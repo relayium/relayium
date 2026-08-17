@@ -457,6 +457,9 @@ func TestBillingChangePlanPendingPaymentDoesNotClaimSuccess(t *testing.T) {
 	cookie := loginCookie(t, ts, mail, email)
 	uid := mustUserID(t, store, email)
 	subscribeUserCycle(t, store, uid, "cus_pending", "plus", "monthly")
+	if err := store.SetScheduledPlan(context.Background(), uid, "plus", "yearly"); err != nil {
+		t.Fatal(err)
+	}
 
 	resp := changePlan(t, ts, cookie, `{"planId":"pro","cycle":"monthly"}`)
 	defer resp.Body.Close()
@@ -475,7 +478,7 @@ func TestBillingChangePlanPendingPaymentDoesNotClaimSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u.PlanID != "plus" || u.ScheduledPlanID != "" {
+	if u.PlanID != "plus" || u.ScheduledPlanID != "" || u.ScheduledCycle != "" {
 		t.Fatalf("pending payment changed local state: %+v", u)
 	}
 }

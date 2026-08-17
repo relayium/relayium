@@ -503,6 +503,37 @@ describe("Pricing", () => {
     expect(target.querySelector('.ok-note[role="status"]')?.textContent).toContain("Downgrade scheduled");
   });
 
+  it("calls a same-tier annual-to-monthly result a cycle change, not a downgrade", async () => {
+    const tiers = [
+      { id: "plus", name: "Plus", storageBytes: 5e9, trafficBytes: 3e11, retentionSecs: 30 * 86400, priceMonthly: 390, priceYearly: 2900, purchasableMonthly: true, purchasableYearly: true },
+    ];
+    const user = { id: "u1", email: "cycle@example.com", displayName: "", hasPassword: true, planId: "plus", subscriptionStatus: "active", hasBilling: true, billingCycle: "yearly" };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url === "/api/plans") return { ok: true, status: 200, json: async () => tiers };
+      if (url === "/api/me") return { ok: true, status: 200, json: async () => ({ user }) };
+      if (url === "/api/billing/preview") return { ok: true, status: 200, json: async () => ({ effective: "period_end", immediateChargeCents: 0, nextAmountCents: 390, nextCycle: "monthly", effectiveDate: 1789999999 }) };
+      if (url === "/api/billing/change-plan") return { ok: true, status: 200, json: async () => ({ status: "ok", effective: "period_end" }) };
+      throw new Error(`unexpected fetch ${url}`);
+    }) as unknown as typeof fetch);
+    const { refreshSession } = await import("./auth.svelte");
+    await refreshSession();
+    await mountPricing();
+
+    const monthly = Array.from(target.querySelectorAll(".toggle-btn")).find((b) => /monthly/i.test(b.textContent ?? "")) as HTMLButtonElement;
+    monthly.click();
+    flushSync();
+    const switchButton = Array.from(target.querySelectorAll(".tier button")).find((b) => /switch to monthly/i.test(b.textContent ?? "")) as HTMLButtonElement;
+    switchButton.click();
+    await new Promise((r) => setTimeout(r, 0)); flushSync();
+    const confirm = Array.from(target.querySelectorAll(".modal button")).find((b) => b.textContent?.trim() === "Confirm change") as HTMLButtonElement;
+    confirm.click();
+    await new Promise((r) => setTimeout(r, 0)); flushSync();
+
+    const toast = target.querySelector('.ok-note[role="status"]')?.textContent ?? "";
+    expect(toast).toContain("Billing-cycle change scheduled");
+    expect(toast).not.toMatch(/downgrade/i);
+  });
+
   it("defaults the cycle toggle to the subscriber's current cycle", async () => {
     const SUB_TIERS = [
       { id: "free", name: "Free", storageBytes: 1e9, trafficBytes: 1e9, retentionSecs: 86400, priceMonthly: 0, priceYearly: 0, purchasableMonthly: false, purchasableYearly: false },

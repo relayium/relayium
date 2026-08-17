@@ -410,14 +410,9 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "already_on_plan"})
 		return
 	}
-	// Already scheduled to downgrade to exactly this tier AND cycle — nothing to
-	// do. A same tier but DIFFERENT cycle must fall through: it's a real change to
-	// the pending schedule (release + reschedule below). A '' scheduled cycle is a
-	// legacy row → fall back to tier-only matching.
-	if plan.ID == u.ScheduledPlanID && (u.ScheduledCycle == "" || wantCycle == u.ScheduledCycle) {
-		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok", "effective": "period_end"})
-		return
-	}
+	// Never trust the local scheduled marker as a no-op decision. It is a UI
+	// projection, not Stripe's canonical state, and a stale marker must not turn a
+	// repeated request into false success without touching Stripe.
 	// Resolve the plan of action BEFORE the price id, because the composite
 	// upgrade bills the target's YEARLY price now even though the request asked
 	// for monthly. If the current plan can't be resolved, apply now.
@@ -445,6 +440,14 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 	// call on the change path is cheap insurance against that lockout.
 	if decision.Effect != effectPeriodEnd {
 		if err := s.biller.ReleaseSchedule(r.Context(), u.StripeCustomerID); err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		// Stripe no longer has the schedule, so its local projection must be
+		// cleared before an immediate stage can fail or become payment-pending.
+		// Otherwise a later same-target request can falsely return period_end
+		// without recreating anything at Stripe.
+		if err := s.Store().SetScheduledPlan(r.Context(), u.ID, "", ""); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}

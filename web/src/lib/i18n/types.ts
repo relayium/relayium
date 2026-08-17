@@ -287,6 +287,7 @@ export interface Messages {
     compositePaymentPending: string;
     changeSuccess: string; // toast after a successful (immediate) upgrade
     downgradeScheduled: string; // toast after a downgrade is scheduled for period end
+    cycleChangeScheduled: string; // same-tier shorter-cycle change at period end
     compositeScheduled: string;
     compositePartial: string;
     previewLoading: string; // 弹窗加载预览时

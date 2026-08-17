@@ -163,6 +163,25 @@ func TestChangePlanCompositeAppliesYearlyNowAndSchedulesMonthly(t *testing.T) {
 	}
 }
 
+func TestSameTargetScheduledMarkerStillConvergesThroughStripe(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	fb := &fakeBiller{}
+	svc.biller = fb
+	tierCyclePlans(t, store)
+	email := "stale-same-target@example.com"
+	cookie := loginCookie(t, ts, mail, email)
+	uid := mustUserID(t, store, email)
+	subscribeUserCycle(t, store, uid, "cus_stale", "pro", "yearly")
+	if err := store.SetScheduledPlan(context.Background(), uid, "pro", "monthly"); err != nil {
+		t.Fatal(err)
+	}
+
+	out := changePlanJSON(t, ts, cookie, `{"planId":"pro","cycle":"monthly"}`)
+	if out["effective"] != "period_end" || fb.downgradeCalls != 1 {
+		t.Fatalf("same-target marker bypassed canonical scheduling: response=%v calls=%d", out, fb.downgradeCalls)
+	}
+}
+
 // orderRecordingBiller records the sequence of mutating calls so the composite's
 // ordering can be asserted directly, and can fail a chosen stage.
 type orderRecordingBiller struct {
@@ -224,9 +243,9 @@ func TestChangePlanCompositeCallOrder(t *testing.T) {
 
 // Stripe has no atomic two-stage primitive, so the partial failure has to be
 // reported truthfully AND be recoverable: the caller must see an error (not a
-// 200 promising a cycle change that will never fire), an existing truthful
-// schedule hint must survive until its replacement succeeds, and a retry must
-// finish the job without charging the proration a second time.
+// 200 promising a cycle change that will never fire), a released schedule must
+// stop being advertised locally, and a retry must finish the job without
+// charging the proration a second time.
 func TestChangePlanCompositePartialFailureIsReportedAndRetryConverges(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	fb := &orderRecordingBiller{priceNow: "price_plus_y", downgradeErr: errors.New("stripe down")}
@@ -257,14 +276,14 @@ func TestChangePlanCompositePartialFailureIsReportedAndRetryConverges(t *testing
 	if fb.priceNow != "price_pro_y" {
 		t.Fatalf("immediate stage should have applied, price is %q", fb.priceNow)
 	}
-	// Replacement failed, so retain the last durable schedule hint rather than
-	// erasing truthful state before Stripe confirms the new schedule.
+	// Release succeeded, so the old schedule no longer exists at Stripe and must
+	// not survive locally when its replacement fails.
 	u, err := store.GetUserByID(context.Background(), uid)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u.ScheduledPlanID != "plus" || u.ScheduledCycle != "monthly" {
-		t.Fatalf("failed replacement must retain prior pending marker, got %q/%q",
+	if u.ScheduledPlanID != "" || u.ScheduledCycle != "" {
+		t.Fatalf("failed replacement must not advertise released schedule, got %q/%q",
 			u.ScheduledPlanID, u.ScheduledCycle)
 	}
 

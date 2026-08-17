@@ -170,11 +170,13 @@
   // on success, surface the toast and poll /api/me for the webhook-applied
   // change to land (same cadence the old inline flow used).
   function onModalClose(effect: "now" | "period_end" | "now_then_period_end" | "partial" | null) {
+    const sameTierCycleChange = effect === "period_end" && modalTier?.id === currentPlanId;
     modalTier = null;
     checkoutError = "";
     if (effect) {
       changeMsg = effect === "now" ? t.billing.changeSuccess
-        : effect === "period_end" ? t.billing.downgradeScheduled
+        : effect === "period_end" ? (sameTierCycleChange
+          ? t.billing.cycleChangeScheduled : t.billing.downgradeScheduled)
         : effect === "now_then_period_end" ? t.billing.compositeScheduled
         : t.billing.compositePartial;
       setTimeout(() => refreshSession(), 1500);
