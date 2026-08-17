@@ -1,5 +1,23 @@
 # Relayium Device Inbox v1 — device identity, keys, capabilities, presence
 
+> **Superseded in part by `relayium-device-inbox-v2.md`, 2026-08-17.**
+>
+> The protocol version, the receive capability, send-target eligibility, the
+> task-create request and the encrypted manifest are now specified by v2. Where
+> this document says protocol `1`, `inbox.receive.v1` or a six-field create
+> body, read v2 §2-§5 instead. Where it says the shared Stored-Wire manifest,
+> that is still what a delivery carries today; v2 §6-§11 specifies the manifest
+> that replaces it and the codecs that implement it, and the wire cutover is
+> stage S3. Those parts of
+> this document are **historical**: v1 is not a compatibility target, not a
+> downgrade path, and not spoken by any current build. The owner waived
+> old-client and old-protocol compatibility on 2026-08-17.
+>
+> Everything else here — enrolment, key registration/rotation/revocation,
+> presence, the queue and its state machine, receiving-client obligations, the
+> task-purpose upload and the native macOS receiver core — is unchanged and
+> still current.
+
 Status: **Phases 1A, 1B, 1C, 1D and 2A.** This document specifies device
 enrolment, end-to-end public-key registration/rotation/revocation, capability
 negotiation and presence (§1-§10), the encrypted asynchronous task queue with its
