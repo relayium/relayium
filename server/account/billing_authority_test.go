@@ -151,9 +151,16 @@ func TestAuthorizedAppleLifecycleAtomicallyBindsAndResolvesDispatch(t *testing.T
 	if err != nil || !ok || got.AppleEnvironment != appleEnvProduction {
 		t.Fatalf("authority=%+v ok=%v err=%v", got, ok, err)
 	}
+	if got.Epoch != authority.Epoch+1 || got.IntentID == authority.IntentID {
+		t.Fatalf("canonical apply did not advance generation exactly once: before=%+v after=%+v", authority, got)
+	}
 	var state string
 	if err := store.db.QueryRowContext(ctx, `SELECT state FROM billing_purchase_attempts WHERE id=?`, attempt.ID).Scan(&state); err != nil || state != "resolved" {
 		t.Fatalf("attempt state=%q err=%v", state, err)
+	}
+	next, created, err := store.DispatchBillingPurchase(ctx, got, "com.relayium.app.max.monthly", 103)
+	if err != nil || !created || next.Epoch != got.Epoch {
+		t.Fatalf("next canonical generation dispatch=%+v created=%v err=%v", next, created, err)
 	}
 }
 

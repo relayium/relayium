@@ -127,6 +127,9 @@ func (s *SQLiteStore) applyAuthorizedAppleLifecycle(ctx context.Context, ev Sour
 				}
 				return SubscriptionApply{}, ErrBillingAuthorityConflict
 			}
+			if err := advanceBillingAuthorityGenerationTx(ctx, tx, authority, ev.Now); err != nil {
+				return SubscriptionApply{}, err
+			}
 		}
 	}
 	return result, tx.Commit()

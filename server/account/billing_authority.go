@@ -105,6 +105,24 @@ func acquireBillingAuthorityTx(ctx context.Context, tx *sql.Tx, in BillingAuthor
 
 var ErrBillingPurchaseAmbiguous = errors.New("account: billing purchase does not match dispatched intent")
 
+func advanceBillingAuthorityGenerationTx(ctx context.Context, tx *sql.Tx, authority BillingAuthority, now int64) error {
+	nextIntent := authx.NewID()
+	res, err := tx.ExecContext(ctx, `UPDATE billing_authorities SET epoch=epoch+1,intent_id=?,updated_at=? WHERE user_id=? AND provider=? AND external_scope=? AND apple_environment=? AND apple_account_token=? AND epoch=? AND intent_id=?`,
+		nextIntent, now, authority.UserID, authority.Provider, authority.ExternalScope,
+		authority.AppleEnvironment, authority.AppleAccountToken, authority.Epoch, authority.IntentID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrBillingAuthorityConflict
+	}
+	return nil
+}
+
 func (s *SQLiteStore) BillingAuthority(ctx context.Context, userID string) (BillingAuthority, bool, error) {
 	var out BillingAuthority
 	err := s.reader().QueryRowContext(ctx, `SELECT user_id, provider, external_scope, apple_environment, apple_account_token, epoch, intent_id, created_at, updated_at FROM billing_authorities WHERE user_id=?`, userID).
