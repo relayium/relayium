@@ -469,6 +469,10 @@ async function signedIn(props: Record<string, unknown> = {}) {
 const rowsOf = (root: HTMLElement) => [...root.querySelectorAll('[data-di="devices"] li')];
 const rowFor = (root: HTMLElement, name: string) =>
   rowsOf(root).find((r) => r.textContent?.includes(name))!;
+const openDevice = (root: HTMLElement, name: string) => {
+  rowFor(root, name).querySelector<HTMLButtonElement>("button.open")!.click();
+  flushSync();
+};
 
 describe("the five things the signed-in block may say", () => {
   it("says it is still checking, and claims nothing while it does", async () => {
@@ -576,7 +580,7 @@ describe("the five things the signed-in block may say", () => {
     expect(root.querySelector('[data-di="start"]')!.getAttribute("data-state")).toBe("ready");
     expect(root.querySelector('[data-di="next-step"]')!.textContent!.trim()).toBe(en().stateReady(1));
     expect(rowsOf(root)).toHaveLength(3);
-    expect(root.querySelectorAll(".sendzone")).toHaveLength(1);
+    expect(root.querySelectorAll(".sendzone")).toHaveLength(0);
   });
 
   it("lists only device kinds this build can describe", async () => {
@@ -589,8 +593,27 @@ describe("the five things the signed-in block may say", () => {
 });
 
 describe("sending, without leaving this page", () => {
+  it("opens a named device workspace, distinguishes duplicate names, and returns to the list", async () => {
+    const twin = { ...READY_DEVICE, ID: "0123456789abcdef0123456789bbb999" };
+    const root = await signedIn({ fetchDevices: async () => [READY_DEVICE, twin] });
+    expect(root.querySelector(".sendzone")).toBeNull();
+    const labels = [...root.querySelectorAll<HTMLButtonElement>("button.open")].map((button) => button.getAttribute("aria-label"));
+    expect(labels).toHaveLength(2);
+    expect(new Set(labels).size).toBe(2);
+
+    openDevice(root, "build-server");
+    expect(root.querySelector('[data-di="device-workspace-heading"]')!.textContent).toContain("build-server");
+    expect(root.querySelector(".sendzone")).not.toBeNull();
+    expect(root.textContent).toContain(en().deviceWorkspaceNote);
+    root.querySelector<HTMLButtonElement>('[data-di="device-back"]')!.click();
+    flushSync();
+    expect(root.querySelectorAll("button.open")).toHaveLength(2);
+    expect(root.querySelector(".sendzone")).toBeNull();
+  });
+
   it("puts the real send control on every device that can receive", async () => {
     const root = await signedIn({ fetchDevices: async () => [READY_DEVICE] });
+    openDevice(root, "build-server");
     const row = rowFor(root, "build-server");
     expect(row.querySelector(".sendzone"), "the ready device has no drop target").not.toBeNull();
     const btn = row.querySelector<HTMLButtonElement>("button.sendbtn")!;
@@ -599,6 +622,7 @@ describe("sending, without leaving this page", () => {
 
   it("a real drop starts a real send, from this page, to that device", async () => {
     const root = await signedIn({ fetchDevices: async () => [READY_DEVICE] });
+    openDevice(root, "build-server");
     const files = [new File(["hello"], "notes.txt"), new File(["x"], "b.bin")];
     dropOn(rowFor(root, "build-server").querySelector(".sendzone")!, files);
     // The send walks several awaits before central's answer becomes a task.
@@ -621,6 +645,7 @@ describe("sending, without leaving this page", () => {
 
   it("choosing files with the button reaches the same pipeline", async () => {
     const root = await signedIn({ fetchDevices: async () => [READY_DEVICE] });
+    openDevice(root, "build-server");
     const row = rowFor(root, "build-server");
     const input = row.querySelector<HTMLInputElement>("input.filepick")!;
     const file = new File(["picked"], "picked.txt");
@@ -652,7 +677,7 @@ describe("sending, without leaving this page", () => {
     });
     const block = root.querySelector('[data-di="devices"]')!;
     expect(block.querySelector("button.del")).toBeNull();
-    expect(block.querySelector(".rowactions")).toBeNull();
+    expect(block.querySelector("button.open")).not.toBeNull();
     // Asserted against the real labels rather than the words: "This device's
     // inbox was revoked" is an explanation the row SHOULD carry, and a blanket
     // /revoke/i ban would forbid the sentence while permitting the button.
@@ -702,6 +727,7 @@ describe("keeping a trustworthy list across a presence refresh", () => {
       calls++;
       return [{ ...READY_DEVICE, Inbox: inbox({ Presence: presence }) }];
     });
+    openDevice(root, "build-server");
     expect(calls).toBe(1);
     expect(rowFor(root, "build-server").textContent).toContain("Online");
 
@@ -724,6 +750,7 @@ describe("keeping a trustworthy list across a presence refresh", () => {
     });
     let ok = true;
     const root = await mounted(async () => (ok ? [READY_DEVICE] : null));
+    openDevice(root, "build-server");
 
     dropOn(rowFor(root, "build-server").querySelector(".sendzone")!, [new File(["x"], "a.bin")]);
     await vi.advanceTimersByTimeAsync(5);
@@ -749,6 +776,7 @@ describe("keeping a trustworthy list across a presence refresh", () => {
 
   it("signing out drops the rows entirely", async () => {
     const root = await mounted(async () => [READY_DEVICE]);
+    openDevice(root, "build-server");
     expect(rowsOf(root)).toHaveLength(1);
     currentUser = null;
     await refreshSession();
@@ -756,5 +784,16 @@ describe("keeping a trustworthy list across a presence refresh", () => {
     flushSync();
     expect(root.querySelector('[data-di="devices"]'), "another session's device stayed on screen").toBeNull();
     expect(root.querySelector('[data-di="start"]')!.getAttribute("data-state")).toBe("signed-out");
+  });
+
+  it("an account switch clears an open device workspace", async () => {
+    const root = await mounted(async () => [READY_DEVICE]);
+    openDevice(root, "build-server");
+    currentUser = { ...USER, id: "u2", email: "second@example.com" };
+    await refreshSession();
+    await vi.advanceTimersByTimeAsync(5);
+    flushSync();
+    expect(root.querySelector('[data-di="device-workspace-heading"]')).toBeNull();
+    expect(root.querySelectorAll("button.open")).toHaveLength(1);
   });
 });

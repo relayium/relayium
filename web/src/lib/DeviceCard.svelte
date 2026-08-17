@@ -83,11 +83,15 @@
      *
      *  Required when `manage` is true; ignored otherwise. */
     onRename?: (name: string) => Promise<RenameOutcome>;
+    /** Browse-mode action. When present, this row opens a dedicated workspace
+     *  and intentionally does not mount its send controls. */
+    onOpen?: () => void;
+    openLabel?: string;
   }
 
   export type RenameOutcome = "ok" | "rejected" | "failed";
 
-  const { device, kind, lastUsed, signedIn, deviceRef, manage = true, onRevoke, onRename }: Props = $props();
+  const { device, kind, lastUsed, signedIn, deviceRef, manage = true, onRevoke, onRename, onOpen, openLabel }: Props = $props();
 
   // Each control is gated on its own handler as well as on `manage`: a caller
   // that asks for management without supplying one would otherwise render a
@@ -788,6 +792,13 @@
       {/if}
     </div>
   {/if}
+  {#if onOpen && avail.sendable}
+    <div class="rowactions">
+      <button class="chk open" type="button" aria-label={openLabel} onclick={onOpen}>
+        {t.deviceInboxPage.deviceOpen}
+      </button>
+    </div>
+  {/if}
 
   <!-- Second line: when this credential was approved, and whether it has been
        used since. Both are here for the rows that predate device labels —
@@ -831,7 +842,11 @@
     {/if}
   {/if}
 
-  {#if inbox}
+  {#if onOpen && inbox && !avail.sendable}
+    <p class="inboxblocked">{blockText(avail.block ?? "not_enrolled")}</p>
+  {/if}
+
+  {#if inbox && !onOpen}
     <div class="inboxblock">
       {#if avail.sendable}
         <!-- svelte-ignore a11y_no_static_element_interactions -->

@@ -633,6 +633,12 @@ const en: Messages = {
     createAccountCta: "Create an account",
     signedInLead: (email) => `Signed in as ${email}.`,
     devicesH3: "Your devices",
+    deviceOpen: "Open",
+    deviceOpenLabel: (name, ref) => `Open ${name}${ref ? `, ${ref}` : ""}`,
+    deviceBack: "Back to devices",
+    deviceWorkspace: (name) => `Send to ${name}`,
+    deviceWorkspaceNote:
+      "Send a message, files or a folder to this device. This browser does not receive or show that device's history.",
     manageDevicesCta: "Manage devices (rename, revoke) →",
     sendHereCta: "Send to it from this page ↑",
     retryCta: "Check again",

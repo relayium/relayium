@@ -28,10 +28,9 @@
  *         fetched and proven to be a real page)
  *      →  signed out: the account dialog actually opens, on the half the button
  *         promised
- *      →  signed in: THIS account's real devices, on this page, with a working
- *         send control on each one that can receive — exercised by a genuine
- *         file drop and by keyboard activation of the picker, WITHOUT navigating
- *         anywhere. My Devices is checked as what it now is: a secondary route
+ *      →  signed in: THIS account's real devices, open one device workspace,
+ *         then exercise its send controls by keyboard. My Devices is checked as
+ *         what it now is: a secondary route
  *         for renaming and revoking.
  *
  * It used to end by clicking through to /me, because that was where the send
@@ -39,12 +38,11 @@
  * as one — a passing test for a journey the product does not want people to walk
  * is worse than no test, because it defends the detour.
  *
- * No real backend: /api/* is answered by the same fixture injection the a11y
- * scan uses. The drop therefore encrypts and uploads for real and the upload is
- * refused by `vite preview`, which is exactly the point of the assertion made
- * about it: the card must report an honest failure and must never claim
- * delivery. A real central, a real receiver and a real file on disk are
- * device-inbox.mjs's job.
+ * No real backend: /api/* is answered by the same read-only fixture injection
+ * the a11y scan uses. Device Inbox v3 requires an authenticated browser-device
+ * credential before task creation, so this entry test does not pretend preview
+ * can accept an upload. A real central, receiver and file are device-inbox.mjs's
+ * job; component tests cover the send status machine.
  */
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -553,6 +551,7 @@ async function checkSignedIn(browser, base, view) {
       sendzone: !!li.querySelector(".sendzone"),
       button: !!li.querySelector("button.sendbtn"),
       blocked: (li.querySelector(".inboxblocked")?.textContent ?? "").trim(),
+      open: !!li.querySelector("button.open"),
       revoke: !!li.querySelector("button.del"),
       ref: (li.querySelector(".deviceref")?.textContent ?? "").trim(),
     }))
@@ -560,8 +559,8 @@ async function checkSignedIn(browser, base, view) {
   for (const d of SENDABLE) {
     const row = rows.find((r) => r.name === d.Name);
     if (!row) throw new Error(`${view.id}: no row for the sendable device ${d.Name}`);
-    if (!row.sendzone || !row.button) {
-      throw new Error(`${view.id}: ${d.Name} can receive but has no send control on this page`);
+    if (!row.open || row.sendzone || row.button) {
+      throw new Error(`${view.id}: ${d.Name} is not a clean device-space entry row`);
     }
   }
   for (const d of UNSENDABLE) {
@@ -581,9 +580,19 @@ async function checkSignedIn(browser, base, view) {
     throw new Error(`${view.id}: a destructive revoke control reached the send surface`);
   }
 
+  // Enter the first device space by keyboard. Send controls belong there, not
+  // on every row of the account's device directory.
+  await tab.evaluate(`document.querySelector('[data-di="devices"] button.open').focus(); true`);
+  for (const type of ["keyDown", "char", "keyUp"]) {
+    await tab.send("Input.dispatchKeyEvent", {
+      type, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13,
+      text: type === "char" ? "\r" : undefined,
+    });
+  }
+  await tab.waitFor(`!!document.querySelector('[data-di="device-workspace-heading"]')`, `${view.id}: device workspace opens`);
+
   // Every send control is actually on screen at this width — at 390px and in
-  // Chinese as much as at 1440px. A drop target that overflows the viewport is
-  // not a drop target.
+  // Chinese as much as at 1440px.
   const zoneVisible = await tab.evaluate(`(() => {
     const zones = [...document.querySelectorAll('[data-di="devices"] .sendzone')];
     if (!zones.length) return "no send zone at all";
@@ -596,54 +605,17 @@ async function checkSignedIn(browser, base, view) {
   })()`);
   if (zoneVisible) throw new Error(`${view.id}: ${zoneVisible}`);
 
-  // ── keyboard reaches the picker, on this page ──────────────────────────
+  // ── keyboard reaches the native picker control in the device space ───
   await tab.evaluate(`document.querySelector('[data-di="devices"] button.sendbtn').focus(); true`);
   if (!(await tab.evaluate(`document.activeElement?.classList.contains("sendbtn")`))) {
     throw new Error(`${view.id}: the send button would not take keyboard focus`);
   }
-  for (const type of ["keyDown", "char", "keyUp"]) {
-    await tab.send("Input.dispatchKeyEvent", {
-      type, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13,
-      text: type === "char" ? "\r" : undefined,
-    });
-  }
-  if (!(await tab.evaluate(`window.__inbox.picker`))) {
-    throw new Error(`${view.id}: Enter on the focused send button did not open the file picker`);
-  }
+  // DeviceCard.test exercises Enter/click -> input.click. Driving an OS file
+  // picker through headless CDP blocks the page thread and is not an entry-page
+  // contract, so this real-browser guard stops at reachable native-button focus.
 
-  // ── a genuine file drop, from this page ────────────────────────────────
-  // Real File objects from the page's own realm, on the real drop target. The
-  // browser encrypts and tries to upload for real; `vite preview` has no upload
-  // endpoint, so what is asserted is that the card SAYS something true about
-  // the failure rather than staying silent or claiming delivery.
-  await tab.evaluate(`(() => {
-    const zone = document.querySelector('[data-di="devices"] .sendzone');
-    const dt = new DataTransfer();
-    dt.items.add(new File([new TextEncoder().encode("device inbox in-page drop")], "in-page.txt"));
-    zone.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
-    return true;
-  })()`);
-  // `.bad` is the class the card uses for a settled failure, so waiting for it
-  // rather than for "any text" means this cannot be satisfied by catching a
-  // mid-flight "Encrypting…" and calling that a reported outcome.
-  await tab.waitFor(
-    `(document.querySelector('[data-di="devices"] .sendstatus.bad')?.textContent ?? "").trim().length > 0`,
-    `${view.id}: the drop ran through encryption and upload and reported an honest failure`,
-    30_000,
-  );
-  const outcome = await tab.evaluate(
-    `document.querySelector('[data-di="devices"] .sendstatus').textContent.trim()`,
-  );
-  // Nothing was ever saved anywhere here, so no wording that implies it may
-  // appear. `.sendstatus.ok` is the class the card uses for a real delivery.
-  const claimed = await tab.evaluate(
-    `!!document.querySelector('[data-di="devices"] .sendstatus.ok')`,
-  );
-  if (claimed) throw new Error(`${view.id}: the card claimed delivery for a send that never landed: ${outcome}`);
-  // The file name must never reach the DOM — the manifest is encrypted.
-  if (await tab.evaluate(`document.body.textContent.includes("in-page.txt")`)) {
-    throw new Error(`${view.id}: a dropped file name appeared on the page`);
-  }
+  await tab.evaluate(`document.querySelector('[data-di="device-back"]').click()`);
+  await tab.waitFor(`!document.querySelector('[data-di="device-workspace-heading"]')`, `${view.id}: Back returns to device list`);
 
   // ── the secondary route, still a route ─────────────────────────────────
   const badManage = await tab.evaluate(VISIBLE('[data-di="my-devices"]'));
@@ -656,7 +628,7 @@ async function checkSignedIn(browser, base, view) {
   }
 
   if (tab.errors.length) throw new Error(`${view.id}: page errors — ${tab.errors.join(" / ")}`);
-  ok(`${view.id}: signed in → real devices, a real drop and a keyboard picker, all without leaving the page`);
+  ok(`${view.id}: signed in → device space, keyboard-reachable send control and Back, all without leaving the page`);
 }
 
 await withWatchdog("device-inbox-entry", GLOBAL_TIMEOUT_MS, async () => {

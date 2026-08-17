@@ -36,8 +36,8 @@
   import { navigate, ME_PATH, CLI_PATH } from "./router.svelte";
   import { session, refreshSession } from "./auth.svelte";
   import { setLoginOpen } from "./login.svelte";
-  import { DEVICE_REFRESH_MS } from "./device-inbox";
-  import { censusOf, supportedDevices, type DeviceRow } from "./device-list";
+  import { DEVICE_REFRESH_MS, parseDeviceInbox } from "./device-inbox";
+  import { censusOf, deviceRefText, supportedDevices, type DeviceRow } from "./device-list";
   import {
     INBOX_PLATFORMS,
     SERVER_GUIDE_SLUG,
@@ -98,6 +98,12 @@
    *  previous account must not repaint the current one. */
   let deviceGen = 0;
   let loadedFor = $state("");
+  let selectedDeviceID = $state("");
+  const selectedDevice = $derived(devices.find((device) => {
+    if (device.ID !== selectedDeviceID) return false;
+    const inbox = parseDeviceInbox(device.Inbox);
+    return !!inbox && !inbox.Revoked;
+  }));
 
   async function loadDevices(gen: number) {
     // The catch is not belt-and-braces over the default fetcher's own guard: it
@@ -134,11 +140,16 @@
   /** Everything this account could see, dropped. Called on sign-out and on an
    *  account switch, BEFORE any request for the new account can land. */
   function clearDevices() {
+    selectedDeviceID = "";
     devices = [];
     devicesLoaded = false;
     devicesFailed = false;
     refreshFailed = false;
   }
+
+  $effect(() => {
+    if (selectedDeviceID && devicesLoaded && !selectedDevice) selectedDeviceID = "";
+  });
 
   // Load once per signed-in account, and re-load if a sign-in happens while the
   // page is open — which is the normal path here, since the page's own button
@@ -335,8 +346,25 @@
            owner comparing a count against a list that does not include it. -->
       {#if devices.length > 0}
         <div class="devices" data-di="devices">
-          <h3 class="devicesh">{t.deviceInboxPage.devicesH3}</h3>
-          <DeviceSendList {devices} label={t.deviceInboxPage.devicesH3} />
+          {#if selectedDevice}
+            <button class="back" type="button" data-di="device-back" onclick={() => (selectedDeviceID = "")}>
+              {t.deviceInboxPage.deviceBack}
+            </button>
+            <h3 class="devicesh" data-di="device-workspace-heading">
+              {t.deviceInboxPage.deviceWorkspace(selectedDevice.Name)}
+            </h3>
+            <p class="workspace-ref">{deviceRefText(selectedDevice, t)}</p>
+            <p class="workspace-note">{t.deviceInboxPage.deviceWorkspaceNote}</p>
+            <DeviceSendList devices={[selectedDevice]} label={t.deviceInboxPage.deviceWorkspace(selectedDevice.Name)} />
+          {:else}
+            <h3 class="devicesh">{t.deviceInboxPage.devicesH3}</h3>
+            <DeviceSendList
+              {devices}
+              label={t.deviceInboxPage.devicesH3}
+              openLabel={(device) => t.deviceInboxPage.deviceOpenLabel(device.Name, deviceRefText(device, t))}
+              onOpen={(device) => (selectedDeviceID = device.ID)}
+            />
+          {/if}
         </div>
       {/if}
 
@@ -670,6 +698,24 @@
     color: var(--text-h);
     margin: 0;
   }
+  .back {
+    font: inherit;
+    font-size: var(--fs-sm);
+    color: var(--accent-fg);
+    background: none;
+    border: 0;
+    padding: 0;
+    margin: 0 0 var(--space-3);
+    cursor: pointer;
+  }
+  .back:hover { text-decoration: underline; }
+  .back:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .workspace-ref, .workspace-note {
+    margin: var(--space-2) 0 0;
+    color: var(--text);
+    font-size: var(--fs-sm);
+  }
+  .workspace-ref { font-family: var(--mono); }
   .stale {
     margin: 0 0 var(--space-4);
     font-size: var(--fs-sm);

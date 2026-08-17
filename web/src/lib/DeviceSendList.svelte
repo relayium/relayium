@@ -34,9 +34,11 @@
     label?: string;
     onRevoke?: (d: DeviceRow) => void;
     onRename?: (d: DeviceRow, name: string) => Promise<RenameOutcome>;
+    onOpen?: (d: DeviceRow) => void;
+    openLabel?: (d: DeviceRow) => string;
   }
 
-  const { devices, manage = false, label, onRevoke, onRename }: Props = $props();
+  const { devices, manage = false, label, onRevoke, onRename, onOpen, openLabel }: Props = $props();
   const t = $derived<Messages>(messages[lang()]);
 </script>
 
@@ -55,6 +57,8 @@
       {manage}
       onRevoke={onRevoke ? () => onRevoke(d) : undefined}
       onRename={onRename ? (name) => onRename(d, name) : undefined}
+      onOpen={onOpen ? () => onOpen(d) : undefined}
+      openLabel={openLabel ? openLabel(d) : undefined}
     />
   {/each}
 </ul>

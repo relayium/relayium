@@ -886,6 +886,11 @@ export interface Messages {
     /** Heading over the account's own device rows, which carry the send
      *  controls. This block is the primary journey; /me is not on the path. */
     devicesH3: string;
+    deviceOpen: string;
+    deviceOpenLabel: (name: string, ref: string) => string;
+    deviceBack: string;
+    deviceWorkspace: (name: string) => string;
+    deviceWorkspaceNote: string;
     /** Secondary link to /me. Names what /me is FOR — renaming and revoking —
      *  because the rows here deliberately carry neither. */
     manageDevicesCta: string;
