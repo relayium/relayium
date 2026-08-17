@@ -199,7 +199,7 @@ const zh: Messages = {
     canceledUntil: (date) => `已取消 · ${date} 前有效`,
     scheduledDowngradeRow: (name, cycle, date) => `已排期：${date} 切换到 ${name}${cycle ? `（${cycle}）` : ""}`,
     appleManagedBadge: "由 App Store 管理",
-    appleManagedNote: "这个订阅是在 App Store 购买的。请到 Apple 账户设置里更改或取消。",
+    appleManagedNote: "打开 Apple 订阅管理。如果你有 App Store 订阅，删除 Relayium 账户不会取消该订阅。",
     multipleProvidersNote: "你在不止一个渠道有生效中的订阅。请到当初购买的地方取消其中不需要的那个。",
   },
   pricingPage: {
@@ -355,7 +355,7 @@ const zh: Messages = {
     deleteTitle: "删除账户",
     deleteBody: (email) => `删除账户从一封邮件开始：Relayium 会向 ${email} 发送确认链接。在打开该链接之前，不会删除任何内容。`,
     deleteAction: "删除账户…",
-    deleteConfirm: (email) => `要删除这个 Relayium 账户吗？Relayium 会通过邮件向 ${email} 发送确认链接。在打开该链接之前，不会删除任何内容。打开之后会撤销该账户的 Relayium 登录会话和设备访问权限，抹除服务器上存储的文件和数据，并安排在 30 天宽限期结束后永久删除账户；在宽限期内重新登录即可开始重新激活账户。`,
+    deleteConfirm: (email) => `要删除这个 Relayium 账户吗？Relayium 会通过邮件向 ${email} 发送确认链接。在打开该链接之前，不会删除任何内容。打开之后会撤销该账户的 Relayium 登录会话和设备访问权限，抹除服务器上存储的文件和数据，并安排在 30 天宽限期结束后永久删除账户；在宽限期内重新登录即可开始重新激活账户。删除 Relayium 账户不会取消 App Store 订阅；请在删除前或删除后前往 Apple 管理该订阅。`,
     deleteConfirmAction: "发送确认邮件",
     deleteRequesting: "正在请求确认邮件…",
     deleteRequested: (email) => `已提交请求。在打开该链接之前，不会删除任何内容。如果 ${email} 一直收不到邮件，请查看垃圾邮件文件夹后再试一次。`,

@@ -437,7 +437,7 @@
 "account.deleteAccountBody" = "Deleting this account starts with an email: Relayium sends a confirmation link to %@. Nothing is removed until that link is opened.";
 "account.deleteAccount" = "Delete account…";
 "account.deleteAccountConfirmTitle" = "Delete this Relayium account?";
-"account.deleteAccountConfirmBody" = "Relayium sends a confirmation link by email to %@. Nothing is removed until that link is opened. Opening it revokes this account's Relayium sessions and device access, erases its stored files, and schedules permanent account deletion after the grace period. During that period, sign in again to reactivate the account.";
+"account.deleteAccountConfirmBody" = "Relayium sends a confirmation link by email to %@. Nothing is removed until that link is opened. Opening it revokes this account's Relayium sessions and device access, erases its stored files, and schedules permanent account deletion after the grace period. During that period, sign in again to reactivate the account. Deleting Relayium does not cancel an App Store subscription; manage it with Apple before or after deleting this account.";
 "account.deleteAccountConfirmAction" = "Send the confirmation email";
 "account.deleteAccountRequesting" = "Asking for the confirmation email…";
 "account.deleteAccountRequested" = "Requested. Nothing is removed until that link is opened. If no email reaches %@, check your spam folder and try again.";

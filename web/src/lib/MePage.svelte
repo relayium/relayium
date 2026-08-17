@@ -666,6 +666,7 @@
     <section class="danger-zone">
       <h2>{t.me.deleteTitle}</h2>
       <p class="muted">{t.me.deleteBody(session().user?.email ?? "")}</p>
+      <p class="muted"><a href="https://apps.apple.com/account/subscriptions" target="_blank" rel="noopener">{t.billing.appleManagedNote}</a></p>
       <button
         class="danger-btn"
         disabled={deleteState === "requesting"}

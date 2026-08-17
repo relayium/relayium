@@ -575,6 +575,8 @@ struct AccountSummaryView: View {
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            Link(L10n.t(.subscriptionManage), destination: URL(string: "https://apps.apple.com/account/subscriptions")!)
+
             switch session.deletionRequestState {
             case .requested:
                 // Not "sent": the endpoint answers the same way whether it

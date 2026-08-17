@@ -51,7 +51,8 @@ func (s *Service) RequestAccountDeletion(ctx context.Context, userID, email stri
 //     within the grace window.
 func (s *Service) ConfirmAccountDeletion(ctx context.Context, rawToken string) error {
 	now := s.now()
-	tok, ok, err := s.store.UseEmailToken(ctx, authx.HashToken(rawToken), "delete", now.Unix())
+	tokenHash := authx.HashToken(rawToken)
+	tok, ok, err := s.store.PeekEmailToken(ctx, tokenHash, "delete", now.Unix())
 	if err != nil {
 		return err
 	}
@@ -65,6 +66,21 @@ func (s *Service) ConfirmAccountDeletion(ctx context.Context, rawToken string) e
 	if u.DeletedAt > 0 {
 		// Already pending: idempotent no-op, per the doc comment above.
 		return nil
+	}
+	if prepared, ok := s.store.(interface {
+		PrepareBillingDeletion(context.Context, User, int64) (BillingCancellation, bool, error)
+	}); ok {
+		if _, _, err := prepared.PrepareBillingDeletion(ctx, u, now.Unix()); err != nil {
+			return err
+		}
+		s.ReconcileBillingCancellations(context.WithoutCancel(ctx))
+	}
+	tok, ok, err = s.store.UseEmailToken(ctx, tokenHash, "delete", now.Unix())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrInvalidToken
 	}
 
 	st := s.ResolveSettings(ctx)

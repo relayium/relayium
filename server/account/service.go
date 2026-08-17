@@ -130,6 +130,7 @@ type Config struct {
 	StripeSecretKey     string
 	StripeWebhookSecret string
 	StripePortalConfig  string
+	BillingHoldSecret   string
 	// ReleaseCheck enables the hourly poll for a newer upstream release and the
 	// admin notice built on it. On by default; RELAYIUM_RELEASE_CHECK=false
 	// turns it off, and when off no request is made at all.
@@ -335,6 +336,13 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 		verifyRequests: newLoginThrottle(maxFails), resetRequests: newLoginThrottle(maxFails),
 		deleteRequests: newLoginThrottle(maxFails),
 		uploadSem:      newUploadSem(maxConcurrentUploadsPerUser)}
+	if cfg.BillingHoldSecret != "" {
+		if configured, ok := store.(interface{ ConfigureBillingHoldSecret(string) error }); ok {
+			if err := configured.ConfigureBillingHoldSecret(cfg.BillingHoldSecret); err != nil {
+				panic("account: configure billing deletion hold: " + err.Error())
+			}
+		}
+	}
 	svc.adminPasskeyLogins = newLoginThrottle(maxFails)
 	svc.clientIP = httpx.ClientIP
 	svc.fetchGoogleUser = svc.realFetchGoogleUser

@@ -199,7 +199,7 @@ const en: Messages = {
     canceledUntil: (date) => `Canceled · active until ${date}`,
     scheduledDowngradeRow: (name, cycle, date) => `Scheduled: changes to ${name}${cycle ? ` (${cycle})` : ""} on ${date}`,
     appleManagedBadge: "Managed in the App Store",
-    appleManagedNote: "This subscription was bought in the App Store. Change or cancel it in your Apple account settings.",
+    appleManagedNote: "Open Apple subscription management. If you have an App Store subscription, deleting Relayium does not cancel it.",
     multipleProvidersNote: "You have active subscriptions from more than one provider. Cancel the one you don’t need where you bought it.",
   },
   pricingPage: {
@@ -355,7 +355,7 @@ const en: Messages = {
     deleteTitle: "Delete account",
     deleteBody: (email) => `Deleting this account starts with an email: Relayium sends a confirmation link to ${email}. Nothing is removed until that link is opened.`,
     deleteAction: "Delete account…",
-    deleteConfirm: (email) => `Delete this Relayium account? Relayium sends a confirmation link by email to ${email}. Nothing is removed until that link is opened. Opening it revokes this account's Relayium sessions and device access, erases the files and data stored on the server, and schedules permanent account deletion after the 30-day grace period. During that period, sign in again to reactivate the account.`,
+    deleteConfirm: (email) => `Delete this Relayium account? Relayium sends a confirmation link by email to ${email}. Nothing is removed until that link is opened. Opening it revokes this account's Relayium sessions and device access, erases the files and data stored on the server, and schedules permanent account deletion after the 30-day grace period. During that period, sign in again to reactivate the account. Deleting Relayium does not cancel an App Store subscription; manage that subscription with Apple before or after deleting this account.`,
     deleteConfirmAction: "Send the confirmation email",
     deleteRequesting: "Asking for the confirmation email…",
     deleteRequested: (email) => `Requested. Nothing is removed until that link is opened. If no email reaches ${email}, check your spam folder and try again.`,

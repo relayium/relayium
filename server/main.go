@@ -169,6 +169,7 @@ func main() {
 	stripeSecretKey := flag.String("stripe-secret-key", envStr("RELAYIUM_STRIPE_SECRET_KEY", ""), "Stripe secret API key (sk_...); empty disables billing (/api/billing/* 404)")
 	stripeWebhookSecret := flag.String("stripe-webhook-secret", envStr("RELAYIUM_STRIPE_WEBHOOK_SECRET", ""), "Stripe webhook signing secret (whsec_...)")
 	stripePortalConfig := flag.String("stripe-portal-config", envStr("RELAYIUM_STRIPE_PORTAL_CONFIG", ""), "required dedicated Stripe Billing Portal configuration id; plan switching disabled and cancellation at period end")
+	billingHoldSecret := flag.String("billing-hold-secret", envStr("RELAYIUM_BILLING_HOLD_SECRET", ""), "HMAC secret for bounded post-deletion billing holds")
 	// Deprecated and ignored: relay bandwidth is now bounded by each account's
 	// per-plan monthly traffic quota (billing plans phase-1), not this global
 	// allowance. Kept as an accepted-but-unused flag/env so a deployment whose
@@ -180,6 +181,9 @@ func main() {
 	flag.Parse()
 	if *stripeSecretKey != "" && *stripePortalConfig == "" {
 		log.Fatal("RELAYIUM_STRIPE_PORTAL_CONFIG is required when Stripe billing is enabled")
+	}
+	if (*stripeSecretKey != "" || *appleStoreConfig != "") && *billingHoldSecret == "" {
+		log.Fatal("RELAYIUM_BILLING_HOLD_SECRET is required when provider billing is enabled")
 	}
 
 	if *genAdminTOTP {
@@ -520,6 +524,7 @@ func main() {
 			StripeSecretKey:      *stripeSecretKey,
 			StripeWebhookSecret:  *stripeWebhookSecret,
 			StripePortalConfig:   *stripePortalConfig,
+			BillingHoldSecret:    *billingHoldSecret,
 			ReleaseCheck:         *releaseCheck,
 		})
 		// The live pairing-code registry, whole. Two things need it, and they need
@@ -768,8 +773,10 @@ func main() {
 				t := time.NewTicker(6 * time.Hour)
 				defer t.Stop()
 				acct.ReconcileStripeSubscriptions(context.Background())
+				acct.ReconcileBillingCancellations(context.Background())
 				for range t.C {
 					acct.ReconcileStripeSubscriptions(context.Background())
+					acct.ReconcileBillingCancellations(context.Background())
 				}
 			}()
 		}

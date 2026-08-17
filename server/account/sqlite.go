@@ -24,8 +24,9 @@ import (
 // separate read-only pool (rdb) so a slow admin query doesn't block the writer.
 // rdb is nil for :memory: (a second connection would see a separate empty DB).
 type SQLiteStore struct {
-	db  *sql.DB
-	rdb *sql.DB
+	db                *sql.DB
+	rdb               *sql.DB
+	billingHoldSecret []byte
 }
 
 // Ping verifies the live writer connection used by account mutations. It is
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS users (
   display_name TEXT,
   created_at   INTEGER NOT NULL,
   canonical_email TEXT NOT NULL DEFAULT ''
+	,billing_hold_hmac BLOB NOT NULL DEFAULT X''
 );
 CREATE TABLE IF NOT EXISTS identities (
   provider TEXT NOT NULL,
@@ -1023,7 +1025,30 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
  created_at INTEGER NOT NULL,
  updated_at INTEGER NOT NULL,
  CHECK(epoch > 0),
- CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (provider='stripe' AND external_scope='' AND apple_environment='' AND apple_account_token='')))`,
+CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (provider='stripe' AND external_scope='' AND apple_environment='' AND apple_account_token='')))`,
+		`CREATE TABLE IF NOT EXISTS billing_deletion_holds (
+ billing_subject_id TEXT PRIMARY KEY,
+ email_hmac BLOB NOT NULL,
+ provider TEXT NOT NULL CHECK(provider IN ('stripe','apple')),
+ created_at INTEGER NOT NULL,
+ expires_at INTEGER NOT NULL)`,
+		`CREATE INDEX IF NOT EXISTS idx_billing_deletion_hold_email ON billing_deletion_holds(email_hmac,expires_at)`,
+		`CREATE TABLE IF NOT EXISTS billing_deletion_config (
+ id INTEGER PRIMARY KEY CHECK(id=1),
+ key_fingerprint BLOB NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS billing_cancellation_outbox (
+ id TEXT PRIMARY KEY,
+ billing_subject_id TEXT NOT NULL,
+ provider TEXT NOT NULL CHECK(provider='stripe'),
+ customer_id TEXT NOT NULL DEFAULT '',
+ subscription_id TEXT NOT NULL DEFAULT '',
+ idempotency_key TEXT NOT NULL UNIQUE,
+ state TEXT NOT NULL CHECK(state IN ('pending','terminal')),
+ attempts INTEGER NOT NULL DEFAULT 0,
+ created_at INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL,
+ UNIQUE(billing_subject_id,provider))`,
+		`ALTER TABLE users ADD COLUMN billing_hold_hmac BLOB NOT NULL DEFAULT X''`,
 		`CREATE TABLE IF NOT EXISTS billing_purchase_attempts (
  id TEXT PRIMARY KEY,
  user_id TEXT NOT NULL,
@@ -1720,8 +1745,8 @@ func (s *SQLiteStore) UpsertUserByEmail(ctx context.Context, email, displayName 
 	}
 	u = User{ID: authx.NewID(), Email: email, DisplayName: displayName, CreatedAt: time.Now().Unix()}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO users (id, email, display_name, created_at, canonical_email) VALUES (?, ?, ?, ?, ?)`,
-		u.ID, u.Email, u.DisplayName, u.CreatedAt, canonicalEmail(email))
+		`INSERT INTO users (id, email, display_name, created_at, canonical_email, billing_hold_hmac) VALUES (?, ?, ?, ?, ?, ?)`,
+		u.ID, u.Email, u.DisplayName, u.CreatedAt, canonicalEmail(email), s.billingEmailHMAC(email))
 	return u, err
 }
 
@@ -1772,8 +1797,8 @@ func (s *SQLiteStore) InsertUserDedupedByCanonical(ctx context.Context, email, d
 
 	u := User{ID: authx.NewID(), Email: email, DisplayName: displayName, CreatedAt: time.Now().Unix()}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO users (id, email, display_name, created_at, canonical_email) VALUES (?, ?, ?, ?, ?)`,
-		u.ID, u.Email, u.DisplayName, u.CreatedAt, canonical); err != nil {
+		`INSERT INTO users (id, email, display_name, created_at, canonical_email, billing_hold_hmac) VALUES (?, ?, ?, ?, ?, ?)`,
+		u.ID, u.Email, u.DisplayName, u.CreatedAt, canonical, s.billingEmailHMAC(email)); err != nil {
 		return User{}, false, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -2703,6 +2728,17 @@ func (s *SQLiteStore) CreateEmailToken(ctx context.Context, t EmailToken) error 
 		 VALUES (?, ?, ?, ?, ?, ?, 0)`,
 		t.TokenHash, t.UserID, normEmail(t.Email), t.Purpose, t.CreatedAt, t.ExpiresAt)
 	return err
+}
+
+func (s *SQLiteStore) PeekEmailToken(ctx context.Context, tokenHash, purpose string, now int64) (EmailToken, bool, error) {
+	var t EmailToken
+	err := s.reader().QueryRowContext(ctx, `SELECT token_hash,user_id,email,purpose,created_at,expires_at,used_at
+ FROM email_tokens WHERE token_hash=? AND purpose=? AND used_at=0 AND expires_at>?`, tokenHash, purpose, now).
+		Scan(&t.TokenHash, &t.UserID, &t.Email, &t.Purpose, &t.CreatedAt, &t.ExpiresAt, &t.UsedAt)
+	if err == sql.ErrNoRows {
+		return EmailToken{}, false, nil
+	}
+	return t, err == nil, err
 }
 
 func (s *SQLiteStore) UseEmailToken(ctx context.Context, tokenHash, purpose string, now int64) (EmailToken, bool, error) {

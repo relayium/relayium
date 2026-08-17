@@ -166,8 +166,8 @@ func (m *SMTPMailer) SendPasswordReset(_ context.Context, email, link string) er
 
 func (m *SMTPMailer) SendAccountDeletionConfirm(_ context.Context, email, link string) error {
 	return m.send(email, "Confirm Relayium account deletion",
-		"Confirm you want to delete your Relayium account:\n"+link+"\n\nThis link is valid for 1 hour and can be used once. If you didn't request this, ignore this email and no changes will be made.",
-		`<p>Confirm you want to delete your Relayium account:</p><p><a href="`+link+`">Confirm deletion</a></p><p style="color:#666">This link is valid for 1 hour and can be used once. If you didn't request this, ignore this email and no changes will be made.</p>`)
+		"Confirm you want to delete your Relayium account:\n"+link+"\n\nDeleting Relayium does not cancel an App Store subscription. Manage it with Apple before or after deletion: https://apps.apple.com/account/subscriptions\n\nThis link is valid for 1 hour and can be used once. If you didn't request this, ignore this email and no changes will be made.",
+		`<p>Confirm you want to delete your Relayium account:</p><p><a href="`+link+`">Confirm deletion</a></p><p>Deleting Relayium does not cancel an App Store subscription. <a href="https://apps.apple.com/account/subscriptions">Manage it with Apple</a> before or after deletion.</p><p style="color:#666">This link is valid for 1 hour and can be used once. If you didn't request this, ignore this email and no changes will be made.</p>`)
 }
 
 func (m *SMTPMailer) SendAccountDeletionScheduled(_ context.Context, email string, purgeAt int64, reactivateLink string) error {

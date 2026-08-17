@@ -204,6 +204,11 @@ func (s *SQLiteStore) AcquireBillingAuthority(ctx context.Context, in BillingAut
 }
 
 func acquireBillingAuthorityTx(ctx context.Context, tx *sql.Tx, in BillingAuthorityRequest) (BillingAuthority, error) {
+	if frozen, err := billingUserFrozenTx(ctx, tx, in.UserID, in.Now); err != nil {
+		return BillingAuthority{}, err
+	} else if frozen {
+		return BillingAuthority{}, ErrBillingAuthorityConflict
+	}
 	var existing BillingAuthority
 	err := tx.QueryRowContext(ctx, `SELECT user_id, provider, external_scope, apple_environment, apple_account_token, epoch, intent_id, created_at, updated_at FROM billing_authorities WHERE user_id=?`, in.UserID).
 		Scan(&existing.UserID, &existing.Provider, &existing.ExternalScope, &existing.AppleEnvironment, &existing.AppleAccountToken, &existing.Epoch, &existing.IntentID, &existing.CreatedAt, &existing.UpdatedAt)
@@ -373,6 +378,12 @@ func (s *SQLiteStore) DispatchBillingPurchase(ctx context.Context, authority Bil
 		return BillingPurchaseAttempt{}, false, err
 	}
 	defer tx.Rollback()
+	if frozen, err := billingUserFrozenTx(ctx, tx, authority.UserID, now); err != nil || frozen {
+		if err != nil {
+			return BillingPurchaseAttempt{}, false, err
+		}
+		return BillingPurchaseAttempt{}, false, ErrBillingAuthorityConflict
+	}
 	var current BillingAuthority
 	if err := tx.QueryRowContext(ctx, `SELECT user_id,provider,external_scope,apple_environment,apple_account_token,epoch,intent_id,created_at,updated_at FROM billing_authorities WHERE user_id=?`, authority.UserID).
 		Scan(&current.UserID, &current.Provider, &current.ExternalScope, &current.AppleEnvironment, &current.AppleAccountToken, &current.Epoch, &current.IntentID, &current.CreatedAt, &current.UpdatedAt); err != nil {
@@ -406,6 +417,12 @@ func (s *SQLiteStore) DispatchAppleBillingPurchase(ctx context.Context, authorit
 		return BillingPurchaseAttempt{}, false, err
 	}
 	defer tx.Rollback()
+	if frozen, err := billingUserFrozenTx(ctx, tx, authority.UserID, now); err != nil || frozen {
+		if err != nil {
+			return BillingPurchaseAttempt{}, false, err
+		}
+		return BillingPurchaseAttempt{}, false, ErrBillingAuthorityConflict
+	}
 	var current BillingAuthority
 	if err := tx.QueryRowContext(ctx, `SELECT user_id,provider,external_scope,apple_environment,apple_account_token,epoch,intent_id,created_at,updated_at FROM billing_authorities WHERE user_id=?`, authority.UserID).
 		Scan(&current.UserID, &current.Provider, &current.ExternalScope, &current.AppleEnvironment, &current.AppleAccountToken, &current.Epoch, &current.IntentID, &current.CreatedAt, &current.UpdatedAt); err != nil {
@@ -515,6 +532,12 @@ func (s *SQLiteStore) PrepareBillingPurchase(ctx context.Context, authority Bill
 		return BillingPurchaseAttempt{}, false, err
 	}
 	defer tx.Rollback()
+	if frozen, err := billingUserFrozenTx(ctx, tx, authority.UserID, now); err != nil || frozen {
+		if err != nil {
+			return BillingPurchaseAttempt{}, false, err
+		}
+		return BillingPurchaseAttempt{}, false, ErrBillingAuthorityConflict
+	}
 	var current BillingAuthority
 	if err := tx.QueryRowContext(ctx, `SELECT user_id,provider,external_scope,apple_environment,apple_account_token,epoch,intent_id,created_at,updated_at FROM billing_authorities WHERE user_id=?`, authority.UserID).
 		Scan(&current.UserID, &current.Provider, &current.ExternalScope, &current.AppleEnvironment, &current.AppleAccountToken, &current.Epoch, &current.IntentID, &current.CreatedAt, &current.UpdatedAt); err != nil {
@@ -540,10 +563,32 @@ func (s *SQLiteStore) PrepareBillingPurchase(ctx context.Context, authority Bill
 }
 
 func (s *SQLiteStore) MarkBillingPurchaseDispatched(ctx context.Context, userID, attemptID string, epoch int64) (bool, error) {
-	res, err := s.db.ExecContext(ctx, `UPDATE billing_purchase_attempts SET state='dispatched' WHERE id=? AND user_id=? AND epoch=? AND state='prepared'`, attemptID, userID, epoch)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var now int64
+	if err := tx.QueryRowContext(ctx, `SELECT unixepoch()`).Scan(&now); err != nil {
+		return false, err
+	}
+	frozen, err := billingUserFrozenTx(ctx, tx, userID, now)
+	if err != nil {
+		return false, err
+	}
+	if frozen {
+		return false, ErrBillingAuthorityConflict
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE billing_purchase_attempts SET state='dispatched' WHERE id=? AND user_id=? AND epoch=? AND state='prepared'`, attemptID, userID, epoch)
 	if err != nil {
 		return false, err
 	}
 	n, err := res.RowsAffected()
-	return n == 1, err
+	if err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return n == 1, nil
 }

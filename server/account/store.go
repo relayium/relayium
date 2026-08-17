@@ -1749,6 +1749,7 @@ type Store interface {
 	DeleteSpentMagicTokens(ctx context.Context, now int64) error
 	// email tokens (verify + reset)
 	CreateEmailToken(ctx context.Context, t EmailToken) error
+	PeekEmailToken(ctx context.Context, tokenHash, purpose string, now int64) (EmailToken, bool, error)
 	UseEmailToken(ctx context.Context, tokenHash, purpose string, now int64) (EmailToken, bool, error)
 	DeleteSpentEmailTokens(ctx context.Context, now int64) error
 	// devices

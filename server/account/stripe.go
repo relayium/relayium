@@ -535,6 +535,27 @@ func (c *stripeClient) CancelSubscription(ctx context.Context, subID string, ref
 	return nil
 }
 
+func (c *stripeClient) CancelSubscriptionForDeletion(ctx context.Context, subID, idempotencyKey string) (bool, error) {
+	cancelErr := error(nil)
+	if subID == "" || idempotencyKey == "" {
+		return false, errors.New("stripe: deletion cancellation identity is required")
+	}
+	if _, err := c.requestKeyed(ctx, http.MethodDelete, "/v1/subscriptions/"+url.PathEscape(subID), nil, idempotencyKey); err != nil {
+		cancelErr = err
+	}
+	info, missing, getErr := c.canonicalSubscription(ctx, subID)
+	if getErr != nil {
+		return false, getErr
+	}
+	if missing || info.Status == "canceled" || info.Status == "incomplete_expired" {
+		return true, nil
+	}
+	if cancelErr != nil {
+		return false, cancelErr
+	}
+	return false, errors.New("stripe: cancellation is not yet canonical")
+}
+
 // latestInvoiceID reads a subscription's latest_invoice id.
 func (c *stripeClient) latestInvoiceID(ctx context.Context, subID string) (string, error) {
 	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions/"+subID, nil)

@@ -431,7 +431,7 @@
 "account.deleteAccountBody" = "删除账户从一封邮件开始：Relayium 会向 %@ 发送确认链接。在打开该链接之前不会删除任何内容。";
 "account.deleteAccount" = "删除账户…";
 "account.deleteAccountConfirmTitle" = "要删除这个 Relayium 账户吗？";
-"account.deleteAccountConfirmBody" = "Relayium 会通过邮件向 %@ 发送确认链接。在打开该链接之前不会删除任何内容。打开后会撤销该账户的 Relayium 登录会话和设备访问权限、清除已存储的文件，并安排在宽限期结束后永久删除账户；在宽限期内重新登录即可重新激活账户。";
+"account.deleteAccountConfirmBody" = "Relayium 会通过邮件向 %@ 发送确认链接。在打开该链接之前不会删除任何内容。打开后会撤销该账户的 Relayium 登录会话和设备访问权限、清除已存储的文件，并安排在宽限期结束后永久删除账户；在宽限期内重新登录即可重新激活账户。删除 Relayium 账户不会取消 App Store 订阅；请在删除前或删除后前往 Apple 管理该订阅。";
 "account.deleteAccountConfirmAction" = "发送确认邮件";
 "account.deleteAccountRequesting" = "正在请求确认邮件…";
 "account.deleteAccountRequested" = "已提交请求。在打开该链接之前不会删除任何内容。如果 %@ 没有收到邮件，请查看垃圾邮件文件夹后重试。";
