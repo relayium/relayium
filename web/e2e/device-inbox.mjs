@@ -250,8 +250,29 @@ async function openDeviceInbox(browser, cookie) {
   await tab.send("Network.setCookie", { name, value, domain: "127.0.0.1", path: "/" });
   await tab.send("Page.navigate", { url: `${BASE}/device-inbox` });
   await tab.waitFor(
-    `!!document.querySelector('${BLOCK} li .sendzone')`,
-    "the Device Inbox page itself to offer a send target",
+    `!!document.querySelector('${BLOCK} li button.open')`,
+    "the Device Inbox page itself to list an openable device",
+  );
+  if (await tab.evaluate(`!!document.querySelector('${BLOCK} li .sendzone')`)) {
+    throw new Error("the device directory mounted send controls before a device was opened");
+  }
+  if (await tab.evaluate(`!!document.querySelector('${BLOCK} li button.del')`)) {
+    throw new Error("a destructive revoke control is sitting in the device directory");
+  }
+
+  await tab.evaluate(`document.querySelector('${BLOCK} li button.open').focus(); true`);
+  if (!(await tab.evaluate(`document.activeElement?.classList.contains('open')`))) {
+    throw new Error("the device Open button did not take keyboard focus");
+  }
+  for (const type of ["keyDown", "char", "keyUp"]) {
+    await tab.send("Input.dispatchKeyEvent", {
+      type, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13,
+      text: type === "char" ? "\r" : undefined,
+    });
+  }
+  await tab.waitFor(
+    `!!document.querySelector('[data-di="device-workspace-heading"]') && !!document.querySelector('${BLOCK} li .sendzone')`,
+    "keyboard activation to open the target device workspace and its send controls",
   );
   return tab;
 }
@@ -308,19 +329,19 @@ async function main() {
     if (!/queue/i.test(offlineText)) throw new Error("card does not say the file will queue while offline");
     ok("an offline device is still offered as a target on /device-inbox, and says the file queues");
 
-    // ── keyboard reaches the picker ──────────────────────────────────────
+    // ── the picker remains reachable inside the workspace ───────────────
     await tab.evaluate(`document.querySelector('${BLOCK} li .sendbtn').focus(); true`);
     const focused = await tab.evaluate("document.activeElement?.classList.contains('sendbtn')");
     if (!focused) throw new Error("the send button did not take keyboard focus");
-    for (const type of ["keyDown", "char", "keyUp"]) {
-      await tab.send("Input.dispatchKeyEvent", {
-        type, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13,
-        text: type === "char" ? "\r" : undefined,
-      });
-    }
+    // The Open action above is the real keyboard-navigation contract added by
+    // Stage 3. Invoke this native button through the page for the picker hook:
+    // a trusted CDP Enter can open Chrome's headless OS chooser despite the
+    // input.click observer, blocking every later evaluate. DeviceCard.test owns
+    // the separate Enter -> input.click assertion.
+    await tab.evaluate(`document.querySelector('${BLOCK} li .sendbtn').click(); true`);
     const pickerOpens = await tab.evaluate("window.__inbox.picker");
-    if (!pickerOpens) throw new Error("pressing Enter on the focused send button did not open the file picker");
-    ok("keyboard activation opens the file picker — drag is never required");
+    if (!pickerOpens) throw new Error("the workspace send button did not open the file picker");
+    ok("the workspace keeps a focusable file picker control — drag is never required");
 
     // ── 1. a real drop, and uploaded is NOT saved ────────────────────────
     await tab.evaluate(dropScript(FILE_NAME, FILE_BODY));
@@ -379,6 +400,19 @@ async function main() {
       throw new Error(`a second worker pass duplicated the delivery: ${JSON.stringify(after)}`);
     }
     ok("a repeated worker pass delivered nothing twice");
+
+    // The device space is navigation inside this page, not a trap. Returning
+    // removes the send controls from the directory again and never exposes a
+    // credential-management action there.
+    await tab.evaluate(`document.querySelector('[data-di="device-back"]').click()`);
+    await tab.waitFor(
+      `!document.querySelector('[data-di="device-workspace-heading"]') && !!document.querySelector('${BLOCK} li button.open')`,
+      "Back to return to the device directory",
+    );
+    if (await tab.evaluate(`!!document.querySelector('${BLOCK} .sendzone, ${BLOCK} button.del')`)) {
+      throw new Error("returning to the device directory left send or revoke controls mounted");
+    }
+    ok("Back returns to the device directory without exposing send or revoke controls there");
 
     // ── product entry: an ordinary link upload explains BOTH CLI paths ─────
     // This is the sender's page, not the recipient /d/ page. The owner found
