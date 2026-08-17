@@ -1,10 +1,17 @@
 # Relayium Device Inbox v2 — content kind, the encrypted manifest, negotiation
 
-Status: **stages S1 and S2 delivered.** This document specifies what v2 changes
-about v1: the protocol and capability vocabulary central negotiates (§2-§4), the
-one non-opaque field a sender declares when it creates a task (§5), and the v2
-**encrypted manifest** — its shape, its canonical bytes, its bounds and its
-refusals (§6-§11).
+Status: **stages S1, S2 and the RECEIVER half of S3/S4 delivered.** This document
+specifies what v2 changes about v1: the protocol and capability vocabulary
+central negotiates (§2-§4), the one non-opaque field a sender declares when it
+creates a task (§5), the v2 **encrypted manifest** — its shape, its canonical
+bytes, its bounds and its refusals (§6-§11) — and what a receiver does with a
+decoded one (§13).
+
+**The sender half is NOT delivered.** No production sender seals a v2 manifest
+yet, so a delivery built by today's uploader is refused by every v2 receiver as
+`verify_failed`. That is safe only because there is no dual stack and no external
+users; it is also the blocking prerequisite for the feature working end to end.
+See §13.5.
 
 Everything v1 specified and v2 does not restate is unchanged and still current:
 device enrolment, public-key registration/rotation/revocation, presence, the
@@ -19,23 +26,24 @@ old-client and old-protocol compatibility on 2026-08-17: there are no external
 users yet and the release forces an update. Central speaks protocol 2 only,
 negotiates `inbox.receive.v2` only, and refuses v1 rather than degrading to it.
 
-**What S2 did NOT do, stated plainly: nothing calls the manifest codec yet.**
-All three implementations exist, agree byte-for-byte on the frozen vectors, and
-have no caller. No sender seals a v2 manifest and no receiver decodes one, so
-frame 0 of a delivery on the wire today is still the shared Stored-Wire
-manifest, exactly as in v1. §6-§11 therefore specify the format and the three
-validated codecs that implement it — not yet the bytes any live delivery
-carries. Wiring the codec into the sender and the receiver is S3, and until then
-`protocolVersion: 2` on a create (§5) identifies the protocol generation both
-sides negotiated, not a v2 manifest already inside that ciphertext. That gap is
-safe only because there is no dual stack and no external users: every sender and
-every receiver moves together, so no build ever reads a manifest written by a
-build that disagreed with it.
+**Both receivers now decode the v2 manifest** (§13). The CLI reads file
+deliveries and refuses text deterministically; RelayiumKit reads both and commits
+a message to a protected local store. Neither will accept the shared Stored-Wire
+manifest under any circumstances — a `{"files":[…]}` document is refused as a
+version problem, which is the property that makes "v2 receivers read v2
+manifests" checkable rather than assumed.
 
-Also not specified or implemented as of S2: which sender produces a text
-delivery, which receiver presents one, how a message is stored locally, and the
-migration/cutover of deployed clients. Those are stages S3 and later. Nothing in
-this document describes shipped end-user behaviour on its own.
+**What is still missing, stated plainly: no sender writes one.** A Device Inbox
+delivery references a Stored Object created by the ordinary upload path, and that
+path still seals the shared Stored-Wire manifest. So until the sender half lands,
+`protocolVersion: 2` on a create (§5) identifies the protocol generation both
+sides negotiated, and the ciphertext behind it carries a manifest its own
+receiver will refuse. The gap is safe only because there is no dual stack and no
+external users: every sender and every receiver moves together, so no build ever
+reads a manifest written by a build that disagreed with it.
+
+Also not implemented: any SENDER-side text UI, the device-first send surface, and
+the migration/cutover of deployed clients.
 
 Authoritative implementation:
 
@@ -51,6 +59,11 @@ Authoritative implementation:
   TypeScript codec and vocabulary.
 - `apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v2-vectors.json` — the
   frozen cross-language vectors all three codecs are tested against.
+- `server/internal/inboxclient/receive.go`, `plan.go`, `failure.go` — the CLI
+  receiver: v2 decode, the file-only kind gate, destination planning.
+- `apps/RelayiumKit/Sources/RelayiumAppKit/DeviceInbox/InboxReceiver.swift`,
+  `InboxMessageStore.swift`, `InboxJournal.swift`, `InboxReceiveEngine.swift` —
+  the native receiver, the message store, and the folder-independent pass.
 
 Product source of truth: `DEVICE-INBOX-PRD.md`.
 
@@ -131,11 +144,16 @@ user's downloads folder as a `.txt` file must not announce it: the sender would
 then promise a message and deliver a file. A build announces `inbox.text.v1` in
 the same commit that makes it true and never one commit earlier.
 
-As of S2: the CLI receiver announces `inbox.receive.v2`, `inbox.autoaccept.v1`
-and `inbox.resume.v1`, and deliberately not `inbox.text.v1` — it has no message
-store. RelayiumKit announces the same three for the same reason; the token is
-defined in `InboxCapability.textV1` and added when S3 ships the store and its
-surface.
+Where it stands now: the CLI receiver announces `inbox.receive.v2`,
+`inbox.autoaccept.v1` and `inbox.resume.v1`, and deliberately **not**
+`inbox.text.v1` — it has no message store, and a build that would write a message
+into a downloads folder as a file must not claim to present one.
+
+RelayiumKit announces `inbox.text.v1` **as of the commit that made it true**: a
+message is committed whole to `InboxMessageStore` and is readable back as text
+through `InboxController.messages`. `InboxProtocolTests` asserts the token is
+announced and names what backs it, so removing the store without removing the
+claim fails there.
 
 ## 4. Send-target eligibility
 
@@ -378,3 +396,73 @@ cannot observe identically — JavaScript's `JSON.parse` has already turned `1.0
 `1e3` and `1` into one value before our code runs, and Go cannot distinguish an
 absent key from a zero value without a pointer. Each language pins its own
 clause for those in its unit tests.
+
+---
+
+## 13. The receiver
+
+Delivered. Both receivers open frame 0 with the delivery's content key, decode it
+with the v2 codec, and act on the kind it names.
+
+### 13.1 Classify first, folder second
+
+The kind is decided **before** the receive folder is consulted, and that order is
+the contract rather than an implementation detail. A message is not written to
+the receive folder, so a missing, revoked, unwritable or never-chosen folder has
+nothing to do with whether it can land; checking the folder first would block a
+delivery that does not need it and report `directory_unavailable` about a
+directory that delivery was never going to touch.
+
+Consequently, in `InboxReceiveEngine`:
+
+- a folder verdict is not the claim gate; a pass claims and lets the receiver
+  decide;
+- a **file** delivery with no usable folder is reported `attention_required` /
+  `directory_unavailable` — the folder-attention flow, unchanged;
+- a task central parked because this device reported `receiveDirReady: false`
+  carries no error code and is re-queued so its kind can be discovered, but
+  **only under the `auto` policy**: the same shape under `ask` is a question
+  waiting for the user, and answering it here would be this machine deciding on
+  their behalf.
+
+### 13.2 A message is committed to a protected store
+
+`InboxMessageStore`: a per-account directory in Application Support at 0700, one
+0600 JSON record per delivery, keyed by task id. Not the receive folder, not
+`tmp`, not `caches`. Exactly one nonempty UTF-8 message of the declared length is
+committed — the payload is re-measured and re-decoded after the stream
+authenticates, and invalid UTF-8 is refused rather than repaired, because a
+receiver that substituted U+FFFD would show the user something nobody wrote.
+
+Keying by task id is what makes a replayed commit idempotent: the retry rewrites
+the same record at the same name, so the crash window between committing the
+message and journalling it produces a duplicate of nothing.
+
+### 13.3 The journal
+
+`InboxJournal` gains `kind` and `messageBytes`, both optional, and an absent
+`kind` means `file`. Journals written before v2 wiring stay readable for exactly
+one reason: a completed journal is what stops a task this device already saved
+from being delivered a second time. That is duplicate/data-loss safety, not v1
+compatibility, and nothing else about v1 is honoured. A journal whose kind
+disagrees with the delivery being resumed is refused.
+
+### 13.4 What is never said
+
+No log event, notification, error code, journal field or receipt carries the
+message body or a preview of it. `InboxLogEvent.committedMessage` carries a task
+id and a byte count; `InboxNotification.savedMessage` carries nothing at all —
+a macOS banner is drawn on a locked screen, and "you received a message" is the
+most a person walking past may learn. The body lives in the store and is read by
+the user opening the app.
+
+### 13.5 The sender half
+
+Outstanding, and it blocks the feature end to end. A Device Inbox delivery
+references a Stored Object whose frame 0 is whatever the upload path sealed, and
+that path still writes the shared Stored-Wire manifest. Until an inbox send
+uploads an object carrying a v2 manifest, every delivery is refused by its own
+receiver as `verify_failed`. The e2e fixture in
+`server/cmd/relayium/inbox_e2e_test.go` shows the shape a real v2 sender must
+produce: the same `uint32BE(len) || encManifest || frames` body, with the
+dedicated manifest in the seq-0 unit.

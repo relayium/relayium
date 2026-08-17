@@ -23,7 +23,7 @@ final class InboxDestinationPlanTests: XCTestCase {
                       exists: @escaping (String) -> Bool = { _ in false })
         throws -> [InboxPlanEntry] {
         try InboxDestinationPlan.plan(root: root,
-                                      files: names.map { ManifestFile(name: $0, size: 1) },
+                                      files: names.map { InboxManifestItem(kind: .file, name:$0, size: 1) },
                                       exists: exists)
     }
 
@@ -152,12 +152,12 @@ final class InboxDestinationPlanTests: XCTestCase {
         let taken = Set([root.path + "/a.txt"])
         let names = ["a.txt", "a.txt".uppercased(), "b/c.txt"]
         let first = try InboxDestinationPlan.plan(
-            root: root, files: [ManifestFile(name: "a.txt", size: 1),
-                                ManifestFile(name: "b/c.txt", size: 2)],
+            root: root, files: [InboxManifestItem(kind: .file, name:"a.txt", size: 1),
+                                InboxManifestItem(kind: .file, name:"b/c.txt", size: 2)],
             exists: { taken.contains($0) })
         let second = try InboxDestinationPlan.plan(
-            root: root, files: [ManifestFile(name: "a.txt", size: 1),
-                                ManifestFile(name: "b/c.txt", size: 2)],
+            root: root, files: [InboxManifestItem(kind: .file, name:"a.txt", size: 1),
+                                InboxManifestItem(kind: .file, name:"b/c.txt", size: 2)],
             exists: { taken.contains($0) })
         XCTAssertEqual(first, second)
         _ = names
@@ -170,7 +170,7 @@ final class InboxDestinationPlanTests: XCTestCase {
         let taken = Set([root.path + "/a.txt"])
         let entries = try InboxDestinationPlan.plan(
             root: root,
-            files: [ManifestFile(name: "a.txt", size: 1), ManifestFile(name: "a (2).txt", size: 1)],
+            files: [InboxManifestItem(kind: .file, name:"a.txt", size: 1), InboxManifestItem(kind: .file, name:"a (2).txt", size: 1)],
             exists: { taken.contains($0) })
         XCTAssertEqual(Set(entries.map(\.destination)).count, 2)
         XCTAssertEqual(entries[0].destination, root.path + "/a (2).txt")
@@ -192,7 +192,7 @@ final class InboxDestinationPlanTests: XCTestCase {
         let root = try temporaryDirectory()
         let entries = try InboxDestinationPlan.plan(
             root: root,
-            files: [ManifestFile(name: "a.txt", size: 3), ManifestFile(name: "d/b.bin", size: 0)])
+            files: [InboxManifestItem(kind: .file, name:"a.txt", size: 3), InboxManifestItem(kind: .file, name:"d/b.bin", size: 0)])
         XCTAssertEqual(entries.map(\.index), [0, 1])
         XCTAssertEqual(entries.map(\.name), ["a.txt", "d/b.bin"])
         XCTAssertEqual(entries.map(\.size), [3, 0])

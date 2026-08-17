@@ -40,14 +40,19 @@ public enum InboxProtocol {
     /// boundary — which `InboxReceiver` does, through `StoreDecryptor`'s
     /// consumed-ciphertext accounting.
     ///
-    /// `inbox.text.v1` is NOT here yet, and its absence is a truth claim rather
-    /// than an oversight: the token means "this receiver shows a message as a
-    /// message", and the message store and its surface land in a later stage.
-    /// It is added the same commit that makes it true, never before — a sender
-    /// reads this list to decide whether offering "send text" to this device
-    /// would be honest.
+    /// `inbox.text.v1` is here as of the commit that made it TRUE, and not one
+    /// commit earlier. The token means "this receiver presents a text delivery
+    /// as text", and a sender reads this list to decide whether offering a text
+    /// send to this device would be honest. What backs it: a message is
+    /// committed whole to `InboxMessageStore` — a per-account, 0700/0600 store
+    /// in Application Support — and surfaced as a message, never written into
+    /// the user's receive folder and never as a `.txt` file.
+    ///
+    /// The CLI receiver deliberately still does NOT announce it: it has no
+    /// message store, so for that build the absence is the truthful answer.
     public static let capabilities: [String] = [
         InboxCapability.receiveV2, InboxCapability.autoAcceptV1, InboxCapability.resumeV1,
+        InboxCapability.textV1,
     ]
 
     /// The one wrap algorithm this protocol version defines.

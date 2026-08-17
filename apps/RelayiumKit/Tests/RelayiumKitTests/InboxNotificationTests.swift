@@ -83,7 +83,8 @@ final class InboxNotificationTests: XCTestCase {
     /// their closed codes, every terminal failure, and a range of counts.
     func testNoNotificationCanRenderContentAFileNameOrAnIdentifier() {
         var notifications: [InboxNotification] = [.saved(files: 0), .saved(files: 1),
-                                                  .saved(files: 3), .saved(files: 11)]
+                                                  .saved(files: 3), .saved(files: 11),
+                                                  .savedMessage]
         for problem in [InboxFolderProblem.accessDenied, .unresolvable, .notWritable,
                         .staleRefreshFailed] {
             notifications.append(.attention(.folder(problem)))
@@ -124,5 +125,27 @@ final class InboxNotificationTests: XCTestCase {
         XCTAssertNotEqual(one, many)
         XCTAssertTrue(one.contains("1"))
         XCTAssertTrue(many.contains("4"))
+    }
+
+    /// A message banner announces THAT a message arrived and nothing else.
+    ///
+    /// The type is what enforces it — `savedMessage` has no associated value, so
+    /// there is nothing a call site could put on the banner — and this asserts
+    /// the rendered halves in both maintained languages, including that a
+    /// message does not render as a file count.
+    func testAMessageBannerCarriesNoContentAndNoCount() {
+        for language in [AppLanguage.en, .zh] {
+            let title = InboxNotificationPresentation.title(.savedMessage, language: language)
+            let body = InboxNotificationPresentation.body(.savedMessage, language: language)
+            XCTAssertFalse(title.isEmpty)
+            XCTAssertFalse(body.isEmpty)
+            XCTAssertNotEqual(body,
+                              InboxNotificationPresentation.body(.saved(files: 1),
+                                                                 language: language),
+                              "a message renders as a file delivery")
+            XCTAssertNotEqual(body,
+                              InboxNotificationPresentation.body(.saved(files: 0),
+                                                                 language: language))
+        }
     }
 }

@@ -191,7 +191,12 @@ public enum InboxDestinationPlan {
     /// so the same manifest against the same directory always produces the same
     /// plan. That determinism is what lets a resumed task compare its journalled
     /// plan against reality instead of guessing.
-    public static func plan(root: URL, files: [ManifestFile],
+    /// Takes v2 manifest ITEMS rather than the shared manifest's file entries.
+    /// A `.text` item has no name and no destination, so it is refused here as
+    /// well as gated by the receiver: a planner that assumed its caller had
+    /// already separated the kinds would create a destination for a nameless
+    /// item the first time one forgot.
+    public static func plan(root: URL, files: [InboxManifestItem],
                             exists: (String) -> Bool = InboxDestinationPlan.pathExists)
         throws -> [InboxPlanEntry] {
         let absRoot = root.standardizedFileURL.path
@@ -221,7 +226,8 @@ public enum InboxDestinationPlan {
         }
 
         for (i, file) in files.enumerated() {
-            guard let relative = checkedRelativePath(file.name) else {
+            guard file.kind == .file, let name = file.name,
+                  let relative = checkedRelativePath(name) else {
                 throw InboxPlanError.unsafeName(index: i)
             }
             let top = relative.split(separator: "/", maxSplits: 1).first.map(String.init) ?? relative
@@ -263,7 +269,7 @@ public enum InboxDestinationPlan {
             }
             taken.insert(final)
             lowered.insert(final.lowercased())
-            plan.append(InboxPlanEntry(index: i, name: file.name, size: file.size,
+            plan.append(InboxPlanEntry(index: i, name: name, size: file.size,
                                        destination: final))
         }
         return plan

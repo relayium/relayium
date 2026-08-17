@@ -15,7 +15,7 @@ final class InboxCopyTests: XCTestCase {
     private var allStates: [InboxRuntimeState] {
         var states: [InboxRuntimeState] = [
             .signedOut, .loading, .disabled, .folderMissing, .paused, .working,
-            .saved(files: 0), .saved(files: 1), .saved(files: 5),
+            .saved(files: 0), .saved(files: 1), .saved(files: 5), .savedMessage,
             .asking(count: 1), .asking(count: 4),
             .offline(retryInSeconds: nil), .offline(retryInSeconds: 30),
         ]

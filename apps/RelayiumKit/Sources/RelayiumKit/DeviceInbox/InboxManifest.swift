@@ -320,6 +320,30 @@ extension InboxManifest {
         return m
     }
 
+    // MARK: - the sealed frame
+
+    /// Open a delivery's frame 0 and decode the manifest inside it.
+    ///
+    /// The AEAD unit is the one Stored-Wire already defines — sequence 0, opened
+    /// with the delivery's content key — and v2 changes only the document it
+    /// carries. That is why this opens the bytes and hands them to `decode`
+    /// rather than reaching for `decryptManifestRaw`: the shared codec would
+    /// parse them as a `StoredManifest`, which has no content kind and would
+    /// read a message as a nameless file.
+    ///
+    /// The two failures are deliberately different types. An AEAD refusal is a
+    /// `StoredWireError`, the same one every other frame in the delivery raises,
+    /// so a caller classifies it as the transport/authentication problem it is.
+    /// Everything the document itself gets wrong is an `InboxManifestError`,
+    /// which is terminal: the seal opened, so those are the sender's own bytes
+    /// and every later attempt reads exactly the same ones.
+    public static func open(key: [UInt8], sealed: [UInt8]) throws -> InboxManifestV2 {
+        guard let plaintext = RelayiumKit.open(key: key, seq: 0, ciphertext: sealed) else {
+            throw StoredWireError.truncatedStream
+        }
+        return try decode(plaintext)
+    }
+
     /// An exact integer, or `nil`.
     ///
     /// `JSONSerialization` hands back an `NSNumber` that remembers how the

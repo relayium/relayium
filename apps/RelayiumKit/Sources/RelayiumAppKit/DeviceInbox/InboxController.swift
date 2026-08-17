@@ -126,6 +126,15 @@ public struct InboxRuntime: Sendable {
     /// there is no honest local answer to that.
     public var makeEngine: @Sendable (InboxAccountID, String) async throws -> InboxReceiveEngine
     public var notifier: InboxNotifying?
+    /// This account's message store, for READING what has been received.
+    ///
+    /// The controller never writes through it — committing is the receiver's job
+    /// and happens under a lease — but a message that no surface can read is not
+    /// a message this build may claim to present, and `inbox.text.v1` is exactly
+    /// that claim. Defaulted to nothing so a harness that does not exercise
+    /// messages is unchanged, and so a build that forgets to wire it shows an
+    /// empty list rather than inventing one.
+    public var messageStore: @Sendable (InboxAccountID) -> InboxMessageStore?
     public var sleeper: InboxSleeping
     /// Show these paths in Finder. A seam so a test can prove that ONLY paths
     /// from a completed receipt ever reach it.
@@ -156,6 +165,8 @@ public struct InboxRuntime: Sendable {
                 makeEngine: @escaping @Sendable (InboxAccountID, String) async throws
                     -> InboxReceiveEngine,
                 notifier: InboxNotifying? = nil,
+                messageStore: @escaping @Sendable (InboxAccountID) -> InboxMessageStore?
+                    = { _ in nil },
                 sleeper: InboxSleeping = InboxTaskSleeper(),
                 reveal: @escaping @Sendable ([URL]) -> Void = { _ in },
                 refreshNotificationPermission: @escaping @Sendable () -> Void = {},
@@ -166,6 +177,7 @@ public struct InboxRuntime: Sendable {
         self.folder = folder
         self.makeEngine = makeEngine
         self.notifier = notifier
+        self.messageStore = messageStore
         self.sleeper = sleeper
         self.reveal = reveal
         self.refreshNotificationPermission = refreshNotificationPermission
@@ -252,6 +264,15 @@ public final class InboxController: ObservableObject {
     @Published public private(set) var folder: InboxFolderSummary = .none
     /// Completed deliveries, newest first, bounded.
     @Published public private(set) var results: [InboxReceipt] = []
+    /// Messages this account has received, newest first, read from the protected
+    /// store. This is the whole of what `inbox.text.v1` promises at the model
+    /// layer: a message is stored AS a message and can be read back as one.
+    ///
+    /// It is refreshed on a generation change and when a message lands, never on
+    /// a redraw, and it is cleared on sign-out — the files stay on disk for the
+    /// account that received them, and nothing about another account's session
+    /// may show them.
+    @Published public private(set) var messages: [InboxMessage] = []
     /// Tasks central is holding for an answer under `ask`. No names: the manifest
     /// is not decrypted until a task is claimed. Bounded ciphertext size and
     /// expiry remain available so two questions do not render as identical rows.
@@ -371,6 +392,7 @@ public final class InboxController: ObservableObject {
         }
         policy = runtime.folder.receivePolicy(account: account)
         refreshFolder()
+        refreshMessages()
         state = isPaused ? .paused : .loading
         loop = Task { [weak self] in
             await draining?.value
@@ -393,6 +415,7 @@ public final class InboxController: ObservableObject {
 
     private func reset() {
         results = []
+        messages = []
         asking = []
         settingsError = nil
         isPaused = false
@@ -562,7 +585,8 @@ public final class InboxController: ObservableObject {
                 // "1 file saved" as the CURRENT status after a relaunch would
                 // date somebody's old delivery to this moment.
                 ledger.attentionCleared()
-                state = .saved(files: receipt.fileCount)
+                state = receipt.kind == .message ? .savedMessage
+                                                 : .saved(files: receipt.fileCount)
             } else if let blocker = record.blocker {
                 state = .attention(.delivery(blocker))
                 announce(.attention(.delivery(blocker)))
@@ -682,12 +706,31 @@ public final class InboxController: ObservableObject {
             results.removeAll { $0.taskID == receipt.taskID }
             results.insert(receipt, at: 0)
             if ledger.shouldAnnounce(receipt) {
-                runtime.notifier?.deliver(.saved(files: receipt.fileCount))
+                runtime.notifier?.deliver(receipt.kind == .message
+                                          ? .savedMessage
+                                          : .saved(files: receipt.fileCount))
             }
         }
         if results.count > runtime.resultLimit {
             results = Array(results.prefix(runtime.resultLimit))
         }
+        // Re-read the store rather than appending the receipt's own idea of what
+        // landed: the store is what the commit wrote, and a list assembled from
+        // receipts would drift from it across a relaunch, a prune or a replay.
+        if receipts.contains(where: { $0.kind == .message }) { refreshMessages() }
+    }
+
+    /// Re-read this account's messages from the protected store.
+    ///
+    /// Cheap — a small directory of small files — but still not something to do
+    /// per redraw: it is called when a generation starts and when a message
+    /// lands, which are the only two moments the list can change.
+    public func refreshMessages() {
+        guard let generation, let store = runtime.messageStore(generation.account) else {
+            messages = []
+            return
+        }
+        messages = store.all()
     }
 
     private func adoptPending(_ tasks: [InboxTask]) {

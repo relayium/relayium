@@ -138,7 +138,7 @@ struct MenuBarView: View {
     /// and a control with no effect reads as a broken one.
     private var canPauseInbox: Bool {
         switch inbox.state {
-        case .ready, .working, .asking, .offline, .saved, .loading:
+        case .ready, .working, .asking, .offline, .saved, .savedMessage, .loading:
             return true
         case .signedOut, .disabled, .folderMissing, .paused, .attention, .failed:
             return false

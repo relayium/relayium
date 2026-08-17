@@ -22,6 +22,9 @@ public struct InboxReceiveEngine: Sendable {
     public let transport: InboxTransport
     public let keys: InboxDeviceKeyStoring
     public let journals: InboxJournalStore
+    /// Where a received message is committed. Independent of `folder` on
+    /// purpose: see `InboxMessageStore`.
+    public let messages: InboxMessageStore
     public let folder: InboxReceiveFolder
     public let account: InboxAccountID
     public let now: @Sendable () -> Date
@@ -50,7 +53,8 @@ public struct InboxReceiveEngine: Sendable {
     public var onReceipt: (@Sendable (InboxReceipt) -> Void)?
 
     public init(transport: InboxTransport, keys: InboxDeviceKeyStoring,
-                journals: InboxJournalStore, folder: InboxReceiveFolder,
+                journals: InboxJournalStore, messages: InboxMessageStore,
+                folder: InboxReceiveFolder,
                 account: InboxAccountID,
                 now: @escaping @Sendable () -> Date = { Date() },
                 log: InboxLog? = nil,
@@ -60,6 +64,7 @@ public struct InboxReceiveEngine: Sendable {
         self.transport = transport
         self.keys = keys
         self.journals = journals
+        self.messages = messages
         self.folder = folder
         self.account = account
         self.now = now
@@ -162,37 +167,50 @@ public struct InboxReceiveEngine: Sendable {
         // of permission bits.
         try await transport.heartbeat(receiveDirReady: opened.state.canReceive)
 
-        guard case .usable(let root) = opened.state else {
-            // Refuse to CLAIM into a folder that just failed its probe. Claiming
-            // would take a lease this Mac cannot honour and would leave the sender
-            // watching a task that is not progressing.
-            return .notReceiving(opened.state)
-        }
+        // A folder verdict is NOT the claim gate any more, and that is the whole
+        // point of the v2 receiver: a message is committed to the protected
+        // message store and never to the receive folder, so an unusable folder
+        // must not stop one from landing. The pass goes on to claim; the
+        // receiver decodes the manifest, decides the kind, and only a FILE
+        // delivery reports `directory_unavailable` back to central.
+        //
+        // What an unusable folder still does: it is reported on the heartbeat
+        // above, so central holds new tasks in `attention_required` rather than
+        // queuing them, and it is what `.notReceiving` says when this pass has
+        // nothing else to report.
+        let root = opened.state.url
 
         let pending = try await transport.pending(limit: InboxProtocol.claimBatch)
         onPending?(pending)
         if pending.isEmpty {
             journals.prune(now: now())
-            return .idle
+            messages.prune(now: now())
+            return root == nil ? .notReceiving(opened.state) : .idle
         }
-        // A write probe says the folder is writable; it does not say it now has
-        // room for a task that was parked as `disk_full`. Re-check that task's own
-        // declared size, and re-queue it only once the same preflight the receiver
-        // uses would pass. That makes "free some space" self-healing without
-        // turning a still-full disk into a claim/report busy loop.
-        await requeueRecovered(pending, root: root)
+        if let root {
+            // A write probe says the folder is writable; it does not say it now
+            // has room for a task that was parked as `disk_full`. Re-check that
+            // task's own declared size, and re-queue it only once the same
+            // preflight the receiver uses would pass. That makes "free some
+            // space" self-healing without turning a still-full disk into a
+            // claim/report busy loop.
+            await requeueRecovered(pending, root: root)
+        } else {
+            await requeueUnjudged(pending)
+        }
 
         let claimed = try await transport.claim(max: InboxProtocol.claimBatch)
         guard let delivery = claimed.deliveries.first else {
             // Pending said there was work but the claim leased none: another worker
             // took it, or it expired between the two calls. Not an error.
-            return .idle
+            return root == nil ? .notReceiving(opened.state) : .idle
         }
         log?(.claimed(taskID: delivery.task.id,
                       ciphertextBytes: delivery.task.ciphertextBytes))
 
         var receiver = InboxReceiver(transport: transport, keys: keys, journals: journals,
-                                     account: account, root: root, now: now, log: log,
+                                     messages: messages, account: account, root: root,
+                                     now: now, log: log,
                                      renewInterval: renewInterval, streamAttempts: streamAttempts,
                                      freeBytes: freeBytes)
         if claimed.leaseSeconds > 0 {
@@ -283,6 +301,36 @@ public struct InboxReceiveEngine: Sendable {
             log?(.reported(taskID: delivery.task.id, state: state, code: code))
         } catch {
             log?(.reportFailed(taskID: delivery.task.id, state: state))
+        }
+    }
+
+    /// Re-queue the tasks CENTRAL parked because this device last reported an
+    /// unusable receive folder, so their kind can be discovered.
+    ///
+    /// Central cannot know what a delivery contains — kind is sealed — so when a
+    /// device reports `receiveDirReady: false` it holds every new task in
+    /// `attention_required`, message or not. Left alone, a message would be
+    /// blocked by a folder it was never going to touch, which is exactly what v2
+    /// says must not happen. The only way to find out which it is, is to claim
+    /// it: a message then commits to the message store, and a file delivery is
+    /// re-parked with `directory_unavailable` — a better answer than the empty
+    /// code it had, and one `requeueRecovered` will act on once the folder works.
+    ///
+    /// Two guards make this narrow rather than a blanket unpark:
+    ///
+    ///   - **Only under `auto`.** A task with no error code under the `ask`
+    ///     policy is a question waiting for the USER. Accepting one would be this
+    ///     machine answering on their behalf, which is the one thing the ask
+    ///     policy exists to prevent.
+    ///   - **Only with NO error code.** A task carrying one was parked for a
+    ///     blocker this device reported; `requeueRecovered` owns those, and it
+    ///     only clears them once the condition is actually gone. That is also
+    ///     what makes this converge instead of looping: a file delivery claimed
+    ///     here comes back with a code and is not picked up again.
+    private func requeueUnjudged(_ tasks: [InboxTask]) async {
+        guard announcedPolicy == .auto else { return }
+        for task in tasks where task.state == .attentionRequired && task.errorCode.isNone {
+            _ = try? await transport.accept(taskID: task.id, accept: true)
         }
     }
 

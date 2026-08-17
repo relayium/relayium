@@ -39,7 +39,7 @@ final class InboxCommitTests: XCTestCase {
 
         let journals = InboxJournalStore(directory: root.appendingPathComponent(".journals"))
         let plan = try InboxDestinationPlan.plan(
-            root: root, files: entries.map { ManifestFile(name: $0.name, size: $0.bytes.count) })
+            root: root, files: entries.map { InboxManifestItem(kind: .file, name:$0.name, size: $0.bytes.count) })
         let staging = try InboxCommit.prepareStaging(root: root, taskID: taskID)
         for (index, entry) in entries.enumerated() {
             let path = staging.appendingPathComponent("\(index).part")

@@ -80,7 +80,8 @@ final class InboxProtocolTests: XCTestCase {
         XCTAssertEqual(InboxProtocol.sealedBoxBytes, 80)
         XCTAssertEqual(InboxProtocol.claimTokenHeader, "X-Relayium-Inbox-Claim")
         XCTAssertEqual(InboxProtocol.capabilities,
-                       ["inbox.receive.v2", "inbox.autoaccept.v1", "inbox.resume.v1"])
+                       ["inbox.receive.v2", "inbox.autoaccept.v1", "inbox.resume.v1",
+                        "inbox.text.v1"])
     }
 
     /// v1 is gone, not deprioritised. The owner waived old-protocol
@@ -92,18 +93,21 @@ final class InboxProtocolTests: XCTestCase {
         XCTAssertFalse(InboxProtocol.capabilities.contains(InboxCapability.receiveV1))
     }
 
-    /// `inbox.text.v1` means "this receiver shows a message as a message". It
-    /// must be announced by the same commit that makes that true and not one
-    /// earlier: a sender reads the token to decide whether offering a text send
-    /// to this device would be honest, so announcing it early is a lie that
-    /// lands somebody's message in a downloads folder.
+    /// `inbox.text.v1` means "this receiver shows a message as a message". It is
+    /// announced by the same commit that made that true and not one earlier: a
+    /// sender reads the token to decide whether offering a text send to this
+    /// device would be honest, so announcing it early is a lie that lands
+    /// somebody's message in a downloads folder.
     ///
-    /// Flip this assertion in the stage that ships the message store and its
-    /// surface — never before.
-    func testTextCapabilityIsNotAnnouncedUntilTextIsPresentedAsText() {
+    /// This assertion was inverted when `InboxMessageStore` shipped. What backs
+    /// the claim, and what would have to be removed before it could be inverted
+    /// back: a message is committed whole to a per-account protected store
+    /// (`InboxMessageStoreTests`), never to the receive folder
+    /// (`InboxTextDeliveryTests`), and it is readable back as text through
+    /// `InboxController.messages`.
+    func testTextCapabilityIsAnnouncedBecauseAMessageIsStoredAsAMessage() {
         XCTAssertEqual(InboxCapability.textV1, "inbox.text.v1")
-        XCTAssertFalse(InboxProtocol.capabilities.contains(InboxCapability.textV1),
-                       "this build has no message store yet; announcing inbox.text.v1 would promise a surface that does not exist")
+        XCTAssertTrue(InboxProtocol.capabilities.contains(InboxCapability.textV1))
     }
 
     /// One task per claim. A second task claimed before the first finishes could

@@ -152,6 +152,7 @@ final class InboxReceivePolicyTests: XCTestCase {
         let engine = InboxReceiveEngine(transport: FakeInboxTransport(),
                                         keys: InMemoryInboxDeviceKeyStore(),
                                         journals: InboxJournalStore(directory: root),
+                                        messages: InboxMessageStore(directory: root),
                                         folder: folder, account: account)
         for policy in [InboxAutoAccept.off, .ask, .auto] {
             try folder.setReceivePolicy(policy, account: account)

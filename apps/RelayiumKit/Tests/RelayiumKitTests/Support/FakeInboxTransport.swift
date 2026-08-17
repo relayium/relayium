@@ -206,10 +206,67 @@ enum InboxFixture {
                          claimToken: String = "claim-token",
                          contentKey: [UInt8]? = nil)
         throws -> (delivery: InboxDelivery, ciphertext: Data, contentKey: [UInt8]) {
+        try delivery(taskID: taskID,
+                     manifest: manifestBytes(items: files.map {
+                         (kind: "file", name: $0.0, size: $0.1.count)
+                     }),
+                     payload: files.map { $0.1 },
+                     deviceKey: deviceKey, keyID: keyID, claimToken: claimToken,
+                     contentKey: contentKey)
+    }
+
+    /// One message delivery: a v2 text manifest and the message's UTF-8 bytes as
+    /// the payload frames. The message is NOT in the manifest — the manifest
+    /// declares only its length — which is the invariant this fixture exists to
+    /// exercise honestly.
+    static func message(taskID: String = "task1", text: String,
+                        deviceKey: InboxDeviceKeyPair, keyID: String = "key1",
+                        claimToken: String = "claim-token",
+                        contentKey: [UInt8]? = nil)
+        throws -> (delivery: InboxDelivery, ciphertext: Data, contentKey: [UInt8]) {
+        let bytes = Array(text.utf8)
+        return try delivery(taskID: taskID,
+                            manifest: manifestBytes(items: [(kind: "text", name: nil,
+                                                             size: bytes.count)]),
+                            payload: [bytes],
+                            deviceKey: deviceKey, keyID: keyID, claimToken: claimToken,
+                            contentKey: contentKey)
+    }
+
+    /// The v2 manifest's canonical bytes, written HERE rather than through
+    /// `InboxManifest.encode`.
+    ///
+    /// The encoder validates, so a fixture built on it could only pose as a
+    /// well-behaved sender — and the refusal tests need the opposite: a manifest
+    /// that authenticates perfectly under the real content key and says
+    /// something this receiver must refuse. A fixture that cannot lie cannot
+    /// test a refusal.
+    static func manifestBytes(version: Int = 2,
+                              items: [(kind: String, name: String?, size: Int)]) -> [UInt8] {
+        var out = "{\"v\":\(version),\"items\":["
+        for (i, item) in items.enumerated() {
+            if i > 0 { out += "," }
+            out += "{\"kind\":\"\(item.kind)\""
+            if let name = item.name {
+                let escaped = name
+                    .replacingOccurrences(of: "\\", with: "\\\\")
+                    .replacingOccurrences(of: "\"", with: "\\\"")
+                out += ",\"name\":\"" + escaped + "\""
+            }
+            out += ",\"size\":\(item.size)}"
+        }
+        return Array((out + "]}").utf8)
+    }
+
+    /// One delivery from manifest bytes and payload runs the caller chose.
+    static func delivery(taskID: String = "task1", manifest: [UInt8], payload: [[UInt8]],
+                         deviceKey: InboxDeviceKeyPair, keyID: String = "key1",
+                         claimToken: String = "claim-token",
+                         contentKey: [UInt8]? = nil)
+        throws -> (delivery: InboxDelivery, ciphertext: Data, contentKey: [UInt8]) {
         let key = contentKey ?? generateStoreKey()
-        let manifest = StoredManifest(files: files.map { ManifestFile(name: $0.0, size: $0.1.count) })
-        let encManifest = try encryptManifest(key: key, manifest)
-        let ciphertext = Data(encryptChunks(key: key, files: files.map { $0.1 }))
+        let encManifest = RelayiumKit.seal(key: key, seq: 0, plaintext: manifest)
+        let ciphertext = Data(encryptChunks(key: key, files: payload))
         let sealed = try seal(contentKey: key, to: deviceKey.publicKey)
         let task = InboxTask(id: taskID, storedFileID: "obj1", state: .downloading,
                              ciphertextBytes: Int64(ciphertext.count),

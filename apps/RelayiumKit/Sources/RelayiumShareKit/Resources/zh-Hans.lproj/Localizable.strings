@@ -619,6 +619,7 @@
 "inbox.errorAskFailed" = "你的答复未能送出。请检查网络连接后重试。";
 "inbox.errorNotificationSettings" = "无法打开「系统设置」。请自行打开，然后前往「通知」中的 Relayium。";
 "inbox.notifyTitleSaved" = "已接收文件";
+"inbox.savedMessage" = "已收到消息";
 "inbox.notifyTitleAttention" = "设备收件箱需要处理";
 "inbox.bannersBlocked" = "通知横幅已关闭";
 "inbox.bannersBlockedBody" = "这台 Mac 仍会接收发送给它的文件，并保存到你选择的文件夹中。被隐藏的只是提示到达的横幅，最近接收的内容仍会显示在下方。";

@@ -24,9 +24,22 @@ import Foundation
 /// completion that is published twice, across a retry or a relaunch — and it is
 /// never rendered.
 public struct InboxReceipt: Equatable, Sendable, Identifiable {
+    /// What landed: files in the user's folder, or a message in the protected
+    /// store. Two different sentences, two different places, and nothing may
+    /// render one as the other — "0 files saved" for a delivered message is a
+    /// lie about both halves.
+    public enum Kind: Equatable, Sendable {
+        case files
+        case message
+    }
+
     /// De-duplication identity, never displayed.
     public let taskID: String
-    /// Absolute paths this delivery created, in plan order.
+    public let kind: Kind
+    /// Absolute paths this delivery created, in plan order. EMPTY for a message,
+    /// which has no path in the user's folder by design; the message is read
+    /// from `InboxMessageStore` under `taskID`, and deliberately not carried
+    /// here — a receipt is published state, and the body is not.
     public let urls: [URL]
     /// Bytes delivered, summed from the journalled plan.
     public let byteCount: Int64
@@ -43,15 +56,18 @@ public struct InboxReceipt: Equatable, Sendable, Identifiable {
 
     public var id: String { taskID }
 
-    public init(taskID: String, urls: [URL], byteCount: Int64,
+    public init(taskID: String, kind: Kind = .files, urls: [URL], byteCount: Int64,
                 savedAt: Date, isReplay: Bool) {
         self.taskID = taskID
+        self.kind = kind
         self.urls = urls
         self.byteCount = byteCount
         self.savedAt = savedAt
         self.isReplay = isReplay
     }
 
+    /// How many FILES landed. Zero for a message, which is why nothing renders a
+    /// completion from this number alone.
     public var fileCount: Int { urls.count }
 
     /// Build one from a completed journal, or nothing.
@@ -64,6 +80,19 @@ public struct InboxReceipt: Equatable, Sendable, Identifiable {
     public static func make(taskID: String, journal: InboxJournal?,
                             isReplay: Bool) -> InboxReceipt? {
         guard let journal, journal.isCompleted, !journal.committed.isEmpty else { return nil }
+        if journal.contentKind == .text {
+            // A message has no committed path and no plan, so the file arm below
+            // would produce nothing at all. The byte count comes from the
+            // journal rather than from the store, for the same reason the file
+            // arm reads `committed` rather than `plan`: this is the record the
+            // commit itself wrote, and reading the message back to measure it
+            // would put the body somewhere it does not need to be.
+            guard let bytes = journal.messageBytes, bytes > 0 else { return nil }
+            let stamp = journal.completedAt > 0 ? journal.completedAt : journal.updatedAt
+            return InboxReceipt(
+                taskID: taskID, kind: .message, urls: [], byteCount: Int64(bytes),
+                savedAt: Date(timeIntervalSince1970: TimeInterval(stamp)), isReplay: isReplay)
+        }
         // Plan order, not journal-append order: the plan is what the sender's
         // manifest described, and it is stable across a resumed commit.
         let committed = Set(journal.committed)

@@ -2,15 +2,27 @@ import Foundation
 import Darwin
 @preconcurrency import RelayiumKit
 
-/// One delivery, end to end: claim material in, a committed file tree out.
+/// One delivery, end to end: claim material in, a committed file tree — or one
+/// committed message — out.
 ///
 /// The pipeline is ordered so that nothing observable is produced until
 /// everything has been proven:
 ///
-///     unseal -> decrypt+validate manifest -> plan destinations -> journal the plan
-///       -> preflight space -> stream ciphertext into STAGING, authenticating every
-///       frame -> verify the WHOLE stream -> report `verifying` -> commit -> report
-///       `saved`
+///     unseal -> decrypt+validate manifest -> CLASSIFY -> plan destinations ->
+///       journal the plan -> preflight space -> stream ciphertext into STAGING,
+///       authenticating every frame -> verify the WHOLE stream -> report
+///       `verifying` -> commit -> report `saved`
+///
+/// ## Classify first, and the receive folder second
+///
+/// The manifest is decoded and its KIND decided before anything asks whether
+/// this Mac has a usable receive folder, and that ordering is a requirement
+/// rather than a tidy-up. A message is not written to the receive folder — it is
+/// committed whole to `InboxMessageStore` — so a missing, revoked, unwritable or
+/// never-chosen folder has nothing to do with whether it can land. Checking the
+/// folder first would block a delivery that does not need it, and would report
+/// `directory_unavailable` about a directory this delivery was never going to
+/// touch. Only a FILE delivery enters the folder-attention flow.
 ///
 /// Nothing is written outside the staging area before the last authenticated
 /// frame has been accepted and the total length checked, so a tampered, truncated
@@ -34,6 +46,9 @@ public enum InboxLogEvent: Equatable, Sendable {
     case alreadyCommittedLocally(taskID: String, files: Int)
     case streamInterrupted(taskID: String, attempt: Int)
     case committed(taskID: String, files: Int, bytes: Int64)
+    /// A message landed. A BYTE COUNT and nothing else: the body is not logged,
+    /// and there is no case here through which it could be.
+    case committedMessage(taskID: String, bytes: Int64)
     case reported(taskID: String, state: InboxTaskState, code: InboxDeviceErrorCode)
     case reportFailed(taskID: String, state: InboxTaskState)
     case abandoned(taskID: String, cause: InboxAbandon.Cause)
@@ -46,12 +61,19 @@ public struct InboxReceiver: Sendable {
     public let transport: InboxTransport
     public let keys: InboxDeviceKeyStoring
     public let journals: InboxJournalStore
+    /// Where a received MESSAGE is committed. Never the receive folder, and
+    /// never dependent on it: see `InboxMessageStore`.
+    public let messages: InboxMessageStore
     public let account: InboxAccountID
     /// The receive directory, resolved and held under an OPEN security scope by
     /// the caller for the whole delivery. The receiver never resolves a bookmark
     /// itself: whoever owns the scope owns the permission, and splitting the two
     /// is how a scope gets leaked.
-    public let root: URL
+    ///
+    /// OPTIONAL, because a delivery may not need one. A `nil` root means this
+    /// Mac has no usable folder right now; a message still lands, and a file
+    /// delivery is the only thing that reports `directory_unavailable`.
+    public let root: URL?
     public let now: @Sendable () -> Date
     public let log: InboxLog?
 
@@ -74,7 +96,8 @@ public struct InboxReceiver: Sendable {
     public var freeBytes: @Sendable (URL) -> Int64?
 
     public init(transport: InboxTransport, keys: InboxDeviceKeyStoring,
-                journals: InboxJournalStore, account: InboxAccountID, root: URL,
+                journals: InboxJournalStore, messages: InboxMessageStore,
+                account: InboxAccountID, root: URL?,
                 now: @escaping @Sendable () -> Date = { Date() },
                 log: InboxLog? = nil,
                 renewInterval: TimeInterval = Double(InboxProtocol.defaultLeaseSeconds) / 3,
@@ -83,6 +106,7 @@ public struct InboxReceiver: Sendable {
         self.transport = transport
         self.keys = keys
         self.journals = journals
+        self.messages = messages
         self.account = account
         self.root = root
         self.now = now
@@ -112,15 +136,18 @@ public struct InboxReceiver: Sendable {
         try Task.checkCancellation()
         let task = delivery.task
 
-        var journal: InboxJournal
         do {
             if let existing = try journals.load(task.id), existing.isCompleted {
                 try validateJournalIdentity(existing, for: task)
-                // A crash between the last journal write and the staging cleanup
-                // leaves an empty per-task directory behind — `commit` removes each
-                // staged source as it records it. Inert, but nothing else would
-                // ever collect it, because this path never calls `prepareStaging`.
-                InboxCommit.cleanStaging(root: root, taskID: task.id)
+                if existing.contentKind == .file, let root {
+                    // A crash between the last journal write and the staging
+                    // cleanup leaves an empty per-task directory behind —
+                    // `commit` removes each staged source as it records it.
+                    // Inert, but nothing else would ever collect it, because
+                    // this path never calls `prepareStaging`. A message has no
+                    // staging area at all.
+                    InboxCommit.cleanStaging(root: root, taskID: task.id)
+                }
                 log?(.alreadyCommittedLocally(taskID: task.id, files: existing.plan.count))
                 return .alreadyCommitted
             }
@@ -132,7 +159,35 @@ public struct InboxReceiver: Sendable {
         defer { InboxKeyMaterial.zero(&contentKey) }
 
         let (manifest, total) = try openManifest(delivery, key: contentKey)
-        journal = try planAndJournal(delivery, manifest: manifest)
+        // The classification, and it happens HERE — before the receive folder is
+        // consulted, before a destination is planned, before space is measured
+        // against a volume this delivery may never write to.
+        switch manifest.kind {
+        case .text:
+            return try await deliverMessage(delivery, key: contentKey, total: total)
+        case .file:
+            return try await deliverFiles(delivery, key: contentKey, manifest: manifest,
+                                          total: total)
+        case nil:
+            // `validate` refuses an empty manifest, so this is unreachable from
+            // a decoded document. Fails closed rather than defaulting to either
+            // kind: a delivery whose kind this build cannot name is one it must
+            // not commit anywhere.
+            throw InboxFailure.terminal(.verifyFailed, .manifestInvalid)
+        }
+    }
+
+    /// A file delivery: planned, staged, verified and linked into the user's own
+    /// receive folder, and nowhere else.
+    private func deliverFiles(_ delivery: InboxDelivery, key: [UInt8],
+                              manifest: InboxManifestV2, total: Int64) async throws -> Outcome {
+        let task = delivery.task
+        // The one place the folder is required, and the only delivery that can
+        // be blocked by it.
+        guard let root else {
+            throw InboxFailure.attention(.directoryUnavailable, .directoryUnavailable)
+        }
+        var journal = try planAndJournal(delivery, manifest: manifest, root: root)
 
         guard InboxSpace.hasRoom(at: root, for: total, freeBytes: freeBytes) else {
             throw InboxFailure.attention(.diskFull, .notEnoughSpace)
@@ -145,9 +200,15 @@ public struct InboxReceiver: Sendable {
         do { try journals.save(&journal, now: now()) }
         catch { throw InboxClassify.filesystem(error) }
 
+        let writer: InboxStagingWriter
+        do { writer = try InboxStagingWriter(staging: staging, plan: journal.plan) }
+        catch {
+            InboxCommit.cleanStaging(root: root, taskID: task.id)
+            throw InboxClassify.filesystem(error)
+        }
+        defer { writer.closeAll() }
         do {
-            try await stream(delivery, key: contentKey, plan: journal.plan,
-                             staging: staging, total: total)
+            try await stream(delivery, key: key, sink: writer, total: total)
         } catch {
             // Nothing outside staging exists yet, so removing it leaves no trace.
             InboxCommit.cleanStaging(root: root, taskID: task.id)
@@ -196,6 +257,83 @@ public struct InboxReceiver: Sendable {
         return .committed
     }
 
+    /// A message delivery: held whole in memory, proven to be exactly the
+    /// declared number of valid UTF-8 bytes, and committed to the protected
+    /// per-account message store.
+    ///
+    /// Nothing in this path resolves the receive folder, plans a destination,
+    /// creates a staging area, or measures the volume the user chose. A message
+    /// is bounded at 64 KiB by the protocol precisely so a receiver can hold one
+    /// in memory rather than needing a staging path of its own — which is also
+    /// what frees it from the folder grant entirely.
+    private func deliverMessage(_ delivery: InboxDelivery, key: [UInt8],
+                                total: Int64) async throws -> Outcome {
+        let task = delivery.task
+        var journal = try messageJournal(delivery)
+
+        guard InboxSpace.hasRoom(at: messages.directory, for: total, freeBytes: freeBytes) else {
+            throw InboxFailure.attention(.diskFull, .notEnoughSpace)
+        }
+
+        let buffer = InboxMessageBuffer(declared: Int(total))
+        try await stream(delivery, key: key, sink: buffer, total: total)
+
+        // The bytes authenticated and are exactly as long as the manifest said.
+        // That still does not make them a MESSAGE: a sender may be broken or
+        // hostile, and a receiver that repaired invalid UTF-8 would show the
+        // user something nobody wrote. Refused, terminally — the same bytes fail
+        // the same way on every attempt.
+        guard let text = buffer.message(), InboxMessageStore.isAcceptable(text) else {
+            throw InboxFailure.terminal(.verifyFailed, .messageMalformed)
+        }
+
+        try Task.checkCancellation()
+        try await renew(delivery, state: .verifying)
+        try Task.checkCancellation()
+
+        // Store first, journal second. A crash between them costs a re-download
+        // that rewrites the SAME record at the SAME name — the store is keyed by
+        // task id — so the window produces a duplicate of nothing. The reverse
+        // order would let a journal claim a message that is not there.
+        do { try messages.commit(id: task.id, text: text, receivedAt: now()) }
+        catch { throw InboxClassify.filesystem(error) }
+
+        journal.committed = [task.id]
+        journal.messageBytes = Int(total)
+        journal.isCompleted = true
+        journal.completedAt = Int64(now().timeIntervalSince1970)
+        do { try journals.save(&journal, now: now()) }
+        catch { throw InboxClassify.filesystem(error) }
+
+        log?(.committedMessage(taskID: task.id, bytes: total))
+        return .committed
+    }
+
+    /// Journal a message delivery before it is committed.
+    ///
+    /// Its `root` is the MESSAGE STORE's directory, not the receive folder: that
+    /// is where this delivery is going, and pinning it is what stops a journal
+    /// written for one account's store being resumed against another's.
+    private func messageJournal(_ delivery: InboxDelivery) throws -> InboxJournal {
+        let task = delivery.task
+        let existing: InboxJournal?
+        do { existing = try journals.load(task.id) }
+        catch { throw InboxClassify.filesystem(error) }
+        if let existing {
+            try validateJournalIdentity(existing, for: task, kind: .text)
+            return existing
+        }
+        var journal = InboxJournal(taskID: task.id, storedFileID: task.storedFileID,
+                                   targetKeyID: task.targetKeyID,
+                                   root: messages.directory.standardizedFileURL.path,
+                                   plan: [],
+                                   plannedAt: Int64(now().timeIntervalSince1970),
+                                   kind: .text)
+        do { try journals.save(&journal, now: now()) }
+        catch { throw InboxClassify.filesystem(error) }
+        return journal
+    }
+
     /// Mark this task's receipt as acknowledged by central, so it is not retried
     /// forever after the task has left the queue.
     public func markSavedReported(_ taskID: String) {
@@ -239,20 +377,26 @@ public struct InboxReceiver: Sendable {
     /// terabytes behind a 4 KiB object is a lie central can be used to catch,
     /// before any space is reserved for it.
     private func openManifest(_ delivery: InboxDelivery,
-                              key: [UInt8]) throws -> (StoredManifest, Int64) {
+                              key: [UInt8]) throws -> (InboxManifestV2, Int64) {
         guard let encoded = Data(base64Encoded: delivery.encManifest) else {
             throw InboxFailure.terminal(.verifyFailed, .manifestUnreadable)
         }
-        let manifest: StoredManifest
+        let manifest: InboxManifestV2
         do {
-            // RAW names: `decryptManifest` strips control and bidi characters for
-            // display, and a stripped name is one this device would then create
-            // under a name nobody chose. The refusal belongs to the planner.
-            manifest = try decryptManifestRaw(key: key, [UInt8](encoded))
+            // The DEDICATED v2 codec, never `decryptManifestRaw`. The shared
+            // Stored-Wire manifest has no content kind, so decoding this
+            // document with it would read a message as a nameless file — and it
+            // is the one structure that says which of the two a delivery is.
+            //
+            // RAW names throughout: nothing here strips control or bidi
+            // characters for display, because a stripped name is one this device
+            // would then create under a name nobody chose. The codec refuses
+            // them outright and the planner refuses what is left.
+            manifest = try InboxManifest.open(key: key, sealed: [UInt8](encoded))
         } catch {
             throw InboxClassify.crypto(error)
         }
-        let total = manifest.files.reduce(Int64(0)) { $0 + Int64($1.size) }
+        let total = Int64(manifest.totalSize)
         if delivery.task.ciphertextBytes > 0, total > delivery.task.ciphertextBytes {
             throw InboxFailure.terminal(.verifyFailed, .manifestExceedsCiphertext)
         }
@@ -265,27 +409,28 @@ public struct InboxReceiver: Sendable {
     /// A resumed task keeps its ORIGINAL plan: recomputing it against a directory
     /// that now contains this task's own earlier output would walk the collision
     /// suffix forward and deliver the same file twice.
-    private func planAndJournal(_ delivery: InboxDelivery,
-                                manifest: StoredManifest) throws -> InboxJournal {
+    private func planAndJournal(_ delivery: InboxDelivery, manifest: InboxManifestV2,
+                                root: URL) throws -> InboxJournal {
         let task = delivery.task
         let existing: InboxJournal?
         do { existing = try journals.load(task.id) }
         catch { throw InboxClassify.filesystem(error) }
 
         if let existing, !existing.plan.isEmpty {
-            try validateJournalIdentity(existing, for: task)
+            try validateJournalIdentity(existing, for: task, kind: .file)
             return existing
         }
 
         let plan: [InboxPlanEntry]
-        do { plan = try InboxDestinationPlan.plan(root: root, files: manifest.files) }
+        do { plan = try InboxDestinationPlan.plan(root: root, files: manifest.items) }
         catch { throw InboxClassify.filesystem(error) }
 
         var journal = InboxJournal(taskID: task.id, storedFileID: task.storedFileID,
                                    targetKeyID: task.targetKeyID,
                                    root: root.standardizedFileURL.path,
                                    plan: plan,
-                                   plannedAt: Int64(now().timeIntervalSince1970))
+                                   plannedAt: Int64(now().timeIntervalSince1970),
+                                   kind: .file)
         do { try journals.save(&journal, now: now()) }
         catch { throw InboxClassify.filesystem(error) }
         return journal
@@ -294,17 +439,33 @@ public struct InboxReceiver: Sendable {
     /// A task id names the journal file, but it is not sufficient identity for
     /// resumption. Refuse a stale or replaced journal unless every immutable
     /// delivery binding and the receive root still match this claim.
-    private func validateJournalIdentity(_ journal: InboxJournal,
-                                         for task: InboxTask) throws {
+    ///
+    /// `kind` is what this delivery turned out to be, or nil at the top of
+    /// `deliver`, where the manifest has not been opened yet and the journal's
+    /// own answer is the only one available.
+    private func validateJournalIdentity(_ journal: InboxJournal, for task: InboxTask,
+                                         kind: InboxManifestKind? = nil) throws {
         guard journal.taskID == task.id,
               journal.storedFileID == task.storedFileID,
-              journal.targetKeyID == task.targetKeyID else {
+              journal.targetKeyID == task.targetKeyID,
+              // The kind is part of the identity too. A journal that describes
+              // files cannot be resumed as a message or the other way round:
+              // they commit to different places, so continuing under the wrong
+              // one is how a delivery lands twice or lands nowhere.
+              kind == nil || journal.contentKind == kind else {
             throw InboxFailure.terminal(.internal, .journalUnreadable)
         }
-        guard journal.root == root.standardizedFileURL.path else {
+        // Which root a journal must still match depends on what it describes: a
+        // message was journalled against the MESSAGE STORE, which does not move
+        // with the user's folder grant, so a folder change is irrelevant to it.
+        let expected = journal.contentKind == .text
+            ? messages.directory.standardizedFileURL.path
+            : root?.standardizedFileURL.path
+        guard journal.root == expected else {
             // The receive directory changed under an unfinished or unreported
-            // task. Reusing absolute destinations from the old grant could land
-            // the same delivery in two places.
+            // task — or is unavailable right now, so this build cannot prove it
+            // is the same one. Reusing absolute destinations from the old grant
+            // could land the same delivery in two places.
             throw InboxFailure.attention(.directoryUnavailable, .receiveFolderChanged)
         }
     }
@@ -316,10 +477,9 @@ public struct InboxReceiver: Sendable {
     /// The resume offset comes from `StoreDecryptor.consumedCipher`, which only
     /// advances past frames that already authenticated, so a resumed request never
     /// re-feeds a partial frame and never skips one.
-    private func stream(_ delivery: InboxDelivery, key: [UInt8], plan: [InboxPlanEntry],
-                        staging: URL, total: Int64) async throws {
-        let writer = try InboxStagingWriter(staging: staging, plan: plan)
-        defer { writer.closeAll() }
+    private func stream(_ delivery: InboxDelivery, key: [UInt8], sink: InboxPayloadSink,
+                        total: Int64) async throws {
+        let writer = sink
         let decryptor = StoreDecryptor(key: key)
         var lastRenew = now()
 
@@ -357,15 +517,15 @@ public struct InboxReceiver: Sendable {
         catch { throw InboxClassify.crypto(error) }
         do { try writer.finish() }
         catch { throw InboxClassify.filesystem(error) }
-        // Independent of the writer's own accounting: stat every staged file and
-        // compare it against the manifest. The writer could be wrong; the
-        // filesystem cannot be, and this is the last chance to notice before
-        // anything becomes visible to the user.
-        try writer.verifySizes()
+        // Independent of the sink's own accounting: for files, stat every staged
+        // entry and compare it against the manifest; for a message, re-measure
+        // what was collected. The sink could be wrong; what it wrote cannot be,
+        // and this is the last chance to notice before anything is committed.
+        try writer.verifyDelivered()
     }
 
     private func streamOnce(_ delivery: InboxDelivery, decryptor: StoreDecryptor,
-                            writer: InboxStagingWriter, lastRenew: inout Date) async throws {
+                            writer: InboxPayloadSink, lastRenew: inout Date) async throws {
         try Task.checkCancellation()
         let start = Int64(decryptor.consumedCipher)
         let stream: InboxBlobStream
@@ -420,13 +580,82 @@ public struct InboxReceiver: Sendable {
 
 }
 
+/// Where a delivery's decrypted payload goes while it is still unproven.
+///
+/// Two implementations, and the split is the file/message boundary itself: a
+/// file tree lands in a staging directory inside the user's receive folder,
+/// while a message is held in memory and never touches that folder at all. The
+/// streaming loop is written against this protocol so neither kind can acquire
+/// the other's obligations by accident — there is no way to reach the staging
+/// area from the message path, because the message path never has one.
+protocol InboxPayloadSink: AnyObject {
+    /// One run of authenticated plaintext, in delivery order.
+    func write(_ plaintext: [UInt8]) throws
+    /// The stream ended. Flush anything the writes alone would have left.
+    func finish() throws
+    /// Prove what was written matches what the manifest declared. Called after
+    /// the whole authenticated stream has been consumed and before anything is
+    /// committed.
+    func verifyDelivered() throws
+}
+
+/// Collects one message in memory, bounded by its declared length.
+///
+/// In memory because the protocol bounds a message at 64 KiB precisely so a
+/// receiver can do this rather than build a second staging path — and because a
+/// message that never reaches a temporary file is one that cannot be left behind
+/// in the user's folder by a crash.
+final class InboxMessageBuffer: InboxPayloadSink {
+    private let declared: Int
+    private var bytes: [UInt8] = []
+
+    init(declared: Int) {
+        self.declared = declared
+        bytes.reserveCapacity(min(max(declared, 0), InboxManifest.maxTextBytes))
+    }
+
+    /// Refuses the first byte past the declared length rather than growing.
+    /// The stream is authenticated, so an over-long one is a sender that lied in
+    /// its own manifest — and an unbounded append here would be a memory
+    /// exhaustion any sender could ask for.
+    func write(_ plaintext: [UInt8]) throws {
+        guard bytes.count + plaintext.count <= declared else {
+            throw InboxFailure.terminal(.verifyFailed, .messageMalformed)
+        }
+        bytes.append(contentsOf: plaintext)
+    }
+
+    func finish() throws {}
+
+    func verifyDelivered() throws {
+        guard bytes.count == declared else {
+            throw InboxFailure.retryable(.verifyFailed, .stagedSizeMismatch)
+        }
+    }
+
+    /// The message, or nil if these bytes are not exactly one valid UTF-8 string
+    /// of the declared length.
+    ///
+    /// The re-encode is not belt and braces. `String(bytes:encoding:)` is the
+    /// strict initialiser, but the round trip is what proves it: if any decoder
+    /// on any future OS version ever repaired an invalid sequence into U+FFFD,
+    /// the re-encoded bytes would differ and this returns nil instead of handing
+    /// the user something the sender did not write.
+    func message() -> String? {
+        guard bytes.count == declared,
+              let text = String(bytes: bytes, encoding: .utf8),
+              Array(text.utf8) == bytes else { return nil }
+        return text
+    }
+}
+
 /// Fans decrypted plaintext across the staged files in plan order.
 ///
 /// The manifest is the ONLY source of per-file boundaries — the ciphertext stream
 /// carries none — so the declared sizes are consumed exactly, and a stream that
 /// delivers more data than the manifest accounts for is refused rather than
 /// spilling into the next file or a new one.
-final class InboxStagingWriter {
+final class InboxStagingWriter: InboxPayloadSink {
     private let plan: [InboxPlanEntry]
     private let stagingFD: Int32
     private var index = 0
@@ -511,6 +740,8 @@ final class InboxStagingWriter {
         }
         try openNext()
     }
+
+    func verifyDelivered() throws { try verifySizes() }
 
     /// Confirm every planned entry exists in staging at exactly its declared size,
     /// and that none carries an executable bit.

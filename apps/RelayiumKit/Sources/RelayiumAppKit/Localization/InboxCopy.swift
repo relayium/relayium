@@ -65,6 +65,8 @@ public enum InboxStatusPresentation {
                           language: language)
         case .saved(let files):
             return L10n.plural(.inboxSavedFiles, files, language: language)
+        case .savedMessage:
+            return L10n.t(.inboxSavedMessage, language: language)
         case .failed(let failure):
             return text(for: failure, language: language)
         }
@@ -140,7 +142,7 @@ public enum InboxStatusPresentation {
             }
         case .failed:
             return .retry
-        case .signedOut, .loading, .disabled, .ready, .working, .saved:
+        case .signedOut, .loading, .disabled, .ready, .working, .saved, .savedMessage:
             return nil
         }
     }
@@ -220,6 +222,13 @@ public enum InboxReceiptPresentation {
     /// honest fallback rather than an empty row if one ever did.
     static func names(_ receipt: InboxReceipt,
                       language: AppLanguage? = nil) -> [String] {
+        guard receipt.kind != .message else {
+            // A message has no name to print and its TEXT is not printed here.
+            // The row says what arrived; reading it is a deliberate act in a
+            // surface the user opened, not something a list does on their behalf
+            // in a window that may be on a shared screen.
+            return [L10n.t(.inboxSavedMessage, language: language)]
+        }
         let all = receipt.urls.map(\.lastPathComponent)
         guard !all.isEmpty else {
             return [L10n.plural(.inboxSavedFiles, receipt.fileCount, language: language)]
@@ -352,6 +361,11 @@ public enum InboxNotificationPresentation {
         switch notification {
         case .saved:
             return L10n.t(.inboxNotifyTitleSaved, language: language)
+        case .savedMessage:
+            // The title carries the whole announcement, and the body repeats it
+            // rather than adding a length, a sender or a preview. There is
+            // nothing else this banner is allowed to say.
+            return L10n.t(.inboxSavedMessage, language: language)
         case .attention, .failed:
             return L10n.t(.inboxNotifyTitleAttention, language: language)
         }
@@ -362,6 +376,8 @@ public enum InboxNotificationPresentation {
         switch notification {
         case .saved(let files):
             return L10n.plural(.inboxSavedFiles, files, language: language)
+        case .savedMessage:
+            return L10n.t(.inboxSavedMessage, language: language)
         case .attention(let attention):
             return InboxStatusPresentation.text(for: attention, language: language)
         case .failed(let failure):

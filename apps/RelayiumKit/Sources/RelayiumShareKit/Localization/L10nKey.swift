@@ -1684,6 +1684,16 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case inboxNotifyTitleSaved = "inbox.notifyTitleSaved"
     case inboxNotifyTitleAttention = "inbox.notifyTitleAttention"
 
+    /// One Device Inbox delivery that was a MESSAGE rather than files.
+    ///
+    /// It says that a message arrived and nothing about what it says. This one
+    /// string is rendered in three places — the menu-bar status line, a
+    /// notification banner macOS draws on a locked screen, and the row in
+    /// Recently received — and the strictest of the three sets the rule for all
+    /// of them. There is deliberately no preview key beside it to be reached for
+    /// later.
+    case inboxSavedMessage = "inbox.savedMessage"
+
     /// macOS will not show a delivery banner.
     ///
     /// The body is the load-bearing half: it has to say that receiving and saving

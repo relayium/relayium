@@ -24,6 +24,10 @@ final class InboxReceiverTests: XCTestCase {
         let transport: FakeInboxTransport
         let keys: InMemoryInboxDeviceKeyStore
         let journals: InboxJournalStore
+        /// Outside `root` on purpose, exactly as in production: a message store
+        /// inside the receive folder would make every message test pass for the
+        /// wrong reason — the folder would be doing the work.
+        let messages: InboxMessageStore
         let root: URL
         let deviceKey: InboxDeviceKeyPair
         var log: [InboxLogEvent] = []
@@ -34,9 +38,11 @@ final class InboxReceiverTests: XCTestCase {
             .appendingPathComponent("relayium-receiver-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let journals = root.appendingPathExtension("journals")
+        let messages = root.appendingPathExtension("messages")
         addTeardownBlock {
             try? FileManager.default.removeItem(at: root)
             try? FileManager.default.removeItem(at: journals)
+            try? FileManager.default.removeItem(at: messages)
         }
 
         let keys = InMemoryInboxDeviceKeyStore()
@@ -51,6 +57,7 @@ final class InboxReceiverTests: XCTestCase {
                        // destinations, and it must stay readable when the receive
                        // folder itself becomes unusable.
                        journals: InboxJournalStore(directory: journals),
+                       messages: InboxMessageStore(directory: messages),
                        root: root, deviceKey: deviceKey)
     }
 
@@ -60,7 +67,7 @@ final class InboxReceiverTests: XCTestCase {
                           freeBytes: (@Sendable (URL) -> Int64?)? = nil) -> InboxReceiver {
         let epoch = self.epoch
         return InboxReceiver(transport: h.transport, keys: h.keys, journals: h.journals,
-                             account: account, root: h.root,
+                             messages: h.messages, account: account, root: h.root,
                              now: now ?? { epoch }, log: log,
                              renewInterval: renewInterval, streamAttempts: 3,
                              freeBytes: freeBytes ?? InboxSpace.freeBytes)
@@ -168,8 +175,10 @@ final class InboxReceiverTests: XCTestCase {
     func testAManifestClaimingMoreThanTheCiphertextCanHoldIsRefused() async throws {
         let h = try await harness()
         let key = generateStoreKey()
-        let manifest = StoredManifest(files: [ManifestFile(name: "a.txt", size: 1 << 30)])
-        let encManifest = try encryptManifest(key: key, manifest)
+        let encManifest = RelayiumKit.seal(
+            key: key, seq: 0,
+            plaintext: InboxFixture.manifestBytes(items: [(kind: "file", name: "a.txt",
+                                                           size: 1 << 30)]))
         let sealed = try InboxFixture.seal(contentKey: key, to: h.deviceKey.publicKey)
         let delivery = InboxDelivery(
             task: InboxTask(id: "task1", state: .downloading, ciphertextBytes: 4096,
@@ -198,9 +207,15 @@ final class InboxReceiverTests: XCTestCase {
         XCTAssertEqual(try delivered(h.root), [])
     }
 
-    /// The RAW manifest names are what the planner sees. `decryptManifest` strips
-    /// control characters for display; a stripped name is one this device would
-    /// then create under a name nobody chose, so the receiver refuses instead.
+    /// A control character in a name is REFUSED, never stripped: a stripped name
+    /// is one this device would then create under a name nobody chose.
+    ///
+    /// Under v2 the refusal happens one step earlier than it used to — the
+    /// manifest codec rejects the document before the planner ever sees it, so
+    /// the reason is `manifestInvalid` rather than `unsafeManifestName`. Both are
+    /// terminal and both leave the folder untouched, which is what this test is
+    /// actually about; the planner's own rule is still asserted directly in
+    /// `InboxDestinationPlanTests`.
     func testAControlCharacterInAManifestNameIsRefusedRatherThanStripped() async throws {
         let h = try await harness()
         let built = try InboxFixture.delivery(files: [("a\u{7}b.txt", [1])],
@@ -209,7 +224,7 @@ final class InboxReceiverTests: XCTestCase {
 
         await assertFailure(try await receiver(h).deliver(built.delivery),
                             state: .failedTerminal, code: .verifyFailed,
-                            reason: .unsafeManifestName)
+                            reason: .manifestInvalid)
         XCTAssertEqual(try delivered(h.root), [])
     }
 
@@ -521,8 +536,10 @@ final class InboxReceiverTests: XCTestCase {
         let h = try await harness()
         let key = generateStoreKey()
         let huge = Int(Int32.max)
-        let manifest = StoredManifest(files: [ManifestFile(name: "a.bin", size: huge)])
-        let encManifest = try encryptManifest(key: key, manifest)
+        let encManifest = RelayiumKit.seal(
+            key: key, seq: 0,
+            plaintext: InboxFixture.manifestBytes(items: [(kind: "file", name: "a.bin",
+                                                           size: huge)]))
         let sealed = try InboxFixture.seal(contentKey: key, to: h.deviceKey.publicKey)
         let delivery = InboxDelivery(
             task: InboxTask(id: "task1", state: .downloading,

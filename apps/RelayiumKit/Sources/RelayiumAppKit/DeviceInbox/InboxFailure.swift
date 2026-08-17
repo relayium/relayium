@@ -57,6 +57,12 @@ public enum InboxFailureReason: String, Equatable, Sendable {
     case manifestUnreadable
     case manifestInvalid
     case manifestExceedsCiphertext
+    /// The payload of a text delivery is not exactly one nonempty UTF-8 message
+    /// of the declared length. Named apart from `manifestInvalid`: the manifest
+    /// was fine and the BYTES are not.
+    case messageMalformed
+    /// The message store refused or could not hold a committed message.
+    case messageStoreUnavailable
     case unsafeManifestName
     case duplicateDestination
     case noFreeName
@@ -133,6 +139,18 @@ public enum InboxClassify {
             }
         case let e as InboxStagingError:
             return posix(e.code)
+        case let e as InboxMessageStoreError:
+            switch e {
+            case .invalidID:
+                return .terminal(.internal, .journalUnreadable)
+            case .invalidMessage:
+                // The same bytes are refused the same way on every attempt.
+                return .terminal(.verifyFailed, .messageMalformed)
+            case .unreadable:
+                return .retryable(.internal, .messageStoreUnavailable)
+            case .system(let code):
+                return posix(code)
+            }
         default:
             // A Cocoa or POSIX wrapper from Foundation. Unwrapping it is not
             // tidiness: without this a read-only receive folder reads as
@@ -170,6 +188,12 @@ public enum InboxClassify {
     public static func crypto(_ error: Error) -> InboxFailure {
         if let failure = error as? InboxFailure { return failure }
         switch error {
+        case is InboxManifestError:
+            // The seal opened, so this document is the sender's own bytes and
+            // every later attempt reads exactly the same ones: an unsupported
+            // version, an unknown or mixed kind, a hostile name and a
+            // non-canonical spelling are all terminal.
+            return .terminal(.verifyFailed, .manifestInvalid)
         case let e as InboxKeyError:
             switch e {
             case .unseal, .unsupportedAlgorithm, .malformedKeyMaterial,

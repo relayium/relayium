@@ -932,6 +932,27 @@ public enum AppEnvironment {
         return InboxJournalStore(directory: directory)
     }
 
+    /// Where received MESSAGES live.
+    ///
+    /// Beside the journals and for the same reasons — Application Support so the
+    /// system may not purge it, account-scoped so one account's messages are not
+    /// the next one's — but it is a SEPARATE directory because it holds different
+    /// stuff: a journal is bookkeeping about a delivery, and this is the delivery
+    /// itself. It is deliberately NOT under the user's receive folder, which is a
+    /// grant about files that may be shared, synced or backed up.
+    ///
+    /// Returns `nil` when Application Support cannot be created at all, and the
+    /// caller fails closed rather than storing a message somewhere temporary.
+    public static func makeInboxMessageStore(subdirectory: String = "device-inbox")
+        -> InboxMessageStore? {
+        guard let support = try? FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true) else { return nil }
+        let directory = support.appendingPathComponent(subdirectory, isDirectory: true)
+            .appendingPathComponent("messages", isDirectory: true)
+        return InboxMessageStore(directory: directory)
+    }
+
     /// Journals are account-scoped even though central task ids are random.
     /// Relying on global uniqueness would still let account B inspect or replay
     /// account A's durable local receipt if a server defect or restored database
@@ -972,12 +993,20 @@ public enum AppEnvironment {
         baseURL: URL = transferBaseURL,
         keys: InboxDeviceKeyStoring,
         journalStore: @escaping @Sendable (InboxAccountID) -> InboxJournalStore?,
+        messageStore: @escaping @Sendable (InboxAccountID) -> InboxMessageStore?,
         folderStore: InboxFolderStoring,
         session: URLSession = .shared
     ) -> @Sendable (InboxAccountID, String) async throws -> InboxReceiveEngine {
         let folder = InboxReceiveFolder(store: folderStore)
         return { account, bearer in
             guard let journals = journalStore(account) else {
+                throw InboxSupportError.noJournalDirectory
+            }
+            // Fails closed for the same reason the journal does: with nowhere
+            // durable to put a message, a text delivery could only be dropped or
+            // stored somewhere the system may purge, and both are worse than
+            // never claiming it.
+            guard let messages = messageStore(account) else {
                 throw InboxSupportError.noJournalDirectory
             }
             // Resolved with the bearer it was handed and never retained: the
@@ -989,7 +1018,7 @@ public enum AppEnvironment {
             let client = try InboxClient(baseURL: baseURL, deviceID: row.id,
                                          token: bearer, session: session)
             return InboxReceiveEngine(transport: client, keys: keys, journals: journals,
-                                      folder: folder, account: account)
+                                      messages: messages, folder: folder, account: account)
         }
     }
 
@@ -1040,9 +1069,17 @@ public enum AppEnvironment {
                 makeInboxJournalStore(subdirectory: inboxJournalSubdirectory(
                     base: journalSubdirectory, account: account))
             },
+            messageStore: { account in
+                makeInboxMessageStore(subdirectory: inboxJournalSubdirectory(
+                    base: journalSubdirectory, account: account))
+            },
             folderStore: folderStore, session: session)
         return InboxController(runtime: InboxRuntime(
             folder: folder, makeEngine: makeEngine, notifier: notifier,
+            messageStore: { account in
+                makeInboxMessageStore(subdirectory: inboxJournalSubdirectory(
+                    base: journalSubdirectory, account: account))
+            },
             reveal: reveal,
             refreshNotificationPermission: refreshNotificationPermission,
             openNotificationSettings: openNotificationSettings,

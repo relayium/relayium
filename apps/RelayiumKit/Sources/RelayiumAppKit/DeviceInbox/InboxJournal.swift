@@ -36,6 +36,21 @@ public struct InboxJournal: Codable, Equatable, Sendable {
     public var taskID: String
     public var storedFileID: String
     public var targetKeyID: String
+    /// What this delivery turned out to be, once the manifest was decoded.
+    ///
+    /// OPTIONAL, and absent means `.file`. Journals written before v2 wiring
+    /// describe file deliveries and nothing else, and they are kept readable for
+    /// exactly one reason: a completed journal is what stops a task this Mac
+    /// already saved from being delivered a SECOND time. Refusing to read one
+    /// would trade a compatibility scruple for a duplicate delivery, which is
+    /// the failure the whole journal exists to prevent. It is not v1 protocol
+    /// support and nothing else about v1 is honoured.
+    public var kind: InboxManifestKind?
+    /// The declared UTF-8 length of a committed message. Present only for a
+    /// text delivery, and it is a COUNT: the message itself lives in
+    /// `InboxMessageStore` and never in the journal, which is a plaintext
+    /// record of names and paths that a receipt and a crash recovery both read.
+    public var messageBytes: Int?
     /// The receive directory the plan was computed against. A task journalled for
     /// one directory must never be resumed into another: the planned destinations
     /// would be meaningless there.
@@ -56,14 +71,21 @@ public struct InboxJournal: Codable, Equatable, Sendable {
     public var completedAt: Int64
     public var updatedAt: Int64
 
+    /// The delivery's kind, with the absent-means-file rule applied once, here,
+    /// so no call site has to remember it.
+    public var contentKind: InboxManifestKind { kind ?? .file }
+
     public init(taskID: String, storedFileID: String, targetKeyID: String,
                 root: String, staging: String = "", plan: [InboxPlanEntry],
                 plannedAt: Int64, committed: [String] = [], isCompleted: Bool = false,
-                isSavedReported: Bool = false, completedAt: Int64 = 0, updatedAt: Int64 = 0) {
+                isSavedReported: Bool = false, completedAt: Int64 = 0, updatedAt: Int64 = 0,
+                kind: InboxManifestKind = .file, messageBytes: Int? = nil) {
         self.version = InboxJournal.version
         self.taskID = taskID
         self.storedFileID = storedFileID
         self.targetKeyID = targetKeyID
+        self.kind = kind
+        self.messageBytes = messageBytes
         self.root = root
         self.staging = staging
         self.plan = plan

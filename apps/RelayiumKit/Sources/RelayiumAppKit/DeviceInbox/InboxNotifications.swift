@@ -16,6 +16,12 @@ import Foundation
 public enum InboxNotification: Equatable, Sendable {
     /// A durable commit landed. `files` is a count, never a list.
     case saved(files: Int)
+    /// A message landed. It carries NOTHING — not the text, not a preview, not
+    /// its length, not who sent it. A macOS banner is drawn on a locked screen
+    /// by anyone in the room, and "you received a message" is the most a person
+    /// walking past may learn. The body is in `InboxMessageStore` and is read by
+    /// the user opening the app.
+    case savedMessage
     /// Something a person has to fix, named only by its closed category.
     case attention(InboxAttention)
     /// The inbox stopped for this session and will not resume on its own.

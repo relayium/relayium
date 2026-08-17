@@ -19,6 +19,10 @@ final class InboxReceiveEngineTests: XCTestCase {
         let transport: FakeInboxTransport
         let keys: InMemoryInboxDeviceKeyStore
         let journals: InboxJournalStore
+        /// Outside the receive folder, exactly as in production: a message must
+        /// land on a Mac whose folder is unusable, and a store inside it could
+        /// not.
+        let messages: InboxMessageStore
         let store: InMemoryInboxFolderStore
         let folder: InboxReceiveFolder
         let root: URL
@@ -31,9 +35,11 @@ final class InboxReceiveEngineTests: XCTestCase {
             .appendingPathComponent("relayium-engine-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let journalDirectory = root.appendingPathExtension("journals")
+        let messageDirectory = root.appendingPathExtension("messages")
         addTeardownBlock {
             try? FileManager.default.removeItem(at: root)
             try? FileManager.default.removeItem(at: journalDirectory)
+            try? FileManager.default.removeItem(at: messageDirectory)
         }
 
         let store = InMemoryInboxFolderStore()
@@ -52,6 +58,7 @@ final class InboxReceiveEngineTests: XCTestCase {
 
         return Harness(transport: FakeInboxTransport(), keys: keys,
                        journals: InboxJournalStore(directory: journalDirectory),
+                       messages: InboxMessageStore(directory: messageDirectory),
                        store: store, folder: folder, root: root, deviceKey: deviceKey)
     }
 
@@ -59,7 +66,8 @@ final class InboxReceiveEngineTests: XCTestCase {
                         freeBytes: (@Sendable (URL) -> Int64?)? = nil) -> InboxReceiveEngine {
         let epoch = self.epoch
         return InboxReceiveEngine(transport: h.transport, keys: h.keys, journals: h.journals,
-                                  folder: h.folder, account: account, now: { epoch }, log: log,
+                                  messages: h.messages, folder: h.folder,
+                                  account: account, now: { epoch }, log: log,
                                   renewInterval: 3600, streamAttempts: 3,
                                   freeBytes: freeBytes ?? InboxSpace.freeBytes)
     }
@@ -113,33 +121,101 @@ final class InboxReceiveEngineTests: XCTestCase {
             inbox: InboxView(key: InboxKey(id: "key1", algorithm: InboxProtocol.keyAlgorithm,
                                            publicKey: InboxKeyMaterial.encode(h.deviceKey.publicKey),
                                            generation: 1)),
-            protocolVersion: 1, receiveCapability: InboxCapability.receiveV1,
+            // The NEGOTIABLE pair. Feeding v1 here made this test assert that a
+            // v1 enrolment succeeds, which `InboxProtocol.versions == [2]` has
+            // refused since the protocol moved — the enrolment threw before the
+            // assertion was ever reached. The refusal itself is covered by
+            // `InboxEnrolmentTests`; what this test is about is the policy and
+            // the folder probe the request carries.
+            protocolVersion: InboxProtocol.versions[0],
+            receiveCapability: InboxCapability.receiveV2,
             keyAlgorithm: InboxProtocol.keyAlgorithm))
 
         _ = try await engine(h).prepare(platform: "darwin", appVersion: "1.0")
         XCTAssertEqual(h.transport.calls.first, .enrol(autoAccept: .auto, receiveDirReady: true))
     }
 
-    // MARK: - no folder, no claim
+    // MARK: - no folder
 
-    /// The single gate the whole receive path rests on. Claiming into a folder
-    /// that just failed its probe would take a lease this Mac cannot honour and
-    /// leave the sender watching a task that is not progressing.
-    func testNoUsableFolderMeansNoClaimAtAll() async throws {
+    /// An unusable folder is no longer the gate on the whole receive path, and
+    /// this test is the record of that change.
+    ///
+    /// It used to assert that a pass with no usable folder claimed nothing at
+    /// all. That was right when every delivery was files. Under v2 a delivery may
+    /// be a MESSAGE, which is committed to the protected message store and never
+    /// to the receive folder — so refusing to claim would block a delivery the
+    /// folder has nothing to do with, and the receiver cannot know which kind it
+    /// is until it has claimed and decrypted one.
+    ///
+    /// What still holds, and is asserted below: a FILE delivery claimed in this
+    /// state is reported `attention_required` / `directory_unavailable` and
+    /// nothing is written anywhere.
+    func testAFileDeliveryWithNoUsableFolderIsParkedForTheUser() async throws {
         for h in [try await harness(withFolder: false), try await harness()] {
             if h.store.bookmarkData(account: account) != nil {
                 try FileManager.default.removeItem(at: h.root)   // grant resolves nowhere
             }
             _ = try await claim(h)
-            let result = try await engine(h).pass()
+            _ = try await engine(h).pass()
 
-            guard case .notReceiving = result else {
-                return XCTFail("a pass claimed work with no usable folder: \(result)")
+            let reported = h.transport.calls.compactMap { call -> (InboxTaskState, InboxDeviceErrorCode)? in
+                if case .report(_, let state, let code, _) = call { return (state, code) }
+                return nil
             }
-            XCTAssertFalse(h.transport.calls.contains { if case .claim = $0 { return true }; return false },
-                           "work was claimed into an unusable folder")
-            XCTAssertFalse(h.transport.calls.contains { if case .pending = $0 { return true }; return false },
-                           "a device that cannot receive still polled for work")
+            XCTAssertEqual(reported.last?.0, .attentionRequired)
+            XCTAssertEqual(reported.last?.1, .directoryUnavailable)
+            let landed = (try? FileManager.default.contentsOfDirectory(atPath: h.root.path)) ?? []
+            XCTAssertEqual(landed, [],
+                           "a file delivery wrote something with no usable folder")
+            XCTAssertTrue(h.messages.all().isEmpty,
+                          "a file delivery reached the message store")
+        }
+    }
+
+    /// A task central parked because this Mac reported no usable folder is
+    /// re-queued so its KIND can be discovered — it may be a message, which the
+    /// folder has nothing to do with.
+    func testATaskParkedForTheFolderIsRequeuedSoItsKindCanBeSeen() async throws {
+        // A folder was chosen and receiving is `auto`; the folder then broke —
+        // which is the state central parks new tasks for.
+        let h = try await harness()
+        try FileManager.default.removeItem(at: h.root)   // the grant resolves nowhere
+        let parked = InboxTask(id: "parked", state: .attentionRequired,
+                               ciphertextBytes: 10, targetKeyID: "key1")
+        h.transport.pendingResults = [.success([parked])]
+        h.transport.claimResult = .success((deliveries: [], leaseSeconds: 300))
+
+        _ = try await engine(h).pass()
+
+        XCTAssertTrue(h.transport.calls.contains(.accept(taskID: "parked", accept: true)),
+                      "a task parked for the folder was never re-queued, so a message could not land")
+    }
+
+    /// The same shape under `ask` is a QUESTION, and this machine must not answer
+    /// it. Removing the policy guard makes this test fail, which is the point.
+    func testATaskHeldForTheUsersAnswerIsNeverRequeued() async throws {
+        let h = try await harness(withFolder: true, automatic: false)
+        try h.folder.setReceivePolicy(.ask, account: account)
+        try FileManager.default.removeItem(at: h.root)   // the grant resolves nowhere
+        let held = InboxTask(id: "held", state: .attentionRequired,
+                             ciphertextBytes: 10, targetKeyID: "key1")
+        h.transport.pendingResults = [.success([held])]
+        h.transport.claimResult = .success((deliveries: [], leaseSeconds: 300))
+
+        _ = try await engine(h).pass()
+
+        XCTAssertFalse(h.transport.calls.contains(.accept(taskID: "held", accept: true)),
+                       "this Mac answered a question that was asked of its owner")
+    }
+
+    /// With nothing queued, an unusable folder is still what the pass reports:
+    /// the user has something to fix, and saying `idle` would hide it.
+    func testAnIdlePassWithNoUsableFolderStillReportsTheFolder() async throws {
+        let h = try await harness(withFolder: false)
+        h.transport.pendingResults = [.success([])]
+
+        guard case .notReceiving = try await engine(h).pass() else {
+            return XCTFail("an idle pass with no folder did not report the folder")
         }
     }
 
@@ -353,7 +429,8 @@ final class InboxReceiveEngineTests: XCTestCase {
 
         let clock = TickingClock(start: epoch, step: 3)
         let engine = InboxReceiveEngine(transport: h.transport, keys: h.keys,
-                                        journals: h.journals, folder: h.folder,
+                                        journals: h.journals, messages: h.messages,
+                                        folder: h.folder,
                                         account: account, now: { clock.next() },
                                         renewInterval: 3600, streamAttempts: 3)
         _ = try await engine.pass()

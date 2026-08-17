@@ -65,9 +65,22 @@ public final class AppInboxReceiverHost {
                 InboxJournalStore(directory: journalRoot
                     .appendingPathComponent(account.value, isDirectory: true))
             },
+            // Under the run's own journal root for the same reason the journals
+            // are: a message this acceptance peer receives must not land in the
+            // installed app's store, where it would look like the owner's own.
+            messageStore: { account in
+                InboxMessageStore(directory: journalRoot
+                    .appendingPathComponent(account.value, isDirectory: true)
+                    .appendingPathComponent("messages", isDirectory: true))
+            },
             folderStore: folderStore)
         controller = InboxController(runtime: InboxRuntime(
             folder: folder, makeEngine: makeEngine,
+            messageStore: { account in
+                InboxMessageStore(directory: journalRoot
+                    .appendingPathComponent(account.value, isDirectory: true)
+                    .appendingPathComponent("messages", isDirectory: true))
+            },
             // No notifier and no reveal: a headless peer has no notification
             // centre and must never hand a received path to the Finder. The
             // defaults are the honest ones — `openNotificationSettings` reports

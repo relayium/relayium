@@ -254,7 +254,7 @@ struct DeviceInboxSurface: View {
     /// waiting for work.
     private var canPause: Bool {
         switch inbox.state {
-        case .ready, .working, .asking, .offline, .saved, .loading:
+        case .ready, .working, .asking, .offline, .saved, .savedMessage, .loading:
             return true
         case .signedOut, .disabled, .folderMissing, .paused, .attention, .failed:
             return false
@@ -275,7 +275,7 @@ struct DeviceInboxSurface: View {
         case .working:        return "arrow.down.circle"
         case .attention:      return "exclamationmark.triangle"
         case .offline:        return "wifi.slash"
-        case .saved:          return "checkmark.circle"
+        case .saved, .savedMessage: return "checkmark.circle"
         case .failed:         return "xmark.octagon"
         }
     }
@@ -286,7 +286,7 @@ struct DeviceInboxSurface: View {
     /// pane is carried by colour alone.
     private var tint: Color {
         switch inbox.state {
-        case .ready, .saved:                       return .green
+        case .ready, .saved, .savedMessage:        return .green
         case .working:                             return .accentColor
         case .attention, .failed:                  return InlineMessage.Kind.failure.tint
         case .asking, .offline, .folderMissing:    return InlineMessage.Kind.warning.tint

@@ -31,6 +31,7 @@ final class InboxControllerTests: XCTestCase {
         let revealed = RevealRecorder()
         var folder: InboxReceiveFolder!
         var journals: InboxJournalStore!
+        var messages: InboxMessageStore!
         var root: URL!
         var transports: [String: GatedInboxTransport] = [:]
         var deviceKeys: [String: InboxDeviceKeyPair] = [:]
@@ -43,18 +44,22 @@ final class InboxControllerTests: XCTestCase {
             .appendingPathComponent("relayium-controller-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let journalDirectory = root.appendingPathExtension("journals")
+        let messageDirectory = root.appendingPathExtension("messages")
         addTeardownBlock {
             try? FileManager.default.removeItem(at: root)
             try? FileManager.default.removeItem(at: journalDirectory)
+            try? FileManager.default.removeItem(at: messageDirectory)
         }
         harness.root = root
         harness.journals = InboxJournalStore(directory: journalDirectory)
+        harness.messages = InboxMessageStore(directory: messageDirectory)
         harness.folder = InboxReceiveFolder(
             store: harness.store,
             bookmarking: bookmarking ?? ControllerBookmarking(url: root))
 
         let keys = harness.keys
         let journals = harness.journals!
+        let messages = harness.messages!
         let folder = harness.folder!
         let epoch = self.epoch
         let controller = InboxController(runtime: InboxRuntime(
@@ -68,10 +73,12 @@ final class InboxControllerTests: XCTestCase {
                     return made
                 }
                 return InboxReceiveEngine(transport: transport, keys: keys, journals: journals,
-                                          folder: folder, account: account, now: { epoch },
+                                          messages: messages, folder: folder,
+                                          account: account, now: { epoch },
                                           renewInterval: 3600, streamAttempts: 1)
             },
             notifier: harness.notifier,
+            messageStore: { _ in messages },
             sleeper: harness.sleeper,
             reveal: { [revealed = harness.revealed] urls in revealed.record(urls) },
             platform: "macos", appVersion: "test",
@@ -120,6 +127,16 @@ final class InboxControllerTests: XCTestCase {
                                files: [(String, [UInt8])] = [("a.txt", [1, 2, 3])]) throws {
         let key = harness.deviceKeys[account.value]!
         let built = try InboxFixture.delivery(taskID: taskID, files: files, deviceKey: key)
+        let transport = transport(harness, account)
+        transport.blobBody = built.ciphertext
+        transport.pendingResults = [.success([built.delivery.task]), .success([])]
+        transport.claimResult = .success((deliveries: [built.delivery], leaseSeconds: 300))
+    }
+
+    private func queueMessage(_ harness: Harness, account: InboxAccountID,
+                              taskID: String = "task1", text: String) throws {
+        let key = harness.deviceKeys[account.value]!
+        let built = try InboxFixture.message(taskID: taskID, text: text, deviceKey: key)
         let transport = transport(harness, account)
         transport.blobBody = built.ciphertext
         transport.pendingResults = [.success([built.delivery.task]), .success([])]
@@ -468,6 +485,35 @@ final class InboxControllerTests: XCTestCase {
         XCTAssertEqual(harness.controller.state, .saved(files: 2))
         XCTAssertEqual(harness.notifier.delivered, [.saved(files: 2)])
         harness.controller.signedOut()
+    }
+
+    /// A MESSAGE reaches the model layer as a message: its own state, its own
+    /// notification, and readable text in `messages`.
+    ///
+    /// The three assertions that make `inbox.text.v1` an honest claim rather than
+    /// a token: the status is not "0 files saved", the banner carries no content,
+    /// and the message itself can be read back — from the protected store, not
+    /// from the receipt, which deliberately does not carry it.
+    func testAMessageIsPresentedAsAMessage() async throws {
+        let harness = try makeHarness()
+        try await seedKey(harness, account: accountA)
+        try enable(harness, account: accountA, policy: .auto)
+        try queueMessage(harness, account: accountA, text: "the door code is 4321")
+        harness.controller.session(identity(accountA))
+
+        await waitUntil({ !harness.controller.results.isEmpty }, "no delivery completed")
+        let receipt = try XCTUnwrap(harness.controller.results.first)
+        XCTAssertEqual(receipt.kind, .message)
+        XCTAssertEqual(receipt.urls, [], "a message receipt named a path")
+        XCTAssertEqual(harness.controller.state, .savedMessage)
+        XCTAssertEqual(harness.notifier.delivered, [.savedMessage])
+        XCTAssertEqual(harness.controller.messages.map(\.text), ["the door code is 4321"])
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: harness.root.path)
+            .filter { $0 != InboxDestinationPlan.stagingDirectoryName }, [],
+                       "a message put something in the user's receive folder")
+        harness.controller.signedOut()
+        XCTAssertEqual(harness.controller.messages, [],
+                       "another account's session could see these messages")
     }
 
     /// A delivery whose commit did not happen produces no receipt, no

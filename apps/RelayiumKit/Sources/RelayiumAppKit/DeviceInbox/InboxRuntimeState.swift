@@ -54,6 +54,12 @@ public enum InboxRuntimeState: Equatable, Sendable {
     /// A delivery just landed. Set only from a durable commit receipt, and
     /// replaced by the next state the loop reaches.
     case saved(files: Int)
+    /// A MESSAGE just landed. A separate case rather than `saved(files: 0)`,
+    /// because that sentence would be false twice over: nothing was saved to the
+    /// user's folder, and something was in fact received. It carries no length
+    /// and no preview — the status line is rendered in the menu bar, over a
+    /// shared screen, and what arrived is the user's own content.
+    case savedMessage
     /// Terminal for this generation: nothing further will be attempted until the
     /// user acts or the account changes.
     case failed(InboxRuntimeFailure)
