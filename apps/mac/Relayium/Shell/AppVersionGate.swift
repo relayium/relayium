@@ -109,10 +109,18 @@ struct UnsupportedVersionView: View {
                 .font(.title)
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
+            // The heading carries the surface identifier: stable and
+            // nonlocalized, so the acceptance suite can assert the blocked
+            // surface itself rather than the absence of a destination. It is
+            // the heading's and NOT the stack's — an identifier on a container
+            // propagates down and overwrites every child's, which left the two
+            // buttons this screen exists to offer unreachable to the suite that
+            // has to click one.
             Text(L10n.t(.updateRequiredTitle))
                 .font(.title2)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("version-blocked")
             // Selectable: this sentence carries three version numbers, and they
             // are exactly what a person types into a bug report or a support
             // message from a Mac whose app will not open.
@@ -148,9 +156,6 @@ struct UnsupportedVersionView: View {
         .padding(Metrics.page)
         .frame(minWidth: 480, minHeight: 320)
         .frame(maxWidth: Metrics.readingMeasure)
-        // Stable and nonlocalized, so the acceptance suite can assert the
-        // blocked surface itself rather than the absence of a destination.
-        .accessibilityIdentifier("version-blocked")
     }
 }
 

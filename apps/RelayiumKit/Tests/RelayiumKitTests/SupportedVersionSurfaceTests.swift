@@ -198,6 +198,27 @@ final class SupportedVersionSurfaceTests: XCTestCase {
         XCTAssertTrue(screen.contains(
             "UpdateRequirementPresentation\n                    "
             + ".updateActionLabel(channel: AppDistribution.channel)"))
+
+        // **The surface identifier is the heading's, not the container's.**
+        //
+        // An `accessibilityIdentifier` on the enclosing stack propagates to
+        // every descendant and overwrites theirs, which is how a built-App run
+        // found the blocked screen and then no `version-blocked-update` and no
+        // `version-blocked-quit` on it — the two ways out this state exists to
+        // offer, unreachable to the suite that must click one. Asserted by
+        // indentation because that is exactly what distinguishes the two: a
+        // modifier at the body's own level applies to the whole stack.
+        XCTAssertTrue(screen.contains(
+            "Text(L10n.t(.updateRequiredTitle))\n"
+            + "                .font(.title2)\n"
+            + "                .multilineTextAlignment(.center)\n"
+            + "                .fixedSize(horizontal: false, vertical: true)\n"
+            + "                .accessibilityIdentifier(\"version-blocked\")"),
+            "the blocked surface identifier is no longer the heading's own")
+        XCTAssertFalse(screen.contains(
+            "\n        .accessibilityIdentifier(\"version-blocked\")"),
+            "the blocked surface identifier is back on the container, where it "
+            + "overwrites the update and quit identifiers")
     }
 
     /// The recommendation is the opposite shape: nothing is replaced, nothing is
