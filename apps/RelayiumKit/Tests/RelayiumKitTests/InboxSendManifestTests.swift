@@ -279,7 +279,7 @@ final class InboxSendManifestTests: XCTestCase {
             seven keys, the seventh a bare integer. No kind, text, message, \
             name, path, manifest or itemCount, ever
             """)
-        XCTAssertEqual(request.payload["protocolVersion"] as? Int, 2)
+        XCTAssertEqual(request.payload["protocolVersion"] as? Int, 3)
         let body = try JSONSerialization.data(withJSONObject: request.payload)
         let text = try XCTUnwrap(String(data: body, encoding: .utf8))
         XCTAssertFalse(text.contains(message))
@@ -334,7 +334,7 @@ final class InboxSendManifestTests: XCTestCase {
         let manifest = try InboxManifest.text(size: Array(message.utf8).count)
         XCTAssertEqual(manifest.items[0].size, 8)
         XCTAssertEqual(String(decoding: try InboxManifest.encode(manifest), as: UTF8.self),
-                       #"{"v":2,"items":[{"kind":"text","size":8}]}"#)
+                       #"{"v":3,"items":[{"kind":"text","size":8}]}"#)
     }
 
     /// A name no receiver would accept fails the SEND rather than being sealed

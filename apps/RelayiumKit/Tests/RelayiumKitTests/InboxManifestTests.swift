@@ -14,12 +14,12 @@ final class InboxManifestTests: XCTestCase {
         // is no whitespace anywhere.
         XCTAssertEqual(
             text(try InboxManifest.encode(m)),
-            #"{"v":2,"items":[{"kind":"file","name":"b.txt","size":2},{"kind":"file","name":"a.txt","size":1}]}"#)
+            #"{"v":3,"items":[{"kind":"file","name":"b.txt","size":2},{"kind":"file","name":"a.txt","size":1}]}"#)
     }
 
     func testTextEncodesWithNoNameKeyAtAll() throws {
         let encoded = text(try InboxManifest.encode(try InboxManifest.text(size: 11)))
-        XCTAssertEqual(encoded, #"{"v":2,"items":[{"kind":"text","size":11}]}"#)
+        XCTAssertEqual(encoded, #"{"v":3,"items":[{"kind":"text","size":11}]}"#)
         // Absent, not empty. An empty string is something a receiver could be
         // tempted to treat as a destination; an absent key cannot be.
         XCTAssertFalse(encoded.contains("name"))
@@ -48,7 +48,7 @@ final class InboxManifestTests: XCTestCase {
         ] {
             let m = try InboxManifest.files([(name: name, size: 1)])
             XCTAssertEqual(text(try InboxManifest.encode(m)),
-                           #"{"v":2,"items":[{"kind":"file","name":"\#(escaped)","size":1}]}"#,
+                           #"{"v":3,"items":[{"kind":"file","name":"\#(escaped)","size":1}]}"#,
                            "escaping \(name)")
         }
     }
@@ -87,16 +87,16 @@ final class InboxManifestTests: XCTestCase {
     func testVersionFailsClosed() {
         assertRefused(#"{"files":[{"name":"a.txt","size":1}]}"#, .version, "the v1 shape")
         assertRefused(#"{"v":1,"items":[{"kind":"file","name":"a.txt","size":1}]}"#, .version)
-        assertRefused(#"{"v":3,"items":[{"kind":"file","name":"a.txt","size":1}]}"#, .version,
+        assertRefused(#"{"v":4,"items":[{"kind":"file","name":"a.txt","size":1}]}"#, .version,
                       "a future version is refused, never downgraded")
         assertRefused(#"{"items":[{"kind":"file","name":"a.txt","size":1}]}"#, .version)
         assertRefused(#"{"v":0,"items":[{"kind":"file","name":"a.txt","size":1}]}"#, .version)
     }
 
     func testSingleKindPerDelivery() {
-        assertRefused(#"{"v":2,"items":[{"kind":"file","name":"a.txt","size":1},{"kind":"text","size":5}]}"#,
+        assertRefused(#"{"v":3,"items":[{"kind":"file","name":"a.txt","size":1},{"kind":"text","size":5}]}"#,
                       .mixedKinds)
-        assertRefused(#"{"v":2,"items":[{"kind":"text","size":5},{"kind":"file","name":"a.txt","size":1}]}"#,
+        assertRefused(#"{"v":3,"items":[{"kind":"text","size":5},{"kind":"file","name":"a.txt","size":1}]}"#,
                       .mixedKinds, "the reverse order is the same rule")
         // A single stray item at the end of a long run: a check that only
         // compared neighbours, or only looked at the first two items, would pass
@@ -109,9 +109,9 @@ final class InboxManifestTests: XCTestCase {
     }
 
     func testTextIsExactlyOneUnnamedBoundedItem() {
-        assertRefused(#"{"v":2,"items":[{"kind":"text","size":5},{"kind":"text","size":6}]}"#,
+        assertRefused(#"{"v":3,"items":[{"kind":"text","size":5},{"kind":"text","size":6}]}"#,
                       .textItemCount, "two messages have no frame boundary between them")
-        assertRefused(#"{"v":2,"items":[{"kind":"text","name":"note.txt","size":5}]}"#, .textName)
+        assertRefused(#"{"v":3,"items":[{"kind":"text","name":"note.txt","size":5}]}"#, .textName)
         for size in [0, -1, InboxManifest.maxTextBytes + 1, InboxManifest.maxSafeInteger] {
             XCTAssertThrowsError(try InboxManifest.text(size: size), "text size \(size)") {
                 XCTAssertEqual($0 as? InboxManifestError, .size)
@@ -180,28 +180,28 @@ final class InboxManifestTests: XCTestCase {
     }
 
     func testUnknownFieldsAreRefusedNotIgnored() {
-        assertRefused(#"{"v":2,"note":"hi","items":[{"kind":"file","name":"a.txt","size":1}]}"#, .malformed)
-        assertRefused(#"{"v":2,"items":[{"kind":"file","name":"a.txt","size":1,"path":"/tmp"}]}"#, .malformed)
+        assertRefused(#"{"v":3,"note":"hi","items":[{"kind":"file","name":"a.txt","size":1}]}"#, .malformed)
+        assertRefused(#"{"v":3,"items":[{"kind":"file","name":"a.txt","size":1,"path":"/tmp"}]}"#, .malformed)
         // The one that matters: a sender must not be able to smuggle the message
         // body into the structure every receiver parses first.
-        assertRefused(#"{"v":2,"items":[{"kind":"text","size":5,"text":"hello"}]}"#, .malformed)
-        assertRefused(#"{"v":2,"items":[{"kind":"file","name":"a.txt","size":1}],"key":"AAAA"}"#, .malformed)
+        assertRefused(#"{"v":3,"items":[{"kind":"text","size":5,"text":"hello"}]}"#, .malformed)
+        assertRefused(#"{"v":3,"items":[{"kind":"file","name":"a.txt","size":1}],"key":"AAAA"}"#, .malformed)
     }
 
     func testNonCanonicalDocumentsAreRefused() {
-        assertRefused(#"{"items":[{"kind":"file","name":"a.txt","size":1}],"v":2}"#, .notCanonical,
+        assertRefused(#"{"items":[{"kind":"file","name":"a.txt","size":1}],"v":3}"#, .notCanonical,
                       "manifest keys reordered")
-        assertRefused(#"{"v":2,"items":[{"size":1,"kind":"file","name":"a.txt"}]}"#, .notCanonical,
+        assertRefused(#"{"v":3,"items":[{"size":1,"kind":"file","name":"a.txt"}]}"#, .notCanonical,
                       "item keys reordered")
-        assertRefused(#"{"v": 2, "items": [{"kind": "file", "name": "a.txt", "size": 1}]}"#, .notCanonical,
+        assertRefused(#"{"v": 3, "items": [{"kind": "file", "name": "a.txt", "size": 1}]}"#, .notCanonical,
                       "pretty printed")
         assertRefused("{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}]}\n",
                       .notCanonical, "trailing newline")
-        assertRefused(#"{"v":2,"items":[{"kind":"file","name":"a.txt","size":1,"size":2}]}"#, .notCanonical,
+        assertRefused(#"{"v":3,"items":[{"kind":"file","name":"a.txt","size":1,"size":2}]}"#, .notCanonical,
                       "a duplicated key where the last would win")
-        assertRefused(#"{"v":2,"items":[{"kind":"file","name":"a\/b.txt","size":1}]}"#, .notCanonical,
+        assertRefused(#"{"v":3,"items":[{"kind":"file","name":"a\/b.txt","size":1}]}"#, .notCanonical,
                       "an escaped solidus")
-        assertRefused(#"{"v":2,"items":[{"kind":"file","name":"a\u003cb.txt","size":1}]}"#, .notCanonical,
+        assertRefused(#"{"v":3,"items":[{"kind":"file","name":"a\u003cb.txt","size":1}]}"#, .notCanonical,
                       "a needlessly escaped character")
     }
 
@@ -209,24 +209,24 @@ final class InboxManifestTests: XCTestCase {
         assertRefused("", .malformed)
         assertRefused("not json", .malformed)
         assertRefused(#"[{"kind":"file","name":"a.txt","size":1}]"#, .malformed, "an array document")
-        assertRefused(#"{"v":2,"items":{"kind":"file","name":"a.txt","size":1}}"#, .malformed)
-        assertRefused(#"{"v":2,"items":["a.txt"]}"#, .malformed)
-        assertRefused(#"{"v":2,"items":[{"kind":"file","name":"a.txt","size":"1"}]}"#, .malformed)
-        assertRefused(#"{"v":2,"items":[{"kind":"file","name":"a.txt","size":1.5}]}"#, .malformed)
-        assertRefused(#"{"v":2,"items":[{"kind":"file","name":"a.txt","size":1}"#, .malformed, "truncated")
+        assertRefused(#"{"v":3,"items":{"kind":"file","name":"a.txt","size":1}}"#, .malformed)
+        assertRefused(#"{"v":3,"items":["a.txt"]}"#, .malformed)
+        assertRefused(#"{"v":3,"items":[{"kind":"file","name":"a.txt","size":"1"}]}"#, .malformed)
+        assertRefused(#"{"v":3,"items":[{"kind":"file","name":"a.txt","size":1.5}]}"#, .malformed)
+        assertRefused(#"{"v":3,"items":[{"kind":"file","name":"a.txt","size":1}"#, .malformed, "truncated")
         // A second document appended to the first. Without a whole-input parse
         // this would decode as its first value and the rest would vanish.
         assertRefused(
-            #"{"v":2,"items":[{"kind":"file","name":"a.txt","size":1}]}{"v":2,"items":[{"kind":"text","size":1}]}"#,
+            #"{"v":3,"items":[{"kind":"file","name":"a.txt","size":1}]}{"v":3,"items":[{"kind":"text","size":1}]}"#,
             .malformed)
     }
 
     func testUnknownKindIsNeverGuessedAt() {
-        assertRefused(#"{"v":2,"items":[{"kind":"folder","name":"a","size":1}]}"#, .unknownKind)
-        assertRefused(#"{"v":2,"items":[{"name":"a.txt","size":1}]}"#, .unknownKind, "absent")
-        assertRefused(#"{"v":2,"items":[{"kind":"File","name":"a.txt","size":1}]}"#, .unknownKind,
+        assertRefused(#"{"v":3,"items":[{"kind":"folder","name":"a","size":1}]}"#, .unknownKind)
+        assertRefused(#"{"v":3,"items":[{"name":"a.txt","size":1}]}"#, .unknownKind, "absent")
+        assertRefused(#"{"v":3,"items":[{"kind":"File","name":"a.txt","size":1}]}"#, .unknownKind,
                       "kind is case-sensitive")
-        assertRefused(#"{"v":2,"items":[{"kind":"","name":"a.txt","size":1}]}"#, .unknownKind)
+        assertRefused(#"{"v":3,"items":[{"kind":"","name":"a.txt","size":1}]}"#, .unknownKind)
     }
 
     /// The sender-side half. A codec that only checked on the way IN would seal

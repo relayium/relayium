@@ -371,7 +371,7 @@ final class InboxLegacyDeliveryRestartTests: XCTestCase {
     /// would have to guess at.
     func testAnUnknownInboxProtocolIsRefused() async throws {
         let plan = try await staged()
-        try rewrite(plan.jobId) { $0["inboxProtocolVersion"] = 3 }
+        try rewrite(plan.jobId) { $0["inboxProtocolVersion"] = 4 }
 
         XCTAssertEqual(store.deviceSendPlans(for: "acct-1"), [])
     }

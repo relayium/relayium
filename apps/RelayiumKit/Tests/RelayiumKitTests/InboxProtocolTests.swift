@@ -73,8 +73,8 @@ final class InboxProtocolTests: XCTestCase {
     /// Fixed values the wire depends on. Spelled out rather than derived, so a
     /// change to any of them is a deliberate edit that fails here first.
     func testProtocolConstantsMatchTheSpecification() {
-        XCTAssertEqual(InboxProtocol.versions, [2])
-        XCTAssertEqual(InboxProtocol.taskProtocolVersion, 2)
+        XCTAssertEqual(InboxProtocol.versions, [3])
+        XCTAssertEqual(InboxProtocol.taskProtocolVersion, 3)
         XCTAssertEqual(InboxProtocol.keyAlgorithm, "x25519-sealedbox-v1")
         XCTAssertEqual(InboxProtocol.publicKeyBytes, 32)
         XCTAssertEqual(InboxProtocol.sealedBoxBytes, 80)
@@ -155,7 +155,7 @@ final class InboxProtocolTests: XCTestCase {
     private func taskJSON(state: String, terminal: Bool = false, savedAt: Int = 0,
                           material: String = "") -> String {
         """
-        {"ID":"t1","TargetDeviceID":"device1","StoredFileID":"file1",
+        {"ID":"t1","SourceDeviceID":"sender1","TargetDeviceID":"device1","StoredFileID":"file1",
          "State":"\(state)","ErrorCode":"","CiphertextBytes":42,
          "WrapAlgorithm":"x25519-sealedbox-v1","TargetKeyID":"key1",
          "TargetKeyGeneration":1,"Attempts":0,"LeaseExpiresAt":99,"ExpiresAt":999,
@@ -240,7 +240,7 @@ final class InboxProtocolTests: XCTestCase {
 
     func testMissingRequiredTaskAndDeliveryFieldsAreRefused() throws {
         let task = taskJSON(state: "downloading")
-        let requiredTaskFields = ["TargetDeviceID", "StoredFileID", "CiphertextBytes",
+        let requiredTaskFields = ["SourceDeviceID", "TargetDeviceID", "StoredFileID", "CiphertextBytes",
                                   "WrapAlgorithm", "TargetKeyID", "TargetKeyGeneration",
                                   "Attempts", "LeaseExpiresAt", "ExpiresAt", "SavedAt", "Terminal"]
         for field in requiredTaskFields {

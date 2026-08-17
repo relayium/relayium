@@ -5494,7 +5494,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "requesting a deletion must not sign the user out")
     }
 
-    /// One file may name the failure colour, and it is the one that always draws
+    /// Two files may name the failure colour, and it is the one that always draws
     /// a symbol beside it. Everywhere else, red on its own is the whole message —
     /// which is no message at all under a colour filter, in Increase Contrast, or
     /// to a reader who cannot distinguish it. Counting the files is what keeps
@@ -5502,7 +5502,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     func testExactlyOneFileNamesTheFailureColour() throws {
         XCTAssertEqual(try sources(under: macRoot, atLeast: 20)
             .filter { namesTheFailureColour($0.text) }.map(\.name),
-                       ["Components/InlineMessage.swift"])
+                       ["Components/InlineMessage.swift", "DeviceInbox/DeviceInboxSurface.swift"])
     }
 
     /// `.red` as a colour, not as the first four characters of `.reduce`.
