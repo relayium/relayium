@@ -942,7 +942,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		if !processed {
 			failure = "handler returned server error"
 		}
-		if err := s.Store().FinishStripeWebhookEvent(context.Background(), ev.EventID, claim.LeaseToken, processed, failure, s.Now().Unix()); err != nil {
+		if err := s.Store().FinishStripeWebhookEvent(context.Background(), ev.EventID, claim.Generation, processed, failure, s.Now().Unix()); err != nil {
 			log.Printf("billing: finish Stripe event %s: %v", ev.EventID, err)
 			http.Error(responseWriter, "server error", http.StatusInternalServerError)
 			return

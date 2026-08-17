@@ -1567,7 +1567,7 @@ type Store interface {
 	// owns it — a refusal to adopt, not a transient failure to retry past.
 	SetUserStripeSubscription(ctx context.Context, userID, subID string) error
 	ClaimStripeWebhookEvent(ctx context.Context, eventID, eventType string, now int64) (StripeWebhookClaim, error)
-	FinishStripeWebhookEvent(ctx context.Context, eventID string, leaseToken int64, processed bool, failure string, now int64) error
+	FinishStripeWebhookEvent(ctx context.Context, eventID string, claimGeneration int64, processed bool, failure string, now int64) error
 	// GetUserByStripeCustomer looks up a user by Stripe customer id (webhook
 	// dispatch). An empty customerID returns not-found.
 	GetUserByStripeCustomer(ctx context.Context, customerID string) (User, bool, error)

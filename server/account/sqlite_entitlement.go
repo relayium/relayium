@@ -22,7 +22,7 @@ const (
 
 type StripeWebhookClaim struct {
 	State      StripeWebhookClaimState
-	LeaseToken int64
+	Generation int64
 }
 
 func (s *SQLiteStore) ClaimStripeWebhookEvent(ctx context.Context, eventID, eventType string, now int64) (StripeWebhookClaim, error) {
@@ -43,11 +43,12 @@ func (s *SQLiteStore) ClaimStripeWebhookEvent(ctx context.Context, eventID, even
 		if err := tx.Commit(); err != nil {
 			return StripeWebhookClaim{}, err
 		}
-		return StripeWebhookClaim{State: StripeWebhookClaimed, LeaseToken: now}, nil
+		return StripeWebhookClaim{State: StripeWebhookClaimed, Generation: 1}, nil
 	}
 	var status string
 	var claimed int64
-	if err := tx.QueryRowContext(ctx, `SELECT status,claimed_at FROM stripe_webhook_events WHERE event_id=?`, eventID).Scan(&status, &claimed); err != nil {
+	var attempts int64
+	if err := tx.QueryRowContext(ctx, `SELECT status,claimed_at,attempts FROM stripe_webhook_events WHERE event_id=?`, eventID).Scan(&status, &claimed, &attempts); err != nil {
 		if err == sql.ErrNoRows {
 			return StripeWebhookClaim{State: StripeWebhookInFlight}, nil
 		}
@@ -59,7 +60,7 @@ func (s *SQLiteStore) ClaimStripeWebhookEvent(ctx context.Context, eventID, even
 	if status == "processing" && now-claimed < stripeEventLeaseSeconds {
 		return StripeWebhookClaim{State: StripeWebhookInFlight}, tx.Commit()
 	}
-	res, err = tx.ExecContext(ctx, `UPDATE stripe_webhook_events SET status='processing',attempts=attempts+1,claimed_at=?,finished_at=0,failure='' WHERE event_id=? AND status=? AND claimed_at=?`, now, eventID, status, claimed)
+	res, err = tx.ExecContext(ctx, `UPDATE stripe_webhook_events SET status='processing',attempts=attempts+1,claimed_at=?,finished_at=0,failure='' WHERE event_id=? AND status=? AND claimed_at=? AND attempts=?`, now, eventID, status, claimed, attempts)
 	if err != nil {
 		return StripeWebhookClaim{}, err
 	}
@@ -71,12 +72,12 @@ func (s *SQLiteStore) ClaimStripeWebhookEvent(ctx context.Context, eventID, even
 	if err := tx.Commit(); err != nil {
 		return StripeWebhookClaim{}, err
 	}
-	return StripeWebhookClaim{State: StripeWebhookClaimed, LeaseToken: now}, nil
+	return StripeWebhookClaim{State: StripeWebhookClaimed, Generation: attempts + 1}, nil
 }
 
-func (s *SQLiteStore) FinishStripeWebhookEvent(ctx context.Context, eventID string, leaseToken int64, processed bool, failure string, now int64) error {
-	if leaseToken <= 0 {
-		return errors.New("account: invalid Stripe webhook lease token")
+func (s *SQLiteStore) FinishStripeWebhookEvent(ctx context.Context, eventID string, claimGeneration int64, processed bool, failure string, now int64) error {
+	if claimGeneration <= 0 {
+		return errors.New("account: invalid Stripe webhook claim generation")
 	}
 	if eventID == "" {
 		return nil
@@ -88,7 +89,7 @@ func (s *SQLiteStore) FinishStripeWebhookEvent(ctx context.Context, eventID stri
 	if len(failure) > 500 {
 		failure = failure[:500]
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE stripe_webhook_events SET status=?,finished_at=?,failure=? WHERE event_id=? AND status='processing' AND claimed_at=?`, status, now, failure, eventID, leaseToken)
+	res, err := s.db.ExecContext(ctx, `UPDATE stripe_webhook_events SET status=?,finished_at=?,failure=? WHERE event_id=? AND status='processing' AND attempts=?`, status, now, failure, eventID, claimGeneration)
 	if err != nil {
 		return err
 	}
