@@ -458,7 +458,7 @@ final class MacSurfaceGuardTests: XCTestCase {
             "xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium"))
         XCTAssertTrue(workflow.contains("-destination 'platform=macOS'"))
         XCTAssertTrue(workflow.contains("-only-testing:RelayiumUITests test"))
-        XCTAssertTrue(workflow.contains("timeout-minutes: 25"),
+        XCTAssertTrue(workflow.contains("timeout-minutes: 50"),
                       "a hosted desktop failure can occupy the runner indefinitely")
     }
 

@@ -297,7 +297,7 @@ jobs:
         # macos-15 runners reached the old 15-minute ceiling twice while the
         # same exact-source suite passed locally; keep a finite bound without
         # terminating a healthy full product gate before it can report results.
-        timeout-minutes: 25
+        timeout-minutes: 50
         run: |
           xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium \
             -destination 'platform=macOS' \
