@@ -243,14 +243,47 @@ public final class LinkAdmission: @unchecked Sendable {
             guard supportsLink(from) else { return .ignore }
             // A request that reached the wrong side is dropped in silence.
             guard linkRole(selfId: selfId(), peerId: from) == .initiator else { return .ignore }
-            guard canAcceptLink(from) else { return .busy }
+            // Deliberately OUTSIDE the lock, for the same reason the offer path
+            // below states in full: `canAcceptLink` is owner-supplied, may read
+            // this admission back, and `NSLock` is not recursive.
+            //
+            // ASKED here, but not ACTED ON until the phase is known — and that
+            // split is the second half of the same shipped defect the offer
+            // path already fixes. **The predicate answers "may an UNSOLICITED
+            // link take the surface", so it is a question about the `.idle`
+            // room only.** The app writes it false the instant the surface is
+            // claimed, and a pairing claims the surface as it begins its own
+            // attempt, so applied ahead of the phase it refused a request from
+            // the exact peer this side was already establishing with — the one
+            // peer the room was opened for. Measured in a built-App run: macOS
+            // and Web paired by Direct code, macOS held `.connecting(peer)` for
+            // that same Web client, answered its crossing request `busy`, and
+            // the peer settled `.refused` while macOS reported "Another
+            // transfer is open" about its own counterpart.
+            //
+            // A remote peer cannot manufacture the exemption. `.requesting` and
+            // `.connecting` are entered only by this side's own claims and
+            // lifecycle calls, and the peer id is compared exactly, so what is
+            // exempted is precisely the link this device is already building
+            // with this peer. Everything else is unchanged: a SECOND peer is
+            // still `busy`, `.open`/`.interrupted` are still `busy`, and an
+            // unsolicited request into an idle room is still the surface's
+            // decision.
+            let surfaceIsFree = canAcceptLink(from)
             lock.lock(); defer { lock.unlock() }
             switch _phase {
             case .open, .interrupted:
                 return .busy
             case let .connecting(peerId), let .requesting(peerId):
+                // Idempotent for the bound peer, refusal for anybody else. The
+                // phase is re-read here rather than before the predicate ran,
+                // so an owner that withdrew its own attempt from inside
+                // `canAcceptLink` is answered against the room it left behind.
                 return peerId == from ? .alreadyInFlight : .busy
             case .idle, .failed:
+                // Nothing was asked for, so this request is unsolicited and the
+                // surface's answer is the whole decision.
+                guard surfaceIsFree else { return .busy }
                 return .establish(role: .initiator)
             }
         }

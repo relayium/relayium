@@ -8,14 +8,17 @@ import XCTest
 /// lanes, or answer a peer that has no business being answered. Pinned against
 /// `web/src/lib/peer-link.svelte.ts`'s `listen()` and `ensure()`.
 ///
-/// One clause is deliberately NOT a line-for-line pin, and it is named here so
-/// nobody restores the parity: `route`'s offer branch does not let
-/// `canAcceptLink` refuse the answer to this side's own request, where
-/// `peer-link.svelte.ts` asks the predicate first. The Web client reaches the
-/// same rule one layer up — `peer-workspace.svelte.ts` refuses to inspect its
-/// own session manager for exactly this reason — so the two clients agree once
-/// composed, and nothing on the wire differs. See
-/// `testTheAnswerToThisSidesOwnRequestIsNotRefusedByAClosedSurfaceGate`.
+/// TWO clauses are deliberately NOT a line-for-line pin, and they are named here
+/// so nobody restores the parity: neither `route`'s offer branch nor its request
+/// branch lets `canAcceptLink` refuse a link this side is already bound to,
+/// where `peer-link.svelte.ts` asks the predicate first in both. The Web client
+/// reaches the same rule one layer up — `peer-workspace.svelte.ts` refuses to
+/// inspect its own session manager for exactly this reason — so the two clients
+/// agree once composed, and nothing on the wire differs. See
+/// `testTheAnswerToThisSidesOwnRequestIsNotRefusedByAClosedSurfaceGate` for the
+/// offer half and
+/// `testACrossingRequestFromThePeerBeingEstablishedWithSurvivesAClaimedSurface`
+/// for the request half.
 ///
 /// The security claim being tested is deliberately narrow, and it is the honest
 /// one: a forged capability or a forged link signal must at worst DENY SERVICE.
@@ -130,6 +133,127 @@ final class LinkAdmissionTests: XCTestCase {
         let a = admission(selfId: smaller)
         a.didBeginEstablishing(peerId: larger, role: .initiator)
         XCTAssertEqual(a.route(from: "ccc", signal: linkRequestSignal()), .busy)
+    }
+
+    // MARK: - the request for the link this side is already building
+
+    /// **A request from the peer this side is ALREADY establishing with must be
+    /// absorbed, not refused, however the surface gate answers.**
+    ///
+    /// The offer branch's defect, one signal type over, and the one an owner
+    /// reproduced in a built App: macOS and Web paired by Direct code, macOS
+    /// took the room as initiator for that exact Web client, and the Web
+    /// client's crossing request — sent because both sides announce and both
+    /// act on the caps listener — arrived while the app's own attempt had
+    /// already closed the surface gate. `route` consulted `canAcceptLink`
+    /// BEFORE it read the phase, so the `.alreadyInFlight` rule two lines below
+    /// it could never run: the peer was answered `busy`, `LinkSignalPolicy`
+    /// turned that into an immediate `.refused`, and macOS reported "Another
+    /// transfer is open" about the very counterpart it was offering to.
+    ///
+    /// Restore `guard canAcceptLink(from) else { return .busy }` ahead of the
+    /// phase switch and this fails.
+    func testACrossingRequestFromThePeerBeingEstablishedWithSurvivesAClaimedSurface() {
+        let a = admission(selfId: smaller, canAccept: { _ in false })
+        XCTAssertEqual(a.ensure(peerId: larger), .establish(role: .initiator))
+        XCTAssertTrue(a.admitEstablishment(peerId: larger, role: .initiator))
+
+        XCTAssertEqual(a.route(from: larger, signal: linkRequestSignal()), .alreadyInFlight)
+        XCTAssertEqual(a.phase, .connecting(peerId: larger),
+                       "and the establishment this side is running is untouched")
+    }
+
+    /// The same through the lifecycle announcement rather than the claim, and
+    /// through `.requesting` as well as `.connecting`, so the property belongs
+    /// to the PHASE and its peer rather than to one entry point. `.requesting`
+    /// is included because this object is a total state machine and a partial
+    /// exemption is how the same defect grows back: the rule is "the peer bound
+    /// in `_phase`", not "the peer bound by one of the two ways in".
+    func testAClaimedSurfaceCannotRefuseTheBoundPeerInAnyInFlightPhase() {
+        let announced = admission(selfId: smaller, canAccept: { _ in false })
+        announced.didBeginEstablishing(peerId: larger, role: .initiator)
+        XCTAssertEqual(announced.route(from: larger, signal: linkRequestSignal()),
+                       .alreadyInFlight)
+
+        let asked = admission(selfId: smaller, canAccept: { _ in false })
+        asked.didBeginRequesting(peerId: larger)
+        XCTAssertEqual(asked.route(from: larger, signal: linkRequestSignal()),
+                       .alreadyInFlight)
+        XCTAssertEqual(asked.phase, .requesting(peerId: larger))
+    }
+
+    /// The half that must NOT move, and the reason the exemption is written as
+    /// "the bound peer" rather than "while requesting": a SECOND peer is still
+    /// refused, with the gate open or shut. Answering it would invite two
+    /// authenticated peers onto one workspace surface, which is the whole
+    /// admission rule.
+    func testASecondPeersRequestIsStillRefusedWhileTheRoomIsBound() {
+        for gate in [true, false] {
+            let connecting = admission(selfId: smaller, canAccept: { _ in gate })
+            connecting.didBeginEstablishing(peerId: larger, role: .initiator)
+            XCTAssertEqual(connecting.route(from: "ccc", signal: linkRequestSignal()), .busy,
+                           "a second peer took a room bound to another, gate=\(gate)")
+
+            let requesting = admission(selfId: smaller, canAccept: { _ in gate })
+            requesting.didBeginRequesting(peerId: larger)
+            XCTAssertEqual(requesting.route(from: "ccc", signal: linkRequestSignal()), .busy,
+                           "a second peer took a room already asked for, gate=\(gate)")
+            XCTAssertEqual(requesting.phase, .requesting(peerId: larger))
+        }
+    }
+
+    /// An authenticated link, held or mid-gap, is still `busy` for its own peer
+    /// too: a request is an ask to START one, and the answer to it is not the
+    /// link that already exists. `.interrupted` matters most — a rebuild is
+    /// driven by the authenticated resume path, and admitting a fresh
+    /// establishment there would put a second PeerConnection into one pair of
+    /// lanes while recovery is running.
+    func testARequestIsRefusedOnAnAuthenticatedLinkEvenFromItsOwnPeer() {
+        let a = admission(selfId: smaller)
+        a.didBeginEstablishing(peerId: larger, role: .initiator)
+        a.didOpen(peerId: larger)
+        XCTAssertEqual(a.route(from: larger, signal: linkRequestSignal()), .busy)
+        a.didInterrupt()
+        XCTAssertEqual(a.phase, .interrupted(peerId: larger))
+        XCTAssertEqual(a.route(from: larger, signal: linkRequestSignal()), .busy)
+    }
+
+    /// The predicate is still ASKED on the request path — only its answer is
+    /// confined to the idle room, exactly as on the offer path. Both halves
+    /// matter: an owner that really has changed its mind ends its own ask from
+    /// inside the predicate, and the phase re-read afterwards is what turns
+    /// that into a refusal. A "fix" that deleted the call rather than moving
+    /// its effect fails here.
+    func testTheSurfaceGateIsStillAskedButCannotRefuseTheLinkBeingBuilt() {
+        let asked = Counter()
+        let a = admission(selfId: smaller, canAccept: { _ in asked.bump(); return false })
+        XCTAssertTrue(a.admitEstablishment(peerId: larger, role: .initiator))
+
+        XCTAssertEqual(a.route(from: larger, signal: linkRequestSignal()), .alreadyInFlight)
+        XCTAssertEqual(asked.value, 1, """
+            the predicate must still run: an owner withdrawing its own attempt \
+            from inside it is the supported way to refuse a link this side started
+            """)
+    }
+
+    /// And the withdrawal that call exists for: a predicate that ends this
+    /// side's own attempt while it is being consulted must be believed, because
+    /// the phase is read AFTER it returns.
+    ///
+    /// This is the mutation guard for the OTHER plausible fix — snapshotting the
+    /// phase before consulting the predicate and exempting the bound peer from
+    /// that snapshot. It would answer `alreadyInFlight` here, for a room the
+    /// owner had just released, and the peer would then be built into an
+    /// establishment nothing on this side is holding.
+    func testARequestIsAnsweredAgainstTheRoomThePredicateLeftBehind() {
+        let probe = WithdrawingAdmissionProbe(selfId: smaller,
+                                              peerId: larger,
+                                              signal: linkRequestSignal())
+        probe.admission.didBeginRequesting(peerId: larger)
+
+        XCTAssertEqual(probe.route(), .busy,
+                       "an attempt the predicate withdrew cannot still exempt its peer")
+        XCTAssertEqual(probe.admission.phase, .idle)
     }
 
     // MARK: - inbound offers
@@ -1098,6 +1222,37 @@ private final class TimingOutAdmissionProbe: @unchecked Sendable {
 
     func route() -> LinkAdmissionDecision {
         admission.route(from: peerId, signal: offer)
+    }
+}
+
+/// An owner-shaped `canAcceptLink` that WITHDRAWS this side's own attempt while
+/// it is being consulted, and then answers "the surface is taken".
+///
+/// The supported way for an owner to refuse a link this side started: it ends
+/// its ask and says no in the same breath. Distinct from
+/// `TimingOutAdmissionProbe`, which times out and still answers yes — this one
+/// exists to prove the phase is re-read after the call rather than exempting a
+/// peer on a snapshot taken before it.
+private final class WithdrawingAdmissionProbe: @unchecked Sendable {
+    private(set) var admission: LinkAdmission!
+    private let peerId: String
+    private let signal: JSONValue
+
+    init(selfId: String, peerId: String, signal: JSONValue) {
+        self.peerId = peerId
+        self.signal = signal
+        admission = LinkAdmission(
+            selfId: { selfId },
+            supportsLink: { _ in true },
+            canAcceptLink: { [unowned self] peer in
+                admission.endRequest(peerId: peer, as: .cancelled)
+                return false
+            }
+        )
+    }
+
+    func route() -> LinkAdmissionDecision {
+        admission.route(from: peerId, signal: signal)
     }
 }
 

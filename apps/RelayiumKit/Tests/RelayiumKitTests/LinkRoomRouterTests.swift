@@ -664,6 +664,56 @@ final class LinkRoomRouterTests: XCTestCase {
         XCTAssertNil(r.initialSignals[0])
     }
 
+    /// **The mirror image of `testAClaimedSurfaceStillAdoptsTheOfferItAskedFor`,
+    /// on the role assignment where THIS side offers.**
+    ///
+    /// The owner reproduced it in a built App: macOS and Web paired by Direct
+    /// code, macOS was the smaller id and so claimed the room as initiator, and
+    /// the Web client's crossing `link request` — both sides announce, both act
+    /// on the caps listener — arrived after the pairing had already closed this
+    /// module's surface gate. `LinkAdmission.route` consulted `canAcceptLink`
+    /// ahead of the phase, so the peer this side was at that moment offering to
+    /// was answered `busy`; the counterpart settled `.refused` and macOS drew
+    /// "Another transfer is open" about that same counterpart.
+    ///
+    /// Driven through the whole composition, because the only observable that
+    /// matters is what went out on the wire: ONE `busy` is what
+    /// `LinkSignalPolicy` turns into an immediate refusal at the peer.
+    func testAClaimedSurfaceStillAbsorbsTheCrossingRequestForTheLinkItStarted() async {
+        let r = rig(canAcceptLink: { _ in false }, peers: ["z-peer"])
+
+        let operation = r.router.ensure(peerId: "z-peer")
+        XCTAssertEqual(operation.settledOutcome, .establishing)
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "z-peer"))
+
+        r.socket.deliver(from: "z-peer", linkRequestSignal())
+
+        XCTAssertTrue(r.socket.busied.isEmpty, """
+            this side refused the peer it had just started offering to; the peer \
+            reads that as `.peerBusy` and settles refused while this side waits
+            """)
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "z-peer"))
+        await settle()
+        XCTAssertEqual(r.peers, ["z-peer"], "and exactly one establishment exists")
+        XCTAssertEqual(r.roles, [.initiator])
+    }
+
+    /// The half that must not move, through the same composition: a SECOND
+    /// peer's request is still refused, and told so exactly once.
+    func testASecondPeersRequestIsRefusedWhileTheRoomIsBoundThroughTheRouter() async {
+        let r = rig(peers: ["z-peer", "z-other"])
+
+        _ = r.router.ensure(peerId: "z-peer")
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "z-peer"))
+
+        r.socket.deliver(from: "z-other", linkRequestSignal())
+        await settle()
+
+        XCTAssertEqual(r.socket.busied, ["z-other"])
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "z-peer"))
+        XCTAssertEqual(r.peers, ["z-peer"], "a second peer was built into the room")
+    }
+
     func testRosterAbsenceCancelsOnlyThePendingRequest() {
         let scheduler = RouterScheduler()
         let r = rig(scheduler: scheduler)

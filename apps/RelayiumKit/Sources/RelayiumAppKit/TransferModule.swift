@@ -115,9 +115,12 @@ public final class TransferModule: ObservableObject {
         // them as one publisher was a shipped defect that refused about half of
         // all pairing attempts.**
         //
-        // `LinkAdmission.route` answers an inbound link REQUEST with `.busy`
-        // whenever `canAcceptLink` is false, and that predicate is fed from
-        // here. Minting or joining a code claims this module's surface before
+        // `LinkAdmission.route` answers an UNSOLICITED inbound link REQUEST —
+        // one arriving into an idle room — with `.busy` whenever
+        // `canAcceptLink` is false, and that predicate is fed from
+        // here. A watched pairing room is exactly that idle room: a code has
+        // been minted but no peer is bound yet, so this predicate is the whole
+        // decision. Minting or joining a code claims this module's surface before
         // the room is watched — `CrossNetworkConnectPane` calls
         // `presence.beginSession` and then `watchPairingCode` — so from the
         // moment a code exists, `owner != nil` and the gate said "busy" to
@@ -177,10 +180,10 @@ public final class TransferModule: ObservableObject {
     /// unsolicited link may take it. The second is the repair. Minting or
     /// joining a code claims this module's surface BEFORE the room is watched,
     /// so from the moment a code exists the first clause is false and
-    /// `LinkAdmission.route` answered every inbound request with `.busy`.
-    /// `linkRole` decides which side asks, so the visible symptom was a
-    /// cross-network pairing that failed roughly half the time — the half where
-    /// this side was the offerer — with no error on either screen.
+    /// `LinkAdmission.route` answered every inbound request into that still-idle
+    /// room with `.busy`. `linkRole` decides which side asks, so the visible
+    /// symptom was a cross-network pairing that failed roughly half the time —
+    /// the half where this side was the offerer — with no error on either screen.
     ///
     /// A room this module opened with a code is available for the peer that code
     /// names, because that peer is the entire reason the room is open. It is
@@ -188,6 +191,15 @@ public final class TransferModule: ObservableObject {
     /// something": `.requesting`, `.establishing` and `.open` all mean a peer has
     /// already been admitted, and answering `available` then would invite a
     /// SECOND one into a module that holds one session.
+    ///
+    /// **That strictness is safe, and it is not what refuses the peer already
+    /// being connected to.** This answer is ADVISORY: `LinkAdmission` consults
+    /// it only for a room bound to nobody. A request or offer from the exact
+    /// peer it already holds in `.requesting`/`.connecting` is answered
+    /// `alreadyInFlight` without this predicate's answer being applied, so the
+    /// crossing request a pairing produces cannot be refused here — the rule
+    /// lives in the one object that knows both the phase and the peer, where a
+    /// module observing only its own surface cannot forget it.
     static func acceptsInboundLink(owner: AppDestination?,
                                    connection: LinkWorkspaceConnection) -> Bool {
         owner == nil || connection.isWatchingPairingRoom

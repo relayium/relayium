@@ -280,12 +280,13 @@ final class TransferModuleTests: XCTestCase {
     /// names.**
     ///
     /// This is the deterministic half of a shipped defect the built-App run
-    /// found. `LinkAdmission.route` answers an inbound link request with `.busy`
-    /// whenever `canAcceptLink` is false, and that predicate is fed from the
-    /// module's surface ownership. Minting or joining a code claims the surface
-    /// BEFORE the room is watched, so from the moment a code existed the gate
-    /// said "busy" to everybody — including the one peer the room was opened
-    /// for.
+    /// found. `LinkAdmission.route` answers an inbound link request arriving
+    /// into an idle room with `.busy` whenever `canAcceptLink` is false, and
+    /// that predicate is fed from the module's surface ownership. A watched
+    /// pairing room is exactly that idle room. Minting or joining a code claims
+    /// the surface BEFORE the room is watched, so from the moment a code existed
+    /// the gate said "busy" to everybody — including the one peer the room was
+    /// opened for.
     ///
     /// Whether it mattered depended on `linkRole`: the smaller hub id must
     /// offer, so only when this side was the offerer did the peer send a request
@@ -319,6 +320,12 @@ final class TransferModuleTests: XCTestCase {
     /// answering "available" in any of them would invite a SECOND peer into a
     /// module that holds one session — which is the opposite defect, and a worse
     /// one, because it interrupts a connection that is working.
+    ///
+    /// This answer is advisory, and staying strict here does NOT refuse the peer
+    /// the module is already connecting to: `LinkAdmission` applies it only to a
+    /// room bound to nobody, and answers `alreadyInFlight` to a request or offer
+    /// from the exact peer it already holds. See
+    /// `LinkAdmissionTests.testACrossingRequestFromThePeerBeingEstablishedWithSurvivesAClaimedSurface`.
     func testAModuleThatHasAdmittedAPeerStillRefusesTheNextOne() {
         for connection in [LinkWorkspaceConnection.requesting,
                            .establishing(sas: nil),
