@@ -619,7 +619,12 @@ export interface Messages {
     // control rather than instead of it: a composer simply removed teaches the
     // reader that this browser cannot send messages at all, which is false.
     textUnavailable: string;
-    messagePrivacyNote: string; // the words never leave this browser unencrypted
+    // Two halves, and the second is what keeps the first honest: the SERVICE
+    // only ever receives and stores ciphertext, and the DESTINATION DEVICE
+    // decrypts the message and holds it locally. "Relayium never holds the
+    // words" alone reads as a claim about the receiving app too, which runs
+    // Relayium and does store and display the plaintext (§13.2 of the v2 spec).
+    messagePrivacyNote: string;
     messageSummary: (bytes: number) => string; // what this send carries — a size, never the text
     // Sender-local phases (PRD §10 items 1-2). Central stores neither.
     phaseEncrypting: (pct: number) => string;

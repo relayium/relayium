@@ -398,7 +398,7 @@ const zh: Messages = {
     messageSendLabel: (name) => `把这条消息发送到 ${name}`,
     composerClose: "收起",
     textUnavailable: "这台设备没有声明它能显示消息，所以只能给它发文件。要发消息，请在那台设备上升级 Relayium。",
-    messagePrivacyNote: "消息在离开本浏览器之前就已加密。Relayium 只拿得到密文，从来拿不到文字本身。",
+    messagePrivacyNote: "消息在离开本浏览器之前就已加密。Relayium 服务器只接收、只保存密文——解密在目标设备上完成，消息也保存和显示在那台设备本地。",
     messageSummary: (bytes) => `消息 · ${bytes} 字节`,
     phaseEncrypting: (pct) => `正在本浏览器加密… ${pct}%`,
     phaseUploading: (pct) => `正在上传密文… ${pct}%`,

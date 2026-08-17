@@ -42,6 +42,12 @@ type Claims = {
   enableThere: RegExp;
   /** Names and folders never reach Relayium. */
   namesStayLocal: RegExp;
+  /** The SERVICE only ever receives and stores ciphertext… */
+  serviceCiphertextOnly: RegExp;
+  /** …and the DESTINATION DEVICE is where the message is decrypted and kept.
+   *  Without this half, "Relayium never holds the words" reads as a claim about
+   *  the receiving app as well, which does store and show the plaintext. */
+  deviceHoldsPlaintext: RegExp;
 };
 
 const claims: Record<Code, Claims> = {
@@ -52,6 +58,8 @@ const claims: Record<Code, Claims> = {
     cancelDestroys: /deleted from the server/i,
     enableThere: /Turn it on there/i,
     namesStayLocal: /never receives them/i,
+    serviceCiphertextOnly: /servers receive and store only ciphertext/i,
+    deviceHoldsPlaintext: /destination device decrypts the message and stores and shows it there/i,
   },
   zh: {
     notSaved: /设备还没保存/,
@@ -60,6 +68,8 @@ const claims: Record<Code, Claims> = {
     cancelDestroys: /密文会被删除/,
     enableThere: /只能在那台设备上打开/,
     namesStayLocal: /从不接收它们/,
+    serviceCiphertextOnly: /服务器只接收、只保存密文/,
+    deviceHoldsPlaintext: /解密在目标设备上完成/,
   },
 };
 
@@ -92,6 +102,16 @@ describe.each(Object.keys(locales) as Code[])("%s Device Inbox copy", (code) => 
 
   it("states that names and folders never reach Relayium", () => {
     expect(d.privacyNote).toMatch(c.namesStayLocal);
+  });
+
+  it("separates what the service holds from what the destination device holds", () => {
+    // The message composer's note. Both halves are required: the service only
+    // ever receives and stores ciphertext, AND the destination device is where
+    // the message is decrypted, stored and shown. A translation that keeps only
+    // the first half promises that no copy of Relayium anywhere holds the text,
+    // which the receiving app disproves the moment it displays one.
+    expect(d.messagePrivacyNote).toMatch(c.serviceCiphertextOnly);
+    expect(d.messagePrivacyNote).toMatch(c.deviceHoldsPlaintext);
   });
 
   it("interpolates the device name into every control that names one", () => {
@@ -134,6 +154,7 @@ describe("every locale carries the whole section", () => {
     "sendErrMalformedWrappedKey", "sendErrInvalidIdempotencyKey", "sendErrTooLarge", "sendErrQuota",
     "sendErrSignedOut", "sendErrNetwork", "sendErrCancelled", "sendErrUnsupportedKey",
     "sendErrNoFiles", "sendErrUnknown", "cancelTask", "cancelTaskFailed", "dismiss", "privacyNote",
+    "messagePrivacyNote",
   ] as const;
 
   it.each(Object.keys(locales) as Code[])("%s", (code) => {

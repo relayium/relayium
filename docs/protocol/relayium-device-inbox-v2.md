@@ -18,10 +18,14 @@ composer, the file picker and the folder picker, with the message group gated on
 `inbox.text.v1` (§4) and the file groups deliberately not. One send is one kind:
 the two groups have two Sends and there is no control that could combine them.
 
-Still outstanding, and stated plainly: **the web client has no text send
-surface**. `sendTextToDevice` exists there and nothing in its UI calls it. iOS
-has neither the text surface nor the device-first arrangement. The
-migration/cutover of deployed clients is also outstanding.
+**The web client now has one too.** The device card carries a message composer
+beside its file drop zone, gated on the same `inbox.text.v1` claim, so
+`sendTextToDevice` is reachable from the product rather than only from tests.
+
+Still outstanding, and stated plainly: **iOS has neither the text surface nor
+the device-first arrangement**, and **nothing here is deployed** — every
+published artifact predates v2 and speaks v1. The cutover is specified in §15
+and has not been carried out.
 
 Everything v1 specified and v2 does not restate is unchanged and still current:
 device enrolment, public-key registration/rotation/revocation, presence, the
@@ -608,3 +612,65 @@ The abandoned v1 object is left to central's collector, which reclaims an unboun
 This is not v1 compatibility, which the owner waived on 2026-08-17: nothing
 decodes, sends or falls back to a v1 document. It is duplicate- and data-loss
 safety for ciphertext that was already in flight.
+
+---
+
+## 15. Release and fleet cutover
+
+**Status: planned, not published and not deployed.** The published fleet is
+`v0.19.1` (tagged 2026-08-12); every v2 commit is later than that tag, so
+nothing described in this document is running anywhere.
+
+**The cutover ships as `v0.20.0`**, the next server/fleet release tag. v2 is a
+breaking change with no dual stack and no downgrade path — central speaks
+protocol 2 only and refuses a client announcing `[1]` (§2) — so it cannot ride a
+patch on `v0.19.x`: there is no version of this change that older clients
+survive, which is exactly what a minor bump is for.
+
+`v0.20.0` is a **release target, not a release**. Until it is actually tagged
+and published it must not appear on the public releases page or in any generated
+HTML: `web/scripts/pages/content/releases.mjs` lists published tags only and
+`releases.test.mjs` holds it to `git tag`, so an early entry would be a download
+link to a tag that does not exist.
+
+### 15.1 Rollout order
+
+The order is forced by the refusal, not chosen for convenience. Deploying a
+v2-only central is itself the breaking event: from that moment every deployed v1
+client fails to negotiate, and shipping their update afterwards does not
+retroactively close the window in between.
+
+1. **Prepare and test the compatible set first** — web, macOS and server
+   artifacts built from the same v2 commit range, exercised against each other
+   rather than each against the deployed v1 world. A green server suite against
+   a v1 client proves nothing here; that combination is meant to fail.
+2. **Do not deploy a v2-only central while public clients still speak v1.** This
+   is the one ordering constraint that cannot be recovered from by moving
+   faster afterwards.
+3. **Hands-on acceptance of the test build comes before any of it.** The macOS
+   candidate is exercised from a non-stable channel first, and a green suite is
+   not that acceptance: the failure this cutover risks is a device that can no
+   longer be sent to, which only a real pair of clients demonstrates.
+4. **Then coordinate the server/web deploy with required-client enforcement in
+   the same operation.** The client floor is `web/native-client-policy.json`
+   (`minimumSupportedVersion` / `minimumSupportedBuild`), published to
+   `public/apps/macos/client-policy.json` and carried into the Sparkle feed's
+   critical-update threshold. Raising it to the first v2 build is what turns
+   "this client can no longer talk to us" into an update prompt instead of an
+   unexplained failure, so it belongs to the cutover rather than to a later
+   tidy-up.
+
+### 15.2 Rollback needs the whole set, not the server
+
+Rolling central back to `v0.19.1` on its own does not undo the cutover — it
+inverts it. Clients that updated to v2 would then be the ones refused, by a
+server that no longer speaks their protocol, and a partially-migrated user is
+worse off than either consistent state. **A rollback is therefore a return to
+the complete compatible pre-cutover set** — server, web and the client build
+together — and never a mix of a v1 half and a v2 half in either direction. The
+practical consequence: the pre-cutover artifacts must still be deployable at the
+moment `v0.20.0` goes out, and the plan is not ready until that has been
+confirmed rather than assumed.
+
+Nothing in this section is an operations change. It records the decision and the
+order; performing it is a separate, owner-authorized task.

@@ -398,7 +398,7 @@ const en: Messages = {
     messageSendLabel: (name) => `Send this message to ${name}`,
     composerClose: "Close",
     textUnavailable: "This device doesn't say it can show a message, so only files can be sent to it. Update Relayium there to send messages.",
-    messagePrivacyNote: "The message is encrypted in this browser before it leaves. Relayium only ever holds ciphertext, never the words.",
+    messagePrivacyNote: "The message is encrypted in this browser before it leaves. Relayium's servers receive and store only ciphertext — the destination device decrypts the message and stores and shows it there.",
     messageSummary: (bytes) => `Message · ${bytes} bytes`,
     phaseEncrypting: (pct) => `Encrypting in this browser… ${pct}%`,
     phaseUploading: (pct) => `Uploading encrypted data… ${pct}%`,
