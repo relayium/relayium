@@ -85,6 +85,17 @@ func (f *fakeBiller) CancelSubscription(ctx context.Context, subID string, refun
 	return nil
 }
 
+func (f *fakeBiller) InspectDuplicateSubscription(_ context.Context, userID, customerID, canonicalID, duplicateID string) (DuplicateRefundPlan, error) {
+	return DuplicateRefundPlan{UserID: userID, CustomerID: customerID, CanonicalSubscriptionID: canonicalID, DuplicateSubscriptionID: duplicateID}, nil
+}
+
+func (f *fakeBiller) ReconcileDuplicateSubscription(ctx context.Context, job DuplicateRefundJob) (DuplicateRefundResult, error) {
+	if err := f.CancelSubscription(ctx, job.DuplicateSubscriptionID, true); err != nil {
+		return DuplicateRefundResult{}, err
+	}
+	return DuplicateRefundResult{SubscriptionCanceled: true, RefundComplete: true}, nil
+}
+
 func (f *fakeBiller) CreateCheckoutSession(ctx context.Context, in CheckoutInput) (CheckoutSession, error) {
 	f.checkoutCalls++
 	f.lastCheckout = in

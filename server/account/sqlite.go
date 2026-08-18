@@ -1124,6 +1124,27 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
  created_at INTEGER NOT NULL,
  updated_at INTEGER NOT NULL,
  UNIQUE(outbox_id,resource_key))`,
+		// Duplicate subscriptions are a refund responsibility, not an account
+		// deletion. This independent saga survives the duplicate disappearing from
+		// Stripe's active-subscription list and never participates in entitlement
+		// projection or billing deletion holds.
+		`CREATE TABLE IF NOT EXISTS billing_duplicate_refunds (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL,
+ customer_id TEXT NOT NULL,
+ canonical_subscription_id TEXT NOT NULL,
+ duplicate_subscription_id TEXT NOT NULL UNIQUE,
+ invoice_id TEXT NOT NULL DEFAULT '',
+ constituents_json TEXT NOT NULL DEFAULT '[]',
+ state TEXT NOT NULL CHECK(state IN ('pending','manual','terminal')),
+ manual_reason TEXT NOT NULL DEFAULT '',
+ subscription_canceled INTEGER NOT NULL DEFAULT 0,
+ refund_complete INTEGER NOT NULL DEFAULT 0,
+ attempts INTEGER NOT NULL DEFAULT 0,
+ last_error TEXT NOT NULL DEFAULT '',
+ created_at INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL)`,
+		`CREATE INDEX IF NOT EXISTS idx_billing_duplicate_refunds_due ON billing_duplicate_refunds(state,subscription_canceled,updated_at)`,
 		`CREATE TABLE IF NOT EXISTS stripe_customer_history (
  user_id TEXT NOT NULL,
  customer_id TEXT NOT NULL,

@@ -32,9 +32,6 @@ type Biller interface {
 	// ListActiveSubscriptions returns a customer's active/trialing subscriptions,
 	// so the webhook can detect a double-checkout (>1) and keep the earliest.
 	ListActiveSubscriptions(ctx context.Context, customerID string) ([]SubscriptionInfo, error)
-	// CancelSubscription cancels a subscription immediately; refund=true also fully
-	// refunds its latest invoice. Used to reap a duplicate subscription.
-	CancelSubscription(ctx context.Context, subID string, refund bool) error
 	CreateCheckoutSession(ctx context.Context, in CheckoutInput) (CheckoutSession, error)
 	CreatePortalSession(ctx context.Context, customerID, returnURL string) (url string, err error)
 	// ChangeSubscriptionPlan switches the customer's existing active subscription
@@ -667,28 +664,109 @@ func (c *stripeClient) ListActiveSubscriptions(ctx context.Context, customerID s
 	return out, nil
 }
 
-// CancelSubscription cancels a subscription immediately and, when refund is set,
-// fully refunds its latest invoice's payment. Cancellation is done first — the
-// critical outcome is that a duplicate stops billing; a refund failure surfaces
-// as an error (the caller logs it) but never leaves the subscription active.
-func (c *stripeClient) CancelSubscription(ctx context.Context, subID string, refund bool) error {
-	var invoiceID string
-	if refund {
-		invoiceID, _ = c.latestInvoiceID(ctx, subID) // best-effort read before cancel
+func (c *stripeClient) InspectDuplicateSubscription(ctx context.Context, userID, customerID, canonicalID, duplicateID string) (DuplicateRefundPlan, error) {
+	plan := DuplicateRefundPlan{UserID: userID, CustomerID: customerID, CanonicalSubscriptionID: canonicalID, DuplicateSubscriptionID: duplicateID}
+	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions/"+url.PathEscape(duplicateID), nil)
+	if err != nil {
+		return DuplicateRefundPlan{}, err
 	}
-	if _, err := c.request(ctx, http.MethodDelete, "/v1/subscriptions/"+subID, nil); err != nil {
-		// Already canceled / gone ⇒ idempotent success; still try the refund.
-		if !strings.Contains(err.Error(), "No such subscription") &&
-			!strings.Contains(err.Error(), "canceled") {
-			return err
+	var sub struct {
+		ID            string `json:"id"`
+		Customer      string `json:"customer"`
+		LatestInvoice string `json:"latest_invoice"`
+	}
+	if json.Unmarshal(body, &sub) != nil || sub.ID != duplicateID || sub.Customer != customerID {
+		return DuplicateRefundPlan{}, errors.New("stripe: duplicate subscription identity is invalid")
+	}
+	plan.InvoiceID = sub.LatestInvoice
+	if plan.InvoiceID == "" {
+		plan.ManualReason = "latest_invoice_unavailable"
+		return plan, nil
+	}
+	invoice, err := c.canonicalInvoicePayments(ctx, plan.InvoiceID, customerID, duplicateID, true)
+	if err != nil {
+		return DuplicateRefundPlan{}, err
+	}
+	plan.Payments = invoice.Payments
+	plan.ManualReason = duplicateRefundManualReason(invoice)
+	return plan, nil
+}
+
+func (c *stripeClient) ReconcileDuplicateSubscription(ctx context.Context, job DuplicateRefundJob) (DuplicateRefundResult, error) {
+	result := DuplicateRefundResult{SubscriptionCanceled: job.SubscriptionCanceled, RefundComplete: job.RefundComplete, ManualReason: job.ManualReason}
+	readSubscription := func() (string, bool, error) {
+		body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions/"+url.PathEscape(job.DuplicateSubscriptionID), nil)
+		if err != nil {
+			if stripeDeletionObjectGone(err) {
+				return "", true, nil
+			}
+			return "", false, err
+		}
+		var sub struct {
+			ID            string `json:"id"`
+			Customer      string `json:"customer"`
+			Status        string `json:"status"`
+			LatestInvoice string `json:"latest_invoice"`
+		}
+		if json.Unmarshal(body, &sub) != nil || sub.ID != job.DuplicateSubscriptionID || sub.Customer != job.CustomerID {
+			return "", false, errors.New("stripe: duplicate subscription canonical identity changed")
+		}
+		if job.InvoiceID != "" && sub.LatestInvoice != job.InvoiceID {
+			return "", false, errors.New("stripe: duplicate subscription latest invoice changed")
+		}
+		return sub.Status, sub.Status == "canceled" || sub.Status == "incomplete_expired", nil
+	}
+	_, canceled, err := readSubscription()
+	if err != nil {
+		return result, err
+	}
+	if !canceled {
+		if _, err := c.request(ctx, http.MethodDelete, "/v1/subscriptions/"+url.PathEscape(job.DuplicateSubscriptionID), nil); err != nil && !stripeDeletionObjectGone(err) {
+			return result, err
+		}
+		_, canceled, err = readSubscription()
+		if err != nil {
+			return result, err
+		}
+		if !canceled {
+			return result, errors.New("stripe: duplicate subscription cancellation is not canonical")
 		}
 	}
-	if refund && invoiceID != "" {
-		if err := c.refundInvoice(ctx, subID, invoiceID); err != nil {
-			return fmt.Errorf("stripe: canceled sub %s but refund failed: %w", subID, err)
-		}
+	result.SubscriptionCanceled = true
+	if result.ManualReason != "" {
+		return result, nil
 	}
-	return nil
+	if job.InvoiceID == "" || len(job.Payments) == 0 {
+		result.RefundComplete = true
+		return result, nil
+	}
+	invoice, err := c.canonicalInvoicePayments(ctx, job.InvoiceID, job.CustomerID, job.DuplicateSubscriptionID, true)
+	if err != nil {
+		return result, err
+	}
+	if !duplicatePaymentIdentitiesEqual(invoice.Payments, job.Payments) || !invoiceHasOneExclusivePaymentIntent(invoice) {
+		result.ManualReason = "invoice_payment_constituents_changed"
+		return result, nil
+	}
+	if invoice.Payments[0].AmountRefunded == invoice.Payments[0].AmountPaid {
+		result.RefundComplete = true
+		return result, nil
+	}
+	if err := c.refundInvoice(ctx, job.DuplicateSubscriptionID, job.InvoiceID); err != nil {
+		return result, err
+	}
+	invoice, err = c.canonicalInvoicePayments(ctx, job.InvoiceID, job.CustomerID, job.DuplicateSubscriptionID, true)
+	if err != nil {
+		return result, err
+	}
+	if !duplicatePaymentIdentitiesEqual(invoice.Payments, job.Payments) {
+		return result, errors.New("stripe: duplicate refund canonical evidence changed")
+	}
+	if len(invoice.Payments) != 1 || invoice.Payments[0].AmountRefunded != invoice.Payments[0].AmountPaid {
+		return result, errors.New("stripe: duplicate refund is not canonically complete")
+	}
+	result.RefundComplete = true
+	return result, nil
 }
 
 type stripeDeletionList struct {

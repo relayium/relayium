@@ -877,19 +877,17 @@ func (s *Service) reconcileSubscriptions(ctx context.Context, u User, evCreated 
 		log.Printf("billing: reconcile could not adopt canonical subscription %s for user %s: %v (no cancel/refund performed)", canonical.ID, u.ID, err)
 		return false, err
 	}
-	// Cancel + fully refund every OTHER active subscription — the duplicates a
-	// double-checkout opened. Best-effort per sub: a failure is logged and the next
-	// event (idempotently) re-runs this; the duplicate is at least visible in the
-	// single customer's Portal meanwhile.
+	// Every duplicate becomes a durable cancellation/refund responsibility before
+	// the provider is mutated. A failure is returned so Stripe retries; the
+	// periodic worker also keeps going after the duplicate leaves the active list.
 	for _, sub := range subs {
 		if sub.ID == canonical.ID {
 			continue
 		}
-		if cerr := s.biller.CancelSubscription(ctx, sub.ID, true); cerr != nil {
-			log.Printf("billing: cancel+refund duplicate sub %s for user %s failed: %v", sub.ID, u.ID, cerr)
-		} else {
-			log.Printf("billing: canceled+refunded duplicate subscription %s for user %s (kept earliest %s)", sub.ID, u.ID, canonical.ID)
+		if err := s.reconcileDuplicateSubscription(ctx, u, canonical.ID, sub.ID); err != nil {
+			return false, err
 		}
+		log.Printf("billing: reconciled duplicate subscription %s for user %s (kept earliest %s)", sub.ID, u.ID, canonical.ID)
 	}
 	// Drive plan/status from the canonical subscription (not this event's sub).
 	planID, cycle := "free", ""

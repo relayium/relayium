@@ -823,9 +823,11 @@ func main() {
 				defer t.Stop()
 				acct.ReconcileStripeSubscriptions(context.Background())
 				acct.ReconcileBillingCancellations(context.Background())
+				acct.ReconcileDuplicateRefunds(context.Background())
 				for range t.C {
 					acct.ReconcileStripeSubscriptions(context.Background())
 					acct.ReconcileBillingCancellations(context.Background())
+					acct.ReconcileDuplicateRefunds(context.Background())
 				}
 			}()
 		}

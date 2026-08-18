@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 )
@@ -11,9 +12,10 @@ import (
 // controls the "live" active subscriptions and records cancellations — no network.
 type dedupBiller struct {
 	*stripeClient
-	active   []SubscriptionInfo
-	canceled []string
-	refunded []bool
+	active     []SubscriptionInfo
+	canceled   []string
+	refunded   []bool
+	inspectErr error
 }
 
 func (d *dedupBiller) ListActiveSubscriptions(ctx context.Context, customerID string) ([]SubscriptionInfo, error) {
@@ -31,6 +33,45 @@ func (d *dedupBiller) CancelSubscription(ctx context.Context, subID string, refu
 	}
 	d.active = kept
 	return nil
+}
+
+func (d *dedupBiller) InspectDuplicateSubscription(_ context.Context, userID, customerID, canonicalID, duplicateID string) (DuplicateRefundPlan, error) {
+	if d.inspectErr != nil {
+		return DuplicateRefundPlan{}, d.inspectErr
+	}
+	return DuplicateRefundPlan{UserID: userID, CustomerID: customerID, CanonicalSubscriptionID: canonicalID, DuplicateSubscriptionID: duplicateID}, nil
+}
+
+func TestWebhookDuplicateInspectionFailureIsRetryableBeforeCancellation(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	secret := "whsec_dedup_prepare"
+	biller := &dedupBiller{stripeClient: NewStripeClient("sk_test", secret, ""), inspectErr: errors.New("canonical invoice unavailable"), active: []SubscriptionInfo{
+		{ID: "sub_A", Created: 100, PriceID: "price_pro_m", Status: "active", CurrentPeriodEnd: 1 << 40},
+		{ID: "sub_B", Created: 200, PriceID: "price_pro_m", Status: "active", CurrentPeriodEnd: 1 << 40},
+	}}
+	svc.biller = biller
+	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
+	_ = loginCookie(t, ts, mail, "dedup-prepare@example.com")
+	uid := mustUserID(t, store, "dedup-prepare@example.com")
+	ctx := context.Background()
+	_ = store.SetUserStripeCustomer(ctx, uid, "cus_prepare")
+	_ = store.SetUserStripeSubscription(ctx, uid, "sub_A")
+	resp := postWebhook(t, ts, secret, webhookEnv("customer.subscription.created", "cus_prepare", "sub_B", "", "active", "price_pro_m", 1<<40))
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError || len(biller.canceled) != 0 {
+		t.Fatalf("status=%d canceled=%v", resp.StatusCode, biller.canceled)
+	}
+	var rows int
+	if err := store.db.QueryRow(`SELECT COUNT(*) FROM billing_duplicate_refunds WHERE duplicate_subscription_id='sub_B'`).Scan(&rows); err != nil || rows != 0 {
+		t.Fatalf("rows=%d err=%v", rows, err)
+	}
+}
+
+func (d *dedupBiller) ReconcileDuplicateSubscription(ctx context.Context, job DuplicateRefundJob) (DuplicateRefundResult, error) {
+	if err := d.CancelSubscription(ctx, job.DuplicateSubscriptionID, true); err != nil {
+		return DuplicateRefundResult{}, err
+	}
+	return DuplicateRefundResult{SubscriptionCanceled: true, RefundComplete: true}, nil
 }
 
 // A double-checkout opens a second subscription on the (single) customer. When an
