@@ -2356,8 +2356,22 @@ func (s *SQLiteStore) ClearAccountDeletion(ctx context.Context, userID string) e
 			if _, err := tx.ExecContext(ctx, `UPDATE billing_deletion_holds SET subject_released_at=unixepoch() WHERE billing_subject_id=?`, userID); err != nil {
 				return err
 			}
-			if _, err := tx.ExecContext(ctx, `UPDATE users SET plan_id='free',plan_source='',subscription_status='canceled',subscription_end=0,scheduled_plan_id='',scheduled_cycle='' WHERE id=?`, userID); err != nil {
+			var curPlan, curSource string
+			err := tx.QueryRowContext(ctx, `SELECT plan_id,plan_source FROM users WHERE id=?`, userID).Scan(&curPlan, &curSource)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
 				return err
+			}
+			if err == nil {
+				if _, err := tx.ExecContext(ctx, `UPDATE subscription_sources SET plan_id='free',status='canceled',period_end=0 WHERE user_id=? AND provider='stripe'`, userID); err != nil {
+					return err
+				}
+				eff, err := recomputeProjectionTx(ctx, tx, userID, ProviderStripe, curPlan, curSource)
+				if err != nil {
+					return err
+				}
+				if err := writeProjectionTx(ctx, tx, userID, eff, time.Now().Unix(), 0); err != nil {
+					return err
+				}
 			}
 		}
 	}

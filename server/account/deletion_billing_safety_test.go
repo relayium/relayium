@@ -38,6 +38,28 @@ func TestBillingDeletionProgressDecoderFailsClosedAndMigratesLegacyArrays(t *tes
 	}
 }
 
+func TestCompletedStripeDeletionReprojectsWithoutClearingAppleEntitlement(t *testing.T) {
+	store := newTestStore(t)
+	seedTiers(t, store)
+	u := newEntitlementUser(t, store, "provider-neutral-delete@example.test")
+	apply(t, store, u.ID, ProviderApple, "pro", "active", "yearly", fixedNow+86400, 10)
+	apply(t, store, u.ID, ProviderStripe, "plus", "active", "monthly", fixedNow+3600, 11)
+	now := time.Now().Unix()
+	if _, err := store.db.Exec(`INSERT INTO billing_deletion_holds(billing_subject_id,email_hmac,provider,created_at,expires_at,review_at) VALUES(?,X'03','stripe',?,?,?)`, u.ID, now, now+1000, now+1000); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation,progress_json,terminal_at) VALUES('provider-neutral',?,'stripe','provider-neutral-idem','terminal',?,?,1,'{}',?)`, u.ID, now, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ClearAccountDeletion(context.Background(), u.ID); err != nil {
+		t.Fatal(err)
+	}
+	got := mustUser(t, store, u.ID)
+	if got.PlanID != "pro" || got.PlanSource != ProviderApple {
+		t.Fatalf("provider-neutral projection plan=%s source=%s", got.PlanID, got.PlanSource)
+	}
+}
+
 func (b *deletionStripeBiller) DiscoverDeletionHazards(ctx context.Context, row BillingCancellation, p BillingDeletionProgress) (BillingDeletionProgress, error) {
 	p.Customers = appendUnique(p.Customers, row.CustomerID)
 	if len(b.hazards.Resources) > 0 {
