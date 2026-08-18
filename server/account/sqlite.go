@@ -1077,6 +1077,7 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
  UNIQUE(outbox_id,payment_intent_id,retry_generation))`,
 		`ALTER TABLE billing_deletion_manual_actions ADD COLUMN retry_generation INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE billing_deletion_manual_actions ADD COLUMN provider_status TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE billing_deletion_manual_actions ADD COLUMN refund_proof TEXT NOT NULL DEFAULT ''`,
 		`CREATE TABLE IF NOT EXISTS billing_deletion_refund_failures (
  refund_id TEXT PRIMARY KEY,
  action_id TEXT NOT NULL,
@@ -1265,6 +1266,10 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		return nil, err
 	}
 	if err := migrateBillingCancellationIdentityV4(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := migrateBillingCancellationHistoryAuditV5(db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -1866,6 +1871,53 @@ func migrateBillingCancellationIdentityV4(db *sql.DB) error {
 	})
 }
 
+// v5 reopens conclusions produced before deletion reconciliation retained
+// complete payment identity. Provider history, without a deletion cutoff, must
+// be inventoried once before these rows may become terminal again.
+func migrateBillingCancellationHistoryAuditV5(db *sql.DB) error {
+	return migrateOnce(db, "billing_cancellation_history_audit_v5", func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(context.Background(), `SELECT id,progress_json FROM billing_cancellation_outbox WHERE state='pending'`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		type update struct{ id, raw string }
+		var updates []update
+		for rows.Next() {
+			var id, raw string
+			if err := rows.Scan(&id, &raw); err != nil {
+				return err
+			}
+			p, err := decodeDeletionProgressStrict(raw)
+			if err != nil {
+				return fmt.Errorf("billing deletion history audit %s: %w", id, err)
+			}
+			for key, r := range p.Resources {
+				if r.Kind == "checkout_session" {
+					r.Terminal, r.Manual, r.Status = false, false, "migration_history_revalidate"
+					p.Resources[key] = r
+				}
+			}
+			p.CleanSince = 0
+			p.HistoricalAuditRequired = true
+			encoded, err := json.Marshal(p)
+			if err != nil {
+				return err
+			}
+			updates = append(updates, update{id, string(encoded)})
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		for _, u := range updates {
+			if _, err := tx.ExecContext(context.Background(), `UPDATE billing_cancellation_outbox SET progress_json=?,next_attempt_at=0 WHERE id=?`, u.raw, u.id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func migrateBillingDeletionManualActionsV2(db *sql.DB) error {
 	return migrateOnce(db, "billing_deletion_manual_actions_v2", func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(context.Background(), `CREATE TABLE billing_deletion_manual_actions_v2 (
@@ -1879,14 +1931,15 @@ func migrateBillingDeletionManualActionsV2(db *sql.DB) error {
  state TEXT NOT NULL CHECK(state IN ('prepared','succeeded','failed')),
  retry_generation INTEGER NOT NULL DEFAULT 0,
  provider_status TEXT NOT NULL DEFAULT '',
+	refund_proof TEXT NOT NULL DEFAULT '',
  created_at INTEGER NOT NULL,
  updated_at INTEGER NOT NULL,
  UNIQUE(outbox_id,payment_intent_id,retry_generation))`); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(context.Background(), `INSERT INTO billing_deletion_manual_actions_v2
- (id,outbox_id,resource_key,actor,reason,payment_intent_id,refund_id,state,retry_generation,provider_status,created_at,updated_at)
- SELECT id,outbox_id,resource_key,actor,reason,payment_intent_id,refund_id,state,retry_generation,provider_status,created_at,updated_at
+ (id,outbox_id,resource_key,actor,reason,payment_intent_id,refund_id,state,retry_generation,provider_status,refund_proof,created_at,updated_at)
+ SELECT id,outbox_id,resource_key,actor,reason,payment_intent_id,refund_id,state,retry_generation,provider_status,refund_proof,created_at,updated_at
  FROM billing_deletion_manual_actions`); err != nil {
 			return fmt.Errorf("billing deletion manual action audit migration: %w", err)
 		}

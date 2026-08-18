@@ -36,14 +36,17 @@ type BillingDeletionResource struct {
 	Manual            bool   `json:"manual,omitempty"`
 	ProviderCreatedAt int64  `json:"providerCreatedAt,omitempty"`
 	SuccessAt         int64  `json:"successAt,omitempty"`
+	AsyncFailureAt    int64  `json:"asyncFailureAt,omitempty"`
+	AsyncSuccessAt    int64  `json:"asyncSuccessAt,omitempty"`
 	RecoveryExpiresAt int64  `json:"recoveryExpiresAt,omitempty"`
 	RecoveredFrom     string `json:"recoveredFrom,omitempty"`
 }
 type BillingDeletionProgress struct {
-	Version    int                                `json:"version"`
-	Customers  []string                           `json:"customers,omitempty"`
-	Resources  map[string]BillingDeletionResource `json:"resources,omitempty"`
-	CleanSince int64                              `json:"cleanSince,omitempty"`
+	Version                 int                                `json:"version"`
+	Customers               []string                           `json:"customers,omitempty"`
+	Resources               map[string]BillingDeletionResource `json:"resources,omitempty"`
+	CleanSince              int64                              `json:"cleanSince,omitempty"`
+	HistoricalAuditRequired bool                               `json:"historicalAuditRequired,omitempty"`
 }
 
 const billingDeletionProgressVersion = 1
@@ -60,6 +63,26 @@ func (p *BillingDeletionProgress) add(r BillingDeletionResource) {
 	}
 	key := r.Kind + ":" + r.ID
 	if old, ok := p.Resources[key]; ok {
+		// A later asynchronous Checkout outcome invalidates an earlier terminal
+		// observation. In particular, payment success delivered after failure must
+		// reopen reconciliation rather than letting deletion release its hold.
+		if r.AsyncSuccessAt > old.AsyncSuccessAt || r.AsyncFailureAt > old.AsyncFailureAt {
+			old.Terminal, old.Manual = false, false
+			if r.Status != "" {
+				old.Status = r.Status
+			}
+			old.AsyncSuccessAt = max(old.AsyncSuccessAt, r.AsyncSuccessAt)
+			old.AsyncFailureAt = max(old.AsyncFailureAt, r.AsyncFailureAt)
+			if old.AttemptID == "" {
+				old.AttemptID = r.AttemptID
+			}
+			if old.CustomerID == "" {
+				old.CustomerID = r.CustomerID
+			}
+			p.Resources[key] = old
+			p.CleanSince = 0
+			return
+		}
 		// Terminal and manual states are monotonic. A later provider list may
 		// rediscover the same ID, but it must not erase canonical completion or
 		// an audit-required payment outcome.
@@ -99,6 +122,12 @@ func (p *BillingDeletionProgress) add(r BillingDeletionResource) {
 		if old.SuccessAt > r.SuccessAt {
 			r.SuccessAt = old.SuccessAt
 		}
+		if old.AsyncFailureAt > r.AsyncFailureAt {
+			r.AsyncFailureAt = old.AsyncFailureAt
+		}
+		if old.AsyncSuccessAt > r.AsyncSuccessAt {
+			r.AsyncSuccessAt = old.AsyncSuccessAt
+		}
 	}
 	if _, ok := p.Resources[key]; !ok || !r.Terminal {
 		p.CleanSince = 0
@@ -106,6 +135,9 @@ func (p *BillingDeletionProgress) add(r BillingDeletionResource) {
 	p.Resources[key] = r
 }
 func (p BillingDeletionProgress) terminal(now int64) bool {
+	if p.HistoricalAuditRequired {
+		return false
+	}
 	hasIdentity := p.hasIdentity()
 	for _, r := range p.Resources {
 		if !r.Terminal {

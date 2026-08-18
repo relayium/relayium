@@ -1363,11 +1363,18 @@ func checkoutDeletionObservation(ev WebhookEvent) BillingDeletionResource {
 	// Webhooks report observations, not provider-safe deletion terminals. An
 	// expired Session can retain a live recovery URL, and an asynchronous failure
 	// can still reference payment objects that require canonical reconciliation.
-	return BillingDeletionResource{
+	r := BillingDeletionResource{
 		Kind: "checkout_session", ID: ev.CheckoutSessionID,
 		AttemptID: ev.MetadataBillingAttemptID, CustomerID: ev.CustomerID,
 		Status: ev.Type, ProviderCreatedAt: ev.Created,
 	}
+	if ev.Type == "checkout.session.async_payment_failed" {
+		r.AsyncFailureAt = ev.Created
+	}
+	if ev.Type == "checkout.session.async_payment_succeeded" {
+		r.AsyncSuccessAt = ev.Created
+	}
+	return r
 }
 
 func (s *Service) applyStripeLifecycle(ctx context.Context, userID, planID, cycle string, ev WebhookEvent) error {

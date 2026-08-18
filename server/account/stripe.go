@@ -682,7 +682,11 @@ func (c *stripeClient) DiscoverDeletionHazards(ctx context.Context, row BillingC
 			return p, errors.New("stripe: no canonical customer identity for deletion")
 		}
 	}
+	completedHistoricalInventory := !p.HistoricalAuditRequired
 	for _, customerID := range p.Customers {
+		if p.HistoricalAuditRequired {
+			completedHistoricalInventory = true
+		}
 		base := url.Values{"customer": {customerID}}
 		copyQ := func(extra ...string) url.Values {
 			q := url.Values{}
@@ -694,10 +698,28 @@ func (c *stripeClient) DiscoverDeletionHazards(ctx context.Context, row BillingC
 			}
 			return q
 		}
+		createdFilter := fmt.Sprint(row.CreatedAt)
+		if p.HistoricalAuditRequired {
+			createdFilter = ""
+		}
 		kinds := []struct {
 			kind, path string
 			q          url.Values
-		}{{"checkout_session", "/v1/checkout/sessions", copyQ("status", "open")}, {"checkout_session", "/v1/checkout/sessions", copyQ("status", "complete")}, {"checkout_session", "/v1/checkout/sessions", copyQ("status", "expired")}, {"subscription", "/v1/subscriptions", copyQ("status", "all")}, {"schedule", "/v1/subscription_schedules", copyQ()}, {"invoice_item", "/v1/invoiceitems", copyQ("pending", "true")}, {"invoice", "/v1/invoices", copyQ("status", "draft")}, {"invoice", "/v1/invoices", copyQ("status", "open")}, {"invoice", "/v1/invoices", copyQ("created[gte]", fmt.Sprint(row.CreatedAt))}, {"payment_intent", "/v1/payment_intents", copyQ("created[gte]", fmt.Sprint(row.CreatedAt))}, {"charge", "/v1/charges", copyQ("created[gte]", fmt.Sprint(row.CreatedAt))}}
+		}{{"checkout_session", "/v1/checkout/sessions", copyQ("status", "open")}, {"checkout_session", "/v1/checkout/sessions", copyQ("status", "complete")}, {"checkout_session", "/v1/checkout/sessions", copyQ("status", "expired")}, {"subscription", "/v1/subscriptions", copyQ("status", "all")}, {"schedule", "/v1/subscription_schedules", copyQ()}, {"invoice_item", "/v1/invoiceitems", copyQ("pending", "true")}, {"invoice", "/v1/invoices", copyQ("status", "draft")}, {"invoice", "/v1/invoices", copyQ("status", "open")}}
+		for _, kind := range []string{"invoice", "payment_intent", "charge"} {
+			q := copyQ()
+			if createdFilter != "" {
+				q.Set("created[gte]", createdFilter)
+			}
+			path := "/v1/" + kind + "s"
+			if kind == "payment_intent" {
+				path = "/v1/payment_intents"
+			}
+			kinds = append(kinds, struct {
+				kind, path string
+				q          url.Values
+			}{kind, path, q})
+		}
 		for _, k := range kinds {
 			ids, err := c.deletionList(ctx, k.path, k.q)
 			if err != nil {
@@ -707,6 +729,9 @@ func (c *stripeClient) DiscoverDeletionHazards(ctx context.Context, row BillingC
 				p.add(BillingDeletionResource{Kind: k.kind, ID: id, CustomerID: customerID, Status: "discovered"})
 			}
 		}
+	}
+	if completedHistoricalInventory {
+		p.HistoricalAuditRequired = false
 	}
 	return p, nil
 }
@@ -838,7 +863,7 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 		}
 		switch r.Kind {
 		case "checkout_session":
-			observedAsyncFailure := r.Status == "checkout.session.async_payment_failed"
+			observedAsyncFailure := r.AsyncFailureAt > r.AsyncSuccessAt
 			r.ProviderCreatedAt = obj.Created
 			r.PaymentIntentID = obj.PaymentIntent
 			r.InvoiceID = obj.Invoice
@@ -854,7 +879,7 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				p.add(BillingDeletionResource{Kind: "subscription", ID: obj.Subscription, CustomerID: obj.Customer, Status: "session_link"})
 			}
 			if obj.PaymentIntent != "" {
-				p.add(BillingDeletionResource{Kind: "payment_intent", ID: obj.PaymentIntent, PaymentIntentID: obj.PaymentIntent, CustomerID: obj.Customer, Status: "session_link"})
+				p.add(BillingDeletionResource{Kind: "payment_intent", ID: obj.PaymentIntent, PaymentIntentID: obj.PaymentIntent, CustomerID: obj.Customer, Status: "session_link", AsyncFailureAt: r.AsyncFailureAt, AsyncSuccessAt: r.AsyncSuccessAt})
 			}
 			if obj.Invoice != "" {
 				p.add(BillingDeletionResource{Kind: "invoice", ID: obj.Invoice, InvoiceID: obj.Invoice, CustomerID: obj.Customer, Status: "session_link"})
@@ -1009,6 +1034,11 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				r.Status = "processing"
 				p.Resources[resourceKey] = r
 				return p, errors.New("stripe: payment remains processing")
+			}
+			if obj.Status == "requires_payment_method" && r.AsyncFailureAt > r.AsyncSuccessAt {
+				r.Terminal = true
+				r.Status = "canonical_async_payment_failed"
+				break
 			}
 			// Subscription Checkout owns its PaymentIntent through the invoice.
 			// Observe it here; canceling the PI directly is not a supported safety

@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -131,7 +132,7 @@ func TestAsyncPaymentFailureReconcilesItsCanonicalPaymentChain(t *testing.T) {
 	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
 	c.base, c.http = ts.URL, ts.Client()
 	p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{
-		"checkout_session:cs_failed": {Kind: "checkout_session", ID: "cs_failed", CustomerID: "cus_1", Status: "checkout.session.async_payment_failed"},
+		"checkout_session:cs_failed": {Kind: "checkout_session", ID: "cs_failed", CustomerID: "cus_1", Status: "checkout.session.async_payment_failed", AsyncFailureAt: 10},
 	}}
 	var err error
 	for i := 0; i < 2; i++ {
@@ -139,6 +140,128 @@ func TestAsyncPaymentFailureReconcilesItsCanonicalPaymentChain(t *testing.T) {
 	}
 	if err != nil || sessionGets == 0 || paymentGets == 0 || !p.Resources["checkout_session:cs_failed"].Terminal || !p.Resources["payment_intent:pi_failed"].Terminal {
 		t.Fatalf("sessionGets=%d paymentGets=%d progress=%+v err=%v", sessionGets, paymentGets, p.Resources, err)
+	}
+}
+
+func TestAsyncFailureEvidenceSurvivesDiscoveryAndLaterSuccessWins(t *testing.T) {
+	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{}}
+	p.add(checkoutDeletionObservation(WebhookEvent{Type: "checkout.session.async_payment_failed", CheckoutSessionID: "cs_async", Created: 10}))
+	p.add(BillingDeletionResource{Kind: "checkout_session", ID: "cs_async", Status: "discovered"})
+	if got := p.Resources["checkout_session:cs_async"]; got.AsyncFailureAt != 10 || got.AsyncSuccessAt != 0 {
+		t.Fatalf("discovery erased failure evidence: %+v", got)
+	}
+	p.add(checkoutDeletionObservation(WebhookEvent{Type: "checkout.session.async_payment_succeeded", CheckoutSessionID: "cs_async", Created: 11}))
+	if got := p.Resources["checkout_session:cs_async"]; got.AsyncFailureAt != 10 || got.AsyncSuccessAt != 11 {
+		t.Fatalf("success evidence was not monotonic: %+v", got)
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `{"id":"cs_async","status":"complete","payment_status":"unpaid","customer":"cus_1","payment_intent":"pi_async"}`)
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test", "whsec", "bpc")
+	c.base, c.http = ts.URL, ts.Client()
+	p.Customers = []string{"cus_1"}
+	got, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", IdempotencyKey: "delete"}, p)
+	if err == nil || got.Resources["checkout_session:cs_async"].Terminal {
+		t.Fatalf("late success was misclassified as failed terminal: %+v err=%v", got.Resources, err)
+	}
+}
+
+func TestLateAsyncSuccessReopensPriorFailureTerminal(t *testing.T) {
+	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{
+		"checkout_session:cs_late": {Kind: "checkout_session", ID: "cs_late", Status: "canonical_async_payment_failed", Terminal: true, AsyncFailureAt: 10},
+	}, CleanSince: 10}
+	p.add(checkoutDeletionObservation(WebhookEvent{Type: "checkout.session.async_payment_succeeded", CheckoutSessionID: "cs_late", Created: 11}))
+	got := p.Resources["checkout_session:cs_late"]
+	if got.Terminal || got.AsyncSuccessAt != 11 || p.CleanSince != 0 {
+		t.Fatalf("late success did not reopen deletion reconciliation: %+v clean=%d", got, p.CleanSince)
+	}
+}
+
+func TestHistoricalDeletionAuditListsPaymentsWithoutCutoff(t *testing.T) {
+	seen := map[string]bool{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if (r.URL.Path == "/v1/invoices" || r.URL.Path == "/v1/payment_intents" || r.URL.Path == "/v1/charges") && r.URL.Query().Get("status") == "" && r.URL.Query().Get("created[gte]") == "" {
+			seen[r.URL.Path] = true
+		}
+		io.WriteString(w, `{"data":[],"has_more":false}`)
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test", "whsec", "bpc")
+	c.base, c.http = ts.URL, ts.Client()
+	p := BillingDeletionProgress{Customers: []string{"cus_old"}, Resources: map[string]BillingDeletionResource{}, HistoricalAuditRequired: true}
+	got, err := c.DiscoverDeletionHazards(context.Background(), BillingCancellation{CustomerID: "cus_old", CreatedAt: 100}, p)
+	if err != nil || got.HistoricalAuditRequired || !seen["/v1/invoices"] || !seen["/v1/payment_intents"] || !seen["/v1/charges"] {
+		t.Fatalf("historical audit seen=%v progress=%+v err=%v", seen, got, err)
+	}
+}
+
+func TestHistoricalAuditWaitsForCanonicalCustomerIdentity(t *testing.T) {
+	c := NewStripeClient("sk_test", "whsec", "bpc")
+	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{
+		"checkout_session:cs_attributed": {Kind: "checkout_session", ID: "cs_attributed", AttemptID: "attempt"},
+	}, HistoricalAuditRequired: true}
+	got, err := c.DiscoverDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject"}, p)
+	if err != nil || !got.HistoricalAuditRequired {
+		t.Fatalf("audit was cleared before customer derivation: %+v err=%v", got, err)
+	}
+}
+
+func TestHistoricalAuditRecoversPreDeletionInvoicePaidAfterDeletion(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet && r.URL.Path == "/v1/invoices/in_late" {
+			io.WriteString(w, `{"id":"in_late","status":"paid","customer":"cus_old","created":90,"payment_intent":"pi_late","charge":"ch_late","status_transitions":{"paid_at":110}}`)
+			return
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/v1/invoices" && r.URL.Query().Get("status") == "" && r.URL.Query().Get("created[gte]") == "" {
+			io.WriteString(w, `{"data":[{"id":"in_late"}],"has_more":false}`)
+			return
+		}
+		io.WriteString(w, `{"data":[],"has_more":false}`)
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test", "whsec", "bpc")
+	c.base, c.http = ts.URL, ts.Client()
+	row := BillingCancellation{BillingSubjectID: "subject", CustomerID: "cus_old", CreatedAt: 100, IdempotencyKey: "delete"}
+	p := BillingDeletionProgress{Customers: []string{"cus_old"}, Resources: map[string]BillingDeletionResource{}, HistoricalAuditRequired: true}
+	p, err := c.DiscoverDeletionHazards(context.Background(), row, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err = c.ReconcileDeletionHazards(context.Background(), row, p)
+	invoice := p.Resources["invoice:in_late"]
+	if err == nil || !invoice.Manual || invoice.Status != "paid_after_deletion" || invoice.PaymentIntentID != "pi_late" {
+		t.Fatalf("late historical payment was lost: invoice=%+v progress=%+v err=%v", invoice, p, err)
+	}
+}
+
+func TestVerifiedAsyncFailureMakesRequiresPaymentMethodTerminal(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/checkout/sessions/cs_failed_method":
+			io.WriteString(w, `{"id":"cs_failed_method","status":"complete","payment_status":"unpaid","customer":"cus_1","payment_intent":"pi_failed_method"}`)
+		case "/v1/payment_intents/pi_failed_method":
+			io.WriteString(w, `{"id":"pi_failed_method","status":"requires_payment_method","customer":"cus_1"}`)
+		default:
+			http.Error(w, "unexpected", http.StatusBadRequest)
+		}
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test", "whsec", "bpc")
+	c.base, c.http = ts.URL, ts.Client()
+	p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{}}
+	p.add(checkoutDeletionObservation(WebhookEvent{Type: "checkout.session.async_payment_failed", CheckoutSessionID: "cs_failed_method", CustomerID: "cus_1", Created: 10}))
+	raw, _ := json.Marshal(p)
+	p, _ = decodeDeletionProgressStrict(string(raw))
+	var err error
+	for i := 0; i < 2; i++ {
+		p, err = c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", IdempotencyKey: "delete"}, p)
+	}
+	if err != nil || !p.Resources["checkout_session:cs_failed_method"].Terminal || !p.Resources["payment_intent:pi_failed_method"].Terminal {
+		t.Fatalf("verified failure did not converge: %+v err=%v", p.Resources, err)
 	}
 }
 

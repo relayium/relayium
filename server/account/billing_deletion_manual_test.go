@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -29,7 +30,11 @@ func TestManualDeletionRefundRequiresCanonicalSuccessAndIsIdempotent(t *testing.
 		case "GET /v1/invoices/in_paid":
 			io.WriteString(w, `{"id":"in_paid","payment_intent":"pi_paid"}`)
 		case "GET /v1/refunds":
-			io.WriteString(w, `{"data":[]}`)
+			if refunded {
+				io.WriteString(w, `{"data":[{"id":"re_safe","status":"succeeded","payment_intent":"pi_paid","amount":500}],"has_more":false}`)
+			} else {
+				io.WriteString(w, `{"data":[],"has_more":false}`)
+			}
 		case "GET /v1/payment_intents/pi_paid":
 			io.WriteString(w, `{"id":"pi_paid","latest_charge":"ch_paid"}`)
 		case "GET /v1/charges/ch_paid":
@@ -49,7 +54,7 @@ func TestManualDeletionRefundRequiresCanonicalSuccessAndIsIdempotent(t *testing.
 			}
 			io.WriteString(w, `{"id":"re_safe"}`)
 		case "GET /v1/refunds/re_safe":
-			io.WriteString(w, `{"id":"re_safe","status":"succeeded","payment_intent":"pi_paid","metadata":{"relayium_deletion_action_id":"`+actionID+`"}}`)
+			io.WriteString(w, `{"id":"re_safe","status":"succeeded","payment_intent":"pi_paid","amount":500,"metadata":{"relayium_deletion_action_id":"`+actionID+`"}}`)
 		default:
 			http.Error(w, "unexpected", http.StatusBadRequest)
 		}
@@ -384,9 +389,15 @@ func TestManualDeletionRefundAdoptsOneCanonicalExternalFullRefund(t *testing.T) 
 		case "GET /v1/charges/ch_ext":
 			io.WriteString(w, `{"id":"ch_ext","payment_intent":"pi_ext","amount":500,"amount_refunded":500,"refunded":true}`)
 		case "GET /v1/refunds":
-			io.WriteString(w, `{"data":[{"id":"re_external","status":"succeeded","payment_intent":"pi_ext"}],"has_more":false}`)
-		case "GET /v1/refunds/re_external":
-			io.WriteString(w, `{"id":"re_external","status":"succeeded","payment_intent":"pi_ext","metadata":{}}`)
+			if r.URL.Query().Get("starting_after") == "re_part_a" {
+				io.WriteString(w, `{"data":[{"id":"re_part_b","status":"succeeded","payment_intent":"pi_ext","amount":300}],"has_more":false}`)
+			} else {
+				io.WriteString(w, `{"data":[{"id":"re_part_a","status":"succeeded","payment_intent":"pi_ext","amount":200}],"has_more":true}`)
+			}
+		case "GET /v1/refunds/re_part_a":
+			io.WriteString(w, `{"id":"re_part_a","status":"succeeded","payment_intent":"pi_ext","amount":200,"metadata":{}}`)
+		case "GET /v1/refunds/re_part_b":
+			io.WriteString(w, `{"id":"re_part_b","status":"succeeded","payment_intent":"pi_ext","amount":300,"metadata":{}}`)
 		case "POST /v1/refunds":
 			refundPosts++
 		default:
@@ -398,13 +409,38 @@ func TestManualDeletionRefundAdoptsOneCanonicalExternalFullRefund(t *testing.T) 
 	c.base, c.http = ts.URL, ts.Client()
 	for i := 0; i < 2; i++ {
 		result, err := ResolveBillingDeletionRefund(context.Background(), store, c, "out_ext", "charge:ch_ext", "operator", "adopt verified external refund")
-		if err != nil || result.RefundID != "re_external" || refundPosts != 0 {
+		if err != nil || result.RefundID != "re_part_a" || refundPosts != 0 {
 			t.Fatalf("iteration=%d result=%+v posts=%d err=%v", i, result, refundPosts, err)
 		}
 	}
-	var status string
-	if err := store.db.QueryRow(`SELECT provider_status FROM billing_deletion_manual_actions WHERE outbox_id='out_ext' ORDER BY retry_generation DESC LIMIT 1`).Scan(&status); err != nil || status != "adopted_external" {
-		t.Fatalf("provider status=%q err=%v", status, err)
+	var status, proof string
+	if err := store.db.QueryRow(`SELECT provider_status,refund_proof FROM billing_deletion_manual_actions WHERE outbox_id='out_ext' ORDER BY retry_generation DESC LIMIT 1`).Scan(&status, &proof); err != nil || status != "adopted_external" || !strings.Contains(proof, "re_part_a") || !strings.Contains(proof, "re_part_b") {
+		t.Fatalf("provider status=%q proof=%q err=%v", status, proof, err)
+	}
+}
+
+func TestManualDeletionRefundRejectsMissingCanonicalRefundAmount(t *testing.T) {
+	store := newTestStore(t)
+	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{"charge:ch_missing": {Kind: "charge", ID: "ch_missing", PaymentIntentID: "pi_missing", Status: "succeeded_after_deletion", Manual: true}}}
+	raw, _ := json.Marshal(p)
+	_, _ = store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,progress_json,created_at,updated_at,generation,next_attempt_at) VALUES('out_missing','subject','stripe','delete-missing','pending',?,1,1,1,1)`, string(raw))
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/payment_intents/pi_missing":
+			io.WriteString(w, `{"latest_charge":"ch_missing"}`)
+		case "/v1/charges/ch_missing":
+			io.WriteString(w, `{"id":"ch_missing","payment_intent":"pi_missing","amount":500,"amount_refunded":500,"refunded":true}`)
+		case "/v1/refunds":
+			io.WriteString(w, `{"data":[{"id":"re_missing","status":"succeeded","payment_intent":"pi_missing"}],"has_more":false}`)
+		default:
+			http.Error(w, "unexpected", http.StatusBadRequest)
+		}
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test", "whsec", "bpc")
+	c.base, c.http = ts.URL, ts.Client()
+	if _, err := ResolveBillingDeletionRefund(context.Background(), store, c, "out_missing", "charge:ch_missing", "operator", "audit"); err == nil {
+		t.Fatal("refund without an amount was accepted")
 	}
 }
 
@@ -425,7 +461,11 @@ func TestManualCheckoutRefundFollowsSubscriptionLatestInvoice(t *testing.T) {
 		case "GET /v1/invoices/in_paid":
 			io.WriteString(w, `{"id":"in_paid","payment_intent":"pi_paid"}`)
 		case "GET /v1/refunds":
-			io.WriteString(w, `{"data":[]}`)
+			if refunded {
+				io.WriteString(w, `{"data":[{"id":"re_checkout","status":"succeeded","payment_intent":"pi_paid","amount":500}],"has_more":false}`)
+			} else {
+				io.WriteString(w, `{"data":[],"has_more":false}`)
+			}
 		case "GET /v1/payment_intents/pi_paid":
 			io.WriteString(w, `{"id":"pi_paid","latest_charge":"ch_paid"}`)
 		case "GET /v1/charges/ch_paid":
@@ -441,7 +481,7 @@ func TestManualCheckoutRefundFollowsSubscriptionLatestInvoice(t *testing.T) {
 			actionID = form.Get("metadata[relayium_deletion_action_id]")
 			io.WriteString(w, `{"id":"re_checkout"}`)
 		case "GET /v1/refunds/re_checkout":
-			io.WriteString(w, `{"id":"re_checkout","status":"succeeded","payment_intent":"pi_paid","metadata":{"relayium_deletion_action_id":"`+actionID+`"}}`)
+			io.WriteString(w, `{"id":"re_checkout","status":"succeeded","payment_intent":"pi_paid","amount":500,"metadata":{"relayium_deletion_action_id":"`+actionID+`"}}`)
 		default:
 			http.Error(w, "unexpected", http.StatusBadRequest)
 		}

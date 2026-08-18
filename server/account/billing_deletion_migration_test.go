@@ -67,6 +67,37 @@ func TestOpenSQLiteRebuildsLegacyCancellationUniqueness(t *testing.T) {
 	}
 }
 
+func TestBillingDeletionHistoryAuditV5ReopensOldCheckoutProof(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history-v5.db")
+	store, err := OpenSQLite(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`DELETE FROM schema_migrations WHERE id='billing_cancellation_history_audit_v5'`); err != nil {
+		t.Fatal(err)
+	}
+	raw := `{"version":1,"customers":["cus_old"],"resources":{"checkout_session:cs_old":{"kind":"checkout_session","id":"cs_old","status":"recovery_window_closed","terminal":true,"paymentIntentId":"pi_old"}},"cleanSince":99}`
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,idempotency_key,state,created_at,updated_at,generation,progress_json) VALUES('old-v5','subject','stripe','cus_old','old-v5-key','pending',100,100,1,?)`, raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err = OpenSQLite(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.db.Close()
+	if err := store.db.QueryRow(`SELECT progress_json FROM billing_cancellation_outbox WHERE id='old-v5'`).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	p, err := decodeDeletionProgressStrict(raw)
+	r := p.Resources["checkout_session:cs_old"]
+	if err != nil || !p.HistoricalAuditRequired || p.CleanSince != 0 || r.Terminal || r.Manual || r.PaymentIntentID != "pi_old" {
+		t.Fatalf("v5 progress=%+v resource=%+v err=%v", p, r, err)
+	}
+}
+
 func TestDeletionProgressManualAndTerminalAreMonotonic(t *testing.T) {
 	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{
 		"checkout_session:cs_manual": {Kind: "checkout_session", ID: "cs_manual", Manual: true, Status: "paid_after_deletion"},

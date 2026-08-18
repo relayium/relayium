@@ -316,9 +316,9 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 	sum := sha256.Sum256([]byte("relayium:billing-deletion-refund:v2\x00" + outboxID + "\x00" + paymentIntentID))
 	actionID := "bdr_" + hex.EncodeToString(sum[:16])
 	now := time.Now().Unix()
-	var savedID, savedActor, savedReason, refundID, actionState, providerStatus string
+	var savedID, savedActor, savedReason, refundID, actionState, providerStatus, refundProof string
 	var retryGeneration int64
-	err = store.db.QueryRowContext(ctx, `SELECT id,actor,reason,refund_id,state,retry_generation,provider_status FROM billing_deletion_manual_actions WHERE outbox_id=? AND payment_intent_id=? ORDER BY retry_generation DESC LIMIT 1`, outboxID, paymentIntentID).Scan(&savedID, &savedActor, &savedReason, &refundID, &actionState, &retryGeneration, &providerStatus)
+	err = store.db.QueryRowContext(ctx, `SELECT id,actor,reason,refund_id,state,retry_generation,provider_status,refund_proof FROM billing_deletion_manual_actions WHERE outbox_id=? AND payment_intent_id=? ORDER BY retry_generation DESC LIMIT 1`, outboxID, paymentIntentID).Scan(&savedID, &savedActor, &savedReason, &refundID, &actionState, &retryGeneration, &providerStatus, &refundProof)
 	if errors.Is(err, sql.ErrNoRows) {
 		if !r.Manual || r.Terminal || state != "pending" {
 			return BillingDeletionManualResult{}, errors.New("account: selected deletion resource is not pending manual reconciliation")
@@ -327,12 +327,13 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 			VALUES(?,?,?,?,?,?,'prepared',?,?)`, actionID, outboxID, resourceKey, strings.TrimSpace(actor), strings.TrimSpace(reason), paymentIntentID, now, now); err != nil {
 			return BillingDeletionManualResult{}, err
 		}
-		err = store.db.QueryRowContext(ctx, `SELECT id,actor,reason,refund_id,state,retry_generation,provider_status FROM billing_deletion_manual_actions WHERE outbox_id=? AND payment_intent_id=? ORDER BY retry_generation DESC LIMIT 1`, outboxID, paymentIntentID).Scan(&savedID, &savedActor, &savedReason, &refundID, &actionState, &retryGeneration, &providerStatus)
+		err = store.db.QueryRowContext(ctx, `SELECT id,actor,reason,refund_id,state,retry_generation,provider_status,refund_proof FROM billing_deletion_manual_actions WHERE outbox_id=? AND payment_intent_id=? ORDER BY retry_generation DESC LIMIT 1`, outboxID, paymentIntentID).Scan(&savedID, &savedActor, &savedReason, &refundID, &actionState, &retryGeneration, &providerStatus, &refundProof)
 	}
 	if err != nil {
 		return BillingDeletionManualResult{}, err
 	}
 	actionID = savedID
+	savedRefundProof := refundProof
 	if savedActor != strings.TrimSpace(actor) || savedReason != strings.TrimSpace(reason) {
 		return BillingDeletionManualResult{}, errors.New("account: refund action actor/reason conflict")
 	}
@@ -340,14 +341,15 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 	if !wasSucceeded && (!r.Manual || r.Terminal || state != "pending") {
 		return BillingDeletionManualResult{}, errors.New("account: selected deletion resource is not pending manual reconciliation")
 	}
-	_, remaining, err := c.deletionRefundRemaining(ctx, paymentIntentID)
+	_, amount, refunded, err := c.deletionRefundTotals(ctx, paymentIntentID)
 	if err != nil {
 		return BillingDeletionManualResult{}, err
 	}
+	remaining := amount - refunded
 	adoptedExternal := providerStatus == "adopted_external"
 	if refundID == "" {
 		if remaining <= 0 {
-			refundID, err = c.findCanonicalFullRefund(ctx, paymentIntentID)
+			refundID, refundProof, err = c.canonicalRefundProof(ctx, paymentIntentID, amount, refunded)
 			adoptedExternal = true
 		} else {
 			refundID, err = c.findDeletionRefund(ctx, paymentIntentID, actionID)
@@ -369,7 +371,7 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 			}
 			refundID = created.ID
 		}
-		res, err := store.db.ExecContext(ctx, `UPDATE billing_deletion_manual_actions SET refund_id=?,provider_status=CASE WHEN ? THEN 'adopted_external' ELSE provider_status END,updated_at=? WHERE id=? AND state='prepared' AND retry_generation=? AND provider_status=? AND (refund_id='' OR refund_id=?)`, refundID, adoptedExternal, now, actionID, retryGeneration, providerStatus, refundID)
+		res, err := store.db.ExecContext(ctx, `UPDATE billing_deletion_manual_actions SET refund_id=?,refund_proof=CASE WHEN ?<>'' THEN ? ELSE refund_proof END,provider_status=CASE WHEN ? THEN 'adopted_external' ELSE provider_status END,updated_at=? WHERE id=? AND state='prepared' AND retry_generation=? AND provider_status=? AND (refund_id='' OR refund_id=?)`, refundID, refundProof, refundProof, adoptedExternal, now, actionID, retryGeneration, providerStatus, refundID)
 		if err != nil {
 			return BillingDeletionManualResult{}, err
 		}
@@ -395,13 +397,28 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 	if json.Unmarshal(body, &canonical) != nil || canonical.ID != refundID || canonical.Status != "succeeded" || canonical.PaymentIntent != paymentIntentID || (!adoptedExternal && canonical.Metadata.ActionID != actionID) {
 		return BillingDeletionManualResult{}, errors.New("stripe: canonical refund is not safely complete")
 	}
-	if _, remaining, err = c.deletionRefundRemaining(ctx, paymentIntentID); err != nil || remaining != 0 {
+	_, amount, refunded, err = c.deletionRefundTotals(ctx, paymentIntentID)
+	if err != nil || refunded != amount {
 		if err != nil {
 			return BillingDeletionManualResult{}, err
 		}
 		return BillingDeletionManualResult{}, errors.New("stripe: canonical payment remains partially unrefunded")
 	}
+	canonicalRefundID, canonicalProof, err := c.canonicalRefundProof(ctx, paymentIntentID, amount, refunded)
+	if err != nil {
+		return BillingDeletionManualResult{}, err
+	}
+	if refundProof != "" && refundProof != canonicalProof {
+		return BillingDeletionManualResult{}, errors.New("stripe: canonical refund set changed after audit")
+	}
+	if adoptedExternal && canonicalRefundID != refundID {
+		return BillingDeletionManualResult{}, errors.New("stripe: canonical external refund identity changed")
+	}
+	refundProof = canonicalProof
 	if wasSucceeded {
+		if savedRefundProof == "" || savedRefundProof != canonicalProof {
+			return BillingDeletionManualResult{}, errors.New("stripe: succeeded refund lacks its durable canonical proof")
+		}
 		return BillingDeletionManualResult{ActionID: actionID, RefundID: refundID, Status: "succeeded"}, nil
 	}
 	tx, err := store.db.BeginTx(ctx, nil)
@@ -441,7 +458,7 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 		}
 	}
 	encoded, _ := json.Marshal(p)
-	res, err := tx.ExecContext(ctx, `UPDATE billing_deletion_manual_actions SET state='succeeded',refund_id=?,provider_status=CASE WHEN provider_status='' THEN 'succeeded' ELSE provider_status END,updated_at=? WHERE id=? AND state='prepared' AND refund_id=? AND retry_generation=? AND provider_status=?`, refundID, now, actionID, refundID, retryGeneration, providerStatus)
+	res, err := tx.ExecContext(ctx, `UPDATE billing_deletion_manual_actions SET state='succeeded',refund_id=?,refund_proof=?,provider_status=CASE WHEN provider_status='' THEN 'succeeded' ELSE provider_status END,updated_at=? WHERE id=? AND state='prepared' AND refund_id=? AND retry_generation=? AND provider_status=?`, refundID, refundProof, now, actionID, refundID, retryGeneration, providerStatus)
 	if err != nil {
 		return BillingDeletionManualResult{}, err
 	}
@@ -461,20 +478,20 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 	return BillingDeletionManualResult{ActionID: actionID, RefundID: refundID, Status: "succeeded"}, nil
 }
 
-func (c *stripeClient) deletionRefundRemaining(ctx context.Context, paymentIntentID string) (string, int64, error) {
+func (c *stripeClient) deletionRefundTotals(ctx context.Context, paymentIntentID string) (string, int64, int64, error) {
 	body, err := c.request(ctx, http.MethodGet, "/v1/payment_intents/"+url.PathEscape(paymentIntentID), nil)
 	if err != nil {
-		return "", 0, err
+		return "", 0, 0, err
 	}
 	var pi struct {
 		LatestCharge string `json:"latest_charge"`
 	}
 	if json.Unmarshal(body, &pi) != nil || !strings.HasPrefix(pi.LatestCharge, "ch_") {
-		return "", 0, errors.New("stripe: payment intent latest charge is unavailable")
+		return "", 0, 0, errors.New("stripe: payment intent latest charge is unavailable")
 	}
 	body, err = c.request(ctx, http.MethodGet, "/v1/charges/"+url.PathEscape(pi.LatestCharge), nil)
 	if err != nil {
-		return "", 0, err
+		return "", 0, 0, err
 	}
 	var charge struct {
 		ID             string `json:"id"`
@@ -484,12 +501,12 @@ func (c *stripeClient) deletionRefundRemaining(ctx context.Context, paymentInten
 		Refunded       bool   `json:"refunded"`
 	}
 	if err := json.Unmarshal(body, &charge); err != nil {
-		return "", 0, err
+		return "", 0, 0, err
 	}
 	if charge.ID != pi.LatestCharge || charge.PaymentIntent != paymentIntentID || charge.Amount <= 0 || charge.AmountRefunded < 0 || charge.AmountRefunded > charge.Amount || (charge.Refunded && charge.AmountRefunded != charge.Amount) {
-		return "", 0, errors.New("stripe: canonical charge refund totals are invalid")
+		return "", 0, 0, errors.New("stripe: canonical charge refund totals are invalid")
 	}
-	return charge.ID, charge.Amount - charge.AmountRefunded, nil
+	return charge.ID, charge.Amount, charge.AmountRefunded, nil
 }
 
 func (c *stripeClient) deletionPaymentIntent(ctx context.Context, r BillingDeletionResource) (string, error) {
@@ -574,21 +591,79 @@ func (c *stripeClient) findDeletionRefund(ctx context.Context, paymentIntentID, 
 	}
 }
 
-func (c *stripeClient) findCanonicalFullRefund(ctx context.Context, paymentIntentID string) (string, error) {
-	body, err := c.request(ctx, http.MethodGet, "/v1/refunds?"+url.Values{"payment_intent": {paymentIntentID}, "limit": {"100"}}.Encode(), nil)
-	if err != nil {
-		return "", err
+type canonicalDeletionRefund struct {
+	ID     string `json:"id"`
+	Amount int64  `json:"amount"`
+}
+
+func (c *stripeClient) canonicalRefundProof(ctx context.Context, paymentIntentID string, chargeAmount, amountRefunded int64) (string, string, error) {
+	if chargeAmount <= 0 || amountRefunded != chargeAmount {
+		return "", "", errors.New("stripe: payment is not canonically fully refunded")
 	}
-	var list struct {
-		Data []struct {
+	query := url.Values{"payment_intent": {paymentIntentID}, "limit": {"100"}}
+	var refunds []canonicalDeletionRefund
+	seen := map[string]bool{}
+	for {
+		body, err := c.request(ctx, http.MethodGet, "/v1/refunds?"+query.Encode(), nil)
+		if err != nil {
+			return "", "", err
+		}
+		var page struct {
+			Data []struct {
+				ID            string `json:"id"`
+				Status        string `json:"status"`
+				PaymentIntent string `json:"payment_intent"`
+				Amount        int64  `json:"amount"`
+			} `json:"data"`
+			HasMore bool `json:"has_more"`
+		}
+		if err := json.Unmarshal(body, &page); err != nil {
+			return "", "", err
+		}
+		for _, item := range page.Data {
+			if !strings.HasPrefix(item.ID, "re_") || seen[item.ID] || item.Status != "succeeded" || item.PaymentIntent != paymentIntentID || item.Amount <= 0 {
+				return "", "", errors.New("stripe: canonical refund list is invalid")
+			}
+			seen[item.ID] = true
+			refunds = append(refunds, canonicalDeletionRefund{ID: item.ID, Amount: item.Amount})
+		}
+		if !page.HasMore {
+			break
+		}
+		if len(page.Data) == 0 {
+			return "", "", errors.New("stripe: refund pagination made no progress")
+		}
+		query.Set("starting_after", page.Data[len(page.Data)-1].ID)
+	}
+	if len(refunds) == 0 {
+		return "", "", errors.New("stripe: canonical full refund set is empty")
+	}
+	sort.Slice(refunds, func(i, j int) bool { return refunds[i].ID < refunds[j].ID })
+	var total int64
+	for _, expected := range refunds {
+		body, err := c.request(ctx, http.MethodGet, "/v1/refunds/"+url.PathEscape(expected.ID), nil)
+		if err != nil {
+			return "", "", err
+		}
+		var item struct {
 			ID            string `json:"id"`
 			Status        string `json:"status"`
 			PaymentIntent string `json:"payment_intent"`
-		} `json:"data"`
-		HasMore bool `json:"has_more"`
+			Amount        int64  `json:"amount"`
+		}
+		if json.Unmarshal(body, &item) != nil || item.ID != expected.ID || item.Status != "succeeded" || item.PaymentIntent != paymentIntentID || item.Amount != expected.Amount {
+			return "", "", errors.New("stripe: canonical refund detail does not match refund list")
+		}
+		total += item.Amount
 	}
-	if json.Unmarshal(body, &list) != nil || list.HasMore || len(list.Data) != 1 || list.Data[0].Status != "succeeded" || list.Data[0].PaymentIntent != paymentIntentID {
-		return "", errors.New("stripe: fully refunded payment lacks one unambiguous canonical refund")
+	if total != amountRefunded || total != chargeAmount {
+		return "", "", errors.New("stripe: canonical refund amounts do not equal the charge")
 	}
-	return list.Data[0].ID, nil
+	payload, _ := json.Marshal(refunds)
+	digest := sha256.Sum256(payload)
+	proof, _ := json.Marshal(struct {
+		Digest  string                    `json:"digest"`
+		Refunds []canonicalDeletionRefund `json:"refunds"`
+	}{hex.EncodeToString(digest[:]), refunds})
+	return refunds[0].ID, string(proof), nil
 }
