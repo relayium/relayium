@@ -1,5 +1,6 @@
 import XCTest
 @testable import RelayiumKit
+@testable import RelayiumAppKit
 
 /// The two authenticated billing requests an in-app purchase makes, and the
 /// exact vocabulary of answers they can come back with.
@@ -238,6 +239,17 @@ final class AppleBillingClientTests: XCTestCase {
         await XCTAssertThrowsErrorAsync(
             try await self.client().submitAppleTransaction(signedTransactionInfo: Self.jws, token: "t")) {
             XCTAssertEqual($0 as? AppleBillingError, .reconciliationUnavailable)
+        }
+    }
+
+    func testA409ForAnUnresolvedDispatchCannotFinishTheStoreTransaction() async {
+        StubURLProtocol.stub = .init(status: 409, body: Data(#"{"error":"purchase_reconciliation_required"}"#.utf8))
+        do {
+            _ = try await client().submitAppleTransaction(signedTransactionInfo: Self.jws, token: "t")
+            XCTFail("409 was decoded as an accepted transaction")
+        } catch {
+            XCTAssertEqual(error as? AppleBillingError, .reconciliationUnavailable)
+            XCTAssertFalse(AppleSubmission.refused(.billing(.reconciliationUnavailable)).permitsFinish)
         }
     }
 

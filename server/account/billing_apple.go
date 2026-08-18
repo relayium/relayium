@@ -119,7 +119,7 @@ func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Req
 // their real Sandbox token/JWS shape has been observed and reviewed.
 func (s *Service) applePurchaseMustBeManagedByApple(ctx context.Context, userID string, target AppleProduct) (bool, error) {
 	source, ok, err := s.Store().GetSubscriptionSource(ctx, userID, ProviderApple)
-	if err != nil || !ok || !source.grantsAccess() {
+	if err != nil || !ok || !source.stillBillingAt(s.now().Unix()) {
 		return false, err
 	}
 	if source.ExternalScope != target.BundleID {

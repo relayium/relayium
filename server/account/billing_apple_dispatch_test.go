@@ -54,6 +54,22 @@ func TestAppleNextRenewalChangesNeverCreateAPurchaseDispatch(t *testing.T) {
 	}
 }
 
+func TestExpiredAppleActiveProjectionDoesNotForceManageAtRenewal(t *testing.T) {
+	f := newAppleCatalogFixture(t)
+	target := AppleProduct{BundleID: testBundleMac, ProductID: "pro.yearly", PlanID: "pro", Cycle: "yearly", Active: true}
+	mustAppleProduct(t, f.store, target)
+	if _, err := f.store.ApplySubscriptionSource(context.Background(), SourceEvent{UserID: f.userID, Provider: ProviderApple, PlanID: "pro", Status: "active", Cycle: "monthly", PeriodEnd: 1, ExternalID: "sandbox:expired", ExternalScope: testBundleMac, EventAt: 1, Now: 1}); err != nil {
+		t.Fatal(err)
+	}
+	manage, err := f.svc.applePurchaseMustBeManagedByApple(context.Background(), f.userID, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manage {
+		t.Fatal("expired active projection still forced next-renewal management")
+	}
+}
+
 func postApplePurchaseDispatch(t *testing.T, f *appleCatalogFixture, bundleID, productID string) *http.Response {
 	t.Helper()
 	body, err := json.Marshal(map[string]string{"bundleId": bundleID, "productId": productID})
