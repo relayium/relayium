@@ -47,6 +47,7 @@ type DuplicateRefundResult struct {
 type DuplicateRefundEvidence struct {
 	JobID, DuplicateSubscriptionID, CanonicalSubscriptionID, InvoiceID string
 	State, ManualReason, Resolution                                    string
+	LiabilityDigest                                                    string
 	SubscriptionCanceled, RefundComplete                               bool
 	HasError                                                           bool
 	Attempts, Revision                                                 int64
@@ -101,6 +102,20 @@ func normalizeInvoicePayments(payments []CanonicalStripeInvoicePayment) []Canoni
 	out := append([]CanonicalStripeInvoicePayment(nil), payments...)
 	sort.Slice(out, func(i, j int) bool { return out[i].InvoicePaymentID < out[j].InvoicePaymentID })
 	return out
+}
+
+func duplicateRefundLiabilitySnapshot(liabilities []DuplicateRefundLiability) ([]byte, string, error) {
+	canonical := append([]DuplicateRefundLiability(nil), liabilities...)
+	for i := range canonical {
+		canonical[i].Payments = normalizeInvoicePayments(canonical[i].Payments)
+	}
+	sort.Slice(canonical, func(i, j int) bool { return canonical[i].InvoiceID < canonical[j].InvoiceID })
+	raw, err := json.Marshal(canonical)
+	if err != nil {
+		return nil, "", err
+	}
+	digest := sha256.Sum256(raw)
+	return raw, hex.EncodeToString(digest[:]), nil
 }
 
 func (s *SQLiteStore) DuplicateRefundBySubscription(ctx context.Context, subscriptionID string) (DuplicateRefundJob, bool, error) {
@@ -184,6 +199,10 @@ func ListDuplicateRefundEvidence(ctx context.Context, store *SQLiteStore, select
 		out.Payments = append(out.Payments, liability.Payments...)
 	}
 	out.Payments = normalizeInvoicePayments(out.Payments)
+	_, out.LiabilityDigest, err = duplicateRefundLiabilitySnapshot(job.Liabilities)
+	if err != nil {
+		return DuplicateRefundEvidence{}, err
+	}
 	err = store.reader().QueryRowContext(ctx, `SELECT id,state,generation FROM billing_duplicate_refund_actions WHERE job_id=? ORDER BY generation DESC LIMIT 1`, job.ID).
 		Scan(&out.ActionID, &out.ActionState, &out.ActionGeneration)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -210,7 +229,7 @@ func prepareDuplicateRefundAction(ctx context.Context, store *SQLiteStore, job D
 	if actor == "" || reason == "" || len(actor) > 256 || len(reason) > 1024 {
 		return duplicateRefundAction{}, errors.New("account: duplicate refund actor and reason are required and bounded")
 	}
-	snapshot, err := json.Marshal(job.Liabilities)
+	snapshot, _, err := duplicateRefundLiabilitySnapshot(job.Liabilities)
 	if err != nil {
 		return duplicateRefundAction{}, err
 	}
@@ -257,8 +276,14 @@ func markDuplicateRefundActionError(ctx context.Context, store *SQLiteStore, act
 	if blocked {
 		state = "blocked"
 	}
-	_, err := store.db.ExecContext(ctx, `UPDATE billing_duplicate_refund_actions SET state=?,last_error=?,revision=revision+1,updated_at=? WHERE id=? AND state<>'succeeded'`, state, message, now, action.ID)
-	return err
+	res, err := store.db.ExecContext(ctx, `UPDATE billing_duplicate_refund_actions SET state=?,last_error=?,revision=revision+1,updated_at=? WHERE id=? AND state='prepared' AND revision=?`, state, message, now, action.ID, action.Revision)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return errors.New("account: stale duplicate refund action error")
+	}
+	return nil
 }
 
 func findCanonicalInvoicePayment(invoice CanonicalStripePaidInvoice, id string) (CanonicalStripeInvoicePayment, bool) {
@@ -707,7 +732,7 @@ func finishDuplicateRefundAction(ctx context.Context, store *SQLiteStore, job Du
 	return tx.Commit()
 }
 
-func ResolveDuplicateRefund(ctx context.Context, store *SQLiteStore, biller Biller, selector, actor, reason string) (DuplicateRefundOperatorResult, error) {
+func ResolveDuplicateRefund(ctx context.Context, store *SQLiteStore, biller Biller, selector, actor, reason string, expectedRevision int64, expectedDigest string) (DuplicateRefundOperatorResult, error) {
 	client, ok := biller.(*stripeClient)
 	if !ok || store == nil {
 		return DuplicateRefundOperatorResult{}, errors.New("account: duplicate refund operator is unavailable")
@@ -721,6 +746,16 @@ func ResolveDuplicateRefund(ctx context.Context, store *SQLiteStore, biller Bill
 	}
 	if job.State != "manual" && job.State != "terminal" {
 		return DuplicateRefundOperatorResult{}, errors.New("account: duplicate refund job is not manual")
+	}
+	_, currentDigest, err := duplicateRefundLiabilitySnapshot(job.Liabilities)
+	if err != nil {
+		return DuplicateRefundOperatorResult{}, err
+	}
+	if expectedRevision < 0 || strings.TrimSpace(expectedDigest) == "" {
+		return DuplicateRefundOperatorResult{}, errors.New("account: duplicate refund expected revision and liability digest are required; list evidence again")
+	}
+	if job.Revision != expectedRevision || !strings.EqualFold(currentDigest, strings.TrimSpace(expectedDigest)) {
+		return DuplicateRefundOperatorResult{}, errors.New("account: duplicate refund evidence is stale; list evidence again")
 	}
 	action, err := prepareDuplicateRefundAction(ctx, store, job, actor, reason, time.Now().Unix())
 	if err != nil {

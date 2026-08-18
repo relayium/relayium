@@ -232,6 +232,14 @@ func prepareCanceledManualDuplicate(t *testing.T, store *SQLiteStore, client *st
 	return job
 }
 
+func resolveDuplicateRefundCurrent(ctx context.Context, store *SQLiteStore, biller Biller, selector, actor, reason string) (DuplicateRefundOperatorResult, error) {
+	evidence, err := ListDuplicateRefundEvidence(ctx, store, selector)
+	if err != nil {
+		return DuplicateRefundOperatorResult{}, err
+	}
+	return ResolveDuplicateRefund(ctx, store, biller, selector, actor, reason, evidence.Revision, evidence.LiabilityDigest)
+}
+
 func TestWorkerNeverRefundsSinglePaymentAndLeavesOperatorAction(t *testing.T) {
 	store := newTestStore(t)
 	state := &duplicateStripeState{active: true, refunds: map[string]int64{}}
@@ -464,7 +472,7 @@ func TestExpandedLiabilityAllowsNewOperatorGenerationAndReason(t *testing.T) {
 	client, closeServer := newDuplicateStripe(t, state, false)
 	defer closeServer()
 	job := prepareCanceledManualDuplicate(t, store, client, state)
-	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator-one", "first verified liability"); err != nil {
+	if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator-one", "first verified liability"); err != nil {
 		t.Fatal(err)
 	}
 	terminal, _, _ := store.DuplicateRefundBySubscription(context.Background(), "sub_dup")
@@ -480,6 +488,59 @@ func TestExpandedLiabilityAllowsNewOperatorGenerationAndReason(t *testing.T) {
 	action, err := prepareDuplicateRefundAction(context.Background(), store, updated, "operator-two", "newly discovered liability", 201)
 	if err != nil || action.Generation != 2 || action.Actor != "operator-two" || action.Reason != "newly discovered liability" {
 		t.Fatalf("action=%+v err=%v", action, err)
+	}
+}
+
+func TestDuplicateRefundRequiresExactListedRevisionAndDigestBeforeProvider(t *testing.T) {
+	store := newTestStore(t)
+	state := &duplicateStripeState{active: true, refunds: map[string]int64{}}
+	client, closeServer := newDuplicateStripe(t, state, false)
+	defer closeServer()
+	job := prepareCanceledManualDuplicate(t, store, client, state)
+	evidence, err := ListDuplicateRefundEvidence(context.Background(), store, job.ID)
+	if err != nil || evidence.LiabilityDigest == "" {
+		t.Fatalf("evidence=%+v err=%v", evidence, err)
+	}
+	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "listed liability", -1, ""); err == nil || state.refundPosts != 0 {
+		t.Fatalf("missing evidence err=%v posts=%d", err, state.refundPosts)
+	}
+	expanded := job.DuplicateRefundPlan
+	expanded.Liabilities = append(expanded.Liabilities, DuplicateRefundLiability{
+		InvoiceID: "in_after_list", Status: "paid", AmountPaid: 100,
+		Payments: []CanonicalStripeInvoicePayment{{InvoicePaymentID: "inpay_after_list", PaymentType: "payment_intent", PaymentIntentID: "pi_after_list", ChargeID: "ch_after_list", AmountPaid: 100, ChargeAmount: 100, PaidAt: 200}},
+	})
+	if _, err := store.PutDuplicateRefund(context.Background(), expanded, 200); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "listed liability", evidence.Revision, evidence.LiabilityDigest); err == nil || !strings.Contains(err.Error(), "list evidence again") || state.refundPosts != 0 {
+		t.Fatalf("stale evidence err=%v posts=%d", err, state.refundPosts)
+	}
+}
+
+func TestActionErrorCannotReviveActionFailedByLiabilityExpansion(t *testing.T) {
+	store := newTestStore(t)
+	state := &duplicateStripeState{active: true, refunds: map[string]int64{}}
+	client, closeServer := newDuplicateStripe(t, state, false)
+	defer closeServer()
+	job := prepareCanceledManualDuplicate(t, store, client, state)
+	action, err := prepareDuplicateRefundAction(context.Background(), store, job, "operator", "listed liability", 102)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expanded := job.DuplicateRefundPlan
+	expanded.Liabilities = append(expanded.Liabilities, DuplicateRefundLiability{
+		InvoiceID: "in_barrier", Status: "paid", AmountPaid: 100,
+		Payments: []CanonicalStripeInvoicePayment{{InvoicePaymentID: "inpay_barrier", PaymentType: "payment_intent", PaymentIntentID: "pi_barrier", ChargeID: "ch_barrier", AmountPaid: 100, ChargeAmount: 100, PaidAt: 200}},
+	})
+	if _, err := store.PutDuplicateRefund(context.Background(), expanded, 200); err != nil {
+		t.Fatal(err)
+	}
+	if err := markDuplicateRefundActionError(context.Background(), store, action, "provider error", false, 201); err == nil || !strings.Contains(err.Error(), "stale") {
+		t.Fatalf("stale error persistence err=%v", err)
+	}
+	var stateAfter string
+	if err := store.reader().QueryRow(`SELECT state FROM billing_duplicate_refund_actions WHERE id=?`, action.ID).Scan(&stateAfter); err != nil || stateAfter != "failed" {
+		t.Fatalf("action state=%q err=%v", stateAfter, err)
 	}
 }
 
@@ -558,15 +619,15 @@ func TestDuplicateRefundOperatorRefundsEveryPaymentAndIsIdempotent(t *testing.T)
 	client, closeServer := newDuplicateStripe(t, state, true)
 	defer closeServer()
 	job := prepareCanceledManualDuplicate(t, store, client, state)
-	result, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "verified duplicate partial payments")
+	result, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "verified duplicate partial payments")
 	if err != nil || result.State != "succeeded" || state.refundPosts != 2 || state.refunds["pi_a"] != 200 || state.refunds["pi_b"] != 300 {
 		t.Fatalf("result=%+v err=%v posts=%d refunds=%v", result, err, state.refundPosts, state.refunds)
 	}
-	result, err = ResolveDuplicateRefund(context.Background(), store, client, "sub_dup", "operator", "verified duplicate partial payments")
+	result, err = resolveDuplicateRefundCurrent(context.Background(), store, client, "sub_dup", "operator", "verified duplicate partial payments")
 	if err != nil || result.State != "succeeded" || state.refundPosts != 2 {
 		t.Fatalf("replay=%+v err=%v posts=%d", result, err, state.refundPosts)
 	}
-	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "different", "verified duplicate partial payments"); err == nil {
+	if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "different", "verified duplicate partial payments"); err == nil {
 		t.Fatal("actor ownership changed")
 	}
 	evidence, err := ListDuplicateRefundEvidence(context.Background(), store, job.ID)
@@ -598,7 +659,7 @@ func TestDuplicateRefundOperatorPreparedCrashAndPartialSuccessConverge(t *testin
 		t.Fatalf("execute proof=%q err=%v posts=%d", proof, err, state.refundPosts)
 	}
 	// Crash/local commit failure: action stays prepared although provider is done.
-	result, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "resume prepared refund")
+	result, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "resume prepared refund")
 	if err != nil || result.State != "succeeded" || state.refundPosts != 1 {
 		t.Fatalf("resume=%+v err=%v posts=%d", result, err, state.refundPosts)
 	}
@@ -610,10 +671,10 @@ func TestDuplicateRefundOperatorUsesNewGenerationAfterCanonicalProviderFailure(t
 	client, closeServer := newDuplicateStripe(t, state, true)
 	defer closeServer()
 	job := prepareCanceledManualDuplicate(t, store, client, state)
-	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "provider failure retry"); err == nil {
+	if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "provider failure retry"); err == nil {
 		t.Fatal("failed provider refund was accepted")
 	}
-	result, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "provider failure retry")
+	result, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "provider failure retry")
 	if err != nil || result.State != "succeeded" || state.refundPosts != 3 {
 		t.Fatalf("result=%+v err=%v posts=%d", result, err, state.refundPosts)
 	}
@@ -629,7 +690,7 @@ func TestDuplicateRefundCanceledResponseIsAbsorbingFailure(t *testing.T) {
 	client, closeServer := newDuplicateStripe(t, state, true)
 	defer closeServer()
 	job := prepareCanceledManualDuplicate(t, store, client, state)
-	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "canceled refund audit"); !errors.Is(err, errDuplicateRefundReopened) {
+	if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "canceled refund audit"); !errors.Is(err, errDuplicateRefundReopened) {
 		t.Fatalf("canceled refund err=%v", err)
 	}
 	evidence, err := ListDuplicateRefundEvidence(context.Background(), store, job.ID)
@@ -648,7 +709,7 @@ func TestDuplicateRefundOperatorPendingRefundCannotBecomeTerminal(t *testing.T) 
 	client, closeServer := newDuplicateStripe(t, state, true)
 	defer closeServer()
 	job := prepareCanceledManualDuplicate(t, store, client, state)
-	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "pending refund audit"); !errors.Is(err, errDuplicateRefundPending) {
+	if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "pending refund audit"); !errors.Is(err, errDuplicateRefundPending) {
 		t.Fatalf("pending resolve err=%v", err)
 	}
 	got, _, _ := store.DuplicateRefundBySubscription(context.Background(), "sub_dup")
@@ -673,7 +734,7 @@ func TestDuplicateRefundLateFailureReopensTerminalAndNextGenerationRefundsRemain
 	client, closeServer := newDuplicateStripe(t, state, true)
 	defer closeServer()
 	job := prepareCanceledManualDuplicate(t, store, client, state)
-	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "late failure audit"); err != nil {
+	if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "late failure audit"); err != nil {
 		t.Fatal(err)
 	}
 	var refundID string
@@ -697,7 +758,7 @@ func TestDuplicateRefundLateFailureReopensTerminalAndNextGenerationRefundsRemain
 	if err != nil || reopened.State != "manual" || reopened.RefundComplete || evidence.ActionGeneration != 2 || evidence.ActionState != "prepared" {
 		t.Fatalf("reopened=%+v evidence=%+v err=%v", reopened, evidence, err)
 	}
-	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "late failure audit"); err != nil {
+	if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "late failure audit"); err != nil {
 		t.Fatal(err)
 	}
 	terminal, _, _ := store.DuplicateRefundBySubscription(context.Background(), "sub_dup")
@@ -718,7 +779,7 @@ func TestDuplicateRefundFailureBeforeBindingIsAbsorbingAndIdempotent(t *testing.
 	if err := store.RecordStripeDeletionRefundLifecycle(context.Background(), "evt-before-binding", "re_pi_a_1", "", "pi_a", "failed", 200); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "orphan failure audit"); !errors.Is(err, errDuplicateRefundReopened) {
+	if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "orphan failure audit"); !errors.Is(err, errDuplicateRefundReopened) {
 		t.Fatalf("orphan failure err=%v", err)
 	}
 	evidence, err := ListDuplicateRefundEvidence(context.Background(), store, job.ID)
@@ -749,7 +810,7 @@ func TestWebhookRefundFailedReopensEveryBoundDuplicateAction(t *testing.T) {
 	defer closeServer()
 	svc.biller = client
 	job := prepareCanceledManualDuplicate(t, store, client, state)
-	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "signed webhook audit"); err != nil {
+	if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "signed webhook audit"); err != nil {
 		t.Fatal(err)
 	}
 	var refundID, paymentIntentID string
@@ -785,7 +846,7 @@ func TestWebhookRefundUpdatedCanceledForcesAbsorbingFailure(t *testing.T) {
 	defer closeServer()
 	svc.biller = client
 	job := prepareCanceledManualDuplicate(t, store, client, state)
-	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "canceled webhook audit"); err != nil {
+	if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "canceled webhook audit"); err != nil {
 		t.Fatal(err)
 	}
 	var refundID, paymentIntentID string
@@ -809,10 +870,10 @@ func TestDuplicateRefundOperatorRejectsIdentityDriftAndMissingInvoice(t *testing
 	defer closeServer()
 	job := prepareCanceledManualDuplicate(t, store, client, state)
 	state.identityDrift = true
-	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "identity audit"); err == nil || state.refundPosts != 0 {
+	if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "identity audit"); err == nil || state.refundPosts != 0 {
 		t.Fatalf("identity drift err=%v posts=%d", err, state.refundPosts)
 	}
-	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "other", "identity audit"); err == nil {
+	if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "other", "identity audit"); err == nil {
 		t.Fatal("blocked action actor changed")
 	}
 
@@ -823,7 +884,7 @@ func TestDuplicateRefundOperatorRejectsIdentityDriftAndMissingInvoice(t *testing
 	if err := store.SaveDuplicateRefund(context.Background(), missing, DuplicateRefundResult{SubscriptionCanceled: true, ManualReason: "latest_invoice_unavailable"}, nil, 101); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ResolveDuplicateRefund(context.Background(), store, client, "sub_missing", "operator", "missing invoice audit"); err == nil {
+	if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, "sub_missing", "operator", "missing invoice audit"); err == nil {
 		t.Fatal("missing invoice was falsely resolved")
 	}
 	missing, _, _ = store.DuplicateRefundBySubscription(context.Background(), "sub_missing")
@@ -843,7 +904,7 @@ func TestDuplicateRefundOperatorConcurrentCommandsDoNotDoubleRefund(t *testing.T
 	for i := 0; i < 2; i++ {
 		go func() {
 			<-start
-			_, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "concurrent audit")
+			_, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "concurrent audit")
 			errs <- err
 		}()
 	}
@@ -856,7 +917,7 @@ func TestDuplicateRefundOperatorConcurrentCommandsDoNotDoubleRefund(t *testing.T
 		t.Fatalf("posts=%d job=%+v", state.refundPosts, got)
 	}
 	if got.State != "terminal" {
-		if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "concurrent audit"); err != nil {
+		if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "concurrent audit"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -883,7 +944,7 @@ func TestDuplicateRefundWorkerCannotRefundBeforeOperator(t *testing.T) {
 	if got.State != "manual" {
 		t.Fatalf("worker job=%+v", got)
 	}
-	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "verified duplicate payment"); err != nil {
+	if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "verified duplicate payment"); err != nil {
 		t.Fatal(err)
 	}
 	got, _, _ = store.DuplicateRefundBySubscription(context.Background(), "sub_dup")
@@ -942,7 +1003,7 @@ func TestDuplicateRefundWorkerLeavesProviderRefundFailureToOperator(t *testing.T
 	if state.refundPosts != 0 {
 		t.Fatalf("worker refund posts=%d", state.refundPosts)
 	}
-	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "verified duplicate payment"); err == nil {
+	if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "verified duplicate payment"); err == nil {
 		t.Fatal("provider failure was accepted by operator")
 	}
 	manual, _, _ := store.DuplicateRefundBySubscription(context.Background(), "sub_dup")
@@ -992,7 +1053,7 @@ func TestDuplicateRefundCrashBeforeLocalSaveReplaysWithoutDoubleRefund(t *testin
 		t.Fatal(err)
 	}
 	// Crash before finish: provider and constituent binding succeeded, action did not.
-	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "verified duplicate payment"); err != nil {
+	if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "verified duplicate payment"); err != nil {
 		t.Fatal(err)
 	}
 	if state.deletes != 1 || state.refundPosts != 1 {
