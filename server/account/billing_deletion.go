@@ -64,15 +64,24 @@ func (p *BillingDeletionProgress) add(r BillingDeletionResource) {
 	p.Resources[key] = r
 }
 func (p BillingDeletionProgress) terminal(now int64) bool {
-	if len(p.Customers) == 0 {
-		return false
-	}
+	hasIdentity := p.hasIdentity()
 	for _, r := range p.Resources {
 		if !r.Terminal {
 			return false
 		}
 	}
-	return p.CleanSince > 0 && now-p.CleanSince >= 86400
+	return hasIdentity && p.CleanSince > 0 && now-p.CleanSince >= 86400
+}
+func (p BillingDeletionProgress) hasIdentity() bool {
+	if len(p.Customers) > 0 {
+		return true
+	}
+	for _, r := range p.Resources {
+		if r.Kind == "checkout_session" && r.AttemptID != "" {
+			return true
+		}
+	}
+	return false
 }
 func decodeDeletionProgress(raw string) BillingDeletionProgress {
 	var p BillingDeletionProgress
@@ -534,7 +543,7 @@ func (s *Service) ReconcileBillingCancellations(ctx context.Context) {
 		if discoverErr == nil {
 			progress, discoverErr = provider.DiscoverDeletionHazards(ctx, row, progress)
 			encoded, _ = json.Marshal(progress)
-			allTerminal := len(progress.Customers) > 0
+			allTerminal := progress.hasIdentity()
 			for _, r := range progress.Resources {
 				if !r.Terminal {
 					allTerminal = false

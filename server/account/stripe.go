@@ -578,7 +578,7 @@ func (c *stripeClient) DiscoverDeletionHazards(ctx context.Context, row BillingC
 		// response proves the locally journaled attempt and billing subject.
 		hasAttributedSession := false
 		for _, r := range p.Resources {
-			if r.Kind == "checkout_session" && r.AttemptID != "" && !r.Terminal {
+			if r.Kind == "checkout_session" && r.AttemptID != "" {
 				hasAttributedSession = true
 				break
 			}
@@ -783,6 +783,13 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				r.Status = "metering_unknown"
 				p.Resources[resourceKey] = r
 				return p, errors.New("stripe: subscription charge model unavailable")
+			}
+			for _, item := range obj.Items.Data {
+				if item.Price.Recurring == nil || item.Price.Recurring.UsageType != "licensed" {
+					r.Status = "metered_usage_requires_operator"
+					p.Resources[resourceKey] = r
+					return p, errors.New("stripe: metered subscription deletion requires explicit usage reconciliation")
+				}
 			}
 			form := url.Values{"invoice_now": {"false"}, "prorate": {"false"}}
 			if _, err := c.request(ctx, http.MethodDelete, path+url.PathEscape(r.ID), form); err != nil && !stripeDeletionObjectGone(err) {

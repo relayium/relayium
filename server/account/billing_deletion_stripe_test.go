@@ -28,11 +28,7 @@ func TestStripeDeletionEnumeratesAndNeutralizesEveryChargePath(t *testing.T) {
 		case "GET /v1/invoiceitems":
 			io.WriteString(w, `{"data":[{"id":"ii_pending"}],"has_more":false}`)
 		case "GET /v1/invoices":
-			if r.URL.Query().Get("status") == "draft" {
-				io.WriteString(w, `{"data":[{"id":"in_draft"}],"has_more":false}`)
-			} else {
-				io.WriteString(w, `{"data":[{"id":"in_open"}],"has_more":false}`)
-			}
+			io.WriteString(w, `{"data":[{"id":"in_draft","status":"draft"},{"id":"in_open","status":"open"}],"has_more":false}`)
 		case "GET /v1/invoices/in_draft":
 			io.WriteString(w, `{"id":"in_draft","status":"draft"}`)
 		case "GET /v1/invoices/in_open":
@@ -42,7 +38,7 @@ func TestStripeDeletionEnumeratesAndNeutralizesEveryChargePath(t *testing.T) {
 		case "GET /v1/subscriptions/sub_active":
 			io.WriteString(w, `{"id":"sub_active","status":"active","customer":"cus_1","items":{"data":[{"price":{"recurring":{"usage_type":"licensed"}}}]}}`)
 		case "GET /v1/subscriptions/sub_unpaid":
-			io.WriteString(w, `{"id":"sub_unpaid","status":"unpaid","customer":"cus_1","items":{"data":[{"price":{"recurring":{"usage_type":"metered"}}}]}}`)
+			io.WriteString(w, `{"id":"sub_unpaid","status":"unpaid","customer":"cus_1","items":{"data":[{"price":{"recurring":{"usage_type":"licensed"}}}]}}`)
 		case "GET /v1/subscription_schedules/sched_active":
 			io.WriteString(w, `{"id":"sched_active","status":"active","customer":"cus_1"}`)
 		case "GET /v1/invoiceitems/ii_pending":
@@ -76,6 +72,40 @@ func TestStripeDeletionEnumeratesAndNeutralizesEveryChargePath(t *testing.T) {
 		if !containsString(calls, want) {
 			t.Fatalf("missing %s in %v", want, calls)
 		}
+	}
+}
+
+func TestStripeDeletionMeteredSubscriptionFailsClosedBeforeCancellation(t *testing.T) {
+	var mutation bool
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			mutation = true
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"sub_metered","status":"active","customer":"cus_1","items":{"data":[{"price":{"recurring":{"usage_type":"metered"}}}]}}`)
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+	c.base, c.http = ts.URL, ts.Client()
+	p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{"subscription:sub_metered": {Kind: "subscription", ID: "sub_metered", CustomerID: "cus_1"}}}
+	got, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", IdempotencyKey: "delete"}, p)
+	if err == nil || got.Resources["subscription:sub_metered"].Status != "metered_usage_requires_operator" {
+		t.Fatalf("metered subscription accepted: err=%v progress=%+v", err, got)
+	}
+	if mutation {
+		t.Fatal("metered subscription was canceled before usage reconciliation")
+	}
+}
+
+func TestAttemptOnlyTerminalProgressHasDurableIdentity(t *testing.T) {
+	now := int64(100000)
+	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{"checkout_session:cs_attempt": {Kind: "checkout_session", ID: "cs_attempt", AttemptID: "attempt", Terminal: true}}, CleanSince: now}
+	if !p.terminal(now + 86400) {
+		t.Fatal("durably attributed attempt-only deletion never converged")
+	}
+	p.Resources["checkout_session:cs_attempt"] = BillingDeletionResource{Kind: "checkout_session", ID: "cs_attempt", Terminal: true}
+	if p.terminal(now + 86400) {
+		t.Fatal("unattributed session was accepted as terminal identity")
 	}
 }
 
