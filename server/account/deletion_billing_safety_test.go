@@ -352,11 +352,14 @@ func TestWebhookHazardInvalidatesClaimAndPersistsCustomerHistory(t *testing.T) {
 	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation,next_attempt_at) VALUES('webhook-row','subject','stripe','webhook-key','pending',?,?,1,?)`, now, now, now); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := store.db.Exec(`INSERT INTO stripe_customer_history(user_id,customer_id,created_at) VALUES('subject','cus_late',?)`, now); err != nil {
+		t.Fatal(err)
+	}
 	claimed, err := store.PendingBillingCancellations(context.Background(), 1)
 	if err != nil || len(claimed) != 1 {
 		t.Fatalf("claim=%+v err=%v", claimed, err)
 	}
-	if err := store.AppendStripeDeletionHazard(context.Background(), "subject", BillingDeletionResource{Kind: "checkout_session", ID: "cs_late", CustomerID: "cus_late", Status: "webhook"}); err != nil {
+	if err := store.AppendStripeCustomerDeletionHazards(context.Background(), "cus_late", []BillingDeletionResource{{Kind: "invoice", ID: "in_late", Status: "webhook"}, {Kind: "payment_intent", ID: "pi_late", Status: "webhook"}, {Kind: "charge", ID: "ch_late", Status: "webhook"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.FinishBillingCancellation(context.Background(), claimed[0].ID, claimed[0].ClaimToken, claimed[0].Generation, claimed[0].Revision, `{}`, "", true, claimed[0].Attempts, now); err == nil {
@@ -376,6 +379,11 @@ func TestWebhookHazardInvalidatesClaimAndPersistsCustomerHistory(t *testing.T) {
 		t.Fatalf("reclaim=%+v err=%v", rows, err)
 	}
 	p := decodeDeletionProgress(rows[0].ProgressJSON)
+	for _, key := range []string{"invoice:in_late", "payment_intent:pi_late", "charge:ch_late"} {
+		if _, ok := p.Resources[key]; !ok {
+			t.Fatalf("webhook hazard %s missing from atomic journal: %+v", key, p.Resources)
+		}
+	}
 	p.Customers = appendUnique(p.Customers, "cus_late")
 	encoded, _ := json.Marshal(p)
 	if _, err := store.SaveBillingCancellationProgress(context.Background(), rows[0].ID, rows[0].ClaimToken, rows[0].Generation, rows[0].Revision, string(encoded), now); err != nil {

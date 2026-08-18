@@ -479,6 +479,13 @@ func (s *SQLiteStore) AppendStripeDeletionHazard(ctx context.Context, userID str
 		return err
 	}
 	defer tx.Rollback()
+	if err := appendStripeDeletionHazardsTx(ctx, tx, userID, []BillingDeletionResource{r}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func appendStripeDeletionHazardsTx(ctx context.Context, tx *sql.Tx, userID string, resources []BillingDeletionResource) error {
 	rows, err := tx.QueryContext(ctx, `SELECT id,progress_json FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider='stripe' AND state='pending'`, userID)
 	if err != nil {
 		return err
@@ -498,11 +505,55 @@ func (s *SQLiteStore) AppendStripeDeletionHazard(ctx context.Context, userID str
 	}
 	for _, v := range all {
 		p := decodeDeletionProgress(v.raw)
-		p.add(r)
+		for _, r := range resources {
+			if r.ID != "" {
+				p.add(r)
+			}
+		}
 		encoded, _ := json.Marshal(p)
 		if _, err := tx.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET progress_json=?,revision=revision+1,updated_at=unixepoch() WHERE id=? AND state='pending'`, string(encoded), v.id); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (s *SQLiteStore) AppendStripeCustomerDeletionHazards(ctx context.Context, customerID string, resources []BillingDeletionResource) error {
+	if customerID == "" || len(resources) == 0 {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT user_id FROM stripe_customer_history WHERE customer_id=? LIMIT 2`, customerID)
+	if err != nil {
+		return err
+	}
+	var subjects []string
+	for rows.Next() {
+		var subject string
+		if err := rows.Scan(&subject); err != nil {
+			rows.Close()
+			return err
+		}
+		subjects = append(subjects, subject)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if len(subjects) == 0 {
+		return nil
+	}
+	if len(subjects) != 1 {
+		return errors.New("account: Stripe customer billing subject is ambiguous")
+	}
+	for i := range resources {
+		resources[i].CustomerID = customerID
+	}
+	if err := appendStripeDeletionHazardsTx(ctx, tx, subjects[0], resources); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

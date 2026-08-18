@@ -178,6 +178,8 @@ func (c *stripeClient) deletionPaymentIntent(ctx context.Context, r BillingDelet
 		path = "/v1/checkout/sessions/" + url.PathEscape(r.ID)
 	} else if r.Kind == "invoice" {
 		path = "/v1/invoices/" + url.PathEscape(r.ID)
+	} else if r.Kind == "charge" {
+		path = "/v1/charges/" + url.PathEscape(r.ID)
 	} else {
 		return "", fmt.Errorf("account: %s is not a refundable deletion resource", r.Kind)
 	}
@@ -189,9 +191,16 @@ func (c *stripeClient) deletionPaymentIntent(ctx context.Context, r BillingDelet
 		PaymentIntent string `json:"payment_intent"`
 		Invoice       string `json:"invoice"`
 		Customer      string `json:"customer"`
+		Subscription  string `json:"subscription"`
 	}
 	if err := json.Unmarshal(body, &obj); err != nil {
 		return "", err
+	}
+	if obj.PaymentIntent == "" && obj.Invoice == "" && obj.Subscription != "" {
+		obj.Invoice, err = c.latestInvoiceID(ctx, obj.Subscription)
+		if err != nil {
+			return "", err
+		}
 	}
 	if obj.PaymentIntent == "" && obj.Invoice != "" {
 		body, err = c.request(ctx, http.MethodGet, "/v1/invoices/"+url.PathEscape(obj.Invoice), nil)

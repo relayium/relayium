@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -60,9 +61,9 @@ func TestStripeDeletionEnumeratesAndNeutralizesEveryChargePath(t *testing.T) {
 	if len(p.Resources) != 7 {
 		t.Fatalf("inventory=%+v", p)
 	}
-	if _, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{IdempotencyKey: "delete-1"}, p); err != nil {
-		t.Fatal(err)
-	}
+	// Mutation is only a request; the journal remains pending until a later
+	// canonical GET proves each object terminal.
+	_, _ = c.ReconcileDeletionHazards(context.Background(), BillingCancellation{IdempotencyKey: "delete-1"}, p)
 	for _, path := range []string{"/v1/subscriptions/sub_active", "/v1/subscriptions/sub_unpaid", "/v1/subscription_schedules/sched_active/cancel"} {
 		if forms[path].Get("invoice_now") != "false" || forms[path].Get("prorate") != "false" {
 			t.Fatalf("unsafe final billing form for %s: %v", path, forms[path])
@@ -146,11 +147,16 @@ func TestStripeDeletionNeverLosesAsynchronousPayment(t *testing.T) {
 				t.Fatal("async charge incorrectly reached terminal")
 			}
 			r := got.Resources[tc.kind+":"+id]
-			if tc.name != "checkout processing" && !r.Manual {
+			if tc.name == "invoice paid race" && !r.Manual {
 				t.Fatalf("paid race not sent to manual reconciliation: %+v", r)
 			}
-			if r.Terminal {
+			if r.Terminal && tc.name != "checkout paid" {
 				t.Fatalf("async charge disappeared: %+v", r)
+			}
+			if tc.name == "checkout paid" {
+				if _, linked := got.Resources["payment_intent:pi_late"]; !linked || r.Status != "delegated_to_payment_objects" {
+					t.Fatalf("paid Checkout did not delegate canonical payment proof: resource=%+v all=%+v", r, got.Resources)
+				}
 			}
 			if mutation {
 				t.Fatal("completed async payment was blindly expired/voided")
@@ -283,35 +289,60 @@ func TestStripeDeletionRejectsForgedCheckoutAttribution(t *testing.T) {
 	}
 }
 
-func TestStripeDeletionHistoricalPaidIsNotLabeledAfterDeletion(t *testing.T) {
+func TestStripeDeletionUsesInvoicePaidAtNotObjectCreated(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		paidAt     int64
+		wantManual bool
+		wantStatus string
+	}{{"paid before deletion", 95, false, "paid_before_deletion"}, {"created before but paid after deletion", 110, true, "paid_after_deletion"}} {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprintf(w, `{"id":"in_paid","status":"paid","created":90,"customer":"cus_1","status_transitions":{"paid_at":%d}}`, tc.paidAt)
+			}))
+			defer ts.Close()
+			c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+			c.base, c.http = ts.URL, ts.Client()
+			p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{"invoice:in_paid": {Kind: "invoice", ID: "in_paid", CustomerID: "cus_1"}}}
+			got, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", CreatedAt: 100, IdempotencyKey: "delete"}, p)
+			if tc.wantManual && err == nil {
+				t.Fatal("post-deletion payment was accepted")
+			}
+			if !tc.wantManual && err != nil {
+				t.Fatal(err)
+			}
+			r := got.Resources["invoice:in_paid"]
+			if r.Manual != tc.wantManual || r.Status != tc.wantStatus || (!tc.wantManual && !r.Terminal) {
+				t.Fatalf("payment timing misclassified: %+v", r)
+			}
+		})
+	}
+}
+
+func TestStripeDeletionPaymentIntentUsesLatestChargeSuccessTime(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/v1/subscriptions/sub_old":
-			io.WriteString(w, `{"id":"sub_old","status":"canceled","customer":"cus_1"}`)
-		case "/v1/invoices/in_old":
-			io.WriteString(w, `{"id":"in_old","status":"void","customer":"cus_1"}`)
-		default:
-			io.WriteString(w, `{"id":"cs_old","status":"complete","payment_status":"paid","created":90,"customer":"cus_1","subscription":"sub_old","invoice":"in_old"}`)
+		if r.URL.Path == "/v1/payment_intents/pi_old" {
+			io.WriteString(w, `{"id":"pi_old","status":"succeeded","created":90,"customer":"cus_1","latest_charge":"ch_late"}`)
+			return
 		}
+		io.WriteString(w, `{"id":"ch_late","paid":true,"created":110,"customer":"cus_1","payment_intent":"pi_old"}`)
 	}))
 	defer ts.Close()
 	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
 	c.base, c.http = ts.URL, ts.Client()
-	p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{"checkout_session:cs_old": {Kind: "checkout_session", ID: "cs_old", CustomerID: "cus_1"}}}
+	p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{"payment_intent:pi_old": {Kind: "payment_intent", ID: "pi_old", CustomerID: "cus_1"}}}
 	got, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", CreatedAt: 100, IdempotencyKey: "delete"}, p)
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		t.Fatal("charge succeeding after deletion was accepted")
 	}
-	r := got.Resources["checkout_session:cs_old"]
-	if !r.Terminal || r.Manual || r.Status != "paid_before_deletion" || r.ProviderCreatedAt != 90 {
-		t.Fatalf("historical payment misclassified: %+v", r)
+	got, err = c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", CreatedAt: 100, IdempotencyKey: "delete"}, got)
+	if err == nil {
+		t.Fatal("late charge reconciliation reached terminal")
 	}
-	if _, ok := got.Resources["subscription:sub_old"]; !ok {
-		t.Fatal("historical paid checkout lost linked subscription")
-	}
-	if _, ok := got.Resources["invoice:in_old"]; !ok {
-		t.Fatal("historical paid checkout lost linked invoice")
+	if r := got.Resources["charge:ch_late"]; !r.Manual || r.Status != "succeeded_after_deletion" {
+		t.Fatalf("late charge=%+v all=%+v", r, got.Resources)
 	}
 }
 

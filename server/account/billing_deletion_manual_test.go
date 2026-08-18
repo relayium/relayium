@@ -107,3 +107,39 @@ func TestManualDeletionRefundDoesNotAcceptPendingCanonicalRefund(t *testing.T) {
 		t.Fatalf("pending refund mutated hazard: %+v", r)
 	}
 }
+
+func TestManualCheckoutRefundFollowsSubscriptionLatestInvoice(t *testing.T) {
+	store := newTestStore(t)
+	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{"checkout_session:cs_paid": {Kind: "checkout_session", ID: "cs_paid", Manual: true, Status: "paid_time_unknown"}}}
+	raw, _ := json.Marshal(p)
+	_, _ = store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,progress_json,created_at,updated_at,generation,next_attempt_at) VALUES('out_checkout','subject','stripe','checkout-key','pending',?,1,1,1,1)`, string(raw))
+	var actionID string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method + " " + r.URL.Path {
+		case "GET /v1/checkout/sessions/cs_paid":
+			io.WriteString(w, `{"id":"cs_paid","subscription":"sub_paid"}`)
+		case "GET /v1/subscriptions/sub_paid":
+			io.WriteString(w, `{"id":"sub_paid","latest_invoice":"in_paid"}`)
+		case "GET /v1/invoices/in_paid":
+			io.WriteString(w, `{"id":"in_paid","payment_intent":"pi_paid"}`)
+		case "GET /v1/refunds":
+			io.WriteString(w, `{"data":[]}`)
+		case "POST /v1/refunds":
+			body, _ := io.ReadAll(r.Body)
+			form, _ := url.ParseQuery(string(body))
+			actionID = form.Get("metadata[relayium_deletion_action_id]")
+			io.WriteString(w, `{"id":"re_checkout"}`)
+		case "GET /v1/refunds/re_checkout":
+			io.WriteString(w, `{"id":"re_checkout","status":"succeeded","payment_intent":"pi_paid","metadata":{"relayium_deletion_action_id":"`+actionID+`"}}`)
+		default:
+			http.Error(w, "unexpected", http.StatusBadRequest)
+		}
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+	c.base, c.http = ts.URL, ts.Client()
+	if _, err := ResolveBillingDeletionRefund(context.Background(), store, c, "out_checkout", "checkout_session:cs_paid", "operator", "verified late subscription payment"); err != nil {
+		t.Fatal(err)
+	}
+}

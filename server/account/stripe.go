@@ -116,9 +116,9 @@ type WebhookEvent struct {
 	// before (or without) the checkout.session.completed event that normally
 	// does the binding — Stripe does not guarantee delivery order. Empty when
 	// metadata is absent (e.g. checkout.session.completed itself).
-	MetadataUserID, MetadataBillingAttemptID string
-	CheckoutSessionID                        string
-	CurrentPeriodEnd                         int64
+	MetadataUserID, MetadataBillingAttemptID                string
+	CheckoutSessionID, InvoiceID, PaymentIntentID, ChargeID string
+	CurrentPeriodEnd                                        int64
 	// Created is the Stripe event's top-level `created` (unix secs) — the event
 	// emission time, used by the webhook's ordering guard to drop a stale
 	// (re)delivered event that would otherwise revert newer subscription state.
@@ -287,11 +287,15 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 				// its subscription at data.object.subscription. Parsing only the
 				// latter left SubscriptionID empty for every real subscription
 				// event — see the resolution below.
-				ID           string `json:"id"`
-				Object       string `json:"object"`
-				Customer     string `json:"customer"`
-				Subscription string `json:"subscription"`
-				Parent       *struct {
+				ID            string `json:"id"`
+				Object        string `json:"object"`
+				Customer      string `json:"customer"`
+				Subscription  string `json:"subscription"`
+				PaymentIntent string `json:"payment_intent"`
+				Charge        string `json:"charge"`
+				LatestCharge  string `json:"latest_charge"`
+				Invoice       string `json:"invoice"`
+				Parent        *struct {
 					SubscriptionDetails *struct {
 						Subscription string `json:"subscription"`
 					} `json:"subscription_details"`
@@ -355,6 +359,26 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 	}
 	if envelope.Data.Object.Object == "checkout.session" {
 		ev.CheckoutSessionID = envelope.Data.Object.ID
+	}
+	switch envelope.Data.Object.Object {
+	case "invoice":
+		ev.InvoiceID = envelope.Data.Object.ID
+	case "payment_intent":
+		ev.PaymentIntentID = envelope.Data.Object.ID
+	case "charge":
+		ev.ChargeID = envelope.Data.Object.ID
+	}
+	if ev.PaymentIntentID == "" {
+		ev.PaymentIntentID = envelope.Data.Object.PaymentIntent
+	}
+	if ev.ChargeID == "" {
+		ev.ChargeID = envelope.Data.Object.Charge
+	}
+	if ev.ChargeID == "" {
+		ev.ChargeID = envelope.Data.Object.LatestCharge
+	}
+	if ev.InvoiceID == "" {
+		ev.InvoiceID = envelope.Data.Object.Invoice
 	}
 	if items := envelope.Data.Object.Items; items != nil && len(items.Data) > 0 {
 		if items.Data[0].Price != nil {
@@ -602,7 +626,7 @@ func (c *stripeClient) DiscoverDeletionHazards(ctx context.Context, row BillingC
 		kinds := []struct {
 			kind, path string
 			q          url.Values
-		}{{"checkout_session", "/v1/checkout/sessions", copyQ("status", "open")}, {"checkout_session", "/v1/checkout/sessions", copyQ("status", "complete")}, {"subscription", "/v1/subscriptions", copyQ("status", "all")}, {"schedule", "/v1/subscription_schedules", copyQ()}, {"invoice_item", "/v1/invoiceitems", copyQ("pending", "true")}, {"invoice", "/v1/invoices", copyQ("created[gte]", fmt.Sprint(row.CreatedAt))}}
+		}{{"checkout_session", "/v1/checkout/sessions", copyQ("status", "open")}, {"checkout_session", "/v1/checkout/sessions", copyQ("status", "complete")}, {"subscription", "/v1/subscriptions", copyQ("status", "all")}, {"schedule", "/v1/subscription_schedules", copyQ()}, {"invoice_item", "/v1/invoiceitems", copyQ("pending", "true")}, {"invoice", "/v1/invoices", copyQ("status", "draft")}, {"invoice", "/v1/invoices", copyQ("status", "open")}, {"invoice", "/v1/invoices", copyQ("created[gte]", fmt.Sprint(row.CreatedAt))}, {"payment_intent", "/v1/payment_intents", copyQ("created[gte]", fmt.Sprint(row.CreatedAt))}, {"charge", "/v1/charges", copyQ("created[gte]", fmt.Sprint(row.CreatedAt))}}
 		for _, k := range kinds {
 			ids, err := c.deletionList(ctx, k.path, k.q)
 			if err != nil {
@@ -647,6 +671,8 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			path += "invoices/"
 		case "payment_intent":
 			path += "payment_intents/"
+		case "charge":
+			path += "charges/"
 		default:
 			r.Manual = true
 			r.Status = "unknown_resource"
@@ -674,7 +700,13 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			RecoveredFrom     string    `json:"recovered_from"`
 			Created           int64     `json:"created"`
 			AfterExpiration   *struct{} `json:"after_expiration"`
-			ClientReferenceID string    `json:"client_reference_id"`
+			LatestCharge      string    `json:"latest_charge"`
+			Charge            string    `json:"charge"`
+			Paid              bool      `json:"paid"`
+			StatusTransitions struct {
+				PaidAt int64 `json:"paid_at"`
+			} `json:"status_transitions"`
+			ClientReferenceID string `json:"client_reference_id"`
 			Metadata          struct {
 				BillingAttemptID string `json:"billing_attempt_id"`
 				UserID           string `json:"user_id"`
@@ -745,15 +777,15 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				p.add(BillingDeletionResource{Kind: "invoice", ID: obj.Invoice, CustomerID: obj.Customer, Status: "session_link"})
 			}
 			if obj.PaymentStatus == "paid" {
-				if obj.Created > 0 && obj.Created <= row.CreatedAt {
-					r.Terminal = true
-					r.Status = "paid_before_deletion"
-					break
+				if obj.Subscription == "" && obj.Invoice == "" && obj.PaymentIntent == "" {
+					r.Manual = true
+					r.Status = "paid_without_canonical_payment_object"
+					p.Resources[resourceKey] = r
+					return p, errors.New("stripe: paid checkout lacks a canonical payment object")
 				}
-				r.Manual = true
-				r.Status = "paid_after_deletion"
-				p.Resources[resourceKey] = r
-				return p, errors.New("stripe: paid checkout requires audited refund")
+				r.Terminal = true
+				r.Status = "delegated_to_payment_objects"
+				break
 			}
 			if obj.Status == "complete" {
 				r.Status = "complete_payment_pending"
@@ -804,14 +836,21 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			if obj.PaymentIntent != "" {
 				p.add(BillingDeletionResource{Kind: "payment_intent", ID: obj.PaymentIntent, CustomerID: r.CustomerID, Status: "invoice_link"})
 			}
+			if obj.Charge != "" {
+				p.add(BillingDeletionResource{Kind: "charge", ID: obj.Charge, CustomerID: r.CustomerID, Status: "invoice_link"})
+			}
 			if obj.Status == "paid" {
-				if obj.Created > 0 && obj.Created <= row.CreatedAt {
+				if obj.StatusTransitions.PaidAt > 0 && obj.StatusTransitions.PaidAt <= row.CreatedAt {
 					r.Terminal = true
 					r.Status = "paid_before_deletion"
 					break
 				}
 				r.Manual = true
-				r.Status = "paid_after_deletion"
+				if obj.StatusTransitions.PaidAt > row.CreatedAt {
+					r.Status = "paid_after_deletion"
+				} else {
+					r.Status = "paid_time_unknown"
+				}
 				p.Resources[resourceKey] = r
 				return p, errors.New("stripe: paid invoice requires audited refund")
 			}
@@ -836,15 +875,16 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				break
 			}
 			if obj.Status == "succeeded" {
-				if obj.Created > 0 && obj.Created <= row.CreatedAt {
+				if obj.LatestCharge != "" {
+					p.add(BillingDeletionResource{Kind: "charge", ID: obj.LatestCharge, CustomerID: r.CustomerID, Status: "payment_intent_link"})
 					r.Terminal = true
-					r.Status = "succeeded_before_deletion"
+					r.Status = "delegated_to_charge"
 					break
 				}
 				r.Manual = true
-				r.Status = "succeeded_after_deletion"
+				r.Status = "succeeded_time_unknown"
 				p.Resources[resourceKey] = r
-				return p, errors.New("stripe: succeeded payment requires audited refund")
+				return p, errors.New("stripe: succeeded payment lacks canonical charge time")
 			}
 			if obj.Status == "processing" {
 				r.Status = "processing"
@@ -857,12 +897,36 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			r.Status = "observed_nonterminal"
 			p.Resources[resourceKey] = r
 			return p, errors.New("stripe: checkout payment intent remains provider-managed")
+		case "charge":
+			r.ProviderCreatedAt = obj.Created
+			if obj.PaymentIntent != "" {
+				p.add(BillingDeletionResource{Kind: "payment_intent", ID: obj.PaymentIntent, CustomerID: r.CustomerID, Status: "charge_link"})
+			}
+			if obj.Invoice != "" {
+				p.add(BillingDeletionResource{Kind: "invoice", ID: obj.Invoice, CustomerID: r.CustomerID, Status: "charge_link"})
+			}
+			if obj.Paid || obj.Status == "succeeded" {
+				if obj.Created > 0 && obj.Created <= row.CreatedAt {
+					r.Terminal = true
+					r.Status = "succeeded_before_deletion"
+					break
+				}
+				r.Manual = true
+				r.Status = "succeeded_after_deletion"
+				p.Resources[resourceKey] = r
+				return p, errors.New("stripe: charge succeeded after deletion")
+			}
+			r.Terminal = true
+			r.Status = "not_paid"
 		}
 		p.Resources[resourceKey] = r
 	}
 	for _, r := range p.Resources {
 		if r.Manual {
 			return p, errors.New("stripe: deletion requires manual reconciliation")
+		}
+		if !r.Terminal {
+			return p, errors.New("stripe: deletion hazards remain pending")
 		}
 	}
 	return p, nil
