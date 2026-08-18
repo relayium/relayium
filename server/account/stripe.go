@@ -607,7 +607,8 @@ func (c *stripeClient) DiscoverDeletionHazards(ctx context.Context, row BillingC
 		// response proves the locally journaled attempt and billing subject.
 		hasAttributedSession := false
 		for _, r := range p.Resources {
-			if r.Kind == "checkout_session" && r.AttemptID != "" {
+			if (r.Kind == "checkout_session" && r.AttemptID != "") ||
+				(r.Kind == "subscription" && (r.Status == "external_binding" || r.AttemptID != "")) {
 				hasAttributedSession = true
 				break
 			}
@@ -752,6 +753,8 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			}
 			p.Customers = appendUnique(p.Customers, obj.Customer)
 			r.CustomerID = obj.Customer
+			p.Resources[resourceKey] = r
+			return p, errors.New("stripe: canonical customer derived; inventory required before mutation")
 		}
 		if obj.Customer != "" && !allowed(obj.Customer) {
 			r.Manual = true

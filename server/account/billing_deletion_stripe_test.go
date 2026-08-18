@@ -76,6 +76,38 @@ func TestStripeDeletionEnumeratesAndNeutralizesEveryChargePath(t *testing.T) {
 	}
 }
 
+func TestExternalSubscriptionDerivesCustomerBeforeInventoryOrMutation(t *testing.T) {
+	var mutations int
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			mutations++
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/v1/subscriptions/sub_external" {
+			io.WriteString(w, `{"id":"sub_external","status":"active","customer":"cus_derived","items":{"data":[{"price":{"recurring":{"usage_type":"licensed"}}}]}}`)
+			return
+		}
+		io.WriteString(w, `{"object":"list","data":[],"has_more":false}`)
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+	c.base, c.http = ts.URL, ts.Client()
+	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{
+		"subscription:sub_external": {Kind: "subscription", ID: "sub_external", Status: "external_binding"},
+	}}
+	row := BillingCancellation{BillingSubjectID: "subject", IdempotencyKey: "delete", CreatedAt: 100}
+	if _, err := c.DiscoverDeletionHazards(context.Background(), row, p); err != nil {
+		t.Fatalf("attributed customerless discovery rejected: %v", err)
+	}
+	got, err := c.ReconcileDeletionHazards(context.Background(), row, p)
+	if err == nil || mutations != 0 || len(got.Customers) != 1 || got.Customers[0] != "cus_derived" {
+		t.Fatalf("derive phase progress=%+v mutations=%d err=%v", got, mutations, err)
+	}
+	if got.Resources["subscription:sub_external"].CustomerID != "cus_derived" {
+		t.Fatalf("derived customer was not journaled: %+v", got.Resources)
+	}
+}
+
 func TestStripeDeletionMeteredSubscriptionFailsClosedBeforeCancellation(t *testing.T) {
 	var mutation bool
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
