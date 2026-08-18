@@ -1083,6 +1083,16 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
  outbox_id TEXT NOT NULL,
  payment_intent_id TEXT NOT NULL,
  failed_at INTEGER NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS billing_deletion_metered_actions (
+ id TEXT PRIMARY KEY,
+ outbox_id TEXT NOT NULL,
+ resource_key TEXT NOT NULL,
+ actor TEXT NOT NULL,
+ reason TEXT NOT NULL,
+ state TEXT NOT NULL CHECK(state IN ('prepared','succeeded')),
+ created_at INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL,
+ UNIQUE(outbox_id,resource_key))`,
 		`CREATE TABLE IF NOT EXISTS stripe_customer_history (
  user_id TEXT NOT NULL,
  customer_id TEXT NOT NULL,

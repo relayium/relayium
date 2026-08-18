@@ -175,6 +175,62 @@ func TestLateFailedRefundAfterTerminalCreatesANewDeletionGeneration(t *testing.T
 	}
 }
 
+func TestMeteredDeletionOperatorDiscardsPendingBillingAndRequiresCanonicalCancel(t *testing.T) {
+	store := newTestStore(t)
+	p := BillingDeletionProgress{Customers: []string{"cus_metered"}, Resources: map[string]BillingDeletionResource{
+		"subscription:sub_metered": {Kind: "subscription", ID: "sub_metered", CustomerID: "cus_metered", Status: "metered_usage_requires_operator", Manual: true},
+	}}
+	raw, _ := json.Marshal(p)
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,progress_json,created_at,updated_at,generation,next_attempt_at) VALUES('out_metered','subject','stripe','delete-metered','pending',?,1,1,1,1)`, string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	var subReads, itemDeletes, subDeletes int
+	var unsafeForm bool
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method + " " + r.URL.Path {
+		case "GET /v1/subscriptions/sub_metered":
+			subReads++
+			status := "active"
+			if subReads > 1 {
+				status = "canceled"
+			}
+			io.WriteString(w, `{"id":"sub_metered","customer":"cus_metered","status":"`+status+`","items":{"data":[{"price":{"recurring":{"usage_type":"metered"}}}]}}`)
+		case "GET /v1/invoiceitems":
+			io.WriteString(w, `{"data":[{"id":"ii_pending"}],"has_more":false}`)
+		case "DELETE /v1/invoiceitems/ii_pending":
+			itemDeletes++
+			io.WriteString(w, `{}`)
+		case "DELETE /v1/subscriptions/sub_metered":
+			subDeletes++
+			body, err := io.ReadAll(r.Body)
+			form, parseErr := url.ParseQuery(string(body))
+			if err != nil || parseErr != nil || form.Get("invoice_now") != "false" || form.Get("prorate") != "false" {
+				unsafeForm = true
+			}
+			io.WriteString(w, `{"id":"sub_metered","status":"canceled"}`)
+		default:
+			http.Error(w, "unexpected", http.StatusBadRequest)
+		}
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test", "whsec", "bpc")
+	c.base, c.http = ts.URL, ts.Client()
+	if err := ResolveBillingDeletionMetered(context.Background(), store, c, "out_metered", "subscription:sub_metered", "operator", "verified legacy metered deletion"); err != nil {
+		t.Fatal(err)
+	}
+	if itemDeletes != 1 || subDeletes != 1 || subReads != 2 || unsafeForm {
+		t.Fatalf("reads=%d item deletes=%d subscription deletes=%d unsafe form=%t", subReads, itemDeletes, subDeletes, unsafeForm)
+	}
+	if err := store.db.QueryRow(`SELECT progress_json FROM billing_cancellation_outbox WHERE id='out_metered'`).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	p, err := decodeDeletionProgressStrict(string(raw))
+	if err != nil || !p.Resources["subscription:sub_metered"].Terminal || p.Resources["subscription:sub_metered"].Manual {
+		t.Fatalf("metered progress=%+v err=%v", p, err)
+	}
+}
+
 func TestManualDeletionRefundDoesNotAcceptPendingCanonicalRefund(t *testing.T) {
 	store := newTestStore(t)
 	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{"payment_intent:pi_pending": {Kind: "payment_intent", ID: "pi_pending", Manual: true, Status: "processing"}}}

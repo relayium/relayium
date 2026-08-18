@@ -19,6 +19,106 @@ type BillingDeletionManualResult struct {
 	ActionID, RefundID, Status string
 }
 
+// ResolveBillingDeletionMetered is the explicit legacy escape hatch for a
+// metered subscription. It deliberately discards pending usage billing during
+// account deletion: pending invoice items are removed, cancellation requests
+// no final invoice and no proration, and canonical canceled state is required.
+func ResolveBillingDeletionMetered(ctx context.Context, store *SQLiteStore, biller Biller, outboxID, resourceKey, actor, reason string) error {
+	c, ok := biller.(*stripeClient)
+	if !ok || store == nil || outboxID == "" || resourceKey == "" || strings.TrimSpace(actor) == "" || strings.TrimSpace(reason) == "" {
+		return errors.New("account: metered deletion operator input is incomplete")
+	}
+	var raw, state string
+	if err := store.db.QueryRowContext(ctx, `SELECT progress_json,state FROM billing_cancellation_outbox WHERE id=?`, outboxID).Scan(&raw, &state); err != nil {
+		return err
+	}
+	p, err := decodeDeletionProgressStrict(raw)
+	if err != nil {
+		return err
+	}
+	r, ok := p.Resources[resourceKey]
+	if !ok || r.Kind != "subscription" || r.Status != "metered_usage_requires_operator" || state != "pending" {
+		return errors.New("account: selected resource is not a pending metered subscription")
+	}
+	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions/"+url.PathEscape(r.ID), nil)
+	if err != nil {
+		return err
+	}
+	var sub struct {
+		ID, Customer, Status string
+		Items                struct {
+			Data []struct {
+				Price struct {
+					Recurring *struct {
+						UsageType string `json:"usage_type"`
+					} `json:"recurring"`
+				} `json:"price"`
+			} `json:"data"`
+		} `json:"items"`
+	}
+	if json.Unmarshal(body, &sub) != nil || sub.ID != r.ID || sub.Customer == "" || (r.CustomerID != "" && r.CustomerID != sub.Customer) || len(sub.Items.Data) == 0 {
+		return errors.New("stripe: metered subscription canonical identity is invalid")
+	}
+	for _, item := range sub.Items.Data {
+		if item.Price.Recurring == nil || item.Price.Recurring.UsageType != "metered" {
+			return errors.New("stripe: operator path requires an entirely metered subscription")
+		}
+	}
+	ids, err := c.deletionList(ctx, "/v1/invoiceitems", url.Values{"customer": {sub.Customer}, "pending": {"true"}})
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if _, err := c.request(ctx, http.MethodDelete, "/v1/invoiceitems/"+url.PathEscape(id), nil); err != nil && !stripeDeletionObjectGone(err) {
+			return err
+		}
+	}
+	form := url.Values{"invoice_now": {"false"}, "prorate": {"false"}}
+	if _, err := c.request(ctx, http.MethodDelete, "/v1/subscriptions/"+url.PathEscape(r.ID), form); err != nil && !stripeDeletionObjectGone(err) {
+		return err
+	}
+	body, err = c.request(ctx, http.MethodGet, "/v1/subscriptions/"+url.PathEscape(r.ID), nil)
+	if err != nil && !stripeDeletionObjectGone(err) {
+		return err
+	}
+	if err == nil {
+		var canonical struct {
+			Status string `json:"status"`
+		}
+		if json.Unmarshal(body, &canonical) != nil || (canonical.Status != "canceled" && canonical.Status != "incomplete_expired") {
+			return errors.New("stripe: metered subscription cancellation is not canonical terminal")
+		}
+	}
+	now := time.Now().Unix()
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	actionID := "bdm_" + outboxID + "_" + r.ID
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO billing_deletion_metered_actions(id,outbox_id,resource_key,actor,reason,state,created_at,updated_at) VALUES(?,?,?,?,?,'prepared',?,?)`, actionID, outboxID, resourceKey, strings.TrimSpace(actor), strings.TrimSpace(reason), now, now); err != nil {
+		return err
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT progress_json FROM billing_cancellation_outbox WHERE id=? AND state='pending'`, outboxID).Scan(&raw); err != nil {
+		return err
+	}
+	p, err = decodeDeletionProgressStrict(raw)
+	if err != nil {
+		return err
+	}
+	r = p.Resources[resourceKey]
+	r.Manual, r.Terminal, r.Status = false, true, "metered_usage_discarded_and_canceled"
+	p.Resources[resourceKey] = r
+	encoded, _ := json.Marshal(p)
+	if _, err := tx.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET progress_json=?,revision=revision+1,updated_at=? WHERE id=? AND state='pending'`, string(encoded), now, outboxID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE billing_deletion_metered_actions SET state='succeeded',updated_at=? WHERE id=?`, now, actionID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 type BillingDeletionManualEvidence struct {
 	OutboxID, SubjectID, State string
 	Generation, CreatedAt      int64

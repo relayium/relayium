@@ -171,6 +171,7 @@ func main() {
 	stripePortalConfig := flag.String("stripe-portal-config", envStr("RELAYIUM_STRIPE_PORTAL_CONFIG", ""), "required dedicated Stripe Billing Portal configuration id; plan switching disabled and cancellation at period end")
 	billingHoldSecret := flag.String("billing-hold-secret", envStr("RELAYIUM_BILLING_HOLD_SECRET", ""), "HMAC secret for bounded post-deletion billing holds")
 	billingDeletionRefund := flag.String("billing-deletion-refund", "", "operator-only: cancellation outbox id whose audited manual resource must be refunded, then exit")
+	billingDeletionMetered := flag.String("billing-deletion-metered", "", "operator-only: cancellation outbox id whose metered subscription must be reconciled and canceled, then exit")
 	billingDeletionList := flag.String("billing-deletion-list", "", "operator-only: list sanitized cancellation evidence for one outbox id, then exit")
 	billingDeletionResource := flag.String("billing-deletion-resource", "", "operator-only: exact kind:id journal resource selected for -billing-deletion-refund")
 	billingDeletionActor := flag.String("billing-deletion-actor", "", "operator-only: accountable actor for a manual billing refund")
@@ -463,6 +464,16 @@ func main() {
 			log.Fatalf("billing deletion refund: %v", err)
 		}
 		log.Printf("billing deletion refund: action=%s refund=%s status=%s", result.ActionID, result.RefundID, result.Status)
+		return
+	}
+	if *billingDeletionMetered != "" {
+		if dbErr != nil || store == nil || *stripeSecretKey == "" {
+			log.Fatal("billing deletion metered reconciliation: database or Stripe unavailable")
+		}
+		if err := account.ResolveBillingDeletionMetered(context.Background(), store, account.NewStripeClient(*stripeSecretKey, *stripeWebhookSecret, *stripePortalConfig), *billingDeletionMetered, *billingDeletionResource, *billingDeletionActor, *billingDeletionReason); err != nil {
+			log.Fatalf("billing deletion metered reconciliation: %v", err)
+		}
+		log.Printf("billing deletion metered reconciliation: outbox=%s resource=%s status=succeeded", *billingDeletionMetered, *billingDeletionResource)
 		return
 	}
 	var readyBlobs *storage.DiskStore
