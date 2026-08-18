@@ -39,7 +39,7 @@
 #
 #   source "$(dirname "${BASH_SOURCE[0]}")/lib/local-acceptance.sh"
 #   acceptance_begin                 # run root, traps, registries
-#   acceptance_build "$server_dir" "$package_dir"
+#   acceptance_build "$server_dir" "$package_dir"   # RELAYIUM_ACCEPTANCE_SWIFT_SCRATCH
 #   acceptance_start_server          # $origin, and the loopback assertions
 #   acceptance_create_account        # $account_token, for a run that mints
 #   start_peer <label> <role> [args] # sets $peer_port and $peer_pid
@@ -65,6 +65,10 @@ declare -a peer_pids=()
 # Extra environment for the NEXT `start_peer` only, reset after every use so a
 # bearer token cannot leak into a peer that has no business holding one.
 declare -a peer_env=()
+
+# The `--scratch-path` arguments both `swift build` calls take, or empty for
+# SwiftPM's own in-package default. Set by `acceptance_set_swift_scratch`.
+declare -a swift_scratch=()
 
 say() { printf '%s\n' "$*" >&2; }
 
@@ -302,6 +306,39 @@ acceptance_begin() {
   trap 'on_signal HUP' HUP
 }
 
+# The `swift build` arguments that decide where SwiftPM writes, in ONE place.
+#
+# Unset `RELAYIUM_ACCEPTANCE_SWIFT_SCRATCH` is the shipped default and answers
+# with nothing at all, so SwiftPM keeps its own `.build/` inside the package and
+# no existing caller changes behavior. Set, it moves the build directory —
+# object files, module caches and the peer binary — to a path outside the
+# repository, which is what a run in a throwaway worktree needs: SwiftPM's
+# default would otherwise leave hundreds of megabytes inside a tree that is
+# about to be deleted, or rebuild from scratch for every worktree that shares
+# one checkout's sources.
+#
+# The value is resolved to an ABSOLUTE path here, because both `swift build`
+# calls run inside `( cd "$package_dir" && … )` and a relative `--scratch-path`
+# would silently land inside the package — the one place the variable exists to
+# avoid. The directory is created first so the resolution has something to
+# resolve, and a value that cannot be created fails the run rather than being
+# dropped: a scratch path that quietly reverted to the default is how a caller
+# ends up believing the repository stayed clean when it did not.
+#
+# Sets the global `swift_scratch` array, in THIS shell rather than a subshell or
+# a `$(…)` capture, so that a refusal below is `fail` ending the run. A resolver
+# that ran behind a pipe or a process substitution could only end its own
+# subshell, and the caller would carry on with an empty array — which is exactly
+# the silent fallback to the in-repository default this refuses to do.
+acceptance_set_swift_scratch() {
+  local raw="${RELAYIUM_ACCEPTANCE_SWIFT_SCRATCH:-}" resolved
+  swift_scratch=()
+  [ -n "$raw" ] || return 0
+  mkdir -p "$raw" || fail "RELAYIUM_ACCEPTANCE_SWIFT_SCRATCH is not creatable: $raw"
+  resolved="$(cd "$raw" && pwd)" || fail "RELAYIUM_ACCEPTANCE_SWIFT_SCRATCH is not usable: $raw"
+  swift_scratch=(--scratch-path "$resolved")
+}
+
 # acceptance_build <server source dir> <SwiftPM package dir>
 #
 # The server and the acceptance peer, built into the run root. Both directories
@@ -309,12 +346,17 @@ acceptance_begin() {
 # that read a variable a caller happened to name the same way is a library whose
 # contract is a convention, and the failure when the convention drifts is a build
 # of the wrong tree.
+#
+# Both `swift build` invocations take the SAME scratch arguments. They must: the
+# second one is what reports `--show-bin-path`, and a pair that disagreed would
+# answer with the path of a binary the first call never wrote there.
 acceptance_build() {
   local server_dir="$1" package_dir="$2"
+  acceptance_set_swift_scratch
   say "== building the local server and the acceptance peer =="
   ( cd "$server_dir" && go build -o "$run_root/relayium-server" . )
-  ( cd "$package_dir" && swift build --product LocalTransferPeer >/dev/null )
-  peer_binary="$(cd "$package_dir" && swift build --product LocalTransferPeer --show-bin-path)/LocalTransferPeer"
+  ( cd "$package_dir" && swift build ${swift_scratch+"${swift_scratch[@]}"} --product LocalTransferPeer >/dev/null )
+  peer_binary="$(cd "$package_dir" && swift build ${swift_scratch+"${swift_scratch[@]}"} --product LocalTransferPeer --show-bin-path)/LocalTransferPeer"
   [ -x "$peer_binary" ] || fail "the acceptance peer did not build"
 }
 
