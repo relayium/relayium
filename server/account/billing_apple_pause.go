@@ -36,12 +36,13 @@ import (
 //     none of them is a NEW purchase, and the gate is about new purchases.
 //   - the entitlement projection. Pausing sales does not cancel anybody.
 //
-// So the gate is read in exactly ONE place — handleAppleCatalog — and this file
-// is the only thing that reads or writes it. There is deliberately no
-// `Service.applePurchasesPaused()` sprinkled through the billing package: a
-// second reader is how "stop selling" turns into "stop honouring what was
-// sold". TestAppleGatePausedStillAppliesAValidTransaction is the regression
-// that fails if one is ever added to the intake path.
+// So the gate is read at exactly TWO new-purchase entry points:
+// handleAppleCatalog, which names what a client may offer, and
+// handleApplePurchaseDispatch, which grants the one permission that may precede
+// StoreKit. There is deliberately no check in transaction intake: adding one
+// there is how "stop selling" turns into "stop honouring what was sold".
+// TestAppleGatePausedStillAppliesAValidTransaction is the regression that fails
+// if the gate ever reaches that paid-fact path.
 //
 // WHY THE SETTINGS TABLE. It is the deployment's existing durable key/value
 // store: one row, written by a single UPSERT (atomic — there is no
@@ -56,14 +57,10 @@ import (
 // its own audit action, and merging it into that form would mean an unrelated
 // settings save could carry it along.
 
-// SettingApplePurchasesEnabled is the gate's row. 1 (or ABSENT) = purchases may
-// be offered; 0 = paused.
-//
-// Absent means enabled, and that is the load-bearing default: every deployment
-// that exists today has no such row, and a gate that failed closed on absence
-// would silently stop every App Store sale in the world the moment this code
-// shipped. It is also why the key is not seeded — a seeded row and an absent
-// row must mean the same thing, so there is nothing for seeding to add.
+// SettingApplePurchasesEnabled is the gate's row. Exact 1 means purchases may be
+// offered. Zero, absence and every other value mean paused. It is not seeded:
+// deploying code and explicitly opening a money-moving surface are separate
+// operations, so a fresh or partially migrated deployment fails closed.
 const SettingApplePurchasesEnabled = "apple_purchases_enabled"
 
 // applePurchaseGateTarget is the audit/confirmation-page target. One global
@@ -85,9 +82,9 @@ func (s *Service) applePurchasesEnabled(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	if !ok {
-		return true, nil
+		return false, nil
 	}
-	return v != 0, nil
+	return v == 1, nil
 }
 
 // applePurchaseGateImage is the confirmation-page / audit image of the gate,

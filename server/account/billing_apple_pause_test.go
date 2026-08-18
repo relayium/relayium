@@ -2,12 +2,23 @@ package account
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
 )
+
+type appleGateReadFailureStore struct{ Store }
+
+func (s appleGateReadFailureStore) GetSetting(ctx context.Context, key string) (int64, bool, error) {
+	if key == SettingApplePurchasesEnabled {
+		return 0, false, errors.New("gate read failed")
+	}
+	return s.Store.GetSetting(ctx, key)
+}
 
 // The global App Store new-purchase gate.
 //
@@ -53,15 +64,21 @@ func applePurchaseGateAudit(t *testing.T, store *SQLiteStore) []AuditEntry {
 	return entries
 }
 
-// ---- the default ------------------------------------------------------------
+// ---- the fail-closed default ------------------------------------------------
 
-// **A deployment that has never touched this row is SELLING.**
-//
-// Absent must mean enabled, and this is the assertion that pins it: every
-// deployment in the world has no such row today, and a gate that read absence
-// as "closed" would stop every App Store sale everywhere the moment it shipped.
-func TestAppleGateDefaultsToEnabledOnAFreshDeployment(t *testing.T) {
+func removeApplePurchaseGate(t *testing.T, store *SQLiteStore) {
+	t.Helper()
+	if _, err := store.db.ExecContext(context.Background(),
+		`DELETE FROM settings WHERE key=?`, SettingApplePurchasesEnabled); err != nil {
+		t.Fatalf("remove Apple purchase gate: %v", err)
+	}
+}
+
+// A deployment that has never enabled sales explicitly must describe no new
+// purchase path. Missing configuration is a pause, not an implicit launch.
+func TestAppleGateDefaultsToPausedOnAFreshDeployment(t *testing.T) {
 	f := newAppleCatalogFixture(t)
+	removeApplePurchaseGate(t, f.store)
 	if _, ok, err := f.store.GetSetting(context.Background(), SettingApplePurchasesEnabled); err != nil || ok {
 		t.Fatalf("a fresh store already carries the gate row: ok=%v err=%v", ok, err)
 	}
@@ -69,32 +86,91 @@ func TestAppleGateDefaultsToEnabledOnAFreshDeployment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("applePurchasesEnabled: %v", err)
 	}
-	if !enabled {
-		t.Fatal("SECURITY/REVENUE: a deployment with no gate row reads as paused")
+	if enabled {
+		t.Fatal("SECURITY: a deployment with no gate row opened Apple purchases")
 	}
 }
 
-// And the default reaches the wire: an untouched deployment describes its
-// products and says the gate is open, so a client can tell "open" from "this
-// server has no gate at all" without a version negotiation.
-func TestAppleGateDefaultAnswersEnabledWithTheProducts(t *testing.T) {
+func TestAppleGateOnlyExactOneEnablesPurchases(t *testing.T) {
 	f := newAppleCatalogFixture(t)
-	mustAppleProduct(t, f.store, AppleProduct{
+	for _, value := range []int64{-1, 0, 2} {
+		if err := f.store.SetSetting(t.Context(), SettingApplePurchasesEnabled, value, 2); err != nil {
+			t.Fatalf("SetSetting(%d): %v", value, err)
+		}
+		enabled, err := f.svc.applePurchasesEnabled(t.Context())
+		if err != nil {
+			t.Fatalf("applePurchasesEnabled(%d): %v", value, err)
+		}
+		if enabled {
+			t.Errorf("noncanonical gate value %d enabled purchases", value)
+		}
+	}
+	if err := f.store.SetSetting(t.Context(), SettingApplePurchasesEnabled, 1, 3); err != nil {
+		t.Fatalf("SetSetting(1): %v", err)
+	}
+	if enabled, err := f.svc.applePurchasesEnabled(t.Context()); err != nil || !enabled {
+		t.Fatalf("exact 1 did not enable purchases: enabled=%v err=%v", enabled, err)
+	}
+}
+
+func TestAppleGateReadFailureNeverReturnsEnabled(t *testing.T) {
+	f := newAppleCatalogFixture(t)
+	svc := NewService(appleGateReadFailureStore{Store: f.store}, &capturingMailer{}, Config{
+		BaseURL: "http://example.test",
+	})
+	enabled, err := svc.applePurchasesEnabled(t.Context())
+	if err == nil {
+		t.Fatal("gate read failure was hidden")
+	}
+	if enabled {
+		t.Fatal("SECURITY: gate read failure returned enabled")
+	}
+}
+
+// The fail-closed default reaches both new-purchase entry points. Catalog names
+// no products, and dispatch returns before durable authority, attempt or token
+// state can be created (and therefore before a client may call StoreKit).
+func TestAppleGateAbsentClosesCatalogAndDispatchWithoutSideEffects(t *testing.T) {
+	f := newAppleCatalogFixture(t)
+	product := AppleProduct{
 		BundleID: testBundleMac, ProductID: "com.relayium.mac.pro.monthly",
 		PlanID: "pro", Cycle: "monthly", Active: true,
-	})
+	}
+	mustAppleProduct(t, f.store, product)
+	removeApplePurchaseGate(t, f.store)
 
 	resp := f.get(t, macQuery)
-	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("want 200, got %d", resp.StatusCode)
 	}
 	body := f.decode(t, resp)
-	if !body.Purchases.Enabled || body.Purchases.Reason != "" {
-		t.Fatalf("default gate = %+v, want enabled with no reason", body.Purchases)
+	resp.Body.Close()
+	if body.Purchases.Enabled || body.Purchases.Reason != "paused" {
+		t.Fatalf("absent gate = %+v, want paused", body.Purchases)
 	}
-	if len(body.Products) != 1 {
-		t.Fatalf("want the mapped product described, got %d", len(body.Products))
+	if len(body.Products) != 0 {
+		t.Fatalf("absent gate described %d products", len(body.Products))
+	}
+
+	dispatch := postApplePurchaseDispatch(t, f, testBundleMac, product.ProductID)
+	var dispatchBody map[string]string
+	_ = json.NewDecoder(dispatch.Body).Decode(&dispatchBody)
+	dispatch.Body.Close()
+	if dispatch.StatusCode != http.StatusConflict || dispatchBody["error"] != "purchases_paused" {
+		t.Fatalf("absent dispatch: status=%d body=%v", dispatch.StatusCode, dispatchBody)
+	}
+	if authority, ok, err := f.store.BillingAuthority(t.Context(), f.userID); err != nil || ok {
+		t.Fatalf("absent gate created authority=%+v ok=%v err=%v", authority, ok, err)
+	}
+	var attempts int
+	if err := f.store.db.QueryRowContext(t.Context(),
+		`SELECT COUNT(*) FROM billing_purchase_attempts WHERE user_id=?`, f.userID).Scan(&attempts); err != nil || attempts != 0 {
+		t.Fatalf("absent gate created attempts=%d err=%v", attempts, err)
+	}
+	var token string
+	if err := f.store.db.QueryRowContext(t.Context(),
+		`SELECT apple_account_token FROM users WHERE id=?`, f.userID).Scan(&token); err != nil || token != "" {
+		t.Fatalf("absent gate wrote user token=%q err=%v", token, err)
 	}
 }
 
@@ -291,6 +367,7 @@ func TestAppleGateCannotReenableTheRetiredAccountTokenEndpoint(t *testing.T) {
 func TestApplePurchaseGatePostDoesNotWriteBeforeConfirmation(t *testing.T) {
 	ts, _, store, _ := newAppleCatalogServer(t)
 	seedAppleTiers(t, store)
+	pauseApplePurchases(t, store, true)
 	cookie := adminLoginCookie(t, ts)
 
 	resp := postAdminForm(t, ts, cookie, "/admin/apple-purchases", applePurchaseGateForm(false))
@@ -302,8 +379,8 @@ func TestApplePurchaseGatePostDoesNotWriteBeforeConfirmation(t *testing.T) {
 	if !strings.Contains(body, "confirm_token") {
 		t.Fatal("the confirmation page carries no pending-action token")
 	}
-	if _, ok, _ := store.GetSetting(context.Background(), SettingApplePurchasesEnabled); ok {
-		t.Fatal("SECURITY: the gate was written without confirmation")
+	if value, ok, err := store.GetSetting(context.Background(), SettingApplePurchasesEnabled); err != nil || !ok || value != 1 {
+		t.Fatalf("SECURITY: unconfirmed pause changed the gate: value=%d ok=%v err=%v", value, ok, err)
 	}
 	// And the page must state what it is about to do — the action, the one
 	// thing it touches, and the exact before → after transition, as one diff
@@ -324,6 +401,7 @@ func TestApplePurchaseGatePostDoesNotWriteBeforeConfirmation(t *testing.T) {
 func TestApplePurchaseGateConfirmedPauseAppliesAndAudits(t *testing.T) {
 	ts, svc, store, _ := newAppleCatalogServer(t)
 	seedAppleTiers(t, store)
+	pauseApplePurchases(t, store, true)
 	cookie := adminLoginCookie(t, ts)
 
 	resp := confirmAction(t, ts, cookie, "/admin/apple-purchases", applePurchaseGateForm(false))
@@ -394,6 +472,7 @@ func TestApplePurchaseGateResumeIsAlsoConfirmedAndAudited(t *testing.T) {
 func TestApplePurchaseGateSurvivesARestart(t *testing.T) {
 	ts, _, store, _ := newAppleCatalogServer(t)
 	seedAppleTiers(t, store)
+	pauseApplePurchases(t, store, true)
 	cookie := adminLoginCookie(t, ts)
 
 	resp := confirmAction(t, ts, cookie, "/admin/apple-purchases", applePurchaseGateForm(false))
@@ -499,6 +578,7 @@ func TestApplePurchaseGateRejectsCrossOriginPost(t *testing.T) {
 func TestApplePurchaseGatePanelOffersTheOppositeOfTheLiveState(t *testing.T) {
 	ts, _, store, _ := newAppleCatalogServer(t)
 	seedAppleTiers(t, store)
+	pauseApplePurchases(t, store, true)
 	cookie := adminLoginCookie(t, ts)
 
 	open := getAdminHome(t, ts, cookie)

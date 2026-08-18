@@ -31,6 +31,9 @@ func newAppleCatalogFixture(t *testing.T) *appleCatalogFixture {
 	t.Helper()
 	ts, svc, store, mail := newBillingServer(t)
 	seedTiers(t, store)
+	if err := store.SetSetting(context.Background(), SettingApplePurchasesEnabled, 1, 1); err != nil {
+		t.Fatalf("enable Apple purchase fixture: %v", err)
+	}
 	svc.SetAppleTransactionVerifier(testVerifier(t, newAppleTestChain(t)))
 	email := "apple-catalog@example.com"
 	cookie := loginCookie(t, ts, mail, email)
