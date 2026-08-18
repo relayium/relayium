@@ -1052,11 +1052,12 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
  generation INTEGER NOT NULL DEFAULT 1,
  last_error TEXT NOT NULL DEFAULT '',
  next_attempt_at INTEGER NOT NULL DEFAULT 0)`,
-		`CREATE INDEX IF NOT EXISTS idx_billing_cancel_subject ON billing_cancellation_outbox(billing_subject_id,provider,generation)`,
-		`CREATE INDEX IF NOT EXISTS idx_billing_cancel_due ON billing_cancellation_outbox(state,next_attempt_at,updated_at)`,
 		`ALTER TABLE billing_cancellation_outbox ADD COLUMN progress_json TEXT NOT NULL DEFAULT '{}'`,
 		`ALTER TABLE billing_cancellation_outbox ADD COLUMN terminal_at INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE billing_cancellation_outbox ADD COLUMN archived_at INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE billing_cancellation_outbox ADD COLUMN generation INTEGER NOT NULL DEFAULT 1`,
+		`ALTER TABLE billing_cancellation_outbox ADD COLUMN last_error TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE billing_cancellation_outbox ADD COLUMN next_attempt_at INTEGER NOT NULL DEFAULT 0`,
 		`CREATE TABLE IF NOT EXISTS stripe_customer_history (
  user_id TEXT NOT NULL,
  customer_id TEXT NOT NULL,
@@ -1223,6 +1224,10 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 			db.Close()
 			return nil, err
 		}
+	}
+	if err := migrateBillingCancellationOutboxGenerations(db); err != nil {
+		db.Close()
+		return nil, err
 	}
 	if err := backfillBillingAuthorities(context.Background(), db, time.Now().Unix()); err != nil {
 		db.Close()
@@ -1659,6 +1664,55 @@ func migrateEmailVerified(db *sql.DB) error {
 			return err
 		}
 		_, err = tx.ExecContext(context.Background(), `UPDATE users SET email_verified = 1`)
+		return err
+	})
+}
+
+// migrateBillingCancellationOutboxGenerations removes the legacy
+// UNIQUE(billing_subject_id,provider) table constraint. CREATE TABLE IF NOT
+// EXISTS cannot alter an existing table, so a real transactional rebuild is
+// required before a recovered account can create a second deletion generation.
+// The idempotent ALTERs in OpenSQLite run first, making the copy shape identical
+// for legacy and fresh databases.
+func migrateBillingCancellationOutboxGenerations(db *sql.DB) error {
+	return migrateOnce(db, "billing_cancellation_outbox_generations_v2", func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(context.Background(), `
+CREATE TABLE billing_cancellation_outbox_v2 (
+ id TEXT PRIMARY KEY,
+ billing_subject_id TEXT NOT NULL,
+ provider TEXT NOT NULL CHECK(provider='stripe'),
+ customer_id TEXT NOT NULL DEFAULT '',
+ subscription_id TEXT NOT NULL DEFAULT '',
+ idempotency_key TEXT NOT NULL UNIQUE,
+ state TEXT NOT NULL CHECK(state IN ('pending','terminal')),
+ attempts INTEGER NOT NULL DEFAULT 0,
+ created_at INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL,
+ generation INTEGER NOT NULL DEFAULT 1,
+ last_error TEXT NOT NULL DEFAULT '',
+ next_attempt_at INTEGER NOT NULL DEFAULT 0,
+ progress_json TEXT NOT NULL DEFAULT '{}',
+ terminal_at INTEGER NOT NULL DEFAULT 0,
+ archived_at INTEGER NOT NULL DEFAULT 0)`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(context.Background(), `
+INSERT INTO billing_cancellation_outbox_v2
+ (id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at,generation,last_error,next_attempt_at,progress_json,terminal_at,archived_at)
+ SELECT id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at,generation,last_error,next_attempt_at,progress_json,terminal_at,archived_at
+ FROM billing_cancellation_outbox`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(context.Background(), `DROP TABLE billing_cancellation_outbox`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(context.Background(), `ALTER TABLE billing_cancellation_outbox_v2 RENAME TO billing_cancellation_outbox`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(context.Background(), `CREATE INDEX idx_billing_cancel_subject ON billing_cancellation_outbox(billing_subject_id,provider,generation)`); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(context.Background(), `CREATE INDEX idx_billing_cancel_due ON billing_cancellation_outbox(state,next_attempt_at,updated_at)`)
 		return err
 	})
 }

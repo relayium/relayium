@@ -178,3 +178,78 @@ func TestStripeDeletionDiscoveryNeverShrinksTheResourceJournal(t *testing.T) {
 		t.Fatal("empty provider listing erased an observed async checkout")
 	}
 }
+
+func TestStripeDeletionExpiresAttributedCheckoutBeforeCustomerExists(t *testing.T) {
+	var expired int
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method + " " + r.URL.Path {
+		case "GET /v1/customers/search":
+			io.WriteString(w, `{"data":[],"has_more":false}`)
+		case "GET /v1/checkout/sessions/cs_empty":
+			io.WriteString(w, `{"id":"cs_empty","status":"open","payment_status":"unpaid","client_reference_id":"subject","metadata":{"billing_attempt_id":"attempt_1","user_id":"subject"}}`)
+		case "POST /v1/checkout/sessions/cs_empty/expire":
+			expired++
+			io.WriteString(w, `{}`)
+		default:
+			http.Error(w, "unexpected", http.StatusBadRequest)
+		}
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+	c.base, c.http = ts.URL, ts.Client()
+	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{"checkout_session:cs_empty": {Kind: "checkout_session", ID: "cs_empty", AttemptID: "attempt_1", Status: "observed"}}}
+	p, err := c.DiscoverDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject"}, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", IdempotencyKey: "delete"}, p); err != nil {
+		t.Fatal(err)
+	}
+	if expired != 1 {
+		t.Fatalf("expire calls=%d", expired)
+	}
+}
+
+func TestStripeDeletionCompleteCheckoutBindsCustomerAndLinkedHazards(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"cs_race","status":"complete","payment_status":"unpaid","customer":"cus_new","subscription":"sub_new","payment_intent":"pi_new","client_reference_id":"subject","metadata":{"billing_attempt_id":"attempt_1","user_id":"subject"}}`)
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+	c.base, c.http = ts.URL, ts.Client()
+	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{"checkout_session:cs_race": {Kind: "checkout_session", ID: "cs_race", AttemptID: "attempt_1", Status: "observed"}}}
+	got, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", IdempotencyKey: "delete"}, p)
+	if err == nil {
+		t.Fatal("complete unpaid race incorrectly reached terminal")
+	}
+	if len(got.Customers) != 1 || got.Customers[0] != "cus_new" {
+		t.Fatalf("customers=%v", got.Customers)
+	}
+	if got.Resources["subscription:sub_new"].CustomerID != "cus_new" || got.Resources["payment_intent:pi_new"].CustomerID != "cus_new" {
+		t.Fatalf("linked hazards not durably attributed: %+v", got.Resources)
+	}
+}
+
+func TestStripeDeletionRejectsForgedCheckoutAttribution(t *testing.T) {
+	var mutation bool
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			mutation = true
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"cs_forged","status":"open","client_reference_id":"other","metadata":{"billing_attempt_id":"attempt_1","user_id":"other"}}`)
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+	c.base, c.http = ts.URL, ts.Client()
+	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{"checkout_session:cs_forged": {Kind: "checkout_session", ID: "cs_forged", AttemptID: "attempt_1"}}}
+	got, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", IdempotencyKey: "delete"}, p)
+	if err == nil || !got.Resources["checkout_session:cs_forged"].Manual {
+		t.Fatalf("forged checkout accepted: err=%v progress=%+v", err, got)
+	}
+	if mutation {
+		t.Fatal("forged checkout triggered provider mutation")
+	}
+}

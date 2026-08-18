@@ -206,6 +206,9 @@ func TestCreateCheckoutSessionRequestShape(t *testing.T) {
 		if got := r.Form.Get("metadata[billing_attempt_id]"); got != "attempt_42" {
 			t.Errorf("metadata[billing_attempt_id] = %q, want attempt_42", got)
 		}
+		if got := r.Form.Get("metadata[user_id]"); got != "user_42" {
+			t.Errorf("metadata[user_id] = %q, want user_42", got)
+		}
 		if got := r.Form.Get("subscription_data[metadata][billing_attempt_id]"); got != "attempt_42" {
 			t.Errorf("subscription_data metadata attempt = %q, want attempt_42", got)
 		}

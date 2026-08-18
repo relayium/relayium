@@ -425,6 +425,7 @@ func (c *stripeClient) CreateCheckoutSession(ctx context.Context, in CheckoutInp
 	form.Set("cancel_url", in.CancelURL)
 	form.Set("client_reference_id", in.ClientRefUserID)
 	form.Set("metadata[billing_attempt_id]", in.BillingAttemptID)
+	form.Set("metadata[user_id]", in.ClientRefUserID)
 	form.Set("subscription_data[metadata][user_id]", in.ClientRefUserID)
 	form.Set("subscription_data[metadata][billing_attempt_id]", in.BillingAttemptID)
 	if in.CustomerID != "" {
@@ -590,7 +591,19 @@ func (c *stripeClient) DiscoverDeletionHazards(ctx context.Context, row BillingC
 		q.Set("page", customers.NextPage)
 	}
 	if len(p.Customers) == 0 {
-		return p, errors.New("stripe: no canonical customer identity for deletion")
+		// A first Checkout can be durably attributed before Stripe creates its
+		// Customer. Its exact session is safe to reconcile only when the GET
+		// response proves the locally journaled attempt and billing subject.
+		hasAttributedSession := false
+		for _, r := range p.Resources {
+			if r.Kind == "checkout_session" && r.AttemptID != "" && !r.Terminal {
+				hasAttributedSession = true
+				break
+			}
+		}
+		if !hasAttributedSession {
+			return p, errors.New("stripe: no canonical customer identity for deletion")
+		}
 	}
 	for _, customerID := range p.Customers {
 		base := url.Values{"customer": {customerID}}
@@ -669,13 +682,18 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			return p, err
 		}
 		var obj struct {
-			ID            string `json:"id"`
-			Status        string `json:"status"`
-			Customer      string `json:"customer"`
-			PaymentStatus string `json:"payment_status"`
-			Subscription  string `json:"subscription"`
-			PaymentIntent string `json:"payment_intent"`
-			Items         struct {
+			ID                string `json:"id"`
+			Status            string `json:"status"`
+			Customer          string `json:"customer"`
+			PaymentStatus     string `json:"payment_status"`
+			Subscription      string `json:"subscription"`
+			PaymentIntent     string `json:"payment_intent"`
+			ClientReferenceID string `json:"client_reference_id"`
+			Metadata          struct {
+				BillingAttemptID string `json:"billing_attempt_id"`
+				UserID           string `json:"user_id"`
+			} `json:"metadata"`
+			Items struct {
 				Data []struct {
 					Price struct {
 						Recurring *struct {
@@ -687,6 +705,18 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 		}
 		if err := json.Unmarshal(body, &obj); err != nil {
 			return p, err
+		}
+		if r.Kind == "checkout_session" && r.AttemptID != "" {
+			if obj.ClientReferenceID != row.BillingSubjectID || obj.Metadata.UserID != row.BillingSubjectID || obj.Metadata.BillingAttemptID != r.AttemptID {
+				r.Manual = true
+				r.Status = "attempt_attribution_mismatch"
+				p.Resources[resourceKey] = r
+				return p, errors.New("stripe: checkout deletion attribution mismatch")
+			}
+			if obj.Customer != "" {
+				p.Customers = appendUnique(p.Customers, obj.Customer)
+				r.CustomerID = obj.Customer
+			}
 		}
 		if obj.Customer != "" && !allowed(obj.Customer) {
 			r.Manual = true
@@ -702,10 +732,10 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				break
 			}
 			if obj.Subscription != "" {
-				p.add(BillingDeletionResource{Kind: "subscription", ID: obj.Subscription, CustomerID: r.CustomerID, Status: "session_link"})
+				p.add(BillingDeletionResource{Kind: "subscription", ID: obj.Subscription, CustomerID: obj.Customer, Status: "session_link"})
 			}
 			if obj.PaymentIntent != "" {
-				p.add(BillingDeletionResource{Kind: "payment_intent", ID: obj.PaymentIntent, CustomerID: r.CustomerID, Status: "session_link"})
+				p.add(BillingDeletionResource{Kind: "payment_intent", ID: obj.PaymentIntent, CustomerID: obj.Customer, Status: "session_link"})
 			}
 			if obj.PaymentStatus == "paid" {
 				r.Manual = true

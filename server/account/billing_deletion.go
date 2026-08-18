@@ -23,6 +23,7 @@ type BillingCancellation struct {
 type BillingDeletionResource struct {
 	Kind       string `json:"kind"`
 	ID         string `json:"id"`
+	AttemptID  string `json:"attemptId,omitempty"`
 	CustomerID string `json:"customerId,omitempty"`
 	Status     string `json:"status"`
 	Terminal   bool   `json:"terminal"`
@@ -39,8 +40,19 @@ func (p *BillingDeletionProgress) add(r BillingDeletionResource) {
 		p.Resources = map[string]BillingDeletionResource{}
 	}
 	key := r.Kind + ":" + r.ID
-	if old, ok := p.Resources[key]; ok && old.Terminal {
-		return
+	if old, ok := p.Resources[key]; ok {
+		// Terminal and manual states are monotonic. A later provider list may
+		// rediscover the same ID, but it must not erase canonical completion or
+		// an audit-required payment outcome.
+		if old.Terminal || old.Manual {
+			return
+		}
+		if r.AttemptID == "" {
+			r.AttemptID = old.AttemptID
+		}
+		if r.CustomerID == "" {
+			r.CustomerID = old.CustomerID
+		}
 	}
 	if _, ok := p.Resources[key]; !ok || !r.Terminal {
 		p.CleanSince = 0
@@ -251,17 +263,17 @@ func (s *SQLiteStore) CommitAccountDeletion(ctx context.Context, tokenHash strin
 			return nil, false, err
 		}
 		progress.Customers = appendUnique(progress.Customers, u.StripeCustomerID)
-		attempts, err := tx.QueryContext(ctx, `SELECT provider_session_id FROM billing_purchase_attempts WHERE user_id=? AND provider='stripe' AND provider_session_id<>''`, u.ID)
+		attempts, err := tx.QueryContext(ctx, `SELECT id,provider_session_id FROM billing_purchase_attempts WHERE user_id=? AND provider='stripe' AND provider_session_id<>''`, u.ID)
 		if err != nil {
 			return nil, false, err
 		}
 		for attempts.Next() {
-			var sid string
-			if err := attempts.Scan(&sid); err != nil {
+			var attemptID, sid string
+			if err := attempts.Scan(&attemptID, &sid); err != nil {
 				attempts.Close()
 				return nil, false, err
 			}
-			progress.add(BillingDeletionResource{Kind: "checkout_session", ID: sid, CustomerID: u.StripeCustomerID, Status: "observed"})
+			progress.add(BillingDeletionResource{Kind: "checkout_session", ID: sid, AttemptID: attemptID, CustomerID: u.StripeCustomerID, Status: "observed"})
 		}
 		if err := attempts.Close(); err != nil {
 			return nil, false, err
