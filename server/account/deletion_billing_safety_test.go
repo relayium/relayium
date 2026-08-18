@@ -24,6 +24,7 @@ type deletionStripeBiller struct {
 	didReconcile          bool
 	hazards               BillingDeletionProgress
 	observedProgress      bool
+	preserveQuietWindow   bool
 }
 
 func TestBillingDeletionProgressDecoderFailsClosedAndMigratesLegacyArrays(t *testing.T) {
@@ -188,24 +189,60 @@ func (b *deletionStripeBiller) DiscoverDeletionHazards(ctx context.Context, row 
 
 func TestExactCompensationWorkerNeverRunsCustomerDiscovery(t *testing.T) {
 	store := newTestStore(t)
+	seedTiers(t, store)
+	u := newEntitlementUser(t, store, "exact-worker-current@example.test")
+	apply(t, store, u.ID, ProviderStripe, "pro", "active", "yearly", fixedNow+86400, 200)
+	if _, err := store.db.Exec(`UPDATE subscription_sources SET external_id='sub_current' WHERE user_id=? AND provider='stripe'`, u.ID); err != nil {
+		t.Fatal(err)
+	}
 	svc := NewService(store, &capturingMailer{}, Config{BaseURL: "https://relayium.example"})
-	b := &deletionStripeBiller{fakeBiller: &fakeBiller{}, terminal: true, store: store}
+	b := &deletionStripeBiller{fakeBiller: &fakeBiller{}, terminal: true, store: store, preserveQuietWindow: true}
 	svc.biller = b
 	now := time.Now().Unix()
+	svc.now = func() time.Time { return time.Unix(now, 0) }
 	p := BillingDeletionProgress{Customers: []string{"cus_old"}, Resources: map[string]BillingDeletionResource{
 		"payment_intent:pi_old": {Kind: "payment_intent", ID: "pi_old", PaymentIntentID: "pi_old", Status: "refunded"},
 	}}
 	raw, _ := json.Marshal(p)
-	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,idempotency_key,state,created_at,updated_at,generation,progress_json,next_attempt_at,mode,deletion_epoch,cutoff_at) VALUES('exact-worker','subject','stripe','cus_old','exact-worker-key','pending',?,?,2,?,0,'exact_compensation','old-epoch',100)`, now, now, string(raw)); err != nil {
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,idempotency_key,state,created_at,updated_at,generation,progress_json,next_attempt_at,mode,deletion_epoch,cutoff_at,captured_source_id,captured_source_event_at) VALUES('exact-worker',?,'stripe','cus_old','exact-worker-key','pending',?,?,2,?,0,'exact_compensation','old-epoch',100,'sub_old',100)`, u.ID, now, now, string(raw)); err != nil {
 		t.Fatal(err)
 	}
 	svc.ReconcileBillingCancellations(context.Background())
 	if b.discoverCalls != 0 || b.cancelCalls != 1 {
 		t.Fatalf("exact worker discover=%d reconcile=%d", b.discoverCalls, b.cancelCalls)
 	}
-	var mode string
-	if err := store.db.QueryRow(`SELECT mode FROM billing_cancellation_outbox WHERE id='exact-worker'`).Scan(&mode); err != nil || mode != billingCancellationExactCompensation {
-		t.Fatalf("exact worker mode=%s err=%v", mode, err)
+	var state, progress string
+	if err := store.db.QueryRow(`SELECT state,progress_json FROM billing_cancellation_outbox WHERE id='exact-worker'`).Scan(&state, &progress); err != nil || state != "pending" {
+		t.Fatalf("first exact pass state=%s err=%v", state, err)
+	}
+	if p := decodeDeletionProgress(progress); p.CleanSince != now {
+		t.Fatalf("first exact pass cleanSince=%d want=%d", p.CleanSince, now)
+	}
+	quiet := decodeDeletionProgress(progress)
+	quiet.CleanSince = now - 86401
+	quietRaw, _ := json.Marshal(quiet)
+	if _, err := store.db.Exec(`UPDATE billing_cancellation_outbox SET progress_json=?,next_attempt_at=0,claim_until=0 WHERE id='exact-worker'`, string(quietRaw)); err != nil {
+		t.Fatal(err)
+	}
+	var nextAttempt, claimUntil int64
+	var claimToken string
+	if err := store.db.QueryRow(`SELECT next_attempt_at,claim_until,claim_token FROM billing_cancellation_outbox WHERE id='exact-worker'`).Scan(&nextAttempt, &claimUntil, &claimToken); err != nil || nextAttempt != 0 || claimUntil != 0 || claimToken != "" {
+		t.Fatalf("exact retry not due: next=%d claimUntil=%d token=%q err=%v", nextAttempt, claimUntil, claimToken, err)
+	}
+	svc.ReconcileBillingCancellations(context.Background())
+	if b.discoverCalls != 0 || b.cancelCalls != 2 {
+		t.Fatalf("second exact pass discover=%d reconcile=%d", b.discoverCalls, b.cancelCalls)
+	}
+	if err := store.db.QueryRow(`SELECT state FROM billing_cancellation_outbox WHERE id='exact-worker'`).Scan(&state); err != nil || state != "terminal" {
+		t.Fatalf("second exact pass state=%s err=%v", state, err)
+	}
+	got := mustUser(t, store, u.ID)
+	if got.PlanID != "pro" || got.PlanSource != ProviderStripe {
+		t.Fatalf("exact worker changed current entitlement: plan=%s source=%s", got.PlanID, got.PlanSource)
+	}
+	var externalID string
+	if err := store.db.QueryRow(`SELECT external_id FROM subscription_sources WHERE user_id=? AND provider='stripe'`, u.ID).Scan(&externalID); err != nil || externalID != "sub_current" {
+		t.Fatalf("exact worker changed current source: id=%s err=%v", externalID, err)
 	}
 }
 func (b *deletionStripeBiller) ReconcileDeletionHazards(ctx context.Context, _ BillingCancellation, p BillingDeletionProgress) (BillingDeletionProgress, error) {
@@ -225,7 +262,9 @@ func (b *deletionStripeBiller) ReconcileDeletionHazards(ctx context.Context, _ B
 			r.Status = "gone"
 			p.Resources[k] = r
 		}
-		p.CleanSince = time.Now().Unix() - 86401
+		if !b.preserveQuietWindow {
+			p.CleanSince = time.Now().Unix() - 86401
+		}
 	}
 	return p, b.cancelErr
 }

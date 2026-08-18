@@ -985,24 +985,28 @@ func (s *Service) ReconcileBillingCancellations(ctx context.Context) {
 			encoded, _ = json.Marshal(progress)
 		}
 		terminal := false
-		if discoverErr == nil && !exact {
-			progress, discoverErr = provider.DiscoverDeletionHazards(ctx, row, progress)
+		if discoverErr == nil {
+			if !exact {
+				progress, discoverErr = provider.DiscoverDeletionHazards(ctx, row, progress)
+			}
 			encoded, _ = json.Marshal(progress)
-			allTerminal := progress.hasIdentity()
-			for _, r := range progress.Resources {
-				if !r.Terminal {
-					allTerminal = false
-					break
+			if discoverErr == nil {
+				allTerminal := progress.hasIdentity()
+				for _, r := range progress.Resources {
+					if !r.Terminal {
+						allTerminal = false
+						break
+					}
 				}
+				if allTerminal && progress.CleanSince == 0 {
+					progress.CleanSince = s.now().Unix()
+					encoded, _ = json.Marshal(progress)
+				} else if !allTerminal {
+					progress.CleanSince = 0
+					encoded, _ = json.Marshal(progress)
+				}
+				terminal = progress.terminal(s.now().Unix())
 			}
-			if allTerminal && progress.CleanSince == 0 {
-				progress.CleanSince = s.now().Unix()
-				encoded, _ = json.Marshal(progress)
-			} else if !allTerminal {
-				progress.CleanSince = 0
-				encoded, _ = json.Marshal(progress)
-			}
-			terminal = progress.terminal(s.now().Unix())
 		}
 		lastError := ""
 		if discoverErr != nil {
