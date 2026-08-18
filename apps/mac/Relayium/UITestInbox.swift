@@ -120,9 +120,16 @@ enum UITestInbox {
               // journal entry is bookkeeping about a delivery and a message is
               // the delivery. A launch that shared one directory would let the
               // journal's prune reach a message record.
-              let messageRoot = launchDirectory("uitest-inbox-messages") else { return nil }
+              let messageRoot = launchDirectory("uitest-inbox-messages"),
+              // v3 makes the authenticated sender part of the durable receive
+              // commit. Keep that index launch-local too: without it every pass
+              // fails before heartbeat/pending/claim and a ready fixture looks
+              // like a broken receiver rather than exercising its intended state.
+              let conversationRoot = launchDirectory("uitest-inbox-conversations")
+        else { return nil }
         let journals = InboxJournalStore(directory: journalRoot)
         let messages = InboxMessageStore(directory: messageRoot)
+        let conversations = InboxConversationStore(directory: conversationRoot)
 
         // The attention fixture needs a grant that RESOLVES nowhere, which a real
         // bookmark cannot be made to do on demand — the seam the Phase 2A review
@@ -167,6 +174,7 @@ enum UITestInbox {
             // reads back what its own receiver wrote rather than an empty list
             // the product would never show.
             messageStore: { _ in messages },
+            conversationStore: { _ in conversations },
             // The PRODUCTION sleeper, with the intervals scaled down. The first
             // version of this fixture used a sleeper that returned immediately,
             // which turned the loop into a tight main-actor cycle: the app stayed
@@ -202,6 +210,8 @@ enum UITestInbox {
     /// binding is the one the rest of the app is signed in as.
     // nonlocalized: an acceptance fixture account id
     static let accountID = "acct_uitest"
+    // nonlocalized: the server-authenticated sender row for every fixture task
+    static let senderDeviceID = "dev_sender_uitest"
 
     enum Mode { case ready, attention, working, result, ask }
 
@@ -383,14 +393,17 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
     func pending(limit: Int) async throws -> [InboxTask] {
         if mode == .ask {
             return [
-                InboxTask(id: "task_ask_one", state: .attentionRequired,
+                InboxTask(id: "task_ask_one", sourceDeviceID: UITestInbox.senderDeviceID,
+                          state: .attentionRequired,
                           ciphertextBytes: 1_024, expiresAt: 4_102_444_800),
-                InboxTask(id: "task_ask_two", state: .attentionRequired,
+                InboxTask(id: "task_ask_two", sourceDeviceID: UITestInbox.senderDeviceID,
+                          state: .attentionRequired,
                           ciphertextBytes: 8_192, expiresAt: 4_102_444_800)
             ]
         }
         guard mode == .working || mode == .result, !sync({ delivered }) else { return [] }
-        return [InboxTask(id: Self.taskID, state: .queued)]
+        return [InboxTask(id: Self.taskID, sourceDeviceID: UITestInbox.senderDeviceID,
+                          state: .queued)]
     }
 
     func claim(max: Int) async throws -> (deliveries: [InboxDelivery], leaseSeconds: Int) {
@@ -423,7 +436,8 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
         let body = Data(encryptChunks(key: contentKey, files: files))
         sync { ciphertext = body }
 
-        let task = InboxTask(id: Self.taskID, storedFileID: "obj_uitest",  // nonlocalized: fixture id
+        let task = InboxTask(id: Self.taskID, sourceDeviceID: UITestInbox.senderDeviceID,
+                             storedFileID: "obj_uitest",  // nonlocalized: fixture id
                              state: .downloading, ciphertextBytes: Int64(body.count),
                              targetKeyID: "key_uitest")  // nonlocalized: fixture id
         let delivery = InboxDelivery(task: task,

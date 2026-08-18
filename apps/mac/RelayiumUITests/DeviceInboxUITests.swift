@@ -502,6 +502,13 @@ final class DeviceInboxUITests: XCTestCase {
         window.descendants(matching: .any)[identifier].firstMatch
     }
 
+    /// The EN entry action is deliberately the short verb used by v3 device
+    /// rows and the menu. The destination assertion after clicking is what
+    /// proves this otherwise-generic title is the Device Inbox route.
+    private func openDeviceInboxMenuItem() -> XCUIElement? {
+        app.menuItems.allElementsBoundByIndex.first { $0.title == "Open" }
+    }
+
     /// The whole text of a surface, for assertions about what is NOT on it. Built
     /// from labels and values because SwiftUI splits a `Form` across many
     /// elements and macOS 15 drops identifiers from some of them.
@@ -814,8 +821,7 @@ final class DeviceInboxUITests: XCTestCase {
         XCTAssertTrue(statusItem.waitForExistence(timeout: 10),
                       "the resident app has no menu-bar surface")
         statusItem.click()
-        let openInbox = app.menuItems.allElementsBoundByIndex
-            .first { $0.title.contains("Open Device Inbox") }
+        let openInbox = openDeviceInboxMenuItem()
         XCTAssertNotNil(openInbox, "the menu bar has no route to the Device Inbox")
         XCTAssertFalse(openInbox?.title.contains("settings") ?? true,
                        "the menu bar still promises a settings window")
@@ -1146,8 +1152,7 @@ final class DeviceInboxUITests: XCTestCase {
         XCTAssertTrue(statusItem.waitForExistence(timeout: 10),
                       "the resident app has no menu-bar surface")
         statusItem.click()
-        let openInbox = app.menuItems.allElementsBoundByIndex
-            .first { $0.title.contains("Open Device Inbox") }
+        let openInbox = openDeviceInboxMenuItem()
         XCTAssertNotNil(openInbox, "the menu bar has no route back to the Device Inbox")
         openInbox?.click()
 
@@ -1178,7 +1183,7 @@ final class DeviceInboxUITests: XCTestCase {
                        "the menu bar offers a folder grant")
         XCTAssertFalse(titles.contains { $0.contains("Receive automatically") },
                        "the menu bar offers the unattended-write consent")
-        XCTAssertTrue(titles.contains { $0.contains("Open Device Inbox") },
+        XCTAssertTrue(titles.contains("Open"),
                       "the menu bar has no route to where those decisions are made")
     }
 }
