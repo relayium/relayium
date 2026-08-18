@@ -394,6 +394,9 @@ func (b *deletionStripeBiller) ReconcileDeletionHazards(ctx context.Context, _ B
 			r.Status = "gone"
 			p.Resources[k] = r
 		}
+		// terminal=true models a provider pass that completed the mandatory
+		// no-cutoff historical inventory, not merely one successful cancellation.
+		p.HistoricalAuditRequired = false
 		if !b.preserveQuietWindow {
 			p.CleanSince = time.Now().Unix() - 86401
 		}
