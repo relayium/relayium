@@ -501,16 +501,16 @@ final class InboxControllerTests: XCTestCase {
         try queueDelivery(harness, account: accountA, taskID: "conversation-task")
         harness.controller.session(identity(accountA))
 
-        await waitUntil({ harness.controller.conversations.first?.deliveries.count == 1 },
+        await waitUntil({ harness.controller.conversations.first?.entries.count == 1 },
                         "conversation record was not published")
         let conversation = try XCTUnwrap(harness.controller.conversations.first)
-        XCTAssertEqual(conversation.senderDeviceID, "sender-device")
+        XCTAssertEqual(conversation.peerDeviceID, "sender-device")
         XCTAssertEqual(harness.controller.displayName(for: conversation), "Sender Mac")
         XCTAssertEqual(conversation.unreadCount, 1)
         XCTAssertEqual(harness.controller.activeAccountID, accountA.value)
 
         harness.controller.refreshConversations()
-        XCTAssertEqual(harness.controller.conversations.first?.deliveries.count, 1)
+        XCTAssertEqual(harness.controller.conversations.first?.entries.count, 1)
         XCTAssertEqual(harness.controller.conversations.first?.unreadCount, 1)
         harness.controller.markConversationRead("sender-device")
         XCTAssertEqual(harness.controller.conversations.first?.unreadCount, 0)

@@ -473,3 +473,153 @@ public enum InboxNotificationPresentation {
         }
     }
 }
+
+/// One conversation row, said in words.
+///
+/// **Direction and state are TEXT, and the symbol is decoration.** A chat app
+/// says "this one is mine" with alignment and a tint; neither survives VoiceOver,
+/// a monochrome screenshot, or a person who cannot tell the two tints apart. So
+/// every row here carries a sentence naming its direction and the other device,
+/// an outgoing row carries a second sentence naming what this Mac actually
+/// knows, and the SF Symbols beside them are hidden from assistive technology
+/// because the sentence already said it.
+///
+/// **`saved` is the only arrival any of this may claim.** It is reachable from
+/// one place — `InboxTimelineEntry.isSavedOnTarget`, which is `sentState ==
+/// .saved`, which `InboxSendModel.sentState(for:)` writes only from
+/// `InboxSendActivity.isSavedOnTarget`. Every other outgoing state below says
+/// something this Mac can prove, and "it left here" is never "it arrived".
+public enum InboxTimelinePresentation {
+
+    public static func heading(language: AppLanguage? = nil) -> String {
+        L10n.t(.inboxTimelineHeading, language: language)
+    }
+
+    public static func empty(language: AppLanguage? = nil) -> String {
+        L10n.t(.inboxTimelineEmpty, language: language)
+    }
+
+    /// "From MacBook" / "To iPhone" — the accessible name and the visible badge
+    /// at once, so there is one string to keep true instead of two.
+    public static func direction(of entry: InboxTimelineEntry, peerName: String,
+                                 language: AppLanguage? = nil) -> String {
+        L10n.t(entry.direction == .received ? .inboxTimelineReceivedFrom
+                                            : .inboxTimelineSentTo,
+               [peerName], language: language)
+    }
+
+    public static func directionSymbol(of entry: InboxTimelineEntry) -> String {
+        // nonlocalized: SF Symbol names, decorative and hidden from VoiceOver
+        entry.direction == .received ? "tray.and.arrow.down" : "paperplane"
+    }
+
+    /// What this Mac knows about an outgoing delivery, or nil for a received one
+    /// — a received entry is a delivery this Mac already committed, and has no
+    /// state left to report.
+    public static func state(of entry: InboxTimelineEntry,
+                             language: AppLanguage? = nil) -> String? {
+        guard let state = entry.sentState else { return nil }
+        return L10n.t(key(for: state), language: language)
+    }
+
+    public static func stateSymbol(of entry: InboxTimelineEntry) -> String? {
+        guard let state = entry.sentState else { return nil }
+        // nonlocalized: SF Symbol names, decorative and hidden from VoiceOver
+        switch state {
+        case .staged:  return "clock"
+        case .sending: return "arrow.up.circle"
+        case .created: return "paperplane.circle"
+        case .saved:   return "checkmark.circle.fill"
+        case .stopped: return "xmark.circle"
+        case .unknown: return "questionmark.circle"
+        }
+    }
+
+    static func key(for state: InboxTimelineEntry.SentState) -> L10nKey {
+        switch state {
+        case .staged:  return .inboxSentStateStaged
+        case .sending: return .inboxSentStateSending
+        case .created: return .inboxSentStateCreated
+        case .saved:   return .inboxSentStateSaved
+        case .stopped: return .inboxSentStateStopped
+        case .unknown: return .inboxSentStateUnknown
+        }
+    }
+
+    /// The files this row is about, by the safe identity each direction has.
+    ///
+    /// A received row renders the display name this Mac gave the file it wrote;
+    /// an outgoing row renders the sanitized manifest name, which is all a sent
+    /// entry is allowed to carry. Neither is a path, and neither direction can
+    /// reach the other's payload — the store's validator refuses a `sent` entry
+    /// holding a `FileReference` at all.
+    public static func fileNames(of entry: InboxTimelineEntry) -> String {
+        let names = entry.direction == .received
+            ? entry.files.map(\.displayName) : entry.sentFiles.map(\.name)
+        return names.joined(separator: " · ")
+    }
+
+    /// The local moment this row is anchored to. Never central's clock: that is
+    /// a different clock, and using it would move a row while it is being read.
+    public static func at(_ entry: InboxTimelineEntry,
+                          language: AppLanguage? = nil) -> String {
+        L10n.date(entry.at, dateStyle: .medium, timeStyle: .short, language: language)
+    }
+
+    /// The whole row as one spoken sentence: direction, what it was, and — for
+    /// an outgoing row — what is actually known about it.
+    public static func accessibilityLabel(of entry: InboxTimelineEntry, peerName: String,
+                                          language: AppLanguage? = nil) -> String {
+        var parts = [direction(of: entry, peerName: peerName, language: language)]
+        if entry.kind == .files {
+            parts.append(L10n.plural(.inboxSavedFiles, entry.fileCount, language: language))
+        }
+        if let state = state(of: entry, language: language) { parts.append(state) }
+        parts.append(at(entry, language: language))
+        return L10n.detail(parts, language: language)
+    }
+
+    /// The name of one row's command menu, so a column of identical `⋯` buttons
+    /// is not a column of controls named nothing.
+    public static func menuLabel(of entry: InboxTimelineEntry, peerName: String,
+                                 language: AppLanguage? = nil) -> String {
+        L10n.detail([L10n.t(.inboxEntryMenu, language: language),
+                     direction(of: entry, peerName: peerName, language: language)],
+                    language: language)
+    }
+
+    // MARK: - the destructive confirmations
+    //
+    // Every one of these names THIS MAC in the action itself rather than only in
+    // the explanation, because the action label is what a person reads last and
+    // what a screen reader announces at the moment of the deed. The bodies then
+    // state the two facts that make this not a recall: the other device keeps
+    // its copy, and files already written into the receive folder stay.
+
+    public static func entryDeleteTitle(language: AppLanguage? = nil) -> String {
+        L10n.t(.inboxEntryDeleteTitle, language: language)
+    }
+
+    /// The body, plus the extra sentence a delivery still in flight needs: it
+    /// keeps going. Deleting history cancels nothing — there is no central call,
+    /// no plan discarded, no staged byte removed and no idempotency key touched
+    /// anywhere behind this — so the confirmation says so rather than letting the
+    /// user infer a recall from the word Delete.
+    public static func entryDeleteBody(peerName: String, isRunning: Bool,
+                                       language: AppLanguage? = nil) -> String {
+        let body = L10n.t(.inboxEntryDeleteBody, [peerName], language: language)
+        guard isRunning else { return body }
+        return body + " " + L10n.t(.inboxEntryDeleteRunningBody, language: language)
+    }
+
+    public static func conversationDeleteTitle(count: Int,
+                                               language: AppLanguage? = nil) -> String {
+        L10n.t(.inboxConversationDeleteTitle,
+               [L10n.number(count, language: language)], language: language)
+    }
+
+    public static func conversationDeleteBody(peerName: String,
+                                              language: AppLanguage? = nil) -> String {
+        L10n.t(.inboxConversationDeleteBody, [peerName], language: language)
+    }
+}

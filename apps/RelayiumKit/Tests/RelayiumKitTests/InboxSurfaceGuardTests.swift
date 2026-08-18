@@ -146,10 +146,10 @@ final class InboxSurfaceGuardTests: XCTestCase {
         // this app's own picker — so no delivery here can have come from one.
         XCTAssertTrue(app.contains("drafts: nil, root: UITestMode.pendingUploadRoot()"),
                       "the macOS sender can retire a shared draft it never received")
-        XCTAssertFalse(try macSource("DeviceInbox/DeviceSendDetail.swift")
+        XCTAssertFalse(try macSource("DeviceInbox/DeviceConversationPage.swift")
             .contains("sourceDraftId: selection"),
                        "a macOS device send claims a draft it did not come from")
-        XCTAssertTrue(try macSource("DeviceInbox/DeviceSendDetail.swift")
+        XCTAssertTrue(try macSource("DeviceInbox/DeviceConversationPage.swift")
             .contains("sourceDraftId: nil"),
                       "a macOS device send must report the draft it came from: none")
         // Rendered by the Device Inbox surface, in the one branch where the
@@ -158,19 +158,19 @@ final class InboxSurfaceGuardTests: XCTestCase {
         let surface = try macSource("DeviceInbox/DeviceInboxSurface.swift")
         XCTAssertEqual(occurrences(of: "DeviceSendSection(", in: surface), 1,
                        "the device list is rendered zero or twice")
-        XCTAssertEqual(occurrences(of: "DeviceSendDetail(", in: surface), 1,
-                       "the device's own send screen is rendered zero or twice")
+        XCTAssertEqual(occurrences(of: "DeviceConversationPage(", in: surface), 1,
+                       "the device's own page is rendered zero or twice")
         let surfaceBranch = try XCTUnwrap(
             surface.components(separatedBy: "case .surface:").dropFirst().first)
         let branch = try XCTUnwrap(surfaceBranch.components(separatedBy: "case .statusOnly:").first)
         XCTAssertTrue(branch.contains("DeviceSendSection("),
                       "the send half is rendered outside the usable-account branch")
-        XCTAssertTrue(branch.contains("DeviceSendDetail("),
+        XCTAssertTrue(branch.contains("DeviceConversationPage("),
                       "the composer is rendered outside the usable-account branch")
         // Every decision belongs to the model, so `swift test` can drive it.
         // A view that re-derived any of these is a view no test reaches.
         let list = try macSource("DeviceInbox/DeviceSendSection.swift")
-        let detail = try macSource("DeviceInbox/DeviceSendDetail.swift")
+        let detail = try macSource("DeviceInbox/DeviceConversationPage.swift")
         let action = try macSource("DeviceInbox/DeliveryActionButton.swift")
         for owned in ["deliveries.candidates", "deliveries.selectTarget(",
                       "deliveries.refreshTargets(", "InboxSendActions.offered(for: item)"] {
@@ -182,8 +182,19 @@ final class InboxSurfaceGuardTests: XCTestCase {
                       "InboxSendActions.offered(for: item)",
                       "InboxSendActions.current(in: deliveries.items,"] {
             XCTAssertTrue(detail.contains(owned),
-                          "the send screen re-derives what InboxSendModel owns: \(owned)")
+                          "the device page re-derives what InboxSendModel owns: \(owned)")
         }
+        // And the history half belongs to the controller for the same reason:
+        // a page that sorted, grouped or filtered the timeline itself would be
+        // a second ordering rule no `swift test` reaches.
+        for owned in ["inbox.conversations.first", "inbox.deleteTimelineEntry(",
+                      "inbox.deleteConversation(", "inbox.markConversationRead(",
+                      "InboxTimelinePresentation.direction(", "conversation.entryIDs"] {
+            XCTAssertTrue(detail.contains(owned),
+                          "the device page re-derives what InboxController owns: \(owned)")
+        }
+        XCTAssertFalse(detail.contains(".sorted"),
+                       "the device page re-sorts the timeline the store already ordered")
         for owned in ["deliveries.act(", "InboxSendActions.warnsDeliveryMayStillArrive("] {
             XCTAssertTrue(action.contains(owned),
                           "the delivery control re-derives what InboxSendModel owns: \(owned)")
@@ -193,7 +204,7 @@ final class InboxSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(occurrences(of: "session.bearerToken", in: list), 1,
                        "the device list names the credential outside its one refresh site")
         XCTAssertEqual(occurrences(of: "session.bearerToken", in: detail), 2,
-                       "the send screen names the credential outside its refresh and "
+                       "the device page names the credential outside its refresh and "
                        + "its one spend site")
         XCTAssertEqual(occurrences(of: "session.bearerToken", in: action), 1,
                        "the delivery control names the credential outside its one spend site")
@@ -229,8 +240,9 @@ final class InboxSurfaceGuardTests: XCTestCase {
     /// reads a device id it kept for itself, or a send screen that cannot be
     /// left would all look correct in a screenshot.
     func testEverySendControlBelongsToTheChosenDevicesOwnScreen() throws {
+        let surfaceSource = try macSource("DeviceInbox/DeviceInboxSurface.swift")
         let list = try macSource("DeviceInbox/DeviceSendSection.swift")
-        let detail = try macSource("DeviceInbox/DeviceSendDetail.swift")
+        let detail = try macSource("DeviceInbox/DeviceConversationPage.swift")
 
         // Nothing that composes a delivery is on the page that lists devices.
         for control in ["TextEditor(", "chooseFilesOrFolders(", "chooseFolders(",
@@ -251,7 +263,7 @@ final class InboxSurfaceGuardTests: XCTestCase {
         // no fourth path to a delivery. Both file pickers exist and they are
         // configured differently — a control offering both cannot mean *a
         // folder*, which is the whole reason there are two.
-        for control in ["case .message: messageSection", "case .files:   filesSection",
+        for control in ["case .message: messageSection(target)", "case .files:   filesSection",
                         "chooseFilesOrFolders(into: selection)", "chooseFolders(into: selection)",
                         "deliveries.sendText(draft, token: token)",
                         "\"inbox-send-choose-files\"", "\"inbox-send-choose-folder\"",
@@ -264,7 +276,7 @@ final class InboxSurfaceGuardTests: XCTestCase {
         // the terms of its own defect — a control whose only effect is to hide
         // the other half of what you came here to do.
         XCTAssertFalse(detail.contains("pickerStyle("),
-                       "the send screen asks which kind before letting the user act")
+                       "the device page asks which kind before letting the user act")
         let folderPicker = try macSource("FileDropZone.swift")
         XCTAssertTrue(folderPicker.contains("panel.canChooseFiles = false"),
                       "the folder picker would accept a file and call it a folder")
@@ -301,12 +313,24 @@ final class InboxSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(detail.contains(".disabled(selection.files.isEmpty)"),
                       "the file Send is gated on something other than having files")
 
-        // The way out exists, it is the model's own selection, and there is no
-        // second copy of "which device am I on" anywhere in this app.
-        XCTAssertTrue(detail.contains("deliveries.selectTarget(nil)"),
-                      "the send screen cannot be left")
+        // The way out exists, and leaving clears the MODEL's selection rather
+        // than a flag of the page's own. The page asks its host to leave; the
+        // host is the one place that owns both halves of "which device am I on".
+        XCTAssertTrue(detail.contains("onBack()"), "the device page cannot be left")
         XCTAssertTrue(detail.contains("\"inbox-send-back\""),
                       "the way back carries no accessibility identifier")
+        XCTAssertTrue(surfaceSource.contains("deliveries.selectTarget(nil)"),
+                      "leaving a device page leaves the model still pointed at it")
+        // **The composer is bound to the peer this page is about.** Without this
+        // the page could render a history for one device over a composer aimed
+        // at another — the exact drift two separate screens used to allow.
+        XCTAssertTrue(detail.contains("candidate.id == peerID"),
+                      "the composer is not bound to this page's own peer")
+        // And a peer that cannot be sent to gets a sentence, never a dead control.
+        XCTAssertTrue(detail.contains(".inboxComposeUnavailable"),
+                      "a legacy or removed peer is offered a composer that cannot work")
+        XCTAssertFalse(detail.contains(".disabled(target == nil"),
+                       "a peer that cannot be sent to is offered a disabled composer")
         for state in try macSources() {
             XCTAssertFalse(state.text.contains("@State private var selectedDevice"),
                            "\(state.name) keeps its own copy of the chosen device")
@@ -729,8 +753,9 @@ final class InboxSurfaceGuardTests: XCTestCase {
     /// and Copy writes the body itself rather than a summary of it.
     func testTheDeviceInboxRendersReceivedMessagesWithAWorkingCopyAction() throws {
         let surface = try macSource("DeviceInbox/DeviceInboxSurface.swift")
-        XCTAssertTrue(surface.contains("private func conversationDetail("),
-                      "the Device Inbox has no per-device received history")
+        let page = try macSource("DeviceInbox/DeviceConversationPage.swift")
+        XCTAssertTrue(page.contains("private var timelineSection: some View"),
+                      "the Device Inbox has no per-device history")
         // In the usable-account branch, inside the authenticated sender
         // conversations. Outside it, history would render for an account the
         // receiver refused — one that cannot have received anything.
@@ -743,42 +768,207 @@ final class InboxSurfaceGuardTests: XCTestCase {
         // The body, whole and unformatted. `Text(message.text)` and not a
         // presentation helper: a helper is where a preview or a truncation would
         // be added, and this row is the one place the message may appear.
-        XCTAssertTrue(surface.contains("Text(message.text)"),
+        XCTAssertTrue(page.contains("Text(message.text)"),
                       "the message rows no longer render the message")
-        XCTAssertTrue(surface.contains("delivery.receivedAt"),
-                      "a conversation message row no longer says when it arrived")
-        XCTAssertTrue(surface.contains("inbox.message(for: delivery)"),
-                      "conversation history no longer resolves its protected message reference")
+        XCTAssertTrue(page.contains("InboxTimelinePresentation.at(entry)"),
+                      "a conversation row no longer says when it happened")
+        XCTAssertTrue(page.contains("inbox.message(for: entry)")
+                      && page.contains("inbox.sentMessage(for: entry)"),
+                      "conversation history no longer resolves a protected message reference")
+        // **The two namespaces are read by direction and never interchangeably.**
+        // Central mints task ids and this Mac mints job ids; a row that resolved
+        // its body through the other reader could show the user a message they
+        // were SENT in the place of one they wrote, whenever the two collided.
+        XCTAssertTrue(page.contains("entry.direction == .received ? inbox.message(for: entry)"),
+                      "a row resolves its body through whichever store answers first")
 
         // Copy: an explicit control, named for assistive technology, writing the
         // EXACT characters that were received.
-        XCTAssertTrue(surface.contains("copyReceivedMessage(message.text)"),
+        XCTAssertTrue(page.contains("copyReceivedMessage(message.text)"),
                       "the Copy action does not copy the message itself")
         XCTAssertTrue(surface.contains("NSPasteboard.general.clearContents()")
                       && surface.contains("NSPasteboard.general.setString(text, forType: .string)"),
                       "the Copy action does not reach the pasteboard")
-        XCTAssertTrue(surface.contains(
+        XCTAssertEqual(try macSources().filter {
+            $0.name.hasPrefix("DeviceInbox/")
+                && $0.text.contains("NSPasteboard.general.setString(")
+        }.map(\.name), ["DeviceInbox/DeviceInboxSurface.swift"],
+                       "a second Device Inbox clipboard helper can disagree about what "
+                       + "Copy writes")
+        XCTAssertTrue(page.contains(
             ".accessibilityLabel(InboxMessagePresentation.copyActionLabel("),
                       "a column of identical Copy buttons with no accessible names")
-        XCTAssertTrue(surface.contains("\"inbox-message-copy-\\(index)\""),
-                      "the per-row Copy control is unnamed")
-        XCTAssertTrue(surface.contains("\"inbox-message-\\(index)\""),
-                      "the message row itself is unnamed")
 
-        // Nothing is silently withheld. The section draws a bounded number of
-        // rows, and says how many more this Mac is holding — a bound that
-        // stopped in silence would make a message look deleted, which is the
-        // one impression this feature must never give.
-        XCTAssertTrue(surface.contains("InboxMessagePresentation.more(inbox.messages)"),
-                      "the display bound drops messages without counting them")
+        // The row id is COMPARED, to keep the Copied confirmation on the row it
+        // belongs to. It is never drawn — the surface-wide ban on rendering an
+        // identifier holds here too.
+        for rendered in ["Text(message.id", "Text(verbatim: message.id", "Text(entry.id",
+                         "Text(peerID", "Text(entry.jobID", "Text(entry.taskID"] {
+            XCTAssertFalse(page.contains(rendered),
+                           "a conversation row renders an identifier: \(rendered)")
+        }
+    }
 
-        // The delivery id is COMPARED, to keep the Copied confirmation on the
-        // row it belongs to. It is never drawn — the surface-wide ban on
-        // rendering an identifier holds here too.
-        XCTAssertFalse(surface.contains("Text(message.id"),
-                       "a message row renders the delivery identifier")
-        XCTAssertFalse(surface.contains("Text(verbatim: message.id"),
-                       "a message row renders the delivery identifier")
+    /// **One page per device: the history and the composer, with no jump between
+    /// them.**
+    ///
+    /// There were two screens. The conversation's *Send content* button navigated
+    /// to the other one, which REPLACED it — the history disappeared at the exact
+    /// moment the user asked to add to it — and two screens about one device is
+    /// two places for "which device am I on" to be answered differently.
+    func testOneDevicePageCarriesBothTheHistoryAndTheComposer() throws {
+        let page = try macSource("DeviceInbox/DeviceConversationPage.swift")
+        let surface = try macSource("DeviceInbox/DeviceInboxSurface.swift")
+
+        // Both halves, in one view's body.
+        let body = try XCTUnwrap(page.components(separatedBy: "var body: some View {")
+            .dropFirst().first)
+        for half in ["composeSection", "timelineSection"] {
+            XCTAssertTrue(body.contains(half), "the device page does not render \(half)")
+        }
+        // And the send screen it replaced is gone, along with the jump to it.
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: macRoot.appendingPathComponent("DeviceInbox/DeviceSendDetail.swift").path),
+                       "the separate send screen is still shippable")
+        for gone in ["DeviceSendDetail(", "inboxSendContent", "inbox-conversation-send"] {
+            XCTAssertFalse(surface.contains(gone),
+                           "the conversation still jumps to a separate send page: \(gone)")
+        }
+        for (name, source) in try macSources() {
+            XCTAssertFalse(source.contains("DeviceSendDetail"),
+                           "\(name) still reaches the removed send screen")
+        }
+    }
+
+    /// **Local deletion: confirmed, visible, and never a recall.**
+    ///
+    /// Each of these is an ABSENCE or a wording no screenshot review would catch,
+    /// and each one is a way this feature could quietly become something else —
+    /// a delete that fired straight off a menu, a command reachable only by
+    /// right-click, or a confirmation that let the user believe the other device
+    /// had been reached.
+    func testLocalDeletionIsConfirmedVisibleAndNeverReachesTheDelivery() throws {
+        let page = try macSource("DeviceInbox/DeviceConversationPage.swift")
+
+        // Every deletion goes through a confirmation. A `Button` wired straight
+        // to the controller would be an irreversible action with no dialog.
+        for direct in ["Button(L10n.t(.inboxEntryDelete), role: .destructive) {\n            inbox.",
+                       "} { inbox.deleteTimelineEntry", "} { inbox.deleteConversation"] {
+            XCTAssertFalse(page.contains(direct),
+                           "a deletion fires without a confirmation: \(direct)")
+        }
+        XCTAssertEqual(occurrences(of: ".confirmationDialog(", in: page), 2,
+                       "the item and conversation deletions are not both confirmed")
+        XCTAssertEqual(occurrences(of: "inbox.deleteTimelineEntry(", in: page), 1)
+        XCTAssertEqual(occurrences(of: "inbox.deleteConversation(", in: page), 1)
+        XCTAssertTrue(page.contains("role: .destructive"),
+                      "the confirmation's action is not marked destructive")
+
+        // **A visible command, not only a context menu.** A right-click is not
+        // discoverable and is not reachable from the keyboard.
+        XCTAssertTrue(page.contains("Menu {") && page.contains("deleteButton(entry)"),
+                      "the row has no visible command menu")
+        XCTAssertTrue(page.contains(".contextMenu { deleteButton(entry) }"),
+                      "the context-menu shortcut is missing")
+        XCTAssertTrue(page.contains("InboxTimelinePresentation.menuLabel("),
+                      "a column of identical menus with no accessible names")
+
+        // **The peer is passed at every call site**, so a stale or mis-plumbed
+        // snapshot cannot tombstone another conversation's rows for good.
+        XCTAssertTrue(page.contains("inbox.deleteTimelineEntry(entry.id, peerDeviceID: peerID)"))
+        XCTAssertTrue(page.contains("inbox.deleteConversation(peerDeviceID: peerID, "
+                                    + "observedEntryIDs: observed)"))
+        // The snapshot is taken when the button is pressed, not read again on
+        // confirm — a delivery committed while the dialog is up was never on
+        // screen and must survive.
+        XCTAssertTrue(page.contains("deletingConversation = conversation.entryIDs"),
+                      "the conversation delete does not confirm against an observed snapshot")
+        // The send model's card filter is not reactive to the controller, so a
+        // deletion has to re-publish it — otherwise a deleted send keeps a card
+        // in the section above, and a STOPPED one has no state change coming
+        // that would ever clear it.
+        XCTAssertEqual(occurrences(of: "deliveries.refreshOutstanding()", in: page), 2,
+                       "a deletion leaves the send model still describing the job")
+
+        // **It is not a recall, and it does not grow a second way to stop one.**
+        // `DeliveryActionButton` is the only macOS site that activates a delivery
+        // action — it is where "which cancel applies", "does this spend the
+        // bearer" and "does this have to warn that the delivery may still
+        // arrive" are decided once. A copy inside a deletion dialog would be the
+        // one that forgot the warning.
+        XCTAssertFalse(page.contains("deliveries.act("),
+                       "the device page activates a delivery action outside the one control")
+        XCTAssertEqual(try macSources().filter { $0.text.contains("deliveries.act(") }
+            .map(\.name), ["DeviceInbox/DeliveryActionButton.swift"],
+                       "a second macOS site activates a delivery action")
+        // The transfer is still stoppable from this page: the prominent control
+        // of the running-send section is on it, and the confirmation says so.
+        XCTAssertTrue(page.contains("InboxSendActions.cancel(for: item)")
+                      && page.contains("isProminent: true"),
+                      "the page has no prominent control for stopping a running send")
+        XCTAssertTrue(L10n.t(.inboxEntryDeleteRunningBody, language: .en)
+            .contains("stop control"),
+                      "the in-flight confirmation does not say where the real stop control is")
+
+        // The copy the user reads says THIS MAC in the verb itself, and says what
+        // survives. Asserted on the catalog, so a rename cannot silently empty it.
+        for key in [L10nKey.inboxEntryDelete, .inboxConversationDelete] {
+            XCTAssertTrue(L10n.t(key, language: .en).contains("This Mac"),
+                          "\(key.rawValue) does not name this Mac in the action itself")
+        }
+        for key in [L10nKey.inboxEntryDeleteBody, .inboxConversationDeleteBody] {
+            let body = L10n.t(key, language: .en)
+            XCTAssertTrue(body.contains("keeps its copy"),
+                          "\(key.rawValue) does not say the other device is unaffected")
+            XCTAssertTrue(body.contains("receive folder"),
+                          "\(key.rawValue) does not say saved files stay")
+        }
+        XCTAssertTrue(L10n.t(.inboxEntryDeleteRunningBody, language: .en)
+            .contains("does not stop the transfer"),
+                      "the in-flight confirmation does not say the transfer continues")
+    }
+
+    /// **Direction and delivery state are words, not colour or alignment.**
+    ///
+    /// A chat layout says "mine" with a tint and an edge; neither survives
+    /// VoiceOver, a monochrome screenshot or a high-contrast setting. And only
+    /// `tracking(.saved)` may say an outgoing item arrived.
+    func testTheTimelineStatesDirectionAndDeliveryInTextRatherThanInColour() throws {
+        let page = try macSource("DeviceInbox/DeviceConversationPage.swift")
+        XCTAssertTrue(page.contains("InboxTimelinePresentation.direction(of: entry"),
+                      "the row's direction is not stated in words")
+        XCTAssertTrue(page.contains("InboxTimelinePresentation.accessibilityLabel("),
+                      "the row has no spoken description")
+        XCTAssertTrue(page.contains(".accessibilityHidden(true)"),
+                      "the decorative direction symbol is announced as content")
+        for colourOnly in ["alignment: entry.direction", ".foregroundStyle(entry.direction",
+                           "entry.direction == .sent ? .trailing"] {
+            XCTAssertFalse(page.contains(colourOnly),
+                           "direction is conveyed by layout or colour alone: \(colourOnly)")
+        }
+        // The one arrival predicate, in the one place that may write it.
+        let model = try packageSource("DeviceInbox/InboxSendModel.swift")
+        XCTAssertTrue(model.contains("if activity.isSavedOnTarget { return .saved }"),
+                      "the durable arrival state is derived from something other than "
+                      + "tracking(.saved)")
+        // Every OTHER way the durable `saved` could be produced. The one that
+        // remains is `tracking(.saved)`'s own arm, which the guard above has
+        // already returned for and which says so on its own line — a `switch`
+        // over a closed enum has to spell that case out to compile.
+        let other = model.components(separatedBy: "\n")
+            .filter { $0.contains("return .saved") }
+            .filter { !$0.contains("activity.isSavedOnTarget") }
+        XCTAssertEqual(other.count, 1, "a second path writes the durable arrival state")
+        XCTAssertTrue(try XCTUnwrap(other.first).contains("unreachable"),
+                      "an arrival is claimed from something other than tracking(.saved)")
+        for state in InboxTimelineEntry.SentState.allCases {
+            let text = L10n.t(InboxTimelinePresentation.key(for: state), language: .en)
+            XCTAssertFalse(text.isEmpty)
+            if state != .saved {
+                XCTAssertFalse(text.lowercased().contains("saved on the other device"),
+                               "\(state) claims an arrival")
+            }
+        }
     }
 
     func testConversationNavigationIsAccountScopedAndHistoryFailuresStayVisible() throws {
@@ -786,14 +976,27 @@ final class InboxSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(surface.contains(".onChange(of: inbox.activeAccountID)"))
         XCTAssertTrue(surface.contains("selectedConversationID = nil"))
         XCTAssertTrue(surface.contains("copiedMessageID = nil"))
-        XCTAssertTrue(surface.contains("conversation.deliveries.filter { $0.readAt == nil }"),
+        XCTAssertTrue(surface.contains("conversation.entries.filter { $0.isUnread }"),
                       "the home summary counts all history instead of unread history")
-        XCTAssertTrue(surface.contains("else if delivery.kind == .files"),
+        let page = try macSource("DeviceInbox/DeviceConversationPage.swift")
+        XCTAssertTrue(page.contains("} else if entry.kind == .files"),
                       "a missing message reference can fall through as an empty file row")
-        XCTAssertTrue(surface.contains(".inboxConversationMessageMissing"),
-                      "a missing protected message reference is silent")
-        XCTAssertTrue(surface.contains("Button(L10n.t(.inboxSendContent))"),
-                      "the conversation send action still says Open")
+        XCTAssertTrue(page.contains(".inboxConversationMessageMissing"),
+                      "a missing protected received message is silent")
+        XCTAssertTrue(page.contains(".inboxSentMessageMissing"),
+                      "a sent row whose body this Mac no longer holds renders as an empty row")
+        // The history-unreadable banner is on the page the history is on, so a
+        // refusal is not reported only on the screen the user just left.
+        XCTAssertTrue(page.contains("inbox.conversationStoreIssue")
+                      && surface.contains("inbox.conversationStoreIssue"),
+                      "a conversation store failure is invisible on one of the two screens")
+        // **One authority for the open device.** The page follows the model's
+        // selection rather than keeping a second answer that could name a
+        // different machine.
+        XCTAssertTrue(surface.contains(".onChange(of: deliveries.selectedTargetID)"),
+                      "the open page does not follow the model's own selection")
+        XCTAssertTrue(surface.contains("private var openPeer: (id: String, name: String)?"),
+                      "the open device is resolved from something other than live state")
     }
 
     /// **`inbox.text.v1` is announced by the target that ships the screen, and

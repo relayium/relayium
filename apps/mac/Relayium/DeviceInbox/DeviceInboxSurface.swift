@@ -96,27 +96,30 @@ struct DeviceInboxSurface: View {
                 // **The one place this surface has a child, and it is a child of
                 // the whole page rather than of a section inside it.**
                 //
-                // A device's send screen replaces the receive controls instead
-                // of appearing under them, because the failure being repaired is
+                // A device's own page replaces the receive controls instead of
+                // appearing under them, because the failure being repaired is
                 // exactly that they were siblings: a file picker and a Send
                 // button rendered a short scroll below the receive folder's own
                 // *Choose Folder*, with nothing on screen saying which of the
                 // two directions either belonged to. Stacking the composer under
                 // them would reproduce that with more controls, not fewer.
                 //
-                // `selectedCandidate` is the whole of the navigation state, and
-                // it belongs to `InboxSendModel`. That is what makes the exits
-                // safe rather than remembered: a device revoked, switched off,
-                // removed from the account, or left behind by a sign-out clears
-                // the model's selection, and this branch returns to the list on
-                // the same redraw. A `@State` flag here could stay true over a
-                // device that no longer exists.
-                if let target = deliveries.selectedCandidate {
-                    DeviceSendDetail(target: target, deliveries: deliveries,
-                                     onAccount: { onAccount(.signIn) })
-                } else if let id = selectedConversationID,
-                          let conversation = inbox.conversations.first(where: { $0.id == id }) {
-                    conversationDetail(conversation)
+                // There is ONE such child now. It used to be two — a send screen
+                // reached from the device list and a read-only history reached
+                // from Conversations, whose *Send content* button navigated to
+                // the first and made the history it was about disappear. One
+                // device is one page: the timeline and the composer together,
+                // and nothing on it navigates anywhere but back.
+                //
+                // `openPeer` resolves to nil the moment a peer has neither a
+                // local history nor a live device row, so a device removed from
+                // the account while its page is up returns the user to the list
+                // on the same redraw rather than leaving a page about nothing.
+                if let peer = openPeer {
+                    DeviceConversationPage(peerID: peer.id, peerName: peer.name,
+                                           deliveries: deliveries,
+                                           onAccount: { onAccount(.signIn) },
+                                           onBack: { closePeer() })
                 } else {
                     statusSection(offersControls: true)
                     notificationSection
@@ -171,6 +174,17 @@ struct DeviceInboxSurface: View {
             selectedConversationID = nil
             copiedMessageID = nil
         }
+        // **The model's selection is the authority, and this is the one place
+        // the open page follows it.** The device list opens a device by calling
+        // `selectTarget`, and the model itself clears that selection when a
+        // device is revoked, switched off or removed. Mirroring it here rather
+        // than keeping a second answer is what stops the page's peer and the
+        // send target ever naming two different machines — and the page renders
+        // a composer only while the two agree, so even a transient disagreement
+        // cannot aim one at the wrong device.
+        .onChange(of: deliveries.selectedTargetID) { id in
+            if let id { selectedConversationID = id }
+        }
     }
 
     // MARK: - conversations
@@ -202,8 +216,7 @@ struct DeviceInboxSurface: View {
                     }
                     Spacer()
                     Button(L10n.t(.inboxOpenDeviceInbox)) {
-                        selectedConversationID = conversation.id
-                        inbox.markConversationRead(conversation.id)
+                        open(conversation.peerDeviceID)
                     }
                     .buttonStyle(.bordered)
                     .accessibilityLabel(L10n.detail([
@@ -218,19 +231,57 @@ struct DeviceInboxSurface: View {
     }
 
     private func conversationName(_ conversation: InboxConversation) -> String {
-        if conversation.senderDeviceID == InboxConversationStore.legacySenderID {
+        if conversation.peerDeviceID == InboxConversationStore.legacySenderID {
             return L10n.t(.inboxConversationLegacy)
         }
         let name = inbox.displayName(for: conversation)
-        return inbox.isRemoved(conversation.senderDeviceID)
+        return inbox.isRemoved(conversation.peerDeviceID)
             ? L10n.detail([name, L10n.t(.inboxConversationRemoved)]) : name
+    }
+
+    /// The device whose page is up, with the name this list already resolved.
+    ///
+    /// Nil unless the peer still has SOMETHING true to render — a local history
+    /// or a live device row. A peer with neither cannot fill a page: there is no
+    /// timeline to read and no composer that could work, so the list is what is
+    /// shown instead of a header over two empty sections.
+    private var openPeer: (id: String, name: String)? {
+        guard let id = selectedConversationID else { return nil }
+        if let conversation = inbox.conversations.first(where: { $0.peerDeviceID == id }) {
+            return (id, conversationName(conversation))
+        }
+        if let candidate = deliveries.candidates.first(where: { $0.id == id }) {
+            return (id, InboxSendPresentation.name(of: candidate))
+        }
+        return nil
+    }
+
+    /// Open one device's page.
+    ///
+    /// The model's selection is set FIRST and from its own candidate list, so a
+    /// peer that cannot be sent to — a removed device, or the read-only bucket
+    /// that predates authenticated attribution — opens with the previous
+    /// selection cleared rather than with a composer left aimed at whatever was
+    /// selected before.
+    private func open(_ peerID: String) {
+        deliveries.selectTarget(deliveries.candidates.first {
+            $0.id == peerID && $0.isSendable
+        }?.id)
+        selectedConversationID = peerID
+    }
+
+    /// Back to the list, clearing both halves of the answer at once.
+    private func closePeer() {
+        deliveries.selectTarget(nil)
+        selectedConversationID = nil
+        copiedMessageID = nil
     }
 
     private func conversationSummary(_ conversation: InboxConversation) -> String {
         var parts: [String] = []
-        let unread = conversation.deliveries.filter { $0.readAt == nil }
+        let unread = conversation.entries.filter { $0.isUnread }
         let unreadMessages = unread.filter { $0.kind == .message }.count
-        let unreadFiles = unread.reduce(0) { $0 + $1.files.count }
+        let unreadFiles = unread.reduce(0) { $0 + $1.fileCount }
         if unreadMessages > 0 {
             parts.append(L10n.detail([
                 L10n.number(unreadMessages), L10n.t(.inboxSavedMessage)]))
@@ -241,66 +292,6 @@ struct DeviceInboxSurface: View {
         parts.append(L10n.date(conversation.lastActivity, dateStyle: .medium,
                                timeStyle: .short))
         return L10n.detail(parts)
-    }
-
-    private func conversationDetail(_ conversation: InboxConversation) -> some View {
-        Group {
-            Section {
-                Button(L10n.t(.sendBackToDevices)) { selectedConversationID = nil }
-                    .buttonStyle(.bordered)
-                    .keyboardShortcut(.cancelAction)
-                    .accessibilityIdentifier("inbox-conversation-back")
-                if let candidate = deliveries.candidates.first(where: {
-                    $0.id == conversation.senderDeviceID && $0.isSendable
-                }) {
-                    Button(L10n.t(.inboxSendContent)) {
-                        deliveries.selectTarget(candidate.id)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier("inbox-conversation-send")
-                }
-            } header: {
-                Text(conversationName(conversation))
-            }
-            Section {
-                ForEach(conversation.deliveries) { delivery in
-                    VStack(alignment: .leading, spacing: 5) {
-                        if delivery.kind == .message, let message = inbox.message(for: delivery) {
-                            Text(message.text).textSelection(.enabled)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Button(L10n.t(copiedMessageID == message.id
-                                          ? .commonCopied : .commonCopy)) {
-                                copyReceivedMessage(message.text)
-                                copiedMessageID = message.id
-                            }
-                            .buttonStyle(.bordered)
-                            .accessibilityLabel(InboxMessagePresentation.copyActionLabel(
-                                copied: copiedMessageID == message.id))
-                        } else if delivery.kind == .files {
-                            Text(delivery.files.map(\.displayName).joined(separator: " · "))
-                                .textSelection(.enabled)
-                        } else {
-                            InlineMessage(.failure, L10n.t(.inboxConversationMessageMissing))
-                                .accessibilityIdentifier("inbox-conversation-message-missing")
-                        }
-                        Text(L10n.date(delivery.receivedAt, dateStyle: .medium,
-                                       timeStyle: .short))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-            } header: {
-                HStack {
-                    Text(L10n.t(.inboxResultsHeading))
-                    Spacer()
-                    if conversation.fileCount > 0 {
-                        Button(L10n.t(.inboxRevealFolder)) { inbox.reveal(conversation) }
-                            .buttonStyle(.bordered)
-                            .accessibilityIdentifier("inbox-conversation-reveal")
-                    }
-                }
-            }
-        }
-        .onAppear { inbox.markConversationRead(conversation.id) }
     }
 
     // MARK: - no usable account
@@ -882,8 +873,12 @@ struct DeviceInboxSurface: View {
 /// notification-settings seam makes by taking nothing at all: there is no
 /// parameter here through which a task id, a receipt or a path could reach the
 /// pasteboard, and the one call site passes `message.text` and nothing else.
+///
+/// Internal rather than file-private because the conversation page copies a
+/// received message too, and one clipboard helper is what keeps the two rows
+/// from differing about what "copy" writes.
 @MainActor
-private func copyReceivedMessage(_ text: String) {
+func copyReceivedMessage(_ text: String) {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(text, forType: .string)
 }

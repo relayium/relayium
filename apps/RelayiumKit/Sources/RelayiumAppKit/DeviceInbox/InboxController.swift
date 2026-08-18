@@ -135,6 +135,22 @@ public struct InboxRuntime: Sendable {
     /// messages is unchanged, and so a build that forgets to wire it shows an
     /// empty list rather than inventing one.
     public var messageStore: @Sendable (InboxAccountID) -> InboxMessageStore?
+    /// This account's SENT message store, for reading and deleting what this Mac
+    /// has sent as text.
+    ///
+    /// **A separate directory from `messageStore`, and that separation is a
+    /// correctness requirement rather than tidiness.** The received store's
+    /// idempotency contract is "a record is named by task id, so a replayed
+    /// commit rewrites the same bytes". Outgoing bodies are named by JOB id, and
+    /// central mints task ids while this Mac mints job ids — nothing makes the
+    /// two disjoint. One directory would mean a replayed receive could overwrite
+    /// a message the user sent, or the reverse. Two directories cost nothing:
+    /// `InboxMessageStore` takes a directory and holds no other state.
+    ///
+    /// Defaulted to nothing so a harness that does not exercise sent history is
+    /// unchanged, and so a build that forgets to wire it renders no body rather
+    /// than inventing one.
+    public var sentMessageStore: @Sendable (InboxAccountID) -> InboxMessageStore?
     public var conversationStore: @Sendable (InboxAccountID) -> InboxConversationStore?
     public var legacyReceipts: @Sendable (InboxAccountID) throws -> [InboxReceipt]
     public var deviceDirectory: @Sendable (String) async throws -> [InboxDeviceRow]
@@ -180,6 +196,8 @@ public struct InboxRuntime: Sendable {
                 notifier: InboxNotifying? = nil,
                 messageStore: @escaping @Sendable (InboxAccountID) -> InboxMessageStore?
                     = { _ in nil },
+                sentMessageStore: @escaping @Sendable (InboxAccountID) -> InboxMessageStore?
+                    = { _ in nil },
                 conversationStore: @escaping @Sendable (InboxAccountID) -> InboxConversationStore?
                     = { _ in nil },
                 legacyReceipts: @escaping @Sendable (InboxAccountID) throws -> [InboxReceipt]
@@ -199,6 +217,7 @@ public struct InboxRuntime: Sendable {
         self.makeEngine = makeEngine
         self.notifier = notifier
         self.messageStore = messageStore
+        self.sentMessageStore = sentMessageStore
         self.conversationStore = conversationStore
         self.legacyReceipts = legacyReceipts
         self.deviceDirectory = deviceDirectory
@@ -303,6 +322,13 @@ public final class InboxController: ObservableObject {
     @Published public private(set) var messages: [InboxMessage] = []
     @Published public private(set) var conversations: [InboxConversation] = []
     @Published public private(set) var conversationStoreIssue = false
+    /// Every local timeline id this account has deleted, cached from the store's
+    /// tombstones.
+    ///
+    /// Published because `InboxSendModel`'s card list is filtered through it and
+    /// has to redraw when a deletion lands. It is a set of local ids and nothing
+    /// else — no name, no path, no body — and it is cleared with the account.
+    @Published public private(set) var deletedTimelineIDs: Set<String> = []
     @Published public private(set) var activeAccountID: String?
     /// Tasks central is holding for an answer under `ask`. No names: the manifest
     /// is not decrypted until a task is claimed. Bounded ciphertext size and
@@ -454,6 +480,7 @@ public final class InboxController: ObservableObject {
         messages = []
         conversations = []
         conversationStoreIssue = false
+        deletedTimelineIDs = []
         activeAccountID = nil
         deviceNames = [:]
         currentDeviceIDs = []
@@ -790,6 +817,7 @@ public final class InboxController: ObservableObject {
     public func refreshConversations(importLegacy: Bool = false) {
         guard let generation, let store = runtime.conversationStore(generation.account) else {
             conversations = []
+            deletedTimelineIDs = []
             return
         }
         do {
@@ -797,7 +825,14 @@ public final class InboxController: ObservableObject {
                 try store.importLegacy(messages: legacy)
                 try store.importLegacy(receipts: runtime.legacyReceipts(generation.account))
             }
+            // Before the list is published, finish any unlink a previous
+            // deletion did not get to. The tombstones are already durable, so
+            // this converges a crash between the index write and the file
+            // removal — the one window in which a deleted body could otherwise
+            // stay on disk with nothing on screen able to delete it again.
+            convergePlaintextCleanup(store: store, account: generation.account)
             conversations = try store.conversations()
+            deletedTimelineIDs = (try? store.deletedIDs()) ?? deletedTimelineIDs
             conversationStoreIssue = false
         } catch {
             conversations = []
@@ -805,58 +840,229 @@ public final class InboxController: ObservableObject {
         }
     }
 
-    public func markConversationRead(_ senderDeviceID: String) {
+    public func markConversationRead(_ peerDeviceID: String) {
         guard let generation, let store = runtime.conversationStore(generation.account),
-              let conversation = conversations.first(where: { $0.senderDeviceID == senderDeviceID })
+              let conversation = conversations.first(where: { $0.peerDeviceID == peerDeviceID })
         else { return }
         do {
-            try store.markRead(senderDeviceID: senderDeviceID,
-                               observedTaskIDs: Set(conversation.deliveries.map(\.taskID)), at: Date())
+            try store.markRead(peerDeviceID: peerDeviceID,
+                               observedEntryIDs: conversation.entryIDs, at: Date())
             refreshConversations()
         } catch { conversationStoreIssue = true }
     }
 
-    public func message(for delivery: InboxDeliveryRecord) -> InboxMessage? {
-        guard let generation, let id = delivery.messageID else { return nil }
+    // MARK: - local history deletion
+
+    /// Delete ONE timeline row from this Mac.
+    ///
+    /// **Not a recall.** It reaches no central endpoint, no `PendingUploadPlan`,
+    /// no content key, no idempotency key and no staged byte, and it cannot stop
+    /// a delivery — a send already running goes on running and reporting, and
+    /// every later status update it produces is swallowed by the tombstone this
+    /// writes. What it removes is this Mac's history row and the Relayium-owned
+    /// message body behind it. A received file already in the user's folder and
+    /// an outgoing source file are not reachable from here at all.
+    /// The peer is passed so the store can REFUSE an id that does not belong to
+    /// the conversation the row was on. See `InboxConversationStore.delete`.
+    public func deleteTimelineEntry(_ id: String, peerDeviceID: String) {
+        deleteTimelineEntries([id], peerDeviceID: peerDeviceID)
+    }
+
+    /// Delete exactly the rows the open conversation showed.
+    ///
+    /// The caller passes the ids it OBSERVED as well as the peer, for the same
+    /// reason `markConversationRead` does: a delivery committed between the
+    /// screen being drawn and the user confirming has no tombstone, so it lands
+    /// as a new unread entry instead of disappearing into a permanent
+    /// peer-wide ban the user never asked for. The peer is then the store's
+    /// check that every id in that snapshot really is this conversation's.
+    public func deleteConversation(peerDeviceID: String, observedEntryIDs: Set<String>) {
+        deleteTimelineEntries(observedEntryIDs, peerDeviceID: peerDeviceID)
+    }
+
+    private func deleteTimelineEntries(_ ids: Set<String>, peerDeviceID: String) {
+        guard let generation, let store = runtime.conversationStore(generation.account),
+              !ids.isEmpty else { return }
+        do {
+            // One locked read-modify-write. The tombstones are durable before
+            // this returns; the unlinks below are the caller's half and are
+            // retried by `convergePlaintextCleanup` if this process dies first.
+            let cleanup = try store.delete(entryIDs: ids, peerDeviceID: peerDeviceID)
+            // Read back rather than assumed: the store refuses an id belonging
+            // to another peer, so unioning the REQUESTED set here would hide a
+            // live send card for a job that was never actually deleted.
+            deletedTimelineIDs = (try? store.deletedIDs()) ?? deletedTimelineIDs
+            unlink(cleanup, store: store, account: generation.account)
+            refreshConversations()
+        } catch { conversationStoreIssue = true }
+    }
+
+    private func convergePlaintextCleanup(store: InboxConversationStore,
+                                          account: InboxAccountID) {
+        guard let pending = try? store.pendingPlaintextCleanup(), !pending.isEmpty else { return }
+        unlink(pending, store: store, account: account)
+    }
+
+    /// Remove the protected bodies a deletion made this Mac responsible for, and
+    /// record that they are gone.
+    ///
+    /// Only ids that actually unlinked are cleared, so a removal that failed
+    /// stays owed and is retried on the next refresh rather than being marked
+    /// done because the caller tried once.
+    private func unlink(_ cleanup: InboxTimelineCleanup, store: InboxConversationStore,
+                        account: InboxAccountID) {
+        var received: [String] = []
+        var sent: [String] = []
+        if let messages = runtime.messageStore(account) {
+            for id in cleanup.receivedMessageIDs where (try? messages.remove(id)) != nil {
+                received.append(id)
+            }
+        }
+        if let sentMessages = runtime.sentMessageStore(account) {
+            for id in cleanup.sentMessageIDs where (try? sentMessages.remove(id)) != nil {
+                sent.append(id)
+            }
+        }
+        try? store.clearPlaintextCleanup(
+            InboxTimelineCleanup(receivedMessageIDs: received, sentMessageIDs: sent))
+        if !received.isEmpty { refreshMessages() }
+    }
+
+    // MARK: - the sender's durable history
+
+    /// Persist one outgoing delivery the moment a durable plan owns its bytes.
+    ///
+    /// **The account is passed rather than implied, and it is checked.**
+    /// `InboxSendModel` is app-scoped and knows its account as a plain string;
+    /// this controller's stores are scoped to an `InboxAccountID`. They come from
+    /// the same session one turn apart, and the consequence of trusting that is
+    /// one account's sent history landing in another account's index — so the
+    /// merge refuses unless the two agree.
+    ///
+    /// The message body, when there is one, is committed to the protected
+    /// SENT-message store: a separate directory from received messages, keyed by
+    /// job id. Sharing one directory would let a replayed receive whose task id
+    /// equalled some job id overwrite a message the user was sent.
+    /// `messageBody` is asked for the text ONLY once this method has established
+    /// that a body is both wanted and missing, which is what keeps a recovered
+    /// plan's staged plaintext unread on the ordinary path.
+    @discardableResult
+    public func recordSentHistory(_ event: InboxSentHistoryEvent,
+                                  messageBody: () -> String? = { nil }) -> Bool {
+        guard let generation, generation.account.value == event.accountID,
+              let store = runtime.conversationStore(generation.account) else { return false }
+        let entry = InboxTimelineEntry.sent(
+            jobID: event.jobID, peerDeviceID: event.peerDeviceID,
+            peerNameSnapshot: deviceNames[event.peerDeviceID] ?? "",
+            kind: event.kind, at: event.at, byteCount: event.byteCount,
+            files: event.files, state: event.state, taskID: event.taskID)
+        do {
+            let isNew = try store.recordSent(entry)
+            // **Two crash windows, one condition.** A send can be interrupted
+            // between the durable plan and the history row (`isNew` is true on
+            // the next launch) or between the history row and the body (`isNew`
+            // is false and the body is simply absent). Writing whenever the body
+            // is MISSING covers both, and covers neither more than once.
+            //
+            // `isDeleted` is the gate rather than `isNew`, because a job the
+            // user deleted has no row to be new: `recordSent` refuses it against
+            // the tombstone and returns false, and without this check the very
+            // next recovery pass would write the plaintext back for an entry
+            // nothing on screen could ever delete again.
+            if event.kind == .message, !store.isDeleted(entry.id),
+               let sentMessages = runtime.sentMessageStore(generation.account),
+               // Flattened deliberately: `try? load` is a DOUBLE optional, and
+               // `== nil` on it would be true only when the read threw — so an
+               // unflattened test would skip the write for every message that is
+               // genuinely absent, which is every case this branch exists for.
+               ((try? sentMessages.load(event.jobID)) ?? nil) == nil,
+               let text = messageBody() {
+                try sentMessages.commit(id: event.jobID, text: text, receivedAt: event.at)
+            }
+            refreshConversations()
+            return isNew
+        } catch {
+            conversationStoreIssue = true
+            return false
+        }
+    }
+
+    /// Record what is now known about one outgoing delivery. Never moves it.
+    public func updateSentHistory(accountID: String, jobID: String,
+                                  state: InboxTimelineEntry.SentState,
+                                  taskID: String? = nil) {
+        guard let generation, generation.account.value == accountID,
+              let store = runtime.conversationStore(generation.account) else { return }
+        do {
+            try store.updateSent(jobID: jobID, state: state, taskID: taskID)
+            refreshConversations()
+        } catch { conversationStoreIssue = true }
+    }
+
+    /// Whether this Mac's user has deleted this outgoing job's history.
+    ///
+    /// Read from a cached set rather than from disk: `InboxSendModel.publish()`
+    /// asks it once per row on every state change, and a file read per row per
+    /// progress tick would put the index in the upload's hot path. The set is
+    /// refreshed by every `refreshConversations` and by every deletion, both of
+    /// which are the only things that can change the answer.
+    public func isSentHistoryDeleted(accountID: String, jobID: String) -> Bool {
+        guard let generation, generation.account.value == accountID else { return false }
+        return deletedTimelineIDs.contains(InboxTimelineEntry.sentID(jobID: jobID))
+    }
+
+    /// One received body, read from protected storage.
+    public func message(for entry: InboxTimelineEntry) -> InboxMessage? {
+        guard let generation, entry.direction == .received,
+              let id = entry.messageID else { return nil }
         return try? runtime.messageStore(generation.account)?.load(id)
     }
 
-    public func reveal(_ conversation: InboxConversation) {
-        runtime.reveal(conversation.deliveries.flatMap(\.files).map(\.url))
+    /// One body this Mac SENT, read from the separate protected store.
+    public func sentMessage(for entry: InboxTimelineEntry) -> InboxMessage? {
+        guard let generation, entry.direction == .sent,
+              let id = entry.sentMessageID else { return nil }
+        return try? runtime.sentMessageStore(generation.account)?.load(id)
     }
 
-    public func isRemoved(_ senderDeviceID: String) -> Bool {
+    /// The files this Mac RECEIVED here. An outgoing entry carries no path and
+    /// contributes nothing, which is what keeps Reveal unable to reach a source
+    /// file the user owns.
+    public func reveal(_ conversation: InboxConversation) {
+        runtime.reveal(conversation.receivedFileURLs)
+    }
+
+    public func isRemoved(_ peerDeviceID: String) -> Bool {
         deviceDirectoryLoaded
-            && senderDeviceID != InboxConversationStore.legacySenderID
-            && !currentDeviceIDs.contains(senderDeviceID)
+            && peerDeviceID != InboxConversationStore.legacySenderID
+            && !currentDeviceIDs.contains(peerDeviceID)
     }
 
     public func displayName(for conversation: InboxConversation) -> String {
-        let fallback = conversation.senderNameSnapshot.isEmpty
-            ? String(conversation.senderDeviceID.prefix(8))
-                                                               : conversation.senderNameSnapshot
-        let base = deviceNames[conversation.senderDeviceID] ?? fallback
+        let fallback = conversation.peerNameSnapshot.isEmpty
+            ? String(conversation.peerDeviceID.prefix(8))
+                                                               : conversation.peerNameSnapshot
+        let base = deviceNames[conversation.peerDeviceID] ?? fallback
         let duplicates = conversations.filter {
-            let otherFallback = $0.senderNameSnapshot.isEmpty
-                ? String($0.senderDeviceID.prefix(8)) : $0.senderNameSnapshot
-            return (deviceNames[$0.senderDeviceID] ?? otherFallback) == base
+            let otherFallback = $0.peerNameSnapshot.isEmpty
+                ? String($0.peerDeviceID.prefix(8)) : $0.peerNameSnapshot
+            return (deviceNames[$0.peerDeviceID] ?? otherFallback) == base
         }
         return duplicates.count > 1
-            ? base + " · " + String(conversation.senderDeviceID.suffix(6)) : base
+            ? base + " · " + String(conversation.peerDeviceID.suffix(6)) : base
     }
 
     nonisolated private static func persistConversation(_ receipt: InboxReceipt,
                                             store: InboxConversationStore,
                                             senderName: String) throws {
-        let record = InboxDeliveryRecord(taskID: receipt.taskID,
-            senderDeviceID: receipt.senderDeviceID,
-            senderNameSnapshot: senderName,
+        _ = try store.record(.received(taskID: receipt.taskID,
+            peerDeviceID: receipt.senderDeviceID,
+            peerNameSnapshot: senderName,
             kind: receipt.kind == .message ? .message : .files,
-            receivedAt: receipt.savedAt,
+            at: receipt.savedAt,
             messageID: receipt.kind == .message ? receipt.taskID : nil,
-            files: receipt.urls.map(InboxDeliveryRecord.FileReference.init),
-            byteCount: receipt.byteCount)
-        _ = try store.record(record)
+            files: receipt.urls.map(InboxTimelineEntry.FileReference.init),
+            byteCount: receipt.byteCount))
     }
 
     private func refreshDeviceDirectory(bearer: String, generation: InboxGeneration) async {

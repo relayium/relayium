@@ -995,6 +995,27 @@ public enum AppEnvironment {
         return InboxMessageStore(directory: directory)
     }
 
+    /// Where the bodies this Mac SENT live.
+    ///
+    /// Beside the received messages and under the same account scope, but a
+    /// SEPARATE directory — `sent-messages` rather than `messages` — because the
+    /// two namespaces are minted by different systems. A received record is named
+    /// by central's task id and a sent one by this Mac's job id, and nothing makes
+    /// those disjoint; one directory would let a replayed receive overwrite a
+    /// message the user sent, or the reverse.
+    ///
+    /// It holds what the user wrote until they delete it, which is what a
+    /// conversation showing "what this Mac said" requires. It is protected
+    /// storage exactly like its neighbour — 0700 directory, 0600 records, inside
+    /// the container, account-scoped — and central never sees any of it.
+    public static func makeInboxSentMessageStore(subdirectory: String = "device-inbox")
+        -> InboxMessageStore? {
+        guard let support = applicationSupportRoot() else { return nil }
+        let directory = support.appendingPathComponent(subdirectory, isDirectory: true)
+            .appendingPathComponent("sent-messages", isDirectory: true)
+        return InboxMessageStore(directory: directory)
+    }
+
     public static func makeInboxConversationStore(subdirectory: String = "device-inbox")
         -> InboxConversationStore? {
         guard let support = applicationSupportRoot() else { return nil }
@@ -1135,6 +1156,10 @@ public enum AppEnvironment {
             folder: folder, makeEngine: makeEngine, notifier: notifier,
             messageStore: { account in
                 makeInboxMessageStore(subdirectory: inboxJournalSubdirectory(
+                    base: journalSubdirectory, account: account))
+            },
+            sentMessageStore: { account in
+                makeInboxSentMessageStore(subdirectory: inboxJournalSubdirectory(
                     base: journalSubdirectory, account: account))
             },
             conversationStore: { account in

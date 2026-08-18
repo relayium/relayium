@@ -26,7 +26,7 @@ import SwiftUI
 /// they were.
 ///
 /// So the landing page names the *devices* and nothing else about sending, and
-/// every control that composes a delivery moved to `DeviceSendDetail`, the
+/// every control that composes a delivery moved to `DeviceConversationPage`, the
 /// screen belonging to the one device the user picked. This file renders the
 /// list, the outstanding deliveries, and the single action that opens a device.
 ///

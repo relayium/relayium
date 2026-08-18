@@ -688,6 +688,104 @@ final class DeviceInboxUITests: XCTestCase {
                        "the device space offers more than one Finder action")
     }
 
+    /// **One device, one page: the history and the composer together, and no
+    /// jump to a second screen.**
+    ///
+    /// The defect this replaces was runtime-only. The conversation carried a
+    /// *Send content* button whose host branch rendered the separate send screen
+    /// INSTEAD of the conversation, so pressing it made the history the user was
+    /// reading disappear. Nothing in a source scan sees that; the page either has
+    /// both halves on screen at once or it does not.
+    func testADeviceConversationCarriesItsHistoryAndItsComposerOnOnePage() {
+        launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-result"])
+        let window = openDeviceInboxDestination()
+        let openConversation = revealed("inbox-conversation-open", in: window, timeout: 60)
+        XCTAssertTrue(openConversation.exists, "no conversation was rendered")
+        openConversation.click()
+
+        // The history half.
+        XCTAssertTrue(revealed("inbox-timeline", in: window, timeout: 20).exists,
+                      "the device page has no history section")
+        // The composition half, on the SAME page. Which form it takes depends on
+        // whether this peer is a live send target in the fixture — a composer, or
+        // the honest sentence that replaces it — and either is the point: there
+        // is no second screen to go to for it.
+        let composes = ["inbox-send-message-group", "inbox-send-files-group",
+                        "inbox-compose-group"]
+            .contains { element($0, in: window).exists }
+        XCTAssertTrue(composes, "the device page carries no composition section")
+
+        // And the jump is gone, by identifier and by the words it used to carry.
+        XCTAssertFalse(element("inbox-conversation-send", in: window).exists,
+                       "the conversation still offers a jump to a separate send page")
+        XCTAssertFalse(visibleText(in: window).contains("Send content"),
+                       "the conversation still offers the Send content jump")
+        // The way back is the page's own, and it returns to the list.
+        let back = revealed("inbox-send-back", in: window, timeout: 20)
+        XCTAssertTrue(back.exists, "the device page cannot be left")
+        back.click()
+        XCTAssertTrue(revealed("inbox-conversation-open", in: window, timeout: 20).exists,
+                      "leaving the device page did not return to the conversation list")
+    }
+
+    /// **Deleting one item is confirmed, says it is local, and can be refused.**
+    ///
+    /// Three runtime properties a source scan cannot decide: that the visible row
+    /// command actually opens, that the confirmation actually appears before
+    /// anything is removed, and that the sentence a person reads at the moment of
+    /// the deed says the other device keeps its copy and files already saved into
+    /// the receive folder are not touched.
+    func testDeletingOneItemIsConfirmedSaysItIsLocalAndCanBeRefused() {
+        launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-result"])
+        let window = openDeviceInboxDestination()
+        revealed("inbox-conversation-open", in: window, timeout: 60).click()
+        XCTAssertTrue(revealed("inbox-timeline", in: window, timeout: 20).exists)
+
+        let menu = revealed("inbox-entry-menu", in: window, timeout: 20)
+        XCTAssertTrue(menu.exists, "the timeline row has no visible command menu")
+        menu.click()
+        let delete = app.descendants(matching: .any)["inbox-entry-delete"].firstMatch
+        XCTAssertTrue(delete.waitForExistence(timeout: 10),
+                      "the row menu offers no Delete")
+        delete.click()
+
+        // Confirmed before anything happens, and the confirmation says what this
+        // deletion is and is not.
+        let confirm = app.descendants(matching: .any)["inbox-entry-delete-confirm"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10),
+                      "deleting an item was not confirmed")
+        let dialog = app.descendants(matching: .any).allElementsBoundByIndex
+            .map { "\($0.label) \($0.value.map { String(describing: $0) } ?? "")" }
+            .joined(separator: "\n")
+        XCTAssertTrue(dialog.contains("this Mac"),
+                      "the confirmation does not say the deletion is local to this Mac")
+        XCTAssertTrue(dialog.contains("keeps its copy"),
+                      "the confirmation does not say the other device is unaffected")
+        XCTAssertTrue(dialog.contains("receive folder"),
+                      "the confirmation does not say already-saved files stay")
+        // And it grows no second way to stop a transfer: `DeliveryActionButton`
+        // is the only control that activates one.
+        XCTAssertFalse(app.descendants(matching: .any)["inbox-entry-delete-cancel-instead"]
+            .firstMatch.exists,
+                       "the deletion dialog carries a second delivery-action control")
+
+        // Refusing it changes nothing.
+        let cancel = app.buttons["Cancel"].firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10))
+        cancel.click()
+        XCTAssertTrue(revealed("inbox-entry-menu", in: window, timeout: 20).exists,
+                      "cancelling the confirmation removed the item anyway")
+
+        // Confirming it removes the row and leaves the page saying so.
+        revealed("inbox-entry-menu", in: window, timeout: 20).click()
+        app.descendants(matching: .any)["inbox-entry-delete"].firstMatch.click()
+        let second = app.descendants(matching: .any)["inbox-entry-delete-confirm"].firstMatch
+        XCTAssertTrue(second.waitForExistence(timeout: 10))
+        second.click()
+        XCTAssertTrue(revealed("inbox-timeline-empty", in: window, timeout: 20).exists,
+                      "the deleted row is still on screen")
+    }
+
     /// **The whole Help section is readable with every preceding section
     /// present.**
     ///

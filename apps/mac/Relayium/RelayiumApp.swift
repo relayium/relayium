@@ -643,6 +643,38 @@ struct RelayiumApp: App {
                 drafts: nil, root: UITestMode.pendingUploadRoot()),
             transport: UITestMode.makeAccountTransport())
         delivering.observe(account.$state)
+
+        // **The send half's three seams into the local conversation, installed
+        // here because this is the one place both models exist.**
+        //
+        // They are closures rather than a reference in either direction: the send
+        // model must not learn what a conversation index is, and the controller
+        // must not learn how a delivery is staged. `weak` on the controller — the
+        // scene owns both for the life of the process and a cycle here would
+        // never break.
+        //
+        // The account travels inside every call and the controller REFUSES a
+        // mismatch. The two models adopt an account from the same session a turn
+        // apart, so during a switch one can still be describing the previous one,
+        // and the cost of trusting that would be one account's sent history
+        // written into another's index.
+        delivering.onSentHistory = { [weak receiving] event, body in
+            receiving?.recordSentHistory(event, messageBody: body)
+        }
+        // Separate from the above ON PURPOSE: a state change may never create a
+        // row. If it could, an update landing after the user deleted the history
+        // would write the entry back, which is the resurrection the tombstones
+        // exist to prevent — reintroduced one layer above them.
+        delivering.onSentStateChanged = { [weak receiving] accountId, job, state, task in
+            receiving?.updateSentHistory(accountID: accountId, jobID: job,
+                                         state: state, taskID: task)
+        }
+        // A deleted send stops being DESCRIBED. Nothing about the delivery
+        // changes: it keeps running, keeps reporting, keeps its staged bytes,
+        // its content key and its idempotency key.
+        delivering.isSentHistoryDeleted = { [weak receiving] accountId, job in
+            receiving?.isSentHistoryDeleted(accountID: accountId, jobID: job) ?? false
+        }
         _inboxSend = StateObject(wrappedValue: delivering)
     }
 

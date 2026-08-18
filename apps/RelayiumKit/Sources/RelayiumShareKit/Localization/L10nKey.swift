@@ -1730,7 +1730,80 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case inboxConversationRemoved = "inbox.conversationRemoved"
     case inboxConversationStoreIssue = "inbox.conversationStoreIssue"
     case inboxConversationUnread = "inbox.conversationUnread"
-    case inboxSendContent = "inbox.sendContent"
+
+    // MARK: - one device conversation: both directions, and erasable
+
+    /// The section holding one device's whole local history.
+    ///
+    /// It says HISTORY rather than "received", because 1.2.11 makes the same
+    /// list carry what this Mac sent. The old heading would have made an
+    /// outgoing row read as something that arrived.
+    case inboxTimelineHeading = "inbox.timelineHeading"
+    /// A device with no local history yet — a real state, and a different one
+    /// from a device that cannot be sent to.
+    case inboxTimelineEmpty = "inbox.timelineEmpty"
+    /// %@ — the other device. Direction is stated in WORDS on every row.
+    ///
+    /// Alignment and colour are how a chat app says this, and neither survives
+    /// VoiceOver, a high-contrast setting or a screenshot in monochrome. These
+    /// two keys are the accessible name and the visible badge at once.
+    case inboxTimelineReceivedFrom = "inbox.timelineReceivedFrom"
+    case inboxTimelineSentTo = "inbox.timelineSentTo"
+    /// The composer heading on a device's own conversation page.
+    case inboxComposeHeading = "inbox.composeHeading"
+    /// Why a legacy or removed device shows history and no composer.
+    ///
+    /// An honest sentence rather than a disabled composer: a control that cannot
+    /// work is worse than one that is absent with a reason beside it.
+    case inboxComposeUnavailable = "inbox.composeUnavailable"
+    /// This Mac has no body for an outgoing message row — the plan was staged
+    /// and the process died before the body was written. Said out loud rather
+    /// than rendered as an empty row.
+    case inboxSentMessageMissing = "inbox.sentMessageMissing"
+
+    // MARK: - what one outgoing row may claim
+    //
+    // `saved` is the only arrival, and it is reachable from one predicate:
+    // `InboxSendActivity.isSavedOnTarget`. The other five say what this Mac
+    // knows, which is never more than "it left here".
+
+    case inboxSentStateStaged = "inbox.sentStateStaged"
+    case inboxSentStateSending = "inbox.sentStateSending"
+    case inboxSentStateCreated = "inbox.sentStateCreated"
+    case inboxSentStateSaved = "inbox.sentStateSaved"
+    case inboxSentStateStopped = "inbox.sentStateStopped"
+    case inboxSentStateUnknown = "inbox.sentStateUnknown"
+
+    // MARK: - local deletion, which is never a recall
+    //
+    // Every verb here names THIS MAC, and it does so in the button rather than
+    // only in the explanation: the action label is read first and is the last
+    // thing on screen before the deed. The bodies then say the two facts a
+    // person needs — the other device keeps its copy, and files already in the
+    // receive folder are not touched.
+
+    case inboxEntryDelete = "inbox.entryDelete"
+    case inboxEntryDeleteTitle = "inbox.entryDeleteTitle"
+    /// %@ — the other device.
+    case inboxEntryDeleteBody = "inbox.entryDeleteBody"
+    /// The extra sentence for a delivery that is still running: it continues,
+    /// and where the control that would actually end it is.
+    ///
+    /// It POINTS at that control rather than duplicating it.
+    /// `DeliveryActionButton` is the only place in macOS that activates a
+    /// delivery action, because it is where "which cancel applies", "does this
+    /// need a credential" and "does this have to warn that the delivery may
+    /// still arrive" are decided. A second copy inside a deletion dialog would
+    /// be the one that forgot the warning.
+    case inboxEntryDeleteRunningBody = "inbox.entryDeleteRunningBody"
+    case inboxConversationDelete = "inbox.conversationDelete"
+    /// %@ — how many rows the open conversation is showing.
+    case inboxConversationDeleteTitle = "inbox.conversationDeleteTitle"
+    /// %@ — the other device.
+    case inboxConversationDeleteBody = "inbox.conversationDeleteBody"
+    case inboxDeleteConfirmAction = "inbox.deleteConfirmAction"
+    /// The row's own command menu, named for assistive technology.
+    case inboxEntryMenu = "inbox.entryMenu"
 
     /// Where those messages live, said once, under the section.
     ///

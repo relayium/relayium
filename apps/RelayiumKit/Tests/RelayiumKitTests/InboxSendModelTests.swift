@@ -1114,4 +1114,248 @@ final class InboxSendModelTests: XCTestCase {
             return body()
         }
     }
+
+    // MARK: - the local conversation's outgoing half
+
+    /// Everything the three history seams reported, in order, with the bodies
+    /// they were asked for resolved at the moment they were announced.
+    private final class HistoryRecorder {
+        var events: [(event: InboxSentHistoryEvent, body: String?)] = []
+        /// How many creates the sender had made when each event was announced.
+        /// The history is durable BEFORE any byte leaves, so the first entry is
+        /// zero — an ordering claim a structural read cannot make.
+        var createsAtAnnounce: [Int] = []
+        var sender: FakeInboxSenderTransport?
+        var states: [(account: String, job: String,
+                      state: InboxTimelineEntry.SentState, task: String?)] = []
+        var deleted: Set<String> = []
+
+        @MainActor
+        func install(on model: InboxSendModel) {
+            model.onSentHistory = { [weak self] event, body in
+                self?.createsAtAnnounce.append(self?.sender?.creates.count ?? -1)
+                self?.events.append((event, body()))
+            }
+            model.onSentStateChanged = { [weak self] account, job, state, task in
+                self?.states.append((account, job, state, task))
+            }
+            model.isSentHistoryDeleted = { [weak self] _, job in
+                self?.deleted.contains(job) ?? false
+            }
+        }
+    }
+
+    /// **A message's durable history exists before any byte leaves this Mac, and
+    /// it carries the text the user actually typed.**
+    ///
+    /// The body travels through the seam and nowhere else: it is not on the card,
+    /// not in the manifest names, and not in anything `InboxSendItem` publishes.
+    func testAMessageAnnouncesItsDurableHistoryWithItsBodyBeforeDelivery() async throws {
+        let (model, _) = await signedIn()
+        let history = HistoryRecorder()
+        history.sender = sender
+        history.install(on: model)
+        model.selectTarget(deviceID)
+        // The create is refused, so the durable plan stays on disk for this test
+        // to compare the announcement against. What is being asserted is what the
+        // history said and WHEN, not whether the delivery succeeded.
+        sender.createOutcomes = [.failure(InboxError.network)]
+
+        model.sendText("meet me at 6", token: "bearer")
+        await waitUntil("the durable history") { !history.events.isEmpty }
+
+        // Durable before any byte left: nothing had been created yet.
+        XCTAssertEqual(history.createsAtAnnounce.first, 0,
+                       "the history was written after the delivery was attempted")
+        let first = try XCTUnwrap(history.events.first)
+        let plan = try XCTUnwrap(store.deviceSendPlans(for: "acct-1").first)
+        XCTAssertEqual(first.event.jobID, plan.jobId)
+        XCTAssertNotEqual(first.event.jobID, "staging",
+                          "the sender's transient placeholder became durable history")
+        XCTAssertEqual(first.event.accountID, "acct-1")
+        XCTAssertEqual(first.event.peerDeviceID, deviceID)
+        XCTAssertEqual(first.event.kind, .message)
+        XCTAssertEqual(first.event.state, .staged)
+        XCTAssertEqual(first.event.files, [], "a message announced a file manifest")
+        XCTAssertEqual(first.event.at,
+                       Date(timeIntervalSince1970: TimeInterval(plan.createdAt)))
+        XCTAssertEqual(first.body, "meet me at 6")
+        // The card still describes a message by its size alone: the body reached
+        // the history seam and nothing else.
+        await waitUntil("the stopped attempt") { model.items.first?.isRecoverable == true }
+        XCTAssertEqual(model.items.first?.files, [])
+        XCTAssertEqual(model.items.first?.byteCount, Array("meet me at 6".utf8).count)
+    }
+
+    /// A file send announces sanitized manifest names and sizes, no body, and no
+    /// path of any kind — not the user's source and not the staged slot.
+    func testAFileSendAnnouncesManifestNamesAndSizesAndNoBody() async throws {
+        let (model, _) = await signedIn()
+        let history = HistoryRecorder()
+        history.install(on: model)
+        model.selectTarget(deviceID)
+        sender.createOutcomes = [
+            .success(InboxTaskCreation(task: task(idempotencyKey: "recorded"), created: true)),
+        ]
+        let source = try selection("reports/q3.txt")
+        model.send(files: source, sourceDraftId: nil, token: "bearer")
+        await waitUntil("the durable history") { !history.events.isEmpty }
+
+        let first = try XCTUnwrap(history.events.first)
+        XCTAssertEqual(first.event.kind, .files)
+        XCTAssertEqual(first.event.files, [.init(name: "reports/q3.txt", size: 18)])
+        XCTAssertNil(first.body, "a file delivery produced a message body")
+        XCTAssertTrue(first.event.files.allSatisfy {
+            InboxConversationStore.isSafeManifestName($0.name)
+        })
+        // The user's own file is untouched by any of this.
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source[0].url.path))
+    }
+
+    /// **`saved` is reachable from one predicate.** Every local phase maps to
+    /// `sending`, and the durable enum has no state nothing can write.
+    func testTheDurableSentStateReachesSavedOnlyFromTrackingSaved() {
+        XCTAssertEqual(InboxSendModel.sentState(for: .staged), .staged)
+        XCTAssertEqual(InboxSendModel.sentState(for: .preparing), .sending)
+        XCTAssertEqual(InboxSendModel.sentState(for: .uploading(sent: 1, total: 2)), .sending)
+        XCTAssertEqual(InboxSendModel.sentState(for: .creating), .sending)
+        XCTAssertEqual(InboxSendModel.sentState(for: .unknown), .unknown)
+        XCTAssertEqual(InboxSendModel.sentState(for: .stopped(.notAuthorized)), .stopped)
+        XCTAssertEqual(InboxSendModel.sentState(for: .tracking(.queued)), .created)
+        XCTAssertEqual(InboxSendModel.sentState(for: .tracking(.downloading)), .created)
+        XCTAssertEqual(InboxSendModel.sentState(for: .tracking(.verifying)), .created)
+        XCTAssertEqual(InboxSendModel.sentState(for: .tracking(.expired)), .stopped)
+        XCTAssertEqual(InboxSendModel.sentState(for: .tracking(.revoked)), .stopped)
+        XCTAssertEqual(InboxSendModel.sentState(for: .tracking(.failedTerminal)), .stopped)
+        XCTAssertEqual(InboxSendModel.sentState(for: .tracking(.saved)), .saved)
+        // Every case of the durable enum is produced by something above.
+        let produced = Set([InboxSendActivity.staged, .preparing, .uploading(sent: 0, total: 1),
+                            .creating, .unknown, .stopped(.notAuthorized), .tracking(.queued),
+                            .tracking(.saved), .tracking(.expired)]
+            .map(InboxSendModel.sentState(for:)))
+        XCTAssertEqual(produced, Set(InboxTimelineEntry.SentState.allCases))
+    }
+
+    /// A running delivery reports every state change to the history, and none of
+    /// those reports may CREATE a row — that is what `onSentHistory` is for.
+    func testEveryStateChangeIsReportedUnderTheAccountAndTheRealJobIdentifier() async throws {
+        let (model, _) = await signedIn()
+        let history = HistoryRecorder()
+        history.install(on: model)
+        model.selectTarget(deviceID)
+        sender.createOutcomes = [
+            .success(InboxTaskCreation(task: task(idempotencyKey: "recorded"), created: true)),
+        ]
+        sender.taskResults = [.success(task(state: .saved, idempotencyKey: "recorded"))]
+
+        model.sendText("meet me at 6", token: "bearer")
+        await waitUntil("the arrival") { model.items.first?.activity.isSavedOnTarget == true }
+
+        let job = try XCTUnwrap(model.items.first?.id)
+        XCTAssertTrue(history.states.allSatisfy { $0.account == "acct-1" && $0.job == job })
+        XCTAssertFalse(history.states.contains { $0.job == "staging" },
+                       "the staging placeholder reported a durable state")
+        XCTAssertEqual(history.states.last?.state, .saved)
+        XCTAssertEqual(history.states.last?.task, taskID)
+        // Nothing claimed an arrival before central said one had happened.
+        let beforeSaved = history.states.prefix { $0.state != .saved }
+        XCTAssertFalse(beforeSaved.contains { $0.state == .saved })
+    }
+
+    /// **Deleting the history stops the card and nothing else.** The plan, its
+    /// idempotency key, its staged bytes and the running delivery are untouched,
+    /// which is exactly what the confirmation the user saw promised.
+    func testADeletedSendStopsBeingDescribedWhileItsDeliveryContinues() async throws {
+        let (model, _) = await signedIn()
+        let history = HistoryRecorder()
+        history.install(on: model)
+        model.selectTarget(deviceID)
+        sender.createOutcomes = [.failure(InboxError.network)]
+
+        let source = try selection()
+        model.send(files: source, sourceDraftId: nil, token: "bearer")
+        await waitUntil("the stopped attempt") { model.items.first?.isRecoverable == true }
+
+        let plan = try XCTUnwrap(store.deviceSendPlans(for: "acct-1").first)
+        let key = plan.createIdempotencyKey
+        let staged = try XCTUnwrap(store.sources(for: plan).first)
+        _ = staged
+
+        history.deleted.insert(plan.jobId)
+        model.refreshOutstanding()
+        XCTAssertTrue(model.items.isEmpty, "a deleted send is still described")
+
+        // The delivery's durable state is exactly as it was.
+        let after = try XCTUnwrap(store.deviceSendPlans(for: "acct-1").first)
+        XCTAssertEqual(after.jobId, plan.jobId)
+        XCTAssertEqual(after.createIdempotencyKey, key,
+                       "deleting history invalidated the idempotency key")
+        XCTAssertEqual(after.targetWrappedKey, plan.targetWrappedKey,
+                       "deleting history discarded the sealed content key")
+        XCTAssertNotNil(try? store.sources(for: after).first,
+                        "deleting history removed the staged bytes")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source[0].url.path),
+                      "deleting history removed the user's own file")
+
+        // Undeleted, it comes back as the same job rather than as a new one.
+        history.deleted.removeAll()
+        model.refreshOutstanding()
+        XCTAssertEqual(model.items.map(\.id), [plan.jobId])
+    }
+
+    /// **The crash window between a durable plan and its history row.** A later
+    /// process rediscovers the plan, announces it under its REAL job id and its
+    /// own creation time, and re-reads the staged plaintext so a text send
+    /// interrupted there comes back as the message the user wrote.
+    func testARecoveredTextPlanBackfillsItsBodyFromTheStagedCopy() async throws {
+        let (first, _) = await signedIn()
+        first.selectTarget(deviceID)
+        sender.createOutcomes = [.failure(InboxError.network)]
+        first.sendText("recovered body", token: "bearer")
+        await waitUntil("the stopped attempt") { first.items.first?.isRecoverable == true }
+        let plan = try XCTUnwrap(store.deviceSendPlans(for: "acct-1").first)
+
+        // A new process: a new model over the same durable store, which has never
+        // seen the string. The recorder is installed BEFORE the account is
+        // adopted, because adopting one is what rediscovers the plan.
+        let session = CurrentValueSubject<SessionState, Never>(ready("acct-1"))
+        let second = makeModel()
+        let history = HistoryRecorder()
+        history.sender = sender
+        history.install(on: second)
+        second.observe(session)
+        await waitUntil("the recovered history") { !history.events.isEmpty }
+
+        let event = try XCTUnwrap(history.events.first)
+        XCTAssertEqual(event.event.jobID, plan.jobId)
+        XCTAssertEqual(event.event.kind, .message)
+        XCTAssertEqual(event.event.at,
+                       Date(timeIntervalSince1970: TimeInterval(plan.createdAt)),
+                       "a recovered send jumped to the top of the timeline")
+        XCTAssertEqual(event.body, "recovered body")
+    }
+
+    /// A model describing one account never announces history under another.
+    func testTheHistorySeamsCarryTheAccountThatOwnsTheWork() async throws {
+        let (model, session) = await signedIn("acct-1")
+        let history = HistoryRecorder()
+        history.install(on: model)
+        model.selectTarget(deviceID)
+        sender.createOutcomes = [.failure(InboxError.network)]
+        model.sendText("mine", token: "bearer")
+        await waitUntil("the durable history") { !history.events.isEmpty }
+        XCTAssertTrue(history.events.allSatisfy { $0.event.accountID == "acct-1" })
+
+        // The account leaves. Its plans survive, and nothing about them is
+        // announced under the next account.
+        let count = history.events.count
+        session.send(ready("acct-2"))
+        model.refreshTargets(token: "bearer-acct-2")
+        await waitUntil("the second account's list") { model.directory == .loaded }
+        model.refreshOutstanding()
+        XCTAssertEqual(history.events.count, count,
+                       "one account's send was announced under another's history")
+        XCTAssertFalse(store.deviceSendPlans(for: "acct-1").isEmpty,
+                       "leaving an account destroyed its durable plans")
+    }
 }

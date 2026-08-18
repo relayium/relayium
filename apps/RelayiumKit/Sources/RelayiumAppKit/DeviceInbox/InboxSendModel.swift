@@ -77,6 +77,60 @@ public final class InboxSendModel: ObservableObject {
     public var onSelectionCommitted: (@MainActor (_ accountId: String,
                                                   _ sourceDraftId: String?) -> Void)?
 
+    /// Announced, on the main actor, the moment a durable device job exists and
+    /// BEFORE network delivery proceeds — and again whenever a later process
+    /// rediscovers that plan on disk.
+    ///
+    /// This is how the local conversation gains its outgoing half without this
+    /// model learning what a conversation index is. It stays a closure, exactly
+    /// like `onSelectionCommitted` above, for the reason recorded there and one
+    /// more: every test in `InboxSendModelTests` drives this model with no
+    /// Application Support directory at all, and a direct store reference would
+    /// make that impossible.
+    ///
+    /// The second argument PRODUCES the message body, and is deliberately a
+    /// closure rather than a value.
+    ///
+    /// For a text send the user just composed it simply returns what they typed.
+    /// For a plan rediscovered in a later process it re-reads the staged
+    /// plaintext this app already owns — which is what closes the crash window
+    /// between a durable plan existing and its history row being written. Before
+    /// that backfill, a send interrupted in that window came back after a
+    /// relaunch as a message row with no body: permanently "not available",
+    /// because the only copy the app still had was the staged one and nothing
+    /// ever looked at it.
+    ///
+    /// It is a closure so that plaintext is read ONLY when the receiving side
+    /// has decided it actually needs a body — the common recovery, where history
+    /// already holds the message, never touches the staged bytes at all. It
+    /// returns nil for a file delivery, and for a text plan whose staging is
+    /// gone.
+    public var onSentHistory: (@MainActor (InboxSentHistoryEvent,
+                                           @MainActor () -> String?) -> Void)?
+
+    /// Announced whenever what is known about one outgoing delivery changes.
+    ///
+    /// Deliberately separate from `onSentHistory`: a state change must never be
+    /// able to CREATE a row. If it could, an update arriving after the user
+    /// deleted the history would write the entry back — which is the exact
+    /// resurrection the tombstones exist to prevent, reintroduced one layer up.
+    public var onSentStateChanged: (@MainActor (_ accountId: String, _ jobID: String,
+                                                _ state: InboxTimelineEntry.SentState,
+                                                _ taskID: String?) -> Void)?
+
+    /// Whether the user has deleted this job's local history.
+    ///
+    /// A deleted send stops being described here — the card goes — while the
+    /// delivery itself continues untouched: no cancel, no discard, no staged byte
+    /// removed and no idempotency key invalidated. The confirmation the user saw
+    /// says exactly that, and offers the real cancel separately when one is
+    /// genuinely available.
+    ///
+    /// Defaulted to "nothing is deleted", so every existing harness and the iOS
+    /// host are unchanged.
+    public var isSentHistoryDeleted: (@MainActor (_ accountId: String,
+                                                 _ jobID: String) -> Bool)?
+
     // MARK: - internal state, rendered by nothing
 
     /// The rows the last device read returned, KEY MATERIAL INCLUDED.
@@ -296,6 +350,20 @@ public final class InboxSendModel: ObservableObject {
                                              byteCount: plan.totalBytes,
                                              targetDeviceID: deviceID,
                                              sequence: sequence)
+                // A plan this process has not seen before: either a recovery
+                // after a relaunch, or a crash between the plan being written
+                // and its history row. Materialize by the plan's REAL job id and
+                // its own creation time, so a recovered send keeps its place in
+                // the timeline instead of jumping to the top on every launch.
+                // Tombstoned jobs are refused by the store's write gate, so this
+                // cannot resurrect a deleted send.
+                //
+                // No `messageText`: this process never saw the string. The body
+                // provider re-reads the staged plaintext instead, and only if the
+                // history is actually missing a body — which is what makes a
+                // text send interrupted in that window come back as the message
+                // the user wrote rather than as a permanently empty row.
+                announceSentHistory(plan, state: .staged, accountId: accountId)
             }
         }
         // A record whose plan is gone AND which this session is not watching is
@@ -319,6 +387,12 @@ public final class InboxSendModel: ObservableObject {
     /// row stops being a durable one.
     private func publish() {
         items = records
+            // A job whose local history the user deleted stops being described.
+            // Nothing about the delivery changes; this is the card, not the send.
+            .filter { job, _ in
+                guard let accountId else { return true }
+                return !(isSentHistoryDeleted?(accountId, job) ?? false)
+            }
             .sorted { $0.value.sequence > $1.value.sequence }
             .map { job, record in
                 InboxSendItem(
@@ -429,6 +503,9 @@ public final class InboxSendModel: ObservableObject {
                 // shared draft stops being the user's only copy, and the only
                 // moment removing it is safe.
                 self.onSelectionCommitted?(accountId, plan.sourceDraftId)
+                // And the same moment the local history may honestly say this
+                // Mac sent something: durable, before any byte leaves.
+                self.announceSentHistory(plan, state: .staged, accountId: accountId)
                 await self.run(plan, token: token, g: g)
             } catch {
                 guard let self else { return }
@@ -547,6 +624,14 @@ public final class InboxSendModel: ObservableObject {
                 // No `onSelectionCommitted`: a message has no shared draft and
                 // no picked selection behind it, so there is nothing to retire
                 // and nothing whose last copy this staging just became.
+                //
+                // The BODY is handed over exactly here and nowhere else. It goes
+                // to the protected sent-message store, keyed by this job — never
+                // to central, a manifest, a log, a notification or a file name —
+                // and it is what makes a conversation able to show what this Mac
+                // actually said rather than "a message, 42 bytes".
+                self.announceSentHistory(plan, state: .staged, accountId: accountId,
+                                         messageText: message)
                 await self.run(plan, token: token, g: g)
             } catch {
                 guard let self else { return }
@@ -640,6 +725,101 @@ public final class InboxSendModel: ObservableObject {
         publish()
     }
 
+    /// Hand this send's durable identity to whoever keeps the local history.
+    ///
+    /// **Only ever from a real plan.** `Self.stagingKey` is a global singleton
+    /// slot two concurrent stagings would share, so a durable row built on it
+    /// would be one send overwriting another's history; the store refuses it
+    /// too, in `InboxConversationStore.valid`.
+    ///
+    /// The manifest names are the plan's own — already sanitized, already what
+    /// every other send surface renders — and the staged slot names are
+    /// deliberately not carried across.
+    private func announceSentHistory(_ plan: PendingUploadPlan,
+                                     state: InboxTimelineEntry.SentState,
+                                     accountId: String, messageText: String? = nil) {
+        guard let onSentHistory, let deviceID = plan.targetDeviceId,
+              plan.jobId != Self.stagingKey, plan.accountId == accountId else { return }
+        let kind: InboxTimelineEntry.Kind =
+            plan.effectiveDeliveryKind == .text ? .message : .files
+        // The body the caller already holds, or — for a recovered plan, which
+        // has none — the staged plaintext, read only if it is asked for.
+        let body: @MainActor () -> String? = { [weak self] in
+            guard kind == .message else { return nil }
+            if let messageText { return messageText }
+            return self?.stagedMessageBody(of: plan)
+        }
+        let event = InboxSentHistoryEvent(
+            accountID: accountId, jobID: plan.jobId, peerDeviceID: deviceID,
+            kind: kind,
+            // The plan's own creation time: local, durable, and identical on
+            // every later recovery of the same plan.
+            at: Date(timeIntervalSince1970: TimeInterval(plan.createdAt)),
+            byteCount: Int64(plan.totalBytes),
+            files: kind == .files
+                ? plan.files.map { InboxTimelineEntry.FileNameSnapshot(name: $0.name,
+                                                                       size: Int64($0.size)) }
+                : [],
+            state: state, taskID: plan.deviceTaskId)
+        onSentHistory(event, body)
+    }
+
+    /// The message a text plan is still holding, read back from this app's own
+    /// staged copy.
+    ///
+    /// **Only ever the staged copy.** These are bytes `PendingUploadStore
+    /// .prepare` already wrote inside this app's container from the string the
+    /// user typed, so reading them re-derives nothing and reaches nothing the
+    /// user owns — no source file, no receive folder, no network. It is also the
+    /// only remaining copy after a crash between staging and the history row,
+    /// which is exactly the case this exists for.
+    ///
+    /// A file plan is refused before any read: `sources(for:)` on a multi-file
+    /// job would open the user's actual content, and a file delivery has no body
+    /// to recover in the first place.
+    private func stagedMessageBody(of plan: PendingUploadPlan) -> String? {
+        guard plan.effectiveDeliveryKind == .text, plan.files.count == 1,
+              plan.files[0].size >= InboxManifest.minTextBytes,
+              plan.files[0].size <= InboxManifest.maxTextBytes,
+              var source = try? pending.store.sources(for: plan).first else { return nil }
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(plan.files[0].size)
+        while bytes.count < plan.files[0].size {
+            guard let chunk = try? source.read(plan.files[0].size - bytes.count),
+                  !chunk.isEmpty else { return nil }
+            bytes.append(contentsOf: chunk)
+        }
+        // Refused rather than repaired if it is not the text that was staged:
+        // a body this app cannot decode is one it must not claim the user wrote.
+        guard let text = String(bytes: bytes, encoding: .utf8),
+              InboxMessageStore.isAcceptable(text) else { return nil }
+        return text
+    }
+
+    /// The durable snapshot of what one activity means for a delivery.
+    ///
+    /// **`saved` is reachable through exactly one predicate.** Everything local —
+    /// preparing, uploading, creating — is `sending`, because an upload is not a
+    /// delivery; only `InboxSendActivity.isSavedOnTarget`, which is
+    /// `tracking(.saved)`, produces an arrival. Every case below is writable, so
+    /// there is no state in the durable enum that nothing can ever put there.
+    static func sentState(for activity: InboxSendActivity) -> InboxTimelineEntry.SentState {
+        if activity.isSavedOnTarget { return .saved }
+        switch activity {
+        case .staged: return .staged
+        case .preparing, .uploading, .creating: return .sending
+        case .unknown: return .unknown
+        case .stopped: return .stopped
+        case .tracking(let state):
+            switch state {
+            case .expired, .revoked, .failedTerminal: return .stopped
+            case .queued, .notified, .downloading, .verifying, .attentionRequired,
+                 .failedRetryable: return .created
+            case .saved: return .saved     // unreachable: isSavedOnTarget above
+            }
+        }
+    }
+
     /// A plan's manifest, in the shape every other send surface renders.
     ///
     /// `PendingUploadFile.staged` — the on-disk slot name — is deliberately not
@@ -715,6 +895,7 @@ public final class InboxSendModel: ObservableObject {
         record.activity = activity
         records[job] = record
         publish()
+        announceSentState(job: job, activity: activity, taskID: record.result?.task.id)
     }
 
     private func adopt(_ result: InboxSendResult, for job: String, g: Int) {
@@ -723,6 +904,17 @@ public final class InboxSendModel: ObservableObject {
         record.activity = .tracking(result.task.state)
         records[job] = record
         publish()
+        announceSentState(job: job, activity: record.activity, taskID: result.task.id)
+    }
+
+    /// Report what is now known, and never create a row by doing so.
+    ///
+    /// The staging placeholder is excluded because it is not a delivery yet and
+    /// has no durable identity to report against.
+    private func announceSentState(job: String, activity: InboxSendActivity,
+                                   taskID: String?) {
+        guard let onSentStateChanged, let accountId, job != Self.stagingKey else { return }
+        onSentStateChanged(accountId, job, Self.sentState(for: activity), taskID)
     }
 
     private func reloadPlan(for job: String, g: Int) {
