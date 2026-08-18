@@ -244,6 +244,57 @@ func TestDeletionSeedsEveryKnownCheckoutRecoverySession(t *testing.T) {
 	}
 }
 
+func TestAttemptOnlyStripeHistoryCreatesCancellationOutbox(t *testing.T) {
+	svc, store, _, u, token := deletionFixture(t, "attempt-only-delete@example.test")
+	authority, err := store.AcquireBillingAuthority(context.Background(), BillingAuthorityRequest{UserID: u.ID, Provider: ProviderStripe, Now: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt, created, err := store.DispatchBillingPurchase(context.Background(), authority, "price_pro", 100)
+	if err != nil || !created {
+		t.Fatalf("attempt=%+v created=%v err=%v", attempt, created, err)
+	}
+	if err := store.SetBillingPurchaseProviderSession(context.Background(), u.ID, attempt.ID, "cs_attempt_only", "https://checkout.invalid"); err != nil {
+		t.Fatal(err)
+	}
+	svc.biller = &deletionStripeBiller{fakeBiller: &fakeBiller{}, cancelErr: errors.New("pending"), store: store}
+	if err := svc.ConfirmAccountDeletion(context.Background(), token); err != nil {
+		t.Fatal(err)
+	}
+	var progress string
+	if err := store.db.QueryRow(`SELECT progress_json FROM billing_cancellation_outbox WHERE billing_subject_id=?`, u.ID).Scan(&progress); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(progress, "cs_attempt_only") || !strings.Contains(progress, attempt.ID) {
+		t.Fatalf("attempt-only checkout not journaled: %s", progress)
+	}
+}
+
+func TestBillingCancellationClaimRejectsExpiredWorker(t *testing.T) {
+	store := newTestStore(t)
+	now := time.Now().Unix()
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation,next_attempt_at) VALUES('claim-row','subject','stripe','claim-key','pending',?,?,1,?)`, now, now, now); err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.PendingBillingCancellations(context.Background(), 1)
+	if err != nil || len(first) != 1 {
+		t.Fatalf("first claim=%+v err=%v", first, err)
+	}
+	if _, err := store.db.Exec(`UPDATE billing_cancellation_outbox SET claim_until=0 WHERE id='claim-row'`); err != nil {
+		t.Fatal(err)
+	}
+	second, err := store.PendingBillingCancellations(context.Background(), 1)
+	if err != nil || len(second) != 1 || second[0].ClaimToken == first[0].ClaimToken {
+		t.Fatalf("second claim=%+v err=%v", second, err)
+	}
+	if err := store.FinishBillingCancellation(context.Background(), first[0].ID, first[0].ClaimToken, first[0].Generation, first[0].Revision, `{}`, "", true, first[0].Attempts, now); err == nil {
+		t.Fatal("expired worker overwrote replacement claim")
+	}
+	if err := store.FinishBillingCancellation(context.Background(), second[0].ID, second[0].ClaimToken, second[0].Generation, second[0].Revision, `{}`, "", true, second[0].Attempts, now); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestPendingStripeRecoveryRemainsFrozen(t *testing.T) {
 	svc, store, _, u, token := deletionFixture(t, "pending-recovery@example.test")
 	b := &deletionStripeBiller{fakeBiller: &fakeBiller{}, terminal: false, store: store}

@@ -1058,6 +1058,9 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		`ALTER TABLE billing_cancellation_outbox ADD COLUMN generation INTEGER NOT NULL DEFAULT 1`,
 		`ALTER TABLE billing_cancellation_outbox ADD COLUMN last_error TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE billing_cancellation_outbox ADD COLUMN next_attempt_at INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE billing_cancellation_outbox ADD COLUMN claim_token TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE billing_cancellation_outbox ADD COLUMN claim_until INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE billing_cancellation_outbox ADD COLUMN revision INTEGER NOT NULL DEFAULT 0`,
 		`CREATE TABLE IF NOT EXISTS stripe_customer_history (
  user_id TEXT NOT NULL,
  customer_id TEXT NOT NULL,
@@ -1675,7 +1678,7 @@ func migrateEmailVerified(db *sql.DB) error {
 // The idempotent ALTERs in OpenSQLite run first, making the copy shape identical
 // for legacy and fresh databases.
 func migrateBillingCancellationOutboxGenerations(db *sql.DB) error {
-	return migrateOnce(db, "billing_cancellation_outbox_generations_v2", func(tx *sql.Tx) error {
+	return migrateOnce(db, "billing_cancellation_outbox_generations_v3", func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(context.Background(), `
 CREATE TABLE billing_cancellation_outbox_v2 (
  id TEXT PRIMARY KEY,
@@ -1693,13 +1696,20 @@ CREATE TABLE billing_cancellation_outbox_v2 (
  next_attempt_at INTEGER NOT NULL DEFAULT 0,
  progress_json TEXT NOT NULL DEFAULT '{}',
  terminal_at INTEGER NOT NULL DEFAULT 0,
- archived_at INTEGER NOT NULL DEFAULT 0)`); err != nil {
+ archived_at INTEGER NOT NULL DEFAULT 0,
+ claim_token TEXT NOT NULL DEFAULT '',
+ claim_until INTEGER NOT NULL DEFAULT 0,
+ revision INTEGER NOT NULL DEFAULT 0,
+ UNIQUE(billing_subject_id,provider,generation))`); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(context.Background(), `
 INSERT INTO billing_cancellation_outbox_v2
- (id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at,generation,last_error,next_attempt_at,progress_json,terminal_at,archived_at)
- SELECT id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at,generation,last_error,next_attempt_at,progress_json,terminal_at,archived_at
+ (id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at,generation,last_error,next_attempt_at,progress_json,terminal_at,archived_at,claim_token,claim_until,revision)
+ SELECT id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,
+        CASE state WHEN 'terminal' THEN 'pending' ELSE state END,attempts,created_at,updated_at,generation,last_error,
+        CASE state WHEN 'terminal' THEN 0 ELSE next_attempt_at END,progress_json,
+        CASE state WHEN 'terminal' THEN 0 ELSE terminal_at END,0,'',0,revision
  FROM billing_cancellation_outbox`); err != nil {
 			return err
 		}

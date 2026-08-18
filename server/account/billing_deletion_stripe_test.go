@@ -129,13 +129,12 @@ func TestStripeDeletionNeverLosesAsynchronousPayment(t *testing.T) {
 	}
 }
 
-func TestStripeDeletionSearchesEveryHistoricalCustomer(t *testing.T) {
+func TestStripeDeletionUsesEveryDurableHistoricalCustomer(t *testing.T) {
 	seen := map[string]bool{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/v1/customers/search" {
-			io.WriteString(w, `{"data":[{"id":"cus_old"},{"id":"cus_new"}],"has_more":false}`)
-			return
+			t.Fatal("customer search metadata is not an ownership authority")
 		}
 		customer := r.URL.Query().Get("customer")
 		if customer != "" {
@@ -147,7 +146,7 @@ func TestStripeDeletionSearchesEveryHistoricalCustomer(t *testing.T) {
 	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
 	c.base = ts.URL
 	c.http = ts.Client()
-	p, err := c.DiscoverDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", CustomerID: ""}, BillingDeletionProgress{})
+	p, err := c.DiscoverDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject"}, BillingDeletionProgress{Customers: []string{"cus_old", "cus_new"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,5 +250,92 @@ func TestStripeDeletionRejectsForgedCheckoutAttribution(t *testing.T) {
 	}
 	if mutation {
 		t.Fatal("forged checkout triggered provider mutation")
+	}
+}
+
+func TestStripeDeletionHistoricalPaidIsNotLabeledAfterDeletion(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/subscriptions/sub_old":
+			io.WriteString(w, `{"id":"sub_old","status":"canceled","customer":"cus_1"}`)
+		case "/v1/invoices/in_old":
+			io.WriteString(w, `{"id":"in_old","status":"void","customer":"cus_1"}`)
+		default:
+			io.WriteString(w, `{"id":"cs_old","status":"complete","payment_status":"paid","created":90,"customer":"cus_1","subscription":"sub_old","invoice":"in_old"}`)
+		}
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+	c.base, c.http = ts.URL, ts.Client()
+	p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{"checkout_session:cs_old": {Kind: "checkout_session", ID: "cs_old", CustomerID: "cus_1"}}}
+	got, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", CreatedAt: 100, IdempotencyKey: "delete"}, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := got.Resources["checkout_session:cs_old"]
+	if !r.Terminal || r.Manual || r.Status != "paid_before_deletion" || r.ProviderCreatedAt != 90 {
+		t.Fatalf("historical payment misclassified: %+v", r)
+	}
+	if _, ok := got.Resources["subscription:sub_old"]; !ok {
+		t.Fatal("historical paid checkout lost linked subscription")
+	}
+	if _, ok := got.Resources["invoice:in_old"]; !ok {
+		t.Fatal("historical paid checkout lost linked invoice")
+	}
+}
+
+func TestStripeDeletionRecoveryLineageNeverExpiresBlindly(t *testing.T) {
+	var mutation bool
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			mutation = true
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"cs_recovery","status":"open","customer":"cus_1","after_expiration":{"recovery":{"enabled":true}}}`)
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+	c.base, c.http = ts.URL, ts.Client()
+	p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{"checkout_session:cs_recovery": {Kind: "checkout_session", ID: "cs_recovery", CustomerID: "cus_1"}}}
+	got, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", IdempotencyKey: "delete"}, p)
+	if err == nil || got.Resources["checkout_session:cs_recovery"].Status != "recovery_lineage_pending" {
+		t.Fatalf("recovery lineage accepted: err=%v progress=%+v", err, got)
+	}
+	if mutation {
+		t.Fatal("recovery-enabled session was blindly expired")
+	}
+}
+
+func TestStripeDeletionDiscoversCompleteCheckoutAndAllPostCutoffInvoices(t *testing.T) {
+	seen := map[string]url.Values{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		seen[r.URL.Path+"?"+r.URL.Query().Get("status")] = r.URL.Query()
+		if r.URL.Path == "/v1/checkout/sessions" && r.URL.Query().Get("status") == "complete" {
+			io.WriteString(w, `{"data":[{"id":"cs_complete","status":"complete"}],"has_more":false}`)
+			return
+		}
+		if r.URL.Path == "/v1/invoices" {
+			io.WriteString(w, `{"data":[{"id":"in_paid","status":"paid"}],"has_more":false}`)
+			return
+		}
+		io.WriteString(w, `{"data":[],"has_more":false}`)
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+	c.base, c.http = ts.URL, ts.Client()
+	p, err := c.DiscoverDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", CustomerID: "cus_1", CreatedAt: 123}, BillingDeletionProgress{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := p.Resources["checkout_session:cs_complete"]; !ok {
+		t.Fatal("complete Checkout was not discovered")
+	}
+	if _, ok := p.Resources["invoice:in_paid"]; !ok {
+		t.Fatal("paid invoice was not discovered")
+	}
+	if got := seen["/v1/invoices?"].Get("created[gte]"); got != "123" {
+		t.Fatalf("invoice cutoff=%q", got)
 	}
 }

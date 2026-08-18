@@ -212,6 +212,11 @@ func TestCreateCheckoutSessionRequestShape(t *testing.T) {
 		if got := r.Form.Get("subscription_data[metadata][billing_attempt_id]"); got != "attempt_42" {
 			t.Errorf("subscription_data metadata attempt = %q, want attempt_42", got)
 		}
+		for key := range r.Form {
+			if strings.HasPrefix(key, "after_expiration[") || strings.HasPrefix(key, "recovery[") {
+				t.Errorf("Checkout recovery must remain disabled, sent %q", key)
+			}
+		}
 		// CustomerID left empty in this test, so the client must fall back to
 		// the customer_email branch rather than sending an empty "customer".
 		if got := r.Form.Get("customer_email"); got != "user@example.com" {

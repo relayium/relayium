@@ -11,7 +11,7 @@ func TestOpenSQLiteRebuildsLegacyCancellationUniqueness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.db.Exec(`DELETE FROM schema_migrations WHERE id='billing_cancellation_outbox_generations_v2'`); err != nil {
+	if _, err := store.db.Exec(`DELETE FROM schema_migrations WHERE id='billing_cancellation_outbox_generations_v3'`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.db.Exec(`ALTER TABLE billing_cancellation_outbox RENAME TO billing_cancellation_outbox_current`); err != nil {
@@ -46,7 +46,7 @@ func TestOpenSQLiteRebuildsLegacyCancellationUniqueness(t *testing.T) {
 	if err := store.db.QueryRow(`SELECT COUNT(*) FROM billing_cancellation_outbox WHERE billing_subject_id='subject'`).Scan(&rows); err != nil || rows != 2 {
 		t.Fatalf("preserved rows=%d err=%v", rows, err)
 	}
-	if err := store.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE id='billing_cancellation_outbox_generations_v2'`).Scan(&marker); err != nil || marker != 1 {
+	if err := store.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE id='billing_cancellation_outbox_generations_v3'`).Scan(&marker); err != nil || marker != 1 {
 		t.Fatalf("marker=%d err=%v", marker, err)
 	}
 	// The migration is idempotent on a second open.

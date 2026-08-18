@@ -1108,6 +1108,16 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			}
+			if ev.CheckoutSessionID != "" {
+				if journal, ok := s.Store().(interface {
+					AppendStripeDeletionHazard(context.Context, string, BillingDeletionResource) error
+				}); ok {
+					if err := journal.AppendStripeDeletionHazard(ctx, ev.ClientRefUserID, BillingDeletionResource{Kind: "checkout_session", ID: ev.CheckoutSessionID, AttemptID: ev.MetadataBillingAttemptID, CustomerID: ev.CustomerID, Status: "webhook", ProviderCreatedAt: ev.Created}); err != nil {
+						http.Error(w, "server error", http.StatusInternalServerError)
+						return
+					}
+				}
+			}
 		}
 		w.WriteHeader(http.StatusOK)
 
@@ -1152,6 +1162,16 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		} else if _, err := acquireStoreBillingAuthority(ctx, s.Store(), BillingAuthorityRequest{UserID: u.ID, Provider: ProviderStripe, Now: s.Now().Unix()}); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
+		}
+		if ev.SubscriptionID != "" {
+			if journal, ok := s.Store().(interface {
+				AppendStripeDeletionHazard(context.Context, string, BillingDeletionResource) error
+			}); ok {
+				if err := journal.AppendStripeDeletionHazard(ctx, u.ID, BillingDeletionResource{Kind: "subscription", ID: ev.SubscriptionID, AttemptID: ev.MetadataBillingAttemptID, CustomerID: ev.CustomerID, Status: "webhook", ProviderCreatedAt: ev.Created}); err != nil {
+					http.Error(w, "server error", http.StatusInternalServerError)
+					return
+				}
+			}
 		}
 		// Ordering guard: drop an out-of-order / re-delivered event older than the
 		// last one applied, so it cannot revert newer subscription state.

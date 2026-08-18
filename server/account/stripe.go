@@ -572,24 +572,6 @@ func (c *stripeClient) deletionList(ctx context.Context, path string, query url.
 
 func (c *stripeClient) DiscoverDeletionHazards(ctx context.Context, row BillingCancellation, p BillingDeletionProgress) (BillingDeletionProgress, error) {
 	p.Customers = appendUnique(p.Customers, row.CustomerID)
-	q := url.Values{"query": {fmt.Sprintf("metadata['user_id']:'%s'", row.BillingSubjectID)}, "limit": {"100"}}
-	for {
-		body, err := c.request(ctx, http.MethodGet, "/v1/customers/search?"+q.Encode(), nil)
-		if err != nil {
-			return p, err
-		}
-		var customers stripeDeletionList
-		if err := json.Unmarshal(body, &customers); err != nil {
-			return p, err
-		}
-		for _, v := range customers.Data {
-			p.Customers = appendUnique(p.Customers, v.ID)
-		}
-		if !customers.HasMore || customers.NextPage == "" {
-			break
-		}
-		q.Set("page", customers.NextPage)
-	}
 	if len(p.Customers) == 0 {
 		// A first Checkout can be durably attributed before Stripe creates its
 		// Customer. Its exact session is safe to reconcile only when the GET
@@ -620,7 +602,7 @@ func (c *stripeClient) DiscoverDeletionHazards(ctx context.Context, row BillingC
 		kinds := []struct {
 			kind, path string
 			q          url.Values
-		}{{"checkout_session", "/v1/checkout/sessions", copyQ("status", "open")}, {"subscription", "/v1/subscriptions", copyQ("status", "all")}, {"schedule", "/v1/subscription_schedules", copyQ()}, {"invoice_item", "/v1/invoiceitems", copyQ("pending", "true")}, {"invoice", "/v1/invoices", copyQ("status", "draft")}, {"invoice", "/v1/invoices", copyQ("status", "open")}}
+		}{{"checkout_session", "/v1/checkout/sessions", copyQ("status", "open")}, {"checkout_session", "/v1/checkout/sessions", copyQ("status", "complete")}, {"subscription", "/v1/subscriptions", copyQ("status", "all")}, {"schedule", "/v1/subscription_schedules", copyQ()}, {"invoice_item", "/v1/invoiceitems", copyQ("pending", "true")}, {"invoice", "/v1/invoices", copyQ("created[gte]", fmt.Sprint(row.CreatedAt))}}
 		for _, k := range kinds {
 			ids, err := c.deletionList(ctx, k.path, k.q)
 			if err != nil {
@@ -682,13 +664,17 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			return p, err
 		}
 		var obj struct {
-			ID                string `json:"id"`
-			Status            string `json:"status"`
-			Customer          string `json:"customer"`
-			PaymentStatus     string `json:"payment_status"`
-			Subscription      string `json:"subscription"`
-			PaymentIntent     string `json:"payment_intent"`
-			ClientReferenceID string `json:"client_reference_id"`
+			ID                string    `json:"id"`
+			Status            string    `json:"status"`
+			Customer          string    `json:"customer"`
+			PaymentStatus     string    `json:"payment_status"`
+			Subscription      string    `json:"subscription"`
+			PaymentIntent     string    `json:"payment_intent"`
+			Invoice           string    `json:"invoice"`
+			RecoveredFrom     string    `json:"recovered_from"`
+			Created           int64     `json:"created"`
+			AfterExpiration   *struct{} `json:"after_expiration"`
+			ClientReferenceID string    `json:"client_reference_id"`
 			Metadata          struct {
 				BillingAttemptID string `json:"billing_attempt_id"`
 				UserID           string `json:"user_id"`
@@ -718,6 +704,16 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				r.CustomerID = obj.Customer
 			}
 		}
+		if r.Kind == "subscription" && r.CustomerID == "" {
+			if r.AttemptID == "" || obj.Metadata.UserID != row.BillingSubjectID || obj.Metadata.BillingAttemptID != r.AttemptID || obj.Customer == "" {
+				r.Manual = true
+				r.Status = "subscription_attribution_mismatch"
+				p.Resources[resourceKey] = r
+				return p, errors.New("stripe: subscription deletion attribution mismatch")
+			}
+			p.Customers = appendUnique(p.Customers, obj.Customer)
+			r.CustomerID = obj.Customer
+		}
 		if obj.Customer != "" && !allowed(obj.Customer) {
 			r.Manual = true
 			r.Status = "customer_mismatch"
@@ -726,6 +722,12 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 		}
 		switch r.Kind {
 		case "checkout_session":
+			r.ProviderCreatedAt = obj.Created
+			if obj.AfterExpiration != nil || obj.RecoveredFrom != "" {
+				r.Status = "recovery_lineage_pending"
+				p.Resources[resourceKey] = r
+				return p, errors.New("stripe: checkout recovery lineage requires canonical expiry")
+			}
 			if obj.Status == "expired" {
 				r.Terminal = true
 				r.Status = "expired"
@@ -737,7 +739,15 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			if obj.PaymentIntent != "" {
 				p.add(BillingDeletionResource{Kind: "payment_intent", ID: obj.PaymentIntent, CustomerID: obj.Customer, Status: "session_link"})
 			}
+			if obj.Invoice != "" {
+				p.add(BillingDeletionResource{Kind: "invoice", ID: obj.Invoice, CustomerID: obj.Customer, Status: "session_link"})
+			}
 			if obj.PaymentStatus == "paid" {
+				if obj.Created > 0 && obj.Created <= row.CreatedAt {
+					r.Terminal = true
+					r.Status = "paid_before_deletion"
+					break
+				}
 				r.Manual = true
 				r.Status = "paid_after_deletion"
 				p.Resources[resourceKey] = r
@@ -781,10 +791,16 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				return p, err
 			}
 		case "invoice":
+			r.ProviderCreatedAt = obj.Created
 			if obj.PaymentIntent != "" {
 				p.add(BillingDeletionResource{Kind: "payment_intent", ID: obj.PaymentIntent, CustomerID: r.CustomerID, Status: "invoice_link"})
 			}
 			if obj.Status == "paid" {
+				if obj.Created > 0 && obj.Created <= row.CreatedAt {
+					r.Terminal = true
+					r.Status = "paid_before_deletion"
+					break
+				}
 				r.Manual = true
 				r.Status = "paid_after_deletion"
 				p.Resources[resourceKey] = r
@@ -804,12 +820,18 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				return p, err
 			}
 		case "payment_intent":
+			r.ProviderCreatedAt = obj.Created
 			if obj.Status == "canceled" {
 				r.Terminal = true
 				r.Status = "canceled"
 				break
 			}
 			if obj.Status == "succeeded" {
+				if obj.Created > 0 && obj.Created <= row.CreatedAt {
+					r.Terminal = true
+					r.Status = "succeeded_before_deletion"
+					break
+				}
 				r.Manual = true
 				r.Status = "succeeded_after_deletion"
 				p.Resources[resourceKey] = r
@@ -820,9 +842,12 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				p.Resources[resourceKey] = r
 				return p, errors.New("stripe: payment remains processing")
 			}
-			if _, err := c.requestKeyed(ctx, http.MethodPost, path+url.PathEscape(r.ID)+"/cancel", nil, key("payment-intent", r.ID)); err != nil && !stripeDeletionObjectGone(err) {
-				return p, err
-			}
+			// Subscription Checkout owns its PaymentIntent through the invoice.
+			// Observe it here; canceling the PI directly is not a supported safety
+			// boundary for this flow.
+			r.Status = "observed_nonterminal"
+			p.Resources[resourceKey] = r
+			return p, errors.New("stripe: checkout payment intent remains provider-managed")
 		}
 		p.Resources[resourceKey] = r
 	}
