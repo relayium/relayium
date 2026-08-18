@@ -2,6 +2,10 @@
 
 set -Eeuo pipefail
 
+script_dir="$(cd "$(dirname "$0")" && pwd -P)"
+# shellcheck source=apps/mac/scripts/hdiutil-verify.sh
+. "$script_dir/hdiutil-verify.sh"
+
 usage() {
   echo "Usage: $0 /path/to/Relayium.app /path/to/Relayium.dmg [signing-identity]" >&2
 }
@@ -93,7 +97,7 @@ if [ -n "$signing_identity" ]; then
   fi
 fi
 
-hdiutil verify "$dmg_work"
+verify_hdiutil_image "$dmg_work"
 
 hdiutil attach \
   -readonly \

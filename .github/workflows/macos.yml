@@ -101,6 +101,7 @@ jobs:
         run: swift test
       - name: Release script tests
         run: |
+          apps/mac/scripts/test-package-dmg.sh
           apps/mac/scripts/test-resign-sparkle.sh
           apps/mac/scripts/test-notarize-dmg.sh
           apps/mac/scripts/test-release-readiness.sh

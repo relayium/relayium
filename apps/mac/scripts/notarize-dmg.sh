@@ -2,6 +2,10 @@
 
 set -Eeuo pipefail
 
+script_dir="$(cd "$(dirname "$0")" && pwd -P)"
+# shellcheck source=apps/mac/scripts/hdiutil-verify.sh
+. "$script_dir/hdiutil-verify.sh"
+
 usage() {
   cat >&2 <<'EOF'
 Usage: notarize-dmg.sh /path/to/Relayium.dmg /path/to/evidence-directory
@@ -59,7 +63,7 @@ if ! printf '%s\n' "$dmg_signature" | grep -q '^Timestamp='; then
   echo "error: disk image has no secure timestamp" >&2
   exit 65
 fi
-hdiutil verify "$dmg"
+verify_hdiutil_image "$dmg"
 
 submit_result=0
 xcrun notarytool submit "$dmg" \
@@ -98,7 +102,7 @@ fi
 
 xcrun stapler staple "$dmg"
 xcrun stapler validate "$dmg"
-hdiutil verify "$dmg"
+verify_hdiutil_image "$dmg"
 
 # Assess the final top-level artifact exactly as Gatekeeper does when a user
 # opens a downloaded disk image.
