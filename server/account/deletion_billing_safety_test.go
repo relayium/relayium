@@ -494,7 +494,7 @@ func TestTerminalStripeRecoveryReleasesOriginalButNotReplacementIdentity(t *test
 	}
 }
 
-func TestTerminalCancellationCompactionDropsProviderIdentifiersButKeepsHold(t *testing.T) {
+func TestTerminalCancellationCompactionDropsProviderIdentifiersAfterSafeRelease(t *testing.T) {
 	svc, store, _, u, token := deletionFixture(t, "compact-terminal@example.test")
 	b := &deletionStripeBiller{fakeBiller: &fakeBiller{}, terminal: true, store: store}
 	svc.biller = b
@@ -516,8 +516,8 @@ func TestTerminalCancellationCompactionDropsProviderIdentifiersButKeepsHold(t *t
 	if customer != "" || subscription != "" || progress != "{}" || archived != 3 {
 		t.Fatalf("customer=%q subscription=%q progress=%q archived=%d", customer, subscription, progress, archived)
 	}
-	if frozen, err := store.BillingUserFrozen(context.Background(), u.ID); err != nil || !frozen {
-		t.Fatalf("compaction released hold: frozen=%v err=%v", frozen, err)
+	if frozen, err := store.BillingUserFrozen(context.Background(), u.ID); err != nil || frozen {
+		t.Fatalf("terminal reconciliation did not release the original subject: frozen=%v err=%v", frozen, err)
 	}
 }
 
@@ -778,7 +778,10 @@ func TestOlderTerminalGenerationCannotReleaseNewPendingDeletion(t *testing.T) {
 	if err := svc.ConfirmAccountDeletion(context.Background(), token); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation,next_attempt_at) VALUES('pending-new',?,'stripe','pending-new-key','pending',1,1,2,1)`, u.ID); err != nil {
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation,next_attempt_at,mode) VALUES('pending-new',?,'stripe','pending-new-key','pending',1,1,2,1,'account_deletion')`, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`UPDATE billing_deletion_holds SET subject_released_at=0 WHERE billing_subject_id=?`, u.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.ClearAccountDeletion(context.Background(), u.ID); err != nil {

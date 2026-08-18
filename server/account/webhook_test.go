@@ -579,12 +579,15 @@ func TestWebhookCannotAttachStripeAuthorityToAdminGrant(t *testing.T) {
 	cookie := loginCookie(t, ts, mail, "webhook-admin@example.com")
 	_ = cookie
 	uid := mustUserID(t, store, "webhook-admin@example.com")
-	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_admin_1"); err != nil {
-		t.Fatal(err)
-	}
 	// Admin comps this user onto "enterprise" — must survive a Stripe webhook
 	// for an unrelated "pro" subscription.
 	if err := store.SetUserPlanAdmin(context.Background(), uid, "enterprise", time.Now().Unix()); err != nil {
+		t.Fatal(err)
+	}
+	// Bind the customer only after the comp to model an unsolicited/legacy
+	// Stripe event. Existing Stripe history correctly prevents creating an admin
+	// comp in the first place, which is covered by the authority store tests.
+	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_admin_1"); err != nil {
 		t.Fatal(err)
 	}
 

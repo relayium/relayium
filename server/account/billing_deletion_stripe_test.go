@@ -262,13 +262,19 @@ func TestStripeDeletionDiscoveryNeverShrinksTheResourceJournal(t *testing.T) {
 
 func TestStripeDeletionExpiresAttributedCheckoutBeforeCustomerExists(t *testing.T) {
 	var expired int
+	var reads int
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/customers/search":
 			io.WriteString(w, `{"data":[],"has_more":false}`)
 		case "GET /v1/checkout/sessions/cs_empty":
-			io.WriteString(w, `{"id":"cs_empty","status":"open","payment_status":"unpaid","client_reference_id":"subject","metadata":{"billing_attempt_id":"attempt_1","user_id":"subject"}}`)
+			reads++
+			status := "open"
+			if expired > 0 {
+				status = "expired"
+			}
+			fmt.Fprintf(w, `{"id":"cs_empty","status":%q,"payment_status":"unpaid","client_reference_id":"subject","metadata":{"billing_attempt_id":"attempt_1","user_id":"subject"}}`, status)
 		case "POST /v1/checkout/sessions/cs_empty/expire":
 			expired++
 			io.WriteString(w, `{}`)
@@ -284,11 +290,16 @@ func TestStripeDeletionExpiresAttributedCheckoutBeforeCustomerExists(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", IdempotencyKey: "delete"}, p); err != nil {
+	p, err = c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", IdempotencyKey: "delete"}, p)
+	if err == nil {
+		t.Fatal("an expire request without canonical readback was treated as terminal")
+	}
+	p, err = c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", IdempotencyKey: "delete"}, p)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if expired != 1 {
-		t.Fatalf("expire calls=%d", expired)
+	if expired != 1 || reads != 2 || !p.Resources["checkout_session:cs_empty"].Terminal {
+		t.Fatalf("expire calls=%d reads=%d resource=%+v", expired, reads, p.Resources["checkout_session:cs_empty"])
 	}
 }
 

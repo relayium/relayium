@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -563,22 +564,22 @@ func TestNativeAppleCatalogBlocksADoubleBilledAccountAsMultiple(t *testing.T) {
 	}
 }
 
-// An admin comp blocks even beside a live Apple subscription. The grant — not
-// the subscription — is what the account renders, so selling a tier change
-// against it would charge for something the projection may never show.
-func TestNativeAppleCatalogAdminCompBlocksEvenAnAppleSubscriber(t *testing.T) {
+// A live Apple authority cannot be overwritten by an admin comp. Allowing that
+// state would hide a still-billing subscription behind a manual grant and make
+// later purchases or deletion ambiguous.
+func TestNativeAppleCatalogRejectsAdminCompOverAppleSubscriber(t *testing.T) {
 	f := newAppleCatalogFixture(t)
 	appleSubscriber(t, f.store, f.userID, "pro")
 	if err := f.store.SetUserPlanAdmin(context.Background(), f.userID, "max",
-		time.Now().Unix()); err != nil {
-		t.Fatalf("SetUserPlanAdmin: %v", err)
+		time.Now().Unix()); !errors.Is(err, ErrBillingAuthorityConflict) {
+		t.Fatalf("SetUserPlanAdmin = %v, want authority conflict", err)
 	}
-
-	resp := f.get(t, macQuery)
-	defer resp.Body.Close()
-	body := f.decode(t, resp)
-	if body.Purchase.Allowed || body.Purchase.BlockedBy != SourceAdmin {
-		t.Fatalf("an admin comp must outrank an Apple subscription: %+v", body.Purchase)
+	u, err := f.store.GetUserByID(context.Background(), f.userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.PlanID != "pro" || u.PlanSource != ProviderApple {
+		t.Fatalf("rejected admin comp changed Apple entitlement: plan=%q source=%q", u.PlanID, u.PlanSource)
 	}
 }
 
