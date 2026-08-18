@@ -306,8 +306,23 @@ func recordStripeDeletionRefundActionFailureTx(ctx context.Context, tx *sql.Tx, 
 		if err := tx.QueryRowContext(ctx, `SELECT billing_subject_id FROM billing_cancellation_outbox WHERE id=?`, outboxID).Scan(&subject); err != nil {
 			return err
 		}
-		if err := appendStripeDeletionHazardsTx(ctx, tx, subject, []BillingDeletionResource{hazard}); err != nil {
+		handled, err := appendExactStripeCompensationTx(ctx, tx, subject, outboxID, []BillingDeletionResource{hazard})
+		if err != nil {
 			return err
+		}
+		if !handled {
+			return errors.New("account: failed refund lost its deletion epoch")
+		}
+		var exactOutboxID string
+		if err := tx.QueryRowContext(ctx, `SELECT id FROM billing_cancellation_outbox WHERE parent_outbox_id=? AND mode='exact_compensation' AND state='pending' ORDER BY generation DESC LIMIT 1`, outboxID).Scan(&exactOutboxID); err != nil {
+			return err
+		}
+		res, err := tx.ExecContext(ctx, `UPDATE billing_deletion_manual_actions SET outbox_id=? WHERE id=? AND outbox_id=? AND state='prepared'`, exactOutboxID, newAction, outboxID)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n != 1 {
+			return errors.New("account: failed refund action rebind lost")
 		}
 		return nil
 	}

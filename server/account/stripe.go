@@ -745,6 +745,10 @@ func (c *stripeClient) DiscoverDeletionHazards(ctx context.Context, row BillingC
 }
 
 func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row BillingCancellation, p BillingDeletionProgress) (BillingDeletionProgress, error) {
+	cutoffAt := row.CreatedAt
+	if row.CutoffAt > 0 {
+		cutoffAt = row.CutoffAt
+	}
 	key := func(kind, id string) string {
 		sum := sha256.Sum256([]byte(row.IdempotencyKey + "\x00" + kind + "\x00" + id))
 		return "acct-delete:" + hex.EncodeToString(sum[:16])
@@ -991,13 +995,13 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				p.add(BillingDeletionResource{Kind: "charge", ID: obj.Charge, PaymentIntentID: obj.PaymentIntent, InvoiceID: r.ID, CustomerID: r.CustomerID, Status: "invoice_link", SuccessAt: obj.StatusTransitions.PaidAt})
 			}
 			if obj.Status == "paid" {
-				if obj.StatusTransitions.PaidAt > 0 && obj.StatusTransitions.PaidAt <= row.CreatedAt {
+				if obj.StatusTransitions.PaidAt > 0 && obj.StatusTransitions.PaidAt <= cutoffAt {
 					r.Terminal = true
 					r.Status = "paid_before_deletion"
 					break
 				}
 				r.Manual = true
-				if obj.StatusTransitions.PaidAt > row.CreatedAt {
+				if obj.StatusTransitions.PaidAt > cutoffAt {
 					r.Status = "paid_after_deletion"
 				} else {
 					r.Status = "paid_time_unknown"
@@ -1065,13 +1069,13 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				p.add(BillingDeletionResource{Kind: "invoice", ID: obj.Invoice, CustomerID: r.CustomerID, Status: "charge_link"})
 			}
 			if obj.Paid || obj.Status == "succeeded" {
-				if r.SuccessAt > 0 && r.SuccessAt <= row.CreatedAt {
+				if r.SuccessAt > 0 && r.SuccessAt <= cutoffAt {
 					r.Terminal = true
 					r.Status = "succeeded_before_deletion"
 					break
 				}
 				r.Manual = true
-				if r.SuccessAt > row.CreatedAt {
+				if r.SuccessAt > cutoffAt {
 					r.Status = "succeeded_after_deletion"
 				} else {
 					r.Status = "succeeded_time_unknown"

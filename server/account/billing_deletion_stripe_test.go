@@ -379,12 +379,13 @@ func TestStripeDeletionPaymentIntentUsesLatestChargeSuccessTime(t *testing.T) {
 	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
 	c.base, c.http = ts.URL, ts.Client()
 	p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{"payment_intent:pi_old": {Kind: "payment_intent", ID: "pi_old", CustomerID: "cus_1"}}}
-	got, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", CreatedAt: 100, IdempotencyKey: "delete"}, p)
+	row := BillingCancellation{BillingSubjectID: "subject", CreatedAt: 200, CutoffAt: 100, Mode: billingCancellationExactCompensation, IdempotencyKey: "delete"}
+	got, err := c.ReconcileDeletionHazards(context.Background(), row, p)
 	if err == nil {
 		t.Fatal("charge succeeding after deletion was accepted")
 	}
 	got.add(BillingDeletionResource{Kind: "charge", ID: "ch_late", CustomerID: "cus_1", Status: "webhook", SuccessAt: 110})
-	got, err = c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", CreatedAt: 100, IdempotencyKey: "delete"}, got)
+	got, err = c.ReconcileDeletionHazards(context.Background(), row, got)
 	if err == nil {
 		t.Fatal("late charge reconciliation reached terminal")
 	}

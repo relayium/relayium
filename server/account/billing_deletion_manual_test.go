@@ -157,7 +157,7 @@ func TestFailedRefundReopensHazardAndRotatesProviderAction(t *testing.T) {
 	}
 }
 
-func TestLateFailedRefundAfterTerminalCreatesANewDeletionGeneration(t *testing.T) {
+func TestLateFailedRefundAfterTerminalCreatesExactCompensation(t *testing.T) {
 	store := newTestStore(t)
 	now := int64(200)
 	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{
@@ -177,19 +177,23 @@ func TestLateFailedRefundAfterTerminalCreatesANewDeletionGeneration(t *testing.T
 		t.Fatal(err)
 	}
 	var generation, released int64
-	var state, nextRaw string
-	if err := store.db.QueryRow(`SELECT generation,state,progress_json FROM billing_cancellation_outbox WHERE billing_subject_id='subject-late' ORDER BY generation DESC LIMIT 1`).Scan(&generation, &state, &nextRaw); err != nil {
+	var state, mode, parent, nextRaw string
+	if err := store.db.QueryRow(`SELECT generation,state,mode,parent_outbox_id,progress_json FROM billing_cancellation_outbox WHERE billing_subject_id='subject-late' ORDER BY generation DESC LIMIT 1`).Scan(&generation, &state, &mode, &parent, &nextRaw); err != nil {
 		t.Fatal(err)
 	}
-	if generation != 2 || state != "pending" {
-		t.Fatalf("late generation=%d state=%s", generation, state)
+	if generation != 2 || state != "pending" || mode != billingCancellationExactCompensation || parent != "out-old" {
+		t.Fatalf("late generation=%d state=%s mode=%s parent=%s", generation, state, mode, parent)
 	}
 	next, err := decodeDeletionProgressStrict(nextRaw)
 	if err != nil || !next.Resources["payment_intent:pi_late"].Manual || next.Resources["payment_intent:pi_late"].Terminal {
 		t.Fatalf("late progress=%+v err=%v", next, err)
 	}
-	if err := store.db.QueryRow(`SELECT subject_released_at FROM billing_deletion_holds WHERE billing_subject_id='subject-late'`).Scan(&released); err != nil || released != 0 {
+	if err := store.db.QueryRow(`SELECT subject_released_at FROM billing_deletion_holds WHERE billing_subject_id='subject-late'`).Scan(&released); err != nil || released != 150 {
 		t.Fatalf("late hold released=%d err=%v", released, err)
+	}
+	var actionOutbox string
+	if err := store.db.QueryRow(`SELECT outbox_id FROM billing_deletion_manual_actions WHERE payment_intent_id='pi_late' AND state='prepared'`).Scan(&actionOutbox); err != nil || actionOutbox == "out-old" {
+		t.Fatalf("replacement refund action outbox=%q err=%v", actionOutbox, err)
 	}
 }
 
