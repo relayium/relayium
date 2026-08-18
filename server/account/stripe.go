@@ -708,14 +708,20 @@ func (c *stripeClient) InspectDuplicateSubscription(ctx context.Context, userID,
 				return DuplicateRefundPlan{}, errors.New("stripe: duplicate invoice history identity is invalid")
 			}
 			seen[listed.ID] = true
+			liability := DuplicateRefundLiability{InvoiceID: listed.ID, Status: listed.Status, AmountPaid: listed.AmountPaid}
 			if listed.AmountPaid == 0 {
-				continue
+				// A canceled subscription does not prove that an already-open or
+				// processing invoice cannot complete later. Keep the observation until
+				// canonical inspection appends its eventual Invoice Payment.
+				liability.ManualReason = "invoice_payment_pending"
+			} else {
+				invoice, err := c.canonicalInvoicePayments(ctx, listed.ID, customerID, duplicateID, true)
+				if err != nil {
+					return DuplicateRefundPlan{}, err
+				}
+				liability.Payments = invoice.Payments
+				liability.ManualReason = duplicateRefundManualReason(invoice)
 			}
-			invoice, err := c.canonicalInvoicePayments(ctx, listed.ID, customerID, duplicateID, true)
-			if err != nil {
-				return DuplicateRefundPlan{}, err
-			}
-			liability := DuplicateRefundLiability{InvoiceID: listed.ID, Payments: invoice.Payments, ManualReason: duplicateRefundManualReason(invoice)}
 			plan.Liabilities = append(plan.Liabilities, liability)
 			if liability.ManualReason != "" {
 				plan.ManualReason = liability.ManualReason
@@ -1320,35 +1326,6 @@ func (c *stripeClient) latestInvoiceID(ctx context.Context, subID string) (strin
 		return "", fmt.Errorf("stripe: read subscription %s: %w", subID, err)
 	}
 	return sub.LatestInvoice, nil
-}
-
-// refundInvoice issues a full refund of an invoice's payment, if it was paid.
-// The key includes the immutable Invoice Payment id, so retrying one constituent
-// never creates a second refund or collides with another partial payment.
-func (c *stripeClient) refundInvoice(ctx context.Context, subID, invoiceID string) error {
-	invoice, err := c.canonicalInvoicePayments(ctx, invoiceID, "", subID, true)
-	if err != nil {
-		return err
-	}
-	if invoice.AmountPaid <= 0 {
-		return nil // nothing was charged — nothing to refund
-	}
-	if !invoiceHasOneExclusivePaymentIntent(invoice) {
-		return errors.New("stripe: invoice has multiple, shared, or unsupported payment constituents and requires manual refund")
-	}
-	payment := invoice.Payments[0]
-	if payment.AmountRefunded < 0 || payment.AmountRefunded > payment.AmountPaid {
-		return errors.New("stripe: invoice payment is not exclusively refundable")
-	}
-	remaining := payment.AmountPaid - payment.AmountRefunded
-	if remaining == 0 {
-		return nil
-	}
-	form := url.Values{}
-	form.Set("payment_intent", payment.PaymentIntentID)
-	form.Set("amount", strconv.FormatInt(remaining, 10))
-	_, err = c.requestKeyed(ctx, http.MethodPost, "/v1/refunds", form, "refund:"+subID+":"+payment.InvoicePaymentID)
-	return err
 }
 
 // EnsureCustomer returns a Stripe customer id for the user, creating one if

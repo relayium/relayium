@@ -2,7 +2,6 @@ package account
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -143,52 +142,5 @@ func TestCheckoutAndDeletionUseInvoicePaymentConstituents(t *testing.T) {
 	}
 	if _, err := client.deletionPaymentIntent(context.Background(), BillingDeletionResource{Kind: "invoice", ID: "in_multi", CustomerID: "cus_multi"}); err == nil {
 		t.Fatal("manual resolver guessed one payment from a multi-payment invoice")
-	}
-	if err := client.refundInvoice(context.Background(), "sub_multi", "in_multi"); err == nil {
-		t.Fatal("duplicate cleanup guessed a whole-payment refund for partial constituents")
-	}
-}
-
-func TestRefundInvoiceUsesCanonicalExclusiveRefundableBalance(t *testing.T) {
-	for _, tc := range []struct {
-		name           string
-		amountRefunded int64
-		wantPosts      int
-		wantAmount     string
-	}{
-		{name: "already fully refunded", amountRefunded: 500},
-		{name: "refund remaining once", amountRefunded: 200, wantPosts: 1, wantAmount: "300"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			posts := 0
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method == http.MethodPost && r.URL.Path == "/v1/refunds" {
-					posts++
-					if err := r.ParseForm(); err != nil || r.Form.Get("amount") != tc.wantAmount || r.Form.Get("payment_intent") != "pi_one" {
-						t.Errorf("refund form=%v err=%v", r.Form, err)
-					}
-					io.WriteString(w, `{"id":"re_one"}`)
-					return
-				}
-				switch r.URL.Path {
-				case "/v1/invoices/in_one":
-					io.WriteString(w, `{"id":"in_one","status":"paid","customer":"cus_one","parent":{"subscription_details":{"subscription":"sub_one"}},"amount_paid":500,"created":90}`)
-				case "/v1/invoice_payments":
-					io.WriteString(w, `{"data":[{"id":"inpay_one","invoice":"in_one","status":"paid","amount_paid":500,"status_transitions":{"paid_at":100},"payment":{"type":"payment_intent","payment_intent":"pi_one"}}],"has_more":false}`)
-				case "/v1/payment_intents/pi_one":
-					io.WriteString(w, `{"id":"pi_one","customer":"cus_one","status":"succeeded","latest_charge":"ch_one"}`)
-				case "/v1/charges/ch_one":
-					fmt.Fprintf(w, `{"id":"ch_one","customer":"cus_one","payment_intent":"pi_one","amount":500,"amount_refunded":%d,"paid":true}`, tc.amountRefunded)
-				default:
-					http.Error(w, "unexpected", http.StatusBadRequest)
-				}
-			}))
-			defer server.Close()
-			client := NewStripeClient("sk_test", "whsec", "")
-			client.base, client.http = server.URL, server.Client()
-			if err := client.refundInvoice(context.Background(), "sub_one", "in_one"); err != nil || posts != tc.wantPosts {
-				t.Fatalf("posts=%d err=%v", posts, err)
-			}
-		})
 	}
 }

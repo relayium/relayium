@@ -1066,6 +1066,35 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	if ev.Type == "invoice.paid" {
+		duplicateJournal, duplicateStoreOK := s.Store().(interface {
+			HasDuplicateRefundSubscription(context.Context, string) (bool, error)
+			AppendCanonicalDuplicatePaidInvoice(context.Context, CanonicalStripePaidInvoice, int64) error
+		})
+		if !duplicateStoreOK {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		duplicateExists, duplicateLookupErr := duplicateJournal.HasDuplicateRefundSubscription(ctx, ev.SubscriptionID)
+		if duplicateLookupErr != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if duplicateExists {
+			client, clientOK := s.biller.(*stripeClient)
+			if !clientOK || ev.InvoiceID == "" || ev.CustomerID == "" {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+			canonicalDuplicateInvoice, canonicalDuplicateErr := client.canonicalPaidInvoice(ctx, ev.InvoiceID)
+			if canonicalDuplicateErr != nil || canonicalDuplicateInvoice.CustomerID != ev.CustomerID || canonicalDuplicateInvoice.SubscriptionID != ev.SubscriptionID {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+			if err := duplicateJournal.AppendCanonicalDuplicatePaidInvoice(ctx, canonicalDuplicateInvoice, s.Now().Unix()); err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+		}
 		// Payment evidence must reach the deletion journal before canonical
 		// subscription refresh, user lookup or billing-authority acquisition. Any
 		// of those later gates may legitimately ACK/return 5xx (missing old
