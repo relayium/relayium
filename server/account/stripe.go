@@ -116,9 +116,10 @@ type WebhookEvent struct {
 	// before (or without) the checkout.session.completed event that normally
 	// does the binding — Stripe does not guarantee delivery order. Empty when
 	// metadata is absent (e.g. checkout.session.completed itself).
-	MetadataUserID, MetadataBillingAttemptID                string
-	CheckoutSessionID, InvoiceID, PaymentIntentID, ChargeID string
-	CurrentPeriodEnd                                        int64
+	MetadataUserID, MetadataBillingAttemptID, MetadataDeletionActionID string
+	CheckoutSessionID, InvoiceID, PaymentIntentID, ChargeID            string
+	RefundID                                                           string
+	CurrentPeriodEnd                                                   int64
 	// Created is the Stripe event's top-level `created` (unix secs) — the event
 	// emission time, used by the webhook's ordering guard to drop a stale
 	// (re)delivered event that would otherwise revert newer subscription state.
@@ -306,6 +307,7 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 				Metadata          *struct {
 					UserID           string `json:"user_id"`
 					BillingAttemptID string `json:"billing_attempt_id"`
+					DeletionActionID string `json:"relayium_deletion_action_id"`
 				} `json:"metadata"`
 				Items *struct {
 					Data []struct {
@@ -356,6 +358,7 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 	if md := envelope.Data.Object.Metadata; md != nil {
 		ev.MetadataUserID = md.UserID
 		ev.MetadataBillingAttemptID = md.BillingAttemptID
+		ev.MetadataDeletionActionID = md.DeletionActionID
 	}
 	if envelope.Data.Object.Object == "checkout.session" {
 		ev.CheckoutSessionID = envelope.Data.Object.ID
@@ -367,6 +370,8 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 		ev.PaymentIntentID = envelope.Data.Object.ID
 	case "charge":
 		ev.ChargeID = envelope.Data.Object.ID
+	case "refund":
+		ev.RefundID = envelope.Data.Object.ID
 	}
 	if ev.PaymentIntentID == "" {
 		ev.PaymentIntentID = envelope.Data.Object.PaymentIntent

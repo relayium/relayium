@@ -73,6 +73,15 @@ func TestVerifyWebhookProjectsAsyncCheckoutLifecycle(t *testing.T) {
 	}
 }
 
+func TestVerifyWebhookProjectsRefundFailureIdentity(t *testing.T) {
+	c := NewStripeClient("sk_test", "whsec_abc", "")
+	body := `{"id":"evt_refund","type":"refund.failed","data":{"object":{"id":"re_failed","object":"refund","payment_intent":"pi_1","metadata":{"relayium_deletion_action_id":"bdr_1"}}}}`
+	ev, err := c.VerifyWebhook([]byte(body), signStripe("whsec_abc", body, 3000), 3000)
+	if err != nil || ev.RefundID != "re_failed" || ev.PaymentIntentID != "pi_1" || ev.MetadataDeletionActionID != "bdr_1" {
+		t.Fatalf("refund failure projection=%+v err=%v", ev, err)
+	}
+}
+
 func TestVerifyWebhookProjectsFinancialHazardIDs(t *testing.T) {
 	c := NewStripeClient("sk_test_x", "whsec_abc", "bpc_x")
 	body := `{"id":"evt_invoice","type":"invoice.paid","created":3000,"livemode":false,"data":{"object":{"id":"in_1","object":"invoice","customer":"cus_1","subscription":"sub_1","payment_intent":"pi_1","charge":"ch_1"}}}`

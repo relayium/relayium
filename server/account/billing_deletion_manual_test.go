@@ -85,6 +85,53 @@ func TestManualDeletionRefundRequiresCanonicalSuccessAndIsIdempotent(t *testing.
 	}
 }
 
+func TestFailedRefundReopensHazardAndRotatesProviderAction(t *testing.T) {
+	store := newTestStore(t)
+	now := int64(100)
+	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{
+		"payment_intent:pi_failed": {Kind: "payment_intent", ID: "pi_failed", PaymentIntentID: "pi_failed", Status: "refund_pending", Manual: true},
+	}}
+	raw, _ := json.Marshal(p)
+	if _, err := store.db.Exec(`INSERT INTO billing_deletion_holds(billing_subject_id,email_hmac,provider,created_at,expires_at,review_at,subject_released_at) VALUES('subject',X'01','stripe',?,?,?,99)`, now, now+1000, now+1000); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation,progress_json) VALUES('out','subject','stripe','idem','pending',?,?,1,?)`, now, now, string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO billing_deletion_manual_actions(id,outbox_id,resource_key,actor,reason,payment_intent_id,refund_id,state,created_at,updated_at) VALUES('action-old','out','payment_intent:pi_failed','operator','customer deletion','pi_failed','re_failed','prepared',?,?)`, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordStripeDeletionRefundFailure(context.Background(), "re_failed", "action-old", 110); err != nil {
+		t.Fatal(err)
+	}
+	var action, refund string
+	var generation, released int64
+	if err := store.db.QueryRow(`SELECT id,refund_id,retry_generation FROM billing_deletion_manual_actions WHERE outbox_id='out'`).Scan(&action, &refund, &generation); err != nil {
+		t.Fatal(err)
+	}
+	if action == "action-old" || refund != "" || generation != 1 {
+		t.Fatalf("rotated action=%q refund=%q generation=%d", action, refund, generation)
+	}
+	if err := store.db.QueryRow(`SELECT subject_released_at FROM billing_deletion_holds WHERE billing_subject_id='subject'`).Scan(&released); err != nil || released != 0 {
+		t.Fatalf("hold released=%d err=%v", released, err)
+	}
+	if err := store.db.QueryRow(`SELECT progress_json FROM billing_cancellation_outbox WHERE id='out'`).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	p, err := decodeDeletionProgressStrict(string(raw))
+	if err != nil || !p.Resources["payment_intent:pi_failed"].Manual || p.Resources["payment_intent:pi_failed"].Terminal {
+		t.Fatalf("reopened progress=%+v err=%v", p, err)
+	}
+	if err := store.RecordStripeDeletionRefundFailure(context.Background(), "re_failed", "action-old", 111); err != nil {
+		t.Fatal(err)
+	}
+	var failures int
+	_ = store.db.QueryRow(`SELECT COUNT(*) FROM billing_deletion_refund_failures WHERE refund_id='re_failed'`).Scan(&failures)
+	if failures != 1 {
+		t.Fatalf("failure audit rows=%d", failures)
+	}
+}
+
 func TestManualDeletionRefundDoesNotAcceptPendingCanonicalRefund(t *testing.T) {
 	store := newTestStore(t)
 	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{"payment_intent:pi_pending": {Kind: "payment_intent", ID: "pi_pending", Manual: true, Status: "processing"}}}

@@ -25,6 +25,75 @@ type BillingDeletionManualEvidence struct {
 	Resources                  []BillingDeletionResource
 }
 
+// RecordStripeDeletionRefundFailure converts a verified provider failure into
+// durable, retryable operator work. It never releases the deletion hold.
+func (store *SQLiteStore) RecordStripeDeletionRefundFailure(ctx context.Context, refundID, actionID string, failedAt int64) error {
+	if refundID == "" && actionID == "" {
+		return nil
+	}
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var savedAction, outboxID, paymentIntentID, state, raw string
+	var generation int64
+	err = tx.QueryRowContext(ctx, `SELECT a.id,a.outbox_id,a.payment_intent_id,o.state,o.progress_json,a.retry_generation
+ FROM billing_deletion_manual_actions a JOIN billing_cancellation_outbox o ON o.id=a.outbox_id
+ WHERE (a.refund_id<>'' AND a.refund_id=?) OR (a.id=?) LIMIT 1`, refundID, actionID).
+		Scan(&savedAction, &outboxID, &paymentIntentID, &state, &raw, &generation)
+	if errors.Is(err, sql.ErrNoRows) {
+		return tx.Commit()
+	}
+	if err != nil {
+		return err
+	}
+	if refundID == "" {
+		return errors.New("account: failed Stripe refund has no refund identity")
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO billing_deletion_refund_failures(refund_id,action_id,outbox_id,payment_intent_id,failed_at) VALUES(?,?,?,?,?)`, refundID, savedAction, outboxID, paymentIntentID, failedAt); err != nil {
+		return err
+	}
+	hazard := BillingDeletionResource{Kind: "payment_intent", ID: paymentIntentID, PaymentIntentID: paymentIntentID, Status: "refund_failed", Manual: true}
+	if state == "terminal" {
+		var subject string
+		if err := tx.QueryRowContext(ctx, `SELECT billing_subject_id FROM billing_cancellation_outbox WHERE id=?`, outboxID).Scan(&subject); err != nil {
+			return err
+		}
+		if err := appendStripeDeletionHazardsTx(ctx, tx, subject, []BillingDeletionResource{hazard}); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+	p, err := decodeDeletionProgressStrict(raw)
+	if err != nil {
+		return err
+	}
+	p.Resources[hazard.Kind+":"+hazard.ID] = hazard
+	p.CleanSince = 0
+	encoded, err := json.Marshal(p)
+	if err != nil {
+		return err
+	}
+	generation++
+	sum := sha256.Sum256([]byte("relayium:billing-deletion-refund:v3\x00" + outboxID + "\x00" + paymentIntentID + "\x00" + fmt.Sprint(generation)))
+	newAction := "bdr_" + hex.EncodeToString(sum[:16])
+	if _, err := tx.ExecContext(ctx, `UPDATE billing_deletion_manual_actions SET id=?,refund_id='',retry_generation=?,updated_at=? WHERE id=? AND refund_id=?`, newAction, generation, failedAt, savedAction, refundID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET progress_json=?,revision=revision+1,last_error='provider refund failed',next_attempt_at=0,updated_at=? WHERE id=? AND state='pending'`, string(encoded), failedAt, outboxID); err != nil {
+		return err
+	}
+	var subject string
+	if err := tx.QueryRowContext(ctx, `SELECT billing_subject_id FROM billing_cancellation_outbox WHERE id=?`, outboxID).Scan(&subject); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE billing_deletion_holds SET subject_released_at=0 WHERE billing_subject_id=?`, subject); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func ListBillingDeletionManualEvidence(ctx context.Context, store *SQLiteStore, outboxID string) (BillingDeletionManualEvidence, error) {
 	var out BillingDeletionManualEvidence
 	var raw string

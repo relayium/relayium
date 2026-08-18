@@ -1053,6 +1053,16 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 	w = tw
 
 	ctx := r.Context()
+	if ev.Type == "refund.failed" {
+		if recorder, ok := s.Store().(interface {
+			RecordStripeDeletionRefundFailure(context.Context, string, string, int64) error
+		}); ok {
+			if err := recorder.RecordStripeDeletionRefundFailure(ctx, ev.RefundID, ev.MetadataDeletionActionID, ev.Created); err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+		}
+	}
 	if strings.HasPrefix(ev.Type, "invoice.") && ev.SubscriptionID == "" {
 		// An invoice without a subscription may be a one-off invoice or a Stripe
 		// event shape we do not understand. It is verified and ledgered, but it is

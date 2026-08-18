@@ -1075,6 +1075,13 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
  UNIQUE(outbox_id,resource_key))`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_billing_manual_refund_payment
  ON billing_deletion_manual_actions(outbox_id,payment_intent_id) WHERE payment_intent_id<>''`,
+		`ALTER TABLE billing_deletion_manual_actions ADD COLUMN retry_generation INTEGER NOT NULL DEFAULT 0`,
+		`CREATE TABLE IF NOT EXISTS billing_deletion_refund_failures (
+ refund_id TEXT PRIMARY KEY,
+ action_id TEXT NOT NULL,
+ outbox_id TEXT NOT NULL,
+ payment_intent_id TEXT NOT NULL,
+ failed_at INTEGER NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS stripe_customer_history (
  user_id TEXT NOT NULL,
  customer_id TEXT NOT NULL,
