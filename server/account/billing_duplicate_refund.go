@@ -46,7 +46,7 @@ type DuplicateRefundResult struct {
 
 type DuplicateRefundEvidence struct {
 	JobID, DuplicateSubscriptionID, CanonicalSubscriptionID, InvoiceID string
-	State, ManualReason                                                string
+	State, ManualReason, Resolution                                    string
 	SubscriptionCanceled, RefundComplete                               bool
 	HasError                                                           bool
 	Attempts, Revision                                                 int64
@@ -183,6 +183,14 @@ func ListDuplicateRefundEvidence(ctx context.Context, store *SQLiteStore, select
 		Scan(&out.ActionID, &out.ActionState, &out.ActionGeneration)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return DuplicateRefundEvidence{}, err
+	}
+	switch {
+	case job.State == "terminal" && job.ManualReason == "no_refund_needed":
+		out.Resolution = "no_refund_needed"
+	case job.State == "terminal" && out.ActionState == "succeeded":
+		out.Resolution = "operator_refund_completed"
+	default:
+		out.Resolution = "action_required"
 	}
 	return out, nil
 }
@@ -883,10 +891,13 @@ func (s *SQLiteStore) HasDuplicateRefundSubscription(ctx context.Context, subscr
 
 func (s *SQLiteStore) SaveDuplicateRefund(ctx context.Context, job DuplicateRefundJob, result DuplicateRefundResult, providerErr error, now int64) error {
 	state, manual, lastError := "pending", result.ManualReason, ""
+	if result.SubscriptionCanceled && result.RefundComplete && len(job.Liabilities) == 0 {
+		manual = "no_refund_needed"
+	}
 	if manual != "" {
 		state = "manual"
 	}
-	if result.SubscriptionCanceled && result.RefundComplete && manual == "" {
+	if result.SubscriptionCanceled && result.RefundComplete && manual == "no_refund_needed" {
 		state = "terminal"
 	} else if result.SubscriptionCanceled {
 		state = "manual"

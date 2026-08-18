@@ -256,6 +256,30 @@ func TestWorkerNeverRefundsSinglePaymentAndLeavesOperatorAction(t *testing.T) {
 	}
 }
 
+func TestDuplicateWithoutAnyInvoiceEndsNoRefundNeeded(t *testing.T) {
+	store := newTestStore(t)
+	state := &duplicateStripeState{active: true, refunds: map[string]int64{}}
+	client, closeServer := newDuplicateStripe(t, state, false)
+	defer closeServer()
+	job, err := store.PutDuplicateRefund(context.Background(), DuplicateRefundPlan{
+		UserID: "user_empty", CustomerID: "cus_dup", CanonicalSubscriptionID: "sub_keep", DuplicateSubscriptionID: "sub_dup",
+	}, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := client.ReconcileDuplicateSubscription(context.Background(), job)
+	if err != nil || !result.SubscriptionCanceled || !result.RefundComplete {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	if err := store.SaveDuplicateRefund(context.Background(), job, result, nil, 101); err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := ListDuplicateRefundEvidence(context.Background(), store, job.ID)
+	if err != nil || evidence.State != "terminal" || evidence.Resolution != "no_refund_needed" || evidence.ManualReason != "no_refund_needed" || evidence.ActionGeneration != 0 || state.refundPosts != 0 {
+		t.Fatalf("evidence=%+v posts=%d err=%v", evidence, state.refundPosts, err)
+	}
+}
+
 func TestWorkerNeverCallsRefundForAnyProviderRefundOutcome(t *testing.T) {
 	for _, tc := range []struct {
 		name, status string
