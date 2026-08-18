@@ -68,6 +68,8 @@ func newDuplicateStripe(t *testing.T, state *duplicateStripeState, multi bool) (
 			io.WriteString(w, `{"id":"sub_dup","customer":"cus_dup","status":"canceled","latest_invoice":"in_dup"}`)
 		case "GET /v1/invoices/in_dup":
 			io.WriteString(w, `{"id":"in_dup","status":"paid","customer":"cus_dup","parent":{"subscription_details":{"subscription":"sub_dup"}},"amount_paid":500,"created":90}`)
+		case "GET /v1/invoices/in_late_b":
+			io.WriteString(w, `{"id":"in_late_b","status":"paid","customer":"cus_dup","parent":{"subscription_details":{"subscription":"sub_dup"}},"amount_paid":300,"created":190}`)
 		case "GET /v1/invoices":
 			state.invoiceListCalls++
 			if state.historyEmptyMore {
@@ -92,6 +94,10 @@ func newDuplicateStripe(t *testing.T, state *duplicateStripeState, multi bool) (
 		case "GET /v1/invoices/in_new":
 			io.WriteString(w, `{"id":"in_new","status":"paid","customer":"cus_dup","parent":{"subscription_details":{"subscription":"sub_dup"}},"amount_paid":300,"created":95}`)
 		case "GET /v1/invoice_payments":
+			if r.URL.Query().Get("invoice") == "in_late_b" {
+				io.WriteString(w, `{"data":[{"id":"inpay_late_b","invoice":"in_late_b","status":"paid","amount_paid":300,"status_transitions":{"paid_at":200},"payment":{"type":"payment_intent","payment_intent":"pi_late_b"}}],"has_more":false}`)
+				return
+			}
 			if r.URL.Query().Get("invoice") == "in_old" {
 				io.WriteString(w, `{"data":[{"id":"inpay_old","invoice":"in_old","status":"paid","amount_paid":200,"status_transitions":{"paid_at":60},"payment":{"type":"payment_intent","payment_intent":"pi_old"}}],"has_more":false}`)
 				return
@@ -119,6 +125,8 @@ func newDuplicateStripe(t *testing.T, state *duplicateStripeState, multi bool) (
 			io.WriteString(w, `{"id":"pi_old","customer":"cus_dup","status":"succeeded","latest_charge":"ch_old"}`)
 		case "GET /v1/payment_intents/pi_new":
 			io.WriteString(w, `{"id":"pi_new","customer":"cus_dup","status":"succeeded","latest_charge":"ch_new"}`)
+		case "GET /v1/payment_intents/pi_late_b":
+			io.WriteString(w, `{"id":"pi_late_b","customer":"cus_dup","status":"succeeded","latest_charge":"ch_late_b"}`)
 		case "GET /v1/charges/ch_dup":
 			refunded := 0
 			if state.refunded {
@@ -136,6 +144,8 @@ func newDuplicateStripe(t *testing.T, state *duplicateStripeState, multi bool) (
 			fmt.Fprintf(w, `{"id":"ch_old","customer":"cus_dup","payment_intent":"pi_old","amount":200,"amount_refunded":%d,"paid":true}`, state.refunds["pi_old"])
 		case "GET /v1/charges/ch_new":
 			fmt.Fprintf(w, `{"id":"ch_new","customer":"cus_dup","payment_intent":"pi_new","amount":300,"amount_refunded":%d,"paid":true}`, state.refunds["pi_new"])
+		case "GET /v1/charges/ch_late_b":
+			fmt.Fprintf(w, `{"id":"ch_late_b","customer":"cus_dup","payment_intent":"pi_late_b","amount":300,"amount_refunded":%d,"paid":true}`, state.refunds["pi_late_b"])
 		case "GET /v1/refunds":
 			var records []duplicateRefundObservation
 			for _, record := range state.refundRecords {
@@ -751,7 +761,7 @@ func TestDuplicateRefundOperatorUsesNewGenerationAfterCanonicalProviderFailure(t
 		t.Fatalf("result=%+v err=%v posts=%d", result, err, state.refundPosts)
 	}
 	evidence, err := ListDuplicateRefundEvidence(context.Background(), store, job.ID)
-	if err != nil || evidence.ActionGeneration != 2 || evidence.ActionState != "succeeded" {
+	if err != nil || evidence.ActionGeneration != 3 || evidence.ActionState != "succeeded" {
 		t.Fatalf("evidence=%+v err=%v", evidence, err)
 	}
 }
@@ -835,8 +845,66 @@ func TestDuplicateRefundLateFailureReopensTerminalAndNextGenerationRefundsRemain
 	}
 	terminal, _, _ := store.DuplicateRefundBySubscription(context.Background(), "sub_dup")
 	evidence, _ = ListDuplicateRefundEvidence(context.Background(), store, job.ID)
-	if terminal.State != "terminal" || !terminal.RefundComplete || evidence.ActionGeneration != 2 || state.refundPosts != 3 {
+	if terminal.State != "terminal" || !terminal.RefundComplete || evidence.ActionGeneration != 3 || state.refundPosts != 3 {
 		t.Fatalf("terminal=%+v evidence=%+v posts=%d", terminal, evidence, state.refundPosts)
+	}
+}
+
+func TestLateFailureRecoverySnapshotsCurrentExpandedLiabilityBeforeNewOperator(t *testing.T) {
+	store := newTestStore(t)
+	state := &duplicateStripeState{active: true, refunds: map[string]int64{}}
+	client, closeServer := newDuplicateStripe(t, state, true)
+	defer closeServer()
+	job := prepareCanceledManualDuplicate(t, store, client, state)
+	if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator-one", "initial duplicate liability"); err != nil {
+		t.Fatal(err)
+	}
+	terminal, _, _ := store.DuplicateRefundBySubscription(context.Background(), job.DuplicateSubscriptionID)
+	expanded := terminal.DuplicateRefundPlan
+	expanded.Liabilities = append(expanded.Liabilities, DuplicateRefundLiability{
+		InvoiceID: "in_late_b", Status: "paid", AmountPaid: 300,
+		Payments: []CanonicalStripeInvoicePayment{{InvoicePaymentID: "inpay_late_b", PaymentType: "payment_intent", PaymentIntentID: "pi_late_b", ChargeID: "ch_late_b", AmountPaid: 300, ChargeAmount: 300, PaidAt: 200}},
+	})
+	current, err := store.PutDuplicateRefund(context.Background(), expanded, 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var refundID string
+	for id := range state.refundRecords {
+		refundID = id
+		break
+	}
+	state.mu.Lock()
+	failed := state.refundRecords[refundID]
+	failed.Status = "failed"
+	state.refundRecords[refundID] = failed
+	state.refunds[failed.PaymentIntentID] -= failed.Amount
+	postsBeforeFailure := state.refundPosts
+	state.mu.Unlock()
+	if err := store.RecordStripeDeletionRefundLifecycle(context.Background(), "evt-expanded-late-failure", refundID, "", failed.PaymentIntentID, "failed", 201); err != nil {
+		t.Fatal(err)
+	}
+	var generation, liabilityRevision int64
+	var snapshot, actionState string
+	if err := store.reader().QueryRow(`SELECT generation,liability_revision,snapshot_json,state FROM billing_duplicate_refund_actions WHERE job_id=? ORDER BY generation DESC LIMIT 1`, job.ID).
+		Scan(&generation, &liabilityRevision, &snapshot, &actionState); err != nil {
+		t.Fatal(err)
+	}
+	wantSnapshot, wantDigest, err := duplicateRefundLiabilitySnapshot(current.Liabilities)
+	if err != nil || generation != 2 || liabilityRevision != current.LiabilityRevision || snapshot != string(wantSnapshot) || actionState != "prepared" {
+		t.Fatalf("generation=%d liabilityRevision=%d current=%d state=%q snapshot=%q want=%q err=%v", generation, liabilityRevision, current.LiabilityRevision, actionState, snapshot, wantSnapshot, err)
+	}
+	evidence, err := ListDuplicateRefundEvidence(context.Background(), store, job.ID)
+	if err != nil || evidence.LiabilityDigest != wantDigest || state.refundPosts != postsBeforeFailure {
+		t.Fatalf("evidence=%+v wantDigest=%q posts=%d before=%d err=%v", evidence, wantDigest, state.refundPosts, postsBeforeFailure, err)
+	}
+	result, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator-two", "expanded liability approval", evidence.LiabilityRevision, evidence.LiabilityDigest)
+	if err != nil || result.State != "succeeded" {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	finalEvidence, err := ListDuplicateRefundEvidence(context.Background(), store, job.ID)
+	if err != nil || finalEvidence.ActionGeneration != 3 || finalEvidence.ActionState != "succeeded" {
+		t.Fatalf("evidence=%+v err=%v", finalEvidence, err)
 	}
 }
 

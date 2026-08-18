@@ -299,13 +299,16 @@ func prepareDuplicateRefundAction(ctx context.Context, store *SQLiteStore, job D
 	if err == nil {
 		snapshotChanged := previous.SnapshotJSON != string(liveSnapshot)
 		liabilityGenerationChanged := snapshotChanged && liveLiabilityRevision > previous.LiabilityRevision && (previous.State == "succeeded" || previous.State == "failed")
-		if !liabilityGenerationChanged && (previous.Actor != actor || previous.Reason != reason) {
+		automaticFailureRecovery := previous.State == "prepared" && previous.LastError == errDuplicateRefundProviderFailed.Error()
+		if !liabilityGenerationChanged && !automaticFailureRecovery && (previous.Actor != actor || previous.Reason != reason) {
 			return duplicateRefundAction{}, errors.New("account: duplicate refund action ownership conflict")
 		}
 		if snapshotChanged {
 			if previous.State != "succeeded" && previous.State != "failed" {
 				return duplicateRefundAction{}, errors.New("account: duplicate refund liability changed during an active action")
 			}
+			generation = previous.Generation + 1
+		} else if automaticFailureRecovery {
 			generation = previous.Generation + 1
 		} else if previous.State != "blocked" || previous.LastError != errDuplicateRefundProviderFailed.Error() {
 			return previous, nil
@@ -546,7 +549,21 @@ func recordDuplicateRefundFailuresTx(ctx context.Context, tx *sql.Tx, refundID s
 		if err := tx.QueryRowContext(ctx, `SELECT liability_revision FROM billing_duplicate_refunds WHERE id=?`, jobID).Scan(&liabilityRevision); err != nil {
 			return false, err
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO billing_duplicate_refund_actions(id,job_id,generation,liability_revision,actor,reason,state,snapshot_json,created_at,updated_at) VALUES(?,?,?,?,?,?,'prepared',?,?,?)`, nextID, jobID, nextGeneration, liabilityRevision, action.Actor, action.Reason, action.SnapshotJSON, failedAt, failedAt); err != nil {
+		liabilities, err := loadDuplicateRefundLiabilities(ctx, tx, jobID)
+		if err != nil {
+			return false, err
+		}
+		currentSnapshot, currentDigest, err := duplicateRefundLiabilitySnapshot(liabilities)
+		if err != nil || currentDigest == "" {
+			if err == nil {
+				err = errors.New("account: duplicate refund current liability digest is empty")
+			}
+			return false, err
+		}
+		if liabilityRevision < action.LiabilityRevision || (liabilityRevision == action.LiabilityRevision) != (string(currentSnapshot) == action.SnapshotJSON) {
+			return false, errors.New("account: duplicate refund liability revision and snapshot are inconsistent")
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO billing_duplicate_refund_actions(id,job_id,generation,liability_revision,actor,reason,state,snapshot_json,last_error,created_at,updated_at) VALUES(?,?,?,?,?,?,'prepared',?,?,?,?)`, nextID, jobID, nextGeneration, liabilityRevision, action.Actor, action.Reason, string(currentSnapshot), errDuplicateRefundProviderFailed.Error(), failedAt, failedAt); err != nil {
 			return false, err
 		}
 		rotated = true
