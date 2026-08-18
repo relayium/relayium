@@ -113,6 +113,9 @@ func (p BillingDeletionProgress) hasIdentity() bool {
 		if r.Kind == "checkout_session" && r.AttemptID != "" {
 			return true
 		}
+		if r.Kind == "no_side_effect_proof" && r.Terminal {
+			return true
+		}
 	}
 	return false
 }
@@ -326,7 +329,7 @@ func (s *SQLiteStore) CommitAccountDeletion(ctx context.Context, tokenHash strin
 			return nil, false, err
 		}
 	}
-	if hasStripe {
+	if hasStripe || provider == ProviderStripe {
 		subID := u.StripeSubscriptionID
 		if subID == "" {
 			subID = stripeExternalID
@@ -376,6 +379,10 @@ func (s *SQLiteStore) CommitAccountDeletion(ctx context.Context, tokenHash strin
 		}
 		if subID != "" {
 			progress.add(BillingDeletionResource{Kind: "subscription", ID: subID, CustomerID: u.StripeCustomerID, Status: "external_binding"})
+		}
+		if !hasStripe {
+			progress.add(BillingDeletionResource{Kind: "no_side_effect_proof", ID: u.ID, Status: "verified_local_history_empty", Terminal: true})
+			progress.CleanSince = now
 		}
 		encoded, _ := json.Marshal(progress)
 		if _, err := tx.ExecContext(ctx, `INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at,progress_json,generation,next_attempt_at) VALUES(?,?,?,?,?,?,'pending',0,?,?,?,?,?)`, id, u.ID, ProviderStripe, u.StripeCustomerID, subID, key, now, now, string(encoded), generation, now); err != nil {

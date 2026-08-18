@@ -142,6 +142,19 @@ func TestAttemptOnlyTerminalProgressHasDurableIdentity(t *testing.T) {
 	}
 }
 
+func TestStripeAuthorityWithoutProviderObjectsHasTerminalNoSideEffectProof(t *testing.T) {
+	now := int64(100000)
+	row := BillingCancellation{BillingSubjectID: "subject-empty", CreatedAt: now}
+	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{
+		"no_side_effect_proof:subject-empty": {Kind: "no_side_effect_proof", ID: "subject-empty", Status: "verified_local_history_empty", Terminal: true},
+	}, CleanSince: now}
+	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+	got, err := c.DiscoverDeletionHazards(context.Background(), row, p)
+	if err != nil || !got.hasIdentity() || !got.terminal(now+86400) {
+		t.Fatalf("no-side-effect proof=%+v err=%v", got, err)
+	}
+}
+
 func containsString(xs []string, want string) bool {
 	for _, x := range xs {
 		if x == want {

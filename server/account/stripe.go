@@ -602,6 +602,11 @@ func (c *stripeClient) deletionList(ctx context.Context, path string, query url.
 func (c *stripeClient) DiscoverDeletionHazards(ctx context.Context, row BillingCancellation, p BillingDeletionProgress) (BillingDeletionProgress, error) {
 	p.Customers = appendUnique(p.Customers, row.CustomerID)
 	if len(p.Customers) == 0 {
+		if proof, ok := p.Resources["no_side_effect_proof:"+row.BillingSubjectID]; ok && proof.Terminal {
+			return p, nil
+		}
+	}
+	if len(p.Customers) == 0 {
 		// A first Checkout can be durably attributed before Stripe creates its
 		// Customer. Its exact session is safe to reconcile only when the GET
 		// response proves the locally journaled attempt and billing subject.
@@ -679,6 +684,8 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			path += "payment_intents/"
 		case "charge":
 			path += "charges/"
+		case "no_side_effect_proof":
+			continue
 		default:
 			r.Manual = true
 			r.Status = "unknown_resource"
