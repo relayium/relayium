@@ -1061,6 +1061,18 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		`ALTER TABLE billing_cancellation_outbox ADD COLUMN claim_token TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE billing_cancellation_outbox ADD COLUMN claim_until INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE billing_cancellation_outbox ADD COLUMN revision INTEGER NOT NULL DEFAULT 0`,
+		`CREATE TABLE IF NOT EXISTS billing_deletion_manual_actions (
+ id TEXT PRIMARY KEY,
+ outbox_id TEXT NOT NULL,
+ resource_key TEXT NOT NULL,
+ actor TEXT NOT NULL,
+ reason TEXT NOT NULL,
+ payment_intent_id TEXT NOT NULL DEFAULT '',
+ refund_id TEXT NOT NULL DEFAULT '',
+ state TEXT NOT NULL CHECK(state IN ('prepared','succeeded')),
+ created_at INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL,
+ UNIQUE(outbox_id,resource_key))`,
 		`CREATE TABLE IF NOT EXISTS stripe_customer_history (
  user_id TEXT NOT NULL,
  customer_id TEXT NOT NULL,
@@ -1708,7 +1720,8 @@ INSERT INTO billing_cancellation_outbox_v2
  (id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at,generation,last_error,next_attempt_at,progress_json,terminal_at,archived_at,claim_token,claim_until,revision)
  SELECT id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,
         CASE state WHEN 'terminal' THEN 'pending' ELSE state END,attempts,created_at,updated_at,generation,last_error,
-        CASE state WHEN 'terminal' THEN 0 ELSE next_attempt_at END,progress_json,
+		CASE state WHEN 'terminal' THEN 0 ELSE next_attempt_at END,
+		CASE state WHEN 'terminal' THEN '{}' ELSE progress_json END,
         CASE state WHEN 'terminal' THEN 0 ELSE terminal_at END,0,'',0,revision
  FROM billing_cancellation_outbox`); err != nil {
 			return err

@@ -295,7 +295,7 @@ func (s *SQLiteStore) CommitAccountDeletion(ctx context.Context, tokenHash strin
 			return nil, false, err
 		}
 		if subID != "" {
-			progress.add(BillingDeletionResource{Kind: "subscription", ID: subID, CustomerID: u.StripeCustomerID, Status: "observed"})
+			progress.add(BillingDeletionResource{Kind: "subscription", ID: subID, CustomerID: u.StripeCustomerID, Status: "external_binding"})
 		}
 		encoded, _ := json.Marshal(progress)
 		if _, err := tx.ExecContext(ctx, `INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at,progress_json,generation,next_attempt_at) VALUES(?,?,?,?,?,?,'pending',0,?,?,?,?,?)`, id, u.ID, ProviderStripe, u.StripeCustomerID, subID, key, now, now, string(encoded), generation, now); err != nil {
@@ -385,6 +385,9 @@ func (s *SQLiteStore) FinishBillingCancellation(ctx context.Context, id, claim s
 		return err
 	}
 	defer tx.Rollback()
+	if err := persistDeletionCustomersTx(ctx, tx, id, progress); err != nil {
+		return err
+	}
 	res, err := tx.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET state=?,progress_json=?,last_error=?,attempts=attempts+1,updated_at=?,terminal_at=?,next_attempt_at=?,claim_token='',claim_until=0,revision=revision+1 WHERE id=? AND generation=? AND revision=? AND claim_token=? AND state='pending'`, state, progress, lastError, now, terminalAt, next, id, generation, revision, claim)
 	if err != nil {
 		return err
@@ -407,14 +410,36 @@ func (s *SQLiteStore) FinishBillingCancellation(ctx context.Context, id, claim s
 }
 
 func (s *SQLiteStore) SaveBillingCancellationProgress(ctx context.Context, id, claim string, generation, revision int64, progress string, now int64) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET progress_json=?,updated_at=?,revision=revision+1 WHERE id=? AND generation=? AND revision=? AND claim_token=? AND claim_until>? AND state='pending'`, progress, now, id, generation, revision, claim, now)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return revision, err
+	}
+	defer tx.Rollback()
+	if err := persistDeletionCustomersTx(ctx, tx, id, progress); err != nil {
+		return revision, err
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET progress_json=?,updated_at=?,revision=revision+1 WHERE id=? AND generation=? AND revision=? AND claim_token=? AND claim_until>? AND state='pending'`, progress, now, id, generation, revision, claim, now)
 	if err != nil {
 		return revision, err
 	}
 	if n, _ := res.RowsAffected(); n != 1 {
 		return revision, errors.New("account: stale billing cancellation progress")
 	}
-	return revision + 1, nil
+	return revision + 1, tx.Commit()
+}
+
+func persistDeletionCustomersTx(ctx context.Context, tx *sql.Tx, outboxID, raw string) error {
+	p := decodeDeletionProgress(raw)
+	for _, customerID := range p.Customers {
+		if customerID == "" {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO stripe_customer_history(user_id,customer_id,created_at)
+			SELECT billing_subject_id,?,unixepoch() FROM billing_cancellation_outbox WHERE id=?`, customerID, outboxID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *SQLiteStore) CompactBillingCancellations(ctx context.Context, before, now int64) error {

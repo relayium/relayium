@@ -705,7 +705,9 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			}
 		}
 		if r.Kind == "subscription" && r.CustomerID == "" {
-			if r.AttemptID == "" || obj.Metadata.UserID != row.BillingSubjectID || obj.Metadata.BillingAttemptID != r.AttemptID || obj.Customer == "" {
+			boundExternal := r.Status == "external_binding"
+			boundAttempt := r.AttemptID != "" && obj.Metadata.UserID == row.BillingSubjectID && obj.Metadata.BillingAttemptID == r.AttemptID
+			if (!boundExternal && !boundAttempt) || obj.Customer == "" {
 				r.Manual = true
 				r.Status = "subscription_attribution_mismatch"
 				p.Resources[resourceKey] = r

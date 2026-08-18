@@ -46,6 +46,13 @@ func TestOpenSQLiteRebuildsLegacyCancellationUniqueness(t *testing.T) {
 	if err := store.db.QueryRow(`SELECT COUNT(*) FROM billing_cancellation_outbox WHERE billing_subject_id='subject'`).Scan(&rows); err != nil || rows != 2 {
 		t.Fatalf("preserved rows=%d err=%v", rows, err)
 	}
+	var oldState string
+	if err := store.db.QueryRow(`SELECT state FROM billing_cancellation_outbox WHERE id='old'`).Scan(&oldState); err != nil || oldState != "pending" {
+		t.Fatalf("legacy terminal evidence was trusted: state=%q err=%v", oldState, err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation) VALUES('duplicate','subject','stripe','duplicate-key','pending',3,3,2)`); err == nil {
+		t.Fatal("duplicate subject/provider/generation was accepted")
+	}
 	if err := store.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE id='billing_cancellation_outbox_generations_v3'`).Scan(&marker); err != nil || marker != 1 {
 		t.Fatalf("marker=%d err=%v", marker, err)
 	}

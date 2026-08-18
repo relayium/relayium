@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -308,6 +309,81 @@ func TestPendingStripeRecoveryRemainsFrozen(t *testing.T) {
 	}
 	if frozen, err := store.BillingUserFrozen(context.Background(), u.ID); err != nil || !frozen {
 		t.Fatalf("pending recovery frozen=%v err=%v", frozen, err)
+	}
+	b.terminal = true
+	if _, err := store.db.Exec(`UPDATE billing_cancellation_outbox SET next_attempt_at=0,claim_until=0 WHERE billing_subject_id=?`, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	svc.ReconcileBillingCancellations(context.Background())
+	if frozen, err := store.BillingUserFrozen(context.Background(), u.ID); err != nil || frozen {
+		t.Fatalf("late terminal did not release recovered original subject: frozen=%v err=%v", frozen, err)
+	}
+}
+
+func TestCompactionRemovesHostedCheckoutURLButRetainsProviderTombstones(t *testing.T) {
+	store := newTestStore(t)
+	if _, err := store.db.Exec(`INSERT INTO billing_purchase_attempts(id,user_id,provider,product_id,state,provider_ref,provider_session_id,epoch,created_at) VALUES('attempt','subject','stripe','price','resolved','https://checkout.stripe.test/secret','cs_keep',1,1)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO stripe_customer_history(user_id,customer_id,created_at) VALUES('subject','cus_keep',1)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation,terminal_at) VALUES('terminal','subject','stripe','terminal-key','terminal',1,1,1,1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CompactBillingCancellations(context.Background(), 2, 3); err != nil {
+		t.Fatal(err)
+	}
+	var checkoutURL, sessionID, customerID string
+	if err := store.db.QueryRow(`SELECT provider_ref,provider_session_id FROM billing_purchase_attempts WHERE id='attempt'`).Scan(&checkoutURL, &sessionID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.db.QueryRow(`SELECT customer_id FROM stripe_customer_history WHERE user_id='subject'`).Scan(&customerID); err != nil {
+		t.Fatal(err)
+	}
+	if checkoutURL != "" || sessionID != "cs_keep" || customerID != "cus_keep" {
+		t.Fatalf("url=%q session=%q customer=%q", checkoutURL, sessionID, customerID)
+	}
+}
+
+func TestWebhookHazardInvalidatesClaimAndPersistsCustomerHistory(t *testing.T) {
+	store := newTestStore(t)
+	now := time.Now().Unix()
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation,next_attempt_at) VALUES('webhook-row','subject','stripe','webhook-key','pending',?,?,1,?)`, now, now, now); err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := store.PendingBillingCancellations(context.Background(), 1)
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("claim=%+v err=%v", claimed, err)
+	}
+	if err := store.AppendStripeDeletionHazard(context.Background(), "subject", BillingDeletionResource{Kind: "checkout_session", ID: "cs_late", CustomerID: "cus_late", Status: "webhook"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.FinishBillingCancellation(context.Background(), claimed[0].ID, claimed[0].ClaimToken, claimed[0].Generation, claimed[0].Revision, `{}`, "", true, claimed[0].Attempts, now); err == nil {
+		t.Fatal("worker overwrote webhook-appended hazard")
+	}
+	rows, err := store.PendingBillingCancellations(context.Background(), 1)
+	if err != nil || len(rows) != 0 {
+		// The webhook intentionally leaves the prior lease in place; a later
+		// worker may take it only after expiry, never concurrently.
+		t.Fatalf("unexpected immediate reclaim rows=%+v err=%v", rows, err)
+	}
+	if _, err := store.db.Exec(`UPDATE billing_cancellation_outbox SET claim_until=0 WHERE id='webhook-row'`); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = store.PendingBillingCancellations(context.Background(), 1)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("reclaim=%+v err=%v", rows, err)
+	}
+	p := decodeDeletionProgress(rows[0].ProgressJSON)
+	p.Customers = appendUnique(p.Customers, "cus_late")
+	encoded, _ := json.Marshal(p)
+	if _, err := store.SaveBillingCancellationProgress(context.Background(), rows[0].ID, rows[0].ClaimToken, rows[0].Generation, rows[0].Revision, string(encoded), now); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := store.db.QueryRow(`SELECT COUNT(*) FROM stripe_customer_history WHERE user_id='subject' AND customer_id='cus_late'`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("history=%d err=%v", n, err)
 	}
 }
 
