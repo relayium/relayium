@@ -35,6 +35,8 @@ type BillingDeletionResource struct {
 	Manual            bool   `json:"manual,omitempty"`
 	ProviderCreatedAt int64  `json:"providerCreatedAt,omitempty"`
 	SuccessAt         int64  `json:"successAt,omitempty"`
+	RecoveryExpiresAt int64  `json:"recoveryExpiresAt,omitempty"`
+	RecoveredFrom     string `json:"recoveredFrom,omitempty"`
 }
 type BillingDeletionProgress struct {
 	Version    int                                `json:"version"`
@@ -86,6 +88,12 @@ func (p *BillingDeletionProgress) add(r BillingDeletionResource) {
 		}
 		if r.InvoiceID == "" {
 			r.InvoiceID = old.InvoiceID
+		}
+		if r.RecoveryExpiresAt == 0 {
+			r.RecoveryExpiresAt = old.RecoveryExpiresAt
+		}
+		if r.RecoveredFrom == "" {
+			r.RecoveredFrom = old.RecoveredFrom
 		}
 		if old.SuccessAt > r.SuccessAt {
 			r.SuccessAt = old.SuccessAt

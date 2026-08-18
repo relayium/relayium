@@ -703,19 +703,24 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			return p, err
 		}
 		var obj struct {
-			ID                string    `json:"id"`
-			Status            string    `json:"status"`
-			Customer          string    `json:"customer"`
-			PaymentStatus     string    `json:"payment_status"`
-			Subscription      string    `json:"subscription"`
-			PaymentIntent     string    `json:"payment_intent"`
-			Invoice           string    `json:"invoice"`
-			RecoveredFrom     string    `json:"recovered_from"`
-			Created           int64     `json:"created"`
-			AfterExpiration   *struct{} `json:"after_expiration"`
-			LatestCharge      string    `json:"latest_charge"`
-			Charge            string    `json:"charge"`
-			Paid              bool      `json:"paid"`
+			ID              string `json:"id"`
+			Status          string `json:"status"`
+			Customer        string `json:"customer"`
+			PaymentStatus   string `json:"payment_status"`
+			Subscription    string `json:"subscription"`
+			PaymentIntent   string `json:"payment_intent"`
+			Invoice         string `json:"invoice"`
+			RecoveredFrom   string `json:"recovered_from"`
+			Created         int64  `json:"created"`
+			ExpiresAt       int64  `json:"expires_at"`
+			AfterExpiration *struct {
+				Recovery *struct {
+					Enabled bool `json:"enabled"`
+				} `json:"recovery"`
+			} `json:"after_expiration"`
+			LatestCharge      string `json:"latest_charge"`
+			Charge            string `json:"charge"`
+			Paid              bool   `json:"paid"`
 			StatusTransitions struct {
 				PaidAt int64 `json:"paid_at"`
 			} `json:"status_transitions"`
@@ -774,7 +779,20 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			r.ProviderCreatedAt = obj.Created
 			r.PaymentIntentID = obj.PaymentIntent
 			r.InvoiceID = obj.Invoice
-			if obj.AfterExpiration != nil || obj.RecoveredFrom != "" {
+			r.RecoveredFrom = obj.RecoveredFrom
+			if obj.RecoveredFrom != "" {
+				p.add(BillingDeletionResource{Kind: "checkout_session", ID: obj.RecoveredFrom, CustomerID: obj.Customer, Status: "recovery_parent"})
+			}
+			recoveryEnabled := obj.AfterExpiration != nil && obj.AfterExpiration.Recovery != nil && obj.AfterExpiration.Recovery.Enabled
+			if recoveryEnabled {
+				if obj.ExpiresAt > 0 {
+					r.RecoveryExpiresAt = obj.ExpiresAt + 30*86400
+				}
+				if obj.Status == "expired" && r.RecoveryExpiresAt > 0 && c.now().Unix() >= r.RecoveryExpiresAt {
+					r.Terminal = true
+					r.Status = "recovery_window_closed"
+					break
+				}
 				r.Status = "recovery_lineage_pending"
 				p.Resources[resourceKey] = r
 				return p, errors.New("stripe: checkout recovery lineage requires canonical expiry")

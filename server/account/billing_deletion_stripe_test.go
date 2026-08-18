@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 )
 
 func TestStripeDeletionEnumeratesAndNeutralizesEveryChargePath(t *testing.T) {
@@ -468,6 +469,39 @@ func TestStripeDeletionRecoveryLineageNeverExpiresBlindly(t *testing.T) {
 	}
 	if mutation {
 		t.Fatal("recovery-enabled session was blindly expired")
+	}
+}
+
+func TestStripeDeletionRecoveryWindowAndChildLineageAreDurable(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/checkout/sessions/cs_parent":
+			io.WriteString(w, `{"id":"cs_parent","status":"expired","customer":"cus_1","expires_at":100,"after_expiration":{"recovery":{"enabled":true}}}`)
+		case "/v1/checkout/sessions/cs_child":
+			io.WriteString(w, `{"id":"cs_child","status":"expired","customer":"cus_1","recovered_from":"cs_parent"}`)
+		default:
+			http.Error(w, "unexpected", http.StatusBadRequest)
+		}
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+	c.base, c.http = ts.URL, ts.Client()
+	c.now = func() time.Time { return time.Unix(100+30*86400, 0) }
+	p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{
+		"checkout_session:cs_parent": {Kind: "checkout_session", ID: "cs_parent", CustomerID: "cus_1"},
+		"checkout_session:cs_child":  {Kind: "checkout_session", ID: "cs_child", CustomerID: "cus_1"},
+	}}
+	got, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", IdempotencyKey: "delete"}, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent, child := got.Resources["checkout_session:cs_parent"], got.Resources["checkout_session:cs_child"]
+	if !parent.Terminal || parent.Status != "recovery_window_closed" || parent.RecoveryExpiresAt != 100+30*86400 {
+		t.Fatalf("parent=%+v", parent)
+	}
+	if !child.Terminal || child.RecoveredFrom != "cs_parent" {
+		t.Fatalf("child=%+v", child)
 	}
 }
 
