@@ -106,7 +106,7 @@ func TestFailedRefundReopensHazardAndRotatesProviderAction(t *testing.T) {
 	if _, err := store.db.Exec(`INSERT INTO billing_deletion_manual_actions(id,outbox_id,resource_key,actor,reason,payment_intent_id,refund_id,state,created_at,updated_at) VALUES('action-old','out','payment_intent:pi_failed','operator','customer deletion','pi_failed','re_failed','prepared',?,?)`, now, now); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RecordStripeDeletionRefundLifecycle(context.Background(), "re_failed", "action-old", "pending", 105); err != nil {
+	if err := store.RecordStripeDeletionRefundLifecycle(context.Background(), "re_failed", "action-old", "pi_failed", "pending", 105); err != nil {
 		t.Fatal(err)
 	}
 	var providerStatus string
@@ -141,7 +141,7 @@ func TestFailedRefundReopensHazardAndRotatesProviderAction(t *testing.T) {
 	if err := store.RecordStripeDeletionRefundFailure(context.Background(), "re_failed", "action-old", 111); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RecordStripeDeletionRefundLifecycle(context.Background(), "re_failed", "action-old", "succeeded", 112); err != nil {
+	if err := store.RecordStripeDeletionRefundLifecycle(context.Background(), "re_failed", "action-old", "pi_failed", "succeeded", 112); err != nil {
 		t.Fatal(err)
 	}
 	var oldProviderStatus string
@@ -377,6 +377,9 @@ func TestManualDeletionRefundAdoptsOneCanonicalExternalFullRefund(t *testing.T) 
 		"charge:ch_ext": {Kind: "charge", ID: "ch_ext", PaymentIntentID: "pi_ext", CustomerID: "cus_ext", Status: "succeeded_after_deletion", Manual: true},
 	}}
 	raw, _ := json.Marshal(p)
+	if _, err := store.db.Exec(`INSERT INTO billing_deletion_holds(billing_subject_id,email_hmac,provider,created_at,expires_at,review_at,subject_released_at) VALUES('subject',X'08','stripe',1,2,3,99)`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,progress_json,created_at,updated_at,generation,next_attempt_at) VALUES('out_ext','subject','stripe','delete-ext','pending',?,1,1,1,1)`, string(raw)); err != nil {
 		t.Fatal(err)
 	}
@@ -392,7 +395,7 @@ func TestManualDeletionRefundAdoptsOneCanonicalExternalFullRefund(t *testing.T) 
 			if r.URL.Query().Get("starting_after") == "re_part_a" {
 				io.WriteString(w, `{"data":[{"id":"re_part_b","status":"succeeded","payment_intent":"pi_ext","amount":300}],"has_more":false}`)
 			} else {
-				io.WriteString(w, `{"data":[{"id":"re_part_a","status":"succeeded","payment_intent":"pi_ext","amount":200}],"has_more":true}`)
+				io.WriteString(w, `{"data":[{"id":"re_failed_old","status":"failed","payment_intent":"pi_ext","amount":100},{"id":"re_part_a","status":"succeeded","payment_intent":"pi_ext","amount":200}],"has_more":true}`)
 			}
 		case "GET /v1/refunds/re_part_a":
 			io.WriteString(w, `{"id":"re_part_a","status":"succeeded","payment_intent":"pi_ext","amount":200,"metadata":{}}`)
@@ -414,8 +417,20 @@ func TestManualDeletionRefundAdoptsOneCanonicalExternalFullRefund(t *testing.T) 
 		}
 	}
 	var status, proof string
-	if err := store.db.QueryRow(`SELECT provider_status,refund_proof FROM billing_deletion_manual_actions WHERE outbox_id='out_ext' ORDER BY retry_generation DESC LIMIT 1`).Scan(&status, &proof); err != nil || status != "adopted_external" || !strings.Contains(proof, "re_part_a") || !strings.Contains(proof, "re_part_b") {
+	if err := store.db.QueryRow(`SELECT provider_status,refund_proof FROM billing_deletion_manual_actions WHERE outbox_id='out_ext' ORDER BY retry_generation DESC LIMIT 1`).Scan(&status, &proof); err != nil || status != "adopted_external" || !strings.Contains(proof, "re_part_a") || !strings.Contains(proof, "re_part_b") || !strings.Contains(proof, "re_failed_old") {
 		t.Fatalf("provider status=%q proof=%q err=%v", status, proof, err)
+	}
+	var constituents int
+	if err := store.db.QueryRow(`SELECT COUNT(*) FROM billing_deletion_refund_constituents WHERE outbox_id='out_ext'`).Scan(&constituents); err != nil || constituents != 3 {
+		t.Fatalf("constituents=%d err=%v", constituents, err)
+	}
+	if err := store.RecordStripeDeletionRefundFailure(context.Background(), "re_part_b", "", 200); err != nil {
+		t.Fatal(err)
+	}
+	var generation int
+	var actionState string
+	if err := store.db.QueryRow(`SELECT retry_generation,state FROM billing_deletion_manual_actions WHERE outbox_id='out_ext' ORDER BY retry_generation DESC LIMIT 1`).Scan(&generation, &actionState); err != nil || generation != 1 || actionState != "prepared" {
+		t.Fatalf("late constituent generation=%d state=%s err=%v", generation, actionState, err)
 	}
 }
 
@@ -441,6 +456,18 @@ func TestManualDeletionRefundRejectsMissingCanonicalRefundAmount(t *testing.T) {
 	c.base, c.http = ts.URL, ts.Client()
 	if _, err := ResolveBillingDeletionRefund(context.Background(), store, c, "out_missing", "charge:ch_missing", "operator", "audit"); err == nil {
 		t.Fatal("refund without an amount was accepted")
+	}
+}
+
+func TestRefundFailureIsDurableBeforeActionBinding(t *testing.T) {
+	store := newTestStore(t)
+	if err := store.RecordStripeDeletionRefundLifecycle(context.Background(), "re_orphan", "", "pi_orphan", "failed", 123); err != nil {
+		t.Fatal(err)
+	}
+	var status, paymentIntent string
+	var eventAt int64
+	if err := store.db.QueryRow(`SELECT status,payment_intent_id,event_at FROM billing_deletion_refund_inbox WHERE refund_id='re_orphan'`).Scan(&status, &paymentIntent, &eventAt); err != nil || status != "failed" || paymentIntent != "pi_orphan" || eventAt != 123 {
+		t.Fatalf("orphan status=%q pi=%q at=%d err=%v", status, paymentIntent, eventAt, err)
 	}
 }
 

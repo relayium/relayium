@@ -652,17 +652,25 @@ func (c *stripeClient) deletionList(ctx context.Context, path string, query url.
 			}
 			ids = append(ids, v.ID)
 		}
-		if !page.HasMore || len(page.Data) == 0 {
+		if !page.HasMore {
 			return ids, nil
 		}
-		query.Set("starting_after", page.Data[len(page.Data)-1].ID)
+		if len(page.Data) == 0 {
+			return nil, errors.New("stripe: deletion inventory pagination made no progress")
+		}
+		next := page.Data[len(page.Data)-1].ID
+		if next == "" || next == query.Get("starting_after") {
+			return nil, errors.New("stripe: deletion inventory cursor did not advance")
+		}
+		query.Set("starting_after", next)
 	}
 }
 
 func (c *stripeClient) DiscoverDeletionHazards(ctx context.Context, row BillingCancellation, p BillingDeletionProgress) (BillingDeletionProgress, error) {
 	p.Customers = appendUnique(p.Customers, row.CustomerID)
 	if len(p.Customers) == 0 {
-		if proof, ok := p.Resources["no_side_effect_proof:"+row.BillingSubjectID]; ok && proof.Terminal {
+		if proof, ok := p.Resources["no_side_effect_proof:"+row.BillingSubjectID]; ok && proof.Terminal && len(p.Resources) == 1 {
+			p.HistoricalAuditRequired = false
 			return p, nil
 		}
 	}
@@ -1071,8 +1079,14 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				p.Resources[resourceKey] = r
 				return p, errors.New("stripe: charge succeeded after deletion")
 			}
-			r.Terminal = true
-			r.Status = "not_paid"
+			if obj.Status == "failed" {
+				r.Terminal = true
+				r.Status = "canonical_failed"
+				break
+			}
+			r.Status = "canonical_payment_pending"
+			p.Resources[resourceKey] = r
+			return p, errors.New("stripe: charge remains nonterminal")
 		}
 		p.Resources[resourceKey] = r
 	}

@@ -63,6 +63,13 @@ func (p *BillingDeletionProgress) add(r BillingDeletionResource) {
 	}
 	key := r.Kind + ":" + r.ID
 	if old, ok := p.Resources[key]; ok {
+		if old.Terminal && r.SuccessAt > old.SuccessAt && (r.Kind == "charge" || r.Kind == "payment_intent") {
+			old.Terminal, old.Manual = false, false
+			old.SuccessAt, old.Status = r.SuccessAt, r.Status
+			p.Resources[key] = old
+			p.CleanSince = 0
+			return
+		}
 		// A later asynchronous Checkout outcome invalidates an earlier terminal
 		// observation. In particular, payment success delivered after failure must
 		// reopen reconciliation rather than letting deletion release its hold.

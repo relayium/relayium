@@ -98,6 +98,59 @@ func TestBillingDeletionHistoryAuditV5ReopensOldCheckoutProof(t *testing.T) {
 	}
 }
 
+func TestBillingDeletionHistoryAuditV6ReopensTerminalAndUnionsCustomers(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history-v6.db")
+	store, err := OpenSQLite(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`DELETE FROM schema_migrations WHERE id='billing_cancellation_history_audit_v6'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO billing_deletion_holds(billing_subject_id,email_hmac,provider,created_at,expires_at,review_at,subject_released_at) VALUES('subject-v6',X'01','stripe',1,2,3,99)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO stripe_customer_history(user_id,customer_id,created_at) VALUES('subject-v6','cus_history',1)`); err != nil {
+		t.Fatal(err)
+	}
+	raw := `{"version":1,"customers":["cus_progress"],"resources":{"checkout_session:cs_old":{"kind":"checkout_session","id":"cs_old","status":"checkout.session.async_payment_failed","terminal":true},"charge:ch_old":{"kind":"charge","id":"ch_old","status":"not_paid","terminal":true}},"cleanSince":50}`
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,idempotency_key,state,created_at,updated_at,generation,progress_json,terminal_at,archived_at,claim_token,claim_until,revision) VALUES('out-v6','subject-v6','stripe','cus_row','v6-key','terminal',1,1,1,?,50,60,'old-claim',999,7)`, raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err = OpenSQLite(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.db.Close()
+	var state, claim string
+	var terminalAt, archivedAt, claimUntil, revision, released int64
+	if err := store.db.QueryRow(`SELECT state,progress_json,terminal_at,archived_at,claim_token,claim_until,revision FROM billing_cancellation_outbox WHERE id='out-v6'`).Scan(&state, &raw, &terminalAt, &archivedAt, &claim, &claimUntil, &revision); err != nil {
+		t.Fatal(err)
+	}
+	p, err := decodeDeletionProgressStrict(raw)
+	if err != nil || state != "pending" || terminalAt != 0 || archivedAt != 0 || claim != "" || claimUntil != 0 || revision != 8 || !p.HistoricalAuditRequired || p.CleanSince != 0 {
+		t.Fatalf("v6 row state=%s progress=%+v terminal=%d archived=%d claim=%q/%d revision=%d err=%v", state, p, terminalAt, archivedAt, claim, claimUntil, revision, err)
+	}
+	for _, customer := range []string{"cus_progress", "cus_row", "cus_history"} {
+		found := false
+		for _, got := range p.Customers {
+			found = found || got == customer
+		}
+		if !found {
+			t.Fatalf("missing customer %s in %v", customer, p.Customers)
+		}
+	}
+	if p.Resources["checkout_session:cs_old"].Terminal || p.Resources["checkout_session:cs_old"].AsyncFailureAt != 0 || p.Resources["charge:ch_old"].Terminal {
+		t.Fatalf("old conclusions survived: %+v", p.Resources)
+	}
+	if err := store.db.QueryRow(`SELECT subject_released_at FROM billing_deletion_holds WHERE billing_subject_id='subject-v6'`).Scan(&released); err != nil || released != 0 {
+		t.Fatalf("hold=%d err=%v", released, err)
+	}
+}
+
 func TestDeletionProgressManualAndTerminalAreMonotonic(t *testing.T) {
 	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{
 		"checkout_session:cs_manual": {Kind: "checkout_session", ID: "cs_manual", Manual: true, Status: "paid_after_deletion"},

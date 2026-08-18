@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -205,6 +206,59 @@ func TestHistoricalAuditWaitsForCanonicalCustomerIdentity(t *testing.T) {
 	got, err := c.DiscoverDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject"}, p)
 	if err != nil || !got.HistoricalAuditRequired {
 		t.Fatalf("audit was cleared before customer derivation: %+v err=%v", got, err)
+	}
+}
+
+func TestHistoricalAuditAcceptsExistingNoSideEffectProof(t *testing.T) {
+	c := NewStripeClient("sk_test", "whsec", "bpc")
+	p := BillingDeletionProgress{HistoricalAuditRequired: true, Resources: map[string]BillingDeletionResource{"no_side_effect_proof:subject": {Kind: "no_side_effect_proof", ID: "subject", Terminal: true, Status: "verified"}}}
+	got, err := c.DiscoverDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject"}, p)
+	if err != nil || got.HistoricalAuditRequired {
+		t.Fatalf("safe proof did not settle audit: %+v err=%v", got, err)
+	}
+}
+
+func TestChargeRequiresCanonicalFailedState(t *testing.T) {
+	status := "pending"
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, fmt.Sprintf(`{"id":"ch_state","status":%q,"paid":false,"customer":"cus_1"}`, status))
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test", "whsec", "bpc")
+	c.base, c.http = ts.URL, ts.Client()
+	p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{"charge:ch_state": {Kind: "charge", ID: "ch_state", CustomerID: "cus_1"}}}
+	got, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject"}, p)
+	if err == nil || got.Resources["charge:ch_state"].Terminal {
+		t.Fatalf("pending charge became terminal: %+v err=%v", got.Resources, err)
+	}
+	status = "failed"
+	got, err = c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject"}, got)
+	if err != nil || !got.Resources["charge:ch_state"].Terminal || got.Resources["charge:ch_state"].Status != "canonical_failed" {
+		t.Fatalf("failed charge did not settle: %+v err=%v", got.Resources, err)
+	}
+}
+
+func TestDeletionInventoryRejectsNonAdvancingPagination(t *testing.T) {
+	for _, response := range []string{`{"data":[],"has_more":true}`, `{"data":[{"id":"same"}],"has_more":true}`} {
+		t.Run(response, func(t *testing.T) {
+			calls := 0
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++; io.WriteString(w, response) }))
+			defer ts.Close()
+			c := NewStripeClient("sk_test", "whsec", "bpc")
+			c.base, c.http = ts.URL, ts.Client()
+			_, err := c.deletionList(context.Background(), "/v1/charges", url.Values{"starting_after": {"same"}})
+			if err == nil || calls != 1 {
+				t.Fatalf("pagination calls=%d err=%v", calls, err)
+			}
+		})
+	}
+}
+
+func TestChargeNeedsCanonicalFailureAndLateSuccessReopens(t *testing.T) {
+	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{"charge:ch": {Kind: "charge", ID: "ch", Status: "canonical_failed", Terminal: true}}, CleanSince: 1}
+	p.add(BillingDeletionResource{Kind: "charge", ID: "ch", Status: "webhook_success_time", SuccessAt: 10})
+	if got := p.Resources["charge:ch"]; got.Terminal || got.SuccessAt != 10 || p.CleanSince != 0 {
+		t.Fatalf("late success did not reopen: %+v", got)
 	}
 }
 

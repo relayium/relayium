@@ -1084,6 +1084,23 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
  outbox_id TEXT NOT NULL,
  payment_intent_id TEXT NOT NULL,
  failed_at INTEGER NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS billing_deletion_refund_inbox (
+ refund_id TEXT PRIMARY KEY,
+ action_id TEXT NOT NULL DEFAULT '',
+ payment_intent_id TEXT NOT NULL DEFAULT '',
+ status TEXT NOT NULL,
+ event_at INTEGER NOT NULL,
+ processed_at INTEGER NOT NULL DEFAULT 0)`,
+		`CREATE TABLE IF NOT EXISTS billing_deletion_refund_constituents (
+ action_id TEXT NOT NULL,
+ outbox_id TEXT NOT NULL,
+ payment_intent_id TEXT NOT NULL,
+ proof_generation INTEGER NOT NULL,
+ refund_id TEXT NOT NULL,
+ amount INTEGER NOT NULL CHECK(amount>0),
+ status TEXT NOT NULL CHECK(status IN ('succeeded','failed','canceled')),
+ PRIMARY KEY(action_id,proof_generation,refund_id),
+ UNIQUE(outbox_id,payment_intent_id,proof_generation,refund_id))`,
 		`CREATE TABLE IF NOT EXISTS billing_deletion_metered_actions (
  id TEXT PRIMARY KEY,
  outbox_id TEXT NOT NULL,
@@ -1270,6 +1287,10 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		return nil, err
 	}
 	if err := migrateBillingCancellationHistoryAuditV5(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := migrateBillingCancellationHistoryAuditV6(db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -1911,6 +1932,95 @@ func migrateBillingCancellationHistoryAuditV5(db *sql.DB) error {
 		}
 		for _, u := range updates {
 			if _, err := tx.ExecContext(context.Background(), `UPDATE billing_cancellation_outbox SET progress_json=?,next_attempt_at=0 WHERE id=?`, u.raw, u.id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func migrateBillingCancellationHistoryAuditV6(db *sql.DB) error {
+	return migrateOnce(db, "billing_cancellation_history_audit_v6", func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(context.Background(), `SELECT id,billing_subject_id,customer_id,subscription_id,progress_json FROM billing_cancellation_outbox`)
+		if err != nil {
+			return err
+		}
+		type update struct{ id, subject, raw string }
+		var updates []update
+		for rows.Next() {
+			var id, subject, customerID, subscriptionID, raw string
+			if err := rows.Scan(&id, &subject, &customerID, &subscriptionID, &raw); err != nil {
+				rows.Close()
+				return err
+			}
+			p, err := decodeDeletionProgressStrict(raw)
+			if err != nil {
+				rows.Close()
+				return fmt.Errorf("billing deletion v6 %s: %w", id, err)
+			}
+			p.Customers = appendUnique(p.Customers, customerID)
+			history, err := tx.QueryContext(context.Background(), `SELECT customer_id FROM stripe_customer_history WHERE user_id=? ORDER BY customer_id`, subject)
+			if err != nil {
+				rows.Close()
+				return err
+			}
+			for history.Next() {
+				var customer string
+				if err := history.Scan(&customer); err != nil {
+					history.Close()
+					rows.Close()
+					return err
+				}
+				p.Customers = appendUnique(p.Customers, customer)
+			}
+			if err := history.Close(); err != nil {
+				rows.Close()
+				return err
+			}
+			if subscriptionID != "" {
+				p.add(BillingDeletionResource{Kind: "subscription", ID: subscriptionID, CustomerID: customerID, Status: "migration_history_revalidate"})
+			}
+			onlySafeProof := len(p.Resources) > 0
+			hasRecoverableObject := false
+			for key, r := range p.Resources {
+				if r.Kind == "no_side_effect_proof" && r.Terminal {
+					continue
+				}
+				onlySafeProof = false
+				if (r.Kind == "checkout_session" && r.AttemptID != "") || (r.Kind == "subscription" && (r.AttemptID != "" || r.Status == "external_binding")) {
+					hasRecoverableObject = true
+				}
+				r.Terminal, r.Manual, r.Status = false, false, "migration_history_revalidate"
+				if r.Kind == "checkout_session" {
+					r.AsyncFailureAt, r.AsyncSuccessAt = 0, 0
+				}
+				p.Resources[key] = r
+			}
+			if len(p.Customers) == 0 && !onlySafeProof && !hasRecoverableObject {
+				rows.Close()
+				return fmt.Errorf("billing deletion v6 %s has no recoverable provider identity", id)
+			}
+			p.CleanSince = 0
+			p.HistoricalAuditRequired = !onlySafeProof
+			encoded, err := json.Marshal(p)
+			if err != nil {
+				rows.Close()
+				return err
+			}
+			updates = append(updates, update{id, subject, string(encoded)})
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		for _, u := range updates {
+			res, err := tx.ExecContext(context.Background(), `UPDATE billing_deletion_holds SET subject_released_at=0 WHERE billing_subject_id=?`, u.subject)
+			if err != nil {
+				return err
+			}
+			if n, _ := res.RowsAffected(); n == 0 {
+				return fmt.Errorf("billing deletion v6 %s has no durable hold", u.id)
+			}
+			if _, err := tx.ExecContext(context.Background(), `UPDATE billing_cancellation_outbox SET state='pending',progress_json=?,terminal_at=0,archived_at=0,next_attempt_at=0,claim_token='',claim_until=0,revision=revision+1 WHERE id=?`, u.raw, u.id); err != nil {
 				return err
 			}
 		}
