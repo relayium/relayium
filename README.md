@@ -48,9 +48,9 @@ and anything larger is a file.
 
 The production web app and CLI are live, and the CLI and node binaries are still
 in **pre-1.0 versioning** (`v0.x`). The macOS app is on its own track and is at
-**1.2.9**: a universal, Developer ID-signed, Apple-notarized and stapled
+**1.2.10**: a universal, Developer ID-signed, Apple-notarized and stapled
 build, published as a direct download from its own GitHub Release,
-[`macos-v1.2.9`](https://github.com/relayium/relayium/releases/tag/macos-v1.2.9).
+[`macos-v1.2.10`](https://github.com/relayium/relayium/releases/tag/macos-v1.2.10).
 There is no Mac App Store listing; a Developer ID download is the channel.
 The iOS app runs its transfer, nearby and account workflows in the
 foreground and is **not public**: there is no App Store listing and nothing to
@@ -240,7 +240,7 @@ pairing code requires sign-in; joining with that code does not.
 | --- | --- | --- |
 | **Web** | [Live at relayium.com](https://relayium.com/) | LAN and cross-network file/text transfer, encrypted stored links, accounts, and usage controls. |
 | **CLI and nodes** | [Published on GitHub](https://github.com/relayium/relayium/releases) | Pairing-code transfer, encrypted links, direct transfer, folder sync, self-hosting, and relay/storage nodes. |
-| **macOS** | [1.2.9 direct download](https://github.com/relayium/relayium/releases/tag/macos-v1.2.9) | Universal, signed and notarized. The public channel is the Developer ID download with signed in-app updates; there is no public Mac App Store listing. |
+| **macOS** | [1.2.10 direct download](https://github.com/relayium/relayium/releases/tag/macos-v1.2.10) | Universal, signed and notarized. The public channel is the Developer ID download with signed in-app updates; there is no public Mac App Store listing. |
 | **iOS** | In development | Not available on the App Store or TestFlight. Realtime work requires the app to remain in the foreground; background transfer and push notifications are not supported. |
 
 Relayium currently maintains English and Simplified Chinese. Detailed native
