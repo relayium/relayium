@@ -57,6 +57,18 @@ type duplicateRefundAction struct {
 }
 
 var errDuplicateRefundProviderFailed = errors.New("stripe: duplicate refund provider reported a terminal failed refund")
+var errDuplicateRefundPending = errors.New("stripe: duplicate refund remains pending")
+var errDuplicateRefundReopened = errors.New("account: duplicate refund failure reopened operator reconciliation")
+
+type duplicateRefundObservation struct {
+	RefundID, InvoicePaymentID, PaymentIntentID, Status string
+	Amount                                              int64
+}
+
+type duplicateRefundProof struct {
+	Digest  string                       `json:"digest"`
+	Refunds []duplicateRefundObservation `json:"refunds"`
+}
 
 type duplicateSubscriptionProvider interface {
 	InspectDuplicateSubscription(context.Context, string, string, string, string) (DuplicateRefundPlan, error)
@@ -198,7 +210,220 @@ func findCanonicalInvoicePayment(invoice CanonicalStripePaidInvoice, id string) 
 	return CanonicalStripeInvoicePayment{}, false
 }
 
-func executeDuplicateRefundAction(ctx context.Context, client *stripeClient, job DuplicateRefundJob, action duplicateRefundAction) (string, error) {
+func (c *stripeClient) canonicalDuplicateRefundObservations(ctx context.Context, payment CanonicalStripeInvoicePayment) ([]duplicateRefundObservation, error) {
+	query := url.Values{"payment_intent": {payment.PaymentIntentID}, "limit": {"100"}}
+	seen := map[string]bool{}
+	var observations []duplicateRefundObservation
+	var succeeded int64
+	for {
+		body, err := c.request(ctx, http.MethodGet, "/v1/refunds?"+query.Encode(), nil)
+		if err != nil {
+			return nil, err
+		}
+		var page struct {
+			Data []struct {
+				ID            string `json:"id"`
+				Status        string `json:"status"`
+				PaymentIntent string `json:"payment_intent"`
+				Amount        int64  `json:"amount"`
+			} `json:"data"`
+			HasMore bool `json:"has_more"`
+		}
+		if json.Unmarshal(body, &page) != nil {
+			return nil, errors.New("stripe: duplicate refund list is invalid")
+		}
+		if page.HasMore && len(page.Data) == 0 {
+			return nil, errors.New("stripe: duplicate refund pagination made no progress")
+		}
+		for _, listed := range page.Data {
+			if listed.ID == "" || seen[listed.ID] {
+				return nil, errors.New("stripe: duplicate refund list identity is invalid")
+			}
+			seen[listed.ID] = true
+			detailBody, err := c.request(ctx, http.MethodGet, "/v1/refunds/"+url.PathEscape(listed.ID), nil)
+			if err != nil {
+				return nil, err
+			}
+			var detail struct {
+				ID            string `json:"id"`
+				Status        string `json:"status"`
+				PaymentIntent string `json:"payment_intent"`
+				Amount        int64  `json:"amount"`
+			}
+			if json.Unmarshal(detailBody, &detail) != nil || detail.ID != listed.ID || detail.ID == "" || detail.Status != listed.Status || detail.PaymentIntent != payment.PaymentIntentID || detail.Amount != listed.Amount || detail.Amount <= 0 {
+				return nil, errors.New("stripe: duplicate refund detail is invalid")
+			}
+			switch detail.Status {
+			case "succeeded":
+				if detail.Amount > payment.AmountRefunded-succeeded {
+					return nil, errors.New("stripe: duplicate refund succeeded amount exceeds canonical total")
+				}
+				succeeded += detail.Amount
+			case "pending", "requires_action", "failed", "canceled":
+			default:
+				return nil, errors.New("stripe: duplicate refund status is unsupported")
+			}
+			observations = append(observations, duplicateRefundObservation{detail.ID, payment.InvoicePaymentID, payment.PaymentIntentID, detail.Status, detail.Amount})
+		}
+		if !page.HasMore {
+			break
+		}
+		last := page.Data[len(page.Data)-1].ID
+		if last == query.Get("starting_after") {
+			return nil, errors.New("stripe: duplicate refund pagination cursor did not advance")
+		}
+		query.Set("starting_after", last)
+	}
+	if succeeded != payment.AmountRefunded {
+		return nil, errors.New("stripe: duplicate refund list does not equal canonical refunded amount")
+	}
+	sort.Slice(observations, func(i, j int) bool { return observations[i].RefundID < observations[j].RefundID })
+	return observations, nil
+}
+
+func makeDuplicateRefundProof(observations []duplicateRefundObservation) (string, error) {
+	observations = append([]duplicateRefundObservation(nil), observations...)
+	sort.Slice(observations, func(i, j int) bool {
+		if observations[i].RefundID != observations[j].RefundID {
+			return observations[i].RefundID < observations[j].RefundID
+		}
+		return observations[i].InvoicePaymentID < observations[j].InvoicePaymentID
+	})
+	raw, err := json.Marshal(observations)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(raw)
+	proof, err := json.Marshal(duplicateRefundProof{Digest: hex.EncodeToString(digest[:]), Refunds: observations})
+	return string(proof), err
+}
+
+func decodeDuplicateRefundProof(raw string) (duplicateRefundProof, error) {
+	var proof duplicateRefundProof
+	if raw == "" || json.Unmarshal([]byte(raw), &proof) != nil || proof.Digest == "" || len(proof.Refunds) == 0 {
+		return proof, errors.New("account: duplicate refund proof is invalid")
+	}
+	want, err := makeDuplicateRefundProof(proof.Refunds)
+	if err != nil {
+		return proof, err
+	}
+	var canonical duplicateRefundProof
+	if json.Unmarshal([]byte(want), &canonical) != nil || canonical.Digest != proof.Digest {
+		return proof, errors.New("account: duplicate refund proof digest does not match")
+	}
+	return canonical, nil
+}
+
+func recordDuplicateRefundFailuresTx(ctx context.Context, tx *sql.Tx, refundID string, failedAt int64) (bool, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT job_id FROM billing_duplicate_refund_constituents WHERE refund_id=? ORDER BY job_id`, refundID)
+	if err != nil {
+		return false, err
+	}
+	var jobs []string
+	for rows.Next() {
+		var jobID string
+		if err := rows.Scan(&jobID); err != nil {
+			rows.Close()
+			return false, err
+		}
+		jobs = append(jobs, jobID)
+	}
+	if err := rows.Close(); err != nil {
+		return false, err
+	}
+	rotated := false
+	for _, jobID := range jobs {
+		res, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO billing_duplicate_refund_failures(refund_id,job_id,failed_at) VALUES(?,?,?)`, refundID, jobID, failedAt)
+		if err != nil {
+			return false, err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			continue
+		}
+		var action duplicateRefundAction
+		if err := tx.QueryRowContext(ctx, `SELECT id,job_id,generation,actor,reason,state,snapshot_json,proof_json,last_error,revision FROM billing_duplicate_refund_actions WHERE job_id=? ORDER BY generation DESC LIMIT 1`, jobID).
+			Scan(&action.ID, &action.JobID, &action.Generation, &action.Actor, &action.Reason, &action.State, &action.SnapshotJSON, &action.ProofJSON, &action.LastError, &action.Revision); err != nil {
+			return false, err
+		}
+		res, err = tx.ExecContext(ctx, `UPDATE billing_duplicate_refund_actions SET state='failed',last_error=?,revision=revision+1,updated_at=? WHERE id=? AND state IN ('prepared','blocked','succeeded')`, errDuplicateRefundProviderFailed.Error(), failedAt, action.ID)
+		if err != nil {
+			return false, err
+		}
+		if n, _ := res.RowsAffected(); n != 1 {
+			return false, errors.New("account: duplicate refund failure lost action ownership")
+		}
+		nextGeneration := action.Generation + 1
+		nextID := duplicateRefundActionID(jobID, nextGeneration)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO billing_duplicate_refund_actions(id,job_id,generation,actor,reason,state,snapshot_json,created_at,updated_at) VALUES(?,?,?,?,?,'prepared',?,?,?)`, nextID, jobID, nextGeneration, action.Actor, action.Reason, action.SnapshotJSON, failedAt, failedAt); err != nil {
+			return false, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET state='manual',manual_reason='provider_refund_failed',refund_complete=0,last_error='provider refund failed',revision=revision+1,updated_at=? WHERE id=?`, failedAt, jobID); err != nil {
+			return false, err
+		}
+		rotated = true
+	}
+	return rotated, nil
+}
+
+func bindDuplicateRefundObservations(ctx context.Context, store *SQLiteStore, action duplicateRefundAction, job DuplicateRefundJob, observations []duplicateRefundObservation, eventAt int64) error {
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	reopened := false
+	for _, observation := range observations {
+		if observation.RefundID == "" || observation.InvoicePaymentID == "" || observation.PaymentIntentID == "" || observation.Amount <= 0 {
+			return errors.New("account: duplicate refund observation identity is incomplete")
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO billing_duplicate_refund_constituents(action_id,job_id,generation,invoice_payment_id,payment_intent_id,refund_id,amount,status,event_at) VALUES(?,?,?,?,?,?,?,?,?)`, action.ID, job.ID, action.Generation, observation.InvoicePaymentID, observation.PaymentIntentID, observation.RefundID, observation.Amount, observation.Status, eventAt); err != nil {
+			return err
+		}
+		var gotJob, gotInvoicePayment, gotPI, gotStatus string
+		var gotGeneration, gotAmount int64
+		if err := tx.QueryRowContext(ctx, `SELECT job_id,generation,invoice_payment_id,payment_intent_id,amount,status FROM billing_duplicate_refund_constituents WHERE action_id=? AND generation=? AND refund_id=?`, action.ID, action.Generation, observation.RefundID).
+			Scan(&gotJob, &gotGeneration, &gotInvoicePayment, &gotPI, &gotAmount, &gotStatus); err != nil {
+			return err
+		}
+		if gotJob != job.ID || gotGeneration != action.Generation || gotInvoicePayment != observation.InvoicePaymentID || gotPI != observation.PaymentIntentID || gotAmount != observation.Amount {
+			return errors.New("account: duplicate refund constituent ownership conflict")
+		}
+		status := observation.Status
+		if gotStatus == "failed" {
+			status = "failed"
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE billing_duplicate_refund_constituents SET status=?,event_at=MAX(event_at,?) WHERE action_id=? AND generation=? AND refund_id=?`, status, eventAt, action.ID, action.Generation, observation.RefundID); err != nil {
+			return err
+		}
+		var inboxStatus string
+		inboxErr := tx.QueryRowContext(ctx, `SELECT status FROM billing_deletion_refund_inbox WHERE refund_id=?`, observation.RefundID).Scan(&inboxStatus)
+		if inboxErr != nil && !errors.Is(inboxErr, sql.ErrNoRows) {
+			return inboxErr
+		}
+		if observation.Status == "failed" {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO billing_deletion_refund_inbox(refund_id,action_id,payment_intent_id,status,event_at) VALUES(?,?,?,'failed',?) ON CONFLICT(refund_id) DO UPDATE SET status='failed',event_at=MAX(event_at,excluded.event_at)`, observation.RefundID, "", observation.PaymentIntentID, eventAt); err != nil {
+				return err
+			}
+			inboxStatus = "failed"
+		}
+		if inboxStatus == "failed" {
+			rotated, err := recordDuplicateRefundFailuresTx(ctx, tx, observation.RefundID, eventAt)
+			if err != nil {
+				return err
+			}
+			reopened = reopened || rotated
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if reopened {
+		return errDuplicateRefundReopened
+	}
+	return nil
+}
+
+func executeDuplicateRefundAction(ctx context.Context, store *SQLiteStore, client *stripeClient, job DuplicateRefundJob, action duplicateRefundAction) (string, error) {
 	if job.InvoiceID == "" || len(job.Payments) == 0 {
 		return "", errors.New("stripe: duplicate refund has no canonical invoice payment identity")
 	}
@@ -208,6 +433,7 @@ func executeDuplicateRefundAction(ctx context.Context, client *stripeClient, job
 			return "", errors.New("stripe: duplicate refund constituent is shared or unsupported")
 		}
 	}
+	var allObservations []duplicateRefundObservation
 	for _, expectedPayment := range expected {
 		invoice, err := client.canonicalInvoicePayments(ctx, job.InvoiceID, job.CustomerID, job.DuplicateSubscriptionID, true)
 		if err != nil {
@@ -220,6 +446,19 @@ func executeDuplicateRefundAction(ctx context.Context, client *stripeClient, job
 		if !ok || current.AmountRefunded < 0 || current.AmountRefunded > current.AmountPaid {
 			return "", errors.New("stripe: duplicate refund constituent is not canonical")
 		}
+		observations, err := client.canonicalDuplicateRefundObservations(ctx, current)
+		if err != nil {
+			return "", err
+		}
+		if err := bindDuplicateRefundObservations(ctx, store, action, job, observations, time.Now().Unix()); err != nil {
+			return "", err
+		}
+		allObservations = append(allObservations, observations...)
+		for _, observation := range observations {
+			if observation.Status == "pending" || observation.Status == "requires_action" {
+				return "", errDuplicateRefundPending
+			}
+		}
 		remaining := current.AmountPaid - current.AmountRefunded
 		if remaining == 0 {
 			continue
@@ -230,13 +469,26 @@ func executeDuplicateRefundAction(ctx context.Context, client *stripeClient, job
 			return "", err
 		}
 		var created struct {
-			ID, Status string
+			ID            string `json:"id"`
+			Status        string `json:"status"`
+			PaymentIntent string `json:"payment_intent"`
+			Amount        int64  `json:"amount"`
 		}
-		if json.Unmarshal(body, &created) != nil || created.ID == "" {
+		if json.Unmarshal(body, &created) != nil || created.ID == "" || created.PaymentIntent != current.PaymentIntentID || created.Amount != remaining {
 			return "", errors.New("stripe: duplicate refund response is invalid")
 		}
+		createdObservation := duplicateRefundObservation{created.ID, current.InvoicePaymentID, current.PaymentIntentID, created.Status, created.Amount}
+		if err := bindDuplicateRefundObservations(ctx, store, action, job, []duplicateRefundObservation{createdObservation}, time.Now().Unix()); err != nil {
+			return "", err
+		}
+		if created.Status == "pending" || created.Status == "requires_action" {
+			return "", errDuplicateRefundPending
+		}
 		if created.Status == "failed" || created.Status == "canceled" {
-			return "", errDuplicateRefundProviderFailed
+			return "", errDuplicateRefundReopened
+		}
+		if created.Status != "succeeded" {
+			return "", errors.New("stripe: duplicate refund response status is unsupported")
 		}
 		verified, err := client.canonicalInvoicePayments(ctx, job.InvoiceID, job.CustomerID, job.DuplicateSubscriptionID, true)
 		if err != nil {
@@ -246,6 +498,14 @@ func executeDuplicateRefundAction(ctx context.Context, client *stripeClient, job
 		if !ok || !duplicatePaymentIdentitiesEqual(verified.Payments, expected) || got.AmountRefunded != got.AmountPaid {
 			return "", errors.New("stripe: duplicate refund constituent is not canonically complete")
 		}
+		observations, err = client.canonicalDuplicateRefundObservations(ctx, got)
+		if err != nil {
+			return "", err
+		}
+		if err := bindDuplicateRefundObservations(ctx, store, action, job, observations, time.Now().Unix()); err != nil {
+			return "", err
+		}
+		allObservations = append(allObservations, observations...)
 	}
 	invoice, err := client.canonicalInvoicePayments(ctx, job.InvoiceID, job.CustomerID, job.DuplicateSubscriptionID, true)
 	if err != nil {
@@ -254,22 +514,43 @@ func executeDuplicateRefundAction(ctx context.Context, client *stripeClient, job
 	if !duplicatePaymentIdentitiesEqual(invoice.Payments, expected) {
 		return "", errors.New("stripe: duplicate refund final identity changed")
 	}
-	proofPayments := normalizeInvoicePayments(invoice.Payments)
-	for _, payment := range proofPayments {
+	for _, payment := range normalizeInvoicePayments(invoice.Payments) {
 		if payment.AmountRefunded != payment.AmountPaid {
 			return "", errors.New("stripe: duplicate refund final proof is incomplete")
 		}
+		observations, err := client.canonicalDuplicateRefundObservations(ctx, payment)
+		if err != nil {
+			return "", err
+		}
+		if err := bindDuplicateRefundObservations(ctx, store, action, job, observations, time.Now().Unix()); err != nil {
+			return "", err
+		}
+		for _, observation := range observations {
+			if observation.Status == "pending" || observation.Status == "requires_action" {
+				return "", errDuplicateRefundPending
+			}
+		}
+		allObservations = append(allObservations, observations...)
 	}
-	proof, err := json.Marshal(struct {
-		InvoiceID string                          `json:"invoiceId"`
-		Payments  []CanonicalStripeInvoicePayment `json:"payments"`
-	}{job.InvoiceID, proofPayments})
-	return string(proof), err
+	deduped := make(map[string]duplicateRefundObservation)
+	for _, observation := range allObservations {
+		key := observation.InvoicePaymentID + "\x00" + observation.RefundID
+		if previous, ok := deduped[key]; ok && previous != observation {
+			return "", errors.New("stripe: duplicate refund proof identity changed")
+		}
+		deduped[key] = observation
+	}
+	allObservations = allObservations[:0]
+	for _, observation := range deduped {
+		allObservations = append(allObservations, observation)
+	}
+	return makeDuplicateRefundProof(allObservations)
 }
 
 func finishDuplicateRefundAction(ctx context.Context, store *SQLiteStore, job DuplicateRefundJob, action duplicateRefundAction, proof string, now int64) error {
-	if proof == "" {
-		return errors.New("account: duplicate refund proof is empty")
+	decoded, err := decodeDuplicateRefundProof(proof)
+	if err != nil {
+		return err
 	}
 	tx, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -284,6 +565,23 @@ func finishDuplicateRefundAction(ctx context.Context, store *SQLiteStore, job Du
 	if err := tx.QueryRowContext(ctx, `SELECT state,revision,proof_json FROM billing_duplicate_refund_actions WHERE id=?`, action.ID).Scan(&actionState, &actionRevision, &savedProof); err != nil {
 		return err
 	}
+	var failedRefund string
+	err = tx.QueryRowContext(ctx, `SELECT c.refund_id FROM billing_duplicate_refund_constituents c JOIN billing_deletion_refund_inbox i ON i.refund_id=c.refund_id AND i.status='failed' WHERE c.action_id=? AND c.generation=? LIMIT 1`, action.ID, action.Generation).Scan(&failedRefund)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if failedRefund != "" {
+		rotated, err := recordDuplicateRefundFailuresTx(ctx, tx, failedRefund, now)
+		if err != nil {
+			return err
+		}
+		if rotated {
+			if err := tx.Commit(); err != nil {
+				return err
+			}
+			return errDuplicateRefundReopened
+		}
+	}
 	if jobState == "terminal" && actionState == "succeeded" {
 		if savedProof != proof {
 			return errors.New("account: duplicate refund terminal proof changed")
@@ -292,6 +590,30 @@ func finishDuplicateRefundAction(ctx context.Context, store *SQLiteStore, job Du
 	}
 	if jobState != "manual" || actionState != "prepared" || !job.SubscriptionCanceled {
 		return errors.New("account: duplicate refund action is not finalizable")
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT refund_id,invoice_payment_id,payment_intent_id,status,amount FROM billing_duplicate_refund_constituents WHERE action_id=? AND generation=? ORDER BY refund_id,invoice_payment_id`, action.ID, action.Generation)
+	if err != nil {
+		return err
+	}
+	var stored []duplicateRefundObservation
+	for rows.Next() {
+		var observation duplicateRefundObservation
+		if err := rows.Scan(&observation.RefundID, &observation.InvoicePaymentID, &observation.PaymentIntentID, &observation.Status, &observation.Amount); err != nil {
+			rows.Close()
+			return err
+		}
+		stored = append(stored, observation)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	storedProof, err := makeDuplicateRefundProof(stored)
+	if err != nil {
+		return err
+	}
+	var canonicalStored duplicateRefundProof
+	if json.Unmarshal([]byte(storedProof), &canonicalStored) != nil || canonicalStored.Digest != decoded.Digest {
+		return errors.New("account: duplicate refund durable proof does not match provider proof")
 	}
 	res, err := tx.ExecContext(ctx, `UPDATE billing_duplicate_refund_actions SET state='succeeded',proof_json=?,last_error='',revision=revision+1,updated_at=? WHERE id=? AND state='prepared' AND revision=?`, proof, now, action.ID, actionRevision)
 	if err != nil {
@@ -332,8 +654,11 @@ func ResolveDuplicateRefund(ctx context.Context, store *SQLiteStore, biller Bill
 	if action.State == "blocked" {
 		return DuplicateRefundOperatorResult{ActionID: action.ID, State: action.State}, errors.New("account: duplicate refund action is blocked on missing canonical identity")
 	}
-	proof, err := executeDuplicateRefundAction(ctx, client, job, action)
+	proof, err := executeDuplicateRefundAction(ctx, store, client, job, action)
 	if err != nil {
+		if errors.Is(err, errDuplicateRefundReopened) {
+			return DuplicateRefundOperatorResult{ActionID: action.ID, State: "failed"}, err
+		}
 		blocked := job.InvoiceID == "" || len(job.Payments) == 0 || errors.Is(err, errDuplicateRefundProviderFailed) || strings.Contains(err.Error(), "shared or unsupported") || strings.Contains(err.Error(), "identity drifted")
 		if saveErr := markDuplicateRefundActionError(ctx, store, action, err.Error(), blocked, time.Now().Unix()); saveErr != nil {
 			return DuplicateRefundOperatorResult{ActionID: action.ID, State: "prepared"}, fmt.Errorf("%w; persist operator evidence: %v", err, saveErr)

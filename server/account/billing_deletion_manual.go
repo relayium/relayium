@@ -187,6 +187,9 @@ func (store *SQLiteStore) RecordStripeDeletionRefundLifecycle(ctx context.Contex
 		if err := recordStripeDeletionRefundFailuresTx(ctx, tx, refundID, actionID, eventAt); err != nil {
 			return err
 		}
+		if _, err := recordDuplicateRefundFailuresTx(ctx, tx, refundID, eventAt); err != nil {
+			return err
+		}
 		return tx.Commit()
 	}
 	if actionID != "" {
