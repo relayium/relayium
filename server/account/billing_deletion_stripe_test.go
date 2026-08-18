@@ -177,6 +177,10 @@ func TestStripeDeletionNeverLosesAsynchronousPayment(t *testing.T) {
 					mutation = true
 				}
 				w.Header().Set("Content-Type", "application/json")
+				if tc.kind == "invoice" {
+					serveDahliaInvoicePayment(t, w, r, "in_late", "cus_1", `"parent":{"type":"subscription_details","subscription_details":{"subscription":"sub_late"}},`, "pi_late", "ch_late", 500, 110)
+					return
+				}
 				io.WriteString(w, tc.body)
 			}))
 			defer ts.Close()
@@ -376,13 +380,16 @@ func TestStripeDeletionUsesInvoicePaidAtNotObjectCreated(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
-				fmt.Fprintf(w, `{"id":"in_paid","status":"paid","created":90,"customer":"cus_1","status_transitions":{"paid_at":%d}}`, tc.paidAt)
+				serveDahliaInvoicePayment(t, w, r, "in_paid", "cus_1", `"parent":{"type":"subscription_details","subscription_details":{"subscription":"sub_paid"}},`, "pi_paid", "ch_paid", 500, tc.paidAt)
 			}))
 			defer ts.Close()
 			c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
 			c.base, c.http = ts.URL, ts.Client()
 			p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{"invoice:in_paid": {Kind: "invoice", ID: "in_paid", CustomerID: "cus_1"}}}
-			got, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", CreatedAt: 100, IdempotencyKey: "delete"}, p)
+			got, err := p, error(nil)
+			for i := 0; i < 3; i++ {
+				got, err = c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", CreatedAt: 100, IdempotencyKey: "delete"}, got)
+			}
 			if tc.wantManual && err == nil {
 				t.Fatal("post-deletion payment was accepted")
 			}
@@ -504,16 +511,7 @@ func TestStripeDeletionInvoicePaidAtPropagatesThroughPaymentChain(t *testing.T) 
 		t.Run(tc.name, func(t *testing.T) {
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
-				switch r.URL.Path {
-				case "/v1/invoices/in_chain":
-					fmt.Fprintf(w, `{"id":"in_chain","status":"paid","created":90,"customer":"cus_1","payment_intent":"pi_chain","status_transitions":{"paid_at":%d}}`, tc.paidAt)
-				case "/v1/payment_intents/pi_chain":
-					io.WriteString(w, `{"id":"pi_chain","status":"succeeded","created":90,"customer":"cus_1","latest_charge":"ch_chain"}`)
-				case "/v1/charges/ch_chain":
-					io.WriteString(w, `{"id":"ch_chain","paid":true,"created":90,"customer":"cus_1","payment_intent":"pi_chain","invoice":"in_chain"}`)
-				default:
-					http.Error(w, "unexpected", http.StatusBadRequest)
-				}
+				serveDahliaInvoicePayment(t, w, r, "in_chain", "cus_1", `"parent":{"type":"subscription_details","subscription_details":{"subscription":"sub_chain"}},`, "pi_chain", "ch_chain", 500, tc.paidAt)
 			}))
 			defer ts.Close()
 			c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
