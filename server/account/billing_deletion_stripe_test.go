@@ -365,6 +365,45 @@ func TestStripeDeletionChargeCreatedBeforeSucceededAfterUsesWebhookSuccessAt(t *
 	}
 }
 
+func TestStripeDeletionInvoicePaidAtPropagatesThroughPaymentChain(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		paidAt     int64
+		wantManual bool
+	}{{"paid before deletion", 95, false}, {"paid after deletion", 110, true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/v1/invoices/in_chain":
+					fmt.Fprintf(w, `{"id":"in_chain","status":"paid","created":90,"customer":"cus_1","payment_intent":"pi_chain","status_transitions":{"paid_at":%d}}`, tc.paidAt)
+				case "/v1/payment_intents/pi_chain":
+					io.WriteString(w, `{"id":"pi_chain","status":"succeeded","created":90,"customer":"cus_1","latest_charge":"ch_chain"}`)
+				case "/v1/charges/ch_chain":
+					io.WriteString(w, `{"id":"ch_chain","paid":true,"created":90,"customer":"cus_1","payment_intent":"pi_chain","invoice":"in_chain"}`)
+				default:
+					http.Error(w, "unexpected", http.StatusBadRequest)
+				}
+			}))
+			defer ts.Close()
+			c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+			c.base, c.http = ts.URL, ts.Client()
+			p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{"invoice:in_chain": {Kind: "invoice", ID: "in_chain", CustomerID: "cus_1"}}}
+			var err error
+			for i := 0; i < 3; i++ {
+				p, err = c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", CreatedAt: 100, IdempotencyKey: "delete"}, p)
+			}
+			charge := p.Resources["charge:ch_chain"]
+			if charge.SuccessAt != tc.paidAt || charge.Manual != tc.wantManual || (!tc.wantManual && !charge.Terminal) {
+				t.Fatalf("charge=%+v all=%+v err=%v", charge, p.Resources, err)
+			}
+			if tc.wantManual && err == nil {
+				t.Fatal("post-deletion invoice chain reached terminal")
+			}
+		})
+	}
+}
+
 func TestStripeDeletionRecoveryLineageNeverExpiresBlindly(t *testing.T) {
 	var mutation bool
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

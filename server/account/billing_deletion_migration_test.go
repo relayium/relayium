@@ -76,3 +76,18 @@ func TestDeletionProgressManualAndTerminalAreMonotonic(t *testing.T) {
 		t.Fatalf("terminal state regressed: %+v", p.Resources["subscription:sub_done"])
 	}
 }
+
+func TestVerifiedSuccessTimeOnlyCompletesTimeUnknownManualEvidence(t *testing.T) {
+	for _, status := range []string{"customer_mismatch", "attempt_attribution_mismatch", "metered_usage_requires_operator", "recovery_lineage_pending", "unknown_resource"} {
+		p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{"charge:ch": {Kind: "charge", ID: "ch", Manual: true, Status: status}}}
+		p.add(BillingDeletionResource{Kind: "charge", ID: "ch", SuccessAt: 200, Status: "webhook"})
+		if r := p.Resources["charge:ch"]; !r.Manual || r.Status != status {
+			t.Fatalf("manual %q was downgraded by unrelated success evidence: %+v", status, r)
+		}
+	}
+	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{"charge:ch": {Kind: "charge", ID: "ch", Manual: true, Status: "succeeded_time_unknown"}}}
+	p.add(BillingDeletionResource{Kind: "charge", ID: "ch", SuccessAt: 200, Status: "webhook"})
+	if r := p.Resources["charge:ch"]; r.Manual || r.SuccessAt != 200 || r.Status != "webhook_success_time" {
+		t.Fatalf("verified success time did not complete the narrow unknown-time state: %+v", r)
+	}
+}

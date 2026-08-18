@@ -53,7 +53,8 @@ func (p *BillingDeletionProgress) add(r BillingDeletionResource) {
 			return
 		}
 		if old.Manual {
-			if r.SuccessAt <= old.SuccessAt {
+			canCompleteUnknownSuccessTime := (old.Kind == "charge" || old.Kind == "payment_intent") && old.Status == "succeeded_time_unknown"
+			if !canCompleteUnknownSuccessTime || r.SuccessAt <= old.SuccessAt {
 				return
 			}
 			old.SuccessAt = r.SuccessAt

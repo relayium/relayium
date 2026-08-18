@@ -834,10 +834,10 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 		case "invoice":
 			r.ProviderCreatedAt = obj.Created
 			if obj.PaymentIntent != "" {
-				p.add(BillingDeletionResource{Kind: "payment_intent", ID: obj.PaymentIntent, CustomerID: r.CustomerID, Status: "invoice_link"})
+				p.add(BillingDeletionResource{Kind: "payment_intent", ID: obj.PaymentIntent, CustomerID: r.CustomerID, Status: "invoice_link", SuccessAt: obj.StatusTransitions.PaidAt})
 			}
 			if obj.Charge != "" {
-				p.add(BillingDeletionResource{Kind: "charge", ID: obj.Charge, CustomerID: r.CustomerID, Status: "invoice_link"})
+				p.add(BillingDeletionResource{Kind: "charge", ID: obj.Charge, CustomerID: r.CustomerID, Status: "invoice_link", SuccessAt: obj.StatusTransitions.PaidAt})
 			}
 			if obj.Status == "paid" {
 				if obj.StatusTransitions.PaidAt > 0 && obj.StatusTransitions.PaidAt <= row.CreatedAt {
@@ -876,7 +876,7 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			}
 			if obj.Status == "succeeded" {
 				if obj.LatestCharge != "" {
-					p.add(BillingDeletionResource{Kind: "charge", ID: obj.LatestCharge, CustomerID: r.CustomerID, Status: "payment_intent_link"})
+					p.add(BillingDeletionResource{Kind: "charge", ID: obj.LatestCharge, CustomerID: r.CustomerID, Status: "payment_intent_link", SuccessAt: r.SuccessAt})
 					r.Terminal = true
 					r.Status = "delegated_to_charge"
 					break
