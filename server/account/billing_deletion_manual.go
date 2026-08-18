@@ -169,6 +169,9 @@ func (store *SQLiteStore) RecordStripeDeletionRefundLifecycle(ctx context.Contex
 	if refundID == "" {
 		return nil
 	}
+	if status == "canceled" {
+		status = "failed"
+	}
 	tx, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err

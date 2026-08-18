@@ -995,7 +995,7 @@ func (s *Service) subEventIsStale(ctx context.Context, w http.ResponseWriter, us
 // the admin console) but leaves plan_id untouched — see the admin-source
 // branches below.
 func stripeRefundLifecycleStatus(ev WebhookEvent) string {
-	if ev.Type == "refund.failed" {
+	if ev.Type == "refund.failed" || ev.Status == "failed" || ev.Status == "canceled" {
 		return "failed"
 	}
 	return ev.Status

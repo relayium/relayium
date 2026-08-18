@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -668,27 +669,71 @@ func (c *stripeClient) InspectDuplicateSubscription(ctx context.Context, userID,
 	plan := DuplicateRefundPlan{UserID: userID, CustomerID: customerID, CanonicalSubscriptionID: canonicalID, DuplicateSubscriptionID: duplicateID}
 	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions/"+url.PathEscape(duplicateID), nil)
 	if err != nil {
-		return DuplicateRefundPlan{}, err
+		if !stripeDeletionObjectGone(err) {
+			return DuplicateRefundPlan{}, err
+		}
+		body = nil
 	}
 	var sub struct {
 		ID            string `json:"id"`
 		Customer      string `json:"customer"`
 		LatestInvoice string `json:"latest_invoice"`
 	}
-	if json.Unmarshal(body, &sub) != nil || sub.ID != duplicateID || sub.Customer != customerID {
-		return DuplicateRefundPlan{}, errors.New("stripe: duplicate subscription identity is invalid")
+	if len(body) > 0 {
+		if json.Unmarshal(body, &sub) != nil || sub.ID != duplicateID || sub.Customer != customerID {
+			return DuplicateRefundPlan{}, errors.New("stripe: duplicate subscription identity is invalid")
+		}
 	}
-	plan.InvoiceID = sub.LatestInvoice
-	if plan.InvoiceID == "" {
-		plan.ManualReason = "latest_invoice_unavailable"
-		return plan, nil
+	query := url.Values{"customer": {customerID}, "subscription": {duplicateID}, "limit": {"100"}}
+	seen := map[string]bool{}
+	for {
+		body, err := c.request(ctx, http.MethodGet, "/v1/invoices?"+query.Encode(), nil)
+		if err != nil {
+			return DuplicateRefundPlan{}, err
+		}
+		var page struct {
+			Data []struct {
+				ID         string `json:"id"`
+				Customer   string `json:"customer"`
+				Status     string `json:"status"`
+				AmountPaid int64  `json:"amount_paid"`
+			} `json:"data"`
+			HasMore bool `json:"has_more"`
+		}
+		if json.Unmarshal(body, &page) != nil || (page.HasMore && len(page.Data) == 0) {
+			return DuplicateRefundPlan{}, errors.New("stripe: duplicate invoice history pagination is invalid")
+		}
+		for _, listed := range page.Data {
+			if listed.ID == "" || listed.Customer != customerID || seen[listed.ID] {
+				return DuplicateRefundPlan{}, errors.New("stripe: duplicate invoice history identity is invalid")
+			}
+			seen[listed.ID] = true
+			if listed.AmountPaid == 0 {
+				continue
+			}
+			invoice, err := c.canonicalInvoicePayments(ctx, listed.ID, customerID, duplicateID, true)
+			if err != nil {
+				return DuplicateRefundPlan{}, err
+			}
+			liability := DuplicateRefundLiability{InvoiceID: listed.ID, Payments: invoice.Payments, ManualReason: duplicateRefundManualReason(invoice)}
+			plan.Liabilities = append(plan.Liabilities, liability)
+			if liability.ManualReason != "" {
+				plan.ManualReason = liability.ManualReason
+			}
+		}
+		if !page.HasMore {
+			break
+		}
+		last := page.Data[len(page.Data)-1].ID
+		if last == query.Get("starting_after") {
+			return DuplicateRefundPlan{}, errors.New("stripe: duplicate invoice history cursor did not advance")
+		}
+		query.Set("starting_after", last)
 	}
-	invoice, err := c.canonicalInvoicePayments(ctx, plan.InvoiceID, customerID, duplicateID, true)
-	if err != nil {
-		return DuplicateRefundPlan{}, err
+	sort.Slice(plan.Liabilities, func(i, j int) bool { return plan.Liabilities[i].InvoiceID < plan.Liabilities[j].InvoiceID })
+	if len(plan.Liabilities) == 1 {
+		plan.InvoiceID, plan.Payments = plan.Liabilities[0].InvoiceID, plan.Liabilities[0].Payments
 	}
-	plan.Payments = invoice.Payments
-	plan.ManualReason = duplicateRefundManualReason(invoice)
 	return plan, nil
 }
 
@@ -711,9 +756,6 @@ func (c *stripeClient) ReconcileDuplicateSubscription(ctx context.Context, job D
 		if json.Unmarshal(body, &sub) != nil || sub.ID != job.DuplicateSubscriptionID || sub.Customer != job.CustomerID {
 			return "", false, errors.New("stripe: duplicate subscription canonical identity changed")
 		}
-		if job.InvoiceID != "" && sub.LatestInvoice != job.InvoiceID {
-			return "", false, errors.New("stripe: duplicate subscription latest invoice changed")
-		}
 		return sub.Status, sub.Status == "canceled" || sub.Status == "incomplete_expired", nil
 	}
 	_, canceled, err := readSubscription()
@@ -733,39 +775,7 @@ func (c *stripeClient) ReconcileDuplicateSubscription(ctx context.Context, job D
 		}
 	}
 	result.SubscriptionCanceled = true
-	if result.ManualReason != "" {
-		return result, nil
-	}
-	if job.InvoiceID == "" || len(job.Payments) == 0 {
-		result.RefundComplete = true
-		return result, nil
-	}
-	invoice, err := c.canonicalInvoicePayments(ctx, job.InvoiceID, job.CustomerID, job.DuplicateSubscriptionID, true)
-	if err != nil {
-		return result, err
-	}
-	if !duplicatePaymentIdentitiesEqual(invoice.Payments, job.Payments) || !invoiceHasOneExclusivePaymentIntent(invoice) {
-		result.ManualReason = "invoice_payment_constituents_changed"
-		return result, nil
-	}
-	if invoice.Payments[0].AmountRefunded == invoice.Payments[0].AmountPaid {
-		result.RefundComplete = true
-		return result, nil
-	}
-	if err := c.refundInvoice(ctx, job.DuplicateSubscriptionID, job.InvoiceID); err != nil {
-		return result, err
-	}
-	invoice, err = c.canonicalInvoicePayments(ctx, job.InvoiceID, job.CustomerID, job.DuplicateSubscriptionID, true)
-	if err != nil {
-		return result, err
-	}
-	if !duplicatePaymentIdentitiesEqual(invoice.Payments, job.Payments) {
-		return result, errors.New("stripe: duplicate refund canonical evidence changed")
-	}
-	if len(invoice.Payments) != 1 || invoice.Payments[0].AmountRefunded != invoice.Payments[0].AmountPaid {
-		return result, errors.New("stripe: duplicate refund is not canonically complete")
-	}
-	result.RefundComplete = true
+	result.RefundComplete = len(job.Liabilities) == 0
 	return result, nil
 }
 

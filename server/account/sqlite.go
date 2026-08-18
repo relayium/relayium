@@ -1146,6 +1146,13 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
  created_at INTEGER NOT NULL,
  updated_at INTEGER NOT NULL)`,
 		`CREATE INDEX IF NOT EXISTS idx_billing_duplicate_refunds_due ON billing_duplicate_refunds(state,subscription_canceled,updated_at)`,
+		`CREATE TABLE IF NOT EXISTS billing_duplicate_refund_liabilities (
+ job_id TEXT NOT NULL,
+ invoice_id TEXT NOT NULL,
+ constituents_json TEXT NOT NULL,
+ manual_reason TEXT NOT NULL DEFAULT '',
+ created_at INTEGER NOT NULL,
+ PRIMARY KEY(job_id,invoice_id))`,
 		`CREATE TABLE IF NOT EXISTS billing_duplicate_refund_actions (
  id TEXT PRIMARY KEY,
  job_id TEXT NOT NULL,
