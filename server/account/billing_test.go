@@ -97,6 +97,16 @@ func (f *fakeBiller) CreateCheckoutSession(ctx context.Context, in CheckoutInput
 
 type checkoutProviderRefFailStore struct{ Store }
 
+func (s checkoutProviderRefFailStore) BillingUserFrozen(ctx context.Context, userID string) (bool, error) {
+	store, ok := s.Store.(interface {
+		BillingUserFrozen(context.Context, string) (bool, error)
+	})
+	if !ok {
+		return false, errors.New("missing billing freeze store")
+	}
+	return store.BillingUserFrozen(ctx, userID)
+}
+
 func (s checkoutProviderRefFailStore) AcquireBillingAuthority(ctx context.Context, in BillingAuthorityRequest) (BillingAuthority, error) {
 	return acquireStoreBillingAuthority(ctx, s.Store, in)
 }

@@ -77,6 +77,91 @@ func TestDeletionProgressManualAndTerminalAreMonotonic(t *testing.T) {
 	}
 }
 
+func TestOpenSQLiteRebuildsRefundActionsAsAppendOnlyGenerations(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "refund-actions.db")
+	store, err := OpenSQLite(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`DELETE FROM schema_migrations WHERE id='billing_deletion_manual_actions_v2'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`DROP TABLE billing_deletion_manual_actions`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`CREATE TABLE billing_deletion_manual_actions (
+ id TEXT PRIMARY KEY,outbox_id TEXT NOT NULL,resource_key TEXT NOT NULL,actor TEXT NOT NULL,reason TEXT NOT NULL,
+ payment_intent_id TEXT NOT NULL DEFAULT '',refund_id TEXT NOT NULL DEFAULT '',state TEXT NOT NULL CHECK(state IN ('prepared','succeeded')),
+ created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,UNIQUE(outbox_id,resource_key))`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO billing_deletion_manual_actions VALUES('old','out','charge:ch','actor','reason','pi','re','prepared',1,1)`); err != nil {
+		t.Fatal(err)
+	}
+	store.db.Close()
+	store, err = OpenSQLite(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.db.Close()
+	if _, err := store.db.Exec(`UPDATE billing_deletion_manual_actions SET state='failed' WHERE id='old'`); err != nil {
+		t.Fatalf("failed state unavailable after migration: %v", err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO billing_deletion_manual_actions(id,outbox_id,resource_key,actor,reason,payment_intent_id,state,retry_generation,created_at,updated_at) VALUES('new','out','charge:ch','actor','reason','pi','prepared',1,2,2)`); err != nil {
+		t.Fatalf("append-only retry generation unavailable: %v", err)
+	}
+}
+
+func TestOpenSQLiteRefusesAmbiguousLegacyRefundActions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ambiguous-refund-actions.db")
+	store, err := OpenSQLite(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`DELETE FROM schema_migrations WHERE id='billing_deletion_manual_actions_v2'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`DROP TABLE billing_deletion_manual_actions`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`CREATE TABLE billing_deletion_manual_actions (
+ id TEXT PRIMARY KEY,outbox_id TEXT NOT NULL,resource_key TEXT NOT NULL,actor TEXT NOT NULL,reason TEXT NOT NULL,
+ payment_intent_id TEXT NOT NULL DEFAULT '',refund_id TEXT NOT NULL DEFAULT '',state TEXT NOT NULL CHECK(state IN ('prepared','succeeded')),
+ retry_generation INTEGER NOT NULL DEFAULT 0,provider_status TEXT NOT NULL DEFAULT '',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,
+ UNIQUE(outbox_id,resource_key))`); err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []string{
+		`INSERT INTO billing_deletion_manual_actions VALUES('a','out','charge:one','actor','reason','pi_same','','prepared',0,'',1,1)`,
+		`INSERT INTO billing_deletion_manual_actions VALUES('b','out','invoice:two','actor','reason','pi_same','','prepared',0,'',1,1)`,
+	} {
+		if _, err := store.db.Exec(row); err != nil {
+			t.Fatal(err)
+		}
+	}
+	store.db.Close()
+	if reopened, err := OpenSQLite(path); err == nil {
+		reopened.db.Close()
+		t.Fatal("ambiguous duplicate payment actions did not block startup")
+	}
+}
+
+func TestOpenSQLiteRefusesCorruptPendingDeletionJournal(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "corrupt-progress.db")
+	store, err := OpenSQLite(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,progress_json,created_at,updated_at,generation) VALUES('corrupt','subject','stripe','corrupt-key','pending','{"version":1,"unknown":true}',1,1,1)`); err != nil {
+		t.Fatal(err)
+	}
+	store.db.Close()
+	if reopened, err := OpenSQLite(path); err == nil {
+		reopened.db.Close()
+		t.Fatal("corrupt pending deletion journal did not block startup")
+	}
+}
+
 func TestVerifiedSuccessTimeOnlyCompletesTimeUnknownManualEvidence(t *testing.T) {
 	for _, status := range []string{"customer_mismatch", "attempt_attribution_mismatch", "metered_usage_requires_operator", "recovery_lineage_pending", "unknown_resource"} {
 		p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{"charge:ch": {Kind: "charge", ID: "ch", Manual: true, Status: status}}}

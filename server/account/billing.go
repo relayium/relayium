@@ -79,6 +79,10 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "plan not purchasable"})
 		return
 	}
+	if err := s.validateStripePlanPrice(r.Context(), plan, in.Cycle); err != nil {
+		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "billing_catalog_unavailable"})
+		return
+	}
 	authorities, ok := s.Store().(interface {
 		AcquireBillingAuthority(context.Context, BillingAuthorityRequest) (BillingAuthority, error)
 		DispatchBillingPurchase(context.Context, BillingAuthority, string, int64) (BillingPurchaseAttempt, bool, error)
@@ -1133,7 +1137,8 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 				if journal, ok := s.Store().(interface {
 					AppendStripeDeletionHazard(context.Context, string, BillingDeletionResource) error
 				}); ok {
-					if err := journal.AppendStripeDeletionHazard(ctx, ev.ClientRefUserID, BillingDeletionResource{Kind: "checkout_session", ID: ev.CheckoutSessionID, AttemptID: ev.MetadataBillingAttemptID, CustomerID: ev.CustomerID, Status: "webhook", ProviderCreatedAt: ev.Created}); err != nil {
+					terminalWithoutPaymentChain := (ev.Type == "checkout.session.async_payment_failed" || ev.Type == "checkout.session.expired") && ev.SubscriptionID == "" && ev.InvoiceID == "" && ev.PaymentIntentID == ""
+					if err := journal.AppendStripeDeletionHazard(ctx, ev.ClientRefUserID, BillingDeletionResource{Kind: "checkout_session", ID: ev.CheckoutSessionID, AttemptID: ev.MetadataBillingAttemptID, CustomerID: ev.CustomerID, Status: ev.Type, ProviderCreatedAt: ev.Created, Terminal: terminalWithoutPaymentChain}); err != nil {
 						http.Error(w, "server error", http.StatusInternalServerError)
 						return
 					}

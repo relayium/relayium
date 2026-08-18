@@ -1281,6 +1281,12 @@ func (s *Service) handleAdminUpsertPlan(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	p.UpdatedAt = s.Now().Unix()
+	for _, cycle := range []string{"monthly", "yearly"} {
+		if err := s.validateStripePlanPrice(r.Context(), p, cycle); err != nil {
+			http.Error(w, "Stripe price does not match this plan", http.StatusConflict)
+			return
+		}
+	}
 	if err := s.Store().UpsertPlan(r.Context(), p); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return

@@ -477,7 +477,7 @@ func TestStripeDeletionRecoveryWindowAndChildLineageAreDurable(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/v1/checkout/sessions/cs_parent":
-			io.WriteString(w, `{"id":"cs_parent","status":"expired","customer":"cus_1","expires_at":100,"after_expiration":{"recovery":{"enabled":true}}}`)
+			io.WriteString(w, `{"id":"cs_parent","status":"expired","customer":"cus_1","expires_at":100,"after_expiration":{"recovery":{"enabled":true,"expires_at":2592100}}}`)
 		case "/v1/checkout/sessions/cs_child":
 			io.WriteString(w, `{"id":"cs_child","status":"expired","customer":"cus_1","recovered_from":"cs_parent"}`)
 		default:

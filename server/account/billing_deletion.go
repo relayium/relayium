@@ -1,6 +1,7 @@
 package account
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -148,8 +149,46 @@ func decodeDeletionProgressStrict(raw string) (BillingDeletionProgress, error) {
 		}
 		return p, nil
 	}
-	if shape[0] != '{' || json.Unmarshal(shape, &p) != nil {
+	if shape[0] != '{' {
 		return BillingDeletionProgress{}, errors.New("account: invalid billing deletion progress")
+	}
+	var header struct {
+		Version int `json:"version"`
+	}
+	if json.Unmarshal(shape, &header) != nil {
+		return BillingDeletionProgress{}, errors.New("account: invalid billing deletion progress")
+	}
+	if header.Version == 0 {
+		var legacy struct {
+			Customers        []string                           `json:"customers"`
+			CheckoutSessions []string                           `json:"checkoutSessions"`
+			Subscriptions    []string                           `json:"subscriptions"`
+			Schedules        []string                           `json:"schedules"`
+			InvoiceItems     []string                           `json:"invoiceItems"`
+			Invoices         []string                           `json:"invoices"`
+			Resources        map[string]BillingDeletionResource `json:"resources"`
+			CleanSince       int64                              `json:"cleanSince"`
+		}
+		if json.Unmarshal(shape, &legacy) != nil {
+			return BillingDeletionProgress{}, errors.New("account: invalid legacy billing deletion progress")
+		}
+		if len(legacy.CheckoutSessions)+len(legacy.Subscriptions)+len(legacy.Schedules)+len(legacy.InvoiceItems)+len(legacy.Invoices) > 0 {
+			p = BillingDeletionProgress{Version: billingDeletionProgressVersion, Customers: legacy.Customers, Resources: map[string]BillingDeletionResource{}, CleanSince: legacy.CleanSince}
+			for kind, ids := range map[string][]string{"checkout_session": legacy.CheckoutSessions, "subscription": legacy.Subscriptions, "schedule": legacy.Schedules, "invoice_item": legacy.InvoiceItems, "invoice": legacy.Invoices} {
+				for _, id := range ids {
+					if id == "" {
+						return BillingDeletionProgress{}, errors.New("account: invalid legacy billing deletion identity")
+					}
+					p.add(BillingDeletionResource{Kind: kind, ID: id, Status: "legacy_migrated"})
+				}
+			}
+			return p, nil
+		}
+	}
+	decoder := json.NewDecoder(bytes.NewReader(shape))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&p); err != nil {
+		return BillingDeletionProgress{}, errors.New("account: invalid billing deletion progress fields")
 	}
 	if p.Version != 0 && p.Version != billingDeletionProgressVersion {
 		return BillingDeletionProgress{}, errors.New("account: unsupported billing deletion progress version")
@@ -269,6 +308,35 @@ func billingUserFrozenTx(ctx context.Context, tx *sql.Tx, userID string, _ int64
     OR (h.billing_subject_id<>? AND length(u.billing_hold_hmac)>0 AND h.email_hmac=u.billing_hold_hmac)
 )`, userID, userID, userID).Scan(&frozen)
 	return frozen != 0, err
+}
+
+func finalizeStripeDeletionTx(ctx context.Context, tx *sql.Tx, userID string, now int64) error {
+	var pending int
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider='stripe' AND state='pending')`, userID).Scan(&pending); err != nil {
+		return err
+	}
+	if pending != 0 {
+		return nil
+	}
+	var curPlan, curSource string
+	err := tx.QueryRowContext(ctx, `SELECT plan_id,plan_source FROM users WHERE id=?`, userID).Scan(&curPlan, &curSource)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if err == nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE subscription_sources SET plan_id='free',status='canceled',period_end=0 WHERE user_id=? AND provider='stripe'`, userID); err != nil {
+			return err
+		}
+		eff, err := recomputeProjectionTx(ctx, tx, userID, ProviderStripe, curPlan, curSource)
+		if err != nil {
+			return err
+		}
+		if err := writeProjectionTx(ctx, tx, userID, eff, now, 0); err != nil {
+			return err
+		}
+	}
+	_, err = tx.ExecContext(ctx, `UPDATE billing_deletion_holds SET subject_released_at=? WHERE billing_subject_id=?`, now, userID)
+	return err
 }
 
 func (s *SQLiteStore) BillingUserFrozen(ctx context.Context, userID string) (bool, error) {
@@ -491,13 +559,11 @@ func (s *SQLiteStore) FinishBillingCancellation(ctx context.Context, id, claim s
 		return errors.New("account: stale billing cancellation finish")
 	}
 	if terminal {
-		// A user may reactivate while provider cleanup is still pending. Once the
-		// final generation converges, release only that original subject's hold;
-		// the email-HMAC hold for a replacement identity remains untouched.
-		if _, err := tx.ExecContext(ctx, `UPDATE billing_deletion_holds SET subject_released_at=?
-			WHERE billing_subject_id=(SELECT billing_subject_id FROM billing_cancellation_outbox WHERE id=?)
-			  AND EXISTS(SELECT 1 FROM users u JOIN billing_cancellation_outbox o ON o.billing_subject_id=u.id WHERE o.id=? AND u.deleted_at=0)
-			  AND NOT EXISTS(SELECT 1 FROM billing_cancellation_outbox p WHERE p.billing_subject_id=billing_deletion_holds.billing_subject_id AND p.provider='stripe' AND p.state='pending')`, now, id, id); err != nil {
+		var subject string
+		if err := tx.QueryRowContext(ctx, `SELECT billing_subject_id FROM billing_cancellation_outbox WHERE id=?`, id).Scan(&subject); err != nil {
+			return err
+		}
+		if err := finalizeStripeDeletionTx(ctx, tx, subject, now); err != nil {
 			return err
 		}
 	}

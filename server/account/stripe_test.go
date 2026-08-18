@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -83,14 +84,26 @@ func TestVerifyWebhookProjectsRefundFailureIdentity(t *testing.T) {
 }
 
 func TestStripeCatalogStartupGateRejectsMeteredPrice(t *testing.T) {
-	for _, usage := range []string{"licensed", "metered"} {
-		t.Run(usage, func(t *testing.T) {
+	tests := []struct {
+		name, response string
+		wantOK         bool
+	}{
+		{"matching licensed price", `{"id":"price_paid","active":true,"livemode":false,"type":"recurring","currency":"usd","unit_amount":990,"recurring":{"usage_type":"licensed","interval":"month","interval_count":1}}`, true},
+		{"metered", `{"id":"price_paid","active":true,"livemode":false,"type":"recurring","currency":"usd","unit_amount":990,"recurring":{"usage_type":"metered","interval":"month","interval_count":1}}`, false},
+		{"wrong amount", `{"id":"price_paid","active":true,"livemode":false,"type":"recurring","currency":"usd","unit_amount":991,"recurring":{"usage_type":"licensed","interval":"month","interval_count":1}}`, false},
+		{"wrong currency", `{"id":"price_paid","active":true,"livemode":false,"type":"recurring","currency":"eur","unit_amount":990,"recurring":{"usage_type":"licensed","interval":"month","interval_count":1}}`, false},
+		{"wrong interval", `{"id":"price_paid","active":true,"livemode":false,"type":"recurring","currency":"usd","unit_amount":990,"recurring":{"usage_type":"licensed","interval":"year","interval_count":1}}`, false},
+		{"inactive", `{"id":"price_paid","active":false,"livemode":false,"type":"recurring","currency":"usd","unit_amount":990,"recurring":{"usage_type":"licensed","interval":"month","interval_count":1}}`, false},
+		{"wrong mode", `{"id":"price_paid","active":true,"livemode":true,"type":"recurring","currency":"usd","unit_amount":990,"recurring":{"usage_type":"licensed","interval":"month","interval_count":1}}`, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			store := newTestStore(t)
-			if err := store.UpsertPlan(context.Background(), Plan{ID: "paid", Name: "Paid", Active: true, StripePriceMonthlyID: "price_paid"}); err != nil {
+			if err := store.UpsertPlan(context.Background(), Plan{ID: "paid", Name: "Paid", Active: true, PriceMonthly: 990, StripePriceMonthlyID: "price_paid"}); err != nil {
 				t.Fatal(err)
 			}
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				fmt.Fprintf(w, `{"id":"price_paid","active":true,"type":"recurring","recurring":{"usage_type":%q}}`, usage)
+				io.WriteString(w, tc.response)
 			}))
 			defer ts.Close()
 			c := NewStripeClient("sk_test", "whsec", "bpc")
@@ -98,8 +111,8 @@ func TestStripeCatalogStartupGateRejectsMeteredPrice(t *testing.T) {
 			svc := NewService(store, nil, Config{})
 			svc.biller = c
 			err := svc.ValidateStripeCatalog(context.Background())
-			if (usage == "licensed") != (err == nil) {
-				t.Fatalf("usage=%s err=%v", usage, err)
+			if tc.wantOK != (err == nil) {
+				t.Fatalf("wantOK=%t err=%v", tc.wantOK, err)
 			}
 		})
 	}

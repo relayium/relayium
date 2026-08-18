@@ -179,37 +179,58 @@ func NewStripeClient(secretKey, webhookSecret, portalConfig string) *stripeClien
 // recurring prices. A metered or non-recurring Price would introduce usage
 // billing paths that account deletion cannot safely settle automatically.
 func (s *Service) ValidateStripeCatalog(ctx context.Context) error {
-	c, ok := s.biller.(*stripeClient)
-	if !ok {
+	if _, ok := s.biller.(*stripeClient); !ok {
 		return nil
 	}
 	plans, err := s.Store().ListPlans(ctx)
 	if err != nil {
 		return err
 	}
-	seen := map[string]bool{}
 	for _, plan := range plans {
-		for _, priceID := range []string{plan.StripePriceMonthlyID, plan.StripePriceYearlyID} {
-			if priceID == "" || seen[priceID] {
-				continue
-			}
-			seen[priceID] = true
-			body, err := c.request(ctx, http.MethodGet, "/v1/prices/"+url.PathEscape(priceID), nil)
-			if err != nil {
-				return fmt.Errorf("stripe: validate configured price: %w", err)
-			}
-			var price struct {
-				ID        string `json:"id"`
-				Active    bool   `json:"active"`
-				Type      string `json:"type"`
-				Recurring *struct {
-					UsageType string `json:"usage_type"`
-				} `json:"recurring"`
-			}
-			if json.Unmarshal(body, &price) != nil || price.ID != priceID || !price.Active || price.Type != "recurring" || price.Recurring == nil || price.Recurring.UsageType != "licensed" {
-				return errors.New("stripe: configured price must be active licensed recurring")
+		for _, cycle := range []string{"monthly", "yearly"} {
+			if err := s.validateStripePlanPrice(ctx, plan, cycle); err != nil {
+				return err
 			}
 		}
+	}
+	return nil
+}
+
+func (s *Service) validateStripePlanPrice(ctx context.Context, plan Plan, cycle string) error {
+	c, ok := s.biller.(*stripeClient)
+	priceID := priceIDForCycle(plan, cycle)
+	if priceID == "" {
+		return nil
+	}
+	if !ok {
+		return nil
+	}
+	body, err := c.request(ctx, http.MethodGet, "/v1/prices/"+url.PathEscape(priceID), nil)
+	if err != nil {
+		return fmt.Errorf("stripe: validate configured price: %w", err)
+	}
+	var price struct {
+		ID         string `json:"id"`
+		Type       string `json:"type"`
+		Currency   string `json:"currency"`
+		Active     bool   `json:"active"`
+		Livemode   bool   `json:"livemode"`
+		UnitAmount int64  `json:"unit_amount"`
+		Recurring  *struct {
+			UsageType     string `json:"usage_type"`
+			Interval      string `json:"interval"`
+			IntervalCount int64  `json:"interval_count"`
+		} `json:"recurring"`
+	}
+	if err := json.Unmarshal(body, &price); err != nil {
+		return errors.New("stripe: configured price response is invalid")
+	}
+	wantInterval, wantAmount := "month", plan.PriceMonthly
+	if cycle == "yearly" {
+		wantInterval, wantAmount = "year", plan.PriceYearly
+	}
+	if price.ID != priceID || price.Livemode != c.wantLive || !price.Active || price.Type != "recurring" || price.Currency != "usd" || price.UnitAmount != wantAmount || price.Recurring == nil || price.Recurring.UsageType != "licensed" || price.Recurring.Interval != wantInterval || price.Recurring.IntervalCount != 1 {
+		return errors.New("stripe: configured price does not match the local licensed plan contract")
 	}
 	return nil
 }
@@ -754,7 +775,8 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			ExpiresAt       int64  `json:"expires_at"`
 			AfterExpiration *struct {
 				Recovery *struct {
-					Enabled bool `json:"enabled"`
+					Enabled   bool  `json:"enabled"`
+					ExpiresAt int64 `json:"expires_at"`
 				} `json:"recovery"`
 			} `json:"after_expiration"`
 			LatestCharge      string `json:"latest_charge"`
@@ -824,8 +846,8 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			}
 			recoveryEnabled := obj.AfterExpiration != nil && obj.AfterExpiration.Recovery != nil && obj.AfterExpiration.Recovery.Enabled
 			if recoveryEnabled {
-				if obj.ExpiresAt > 0 {
-					r.RecoveryExpiresAt = obj.ExpiresAt + 30*86400
+				if obj.AfterExpiration.Recovery.ExpiresAt > 0 {
+					r.RecoveryExpiresAt = obj.AfterExpiration.Recovery.ExpiresAt
 				}
 				if obj.Status == "expired" && r.RecoveryExpiresAt > 0 && c.now().Unix() >= r.RecoveryExpiresAt {
 					r.Terminal = true

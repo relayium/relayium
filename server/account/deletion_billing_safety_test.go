@@ -31,7 +31,12 @@ func TestBillingDeletionProgressDecoderFailsClosedAndMigratesLegacyArrays(t *tes
 	if err != nil || p.Version != billingDeletionProgressVersion || p.Resources["subscription:sub_legacy"].ID != "sub_legacy" {
 		t.Fatalf("legacy conversion = %+v, %v", p, err)
 	}
-	for _, raw := range []string{``, `{`, `{"version":2,"resources":{}}`, `{"version":1,"resources":{"wrong":{"kind":"charge","id":"ch_1"}}}`} {
+	legacyObject := `{"customers":["cus_old"],"checkoutSessions":["cs_old"],"subscriptions":["sub_old"],"schedules":["sched_old"],"invoiceItems":["ii_old"],"invoices":["in_old"]}`
+	p, err = decodeDeletionProgressStrict(legacyObject)
+	if err != nil || len(p.Resources) != 5 || p.Resources["invoice_item:ii_old"].Status != "legacy_migrated" {
+		t.Fatalf("legacy object conversion=%+v err=%v", p, err)
+	}
+	for _, raw := range []string{``, `{`, `{"version":2,"resources":{}}`, `{"version":1,"resources":{},"surprise":true}`, `{"version":1,"resources":{"wrong":{"kind":"charge","id":"ch_1"}}}`} {
 		if _, err := decodeDeletionProgressStrict(raw); err == nil {
 			t.Fatalf("unsafe progress accepted: %q", raw)
 		}
@@ -57,6 +62,34 @@ func TestCompletedStripeDeletionReprojectsWithoutClearingAppleEntitlement(t *tes
 	got := mustUser(t, store, u.ID)
 	if got.PlanID != "pro" || got.PlanSource != ProviderApple {
 		t.Fatalf("provider-neutral projection plan=%s source=%s", got.PlanID, got.PlanSource)
+	}
+}
+
+func TestLateBillingFinishAfterRestoreUsesProviderNeutralProjection(t *testing.T) {
+	store := newTestStore(t)
+	seedTiers(t, store)
+	u := newEntitlementUser(t, store, "late-provider-neutral@example.test")
+	apply(t, store, u.ID, ProviderApple, "pro", "active", "yearly", fixedNow+86400, 10)
+	apply(t, store, u.ID, ProviderStripe, "plus", "active", "monthly", fixedNow+3600, 11)
+	now := time.Now().Unix()
+	if _, err := store.db.Exec(`INSERT INTO billing_deletion_holds(billing_subject_id,email_hmac,provider,created_at,expires_at,review_at) VALUES(?,X'04','stripe',?,?,?)`, u.ID, now, now+1000, now+1000); err != nil {
+		t.Fatal(err)
+	}
+	p := BillingDeletionProgress{Customers: []string{"cus_late"}, Resources: map[string]BillingDeletionResource{"subscription:sub_late": {Kind: "subscription", ID: "sub_late", Terminal: true}}, CleanSince: now - 86400}
+	raw, _ := json.Marshal(p)
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation,progress_json,claim_token,claim_until,revision) VALUES('late-finish',?,'stripe','late-finish-key','pending',?,?,1,?,'claim',?,0)`, u.ID, now, now, string(raw), now+60); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.FinishBillingCancellation(context.Background(), "late-finish", "claim", 1, 0, string(raw), "", true, 0, now); err != nil {
+		t.Fatal(err)
+	}
+	got := mustUser(t, store, u.ID)
+	if got.PlanID != "pro" || got.PlanSource != ProviderApple {
+		t.Fatalf("late projection plan=%s source=%s", got.PlanID, got.PlanSource)
+	}
+	var released int64
+	if err := store.db.QueryRow(`SELECT subject_released_at FROM billing_deletion_holds WHERE billing_subject_id=?`, u.ID).Scan(&released); err != nil || released != now {
+		t.Fatalf("released=%d err=%v", released, err)
 	}
 }
 

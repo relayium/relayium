@@ -1069,12 +1069,12 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
  reason TEXT NOT NULL,
  payment_intent_id TEXT NOT NULL DEFAULT '',
  refund_id TEXT NOT NULL DEFAULT '',
- state TEXT NOT NULL CHECK(state IN ('prepared','succeeded')),
+ state TEXT NOT NULL CHECK(state IN ('prepared','succeeded','failed')),
+ retry_generation INTEGER NOT NULL DEFAULT 0,
+ provider_status TEXT NOT NULL DEFAULT '',
  created_at INTEGER NOT NULL,
  updated_at INTEGER NOT NULL,
- UNIQUE(outbox_id,resource_key))`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_billing_manual_refund_payment
- ON billing_deletion_manual_actions(outbox_id,payment_intent_id) WHERE payment_intent_id<>''`,
+ UNIQUE(outbox_id,payment_intent_id,retry_generation))`,
 		`ALTER TABLE billing_deletion_manual_actions ADD COLUMN retry_generation INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE billing_deletion_manual_actions ADD COLUMN provider_status TEXT NOT NULL DEFAULT ''`,
 		`CREATE TABLE IF NOT EXISTS billing_deletion_refund_failures (
@@ -1261,6 +1261,18 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		}
 	}
 	if err := migrateBillingCancellationOutboxGenerations(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := migrateBillingDeletionManualActionsV2(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := migrateBillingDeletionProgressV1(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := validatePendingBillingDeletionProgress(db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -1758,6 +1770,95 @@ INSERT INTO billing_cancellation_outbox_v2
 		_, err := tx.ExecContext(context.Background(), `CREATE INDEX idx_billing_cancel_due ON billing_cancellation_outbox(state,next_attempt_at,updated_at)`)
 		return err
 	})
+}
+
+func migrateBillingDeletionManualActionsV2(db *sql.DB) error {
+	return migrateOnce(db, "billing_deletion_manual_actions_v2", func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(context.Background(), `CREATE TABLE billing_deletion_manual_actions_v2 (
+ id TEXT PRIMARY KEY,
+ outbox_id TEXT NOT NULL,
+ resource_key TEXT NOT NULL,
+ actor TEXT NOT NULL,
+ reason TEXT NOT NULL,
+ payment_intent_id TEXT NOT NULL DEFAULT '',
+ refund_id TEXT NOT NULL DEFAULT '',
+ state TEXT NOT NULL CHECK(state IN ('prepared','succeeded','failed')),
+ retry_generation INTEGER NOT NULL DEFAULT 0,
+ provider_status TEXT NOT NULL DEFAULT '',
+ created_at INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL,
+ UNIQUE(outbox_id,payment_intent_id,retry_generation))`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(context.Background(), `INSERT INTO billing_deletion_manual_actions_v2
+ (id,outbox_id,resource_key,actor,reason,payment_intent_id,refund_id,state,retry_generation,provider_status,created_at,updated_at)
+ SELECT id,outbox_id,resource_key,actor,reason,payment_intent_id,refund_id,state,retry_generation,provider_status,created_at,updated_at
+ FROM billing_deletion_manual_actions`); err != nil {
+			return fmt.Errorf("billing deletion manual action audit migration: %w", err)
+		}
+		if _, err := tx.ExecContext(context.Background(), `DROP TABLE billing_deletion_manual_actions`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(context.Background(), `ALTER TABLE billing_deletion_manual_actions_v2 RENAME TO billing_deletion_manual_actions`); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(context.Background(), `CREATE INDEX idx_billing_manual_refund_payment ON billing_deletion_manual_actions(outbox_id,payment_intent_id,retry_generation)`)
+		return err
+	})
+}
+
+func migrateBillingDeletionProgressV1(db *sql.DB) error {
+	return migrateOnce(db, "billing_deletion_progress_v1", func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(context.Background(), `SELECT id,progress_json FROM billing_cancellation_outbox WHERE state='pending'`)
+		if err != nil {
+			return err
+		}
+		type item struct{ id, raw string }
+		var pending []item
+		for rows.Next() {
+			var v item
+			if err := rows.Scan(&v.id, &v.raw); err != nil {
+				rows.Close()
+				return err
+			}
+			pending = append(pending, v)
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		for _, v := range pending {
+			p, err := decodeDeletionProgressStrict(v.raw)
+			if err != nil {
+				return fmt.Errorf("billing deletion progress %s blocks startup: %w", v.id, err)
+			}
+			encoded, err := json.Marshal(p)
+			if err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(context.Background(), `UPDATE billing_cancellation_outbox SET progress_json=? WHERE id=?`, string(encoded), v.id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func validatePendingBillingDeletionProgress(db *sql.DB) error {
+	rows, err := db.QueryContext(context.Background(), `SELECT id,progress_json FROM billing_cancellation_outbox WHERE state='pending'`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, raw string
+		if err := rows.Scan(&id, &raw); err != nil {
+			return err
+		}
+		if _, err := decodeDeletionProgressStrict(raw); err != nil {
+			return fmt.Errorf("billing deletion progress %s blocks startup: %w", id, err)
+		}
+	}
+	return rows.Err()
 }
 
 // migrateActiveTransfersUnknown corrects nodes.active_transfers on any database
@@ -2364,25 +2465,8 @@ func (s *SQLiteStore) ClearAccountDeletion(ctx context.Context, userID string) e
 			return err
 		}
 		if terminal != 0 {
-			if _, err := tx.ExecContext(ctx, `UPDATE billing_deletion_holds SET subject_released_at=unixepoch() WHERE billing_subject_id=?`, userID); err != nil {
+			if err := finalizeStripeDeletionTx(ctx, tx, userID, time.Now().Unix()); err != nil {
 				return err
-			}
-			var curPlan, curSource string
-			err := tx.QueryRowContext(ctx, `SELECT plan_id,plan_source FROM users WHERE id=?`, userID).Scan(&curPlan, &curSource)
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				return err
-			}
-			if err == nil {
-				if _, err := tx.ExecContext(ctx, `UPDATE subscription_sources SET plan_id='free',status='canceled',period_end=0 WHERE user_id=? AND provider='stripe'`, userID); err != nil {
-					return err
-				}
-				eff, err := recomputeProjectionTx(ctx, tx, userID, ProviderStripe, curPlan, curSource)
-				if err != nil {
-					return err
-				}
-				if err := writeProjectionTx(ctx, tx, userID, eff, time.Now().Unix(), 0); err != nil {
-					return err
-				}
 			}
 		}
 	}
