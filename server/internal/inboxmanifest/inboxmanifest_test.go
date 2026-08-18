@@ -100,7 +100,7 @@ func TestVersionFailsClosed(t *testing.T) {
 		"absent":    `{"items":[{"kind":"file","name":"a.txt","size":1}]}`,
 		"zero":      `{"v":0,"items":[{"kind":"file","name":"a.txt","size":1}]}`,
 		"negative":  `{"v":-2,"items":[{"kind":"file","name":"a.txt","size":1}]}`,
-		"very high": `{"v":3147483647,"items":[{"kind":"file","name":"a.txt","size":1}]}`,
+		"very high": `{"v":2147483647,"items":[{"kind":"file","name":"a.txt","size":1}]}`,
 	} {
 		if _, err := Decode([]byte(doc)); !errors.Is(err, ErrVersion) {
 			t.Errorf("%s: err = %v, want ErrVersion", name, err)
