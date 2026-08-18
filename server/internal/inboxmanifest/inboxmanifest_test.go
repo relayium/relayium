@@ -22,7 +22,7 @@ func TestEncodeIsTheOneCanonicalSpelling(t *testing.T) {
 	}
 	// Key order is fixed, item order is the SENDER's (not sorted), and there is
 	// no whitespace anywhere.
-	want := `{"v":2,"items":[{"kind":"file","name":"b.txt","size":2},{"kind":"file","name":"a.txt","size":1}]}`
+	want := `{"v":3,"items":[{"kind":"file","name":"b.txt","size":2},{"kind":"file","name":"a.txt","size":1}]}`
 	if string(got) != want {
 		t.Fatalf("got  %s\nwant %s", got, want)
 	}
@@ -34,7 +34,7 @@ func TestTextEncodesWithNoNameKeyAtAll(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ := Encode(m)
-	want := `{"v":2,"items":[{"kind":"text","size":11}]}`
+	want := `{"v":3,"items":[{"kind":"text","size":11}]}`
 	if string(got) != want {
 		t.Fatalf("got %s, want %s", got, want)
 	}
@@ -96,11 +96,11 @@ func TestVersionFailsClosed(t *testing.T) {
 	for name, doc := range map[string]string{
 		"v1 shape":  `{"files":[{"name":"a.txt","size":1}]}`,
 		"explicit":  `{"v":1,"items":[{"kind":"file","name":"a.txt","size":1}]}`,
-		"future":    `{"v":3,"items":[{"kind":"file","name":"a.txt","size":1}]}`,
+		"future":    `{"v":4,"items":[{"kind":"file","name":"a.txt","size":1}]}`,
 		"absent":    `{"items":[{"kind":"file","name":"a.txt","size":1}]}`,
 		"zero":      `{"v":0,"items":[{"kind":"file","name":"a.txt","size":1}]}`,
 		"negative":  `{"v":-2,"items":[{"kind":"file","name":"a.txt","size":1}]}`,
-		"very high": `{"v":2147483647,"items":[{"kind":"file","name":"a.txt","size":1}]}`,
+		"very high": `{"v":3147483647,"items":[{"kind":"file","name":"a.txt","size":1}]}`,
 	} {
 		if _, err := Decode([]byte(doc)); !errors.Is(err, ErrVersion) {
 			t.Errorf("%s: err = %v, want ErrVersion", name, err)
@@ -109,13 +109,13 @@ func TestVersionFailsClosed(t *testing.T) {
 }
 
 func TestSingleKindPerDelivery(t *testing.T) {
-	mixed := `{"v":2,"items":[{"kind":"file","name":"a.txt","size":1},{"kind":"text","size":5}]}`
+	mixed := `{"v":3,"items":[{"kind":"file","name":"a.txt","size":1},{"kind":"text","size":5}]}`
 	if _, err := Decode([]byte(mixed)); !errors.Is(err, ErrMixedKinds) {
 		t.Fatalf("file+text: err = %v, want ErrMixedKinds", err)
 	}
 	// The reverse order too. Checking every item against item 0 (rather than
 	// against a permitted set) is what makes both directions one rule.
-	reversed := `{"v":2,"items":[{"kind":"text","size":5},{"kind":"file","name":"a.txt","size":1}]}`
+	reversed := `{"v":3,"items":[{"kind":"text","size":5},{"kind":"file","name":"a.txt","size":1}]}`
 	if _, err := Decode([]byte(reversed)); !errors.Is(err, ErrMixedKinds) {
 		t.Fatalf("text+file: err = %v, want ErrMixedKinds", err)
 	}
@@ -133,11 +133,11 @@ func TestSingleKindPerDelivery(t *testing.T) {
 }
 
 func TestTextIsExactlyOneUnnamedBoundedItem(t *testing.T) {
-	two := `{"v":2,"items":[{"kind":"text","size":5},{"kind":"text","size":6}]}`
+	two := `{"v":3,"items":[{"kind":"text","size":5},{"kind":"text","size":6}]}`
 	if _, err := Decode([]byte(two)); !errors.Is(err, ErrTextItemCount) {
 		t.Fatalf("two messages: err = %v, want ErrTextItemCount", err)
 	}
-	named := `{"v":2,"items":[{"kind":"text","name":"note.txt","size":5}]}`
+	named := `{"v":3,"items":[{"kind":"text","name":"note.txt","size":5}]}`
 	if _, err := Decode([]byte(named)); !errors.Is(err, ErrTextName) {
 		t.Fatalf("named message: err = %v, want ErrTextName", err)
 	}
@@ -251,12 +251,12 @@ func TestItemCountIsBounded(t *testing.T) {
 
 func TestUnknownFieldsAreRefusedNotIgnored(t *testing.T) {
 	for name, doc := range map[string]string{
-		"on the manifest": `{"v":2,"note":"hi","items":[{"kind":"file","name":"a.txt","size":1}]}`,
-		"on an item":      `{"v":2,"items":[{"kind":"file","name":"a.txt","size":1,"path":"/tmp"}]}`,
+		"on the manifest": `{"v":3,"note":"hi","items":[{"kind":"file","name":"a.txt","size":1}]}`,
+		"on an item":      `{"v":3,"items":[{"kind":"file","name":"a.txt","size":1,"path":"/tmp"}]}`,
 		// The one that matters: a sender must not be able to smuggle the
 		// message body into the structure every receiver parses first.
-		"the message body": `{"v":2,"items":[{"kind":"text","size":5,"text":"hello"}]}`,
-		"a content key":    `{"v":2,"items":[{"kind":"file","name":"a.txt","size":1}],"key":"AAAA"}`,
+		"the message body": `{"v":3,"items":[{"kind":"text","size":5,"text":"hello"}]}`,
+		"a content key":    `{"v":3,"items":[{"kind":"file","name":"a.txt","size":1}],"key":"AAAA"}`,
 	} {
 		if _, err := Decode([]byte(doc)); !errors.Is(err, ErrMalformed) {
 			t.Errorf("%s: err = %v, want ErrMalformed", name, err)
@@ -266,16 +266,16 @@ func TestUnknownFieldsAreRefusedNotIgnored(t *testing.T) {
 
 func TestNonCanonicalDocumentsAreRefused(t *testing.T) {
 	for name, doc := range map[string]string{
-		"manifest keys reordered": `{"items":[{"kind":"file","name":"a.txt","size":1}],"v":2}`,
-		"item keys reordered":     `{"v":2,"items":[{"size":1,"kind":"file","name":"a.txt"}]}`,
-		"pretty printed":          `{"v": 2, "items": [{"kind": "file", "name": "a.txt", "size": 1}]}`,
-		"leading whitespace":      ` {"v":2,"items":[{"kind":"file","name":"a.txt","size":1}]}`,
-		"trailing newline":        "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}]}\n",
-		"duplicate key":           `{"v":2,"items":[{"kind":"file","name":"a.txt","size":1,"size":2}]}`,
-		"escaped solidus":         `{"v":2,"items":[{"kind":"file","name":"a\/b.txt","size":1}]}`,
-		"needlessly escaped":      `{"v":2,"items":[{"kind":"file","name":"a\u003cb.txt","size":1}]}`,
-		"omitted size":            `{"v":2,"items":[{"kind":"file","name":"a.txt"}]}`,
-		"empty name on text":      `{"v":2,"items":[{"kind":"text","name":"","size":5}]}`,
+		"manifest keys reordered": `{"items":[{"kind":"file","name":"a.txt","size":1}],"v":3}`,
+		"item keys reordered":     `{"v":3,"items":[{"size":1,"kind":"file","name":"a.txt"}]}`,
+		"pretty printed":          `{"v": 3, "items": [{"kind": "file", "name": "a.txt", "size": 1}]}`,
+		"leading whitespace":      ` {"v":3,"items":[{"kind":"file","name":"a.txt","size":1}]}`,
+		"trailing newline":        "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}]}\n",
+		"duplicate key":           `{"v":3,"items":[{"kind":"file","name":"a.txt","size":1,"size":2}]}`,
+		"escaped solidus":         `{"v":3,"items":[{"kind":"file","name":"a\/b.txt","size":1}]}`,
+		"needlessly escaped":      `{"v":3,"items":[{"kind":"file","name":"a\u003cb.txt","size":1}]}`,
+		"omitted size":            `{"v":3,"items":[{"kind":"file","name":"a.txt"}]}`,
+		"empty name on text":      `{"v":3,"items":[{"kind":"text","name":"","size":5}]}`,
 	} {
 		if _, err := Decode([]byte(doc)); !errors.Is(err, ErrNotCanonical) {
 			t.Errorf("%s: err = %v, want ErrNotCanonical", name, err)
@@ -288,16 +288,16 @@ func TestMalformedDocumentsAreRefused(t *testing.T) {
 		"empty":              "",
 		"not json":           "not json",
 		"an array document":  `[{"kind":"file","name":"a.txt","size":1}]`,
-		"items not an array": `{"v":2,"items":{"kind":"file","name":"a.txt","size":1}}`,
-		"item not an object": `{"v":2,"items":["a.txt"]}`,
-		"stringly size":      `{"v":2,"items":[{"kind":"file","name":"a.txt","size":"1"}]}`,
-		"float size":         `{"v":2,"items":[{"kind":"file","name":"a.txt","size":1.0}]}`,
-		"exponent size":      `{"v":2,"items":[{"kind":"file","name":"a.txt","size":1e3}]}`,
-		"fractional size":    `{"v":2,"items":[{"kind":"file","name":"a.txt","size":1.5}]}`,
+		"items not an array": `{"v":3,"items":{"kind":"file","name":"a.txt","size":1}}`,
+		"item not an object": `{"v":3,"items":["a.txt"]}`,
+		"stringly size":      `{"v":3,"items":[{"kind":"file","name":"a.txt","size":"1"}]}`,
+		"float size":         `{"v":3,"items":[{"kind":"file","name":"a.txt","size":1.0}]}`,
+		"exponent size":      `{"v":3,"items":[{"kind":"file","name":"a.txt","size":1e3}]}`,
+		"fractional size":    `{"v":3,"items":[{"kind":"file","name":"a.txt","size":1.5}]}`,
 		// A second document appended to the first. Without the trailing-token
 		// check this would decode as its first value and the rest would vanish.
-		"two documents": `{"v":2,"items":[{"kind":"file","name":"a.txt","size":1}]}{"v":2,"items":[{"kind":"text","size":1}]}`,
-		"truncated":     `{"v":2,"items":[{"kind":"file","name":"a.txt","size":1}`,
+		"two documents": `{"v":3,"items":[{"kind":"file","name":"a.txt","size":1}]}{"v":3,"items":[{"kind":"text","size":1}]}`,
+		"truncated":     `{"v":3,"items":[{"kind":"file","name":"a.txt","size":1}`,
 	} {
 		if _, err := Decode([]byte(doc)); !errors.Is(err, ErrMalformed) {
 			t.Errorf("%s: err = %v, want ErrMalformed", name, err)
@@ -307,11 +307,11 @@ func TestMalformedDocumentsAreRefused(t *testing.T) {
 
 func TestUnknownKindIsNeverGuessedAt(t *testing.T) {
 	for name, doc := range map[string]string{
-		"a third kind":  `{"v":2,"items":[{"kind":"folder","name":"a","size":1}]}`,
-		"absent":        `{"v":2,"items":[{"name":"a.txt","size":1}]}`,
-		"wrong case":    `{"v":2,"items":[{"kind":"File","name":"a.txt","size":1}]}`,
-		"empty string":  `{"v":2,"items":[{"kind":"","name":"a.txt","size":1}]}`,
-		"looks like v1": `{"v":2,"items":[{"kind":"files","name":"a.txt","size":1}]}`,
+		"a third kind":  `{"v":3,"items":[{"kind":"folder","name":"a","size":1}]}`,
+		"absent":        `{"v":3,"items":[{"name":"a.txt","size":1}]}`,
+		"wrong case":    `{"v":3,"items":[{"kind":"File","name":"a.txt","size":1}]}`,
+		"empty string":  `{"v":3,"items":[{"kind":"","name":"a.txt","size":1}]}`,
+		"looks like v1": `{"v":3,"items":[{"kind":"files","name":"a.txt","size":1}]}`,
 	} {
 		if _, err := Decode([]byte(doc)); !errors.Is(err, ErrUnknownKind) {
 			t.Errorf("%s: err = %v, want ErrUnknownKind", name, err)
