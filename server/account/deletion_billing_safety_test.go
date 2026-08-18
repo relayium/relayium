@@ -25,6 +25,19 @@ type deletionStripeBiller struct {
 	observedProgress      bool
 }
 
+func TestBillingDeletionProgressDecoderFailsClosedAndMigratesLegacyArrays(t *testing.T) {
+	legacy := `[{"kind":"subscription","id":"sub_legacy","status":"active"}]`
+	p, err := decodeDeletionProgressStrict(legacy)
+	if err != nil || p.Version != billingDeletionProgressVersion || p.Resources["subscription:sub_legacy"].ID != "sub_legacy" {
+		t.Fatalf("legacy conversion = %+v, %v", p, err)
+	}
+	for _, raw := range []string{``, `{`, `{"version":2,"resources":{}}`, `{"version":1,"resources":{"wrong":{"kind":"charge","id":"ch_1"}}}`} {
+		if _, err := decodeDeletionProgressStrict(raw); err == nil {
+			t.Fatalf("unsafe progress accepted: %q", raw)
+		}
+	}
+}
+
 func (b *deletionStripeBiller) DiscoverDeletionHazards(ctx context.Context, row BillingCancellation, p BillingDeletionProgress) (BillingDeletionProgress, error) {
 	p.Customers = appendUnique(p.Customers, row.CustomerID)
 	if len(b.hazards.Resources) > 0 {

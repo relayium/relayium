@@ -35,7 +35,10 @@ func ListBillingDeletionManualEvidence(ctx context.Context, store *SQLiteStore, 
 		Scan(&out.OutboxID, &out.SubjectID, &out.State, &out.Generation, &out.CreatedAt, &raw); err != nil {
 		return out, err
 	}
-	p := decodeDeletionProgress(raw)
+	p, err := decodeDeletionProgressStrict(raw)
+	if err != nil {
+		return out, err
+	}
 	keys := make([]string, 0, len(p.Resources))
 	for key := range p.Resources {
 		keys = append(keys, key)
@@ -63,7 +66,10 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 	if err := store.db.QueryRowContext(ctx, `SELECT progress_json,state FROM billing_cancellation_outbox WHERE id=?`, outboxID).Scan(&raw, &state); err != nil {
 		return BillingDeletionManualResult{}, err
 	}
-	p := decodeDeletionProgress(raw)
+	p, err := decodeDeletionProgressStrict(raw)
+	if err != nil {
+		return BillingDeletionManualResult{}, err
+	}
 	r, exists := p.Resources[resourceKey]
 	if !exists {
 		return BillingDeletionManualResult{}, errors.New("account: selected deletion resource does not exist")
@@ -80,7 +86,7 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 	actionID := "bdr_" + hex.EncodeToString(sum[:16])
 	now := time.Now().Unix()
 	var savedID, savedActor, savedReason, refundID, actionState string
-	err := store.db.QueryRowContext(ctx, `SELECT id,actor,reason,refund_id,state FROM billing_deletion_manual_actions WHERE outbox_id=? AND payment_intent_id=?`, outboxID, paymentIntentID).Scan(&savedID, &savedActor, &savedReason, &refundID, &actionState)
+	err = store.db.QueryRowContext(ctx, `SELECT id,actor,reason,refund_id,state FROM billing_deletion_manual_actions WHERE outbox_id=? AND payment_intent_id=?`, outboxID, paymentIntentID).Scan(&savedID, &savedActor, &savedReason, &refundID, &actionState)
 	if errors.Is(err, sql.ErrNoRows) {
 		if !r.Manual || r.Terminal || state != "pending" {
 			return BillingDeletionManualResult{}, errors.New("account: selected deletion resource is not pending manual reconciliation")
@@ -163,7 +169,10 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 	if err := tx.QueryRowContext(ctx, `SELECT progress_json FROM billing_cancellation_outbox WHERE id=? AND state='pending'`, outboxID).Scan(&raw); err != nil {
 		return BillingDeletionManualResult{}, err
 	}
-	p = decodeDeletionProgress(raw)
+	p, err = decodeDeletionProgressStrict(raw)
+	if err != nil {
+		return BillingDeletionManualResult{}, err
+	}
 	r = p.Resources[resourceKey]
 	if !r.Manual || r.Terminal {
 		return BillingDeletionManualResult{}, errors.New("account: manual resource changed during refund")

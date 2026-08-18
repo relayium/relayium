@@ -37,9 +37,18 @@ type BillingDeletionResource struct {
 	SuccessAt         int64  `json:"successAt,omitempty"`
 }
 type BillingDeletionProgress struct {
+	Version    int                                `json:"version"`
 	Customers  []string                           `json:"customers,omitempty"`
 	Resources  map[string]BillingDeletionResource `json:"resources,omitempty"`
 	CleanSince int64                              `json:"cleanSince,omitempty"`
+}
+
+const billingDeletionProgressVersion = 1
+
+func (p BillingDeletionProgress) MarshalJSON() ([]byte, error) {
+	type wire BillingDeletionProgress
+	p.Version = billingDeletionProgressVersion
+	return json.Marshal(wire(p))
 }
 
 func (p *BillingDeletionProgress) add(r BillingDeletionResource) {
@@ -107,12 +116,50 @@ func (p BillingDeletionProgress) hasIdentity() bool {
 	}
 	return false
 }
-func decodeDeletionProgress(raw string) BillingDeletionProgress {
+func decodeDeletionProgressStrict(raw string) (BillingDeletionProgress, error) {
 	var p BillingDeletionProgress
-	_ = json.Unmarshal([]byte(raw), &p)
+	var shape json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &shape); err != nil || len(shape) == 0 {
+		return p, errors.New("account: invalid billing deletion progress")
+	}
+	if shape[0] == '[' {
+		var legacy []BillingDeletionResource
+		if err := json.Unmarshal(shape, &legacy); err != nil {
+			return p, errors.New("account: invalid legacy billing deletion progress")
+		}
+		p.Version = billingDeletionProgressVersion
+		p.Resources = map[string]BillingDeletionResource{}
+		for _, r := range legacy {
+			if r.Kind == "" || r.ID == "" {
+				return BillingDeletionProgress{}, errors.New("account: invalid legacy billing deletion resource")
+			}
+			p.add(r)
+		}
+		return p, nil
+	}
+	if shape[0] != '{' || json.Unmarshal(shape, &p) != nil {
+		return BillingDeletionProgress{}, errors.New("account: invalid billing deletion progress")
+	}
+	if p.Version != 0 && p.Version != billingDeletionProgressVersion {
+		return BillingDeletionProgress{}, errors.New("account: unsupported billing deletion progress version")
+	}
+	p.Version = billingDeletionProgressVersion
 	if p.Resources == nil {
 		p.Resources = map[string]BillingDeletionResource{}
 	}
+	for key, r := range p.Resources {
+		if r.Kind == "" || r.ID == "" || key != r.Kind+":"+r.ID {
+			return BillingDeletionProgress{}, errors.New("account: invalid billing deletion resource")
+		}
+	}
+	return p, nil
+}
+
+// decodeDeletionProgress remains a test-data convenience. Production paths use
+// decodeDeletionProgressStrict and must never turn corruption into an empty,
+// apparently terminal journal.
+func decodeDeletionProgress(raw string) BillingDeletionProgress {
+	p, _ := decodeDeletionProgressStrict(raw)
 	return p
 }
 func appendUnique(xs []string, v string) []string {
@@ -462,7 +509,10 @@ func (s *SQLiteStore) SaveBillingCancellationProgress(ctx context.Context, id, c
 }
 
 func persistDeletionCustomersTx(ctx context.Context, tx *sql.Tx, outboxID, raw string) error {
-	p := decodeDeletionProgress(raw)
+	p, err := decodeDeletionProgressStrict(raw)
+	if err != nil {
+		return err
+	}
 	for _, customerID := range p.Customers {
 		if customerID == "" {
 			continue
@@ -563,7 +613,10 @@ func appendStripeDeletionHazardsTx(ctx context.Context, tx *sql.Tx, userID strin
 		return err
 	}
 	for _, v := range all {
-		p := decodeDeletionProgress(v.raw)
+		p, err := decodeDeletionProgressStrict(v.raw)
+		if err != nil {
+			return err
+		}
 		for _, r := range resources {
 			if r.ID != "" {
 				p.add(r)
@@ -639,8 +692,10 @@ func (s *Service) ReconcileBillingCancellations(ctx context.Context) {
 		return
 	}
 	for _, row := range rows {
-		progress := decodeDeletionProgress(row.ProgressJSON)
-		progress, discoverErr := provider.DiscoverDeletionHazards(ctx, row, progress)
+		progress, discoverErr := decodeDeletionProgressStrict(row.ProgressJSON)
+		if discoverErr == nil {
+			progress, discoverErr = provider.DiscoverDeletionHazards(ctx, row, progress)
+		}
 		encoded, _ := json.Marshal(progress)
 		if discoverErr == nil {
 			row.Revision, discoverErr = store.SaveBillingCancellationProgress(ctx, row.ID, row.ClaimToken, row.Generation, row.Revision, string(encoded), s.now().Unix())
