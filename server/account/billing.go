@@ -1093,7 +1093,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		ev.Type = "customer.subscription.updated"
 	}
 	switch ev.Type {
-	case "checkout.session.completed":
+	case "checkout.session.completed", "checkout.session.async_payment_succeeded", "checkout.session.async_payment_failed", "checkout.session.expired":
 		// Plan assignment is deferred to the accompanying
 		// customer.subscription.* event Stripe always sends alongside this
 		// one; here we only bind the newly-created (or reused) customer id.

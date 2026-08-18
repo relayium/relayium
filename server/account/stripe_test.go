@@ -62,6 +62,17 @@ func TestVerifyWebhookParsesEventProjection(t *testing.T) {
 	}
 }
 
+func TestVerifyWebhookProjectsAsyncCheckoutLifecycle(t *testing.T) {
+	c := NewStripeClient("sk_test", "whsec_abc", "")
+	for _, eventType := range []string{"checkout.session.async_payment_succeeded", "checkout.session.async_payment_failed", "checkout.session.expired"} {
+		body := fmt.Sprintf(`{"id":"evt_async","type":%q,"data":{"object":{"id":"cs_async","object":"checkout.session","customer":"cus_1","client_reference_id":"user_1","metadata":{"billing_attempt_id":"attempt_1"}}}}`, eventType)
+		ev, err := c.VerifyWebhook([]byte(body), signStripe("whsec_abc", body, 3000), 3000)
+		if err != nil || ev.Type != eventType || ev.CheckoutSessionID != "cs_async" || ev.MetadataBillingAttemptID != "attempt_1" {
+			t.Fatalf("%s projection = %+v, %v", eventType, ev, err)
+		}
+	}
+}
+
 func TestVerifyWebhookProjectsFinancialHazardIDs(t *testing.T) {
 	c := NewStripeClient("sk_test_x", "whsec_abc", "bpc_x")
 	body := `{"id":"evt_invoice","type":"invoice.paid","created":3000,"livemode":false,"data":{"object":{"id":"in_1","object":"invoice","customer":"cus_1","subscription":"sub_1","payment_intent":"pi_1","charge":"ch_1"}}}`
