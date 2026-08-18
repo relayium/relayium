@@ -186,16 +186,20 @@ func TestMeteredDeletionOperatorDiscardsPendingBillingAndRequiresCanonicalCancel
 	}
 	var subReads, itemDeletes, subDeletes int
 	var unsafeForm bool
+	var observedPrepared bool
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/subscriptions/sub_metered":
 			subReads++
+			var prepared int
+			_ = store.db.QueryRow(`SELECT COUNT(*) FROM billing_deletion_metered_actions WHERE outbox_id='out_metered' AND state='prepared'`).Scan(&prepared)
+			observedPrepared = prepared == 1
 			status := "active"
 			if subReads > 1 {
 				status = "canceled"
 			}
-			io.WriteString(w, `{"id":"sub_metered","customer":"cus_metered","status":"`+status+`","items":{"data":[{"price":{"recurring":{"usage_type":"metered"}}}]}}`)
+			io.WriteString(w, `{"id":"sub_metered","customer":"cus_metered","status":"`+status+`","items":{"data":[{"price":{"recurring":{"usage_type":"licensed"}}},{"price":{"recurring":{"usage_type":"metered"}}}]}}`)
 		case "GET /v1/invoiceitems":
 			io.WriteString(w, `{"data":[{"id":"ii_pending"}],"has_more":false}`)
 		case "DELETE /v1/invoiceitems/ii_pending":
@@ -219,8 +223,8 @@ func TestMeteredDeletionOperatorDiscardsPendingBillingAndRequiresCanonicalCancel
 	if err := ResolveBillingDeletionMetered(context.Background(), store, c, "out_metered", "subscription:sub_metered", "operator", "verified legacy metered deletion"); err != nil {
 		t.Fatal(err)
 	}
-	if itemDeletes != 1 || subDeletes != 1 || subReads != 2 || unsafeForm {
-		t.Fatalf("reads=%d item deletes=%d subscription deletes=%d unsafe form=%t", subReads, itemDeletes, subDeletes, unsafeForm)
+	if itemDeletes != 1 || subDeletes != 1 || subReads != 2 || unsafeForm || !observedPrepared {
+		t.Fatalf("reads=%d item deletes=%d subscription deletes=%d unsafe form=%t prepared=%t", subReads, itemDeletes, subDeletes, unsafeForm, observedPrepared)
 	}
 	if err := store.db.QueryRow(`SELECT progress_json FROM billing_cancellation_outbox WHERE id='out_metered'`).Scan(&raw); err != nil {
 		t.Fatal(err)
@@ -228,6 +232,50 @@ func TestMeteredDeletionOperatorDiscardsPendingBillingAndRequiresCanonicalCancel
 	p, err := decodeDeletionProgressStrict(string(raw))
 	if err != nil || !p.Resources["subscription:sub_metered"].Terminal || p.Resources["subscription:sub_metered"].Manual {
 		t.Fatalf("metered progress=%+v err=%v", p, err)
+	}
+}
+
+func TestMeteredDeletionRerunConvergesAfterProviderCompletedBeforeLocalCommit(t *testing.T) {
+	store := newTestStore(t)
+	p := BillingDeletionProgress{Customers: []string{"cus_crash"}, Resources: map[string]BillingDeletionResource{
+		"subscription:sub_crash": {Kind: "subscription", ID: "sub_crash", CustomerID: "cus_crash", Status: "metered_usage_requires_operator", Manual: true},
+	}}
+	raw, _ := json.Marshal(p)
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,progress_json,created_at,updated_at,generation,next_attempt_at) VALUES('out_crash','subject','stripe','delete-crash','pending',?,1,1,1,1)`, string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO billing_deletion_metered_actions(id,outbox_id,resource_key,actor,reason,state,created_at,updated_at) VALUES('bdm_out_crash_sub_crash','out_crash','subscription:sub_crash','operator','legacy cleanup','prepared',1,1)`); err != nil {
+		t.Fatal(err)
+	}
+	var providerMutations int
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			providerMutations++
+		}
+		if r.URL.Path == "/v1/subscriptions/sub_crash" {
+			http.Error(w, `{"error":{"message":"No such subscription"}}`, http.StatusNotFound)
+			return
+		}
+		if r.URL.Path == "/v1/invoiceitems" {
+			io.WriteString(w, `{"data":[],"has_more":false}`)
+			return
+		}
+		http.Error(w, "unexpected", http.StatusBadRequest)
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test", "whsec", "bpc")
+	c.base, c.http = ts.URL, ts.Client()
+	if err := ResolveBillingDeletionMetered(context.Background(), store, c, "out_crash", "subscription:sub_crash", "different", "legacy cleanup"); err == nil {
+		t.Fatal("actor conflict accepted")
+	}
+	if providerMutations != 0 {
+		t.Fatal("actor conflict reached provider")
+	}
+	if err := ResolveBillingDeletionMetered(context.Background(), store, c, "out_crash", "subscription:sub_crash", "operator", "legacy cleanup"); err != nil {
+		t.Fatal(err)
+	}
+	if providerMutations != 0 {
+		t.Fatalf("rerun repeated provider mutation %d times", providerMutations)
 	}
 }
 

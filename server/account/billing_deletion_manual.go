@@ -40,8 +40,24 @@ func ResolveBillingDeletionMetered(ctx context.Context, store *SQLiteStore, bill
 	if !ok || r.Kind != "subscription" || r.Status != "metered_usage_requires_operator" || state != "pending" {
 		return errors.New("account: selected resource is not a pending metered subscription")
 	}
+	now := time.Now().Unix()
+	actionID := "bdm_" + outboxID + "_" + r.ID
+	if _, err := store.db.ExecContext(ctx, `INSERT OR IGNORE INTO billing_deletion_metered_actions(id,outbox_id,resource_key,actor,reason,state,created_at,updated_at) VALUES(?,?,?,?,?,'prepared',?,?)`, actionID, outboxID, resourceKey, strings.TrimSpace(actor), strings.TrimSpace(reason), now, now); err != nil {
+		return err
+	}
+	var savedActor, savedReason, actionState string
+	if err := store.db.QueryRowContext(ctx, `SELECT actor,reason,state FROM billing_deletion_metered_actions WHERE outbox_id=? AND resource_key=?`, outboxID, resourceKey).Scan(&savedActor, &savedReason, &actionState); err != nil {
+		return err
+	}
+	if savedActor != strings.TrimSpace(actor) || savedReason != strings.TrimSpace(reason) {
+		return errors.New("account: metered deletion actor/reason conflict")
+	}
+	if actionState == "succeeded" {
+		return nil
+	}
 	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions/"+url.PathEscape(r.ID), nil)
-	if err != nil {
+	subGone := stripeDeletionObjectGone(err)
+	if err != nil && !subGone {
 		return err
 	}
 	var sub struct {
@@ -56,26 +72,44 @@ func ResolveBillingDeletionMetered(ctx context.Context, store *SQLiteStore, bill
 			} `json:"data"`
 		} `json:"items"`
 	}
-	if json.Unmarshal(body, &sub) != nil || sub.ID != r.ID || sub.Customer == "" || (r.CustomerID != "" && r.CustomerID != sub.Customer) || len(sub.Items.Data) == 0 {
-		return errors.New("stripe: metered subscription canonical identity is invalid")
-	}
-	for _, item := range sub.Items.Data {
-		if item.Price.Recurring == nil || item.Price.Recurring.UsageType != "metered" {
-			return errors.New("stripe: operator path requires an entirely metered subscription")
+	customerID := r.CustomerID
+	if !subGone {
+		if json.Unmarshal(body, &sub) != nil || sub.ID != r.ID || sub.Customer == "" || (r.CustomerID != "" && r.CustomerID != sub.Customer) || len(sub.Items.Data) == 0 {
+			return errors.New("stripe: metered subscription canonical identity is invalid")
+		}
+		customerID = sub.Customer
+		hasMetered := false
+		for _, item := range sub.Items.Data {
+			if item.Price.Recurring == nil {
+				return errors.New("stripe: subscription charge model is unknown")
+			}
+			if item.Price.Recurring.UsageType == "metered" {
+				hasMetered = true
+			} else if item.Price.Recurring.UsageType != "licensed" {
+				return errors.New("stripe: subscription charge model is unsupported")
+			}
+		}
+		if !hasMetered {
+			return errors.New("stripe: operator path requires a metered item")
 		}
 	}
-	ids, err := c.deletionList(ctx, "/v1/invoiceitems", url.Values{"customer": {sub.Customer}, "pending": {"true"}})
-	if err != nil {
-		return err
-	}
-	for _, id := range ids {
-		if _, err := c.request(ctx, http.MethodDelete, "/v1/invoiceitems/"+url.PathEscape(id), nil); err != nil && !stripeDeletionObjectGone(err) {
+	customers := appendUnique(append([]string(nil), p.Customers...), customerID)
+	for _, candidateCustomer := range customers {
+		ids, err := c.deletionList(ctx, "/v1/invoiceitems", url.Values{"customer": {candidateCustomer}, "pending": {"true"}})
+		if err != nil {
 			return err
 		}
+		for _, id := range ids {
+			if _, err := c.request(ctx, http.MethodDelete, "/v1/invoiceitems/"+url.PathEscape(id), nil); err != nil && !stripeDeletionObjectGone(err) {
+				return err
+			}
+		}
 	}
-	form := url.Values{"invoice_now": {"false"}, "prorate": {"false"}}
-	if _, err := c.request(ctx, http.MethodDelete, "/v1/subscriptions/"+url.PathEscape(r.ID), form); err != nil && !stripeDeletionObjectGone(err) {
-		return err
+	if !subGone {
+		form := url.Values{"invoice_now": {"false"}, "prorate": {"false"}}
+		if _, err := c.request(ctx, http.MethodDelete, "/v1/subscriptions/"+url.PathEscape(r.ID), form); err != nil && !stripeDeletionObjectGone(err) {
+			return err
+		}
 	}
 	body, err = c.request(ctx, http.MethodGet, "/v1/subscriptions/"+url.PathEscape(r.ID), nil)
 	if err != nil && !stripeDeletionObjectGone(err) {
@@ -89,16 +123,11 @@ func ResolveBillingDeletionMetered(ctx context.Context, store *SQLiteStore, bill
 			return errors.New("stripe: metered subscription cancellation is not canonical terminal")
 		}
 	}
-	now := time.Now().Unix()
 	tx, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	actionID := "bdm_" + outboxID + "_" + r.ID
-	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO billing_deletion_metered_actions(id,outbox_id,resource_key,actor,reason,state,created_at,updated_at) VALUES(?,?,?,?,?,'prepared',?,?)`, actionID, outboxID, resourceKey, strings.TrimSpace(actor), strings.TrimSpace(reason), now, now); err != nil {
-		return err
-	}
 	if err := tx.QueryRowContext(ctx, `SELECT progress_json FROM billing_cancellation_outbox WHERE id=? AND state='pending'`, outboxID).Scan(&raw); err != nil {
 		return err
 	}
