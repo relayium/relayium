@@ -22,7 +22,7 @@ type BillingCancellation struct {
 	ProgressJSON, LastError                                                           string
 	ClaimToken                                                                        string
 	Generation, Attempts, CreatedAt, UpdatedAt, TerminalAt, ArchivedAt, NextAttemptAt int64
-	Revision, CutoffAt, CapturedSourceEventAt, CapturedAuthorityEpoch                 int64
+	Revision, CutoffAt, CapturedAuthorityEpoch                                        int64
 }
 
 const (
@@ -426,12 +426,12 @@ func (s *SQLiteStore) CommitAccountDeletion(ctx context.Context, tokenHash strin
 	}
 	digest := s.billingEmailHMAC(u.Email)
 	var provider, stripeExternalID string
-	var authorityEpoch, stripeSourceEventAt int64
+	var authorityEpoch int64
 	if err := tx.QueryRowContext(ctx, `SELECT provider,epoch FROM billing_authorities WHERE user_id=?`, u.ID).Scan(&provider, &authorityEpoch); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, false, err
 	}
 	capturedAuthorityProvider := provider
-	if err := tx.QueryRowContext(ctx, `SELECT external_id,event_at FROM subscription_sources WHERE user_id=? AND provider='stripe'`, u.ID).Scan(&stripeExternalID, &stripeSourceEventAt); err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err := tx.QueryRowContext(ctx, `SELECT external_id FROM subscription_sources WHERE user_id=? AND provider='stripe'`, u.ID).Scan(&stripeExternalID); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, false, err
 	}
 	var stripeHistory bool
@@ -515,7 +515,7 @@ func (s *SQLiteStore) CommitAccountDeletion(ctx context.Context, tokenHash strin
 			progress.CleanSince = now
 		}
 		encoded, _ := json.Marshal(progress)
-		if _, err := tx.ExecContext(ctx, `INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at,progress_json,generation,next_attempt_at,mode,deletion_epoch,cutoff_at,captured_source_id,captured_source_event_at,captured_authority_provider,captured_authority_epoch) VALUES(?,?,?,?,?,?,'pending',0,?,?,?,?,?,'account_deletion',?,?,?,?,?,?)`, id, u.ID, ProviderStripe, u.StripeCustomerID, subID, key, now, now, string(encoded), generation, now, id, now, stripeExternalID, stripeSourceEventAt, capturedAuthorityProvider, authorityEpoch); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at,progress_json,generation,next_attempt_at,mode,deletion_epoch,cutoff_at,captured_source_id,captured_authority_provider,captured_authority_epoch) VALUES(?,?,?,?,?,?,'pending',0,?,?,?,?,?,'account_deletion',?,?,?,?,?)`, id, u.ID, ProviderStripe, u.StripeCustomerID, subID, key, now, now, string(encoded), generation, now, id, now, stripeExternalID, capturedAuthorityProvider, authorityEpoch); err != nil {
 			return nil, false, err
 		}
 	}
@@ -545,7 +545,7 @@ func (s *SQLiteStore) PendingBillingCancellations(ctx context.Context, limit int
 	}
 	defer tx.Rollback()
 	now := time.Now().Unix()
-	rows, err := tx.QueryContext(ctx, `SELECT id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,progress_json,last_error,generation,attempts,created_at,updated_at,terminal_at,archived_at,next_attempt_at,revision,mode,deletion_epoch,cutoff_at,parent_outbox_id,captured_source_id,captured_source_event_at,captured_authority_provider,captured_authority_epoch FROM billing_cancellation_outbox WHERE state='pending' AND next_attempt_at<=? AND claim_until<=? ORDER BY next_attempt_at,updated_at,id LIMIT ?`, now, now, limit)
+	rows, err := tx.QueryContext(ctx, `SELECT id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,progress_json,last_error,generation,attempts,created_at,updated_at,terminal_at,archived_at,next_attempt_at,revision,mode,deletion_epoch,cutoff_at,parent_outbox_id,captured_source_id,captured_authority_provider,captured_authority_epoch FROM billing_cancellation_outbox WHERE state='pending' AND next_attempt_at<=? AND claim_until<=? ORDER BY next_attempt_at,updated_at,id LIMIT ?`, now, now, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -553,7 +553,7 @@ func (s *SQLiteStore) PendingBillingCancellations(ctx context.Context, limit int
 	var out []BillingCancellation
 	for rows.Next() {
 		var c BillingCancellation
-		if err := rows.Scan(&c.ID, &c.BillingSubjectID, &c.Provider, &c.CustomerID, &c.SubscriptionID, &c.IdempotencyKey, &c.State, &c.ProgressJSON, &c.LastError, &c.Generation, &c.Attempts, &c.CreatedAt, &c.UpdatedAt, &c.TerminalAt, &c.ArchivedAt, &c.NextAttemptAt, &c.Revision, &c.Mode, &c.DeletionEpoch, &c.CutoffAt, &c.ParentOutboxID, &c.CapturedSourceID, &c.CapturedSourceEventAt, &c.CapturedAuthorityProvider, &c.CapturedAuthorityEpoch); err != nil {
+		if err := rows.Scan(&c.ID, &c.BillingSubjectID, &c.Provider, &c.CustomerID, &c.SubscriptionID, &c.IdempotencyKey, &c.State, &c.ProgressJSON, &c.LastError, &c.Generation, &c.Attempts, &c.CreatedAt, &c.UpdatedAt, &c.TerminalAt, &c.ArchivedAt, &c.NextAttemptAt, &c.Revision, &c.Mode, &c.DeletionEpoch, &c.CutoffAt, &c.ParentOutboxID, &c.CapturedSourceID, &c.CapturedAuthorityProvider, &c.CapturedAuthorityEpoch); err != nil {
 			return nil, err
 		}
 		c.ClaimToken = authx.NewID()
@@ -602,6 +602,25 @@ func (s *SQLiteStore) FinishBillingCancellation(ctx context.Context, id, claim s
 		return err
 	}
 	defer tx.Rollback()
+	var finishRow BillingCancellation
+	if terminal {
+		if err := tx.QueryRowContext(ctx, `SELECT billing_subject_id,mode,captured_source_id,captured_authority_provider,captured_authority_epoch FROM billing_cancellation_outbox WHERE id=?`, id).Scan(&finishRow.BillingSubjectID, &finishRow.Mode, &finishRow.CapturedSourceID, &finishRow.CapturedAuthorityProvider, &finishRow.CapturedAuthorityEpoch); err != nil {
+			return err
+		}
+		if finishRow.Mode != billingCancellationExactCompensation {
+			current, err := billingDeletionSnapshotCurrentTx(ctx, tx, finishRow)
+			if err != nil {
+				return err
+			}
+			if !current {
+				terminal = false
+				state = "pending"
+				terminalAt = 0
+				next = now + 21600
+				lastError = "billing source changed during deletion"
+			}
+		}
+	}
 	if err := persistDeletionCustomersTx(ctx, tx, id, progress); err != nil {
 		return err
 	}
@@ -613,19 +632,9 @@ func (s *SQLiteStore) FinishBillingCancellation(ctx context.Context, id, claim s
 		return errors.New("account: stale billing cancellation finish")
 	}
 	if terminal {
-		var row BillingCancellation
-		if err := tx.QueryRowContext(ctx, `SELECT billing_subject_id,mode,captured_source_id,captured_source_event_at,captured_authority_provider,captured_authority_epoch FROM billing_cancellation_outbox WHERE id=?`, id).Scan(&row.BillingSubjectID, &row.Mode, &row.CapturedSourceID, &row.CapturedSourceEventAt, &row.CapturedAuthorityProvider, &row.CapturedAuthorityEpoch); err != nil {
-			return err
-		}
-		if row.Mode != billingCancellationExactCompensation {
-			current, err := billingDeletionSnapshotCurrentTx(ctx, tx, row)
-			if err != nil {
+		if finishRow.Mode != billingCancellationExactCompensation {
+			if err := finalizeStripeDeletionTx(ctx, tx, finishRow.BillingSubjectID, now); err != nil {
 				return err
-			}
-			if current {
-				if err := finalizeStripeDeletionTx(ctx, tx, row.BillingSubjectID, now); err != nil {
-					return err
-				}
 			}
 		}
 	}
@@ -633,19 +642,18 @@ func (s *SQLiteStore) FinishBillingCancellation(ctx context.Context, id, claim s
 }
 
 func billingDeletionSnapshotCurrentTx(ctx context.Context, tx *sql.Tx, row BillingCancellation) (bool, error) {
-	if row.CapturedSourceID == "" && row.CapturedSourceEventAt == 0 && row.CapturedAuthorityProvider == "" && row.CapturedAuthorityEpoch == 0 {
+	if row.CapturedSourceID == "" && row.CapturedAuthorityProvider == "" && row.CapturedAuthorityEpoch == 0 {
 		return true, nil
 	}
-	if row.CapturedSourceID != "" || row.CapturedSourceEventAt != 0 {
+	if row.CapturedSourceID != "" {
 		var sourceID string
-		var sourceAt int64
-		if err := tx.QueryRowContext(ctx, `SELECT external_id,event_at FROM subscription_sources WHERE user_id=? AND provider='stripe'`, row.BillingSubjectID).Scan(&sourceID, &sourceAt); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT external_id FROM subscription_sources WHERE user_id=? AND provider='stripe'`, row.BillingSubjectID).Scan(&sourceID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return false, nil
 			}
 			return false, err
 		}
-		if sourceID != row.CapturedSourceID || sourceAt != row.CapturedSourceEventAt {
+		if sourceID != row.CapturedSourceID {
 			return false, nil
 		}
 	}
@@ -763,27 +771,18 @@ func appendStripeDeletionHazardsTx(ctx context.Context, tx *sql.Tx, userID strin
 	if err := rows.Close(); err != nil {
 		return err
 	}
-	for _, v := range all {
-		if v.mode != billingCancellationExactCompensation {
-			continue
-		}
-		p, err := decodeDeletionProgressStrict(v.raw)
-		if err != nil {
+	exactEligible := validateExactPaymentResources(resources) == nil
+	if exactEligible {
+		if handled, err := appendExactStripeCompensationTx(ctx, tx, userID, "", resources); err != nil || handled {
 			return err
 		}
-		if !progressMatchesPaymentChain(p, resources) {
-			continue
-		}
-		for _, r := range resources {
-			p.add(r)
-		}
-		p.CleanSince = 0
-		encoded, _ := json.Marshal(p)
-		_, err = tx.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET progress_json=?,revision=revision+1,updated_at=unixepoch() WHERE id=? AND state='pending'`, string(encoded), v.id)
-		return err
 	}
-	if handled, err := appendExactStripeCompensationTx(ctx, tx, userID, "", resources); err != nil || handled {
-		return err
+	hasAccountDeletion := false
+	for _, v := range all {
+		hasAccountDeletion = hasAccountDeletion || v.mode == billingCancellationAccountDeletion
+	}
+	if !exactEligible && !hasAccountDeletion {
+		return errors.New("account: non-payment late event cannot create exact compensation")
 	}
 	for _, v := range all {
 		if v.mode == billingCancellationExactCompensation {
@@ -811,43 +810,85 @@ func appendStripeDeletionHazardsTx(ctx context.Context, tx *sql.Tx, userID strin
 // reopens the subject-wide hold and never admits resources that can mutate a
 // current Checkout Session, Subscription, Schedule, or Customer inventory.
 func appendExactStripeCompensationTx(ctx context.Context, tx *sql.Tx, userID, preferredOutboxID string, resources []BillingDeletionResource) (bool, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT id,customer_id,subscription_id,generation,created_at,progress_json,deletion_epoch,cutoff_at,captured_source_id,captured_source_event_at,captured_authority_provider,captured_authority_epoch FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider='stripe' AND state='terminal' ORDER BY generation DESC`, userID)
+	if err := validateExactPaymentResources(resources); err != nil {
+		return false, err
+	}
+	type match struct {
+		row      BillingCancellation
+		progress BillingDeletionProgress
+	}
+	var pendingMatch, terminalMatch *match
+	matchedEpoch := ""
+	setEpoch := func(epoch string) error {
+		if epoch == "" {
+			return errors.New("account: late Stripe payment has no deletion epoch")
+		}
+		if matchedEpoch != "" && matchedEpoch != epoch {
+			return errors.New("account: late Stripe payment matches multiple deletion epochs")
+		}
+		matchedEpoch = epoch
+		return nil
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT id,customer_id,subscription_id,generation,created_at,progress_json,deletion_epoch,cutoff_at,parent_outbox_id,captured_source_id,captured_authority_provider,captured_authority_epoch,state,mode FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider='stripe' AND (state='terminal' OR mode='exact_compensation') ORDER BY generation DESC`, userID)
 	if err != nil {
 		return false, err
 	}
 	defer rows.Close()
-	var matched *BillingCancellation
-	var oldProgress BillingDeletionProgress
 	for rows.Next() {
 		var candidate BillingCancellation
 		var raw string
-		if err := rows.Scan(&candidate.ID, &candidate.CustomerID, &candidate.SubscriptionID, &candidate.Generation, &candidate.CreatedAt, &raw, &candidate.DeletionEpoch, &candidate.CutoffAt, &candidate.CapturedSourceID, &candidate.CapturedSourceEventAt, &candidate.CapturedAuthorityProvider, &candidate.CapturedAuthorityEpoch); err != nil {
+		if err := rows.Scan(&candidate.ID, &candidate.CustomerID, &candidate.SubscriptionID, &candidate.Generation, &candidate.CreatedAt, &raw, &candidate.DeletionEpoch, &candidate.CutoffAt, &candidate.ParentOutboxID, &candidate.CapturedSourceID, &candidate.CapturedAuthorityProvider, &candidate.CapturedAuthorityEpoch, &candidate.State, &candidate.Mode); err != nil {
 			return false, err
 		}
 		p, err := decodeDeletionProgressStrict(raw)
 		if err != nil {
 			return false, err
 		}
-		if preferredOutboxID != "" && candidate.ID != preferredOutboxID {
+		preferred := preferredOutboxID != "" && (candidate.ID == preferredOutboxID || candidate.ParentOutboxID == preferredOutboxID)
+		if preferredOutboxID != "" && !preferred {
 			continue
 		}
-		if preferredOutboxID == "" && !progressMatchesPaymentChain(p, resources) {
+		if !preferred && !progressMatchesPaymentChain(p, resources) {
 			continue
 		}
-		if matched != nil && matched.ID != candidate.ID {
-			return false, errors.New("account: late Stripe payment matches multiple deletion epochs")
+		epoch := candidate.DeletionEpoch
+		if epoch == "" {
+			epoch = candidate.ID
 		}
-		copy := candidate
-		matched = &copy
-		oldProgress = p
+		if err := setEpoch(epoch); err != nil {
+			return false, err
+		}
+		m := &match{row: candidate, progress: p}
+		if candidate.State == "pending" && candidate.Mode == billingCancellationExactCompensation {
+			if pendingMatch != nil && pendingMatch.row.ID != candidate.ID {
+				return false, errors.New("account: duplicate pending exact compensation")
+			}
+			pendingMatch = m
+		} else if candidate.State == "terminal" && terminalMatch == nil {
+			terminalMatch = m
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return false, err
 	}
-	if matched == nil {
+	if pendingMatch != nil {
+		p := pendingMatch.progress
+		for _, r := range resources {
+			p.add(r)
+		}
+		p.CleanSince = 0
+		encoded, err := json.Marshal(p)
+		if err != nil {
+			return false, err
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET progress_json=?,revision=revision+1,updated_at=unixepoch() WHERE id=? AND state='pending' AND mode='exact_compensation'`, string(encoded), pendingMatch.row.ID)
+		return err == nil, err
+	}
+	if terminalMatch == nil {
 		return false, nil
 	}
-	p := exactPaymentProgress(oldProgress, resources)
+	matched := terminalMatch.row
+	p := exactPaymentProgress(terminalMatch.progress, resources)
 	p.Customers = appendUnique(p.Customers, matched.CustomerID)
 	for _, r := range resources {
 		p.Resources[r.Kind+":"+r.ID] = r
@@ -869,8 +910,17 @@ func appendExactStripeCompensationTx(ctx context.Context, tx *sql.Tx, userID, pr
 	if cutoff == 0 {
 		cutoff = matched.CreatedAt
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at,progress_json,generation,next_attempt_at,mode,deletion_epoch,cutoff_at,parent_outbox_id,captured_source_id,captured_source_event_at,captured_authority_provider,captured_authority_epoch) VALUES(?,?,?,?,?,?,'pending',0,?,?,?,?,?,'exact_compensation',?,?,?,?,?,?,?)`, id, userID, ProviderStripe, matched.CustomerID, matched.SubscriptionID, "relayium-exact-compensation-"+id, now, now, string(encoded), generation, now, epoch, cutoff, matched.ID, matched.CapturedSourceID, matched.CapturedSourceEventAt, matched.CapturedAuthorityProvider, matched.CapturedAuthorityEpoch)
+	_, err = tx.ExecContext(ctx, `INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at,progress_json,generation,next_attempt_at,mode,deletion_epoch,cutoff_at,parent_outbox_id,captured_source_id,captured_authority_provider,captured_authority_epoch) VALUES(?,?,?,?,?,?,'pending',0,?,?,?,?,?,'exact_compensation',?,?,?,?,?,?)`, id, userID, ProviderStripe, matched.CustomerID, matched.SubscriptionID, "relayium-exact-compensation-"+id, now, now, string(encoded), generation, now, epoch, cutoff, matched.ID, matched.CapturedSourceID, matched.CapturedAuthorityProvider, matched.CapturedAuthorityEpoch)
 	return err == nil, err
+}
+
+func validateExactPaymentResources(resources []BillingDeletionResource) error {
+	for _, r := range resources {
+		if r.Kind != "invoice" && r.Kind != "payment_intent" && r.Kind != "charge" {
+			return errors.New("account: exact compensation rejected non-payment resource")
+		}
+	}
+	return nil
 }
 
 func progressMatchesPaymentChain(p BillingDeletionProgress, resources []BillingDeletionResource) bool {

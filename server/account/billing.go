@@ -996,6 +996,13 @@ func (s *Service) subEventIsStale(ctx context.Context, w http.ResponseWriter, us
 // for an admin-comped user still records status/period-end (for visibility in
 // the admin console) but leaves plan_id untouched — see the admin-source
 // branches below.
+func stripeRefundLifecycleStatus(ev WebhookEvent) string {
+	if ev.Type == "refund.failed" {
+		return "failed"
+	}
+	return ev.Status
+}
+
 func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 	if s.biller == nil {
 		http.Error(w, "not found", http.StatusNotFound)
@@ -1064,12 +1071,14 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		if recorder, ok := s.Store().(interface {
 			RecordStripeDeletionRefundLifecycle(context.Context, string, string, string, string, string, int64) error
 		}); ok {
-			if err := recorder.RecordStripeDeletionRefundLifecycle(ctx, ev.EventID, ev.RefundID, ev.MetadataDeletionActionID, ev.PaymentIntentID, ev.Status, ev.Created); err != nil {
+			refundStatus := stripeRefundLifecycleStatus(ev)
+			if err := recorder.RecordStripeDeletionRefundLifecycle(ctx, ev.EventID, ev.RefundID, ev.MetadataDeletionActionID, ev.PaymentIntentID, refundStatus, ev.Created); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
 		}
 	}
+
 	if strings.HasPrefix(ev.Type, "invoice.") && ev.SubscriptionID == "" {
 		// An invoice without a subscription may be a one-off invoice or a Stripe
 		// event shape we do not understand. It is verified and ledgered, but it is

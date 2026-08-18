@@ -112,7 +112,7 @@ func TestExactCompensationFinishCannotOverwriteReactivatedStripeSource(t *testin
 	now := time.Now().Unix()
 	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{"payment_intent:pi_old": {Kind: "payment_intent", ID: "pi_old", Status: "refunded", Terminal: true}}, CleanSince: now - 86400}
 	raw, _ := json.Marshal(p)
-	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation,progress_json,claim_token,claim_until,revision,mode,deletion_epoch,cutoff_at,parent_outbox_id,captured_source_id,captured_source_event_at,captured_authority_provider,captured_authority_epoch) VALUES('exact-finish',?,'stripe','exact-finish-key','pending',?,?,2,?,'claim',?,0,'exact_compensation','old-epoch',100,'old-delete','sub_old',100,'stripe',1)`, u.ID, now, now, string(raw), now+60); err != nil {
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation,progress_json,claim_token,claim_until,revision,mode,deletion_epoch,cutoff_at,parent_outbox_id,captured_source_id,captured_authority_provider,captured_authority_epoch) VALUES('exact-finish',?,'stripe','exact-finish-key','pending',?,?,2,?,'claim',?,0,'exact_compensation','old-epoch',100,'old-delete','sub_old','stripe',1)`, u.ID, now, now, string(raw), now+60); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.FinishBillingCancellation(context.Background(), "exact-finish", "claim", 2, 0, string(raw), "", true, 0, now); err != nil {
@@ -125,6 +125,63 @@ func TestExactCompensationFinishCannotOverwriteReactivatedStripeSource(t *testin
 	var sourceID string
 	if err := store.db.QueryRow(`SELECT external_id FROM subscription_sources WHERE user_id=? AND provider='stripe'`, u.ID).Scan(&sourceID); err != nil || sourceID == "" {
 		t.Fatalf("current source removed: id=%q err=%v", sourceID, err)
+	}
+}
+
+func TestAccountDeletionSnapshotAllowsSameSourceEventAdvance(t *testing.T) {
+	store := newTestStore(t)
+	seedTiers(t, store)
+	u := newEntitlementUser(t, store, "same-source-delete@example.test")
+	apply(t, store, u.ID, ProviderStripe, "pro", "active", "monthly", fixedNow+3600, 100)
+	if _, err := store.db.Exec(`UPDATE subscription_sources SET external_id='sub_same' WHERE user_id=? AND provider='stripe'; INSERT INTO billing_authorities(user_id,provider,epoch,intent_id,created_at,updated_at) VALUES(?,'stripe',1,'same-source-authority',1,1)`, u.ID, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().Unix()
+	p := BillingDeletionProgress{Customers: []string{"cus_same"}, Resources: map[string]BillingDeletionResource{"subscription:sub_same": {Kind: "subscription", ID: "sub_same", Terminal: true}}, CleanSince: now - 86401}
+	raw, _ := json.Marshal(p)
+	if _, err := store.db.Exec(`INSERT INTO billing_deletion_holds(billing_subject_id,email_hmac,provider,created_at,expires_at,review_at) VALUES(?,X'03','stripe',?,?,?); INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation,progress_json,claim_token,claim_until,mode,deletion_epoch,cutoff_at,captured_source_id,captured_authority_provider,captured_authority_epoch) VALUES('same-source-delete',?,'stripe','same-source-key','pending',?,?,1,?,'claim',?,'account_deletion','same-source-delete',?,'sub_same','stripe',1)`, u.ID, now, now+1000, now+1000, u.ID, now, now, string(raw), now+60, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`UPDATE subscription_sources SET status='canceled',event_at=200 WHERE user_id=? AND provider='stripe' AND external_id='sub_same'`, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.FinishBillingCancellation(context.Background(), "same-source-delete", "claim", 1, 0, string(raw), "", true, 0, now); err != nil {
+		t.Fatal(err)
+	}
+	var state string
+	var released int64
+	if err := store.db.QueryRow(`SELECT state FROM billing_cancellation_outbox WHERE id='same-source-delete'`).Scan(&state); err != nil || state != "terminal" {
+		t.Fatalf("same-source state=%s err=%v", state, err)
+	}
+	if err := store.db.QueryRow(`SELECT subject_released_at FROM billing_deletion_holds WHERE billing_subject_id=?`, u.ID).Scan(&released); err != nil || released != now {
+		t.Fatalf("same-source hold=%d err=%v", released, err)
+	}
+}
+
+func TestAccountDeletionSnapshotChangeStaysPendingAndPreservesCurrentSource(t *testing.T) {
+	store := newTestStore(t)
+	seedTiers(t, store)
+	u := newEntitlementUser(t, store, "changed-source-delete@example.test")
+	apply(t, store, u.ID, ProviderStripe, "pro", "active", "yearly", fixedNow+86400, 200)
+	if _, err := store.db.Exec(`UPDATE subscription_sources SET external_id='sub_new' WHERE user_id=? AND provider='stripe'; INSERT INTO billing_authorities(user_id,provider,epoch,intent_id,created_at,updated_at) VALUES(?,'stripe',2,'new-source-authority',1,1)`, u.ID, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().Unix()
+	p := BillingDeletionProgress{Customers: []string{"cus_old"}, Resources: map[string]BillingDeletionResource{"subscription:sub_old": {Kind: "subscription", ID: "sub_old", Terminal: true}}, CleanSince: now - 86401}
+	raw, _ := json.Marshal(p)
+	if _, err := store.db.Exec(`INSERT INTO billing_deletion_holds(billing_subject_id,email_hmac,provider,created_at,expires_at,review_at) VALUES(?,X'04','stripe',?,?,?); INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation,progress_json,claim_token,claim_until,mode,deletion_epoch,cutoff_at,captured_source_id,captured_authority_provider,captured_authority_epoch) VALUES('changed-source-delete',?,'stripe','changed-source-key','pending',?,?,1,?,'claim',?,'account_deletion','changed-source-delete',?,'sub_old','stripe',1)`, u.ID, now, now+1000, now+1000, u.ID, now, now, string(raw), now+60, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.FinishBillingCancellation(context.Background(), "changed-source-delete", "claim", 1, 0, string(raw), "", true, 0, now); err != nil {
+		t.Fatal(err)
+	}
+	var state, lastError string
+	if err := store.db.QueryRow(`SELECT state,last_error FROM billing_cancellation_outbox WHERE id='changed-source-delete'`).Scan(&state, &lastError); err != nil || state != "pending" || lastError == "" {
+		t.Fatalf("changed-source state=%s lastError=%q err=%v", state, lastError, err)
+	}
+	got := mustUser(t, store, u.ID)
+	if got.PlanID != "pro" || got.PlanSource != ProviderStripe {
+		t.Fatalf("changed source overwritten: plan=%s source=%s", got.PlanID, got.PlanSource)
 	}
 }
 
@@ -174,6 +231,61 @@ func TestLateOldChargeCreatesExactCompensationWithoutCurrentCustomerInventory(t 
 	}
 }
 
+func TestExactCompensationRejectsNonPaymentResources(t *testing.T) {
+	store := newTestStore(t)
+	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{"checkout_session:cs_old": {Kind: "checkout_session", ID: "cs_old", Terminal: true}}}
+	raw, _ := json.Marshal(p)
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation,progress_json,terminal_at,mode,deletion_epoch,cutoff_at) VALUES('old-nonpayment','subject','stripe','old-nonpayment-key','terminal',1,1,1,?,1,'account_deletion','epoch-old',1)`, string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := store.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if handled, err := appendExactStripeCompensationTx(context.Background(), tx, "subject", "old-nonpayment", []BillingDeletionResource{{Kind: "checkout_session", ID: "cs_old"}}); err == nil || handled {
+		t.Fatalf("non-payment exact task handled=%v err=%v", handled, err)
+	}
+	var count int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM billing_cancellation_outbox WHERE mode='exact_compensation'`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("non-payment exact rows=%d err=%v", count, err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO stripe_customer_history(user_id,customer_id,created_at) VALUES('subject','cus_old',1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AppendStripeCustomerDeletionHazards(context.Background(), "cus_old", []BillingDeletionResource{{Kind: "checkout_session", ID: "cs_old"}}); err == nil {
+		t.Fatal("late non-payment event was silently ACKed")
+	}
+	if err := store.db.QueryRow(`SELECT COUNT(*) FROM billing_cancellation_outbox WHERE mode='exact_compensation'`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("late non-payment exact rows=%d err=%v", count, err)
+	}
+}
+
+func TestLatePaymentMatchingMultipleDeletionEpochsFailsClosed(t *testing.T) {
+	store := newTestStore(t)
+	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{"payment_intent:pi_shared": {Kind: "payment_intent", ID: "pi_shared", Terminal: true}}}
+	raw, _ := json.Marshal(p)
+	for _, row := range []struct{ id, epoch, key string }{{"old-a", "epoch-a", "key-a"}, {"old-b", "epoch-b", "key-b"}} {
+		if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation,progress_json,terminal_at,mode,deletion_epoch,cutoff_at) VALUES(?,?, 'stripe',?,'terminal',1,1,(SELECT COALESCE(MAX(generation),0)+1 FROM billing_cancellation_outbox WHERE billing_subject_id='subject'),?,1,'account_deletion',?,1)`, row.id, "subject", row.key, string(raw), row.epoch); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.db.Exec(`INSERT INTO stripe_customer_history(user_id,customer_id,created_at) VALUES('subject','cus_shared',1)`); err != nil {
+		t.Fatal(err)
+	}
+	err := store.AppendStripeCustomerDeletionHazards(context.Background(), "cus_shared", []BillingDeletionResource{{Kind: "payment_intent", ID: "pi_shared", SuccessAt: 2}})
+	if err == nil {
+		t.Fatal("ambiguous deletion epochs accepted")
+	}
+	var count int
+	if err := store.db.QueryRow(`SELECT COUNT(*) FROM billing_cancellation_outbox WHERE state='pending'`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("ambiguous exact rows=%d err=%v", count, err)
+	}
+}
+
 func (b *deletionStripeBiller) DiscoverDeletionHazards(ctx context.Context, row BillingCancellation, p BillingDeletionProgress) (BillingDeletionProgress, error) {
 	b.discoverCalls++
 	p.Customers = appendUnique(p.Customers, row.CustomerID)
@@ -204,7 +316,7 @@ func TestExactCompensationWorkerNeverRunsCustomerDiscovery(t *testing.T) {
 		"payment_intent:pi_old": {Kind: "payment_intent", ID: "pi_old", PaymentIntentID: "pi_old", Status: "refunded"},
 	}}
 	raw, _ := json.Marshal(p)
-	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,idempotency_key,state,created_at,updated_at,generation,progress_json,next_attempt_at,mode,deletion_epoch,cutoff_at,captured_source_id,captured_source_event_at) VALUES('exact-worker',?,'stripe','cus_old','exact-worker-key','pending',?,?,2,?,0,'exact_compensation','old-epoch',100,'sub_old',100)`, u.ID, now, now, string(raw)); err != nil {
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,idempotency_key,state,created_at,updated_at,generation,progress_json,next_attempt_at,mode,deletion_epoch,cutoff_at,captured_source_id) VALUES('exact-worker',?,'stripe','cus_old','exact-worker-key','pending',?,?,2,?,0,'exact_compensation','old-epoch',100,'sub_old')`, u.ID, now, now, string(raw)); err != nil {
 		t.Fatal(err)
 	}
 	svc.ReconcileBillingCancellations(context.Background())

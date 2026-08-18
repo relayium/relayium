@@ -341,7 +341,7 @@ func TestStripeDeletionUsesInvoicePaidAtNotObjectCreated(t *testing.T) {
 		paidAt     int64
 		wantManual bool
 		wantStatus string
-	}{{"paid before deletion", 95, false, "paid_before_deletion"}, {"created before but paid after deletion", 110, true, "paid_after_deletion"}} {
+	}{{"paid before deletion", 95, false, "paid_before_deletion"}, {"paid in deletion second", 100, true, "paid_at_deletion_time_unknown"}, {"created before but paid after deletion", 110, true, "paid_after_deletion"}} {
 		t.Run(tc.name, func(t *testing.T) {
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
@@ -409,6 +409,24 @@ func TestStripeDeletionChargeCreatedBeforeSucceededAfterUsesWebhookSuccessAt(t *
 	}
 	if r := got.Resources["charge:ch_async"]; !r.Manual || r.Status != "succeeded_after_deletion" || r.ProviderCreatedAt != 90 || r.SuccessAt != 110 {
 		t.Fatalf("charge=%+v", r)
+	}
+}
+
+func TestStripeDeletionChargeSucceededInDeletionSecondRequiresRefundReview(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"ch_same_second","paid":true,"created":90,"customer":"cus_1"}`)
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+	c.base, c.http = ts.URL, ts.Client()
+	p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{"charge:ch_same_second": {Kind: "charge", ID: "ch_same_second", CustomerID: "cus_1", SuccessAt: 100, Status: "webhook"}}}
+	got, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", CreatedAt: 100, CutoffAt: 100, IdempotencyKey: "delete"}, p)
+	if err == nil {
+		t.Fatal("same-second charge was classified before deletion")
+	}
+	if r := got.Resources["charge:ch_same_second"]; !r.Manual || r.Status != "succeeded_at_deletion_time_unknown" {
+		t.Fatalf("same-second charge=%+v", r)
 	}
 }
 

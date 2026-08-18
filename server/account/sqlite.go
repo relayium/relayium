@@ -1063,7 +1063,6 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
  cutoff_at INTEGER NOT NULL DEFAULT 0,
  parent_outbox_id TEXT NOT NULL DEFAULT '',
  captured_source_id TEXT NOT NULL DEFAULT '',
- captured_source_event_at INTEGER NOT NULL DEFAULT 0,
  captured_authority_provider TEXT NOT NULL DEFAULT '',
  captured_authority_epoch INTEGER NOT NULL DEFAULT 0,
  UNIQUE(billing_subject_id,provider,generation))`,

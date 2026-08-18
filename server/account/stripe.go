@@ -995,7 +995,7 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				p.add(BillingDeletionResource{Kind: "charge", ID: obj.Charge, PaymentIntentID: obj.PaymentIntent, InvoiceID: r.ID, CustomerID: r.CustomerID, Status: "invoice_link", SuccessAt: obj.StatusTransitions.PaidAt})
 			}
 			if obj.Status == "paid" {
-				if obj.StatusTransitions.PaidAt > 0 && obj.StatusTransitions.PaidAt <= cutoffAt {
+				if obj.StatusTransitions.PaidAt > 0 && obj.StatusTransitions.PaidAt < cutoffAt {
 					r.Terminal = true
 					r.Status = "paid_before_deletion"
 					break
@@ -1003,6 +1003,8 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				r.Manual = true
 				if obj.StatusTransitions.PaidAt > cutoffAt {
 					r.Status = "paid_after_deletion"
+				} else if obj.StatusTransitions.PaidAt == cutoffAt {
+					r.Status = "paid_at_deletion_time_unknown"
 				} else {
 					r.Status = "paid_time_unknown"
 				}
@@ -1069,7 +1071,7 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				p.add(BillingDeletionResource{Kind: "invoice", ID: obj.Invoice, CustomerID: r.CustomerID, Status: "charge_link"})
 			}
 			if obj.Paid || obj.Status == "succeeded" {
-				if r.SuccessAt > 0 && r.SuccessAt <= cutoffAt {
+				if r.SuccessAt > 0 && r.SuccessAt < cutoffAt {
 					r.Terminal = true
 					r.Status = "succeeded_before_deletion"
 					break
@@ -1077,6 +1079,8 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				r.Manual = true
 				if r.SuccessAt > cutoffAt {
 					r.Status = "succeeded_after_deletion"
+				} else if r.SuccessAt == cutoffAt {
+					r.Status = "succeeded_at_deletion_time_unknown"
 				} else {
 					r.Status = "succeeded_time_unknown"
 				}

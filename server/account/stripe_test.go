@@ -326,6 +326,9 @@ func TestVerifyWebhookProjectsRefundFailureIdentity(t *testing.T) {
 	if err != nil || ev.RefundID != "re_failed" || ev.PaymentIntentID != "pi_1" || ev.MetadataDeletionActionID != "bdr_1" {
 		t.Fatalf("refund failure projection=%+v err=%v", ev, err)
 	}
+	if ev.Status != "" || stripeRefundLifecycleStatus(ev) != "failed" {
+		t.Fatalf("nullable refund failure status was not forced failed: event=%+v lifecycle=%q", ev, stripeRefundLifecycleStatus(ev))
+	}
 }
 
 func TestStripeCatalogStartupGateRejectsMeteredPrice(t *testing.T) {
