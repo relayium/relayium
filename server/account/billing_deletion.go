@@ -27,6 +27,8 @@ type BillingDeletionResource struct {
 	Kind              string `json:"kind"`
 	ID                string `json:"id"`
 	AttemptID         string `json:"attemptId,omitempty"`
+	PaymentIntentID   string `json:"paymentIntentId,omitempty"`
+	InvoiceID         string `json:"invoiceId,omitempty"`
 	CustomerID        string `json:"customerId,omitempty"`
 	Status            string `json:"status"`
 	Terminal          bool   `json:"terminal"`
@@ -69,6 +71,12 @@ func (p *BillingDeletionProgress) add(r BillingDeletionResource) {
 		}
 		if r.CustomerID == "" {
 			r.CustomerID = old.CustomerID
+		}
+		if r.PaymentIntentID == "" {
+			r.PaymentIntentID = old.PaymentIntentID
+		}
+		if r.InvoiceID == "" {
+			r.InvoiceID = old.InvoiceID
 		}
 		if old.SuccessAt > r.SuccessAt {
 			r.SuccessAt = old.SuccessAt
@@ -502,6 +510,16 @@ func (s *SQLiteStore) AppendStripeDeletionHazard(ctx context.Context, userID str
 }
 
 func appendStripeDeletionHazardsTx(ctx context.Context, tx *sql.Tx, userID string, resources []BillingDeletionResource) error {
+	valid := resources[:0]
+	for _, r := range resources {
+		if r.ID != "" {
+			valid = append(valid, r)
+		}
+	}
+	resources = valid
+	if len(resources) == 0 {
+		return nil
+	}
 	rows, err := tx.QueryContext(ctx, `SELECT id,progress_json FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider='stripe' AND state='pending'`, userID)
 	if err != nil {
 		return err
@@ -517,6 +535,31 @@ func appendStripeDeletionHazardsTx(ctx context.Context, tx *sql.Tx, userID strin
 		all = append(all, v)
 	}
 	if err := rows.Close(); err != nil {
+		return err
+	}
+	if len(all) == 0 {
+		var previous BillingCancellation
+		err := tx.QueryRowContext(ctx, `SELECT customer_id,subscription_id,generation FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider='stripe' AND state='terminal' ORDER BY generation DESC LIMIT 1`, userID).
+			Scan(&previous.CustomerID, &previous.SubscriptionID, &previous.Generation)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{}}
+		p.Customers = appendUnique(p.Customers, previous.CustomerID)
+		for _, r := range resources {
+			p.Customers = appendUnique(p.Customers, r.CustomerID)
+			p.add(r)
+		}
+		encoded, _ := json.Marshal(p)
+		id := authx.NewID()
+		now := time.Now().Unix()
+		if _, err := tx.ExecContext(ctx, `INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at,progress_json,generation,next_attempt_at) VALUES(?,?,?,?,?,?,'pending',0,?,?,?,?,?)`, id, userID, ProviderStripe, previous.CustomerID, previous.SubscriptionID, "relayium-account-delete-late-"+id, now, now, string(encoded), previous.Generation+1, now); err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE billing_deletion_holds SET subject_released_at=0,review_at=MAX(review_at,?) WHERE billing_subject_id=?`, now+billingDeletionReviewDays*86400, userID)
 		return err
 	}
 	for _, v := range all {

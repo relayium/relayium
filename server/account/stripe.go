@@ -757,6 +757,8 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 		switch r.Kind {
 		case "checkout_session":
 			r.ProviderCreatedAt = obj.Created
+			r.PaymentIntentID = obj.PaymentIntent
+			r.InvoiceID = obj.Invoice
 			if obj.AfterExpiration != nil || obj.RecoveredFrom != "" {
 				r.Status = "recovery_lineage_pending"
 				p.Resources[resourceKey] = r
@@ -771,10 +773,10 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				p.add(BillingDeletionResource{Kind: "subscription", ID: obj.Subscription, CustomerID: obj.Customer, Status: "session_link"})
 			}
 			if obj.PaymentIntent != "" {
-				p.add(BillingDeletionResource{Kind: "payment_intent", ID: obj.PaymentIntent, CustomerID: obj.Customer, Status: "session_link"})
+				p.add(BillingDeletionResource{Kind: "payment_intent", ID: obj.PaymentIntent, PaymentIntentID: obj.PaymentIntent, CustomerID: obj.Customer, Status: "session_link"})
 			}
 			if obj.Invoice != "" {
-				p.add(BillingDeletionResource{Kind: "invoice", ID: obj.Invoice, CustomerID: obj.Customer, Status: "session_link"})
+				p.add(BillingDeletionResource{Kind: "invoice", ID: obj.Invoice, InvoiceID: obj.Invoice, CustomerID: obj.Customer, Status: "session_link"})
 			}
 			if obj.PaymentStatus == "paid" {
 				if obj.Subscription == "" && obj.Invoice == "" && obj.PaymentIntent == "" {
@@ -833,11 +835,13 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			}
 		case "invoice":
 			r.ProviderCreatedAt = obj.Created
+			r.PaymentIntentID = obj.PaymentIntent
+			r.InvoiceID = r.ID
 			if obj.PaymentIntent != "" {
-				p.add(BillingDeletionResource{Kind: "payment_intent", ID: obj.PaymentIntent, CustomerID: r.CustomerID, Status: "invoice_link", SuccessAt: obj.StatusTransitions.PaidAt})
+				p.add(BillingDeletionResource{Kind: "payment_intent", ID: obj.PaymentIntent, PaymentIntentID: obj.PaymentIntent, InvoiceID: r.ID, CustomerID: r.CustomerID, Status: "invoice_link", SuccessAt: obj.StatusTransitions.PaidAt})
 			}
 			if obj.Charge != "" {
-				p.add(BillingDeletionResource{Kind: "charge", ID: obj.Charge, CustomerID: r.CustomerID, Status: "invoice_link", SuccessAt: obj.StatusTransitions.PaidAt})
+				p.add(BillingDeletionResource{Kind: "charge", ID: obj.Charge, PaymentIntentID: obj.PaymentIntent, InvoiceID: r.ID, CustomerID: r.CustomerID, Status: "invoice_link", SuccessAt: obj.StatusTransitions.PaidAt})
 			}
 			if obj.Status == "paid" {
 				if obj.StatusTransitions.PaidAt > 0 && obj.StatusTransitions.PaidAt <= row.CreatedAt {
@@ -869,6 +873,7 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			}
 		case "payment_intent":
 			r.ProviderCreatedAt = obj.Created
+			r.PaymentIntentID = r.ID
 			if obj.Status == "canceled" {
 				r.Terminal = true
 				r.Status = "canceled"
@@ -876,7 +881,7 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			}
 			if obj.Status == "succeeded" {
 				if obj.LatestCharge != "" {
-					p.add(BillingDeletionResource{Kind: "charge", ID: obj.LatestCharge, CustomerID: r.CustomerID, Status: "payment_intent_link", SuccessAt: r.SuccessAt})
+					p.add(BillingDeletionResource{Kind: "charge", ID: obj.LatestCharge, PaymentIntentID: r.ID, InvoiceID: r.InvoiceID, CustomerID: r.CustomerID, Status: "payment_intent_link", SuccessAt: r.SuccessAt})
 					r.Terminal = true
 					r.Status = "delegated_to_charge"
 					break
@@ -899,6 +904,8 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			return p, errors.New("stripe: checkout payment intent remains provider-managed")
 		case "charge":
 			r.ProviderCreatedAt = obj.Created
+			r.PaymentIntentID = obj.PaymentIntent
+			r.InvoiceID = obj.Invoice
 			if obj.PaymentIntent != "" {
 				p.add(BillingDeletionResource{Kind: "payment_intent", ID: obj.PaymentIntent, CustomerID: r.CustomerID, Status: "charge_link"})
 			}

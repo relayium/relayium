@@ -14,6 +14,7 @@ func TestManualDeletionRefundRequiresCanonicalSuccessAndIsIdempotent(t *testing.
 	store := newTestStore(t)
 	p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{
 		"invoice:in_paid": {Kind: "invoice", ID: "in_paid", CustomerID: "cus_1", Status: "paid_after_deletion", Manual: true},
+		"charge:ch_paid":  {Kind: "charge", ID: "ch_paid", PaymentIntentID: "pi_paid", CustomerID: "cus_1", Status: "succeeded_after_deletion", Manual: true},
 	}}
 	raw, _ := json.Marshal(p)
 	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,progress_json,created_at,updated_at,generation,next_attempt_at) VALUES('out_manual','subject','stripe','delete-key','pending',?,1,1,1,1)`, string(raw)); err != nil {
@@ -21,6 +22,7 @@ func TestManualDeletionRefundRequiresCanonicalSuccessAndIsIdempotent(t *testing.
 	}
 	var posts int
 	var actionID string
+	var refunded bool
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method + " " + r.URL.Path {
@@ -28,12 +30,21 @@ func TestManualDeletionRefundRequiresCanonicalSuccessAndIsIdempotent(t *testing.
 			io.WriteString(w, `{"id":"in_paid","payment_intent":"pi_paid"}`)
 		case "GET /v1/refunds":
 			io.WriteString(w, `{"data":[]}`)
+		case "GET /v1/payment_intents/pi_paid":
+			io.WriteString(w, `{"id":"pi_paid","latest_charge":"ch_paid"}`)
+		case "GET /v1/charges/ch_paid":
+			if refunded {
+				io.WriteString(w, `{"id":"ch_paid","payment_intent":"pi_paid","amount":500,"amount_refunded":500,"refunded":true}`)
+			} else {
+				io.WriteString(w, `{"id":"ch_paid","payment_intent":"pi_paid","amount":500,"amount_refunded":0,"refunded":false}`)
+			}
 		case "POST /v1/refunds":
 			posts++
+			refunded = true
 			body, _ := io.ReadAll(r.Body)
 			form, _ := url.ParseQuery(string(body))
 			actionID = form.Get("metadata[relayium_deletion_action_id]")
-			if form.Get("payment_intent") != "pi_paid" || actionID == "" || r.Header.Get("Idempotency-Key") != "acct-delete-refund:"+actionID {
+			if form.Get("payment_intent") != "pi_paid" || form.Get("amount") != "500" || actionID == "" || r.Header.Get("Idempotency-Key") != "acct-delete-refund:"+actionID {
 				t.Fatalf("unsafe refund request form=%v key=%q", form, r.Header.Get("Idempotency-Key"))
 			}
 			io.WriteString(w, `{"id":"re_safe"}`)
@@ -66,7 +77,7 @@ func TestManualDeletionRefundRequiresCanonicalSuccessAndIsIdempotent(t *testing.
 	if actor != "operator@example.test" || reason != "verified duplicate charge" || state != "succeeded" {
 		t.Fatalf("audit actor=%q reason=%q state=%q", actor, reason, state)
 	}
-	if _, err := ResolveBillingDeletionRefund(context.Background(), store, c, "out_manual", "invoice:in_paid", actor, reason); err != nil {
+	if _, err := ResolveBillingDeletionRefund(context.Background(), store, c, "out_manual", "charge:ch_paid", actor, reason); err != nil {
 		t.Fatal(err)
 	}
 	if posts != 1 {
@@ -84,6 +95,14 @@ func TestManualDeletionRefundDoesNotAcceptPendingCanonicalRefund(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == http.MethodGet && r.URL.Path == "/v1/refunds" {
 			io.WriteString(w, `{"data":[]}`)
+			return
+		}
+		if r.URL.Path == "/v1/payment_intents/pi_pending" {
+			io.WriteString(w, `{"id":"pi_pending","latest_charge":"ch_pending"}`)
+			return
+		}
+		if r.URL.Path == "/v1/charges/ch_pending" {
+			io.WriteString(w, `{"id":"ch_pending","payment_intent":"pi_pending","amount":500,"amount_refunded":0,"refunded":false}`)
 			return
 		}
 		if r.Method == http.MethodPost {
@@ -114,6 +133,7 @@ func TestManualCheckoutRefundFollowsSubscriptionLatestInvoice(t *testing.T) {
 	raw, _ := json.Marshal(p)
 	_, _ = store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,progress_json,created_at,updated_at,generation,next_attempt_at) VALUES('out_checkout','subject','stripe','checkout-key','pending',?,1,1,1,1)`, string(raw))
 	var actionID string
+	var refunded bool
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method + " " + r.URL.Path {
@@ -125,7 +145,16 @@ func TestManualCheckoutRefundFollowsSubscriptionLatestInvoice(t *testing.T) {
 			io.WriteString(w, `{"id":"in_paid","payment_intent":"pi_paid"}`)
 		case "GET /v1/refunds":
 			io.WriteString(w, `{"data":[]}`)
+		case "GET /v1/payment_intents/pi_paid":
+			io.WriteString(w, `{"id":"pi_paid","latest_charge":"ch_paid"}`)
+		case "GET /v1/charges/ch_paid":
+			if refunded {
+				io.WriteString(w, `{"id":"ch_paid","payment_intent":"pi_paid","amount":500,"amount_refunded":500,"refunded":true}`)
+			} else {
+				io.WriteString(w, `{"id":"ch_paid","payment_intent":"pi_paid","amount":500,"amount_refunded":0,"refunded":false}`)
+			}
 		case "POST /v1/refunds":
+			refunded = true
 			body, _ := io.ReadAll(r.Body)
 			form, _ := url.ParseQuery(string(body))
 			actionID = form.Get("metadata[relayium_deletion_action_id]")

@@ -1073,6 +1073,8 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
  created_at INTEGER NOT NULL,
  updated_at INTEGER NOT NULL,
  UNIQUE(outbox_id,resource_key))`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_billing_manual_refund_payment
+ ON billing_deletion_manual_actions(outbox_id,payment_intent_id) WHERE payment_intent_id<>''`,
 		`CREATE TABLE IF NOT EXISTS stripe_customer_history (
  user_id TEXT NOT NULL,
  customer_id TEXT NOT NULL,
