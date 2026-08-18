@@ -791,6 +791,75 @@ func (s *SQLiteStore) AppendStripeActiveAccountDeletionHazard(ctx context.Contex
 	return tx.Commit()
 }
 
+// AppendStripeActiveAccountDeletionHazardForCustomer resolves an active
+// deletion through durable Stripe customer history before current billing
+// authority acquisition. This lets a frozen/deleting account retain signed
+// Checkout failure/expiry evidence without reopening billing authority.
+func (s *SQLiteStore) AppendStripeActiveAccountDeletionHazardForCustomer(ctx context.Context, customerID, userHint string, r BillingDeletionResource) (bool, error) {
+	if customerID == "" || r.ID == "" {
+		return false, nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT o.billing_subject_id FROM billing_cancellation_outbox o JOIN stripe_customer_history h ON h.user_id=o.billing_subject_id AND h.customer_id=? WHERE o.provider='stripe' AND o.state='pending' AND o.mode='account_deletion' ORDER BY o.billing_subject_id LIMIT 2`, customerID)
+	if err != nil {
+		return false, err
+	}
+	var subjects []string
+	for rows.Next() {
+		var subject string
+		if err := rows.Scan(&subject); err != nil {
+			rows.Close()
+			return false, err
+		}
+		subjects = append(subjects, subject)
+	}
+	if err := rows.Close(); err != nil {
+		return false, err
+	}
+	if len(subjects) == 0 {
+		return false, nil
+	}
+	if len(subjects) != 1 || (userHint != "" && userHint != subjects[0]) {
+		return false, errors.New("account: active deletion Checkout ownership is ambiguous")
+	}
+	rows, err = tx.QueryContext(ctx, `SELECT id,progress_json FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider='stripe' AND state='pending' AND mode='account_deletion'`, subjects[0])
+	if err != nil {
+		return false, err
+	}
+	type pending struct{ id, raw string }
+	var pendingRows []pending
+	for rows.Next() {
+		var row pending
+		if err := rows.Scan(&row.id, &row.raw); err != nil {
+			rows.Close()
+			return false, err
+		}
+		pendingRows = append(pendingRows, row)
+	}
+	if err := rows.Close(); err != nil {
+		return false, err
+	}
+	for _, row := range pendingRows {
+		p, err := decodeDeletionProgressStrict(row.raw)
+		if err != nil {
+			return false, err
+		}
+		p.add(r)
+		encoded, err := json.Marshal(p)
+		if err != nil {
+			return false, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET progress_json=?,revision=revision+1,updated_at=unixepoch() WHERE id=? AND state='pending' AND mode='account_deletion'`, string(encoded), row.id); err != nil {
+			return false, err
+		}
+	}
+	return true, tx.Commit()
+}
+
 func appendStripeDeletionHazardsTx(ctx context.Context, tx *sql.Tx, userID string, resources []BillingDeletionResource) error {
 	valid := resources[:0]
 	for _, r := range resources {

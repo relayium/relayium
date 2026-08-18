@@ -223,9 +223,14 @@ func TestLateAsyncCheckoutSuccessPersistsExactPaymentChainBeforeACK(t *testing.T
 func TestAsyncCheckoutSuccessWithoutCanonicalPaymentChainIsRetried(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_async_no_chain"
+	var reads int
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reads++
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, `{"id":"cs_no_chain","customer":"cus_no_chain","payment_status":"paid"}`)
+		if r.URL.Path != "/v1/checkout/sessions/cs_no_chain" {
+			t.Fatalf("current subscription invoice was read: %s", r.URL.Path)
+		}
+		io.WriteString(w, `{"id":"cs_no_chain","customer":"cus_no_chain","subscription":"sub_current_renewal","payment_status":"paid"}`)
 	}))
 	defer provider.Close()
 	client := newWebhookFixtureClient(secret)
@@ -239,9 +244,55 @@ func TestAsyncCheckoutSuccessWithoutCanonicalPaymentChainIsRetried(t *testing.T)
 	if resp.StatusCode < 500 {
 		t.Fatalf("missing canonical chain ACKed with %d", resp.StatusCode)
 	}
+	if reads != 1 {
+		t.Fatalf("canonical reads=%d want session only", reads)
+	}
 	var status string
 	if err := store.db.QueryRow(`SELECT status FROM stripe_webhook_events WHERE event_id='evt_async_no_chain'`).Scan(&status); err != nil || status != "failed" {
 		t.Fatalf("missing-chain ledger status=%s err=%v", status, err)
+	}
+}
+
+func TestDeletingAccountPersistsFailedAndExpiredCheckoutBeforeAuthority(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	secret := "whsec_deleting_checkout"
+	svc.biller = newWebhookFixtureClient(secret)
+	loginCookie(t, ts, mail, "deleting-checkout@example.test")
+	uid := mustUserID(t, store, "deleting-checkout@example.test")
+	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_deleting_checkout"); err != nil {
+		t.Fatal(err)
+	}
+	p := BillingDeletionProgress{Customers: []string{"cus_deleting_checkout"}, Resources: map[string]BillingDeletionResource{}}
+	raw, _ := json.Marshal(p)
+	if _, err := store.db.Exec(`INSERT INTO billing_deletion_holds(billing_subject_id,email_hmac,provider,created_at,expires_at,review_at) VALUES(?,X'05','stripe',1,1000,1000)`, uid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,idempotency_key,state,created_at,updated_at,generation,progress_json,mode,deletion_epoch,cutoff_at) VALUES('deleting-checkout',?,'stripe','cus_deleting_checkout','deleting-checkout-key','pending',1,1,1,?,'account_deletion','deleting-checkout',1)`, uid, string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	var mapped, pending int
+	if err := store.db.QueryRow(`SELECT (SELECT COUNT(*) FROM stripe_customer_history WHERE user_id=? AND customer_id='cus_deleting_checkout'),(SELECT COUNT(*) FROM billing_cancellation_outbox WHERE billing_subject_id=? AND state='pending' AND mode='account_deletion')`, uid, uid).Scan(&mapped, &pending); err != nil || mapped != 1 || pending != 1 {
+		t.Fatalf("deletion mapping=%d pending=%d err=%v", mapped, pending, err)
+	}
+	for i, eventType := range []string{"checkout.session.async_payment_failed", "checkout.session.expired"} {
+		body := fmt.Sprintf(`{"id":"evt_deleting_checkout_%d","type":%q,"created":%d,"livemode":false,"data":{"object":{"id":"cs_deleting_%d","object":"checkout.session","customer":"cus_deleting_checkout"}}}`, i, eventType, 10+i, i)
+		resp := postWebhook(t, ts, secret, body)
+		responseBody, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s status=%d body=%s", eventType, resp.StatusCode, responseBody)
+		}
+	}
+	var progress string
+	if err := store.db.QueryRow(`SELECT progress_json FROM billing_cancellation_outbox WHERE id='deleting-checkout'`).Scan(&progress); err != nil {
+		t.Fatal(err)
+	}
+	got := decodeDeletionProgress(progress)
+	if r := got.Resources["checkout_session:cs_deleting_0"]; r.AsyncFailureAt != 10 || r.Status != "checkout.session.async_payment_failed" {
+		t.Fatalf("failed observation=%+v", r)
+	}
+	if r := got.Resources["checkout_session:cs_deleting_1"]; r.Status != "checkout.session.expired" {
+		t.Fatalf("expired observation=%+v", r)
 	}
 }
 

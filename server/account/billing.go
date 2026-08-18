@@ -1164,12 +1164,31 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		// Payment facts are journaled before account/authority binding. A late
 		// payment belongs to its captured deletion epoch even if the account has
 		// since reactivated under a different current billing authority.
+		successAt := int64(0)
+		if checkoutPaid {
+			successAt = ev.Created
+		}
 		if journal, ok := s.Store().(interface {
 			AppendStripeCustomerDeletionHazards(context.Context, string, []BillingDeletionResource) error
 		}); ok {
-			if err := journal.AppendStripeCustomerDeletionHazards(ctx, ev.CustomerID, []BillingDeletionResource{{Kind: "invoice", ID: ev.InvoiceID, Status: "webhook"}, {Kind: "payment_intent", ID: ev.PaymentIntentID, Status: "webhook", SuccessAt: ev.Created}, {Kind: "charge", ID: ev.ChargeID, PaymentIntentID: ev.PaymentIntentID, Status: "webhook", SuccessAt: ev.Created}}); err != nil {
+			if err := journal.AppendStripeCustomerDeletionHazards(ctx, ev.CustomerID, []BillingDeletionResource{{Kind: "invoice", ID: ev.InvoiceID, Status: "webhook"}, {Kind: "payment_intent", ID: ev.PaymentIntentID, Status: "webhook", SuccessAt: successAt}, {Kind: "charge", ID: ev.ChargeID, PaymentIntentID: ev.PaymentIntentID, Status: "webhook", SuccessAt: successAt}}); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
+			}
+		}
+		if ev.CheckoutSessionID != "" {
+			if journal, ok := s.Store().(interface {
+				AppendStripeActiveAccountDeletionHazardForCustomer(context.Context, string, string, BillingDeletionResource) (bool, error)
+			}); ok {
+				recorded, err := journal.AppendStripeActiveAccountDeletionHazardForCustomer(ctx, ev.CustomerID, ev.ClientRefUserID, checkoutDeletionObservation(ev))
+				if err != nil {
+					http.Error(w, "server error", http.StatusInternalServerError)
+					return
+				}
+				if recorded {
+					w.WriteHeader(http.StatusOK)
+					return
+				}
 			}
 		}
 		if ev.ClientRefUserID != "" {
@@ -1192,16 +1211,6 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 				if !ok || binder.BindStripePurchaseSubscription(ctx, ev.ClientRefUserID, ev.MetadataBillingAttemptID, ev.CheckoutSessionID, ev.SubscriptionID) != nil {
 					http.Error(w, "server error", http.StatusInternalServerError)
 					return
-				}
-			}
-			if ev.CheckoutSessionID != "" {
-				if journal, ok := s.Store().(interface {
-					AppendStripeActiveAccountDeletionHazard(context.Context, string, BillingDeletionResource) error
-				}); ok {
-					if err := journal.AppendStripeActiveAccountDeletionHazard(ctx, ev.ClientRefUserID, checkoutDeletionObservation(ev)); err != nil {
-						http.Error(w, "server error", http.StatusInternalServerError)
-						return
-					}
 				}
 			}
 		}

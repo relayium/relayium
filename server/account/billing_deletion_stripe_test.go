@@ -394,6 +394,40 @@ func TestStripeDeletionPaymentIntentUsesLatestChargeSuccessTime(t *testing.T) {
 	}
 }
 
+func TestCanonicalSuccessWithoutVerifiedSuccessTimeCannotBeClassifiedBeforeDeletion(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/payment_intents/pi_missing_time":
+			io.WriteString(w, `{"id":"pi_missing_time","status":"succeeded","created":90,"customer":"cus_1","latest_charge":"ch_missing_time"}`)
+		case "/v1/charges/ch_missing_time":
+			io.WriteString(w, `{"id":"ch_missing_time","paid":true,"created":90,"customer":"cus_1","payment_intent":"pi_missing_time"}`)
+		default:
+			http.Error(w, "unexpected", http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+	c.base, c.http = ts.URL, ts.Client()
+	p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{
+		"payment_intent:pi_missing_time": {Kind: "payment_intent", ID: "pi_missing_time", CustomerID: "cus_1", Status: "checkout.session.async_payment_failed"},
+	}}
+	row := BillingCancellation{BillingSubjectID: "subject", CutoffAt: 100, CreatedAt: 100, IdempotencyKey: "delete"}
+	var err error
+	for i := 0; i < 2; i++ {
+		p, err = c.ReconcileDeletionHazards(context.Background(), row, p)
+		if p.Resources["charge:ch_missing_time"].Manual {
+			break
+		}
+	}
+	if err == nil {
+		t.Fatal("canonical success without verified success time reached terminal")
+	}
+	if r := p.Resources["charge:ch_missing_time"]; !r.Manual || r.Status != "succeeded_time_unknown" || r.SuccessAt != 0 {
+		t.Fatalf("missing success evidence charge=%+v", r)
+	}
+}
+
 func TestStripeDeletionChargeCreatedBeforeSucceededAfterUsesWebhookSuccessAt(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

@@ -486,12 +486,6 @@ func (c *stripeClient) canonicalCheckoutPaymentChain(ctx context.Context, sessio
 		return stripeCheckoutPaymentChain{}, fmt.Errorf("stripe: read checkout payment chain: %w", err)
 	}
 	chain := stripeCheckoutPaymentChain{CustomerID: session.Customer, UserID: session.ClientRef, BillingAttemptID: session.Metadata.BillingAttemptID, SubscriptionID: session.Subscription, InvoiceID: session.Invoice, PaymentIntentID: session.PaymentIntent}
-	if chain.InvoiceID == "" && chain.SubscriptionID != "" {
-		chain.InvoiceID, err = c.latestInvoiceID(ctx, chain.SubscriptionID)
-		if err != nil {
-			return stripeCheckoutPaymentChain{}, err
-		}
-	}
 	if chain.InvoiceID != "" {
 		body, err = c.request(ctx, http.MethodGet, "/v1/invoices/"+url.PathEscape(chain.InvoiceID), nil)
 		if err != nil {
