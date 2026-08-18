@@ -16,16 +16,66 @@ const billingDeletionReviewDays = 400
 
 type BillingCancellation struct {
 	ID, BillingSubjectID, Provider, CustomerID, SubscriptionID, IdempotencyKey, State string
-	ProgressJSON                                                                      string
-	Attempts, CreatedAt, UpdatedAt, TerminalAt, ArchivedAt                            int64
+	ProgressJSON, LastError                                                           string
+	Generation, Attempts, CreatedAt, UpdatedAt, TerminalAt, ArchivedAt, NextAttemptAt int64
 }
 
+type BillingDeletionResource struct {
+	Kind       string `json:"kind"`
+	ID         string `json:"id"`
+	CustomerID string `json:"customerId,omitempty"`
+	Status     string `json:"status"`
+	Terminal   bool   `json:"terminal"`
+	Manual     bool   `json:"manual,omitempty"`
+}
 type BillingDeletionProgress struct {
-	CheckoutSessions []string `json:"checkoutSessions,omitempty"`
-	Subscriptions    []string `json:"subscriptions,omitempty"`
-	Schedules        []string `json:"schedules,omitempty"`
-	InvoiceItems     []string `json:"invoiceItems,omitempty"`
-	Invoices         []string `json:"invoices,omitempty"`
+	Customers  []string                           `json:"customers,omitempty"`
+	Resources  map[string]BillingDeletionResource `json:"resources,omitempty"`
+	CleanSince int64                              `json:"cleanSince,omitempty"`
+}
+
+func (p *BillingDeletionProgress) add(r BillingDeletionResource) {
+	if p.Resources == nil {
+		p.Resources = map[string]BillingDeletionResource{}
+	}
+	key := r.Kind + ":" + r.ID
+	if old, ok := p.Resources[key]; ok && old.Terminal {
+		return
+	}
+	if _, ok := p.Resources[key]; !ok || !r.Terminal {
+		p.CleanSince = 0
+	}
+	p.Resources[key] = r
+}
+func (p BillingDeletionProgress) terminal(now int64) bool {
+	if len(p.Customers) == 0 {
+		return false
+	}
+	for _, r := range p.Resources {
+		if !r.Terminal {
+			return false
+		}
+	}
+	return p.CleanSince > 0 && now-p.CleanSince >= 86400
+}
+func decodeDeletionProgress(raw string) BillingDeletionProgress {
+	var p BillingDeletionProgress
+	_ = json.Unmarshal([]byte(raw), &p)
+	if p.Resources == nil {
+		p.Resources = map[string]BillingDeletionResource{}
+	}
+	return p
+}
+func appendUnique(xs []string, v string) []string {
+	if v == "" {
+		return xs
+	}
+	for _, x := range xs {
+		if x == v {
+			return xs
+		}
+	}
+	return append(xs, v)
 }
 
 func (s *SQLiteStore) ConfigureBillingHoldSecret(secret string) error {
@@ -49,7 +99,7 @@ func (s *SQLiteStore) ConfigureBillingHoldSecret(secret string) error {
 		return err
 	} else if !hmac.Equal(existing, fingerprint[:]) {
 		var active int
-		if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM billing_deletion_holds WHERE subject_released_at=0)`).Scan(&active); err != nil {
+		if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM billing_deletion_holds)`).Scan(&active); err != nil {
 			return err
 		}
 		if active != 0 {
@@ -180,7 +230,47 @@ func (s *SQLiteStore) CommitAccountDeletion(ctx context.Context, tokenHash strin
 		}
 		id := authx.NewID()
 		key := "relayium-account-delete-" + id
-		if _, err := tx.ExecContext(ctx, `INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at,progress_json) VALUES(?,?,?,?,?,?,'pending',0,?,?,'{}') ON CONFLICT(billing_subject_id,provider) DO NOTHING`, id, u.ID, ProviderStripe, u.StripeCustomerID, subID, key, now, now); err != nil {
+		var generation int64
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(generation),0)+1 FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider='stripe'`, u.ID).Scan(&generation); err != nil {
+			return nil, false, err
+		}
+		progress := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{}}
+		rows, err := tx.QueryContext(ctx, `SELECT customer_id FROM stripe_customer_history WHERE user_id=? ORDER BY created_at,customer_id`, u.ID)
+		if err != nil {
+			return nil, false, err
+		}
+		for rows.Next() {
+			var c string
+			if err := rows.Scan(&c); err != nil {
+				rows.Close()
+				return nil, false, err
+			}
+			progress.Customers = appendUnique(progress.Customers, c)
+		}
+		if err := rows.Close(); err != nil {
+			return nil, false, err
+		}
+		progress.Customers = appendUnique(progress.Customers, u.StripeCustomerID)
+		attempts, err := tx.QueryContext(ctx, `SELECT provider_session_id FROM billing_purchase_attempts WHERE user_id=? AND provider='stripe' AND provider_session_id<>''`, u.ID)
+		if err != nil {
+			return nil, false, err
+		}
+		for attempts.Next() {
+			var sid string
+			if err := attempts.Scan(&sid); err != nil {
+				attempts.Close()
+				return nil, false, err
+			}
+			progress.add(BillingDeletionResource{Kind: "checkout_session", ID: sid, CustomerID: u.StripeCustomerID, Status: "observed"})
+		}
+		if err := attempts.Close(); err != nil {
+			return nil, false, err
+		}
+		if subID != "" {
+			progress.add(BillingDeletionResource{Kind: "subscription", ID: subID, CustomerID: u.StripeCustomerID, Status: "observed"})
+		}
+		encoded, _ := json.Marshal(progress)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at,progress_json,generation,next_attempt_at) VALUES(?,?,?,?,?,?,'pending',0,?,?,?,?,?)`, id, u.ID, ProviderStripe, u.StripeCustomerID, subID, key, now, now, string(encoded), generation, now); err != nil {
 			return nil, false, err
 		}
 	}
@@ -204,7 +294,7 @@ func (s *SQLiteStore) PendingBillingCancellations(ctx context.Context, limit int
 	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
-	rows, err := s.reader().QueryContext(ctx, `SELECT id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,progress_json,attempts,created_at,updated_at,terminal_at,archived_at FROM billing_cancellation_outbox WHERE state='pending' ORDER BY created_at,id LIMIT ?`, limit)
+	rows, err := s.reader().QueryContext(ctx, `SELECT id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,progress_json,last_error,generation,attempts,created_at,updated_at,terminal_at,archived_at,next_attempt_at FROM billing_cancellation_outbox WHERE state='pending' AND next_attempt_at<=unixepoch() ORDER BY next_attempt_at,updated_at,id LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +302,7 @@ func (s *SQLiteStore) PendingBillingCancellations(ctx context.Context, limit int
 	var out []BillingCancellation
 	for rows.Next() {
 		var c BillingCancellation
-		if err := rows.Scan(&c.ID, &c.BillingSubjectID, &c.Provider, &c.CustomerID, &c.SubscriptionID, &c.IdempotencyKey, &c.State, &c.ProgressJSON, &c.Attempts, &c.CreatedAt, &c.UpdatedAt, &c.TerminalAt, &c.ArchivedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.BillingSubjectID, &c.Provider, &c.CustomerID, &c.SubscriptionID, &c.IdempotencyKey, &c.State, &c.ProgressJSON, &c.LastError, &c.Generation, &c.Attempts, &c.CreatedAt, &c.UpdatedAt, &c.TerminalAt, &c.ArchivedAt, &c.NextAttemptAt); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -220,7 +310,7 @@ func (s *SQLiteStore) PendingBillingCancellations(ctx context.Context, limit int
 	return out, rows.Err()
 }
 
-func (s *SQLiteStore) FinishBillingCancellation(ctx context.Context, id, progress string, terminal bool, now int64) error {
+func (s *SQLiteStore) FinishBillingCancellation(ctx context.Context, id, progress, lastError string, terminal bool, attempts, now int64) error {
 	state := "pending"
 	if terminal {
 		state = "terminal"
@@ -229,7 +319,18 @@ func (s *SQLiteStore) FinishBillingCancellation(ctx context.Context, id, progres
 	if terminal {
 		terminalAt = now
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET state=?,progress_json=?,attempts=attempts+1,updated_at=?,terminal_at=? WHERE id=? AND state='pending'`, state, progress, now, terminalAt, id)
+	next := now
+	if !terminal {
+		delay := int64(60)
+		for i := int64(0); i < attempts && delay < 21600; i++ {
+			delay *= 2
+		}
+		if delay > 21600 {
+			delay = 21600
+		}
+		next = now + delay
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET state=?,progress_json=?,last_error=?,attempts=attempts+1,updated_at=?,terminal_at=?,next_attempt_at=? WHERE id=? AND state='pending'`, state, progress, lastError, now, terminalAt, next, id)
 	return err
 }
 
@@ -244,15 +345,15 @@ func (s *SQLiteStore) CompactBillingCancellations(ctx context.Context, before, n
 }
 
 type deletionStripeProvider interface {
-	DiscoverDeletionHazards(context.Context, string) (BillingDeletionProgress, error)
-	ReconcileDeletionHazards(context.Context, BillingCancellation, BillingDeletionProgress) error
+	DiscoverDeletionHazards(context.Context, BillingCancellation, BillingDeletionProgress) (BillingDeletionProgress, error)
+	ReconcileDeletionHazards(context.Context, BillingCancellation, BillingDeletionProgress) (BillingDeletionProgress, error)
 }
 
 func (s *Service) ReconcileBillingCancellations(ctx context.Context) {
 	store, ok := s.Store().(interface {
 		PendingBillingCancellations(context.Context, int) ([]BillingCancellation, error)
 		SaveBillingCancellationProgress(context.Context, string, string, int64) error
-		FinishBillingCancellation(context.Context, string, string, bool, int64) error
+		FinishBillingCancellation(context.Context, string, string, string, bool, int64, int64) error
 		CompactBillingCancellations(context.Context, int64, int64) error
 	})
 	provider, configured := s.biller.(deletionStripeProvider)
@@ -265,22 +366,45 @@ func (s *Service) ReconcileBillingCancellations(ctx context.Context) {
 		return
 	}
 	for _, row := range rows {
-		progress, discoverErr := provider.DiscoverDeletionHazards(ctx, row.CustomerID)
+		progress := decodeDeletionProgress(row.ProgressJSON)
+		progress, discoverErr := provider.DiscoverDeletionHazards(ctx, row, progress)
 		encoded, _ := json.Marshal(progress)
 		if discoverErr == nil {
 			discoverErr = store.SaveBillingCancellationProgress(ctx, row.ID, string(encoded), s.now().Unix())
 		}
 		if discoverErr == nil {
-			discoverErr = provider.ReconcileDeletionHazards(ctx, row, progress)
+			progress, discoverErr = provider.ReconcileDeletionHazards(ctx, row, progress)
+			encoded, _ = json.Marshal(progress)
 		}
 		terminal := false
 		if discoverErr == nil {
-			progress, discoverErr = provider.DiscoverDeletionHazards(ctx, row.CustomerID)
+			progress, discoverErr = provider.DiscoverDeletionHazards(ctx, row, progress)
 			encoded, _ = json.Marshal(progress)
-			terminal = len(progress.CheckoutSessions)+len(progress.Subscriptions)+len(progress.Schedules)+len(progress.InvoiceItems)+len(progress.Invoices) == 0
+			allTerminal := len(progress.Customers) > 0
+			for _, r := range progress.Resources {
+				if !r.Terminal {
+					allTerminal = false
+					break
+				}
+			}
+			if allTerminal && progress.CleanSince == 0 {
+				progress.CleanSince = s.now().Unix()
+				encoded, _ = json.Marshal(progress)
+			} else if !allTerminal {
+				progress.CleanSince = 0
+				encoded, _ = json.Marshal(progress)
+			}
+			terminal = progress.terminal(s.now().Unix())
 		}
-		if finishErr := store.FinishBillingCancellation(ctx, row.ID, string(encoded), discoverErr == nil && terminal, s.now().Unix()); finishErr != nil {
+		lastError := ""
+		if discoverErr != nil {
+			lastError = "reconciliation_failed"
+		}
+		if finishErr := store.FinishBillingCancellation(ctx, row.ID, string(encoded), lastError, discoverErr == nil && terminal, row.Attempts, s.now().Unix()); finishErr != nil {
 			log.Printf("billing deletion: recording cancellation attempt failed")
+		}
+		if discoverErr != nil && row.Attempts >= 4 {
+			log.Printf("billing deletion: reconciliation remains pending subject=%s generation=%d attempts=%d", row.BillingSubjectID, row.Generation, row.Attempts+1)
 		}
 	}
 	now := s.now().Unix()

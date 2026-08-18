@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"testing"
 )
 
@@ -38,6 +37,16 @@ func TestStripeDeletionEnumeratesAndNeutralizesEveryChargePath(t *testing.T) {
 			io.WriteString(w, `{"id":"in_draft","status":"draft"}`)
 		case "GET /v1/invoices/in_open":
 			io.WriteString(w, `{"id":"in_open","status":"open"}`)
+		case "GET /v1/checkout/sessions/cs_open":
+			io.WriteString(w, `{"id":"cs_open","status":"open","payment_status":"unpaid","customer":"cus_1"}`)
+		case "GET /v1/subscriptions/sub_active":
+			io.WriteString(w, `{"id":"sub_active","status":"active","customer":"cus_1","items":{"data":[{"price":{"recurring":{"usage_type":"licensed"}}}]}}`)
+		case "GET /v1/subscriptions/sub_unpaid":
+			io.WriteString(w, `{"id":"sub_unpaid","status":"unpaid","customer":"cus_1","items":{"data":[{"price":{"recurring":{"usage_type":"metered"}}}]}}`)
+		case "GET /v1/subscription_schedules/sched_active":
+			io.WriteString(w, `{"id":"sched_active","status":"active","customer":"cus_1"}`)
+		case "GET /v1/invoiceitems/ii_pending":
+			io.WriteString(w, `{"id":"ii_pending","customer":"cus_1"}`)
 		case "DELETE /v1/subscriptions/sub_unpaid":
 			http.Error(w, `{"error":{"message":"No such subscription"}}`, http.StatusNotFound)
 		default:
@@ -48,14 +57,14 @@ func TestStripeDeletionEnumeratesAndNeutralizesEveryChargePath(t *testing.T) {
 	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
 	c.base = ts.URL
 	c.http = ts.Client()
-	p, err := c.DiscoverDeletionHazards(context.Background(), "cus_1")
+	p, err := c.DiscoverDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "user_1", CustomerID: "cus_1"}, BillingDeletionProgress{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(p.Subscriptions, ",") != "sub_active,sub_unpaid" || strings.Join(p.Schedules, ",") != "sched_active" || len(p.CheckoutSessions) != 1 || len(p.InvoiceItems) != 1 || len(p.Invoices) != 2 {
+	if len(p.Resources) != 7 {
 		t.Fatalf("inventory=%+v", p)
 	}
-	if err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{IdempotencyKey: "delete-1"}, p); err != nil {
+	if _, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{IdempotencyKey: "delete-1"}, p); err != nil {
 		t.Fatal(err)
 	}
 	for _, path := range []string{"/v1/subscriptions/sub_active", "/v1/subscriptions/sub_unpaid", "/v1/subscription_schedules/sched_active/cancel"} {
@@ -77,4 +86,95 @@ func containsString(xs []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func TestStripeDeletionNeverLosesAsynchronousPayment(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		kind       string
+	}{{"checkout paid", `{"id":"cs_late","status":"complete","payment_status":"paid","customer":"cus_1","payment_intent":"pi_late"}`, "checkout_session"}, {"checkout processing", `{"id":"cs_late","status":"complete","payment_status":"unpaid","customer":"cus_1","payment_intent":"pi_late"}`, "checkout_session"}, {"invoice paid race", `{"id":"in_late","status":"paid","customer":"cus_1","payment_intent":"pi_late"}`, "invoice"}} {
+		t.Run(tc.name, func(t *testing.T) {
+			var mutation bool
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != "GET" {
+					mutation = true
+				}
+				w.Header().Set("Content-Type", "application/json")
+				io.WriteString(w, tc.body)
+			}))
+			defer ts.Close()
+			c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+			c.base = ts.URL
+			c.http = ts.Client()
+			id := "cs_late"
+			if tc.kind == "invoice" {
+				id = "in_late"
+			}
+			p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{tc.kind + ":" + id: {Kind: tc.kind, ID: id, CustomerID: "cus_1"}}}
+			got, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{IdempotencyKey: "del"}, p)
+			if err == nil {
+				t.Fatal("async charge incorrectly reached terminal")
+			}
+			r := got.Resources[tc.kind+":"+id]
+			if tc.name != "checkout processing" && !r.Manual {
+				t.Fatalf("paid race not sent to manual reconciliation: %+v", r)
+			}
+			if r.Terminal {
+				t.Fatalf("async charge disappeared: %+v", r)
+			}
+			if mutation {
+				t.Fatal("completed async payment was blindly expired/voided")
+			}
+		})
+	}
+}
+
+func TestStripeDeletionSearchesEveryHistoricalCustomer(t *testing.T) {
+	seen := map[string]bool{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/v1/customers/search" {
+			io.WriteString(w, `{"data":[{"id":"cus_old"},{"id":"cus_new"}],"has_more":false}`)
+			return
+		}
+		customer := r.URL.Query().Get("customer")
+		if customer != "" {
+			seen[customer] = true
+		}
+		io.WriteString(w, `{"data":[],"has_more":false}`)
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+	c.base = ts.URL
+	c.http = ts.Client()
+	p, err := c.DiscoverDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", CustomerID: ""}, BillingDeletionProgress{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Customers) != 2 || !seen["cus_old"] || !seen["cus_new"] {
+		t.Fatalf("customers=%v seen=%v", p.Customers, seen)
+	}
+}
+
+func TestStripeDeletionDiscoveryNeverShrinksTheResourceJournal(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/v1/customers/search" {
+			io.WriteString(w, `{"data":[],"has_more":false}`)
+			return
+		}
+		io.WriteString(w, `{"data":[],"has_more":false}`)
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+	c.base = ts.URL
+	c.http = ts.Client()
+	p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{"checkout_session:cs_seen": {Kind: "checkout_session", ID: "cs_seen", CustomerID: "cus_1", Status: "observed"}}}
+	got, err := c.DiscoverDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", CustomerID: "cus_1"}, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got.Resources["checkout_session:cs_seen"]; !ok {
+		t.Fatal("empty provider listing erased an observed async checkout")
+	}
 }

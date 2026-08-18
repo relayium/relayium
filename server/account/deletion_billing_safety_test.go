@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -22,16 +23,18 @@ type deletionStripeBiller struct {
 	observedProgress      bool
 }
 
-func (b *deletionStripeBiller) DiscoverDeletionHazards(ctx context.Context, _ string) (BillingDeletionProgress, error) {
-	if b.didReconcile && b.terminal {
-		return BillingDeletionProgress{}, nil
+func (b *deletionStripeBiller) DiscoverDeletionHazards(ctx context.Context, row BillingCancellation, p BillingDeletionProgress) (BillingDeletionProgress, error) {
+	p.Customers = appendUnique(p.Customers, row.CustomerID)
+	if len(b.hazards.Resources) > 0 {
+		for _, r := range b.hazards.Resources {
+			p.add(r)
+		}
+	} else if len(p.Resources) == 0 {
+		p.add(BillingDeletionResource{Kind: "subscription", ID: "sub_delete", CustomerID: row.CustomerID})
 	}
-	if len(b.hazards.CheckoutSessions)+len(b.hazards.Subscriptions)+len(b.hazards.Schedules)+len(b.hazards.InvoiceItems)+len(b.hazards.Invoices) > 0 {
-		return b.hazards, nil
-	}
-	return BillingDeletionProgress{Subscriptions: []string{"sub_delete"}}, nil
+	return p, nil
 }
-func (b *deletionStripeBiller) ReconcileDeletionHazards(ctx context.Context, _ BillingCancellation, _ BillingDeletionProgress) error {
+func (b *deletionStripeBiller) ReconcileDeletionHazards(ctx context.Context, _ BillingCancellation, p BillingDeletionProgress) (BillingDeletionProgress, error) {
 	b.cancelCalls++
 	b.didReconcile = true
 	if b.store != nil {
@@ -40,16 +43,26 @@ func (b *deletionStripeBiller) ReconcileDeletionHazards(ctx context.Context, _ B
 		b.observedDurableOutbox = n > 0
 		var progress string
 		_ = b.store.db.QueryRowContext(ctx, `SELECT progress_json FROM billing_cancellation_outbox WHERE state='pending'`).Scan(&progress)
-		b.observedProgress = strings.Contains(progress, "checkoutSessions") || strings.Contains(progress, "subscriptions")
+		b.observedProgress = strings.Contains(progress, "checkout_session") || strings.Contains(progress, "subscription")
 	}
-	return b.cancelErr
+	if b.cancelErr == nil && b.terminal {
+		for k, r := range p.Resources {
+			r.Terminal = true
+			r.Status = "gone"
+			p.Resources[k] = r
+		}
+		p.CleanSince = time.Now().Unix() - 86401
+	}
+	return p, b.cancelErr
 }
 
 func TestStripeDeletionPersistsEveryCustomerHazardBeforeMutation(t *testing.T) {
 	svc, store, _, u, token := deletionFixture(t, "all-hazards@example.test")
-	b := &deletionStripeBiller{fakeBiller: &fakeBiller{}, terminal: true, store: store, hazards: BillingDeletionProgress{
-		CheckoutSessions: []string{"cs_1"}, Subscriptions: []string{"sub_1", "sub_2"}, Schedules: []string{"sub_sched_1"}, InvoiceItems: []string{"ii_1"}, Invoices: []string{"in_draft", "in_open"},
-	}}
+	hazards := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{}}
+	for _, r := range []BillingDeletionResource{{Kind: "checkout_session", ID: "cs_1"}, {Kind: "subscription", ID: "sub_1"}, {Kind: "subscription", ID: "sub_2"}, {Kind: "schedule", ID: "sub_sched_1"}, {Kind: "invoice_item", ID: "ii_1"}, {Kind: "invoice", ID: "in_draft"}, {Kind: "invoice", ID: "in_open"}} {
+		hazards.add(r)
+	}
+	b := &deletionStripeBiller{fakeBiller: &fakeBiller{}, terminal: true, store: store, hazards: hazards}
 	svc.biller = b
 	seedStripeDeletion(t, store, u)
 	if err := svc.ConfirmAccountDeletion(context.Background(), token); err != nil {
@@ -62,7 +75,7 @@ func TestStripeDeletionPersistsEveryCustomerHazardBeforeMutation(t *testing.T) {
 	if err := store.db.QueryRow(`SELECT state,progress_json FROM billing_cancellation_outbox WHERE billing_subject_id=?`, u.ID).Scan(&state, &progress); err != nil {
 		t.Fatal(err)
 	}
-	if state != "terminal" || progress != "{}" {
+	if state != "terminal" || !strings.Contains(progress, "cs_1") || !strings.Contains(progress, `"terminal":true`) {
 		t.Fatalf("state=%q progress=%q", state, progress)
 	}
 }
@@ -163,6 +176,151 @@ func TestTerminalCancellationCompactionDropsProviderIdentifiersButKeepsHold(t *t
 	}
 }
 
+func TestSecondDeletionCreatesIndependentOutboxGeneration(t *testing.T) {
+	svc, store, mail, u, token := deletionFixture(t, "delete-twice@example.test")
+	b := &deletionStripeBiller{fakeBiller: &fakeBiller{}, terminal: true, store: store}
+	svc.biller = b
+	seedStripeDeletion(t, store, u)
+	if err := svc.ConfirmAccountDeletion(context.Background(), token); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ClearAccountDeletion(context.Background(), u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RequestAccountDeletion(context.Background(), u.ID, u.Email); err != nil {
+		t.Fatal(err)
+	}
+	b.didReconcile = false
+	if err := svc.ConfirmAccountDeletion(context.Background(), mail.lastDeleteToken(t)); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := store.db.Query(`SELECT generation,state FROM billing_cancellation_outbox WHERE billing_subject_id=? ORDER BY generation`, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var got []int64
+	for rows.Next() {
+		var g int64
+		var state string
+		if err := rows.Scan(&g, &state); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, g)
+	}
+	if len(got) != 2 || got[0] != 1 || got[1] != 2 {
+		t.Fatalf("generations=%v", got)
+	}
+}
+
+func TestDeletionSeedsEveryKnownCheckoutRecoverySession(t *testing.T) {
+	svc, store, _, u, token := deletionFixture(t, "checkout-lineage@example.test")
+	if err := store.SetUserStripeCustomer(context.Background(), u.ID, "cus_lineage"); err != nil {
+		t.Fatal(err)
+	}
+	authority, err := store.AcquireBillingAuthority(context.Background(), BillingAuthorityRequest{UserID: u.ID, Provider: ProviderStripe, Now: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt, created, err := store.DispatchBillingPurchase(context.Background(), authority, "price_pro", 100)
+	if err != nil || !created {
+		t.Fatalf("attempt=%+v created=%v err=%v", attempt, created, err)
+	}
+	if err := store.SetBillingPurchaseProviderSession(context.Background(), u.ID, attempt.ID, "cs_recovery", "https://checkout.invalid"); err != nil {
+		t.Fatal(err)
+	}
+	b := &deletionStripeBiller{fakeBiller: &fakeBiller{}, cancelErr: errors.New("hold"), store: store}
+	svc.biller = b
+	if err := svc.ConfirmAccountDeletion(context.Background(), token); err != nil {
+		t.Fatal(err)
+	}
+	var raw string
+	if err := store.db.QueryRow(`SELECT progress_json FROM billing_cancellation_outbox WHERE billing_subject_id=?`, u.ID).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	p := decodeDeletionProgress(raw)
+	if _, ok := p.Resources["checkout_session:cs_recovery"]; !ok {
+		t.Fatalf("checkout recovery lineage missing: %s", raw)
+	}
+}
+
+func TestPendingStripeRecoveryRemainsFrozen(t *testing.T) {
+	svc, store, _, u, token := deletionFixture(t, "pending-recovery@example.test")
+	b := &deletionStripeBiller{fakeBiller: &fakeBiller{}, terminal: false, store: store}
+	svc.biller = b
+	seedStripeDeletion(t, store, u)
+	if err := svc.ConfirmAccountDeletion(context.Background(), token); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ClearAccountDeletion(context.Background(), u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if frozen, err := store.BillingUserFrozen(context.Background(), u.ID); err != nil || !frozen {
+		t.Fatalf("pending recovery frozen=%v err=%v", frozen, err)
+	}
+}
+
+func TestOlderTerminalGenerationCannotReleaseNewPendingDeletion(t *testing.T) {
+	svc, store, _, u, token := deletionFixture(t, "mixed-generation-recovery@example.test")
+	b := &deletionStripeBiller{fakeBiller: &fakeBiller{}, terminal: true, store: store}
+	svc.biller = b
+	seedStripeDeletion(t, store, u)
+	if err := svc.ConfirmAccountDeletion(context.Background(), token); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation,next_attempt_at) VALUES('pending-new',?,'stripe','pending-new-key','pending',1,1,2,1)`, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ClearAccountDeletion(context.Background(), u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if frozen, err := store.BillingUserFrozen(context.Background(), u.ID); err != nil || !frozen {
+		t.Fatalf("new pending generation released: frozen=%v err=%v", frozen, err)
+	}
+}
+
+func TestPendingCancellationBackoffDoesNotStarveDueRows(t *testing.T) {
+	store := newTestStore(t)
+	now := time.Now().Unix()
+	for i := 0; i < 101; i++ {
+		next := now
+		if i == 0 {
+			next = now + 86400
+		}
+		id := fmt.Sprintf("out-%03d", i)
+		if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation,next_attempt_at) VALUES(?,?,'stripe',?,'pending',?,?,1,?)`, id, "u-"+id, "key-"+id, now-int64(1000-i), now-int64(1000-i), next); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rows, err := store.PendingBillingCancellations(context.Background(), 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 100 {
+		t.Fatalf("due rows=%d", len(rows))
+	}
+	for _, r := range rows {
+		if r.ID == "out-000" {
+			t.Fatal("future-backed-off oldest row starved due work")
+		}
+	}
+}
+
+func TestDeletionJournalRequiresAQuietWindowAndNewHazardResetsIt(t *testing.T) {
+	now := int64(100000)
+	p := BillingDeletionProgress{Customers: []string{"cus"}, Resources: map[string]BillingDeletionResource{"subscription:sub": {Kind: "subscription", ID: "sub", Terminal: true}}, CleanSince: now}
+	if p.terminal(now + 86399) {
+		t.Fatal("one empty scan reached terminal")
+	}
+	if !p.terminal(now + 86400) {
+		t.Fatal("bounded quiet window never converged")
+	}
+	p.add(BillingDeletionResource{Kind: "invoice", ID: "late"})
+	if p.CleanSince != 0 || p.terminal(now+200000) {
+		t.Fatalf("late hazard did not reset quiet window: %+v", p)
+	}
+}
+
 func deletionFixture(t *testing.T, email string) (*Service, *SQLiteStore, *capturingMailer, User, string) {
 	t.Helper()
 	store := newTestStore(t)
@@ -247,8 +405,19 @@ func TestFailedStripeDeletionCancellationRetriesToCanonicalTerminal(t *testing.T
 	if err := svc.ConfirmAccountDeletion(context.Background(), token); err != nil {
 		t.Fatal(err)
 	}
+	var lastError string
+	var nextAttempt, updated int64
+	if err := store.db.QueryRow(`SELECT last_error,next_attempt_at,updated_at FROM billing_cancellation_outbox WHERE billing_subject_id=?`, u.ID).Scan(&lastError, &nextAttempt, &updated); err != nil {
+		t.Fatal(err)
+	}
+	if lastError == "" || nextAttempt <= updated {
+		t.Fatalf("last_error=%q next=%d updated=%d", lastError, nextAttempt, updated)
+	}
 	biller.cancelErr = nil
 	biller.terminal = true
+	if _, err := store.db.Exec(`UPDATE billing_cancellation_outbox SET next_attempt_at=0 WHERE billing_subject_id=?`, u.ID); err != nil {
+		t.Fatal(err)
+	}
 	svc.ReconcileBillingCancellations(context.Background())
 	var state string
 	var attempts int

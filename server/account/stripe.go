@@ -535,30 +535,10 @@ func (c *stripeClient) CancelSubscription(ctx context.Context, subID string, ref
 	return nil
 }
 
-func (c *stripeClient) CancelSubscriptionForDeletion(ctx context.Context, subID, idempotencyKey string) (bool, error) {
-	cancelErr := error(nil)
-	if subID == "" || idempotencyKey == "" {
-		return false, errors.New("stripe: deletion cancellation identity is required")
-	}
-	if _, err := c.requestKeyed(ctx, http.MethodDelete, "/v1/subscriptions/"+url.PathEscape(subID), nil, idempotencyKey); err != nil {
-		cancelErr = err
-	}
-	info, missing, getErr := c.canonicalSubscription(ctx, subID)
-	if getErr != nil {
-		return false, getErr
-	}
-	if missing || info.Status == "canceled" || info.Status == "incomplete_expired" {
-		return true, nil
-	}
-	if cancelErr != nil {
-		return false, cancelErr
-	}
-	return false, errors.New("stripe: cancellation is not yet canonical")
-}
-
 type stripeDeletionList struct {
-	Data    []struct{ ID, Status string } `json:"data"`
-	HasMore bool                          `json:"has_more"`
+	Data     []struct{ ID, Status string } `json:"data"`
+	HasMore  bool                          `json:"has_more"`
+	NextPage string                        `json:"next_page"`
 }
 
 func (c *stripeClient) deletionList(ctx context.Context, path string, query url.Values) ([]string, error) {
@@ -589,98 +569,239 @@ func (c *stripeClient) deletionList(ctx context.Context, path string, query url.
 	}
 }
 
-func (c *stripeClient) DiscoverDeletionHazards(ctx context.Context, customerID string) (BillingDeletionProgress, error) {
-	if customerID == "" {
-		return BillingDeletionProgress{}, errors.New("stripe: deletion customer identity is required")
-	}
-	base := url.Values{"customer": {customerID}}
-	copyQ := func(extra ...string) url.Values {
-		q := url.Values{}
-		for k, v := range base {
-			q[k] = append([]string(nil), v...)
+func (c *stripeClient) DiscoverDeletionHazards(ctx context.Context, row BillingCancellation, p BillingDeletionProgress) (BillingDeletionProgress, error) {
+	p.Customers = appendUnique(p.Customers, row.CustomerID)
+	q := url.Values{"query": {fmt.Sprintf("metadata['user_id']:'%s'", row.BillingSubjectID)}, "limit": {"100"}}
+	for {
+		body, err := c.request(ctx, http.MethodGet, "/v1/customers/search?"+q.Encode(), nil)
+		if err != nil {
+			return p, err
 		}
-		for i := 0; i+1 < len(extra); i += 2 {
-			q.Set(extra[i], extra[i+1])
+		var customers stripeDeletionList
+		if err := json.Unmarshal(body, &customers); err != nil {
+			return p, err
 		}
-		return q
+		for _, v := range customers.Data {
+			p.Customers = appendUnique(p.Customers, v.ID)
+		}
+		if !customers.HasMore || customers.NextPage == "" {
+			break
+		}
+		q.Set("page", customers.NextPage)
 	}
-	var p BillingDeletionProgress
-	var err error
-	if p.CheckoutSessions, err = c.deletionList(ctx, "/v1/checkout/sessions", copyQ("status", "open")); err != nil {
-		return p, err
+	if len(p.Customers) == 0 {
+		return p, errors.New("stripe: no canonical customer identity for deletion")
 	}
-	if p.Subscriptions, err = c.deletionList(ctx, "/v1/subscriptions", copyQ("status", "all")); err != nil {
-		return p, err
+	for _, customerID := range p.Customers {
+		base := url.Values{"customer": {customerID}}
+		copyQ := func(extra ...string) url.Values {
+			q := url.Values{}
+			for k, v := range base {
+				q[k] = append([]string(nil), v...)
+			}
+			for i := 0; i+1 < len(extra); i += 2 {
+				q.Set(extra[i], extra[i+1])
+			}
+			return q
+		}
+		kinds := []struct {
+			kind, path string
+			q          url.Values
+		}{{"checkout_session", "/v1/checkout/sessions", copyQ("status", "open")}, {"subscription", "/v1/subscriptions", copyQ("status", "all")}, {"schedule", "/v1/subscription_schedules", copyQ()}, {"invoice_item", "/v1/invoiceitems", copyQ("pending", "true")}, {"invoice", "/v1/invoices", copyQ("status", "draft")}, {"invoice", "/v1/invoices", copyQ("status", "open")}}
+		for _, k := range kinds {
+			ids, err := c.deletionList(ctx, k.path, k.q)
+			if err != nil {
+				return p, err
+			}
+			for _, id := range ids {
+				p.add(BillingDeletionResource{Kind: k.kind, ID: id, CustomerID: customerID, Status: "discovered"})
+			}
+		}
 	}
-	if p.Schedules, err = c.deletionList(ctx, "/v1/subscription_schedules", copyQ()); err != nil {
-		return p, err
-	}
-	if p.InvoiceItems, err = c.deletionList(ctx, "/v1/invoiceitems", copyQ("pending", "true")); err != nil {
-		return p, err
-	}
-	draft, err := c.deletionList(ctx, "/v1/invoices", copyQ("status", "draft"))
-	if err != nil {
-		return p, err
-	}
-	open, err := c.deletionList(ctx, "/v1/invoices", copyQ("status", "open"))
-	if err != nil {
-		return p, err
-	}
-	p.Invoices = append(draft, open...)
 	return p, nil
 }
 
-func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row BillingCancellation, p BillingDeletionProgress) error {
+func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row BillingCancellation, p BillingDeletionProgress) (BillingDeletionProgress, error) {
 	key := func(kind, id string) string {
 		sum := sha256.Sum256([]byte(row.IdempotencyKey + "\x00" + kind + "\x00" + id))
 		return "acct-delete:" + hex.EncodeToString(sum[:16])
 	}
-	for _, id := range p.CheckoutSessions {
-		if _, err := c.requestKeyed(ctx, http.MethodPost, "/v1/checkout/sessions/"+url.PathEscape(id)+"/expire", nil, key("session", id)); err != nil && !stripeDeletionObjectGone(err) {
-			return err
+	allowed := func(customer string) bool {
+		for _, v := range p.Customers {
+			if v == customer {
+				return true
+			}
 		}
+		return false
 	}
-	for _, id := range p.Schedules {
-		form := url.Values{"invoice_now": {"false"}, "prorate": {"false"}}
-		if _, err := c.requestKeyed(ctx, http.MethodPost, "/v1/subscription_schedules/"+url.PathEscape(id)+"/cancel", form, key("schedule", id)); err != nil && !stripeDeletionObjectGone(err) {
-			return err
+	for resourceKey, r := range p.Resources {
+		if r.Terminal || r.Manual {
+			continue
 		}
-	}
-	for _, id := range p.Subscriptions {
-		form := url.Values{"invoice_now": {"false"}, "prorate": {"false"}}
-		if _, err := c.requestKeyed(ctx, http.MethodDelete, "/v1/subscriptions/"+url.PathEscape(id), form, key("subscription", id)); err != nil && !stripeDeletionObjectGone(err) {
-			return err
+		path := "/v1/"
+		switch r.Kind {
+		case "checkout_session":
+			path += "checkout/sessions/"
+		case "subscription":
+			path += "subscriptions/"
+		case "schedule":
+			path += "subscription_schedules/"
+		case "invoice_item":
+			path += "invoiceitems/"
+		case "invoice":
+			path += "invoices/"
+		case "payment_intent":
+			path += "payment_intents/"
+		default:
+			r.Manual = true
+			r.Status = "unknown_resource"
+			p.Resources[resourceKey] = r
+			continue
 		}
-	}
-	for _, id := range p.InvoiceItems {
-		if _, err := c.requestKeyed(ctx, http.MethodDelete, "/v1/invoiceitems/"+url.PathEscape(id), nil, key("invoiceitem", id)); err != nil && !stripeDeletionObjectGone(err) {
-			return err
-		}
-	}
-	for _, id := range p.Invoices {
-		body, err := c.request(ctx, http.MethodGet, "/v1/invoices/"+url.PathEscape(id), nil)
-		if err != nil && stripeDeletionObjectGone(err) {
+		body, err := c.request(ctx, http.MethodGet, path+url.PathEscape(r.ID), nil)
+		if stripeDeletionObjectGone(err) {
+			r.Terminal = true
+			r.Status = "gone"
+			p.Resources[resourceKey] = r
 			continue
 		}
 		if err != nil {
-			return err
+			return p, err
 		}
-		var inv struct {
-			Status string `json:"status"`
+		var obj struct {
+			ID            string `json:"id"`
+			Status        string `json:"status"`
+			Customer      string `json:"customer"`
+			PaymentStatus string `json:"payment_status"`
+			Subscription  string `json:"subscription"`
+			PaymentIntent string `json:"payment_intent"`
+			Items         struct {
+				Data []struct {
+					Price struct {
+						Recurring *struct {
+							UsageType string `json:"usage_type"`
+						} `json:"recurring"`
+					} `json:"price"`
+				} `json:"data"`
+			}
 		}
-		if err := json.Unmarshal(body, &inv); err != nil {
-			return err
+		if err := json.Unmarshal(body, &obj); err != nil {
+			return p, err
 		}
-		method, path := http.MethodPost, "/v1/invoices/"+url.PathEscape(id)+"/void"
-		if inv.Status == "draft" {
-			method = http.MethodDelete
-			path = "/v1/invoices/" + url.PathEscape(id)
+		if obj.Customer != "" && !allowed(obj.Customer) {
+			r.Manual = true
+			r.Status = "customer_mismatch"
+			p.Resources[resourceKey] = r
+			return p, errors.New("stripe: deletion object customer mismatch")
 		}
-		if _, err := c.requestKeyed(ctx, method, path, nil, key("invoice", id)); err != nil && !stripeDeletionObjectGone(err) {
-			return err
+		switch r.Kind {
+		case "checkout_session":
+			if obj.Status == "expired" {
+				r.Terminal = true
+				r.Status = "expired"
+				break
+			}
+			if obj.Subscription != "" {
+				p.add(BillingDeletionResource{Kind: "subscription", ID: obj.Subscription, CustomerID: r.CustomerID, Status: "session_link"})
+			}
+			if obj.PaymentIntent != "" {
+				p.add(BillingDeletionResource{Kind: "payment_intent", ID: obj.PaymentIntent, CustomerID: r.CustomerID, Status: "session_link"})
+			}
+			if obj.PaymentStatus == "paid" {
+				r.Manual = true
+				r.Status = "paid_after_deletion"
+				p.Resources[resourceKey] = r
+				return p, errors.New("stripe: paid checkout requires audited refund")
+			}
+			if obj.Status == "complete" {
+				r.Status = "complete_payment_pending"
+				p.Resources[resourceKey] = r
+				return p, errors.New("stripe: completed checkout payment remains unresolved")
+			}
+			if _, err := c.requestKeyed(ctx, http.MethodPost, path+url.PathEscape(r.ID)+"/expire", nil, key("session", r.ID)); err != nil && !stripeDeletionObjectGone(err) {
+				return p, err
+			}
+		case "schedule":
+			if obj.Status == "canceled" || obj.Status == "completed" || obj.Status == "released" {
+				r.Terminal = true
+				r.Status = obj.Status
+				break
+			}
+			form := url.Values{"invoice_now": {"false"}, "prorate": {"false"}}
+			if _, err := c.requestKeyed(ctx, http.MethodPost, path+url.PathEscape(r.ID)+"/cancel", form, key("schedule", r.ID)); err != nil && !stripeDeletionObjectGone(err) {
+				return p, err
+			}
+		case "subscription":
+			if obj.Status == "canceled" || obj.Status == "incomplete_expired" {
+				r.Terminal = true
+				r.Status = obj.Status
+				break
+			}
+			if len(obj.Items.Data) == 0 && obj.Status != "canceled" && obj.Status != "incomplete_expired" {
+				r.Status = "metering_unknown"
+				p.Resources[resourceKey] = r
+				return p, errors.New("stripe: subscription charge model unavailable")
+			}
+			form := url.Values{"invoice_now": {"false"}, "prorate": {"false"}}
+			if _, err := c.request(ctx, http.MethodDelete, path+url.PathEscape(r.ID), form); err != nil && !stripeDeletionObjectGone(err) {
+				return p, err
+			}
+		case "invoice_item":
+			if _, err := c.request(ctx, http.MethodDelete, path+url.PathEscape(r.ID), nil); err != nil && !stripeDeletionObjectGone(err) {
+				return p, err
+			}
+		case "invoice":
+			if obj.PaymentIntent != "" {
+				p.add(BillingDeletionResource{Kind: "payment_intent", ID: obj.PaymentIntent, CustomerID: r.CustomerID, Status: "invoice_link"})
+			}
+			if obj.Status == "paid" {
+				r.Manual = true
+				r.Status = "paid_after_deletion"
+				p.Resources[resourceKey] = r
+				return p, errors.New("stripe: paid invoice requires audited refund")
+			}
+			method, suffix := http.MethodPost, "/void"
+			if obj.Status == "draft" {
+				method = http.MethodDelete
+				suffix = ""
+			}
+			if obj.Status == "void" || obj.Status == "uncollectible" {
+				r.Terminal = true
+				r.Status = obj.Status
+				break
+			}
+			if _, err := c.requestKeyed(ctx, method, path+url.PathEscape(r.ID)+suffix, nil, key("invoice", r.ID)); err != nil && !stripeDeletionObjectGone(err) {
+				return p, err
+			}
+		case "payment_intent":
+			if obj.Status == "canceled" {
+				r.Terminal = true
+				r.Status = "canceled"
+				break
+			}
+			if obj.Status == "succeeded" {
+				r.Manual = true
+				r.Status = "succeeded_after_deletion"
+				p.Resources[resourceKey] = r
+				return p, errors.New("stripe: succeeded payment requires audited refund")
+			}
+			if obj.Status == "processing" {
+				r.Status = "processing"
+				p.Resources[resourceKey] = r
+				return p, errors.New("stripe: payment remains processing")
+			}
+			if _, err := c.requestKeyed(ctx, http.MethodPost, path+url.PathEscape(r.ID)+"/cancel", nil, key("payment-intent", r.ID)); err != nil && !stripeDeletionObjectGone(err) {
+				return p, err
+			}
+		}
+		p.Resources[resourceKey] = r
+	}
+	for _, r := range p.Resources {
+		if r.Manual {
+			return p, errors.New("stripe: deletion requires manual reconciliation")
 		}
 	}
-	return nil
+	return p, nil
 }
 
 func stripeDeletionObjectGone(err error) bool {

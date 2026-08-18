@@ -1049,10 +1049,20 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
  attempts INTEGER NOT NULL DEFAULT 0,
  created_at INTEGER NOT NULL,
  updated_at INTEGER NOT NULL,
- UNIQUE(billing_subject_id,provider))`,
+ generation INTEGER NOT NULL DEFAULT 1,
+ last_error TEXT NOT NULL DEFAULT '',
+ next_attempt_at INTEGER NOT NULL DEFAULT 0)`,
+		`CREATE INDEX IF NOT EXISTS idx_billing_cancel_subject ON billing_cancellation_outbox(billing_subject_id,provider,generation)`,
+		`CREATE INDEX IF NOT EXISTS idx_billing_cancel_due ON billing_cancellation_outbox(state,next_attempt_at,updated_at)`,
 		`ALTER TABLE billing_cancellation_outbox ADD COLUMN progress_json TEXT NOT NULL DEFAULT '{}'`,
 		`ALTER TABLE billing_cancellation_outbox ADD COLUMN terminal_at INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE billing_cancellation_outbox ADD COLUMN archived_at INTEGER NOT NULL DEFAULT 0`,
+		`CREATE TABLE IF NOT EXISTS stripe_customer_history (
+ user_id TEXT NOT NULL,
+ customer_id TEXT NOT NULL,
+ created_at INTEGER NOT NULL DEFAULT 0,
+ PRIMARY KEY(user_id,customer_id))`,
+		`INSERT OR IGNORE INTO stripe_customer_history(user_id,customer_id,created_at) SELECT id,stripe_customer_id,0 FROM users WHERE stripe_customer_id<>''`,
 		`ALTER TABLE users ADD COLUMN billing_hold_hmac BLOB NOT NULL DEFAULT X''`,
 		`CREATE TABLE IF NOT EXISTS billing_purchase_attempts (
  id TEXT PRIMARY KEY,
@@ -2001,9 +2011,18 @@ func (s *SQLiteStore) SetUserPlanAdmin(ctx context.Context, userID, planID strin
 // SetUserStripeCustomer binds a user to their Stripe customer id, set once on
 // first checkout (or backfilled by the webhook if it observes a new customer).
 func (s *SQLiteStore) SetUserStripeCustomer(ctx context.Context, userID, customerID string) error {
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE users SET stripe_customer_id = ? WHERE id = ?`, customerID, userID)
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO stripe_customer_history(user_id,customer_id,created_at) VALUES(?,?,unixepoch())`, userID, customerID); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE users SET stripe_customer_id = ? WHERE id = ?`, customerID, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // SetUserStripeSubscription records the user's canonical subscription id; an
@@ -2056,7 +2075,18 @@ func (s *SQLiteStore) SetUserStripeCustomerIfEmpty(ctx context.Context, userID, 
 		return "", err
 	}
 	if current != "" {
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO stripe_customer_history(user_id,customer_id,created_at) VALUES(?,?,unixepoch())`, userID, current); err != nil {
+			return "", err
+		}
+		if customerID != "" {
+			if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO stripe_customer_history(user_id,customer_id,created_at) VALUES(?,?,unixepoch())`, userID, customerID); err != nil {
+				return "", err
+			}
+		}
 		return current, tx.Commit()
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO stripe_customer_history(user_id,customer_id,created_at) VALUES(?,?,unixepoch())`, userID, customerID); err != nil {
+		return "", err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE users SET stripe_customer_id = ? WHERE id = ?`, customerID, userID); err != nil {
 		return "", err
@@ -2233,7 +2263,7 @@ func (s *SQLiteStore) ClearAccountDeletion(ctx context.Context, userID string) e
 	_ = tx.QueryRowContext(ctx, `SELECT provider FROM billing_deletion_holds WHERE billing_subject_id=?`, userID).Scan(&provider)
 	if provider == ProviderStripe {
 		var terminal int
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider='stripe' AND state='terminal')`, userID).Scan(&terminal); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider='stripe' AND state='terminal') AND NOT EXISTS(SELECT 1 FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider='stripe' AND state='pending')`, userID, userID).Scan(&terminal); err != nil {
 			return err
 		}
 		if terminal != 0 {
