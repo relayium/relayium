@@ -743,6 +743,54 @@ func (s *SQLiteStore) AppendStripeDeletionHazard(ctx context.Context, userID str
 	return tx.Commit()
 }
 
+// AppendStripeActiveAccountDeletionHazard records Checkout lifecycle only for
+// a deletion that is still actively inventorying the whole account. Once that
+// deletion is terminal, Checkout is audit context rather than an exact refund
+// target; the authenticated invoice/payment-intent/charge chain is journaled
+// separately and must not be blocked by this non-payment observation.
+func (s *SQLiteStore) AppendStripeActiveAccountDeletionHazard(ctx context.Context, userID string, r BillingDeletionResource) error {
+	if r.ID == "" {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, `SELECT id,progress_json FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider='stripe' AND state='pending' AND mode='account_deletion'`, userID)
+	if err != nil {
+		return err
+	}
+	type pending struct{ id, raw string }
+	var pendingRows []pending
+	for rows.Next() {
+		var row pending
+		if err := rows.Scan(&row.id, &row.raw); err != nil {
+			rows.Close()
+			return err
+		}
+		pendingRows = append(pendingRows, row)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, row := range pendingRows {
+		p, err := decodeDeletionProgressStrict(row.raw)
+		if err != nil {
+			return err
+		}
+		p.add(r)
+		encoded, err := json.Marshal(p)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET progress_json=?,revision=revision+1,updated_at=unixepoch() WHERE id=? AND state='pending' AND mode='account_deletion'`, string(encoded), row.id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 func appendStripeDeletionHazardsTx(ctx context.Context, tx *sql.Tx, userID string, resources []BillingDeletionResource) error {
 	valid := resources[:0]
 	for _, r := range resources {

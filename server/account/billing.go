@@ -1118,11 +1118,60 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 		ev.Type = "customer.subscription.updated"
 	}
+	checkoutPaid := ev.Type == "checkout.session.async_payment_succeeded" || (ev.Type == "checkout.session.completed" && ev.PaymentStatus == "paid")
+	if checkoutPaid {
+		client, ok := s.biller.(*stripeClient)
+		if !ok {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		chain, err := client.canonicalCheckoutPaymentChain(ctx, ev.CheckoutSessionID)
+		if err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if ev.CustomerID != "" && chain.CustomerID != "" && ev.CustomerID != chain.CustomerID {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if ev.ClientRefUserID != "" && chain.UserID != "" && ev.ClientRefUserID != chain.UserID {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if ev.MetadataBillingAttemptID != "" && chain.BillingAttemptID != "" && ev.MetadataBillingAttemptID != chain.BillingAttemptID {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if ev.CustomerID == "" {
+			ev.CustomerID = chain.CustomerID
+		}
+		if ev.ClientRefUserID == "" {
+			ev.ClientRefUserID = chain.UserID
+		}
+		if ev.MetadataBillingAttemptID == "" {
+			ev.MetadataBillingAttemptID = chain.BillingAttemptID
+		}
+		if ev.SubscriptionID == "" {
+			ev.SubscriptionID = chain.SubscriptionID
+		}
+		ev.InvoiceID, ev.PaymentIntentID, ev.ChargeID = chain.InvoiceID, chain.PaymentIntentID, chain.ChargeID
+	}
 	switch ev.Type {
 	case "checkout.session.completed", "checkout.session.async_payment_succeeded", "checkout.session.async_payment_failed", "checkout.session.expired":
 		// Plan assignment is deferred to the accompanying
 		// customer.subscription.* event Stripe always sends alongside this
 		// one; here we only bind the newly-created (or reused) customer id.
+		// Payment facts are journaled before account/authority binding. A late
+		// payment belongs to its captured deletion epoch even if the account has
+		// since reactivated under a different current billing authority.
+		if journal, ok := s.Store().(interface {
+			AppendStripeCustomerDeletionHazards(context.Context, string, []BillingDeletionResource) error
+		}); ok {
+			if err := journal.AppendStripeCustomerDeletionHazards(ctx, ev.CustomerID, []BillingDeletionResource{{Kind: "invoice", ID: ev.InvoiceID, Status: "webhook"}, {Kind: "payment_intent", ID: ev.PaymentIntentID, Status: "webhook", SuccessAt: ev.Created}, {Kind: "charge", ID: ev.ChargeID, PaymentIntentID: ev.PaymentIntentID, Status: "webhook", SuccessAt: ev.Created}}); err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+		}
 		if ev.ClientRefUserID != "" {
 			if _, err := acquireStoreBillingAuthority(ctx, s.Store(), BillingAuthorityRequest{UserID: ev.ClientRefUserID, Provider: ProviderStripe, Now: s.Now().Unix()}); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
@@ -1147,20 +1196,12 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			}
 			if ev.CheckoutSessionID != "" {
 				if journal, ok := s.Store().(interface {
-					AppendStripeDeletionHazard(context.Context, string, BillingDeletionResource) error
+					AppendStripeActiveAccountDeletionHazard(context.Context, string, BillingDeletionResource) error
 				}); ok {
-					if err := journal.AppendStripeDeletionHazard(ctx, ev.ClientRefUserID, checkoutDeletionObservation(ev)); err != nil {
+					if err := journal.AppendStripeActiveAccountDeletionHazard(ctx, ev.ClientRefUserID, checkoutDeletionObservation(ev)); err != nil {
 						http.Error(w, "server error", http.StatusInternalServerError)
 						return
 					}
-				}
-			}
-			if journal, ok := s.Store().(interface {
-				AppendStripeCustomerDeletionHazards(context.Context, string, []BillingDeletionResource) error
-			}); ok {
-				if err := journal.AppendStripeCustomerDeletionHazards(ctx, ev.CustomerID, []BillingDeletionResource{{Kind: "invoice", ID: ev.InvoiceID, Status: "webhook"}, {Kind: "payment_intent", ID: ev.PaymentIntentID, Status: "webhook"}, {Kind: "charge", ID: ev.ChargeID, Status: "webhook"}}); err != nil {
-					http.Error(w, "server error", http.StatusInternalServerError)
-					return
 				}
 			}
 		}

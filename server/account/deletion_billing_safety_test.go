@@ -264,6 +264,26 @@ func TestExactCompensationRejectsNonPaymentResources(t *testing.T) {
 	}
 }
 
+func TestActiveAccountDeletionStillJournalsCheckoutObservation(t *testing.T) {
+	store := newTestStore(t)
+	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{}}
+	raw, _ := json.Marshal(p)
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation,progress_json,mode,deletion_epoch,cutoff_at) VALUES('active-delete','subject','stripe','active-delete-key','pending',1,1,1,?,'account_deletion','active-delete',1)`, string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	observation := BillingDeletionResource{Kind: "checkout_session", ID: "cs_active", Status: "checkout.session.async_payment_failed", AsyncFailureAt: 2}
+	if err := store.AppendStripeActiveAccountDeletionHazard(context.Background(), "subject", observation); err != nil {
+		t.Fatal(err)
+	}
+	var progress string
+	if err := store.db.QueryRow(`SELECT progress_json FROM billing_cancellation_outbox WHERE id='active-delete'`).Scan(&progress); err != nil {
+		t.Fatal(err)
+	}
+	if got := decodeDeletionProgress(progress).Resources["checkout_session:cs_active"]; got.ID != "cs_active" || got.AsyncFailureAt != 2 {
+		t.Fatalf("active checkout observation=%+v", got)
+	}
+}
+
 func TestLatePaymentMatchingMultipleDeletionEpochsFailsClosed(t *testing.T) {
 	store := newTestStore(t)
 	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{"payment_intent:pi_shared": {Kind: "payment_intent", ID: "pi_shared", Terminal: true}}}

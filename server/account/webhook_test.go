@@ -3,7 +3,9 @@ package account
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -150,6 +152,96 @@ func TestWebhookCheckoutCompletedBindsCustomer(t *testing.T) {
 	// Plan not yet changed by checkout.session.completed alone.
 	if u.PlanID != "" && u.PlanID != "free" {
 		t.Fatalf("plan must stay unassigned after checkout.session.completed alone, got %q", u.PlanID)
+	}
+}
+
+func TestLateAsyncCheckoutSuccessPersistsExactPaymentChainBeforeACK(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	secret := "whsec_late_async"
+	var canonicalReads int
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		canonicalReads++
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/checkout/sessions/cs_late_async":
+			io.WriteString(w, `{"id":"cs_late_async","customer":"cus_late_async","payment_status":"paid","payment_intent":"pi_late_async"}`)
+		case "/v1/payment_intents/pi_late_async":
+			io.WriteString(w, `{"id":"pi_late_async","status":"succeeded","latest_charge":"ch_late_async"}`)
+		default:
+			http.Error(w, "unexpected", http.StatusNotFound)
+		}
+	}))
+	defer provider.Close()
+	client := newWebhookFixtureClient(secret)
+	client.base, client.http = provider.URL, provider.Client()
+	svc.biller = client
+	loginCookie(t, ts, mail, "late-async@example.test")
+	uid := mustUserID(t, store, "late-async@example.test")
+	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_late_async"); err != nil {
+		t.Fatal(err)
+	}
+	p := BillingDeletionProgress{Customers: []string{"cus_late_async"}, Resources: map[string]BillingDeletionResource{
+		"payment_intent:pi_late_async": {Kind: "payment_intent", ID: "pi_late_async", PaymentIntentID: "pi_late_async", Terminal: true, Status: "refunded"},
+	}}
+	raw, _ := json.Marshal(p)
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,idempotency_key,state,created_at,updated_at,generation,progress_json,terminal_at,mode,deletion_epoch,cutoff_at) VALUES('late-async-old',?,'stripe','cus_late_async','late-async-old-key','terminal',100,100,1,?,100,'account_deletion','late-async-epoch',100)`, uid, string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`{"id":"evt_late_async","type":"checkout.session.async_payment_succeeded","created":110,"livemode":false,"data":{"object":{"id":"cs_late_async","object":"checkout.session","customer":"cus_late_async","client_reference_id":%q,"payment_status":"paid"}}}`, uid)
+	resp := postWebhook(t, ts, secret, body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("late async status=%d", resp.StatusCode)
+	}
+	var progress string
+	if err := store.db.QueryRow(`SELECT progress_json FROM billing_cancellation_outbox WHERE mode='exact_compensation' AND state='pending'`).Scan(&progress); err != nil {
+		t.Fatal(err)
+	}
+	exact := decodeDeletionProgress(progress)
+	if _, ok := exact.Resources["payment_intent:pi_late_async"]; !ok {
+		t.Fatalf("payment intent missing: %+v", exact.Resources)
+	}
+	if _, ok := exact.Resources["charge:ch_late_async"]; !ok {
+		t.Fatalf("charge missing: %+v", exact.Resources)
+	}
+	for key := range exact.Resources {
+		if strings.HasPrefix(key, "checkout_session:") || strings.HasPrefix(key, "subscription:") || strings.HasPrefix(key, "schedule:") {
+			t.Fatalf("non-payment resource in exact compensation: %s", key)
+		}
+	}
+	resp = postWebhook(t, ts, secret, body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || canonicalReads != 2 {
+		t.Fatalf("duplicate status=%d canonicalReads=%d", resp.StatusCode, canonicalReads)
+	}
+	var count int
+	if err := store.db.QueryRow(`SELECT COUNT(*) FROM billing_cancellation_outbox WHERE mode='exact_compensation'`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("duplicate exact rows=%d err=%v", count, err)
+	}
+}
+
+func TestAsyncCheckoutSuccessWithoutCanonicalPaymentChainIsRetried(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	secret := "whsec_async_no_chain"
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"cs_no_chain","customer":"cus_no_chain","payment_status":"paid"}`)
+	}))
+	defer provider.Close()
+	client := newWebhookFixtureClient(secret)
+	client.base, client.http = provider.URL, provider.Client()
+	svc.biller = client
+	loginCookie(t, ts, mail, "async-no-chain@example.test")
+	uid := mustUserID(t, store, "async-no-chain@example.test")
+	body := fmt.Sprintf(`{"id":"evt_async_no_chain","type":"checkout.session.async_payment_succeeded","created":110,"livemode":false,"data":{"object":{"id":"cs_no_chain","object":"checkout.session","customer":"cus_no_chain","client_reference_id":%q,"payment_status":"paid"}}}`, uid)
+	resp := postWebhook(t, ts, secret, body)
+	resp.Body.Close()
+	if resp.StatusCode < 500 {
+		t.Fatalf("missing canonical chain ACKed with %d", resp.StatusCode)
+	}
+	var status string
+	if err := store.db.QueryRow(`SELECT status FROM stripe_webhook_events WHERE event_id='evt_async_no_chain'`).Scan(&status); err != nil || status != "failed" {
+		t.Fatalf("missing-chain ledger status=%s err=%v", status, err)
 	}
 }
 

@@ -116,10 +116,10 @@ type WebhookEvent struct {
 	// before (or without) the checkout.session.completed event that normally
 	// does the binding — Stripe does not guarantee delivery order. Empty when
 	// metadata is absent (e.g. checkout.session.completed itself).
-	MetadataUserID, MetadataBillingAttemptID, MetadataDeletionActionID string
-	CheckoutSessionID, InvoiceID, PaymentIntentID, ChargeID            string
-	RefundID                                                           string
-	CurrentPeriodEnd                                                   int64
+	MetadataUserID, MetadataBillingAttemptID, MetadataDeletionActionID     string
+	CheckoutSessionID, InvoiceID, PaymentIntentID, ChargeID, PaymentStatus string
+	RefundID                                                               string
+	CurrentPeriodEnd                                                       int64
 	// Created is the Stripe event's top-level `created` (unix secs) — the event
 	// emission time, used by the webhook's ordering guard to drop a stale
 	// (re)delivered event that would otherwise revert newer subscription state.
@@ -363,6 +363,7 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 				} `json:"parent"`
 				ClientReferenceID string `json:"client_reference_id"`
 				Status            string `json:"status"`
+				PaymentStatus     string `json:"payment_status"`
 				CurrentPeriodEnd  int64  `json:"current_period_end"`
 				Metadata          *struct {
 					UserID           string `json:"user_id"`
@@ -400,6 +401,7 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 		CustomerID:       envelope.Data.Object.Customer,
 		SubscriptionID:   envelope.Data.Object.Subscription,
 		Status:           envelope.Data.Object.Status,
+		PaymentStatus:    envelope.Data.Object.PaymentStatus,
 		ClientRefUserID:  envelope.Data.Object.ClientReferenceID,
 		CurrentPeriodEnd: envelope.Data.Object.CurrentPeriodEnd,
 	}
@@ -454,6 +456,76 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 		}
 	}
 	return ev, nil
+}
+
+type stripeCheckoutPaymentChain struct {
+	CustomerID, UserID, BillingAttemptID, SubscriptionID, InvoiceID, PaymentIntentID, ChargeID string
+}
+
+func (c *stripeClient) canonicalCheckoutPaymentChain(ctx context.Context, sessionID string) (stripeCheckoutPaymentChain, error) {
+	if sessionID == "" {
+		return stripeCheckoutPaymentChain{}, errors.New("stripe: checkout payment chain has no session")
+	}
+	body, err := c.request(ctx, http.MethodGet, "/v1/checkout/sessions/"+url.PathEscape(sessionID), nil)
+	if err != nil {
+		return stripeCheckoutPaymentChain{}, err
+	}
+	var session struct {
+		Customer      string `json:"customer"`
+		Subscription  string `json:"subscription"`
+		Invoice       string `json:"invoice"`
+		PaymentIntent string `json:"payment_intent"`
+		PaymentStatus string `json:"payment_status"`
+		ClientRef     string `json:"client_reference_id"`
+		Metadata      struct {
+			BillingAttemptID string `json:"billing_attempt_id"`
+			UserID           string `json:"user_id"`
+		} `json:"metadata"`
+	}
+	if err := json.Unmarshal(body, &session); err != nil {
+		return stripeCheckoutPaymentChain{}, fmt.Errorf("stripe: read checkout payment chain: %w", err)
+	}
+	chain := stripeCheckoutPaymentChain{CustomerID: session.Customer, UserID: session.ClientRef, BillingAttemptID: session.Metadata.BillingAttemptID, SubscriptionID: session.Subscription, InvoiceID: session.Invoice, PaymentIntentID: session.PaymentIntent}
+	if chain.InvoiceID == "" && chain.SubscriptionID != "" {
+		chain.InvoiceID, err = c.latestInvoiceID(ctx, chain.SubscriptionID)
+		if err != nil {
+			return stripeCheckoutPaymentChain{}, err
+		}
+	}
+	if chain.InvoiceID != "" {
+		body, err = c.request(ctx, http.MethodGet, "/v1/invoices/"+url.PathEscape(chain.InvoiceID), nil)
+		if err != nil {
+			return stripeCheckoutPaymentChain{}, err
+		}
+		var invoice struct {
+			PaymentIntent string `json:"payment_intent"`
+			Charge        string `json:"charge"`
+		}
+		if err := json.Unmarshal(body, &invoice); err != nil {
+			return stripeCheckoutPaymentChain{}, fmt.Errorf("stripe: read checkout invoice chain: %w", err)
+		}
+		if chain.PaymentIntentID == "" {
+			chain.PaymentIntentID = invoice.PaymentIntent
+		}
+		chain.ChargeID = invoice.Charge
+	}
+	if chain.PaymentIntentID != "" && chain.ChargeID == "" {
+		body, err = c.request(ctx, http.MethodGet, "/v1/payment_intents/"+url.PathEscape(chain.PaymentIntentID), nil)
+		if err != nil {
+			return stripeCheckoutPaymentChain{}, err
+		}
+		var payment struct {
+			LatestCharge string `json:"latest_charge"`
+		}
+		if err := json.Unmarshal(body, &payment); err != nil {
+			return stripeCheckoutPaymentChain{}, fmt.Errorf("stripe: read checkout payment intent chain: %w", err)
+		}
+		chain.ChargeID = payment.LatestCharge
+	}
+	if chain.InvoiceID == "" && chain.PaymentIntentID == "" && chain.ChargeID == "" {
+		return stripeCheckoutPaymentChain{}, errors.New("stripe: checkout success has no canonical payment chain")
+	}
+	return chain, nil
 }
 
 func (c *stripeClient) canonicalSubscription(ctx context.Context, subID string) (SubscriptionInfo, bool, error) {
