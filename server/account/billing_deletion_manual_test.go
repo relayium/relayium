@@ -16,8 +16,8 @@ import (
 func TestManualDeletionRefundRequiresCanonicalSuccessAndIsIdempotent(t *testing.T) {
 	store := newTestStore(t)
 	p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{
-		"invoice:in_paid": {Kind: "invoice", ID: "in_paid", CustomerID: "cus_1", Status: "paid_after_deletion", Manual: true},
-		"charge:ch_paid":  {Kind: "charge", ID: "ch_paid", PaymentIntentID: "pi_paid", CustomerID: "cus_1", Status: "succeeded_after_deletion", Manual: true},
+		"invoice:in_paid": {Kind: "invoice", ID: "in_paid", InvoiceID: "in_paid", CustomerID: "cus_1", Status: "paid_after_deletion", Manual: true},
+		"charge:ch_paid":  {Kind: "charge", ID: "ch_paid", PaymentIntentID: "pi_paid", InvoiceID: "in_paid", CustomerID: "cus_1", Status: "succeeded_after_deletion", Manual: true},
 	}}
 	raw, _ := json.Marshal(p)
 	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,progress_json,created_at,updated_at,generation,next_attempt_at) VALUES('out_manual','subject','stripe','delete-key','pending',?,1,1,1,1)`, string(raw)); err != nil {
@@ -30,7 +30,9 @@ func TestManualDeletionRefundRequiresCanonicalSuccessAndIsIdempotent(t *testing.
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/invoices/in_paid":
-			io.WriteString(w, `{"id":"in_paid","payment_intent":"pi_paid"}`)
+			io.WriteString(w, `{"id":"in_paid","status":"paid","customer":"cus_1","parent":{"subscription_details":{"subscription":"sub_paid"}},"amount_paid":500,"created":90}`)
+		case "GET /v1/invoice_payments":
+			io.WriteString(w, `{"data":[{"id":"inpay_paid","invoice":"in_paid","status":"paid","amount_paid":500,"status_transitions":{"paid_at":100},"payment":{"type":"payment_intent","payment_intent":"pi_paid"}}],"has_more":false}`)
 		case "GET /v1/refunds":
 			if refunded {
 				io.WriteString(w, `{"data":[{"id":"re_safe","status":"succeeded","payment_intent":"pi_paid","amount":500}],"has_more":false}`)
@@ -38,12 +40,12 @@ func TestManualDeletionRefundRequiresCanonicalSuccessAndIsIdempotent(t *testing.
 				io.WriteString(w, `{"data":[],"has_more":false}`)
 			}
 		case "GET /v1/payment_intents/pi_paid":
-			io.WriteString(w, `{"id":"pi_paid","latest_charge":"ch_paid"}`)
+			io.WriteString(w, `{"id":"pi_paid","customer":"cus_1","status":"succeeded","latest_charge":"ch_paid"}`)
 		case "GET /v1/charges/ch_paid":
 			if refunded {
-				io.WriteString(w, `{"id":"ch_paid","payment_intent":"pi_paid","amount":500,"amount_refunded":500,"refunded":true}`)
+				io.WriteString(w, `{"id":"ch_paid","customer":"cus_1","payment_intent":"pi_paid","amount":500,"amount_refunded":500,"refunded":true,"paid":true}`)
 			} else {
-				io.WriteString(w, `{"id":"ch_paid","payment_intent":"pi_paid","amount":500,"amount_refunded":0,"refunded":false}`)
+				io.WriteString(w, `{"id":"ch_paid","customer":"cus_1","payment_intent":"pi_paid","amount":500,"amount_refunded":0,"refunded":false,"paid":true}`)
 			}
 		case "POST /v1/refunds":
 			posts++
@@ -380,7 +382,7 @@ func TestManualDeletionRefundDoesNotAcceptPendingCanonicalRefund(t *testing.T) {
 func TestManualDeletionRefundAdoptsOneCanonicalExternalFullRefund(t *testing.T) {
 	store := newTestStore(t)
 	p := BillingDeletionProgress{Customers: []string{"cus_ext"}, Resources: map[string]BillingDeletionResource{
-		"charge:ch_ext": {Kind: "charge", ID: "ch_ext", PaymentIntentID: "pi_ext", CustomerID: "cus_ext", Status: "succeeded_after_deletion", Manual: true},
+		"charge:ch_ext": {Kind: "charge", ID: "ch_ext", PaymentIntentID: "pi_ext", InvoiceID: "in_ext", CustomerID: "cus_ext", Status: "succeeded_after_deletion", Manual: true},
 	}}
 	raw, _ := json.Marshal(p)
 	if _, err := store.db.Exec(`INSERT INTO billing_deletion_holds(billing_subject_id,email_hmac,provider,created_at,expires_at,review_at,subject_released_at) VALUES('subject',X'08','stripe',1,2,3,99)`); err != nil {
@@ -393,10 +395,14 @@ func TestManualDeletionRefundAdoptsOneCanonicalExternalFullRefund(t *testing.T) 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method + " " + r.URL.Path {
+		case "GET /v1/invoices/in_ext":
+			io.WriteString(w, `{"id":"in_ext","status":"paid","customer":"cus_ext","parent":{"subscription_details":{"subscription":"sub_ext"}},"amount_paid":500,"created":90}`)
+		case "GET /v1/invoice_payments":
+			io.WriteString(w, `{"data":[{"id":"inpay_ext","invoice":"in_ext","status":"paid","amount_paid":500,"status_transitions":{"paid_at":100},"payment":{"type":"payment_intent","payment_intent":"pi_ext"}}],"has_more":false}`)
 		case "GET /v1/payment_intents/pi_ext":
-			io.WriteString(w, `{"latest_charge":"ch_ext"}`)
+			io.WriteString(w, `{"id":"pi_ext","customer":"cus_ext","status":"succeeded","latest_charge":"ch_ext"}`)
 		case "GET /v1/charges/ch_ext":
-			io.WriteString(w, `{"id":"ch_ext","payment_intent":"pi_ext","amount":500,"amount_refunded":500,"refunded":true}`)
+			io.WriteString(w, `{"id":"ch_ext","customer":"cus_ext","payment_intent":"pi_ext","amount":500,"amount_refunded":500,"refunded":true,"paid":true}`)
 		case "GET /v1/refunds":
 			if r.URL.Query().Get("starting_after") == "re_part_a" {
 				io.WriteString(w, `{"data":[{"id":"re_part_b","status":"succeeded","payment_intent":"pi_ext","amount":300}],"has_more":false}`)
@@ -584,9 +590,9 @@ func TestOrphanFailureBindingCommitsRotationBeforeReturning(t *testing.T) {
 	}
 }
 
-func TestManualCheckoutRefundFollowsSubscriptionLatestInvoice(t *testing.T) {
+func TestManualCheckoutRefundUsesImmutableSessionInvoice(t *testing.T) {
 	store := newTestStore(t)
-	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{"checkout_session:cs_paid": {Kind: "checkout_session", ID: "cs_paid", Manual: true, Status: "paid_time_unknown"}}}
+	p := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{"checkout_session:cs_paid": {Kind: "checkout_session", ID: "cs_paid", CustomerID: "cus_paid", Manual: true, Status: "paid_time_unknown"}}}
 	raw, _ := json.Marshal(p)
 	_, _ = store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,progress_json,created_at,updated_at,generation,next_attempt_at) VALUES('out_checkout','subject','stripe','checkout-key','pending',?,1,1,1,1)`, string(raw))
 	var actionID string
@@ -595,11 +601,11 @@ func TestManualCheckoutRefundFollowsSubscriptionLatestInvoice(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/checkout/sessions/cs_paid":
-			io.WriteString(w, `{"id":"cs_paid","subscription":"sub_paid"}`)
-		case "GET /v1/subscriptions/sub_paid":
-			io.WriteString(w, `{"id":"sub_paid","latest_invoice":"in_paid"}`)
+			io.WriteString(w, `{"id":"cs_paid","customer":"cus_paid","subscription":"sub_paid","invoice":"in_paid"}`)
 		case "GET /v1/invoices/in_paid":
-			io.WriteString(w, `{"id":"in_paid","payment_intent":"pi_paid"}`)
+			io.WriteString(w, `{"id":"in_paid","status":"paid","customer":"cus_paid","parent":{"subscription_details":{"subscription":"sub_paid"}},"amount_paid":500,"created":90}`)
+		case "GET /v1/invoice_payments":
+			io.WriteString(w, `{"data":[{"id":"inpay_paid","invoice":"in_paid","status":"paid","amount_paid":500,"status_transitions":{"paid_at":100},"payment":{"type":"payment_intent","payment_intent":"pi_paid"}}],"has_more":false}`)
 		case "GET /v1/refunds":
 			if refunded {
 				io.WriteString(w, `{"data":[{"id":"re_checkout","status":"succeeded","payment_intent":"pi_paid","amount":500}],"has_more":false}`)
@@ -607,12 +613,12 @@ func TestManualCheckoutRefundFollowsSubscriptionLatestInvoice(t *testing.T) {
 				io.WriteString(w, `{"data":[],"has_more":false}`)
 			}
 		case "GET /v1/payment_intents/pi_paid":
-			io.WriteString(w, `{"id":"pi_paid","latest_charge":"ch_paid"}`)
+			io.WriteString(w, `{"id":"pi_paid","customer":"cus_paid","status":"succeeded","latest_charge":"ch_paid"}`)
 		case "GET /v1/charges/ch_paid":
 			if refunded {
-				io.WriteString(w, `{"id":"ch_paid","payment_intent":"pi_paid","amount":500,"amount_refunded":500,"refunded":true}`)
+				io.WriteString(w, `{"id":"ch_paid","customer":"cus_paid","payment_intent":"pi_paid","amount":500,"amount_refunded":500,"refunded":true,"paid":true}`)
 			} else {
-				io.WriteString(w, `{"id":"ch_paid","payment_intent":"pi_paid","amount":500,"amount_refunded":0,"refunded":false}`)
+				io.WriteString(w, `{"id":"ch_paid","customer":"cus_paid","payment_intent":"pi_paid","amount":500,"amount_refunded":0,"refunded":false,"paid":true}`)
 			}
 		case "POST /v1/refunds":
 			refunded = true

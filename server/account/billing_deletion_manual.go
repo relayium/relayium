@@ -403,13 +403,9 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 	if !exists {
 		return BillingDeletionManualResult{}, errors.New("account: selected deletion resource does not exist")
 	}
-	paymentIntentID := r.PaymentIntentID
-	if paymentIntentID == "" {
-		var err error
-		paymentIntentID, err = c.deletionPaymentIntent(ctx, r)
-		if err != nil {
-			return BillingDeletionManualResult{}, err
-		}
+	paymentIntentID, err := c.deletionPaymentIntent(ctx, r)
+	if err != nil {
+		return BillingDeletionManualResult{}, err
 	}
 	sum := sha256.Sum256([]byte("relayium:billing-deletion-refund:v2\x00" + outboxID + "\x00" + paymentIntentID))
 	actionID := "bdr_" + hex.EncodeToString(sum[:16])
@@ -664,54 +660,41 @@ func (c *stripeClient) deletionRefundTotals(ctx context.Context, paymentIntentID
 }
 
 func (c *stripeClient) deletionPaymentIntent(ctx context.Context, r BillingDeletionResource) (string, error) {
+	if r.Kind == "invoice" || r.Kind == "checkout_session" || r.InvoiceID != "" {
+		invoiceID := r.InvoiceID
+		if r.Kind == "invoice" {
+			invoiceID = r.ID
+		}
+		if r.Kind == "checkout_session" {
+			body, err := c.request(ctx, http.MethodGet, "/v1/checkout/sessions/"+url.PathEscape(r.ID), nil)
+			if err != nil {
+				return "", err
+			}
+			var session struct{ Invoice, Customer, Subscription string }
+			if json.Unmarshal(body, &session) != nil || session.Invoice == "" || (r.CustomerID != "" && session.Customer != r.CustomerID) {
+				return "", errors.New("stripe: checkout invoice identity is unavailable")
+			}
+			invoiceID = session.Invoice
+		}
+		invoice, err := c.canonicalInvoicePayments(ctx, invoiceID, r.CustomerID, "", true)
+		if err != nil {
+			return "", err
+		}
+		if !invoiceHasOneExclusivePaymentIntent(invoice) {
+			return "", errors.New("stripe: invoice has multiple, shared, or unsupported payment constituents")
+		}
+		if r.PaymentIntentID != "" && r.PaymentIntentID != invoice.Payments[0].PaymentIntentID {
+			return "", errors.New("stripe: deletion payment intent changed")
+		}
+		return invoice.Payments[0].PaymentIntentID, nil
+	}
 	if r.Kind == "payment_intent" && strings.HasPrefix(r.ID, "pi_") {
-		return r.ID, nil
+		return "", errors.New("stripe: payment intent lacks canonical invoice allocation")
 	}
-	path := ""
-	if r.Kind == "checkout_session" {
-		path = "/v1/checkout/sessions/" + url.PathEscape(r.ID)
-	} else if r.Kind == "invoice" {
-		path = "/v1/invoices/" + url.PathEscape(r.ID)
-	} else if r.Kind == "charge" {
-		path = "/v1/charges/" + url.PathEscape(r.ID)
-	} else {
-		return "", fmt.Errorf("account: %s is not a refundable deletion resource", r.Kind)
+	if r.Kind == "charge" {
+		return "", errors.New("stripe: charge lacks canonical invoice allocation")
 	}
-	body, err := c.request(ctx, http.MethodGet, path, nil)
-	if err != nil {
-		return "", err
-	}
-	var obj struct {
-		PaymentIntent string `json:"payment_intent"`
-		Invoice       string `json:"invoice"`
-		Customer      string `json:"customer"`
-		Subscription  string `json:"subscription"`
-	}
-	if err := json.Unmarshal(body, &obj); err != nil {
-		return "", err
-	}
-	if obj.PaymentIntent == "" && obj.Invoice == "" && obj.Subscription != "" {
-		obj.Invoice, err = c.latestInvoiceID(ctx, obj.Subscription)
-		if err != nil {
-			return "", err
-		}
-	}
-	if obj.PaymentIntent == "" && obj.Invoice != "" {
-		body, err = c.request(ctx, http.MethodGet, "/v1/invoices/"+url.PathEscape(obj.Invoice), nil)
-		if err != nil {
-			return "", err
-		}
-		if err := json.Unmarshal(body, &obj); err != nil {
-			return "", err
-		}
-	}
-	if !strings.HasPrefix(obj.PaymentIntent, "pi_") {
-		return "", errors.New("stripe: refundable payment intent is unavailable")
-	}
-	if r.CustomerID != "" && obj.Customer != "" && obj.Customer != r.CustomerID {
-		return "", errors.New("stripe: refundable object customer mismatch")
-	}
-	return obj.PaymentIntent, nil
+	return "", fmt.Errorf("account: %s is not a refundable deletion resource", r.Kind)
 }
 
 func (c *stripeClient) findDeletionRefund(ctx context.Context, paymentIntentID, actionID string) (string, error) {

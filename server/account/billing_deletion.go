@@ -64,6 +64,14 @@ var ErrPaidInvoiceNeedsCanonicalEpoch = errors.New("account: paid invoice requir
 type CanonicalStripePaidInvoice struct {
 	InvoiceID, CustomerID, SubscriptionID, PaymentIntentID, ChargeID string
 	CreatedAt, PaidAt                                                int64
+	AmountPaid                                                       int64
+	Payments                                                         []CanonicalStripeInvoicePayment
+}
+
+type CanonicalStripeInvoicePayment struct {
+	InvoicePaymentID, PaymentType, PaymentIntentID, PaymentRecordID, ChargeID string
+	AmountPaid, ChargeAmount, AmountRefunded                                  int64
+	PaidAt                                                                    int64
 }
 
 const billingDeletionProgressVersion = 1

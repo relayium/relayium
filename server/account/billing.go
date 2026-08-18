@@ -1115,16 +1115,25 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
-			resources = []BillingDeletionResource{{Kind: "invoice", ID: invoice.InvoiceID, InvoiceID: invoice.InvoiceID, PaymentIntentID: invoice.PaymentIntentID, Status: "canonical_invoice_paid"}}
-			if invoice.PaymentIntentID != "" {
-				resources = append(resources, BillingDeletionResource{Kind: "payment_intent", ID: invoice.PaymentIntentID, PaymentIntentID: invoice.PaymentIntentID, InvoiceID: invoice.InvoiceID, Status: "canonical_invoice_paid"})
-			}
-			if invoice.ChargeID != "" {
-				resources = append(resources, BillingDeletionResource{Kind: "charge", ID: invoice.ChargeID, PaymentIntentID: invoice.PaymentIntentID, InvoiceID: invoice.InvoiceID, Status: "canonical_invoice_paid"})
-			}
-			if canonicalJournal.AppendCanonicalStripePaidInvoiceDeletionHazards(ctx, invoice, resources) != nil {
-				http.Error(w, "server error", http.StatusInternalServerError)
-				return
+			if invoice.AmountPaid > 0 {
+				invoiceResource := BillingDeletionResource{Kind: "invoice", ID: invoice.InvoiceID, InvoiceID: invoice.InvoiceID, Status: "canonical_invoice_paid"}
+				if !invoiceHasOneExclusivePaymentIntent(invoice) {
+					invoiceResource.Manual = true
+					invoiceResource.Status = "canonical_invoice_payments_require_manual_reconciliation"
+				}
+				resources = []BillingDeletionResource{invoiceResource}
+				for _, payment := range invoice.Payments {
+					if payment.PaymentIntentID == "" || payment.ChargeID == "" {
+						continue
+					}
+					resources = append(resources,
+						BillingDeletionResource{Kind: "payment_intent", ID: payment.PaymentIntentID, PaymentIntentID: payment.PaymentIntentID, InvoiceID: invoice.InvoiceID, Status: "canonical_invoice_paid", SuccessAt: payment.PaidAt},
+						BillingDeletionResource{Kind: "charge", ID: payment.ChargeID, PaymentIntentID: payment.PaymentIntentID, InvoiceID: invoice.InvoiceID, Status: "canonical_invoice_paid", SuccessAt: payment.PaidAt})
+				}
+				if canonicalJournal.AppendCanonicalStripePaidInvoiceDeletionHazards(ctx, invoice, resources) != nil {
+					http.Error(w, "server error", http.StatusInternalServerError)
+					return
+				}
 			}
 		} else if err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)

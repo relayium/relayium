@@ -55,7 +55,7 @@ func seedTerminalInvoiceDeletionEpoch(t *testing.T, store *SQLiteStore, subject,
 	}
 }
 
-func assertPaidInvoiceExactJournal(t *testing.T, store *SQLiteStore, subject, invoice, paymentIntent, charge string) {
+func assertPaidInvoiceExactJournal(t *testing.T, store *SQLiteStore, subject, invoice, paymentIntent, charge string, canonical bool) {
 	t.Helper()
 	var raw string
 	if err := store.db.QueryRow(`SELECT progress_json FROM billing_cancellation_outbox WHERE billing_subject_id=? AND mode='exact_compensation' AND state='pending'`, subject).Scan(&raw); err != nil {
@@ -76,9 +76,31 @@ func assertPaidInvoiceExactJournal(t *testing.T, store *SQLiteStore, subject, in
 		}
 	}
 	for _, resource := range p.Resources {
-		if resource.SuccessAt != 0 {
+		if !canonical && resource.SuccessAt != 0 {
 			t.Fatalf("webhook fabricated canonical paid_at: %+v", resource)
 		}
+	}
+}
+
+func serveDahliaInvoicePayment(t *testing.T, w http.ResponseWriter, r *http.Request, invoiceID, customer, subscriptionFields, paymentIntent, charge string, amount, paidAt int64) {
+	t.Helper()
+	if got := r.Header.Get("Stripe-Version"); got != stripeAPIVersion {
+		t.Errorf("Stripe-Version=%q", got)
+	}
+	switch r.URL.Path {
+	case "/v1/invoices/" + invoiceID:
+		fmt.Fprintf(w, `{"id":%q,"status":"paid","customer":%q,%s"amount_paid":%d,"created":90,"status_transitions":{"paid_at":%d}}`, invoiceID, customer, subscriptionFields, amount, paidAt)
+	case "/v1/invoice_payments":
+		if r.URL.Query().Get("invoice") != invoiceID || r.URL.Query().Get("status") != "paid" {
+			t.Errorf("invoice payment query=%v", r.URL.Query())
+		}
+		fmt.Fprintf(w, `{"data":[{"id":"inpay_one","invoice":%q,"status":"paid","amount_paid":%d,"status_transitions":{"paid_at":%d},"payment":{"type":"payment_intent","payment_intent":%q}}],"has_more":false}`, invoiceID, amount, paidAt, paymentIntent)
+	case "/v1/payment_intents/" + paymentIntent:
+		fmt.Fprintf(w, `{"id":%q,"customer":%q,"status":"succeeded","latest_charge":%q}`, paymentIntent, customer, charge)
+	case "/v1/charges/" + charge:
+		fmt.Fprintf(w, `{"id":%q,"customer":%q,"payment_intent":%q,"amount":%d,"amount_refunded":0,"paid":true}`, charge, customer, paymentIntent, amount)
+	default:
+		http.Error(w, "unexpected", http.StatusBadRequest)
 	}
 }
 
@@ -114,7 +136,7 @@ func TestPaidInvoiceIsJournaledBeforeCanonicalOrAuthorityGates(t *testing.T) {
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("status=%d", resp.StatusCode)
 		}
-		assertPaidInvoiceExactJournal(t, store, uid, "in_paid_missing", "pi_paid_missing", "ch_paid_missing")
+		assertPaidInvoiceExactJournal(t, store, uid, "in_paid_missing", "pi_paid_missing", "ch_paid_missing", false)
 	})
 
 	t.Run("purged subject and invoice without subscription", func(t *testing.T) {
@@ -127,7 +149,7 @@ func TestPaidInvoiceIsJournaledBeforeCanonicalOrAuthorityGates(t *testing.T) {
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("status=%d", resp.StatusCode)
 		}
-		assertPaidInvoiceExactJournal(t, store, "purged-subject", "in_paid_tombstone", "pi_paid_tombstone", "")
+		assertPaidInvoiceExactJournal(t, store, "purged-subject", "in_paid_tombstone", "pi_paid_tombstone", "", false)
 	})
 
 	for _, provider := range []string{SourceAdmin, ProviderApple} {
@@ -154,7 +176,7 @@ func TestPaidInvoiceIsJournaledBeforeCanonicalOrAuthorityGates(t *testing.T) {
 			if resp.StatusCode != http.StatusInternalServerError {
 				t.Fatalf("status=%d, want 500 authority conflict", resp.StatusCode)
 			}
-			assertPaidInvoiceExactJournal(t, store, uid, "in_paid_"+provider, "pi_paid_"+provider, "ch_paid_"+provider)
+			assertPaidInvoiceExactJournal(t, store, uid, "in_paid_"+provider, "pi_paid_"+provider, "ch_paid_"+provider, false)
 		})
 	}
 }
@@ -182,15 +204,14 @@ func TestPaidInvoiceWithoutChainUsesCanonicalDeletionEpoch(t *testing.T) {
 	secret := "whsec_paid_canonical"
 	var invoiceGets int
 	stripe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/v1/invoices/in_late" {
+		if r.Method != http.MethodGet {
 			http.Error(w, "unexpected", http.StatusBadRequest)
 			return
 		}
-		invoiceGets++
-		if got := r.Header.Get("Stripe-Version"); got != stripeAPIVersion {
-			t.Errorf("Stripe-Version=%q", got)
+		if r.URL.Path == "/v1/invoices/in_late" {
+			invoiceGets++
 		}
-		io.WriteString(w, `{"id":"in_late","status":"paid","customer":"cus_late","parent":{"type":"subscription_details","subscription_details":{"subscription":"sub_old"}},"payment_intent":"pi_late","charge":"ch_late","created":90,"status_transitions":{"paid_at":110}}`)
+		serveDahliaInvoicePayment(t, w, r, "in_late", "cus_late", `"parent":{"type":"subscription_details","subscription_details":{"subscription":"sub_old"}},`, "pi_late", "ch_late", 500, 110)
 	}))
 	defer stripe.Close()
 	client := NewStripeClient("sk_test", secret, "")
@@ -204,14 +225,14 @@ func TestPaidInvoiceWithoutChainUsesCanonicalDeletionEpoch(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || invoiceGets != 1 {
 		t.Fatalf("status=%d canonicalGets=%d", resp.StatusCode, invoiceGets)
 	}
-	assertPaidInvoiceExactJournal(t, store, uid, "in_late", "pi_late", "ch_late")
+	assertPaidInvoiceExactJournal(t, store, uid, "in_late", "pi_late", "ch_late", true)
 }
 
 func TestPaidInvoiceCanonicalEpochAmbiguityIsRetryable(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_paid_ambiguous"
 	stripe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, `{"id":"in_ambiguous","status":"paid","customer":"cus_ambiguous","subscription":"sub_shared","payment_intent":"pi_new","created":90,"status_transitions":{"paid_at":130}}`)
+		serveDahliaInvoicePayment(t, w, r, "in_ambiguous", "cus_ambiguous", `"subscription":"sub_shared",`, "pi_new", "ch_new", 500, 130)
 	}))
 	defer stripe.Close()
 	client := NewStripeClient("sk_test", secret, "")
@@ -248,7 +269,7 @@ func TestCanonicalPaidInvoiceSubscriptionShapes(t *testing.T) {
 				if got := r.Header.Get("Stripe-Version"); got != stripeAPIVersion {
 					t.Errorf("Stripe-Version=%q", got)
 				}
-				fmt.Fprintf(w, `{"id":"in_shape","status":"paid","customer":"cus_shape",%s"payment_intent":"pi_shape","created":90,"status_transitions":{"paid_at":110}}`, tc.subscriptionFields)
+				serveDahliaInvoicePayment(t, w, r, "in_shape", "cus_shape", tc.subscriptionFields, "pi_shape", "ch_shape", 500, 110)
 			}))
 			defer server.Close()
 			client := NewStripeClient("sk_test", "whsec", "")
@@ -278,7 +299,7 @@ func TestPaidInvoiceCannotBindReactivatedSubscriptionOrOneOffInvoice(t *testing.
 			ts, svc, store, mail := newBillingServer(t)
 			secret := "whsec_paid_wrong_scope"
 			stripe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				fmt.Fprintf(w, `{"id":"in_wrong_scope","status":"paid","customer":"cus_reused",%s"payment_intent":"pi_new","created":90,"status_transitions":{"paid_at":110}}`, tc.subscriptionFields)
+				serveDahliaInvoicePayment(t, w, r, "in_wrong_scope", "cus_reused", tc.subscriptionFields, "pi_new", "ch_new", 500, 110)
 			}))
 			defer stripe.Close()
 			client := NewStripeClient("sk_test", secret, "")

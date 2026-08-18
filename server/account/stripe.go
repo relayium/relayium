@@ -465,6 +465,7 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 
 type stripeCheckoutPaymentChain struct {
 	CustomerID, UserID, BillingAttemptID, SubscriptionID, InvoiceID, PaymentIntentID, ChargeID string
+	Payments                                                                                   []CanonicalStripeInvoicePayment
 }
 
 func (c *stripeClient) canonicalCheckoutPaymentChain(ctx context.Context, sessionID string) (stripeCheckoutPaymentChain, error) {
@@ -492,23 +493,17 @@ func (c *stripeClient) canonicalCheckoutPaymentChain(ctx context.Context, sessio
 	}
 	chain := stripeCheckoutPaymentChain{CustomerID: session.Customer, UserID: session.ClientRef, BillingAttemptID: session.Metadata.BillingAttemptID, SubscriptionID: session.Subscription, InvoiceID: session.Invoice, PaymentIntentID: session.PaymentIntent}
 	if chain.InvoiceID != "" {
-		body, err = c.request(ctx, http.MethodGet, "/v1/invoices/"+url.PathEscape(chain.InvoiceID), nil)
+		invoice, err := c.canonicalInvoicePayments(ctx, chain.InvoiceID, chain.CustomerID, chain.SubscriptionID, true)
 		if err != nil {
 			return stripeCheckoutPaymentChain{}, err
 		}
-		var invoice struct {
-			PaymentIntent string `json:"payment_intent"`
-			Charge        string `json:"charge"`
+		chain.Payments = invoice.Payments
+		if len(invoice.Payments) == 1 {
+			chain.PaymentIntentID = invoice.Payments[0].PaymentIntentID
+			chain.ChargeID = invoice.Payments[0].ChargeID
 		}
-		if err := json.Unmarshal(body, &invoice); err != nil {
-			return stripeCheckoutPaymentChain{}, fmt.Errorf("stripe: read checkout invoice chain: %w", err)
-		}
-		if chain.PaymentIntentID == "" {
-			chain.PaymentIntentID = invoice.PaymentIntent
-		}
-		chain.ChargeID = invoice.Charge
 	}
-	if chain.PaymentIntentID != "" && chain.ChargeID == "" {
+	if chain.InvoiceID == "" && chain.PaymentIntentID != "" && chain.ChargeID == "" {
 		body, err = c.request(ctx, http.MethodGet, "/v1/payment_intents/"+url.PathEscape(chain.PaymentIntentID), nil)
 		if err != nil {
 			return stripeCheckoutPaymentChain{}, err
@@ -891,6 +886,7 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			LatestCharge      string `json:"latest_charge"`
 			Charge            string `json:"charge"`
 			Paid              bool   `json:"paid"`
+			AmountPaid        int64  `json:"amount_paid"`
 			StatusTransitions struct {
 				PaidAt int64 `json:"paid_at"`
 			} `json:"status_transitions"`
@@ -1056,25 +1052,35 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				return p, err
 			}
 		case "invoice":
-			r.ProviderCreatedAt = obj.Created
-			r.PaymentIntentID = obj.PaymentIntent
-			r.InvoiceID = r.ID
-			if obj.PaymentIntent != "" {
-				p.add(BillingDeletionResource{Kind: "payment_intent", ID: obj.PaymentIntent, PaymentIntentID: obj.PaymentIntent, InvoiceID: r.ID, CustomerID: r.CustomerID, Status: "invoice_link", SuccessAt: obj.StatusTransitions.PaidAt})
-			}
-			if obj.Charge != "" {
-				p.add(BillingDeletionResource{Kind: "charge", ID: obj.Charge, PaymentIntentID: obj.PaymentIntent, InvoiceID: r.ID, CustomerID: r.CustomerID, Status: "invoice_link", SuccessAt: obj.StatusTransitions.PaidAt})
-			}
 			if obj.Status == "paid" {
-				if obj.StatusTransitions.PaidAt > 0 && obj.StatusTransitions.PaidAt < cutoffAt {
+				invoice, err := c.canonicalInvoicePayments(ctx, r.ID, obj.Customer, "", true)
+				if err != nil {
+					return p, err
+				}
+				r.ProviderCreatedAt, r.InvoiceID = invoice.CreatedAt, r.ID
+				for _, payment := range invoice.Payments {
+					p.add(BillingDeletionResource{Kind: "payment_intent", ID: payment.PaymentIntentID, PaymentIntentID: payment.PaymentIntentID, InvoiceID: r.ID, CustomerID: r.CustomerID, Status: "invoice_payment_link", SuccessAt: payment.PaidAt})
+					p.add(BillingDeletionResource{Kind: "charge", ID: payment.ChargeID, PaymentIntentID: payment.PaymentIntentID, InvoiceID: r.ID, CustomerID: r.CustomerID, Status: "invoice_payment_link", SuccessAt: payment.PaidAt})
+				}
+				if invoice.AmountPaid == 0 {
 					r.Terminal = true
-					r.Status = "paid_before_deletion"
+					r.Status = "paid_without_charge"
+					break
+				}
+				if !invoiceHasOneExclusivePaymentIntent(invoice) {
+					r.Manual, r.Status = true, "multiple_or_unsupported_invoice_payments"
+					p.Resources[resourceKey] = r
+					return p, errors.New("stripe: paid invoice requires constituent-level manual reconciliation")
+				}
+				paidAt := invoice.Payments[0].PaidAt
+				if paidAt > 0 && paidAt < cutoffAt {
+					r.Terminal, r.Status = true, "paid_before_deletion"
 					break
 				}
 				r.Manual = true
-				if obj.StatusTransitions.PaidAt > cutoffAt {
+				if paidAt > cutoffAt {
 					r.Status = "paid_after_deletion"
-				} else if obj.StatusTransitions.PaidAt == cutoffAt {
+				} else if paidAt == cutoffAt {
 					r.Status = "paid_at_deletion_time_unknown"
 				} else {
 					r.Status = "paid_time_unknown"
@@ -1229,26 +1235,31 @@ func (c *stripeClient) latestInvoiceID(ctx context.Context, subID string) (strin
 }
 
 // refundInvoice issues a full refund of an invoice's payment, if it was paid.
-// Idempotency-Key = "refund:<subID>" so a re-run (or a racing reconcile) never
-// double-refunds.
+// The key includes the immutable Invoice Payment id, so retrying one constituent
+// never creates a second refund or collides with another partial payment.
 func (c *stripeClient) refundInvoice(ctx context.Context, subID, invoiceID string) error {
-	body, err := c.request(ctx, http.MethodGet, "/v1/invoices/"+invoiceID, nil)
+	invoice, err := c.canonicalInvoicePayments(ctx, invoiceID, "", subID, true)
 	if err != nil {
 		return err
 	}
-	var inv struct {
-		PaymentIntent string `json:"payment_intent"`
-		AmountPaid    int64  `json:"amount_paid"`
-	}
-	if err := json.Unmarshal(body, &inv); err != nil {
-		return fmt.Errorf("stripe: read invoice %s: %w", invoiceID, err)
-	}
-	if inv.PaymentIntent == "" || inv.AmountPaid <= 0 {
+	if invoice.AmountPaid <= 0 {
 		return nil // nothing was charged — nothing to refund
 	}
+	if !invoiceHasOneExclusivePaymentIntent(invoice) {
+		return errors.New("stripe: invoice has multiple, shared, or unsupported payment constituents and requires manual refund")
+	}
+	payment := invoice.Payments[0]
+	if payment.AmountRefunded < 0 || payment.AmountRefunded > payment.AmountPaid {
+		return errors.New("stripe: invoice payment is not exclusively refundable")
+	}
+	remaining := payment.AmountPaid - payment.AmountRefunded
+	if remaining == 0 {
+		return nil
+	}
 	form := url.Values{}
-	form.Set("payment_intent", inv.PaymentIntent)
-	_, err = c.requestKeyed(ctx, http.MethodPost, "/v1/refunds", form, "refund:"+subID)
+	form.Set("payment_intent", payment.PaymentIntentID)
+	form.Set("amount", strconv.FormatInt(remaining, 10))
+	_, err = c.requestKeyed(ctx, http.MethodPost, "/v1/refunds", form, "refund:"+subID+":"+payment.InvoicePaymentID)
 	return err
 }
 
@@ -1773,8 +1784,12 @@ func (c *stripeClient) request(ctx context.Context, method, path string, form ur
 }
 
 func (c *stripeClient) canonicalPaidInvoice(ctx context.Context, invoiceID string) (CanonicalStripePaidInvoice, error) {
+	return c.canonicalInvoicePayments(ctx, invoiceID, "", "", true)
+}
+
+func (c *stripeClient) canonicalInvoicePayments(ctx context.Context, invoiceID, expectedCustomer, expectedSubscription string, requireSubscription bool) (CanonicalStripePaidInvoice, error) {
 	if invoiceID == "" {
-		return CanonicalStripePaidInvoice{}, errors.New("stripe: canonical paid invoice id is empty")
+		return CanonicalStripePaidInvoice{}, errors.New("stripe: canonical invoice id is empty")
 	}
 	body, err := c.request(ctx, http.MethodGet, "/v1/invoices/"+url.PathEscape(invoiceID), nil)
 	if err != nil {
@@ -1785,9 +1800,8 @@ func (c *stripeClient) canonicalPaidInvoice(ctx context.Context, invoiceID strin
 		Status            string `json:"status"`
 		Customer          string `json:"customer"`
 		Subscription      string `json:"subscription"`
-		PaymentIntent     string `json:"payment_intent"`
-		Charge            string `json:"charge"`
 		Created           int64  `json:"created"`
+		AmountPaid        *int64 `json:"amount_paid"`
 		StatusTransitions struct {
 			PaidAt int64 `json:"paid_at"`
 		} `json:"status_transitions"`
@@ -1805,20 +1819,129 @@ func (c *stripeClient) canonicalPaidInvoice(ctx context.Context, invoiceID strin
 		nestedSubscription = obj.Parent.SubscriptionDetails.Subscription
 	}
 	if obj.Subscription != "" && nestedSubscription != "" && obj.Subscription != nestedSubscription {
-		return CanonicalStripePaidInvoice{}, errors.New("stripe: canonical paid invoice subscription identities conflict")
+		return CanonicalStripePaidInvoice{}, errors.New("stripe: canonical invoice subscription identities conflict")
 	}
 	subscriptionID := obj.Subscription
 	if subscriptionID == "" {
 		subscriptionID = nestedSubscription
 	}
-	if obj.ID != invoiceID || obj.Status != "paid" || obj.Customer == "" || subscriptionID == "" || obj.Created <= 0 || obj.StatusTransitions.PaidAt <= 0 || obj.Created > obj.StatusTransitions.PaidAt {
-		return CanonicalStripePaidInvoice{}, errors.New("stripe: canonical paid invoice evidence is invalid")
+	if obj.ID != invoiceID || obj.Status != "paid" || obj.Customer == "" || obj.Created <= 0 || obj.AmountPaid == nil || *obj.AmountPaid < 0 || (expectedCustomer != "" && obj.Customer != expectedCustomer) || (expectedSubscription != "" && subscriptionID != expectedSubscription) || (requireSubscription && subscriptionID == "") {
+		return CanonicalStripePaidInvoice{}, errors.New("stripe: canonical invoice identity is invalid")
 	}
-	return CanonicalStripePaidInvoice{
-		InvoiceID: obj.ID, CustomerID: obj.Customer, SubscriptionID: subscriptionID,
-		PaymentIntentID: obj.PaymentIntent, ChargeID: obj.Charge,
-		CreatedAt: obj.Created, PaidAt: obj.StatusTransitions.PaidAt,
-	}, nil
+	invoice := CanonicalStripePaidInvoice{InvoiceID: obj.ID, CustomerID: obj.Customer, SubscriptionID: subscriptionID, CreatedAt: obj.Created, PaidAt: obj.StatusTransitions.PaidAt, AmountPaid: *obj.AmountPaid}
+	query := url.Values{"invoice": {invoiceID}, "status": {"paid"}, "limit": {"100"}}
+	seenPayments, seenIntents := map[string]bool{}, map[string]bool{}
+	var allocated int64
+	for {
+		body, err = c.request(ctx, http.MethodGet, "/v1/invoice_payments?"+query.Encode(), nil)
+		if err != nil {
+			return CanonicalStripePaidInvoice{}, err
+		}
+		var page struct {
+			Data []struct {
+				ID                string `json:"id"`
+				Invoice           string `json:"invoice"`
+				Status            string `json:"status"`
+				AmountPaid        *int64 `json:"amount_paid"`
+				StatusTransitions struct {
+					PaidAt int64 `json:"paid_at"`
+				} `json:"status_transitions"`
+				Payment struct {
+					Type          string `json:"type"`
+					PaymentIntent string `json:"payment_intent"`
+					PaymentRecord string `json:"payment_record"`
+				} `json:"payment"`
+			} `json:"data"`
+			HasMore bool `json:"has_more"`
+		}
+		if err := json.Unmarshal(body, &page); err != nil {
+			return CanonicalStripePaidInvoice{}, err
+		}
+		if page.HasMore && len(page.Data) == 0 {
+			return CanonicalStripePaidInvoice{}, errors.New("stripe: invoice payment pagination made no progress")
+		}
+		for _, item := range page.Data {
+			if item.ID == "" || seenPayments[item.ID] || item.Invoice != invoiceID || item.Status != "paid" || item.AmountPaid == nil || *item.AmountPaid <= 0 || item.StatusTransitions.PaidAt < invoice.CreatedAt || allocated > invoice.AmountPaid || *item.AmountPaid > invoice.AmountPaid-allocated {
+				return CanonicalStripePaidInvoice{}, errors.New("stripe: canonical invoice payment is invalid or ambiguous")
+			}
+			seenPayments[item.ID] = true
+			payment := CanonicalStripeInvoicePayment{InvoicePaymentID: item.ID, PaymentType: item.Payment.Type, AmountPaid: *item.AmountPaid, PaidAt: item.StatusTransitions.PaidAt}
+			if item.Payment.Type == "payment_record" {
+				if item.Payment.PaymentRecord == "" || item.Payment.PaymentIntent != "" {
+					return CanonicalStripePaidInvoice{}, errors.New("stripe: canonical invoice payment record identity is invalid")
+				}
+				payment.PaymentRecordID = item.Payment.PaymentRecord
+				invoice.Payments = append(invoice.Payments, payment)
+				allocated += *item.AmountPaid
+				if item.StatusTransitions.PaidAt > invoice.PaidAt {
+					invoice.PaidAt = item.StatusTransitions.PaidAt
+				}
+				continue
+			}
+			if item.Payment.Type != "payment_intent" || !strings.HasPrefix(item.Payment.PaymentIntent, "pi_") || item.Payment.PaymentRecord != "" || seenIntents[item.Payment.PaymentIntent] {
+				return CanonicalStripePaidInvoice{}, errors.New("stripe: canonical invoice payment identity is invalid or ambiguous")
+			}
+			seenIntents[item.Payment.PaymentIntent] = true
+			piBody, err := c.request(ctx, http.MethodGet, "/v1/payment_intents/"+url.PathEscape(item.Payment.PaymentIntent), nil)
+			if err != nil {
+				return CanonicalStripePaidInvoice{}, err
+			}
+			var pi struct {
+				ID           string `json:"id"`
+				Customer     string `json:"customer"`
+				Status       string `json:"status"`
+				LatestCharge string `json:"latest_charge"`
+			}
+			if json.Unmarshal(piBody, &pi) != nil || pi.ID != item.Payment.PaymentIntent || pi.Customer != obj.Customer || pi.Status != "succeeded" || !strings.HasPrefix(pi.LatestCharge, "ch_") {
+				return CanonicalStripePaidInvoice{}, errors.New("stripe: invoice payment intent identity is invalid")
+			}
+			chargeBody, err := c.request(ctx, http.MethodGet, "/v1/charges/"+url.PathEscape(pi.LatestCharge), nil)
+			if err != nil {
+				return CanonicalStripePaidInvoice{}, err
+			}
+			var charge struct {
+				ID             string `json:"id"`
+				Customer       string `json:"customer"`
+				PaymentIntent  string `json:"payment_intent"`
+				Amount         int64  `json:"amount"`
+				AmountRefunded int64  `json:"amount_refunded"`
+				Paid           bool   `json:"paid"`
+			}
+			if json.Unmarshal(chargeBody, &charge) != nil || charge.ID != pi.LatestCharge || charge.Customer != obj.Customer || charge.PaymentIntent != pi.ID || !charge.Paid || charge.Amount <= 0 || charge.AmountRefunded < 0 || charge.AmountRefunded > charge.Amount || charge.Amount < *item.AmountPaid {
+				return CanonicalStripePaidInvoice{}, errors.New("stripe: invoice payment charge identity is invalid")
+			}
+			payment.PaymentIntentID, payment.ChargeID = pi.ID, charge.ID
+			payment.ChargeAmount, payment.AmountRefunded = charge.Amount, charge.AmountRefunded
+			invoice.Payments = append(invoice.Payments, payment)
+			allocated += *item.AmountPaid
+			if item.StatusTransitions.PaidAt > invoice.PaidAt {
+				invoice.PaidAt = item.StatusTransitions.PaidAt
+			}
+		}
+		if !page.HasMore {
+			break
+		}
+		last := page.Data[len(page.Data)-1].ID
+		if last == "" || last == query.Get("starting_after") {
+			return CanonicalStripePaidInvoice{}, errors.New("stripe: invoice payment pagination cursor did not advance")
+		}
+		query.Set("starting_after", last)
+	}
+	if allocated != *obj.AmountPaid {
+		return CanonicalStripePaidInvoice{}, errors.New("stripe: invoice paid amount lacks complete payment identity")
+	}
+	if len(invoice.Payments) == 1 {
+		invoice.PaymentIntentID, invoice.ChargeID = invoice.Payments[0].PaymentIntentID, invoice.Payments[0].ChargeID
+	}
+	return invoice, nil
+}
+
+func invoiceHasOneExclusivePaymentIntent(invoice CanonicalStripePaidInvoice) bool {
+	if len(invoice.Payments) != 1 {
+		return false
+	}
+	payment := invoice.Payments[0]
+	return payment.PaymentType == "payment_intent" && payment.PaymentIntentID != "" && payment.ChargeID != "" && payment.ChargeAmount == payment.AmountPaid
 }
 
 // requestKeyed is request with an optional Stripe Idempotency-Key: retrying (or

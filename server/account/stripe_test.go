@@ -266,7 +266,19 @@ func TestHistoricalAuditRecoversPreDeletionInvoicePaidAfterDeletion(t *testing.T
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == http.MethodGet && r.URL.Path == "/v1/invoices/in_late" {
-			io.WriteString(w, `{"id":"in_late","status":"paid","customer":"cus_old","created":90,"payment_intent":"pi_late","charge":"ch_late","status_transitions":{"paid_at":110}}`)
+			io.WriteString(w, `{"id":"in_late","status":"paid","customer":"cus_old","parent":{"subscription_details":{"subscription":"sub_old"}},"amount_paid":500,"created":90,"status_transitions":{"paid_at":110}}`)
+			return
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/v1/invoice_payments" {
+			io.WriteString(w, `{"data":[{"id":"inpay_late","invoice":"in_late","status":"paid","amount_paid":500,"status_transitions":{"paid_at":110},"payment":{"type":"payment_intent","payment_intent":"pi_late"}}],"has_more":false}`)
+			return
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/v1/payment_intents/pi_late" {
+			io.WriteString(w, `{"id":"pi_late","customer":"cus_old","status":"succeeded","latest_charge":"ch_late"}`)
+			return
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/v1/charges/ch_late" {
+			io.WriteString(w, `{"id":"ch_late","customer":"cus_old","payment_intent":"pi_late","amount":500,"amount_refunded":0,"paid":true}`)
 			return
 		}
 		if r.Method == http.MethodGet && r.URL.Path == "/v1/invoices" && r.URL.Query().Get("status") == "" && r.URL.Query().Get("created[gte]") == "" {
@@ -286,7 +298,8 @@ func TestHistoricalAuditRecoversPreDeletionInvoicePaidAfterDeletion(t *testing.T
 	}
 	p, err = c.ReconcileDeletionHazards(context.Background(), row, p)
 	invoice := p.Resources["invoice:in_late"]
-	if err == nil || !invoice.Manual || invoice.Status != "paid_after_deletion" || invoice.PaymentIntentID != "pi_late" {
+	payment := p.Resources["payment_intent:pi_late"]
+	if err == nil || !invoice.Manual || invoice.Status != "paid_after_deletion" || payment.PaymentIntentID != "pi_late" || payment.InvoiceID != "in_late" {
 		t.Fatalf("late historical payment was lost: invoice=%+v progress=%+v err=%v", invoice, p, err)
 	}
 }
