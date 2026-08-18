@@ -430,7 +430,7 @@ final class DeviceInboxUITests: XCTestCase {
     /// way that fails quietly is a destination that shows a status line and a
     /// "change this in Settings" link. Every consequential control is named here:
     /// status, the folder grant and its removal, all three receiving choices, the
-    /// result list and residency.
+    /// conversation home, send-device controls and residency.
     func testTheDestinationCarriesTheCompleteSignedInSurface() {
         launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-ready"])
         let window = openDeviceInboxDestination()
@@ -453,8 +453,12 @@ final class DeviceInboxUITests: XCTestCase {
             XCTAssertTrue(element("inbox-policy-\(choice)", in: window).exists,
                           "the \(choice) receiving choice is not on the destination")
         }
-        XCTAssertTrue(revealed("inbox-results-empty", in: window).exists,
-                      "the destination has no result list")
+        XCTAssertTrue(revealed("inbox-conversations", in: window).exists,
+                      "the destination has no v3 conversation home")
+        XCTAssertTrue(revealed("inbox-send", in: window).exists,
+                      "the destination has no send-device section")
+        XCTAssertTrue(revealed("inbox-send-refresh", in: window).exists,
+                      "the send-device directory cannot be refreshed")
         XCTAssertTrue(residencyControlExists(in: window),
                       "residency has no control on the destination that depends on it")
         XCTAssertTrue(visibleText(in: window).contains("does not mean the inbox is ready"),
