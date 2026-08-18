@@ -441,11 +441,31 @@ PY
 # SC2119 — a signature change that made every current call site warn would be a
 # cost paid by scripts that do not use the feature.
 #
+# **Set `acceptance_publish_password=1` before calling to keep the password.**
+# It stays `local` for every other caller, and that default is the rule rather
+# than the exception. The one caller that needs it is the macOS UI acceptance
+# run driving the app AS THE CREATOR of a pairing code: minting is account-gated
+# — the code's owner is billed for the relay capacity it reserves — and the only
+# way an acceptance launch can hold an account without a production bypass is to
+# sign in through the product's own form, which needs the credential the way a
+# person would. Handing the app a fabricated bearer instead would be a fixture
+# contradicting the run it is in; adding a launch argument that skips the gate
+# would be a bypass in shipped code.
+#
+# What that exception is bounded by: the account exists only on this run's
+# throwaway server, which is bound to loopback and dies with the run; the value
+# still never reaches argv; and it travels to the test runner the same way the
+# control bearer and the account bearer already do, through the environment.
+#
 # Sets `account_device_tokens` and `account_device_names`, index-aligned.
 acceptance_create_account() {
   local -a extra_devices=(${acceptance_extra_devices+"${acceptance_extra_devices[@]}"})
   account_email="acceptance-${run_tag}@example.invalid"
-  local account_password
+  # `local` unless the caller opted in above. Declaring it conditionally is the
+  # whole mechanism: an un-opted-in run cannot leak what it never declares.
+  if [ "${acceptance_publish_password:-0}" != "1" ]; then
+    local account_password
+  fi
   account_password="$(od -An -tx1 -N24 /dev/urandom | tr -d ' \n')"
   umask 077
   printf '{"email":"%s","password":"%s"}' "$account_email" "$account_password" \

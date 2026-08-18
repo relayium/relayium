@@ -4,8 +4,8 @@
 # which pairing counterparts that run may demand a served `link/1` from.
 #
 # This suite exists for one incident. The launcher starts one `pair-link`
-# counterpart per test and, at the end, asks EVERY pairing counterpart whether
-# it served a link. Run with
+# counterpart per pairing SESSION the suite establishes and, at the end, asks
+# EVERY pairing counterpart whether it served a link. Run with
 # `-only-testing:RelayiumUITests/LocalSessionUITests/testBothModulesHold…`,
 # xcodebuild passed and the first counterpart reported its one `link/1` session
 # — and the run then failed against the second counterpart, which belongs to
@@ -38,6 +38,9 @@ SWIFT="$ROOT/apps/mac/RelayiumUITests/LocalSessionUITests.swift"
 
 BOTH=testBothModulesHoldRealConnectionsAcrossNavigationAndCancelDirectOnly
 NEARBY_FIRST=testCancellingTheNearbyModuleFirstLeavesTheDirectSessionConnected
+CREATOR=testCreatingAPairingCodeSurvivesTheLinkHandoffAndACancelledCode
+# The whole suite, in the order the counterparts are started.
+ALL="$BOTH $NEARBY_FIRST $CREATOR"
 
 # shellcheck source=../lib/macos-ui-test-selection.sh
 . "$LIB"
@@ -77,14 +80,14 @@ selected() {
 printf '%s\n' 'macos_ui_selected_methods'
 
 # ── the default run, which must not narrow ───────────────────────────────────
-selected 'no arguments runs both methods' "$BOTH $NEARBY_FIRST" 0 --
-selected 'non-selector arguments alone still run both' "$BOTH $NEARBY_FIRST" 0 -- \
+selected 'no arguments runs every method' "$ALL" 0 --
+selected 'non-selector arguments alone still run every method' "$ALL" 0 -- \
   -resultBundlePath /tmp/whatever -quiet
-selected 'the whole target runs both' "$BOTH $NEARBY_FIRST" 0 -- \
+selected 'the whole target runs every method' "$ALL" 0 -- \
   -only-testing:RelayiumUITests
-selected 'the whole class runs both' "$BOTH $NEARBY_FIRST" 0 -- \
+selected 'the whole class runs every method' "$ALL" 0 -- \
   -only-testing:RelayiumUITests/LocalSessionUITests
-selected 'a trailing slash on the class is still the class' "$BOTH $NEARBY_FIRST" 0 -- \
+selected 'a trailing slash on the class is still the class' "$ALL" 0 -- \
   -only-testing:RelayiumUITests/LocalSessionUITests/
 
 # ── the incident: one method, one counterpart ────────────────────────────────
@@ -98,18 +101,25 @@ selected 'the separate-argument form of -only-testing' "$BOTH" 0 -- \
   -only-testing "RelayiumUITests/LocalSessionUITests/$BOTH"
 selected 'a method written with trailing parentheses' "$NEARBY_FIRST" 0 -- \
   "-only-testing:RelayiumUITests/LocalSessionUITests/$NEARBY_FIRST()"
+# The creator method alone: the selection the launcher must map to TWO
+# counterparts rather than one.
+selected 'the creator method alone' "$CREATOR" 0 -- \
+  "-only-testing:RelayiumUITests/LocalSessionUITests/$CREATOR"
 
-# ── both, explicitly, in either order ────────────────────────────────────────
-selected 'both methods selected explicitly' "$BOTH $NEARBY_FIRST" 0 -- \
+# ── several, explicitly, in either order ─────────────────────────────────────
+selected 'two methods selected explicitly' "$BOTH $NEARBY_FIRST" 0 -- \
   "-only-testing:RelayiumUITests/LocalSessionUITests/$BOTH" \
   "-only-testing:RelayiumUITests/LocalSessionUITests/$NEARBY_FIRST"
-selected 'both methods, reversed, come back in start order' "$BOTH $NEARBY_FIRST" 0 -- \
+selected 'two methods, reversed, come back in start order' "$BOTH $NEARBY_FIRST" 0 -- \
   "-only-testing:RelayiumUITests/LocalSessionUITests/$NEARBY_FIRST" \
+  "-only-testing:RelayiumUITests/LocalSessionUITests/$BOTH"
+selected 'the creator method beside a joiner one keeps start order' "$BOTH $CREATOR" 0 -- \
+  "-only-testing:RelayiumUITests/LocalSessionUITests/$CREATOR" \
   "-only-testing:RelayiumUITests/LocalSessionUITests/$BOTH"
 selected 'the same method twice is one method' "$BOTH" 0 -- \
   "-only-testing:RelayiumUITests/LocalSessionUITests/$BOTH" \
   "-only-testing:RelayiumUITests/LocalSessionUITests/$BOTH"
-selected 'a method plus its own class is the class' "$BOTH $NEARBY_FIRST" 0 -- \
+selected 'a method plus its own class is the class' "$ALL" 0 -- \
   "-only-testing:RelayiumUITests/LocalSessionUITests/$BOTH" \
   -only-testing:RelayiumUITests/LocalSessionUITests
 
@@ -146,30 +156,127 @@ case "$message" in
     printf '       got [%s]\n' "$message" ;;
 esac
 
-printf '%s\n' 'macos_ui_pair_index / macos_ui_cancel_order'
+printf '%s\n' 'macos_ui_pair_index / macos_ui_pair_count / macos_ui_proof'
 
+# The two joiner methods keep the indices they have always read. A change that
+# renumbered them would point each existing test at the other's counterpart, and
+# nothing in a run would say so — both peers exist and both answer.
 assert_eq 'the Direct-first method reads pairPorts[0]' "$(macos_ui_pair_index "$BOTH")" 0
 assert_eq 'the same-network-first method reads pairPorts[1]' \
   "$(macos_ui_pair_index "$NEARBY_FIRST")" 1
-if macos_ui_pair_index testNotAMethod >/dev/null 2>&1; then
-  bad 'an unknown method has no index'
+# The creator method establishes TWO sequential pairing sessions in one app
+# lifecycle — `pair-link` serves one room per process — so it owns a RANGE, and
+# the launcher must demand a served link from BOTH of its peers. Checking only
+# the first would pass a run in which the code minted after a cancel had gone
+# out unwatched, which is the defect that method exists to catch.
+assert_eq 'the creator method starts at pairPorts[2]' "$(macos_ui_pair_index "$CREATOR")" 2
+assert_eq 'the creator method uses two counterparts' "$(macos_ui_pair_count "$CREATOR")" 2
+assert_eq 'the creator method verifies both of them' \
+  "$(macos_ui_pair_indices "$CREATOR" | tr '\n' ' ')" '2 3 '
+assert_eq 'a one-peer method verifies exactly its own' \
+  "$(macos_ui_pair_indices "$NEARBY_FIRST" | tr '\n' ' ')" '1 '
+assert_eq 'the suite needs four pairing counterparts' "$(macos_ui_pair_total)" 4
+assert_eq 'pairPorts[0] belongs to the Direct-first method' \
+  "$(macos_ui_method_for_pair_index 0)" "$BOTH"
+assert_eq 'pairPorts[2] belongs to the creator method' \
+  "$(macos_ui_method_for_pair_index 2)" "$CREATOR"
+assert_eq 'pairPorts[3] belongs to the creator method too' \
+  "$(macos_ui_method_for_pair_index 3)" "$CREATOR"
+for probe in macos_ui_pair_index macos_ui_pair_count macos_ui_pair_indices; do
+  if "$probe" testNotAMethod >/dev/null 2>&1; then
+    bad "an unknown method has no answer from $probe"
+  else
+    ok "an unknown method has no answer from $probe"
+  fi
+done
+if macos_ui_method_for_pair_index 99 >/dev/null 2>&1; then
+  bad 'an index past the last counterpart belongs to nobody'
 else
-  ok 'an unknown method has no index'
+  ok 'an index past the last counterpart belongs to nobody'
 fi
 
-# Totality: every canonical method has an index equal to its position and a
-# cancel-order phrase. A method added to the list without one would reach the
-# partial PASS line and be summarised as an empty string.
+printf '%s\n' 'macos_ui_uses_nearby_peer'
+
+# The other half of the same incident: the launcher's closing checks ask the
+# RESIDENT peer whether it served a link, and that question was unconditional
+# because every method used to establish a same-network session. A run narrowed
+# to the creator method — which touches only the Cross-network module — failed
+# against a peer nothing had contacted.
+for m in "$BOTH" "$NEARBY_FIRST"; do
+  if macos_ui_uses_nearby_peer "$m"; then
+    ok "$m uses the resident same-network counterpart"
+  else
+    bad "$m uses the resident same-network counterpart"
+  fi
+done
+if macos_ui_uses_nearby_peer "$CREATOR"; then
+  bad 'the creator method does NOT use the resident same-network counterpart'
+else
+  ok 'the creator method does NOT use the resident same-network counterpart'
+fi
+if macos_ui_uses_nearby_peer testNotAMethod; then
+  bad 'an unknown method does not claim the resident counterpart'
+else
+  ok 'an unknown method does not claim the resident counterpart'
+fi
+
+# shellcheck disable=SC2086 # deliberate word split: these are method lists
+if macos_ui_any_uses_nearby_peer $ALL; then
+  ok 'the default run demands the resident counterpart'
+else
+  bad 'the default run demands the resident counterpart'
+fi
+if macos_ui_any_uses_nearby_peer "$CREATOR"; then
+  bad 'a creator-only run demands nothing of the resident counterpart'
+else
+  ok 'a creator-only run demands nothing of the resident counterpart'
+fi
+if macos_ui_any_uses_nearby_peer "$CREATOR" "$BOTH"; then
+  ok 'a mixed selection still demands the resident counterpart'
+else
+  bad 'a mixed selection still demands the resident counterpart'
+fi
+if macos_ui_any_uses_nearby_peer; then
+  bad 'an empty selection demands nothing of the resident counterpart'
+else
+  ok 'an empty selection demands nothing of the resident counterpart'
+fi
+
+printf '%s\n' 'totality over the canonical list'
+
+# Totality: every canonical method has a contiguous index range starting where
+# the previous one ended, a phrase for the partial PASS line, and a stated
+# answer about the resident counterpart. A method added without any of them
+# would be verified against the wrong peer, summarised as an empty string, or
+# silently treated as not using a peer it does use.
 i=0
 for m in $(macos_ui_methods); do
-  assert_eq "$m has index $i" "$(macos_ui_pair_index "$m")" "$i"
-  if phrase="$(macos_ui_cancel_order "$m")" && [ -n "$phrase" ]; then
-    ok "$m names the cancel order it proves ($phrase)"
+  assert_eq "$m starts at index $i" "$(macos_ui_pair_index "$m")" "$i"
+  count="$(macos_ui_pair_count "$m")" || count=''
+  if [ -n "$count" ] && [ "$count" -ge 1 ] 2>/dev/null; then
+    ok "$m uses $count pairing counterpart(s)"
   else
-    bad "$m names the cancel order it proves"
+    bad "$m states how many pairing counterparts it uses"
+    count=1
   fi
-  i=$((i + 1))
+  if phrase="$(macos_ui_proof "$m")" && [ -n "$phrase" ]; then
+    ok "$m names what it proves ($phrase)"
+  else
+    bad "$m names what it proves"
+  fi
+  # Yes or no, but never "unknown method": the launcher branches on this, and a
+  # method the lookup does not recognise answers 2, which reads as false.
+  macos_ui_uses_nearby_peer "$m"
+  case "$?" in
+    0 | 1) ok "$m states whether it uses the resident counterpart" ;;
+    *)     bad "$m states whether it uses the resident counterpart" ;;
+  esac
+  i=$((i + count))
 done
+# The ranges and the peer count are one fact: a mismatch would either start a
+# peer nothing reads or index past the last one started.
+assert_eq 'the ranges cover exactly the counterparts the launcher starts' \
+  "$i" "$(macos_ui_pair_total)"
 
 printf '%s\n' 'the list against the sources'
 

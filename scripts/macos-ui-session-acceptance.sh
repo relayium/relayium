@@ -14,6 +14,12 @@
 #   * PROVES each module's Cancel ends only that module, in BOTH orders —
 #     Direct first in one test, Nearby first in the other. A teardown that
 #     reached across modules passes one order and fails the other.
+#   * PROVES the app AS THE CREATOR of a pairing code: it signs in through its
+#     own form, mints a code, and keeps its surface through the `link/1` handoff
+#     that retires the legacy model rendering that code. Then, in the SAME
+#     process, it cancels a code and mints another, and that second code reaches
+#     a real `link/1` rather than the legacy fallback a retained pairing room
+#     forces — which is what this method measured against the shipped pane.
 #   * CHECKS every one of those claims twice: once against what the window
 #     draws, and once against the counterpart process on the other end of the
 #     wire. A run where the app believes it is connected and no peer is serving
@@ -22,8 +28,8 @@
 # The offline suite covers the same requirement deterministically and without a
 # server, INCLUDING both modules holding a session at once; what it cannot claim
 # is that connections which really exist survive. Both are needed: this one
-# needs a network stack, three counterpart processes and a signed build, and the
-# offline one runs on every push.
+# needs a network stack, several counterpart processes and a signed build, and
+# the offline one runs on every push.
 #
 # ── why the second real session was not here before ──────────────────────────
 #
@@ -63,8 +69,8 @@
 #
 #   scripts/macos-ui-session-acceptance.sh [-only-testing:...]
 #
-# With no arguments the two `LocalSessionUITests` methods run as TWO sequential
-# `xcodebuild` processes against one server and one set of counterparts; see the
+# With no arguments every `LocalSessionUITests` method runs as its own sequential
+# `xcodebuild` process against one server and one set of counterparts; see the
 # block above the launches for why. Arguments are passed through to a single
 # invocation unchanged — and are ALSO read here, without being altered, to
 # decide which counterparts the run's own closing checks demand and what its
@@ -85,10 +91,10 @@ source "$repo_root/scripts/lib/local-acceptance.sh"
 source "$repo_root/scripts/lib/macos-ui-test-selection.sh"
 
 # Decided FIRST, before a single thing is built or started: an unmappable
-# selector is a caller error, and answering it after a server, three peers and
-# a signed build have gone up would charge minutes for a typo. `fail` is not
-# available yet either — it diagnoses a run root that does not exist until
-# `acceptance_begin`.
+# selector is a caller error, and answering it after a server, the counterpart
+# peers and a signed build have gone up would charge minutes for a typo. `fail`
+# is not available yet either — it diagnoses a run root that does not exist
+# until `acceptance_begin`.
 if ! selected_methods="$(macos_ui_selected_methods "$@")"; then
   printf 'FAIL: this run cannot state what it would have proved.\n' >&2
   exit 2
@@ -104,9 +110,14 @@ for test_method in $selected_methods; do selected_set="$selected_set$test_method
 acceptance_begin
 acceptance_build "$server_dir" "$package_dir"
 acceptance_start_server
+# The App-as-creator method signs in through the product's own form, because
+# minting a code is account-gated and a fabricated bearer would be a fixture
+# contradicting the run. See `acceptance_create_account` for what that exception
+# is bounded by.
+acceptance_publish_password=1
 acceptance_create_account
 
-# ── the two counterparts ─────────────────────────────────────────────────────
+# ── the counterparts ─────────────────────────────────────────────────────────
 #
 # The resident one is started BEFORE the app so it is already in the room when
 # the roster is first read. Its name carries the run tag: a shared machine may
@@ -122,11 +133,13 @@ nearby_port="$peer_port"
 
 assert_control_api_is_guarded "$nearby_port"
 
-# The pairing halves, and there are TWO of them on purpose. `pair-link` starts
-# one run per process and `LinkWorkspaceModel.watchPairingCode` refuses a second
-# room while the first is active, so the two cancel-order tests cannot share a
-# counterpart: the second would ask a process that is already in a room to mint
-# a code, and wait out its whole budget for one that never comes.
+# The pairing halves, one per pairing SESSION the suite establishes. `pair-link`
+# starts one run per process and `LinkWorkspaceModel.watchPairingCode` refuses a
+# second room while the first is active, so no two of them can share a
+# counterpart: the second would ask a process already in a room to serve another,
+# and wait out its whole budget for a session that never comes. The
+# App-as-creator method establishes two in one app lifecycle and therefore owns
+# two; `lib/macos-ui-test-selection.sh` is where that count lives.
 #
 # They hold the account bearer, which reaches them through the environment and
 # never through argv, and `start_peer` clears the slot immediately afterwards so
@@ -142,14 +155,16 @@ assert_control_api_is_guarded "$nearby_port"
 # separate question, answered by the selection above; the peer that no selected
 # test contacts is shut down like the others and never asserted against.
 pair_ports=""
-round=0
-for test_method in $(macos_ui_methods); do
-  round=$((round + 1))
+pair_total="$(macos_ui_pair_total)"
+pair_index=0
+while [ "$pair_index" -lt "$pair_total" ]; do
+  round=$((pair_index + 1))
   mkdir -p "$run_root/pair-link-$round"
   peer_env=("RELAYIUM_ACCEPTANCE_ACCOUNT_TOKEN=$account_token")
   start_peer "pair-link-$round" pair-link --receive-root "$run_root/pair-link-$round"
   pair_ports="${pair_ports:+$pair_ports,}$peer_port"
-  say "-- the pairing counterpart on $peer_port is $test_method's"
+  say "-- pairPorts[$pair_index] on $peer_port belongs to $(macos_ui_method_for_pair_index "$pair_index")"
+  pair_index=$((pair_index + 1))
 done
 
 # Residency is started here rather than by the test: it is the state the app
@@ -173,6 +188,11 @@ export TEST_RUNNER_RELAYIUM_ACCEPTANCE_CONTROL_TOKEN="$control_token"
 export TEST_RUNNER_RELAYIUM_ACCEPTANCE_NEARBY_PORT="$nearby_port"
 export TEST_RUNNER_RELAYIUM_ACCEPTANCE_NEARBY_NAME="$peer_name"
 export TEST_RUNNER_RELAYIUM_ACCEPTANCE_PAIR_PORTS="$pair_ports"
+# The throwaway account, for the method that drives the app as the CREATOR of a
+# code. Through the environment for the same reason the control bearer is: argv
+# on macOS is readable by every process this user runs.
+export TEST_RUNNER_RELAYIUM_ACCEPTANCE_ACCOUNT_EMAIL="$account_email"
+export TEST_RUNNER_RELAYIUM_ACCEPTANCE_ACCOUNT_PASSWORD="$account_password"
 
 derived_data="${RELAYIUM_ACCEPTANCE_DERIVED_DATA:-$run_root/dd-mac}"
 
@@ -246,7 +266,7 @@ if [ "$#" -gt 0 ]; then
   say "== driving the caller's selectors against the built macOS app =="
   say "-- that selection runs $selected_count of $method_count LocalSessionUITests method(s):"
   for test_method in $selected_methods; do
-    say "   $test_method (pairing counterpart #$(macos_ui_pair_index "$test_method"))"
+    say "   $test_method (pairing counterpart(s) #$(macos_ui_pair_indices "$test_method" | tr '\n' ' '))"
   done
   run_xcodebuild xcodebuild "$@"
 else
@@ -263,19 +283,27 @@ fi
 # launcher's own independent read of the SAME counterparts, so a suite that had
 # somehow passed without a peer ever serving a link still fails here.
 #
-# The same-network counterpart served one link per test — both methods use it,
-# so it is asserted whatever ran — and each pairing counterpart belonging to a
-# SELECTED test served exactly the one that test established. A pairing peer
-# that ends the run having never held a session means the app's Direct screen
-# drew a connection nobody was on the other end of.
+# Each counterpart belonging to a SELECTED test served exactly the session(s)
+# that test established. A peer that ends the run having never held one means
+# the app's screen drew a connection nobody was on the other end of.
 #
 # The peer of a test that this invocation did not run is a different statement:
 # it was started to keep the index list stable and was never contacted, so
 # demanding a link from it would fail a run for doing exactly what the caller
 # asked. It is named as unverified rather than quietly counted as proof.
-observed="$(control "$nearby_port" GET /observed)" \
-  || fail "the same-network counterpart stopped answering its control API"
-python3 - "$observed" <<'PY' || fail "the same-network counterpart served no link at all"
+#
+# **That applies to the RESIDENT same-network peer too, and it did not used to.**
+# The check below was unconditional because every method established a
+# same-network session; the App-as-creator method touches only the Cross-network
+# module, so a run narrowed to it failed against a peer nothing had contacted —
+# a red run, a real build, and no defect, which is precisely the incident
+# `lib/macos-ui-test-selection.sh` exists to prevent. Which methods use it is
+# answered there, per method, so a new one has to state it.
+# shellcheck disable=SC2086 # deliberate word split: the selection is a list
+if macos_ui_any_uses_nearby_peer $selected_methods; then
+  observed="$(control "$nearby_port" GET /observed)" \
+    || fail "the same-network counterpart stopped answering its control API"
+  python3 - "$observed" <<'PY' || fail "the same-network counterpart served no link at all"
 import json, sys
 
 facts = json.loads(sys.argv[1])
@@ -285,15 +313,26 @@ if not facts.get("epoch"):
     sys.exit(1)
 print("-- the same-network counterpart served %d link(s)" % facts["epoch"], file=sys.stderr)
 PY
+else
+  say "-- no selected test establishes a same-network session, so the resident"
+  say "   counterpart was never contacted and nothing is claimed of it"
+fi
 
+# EVERY index of every selected method, not one per method: the App-as-creator
+# method establishes two sequential pairing sessions, and a run that checked only
+# its first peer would pass while the code minted after a cancel had silently
+# fallen back to the legacy wire — which is the defect that method exists to
+# catch.
 required_pair_indices=""
+required_pair_count=0
 for test_method in $selected_methods; do
-  required_pair_indices="$required_pair_indices $(macos_ui_pair_index "$test_method")" \
+  method_indices="$(macos_ui_pair_indices "$test_method")" \
     || fail "the selection named a method with no pairing counterpart: $test_method"
+  for method_index in $method_indices; do
+    required_pair_indices="$required_pair_indices $method_index"
+    required_pair_count=$((required_pair_count + 1))
+  done
 done
-
-all_methods=()
-while IFS= read -r test_method; do all_methods+=("$test_method"); done < <(macos_ui_methods)
 
 pair_index=0
 verified_pairs=0
@@ -303,7 +342,7 @@ for pair_port in ${pair_ports//,/ }; do
     *)
       say "-- the pairing counterpart on $pair_port belongs to a test this run did"
       say "   not execute, so it was never contacted and nothing is claimed of it:"
-      say "   ${all_methods[$pair_index]}"
+      say "   $(macos_ui_method_for_pair_index "$pair_index")"
       control "$pair_port" POST /shutdown >/dev/null || true
       pair_index=$((pair_index + 1))
       continue
@@ -336,11 +375,12 @@ PY
   pair_index=$((pair_index + 1))
 done
 
-# One verified counterpart per selected test, counted rather than assumed: a
-# selection this launcher mapped but whose peer it never actually reached would
-# otherwise reach the PASS line having checked fewer peers than it names.
-[ "$verified_pairs" -eq "$selected_count" ] \
-  || fail "checked $verified_pairs pairing counterpart(s) for $selected_count selected test(s)"
+# One verified counterpart per pairing SESSION the selected tests establish,
+# counted rather than assumed: a selection this launcher mapped but whose peer it
+# never actually reached would otherwise reach the PASS line having checked fewer
+# peers than it names.
+[ "$verified_pairs" -eq "$required_pair_count" ] \
+  || fail "checked $verified_pairs pairing counterpart(s) for the $required_pair_count the selected test(s) use"
 
 control "$nearby_port" POST /shutdown >/dev/null || true
 
@@ -356,22 +396,35 @@ if [ "$selected_count" -eq "$method_count" ]; then
   say "PASS: the built macOS app held a real same-network link AND a real pairing"
   say "      link/1 at the same time, kept both across five round trips in each"
   say "      direction, and cancelled them one at a time in both orders without"
-  say "      either teardown reaching the other module — checked on screen and"
-  say "      against all three counterpart processes."
+  say "      either teardown reaching the other module; and, as the CREATOR of a"
+  say "      code, carried its own pairing code through the link/1 handoff and then"
+  say "      reached a second real link after cancelling one — checked on screen"
+  say "      and against every counterpart process."
 else
   say "PASS (PARTIAL — $selected_count of $method_count LocalSessionUITests methods):"
-  say "      the built macOS app held a real same-network link AND a real pairing"
-  say "      link/1 at the same time and kept both across five round trips in each"
-  say "      direction, checked on screen and against the same-network counterpart"
-  say "      and the $verified_pairs pairing counterpart(s) the selected test(s) used."
-  say "      Cancel order(s) proved:"
+  # The narrowed line claims only what the selection actually establishes. It
+  # used to describe the two-simultaneous-links requirement whatever ran, which
+  # a creator-only selection never touches — and a PASS line that reads the same
+  # either way is how a narrowed run gets quoted as a full one.
+  # shellcheck disable=SC2086 # deliberate word split: the selection is a list
+  if macos_ui_any_uses_nearby_peer $selected_methods; then
+    say "      the built macOS app held a real same-network link AND a real pairing"
+    say "      link/1 at the same time and kept both across five round trips in each"
+    say "      direction, checked on screen and against the same-network counterpart"
+    say "      and the $verified_pairs pairing counterpart(s) the selected test(s) used."
+  else
+    say "      checked on screen and against the $verified_pairs pairing counterpart(s)"
+    say "      the selected test(s) used. No same-network session was established,"
+    say "      so nothing is claimed about the resident counterpart."
+  fi
+  say "      Proved:"
   for test_method in $selected_methods; do
-    say "        - $(macos_ui_cancel_order "$test_method") ($test_method)"
+    say "        - $(macos_ui_proof "$test_method") ($test_method)"
   done
   for test_method in $(macos_ui_methods); do
     case "$selected_set" in
       *" $test_method "*) ;;
-      *) say "      NOT run, so NOT proved: cancelling $(macos_ui_cancel_order "$test_method")" ;;
+      *) say "      NOT run, so NOT proved: $(macos_ui_proof "$test_method")" ;;
     esac
   done
 fi

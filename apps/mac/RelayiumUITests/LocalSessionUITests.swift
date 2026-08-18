@@ -39,6 +39,20 @@ import XCTest
 /// and neither replaces the other: that one runs on every push with no server,
 /// and this one is the only place two real connections coexist.
 ///
+/// ## The third method: the app as the code's CREATOR
+///
+/// The two methods above join a code another process minted, which leaves the
+/// creator role — the one where the legacy model renders the digits while the
+/// link watches the room — with no runtime coverage at all. Both of the surface
+/// paths `TransferSurfaceReleaseTests` pins deterministically are in that role
+/// and neither is reachable from a joiner: the `link/1` handoff that retires a
+/// creator's code model, and a Cancel that left the watched room alive.
+/// `testCreatingAPairingCodeSurvivesTheLinkHandoffAndACancelledCode` drives
+/// both, which is why it signs in — minting is account-gated and joining is
+/// not. Run against the shipped pane it fails on the second: the code minted
+/// after a cancel reaches its counterpart on the LEGACY wire, because the room
+/// the cancelled code opened was never given up.
+///
 /// Every path SKIPS without the harness, so the file can sit in the same target
 /// as the offline suite and cost a plain `-only-testing:RelayiumUITests` run
 /// nothing. Run it through `scripts/macos-ui-session-acceptance.sh`.
@@ -59,11 +73,23 @@ final class LocalSessionUITests: XCTestCase {
         let controlToken: String
         let nearbyPort: Int
         let peerName: String
-        /// One pairing counterpart per test, and that is a requirement rather
-        /// than tidiness. `LocalTransferPeer`'s `pair-link` role starts one run
-        /// per process and `watchPairingCode` refuses a second room while the
-        /// first is active, so the two cancel orders below cannot share one.
+        /// One pairing counterpart per pairing SESSION, and that is a
+        /// requirement rather than tidiness. `LocalTransferPeer`'s `pair-link`
+        /// role starts one run per process and `watchPairingCode` refuses a
+        /// second room while the first is active, so neither the two cancel
+        /// orders below nor the creator method's two sequential sessions can
+        /// share one. `scripts/lib/macos-ui-test-selection.sh` owns which index
+        /// belongs to which method.
         let pairPorts: [Int]
+        /// The throwaway account on this run's own server.
+        ///
+        /// Only the creator method needs it: **minting** a pairing code is
+        /// account-gated because the code's owner is billed for the relay
+        /// capacity it reserves, while **joining** one needs nothing at all —
+        /// which is why every other method here runs signed out. It is used the
+        /// way a person would use it, through the product's own sign-in form.
+        let accountEmail: String
+        let accountPassword: String
     }
 
     private var app: XCUIApplication!
@@ -91,16 +117,19 @@ final class LocalSessionUITests: XCTestCase {
               let name = value("NEARBY_NAME"),
               let ports = value("PAIR_PORTS")?
                   .split(separator: ",").compactMap({ Int($0) }),
-              ports.count >= 2
+              ports.count >= 2,
+              let accountEmail = value("ACCOUNT_EMAIL"),
+              let accountPassword = value("ACCOUNT_PASSWORD")
         else {
             throw XCTSkip("""
-                No local acceptance harness. These paths need a throwaway server \
-                and three counterpart processes; run them through \
+                No local acceptance harness. These paths need a throwaway server, \
+                an account and several counterpart processes; run them through \
                 scripts/macos-ui-session-acceptance.sh.
                 """)
         }
         return Harness(origin: origin, controlToken: token, nearbyPort: nearby,
-                       peerName: name, pairPorts: ports)
+                       peerName: name, pairPorts: ports,
+                       accountEmail: accountEmail, accountPassword: accountPassword)
     }
 
     /// Stop at the first failure.
@@ -184,6 +213,23 @@ final class LocalSessionUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.5)
         }
         throw XCTSkip("the pairing counterpart never published a code")
+    }
+
+    /// Hand a code the APP minted to a counterpart, which joins the room it
+    /// names.
+    ///
+    /// The mirror of `mintPairingCode` above, and the whole reason the creator
+    /// method can exist: `pair-link` already accepts `join` with a code, so
+    /// nothing about the peer had to change for the app to take the other role.
+    private func handCodeToCounterpart(_ code: String, port: Int) {
+        control(port, "POST", "/start", body: ["action": "join", "code": code])
+        // The peer reports the code it was told to join before it has a peer of
+        // its own, which is what distinguishes "the counterpart never started"
+        // from "the counterpart started and nobody came".
+        let accepted = waitFor("the pairing counterpart to accept the code", timeout: 60) {
+            (control(port, "GET", "/status")?["code"] as? String) == code
+        }
+        XCTAssertTrue(accepted)
     }
 
     /// **The counterpart's own answer, not the app's.**
@@ -290,6 +336,91 @@ final class LocalSessionUITests: XCTestCase {
 
     private func element(_ identifier: String) -> XCUIElement {
         mainWindow.descendants(matching: .any)[identifier].firstMatch
+    }
+
+    // MARK: - the account, for the half of pairing that needs one
+
+    /// Sign in through the product's own form, against the run's own server.
+    ///
+    /// **Not a bypass, and there deliberately is none.** Minting a pairing code
+    /// spends relay capacity billed to an account, so an App-as-creator path has
+    /// to hold a real one; a launch argument that skipped the gate would be a way
+    /// past it living in shipped code, and a fabricated bearer would be a fixture
+    /// contradicting the run it is in (`UITestMode.usesOfflineTransfer` is false
+    /// for a loopback launch precisely so this graph is the real one).
+    ///
+    /// The credential is this run's throwaway account on a loopback-only server
+    /// that dies with the run, and the token the app stores lands in
+    /// `UITestMode.makeTokenStore()`'s isolated keychain, which is cleared on
+    /// every launch — so nothing here touches the installed product's account.
+    ///
+    /// Signed-in is asserted by the CROSS-NETWORK screen offering Create, which
+    /// is the fact this method actually needs: `CrossNetworkConnectPane` renders
+    /// the create controls only for an `.allowed` gate, and a signed-out run
+    /// gets `CapabilityGateView` in their place.
+    private func signIn(_ harness: Harness) {
+        select("account", surface: "account")
+        let window = mainWindow
+
+        let email = window.textFields["account.email"].firstMatch
+        XCTAssertTrue(email.waitForExistence(timeout: 30),
+                      "the account screen offered no sign-in form")
+        email.click()
+        email.typeText(harness.accountEmail)
+
+        let password = window.secureTextFields["account.password"].firstMatch
+        XCTAssertTrue(password.waitForExistence(timeout: 10),
+                      "the sign-in form offered no password field")
+        password.click()
+        password.typeText(harness.accountPassword)
+
+        let submit = element("account.submit")
+        XCTAssertTrue(submit.waitForExistence(timeout: 10),
+                      "the sign-in form offered no submit")
+        XCTAssertTrue(submit.isEnabled,
+                      "the sign-in form refused a complete credential")
+        submit.click()
+
+        showDirect()
+        XCTAssertTrue(element("cross-network-create-code").waitForExistence(timeout: 60),
+                      "signing in did not unlock minting — the Cross-network screen "
+                      + "still renders its account gate instead of Create")
+    }
+
+    /// Press Create and read the six digits off the screen the user reads them
+    /// from.
+    ///
+    /// `SecurityCodeText` exposes the code digit by digit so VoiceOver never
+    /// reads a pairing code as one large number, so the spoken label is
+    /// `"4 8 3 9 2 0"` and the code is that with the spaces removed. Reading the
+    /// RENDERED value rather than asking the server is the point: it is the
+    /// number a person would type into the other device, and a code the app
+    /// minted but drew wrongly would go undetected by any other route.
+    private func createPairingCode() -> String {
+        showDirect()
+        let create = element("cross-network-create-code")
+        XCTAssertTrue(create.waitForExistence(timeout: 30),
+                      "the Cross-network screen offered no Create")
+        XCTAssertTrue(create.isEnabled,
+                      "Create was disabled on an idle Cross-network screen — "
+                      + "busyElsewhere=\(element("transfer-busy-elsewhere").exists)")
+        create.click()
+
+        let shown = element("pairing-code-value")
+        XCTAssertTrue(shown.waitForExistence(timeout: 60),
+                      "Create produced no visible pairing code")
+        let code = shown.label.filter(\.isNumber)
+        XCTAssertEqual(code.count, 6,
+                       "the rendered pairing code is not six digits: “\(shown.label)”")
+        return code
+    }
+
+    /// Dismiss a retained terminal `link/1` — the `Done` its exit is retitled to.
+    private func dismissTerminalSession() {
+        let done = element("link-leave-session")
+        XCTAssertTrue(done.waitForExistence(timeout: 30),
+                      "the ended session dropped its terminal action entirely")
+        done.click()
     }
 
     // MARK: - establishing each module's own connection
@@ -539,6 +670,138 @@ final class LocalSessionUITests: XCTestCase {
         // asserting either element's absence would be asserting that the product
         // throws away a result the user has not read.
         assertTerminalExitReadsDone("pairing")
+    }
+
+    /// **The app as the CREATOR of a pairing code**, which is the role every
+    /// other method here leaves untested — and the role both shipped defects
+    /// were in.
+    ///
+    /// A creator's code is rendered by the LEGACY file model (`.showingCode`)
+    /// while `LinkWorkspaceModel` watches the room the code names. Two things
+    /// then happen that a joiner never sees:
+    ///
+    ///  1. **The `link/1` handoff.** When the peer announces the protocol,
+    ///     `pairingPeerAnnounced` publishes a real link attempt and only then
+    ///     calls `onPairingLinkActivated`, which retires the legacy model that
+    ///     was drawing the code. That lane reaching `.idle` is the handoff, not
+    ///     the session ending, and a release keyed on it alone gives the surface
+    ///     up under a live link — the connect screen with
+    ///     `transfer-busy-elsewhere` across it over a link that is open and has
+    ///     no exit anywhere in the window. Measured against the shipped pane
+    ///     this half PASSED, because the session pane is swapped out for the
+    ///     link pane in the same update and its `onChange` is never delivered;
+    ///     the guard is on the module now rather than on that ordering, and this
+    ///     is the regression check that the handoff keeps working.
+    ///  2. **Cancelling a code — the half that actually failed.** The Cancel
+    ///     under the digits ended the lane only, leaving the room watched with
+    ///     its socket open. `watchPairingCode` refuses a second room while one
+    ///     is held, so the NEXT code that process minted was never watched.
+    ///     Against the shipped pane this method fails here with
+    ///     `legacyPeer=true`: the second code reached the counterpart on the
+    ///     older wire instead of `link/1`.
+    ///
+    /// So this drives both, in one app lifecycle, against real counterparts:
+    /// mint, hand over, reach a real `link/1` with no busy notice; end it; mint
+    /// again and CANCEL before any peer joins; then mint a third time and reach
+    /// a second real `link/1` on a fresh counterpart. The second establishment
+    /// is what a retained room would make impossible, and the counterpart's own
+    /// `legacyFallback` is what would catch it going through on the older wire.
+    ///
+    /// It signs in first, because minting is account-gated. Through the
+    /// product's own form against the run's throwaway server — there is no
+    /// bypass, and adding one would put a way past the account gate into shipped
+    /// code.
+    func testCreatingAPairingCodeSurvivesTheLinkHandoffAndACancelledCode() throws {
+        let harness = try requireHarness()
+        guard harness.pairPorts.count >= 4 else {
+            throw XCTSkip("""
+                This path needs two pairing counterparts of its own; run it \
+                through scripts/macos-ui-session-acceptance.sh, which starts \
+                one per pairing session the suite establishes.
+                """)
+        }
+        let firstPort = harness.pairPorts[2]
+        let secondPort = harness.pairPorts[3]
+        launch(harness)
+        ensureProductWindowIsOpen()
+        XCTAssertTrue(mainWindow.waitForExistence(timeout: 60))
+
+        signIn(harness)
+
+        // ── (1) a creator's own code, through the link/1 handoff ─────────────
+        let firstCode = createPairingCode()
+        handCodeToCounterpart(firstCode, port: firstPort)
+
+        XCTAssertTrue(element("link-session-peer").waitForExistence(timeout: 120),
+                      "the creator's code never reached a link/1 session — "
+                      + "busyElsewhere=\(element("transfer-busy-elsewhere").exists) "
+                      + "stillShowingCode=\(element("pairing-code-value").exists) "
+                      + "ended=\(element("link-ended").exists) "
+                      + "legacyPeer=\(element("transfer-session-peer").exists)")
+        // **The exact symptom, asserted as absent.** The handoff releasing the
+        // surface put the connect screen back with this notice across it, so a
+        // run that established the link and then lost its surface would still
+        // fail here even if the counterpart were happy.
+        XCTAssertFalse(element("transfer-busy-elsewhere").exists,
+                       "the creator's own screen claims a transfer is in progress "
+                       + "elsewhere while it is drawing the link it just made")
+        waitFor("the first pairing counterpart to reach an open link/1") {
+            pairingCounterpartHoldsAnOpenLink(firstPort)
+        }
+
+        // …and it is disposable, which is the half that was unreachable.
+        cancelTheSessionOnScreen("creator pairing")
+        waitFor("the first pairing counterpart to close its link") {
+            !pairingCounterpartHoldsAnOpenLink(firstPort)
+        }
+        assertTerminalExitReadsDone("creator pairing")
+        dismissTerminalSession()
+        assertDirectScreenReleased()
+
+        // ── (2) a code CANCELLED before any peer joins ───────────────────────
+        //
+        // No counterpart is told about this one on purpose: the defect is what
+        // the app keeps after the Cancel, and a peer joining would resolve the
+        // room and hide it.
+        let cancelledCode = createPairingCode()
+        XCTAssertFalse(cancelledCode.isEmpty)
+        let cancelUnderTheCode = mainWindow.buttons["Cancel"].firstMatch
+        XCTAssertTrue(cancelUnderTheCode.waitForExistence(timeout: 20),
+                      "the creator's code offered no Cancel")
+        cancelUnderTheCode.click()
+        XCTAssertTrue(mainWindow.textFields["pairing.joinCode"].firstMatch
+            .waitForExistence(timeout: 30),
+                      "cancelling a creator's code did not return to the connect phase")
+        XCTAssertFalse(element("transfer-busy-elsewhere").exists,
+                       "cancelling a code left the connect screen locked")
+
+        // ── (3) the next code, in the same process, reaches a REAL link ──────
+        //
+        // This is the assertion a retained pairing room fails: `watchPairingCode`
+        // would refuse the new room, the code would go out unwatched, and the
+        // counterpart would either never see a peer or land on the legacy wire —
+        // which `pairingCounterpartHoldsAnOpenLink` checks for explicitly.
+        let secondCode = createPairingCode()
+        XCTAssertNotEqual(secondCode, cancelledCode,
+                          "the server minted the cancelled code again, so this proves "
+                          + "nothing about a room being replaced")
+        handCodeToCounterpart(secondCode, port: secondPort)
+
+        XCTAssertTrue(element("link-session-peer").waitForExistence(timeout: 120),
+                      "the code minted after a cancel never reached a link/1 session — "
+                      + "busyElsewhere=\(element("transfer-busy-elsewhere").exists) "
+                      + "stillShowingCode=\(element("pairing-code-value").exists) "
+                      + "legacyPeer=\(element("transfer-session-peer").exists)")
+        XCTAssertFalse(element("transfer-busy-elsewhere").exists,
+                       "the second creator session drew a busy notice over itself")
+        waitFor("the second pairing counterpart to reach an open link/1") {
+            pairingCounterpartHoldsAnOpenLink(secondPort)
+        }
+
+        cancelTheSessionOnScreen("second creator pairing")
+        waitFor("the second pairing counterpart to close its link") {
+            !pairingCounterpartHoldsAnOpenLink(secondPort)
+        }
     }
 
     /// **The other order**: the same two real connections, and Cancel on Nearby

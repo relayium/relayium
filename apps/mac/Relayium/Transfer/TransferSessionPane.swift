@@ -82,10 +82,11 @@ struct TransferSessionPane: View {
     /// Transfer, `.pairingCode` for Cross-network Transfer.
     ///
     /// Taken from the module rather than derived from `presence.owner`, because
-    /// it is what the release below must be checked AGAINST. Reading the owner
-    /// and then releasing it would let a stale view give up a session that is
-    /// not the one it is drawing — the exact bug `TransferPresence.release`
-    /// refuses per destination in order to prevent.
+    /// it is what every claim here must be checked AGAINST. Reading the owner
+    /// and then acting on it would let a stale view move a session that is not
+    /// the one it is drawing — the exact bug `TransferPresence` refuses per
+    /// destination in order to prevent. The RELEASE side of that rule lives on
+    /// the module now, with the idle test it also has to pass.
     private var route: AppDestination { module.route }
 
     @State private var confirmingLocalTextLeave = false
@@ -127,10 +128,10 @@ struct TransferSessionPane: View {
             // that connection is what stops "nothing was sent" being read
             // beside the send buttons of the next one.
             sendError = nil
-            releaseOwner()
+            releaseSurfaceIfIdle()
         }
         .onChange(of: textModel.state) { state in
-            if mode == .text, state == .idle { releaseOwner() }
+            if mode == .text, state == .idle { releaseSurfaceIfIdle() }
         }
         .confirmationDialog(
             L10n.t(.textDiscardLocalContentConfirmTitle),
@@ -181,7 +182,7 @@ struct TransferSessionPane: View {
             VStack(alignment: .leading, spacing: 8) {
                 ProgressView(L10n.t(.directCreatingCode)).controlSize(.small)
                 PendingFileList(sessionFiles: fileModel.sessionFiles)
-                Button(L10n.t(.commonCancel)) { fileModel.cancel() }
+                Button(L10n.t(.commonCancel)) { module.cancelPairingCode() }
                     .buttonStyle(.bordered)
             }
         case let .showingCode(code, expiresAt):
@@ -194,7 +195,7 @@ struct TransferSessionPane: View {
                 codeHandoff(title: L10n.t(.directGiveCode),
                             code: code,
                             expiresAt: expiresAt,
-                            cancel: { fileModel.cancel() })
+                            cancel: { module.cancelPairingCode() })
             }
         case .failed(let message):
             VStack(alignment: .leading, spacing: 8) {
@@ -295,14 +296,14 @@ struct TransferSessionPane: View {
         case .minting:
             VStack(alignment: .leading, spacing: 8) {
                 ProgressView(L10n.t(.textCreatingCode)).controlSize(.small)
-                Button(L10n.t(.commonCancel)) { textModel.reset() }
+                Button(L10n.t(.commonCancel)) { module.cancelPairingCode() }
                     .buttonStyle(.bordered)
             }
         case let .showingCode(code, expiresAt):
             codeHandoff(title: L10n.t(.textGiveCode),
                         code: code,
                         expiresAt: expiresAt,
-                        cancel: { textModel.reset() })
+                        cancel: { module.cancelPairingCode() })
         case .failed, .ended, .refused, .unsupported,
              .joining, .connecting, .verifying, .waitingAccept,
              .incomingRequest, .open:
@@ -438,16 +439,10 @@ struct TransferSessionPane: View {
             ProgressView(L10n.t(.directWaitingForDevice))
                 .controlSize(.small)
                 .accessibilityIdentifier("transfer-waiting-pairing-peer")
-            Button(L10n.t(.commonCancel)) { cancelPairingWatch() }
+            Button(L10n.t(.commonCancel)) { module.cancelPairingCode() }
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("transfer-cancel-pairing-watch")
         }
-    }
-
-    private func cancelPairingWatch() {
-        link.leave()
-        link.dismiss()
-        releaseOwner()
     }
 
     /// Minting and showing a code happen before there is a peer to classify.
@@ -561,7 +556,7 @@ struct TransferSessionPane: View {
             // truthful place to be is the connect phase, where Create and
             // Connect are on screen. A message lane holding nothing would say
             // this worked.
-            if textModel.state == .idle { releaseOwner() }
+            if textModel.state == .idle { releaseSurfaceIfIdle() }
         }
     }
 
@@ -655,7 +650,7 @@ struct TransferSessionPane: View {
         case .files: fileModel.cancel()
         case .text:  textModel.reset()
         }
-        releaseOwner()
+        releaseSurfaceIfIdle()
     }
 
     private func leaveOrConfirm() {
@@ -666,15 +661,26 @@ struct TransferSessionPane: View {
         }
     }
 
-    /// Release **this destination's own route**, and only that.
+    /// Release this destination's own surface — **and only when the whole
+    /// MODULE is idle**, not merely the lane this pane happens to be drawing.
     ///
-    /// Never `releaseAll()`, and never `presence.owner`: only the owner may let
-    /// go, and naming this pane's own route is what keeps a stale view — one
-    /// rebuilt on the other transfer destination while a session is running here
-    /// — from blanking a surface that is presenting somebody else's live
-    /// session. `TransferPresence.release` refuses a non-owner, so passing the
-    /// route rather than the owner turns that refusal into the check.
-    private func releaseOwner() {
-        presence.release(route)
+    /// The rule and the reason both live on `TransferModule.retainsWork`, which
+    /// is also what the app-scoped liveness observer subscribes to. What used to
+    /// be here was a view-local partial check: it released on the lane's own
+    /// `.idle` edge, which says nothing about the other lanes. The `link/1`
+    /// handoff retires the legacy model rendering a creator's code precisely
+    /// BECAUSE a link has already taken over, so that edge would give the
+    /// surface up under a live link — `pane` drawing the connect screen for a
+    /// module holding a session, `transfer.busyElsewhere` over the top of it,
+    /// and no exit anywhere for the link underneath. Whether the removed pane's
+    /// `onChange` is delivered at all in that same update pass is SwiftUI's
+    /// business and not a contract, which is exactly why the guard belongs on
+    /// the module rather than in the timing.
+    ///
+    /// Still this module's own route and never `releaseAll()`: only the owner
+    /// may let go, so a stale view rebuilt on the other destination cannot blank
+    /// a surface presenting somebody else's live session.
+    private func releaseSurfaceIfIdle() {
+        module.releaseSurfaceIfIdle()
     }
 }

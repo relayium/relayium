@@ -119,12 +119,16 @@ public final class TransferPresence: ObservableObject {
                                 textModel: RealtimeTextSessionModel,
                                 link: LinkWorkspaceModel) {
         let legacy = Publishers.CombineLatest(fileModel.$state, textModel.$state)
-            .map { file, text in file != .idle || text != .idle }
         observeSessionLiveness(Publishers.CombineLatest(legacy, link.$connection)
-            .map { legacyLive, connection in
-                if legacyLive { return true }
-                if case .idle = connection { return false }
-                return true
+            // `TransferModule.retainsWork`, and not a second spelling of it.
+            // This observer was already correct while the pairing surface
+            // released ownership from a single lane, so the two answers
+            // disagreed exactly where it mattered: a creator whose legacy code
+            // model was retired by the `link/1` handoff. One rule, asked from
+            // both places.
+            .map { legacy, connection in
+                TransferModule.retainsWork(files: legacy.0, text: legacy.1,
+                                           link: connection)
             }
             .eraseToAnyPublisher())
     }

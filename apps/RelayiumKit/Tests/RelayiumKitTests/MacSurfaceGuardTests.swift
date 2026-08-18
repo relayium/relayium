@@ -812,17 +812,77 @@ final class MacSurfaceGuardTests: XCTestCase {
 
     /// Minting is a locked network wait: the idle controls are gone until the
     /// request settles, so both pairing modes need an explicit way back.
+    ///
+    /// **It is `module.cancelPairingCode()` in both, and it must be.** Ending
+    /// only the lane that renders the digits — which is what each of these
+    /// buttons used to do — left `LinkWorkspaceModel` in `.watching(code:)` with
+    /// its pairing socket open and nothing on screen pointing at it.
+    /// `watchPairingCode` refuses a second room while one is held, so the next
+    /// code that process minted was never watched and fell back to the legacy
+    /// wire. See `TransferModule.cancelPairingCode`.
     func testPairingMintingCanBeCancelledInBothModes() throws {
         let pane = try source(named: transferSession)
         let fileMinting = try XCTUnwrap(pane.components(separatedBy: "case .minting:")
             .dropFirst().first?.components(separatedBy: "case let .showingCode").first)
-        XCTAssertTrue(fileMinting.contains("Button(L10n.t(.commonCancel)) { fileModel.cancel() }"))
+        XCTAssertTrue(
+            fileMinting.contains("Button(L10n.t(.commonCancel)) { module.cancelPairingCode() }"))
         XCTAssertTrue(fileMinting.contains(".buttonStyle(.bordered)"))
 
         let textMinting = try XCTUnwrap(pane.components(separatedBy: "case .minting:")
             .dropFirst().dropFirst().first?.components(separatedBy: "case let .showingCode").first)
-        XCTAssertTrue(textMinting.contains("Button(L10n.t(.commonCancel)) { textModel.reset() }"))
+        XCTAssertTrue(
+            textMinting.contains("Button(L10n.t(.commonCancel)) { module.cancelPairingCode() }"))
         XCTAssertTrue(textMinting.contains(".buttonStyle(.bordered)"))
+    }
+
+    /// **Every creator-side code exit is the SAME operation, and no surface
+    /// releases ownership from one lane's idea of idle.**
+    ///
+    /// Two separate creator paths reached `owner == nil` while the module still
+    /// held work, and both of them were a view looking at one lane:
+    ///
+    ///  1. `onPairingLinkActivated` retires the legacy model that was rendering
+    ///     a creator's code once the room resolves to `link/1`. That lane going
+    ///     `.idle` is the handoff, not the end — but the pane released on it, so
+    ///     the connect screen was drawn with `transfer.busyElsewhere` over a live
+    ///     link that then had no exit anywhere in the window.
+    ///  2. A code Cancel that ended only the lane left the watched pairing room
+    ///     alive, which the next mint could not replace.
+    ///
+    /// So the pane may not spell either operation itself. `releaseOwner()` and
+    /// the local `cancelPairingWatch()` are gone; what is left is the module's
+    /// own `releaseSurfaceIfIdle()` and `cancelPairingCode()`, whose rule is
+    /// `TransferModule.retainsWork` and is asserted directly in
+    /// `TransferModuleTests`.
+    func testEveryPairingCodeExitGoesThroughTheOneModuleOperation() throws {
+        let pane = try source(named: transferSession)
+
+        XCTAssertFalse(pane.contains("private func releaseOwner()"),
+                       "the pane released ownership without asking whether the whole "
+                       + "module was idle, which is how a link/1 handoff lost its surface")
+        XCTAssertFalse(pane.contains("presence.release("),
+                       "the pane releases this module's surface directly again, "
+                       + "bypassing TransferModule.retainsWork")
+        XCTAssertFalse(pane.contains("presence.releaseAll()"),
+                       "the pane gives up a surface it may not own")
+        XCTAssertFalse(pane.contains("private func cancelPairingWatch()"),
+                       "a second, joiner-only spelling of the code cancel came back")
+
+        // Every Cancel that ends a code — minting, the shown code, the expired
+        // code beneath it, and the joiner's wait — names the one operation.
+        XCTAssertEqual(occurrences(of: "module.cancelPairingCode()", in: pane), 5,
+                       "a pairing-code exit stopped using the shared cancel, or a new "
+                       + "one appeared without it")
+        // The expired-code branch has no cancel of its own: it is handed the
+        // same closure the live handoff is, so the two cannot diverge.
+        let expired = try XCTUnwrap(pane.components(separatedBy: "private func expiredCode(")
+            .dropFirst().first?
+            .components(separatedBy: "private var waitingOnJoinedCode").first)
+        XCTAssertTrue(expired.contains("Button(L10n.t(.commonCancel), action: cancel)"),
+                      "the expired code grew a cancel that is not the handoff's")
+        XCTAssertFalse(expired.contains("fileModel.") || expired.contains("textModel."),
+                       "the expired code reaches a model directly instead of the "
+                       + "operation that also ends the watched room")
     }
 
     // MARK: - the mode picker is gone
@@ -946,17 +1006,29 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertFalse(destination.contains("cancelEverything()"),
                            "\(name) can end the other module's session as well as its own")
         }
-        // Only the owner may let go, and the pane must name ITS OWN route rather
-        // than release whatever the presence object currently holds — a stale
+        // Only the owner may let go, and the release must name ITS OWN route
+        // rather than whatever the presence object currently holds — a stale
         // view rebuilt on the other transfer screen would otherwise blank a live
-        // session. The route is the module's, which is the same guarantee with
-        // one fewer thing for a caller to get wrong.
+        // session.
+        //
+        // **That release now lives on the module**, guarded by `retainsWork`,
+        // and the pane delegates to it. It had to move: the pane released on the
+        // idle edge of the ONE lane it was drawing, so the `link/1` handoff —
+        // which retires a creator's code model precisely because a link has
+        // taken over — gave the surface up under a live link. The route is still
+        // the module's own, which is the same guarantee with one fewer thing for
+        // a caller to get wrong.
+        XCTAssertTrue(module.contains("guard !retainsWork else { return false }")
+                      && module.contains("presence.release(route)"),
+                      "the module releases a route it may not own, or releases it "
+                      + "without asking whether anything still holds work")
+        XCTAssertFalse(module.contains("presence.release(presence.owner)"),
+                       "the module releases whichever route happens to own the session")
         let session = try source(named: transferSession)
-        XCTAssertTrue(session.contains("private var route: AppDestination { module.route }")
-                      && session.contains("presence.release(route)"),
-                      "the session pane releases a route it may not own")
-        XCTAssertFalse(session.contains("presence.release(owner)"),
-                       "the session pane releases whichever route happens to own the session")
+        XCTAssertTrue(session.contains("private var route: AppDestination { module.route }"),
+                      "the session pane lost the route its own claims are checked against")
+        XCTAssertTrue(session.contains("module.releaseSurfaceIfIdle()"),
+                      "the session pane no longer releases through the module's rule")
     }
 
     /// **The two modules share no session object at all**, which is what makes
@@ -1195,14 +1267,14 @@ final class MacSurfaceGuardTests: XCTestCase {
         let text = try XCTUnwrap(source.components(
             separatedBy: "private var textLane:").dropFirst().first?
             .components(separatedBy: "private func codeHandoff").first)
-        XCTAssertTrue(text.contains("cancel: { textModel.reset() }"),
+        XCTAssertTrue(text.contains("cancel: { module.cancelPairingCode() }"),
                       "the text handoff lost its direct way back")
         XCTAssertFalse(text.contains("textModel.end()"),
                        "Cancel creates an empty Session ended task that still needs Done")
         let files = try XCTUnwrap(source.components(
             separatedBy: "private var fileLane:").dropFirst().first?
             .components(separatedBy: "private var textLane").first)
-        XCTAssertTrue(files.contains("cancel: { fileModel.cancel() }"),
+        XCTAssertTrue(files.contains("cancel: { module.cancelPairingCode() }"),
                       "the file handoff lost its direct way back")
     }
 

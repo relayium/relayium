@@ -210,8 +210,120 @@ public final class TransferModule: ObservableObject {
     /// "Retained" is load-bearing: a `.completed` receive keeps its result view,
     /// its Reveal in Finder and its drag-out promise, so the connect controls
     /// must stay refused until the user has actually left it.
+    ///
+    /// Deliberately NOT the release rule below. This answers "is there a session
+    /// to draw, or to refuse a second start for", and `link.hasSession` is false
+    /// for a `.watching` pairing room because a watched room is not a session:
+    /// the code, its QR and its expiry are the legacy lane's `.showingCode`, and
+    /// putting an empty link pane over them would be the wrong screen. Whether
+    /// the surface may be GIVEN UP is a different question with a different
+    /// answer — see `retainsWork`.
     public var sessionIsLiveOrRetained: Bool {
         files.state != .idle || text.state != .idle || link.hasSession
+    }
+
+    /// **Whether anything in this module still holds work, in ANY lane.**
+    ///
+    /// The one predicate that decides when this module's surface may be
+    /// released, and the repair for a shipped invariant violation: `owner == nil`
+    /// while a legacy model or the `LinkWorkspaceModel` still held work.
+    ///
+    /// Two creator-side paths reached that state, and both of them released the
+    /// surface from a view that had looked at ONE lane:
+    ///
+    ///  1. **The protocol handoff — a LATENT one, and the reason this is a rule
+    ///     rather than a patch.** A creator sits in `files == .showingCode` with
+    ///     the room watched. When the peer announces `link/1`,
+    ///     `pairingPeerAnnounced` publishes `.requesting` and only then calls
+    ///     `onPairingLinkActivated`, which cancels the legacy model that was
+    ///     rendering the code. The file lane going `.idle` is not the session
+    ///     ending — it is the session being handed to the link — and a release
+    ///     keyed on that lane alone gives the surface up under a live `link/1`.
+    ///     `pane` then answers `.connect` for a module whose
+    ///     `sessionIsLiveOrRetained` is true, so the connect screen draws
+    ///     `transfer.busyElsewhere` over a link with no exit anywhere on it.
+    ///
+    ///     Measured in the built app, the shipped pane did NOT reach that state
+    ///     on this path: both publishes land in one main-actor turn, so the one
+    ///     SwiftUI update that follows already sees `linkHasSession`, swaps the
+    ///     session pane out for the link pane, and the removed pane's `onChange`
+    ///     is never delivered. That is a coincidence of update ordering, not a
+    ///     guarantee — SwiftUI promises neither delivery nor suppression for a
+    ///     view removed in the same pass, and the ordering only holds while
+    ///     `beginLinkAttempt` publishes before the callback. So the release is
+    ///     made safe here instead of being left to depend on it.
+    ///  2. **Cancelling or expiring a creator's code — the observed failure.**
+    ///     Ending only the legacy lane left `.watching(code:)` alive with its
+    ///     socket. `watchPairingCode` refuses a second room while one is held,
+    ///     so the NEXT code minted in that process was never watched and fell
+    ///     back to the legacy wire; the real macOS acceptance reproduces exactly
+    ///     that against the shipped pane. It is repaired at its source by
+    ///     `cancelPairingCode()`; this predicate is what stops a partial cancel
+    ///     from ever being mistaken for an idle module again.
+    ///
+    /// So the link contributes `connection != .idle` — WIDER than `hasSession`,
+    /// because `.watching` is work this module holds even though nothing is
+    /// drawn for it.
+    ///
+    /// It is the same predicate `TransferPresence.observeSessions(fileModel:
+    /// textModel:link:)` subscribes to, expressed once so the app-scoped
+    /// observer and every surface-local release cannot disagree — and they did:
+    /// the observer was already right, and only the view was wrong.
+    public static func retainsWork(files: RealtimeState,
+                                   text: RealtimeTextState,
+                                   link: LinkWorkspaceConnection) -> Bool {
+        files != .idle || text != .idle || link != .idle
+    }
+
+    /// This module's own answer to the rule above.
+    public var retainsWork: Bool {
+        Self.retainsWork(files: files.state, text: text.state, link: link.connection)
+    }
+
+    /// **Give this module's surface up — and only when nothing still holds
+    /// work.**
+    ///
+    /// Always `presence.release(route)` and never `releaseAll()`: only the owner
+    /// may let go, so naming this module's own route turns a stale caller into a
+    /// refusal rather than into a blanked surface somebody else is drawing.
+    ///
+    /// Reports whether it actually released, so a caller that must not proceed
+    /// on a still-busy module can tell the difference — and so a test can assert
+    /// the refusal rather than infer it from an unchanged owner.
+    @discardableResult
+    public func releaseSurfaceIfIdle() -> Bool {
+        guard !retainsWork else { return false }
+        presence.release(route)
+        return true
+    }
+
+    /// **End a pairing code this module opened: the legacy lane that holds the
+    /// digits AND the `link/1` room watch that was opened alongside them.**
+    ///
+    /// Minting and joining both watch the room before there is a peer —
+    /// `PairingCodeStart.createAndWatch` / `joinAndWatch` — so a cancel that
+    /// ended only the lane rendering the code left `.watching(code:)` and its
+    /// socket alive with nothing on screen pointing at them. The next code that
+    /// process minted was then refused a room by `watchPairingCode`, minted
+    /// digits nothing was watching, and fell back to the legacy wire.
+    ///
+    /// **The order is the correctness.** The lane goes first and the room
+    /// second, and no intermediate state is all-idle: while the room is still
+    /// watched `retainsWork` is true, so neither the release below nor the
+    /// app-scoped liveness observer can give the surface up half way through —
+    /// which is what `observeSurfaceIdle` would turn into closing a room the
+    /// user had not finished with. `leave()` is idempotent and `dismiss()`
+    /// clears only an ended connection, so both are safe on a module whose link
+    /// never left `.idle` — a legacy fallback, or a joiner whose lane is the
+    /// only thing to end.
+    public func cancelPairingCode() {
+        switch presence.mode {
+        case .files: files.cancel()
+        case .text:  text.reset()
+        }
+        link.leave()
+        link.dismiss()
+        releaseSurfaceIfIdle()
     }
 
     /// Whether bytes are moving in this module. Asked by the sidebar marker and
