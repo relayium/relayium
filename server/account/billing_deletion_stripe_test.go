@@ -337,12 +337,31 @@ func TestStripeDeletionPaymentIntentUsesLatestChargeSuccessTime(t *testing.T) {
 	if err == nil {
 		t.Fatal("charge succeeding after deletion was accepted")
 	}
+	got.add(BillingDeletionResource{Kind: "charge", ID: "ch_late", CustomerID: "cus_1", Status: "webhook", SuccessAt: 110})
 	got, err = c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", CreatedAt: 100, IdempotencyKey: "delete"}, got)
 	if err == nil {
 		t.Fatal("late charge reconciliation reached terminal")
 	}
 	if r := got.Resources["charge:ch_late"]; !r.Manual || r.Status != "succeeded_after_deletion" {
 		t.Fatalf("late charge=%+v all=%+v", r, got.Resources)
+	}
+}
+
+func TestStripeDeletionChargeCreatedBeforeSucceededAfterUsesWebhookSuccessAt(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"ch_async","paid":true,"created":90,"customer":"cus_1"}`)
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+	c.base, c.http = ts.URL, ts.Client()
+	p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{"charge:ch_async": {Kind: "charge", ID: "ch_async", CustomerID: "cus_1", SuccessAt: 110, Status: "webhook"}}}
+	got, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", CreatedAt: 100, IdempotencyKey: "delete"}, p)
+	if err == nil {
+		t.Fatal("asynchronously succeeded charge reached terminal")
+	}
+	if r := got.Resources["charge:ch_async"]; !r.Manual || r.Status != "succeeded_after_deletion" || r.ProviderCreatedAt != 90 || r.SuccessAt != 110 {
+		t.Fatalf("charge=%+v", r)
 	}
 }
 

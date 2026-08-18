@@ -32,6 +32,7 @@ type BillingDeletionResource struct {
 	Terminal          bool   `json:"terminal"`
 	Manual            bool   `json:"manual,omitempty"`
 	ProviderCreatedAt int64  `json:"providerCreatedAt,omitempty"`
+	SuccessAt         int64  `json:"successAt,omitempty"`
 }
 type BillingDeletionProgress struct {
 	Customers  []string                           `json:"customers,omitempty"`
@@ -48,7 +49,18 @@ func (p *BillingDeletionProgress) add(r BillingDeletionResource) {
 		// Terminal and manual states are monotonic. A later provider list may
 		// rediscover the same ID, but it must not erase canonical completion or
 		// an audit-required payment outcome.
-		if old.Terminal || old.Manual {
+		if old.Terminal {
+			return
+		}
+		if old.Manual {
+			if r.SuccessAt <= old.SuccessAt {
+				return
+			}
+			old.SuccessAt = r.SuccessAt
+			old.Manual = false
+			old.Status = "webhook_success_time"
+			p.Resources[key] = old
+			p.CleanSince = 0
 			return
 		}
 		if r.AttemptID == "" {
@@ -56,6 +68,9 @@ func (p *BillingDeletionProgress) add(r BillingDeletionResource) {
 		}
 		if r.CustomerID == "" {
 			r.CustomerID = old.CustomerID
+		}
+		if old.SuccessAt > r.SuccessAt {
+			r.SuccessAt = old.SuccessAt
 		}
 	}
 	if _, ok := p.Resources[key]; !ok || !r.Terminal {

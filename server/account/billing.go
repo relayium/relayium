@@ -1060,17 +1060,15 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	if journal, ok := s.Store().(interface {
-		AppendStripeCustomerDeletionHazards(context.Context, string, []BillingDeletionResource) error
-	}); ok && ev.CustomerID != "" {
-		resources := []BillingDeletionResource{
-			{Kind: "invoice", ID: ev.InvoiceID, Status: "webhook", ProviderCreatedAt: ev.Created},
-			{Kind: "payment_intent", ID: ev.PaymentIntentID, Status: "webhook", ProviderCreatedAt: ev.Created},
-			{Kind: "charge", ID: ev.ChargeID, Status: "webhook", ProviderCreatedAt: ev.Created},
-		}
-		if err := journal.AppendStripeCustomerDeletionHazards(ctx, ev.CustomerID, resources); err != nil {
-			http.Error(w, "server error", http.StatusInternalServerError)
-			return
+	if (ev.Type == "charge.succeeded" || ev.Type == "payment_intent.succeeded") && ev.CustomerID != "" {
+		if journal, ok := s.Store().(interface {
+			AppendStripeCustomerDeletionHazards(context.Context, string, []BillingDeletionResource) error
+		}); ok {
+			resources := []BillingDeletionResource{{Kind: "payment_intent", ID: ev.PaymentIntentID, Status: "webhook", SuccessAt: ev.Created}, {Kind: "charge", ID: ev.ChargeID, Status: "webhook", SuccessAt: ev.Created}}
+			if err := journal.AppendStripeCustomerDeletionHazards(ctx, ev.CustomerID, resources); err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 	refresh := ev.Type == "customer.subscription.created" || ev.Type == "customer.subscription.updated" ||
@@ -1131,6 +1129,14 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			}
+			if journal, ok := s.Store().(interface {
+				AppendStripeCustomerDeletionHazards(context.Context, string, []BillingDeletionResource) error
+			}); ok {
+				if err := journal.AppendStripeCustomerDeletionHazards(ctx, ev.CustomerID, []BillingDeletionResource{{Kind: "invoice", ID: ev.InvoiceID, Status: "webhook"}, {Kind: "payment_intent", ID: ev.PaymentIntentID, Status: "webhook"}, {Kind: "charge", ID: ev.ChargeID, Status: "webhook"}}); err != nil {
+					http.Error(w, "server error", http.StatusInternalServerError)
+					return
+				}
+			}
 		}
 		w.WriteHeader(http.StatusOK)
 
@@ -1184,6 +1190,14 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 					http.Error(w, "server error", http.StatusInternalServerError)
 					return
 				}
+			}
+		}
+		if journal, ok := s.Store().(interface {
+			AppendStripeCustomerDeletionHazards(context.Context, string, []BillingDeletionResource) error
+		}); ok {
+			if err := journal.AppendStripeCustomerDeletionHazards(ctx, ev.CustomerID, []BillingDeletionResource{{Kind: "invoice", ID: ev.InvoiceID, Status: "webhook"}, {Kind: "payment_intent", ID: ev.PaymentIntentID, Status: "webhook"}, {Kind: "charge", ID: ev.ChargeID, Status: "webhook"}}); err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
 			}
 		}
 		// Ordering guard: drop an out-of-order / re-delivered event older than the

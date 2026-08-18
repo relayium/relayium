@@ -906,13 +906,17 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 				p.add(BillingDeletionResource{Kind: "invoice", ID: obj.Invoice, CustomerID: r.CustomerID, Status: "charge_link"})
 			}
 			if obj.Paid || obj.Status == "succeeded" {
-				if obj.Created > 0 && obj.Created <= row.CreatedAt {
+				if r.SuccessAt > 0 && r.SuccessAt <= row.CreatedAt {
 					r.Terminal = true
 					r.Status = "succeeded_before_deletion"
 					break
 				}
 				r.Manual = true
-				r.Status = "succeeded_after_deletion"
+				if r.SuccessAt > row.CreatedAt {
+					r.Status = "succeeded_after_deletion"
+				} else {
+					r.Status = "succeeded_time_unknown"
+				}
 				p.Resources[resourceKey] = r
 				return p, errors.New("stripe: charge succeeded after deletion")
 			}
