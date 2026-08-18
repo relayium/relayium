@@ -175,6 +175,45 @@ func NewStripeClient(secretKey, webhookSecret, portalConfig string) *stripeClien
 	}
 }
 
+// ValidateStripeCatalog is a startup gate: Relayium only supports licensed
+// recurring prices. A metered or non-recurring Price would introduce usage
+// billing paths that account deletion cannot safely settle automatically.
+func (s *Service) ValidateStripeCatalog(ctx context.Context) error {
+	c, ok := s.biller.(*stripeClient)
+	if !ok {
+		return nil
+	}
+	plans, err := s.Store().ListPlans(ctx)
+	if err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	for _, plan := range plans {
+		for _, priceID := range []string{plan.StripePriceMonthlyID, plan.StripePriceYearlyID} {
+			if priceID == "" || seen[priceID] {
+				continue
+			}
+			seen[priceID] = true
+			body, err := c.request(ctx, http.MethodGet, "/v1/prices/"+url.PathEscape(priceID), nil)
+			if err != nil {
+				return fmt.Errorf("stripe: validate configured price: %w", err)
+			}
+			var price struct {
+				ID        string `json:"id"`
+				Active    bool   `json:"active"`
+				Type      string `json:"type"`
+				Recurring *struct {
+					UsageType string `json:"usage_type"`
+				} `json:"recurring"`
+			}
+			if json.Unmarshal(body, &price) != nil || price.ID != priceID || !price.Active || price.Type != "recurring" || price.Recurring == nil || price.Recurring.UsageType != "licensed" {
+				return errors.New("stripe: configured price must be active licensed recurring")
+			}
+		}
+	}
+	return nil
+}
+
 // liveSubStatus reports whether a Stripe subscription status is one we treat as
 // a changeable live subscription. It must include every status the webhook
 // grants a plan for (active, trialing — see handleStripeWebhook) plus past_due,

@@ -82,6 +82,29 @@ func TestVerifyWebhookProjectsRefundFailureIdentity(t *testing.T) {
 	}
 }
 
+func TestStripeCatalogStartupGateRejectsMeteredPrice(t *testing.T) {
+	for _, usage := range []string{"licensed", "metered"} {
+		t.Run(usage, func(t *testing.T) {
+			store := newTestStore(t)
+			if err := store.UpsertPlan(context.Background(), Plan{ID: "paid", Name: "Paid", Active: true, StripePriceMonthlyID: "price_paid"}); err != nil {
+				t.Fatal(err)
+			}
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintf(w, `{"id":"price_paid","active":true,"type":"recurring","recurring":{"usage_type":%q}}`, usage)
+			}))
+			defer ts.Close()
+			c := NewStripeClient("sk_test", "whsec", "bpc")
+			c.base, c.http = ts.URL, ts.Client()
+			svc := NewService(store, nil, Config{})
+			svc.biller = c
+			err := svc.ValidateStripeCatalog(context.Background())
+			if (usage == "licensed") != (err == nil) {
+				t.Fatalf("usage=%s err=%v", usage, err)
+			}
+		})
+	}
+}
+
 func TestVerifyWebhookProjectsFinancialHazardIDs(t *testing.T) {
 	c := NewStripeClient("sk_test_x", "whsec_abc", "bpc_x")
 	body := `{"id":"evt_invoice","type":"invoice.paid","created":3000,"livemode":false,"data":{"object":{"id":"in_1","object":"invoice","customer":"cus_1","subscription":"sub_1","payment_intent":"pi_1","charge":"ch_1"}}}`

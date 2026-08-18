@@ -560,6 +560,11 @@ func main() {
 			BillingHoldSecret:    *billingHoldSecret,
 			ReleaseCheck:         *releaseCheck,
 		})
+		if *stripeSecretKey != "" {
+			if err := acct.ValidateStripeCatalog(context.Background()); err != nil {
+				log.Fatalf("Stripe catalog preflight: %v", err)
+			}
+		}
 		// The live pairing-code registry, whole. Two things need it, and they need
 		// to be looking at the SAME object:
 		//
