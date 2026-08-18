@@ -559,7 +559,11 @@ func TestOrphanFailureBindingCommitsRotationBeforeReturning(t *testing.T) {
 	if err := store.RecordStripeDeletionRefundLifecycle(context.Background(), "evt-before-bind", "re_orphan_first", "", "pi_orphan", "failed", 100); err != nil {
 		t.Fatal(err)
 	}
+	var refundPosts int
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/v1/refunds" {
+			refundPosts++
+		}
 		switch r.URL.Path {
 		case "/v1/payment_intents/pi_orphan":
 			io.WriteString(w, `{"latest_charge":"ch_orphan"}`)
@@ -576,17 +580,26 @@ func TestOrphanFailureBindingCommitsRotationBeforeReturning(t *testing.T) {
 	defer ts.Close()
 	c := NewStripeClient("sk_test", "whsec", "bpc")
 	c.base, c.http = ts.URL, ts.Client()
-	_, err := ResolveBillingDeletionRefund(context.Background(), store, c, "out-orphan", "charge:ch_orphan", "operator", "audit")
+	first, err := ResolveBillingDeletionRefund(context.Background(), store, c, "out-orphan", "charge:ch_orphan", "operator", "audit")
 	if !errors.Is(err, ErrBillingDeletionRefundReconciliationRequired) {
 		t.Fatalf("err=%v", err)
+	}
+	second, err := ResolveBillingDeletionRefund(context.Background(), store, c, "out-orphan", "charge:ch_orphan", "operator", "audit")
+	if !errors.Is(err, ErrBillingDeletionRefundReconciliationRequired) || second.ActionID != first.ActionID || second.Status != "prepared" {
+		t.Fatalf("idempotent first=%+v second=%+v err=%v", first, second, err)
+	}
+	if _, err := ResolveBillingDeletionRefund(context.Background(), store, c, "out-orphan", "charge:ch_orphan", "different-operator", "different audit"); err == nil || !strings.Contains(err.Error(), "ownership conflict") {
+		t.Fatalf("ownership err=%v", err)
 	}
 	var failed, prepared, revision, released int
 	_ = store.db.QueryRow(`SELECT COUNT(*) FROM billing_deletion_manual_actions WHERE outbox_id='out-orphan' AND state='failed'`).Scan(&failed)
 	_ = store.db.QueryRow(`SELECT COUNT(*) FROM billing_deletion_manual_actions WHERE outbox_id='out-orphan' AND state='prepared' AND retry_generation=1`).Scan(&prepared)
 	_ = store.db.QueryRow(`SELECT revision FROM billing_cancellation_outbox WHERE id='out-orphan'`).Scan(&revision)
 	_ = store.db.QueryRow(`SELECT subject_released_at FROM billing_deletion_holds WHERE billing_subject_id='subject-orphan'`).Scan(&released)
-	if failed != 1 || prepared != 1 || revision == 0 || released != 0 {
-		t.Fatalf("failed=%d prepared=%d revision=%d hold=%d", failed, prepared, revision, released)
+	var preparedID string
+	_ = store.db.QueryRow(`SELECT id FROM billing_deletion_manual_actions WHERE outbox_id='out-orphan' AND state='prepared' AND retry_generation=1`).Scan(&preparedID)
+	if failed != 1 || prepared != 1 || revision == 0 || released != 0 || first.ActionID != preparedID || refundPosts != 0 {
+		t.Fatalf("first=%+v failed=%d prepared=%d preparedID=%q revision=%d hold=%d posts=%d", first, failed, prepared, preparedID, revision, released, refundPosts)
 	}
 }
 

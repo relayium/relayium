@@ -421,19 +421,51 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 			inboxErr := store.db.QueryRowContext(ctx, `SELECT refund_id FROM billing_deletion_refund_inbox WHERE payment_intent_id=? AND status='failed' ORDER BY event_at,refund_id LIMIT 1`, r.PaymentIntentID).Scan(&failedRefund)
 			if inboxErr == nil {
 				sum := sha256.Sum256([]byte("relayium:billing-deletion-refund:v2\x00" + outboxID + "\x00" + r.PaymentIntentID))
-				actionID := "bdr_" + hex.EncodeToString(sum[:16])
+				initialActionID := "bdr_" + hex.EncodeToString(sum[:16])
 				now := time.Now().Unix()
 				tx, txErr := store.db.BeginTx(ctx, nil)
 				if txErr != nil {
 					return BillingDeletionManualResult{}, txErr
 				}
 				defer tx.Rollback()
-				if _, txErr = tx.ExecContext(ctx, `INSERT OR IGNORE INTO billing_deletion_manual_actions(id,outbox_id,resource_key,actor,reason,payment_intent_id,state,created_at,updated_at)
-					VALUES(?,?,?,?,?,?,'prepared',?,?)`, actionID, outboxID, resourceKey, strings.TrimSpace(actor), strings.TrimSpace(reason), r.PaymentIntentID, now, now); txErr != nil {
+				var actionID, savedOutbox, savedResource, savedPI, savedActor, savedReason, savedState string
+				var savedGeneration int64
+				readLatest := func() error {
+					return tx.QueryRowContext(ctx, `SELECT id,outbox_id,resource_key,payment_intent_id,actor,reason,state,retry_generation
+						FROM billing_deletion_manual_actions WHERE outbox_id=? AND payment_intent_id=? ORDER BY retry_generation DESC LIMIT 1`, outboxID, r.PaymentIntentID).
+						Scan(&actionID, &savedOutbox, &savedResource, &savedPI, &savedActor, &savedReason, &savedState, &savedGeneration)
+				}
+				txErr = readLatest()
+				if errors.Is(txErr, sql.ErrNoRows) {
+					if _, txErr = tx.ExecContext(ctx, `INSERT OR IGNORE INTO billing_deletion_manual_actions(id,outbox_id,resource_key,actor,reason,payment_intent_id,state,created_at,updated_at)
+						VALUES(?,?,?,?,?,?,'prepared',?,?)`, initialActionID, outboxID, resourceKey, strings.TrimSpace(actor), strings.TrimSpace(reason), r.PaymentIntentID, now, now); txErr != nil {
+						return BillingDeletionManualResult{}, txErr
+					}
+					txErr = tx.QueryRowContext(ctx, `SELECT id,outbox_id,resource_key,payment_intent_id,actor,reason,state,retry_generation FROM billing_deletion_manual_actions WHERE id=?`, initialActionID).
+						Scan(&actionID, &savedOutbox, &savedResource, &savedPI, &savedActor, &savedReason, &savedState, &savedGeneration)
+				}
+				if txErr != nil {
 					return BillingDeletionManualResult{}, txErr
 				}
-				if txErr = recordStripeDeletionRefundFailuresTx(ctx, tx, failedRefund, actionID, now); txErr != nil {
-					return BillingDeletionManualResult{}, txErr
+				if savedOutbox != outboxID || savedResource != resourceKey || savedPI != r.PaymentIntentID || savedActor != strings.TrimSpace(actor) || savedReason != strings.TrimSpace(reason) {
+					return BillingDeletionManualResult{}, errors.New("account: refund action ownership conflict")
+				}
+				if savedState != "prepared" {
+					return BillingDeletionManualResult{}, errors.New("account: orphan refund failure has no prepared action")
+				}
+				if savedGeneration == 0 {
+					if txErr = recordStripeDeletionRefundFailuresTx(ctx, tx, failedRefund, actionID, now); txErr != nil {
+						return BillingDeletionManualResult{}, txErr
+					}
+					if txErr = readLatest(); txErr != nil {
+						return BillingDeletionManualResult{}, txErr
+					}
+					if savedOutbox != outboxID || savedResource != resourceKey || savedPI != r.PaymentIntentID || savedActor != strings.TrimSpace(actor) || savedReason != strings.TrimSpace(reason) || savedState != "prepared" || savedGeneration != 1 {
+						return BillingDeletionManualResult{}, errors.New("account: orphan refund failure rotation is inconsistent")
+					}
+				}
+				if savedGeneration < 1 {
+					return BillingDeletionManualResult{}, errors.New("account: orphan refund failure was not rotated")
 				}
 				if txErr = tx.Commit(); txErr != nil {
 					return BillingDeletionManualResult{}, txErr
