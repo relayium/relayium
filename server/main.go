@@ -176,6 +176,10 @@ func main() {
 	billingDeletionResource := flag.String("billing-deletion-resource", "", "operator-only: exact kind:id journal resource selected for -billing-deletion-refund")
 	billingDeletionActor := flag.String("billing-deletion-actor", "", "operator-only: accountable actor for a manual billing refund")
 	billingDeletionReason := flag.String("billing-deletion-reason", "", "operator-only: audited reason for a manual billing refund")
+	billingDuplicateList := flag.String("billing-duplicate-list", "", "operator-only: list sanitized duplicate-refund evidence for one job or duplicate subscription, then exit")
+	billingDuplicateRefund := flag.String("billing-duplicate-refund", "", "operator-only: resolve one durable manual duplicate refund job or subscription, then exit")
+	billingDuplicateActor := flag.String("billing-duplicate-actor", "", "operator-only: accountable actor for a duplicate refund")
+	billingDuplicateReason := flag.String("billing-duplicate-reason", "", "operator-only: audited reason for a duplicate refund")
 	// Deprecated and ignored: relay bandwidth is now bounded by each account's
 	// per-plan monthly traffic quota (billing plans phase-1), not this global
 	// allowance. Kept as an accepted-but-unused flag/env so a deployment whose
@@ -438,6 +442,31 @@ func main() {
 	go downloadLimiter.Run(context.Background(), time.Minute)
 
 	store, dbErr := account.OpenSQLite(*dbPath)
+	if *billingDuplicateList != "" {
+		if dbErr != nil || store == nil {
+			log.Fatal("billing duplicate list: database unavailable")
+		}
+		evidence, err := account.ListDuplicateRefundEvidence(context.Background(), store, *billingDuplicateList)
+		if err != nil {
+			log.Fatalf("billing duplicate list: %v", err)
+		}
+		log.Printf("billing duplicate evidence: job=%s duplicate_subscription=%s canonical_subscription=%s invoice=%s state=%s canceled=%t refunded=%t attempts=%d revision=%d manual_reason=%s has_error=%t payments=%d action=%s action_state=%s action_generation=%d", evidence.JobID, evidence.DuplicateSubscriptionID, evidence.CanonicalSubscriptionID, evidence.InvoiceID, evidence.State, evidence.SubscriptionCanceled, evidence.RefundComplete, evidence.Attempts, evidence.Revision, evidence.ManualReason, evidence.HasError, len(evidence.Payments), evidence.ActionID, evidence.ActionState, evidence.ActionGeneration)
+		for _, payment := range evidence.Payments {
+			log.Printf("billing duplicate payment: invoice_payment=%s type=%s payment_intent=%s payment_record=%s charge=%s amount=%d refunded=%d", payment.InvoicePaymentID, payment.PaymentType, payment.PaymentIntentID, payment.PaymentRecordID, payment.ChargeID, payment.AmountPaid, payment.AmountRefunded)
+		}
+		return
+	}
+	if *billingDuplicateRefund != "" {
+		if dbErr != nil || store == nil || *stripeSecretKey == "" {
+			log.Fatal("billing duplicate refund: database or Stripe unavailable")
+		}
+		result, err := account.ResolveDuplicateRefund(context.Background(), store, account.NewStripeClient(*stripeSecretKey, *stripeWebhookSecret, *stripePortalConfig), *billingDuplicateRefund, *billingDuplicateActor, *billingDuplicateReason)
+		if err != nil {
+			log.Fatalf("billing duplicate refund: %v", err)
+		}
+		log.Printf("billing duplicate refund: action=%s state=%s", result.ActionID, result.State)
+		return
+	}
 	if *billingDeletionList != "" {
 		if dbErr != nil || store == nil {
 			log.Fatalf("billing deletion list: database unavailable")
