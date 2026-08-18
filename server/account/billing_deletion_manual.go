@@ -411,6 +411,39 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 	}
 	paymentIntentID, err := c.deletionPaymentIntent(ctx, r)
 	if err != nil {
+		// A signed refund.failed event can arrive before its provider response is
+		// bound to a manual action. If the durable deletion journal already names
+		// the exact payment intent, preserve and rotate that failure before returning
+		// the canonical-allocation error. This does not authorize a refund: the new
+		// generation remains prepared for a later explicit operator reconciliation.
+		if r.PaymentIntentID != "" && r.Manual && !r.Terminal && state == "pending" {
+			var failedRefund string
+			inboxErr := store.db.QueryRowContext(ctx, `SELECT refund_id FROM billing_deletion_refund_inbox WHERE payment_intent_id=? AND status='failed' ORDER BY event_at,refund_id LIMIT 1`, r.PaymentIntentID).Scan(&failedRefund)
+			if inboxErr == nil {
+				sum := sha256.Sum256([]byte("relayium:billing-deletion-refund:v2\x00" + outboxID + "\x00" + r.PaymentIntentID))
+				actionID := "bdr_" + hex.EncodeToString(sum[:16])
+				now := time.Now().Unix()
+				tx, txErr := store.db.BeginTx(ctx, nil)
+				if txErr != nil {
+					return BillingDeletionManualResult{}, txErr
+				}
+				defer tx.Rollback()
+				if _, txErr = tx.ExecContext(ctx, `INSERT OR IGNORE INTO billing_deletion_manual_actions(id,outbox_id,resource_key,actor,reason,payment_intent_id,state,created_at,updated_at)
+					VALUES(?,?,?,?,?,?,'prepared',?,?)`, actionID, outboxID, resourceKey, strings.TrimSpace(actor), strings.TrimSpace(reason), r.PaymentIntentID, now, now); txErr != nil {
+					return BillingDeletionManualResult{}, txErr
+				}
+				if txErr = recordStripeDeletionRefundFailuresTx(ctx, tx, failedRefund, actionID, now); txErr != nil {
+					return BillingDeletionManualResult{}, txErr
+				}
+				if txErr = tx.Commit(); txErr != nil {
+					return BillingDeletionManualResult{}, txErr
+				}
+				return BillingDeletionManualResult{ActionID: actionID, Status: "prepared"}, ErrBillingDeletionRefundReconciliationRequired
+			}
+			if inboxErr != nil && !errors.Is(inboxErr, sql.ErrNoRows) {
+				return BillingDeletionManualResult{}, inboxErr
+			}
+		}
 		return BillingDeletionManualResult{}, err
 	}
 	sum := sha256.Sum256([]byte("relayium:billing-deletion-refund:v2\x00" + outboxID + "\x00" + paymentIntentID))
