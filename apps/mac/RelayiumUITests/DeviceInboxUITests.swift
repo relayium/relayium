@@ -637,18 +637,17 @@ final class DeviceInboxUITests: XCTestCase {
 
     // MARK: - a completed result
 
-    /// A real delivery, decrypted and committed during this launch, appears as a
-    /// result that can be revealed — and is described by count, size and time
-    /// rather than by name.
-    /// **A completed delivery names the files it actually wrote, and the section
-    /// offers ONE Finder action.**
+    /// A real delivery, decrypted and committed during this launch, appears in
+    /// its authenticated sender's device space and can be revealed there.
+    /// **A completed delivery names the files it actually wrote, and the device
+    /// space offers ONE Finder action.**
     ///
     /// Inverted from the assertion it replaces, deliberately. That one required
     /// the row to say "1 file saved" and to contain no file name — the
     /// NOTIFICATION's rule, which is still correct for a banner macOS draws on a
     /// locked screen and is still asserted in `InboxSurfaceGuardTests`. Applied
-    /// here it produced a list whose rows were identical to each other, beside a
-    /// column of identical Finder buttons that all opened the same folder.
+    /// here it produced a list whose rows were identical to each other. v3 now
+    /// keeps the durable receipt in the sender conversation instead.
     ///
     /// What is still refused has not moved, and is checked below: the containing
     /// PATH never appears.
@@ -656,42 +655,33 @@ final class DeviceInboxUITests: XCTestCase {
         launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-result"])
         let window = openDeviceInboxDestination()
 
-        // The result list is near the bottom, so it may be below the fold as
-        // well as not yet written — `revealed` distinguishes the two.
-        let first = revealed("inbox-result", in: window, timeout: 60)
-        XCTAssertTrue(first.exists, "no completed delivery was rendered")
-        let row = text(of: first)
-        // The fixture delivers three distinctly named files through the real
-        // manifest, encryptor and commit, so these are names that were genuinely
-        // written to this machine's disk during the test.
-        for name in ["brief.txt", "notes.md", "diagram.svg"] {
-            XCTAssertTrue(row.contains(name),
-                          "the result does not name \(name), which it saved")
-        }
-        // The row says how much and when as well as what.
-        XCTAssertTrue(row.contains("KB") || row.contains("MB"),
-                      "the result does not say how much arrived")
-        // Scoped to the ROW, not to the window: the folder line legitimately
-        // names the chosen folder, and asserting over the whole surface would
-        // make this test pass or fail on that instead.
-        XCTAssertFalse(row.contains("/"), "the result rendered a path")
+        // v3 lands the authenticated sender in the conversation list first.
+        // Enter that device space rather than searching below the new section
+        // hierarchy for the retained flat receipt row.
+        let openConversation = revealed("inbox-conversation-open", in: window, timeout: 60)
+        XCTAssertTrue(openConversation.exists,
+                      "no authenticated sender conversation was rendered")
+        let home = visibleText(in: window)
+        XCTAssertTrue(home.contains("3 files saved"),
+                      "the sender conversation does not summarize the committed files")
+        XCTAssertTrue(home.contains("1 unread"),
+                      "the newly committed delivery is not marked unread")
+        openConversation.click()
 
-        // **One Finder action, and it is the section's.** A per-row control is
-        // the exact thing that was removed, so its absence is asserted rather
-        // than merely not looked for.
+        let conversationReveal = element("inbox-conversation-reveal", in: window)
+        XCTAssertTrue(conversationReveal.waitForExistence(timeout: 20),
+                      "the file conversation has no shared Finder action")
+        let conversation = visibleText(in: window)
+        for name in ["brief.txt", "notes.md", "diagram.svg"] {
+            XCTAssertTrue(conversation.contains(name),
+                          "the device space does not name \(name), which it saved")
+        }
+        XCTAssertFalse(conversation.contains("/Users/"), "the device space rendered a path")
+        scrollToReveal(conversationReveal, in: window)
+        assertOnScreen(conversationReveal, "the conversation's Show in Finder", in: window)
         XCTAssertEqual(window.descendants(matching: .any)
-            .matching(identifier: "inbox-reveal").count, 0,
-                       "the results list still carries a Finder button per row")
-        let reveal = revealed("inbox-reveal-folder", in: window, timeout: 20)
-        scrollToReveal(reveal, in: window)
-        assertOnScreen(reveal, "the section's Show in Finder", in: window)
-        XCTAssertEqual(window.descendants(matching: .any)
-            .matching(identifier: "inbox-reveal-folder").count, 1,
-                       "the Recently received section offers more than one Finder action")
-        // Spoken, it says which folder it opens — the fact that distinguishes it
-        // from every other Finder action in the window.
-        XCTAssertTrue(reveal.label.contains("Show the receive folder"),
-                      "the section action does not say what it opens: \(reveal.label)")
+            .matching(identifier: "inbox-conversation-reveal").count, 1,
+                       "the device space offers more than one Finder action")
     }
 
     /// **The whole Help section is readable with every preceding section
@@ -717,8 +707,8 @@ final class DeviceInboxUITests: XCTestCase {
         // Wait for the longest state to actually BE the longest: a delivery that
         // has not committed yet is a shorter page, and scrolling to the bottom of
         // it would prove nothing about the one the owner saw.
-        XCTAssertTrue(revealed("inbox-result", in: window, timeout: 60).exists,
-                      "the completed delivery never appeared, so this is not the long page")
+        XCTAssertTrue(revealed("inbox-conversation-open", in: window, timeout: 60).exists,
+                      "the completed delivery never formed a conversation, so this is not the long page")
         XCTAssertTrue(element("inbox-banners-blocked", in: window).exists
                       || revealed("inbox-banners-blocked", in: window).exists,
                       "the banner section is absent, so this is not the long page")
@@ -1183,7 +1173,11 @@ final class DeviceInboxUITests: XCTestCase {
                        "the menu bar offers a folder grant")
         XCTAssertFalse(titles.contains { $0.contains("Receive automatically") },
                        "the menu bar offers the unattended-write consent")
-        XCTAssertTrue(titles.contains("Open"),
-                      "the menu bar has no route to where those decisions are made")
+        let openInbox = openDeviceInboxMenuItem()
+        XCTAssertNotNil(openInbox, "the menu bar has no route to where those decisions are made")
+        openInbox?.click()
+        XCTAssertTrue(element("destination-deviceInbox", in: mainWindow)
+            .waitForExistence(timeout: 20),
+                      "the menu item named Open did not route to the Device Inbox")
     }
 }
