@@ -25,25 +25,32 @@ func eventIDFromBody(t *testing.T, body string) string {
 }
 
 func seedTerminalInvoiceDeletion(t *testing.T, store *SQLiteStore, subject, customer, paymentIntent string) {
+	seedTerminalInvoiceDeletionEpoch(t, store, subject, customer, "delete-"+subject, "epoch-"+subject, "", 1, paymentIntent)
+}
+
+func seedTerminalInvoiceDeletionEpoch(t *testing.T, store *SQLiteStore, subject, customer, deletionID, epoch, subscription string, cutoff int64, paymentIntent string) {
 	t.Helper()
-	p := BillingDeletionProgress{Version: billingDeletionProgressVersion, Resources: map[string]BillingDeletionResource{
+	p := BillingDeletionProgress{Version: billingDeletionProgressVersion, Customers: []string{customer}, Resources: map[string]BillingDeletionResource{
 		"payment_intent:" + paymentIntent: {
 			Kind: "payment_intent", ID: paymentIntent, PaymentIntentID: paymentIntent,
 			CustomerID: customer, Status: "observed",
 		},
 	}}
+	if subscription != "" {
+		p.add(BillingDeletionResource{Kind: "subscription", ID: subscription, CustomerID: customer, Status: "observed"})
+	}
 	raw, err := json.Marshal(p)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.db.Exec(`INSERT INTO stripe_customer_history(user_id,customer_id,created_at) VALUES(?,?,1)`, subject, customer); err != nil {
+	if _, err := store.db.Exec(`INSERT OR IGNORE INTO stripe_customer_history(user_id,customer_id,created_at) VALUES(?,?,1)`, subject, customer); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.db.Exec(`INSERT INTO billing_deletion_holds(billing_subject_id,email_hmac,provider,created_at,expires_at,review_at,subject_released_at) VALUES(?,X'01','stripe',1,1,1,1)`, subject); err != nil {
+	if _, err := store.db.Exec(`INSERT OR IGNORE INTO billing_deletion_holds(billing_subject_id,email_hmac,provider,created_at,expires_at,review_at,subject_released_at) VALUES(?,X'01','stripe',1,1,1,1)`, subject); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,idempotency_key,state,created_at,updated_at,generation,progress_json,terminal_at,mode,deletion_epoch,cutoff_at) VALUES(?,?, 'stripe',?,?,'terminal',1,1,1,?,1,'account_deletion',?,1)`,
-		"delete-"+subject, subject, customer, "delete-key-"+subject, string(raw), "epoch-"+subject); err != nil {
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,created_at,updated_at,generation,progress_json,terminal_at,mode,deletion_epoch,cutoff_at) VALUES(?,?, 'stripe',?,?,?,'terminal',?,?,(SELECT COALESCE(MAX(generation),0)+1 FROM billing_cancellation_outbox WHERE billing_subject_id=?),?,?,'account_deletion',?,?)`,
+		deletionID, subject, customer, subscription, "delete-key-"+deletionID, cutoff, cutoff, subject, string(raw), cutoff, epoch, cutoff); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -167,6 +174,101 @@ func TestPaidInvoiceMissingIdentityFailsBeforeAcknowledgement(t *testing.T) {
 				t.Fatalf("status=%d, want retryable 500", resp.StatusCode)
 			}
 		})
+	}
+}
+
+func TestPaidInvoiceWithoutChainUsesCanonicalDeletionEpoch(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	secret := "whsec_paid_canonical"
+	var invoiceGets int
+	stripe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/v1/invoices/in_late" {
+			http.Error(w, "unexpected", http.StatusBadRequest)
+			return
+		}
+		invoiceGets++
+		io.WriteString(w, `{"id":"in_late","status":"paid","customer":"cus_late","subscription":"sub_old","payment_intent":"pi_late","charge":"ch_late","created":90,"status_transitions":{"paid_at":110}}`)
+	}))
+	defer stripe.Close()
+	client := NewStripeClient("sk_test", secret, "")
+	client.base, client.http = stripe.URL, stripe.Client()
+	svc.biller = client
+	loginCookie(t, ts, mail, "late-paid@example.test")
+	uid := mustUserID(t, store, "late-paid@example.test")
+	seedTerminalInvoiceDeletionEpoch(t, store, uid, "cus_late", "delete-late", "epoch-late", "sub_old", 100, "pi_unrelated")
+	resp := postWebhook(t, ts, secret, paidInvoiceBody("in_late", "cus_late", "", "", "", ""))
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || invoiceGets != 1 {
+		t.Fatalf("status=%d canonicalGets=%d", resp.StatusCode, invoiceGets)
+	}
+	assertPaidInvoiceExactJournal(t, store, uid, "in_late", "pi_late", "ch_late")
+}
+
+func TestPaidInvoiceCanonicalEpochAmbiguityIsRetryable(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	secret := "whsec_paid_ambiguous"
+	stripe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `{"id":"in_ambiguous","status":"paid","customer":"cus_ambiguous","subscription":"sub_shared","payment_intent":"pi_new","created":90,"status_transitions":{"paid_at":130}}`)
+	}))
+	defer stripe.Close()
+	client := NewStripeClient("sk_test", secret, "")
+	client.base, client.http = stripe.URL, stripe.Client()
+	svc.biller = client
+	loginCookie(t, ts, mail, "ambiguous-paid@example.test")
+	uid := mustUserID(t, store, "ambiguous-paid@example.test")
+	seedTerminalInvoiceDeletionEpoch(t, store, uid, "cus_ambiguous", "delete-a", "epoch-a", "sub_shared", 100, "pi_old_a")
+	seedTerminalInvoiceDeletionEpoch(t, store, uid, "cus_ambiguous", "delete-b", "epoch-b", "sub_shared", 120, "pi_old_b")
+	resp := postWebhook(t, ts, secret, paidInvoiceBody("in_ambiguous", "cus_ambiguous", "", "", "", ""))
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status=%d, want retryable 500", resp.StatusCode)
+	}
+	var exact int
+	if err := store.db.QueryRow(`SELECT COUNT(*) FROM billing_cancellation_outbox WHERE billing_subject_id=? AND mode='exact_compensation'`, uid).Scan(&exact); err != nil || exact != 0 {
+		t.Fatalf("exact=%d err=%v", exact, err)
+	}
+}
+
+func TestPaidInvoiceForOrdinarySubjectDoesNotFetchCanonicalInvoice(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	secret := "whsec_paid_ordinary"
+	var invoiceGets int
+	stripe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		invoiceGets++
+		http.Error(w, "unexpected", http.StatusInternalServerError)
+	}))
+	defer stripe.Close()
+	client := NewStripeClient("sk_test", secret, "")
+	client.base, client.http = stripe.URL, stripe.Client()
+	svc.biller = client
+	loginCookie(t, ts, mail, "ordinary-paid@example.test")
+	uid := mustUserID(t, store, "ordinary-paid@example.test")
+	if _, err := store.db.Exec(`INSERT INTO stripe_customer_history(user_id,customer_id,created_at) VALUES(?,'cus_ordinary',1)`, uid); err != nil {
+		t.Fatal(err)
+	}
+	resp := postWebhook(t, ts, secret, paidInvoiceBody("in_ordinary", "cus_ordinary", "", "", "", ""))
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || invoiceGets != 0 {
+		t.Fatalf("status=%d canonicalGets=%d", resp.StatusCode, invoiceGets)
+	}
+}
+
+func TestNewStripeDeletionRequiresHistoricalAuditBeforeQuiet(t *testing.T) {
+	svc, store, _, user, token := deletionFixture(t, "historical-audit@example.test")
+	seedStripeDeletion(t, store, user)
+	if err := svc.ConfirmAccountDeletion(context.Background(), token); err != nil {
+		t.Fatal(err)
+	}
+	var raw string
+	if err := store.db.QueryRow(`SELECT progress_json FROM billing_cancellation_outbox WHERE billing_subject_id=? AND mode='account_deletion'`, user.ID).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	progress, err := decodeDeletionProgressStrict(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !progress.HistoricalAuditRequired || progress.terminal(time.Now().Unix()+2*86400) {
+		t.Fatalf("new deletion skipped historical audit: %+v", progress)
 	}
 }
 

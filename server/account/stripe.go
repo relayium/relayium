@@ -1767,6 +1767,39 @@ func (c *stripeClient) request(ctx context.Context, method, path string, form ur
 	return c.requestKeyed(ctx, method, path, form, "")
 }
 
+func (c *stripeClient) canonicalPaidInvoice(ctx context.Context, invoiceID string) (CanonicalStripePaidInvoice, error) {
+	if invoiceID == "" {
+		return CanonicalStripePaidInvoice{}, errors.New("stripe: canonical paid invoice id is empty")
+	}
+	body, err := c.request(ctx, http.MethodGet, "/v1/invoices/"+url.PathEscape(invoiceID), nil)
+	if err != nil {
+		return CanonicalStripePaidInvoice{}, err
+	}
+	var obj struct {
+		ID                string `json:"id"`
+		Status            string `json:"status"`
+		Customer          string `json:"customer"`
+		Subscription      string `json:"subscription"`
+		PaymentIntent     string `json:"payment_intent"`
+		Charge            string `json:"charge"`
+		Created           int64  `json:"created"`
+		StatusTransitions struct {
+			PaidAt int64 `json:"paid_at"`
+		} `json:"status_transitions"`
+	}
+	if err := json.Unmarshal(body, &obj); err != nil {
+		return CanonicalStripePaidInvoice{}, err
+	}
+	if obj.ID != invoiceID || obj.Status != "paid" || obj.Customer == "" || obj.Created <= 0 || obj.StatusTransitions.PaidAt <= 0 || obj.Created > obj.StatusTransitions.PaidAt {
+		return CanonicalStripePaidInvoice{}, errors.New("stripe: canonical paid invoice evidence is invalid")
+	}
+	return CanonicalStripePaidInvoice{
+		InvoiceID: obj.ID, CustomerID: obj.Customer, SubscriptionID: obj.Subscription,
+		PaymentIntentID: obj.PaymentIntent, ChargeID: obj.Charge,
+		CreatedAt: obj.Created, PaidAt: obj.StatusTransitions.PaidAt,
+	}, nil
+}
+
 // requestKeyed is request with an optional Stripe Idempotency-Key: retrying (or
 // racing) the same key returns the SAME result object instead of creating a
 // second one — the basis for one-customer-per-user under concurrent checkout.

@@ -1097,7 +1097,36 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		journal, ok := s.Store().(interface {
 			AppendStripePaidInvoiceDeletionHazards(context.Context, string, []BillingDeletionResource) error
 		})
-		if !ok || journal.AppendStripePaidInvoiceDeletionHazards(ctx, ev.CustomerID, resources) != nil {
+		if !ok {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if err := journal.AppendStripePaidInvoiceDeletionHazards(ctx, ev.CustomerID, resources); errors.Is(err, ErrPaidInvoiceNeedsCanonicalEpoch) {
+			client, clientOK := s.biller.(*stripeClient)
+			canonicalJournal, storeOK := s.Store().(interface {
+				AppendCanonicalStripePaidInvoiceDeletionHazards(context.Context, CanonicalStripePaidInvoice, []BillingDeletionResource) error
+			})
+			if !clientOK || !storeOK {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+			invoice, canonicalErr := client.canonicalPaidInvoice(ctx, ev.InvoiceID)
+			if canonicalErr != nil || invoice.CustomerID != ev.CustomerID {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+			resources = []BillingDeletionResource{{Kind: "invoice", ID: invoice.InvoiceID, InvoiceID: invoice.InvoiceID, PaymentIntentID: invoice.PaymentIntentID, Status: "canonical_invoice_paid"}}
+			if invoice.PaymentIntentID != "" {
+				resources = append(resources, BillingDeletionResource{Kind: "payment_intent", ID: invoice.PaymentIntentID, PaymentIntentID: invoice.PaymentIntentID, InvoiceID: invoice.InvoiceID, Status: "canonical_invoice_paid"})
+			}
+			if invoice.ChargeID != "" {
+				resources = append(resources, BillingDeletionResource{Kind: "charge", ID: invoice.ChargeID, PaymentIntentID: invoice.PaymentIntentID, InvoiceID: invoice.InvoiceID, Status: "canonical_invoice_paid"})
+			}
+			if canonicalJournal.AppendCanonicalStripePaidInvoiceDeletionHazards(ctx, invoice, resources) != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+		} else if err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}

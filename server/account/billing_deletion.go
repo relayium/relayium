@@ -55,6 +55,17 @@ type BillingDeletionProgress struct {
 	HistoricalAuditRequired bool                               `json:"historicalAuditRequired,omitempty"`
 }
 
+// ErrPaidInvoiceNeedsCanonicalEpoch means a verified paid-invoice event belongs
+// to a subject with completed deletion history, but its payment chain does not
+// overlap any retained epoch. The caller must retrieve the canonical invoice
+// before choosing an epoch; ACKing this state could permanently lose a refund.
+var ErrPaidInvoiceNeedsCanonicalEpoch = errors.New("account: paid invoice requires canonical deletion epoch")
+
+type CanonicalStripePaidInvoice struct {
+	InvoiceID, CustomerID, SubscriptionID, PaymentIntentID, ChargeID string
+	CreatedAt, PaidAt                                                int64
+}
+
 const billingDeletionProgressVersion = 1
 
 func (p BillingDeletionProgress) MarshalJSON() ([]byte, error) {
@@ -470,7 +481,7 @@ func (s *SQLiteStore) CommitAccountDeletion(ctx context.Context, tokenHash strin
 		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(generation),0)+1 FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider='stripe'`, u.ID).Scan(&generation); err != nil {
 			return nil, false, err
 		}
-		progress := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{}}
+		progress := BillingDeletionProgress{Resources: map[string]BillingDeletionResource{}, HistoricalAuditRequired: true}
 		rows, err := tx.QueryContext(ctx, `SELECT customer_id FROM stripe_customer_history WHERE user_id=? ORDER BY created_at,customer_id`, u.ID)
 		if err != nil {
 			return nil, false, err
@@ -737,7 +748,7 @@ func (s *SQLiteStore) AppendStripeDeletionHazard(ctx context.Context, userID str
 		return err
 	}
 	defer tx.Rollback()
-	if err := appendStripeDeletionHazardsTx(ctx, tx, userID, []BillingDeletionResource{r}); err != nil {
+	if _, err := appendStripeDeletionHazardsTx(ctx, tx, userID, []BillingDeletionResource{r}); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -860,7 +871,7 @@ func (s *SQLiteStore) AppendStripeActiveAccountDeletionHazardForCustomer(ctx con
 	return true, tx.Commit()
 }
 
-func appendStripeDeletionHazardsTx(ctx context.Context, tx *sql.Tx, userID string, resources []BillingDeletionResource) error {
+func appendStripeDeletionHazardsTx(ctx context.Context, tx *sql.Tx, userID string, resources []BillingDeletionResource) (bool, error) {
 	valid := resources[:0]
 	for _, r := range resources {
 		if r.ID != "" {
@@ -869,11 +880,11 @@ func appendStripeDeletionHazardsTx(ctx context.Context, tx *sql.Tx, userID strin
 	}
 	resources = valid
 	if len(resources) == 0 {
-		return nil
+		return false, nil
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT id,progress_json,mode FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider='stripe' AND state='pending'`, userID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	type pending struct{ id, raw, mode string }
 	var all []pending
@@ -881,17 +892,17 @@ func appendStripeDeletionHazardsTx(ctx context.Context, tx *sql.Tx, userID strin
 		var v pending
 		if err := rows.Scan(&v.id, &v.raw, &v.mode); err != nil {
 			rows.Close()
-			return err
+			return false, err
 		}
 		all = append(all, v)
 	}
 	if err := rows.Close(); err != nil {
-		return err
+		return false, err
 	}
 	exactEligible := validateExactPaymentResources(resources) == nil
 	if exactEligible {
 		if handled, err := appendExactStripeCompensationTx(ctx, tx, userID, "", resources); err != nil || handled {
-			return err
+			return handled, err
 		}
 	}
 	hasAccountDeletion := false
@@ -901,11 +912,17 @@ func appendStripeDeletionHazardsTx(ctx context.Context, tx *sql.Tx, userID strin
 	if !exactEligible && !hasAccountDeletion {
 		// Subscription and Checkout observations are meaningful only while a
 		// customer-wide account deletion is pending. They are not exact refund
-		// targets and therefore must never create an exact-compensation task after
-		// a deletion has completed. In the overwhelmingly common case where no
-		// deletion exists at all, this is a deliberate no-op rather than a webhook
-		// failure: the normal subscription lifecycle still has to apply below.
-		return nil
+		// targets and therefore must fail closed after a deletion has completed.
+		// In the overwhelmingly common case where no deletion exists at all, this
+		// remains a deliberate no-op so normal subscription lifecycle can apply.
+		var completedDeletion int
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider='stripe' AND state='terminal' AND mode='account_deletion')`, userID).Scan(&completedDeletion); err != nil {
+			return false, err
+		}
+		if completedDeletion != 0 {
+			return false, errors.New("account: non-payment hazard cannot reopen completed deletion")
+		}
+		return false, nil
 	}
 	for _, v := range all {
 		if v.mode == billingCancellationExactCompensation {
@@ -913,7 +930,7 @@ func appendStripeDeletionHazardsTx(ctx context.Context, tx *sql.Tx, userID strin
 		}
 		p, err := decodeDeletionProgressStrict(v.raw)
 		if err != nil {
-			return err
+			return false, err
 		}
 		for _, r := range resources {
 			if r.ID != "" {
@@ -922,10 +939,10 @@ func appendStripeDeletionHazardsTx(ctx context.Context, tx *sql.Tx, userID strin
 		}
 		encoded, _ := json.Marshal(p)
 		if _, err := tx.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET progress_json=?,revision=revision+1,updated_at=unixepoch() WHERE id=? AND state='pending'`, string(encoded), v.id); err != nil {
-			return err
+			return false, err
 		}
 	}
-	return nil
+	return hasAccountDeletion, nil
 }
 
 // appendExactStripeCompensationTx creates a payment-chain-only task for money
@@ -1128,8 +1145,109 @@ func (s *SQLiteStore) appendStripeCustomerDeletionHazards(ctx context.Context, c
 	for i := range resources {
 		resources[i].CustomerID = customerID
 	}
-	if err := appendStripeDeletionHazardsTx(ctx, tx, subjects[0], resources); err != nil {
+	handled, err := appendStripeDeletionHazardsTx(ctx, tx, subjects[0], resources)
+	if err != nil {
 		return err
+	}
+	if requireSubject && !handled {
+		var completedDeletion int
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider='stripe' AND state='terminal' AND mode='account_deletion')`, subjects[0]).Scan(&completedDeletion); err != nil {
+			return err
+		}
+		if completedDeletion != 0 {
+			return ErrPaidInvoiceNeedsCanonicalEpoch
+		}
+	}
+	return tx.Commit()
+}
+
+// AppendCanonicalStripePaidInvoiceDeletionHazards attaches a canonical paid
+// invoice to exactly one completed deletion epoch. paid_at, not invoice.created,
+// is the money boundary: equality with a second-granularity cutoff is ambiguous.
+func (s *SQLiteStore) AppendCanonicalStripePaidInvoiceDeletionHazards(ctx context.Context, invoice CanonicalStripePaidInvoice, resources []BillingDeletionResource) error {
+	if invoice.InvoiceID == "" || invoice.CustomerID == "" || invoice.CreatedAt <= 0 || invoice.PaidAt <= 0 || invoice.CreatedAt > invoice.PaidAt {
+		return errors.New("account: canonical paid invoice evidence is incomplete")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT user_id FROM stripe_customer_history WHERE customer_id=? LIMIT 2`, invoice.CustomerID)
+	if err != nil {
+		return err
+	}
+	var subjects []string
+	for rows.Next() {
+		var subject string
+		if err := rows.Scan(&subject); err != nil {
+			rows.Close()
+			return err
+		}
+		subjects = append(subjects, subject)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if len(subjects) != 1 {
+		return errors.New("account: canonical paid invoice billing subject is not unique")
+	}
+	rows, err = tx.QueryContext(ctx, `SELECT id,customer_id,subscription_id,captured_source_id,created_at,cutoff_at,progress_json FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider='stripe' AND state='terminal' AND mode='account_deletion' ORDER BY generation DESC`, subjects[0])
+	if err != nil {
+		return err
+	}
+	var matches []string
+	for rows.Next() {
+		var id, customerID, subscriptionID, capturedSourceID, raw string
+		var createdAt, cutoffAt int64
+		if err := rows.Scan(&id, &customerID, &subscriptionID, &capturedSourceID, &createdAt, &cutoffAt, &raw); err != nil {
+			rows.Close()
+			return err
+		}
+		p, err := decodeDeletionProgressStrict(raw)
+		if err != nil {
+			rows.Close()
+			return err
+		}
+		customerMatches := customerID == invoice.CustomerID
+		for _, known := range p.Customers {
+			customerMatches = customerMatches || known == invoice.CustomerID
+		}
+		if !customerMatches {
+			continue
+		}
+		if cutoffAt == 0 {
+			cutoffAt = createdAt
+		}
+		if invoice.PaidAt <= cutoffAt {
+			continue
+		}
+		if invoice.SubscriptionID != "" {
+			subscriptionMatches := subscriptionID == invoice.SubscriptionID || capturedSourceID == invoice.SubscriptionID
+			for _, known := range p.Resources {
+				subscriptionMatches = subscriptionMatches || (known.Kind == "subscription" && known.ID == invoice.SubscriptionID)
+			}
+			if !subscriptionMatches {
+				continue
+			}
+		}
+		matches = append(matches, id)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if len(matches) != 1 {
+		return errors.New("account: canonical paid invoice does not identify one deletion epoch")
+	}
+	for i := range resources {
+		resources[i].CustomerID = invoice.CustomerID
+	}
+	handled, err := appendExactStripeCompensationTx(ctx, tx, subjects[0], matches[0], resources)
+	if err != nil {
+		return err
+	}
+	if !handled {
+		return errors.New("account: canonical paid invoice deletion epoch was not retained")
 	}
 	return tx.Commit()
 }
