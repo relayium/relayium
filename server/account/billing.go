@@ -1067,6 +1067,41 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 	w = tw
 
 	ctx := r.Context()
+	if ev.Type == "invoice.paid" {
+		// Payment evidence must reach the deletion journal before canonical
+		// subscription refresh, user lookup or billing-authority acquisition. Any
+		// of those later gates may legitimately ACK/return 5xx (missing old
+		// subscription, purged user, Apple/admin authority), but none may make a
+		// paid invoice disappear from an already-deleted subject's refund chain.
+		if ev.InvoiceID == "" || ev.CustomerID == "" {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		resources := []BillingDeletionResource{{
+			Kind: "invoice", ID: ev.InvoiceID, InvoiceID: ev.InvoiceID,
+			PaymentIntentID: ev.PaymentIntentID, Status: "invoice.paid_webhook",
+		}}
+		if ev.PaymentIntentID != "" {
+			resources = append(resources, BillingDeletionResource{
+				Kind: "payment_intent", ID: ev.PaymentIntentID,
+				PaymentIntentID: ev.PaymentIntentID, InvoiceID: ev.InvoiceID,
+				Status: "invoice.paid_webhook",
+			})
+		}
+		if ev.ChargeID != "" {
+			resources = append(resources, BillingDeletionResource{
+				Kind: "charge", ID: ev.ChargeID, PaymentIntentID: ev.PaymentIntentID,
+				InvoiceID: ev.InvoiceID, Status: "invoice.paid_webhook",
+			})
+		}
+		journal, ok := s.Store().(interface {
+			AppendStripePaidInvoiceDeletionHazards(context.Context, string, []BillingDeletionResource) error
+		})
+		if !ok || journal.AppendStripePaidInvoiceDeletionHazards(ctx, ev.CustomerID, resources) != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+	}
 	if ev.Type == "refund.created" || ev.Type == "refund.updated" || ev.Type == "refund.failed" {
 		if recorder, ok := s.Store().(interface {
 			RecordStripeDeletionRefundLifecycle(context.Context, string, string, string, string, string, int64) error

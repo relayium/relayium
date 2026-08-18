@@ -24,6 +24,152 @@ func eventIDFromBody(t *testing.T, body string) string {
 	return envelope.ID
 }
 
+func seedTerminalInvoiceDeletion(t *testing.T, store *SQLiteStore, subject, customer, paymentIntent string) {
+	t.Helper()
+	p := BillingDeletionProgress{Version: billingDeletionProgressVersion, Resources: map[string]BillingDeletionResource{
+		"payment_intent:" + paymentIntent: {
+			Kind: "payment_intent", ID: paymentIntent, PaymentIntentID: paymentIntent,
+			CustomerID: customer, Status: "observed",
+		},
+	}}
+	raw, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO stripe_customer_history(user_id,customer_id,created_at) VALUES(?,?,1)`, subject, customer); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO billing_deletion_holds(billing_subject_id,email_hmac,provider,created_at,expires_at,review_at,subject_released_at) VALUES(?,X'01','stripe',1,1,1,1)`, subject); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,idempotency_key,state,created_at,updated_at,generation,progress_json,terminal_at,mode,deletion_epoch,cutoff_at) VALUES(?,?, 'stripe',?,?,'terminal',1,1,1,?,1,'account_deletion',?,1)`,
+		"delete-"+subject, subject, customer, "delete-key-"+subject, string(raw), "epoch-"+subject); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertPaidInvoiceExactJournal(t *testing.T, store *SQLiteStore, subject, invoice, paymentIntent, charge string) {
+	t.Helper()
+	var raw string
+	if err := store.db.QueryRow(`SELECT progress_json FROM billing_cancellation_outbox WHERE billing_subject_id=? AND mode='exact_compensation' AND state='pending'`, subject).Scan(&raw); err != nil {
+		t.Fatalf("exact compensation journal: %v", err)
+	}
+	p, err := decodeDeletionProgressStrict(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"invoice:" + invoice, "payment_intent:" + paymentIntent} {
+		if _, ok := p.Resources[key]; !ok {
+			t.Fatalf("missing %s in paid-invoice journal: %+v", key, p.Resources)
+		}
+	}
+	if charge != "" {
+		if _, ok := p.Resources["charge:"+charge]; !ok {
+			t.Fatalf("missing charge:%s in paid-invoice journal: %+v", charge, p.Resources)
+		}
+	}
+	for _, resource := range p.Resources {
+		if resource.SuccessAt != 0 {
+			t.Fatalf("webhook fabricated canonical paid_at: %+v", resource)
+		}
+	}
+}
+
+func paidInvoiceBody(id, customer, subscription, paymentIntent, charge, userID string) string {
+	metadata := "null"
+	if userID != "" {
+		metadata = fmt.Sprintf(`{"user_id":%q}`, userID)
+	}
+	return fmt.Sprintf(`{"id":"evt_%s","type":"invoice.paid","created":110,"livemode":false,"data":{"object":{"id":%q,"object":"invoice","customer":%q,"subscription":%q,"payment_intent":%q,"charge":%q,"status":"paid","metadata":%s}}}`,
+		id, id, customer, subscription, paymentIntent, charge, metadata)
+}
+
+func TestPaidInvoiceIsJournaledBeforeCanonicalOrAuthorityGates(t *testing.T) {
+	t.Run("canonical subscription missing", func(t *testing.T) {
+		ts, svc, store, mail := newBillingServer(t)
+		secret := "whsec_paid_missing"
+		stripe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/v1/subscriptions/sub_old" {
+				http.Error(w, "unexpected", http.StatusBadRequest)
+				return
+			}
+			http.Error(w, `{"error":{"message":"gone"}}`, http.StatusNotFound)
+		}))
+		defer stripe.Close()
+		client := NewStripeClient("sk_test", secret, "")
+		client.base, client.http = stripe.URL, stripe.Client()
+		svc.biller = client
+		loginCookie(t, ts, mail, "paid-missing@example.test")
+		uid := mustUserID(t, store, "paid-missing@example.test")
+		seedTerminalInvoiceDeletion(t, store, uid, "cus_paid_missing", "pi_paid_missing")
+		resp := postWebhook(t, ts, secret, paidInvoiceBody("in_paid_missing", "cus_paid_missing", "sub_old", "pi_paid_missing", "ch_paid_missing", uid))
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status=%d", resp.StatusCode)
+		}
+		assertPaidInvoiceExactJournal(t, store, uid, "in_paid_missing", "pi_paid_missing", "ch_paid_missing")
+	})
+
+	t.Run("purged subject and invoice without subscription", func(t *testing.T) {
+		ts, svc, store, _ := newBillingServer(t)
+		secret := "whsec_paid_tombstone"
+		svc.biller = newWebhookFixtureClient(secret)
+		seedTerminalInvoiceDeletion(t, store, "purged-subject", "cus_paid_tombstone", "pi_paid_tombstone")
+		resp := postWebhook(t, ts, secret, paidInvoiceBody("in_paid_tombstone", "cus_paid_tombstone", "", "pi_paid_tombstone", "", ""))
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status=%d", resp.StatusCode)
+		}
+		assertPaidInvoiceExactJournal(t, store, "purged-subject", "in_paid_tombstone", "pi_paid_tombstone", "")
+	})
+
+	for _, provider := range []string{SourceAdmin, ProviderApple} {
+		t.Run(provider+" authority conflict", func(t *testing.T) {
+			ts, svc, store, mail := newBillingServer(t)
+			secret := "whsec_paid_conflict_" + provider
+			svc.biller = newWebhookFixtureClient(secret)
+			loginCookie(t, ts, mail, "paid-"+provider+"@example.test")
+			uid := mustUserID(t, store, "paid-"+provider+"@example.test")
+			if provider == SourceAdmin {
+				mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true})
+				if err := store.SetUserPlanAdmin(context.Background(), uid, "pro", 1); err != nil {
+					t.Fatal(err)
+				}
+			} else if _, err := store.AcquireBillingAuthority(context.Background(), BillingAuthorityRequest{
+				UserID: uid, Provider: ProviderApple, ExternalScope: testBundleIOS,
+				AppleAccountToken: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", Now: 1,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			seedTerminalInvoiceDeletion(t, store, uid, "cus_paid_"+provider, "pi_paid_"+provider)
+			resp := postWebhook(t, ts, secret, paidInvoiceBody("in_paid_"+provider, "cus_paid_"+provider, "sub_paid_"+provider, "pi_paid_"+provider, "ch_paid_"+provider, uid))
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusInternalServerError {
+				t.Fatalf("status=%d, want 500 authority conflict", resp.StatusCode)
+			}
+			assertPaidInvoiceExactJournal(t, store, uid, "in_paid_"+provider, "pi_paid_"+provider, "ch_paid_"+provider)
+		})
+	}
+}
+
+func TestPaidInvoiceMissingIdentityFailsBeforeAcknowledgement(t *testing.T) {
+	for _, tc := range []struct{ name, invoice, customer string }{
+		{name: "invoice", customer: "cus_missing_invoice"},
+		{name: "customer", invoice: "in_missing_customer"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ts, svc, _, _ := newBillingServer(t)
+			secret := "whsec_missing_" + tc.name
+			svc.biller = newWebhookFixtureClient(secret)
+			resp := postWebhook(t, ts, secret, paidInvoiceBody(tc.invoice, tc.customer, "", "", "", ""))
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusInternalServerError {
+				t.Fatalf("status=%d, want retryable 500", resp.StatusCode)
+			}
+		})
+	}
+}
+
 func TestWebhookRejectsEmptyEventID(t *testing.T) {
 	ts, svc, _, _ := newBillingServer(t)
 	secret := "whsec_empty_id"
@@ -126,7 +272,7 @@ func TestInvoiceWithoutSubscriptionCannotMutateOrRevokeCanonicalEntitlement(t *t
 		t.Fatal(err)
 	}
 	resp := postWebhook(t, ts, secret,
-		webhookEnv("invoice.paid", "cus_one_off", "", "", "canceled", "", 9000))
+		paidInvoiceBody("in_one_off", "cus_one_off", "", "pi_one_off", "ch_one_off", ""))
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("invoice without subscription = %d, want ACK", resp.StatusCode)
@@ -166,7 +312,7 @@ func TestWebhookPanicAfterClaimIsFailedAndCanonicalRetryConverges(t *testing.T) 
 	client.canonicalWebhookRefresh = true
 	client.http = &http.Client{Transport: panicRoundTripper{}}
 	svc.biller = client
-	body := webhookEnv("invoice.paid", "cus_panic", "sub_panic", "", "", "", 0)
+	body := paidInvoiceBody("in_panic", "cus_panic", "sub_panic", "pi_panic", "ch_panic", uid)
 	eventID := eventIDFromBody(t, body)
 
 	resp := postWebhook(t, ts, secret, body)

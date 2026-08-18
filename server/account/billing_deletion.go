@@ -1075,6 +1075,23 @@ func exactPaymentProgress(old BillingDeletionProgress, incoming []BillingDeletio
 }
 
 func (s *SQLiteStore) AppendStripeCustomerDeletionHazards(ctx context.Context, customerID string, resources []BillingDeletionResource) error {
+	return s.appendStripeCustomerDeletionHazards(ctx, customerID, resources, false)
+}
+
+// AppendStripePaidInvoiceDeletionHazards is the strict pre-projection path for
+// a verified invoice.paid webhook. An invoice that cannot be attributed through
+// durable customer history must be retried: ACKing and only later discovering
+// that it belonged to a deleted billing subject would lose the exact refund
+// chain. Ordinary customer hazard observations retain their historical no-op
+// behavior through AppendStripeCustomerDeletionHazards.
+func (s *SQLiteStore) AppendStripePaidInvoiceDeletionHazards(ctx context.Context, customerID string, resources []BillingDeletionResource) error {
+	if customerID == "" || len(resources) == 0 {
+		return errors.New("account: paid invoice deletion attribution is incomplete")
+	}
+	return s.appendStripeCustomerDeletionHazards(ctx, customerID, resources, true)
+}
+
+func (s *SQLiteStore) appendStripeCustomerDeletionHazards(ctx context.Context, customerID string, resources []BillingDeletionResource, requireSubject bool) error {
 	if customerID == "" || len(resources) == 0 {
 		return nil
 	}
@@ -1100,6 +1117,9 @@ func (s *SQLiteStore) AppendStripeCustomerDeletionHazards(ctx context.Context, c
 		return err
 	}
 	if len(subjects) == 0 {
+		if requireSubject {
+			return errors.New("account: paid invoice customer has no durable billing subject")
+		}
 		return nil
 	}
 	if len(subjects) != 1 {

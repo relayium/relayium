@@ -739,7 +739,7 @@ func TestWebhookHazardInvalidatesClaimAndPersistsCustomerHistory(t *testing.T) {
 	}
 }
 
-func TestInvoiceWebhookBindsMissingCustomerHistoryBeforeAppendingOldInvoiceHazard(t *testing.T) {
+func TestInvoiceWebhookRequiresCustomerHistoryBeforeAppendingOldInvoiceHazard(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_delete_bind"
 	svc.biller = newWebhookFixtureClient(secret)
@@ -750,13 +750,21 @@ func TestInvoiceWebhookBindsMissingCustomerHistoryBeforeAppendingOldInvoiceHazar
 	}
 	body := fmt.Sprintf(`{"id":"evt_delete_bind","type":"invoice.paid","created":110,"livemode":false,"data":{"object":{"id":"in_old","object":"invoice","customer":"cus_bound","subscription":"sub_bound","payment_intent":"pi_bound","charge":"ch_bound","status":"paid","metadata":{"user_id":%q}}}}`, uid)
 	resp := postWebhook(t, ts, secret, body)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("webhook status=%d", resp.StatusCode)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("unattributed paid invoice status=%d, want retryable 500", resp.StatusCode)
 	}
 	var history int
-	if err := store.db.QueryRow(`SELECT COUNT(*) FROM stripe_customer_history WHERE user_id=? AND customer_id='cus_bound'`, uid).Scan(&history); err != nil || history != 1 {
+	if err := store.db.QueryRow(`SELECT COUNT(*) FROM stripe_customer_history WHERE user_id=? AND customer_id='cus_bound'`, uid).Scan(&history); err != nil || history != 0 {
 		t.Fatalf("history=%d err=%v", history, err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO stripe_customer_history(user_id,customer_id,created_at) VALUES(?,'cus_bound',100)`, uid); err != nil {
+		t.Fatal(err)
+	}
+	resp = postWebhook(t, ts, secret, body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("attributed retry status=%d", resp.StatusCode)
 	}
 	var raw string
 	if err := store.db.QueryRow(`SELECT progress_json FROM billing_cancellation_outbox WHERE id='invoice-bind'`).Scan(&raw); err != nil {
