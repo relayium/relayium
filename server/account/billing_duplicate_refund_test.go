@@ -334,7 +334,8 @@ func TestDuplicateRefundPersistsEveryHistoricalInvoiceBeforeCancellation(t *test
 		t.Fatal(err)
 	}
 	manual, _, _ := store.DuplicateRefundBySubscription(context.Background(), "sub_dup")
-	if manual.State != "manual" || len(manual.Liabilities) != 2 || state.refundPosts != 0 || state.deletes != 1 {
+	evidence, evidenceErr := ListDuplicateRefundEvidence(context.Background(), store, job.ID)
+	if manual.State != "manual" || len(manual.Liabilities) != 2 || evidenceErr != nil || len(evidence.Liabilities) != 2 || len(evidence.Payments) != 2 || state.refundPosts != 0 || state.deletes != 1 {
 		t.Fatalf("manual=%+v refunds=%v deletes=%d", manual, state.refunds, state.deletes)
 	}
 }
@@ -431,6 +432,57 @@ func TestDuplicateRefundLiabilitiesAppendNewPaymentAndInvalidatePreparedSnapshot
 	}
 }
 
+func TestStaleWorkerSaveCannotEraseLatePaidLiability(t *testing.T) {
+	store := newTestStore(t)
+	job, err := store.PutDuplicateRefund(context.Background(), DuplicateRefundPlan{
+		UserID: "purged-worker", CustomerID: "cus_race", CanonicalSubscriptionID: "sub_keep", DuplicateSubscriptionID: "sub_race",
+	}, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// This is the worker's pre-cancellation snapshot and result. Before it can
+	// save, invoice.paid durably expands the responsibility and bumps revision.
+	result := DuplicateRefundResult{SubscriptionCanceled: true, RefundComplete: true}
+	if err := store.AppendCanonicalDuplicatePaidInvoice(context.Background(), CanonicalStripePaidInvoice{
+		InvoiceID: "in_race", CustomerID: "cus_race", SubscriptionID: "sub_race", AmountPaid: 500,
+		Payments: []CanonicalStripeInvoicePayment{{InvoicePaymentID: "inpay_race", PaymentType: "payment_intent", PaymentIntentID: "pi_race", ChargeID: "ch_race", AmountPaid: 500, ChargeAmount: 500, PaidAt: 101}},
+	}, 101); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveDuplicateRefund(context.Background(), job, result, nil, 102); err == nil || !strings.Contains(err.Error(), "stale") {
+		t.Fatalf("stale worker save err=%v", err)
+	}
+	got, _, _ := store.DuplicateRefundBySubscription(context.Background(), "sub_race")
+	if got.State == "terminal" || got.RefundComplete || len(got.Liabilities) != 1 || len(got.Liabilities[0].Payments) != 1 {
+		t.Fatalf("late liability was erased: %+v", got)
+	}
+}
+
+func TestExpandedLiabilityAllowsNewOperatorGenerationAndReason(t *testing.T) {
+	store := newTestStore(t)
+	state := &duplicateStripeState{active: true, refunds: map[string]int64{}}
+	client, closeServer := newDuplicateStripe(t, state, false)
+	defer closeServer()
+	job := prepareCanceledManualDuplicate(t, store, client, state)
+	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator-one", "first verified liability"); err != nil {
+		t.Fatal(err)
+	}
+	terminal, _, _ := store.DuplicateRefundBySubscription(context.Background(), "sub_dup")
+	expanded := terminal.DuplicateRefundPlan
+	expanded.Liabilities = append(expanded.Liabilities, DuplicateRefundLiability{
+		InvoiceID: "in_late_generation", Status: "paid", AmountPaid: 300,
+		Payments: []CanonicalStripeInvoicePayment{{InvoicePaymentID: "inpay_late_generation", PaymentType: "payment_intent", PaymentIntentID: "pi_late_generation", ChargeID: "ch_late_generation", AmountPaid: 300, ChargeAmount: 300, PaidAt: 200}},
+	})
+	updated, err := store.PutDuplicateRefund(context.Background(), expanded, 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	action, err := prepareDuplicateRefundAction(context.Background(), store, updated, "operator-two", "newly discovered liability", 201)
+	if err != nil || action.Generation != 2 || action.Actor != "operator-two" || action.Reason != "newly discovered liability" {
+		t.Fatalf("action=%+v err=%v", action, err)
+	}
+}
+
 func TestDuplicateRefundInspectionPersistsZeroPaidChargeCapableInvoice(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -448,6 +500,30 @@ func TestDuplicateRefundInspectionPersistsZeroPaidChargeCapableInvoice(t *testin
 	plan, err := client.InspectDuplicateSubscription(context.Background(), "user_pending", "cus_pending", "sub_keep", "sub_pending")
 	if err != nil || len(plan.Liabilities) != 1 || plan.Liabilities[0].Status != "open" || plan.Liabilities[0].ManualReason != "invoice_payment_pending" || len(plan.Liabilities[0].Payments) != 0 {
 		t.Fatalf("plan=%+v err=%v", plan, err)
+	}
+}
+
+func TestDuplicateRefundInspectionPersistsOpenPartialPaymentWithoutPaidResolver(t *testing.T) {
+	canonicalCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/subscriptions/sub_partial":
+			io.WriteString(w, `{"id":"sub_partial","customer":"cus_partial","status":"active"}`)
+		case "/v1/invoices":
+			io.WriteString(w, `{"data":[{"id":"in_partial","customer":"cus_partial","status":"open","amount_paid":200}],"has_more":false}`)
+		case "/v1/invoices/in_partial":
+			canonicalCalls++
+			http.Error(w, "must not use paid-only resolver", http.StatusBadRequest)
+		default:
+			http.Error(w, "unexpected", http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+	client := NewStripeClient("sk_test", "whsec", "")
+	client.base, client.http = server.URL, server.Client()
+	plan, err := client.InspectDuplicateSubscription(context.Background(), "user_partial", "cus_partial", "sub_keep", "sub_partial")
+	if err != nil || canonicalCalls != 0 || len(plan.Liabilities) != 1 || plan.Liabilities[0].AmountPaid != 200 || plan.Liabilities[0].ManualReason != "partial_or_processing_invoice_payment" {
+		t.Fatalf("plan=%+v canonicalCalls=%d err=%v", plan, canonicalCalls, err)
 	}
 }
 

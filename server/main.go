@@ -451,8 +451,11 @@ func main() {
 			log.Fatalf("billing duplicate list: %v", err)
 		}
 		log.Printf("billing duplicate evidence: job=%s duplicate_subscription=%s canonical_subscription=%s invoice=%s state=%s canceled=%t resolution=%s attempts=%d revision=%d manual_reason=%s has_error=%t payments=%d action=%s action_state=%s action_generation=%d", evidence.JobID, evidence.DuplicateSubscriptionID, evidence.CanonicalSubscriptionID, evidence.InvoiceID, evidence.State, evidence.SubscriptionCanceled, evidence.Resolution, evidence.Attempts, evidence.Revision, evidence.ManualReason, evidence.HasError, len(evidence.Payments), evidence.ActionID, evidence.ActionState, evidence.ActionGeneration)
-		for _, payment := range evidence.Payments {
-			log.Printf("billing duplicate payment: invoice_payment=%s type=%s payment_intent=%s payment_record=%s charge=%s amount=%d refunded=%d", payment.InvoicePaymentID, payment.PaymentType, payment.PaymentIntentID, payment.PaymentRecordID, payment.ChargeID, payment.AmountPaid, payment.AmountRefunded)
+		for _, liability := range evidence.Liabilities {
+			log.Printf("billing duplicate invoice: invoice=%s status=%s amount_paid=%d manual_reason=%s payments=%d", liability.InvoiceID, liability.Status, liability.AmountPaid, liability.ManualReason, len(liability.Payments))
+			for _, payment := range liability.Payments {
+				log.Printf("billing duplicate payment: invoice=%s invoice_payment=%s type=%s payment_intent=%s payment_record=%s charge=%s amount=%d refunded=%d", liability.InvoiceID, payment.InvoicePaymentID, payment.PaymentType, payment.PaymentIntentID, payment.PaymentRecordID, payment.ChargeID, payment.AmountPaid, payment.AmountRefunded)
+			}
 		}
 		return
 	}

@@ -714,6 +714,13 @@ func (c *stripeClient) InspectDuplicateSubscription(ctx context.Context, userID,
 				// processing invoice cannot complete later. Keep the observation until
 				// canonical inspection appends its eventual Invoice Payment.
 				liability.ManualReason = "invoice_payment_pending"
+			} else if listed.Status != "paid" {
+				// Stripe can report amount_paid while an invoice is still open or
+				// processing. The paid-only Invoice Payments resolver cannot establish
+				// final constituents yet, but cancellation must still proceed. Preserve
+				// the exact invoice and amount as an operator liability until a later
+				// canonical paid observation supplies the append-only constituents.
+				liability.ManualReason = "partial_or_processing_invoice_payment"
 			} else {
 				invoice, err := c.canonicalInvoicePayments(ctx, listed.ID, customerID, duplicateID, true)
 				if err != nil {
