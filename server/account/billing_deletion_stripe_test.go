@@ -497,7 +497,7 @@ func TestStripeDeletionRecoveryWindowAndChildLineageAreDurable(t *testing.T) {
 		t.Fatal(err)
 	}
 	parent, child := got.Resources["checkout_session:cs_parent"], got.Resources["checkout_session:cs_child"]
-	if !parent.Terminal || parent.Status != "recovery_window_closed" || parent.RecoveryExpiresAt != 100+30*86400 {
+	if !parent.Terminal || parent.Status != "recovery_descendants_terminal" || parent.RecoveryExpiresAt != 100+30*86400 {
 		t.Fatalf("parent=%+v", parent)
 	}
 	if !child.Terminal || child.RecoveredFrom != "cs_parent" {

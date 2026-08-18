@@ -1264,6 +1264,10 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		db.Close()
 		return nil, err
 	}
+	if err := migrateBillingCancellationIdentityV4(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := migrateBillingDeletionManualActionsV2(db); err != nil {
 		db.Close()
 		return nil, err
@@ -1723,6 +1727,33 @@ func migrateEmailVerified(db *sql.DB) error {
 // for legacy and fresh databases.
 func migrateBillingCancellationOutboxGenerations(db *sql.DB) error {
 	return migrateOnce(db, "billing_cancellation_outbox_generations_v3", func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(context.Background(), `SELECT id,customer_id,subscription_id,progress_json FROM billing_cancellation_outbox WHERE state='terminal'`)
+		if err != nil {
+			return err
+		}
+		type reopened struct{ id, progress string }
+		var reopen []reopened
+		for rows.Next() {
+			var id, customerID, subscriptionID, raw string
+			if err := rows.Scan(&id, &customerID, &subscriptionID, &raw); err != nil {
+				rows.Close()
+				return err
+			}
+			normalized, err := reopenBillingDeletionProgress(raw, customerID, subscriptionID)
+			if err != nil {
+				rows.Close()
+				return fmt.Errorf("billing deletion terminal %s cannot be safely reopened: %w", id, err)
+			}
+			reopen = append(reopen, reopened{id, normalized})
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		for _, item := range reopen {
+			if _, err := tx.ExecContext(context.Background(), `UPDATE billing_cancellation_outbox SET progress_json=? WHERE id=?`, item.progress, item.id); err != nil {
+				return err
+			}
+		}
 		if _, err := tx.ExecContext(context.Background(), `
 CREATE TABLE billing_cancellation_outbox_v2 (
  id TEXT PRIMARY KEY,
@@ -1753,7 +1784,7 @@ INSERT INTO billing_cancellation_outbox_v2
  SELECT id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,
         CASE state WHEN 'terminal' THEN 'pending' ELSE state END,attempts,created_at,updated_at,generation,last_error,
 		CASE state WHEN 'terminal' THEN 0 ELSE next_attempt_at END,
-		CASE state WHEN 'terminal' THEN '{}' ELSE progress_json END,
+		progress_json,
         CASE state WHEN 'terminal' THEN 0 ELSE terminal_at END,0,'',0,revision
  FROM billing_cancellation_outbox`); err != nil {
 			return err
@@ -1767,8 +1798,71 @@ INSERT INTO billing_cancellation_outbox_v2
 		if _, err := tx.ExecContext(context.Background(), `CREATE INDEX idx_billing_cancel_subject ON billing_cancellation_outbox(billing_subject_id,provider,generation)`); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(context.Background(), `CREATE INDEX idx_billing_cancel_due ON billing_cancellation_outbox(state,next_attempt_at,updated_at)`)
+		_, err = tx.ExecContext(context.Background(), `CREATE INDEX idx_billing_cancel_due ON billing_cancellation_outbox(state,next_attempt_at,updated_at)`)
 		return err
+	})
+}
+
+func reopenBillingDeletionProgress(raw, customerID, subscriptionID string) (string, error) {
+	p, err := decodeDeletionProgressStrict(raw)
+	if err != nil {
+		return "", err
+	}
+	p.Customers = appendUnique(p.Customers, customerID)
+	if subscriptionID != "" {
+		p.add(BillingDeletionResource{Kind: "subscription", ID: subscriptionID, CustomerID: customerID, Status: "migration_revalidate"})
+	}
+	if len(p.Customers) == 0 && len(p.Resources) == 0 {
+		return "", errors.New("provider identity was lost by an intermediate migration")
+	}
+	for key, resource := range p.Resources {
+		resource.Terminal = false
+		resource.Manual = false
+		resource.Status = "migration_revalidate"
+		p.Resources[key] = resource
+	}
+	p.CleanSince = 0
+	encoded, err := json.Marshal(p)
+	return string(encoded), err
+}
+
+func migrateBillingCancellationIdentityV4(db *sql.DB) error {
+	return migrateOnce(db, "billing_cancellation_identity_v4", func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(context.Background(), `SELECT id,customer_id,subscription_id,progress_json FROM billing_cancellation_outbox WHERE state='pending'`)
+		if err != nil {
+			return err
+		}
+		type repair struct{ id, raw string }
+		var repairs []repair
+		for rows.Next() {
+			var id, customerID, subscriptionID, raw string
+			if err := rows.Scan(&id, &customerID, &subscriptionID, &raw); err != nil {
+				rows.Close()
+				return err
+			}
+			p, decodeErr := decodeDeletionProgressStrict(raw)
+			if decodeErr != nil {
+				rows.Close()
+				return decodeErr
+			}
+			if len(p.Customers) == 0 && len(p.Resources) == 0 {
+				normalized, normalizeErr := reopenBillingDeletionProgress(raw, customerID, subscriptionID)
+				if normalizeErr != nil {
+					rows.Close()
+					return fmt.Errorf("billing deletion pending %s has no recoverable provider identity: %w", id, normalizeErr)
+				}
+				repairs = append(repairs, repair{id, normalized})
+			}
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		for _, item := range repairs {
+			if _, err := tx.ExecContext(context.Background(), `UPDATE billing_cancellation_outbox SET progress_json=? WHERE id=?`, item.raw, item.id); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 

@@ -344,7 +344,7 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 	if err != nil {
 		return BillingDeletionManualResult{}, err
 	}
-	adoptedExternal := false
+	adoptedExternal := providerStatus == "adopted_external"
 	if refundID == "" {
 		if remaining <= 0 {
 			refundID, err = c.findCanonicalFullRefund(ctx, paymentIntentID)
@@ -441,7 +441,7 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 		}
 	}
 	encoded, _ := json.Marshal(p)
-	res, err := tx.ExecContext(ctx, `UPDATE billing_deletion_manual_actions SET state='succeeded',refund_id=?,provider_status='succeeded',updated_at=? WHERE id=? AND state='prepared' AND refund_id=? AND retry_generation=? AND provider_status=?`, refundID, now, actionID, refundID, retryGeneration, providerStatus)
+	res, err := tx.ExecContext(ctx, `UPDATE billing_deletion_manual_actions SET state='succeeded',refund_id=?,provider_status=CASE WHEN provider_status='' THEN 'succeeded' ELSE provider_status END,updated_at=? WHERE id=? AND state='prepared' AND refund_id=? AND retry_generation=? AND provider_status=?`, refundID, now, actionID, refundID, retryGeneration, providerStatus)
 	if err != nil {
 		return BillingDeletionManualResult{}, err
 	}

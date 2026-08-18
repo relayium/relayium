@@ -28,7 +28,8 @@ func TestOpenSQLiteRebuildsLegacyCancellationUniqueness(t *testing.T) {
  archived_at INTEGER NOT NULL DEFAULT 0,UNIQUE(billing_subject_id,provider))`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at) VALUES('old','subject','stripe','old-key','terminal',1,1)`); err != nil {
+	progress := `{"version":1,"customers":["cus"],"resources":{"invoice:in":{"kind":"invoice","id":"in","paymentIntentId":"pi","status":"refunded","terminal":true}},"cleanSince":1}`
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,created_at,updated_at,progress_json) VALUES('old','subject','stripe','cus_old','sub_old','old-key','terminal',1,1,?)`, progress); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.db.Close(); err != nil {
@@ -47,8 +48,12 @@ func TestOpenSQLiteRebuildsLegacyCancellationUniqueness(t *testing.T) {
 		t.Fatalf("preserved rows=%d err=%v", rows, err)
 	}
 	var oldState string
-	if err := store.db.QueryRow(`SELECT state FROM billing_cancellation_outbox WHERE id='old'`).Scan(&oldState); err != nil || oldState != "pending" {
+	if err := store.db.QueryRow(`SELECT state,progress_json FROM billing_cancellation_outbox WHERE id='old'`).Scan(&oldState, &progress); err != nil || oldState != "pending" {
 		t.Fatalf("legacy terminal evidence was trusted: state=%q err=%v", oldState, err)
+	}
+	reopened, err := decodeDeletionProgressStrict(progress)
+	if err != nil || reopened.Resources["invoice:in"].PaymentIntentID != "pi" || reopened.Resources["invoice:in"].Terminal || reopened.CleanSince != 0 {
+		t.Fatalf("reopened progress=%+v err=%v", reopened, err)
 	}
 	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,generation) VALUES('duplicate','subject','stripe','duplicate-key','pending',3,3,2)`); err == nil {
 		t.Fatal("duplicate subject/provider/generation was accepted")
@@ -159,6 +164,27 @@ func TestOpenSQLiteRefusesCorruptPendingDeletionJournal(t *testing.T) {
 	if reopened, err := OpenSQLite(path); err == nil {
 		reopened.db.Close()
 		t.Fatal("corrupt pending deletion journal did not block startup")
+	}
+}
+
+func TestOpenSQLiteRefusesIntermediateMigrationWithoutProviderIdentity(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "lost-identity.db")
+	store, err := OpenSQLite(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`DELETE FROM schema_migrations WHERE id='billing_cancellation_identity_v4'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,progress_json,created_at,updated_at,generation) VALUES('lost','subject','stripe','lost-key','pending','{}',1,1,1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if reopened, err := OpenSQLite(path); err == nil {
+		reopened.db.Close()
+		t.Fatal("identity-free intermediate database did not block startup")
 	}
 }
 

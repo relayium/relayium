@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func signStripe(secret, payload string, ts int64) string {
@@ -71,6 +72,73 @@ func TestVerifyWebhookProjectsAsyncCheckoutLifecycle(t *testing.T) {
 		if err != nil || ev.Type != eventType || ev.CheckoutSessionID != "cs_async" || ev.MetadataBillingAttemptID != "attempt_1" {
 			t.Fatalf("%s projection = %+v, %v", eventType, ev, err)
 		}
+	}
+}
+
+func TestCheckoutFailureWebhooksAreObservationsNotDeletionTerminals(t *testing.T) {
+	for _, eventType := range []string{"checkout.session.async_payment_failed", "checkout.session.expired"} {
+		r := checkoutDeletionObservation(WebhookEvent{Type: eventType, CheckoutSessionID: "cs_observed", MetadataBillingAttemptID: "attempt", CustomerID: "cus_1"})
+		if r.Terminal || r.Status != eventType || r.ID != "cs_observed" {
+			t.Fatalf("%s observation=%+v", eventType, r)
+		}
+	}
+}
+
+func TestExpiredAndAsyncFailedObservationsRequireCanonicalRecoveryProof(t *testing.T) {
+	for _, observed := range []string{"checkout.session.expired", "checkout.session.async_payment_failed"} {
+		t.Run(observed, func(t *testing.T) {
+			var gets int
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gets++
+				w.Header().Set("Content-Type", "application/json")
+				io.WriteString(w, `{"id":"cs_recoverable","status":"expired","payment_status":"unpaid","customer":"cus_1","after_expiration":{"recovery":{"enabled":true,"expires_at":200}}}`)
+			}))
+			defer ts.Close()
+			c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+			c.base, c.http = ts.URL, ts.Client()
+			now := int64(100)
+			c.now = func() time.Time { return time.Unix(now, 0) }
+			p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{"checkout_session:cs_recoverable": {Kind: "checkout_session", ID: "cs_recoverable", CustomerID: "cus_1", Status: observed}}}
+			got, err := c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", IdempotencyKey: "delete"}, p)
+			if err == nil || gets != 1 || got.Resources["checkout_session:cs_recoverable"].Terminal {
+				t.Fatalf("before expiry gets=%d resource=%+v err=%v", gets, got.Resources["checkout_session:cs_recoverable"], err)
+			}
+			now = 201
+			got, err = c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", IdempotencyKey: "delete"}, got)
+			if err != nil || gets != 2 || !got.Resources["checkout_session:cs_recoverable"].Terminal || got.Resources["checkout_session:cs_recoverable"].Status != "recovery_window_closed" {
+				t.Fatalf("after expiry gets=%d resource=%+v err=%v", gets, got.Resources["checkout_session:cs_recoverable"], err)
+			}
+		})
+	}
+}
+
+func TestAsyncPaymentFailureReconcilesItsCanonicalPaymentChain(t *testing.T) {
+	var sessionGets, paymentGets int
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/checkout/sessions/cs_failed":
+			sessionGets++
+			io.WriteString(w, `{"id":"cs_failed","status":"complete","payment_status":"unpaid","customer":"cus_1","payment_intent":"pi_failed"}`)
+		case "/v1/payment_intents/pi_failed":
+			paymentGets++
+			io.WriteString(w, `{"id":"pi_failed","status":"canceled","customer":"cus_1"}`)
+		default:
+			http.Error(w, "unexpected", http.StatusBadRequest)
+		}
+	}))
+	defer ts.Close()
+	c := NewStripeClient("sk_test_x", "whsec_x", "bpc_x")
+	c.base, c.http = ts.URL, ts.Client()
+	p := BillingDeletionProgress{Customers: []string{"cus_1"}, Resources: map[string]BillingDeletionResource{
+		"checkout_session:cs_failed": {Kind: "checkout_session", ID: "cs_failed", CustomerID: "cus_1", Status: "checkout.session.async_payment_failed"},
+	}}
+	var err error
+	for i := 0; i < 2; i++ {
+		p, err = c.ReconcileDeletionHazards(context.Background(), BillingCancellation{BillingSubjectID: "subject", IdempotencyKey: "delete"}, p)
+	}
+	if err != nil || sessionGets == 0 || paymentGets == 0 || !p.Resources["checkout_session:cs_failed"].Terminal || !p.Resources["payment_intent:pi_failed"].Terminal {
+		t.Fatalf("sessionGets=%d paymentGets=%d progress=%+v err=%v", sessionGets, paymentGets, p.Resources, err)
 	}
 }
 

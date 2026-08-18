@@ -396,12 +396,14 @@ func TestManualDeletionRefundAdoptsOneCanonicalExternalFullRefund(t *testing.T) 
 	defer ts.Close()
 	c := NewStripeClient("sk_test", "whsec", "bpc")
 	c.base, c.http = ts.URL, ts.Client()
-	result, err := ResolveBillingDeletionRefund(context.Background(), store, c, "out_ext", "charge:ch_ext", "operator", "adopt verified external refund")
-	if err != nil || result.RefundID != "re_external" || refundPosts != 0 {
-		t.Fatalf("result=%+v posts=%d err=%v", result, refundPosts, err)
+	for i := 0; i < 2; i++ {
+		result, err := ResolveBillingDeletionRefund(context.Background(), store, c, "out_ext", "charge:ch_ext", "operator", "adopt verified external refund")
+		if err != nil || result.RefundID != "re_external" || refundPosts != 0 {
+			t.Fatalf("iteration=%d result=%+v posts=%d err=%v", i, result, refundPosts, err)
+		}
 	}
 	var status string
-	if err := store.db.QueryRow(`SELECT provider_status FROM billing_deletion_manual_actions WHERE outbox_id='out_ext' ORDER BY retry_generation DESC LIMIT 1`).Scan(&status); err != nil || status != "succeeded" {
+	if err := store.db.QueryRow(`SELECT provider_status FROM billing_deletion_manual_actions WHERE outbox_id='out_ext' ORDER BY retry_generation DESC LIMIT 1`).Scan(&status); err != nil || status != "adopted_external" {
 		t.Fatalf("provider status=%q err=%v", status, err)
 	}
 }

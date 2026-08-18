@@ -697,7 +697,7 @@ func (c *stripeClient) DiscoverDeletionHazards(ctx context.Context, row BillingC
 		kinds := []struct {
 			kind, path string
 			q          url.Values
-		}{{"checkout_session", "/v1/checkout/sessions", copyQ("status", "open")}, {"checkout_session", "/v1/checkout/sessions", copyQ("status", "complete")}, {"subscription", "/v1/subscriptions", copyQ("status", "all")}, {"schedule", "/v1/subscription_schedules", copyQ()}, {"invoice_item", "/v1/invoiceitems", copyQ("pending", "true")}, {"invoice", "/v1/invoices", copyQ("status", "draft")}, {"invoice", "/v1/invoices", copyQ("status", "open")}, {"invoice", "/v1/invoices", copyQ("created[gte]", fmt.Sprint(row.CreatedAt))}, {"payment_intent", "/v1/payment_intents", copyQ("created[gte]", fmt.Sprint(row.CreatedAt))}, {"charge", "/v1/charges", copyQ("created[gte]", fmt.Sprint(row.CreatedAt))}}
+		}{{"checkout_session", "/v1/checkout/sessions", copyQ("status", "open")}, {"checkout_session", "/v1/checkout/sessions", copyQ("status", "complete")}, {"checkout_session", "/v1/checkout/sessions", copyQ("status", "expired")}, {"subscription", "/v1/subscriptions", copyQ("status", "all")}, {"schedule", "/v1/subscription_schedules", copyQ()}, {"invoice_item", "/v1/invoiceitems", copyQ("pending", "true")}, {"invoice", "/v1/invoices", copyQ("status", "draft")}, {"invoice", "/v1/invoices", copyQ("status", "open")}, {"invoice", "/v1/invoices", copyQ("created[gte]", fmt.Sprint(row.CreatedAt))}, {"payment_intent", "/v1/payment_intents", copyQ("created[gte]", fmt.Sprint(row.CreatedAt))}, {"charge", "/v1/charges", copyQ("created[gte]", fmt.Sprint(row.CreatedAt))}}
 		for _, k := range kinds {
 			ids, err := c.deletionList(ctx, k.path, k.q)
 			if err != nil {
@@ -724,6 +724,7 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 		}
 		return false
 	}
+	var pendingRecovery error
 	for resourceKey, r := range p.Resources {
 		if r.Terminal || r.Manual {
 			continue
@@ -837,32 +838,18 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 		}
 		switch r.Kind {
 		case "checkout_session":
+			observedAsyncFailure := r.Status == "checkout.session.async_payment_failed"
 			r.ProviderCreatedAt = obj.Created
 			r.PaymentIntentID = obj.PaymentIntent
 			r.InvoiceID = obj.Invoice
 			r.RecoveredFrom = obj.RecoveredFrom
 			if obj.RecoveredFrom != "" {
-				p.add(BillingDeletionResource{Kind: "checkout_session", ID: obj.RecoveredFrom, CustomerID: obj.Customer, Status: "recovery_parent"})
+				parentKey := "checkout_session:" + obj.RecoveredFrom
+				if _, exists := p.Resources[parentKey]; !exists {
+					p.add(BillingDeletionResource{Kind: "checkout_session", ID: obj.RecoveredFrom, CustomerID: obj.Customer, Status: "recovery_parent"})
+				}
 			}
 			recoveryEnabled := obj.AfterExpiration != nil && obj.AfterExpiration.Recovery != nil && obj.AfterExpiration.Recovery.Enabled
-			if recoveryEnabled {
-				if obj.AfterExpiration.Recovery.ExpiresAt > 0 {
-					r.RecoveryExpiresAt = obj.AfterExpiration.Recovery.ExpiresAt
-				}
-				if obj.Status == "expired" && r.RecoveryExpiresAt > 0 && c.now().Unix() >= r.RecoveryExpiresAt {
-					r.Terminal = true
-					r.Status = "recovery_window_closed"
-					break
-				}
-				r.Status = "recovery_lineage_pending"
-				p.Resources[resourceKey] = r
-				return p, errors.New("stripe: checkout recovery lineage requires canonical expiry")
-			}
-			if obj.Status == "expired" {
-				r.Terminal = true
-				r.Status = "expired"
-				break
-			}
 			if obj.Subscription != "" {
 				p.add(BillingDeletionResource{Kind: "subscription", ID: obj.Subscription, CustomerID: obj.Customer, Status: "session_link"})
 			}
@@ -871,6 +858,39 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 			}
 			if obj.Invoice != "" {
 				p.add(BillingDeletionResource{Kind: "invoice", ID: obj.Invoice, InvoiceID: obj.Invoice, CustomerID: obj.Customer, Status: "session_link"})
+			}
+			if recoveryEnabled {
+				if obj.AfterExpiration.Recovery.ExpiresAt > 0 {
+					r.RecoveryExpiresAt = obj.AfterExpiration.Recovery.ExpiresAt
+				}
+				if obj.Status != "expired" || r.RecoveryExpiresAt == 0 || c.now().Unix() < r.RecoveryExpiresAt {
+					r.Status = "recovery_lineage_pending"
+					p.Resources[resourceKey] = r
+					pendingRecovery = errors.New("stripe: checkout recovery lineage requires canonical expiry")
+					continue
+				}
+				if obj.Subscription != "" || obj.Invoice != "" || obj.PaymentIntent != "" || obj.PaymentStatus == "paid" {
+					r.Terminal = true
+					r.Status = "recovery_delegated_to_payment_objects"
+					break
+				}
+				r.Status = "recovery_window_elapsed_verify_lineage"
+				p.Resources[resourceKey] = r
+				continue
+			}
+			if obj.Status == "expired" {
+				r.Terminal = true
+				r.Status = "expired"
+				break
+			}
+			if observedAsyncFailure && obj.PaymentStatus == "unpaid" {
+				r.Terminal = true
+				if obj.Subscription != "" || obj.Invoice != "" || obj.PaymentIntent != "" {
+					r.Status = "async_failure_delegated_to_payment_objects"
+				} else {
+					r.Status = "canonical_async_payment_failed"
+				}
+				break
 			}
 			if obj.PaymentStatus == "paid" {
 				if obj.Subscription == "" && obj.Invoice == "" && obj.PaymentIntent == "" {
@@ -1026,11 +1046,39 @@ func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row Billing
 		}
 		p.Resources[resourceKey] = r
 	}
+	for key, parent := range p.Resources {
+		if parent.Kind != "checkout_session" || parent.Status != "recovery_window_elapsed_verify_lineage" {
+			continue
+		}
+		hasDescendant, descendantPending := false, false
+		for _, child := range p.Resources {
+			if child.Kind == "checkout_session" && child.RecoveredFrom == parent.ID {
+				hasDescendant = true
+				descendantPending = descendantPending || !child.Terminal
+			}
+		}
+		if descendantPending {
+			parent.Status = "recovery_descendant_pending"
+			p.Resources[key] = parent
+			pendingRecovery = errors.New("stripe: checkout recovery descendant remains pending")
+			continue
+		}
+		parent.Terminal = true
+		if hasDescendant {
+			parent.Status = "recovery_descendants_terminal"
+		} else {
+			parent.Status = "recovery_window_closed"
+		}
+		p.Resources[key] = parent
+	}
 	for _, r := range p.Resources {
 		if r.Manual {
 			return p, errors.New("stripe: deletion requires manual reconciliation")
 		}
 		if !r.Terminal {
+			if pendingRecovery != nil {
+				return p, pendingRecovery
+			}
 			return p, errors.New("stripe: deletion hazards remain pending")
 		}
 	}

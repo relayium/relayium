@@ -70,10 +70,13 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 	}
 	var priceID string
 	switch in.Cycle {
+	case "monthly":
+		priceID = plan.StripePriceMonthlyID
 	case "yearly":
 		priceID = plan.StripePriceYearlyID
 	default:
-		priceID = plan.StripePriceMonthlyID
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid billing cycle"})
+		return
 	}
 	if priceID == "" {
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "plan not purchasable"})
@@ -1137,8 +1140,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 				if journal, ok := s.Store().(interface {
 					AppendStripeDeletionHazard(context.Context, string, BillingDeletionResource) error
 				}); ok {
-					terminalWithoutPaymentChain := (ev.Type == "checkout.session.async_payment_failed" || ev.Type == "checkout.session.expired") && ev.SubscriptionID == "" && ev.InvoiceID == "" && ev.PaymentIntentID == ""
-					if err := journal.AppendStripeDeletionHazard(ctx, ev.ClientRefUserID, BillingDeletionResource{Kind: "checkout_session", ID: ev.CheckoutSessionID, AttemptID: ev.MetadataBillingAttemptID, CustomerID: ev.CustomerID, Status: ev.Type, ProviderCreatedAt: ev.Created, Terminal: terminalWithoutPaymentChain}); err != nil {
+					if err := journal.AppendStripeDeletionHazard(ctx, ev.ClientRefUserID, checkoutDeletionObservation(ev)); err != nil {
 						http.Error(w, "server error", http.StatusInternalServerError)
 						return
 					}
@@ -1354,6 +1356,17 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 	default:
 		// Unrecognized event type: acknowledge so Stripe doesn't retry.
 		w.WriteHeader(http.StatusOK)
+	}
+}
+
+func checkoutDeletionObservation(ev WebhookEvent) BillingDeletionResource {
+	// Webhooks report observations, not provider-safe deletion terminals. An
+	// expired Session can retain a live recovery URL, and an asynchronous failure
+	// can still reference payment objects that require canonical reconciliation.
+	return BillingDeletionResource{
+		Kind: "checkout_session", ID: ev.CheckoutSessionID,
+		AttemptID: ev.MetadataBillingAttemptID, CustomerID: ev.CustomerID,
+		Status: ev.Type, ProviderCreatedAt: ev.Created,
 	}
 }
 

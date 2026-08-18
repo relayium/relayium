@@ -160,6 +160,7 @@ func decodeDeletionProgressStrict(raw string) (BillingDeletionProgress, error) {
 	}
 	if header.Version == 0 {
 		var legacy struct {
+			Version          int                                `json:"version"`
 			Customers        []string                           `json:"customers"`
 			CheckoutSessions []string                           `json:"checkoutSessions"`
 			Subscriptions    []string                           `json:"subscriptions"`
@@ -169,21 +170,27 @@ func decodeDeletionProgressStrict(raw string) (BillingDeletionProgress, error) {
 			Resources        map[string]BillingDeletionResource `json:"resources"`
 			CleanSince       int64                              `json:"cleanSince"`
 		}
-		if json.Unmarshal(shape, &legacy) != nil {
+		legacyDecoder := json.NewDecoder(bytes.NewReader(shape))
+		legacyDecoder.DisallowUnknownFields()
+		if legacyDecoder.Decode(&legacy) != nil {
 			return BillingDeletionProgress{}, errors.New("account: invalid legacy billing deletion progress")
 		}
-		if len(legacy.CheckoutSessions)+len(legacy.Subscriptions)+len(legacy.Schedules)+len(legacy.InvoiceItems)+len(legacy.Invoices) > 0 {
-			p = BillingDeletionProgress{Version: billingDeletionProgressVersion, Customers: legacy.Customers, Resources: map[string]BillingDeletionResource{}, CleanSince: legacy.CleanSince}
-			for kind, ids := range map[string][]string{"checkout_session": legacy.CheckoutSessions, "subscription": legacy.Subscriptions, "schedule": legacy.Schedules, "invoice_item": legacy.InvoiceItems, "invoice": legacy.Invoices} {
-				for _, id := range ids {
-					if id == "" {
-						return BillingDeletionProgress{}, errors.New("account: invalid legacy billing deletion identity")
-					}
-					p.add(BillingDeletionResource{Kind: kind, ID: id, Status: "legacy_migrated"})
-				}
+		p = BillingDeletionProgress{Version: billingDeletionProgressVersion, Customers: legacy.Customers, Resources: map[string]BillingDeletionResource{}, CleanSince: legacy.CleanSince}
+		for key, resource := range legacy.Resources {
+			if resource.Kind == "" || resource.ID == "" || key != resource.Kind+":"+resource.ID {
+				return BillingDeletionProgress{}, errors.New("account: invalid legacy billing deletion resource")
 			}
-			return p, nil
+			p.Resources[key] = resource
 		}
+		for kind, ids := range map[string][]string{"checkout_session": legacy.CheckoutSessions, "subscription": legacy.Subscriptions, "schedule": legacy.Schedules, "invoice_item": legacy.InvoiceItems, "invoice": legacy.Invoices} {
+			for _, id := range ids {
+				if id == "" {
+					return BillingDeletionProgress{}, errors.New("account: invalid legacy billing deletion identity")
+				}
+				p.add(BillingDeletionResource{Kind: kind, ID: id, Status: "legacy_migrated"})
+			}
+		}
+		return p, nil
 	}
 	decoder := json.NewDecoder(bytes.NewReader(shape))
 	decoder.DisallowUnknownFields()

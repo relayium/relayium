@@ -370,6 +370,24 @@ func TestBillingCheckoutYearlyCycle(t *testing.T) {
 	}
 }
 
+func TestBillingCheckoutRejectsUnknownCycle(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	fb := &fakeBiller{checkoutURL: "https://checkout.stripe.com/must-not-open"}
+	svc.biller = fb
+	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_monthly_pro"})
+	cookie := loginCookie(t, ts, mail, "checkout-cycle@example.com")
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/billing/checkout", strings.NewReader(`{"planId":"pro","cycle":"weekly"}`))
+	req.AddCookie(cookie)
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest || fb.checkoutCalls != 0 {
+		t.Fatalf("status=%d providerCalls=%d", resp.StatusCode, fb.checkoutCalls)
+	}
+}
+
 // TestCheckoutSuccessURLReturnsToMe asserts Stripe Checkout sends the user
 // back to /me, not the home page, on both success and cancel — they came
 // from their account/plan state and expect to land back there.

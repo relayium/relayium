@@ -31,12 +31,15 @@ func TestBillingDeletionProgressDecoderFailsClosedAndMigratesLegacyArrays(t *tes
 	if err != nil || p.Version != billingDeletionProgressVersion || p.Resources["subscription:sub_legacy"].ID != "sub_legacy" {
 		t.Fatalf("legacy conversion = %+v, %v", p, err)
 	}
-	legacyObject := `{"customers":["cus_old"],"checkoutSessions":["cs_old"],"subscriptions":["sub_old"],"schedules":["sched_old"],"invoiceItems":["ii_old"],"invoices":["in_old"]}`
+	legacyObject := `{"customers":["cus_old"],"checkoutSessions":["cs_old"],"subscriptions":["sub_old"],"schedules":["sched_old"],"invoiceItems":["ii_old"],"invoices":["in_old"],"resources":{"charge:ch_old":{"kind":"charge","id":"ch_old","status":"paid"}}}`
 	p, err = decodeDeletionProgressStrict(legacyObject)
-	if err != nil || len(p.Resources) != 5 || p.Resources["invoice_item:ii_old"].Status != "legacy_migrated" {
+	if err != nil || len(p.Resources) != 6 || p.Resources["invoice_item:ii_old"].Status != "legacy_migrated" || p.Resources["charge:ch_old"].ID != "ch_old" {
 		t.Fatalf("legacy object conversion=%+v err=%v", p, err)
 	}
-	for _, raw := range []string{``, `{`, `{"version":2,"resources":{}}`, `{"version":1,"resources":{},"surprise":true}`, `{"version":1,"resources":{"wrong":{"kind":"charge","id":"ch_1"}}}`} {
+	if empty, err := decodeDeletionProgressStrict(`{}`); err != nil || empty.Version != billingDeletionProgressVersion || len(empty.Resources) != 0 {
+		t.Fatalf("empty legacy object=%+v err=%v", empty, err)
+	}
+	for _, raw := range []string{``, `{`, `{"surprise":true}`, `{"version":2,"resources":{}}`, `{"version":1,"resources":{},"surprise":true}`, `{"version":1,"resources":{"wrong":{"kind":"charge","id":"ch_1"}}}`} {
 		if _, err := decodeDeletionProgressStrict(raw); err == nil {
 			t.Fatalf("unsafe progress accepted: %q", raw)
 		}
