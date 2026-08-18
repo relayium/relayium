@@ -1062,9 +1062,9 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if ev.Type == "refund.created" || ev.Type == "refund.updated" || ev.Type == "refund.failed" {
 		if recorder, ok := s.Store().(interface {
-			RecordStripeDeletionRefundLifecycle(context.Context, string, string, string, string, int64) error
+			RecordStripeDeletionRefundLifecycle(context.Context, string, string, string, string, string, int64) error
 		}); ok {
-			if err := recorder.RecordStripeDeletionRefundLifecycle(ctx, ev.RefundID, ev.MetadataDeletionActionID, ev.PaymentIntentID, ev.Status, ev.Created); err != nil {
+			if err := recorder.RecordStripeDeletionRefundLifecycle(ctx, ev.EventID, ev.RefundID, ev.MetadataDeletionActionID, ev.PaymentIntentID, ev.Status, ev.Created); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}

@@ -19,6 +19,8 @@ type BillingDeletionManualResult struct {
 	ActionID, RefundID, Status string
 }
 
+var ErrBillingDeletionRefundReconciliationRequired = errors.New("account: refund reconciliation requires a new operator generation")
+
 // ResolveBillingDeletionMetered is the explicit legacy escape hatch for a
 // metered subscription. It deliberately discards pending usage billing during
 // account deletion: pending invoice items are removed, cancellation requests
@@ -163,7 +165,7 @@ type BillingDeletionManualEvidence struct {
 
 // RecordStripeDeletionRefundFailure converts a verified provider failure into
 // durable, retryable operator work. It never releases the deletion hold.
-func (store *SQLiteStore) RecordStripeDeletionRefundLifecycle(ctx context.Context, refundID, actionID, paymentIntentID, status string, eventAt int64) error {
+func (store *SQLiteStore) RecordStripeDeletionRefundLifecycle(ctx context.Context, eventID, refundID, actionID, paymentIntentID, status string, eventAt int64) error {
 	if refundID == "" {
 		return nil
 	}
@@ -172,12 +174,17 @@ func (store *SQLiteStore) RecordStripeDeletionRefundLifecycle(ctx context.Contex
 		return err
 	}
 	defer tx.Rollback()
+	if eventID != "" {
+		if err := insertRefundEventTx(ctx, tx, eventID, refundID, actionID, paymentIntentID, status, eventAt); err != nil {
+			return err
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO billing_deletion_refund_inbox(refund_id,action_id,payment_intent_id,status,event_at) VALUES(?,?,?,?,?)
- ON CONFLICT(refund_id) DO UPDATE SET action_id=CASE WHEN excluded.action_id<>'' THEN excluded.action_id ELSE action_id END,payment_intent_id=CASE WHEN excluded.payment_intent_id<>'' THEN excluded.payment_intent_id ELSE payment_intent_id END,status=CASE WHEN excluded.event_at>=event_at THEN excluded.status ELSE status END,event_at=MAX(event_at,excluded.event_at)`, refundID, actionID, paymentIntentID, status, eventAt); err != nil {
+ ON CONFLICT(refund_id) DO UPDATE SET action_id=CASE WHEN excluded.action_id<>'' THEN excluded.action_id ELSE action_id END,payment_intent_id=CASE WHEN excluded.payment_intent_id<>'' THEN excluded.payment_intent_id ELSE payment_intent_id END,status=CASE WHEN status='failed' OR excluded.status='failed' THEN 'failed' WHEN excluded.event_at>=event_at THEN excluded.status ELSE status END,event_at=MAX(event_at,excluded.event_at)`, refundID, actionID, paymentIntentID, status, eventAt); err != nil {
 		return err
 	}
 	if status == "failed" {
-		if err := recordStripeDeletionRefundFailureTx(ctx, tx, refundID, actionID, eventAt); err != nil {
+		if err := recordStripeDeletionRefundFailuresTx(ctx, tx, refundID, actionID, eventAt); err != nil {
 			return err
 		}
 		return tx.Commit()
@@ -201,23 +208,66 @@ func (store *SQLiteStore) RecordStripeDeletionRefundFailure(ctx context.Context,
 		return err
 	}
 	defer tx.Rollback()
+	if err := insertRefundEventTx(ctx, tx, fmt.Sprintf("manual:%s:%s:%d", refundID, actionID, failedAt), refundID, actionID, "", "failed", failedAt); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO billing_deletion_refund_inbox(refund_id,action_id,status,event_at) VALUES(?,?,'failed',?)
  ON CONFLICT(refund_id) DO UPDATE SET action_id=CASE WHEN excluded.action_id<>'' THEN excluded.action_id ELSE action_id END,status='failed',event_at=MAX(event_at,excluded.event_at)`, refundID, actionID, failedAt); err != nil {
 		return err
 	}
-	if err := recordStripeDeletionRefundFailureTx(ctx, tx, refundID, actionID, failedAt); err != nil {
+	if err := recordStripeDeletionRefundFailuresTx(ctx, tx, refundID, actionID, failedAt); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
-func recordStripeDeletionRefundFailureTx(ctx context.Context, tx *sql.Tx, refundID, actionID string, failedAt int64) error {
-	var savedAction, outboxID, resourceKey, paymentIntentID, actor, reason, actionState, state, raw string
+func insertRefundEventTx(ctx context.Context, tx *sql.Tx, eventID, refundID, actionID, paymentIntentID, status string, eventAt int64) error {
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO billing_deletion_refund_events(event_id,refund_id,action_id,payment_intent_id,status,event_at) VALUES(?,?,?,?,?,?)`, eventID, refundID, actionID, paymentIntentID, status, eventAt); err != nil {
+		return err
+	}
+	var gotRefund, gotAction, gotPI, gotStatus string
+	var gotAt int64
+	if err := tx.QueryRowContext(ctx, `SELECT refund_id,action_id,payment_intent_id,status,event_at FROM billing_deletion_refund_events WHERE event_id=?`, eventID).Scan(&gotRefund, &gotAction, &gotPI, &gotStatus, &gotAt); err != nil {
+		return err
+	}
+	if gotRefund != refundID || gotAction != actionID || gotPI != paymentIntentID || gotStatus != status || gotAt != eventAt {
+		return errors.New("account: refund event identity conflict")
+	}
+	return nil
+}
+
+func recordStripeDeletionRefundFailuresTx(ctx context.Context, tx *sql.Tx, refundID, actionID string, failedAt int64) error {
+	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT a.id FROM billing_deletion_manual_actions a WHERE (a.refund_id<>'' AND a.refund_id=?) OR a.id=? OR EXISTS(SELECT 1 FROM billing_deletion_refund_constituents c WHERE c.action_id=a.id AND c.refund_id=? AND c.status='succeeded') ORDER BY a.id`, refundID, actionID, refundID)
+	if err != nil {
+		return err
+	}
+	var actions []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		actions = append(actions, id)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, id := range actions {
+		if err := recordStripeDeletionRefundActionFailureTx(ctx, tx, refundID, id, failedAt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func recordStripeDeletionRefundActionFailureTx(ctx context.Context, tx *sql.Tx, refundID, savedAction string, failedAt int64) error {
+	var outboxID, resourceKey, paymentIntentID, actor, reason, actionState, state, raw string
 	var generation int64
-	err := tx.QueryRowContext(ctx, `SELECT a.id,a.outbox_id,a.resource_key,a.payment_intent_id,a.actor,a.reason,a.state,o.state,o.progress_json,a.retry_generation
+	err := tx.QueryRowContext(ctx, `SELECT a.outbox_id,a.resource_key,a.payment_intent_id,a.actor,a.reason,a.state,o.state,o.progress_json,a.retry_generation
  FROM billing_deletion_manual_actions a JOIN billing_cancellation_outbox o ON o.id=a.outbox_id
- WHERE (a.refund_id<>'' AND a.refund_id=?) OR (a.id=?) OR a.id=(SELECT action_id FROM billing_deletion_refund_constituents WHERE refund_id=? AND status='succeeded' LIMIT 1) LIMIT 1`, refundID, actionID, refundID).
-		Scan(&savedAction, &outboxID, &resourceKey, &paymentIntentID, &actor, &reason, &actionState, &state, &raw, &generation)
+	 WHERE a.id=?`, savedAction).
+		Scan(&outboxID, &resourceKey, &paymentIntentID, &actor, &reason, &actionState, &state, &raw, &generation)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -452,7 +502,6 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 		if savedRefundProof == "" || savedRefundProof != canonicalProof {
 			return BillingDeletionManualResult{}, errors.New("stripe: succeeded refund lacks its durable canonical proof")
 		}
-		return BillingDeletionManualResult{ActionID: actionID, RefundID: refundID, Status: "succeeded"}, nil
 	}
 	tx, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -464,12 +513,12 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 		return BillingDeletionManualResult{}, err
 	}
 	for _, item := range proofSet.Refunds {
-		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO billing_deletion_refund_constituents(action_id,outbox_id,payment_intent_id,proof_generation,refund_id,amount,status) VALUES(?,?,?,?,?,?,?)`, actionID, outboxID, paymentIntentID, retryGeneration, item.ID, item.Amount, "succeeded"); err != nil {
+		if err := bindRefundConstituentTx(ctx, tx, actionID, outboxID, paymentIntentID, retryGeneration, item.ID, item.Amount, "succeeded"); err != nil {
 			return BillingDeletionManualResult{}, err
 		}
 	}
 	for _, item := range proofSet.NonSucceeded {
-		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO billing_deletion_refund_constituents(action_id,outbox_id,payment_intent_id,proof_generation,refund_id,amount,status) VALUES(?,?,?,?,?,?,?)`, actionID, outboxID, paymentIntentID, retryGeneration, item.ID, item.Amount, item.Status); err != nil {
+		if err := bindRefundConstituentTx(ctx, tx, actionID, outboxID, paymentIntentID, retryGeneration, item.ID, item.Amount, item.Status); err != nil {
 			return BillingDeletionManualResult{}, err
 		}
 	}
@@ -477,17 +526,34 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 	if err := tx.QueryRowContext(ctx, `SELECT i.refund_id FROM billing_deletion_refund_inbox i JOIN billing_deletion_refund_constituents c ON c.refund_id=i.refund_id WHERE c.action_id=? AND c.proof_generation=? AND c.status='succeeded' AND i.status='failed' LIMIT 1`, actionID, retryGeneration).Scan(&failedRefund); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return BillingDeletionManualResult{}, err
 	} else if err == nil {
-		return BillingDeletionManualResult{}, errors.New("account: a canonical refund constituent later failed")
+		if err := recordStripeDeletionRefundFailuresTx(ctx, tx, failedRefund, "", now); err != nil {
+			return BillingDeletionManualResult{}, err
+		}
+		if err := tx.Commit(); err != nil {
+			return BillingDeletionManualResult{}, err
+		}
+		return BillingDeletionManualResult{}, ErrBillingDeletionRefundReconciliationRequired
 	}
-	if err := tx.QueryRowContext(ctx, `SELECT progress_json FROM billing_cancellation_outbox WHERE id=? AND state='pending' AND revision=?`, outboxID, outboxRevision).Scan(&raw); err != nil {
+	var currentState string
+	var currentRevision int64
+	if err := tx.QueryRowContext(ctx, `SELECT progress_json,state,revision FROM billing_cancellation_outbox WHERE id=?`, outboxID).Scan(&raw, &currentState, &currentRevision); err != nil {
 		return BillingDeletionManualResult{}, err
+	}
+	if currentRevision != outboxRevision {
+		return BillingDeletionManualResult{}, errors.New("account: stale deletion journal during refund finalize")
+	}
+	if currentState == "terminal" {
+		if err := tx.Commit(); err != nil {
+			return BillingDeletionManualResult{}, err
+		}
+		return BillingDeletionManualResult{ActionID: actionID, RefundID: refundID, Status: "succeeded"}, nil
 	}
 	p, err = decodeDeletionProgressStrict(raw)
 	if err != nil {
 		return BillingDeletionManualResult{}, err
 	}
 	r = p.Resources[resourceKey]
-	if !r.Manual || r.Terminal {
+	if !wasSucceeded && (!r.Manual || r.Terminal) {
 		return BillingDeletionManualResult{}, errors.New("account: manual resource changed during refund")
 	}
 	r.PaymentIntentID = paymentIntentID
@@ -511,17 +577,19 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 		}
 	}
 	encoded, _ := json.Marshal(p)
-	res, err := tx.ExecContext(ctx, `UPDATE billing_deletion_manual_actions SET state='succeeded',refund_id=?,refund_proof=?,provider_status=CASE WHEN provider_status='' THEN 'succeeded' ELSE provider_status END,updated_at=? WHERE id=? AND state='prepared' AND refund_id=? AND retry_generation=? AND provider_status=?`, refundID, refundProof, now, actionID, refundID, retryGeneration, providerStatus)
-	if err != nil {
-		return BillingDeletionManualResult{}, err
-	}
-	if n, _ := res.RowsAffected(); n != 1 {
-		return BillingDeletionManualResult{}, errors.New("account: stale refund action during finalize")
+	if !wasSucceeded {
+		res, err := tx.ExecContext(ctx, `UPDATE billing_deletion_manual_actions SET state='succeeded',refund_id=?,refund_proof=?,provider_status=CASE WHEN provider_status='' THEN 'succeeded' ELSE provider_status END,updated_at=? WHERE id=? AND state='prepared' AND refund_id=? AND retry_generation=? AND provider_status=?`, refundID, refundProof, now, actionID, refundID, retryGeneration, providerStatus)
+		if err != nil {
+			return BillingDeletionManualResult{}, err
+		}
+		if n, _ := res.RowsAffected(); n != 1 {
+			return BillingDeletionManualResult{}, errors.New("account: stale refund action during finalize")
+		}
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE billing_deletion_refund_inbox SET processed_at=? WHERE refund_id IN (SELECT refund_id FROM billing_deletion_refund_constituents WHERE action_id=? AND proof_generation=?)`, now, actionID, retryGeneration); err != nil {
 		return BillingDeletionManualResult{}, err
 	}
-	res, err = tx.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET progress_json=?,revision=revision+1,updated_at=? WHERE id=? AND state='pending' AND revision=?`, string(encoded), now, outboxID, outboxRevision)
+	res, err := tx.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET progress_json=?,revision=revision+1,updated_at=? WHERE id=? AND state='pending' AND revision=?`, string(encoded), now, outboxID, outboxRevision)
 	if err != nil {
 		return BillingDeletionManualResult{}, err
 	}
@@ -532,6 +600,21 @@ func ResolveBillingDeletionRefund(ctx context.Context, store *SQLiteStore, bille
 		return BillingDeletionManualResult{}, err
 	}
 	return BillingDeletionManualResult{ActionID: actionID, RefundID: refundID, Status: "succeeded"}, nil
+}
+
+func bindRefundConstituentTx(ctx context.Context, tx *sql.Tx, actionID, outboxID, paymentIntentID string, generation int64, refundID string, amount int64, status string) error {
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO billing_deletion_refund_constituents(action_id,outbox_id,payment_intent_id,proof_generation,refund_id,amount,status) VALUES(?,?,?,?,?,?,?)`, actionID, outboxID, paymentIntentID, generation, refundID, amount, status); err != nil {
+		return err
+	}
+	var gotOutbox, gotPI, gotStatus string
+	var gotAmount int64
+	if err := tx.QueryRowContext(ctx, `SELECT outbox_id,payment_intent_id,amount,status FROM billing_deletion_refund_constituents WHERE action_id=? AND proof_generation=? AND refund_id=?`, actionID, generation, refundID).Scan(&gotOutbox, &gotPI, &gotAmount, &gotStatus); err != nil {
+		return err
+	}
+	if gotOutbox != outboxID || gotPI != paymentIntentID || gotAmount != amount || gotStatus != status {
+		return errors.New("account: refund constituent ownership conflict")
+	}
+	return nil
 }
 
 func (c *stripeClient) deletionRefundTotals(ctx context.Context, paymentIntentID string) (string, int64, int64, error) {

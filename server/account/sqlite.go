@@ -1031,9 +1031,9 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
  email_hmac BLOB NOT NULL,
  provider TEXT NOT NULL CHECK(provider IN ('stripe','apple')),
  created_at INTEGER NOT NULL,
- expires_at INTEGER NOT NULL)`,
-		`ALTER TABLE billing_deletion_holds ADD COLUMN review_at INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE billing_deletion_holds ADD COLUMN subject_released_at INTEGER NOT NULL DEFAULT 0`,
+ expires_at INTEGER NOT NULL,
+ review_at INTEGER NOT NULL DEFAULT 0,
+ subject_released_at INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE INDEX IF NOT EXISTS idx_billing_deletion_hold_email ON billing_deletion_holds(email_hmac,expires_at)`,
 		`CREATE TABLE IF NOT EXISTS billing_deletion_config (
  id INTEGER PRIMARY KEY CHECK(id=1),
@@ -1051,16 +1051,16 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
  updated_at INTEGER NOT NULL,
  generation INTEGER NOT NULL DEFAULT 1,
  last_error TEXT NOT NULL DEFAULT '',
- next_attempt_at INTEGER NOT NULL DEFAULT 0)`,
-		`ALTER TABLE billing_cancellation_outbox ADD COLUMN progress_json TEXT NOT NULL DEFAULT '{}'`,
-		`ALTER TABLE billing_cancellation_outbox ADD COLUMN terminal_at INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE billing_cancellation_outbox ADD COLUMN archived_at INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE billing_cancellation_outbox ADD COLUMN generation INTEGER NOT NULL DEFAULT 1`,
-		`ALTER TABLE billing_cancellation_outbox ADD COLUMN last_error TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE billing_cancellation_outbox ADD COLUMN next_attempt_at INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE billing_cancellation_outbox ADD COLUMN claim_token TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE billing_cancellation_outbox ADD COLUMN claim_until INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE billing_cancellation_outbox ADD COLUMN revision INTEGER NOT NULL DEFAULT 0`,
+ next_attempt_at INTEGER NOT NULL DEFAULT 0,
+ progress_json TEXT NOT NULL DEFAULT '{}',
+ terminal_at INTEGER NOT NULL DEFAULT 0,
+ archived_at INTEGER NOT NULL DEFAULT 0,
+ claim_token TEXT NOT NULL DEFAULT '',
+ claim_until INTEGER NOT NULL DEFAULT 0,
+ revision INTEGER NOT NULL DEFAULT 0,
+ UNIQUE(billing_subject_id,provider,generation))`,
+		`CREATE INDEX IF NOT EXISTS idx_billing_cancel_subject ON billing_cancellation_outbox(billing_subject_id,provider,generation)`,
+		`CREATE INDEX IF NOT EXISTS idx_billing_cancel_due ON billing_cancellation_outbox(state,next_attempt_at,updated_at)`,
 		`CREATE TABLE IF NOT EXISTS billing_deletion_manual_actions (
  id TEXT PRIMARY KEY,
  outbox_id TEXT NOT NULL,
@@ -1072,18 +1072,17 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
  state TEXT NOT NULL CHECK(state IN ('prepared','succeeded','failed')),
  retry_generation INTEGER NOT NULL DEFAULT 0,
  provider_status TEXT NOT NULL DEFAULT '',
+ refund_proof TEXT NOT NULL DEFAULT '',
  created_at INTEGER NOT NULL,
  updated_at INTEGER NOT NULL,
  UNIQUE(outbox_id,payment_intent_id,retry_generation))`,
-		`ALTER TABLE billing_deletion_manual_actions ADD COLUMN retry_generation INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE billing_deletion_manual_actions ADD COLUMN provider_status TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE billing_deletion_manual_actions ADD COLUMN refund_proof TEXT NOT NULL DEFAULT ''`,
 		`CREATE TABLE IF NOT EXISTS billing_deletion_refund_failures (
- refund_id TEXT PRIMARY KEY,
+ refund_id TEXT NOT NULL,
  action_id TEXT NOT NULL,
  outbox_id TEXT NOT NULL,
  payment_intent_id TEXT NOT NULL,
- failed_at INTEGER NOT NULL)`,
+ failed_at INTEGER NOT NULL,
+ PRIMARY KEY(refund_id,action_id))`,
 		`CREATE TABLE IF NOT EXISTS billing_deletion_refund_inbox (
  refund_id TEXT PRIMARY KEY,
  action_id TEXT NOT NULL DEFAULT '',
@@ -1091,6 +1090,13 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
  status TEXT NOT NULL,
  event_at INTEGER NOT NULL,
  processed_at INTEGER NOT NULL DEFAULT 0)`,
+		`CREATE TABLE IF NOT EXISTS billing_deletion_refund_events (
+ event_id TEXT PRIMARY KEY,
+ refund_id TEXT NOT NULL,
+ action_id TEXT NOT NULL DEFAULT '',
+ payment_intent_id TEXT NOT NULL DEFAULT '',
+ status TEXT NOT NULL,
+ event_at INTEGER NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS billing_deletion_refund_constituents (
  action_id TEXT NOT NULL,
  outbox_id TEXT NOT NULL,
@@ -1277,30 +1283,6 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 			db.Close()
 			return nil, err
 		}
-	}
-	if err := migrateBillingCancellationOutboxGenerations(db); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := migrateBillingCancellationIdentityV4(db); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := migrateBillingCancellationHistoryAuditV5(db); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := migrateBillingCancellationHistoryAuditV6(db); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := migrateBillingDeletionManualActionsV2(db); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := migrateBillingDeletionProgressV1(db); err != nil {
-		db.Close()
-		return nil, err
 	}
 	if err := validatePendingBillingDeletionProgress(db); err != nil {
 		db.Close()
@@ -1745,360 +1727,7 @@ func migrateEmailVerified(db *sql.DB) error {
 	})
 }
 
-// migrateBillingCancellationOutboxGenerations removes the legacy
-// UNIQUE(billing_subject_id,provider) table constraint. CREATE TABLE IF NOT
-// EXISTS cannot alter an existing table, so a real transactional rebuild is
-// required before a recovered account can create a second deletion generation.
-// The idempotent ALTERs in OpenSQLite run first, making the copy shape identical
-// for legacy and fresh databases.
-func migrateBillingCancellationOutboxGenerations(db *sql.DB) error {
-	return migrateOnce(db, "billing_cancellation_outbox_generations_v3", func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(context.Background(), `SELECT id,customer_id,subscription_id,progress_json FROM billing_cancellation_outbox WHERE state='terminal'`)
-		if err != nil {
-			return err
-		}
-		type reopened struct{ id, progress string }
-		var reopen []reopened
-		for rows.Next() {
-			var id, customerID, subscriptionID, raw string
-			if err := rows.Scan(&id, &customerID, &subscriptionID, &raw); err != nil {
-				rows.Close()
-				return err
-			}
-			normalized, err := reopenBillingDeletionProgress(raw, customerID, subscriptionID)
-			if err != nil {
-				rows.Close()
-				return fmt.Errorf("billing deletion terminal %s cannot be safely reopened: %w", id, err)
-			}
-			reopen = append(reopen, reopened{id, normalized})
-		}
-		if err := rows.Close(); err != nil {
-			return err
-		}
-		for _, item := range reopen {
-			if _, err := tx.ExecContext(context.Background(), `UPDATE billing_cancellation_outbox SET progress_json=? WHERE id=?`, item.progress, item.id); err != nil {
-				return err
-			}
-		}
-		if _, err := tx.ExecContext(context.Background(), `
-CREATE TABLE billing_cancellation_outbox_v2 (
- id TEXT PRIMARY KEY,
- billing_subject_id TEXT NOT NULL,
- provider TEXT NOT NULL CHECK(provider='stripe'),
- customer_id TEXT NOT NULL DEFAULT '',
- subscription_id TEXT NOT NULL DEFAULT '',
- idempotency_key TEXT NOT NULL UNIQUE,
- state TEXT NOT NULL CHECK(state IN ('pending','terminal')),
- attempts INTEGER NOT NULL DEFAULT 0,
- created_at INTEGER NOT NULL,
- updated_at INTEGER NOT NULL,
- generation INTEGER NOT NULL DEFAULT 1,
- last_error TEXT NOT NULL DEFAULT '',
- next_attempt_at INTEGER NOT NULL DEFAULT 0,
- progress_json TEXT NOT NULL DEFAULT '{}',
- terminal_at INTEGER NOT NULL DEFAULT 0,
- archived_at INTEGER NOT NULL DEFAULT 0,
- claim_token TEXT NOT NULL DEFAULT '',
- claim_until INTEGER NOT NULL DEFAULT 0,
- revision INTEGER NOT NULL DEFAULT 0,
- UNIQUE(billing_subject_id,provider,generation))`); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(context.Background(), `
-INSERT INTO billing_cancellation_outbox_v2
- (id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at,generation,last_error,next_attempt_at,progress_json,terminal_at,archived_at,claim_token,claim_until,revision)
- SELECT id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,
-        CASE state WHEN 'terminal' THEN 'pending' ELSE state END,attempts,created_at,updated_at,generation,last_error,
-		CASE state WHEN 'terminal' THEN 0 ELSE next_attempt_at END,
-		progress_json,
-        CASE state WHEN 'terminal' THEN 0 ELSE terminal_at END,0,'',0,revision
- FROM billing_cancellation_outbox`); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(context.Background(), `DROP TABLE billing_cancellation_outbox`); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(context.Background(), `ALTER TABLE billing_cancellation_outbox_v2 RENAME TO billing_cancellation_outbox`); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(context.Background(), `CREATE INDEX idx_billing_cancel_subject ON billing_cancellation_outbox(billing_subject_id,provider,generation)`); err != nil {
-			return err
-		}
-		_, err = tx.ExecContext(context.Background(), `CREATE INDEX idx_billing_cancel_due ON billing_cancellation_outbox(state,next_attempt_at,updated_at)`)
-		return err
-	})
-}
-
-func reopenBillingDeletionProgress(raw, customerID, subscriptionID string) (string, error) {
-	p, err := decodeDeletionProgressStrict(raw)
-	if err != nil {
-		return "", err
-	}
-	p.Customers = appendUnique(p.Customers, customerID)
-	if subscriptionID != "" {
-		p.add(BillingDeletionResource{Kind: "subscription", ID: subscriptionID, CustomerID: customerID, Status: "migration_revalidate"})
-	}
-	if len(p.Customers) == 0 && len(p.Resources) == 0 {
-		return "", errors.New("provider identity was lost by an intermediate migration")
-	}
-	for key, resource := range p.Resources {
-		resource.Terminal = false
-		resource.Manual = false
-		resource.Status = "migration_revalidate"
-		p.Resources[key] = resource
-	}
-	p.CleanSince = 0
-	encoded, err := json.Marshal(p)
-	return string(encoded), err
-}
-
-func migrateBillingCancellationIdentityV4(db *sql.DB) error {
-	return migrateOnce(db, "billing_cancellation_identity_v4", func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(context.Background(), `SELECT id,customer_id,subscription_id,progress_json FROM billing_cancellation_outbox WHERE state='pending'`)
-		if err != nil {
-			return err
-		}
-		type repair struct{ id, raw string }
-		var repairs []repair
-		for rows.Next() {
-			var id, customerID, subscriptionID, raw string
-			if err := rows.Scan(&id, &customerID, &subscriptionID, &raw); err != nil {
-				rows.Close()
-				return err
-			}
-			p, decodeErr := decodeDeletionProgressStrict(raw)
-			if decodeErr != nil {
-				rows.Close()
-				return decodeErr
-			}
-			if len(p.Customers) == 0 && len(p.Resources) == 0 {
-				normalized, normalizeErr := reopenBillingDeletionProgress(raw, customerID, subscriptionID)
-				if normalizeErr != nil {
-					rows.Close()
-					return fmt.Errorf("billing deletion pending %s has no recoverable provider identity: %w", id, normalizeErr)
-				}
-				repairs = append(repairs, repair{id, normalized})
-			}
-		}
-		if err := rows.Close(); err != nil {
-			return err
-		}
-		for _, item := range repairs {
-			if _, err := tx.ExecContext(context.Background(), `UPDATE billing_cancellation_outbox SET progress_json=? WHERE id=?`, item.raw, item.id); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-}
-
-// v5 reopens conclusions produced before deletion reconciliation retained
-// complete payment identity. Provider history, without a deletion cutoff, must
-// be inventoried once before these rows may become terminal again.
-func migrateBillingCancellationHistoryAuditV5(db *sql.DB) error {
-	return migrateOnce(db, "billing_cancellation_history_audit_v5", func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(context.Background(), `SELECT id,progress_json FROM billing_cancellation_outbox WHERE state='pending'`)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		type update struct{ id, raw string }
-		var updates []update
-		for rows.Next() {
-			var id, raw string
-			if err := rows.Scan(&id, &raw); err != nil {
-				return err
-			}
-			p, err := decodeDeletionProgressStrict(raw)
-			if err != nil {
-				return fmt.Errorf("billing deletion history audit %s: %w", id, err)
-			}
-			for key, r := range p.Resources {
-				if r.Kind == "checkout_session" {
-					r.Terminal, r.Manual, r.Status = false, false, "migration_history_revalidate"
-					p.Resources[key] = r
-				}
-			}
-			p.CleanSince = 0
-			p.HistoricalAuditRequired = true
-			encoded, err := json.Marshal(p)
-			if err != nil {
-				return err
-			}
-			updates = append(updates, update{id, string(encoded)})
-		}
-		if err := rows.Err(); err != nil {
-			return err
-		}
-		for _, u := range updates {
-			if _, err := tx.ExecContext(context.Background(), `UPDATE billing_cancellation_outbox SET progress_json=?,next_attempt_at=0 WHERE id=?`, u.raw, u.id); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-}
-
-func migrateBillingCancellationHistoryAuditV6(db *sql.DB) error {
-	return migrateOnce(db, "billing_cancellation_history_audit_v6", func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(context.Background(), `SELECT id,billing_subject_id,customer_id,subscription_id,progress_json FROM billing_cancellation_outbox`)
-		if err != nil {
-			return err
-		}
-		type update struct{ id, subject, raw string }
-		var updates []update
-		for rows.Next() {
-			var id, subject, customerID, subscriptionID, raw string
-			if err := rows.Scan(&id, &subject, &customerID, &subscriptionID, &raw); err != nil {
-				rows.Close()
-				return err
-			}
-			p, err := decodeDeletionProgressStrict(raw)
-			if err != nil {
-				rows.Close()
-				return fmt.Errorf("billing deletion v6 %s: %w", id, err)
-			}
-			p.Customers = appendUnique(p.Customers, customerID)
-			history, err := tx.QueryContext(context.Background(), `SELECT customer_id FROM stripe_customer_history WHERE user_id=? ORDER BY customer_id`, subject)
-			if err != nil {
-				rows.Close()
-				return err
-			}
-			for history.Next() {
-				var customer string
-				if err := history.Scan(&customer); err != nil {
-					history.Close()
-					rows.Close()
-					return err
-				}
-				p.Customers = appendUnique(p.Customers, customer)
-			}
-			if err := history.Close(); err != nil {
-				rows.Close()
-				return err
-			}
-			if subscriptionID != "" {
-				p.add(BillingDeletionResource{Kind: "subscription", ID: subscriptionID, CustomerID: customerID, Status: "migration_history_revalidate"})
-			}
-			onlySafeProof := len(p.Resources) > 0
-			hasRecoverableObject := false
-			for key, r := range p.Resources {
-				if r.Kind == "no_side_effect_proof" && r.Terminal {
-					continue
-				}
-				onlySafeProof = false
-				if (r.Kind == "checkout_session" && r.AttemptID != "") || (r.Kind == "subscription" && (r.AttemptID != "" || r.Status == "external_binding")) {
-					hasRecoverableObject = true
-				}
-				r.Terminal, r.Manual, r.Status = false, false, "migration_history_revalidate"
-				if r.Kind == "checkout_session" {
-					r.AsyncFailureAt, r.AsyncSuccessAt = 0, 0
-				}
-				p.Resources[key] = r
-			}
-			if len(p.Customers) == 0 && !onlySafeProof && !hasRecoverableObject {
-				rows.Close()
-				return fmt.Errorf("billing deletion v6 %s has no recoverable provider identity", id)
-			}
-			p.CleanSince = 0
-			p.HistoricalAuditRequired = !onlySafeProof
-			encoded, err := json.Marshal(p)
-			if err != nil {
-				rows.Close()
-				return err
-			}
-			updates = append(updates, update{id, subject, string(encoded)})
-		}
-		if err := rows.Close(); err != nil {
-			return err
-		}
-		for _, u := range updates {
-			res, err := tx.ExecContext(context.Background(), `UPDATE billing_deletion_holds SET subject_released_at=0 WHERE billing_subject_id=?`, u.subject)
-			if err != nil {
-				return err
-			}
-			if n, _ := res.RowsAffected(); n == 0 {
-				return fmt.Errorf("billing deletion v6 %s has no durable hold", u.id)
-			}
-			if _, err := tx.ExecContext(context.Background(), `UPDATE billing_cancellation_outbox SET state='pending',progress_json=?,terminal_at=0,archived_at=0,next_attempt_at=0,claim_token='',claim_until=0,revision=revision+1 WHERE id=?`, u.raw, u.id); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-}
-
-func migrateBillingDeletionManualActionsV2(db *sql.DB) error {
-	return migrateOnce(db, "billing_deletion_manual_actions_v2", func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(context.Background(), `CREATE TABLE billing_deletion_manual_actions_v2 (
- id TEXT PRIMARY KEY,
- outbox_id TEXT NOT NULL,
- resource_key TEXT NOT NULL,
- actor TEXT NOT NULL,
- reason TEXT NOT NULL,
- payment_intent_id TEXT NOT NULL DEFAULT '',
- refund_id TEXT NOT NULL DEFAULT '',
- state TEXT NOT NULL CHECK(state IN ('prepared','succeeded','failed')),
- retry_generation INTEGER NOT NULL DEFAULT 0,
- provider_status TEXT NOT NULL DEFAULT '',
-	refund_proof TEXT NOT NULL DEFAULT '',
- created_at INTEGER NOT NULL,
- updated_at INTEGER NOT NULL,
- UNIQUE(outbox_id,payment_intent_id,retry_generation))`); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(context.Background(), `INSERT INTO billing_deletion_manual_actions_v2
- (id,outbox_id,resource_key,actor,reason,payment_intent_id,refund_id,state,retry_generation,provider_status,refund_proof,created_at,updated_at)
- SELECT id,outbox_id,resource_key,actor,reason,payment_intent_id,refund_id,state,retry_generation,provider_status,refund_proof,created_at,updated_at
- FROM billing_deletion_manual_actions`); err != nil {
-			return fmt.Errorf("billing deletion manual action audit migration: %w", err)
-		}
-		if _, err := tx.ExecContext(context.Background(), `DROP TABLE billing_deletion_manual_actions`); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(context.Background(), `ALTER TABLE billing_deletion_manual_actions_v2 RENAME TO billing_deletion_manual_actions`); err != nil {
-			return err
-		}
-		_, err := tx.ExecContext(context.Background(), `CREATE INDEX idx_billing_manual_refund_payment ON billing_deletion_manual_actions(outbox_id,payment_intent_id,retry_generation)`)
-		return err
-	})
-}
-
-func migrateBillingDeletionProgressV1(db *sql.DB) error {
-	return migrateOnce(db, "billing_deletion_progress_v1", func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(context.Background(), `SELECT id,progress_json FROM billing_cancellation_outbox WHERE state='pending'`)
-		if err != nil {
-			return err
-		}
-		type item struct{ id, raw string }
-		var pending []item
-		for rows.Next() {
-			var v item
-			if err := rows.Scan(&v.id, &v.raw); err != nil {
-				rows.Close()
-				return err
-			}
-			pending = append(pending, v)
-		}
-		if err := rows.Close(); err != nil {
-			return err
-		}
-		for _, v := range pending {
-			p, err := decodeDeletionProgressStrict(v.raw)
-			if err != nil {
-				return fmt.Errorf("billing deletion progress %s blocks startup: %w", v.id, err)
-			}
-			encoded, err := json.Marshal(p)
-			if err != nil {
-				return err
-			}
-			if _, err := tx.ExecContext(context.Background(), `UPDATE billing_cancellation_outbox SET progress_json=? WHERE id=?`, string(encoded), v.id); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-}
+// Billing deletion tables are introduced by this release. Their CREATE statements above are the only supported baseline; no unpublished candidate-schema migration runs in production.
 
 func validatePendingBillingDeletionProgress(db *sql.DB) error {
 	rows, err := db.QueryContext(context.Background(), `SELECT id,progress_json FROM billing_cancellation_outbox WHERE state='pending'`)
