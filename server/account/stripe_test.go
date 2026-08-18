@@ -495,6 +495,9 @@ func TestCreateCheckoutSessionRequestShape(t *testing.T) {
 		if got := r.Header.Get("Idempotency-Key"); got != "checkout:attempt_42" {
 			t.Errorf("Idempotency-Key = %q, want checkout:attempt_42", got)
 		}
+		if got := r.Header.Get("Stripe-Version"); got != stripeAPIVersion {
+			t.Errorf("Stripe-Version = %q, want %q", got, stripeAPIVersion)
+		}
 		if err := r.ParseForm(); err != nil {
 			t.Fatalf("ParseForm: %v", err)
 		}

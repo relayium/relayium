@@ -187,7 +187,10 @@ func TestPaidInvoiceWithoutChainUsesCanonicalDeletionEpoch(t *testing.T) {
 			return
 		}
 		invoiceGets++
-		io.WriteString(w, `{"id":"in_late","status":"paid","customer":"cus_late","subscription":"sub_old","payment_intent":"pi_late","charge":"ch_late","created":90,"status_transitions":{"paid_at":110}}`)
+		if got := r.Header.Get("Stripe-Version"); got != stripeAPIVersion {
+			t.Errorf("Stripe-Version=%q", got)
+		}
+		io.WriteString(w, `{"id":"in_late","status":"paid","customer":"cus_late","parent":{"type":"subscription_details","subscription_details":{"subscription":"sub_old"}},"payment_intent":"pi_late","charge":"ch_late","created":90,"status_transitions":{"paid_at":110}}`)
 	}))
 	defer stripe.Close()
 	client := NewStripeClient("sk_test", secret, "")
@@ -226,6 +229,74 @@ func TestPaidInvoiceCanonicalEpochAmbiguityIsRetryable(t *testing.T) {
 	var exact int
 	if err := store.db.QueryRow(`SELECT COUNT(*) FROM billing_cancellation_outbox WHERE billing_subject_id=? AND mode='exact_compensation'`, uid).Scan(&exact); err != nil || exact != 0 {
 		t.Fatalf("exact=%d err=%v", exact, err)
+	}
+}
+
+func TestCanonicalPaidInvoiceSubscriptionShapes(t *testing.T) {
+	for _, tc := range []struct {
+		name, subscriptionFields, wantSubscription string
+		wantError                                  bool
+	}{
+		{name: "legacy", subscriptionFields: `"subscription":"sub_legacy",`, wantSubscription: "sub_legacy"},
+		{name: "Basil nested", subscriptionFields: `"parent":{"type":"subscription_details","subscription_details":{"subscription":"sub_basil"}},`, wantSubscription: "sub_basil"},
+		{name: "matching dual fields", subscriptionFields: `"subscription":"sub_same","parent":{"subscription_details":{"subscription":"sub_same"}},`, wantSubscription: "sub_same"},
+		{name: "conflicting dual fields", subscriptionFields: `"subscription":"sub_old","parent":{"subscription_details":{"subscription":"sub_new"}},`, wantError: true},
+		{name: "one-off invoice", wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if got := r.Header.Get("Stripe-Version"); got != stripeAPIVersion {
+					t.Errorf("Stripe-Version=%q", got)
+				}
+				fmt.Fprintf(w, `{"id":"in_shape","status":"paid","customer":"cus_shape",%s"payment_intent":"pi_shape","created":90,"status_transitions":{"paid_at":110}}`, tc.subscriptionFields)
+			}))
+			defer server.Close()
+			client := NewStripeClient("sk_test", "whsec", "")
+			client.base, client.http = server.URL, server.Client()
+			got, err := client.canonicalPaidInvoice(context.Background(), "in_shape")
+			if tc.wantError {
+				if err == nil {
+					t.Fatalf("accepted subscription=%q", got.SubscriptionID)
+				}
+				return
+			}
+			if err != nil || got.SubscriptionID != tc.wantSubscription {
+				t.Fatalf("invoice=%+v err=%v", got, err)
+			}
+		})
+	}
+}
+
+func TestPaidInvoiceCannotBindReactivatedSubscriptionOrOneOffInvoice(t *testing.T) {
+	for _, tc := range []struct {
+		name, email, subscriptionFields string
+	}{
+		{name: "reactivated subscription", email: "reactivated-scope@example.test", subscriptionFields: `"parent":{"subscription_details":{"subscription":"sub_new"}},`},
+		{name: "one-off invoice", email: "one-off-scope@example.test"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ts, svc, store, mail := newBillingServer(t)
+			secret := "whsec_paid_wrong_scope"
+			stripe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintf(w, `{"id":"in_wrong_scope","status":"paid","customer":"cus_reused",%s"payment_intent":"pi_new","created":90,"status_transitions":{"paid_at":110}}`, tc.subscriptionFields)
+			}))
+			defer stripe.Close()
+			client := NewStripeClient("sk_test", secret, "")
+			client.base, client.http = stripe.URL, stripe.Client()
+			svc.biller = client
+			loginCookie(t, ts, mail, tc.email)
+			uid := mustUserID(t, store, tc.email)
+			seedTerminalInvoiceDeletionEpoch(t, store, uid, "cus_reused", "delete-old", "epoch-old", "sub_old", 100, "pi_old")
+			resp := postWebhook(t, ts, secret, paidInvoiceBody("in_wrong_scope", "cus_reused", "", "", "", ""))
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusInternalServerError {
+				t.Fatalf("status=%d, want retryable 500", resp.StatusCode)
+			}
+			var exact int
+			if err := store.db.QueryRow(`SELECT COUNT(*) FROM billing_cancellation_outbox WHERE billing_subject_id=? AND mode='exact_compensation'`, uid).Scan(&exact); err != nil || exact != 0 {
+				t.Fatalf("exact=%d err=%v", exact, err)
+			}
+		})
 	}
 }
 

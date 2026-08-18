@@ -16,6 +16,11 @@ import (
 	"time"
 )
 
+// stripeAPIVersion is the audited server-side REST contract. Pinning every
+// request prevents account deletion and subscription logic from silently
+// switching object shapes when Stripe changes an account default version.
+const stripeAPIVersion = "2026-06-24.dahlia"
+
 // Biller abstracts Stripe so handlers/tests never touch the network directly.
 // A thin hand-rolled client (stripeClient) is the only implementation; nil
 // means billing is unconfigured (RELAYIUM_STRIPE_SECRET_KEY empty).
@@ -1786,15 +1791,31 @@ func (c *stripeClient) canonicalPaidInvoice(ctx context.Context, invoiceID strin
 		StatusTransitions struct {
 			PaidAt int64 `json:"paid_at"`
 		} `json:"status_transitions"`
+		Parent struct {
+			SubscriptionDetails *struct {
+				Subscription string `json:"subscription"`
+			} `json:"subscription_details"`
+		} `json:"parent"`
 	}
 	if err := json.Unmarshal(body, &obj); err != nil {
 		return CanonicalStripePaidInvoice{}, err
 	}
-	if obj.ID != invoiceID || obj.Status != "paid" || obj.Customer == "" || obj.Created <= 0 || obj.StatusTransitions.PaidAt <= 0 || obj.Created > obj.StatusTransitions.PaidAt {
+	nestedSubscription := ""
+	if obj.Parent.SubscriptionDetails != nil {
+		nestedSubscription = obj.Parent.SubscriptionDetails.Subscription
+	}
+	if obj.Subscription != "" && nestedSubscription != "" && obj.Subscription != nestedSubscription {
+		return CanonicalStripePaidInvoice{}, errors.New("stripe: canonical paid invoice subscription identities conflict")
+	}
+	subscriptionID := obj.Subscription
+	if subscriptionID == "" {
+		subscriptionID = nestedSubscription
+	}
+	if obj.ID != invoiceID || obj.Status != "paid" || obj.Customer == "" || subscriptionID == "" || obj.Created <= 0 || obj.StatusTransitions.PaidAt <= 0 || obj.Created > obj.StatusTransitions.PaidAt {
 		return CanonicalStripePaidInvoice{}, errors.New("stripe: canonical paid invoice evidence is invalid")
 	}
 	return CanonicalStripePaidInvoice{
-		InvoiceID: obj.ID, CustomerID: obj.Customer, SubscriptionID: obj.Subscription,
+		InvoiceID: obj.ID, CustomerID: obj.Customer, SubscriptionID: subscriptionID,
 		PaymentIntentID: obj.PaymentIntent, ChargeID: obj.Charge,
 		CreatedAt: obj.Created, PaidAt: obj.StatusTransitions.PaidAt,
 	}, nil
@@ -1816,6 +1837,7 @@ func (c *stripeClient) requestKeyed(ctx context.Context, method, path string, fo
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 	req.Header.Set("Authorization", "Bearer "+c.secretKey)
+	req.Header.Set("Stripe-Version", stripeAPIVersion)
 	if idemKey != "" {
 		req.Header.Set("Idempotency-Key", idemKey)
 	}

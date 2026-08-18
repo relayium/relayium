@@ -1165,7 +1165,7 @@ func (s *SQLiteStore) appendStripeCustomerDeletionHazards(ctx context.Context, c
 // invoice to exactly one completed deletion epoch. paid_at, not invoice.created,
 // is the money boundary: equality with a second-granularity cutoff is ambiguous.
 func (s *SQLiteStore) AppendCanonicalStripePaidInvoiceDeletionHazards(ctx context.Context, invoice CanonicalStripePaidInvoice, resources []BillingDeletionResource) error {
-	if invoice.InvoiceID == "" || invoice.CustomerID == "" || invoice.CreatedAt <= 0 || invoice.PaidAt <= 0 || invoice.CreatedAt > invoice.PaidAt {
+	if invoice.InvoiceID == "" || invoice.CustomerID == "" || invoice.SubscriptionID == "" || invoice.CreatedAt <= 0 || invoice.PaidAt <= 0 || invoice.CreatedAt > invoice.PaidAt {
 		return errors.New("account: canonical paid invoice evidence is incomplete")
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -1222,14 +1222,12 @@ func (s *SQLiteStore) AppendCanonicalStripePaidInvoiceDeletionHazards(ctx contex
 		if invoice.PaidAt <= cutoffAt {
 			continue
 		}
-		if invoice.SubscriptionID != "" {
-			subscriptionMatches := subscriptionID == invoice.SubscriptionID || capturedSourceID == invoice.SubscriptionID
-			for _, known := range p.Resources {
-				subscriptionMatches = subscriptionMatches || (known.Kind == "subscription" && known.ID == invoice.SubscriptionID)
-			}
-			if !subscriptionMatches {
-				continue
-			}
+		subscriptionMatches := subscriptionID == invoice.SubscriptionID || capturedSourceID == invoice.SubscriptionID
+		for _, known := range p.Resources {
+			subscriptionMatches = subscriptionMatches || (known.Kind == "subscription" && known.ID == invoice.SubscriptionID)
+		}
+		if !subscriptionMatches {
+			continue
 		}
 		matches = append(matches, id)
 	}
