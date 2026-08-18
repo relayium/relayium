@@ -629,6 +629,8 @@ final class StoreKitLinkageTests: XCTestCase {
         // address is written and one place a test can read it.
         XCTAssertFalse(card.contains("https://"),
                        "the purchase card hard-codes a URL instead of using AppEnvironment")
+        XCTAssertTrue(flat.contains("destination: AppEnvironment.appleSubscriptionsURL"),
+                      "the Apple subscription-management destination bypasses AppEnvironment")
 
         // **Unconditional.** Everything else on this card is gated on a state —
         // what is on sale, what the server allows, who bills the account — and a
@@ -678,6 +680,8 @@ final class StoreKitLinkageTests: XCTestCase {
         }
         XCTAssertFalse(card.contains("https://"),
                        "the iOS purchase card hard-codes a URL")
+        XCTAssertTrue(flat.contains("destination: AppEnvironment.appleSubscriptionsURL"),
+                      "the iOS subscription-management destination bypasses AppEnvironment")
 
         let marker = "HStack(spacing: 16) {"
         let links = try XCTUnwrap(card.components(separatedBy: marker).dropFirst().first)

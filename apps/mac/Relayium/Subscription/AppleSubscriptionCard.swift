@@ -248,7 +248,7 @@ struct AppleSubscriptionCard: View {
             // decision is the presentation layer's (`offersSubscribe`), not this
             // view's.
             if row.changeEffect == .nextRenewal {
-                Link(L10n.t(.subscriptionManage), destination: URL(string: "https://apps.apple.com/account/subscriptions")!)
+                Link(L10n.t(.subscriptionManage), destination: AppEnvironment.appleSubscriptionsURL)
                     .accessibilityIdentifier("subscription-manage-\(row.productID)")
             } else if row.offersSubscribe {
                 Button(L10n.t(.subscriptionSubscribe)) {

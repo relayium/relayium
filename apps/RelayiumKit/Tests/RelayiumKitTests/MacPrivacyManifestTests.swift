@@ -211,8 +211,10 @@ final class MacPrivacyManifestTests: XCTestCase {
         XCTAssertTrue(storeKit.contains("jwsRepresentation"))
         XCTAssertTrue(schema.contains("CREATE TABLE IF NOT EXISTS subscription_sources"))
         let appleBilling = try text("server/account/billing_apple_transaction.go")
+        let flatAppleBilling = appleBilling.split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
         let appleIdentity = try text("server/account/apple_identity.go")
-        XCTAssertTrue(appleBilling.contains("ExternalID: externalID"))
+        XCTAssertTrue(flatAppleBilling.contains("ExternalID: externalID"))
         XCTAssertTrue(appleBilling.contains("appleSubscriptionKeyOf(tx).externalID()"))
         XCTAssertTrue(appleIdentity.contains("OriginalTransactionID: tx.OriginalTransactionID"))
 
