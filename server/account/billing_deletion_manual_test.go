@@ -101,6 +101,13 @@ func TestFailedRefundReopensHazardAndRotatesProviderAction(t *testing.T) {
 	if _, err := store.db.Exec(`INSERT INTO billing_deletion_manual_actions(id,outbox_id,resource_key,actor,reason,payment_intent_id,refund_id,state,created_at,updated_at) VALUES('action-old','out','payment_intent:pi_failed','operator','customer deletion','pi_failed','re_failed','prepared',?,?)`, now, now); err != nil {
 		t.Fatal(err)
 	}
+	if err := store.RecordStripeDeletionRefundLifecycle(context.Background(), "re_failed", "action-old", "pending", 105); err != nil {
+		t.Fatal(err)
+	}
+	var providerStatus string
+	if err := store.db.QueryRow(`SELECT provider_status FROM billing_deletion_manual_actions WHERE id='action-old'`).Scan(&providerStatus); err != nil || providerStatus != "pending" {
+		t.Fatalf("provider status=%q err=%v", providerStatus, err)
+	}
 	if err := store.RecordStripeDeletionRefundFailure(context.Background(), "re_failed", "action-old", 110); err != nil {
 		t.Fatal(err)
 	}

@@ -27,6 +27,20 @@ type BillingDeletionManualEvidence struct {
 
 // RecordStripeDeletionRefundFailure converts a verified provider failure into
 // durable, retryable operator work. It never releases the deletion hold.
+func (store *SQLiteStore) RecordStripeDeletionRefundLifecycle(ctx context.Context, refundID, actionID, status string, eventAt int64) error {
+	if status == "failed" {
+		return store.RecordStripeDeletionRefundFailure(ctx, refundID, actionID, eventAt)
+	}
+	if refundID == "" || actionID == "" {
+		return nil
+	}
+	_, err := store.db.ExecContext(ctx, `UPDATE billing_deletion_manual_actions
+ SET refund_id=CASE WHEN refund_id='' OR refund_id=? THEN ? ELSE refund_id END,
+     provider_status=?,updated_at=MAX(updated_at,?)
+ WHERE id=?`, refundID, refundID, status, eventAt, actionID)
+	return err
+}
+
 func (store *SQLiteStore) RecordStripeDeletionRefundFailure(ctx context.Context, refundID, actionID string, failedAt int64) error {
 	if refundID == "" && actionID == "" {
 		return nil
@@ -78,7 +92,7 @@ func (store *SQLiteStore) RecordStripeDeletionRefundFailure(ctx context.Context,
 	generation++
 	sum := sha256.Sum256([]byte("relayium:billing-deletion-refund:v3\x00" + outboxID + "\x00" + paymentIntentID + "\x00" + fmt.Sprint(generation)))
 	newAction := "bdr_" + hex.EncodeToString(sum[:16])
-	if _, err := tx.ExecContext(ctx, `UPDATE billing_deletion_manual_actions SET id=?,refund_id='',retry_generation=?,updated_at=? WHERE id=? AND refund_id=?`, newAction, generation, failedAt, savedAction, refundID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE billing_deletion_manual_actions SET id=?,refund_id='',provider_status='failed',retry_generation=?,updated_at=? WHERE id=? AND refund_id=?`, newAction, generation, failedAt, savedAction, refundID); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET progress_json=?,revision=revision+1,last_error='provider refund failed',next_attempt_at=0,updated_at=? WHERE id=? AND state='pending'`, string(encoded), failedAt, outboxID); err != nil {

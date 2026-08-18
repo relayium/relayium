@@ -1076,6 +1076,7 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_billing_manual_refund_payment
  ON billing_deletion_manual_actions(outbox_id,payment_intent_id) WHERE payment_intent_id<>''`,
 		`ALTER TABLE billing_deletion_manual_actions ADD COLUMN retry_generation INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE billing_deletion_manual_actions ADD COLUMN provider_status TEXT NOT NULL DEFAULT ''`,
 		`CREATE TABLE IF NOT EXISTS billing_deletion_refund_failures (
  refund_id TEXT PRIMARY KEY,
  action_id TEXT NOT NULL,
