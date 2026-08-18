@@ -237,7 +237,7 @@ func resolveDuplicateRefundCurrent(ctx context.Context, store *SQLiteStore, bill
 	if err != nil {
 		return DuplicateRefundOperatorResult{}, err
 	}
-	return ResolveDuplicateRefund(ctx, store, biller, selector, actor, reason, evidence.Revision, evidence.LiabilityDigest)
+	return ResolveDuplicateRefund(ctx, store, biller, selector, actor, reason, evidence.LiabilityRevision, evidence.LiabilityDigest)
 }
 
 func TestWorkerNeverRefundsSinglePaymentAndLeavesOperatorAction(t *testing.T) {
@@ -420,7 +420,7 @@ func TestDuplicateRefundLiabilitiesAppendNewPaymentAndInvalidatePreparedSnapshot
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.Revision <= action.JobRevision || len(updated.Liabilities) != 1 || len(updated.Liabilities[0].Payments) != 1 || updated.State != "manual" {
+	if updated.LiabilityRevision <= action.LiabilityRevision || len(updated.Liabilities) != 1 || len(updated.Liabilities[0].Payments) != 1 || updated.State != "manual" {
 		t.Fatalf("updated=%+v action=%+v", updated, action)
 	}
 	var actionState string
@@ -512,8 +512,80 @@ func TestDuplicateRefundRequiresExactListedRevisionAndDigestBeforeProvider(t *te
 	if _, err := store.PutDuplicateRefund(context.Background(), expanded, 200); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "listed liability", evidence.Revision, evidence.LiabilityDigest); err == nil || !strings.Contains(err.Error(), "list evidence again") || state.refundPosts != 0 {
+	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "listed liability", evidence.LiabilityRevision, evidence.LiabilityDigest); err == nil || !strings.Contains(err.Error(), "list evidence again") || state.refundPosts != 0 {
 		t.Fatalf("stale evidence err=%v posts=%d", err, state.refundPosts)
+	}
+}
+
+func TestPrepareDuplicateRefundActionAtomicallyRejectsLiabilityAddedAfterList(t *testing.T) {
+	store := newTestStore(t)
+	state := &duplicateStripeState{active: true, refunds: map[string]int64{}}
+	client, closeServer := newDuplicateStripe(t, state, true)
+	defer closeServer()
+	listed := prepareCanceledManualDuplicate(t, store, client, state)
+	expanded := listed.DuplicateRefundPlan
+	expanded.Liabilities = append(expanded.Liabilities, DuplicateRefundLiability{
+		InvoiceID: "in_after_approval", Status: "paid", AmountPaid: 100,
+		Payments: []CanonicalStripeInvoicePayment{{InvoicePaymentID: "inpay_after_approval", PaymentType: "payment_intent", PaymentIntentID: "pi_after_approval", ChargeID: "ch_after_approval", AmountPaid: 100, ChargeAmount: 100, PaidAt: 200}},
+	})
+	if _, err := store.PutDuplicateRefund(context.Background(), expanded, 200); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := prepareDuplicateRefundAction(context.Background(), store, listed, "operator", "stale listed evidence", 201); err == nil || !strings.Contains(err.Error(), "list evidence again") {
+		t.Fatalf("prepare err=%v", err)
+	}
+	if state.refundPosts != 0 {
+		t.Fatalf("stale approval posted refunds=%d", state.refundPosts)
+	}
+}
+
+func TestWorkerSaveDoesNotInvalidatePreparedLiabilityAuthority(t *testing.T) {
+	store := newTestStore(t)
+	state := &duplicateStripeState{active: true, refunds: map[string]int64{}}
+	client, closeServer := newDuplicateStripe(t, state, true)
+	defer closeServer()
+	job := prepareCanceledManualDuplicate(t, store, client, state)
+	action, err := prepareDuplicateRefundAction(context.Background(), store, job, "operator", "stable liability approval", 102)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveDuplicateRefund(context.Background(), job, DuplicateRefundResult{SubscriptionCanceled: true, ManualReason: "refund_operator_required"}, nil, 103); err != nil {
+		t.Fatal(err)
+	}
+	updated, _, err := store.DuplicateRefundBySubscription(context.Background(), job.DuplicateSubscriptionID)
+	if err != nil || updated.Revision == job.Revision || updated.LiabilityRevision != action.LiabilityRevision {
+		t.Fatalf("updated=%+v action=%+v err=%v", updated, action, err)
+	}
+	if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "stable liability approval"); err != nil {
+		t.Fatal(err)
+	}
+	if state.refundPosts != 2 {
+		t.Fatalf("refund posts=%d", state.refundPosts)
+	}
+}
+
+func TestFreshDuplicateRefundSchemaSeparatesLiabilityRevision(t *testing.T) {
+	store := newTestStore(t)
+	for table, column := range map[string]string{"billing_duplicate_refunds": "liability_revision", "billing_duplicate_refund_actions": "liability_revision"} {
+		rows, err := store.reader().Query(`PRAGMA table_info(` + table + `)`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for rows.Next() {
+			var cid, notNull, primaryKey int
+			var name, kind string
+			var defaultValue any
+			if err := rows.Scan(&cid, &name, &kind, &notNull, &defaultValue, &primaryKey); err != nil {
+				rows.Close()
+				t.Fatal(err)
+			}
+			found = found || name == column
+		}
+		rows.Close()
+		if !found {
+			t.Fatalf("%s missing %s", table, column)
+		}
 	}
 }
 

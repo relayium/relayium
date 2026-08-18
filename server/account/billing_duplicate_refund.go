@@ -33,10 +33,10 @@ type DuplicateRefundLiability struct {
 
 type DuplicateRefundJob struct {
 	DuplicateRefundPlan
-	ID                                       string
-	State, LastError                         string
-	SubscriptionCanceled, RefundComplete     bool
-	Attempts, Revision, CreatedAt, UpdatedAt int64
+	ID                                                          string
+	State, LastError                                            string
+	SubscriptionCanceled, RefundComplete                        bool
+	Attempts, Revision, LiabilityRevision, CreatedAt, UpdatedAt int64
 }
 
 type DuplicateRefundResult struct {
@@ -50,7 +50,7 @@ type DuplicateRefundEvidence struct {
 	LiabilityDigest                                                    string
 	SubscriptionCanceled, RefundComplete                               bool
 	HasError                                                           bool
-	Attempts, Revision                                                 int64
+	Attempts, Revision, LiabilityRevision                              int64
 	Payments                                                           []CanonicalStripeInvoicePayment
 	Liabilities                                                        []DuplicateRefundLiability
 	ActionID, ActionState                                              string
@@ -64,7 +64,11 @@ type DuplicateRefundOperatorResult struct {
 
 type duplicateRefundAction struct {
 	ID, JobID, Actor, Reason, State, SnapshotJSON, ProofJSON, LastError string
-	Generation, JobRevision, Revision                                   int64
+	Generation, LiabilityRevision, Revision                             int64
+}
+
+type duplicateRefundLiabilityQueryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }
 
 var errDuplicateRefundProviderFailed = errors.New("stripe: duplicate refund provider reported a terminal failed refund")
@@ -118,12 +122,41 @@ func duplicateRefundLiabilitySnapshot(liabilities []DuplicateRefundLiability) ([
 	return raw, hex.EncodeToString(digest[:]), nil
 }
 
+func loadDuplicateRefundLiabilities(ctx context.Context, q duplicateRefundLiabilityQueryer, jobID string) ([]DuplicateRefundLiability, error) {
+	rows, err := q.QueryContext(ctx, `SELECT i.invoice_id,i.status,i.amount_paid,i.manual_reason,l.invoice_payment_id,l.payment_type,l.payment_intent_id,l.payment_record_id,l.charge_id,l.amount_paid,l.charge_amount,l.paid_at
+ FROM billing_duplicate_refund_invoices i LEFT JOIN billing_duplicate_refund_liabilities l ON l.job_id=i.job_id AND l.invoice_id=i.invoice_id
+ WHERE i.job_id=? ORDER BY i.invoice_id,l.invoice_payment_id`, jobID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var liabilities []DuplicateRefundLiability
+	var current *DuplicateRefundLiability
+	for rows.Next() {
+		var invoiceID, status, manualReason string
+		var invoiceAmountPaid int64
+		var invoicePaymentID, paymentType, paymentIntentID, paymentRecordID, chargeID sql.NullString
+		var amountPaid, chargeAmount, paidAt sql.NullInt64
+		if err := rows.Scan(&invoiceID, &status, &invoiceAmountPaid, &manualReason, &invoicePaymentID, &paymentType, &paymentIntentID, &paymentRecordID, &chargeID, &amountPaid, &chargeAmount, &paidAt); err != nil {
+			return nil, err
+		}
+		if current == nil || current.InvoiceID != invoiceID {
+			liabilities = append(liabilities, DuplicateRefundLiability{InvoiceID: invoiceID, Status: status, AmountPaid: invoiceAmountPaid, ManualReason: manualReason})
+			current = &liabilities[len(liabilities)-1]
+		}
+		if invoicePaymentID.Valid {
+			current.Payments = append(current.Payments, CanonicalStripeInvoicePayment{InvoicePaymentID: invoicePaymentID.String, PaymentType: paymentType.String, PaymentIntentID: paymentIntentID.String, PaymentRecordID: paymentRecordID.String, ChargeID: chargeID.String, AmountPaid: amountPaid.Int64, ChargeAmount: chargeAmount.Int64, PaidAt: paidAt.Int64})
+		}
+	}
+	return liabilities, rows.Err()
+}
+
 func (s *SQLiteStore) DuplicateRefundBySubscription(ctx context.Context, subscriptionID string) (DuplicateRefundJob, bool, error) {
 	var row DuplicateRefundJob
 	var raw string
 	var canceled, refunded int
-	err := s.reader().QueryRowContext(ctx, `SELECT id,user_id,customer_id,canonical_subscription_id,duplicate_subscription_id,invoice_id,constituents_json,state,manual_reason,subscription_canceled,refund_complete,attempts,revision,last_error,created_at,updated_at FROM billing_duplicate_refunds WHERE duplicate_subscription_id=?`, subscriptionID).
-		Scan(&row.ID, &row.UserID, &row.CustomerID, &row.CanonicalSubscriptionID, &row.DuplicateSubscriptionID, &row.InvoiceID, &raw, &row.State, &row.ManualReason, &canceled, &refunded, &row.Attempts, &row.Revision, &row.LastError, &row.CreatedAt, &row.UpdatedAt)
+	err := s.reader().QueryRowContext(ctx, `SELECT id,user_id,customer_id,canonical_subscription_id,duplicate_subscription_id,invoice_id,constituents_json,state,manual_reason,subscription_canceled,refund_complete,attempts,revision,liability_revision,last_error,created_at,updated_at FROM billing_duplicate_refunds WHERE duplicate_subscription_id=?`, subscriptionID).
+		Scan(&row.ID, &row.UserID, &row.CustomerID, &row.CanonicalSubscriptionID, &row.DuplicateSubscriptionID, &row.InvoiceID, &raw, &row.State, &row.ManualReason, &canceled, &refunded, &row.Attempts, &row.Revision, &row.LiabilityRevision, &row.LastError, &row.CreatedAt, &row.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return DuplicateRefundJob{}, false, nil
 	}
@@ -194,7 +227,7 @@ func ListDuplicateRefundEvidence(ctx context.Context, store *SQLiteStore, select
 	out.JobID, out.DuplicateSubscriptionID, out.CanonicalSubscriptionID, out.InvoiceID = job.ID, job.DuplicateSubscriptionID, job.CanonicalSubscriptionID, job.InvoiceID
 	out.State, out.ManualReason, out.HasError = job.State, job.ManualReason, job.LastError != ""
 	out.SubscriptionCanceled, out.RefundComplete = job.SubscriptionCanceled, job.RefundComplete
-	out.Attempts, out.Revision, out.Liabilities = job.Attempts, job.Revision, job.Liabilities
+	out.Attempts, out.Revision, out.LiabilityRevision, out.Liabilities = job.Attempts, job.Revision, job.LiabilityRevision, job.Liabilities
 	for _, liability := range job.Liabilities {
 		out.Payments = append(out.Payments, liability.Payments...)
 	}
@@ -229,17 +262,43 @@ func prepareDuplicateRefundAction(ctx context.Context, store *SQLiteStore, job D
 	if actor == "" || reason == "" || len(actor) > 256 || len(reason) > 1024 {
 		return duplicateRefundAction{}, errors.New("account: duplicate refund actor and reason are required and bounded")
 	}
-	snapshot, _, err := duplicateRefundLiabilitySnapshot(job.Liabilities)
+	expectedSnapshot, expectedDigest, err := duplicateRefundLiabilitySnapshot(job.Liabilities)
 	if err != nil {
 		return duplicateRefundAction{}, err
 	}
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return duplicateRefundAction{}, err
+	}
+	defer tx.Rollback()
+	// Acquire SQLite's sole writer before reading the authority snapshot. A
+	// concurrent Put must complete before this point or wait until the action row
+	// is committed; it cannot slip between the checked snapshot and INSERT.
+	if _, err := tx.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET liability_revision=liability_revision WHERE id=?`, job.ID); err != nil {
+		return duplicateRefundAction{}, err
+	}
+	var liveLiabilityRevision int64
+	if err := tx.QueryRowContext(ctx, `SELECT liability_revision FROM billing_duplicate_refunds WHERE id=?`, job.ID).Scan(&liveLiabilityRevision); err != nil {
+		return duplicateRefundAction{}, err
+	}
+	live, err := loadDuplicateRefundLiabilities(ctx, tx, job.ID)
+	if err != nil {
+		return duplicateRefundAction{}, err
+	}
+	liveSnapshot, liveDigest, err := duplicateRefundLiabilitySnapshot(live)
+	if err != nil {
+		return duplicateRefundAction{}, err
+	}
+	if liveLiabilityRevision != job.LiabilityRevision || liveDigest != expectedDigest || string(liveSnapshot) != string(expectedSnapshot) {
+		return duplicateRefundAction{}, errors.New("account: duplicate refund evidence changed before action creation; list evidence again")
+	}
 	var previous duplicateRefundAction
-	err = store.reader().QueryRowContext(ctx, `SELECT id,job_id,generation,job_revision,actor,reason,state,snapshot_json,proof_json,last_error,revision FROM billing_duplicate_refund_actions WHERE job_id=? ORDER BY generation DESC LIMIT 1`, job.ID).
-		Scan(&previous.ID, &previous.JobID, &previous.Generation, &previous.JobRevision, &previous.Actor, &previous.Reason, &previous.State, &previous.SnapshotJSON, &previous.ProofJSON, &previous.LastError, &previous.Revision)
+	err = tx.QueryRowContext(ctx, `SELECT id,job_id,generation,liability_revision,actor,reason,state,snapshot_json,proof_json,last_error,revision FROM billing_duplicate_refund_actions WHERE job_id=? ORDER BY generation DESC LIMIT 1`, job.ID).
+		Scan(&previous.ID, &previous.JobID, &previous.Generation, &previous.LiabilityRevision, &previous.Actor, &previous.Reason, &previous.State, &previous.SnapshotJSON, &previous.ProofJSON, &previous.LastError, &previous.Revision)
 	generation := int64(1)
 	if err == nil {
-		snapshotChanged := previous.SnapshotJSON != string(snapshot)
-		liabilityGenerationChanged := snapshotChanged && job.Revision > previous.JobRevision && (previous.State == "succeeded" || previous.State == "failed")
+		snapshotChanged := previous.SnapshotJSON != string(liveSnapshot)
+		liabilityGenerationChanged := snapshotChanged && liveLiabilityRevision > previous.LiabilityRevision && (previous.State == "succeeded" || previous.State == "failed")
 		if !liabilityGenerationChanged && (previous.Actor != actor || previous.Reason != reason) {
 			return duplicateRefundAction{}, errors.New("account: duplicate refund action ownership conflict")
 		}
@@ -257,18 +316,59 @@ func prepareDuplicateRefundAction(ctx context.Context, store *SQLiteStore, job D
 		return duplicateRefundAction{}, err
 	}
 	id := duplicateRefundActionID(job.ID, generation)
-	if _, err := store.db.ExecContext(ctx, `INSERT OR IGNORE INTO billing_duplicate_refund_actions(id,job_id,generation,job_revision,actor,reason,state,snapshot_json,created_at,updated_at) VALUES(?,?,?,?,?,?,'prepared',?,?,?)`, id, job.ID, generation, job.Revision, actor, reason, string(snapshot), now, now); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO billing_duplicate_refund_actions(id,job_id,generation,liability_revision,actor,reason,state,snapshot_json,created_at,updated_at) VALUES(?,?,?,?,?,?,'prepared',?,?,?)`, id, job.ID, generation, liveLiabilityRevision, actor, reason, string(liveSnapshot), now, now); err != nil {
 		return duplicateRefundAction{}, err
 	}
 	var action duplicateRefundAction
-	if err := store.reader().QueryRowContext(ctx, `SELECT id,job_id,generation,job_revision,actor,reason,state,snapshot_json,proof_json,last_error,revision FROM billing_duplicate_refund_actions WHERE job_id=? AND generation=?`, job.ID, generation).
-		Scan(&action.ID, &action.JobID, &action.Generation, &action.JobRevision, &action.Actor, &action.Reason, &action.State, &action.SnapshotJSON, &action.ProofJSON, &action.LastError, &action.Revision); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT id,job_id,generation,liability_revision,actor,reason,state,snapshot_json,proof_json,last_error,revision FROM billing_duplicate_refund_actions WHERE job_id=? AND generation=?`, job.ID, generation).
+		Scan(&action.ID, &action.JobID, &action.Generation, &action.LiabilityRevision, &action.Actor, &action.Reason, &action.State, &action.SnapshotJSON, &action.ProofJSON, &action.LastError, &action.Revision); err != nil {
 		return duplicateRefundAction{}, err
 	}
-	if action.ID != id || action.Actor != actor || action.Reason != reason || action.SnapshotJSON != string(snapshot) {
+	if action.ID != id || action.Actor != actor || action.Reason != reason || action.SnapshotJSON != string(liveSnapshot) || action.LiabilityRevision != liveLiabilityRevision {
 		return duplicateRefundAction{}, errors.New("account: duplicate refund action ownership conflict")
 	}
+	if err := tx.Commit(); err != nil {
+		return duplicateRefundAction{}, err
+	}
 	return action, nil
+}
+
+func beginDuplicateRefundProviderMutation(ctx context.Context, store *SQLiteStore, action duplicateRefundAction) (*sql.Tx, error) {
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	fail := func(err error) (*sql.Tx, error) {
+		tx.Rollback()
+		return nil, err
+	}
+	// Hold SQLite's writer lock across the provider mutation. Liability discovery
+	// cannot cross this approval boundary; a provider ambiguity is still replayed
+	// with the action's stable idempotency key and canonical readback.
+	if _, err := tx.ExecContext(ctx, `UPDATE billing_duplicate_refund_actions SET revision=revision WHERE id=?`, action.ID); err != nil {
+		return fail(err)
+	}
+	var jobLiabilityRevision, actionLiabilityRevision, actionRevision int64
+	var state, snapshot string
+	if err := tx.QueryRowContext(ctx, `SELECT state,revision,liability_revision,snapshot_json FROM billing_duplicate_refund_actions WHERE id=?`, action.ID).
+		Scan(&state, &actionRevision, &actionLiabilityRevision, &snapshot); err != nil {
+		return fail(err)
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT liability_revision FROM billing_duplicate_refunds WHERE id=?`, action.JobID).Scan(&jobLiabilityRevision); err != nil {
+		return fail(err)
+	}
+	liabilities, err := loadDuplicateRefundLiabilities(ctx, tx, action.JobID)
+	if err != nil {
+		return fail(err)
+	}
+	liveSnapshot, _, err := duplicateRefundLiabilitySnapshot(liabilities)
+	if err != nil {
+		return fail(err)
+	}
+	if state != "prepared" || actionRevision != action.Revision || actionLiabilityRevision != action.LiabilityRevision || jobLiabilityRevision != action.LiabilityRevision || snapshot != action.SnapshotJSON || string(liveSnapshot) != action.SnapshotJSON {
+		return fail(errors.New("account: duplicate refund action liability snapshot is stale"))
+	}
+	return tx, nil
 }
 
 func markDuplicateRefundActionError(ctx context.Context, store *SQLiteStore, action duplicateRefundAction, message string, blocked bool, now int64) error {
@@ -426,8 +526,8 @@ func recordDuplicateRefundFailuresTx(ctx context.Context, tx *sql.Tx, refundID s
 			continue
 		}
 		var action duplicateRefundAction
-		if err := tx.QueryRowContext(ctx, `SELECT id,job_id,generation,job_revision,actor,reason,state,snapshot_json,proof_json,last_error,revision FROM billing_duplicate_refund_actions WHERE job_id=? ORDER BY generation DESC LIMIT 1`, jobID).
-			Scan(&action.ID, &action.JobID, &action.Generation, &action.JobRevision, &action.Actor, &action.Reason, &action.State, &action.SnapshotJSON, &action.ProofJSON, &action.LastError, &action.Revision); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT id,job_id,generation,liability_revision,actor,reason,state,snapshot_json,proof_json,last_error,revision FROM billing_duplicate_refund_actions WHERE job_id=? ORDER BY generation DESC LIMIT 1`, jobID).
+			Scan(&action.ID, &action.JobID, &action.Generation, &action.LiabilityRevision, &action.Actor, &action.Reason, &action.State, &action.SnapshotJSON, &action.ProofJSON, &action.LastError, &action.Revision); err != nil {
 			return false, err
 		}
 		res, err = tx.ExecContext(ctx, `UPDATE billing_duplicate_refund_actions SET state='failed',last_error=?,revision=revision+1,updated_at=? WHERE id=? AND state IN ('prepared','blocked','succeeded')`, errDuplicateRefundProviderFailed.Error(), failedAt, action.ID)
@@ -442,11 +542,11 @@ func recordDuplicateRefundFailuresTx(ctx context.Context, tx *sql.Tx, refundID s
 		if _, err := tx.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET state='manual',manual_reason='provider_refund_failed',refund_complete=0,last_error='provider refund failed',revision=revision+1,next_audit_at=0,updated_at=? WHERE id=?`, failedAt, jobID); err != nil {
 			return false, err
 		}
-		var jobRevision int64
-		if err := tx.QueryRowContext(ctx, `SELECT revision FROM billing_duplicate_refunds WHERE id=?`, jobID).Scan(&jobRevision); err != nil {
+		var liabilityRevision int64
+		if err := tx.QueryRowContext(ctx, `SELECT liability_revision FROM billing_duplicate_refunds WHERE id=?`, jobID).Scan(&liabilityRevision); err != nil {
 			return false, err
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO billing_duplicate_refund_actions(id,job_id,generation,job_revision,actor,reason,state,snapshot_json,created_at,updated_at) VALUES(?,?,?,?,?,?,'prepared',?,?,?)`, nextID, jobID, nextGeneration, jobRevision, action.Actor, action.Reason, action.SnapshotJSON, failedAt, failedAt); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO billing_duplicate_refund_actions(id,job_id,generation,liability_revision,actor,reason,state,snapshot_json,created_at,updated_at) VALUES(?,?,?,?,?,?,'prepared',?,?,?)`, nextID, jobID, nextGeneration, liabilityRevision, action.Actor, action.Reason, action.SnapshotJSON, failedAt, failedAt); err != nil {
 			return false, err
 		}
 		rotated = true
@@ -559,9 +659,17 @@ func executeDuplicateRefundAction(ctx context.Context, store *SQLiteStore, clien
 			if remaining == 0 {
 				continue
 			}
+			guard, err := beginDuplicateRefundProviderMutation(ctx, store, action)
+			if err != nil {
+				return "", err
+			}
 			form := url.Values{"payment_intent": {current.PaymentIntentID}, "amount": {fmt.Sprint(remaining)}, "metadata[relayium_duplicate_refund_action_id]": {action.ID}, "metadata[relayium_invoice_payment_id]": {current.InvoicePaymentID}}
 			body, err := client.requestKeyed(ctx, http.MethodPost, "/v1/refunds", form, "duplicate-refund:"+action.ID+":"+current.InvoicePaymentID)
 			if err != nil {
+				guard.Rollback()
+				return "", err
+			}
+			if err := guard.Commit(); err != nil {
 				return "", err
 			}
 			var created struct {
@@ -655,8 +763,8 @@ func finishDuplicateRefundAction(ctx context.Context, store *SQLiteStore, job Du
 	}
 	defer tx.Rollback()
 	var jobState, actionState, savedProof string
-	var jobRevision, actionRevision int64
-	if err := tx.QueryRowContext(ctx, `SELECT state,revision FROM billing_duplicate_refunds WHERE id=?`, job.ID).Scan(&jobState, &jobRevision); err != nil {
+	var jobLiabilityRevision, actionRevision int64
+	if err := tx.QueryRowContext(ctx, `SELECT state,liability_revision FROM billing_duplicate_refunds WHERE id=?`, job.ID).Scan(&jobState, &jobLiabilityRevision); err != nil {
 		return err
 	}
 	if err := tx.QueryRowContext(ctx, `SELECT state,revision,proof_json FROM billing_duplicate_refund_actions WHERE id=?`, action.ID).Scan(&actionState, &actionRevision, &savedProof); err != nil {
@@ -688,7 +796,7 @@ func finishDuplicateRefundAction(ctx context.Context, store *SQLiteStore, job Du
 	if jobState != "manual" || actionState != "prepared" || !job.SubscriptionCanceled {
 		return errors.New("account: duplicate refund action is not finalizable")
 	}
-	if jobRevision != action.JobRevision {
+	if jobLiabilityRevision != action.LiabilityRevision {
 		return errors.New("account: duplicate refund action liability snapshot is stale")
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT refund_id,invoice_payment_id,payment_intent_id,status,amount FROM billing_duplicate_refund_constituents WHERE action_id=? AND generation=? ORDER BY refund_id,invoice_payment_id`, action.ID, action.Generation)
@@ -722,7 +830,7 @@ func finishDuplicateRefundAction(ctx context.Context, store *SQLiteStore, job Du
 	if n, _ := res.RowsAffected(); n != 1 {
 		return errors.New("account: stale duplicate refund action")
 	}
-	res, err = tx.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET state='terminal',manual_reason='',refund_complete=1,last_error='',revision=revision+1,next_audit_at=?,updated_at=? WHERE id=? AND state='manual' AND revision=?`, now+6*60*60, now, job.ID, action.JobRevision)
+	res, err = tx.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET state='terminal',manual_reason='',refund_complete=1,last_error='',revision=revision+1,next_audit_at=?,updated_at=? WHERE id=? AND state='manual' AND liability_revision=?`, now+6*60*60, now, job.ID, action.LiabilityRevision)
 	if err != nil {
 		return err
 	}
@@ -732,7 +840,7 @@ func finishDuplicateRefundAction(ctx context.Context, store *SQLiteStore, job Du
 	return tx.Commit()
 }
 
-func ResolveDuplicateRefund(ctx context.Context, store *SQLiteStore, biller Biller, selector, actor, reason string, expectedRevision int64, expectedDigest string) (DuplicateRefundOperatorResult, error) {
+func ResolveDuplicateRefund(ctx context.Context, store *SQLiteStore, biller Biller, selector, actor, reason string, expectedLiabilityRevision int64, expectedDigest string) (DuplicateRefundOperatorResult, error) {
 	client, ok := biller.(*stripeClient)
 	if !ok || store == nil {
 		return DuplicateRefundOperatorResult{}, errors.New("account: duplicate refund operator is unavailable")
@@ -751,10 +859,10 @@ func ResolveDuplicateRefund(ctx context.Context, store *SQLiteStore, biller Bill
 	if err != nil {
 		return DuplicateRefundOperatorResult{}, err
 	}
-	if expectedRevision < 0 || strings.TrimSpace(expectedDigest) == "" {
-		return DuplicateRefundOperatorResult{}, errors.New("account: duplicate refund expected revision and liability digest are required; list evidence again")
+	if expectedLiabilityRevision < 0 || strings.TrimSpace(expectedDigest) == "" {
+		return DuplicateRefundOperatorResult{}, errors.New("account: duplicate refund expected liability revision and digest are required; list evidence again")
 	}
-	if job.Revision != expectedRevision || !strings.EqualFold(currentDigest, strings.TrimSpace(expectedDigest)) {
+	if job.LiabilityRevision != expectedLiabilityRevision || !strings.EqualFold(currentDigest, strings.TrimSpace(expectedDigest)) {
 		return DuplicateRefundOperatorResult{}, errors.New("account: duplicate refund evidence is stale; list evidence again")
 	}
 	action, err := prepareDuplicateRefundAction(ctx, store, job, actor, reason, time.Now().Unix())
@@ -855,7 +963,7 @@ func (s *SQLiteStore) PutDuplicateRefund(ctx context.Context, plan DuplicateRefu
 		if manual == "" {
 			manual = "new_invoice_liability"
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET state=CASE WHEN subscription_canceled=1 THEN 'manual' ELSE 'pending' END,manual_reason=CASE WHEN subscription_canceled=1 THEN ? ELSE manual_reason END,refund_complete=0,revision=revision+1,next_audit_at=0,updated_at=? WHERE id=?`, manual, now, id); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET state=CASE WHEN subscription_canceled=1 THEN 'manual' ELSE 'pending' END,manual_reason=CASE WHEN subscription_canceled=1 THEN ? ELSE manual_reason END,refund_complete=0,revision=revision+1,liability_revision=liability_revision+1,next_audit_at=0,updated_at=? WHERE id=?`, manual, now, id); err != nil {
 			return DuplicateRefundJob{}, err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE billing_duplicate_refund_actions SET state='failed',last_error='liability set expanded',revision=revision+1,updated_at=? WHERE job_id=? AND state='prepared'`, now, id); err != nil {
@@ -876,8 +984,8 @@ func (s *SQLiteStore) PutDuplicateRefund(ctx context.Context, plan DuplicateRefu
 	var got DuplicateRefundJob
 	var gotRaw string
 	var canceled, refunded int
-	if err := tx.QueryRowContext(ctx, `SELECT id,user_id,customer_id,canonical_subscription_id,duplicate_subscription_id,invoice_id,constituents_json,state,manual_reason,subscription_canceled,refund_complete,attempts,revision,last_error,created_at,updated_at FROM billing_duplicate_refunds WHERE duplicate_subscription_id=?`, plan.DuplicateSubscriptionID).
-		Scan(&got.ID, &got.UserID, &got.CustomerID, &got.CanonicalSubscriptionID, &got.DuplicateSubscriptionID, &got.InvoiceID, &gotRaw, &got.State, &got.ManualReason, &canceled, &refunded, &got.Attempts, &got.Revision, &got.LastError, &got.CreatedAt, &got.UpdatedAt); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT id,user_id,customer_id,canonical_subscription_id,duplicate_subscription_id,invoice_id,constituents_json,state,manual_reason,subscription_canceled,refund_complete,attempts,revision,liability_revision,last_error,created_at,updated_at FROM billing_duplicate_refunds WHERE duplicate_subscription_id=?`, plan.DuplicateSubscriptionID).
+		Scan(&got.ID, &got.UserID, &got.CustomerID, &got.CanonicalSubscriptionID, &got.DuplicateSubscriptionID, &got.InvoiceID, &gotRaw, &got.State, &got.ManualReason, &canceled, &refunded, &got.Attempts, &got.Revision, &got.LiabilityRevision, &got.LastError, &got.CreatedAt, &got.UpdatedAt); err != nil {
 		return DuplicateRefundJob{}, err
 	}
 	if got.UserID != plan.UserID || got.CustomerID != plan.CustomerID || got.CanonicalSubscriptionID != plan.CanonicalSubscriptionID {
@@ -950,7 +1058,7 @@ func (s *SQLiteStore) SaveDuplicateRefund(ctx context.Context, job DuplicateRefu
 	if providerErr != nil {
 		lastError = providerErr.Error()
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET state=?,manual_reason=?,subscription_canceled=?,refund_complete=?,attempts=attempts+1,revision=revision+1,last_error=?,updated_at=? WHERE id=? AND state<>'terminal' AND revision=?`, state, manual, b2i(result.SubscriptionCanceled), b2i(result.RefundComplete), lastError, now, job.ID, job.Revision)
+	res, err := s.db.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET state=?,manual_reason=?,subscription_canceled=?,refund_complete=?,attempts=attempts+1,revision=revision+1,last_error=?,updated_at=? WHERE id=? AND state<>'terminal' AND liability_revision=?`, state, manual, b2i(result.SubscriptionCanceled), b2i(result.RefundComplete), lastError, now, job.ID, job.LiabilityRevision)
 	if err != nil {
 		return err
 	}
@@ -959,15 +1067,15 @@ func (s *SQLiteStore) SaveDuplicateRefund(ctx context.Context, job DuplicateRefu
 			return err
 		}
 		var currentState string
-		var currentRevision int64
-		if err := s.reader().QueryRowContext(ctx, `SELECT state,revision FROM billing_duplicate_refunds WHERE id=?`, job.ID).Scan(&currentState, &currentRevision); err == nil && currentState == "terminal" && currentRevision == job.Revision {
+		var currentLiabilityRevision int64
+		if err := s.reader().QueryRowContext(ctx, `SELECT state,liability_revision FROM billing_duplicate_refunds WHERE id=?`, job.ID).Scan(&currentState, &currentLiabilityRevision); err == nil && currentState == "terminal" && currentLiabilityRevision == job.LiabilityRevision {
 			return nil
 		}
 		if result.SubscriptionCanceled {
 			// Cancellation is monotonic and remains useful even when a concurrent
 			// payment expanded the liability set. Merge only that safe fact; never
 			// copy the stale snapshot's no-refund conclusion over the new liability.
-			if _, mergeErr := s.db.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET subscription_canceled=1,state='manual',manual_reason='refund_operator_required',refund_complete=0,revision=revision+1,updated_at=? WHERE id=? AND revision<>? AND EXISTS(SELECT 1 FROM billing_duplicate_refund_invoices WHERE job_id=?)`, now, job.ID, job.Revision, job.ID); mergeErr != nil {
+			if _, mergeErr := s.db.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET subscription_canceled=1,state='manual',manual_reason='refund_operator_required',refund_complete=0,revision=revision+1,updated_at=? WHERE id=? AND liability_revision<>? AND EXISTS(SELECT 1 FROM billing_duplicate_refund_invoices WHERE job_id=?)`, now, job.ID, job.LiabilityRevision, job.ID); mergeErr != nil {
 				return mergeErr
 			}
 		}

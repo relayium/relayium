@@ -180,7 +180,7 @@ func main() {
 	billingDuplicateRefund := flag.String("billing-duplicate-refund", "", "operator-only: resolve one durable manual duplicate refund job or subscription, then exit")
 	billingDuplicateActor := flag.String("billing-duplicate-actor", "", "operator-only: accountable actor for a duplicate refund")
 	billingDuplicateReason := flag.String("billing-duplicate-reason", "", "operator-only: audited reason for a duplicate refund")
-	billingDuplicateExpectedRevision := flag.Int64("billing-duplicate-expected-revision", -1, "operator-only: exact revision printed by -billing-duplicate-list")
+	billingDuplicateExpectedLiabilityRevision := flag.Int64("billing-duplicate-expected-liability-revision", -1, "operator-only: exact liability revision printed by -billing-duplicate-list")
 	billingDuplicateExpectedDigest := flag.String("billing-duplicate-expected-digest", "", "operator-only: exact liability digest printed by -billing-duplicate-list")
 	// Deprecated and ignored: relay bandwidth is now bounded by each account's
 	// per-plan monthly traffic quota (billing plans phase-1), not this global
@@ -452,7 +452,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("billing duplicate list: %v", err)
 		}
-		log.Printf("billing duplicate evidence: job=%s duplicate_subscription=%s canonical_subscription=%s invoice=%s state=%s canceled=%t resolution=%s attempts=%d revision=%d liability_digest=%s manual_reason=%s has_error=%t payments=%d action=%s action_state=%s action_generation=%d", evidence.JobID, evidence.DuplicateSubscriptionID, evidence.CanonicalSubscriptionID, evidence.InvoiceID, evidence.State, evidence.SubscriptionCanceled, evidence.Resolution, evidence.Attempts, evidence.Revision, evidence.LiabilityDigest, evidence.ManualReason, evidence.HasError, len(evidence.Payments), evidence.ActionID, evidence.ActionState, evidence.ActionGeneration)
+		log.Printf("billing duplicate evidence: job=%s duplicate_subscription=%s canonical_subscription=%s invoice=%s state=%s canceled=%t resolution=%s attempts=%d revision=%d liability_revision=%d liability_digest=%s manual_reason=%s has_error=%t payments=%d action=%s action_state=%s action_generation=%d", evidence.JobID, evidence.DuplicateSubscriptionID, evidence.CanonicalSubscriptionID, evidence.InvoiceID, evidence.State, evidence.SubscriptionCanceled, evidence.Resolution, evidence.Attempts, evidence.Revision, evidence.LiabilityRevision, evidence.LiabilityDigest, evidence.ManualReason, evidence.HasError, len(evidence.Payments), evidence.ActionID, evidence.ActionState, evidence.ActionGeneration)
 		for _, liability := range evidence.Liabilities {
 			log.Printf("billing duplicate invoice: invoice=%s status=%s amount_paid=%d manual_reason=%s payments=%d", liability.InvoiceID, liability.Status, liability.AmountPaid, liability.ManualReason, len(liability.Payments))
 			for _, payment := range liability.Payments {
@@ -465,7 +465,7 @@ func main() {
 		if dbErr != nil || store == nil || *stripeSecretKey == "" {
 			log.Fatal("billing duplicate refund: database or Stripe unavailable")
 		}
-		result, err := account.ResolveDuplicateRefund(context.Background(), store, account.NewStripeClient(*stripeSecretKey, *stripeWebhookSecret, *stripePortalConfig), *billingDuplicateRefund, *billingDuplicateActor, *billingDuplicateReason, *billingDuplicateExpectedRevision, *billingDuplicateExpectedDigest)
+		result, err := account.ResolveDuplicateRefund(context.Background(), store, account.NewStripeClient(*stripeSecretKey, *stripeWebhookSecret, *stripePortalConfig), *billingDuplicateRefund, *billingDuplicateActor, *billingDuplicateReason, *billingDuplicateExpectedLiabilityRevision, *billingDuplicateExpectedDigest)
 		if err != nil {
 			log.Fatalf("billing duplicate refund: %v", err)
 		}
