@@ -292,6 +292,26 @@ func TestStripeDeletionExpiresAttributedCheckoutBeforeCustomerExists(t *testing.
 	}
 }
 
+func TestStripeSubscriptionObservationWithoutDeletionIsANoOp(t *testing.T) {
+	store := newTestStore(t)
+	u, err := store.UpsertUserByEmail(context.Background(), "ordinary-webhook@example.test", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AppendStripeDeletionHazard(context.Background(), u.ID, BillingDeletionResource{
+		Kind: "subscription", ID: "sub_ordinary", CustomerID: "cus_ordinary", Status: "active",
+	}); err != nil {
+		t.Fatalf("ordinary subscription observation: %v", err)
+	}
+	var outboxes int
+	if err := store.db.QueryRow(`SELECT COUNT(*) FROM billing_cancellation_outbox WHERE billing_subject_id=?`, u.ID).Scan(&outboxes); err != nil {
+		t.Fatal(err)
+	}
+	if outboxes != 0 {
+		t.Fatalf("ordinary subscription observation created %d deletion outboxes", outboxes)
+	}
+}
+
 func TestStripeDeletionCompleteCheckoutBindsCustomerAndLinkedHazards(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

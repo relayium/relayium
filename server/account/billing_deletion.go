@@ -899,7 +899,13 @@ func appendStripeDeletionHazardsTx(ctx context.Context, tx *sql.Tx, userID strin
 		hasAccountDeletion = hasAccountDeletion || v.mode == billingCancellationAccountDeletion
 	}
 	if !exactEligible && !hasAccountDeletion {
-		return errors.New("account: non-payment late event cannot create exact compensation")
+		// Subscription and Checkout observations are meaningful only while a
+		// customer-wide account deletion is pending. They are not exact refund
+		// targets and therefore must never create an exact-compensation task after
+		// a deletion has completed. In the overwhelmingly common case where no
+		// deletion exists at all, this is a deliberate no-op rather than a webhook
+		// failure: the normal subscription lifecycle still has to apply below.
+		return nil
 	}
 	for _, v := range all {
 		if v.mode == billingCancellationExactCompensation {
