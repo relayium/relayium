@@ -506,6 +506,36 @@ final class DeviceInboxUITests: XCTestCase {
         window.descendants(matching: .any)[identifier].firstMatch
     }
 
+    /// The Cancel of a confirmation this page presented, asked of the dialog
+    /// rather than of the application.
+    ///
+    /// **`app.buttons["Cancel"]` is not unique in this process.** macOS mirrors
+    /// a dialog's buttons onto the Touch Bar, so the global query has two
+    /// equally valid answers and picked the Touch Bar's copy — which XCTest
+    /// then refuses to click. The product was never wrong when that happened:
+    /// the right sheet was on screen, carrying the right sentence, and the test
+    /// failed on its own lookup. `AppShellUITests.dismissConfirmation` scopes
+    /// the same dismissal the same way, for the same reason.
+    ///
+    /// Every candidate below is a typed container a Touch Bar element cannot be
+    /// inside — the Touch Bar hangs off the application, never off a window, a
+    /// sheet or a dialog — so this narrows WHICH Cancel is meant without
+    /// waiting longer or accepting a less specific one. The sheet comes first
+    /// because that is what SwiftUI's `.confirmationDialog` builds on macOS;
+    /// `dialogs` covers a detached alert panel, and the window itself is the
+    /// last resort. These are plain `exists` reads rather than waits: the
+    /// caller has already proven the confirmation is up by finding its confirm
+    /// button, so anything still missing here is absent, not late.
+    private func confirmationCancel(in window: XCUIElement) -> XCUIElement {
+        let scoped = [window.sheets.buttons["Cancel"],
+                      app.sheets.buttons["Cancel"],
+                      app.dialogs.buttons["Cancel"]]
+        for candidate in scoped where candidate.firstMatch.exists {
+            return candidate.firstMatch
+        }
+        return window.buttons["Cancel"].firstMatch
+    }
+
     /// The EN entry action is deliberately the short verb used by v3 device
     /// rows and the menu. The destination assertion after clicking is what
     /// proves this otherwise-generic title is the Device Inbox route.
@@ -770,20 +800,43 @@ final class DeviceInboxUITests: XCTestCase {
                        "the deletion dialog carries a second delivery-action control")
 
         // Refusing it changes nothing.
-        let cancel = app.buttons["Cancel"].firstMatch
+        let cancel = confirmationCancel(in: window)
         XCTAssertTrue(cancel.waitForExistence(timeout: 10))
         cancel.click()
         XCTAssertTrue(revealed("inbox-entry-menu", in: window, timeout: 20).exists,
                       "cancelling the confirmation removed the item anyway")
 
-        // Confirming it removes the row and leaves the page saying so.
+        // Confirming it removes the row — and the conversation goes with it.
+        //
+        // **Not `inbox-timeline-empty`, which this fixture can never reach.**
+        // Its peer is a REMOVED device, so the local history WAS its only claim
+        // to a page. `InboxConversationStore.conversations()` groups the index
+        // by peer, so a peer whose last entry is gone forms no conversation at
+        // all, and `DeviceInboxSurface.openPeer` resolves to nil for a peer with
+        // neither a history nor a live device row — the surface returns to the
+        // list on that same redraw rather than drawing an empty timeline. The
+        // empty state is reachable only for a peer that still HAS a device row,
+        // which is a different fixture and a different property.
+        //
+        // What is asserted instead is strictly more than the empty state
+        // proved: the list is back, the row is gone, the page it sat on is
+        // gone, and the conversation it was the last item of is no longer
+        // offered — deletion, not a redraw that merely hid it.
         revealed("inbox-entry-menu", in: window, timeout: 20).click()
         app.descendants(matching: .any)["inbox-entry-delete"].firstMatch.click()
         let second = app.descendants(matching: .any)["inbox-entry-delete-confirm"].firstMatch
         XCTAssertTrue(second.waitForExistence(timeout: 10))
         second.click()
-        XCTAssertTrue(revealed("inbox-timeline-empty", in: window, timeout: 20).exists,
-                      "the deleted row is still on screen")
+        // Wait on a landmark the LIST has and the conversation page does not, so
+        // the absences below are read after the transition rather than during it.
+        XCTAssertTrue(revealed("inbox-conversations", in: window, timeout: 20).exists,
+                      "deleting the last item did not return to the conversation list")
+        XCTAssertFalse(element("inbox-entry-menu", in: window).exists,
+                       "the deleted row is still on screen")
+        XCTAssertFalse(element("inbox-timeline", in: window).exists,
+                       "the emptied conversation still has a page")
+        XCTAssertFalse(element("inbox-conversation-open", in: window).exists,
+                       "the conversation whose last item was deleted is still listed")
     }
 
     /// **The whole Help section is readable with every preceding section
