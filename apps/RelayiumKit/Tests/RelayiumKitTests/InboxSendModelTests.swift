@@ -1274,7 +1274,18 @@ final class InboxSendModelTests: XCTestCase {
 
         let source = try selection()
         model.send(files: source, sourceDraftId: nil, token: "bearer")
-        await waitUntil("the stopped attempt") { model.items.first?.isRecoverable == true }
+        // The attempt must have STOPPED before the plan is read, because the
+        // snapshot below is what every "unchanged" assertion is compared
+        // against. `isRecoverable` alone is true as soon as a durable plan
+        // exists — while the coordinator is still preparing, uploading and
+        // creating — so snapshotting on it captures a plan the running attempt
+        // is still legitimately writing to, and the sealed content key it
+        // persists before the first create lands after the snapshot.
+        await waitUntil("the stopped attempt") {
+            guard let item = model.items.first, item.isRecoverable else { return false }
+            if case .stopped(.unknownOutcome) = item.activity { return true }
+            return false
+        }
 
         let plan = try XCTUnwrap(store.deviceSendPlans(for: "acct-1").first)
         let key = plan.createIdempotencyKey
