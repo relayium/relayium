@@ -4384,6 +4384,83 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
     }
 
+    /// **Guideline 2.4.5(iii), as a source guard.**
+    ///
+    /// App Review rejected this app for adding itself to auto-launch "without
+    /// user consent", having pressed what it read as a *Registration* button in
+    /// the General pane. Both ways of turning residency on registered on a
+    /// single press. They now raise a request and this view asks first.
+    ///
+    /// The boundary is asserted in the two places it can be broken: the
+    /// preference, where a second `enable()` call site would reintroduce a path
+    /// that does not pass the confirmation, and this view, where a confirmation
+    /// that stops being rendered leaves the request unanswerable — or, worse, a
+    /// button wired straight back to the service.
+    func testTurningResidencyOnIsGatedBehindAnExplicitConfirmation() throws {
+        let control = try source(named: "Components/LoginItemSetting.swift")
+
+        // The confirmation exists, is titled, and carries the body that names
+        // what confirming actually does. A title alone would repeat the
+        // rejection: the reviewer's complaint was that nothing said the app
+        // would be added to Login Items and opened at every login.
+        XCTAssertTrue(control.contains(".confirmationDialog("),
+                      "turning residency on is not confirmed at all")
+        XCTAssertTrue(control.contains("L10n.t(.settingsLoginConsentTitle)"))
+        XCTAssertTrue(control.contains("Text(L10n.t(.settingsLoginConsentBody))"),
+                      "the confirmation asks without saying what it does")
+        XCTAssertTrue(control.contains("titleVisibility: .visible"),
+                      "a confirmation whose title is hidden explains less, not more")
+
+        // Presented from the preference's request rather than from a boolean the
+        // view owns — a view-local flag can be set by something other than a
+        // press, and cannot survive the row that raised it.
+        XCTAssertTrue(control.contains("get: { loginItem.consentRequest != nil }"))
+        XCTAssertFalse(control.contains("@State private var confirmingLogin"),
+                       "a view-local flag would drift from the preference's request")
+
+        // Exactly one confirm action, and it is the only thing in this view that
+        // may reach the registration.
+        XCTAssertEqual(occurrences(of: "loginItem.confirmConsent()", in: control), 1,
+                       "the confirmation has no single confirm action")
+        XCTAssertTrue(control.contains(
+            "Button(L10n.t(.settingsLoginConsentConfirm)) { loginItem.confirmConsent() }"))
+
+        // Every way out that is not that button cancels, including dismissal
+        // through the binding. Cancel keeps the platform's role so Escape and
+        // the default button behave the way macOS users expect.
+        XCTAssertTrue(control.contains("set: { if !$0 { loginItem.cancelConsent() } }"),
+                      "dismissing the confirmation does not cancel the request")
+        XCTAssertTrue(control.contains(
+            "Button(L10n.t(.commonCancel), role: .cancel) { loginItem.cancelConsent() }"))
+
+        // Both identifiers, so a UI test can press either side of the boundary.
+        for identifier in ["login-item-consent-confirm", "login-item-consent-cancel"] {
+            XCTAssertTrue(control.contains(".accessibilityIdentifier(\"\(identifier)\")"),
+                          "\(identifier) is unreachable from a UI test")
+        }
+
+        // **The load-bearing assertion.** One `enable()` call site in the whole
+        // preference, and it is inside `confirmConsent()`. A second one is how
+        // this regresses: it is exactly what `set(_:)` and `attemptRegistration()`
+        // each used to be.
+        let preference = try appKitSource(named: "LoginItemPreference.swift")
+        XCTAssertEqual(occurrences(of: "service.enable()", in: preference), 1,
+                       "a second registration path can now skip the confirmation")
+        let confirm = try XCTUnwrap(
+            preference.components(separatedBy: "public func confirmConsent() {")
+                .dropFirst().first?.components(separatedBy: "public func cancelConsent()").first)
+        XCTAssertTrue(confirm.contains("try service.enable()"),
+                      "the one registration is not inside the confirmed path")
+
+        // And neither press registers by itself any more.
+        for press in ["public func set(_ wanted: Bool) {", "public func attemptRegistration() {"] {
+            let body = try XCTUnwrap(preference.components(separatedBy: press)
+                .dropFirst().first?.components(separatedBy: "\n    /// ").first)
+            XCTAssertFalse(body.contains("service.enable()"),
+                           "\(press) registers on a single press again")
+        }
+    }
+
     /// **One residency control, rendered by both surfaces that offer it.**
     ///
     /// The Device Inbox destination's copy was a `Toggle` with

@@ -39,6 +39,25 @@ import SwiftUI
 /// NOT do is unregister to tidy up: the registration may be live and merely
 /// unindexed, and destroying a working setup to make a status line consistent is
 /// the wrong trade.
+///
+/// ## Turning it on asks first; turning it off does not
+///
+/// **App Review rejected this app under Guideline 2.4.5(iii)** — it "added
+/// itself to auto-launch at start up" when the reviewer pressed what they read
+/// as a *Registration* button in the General pane. Both ways in registered on a
+/// single press: moving the switch, and the `unconfirmed` remedy below, whose
+/// label said *Try registration* and named neither Login Items nor logging in.
+///
+/// So both now raise a `consentRequest` and this view asks, in a system
+/// confirmation, in words — that confirming adds Relayium to Login Items, that
+/// macOS will then open it every time the user logs in, and that it can be
+/// turned off again here or in System Settings. Cancelling, Escape and
+/// dismissal all leave it unregistered, because `LoginItemPreference` registers
+/// only from `confirmConsent()`.
+///
+/// The off direction keeps its single press. A confirmation there would make
+/// residency harder to leave than to take, which is the wrong asymmetry for the
+/// setting this is.
 struct LoginItemSetting: View {
     @EnvironmentObject private var loginItem: LoginItemPreference
 
@@ -62,6 +81,47 @@ struct LoginItemSetting: View {
                 .accessibilityIdentifier("login-item-status")
         }
         caption(L10n.t(.settingsOpenAtLoginBody))
+            // **Anchored to this one always-rendered row on purpose.**
+            //
+            // Not to a `Group` around the whole control: SwiftUI applies a
+            // modifier written on a `Group` to each of its children, so that
+            // spelling builds one confirmation per row and the user dismisses
+            // the same question three times. And not to the toggle or to a
+            // remedy, because both come and go with the state — the request can
+            // outlive the row that raised it, and a presenter that disappeared
+            // takes the question with it while `consentRequest` stays set.
+            //
+            // The caption is the row every state renders, so it is the one that
+            // can always present this. A dialog is a window-level presentation
+            // regardless of what it hangs off, so nothing about the layout
+            // depends on the choice.
+            .confirmationDialog(
+                L10n.t(.settingsLoginConsentTitle),
+                isPresented: Binding(
+                    get: { loginItem.consentRequest != nil },
+                    // Every way out that is not the confirm button — Cancel,
+                    // Escape, clicking away — lands here, and all of them leave
+                    // the app unregistered.
+                    //
+                    // This does NOT swallow the confirm: SwiftUI runs a
+                    // dialog's button action before it sets `isPresented` back
+                    // to false, so `confirmConsent()` has already taken the
+                    // request by the time this fires and finds nothing to put
+                    // down. The app's three other confirmations depend on that
+                    // same order more sharply than this one does —
+                    // `AccountView`'s delete reads `fileToDelete` INSIDE its
+                    // action, and would delete nothing if dismissal ran first.
+                    set: { if !$0 { loginItem.cancelConsent() } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button(L10n.t(.settingsLoginConsentConfirm)) { loginItem.confirmConsent() }
+                    .accessibilityIdentifier("login-item-consent-confirm")
+                Button(L10n.t(.commonCancel), role: .cancel) { loginItem.cancelConsent() }
+                    .accessibilityIdentifier("login-item-consent-cancel")
+            } message: {
+                Text(L10n.t(.settingsLoginConsentBody))
+            }
         remedies
     }
 

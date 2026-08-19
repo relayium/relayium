@@ -60,15 +60,26 @@ final class LoginItemPreferenceTests: XCTestCase {
             preference.refresh()
             XCTAssertEqual(service.enables, 0, "\(state) registered without being asked")
             XCTAssertEqual(service.disables, 0, "\(state) unregistered without being asked")
+            XCTAssertNil(preference.consentRequest,
+                         "\(state) put a confirmation on screen nobody asked for")
         }
     }
 
-    func testTurningItOnRegisters() {
+    /// **Moving the switch asks. Confirming registers.** The rejection this
+    /// gate exists for is that the first of these two used to be the whole of it.
+    func testTurningItOnAsksFirstAndOnlyRegistersOnConfirmation() {
         let service = FakeService(state: .off)
         let preference = LoginItemPreference(service: service)
+
         preference.set(true)
+        XCTAssertEqual(service.enables, 0, "the switch registered on its own")
+        XCTAssertEqual(preference.state, .off, "the switch claimed a residency it lacks")
+        XCTAssertEqual(preference.consentRequest, .turnOn)
+
+        preference.confirmConsent()
         XCTAssertEqual(service.enables, 1)
         XCTAssertEqual(preference.state, .on)
+        XCTAssertNil(preference.consentRequest)
         XCTAssertFalse(preference.lastChangeRefused)
     }
 
@@ -87,6 +98,7 @@ final class LoginItemPreferenceTests: XCTestCase {
         service.stateAfterEnable = .needsApproval
         let preference = LoginItemPreference(service: service)
         preference.set(true)
+        preference.confirmConsent()
         XCTAssertEqual(preference.state, .needsApproval)
         XCTAssertFalse(preference.lastChangeRefused,
                        "needing approval is not a failure; nothing was refused")
@@ -97,6 +109,7 @@ final class LoginItemPreferenceTests: XCTestCase {
         service.enableError = Refused()
         let preference = LoginItemPreference(service: service)
         preference.set(true)
+        preference.confirmConsent()
         XCTAssertTrue(preference.lastChangeRefused)
         XCTAssertEqual(preference.state, .off, "a refused enable must not show as on")
     }
@@ -119,6 +132,7 @@ final class LoginItemPreferenceTests: XCTestCase {
         let preference = LoginItemPreference(service: service)
         service.state = .needsApproval
         preference.set(true)
+        preference.confirmConsent()
         XCTAssertEqual(preference.state, .needsApproval)
     }
 
@@ -127,9 +141,11 @@ final class LoginItemPreferenceTests: XCTestCase {
         service.enableError = Refused()
         let preference = LoginItemPreference(service: service)
         preference.set(true)
+        preference.confirmConsent()
         XCTAssertTrue(preference.lastChangeRefused)
         service.enableError = nil
         preference.set(true)
+        preference.confirmConsent()
         XCTAssertFalse(preference.lastChangeRefused)
         XCTAssertEqual(preference.state, .on)
     }
@@ -151,6 +167,7 @@ final class LoginItemPreferenceTests: XCTestCase {
         service.enableError = Refused()
         let preference = LoginItemPreference(service: service)
         preference.set(true)
+        preference.confirmConsent()
         service.enableError = nil
         preference.refresh()
         XCTAssertFalse(preference.lastChangeRefused)
@@ -183,6 +200,8 @@ final class LoginItemPreferenceTests: XCTestCase {
             preference.set(false)
             XCTAssertEqual(service.enables, 0)
             XCTAssertEqual(service.disables, 0)
+            XCTAssertNil(preference.consentRequest,
+                         "\(state) asked to confirm a change it cannot make")
             XCTAssertEqual(preference.state, state)
             XCTAssertFalse(preference.lastChangeRefused)
         }
@@ -195,6 +214,9 @@ final class LoginItemPreferenceTests: XCTestCase {
         service.stateAfterEnable = .on
         let preference = LoginItemPreference(service: service)
         preference.attemptRegistration()
+        XCTAssertEqual(service.enables, 0, "the remedy button registered on a single press")
+        XCTAssertEqual(preference.consentRequest, .registration)
+        preference.confirmConsent()
         XCTAssertEqual(service.enables, 1)
         XCTAssertEqual(preference.state, .on)
         XCTAssertFalse(preference.lastRegistrationUnconfirmed)
@@ -208,6 +230,7 @@ final class LoginItemPreferenceTests: XCTestCase {
         service.stateAfterEnable = .needsApproval
         let preference = LoginItemPreference(service: service)
         preference.attemptRegistration()
+        preference.confirmConsent()
         XCTAssertEqual(preference.state, .needsApproval)
         XCTAssertFalse(preference.lastRegistrationUnconfirmed)
     }
@@ -224,6 +247,7 @@ final class LoginItemPreferenceTests: XCTestCase {
         service.stateAfterEnable = .unconfirmed
         let preference = LoginItemPreference(service: service)
         preference.attemptRegistration()
+        preference.confirmConsent()
         XCTAssertEqual(service.enables, 1)
         XCTAssertEqual(preference.state, .unconfirmed)
         XCTAssertTrue(preference.lastRegistrationUnconfirmed)
@@ -238,6 +262,7 @@ final class LoginItemPreferenceTests: XCTestCase {
         service.enableError = Refused()
         let preference = LoginItemPreference(service: service)
         preference.attemptRegistration()
+        preference.confirmConsent()
         XCTAssertTrue(preference.lastChangeRefused)
         XCTAssertFalse(preference.lastRegistrationUnconfirmed)
         XCTAssertEqual(service.disables, 0)
@@ -251,8 +276,10 @@ final class LoginItemPreferenceTests: XCTestCase {
             let service = FakeService(state: state)
             let preference = LoginItemPreference(service: service)
             preference.attemptRegistration()
+            preference.confirmConsent()
             XCTAssertEqual(service.enables, 0, "\(state) attempted a registration")
             XCTAssertEqual(preference.state, state)
+            XCTAssertNil(preference.consentRequest)
         }
     }
 
@@ -261,6 +288,7 @@ final class LoginItemPreferenceTests: XCTestCase {
         service.stateAfterEnable = .unconfirmed
         let preference = LoginItemPreference(service: service)
         preference.attemptRegistration()
+        preference.confirmConsent()
         XCTAssertTrue(preference.lastRegistrationUnconfirmed)
         service.state = .on
         preference.refresh()
@@ -273,6 +301,147 @@ final class LoginItemPreferenceTests: XCTestCase {
         let preference = LoginItemPreference(service: service)
         preference.openSystemSettings()
         XCTAssertEqual(service.settingsOpened, 1)
+    }
+
+    // MARK: - consent, and the rejection it answers
+
+    /// **Guideline 2.4.5(iii): nothing but a confirmed press may register.**
+    ///
+    /// Exhaustive rather than illustrative. Every public entry point this type
+    /// has EXCEPT `confirmConsent()` is called, from every state, in the order a
+    /// surface can reach them — which is the whole set of things a launch, an
+    /// account flow, a settings window appearing, or a toggle being moved can
+    /// cause. None of them may reach `enable()`.
+    ///
+    /// It is written as "everything except one" on purpose: a future edit that
+    /// adds a second registration path fails here without anyone remembering to
+    /// extend a list of named cases.
+    func testConfirmingIsTheOnlyThingInThisTypeThatCanRegister() {
+        for state in everyState {
+            let service = FakeService(state: state)
+            let preference = LoginItemPreference(service: service)
+            preference.refresh()
+            preference.set(true)
+            preference.set(false)
+            preference.attemptRegistration()
+            preference.cancelConsent()
+            preference.openSystemSettings()
+            preference.refresh()
+            XCTAssertEqual(service.enables, 0,
+                           "\(state) registered without a confirmed press")
+        }
+    }
+
+    /// Launch and every surface appearance, which is where App Review's
+    /// "automatically" would have to live if it were true of this build.
+    ///
+    /// Constructing the preference is what the app does at launch; `refresh()`
+    /// is the whole of what ⌘, and the Device Inbox destination do when they
+    /// appear, and it is the only thing an account screen could reach. Repeated
+    /// because a surface can appear many times in one run.
+    func testLaunchAndEverySurfaceAppearanceRegisterNothing() {
+        for state in everyState {
+            let service = FakeService(state: state)
+            let preference = LoginItemPreference(service: service)
+            for _ in 0..<5 { preference.refresh() }
+            XCTAssertEqual(service.enables, 0, "\(state) registered on appearance")
+            XCTAssertEqual(service.disables, 0, "\(state) unregistered on appearance")
+            XCTAssertNil(preference.consentRequest)
+            XCTAssertEqual(preference.state, state)
+        }
+    }
+
+    /// Cancelling either request leaves the machine exactly as it was.
+    func testCancellingAConfirmationRegistersNothing() {
+        // The switch's request.
+        let toggle = FakeService(state: .off)
+        let fromToggle = LoginItemPreference(service: toggle)
+        fromToggle.set(true)
+        XCTAssertEqual(fromToggle.consentRequest, .turnOn)
+        fromToggle.cancelConsent()
+        XCTAssertNil(fromToggle.consentRequest)
+        XCTAssertEqual(toggle.enables, 0, "the switch registered after a cancel")
+        XCTAssertEqual(fromToggle.state, .off, "the switch moved after a cancel")
+        // A cancel is not a deferred yes: confirming after it finds nothing.
+        fromToggle.confirmConsent()
+        XCTAssertEqual(toggle.enables, 0, "a cancelled request was still honoured")
+
+        // The remedy button's request — the one App Review pressed.
+        let remedy = FakeService(state: .unconfirmed)
+        let fromRemedy = LoginItemPreference(service: remedy)
+        fromRemedy.attemptRegistration()
+        XCTAssertEqual(fromRemedy.consentRequest, .registration)
+        fromRemedy.cancelConsent()
+        XCTAssertNil(fromRemedy.consentRequest)
+        XCTAssertEqual(remedy.enables, 0, "the remedy registered after a cancel")
+        XCTAssertEqual(fromRemedy.state, .unconfirmed)
+        fromRemedy.confirmConsent()
+        XCTAssertEqual(remedy.enables, 0, "a cancelled request was still honoured")
+    }
+
+    /// Dismissal — Escape, clicking away — reaches `cancelConsent()` through the
+    /// presentation binding, and a `refresh` behind the dialog drops it too.
+    /// Both leave it unregistered, which is the only direction either may take.
+    func testDismissalAndARefreshBehindTheDialogBothLeaveItUnregistered() {
+        let service = FakeService(state: .off)
+        let preference = LoginItemPreference(service: service)
+
+        preference.set(true)
+        preference.refresh()
+        XCTAssertNil(preference.consentRequest, "a re-read carried a stale request")
+        preference.confirmConsent()
+        XCTAssertEqual(service.enables, 0, "a request the refresh dropped still registered")
+        XCTAssertEqual(preference.state, .off)
+    }
+
+    /// One confirmation, one registration. A double-click, or the Touch Bar
+    /// mirror of the same button, must not ask the system twice.
+    func testConfirmingTwiceRegistersOnce() {
+        let service = FakeService(state: .off)
+        let preference = LoginItemPreference(service: service)
+        preference.set(true)
+        preference.confirmConsent()
+        preference.confirmConsent()
+        preference.confirmConsent()
+        XCTAssertEqual(service.enables, 1)
+        XCTAssertEqual(preference.state, .on)
+    }
+
+    func testConfirmingWithNothingPendingDoesNothing() {
+        for state in everyState {
+            let service = FakeService(state: state)
+            let preference = LoginItemPreference(service: service)
+            preference.confirmConsent()
+            XCTAssertEqual(service.enables, 0, "\(state) registered with nothing pending")
+            XCTAssertEqual(preference.state, state)
+        }
+    }
+
+    /// **Turning it off keeps its single press**, and raises no confirmation.
+    /// Consent is for taking residency, not for giving it up; a dialog in front
+    /// of the off switch would make this harder to leave than to enter.
+    func testTurningItOffIsDirectAndAsksNothing() {
+        for state in [LoginItemState.on, .needsApproval] {
+            let service = FakeService(state: state)
+            let preference = LoginItemPreference(service: service)
+            preference.set(false)
+            XCTAssertNil(preference.consentRequest, "\(state) asked before turning off")
+            XCTAssertEqual(service.disables, 1, "\(state) did not unregister")
+            XCTAssertEqual(service.enables, 0)
+            XCTAssertEqual(preference.state, .off)
+        }
+    }
+
+    /// Asking twice replaces the pending request rather than queueing a second
+    /// registration behind it.
+    func testRaisingTheRequestAgainStillRegistersOnlyOnce() {
+        let service = FakeService(state: .off)
+        let preference = LoginItemPreference(service: service)
+        preference.set(true)
+        preference.set(true)
+        XCTAssertEqual(preference.consentRequest, .turnOn)
+        preference.confirmConsent()
+        XCTAssertEqual(service.enables, 1)
     }
 
     // MARK: - where the bundle is

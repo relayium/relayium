@@ -769,10 +769,15 @@
 "format.helpStep" = "%1$@. %2$@";
 
 /* MARK: 1.1.2 — login item: notFound is two situations */
-"settings.loginUnconfirmed" = "macOS reports no login-item record for this copy of Relayium, even though it is in an Applications folder. You can ask macOS to register it now.";
+"settings.loginUnconfirmed" = "macOS reports no login-item record for this copy of Relayium, even though it is in an Applications folder. You can ask macOS to add Relayium to your Login Items now.";
 "settings.loginNotRegistered" = "Relayium is not registered to open at login.";
-"settings.loginTryRegistration" = "Try registration";
+"settings.loginTryRegistration" = "Add to Login Items…";
 "settings.loginStillUnconfirmed" = "Relayium asked macOS to register it and macOS still reports no record. Nothing was removed, and any registration that already existed is untouched. Open Login Items to check, and restart this Mac if Relayium is not listed there.";
+
+/* MARK: 1.3.0 — the consent every way of turning residency on must pass */
+"settings.loginConsentTitle" = "Open Relayium automatically when you log in?";
+"settings.loginConsentBody" = "Confirming adds Relayium to Login Items in System Settings, and macOS then opens it automatically every time you log in to this Mac. Nothing is added unless you confirm. You can turn this off again here, or under General ▸ Login Items in System Settings, whenever you want.";
+"settings.loginConsentConfirm" = "Add to Login Items";
 
 /* MARK: 1.1.2 — what this Mac is on the network */
 "nearby.thisMacHeading" = "This Mac";

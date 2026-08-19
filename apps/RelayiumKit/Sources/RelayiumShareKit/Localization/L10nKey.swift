@@ -86,6 +86,13 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// that have no working switch. Never a greyed `Toggle`.
     case settingsLoginNotRegistered = "settings.loginNotRegistered"
     case settingsLoginTryRegistration = "settings.loginTryRegistration"
+    /// The confirmation both ways of turning residency ON must pass, added after
+    /// App Review found a single press enough to auto-launch the app. The body
+    /// is the part that has to do the work: it names Login Items, says macOS
+    /// will open Relayium at every login, and says it can be undone.
+    case settingsLoginConsentTitle = "settings.loginConsentTitle"
+    case settingsLoginConsentBody = "settings.loginConsentBody"
+    case settingsLoginConsentConfirm = "settings.loginConsentConfirm"
     /// The third outcome of an explicit registration: the call succeeded and the
     /// system still reports nothing. Neither a success nor a failure, so it
     /// borrows neither sentence — and it says outright that nothing was removed.

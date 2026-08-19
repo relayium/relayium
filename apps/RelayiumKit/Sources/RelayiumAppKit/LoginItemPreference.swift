@@ -95,6 +95,21 @@ public protocol LoginItemService {
     func openSystemSettings()
 }
 
+/// Which press asked to register, held until the user confirms it.
+///
+/// Two different presses can ask, and after confirmation they have different
+/// outcomes to report — the toggle's enable is an ordinary on/off, and the
+/// `unconfirmed` remedy has a third outcome (`lastRegistrationUnconfirmed`) that
+/// the toggle does not. Remembering WHICH asked is what lets one confirmation
+/// resume the right one, rather than collapsing them into a single "enable" that
+/// then has to guess.
+public enum LoginItemConsentRequest: Equatable, Sendable {
+    /// The on/off switch was moved to on.
+    case turnOn
+    /// The `unconfirmed` state's remedy button was pressed.
+    case registration
+}
+
 /// "Open Relayium at login", and the one place that decides what the app claims
 /// about it.
 ///
@@ -109,9 +124,30 @@ public protocol LoginItemService {
 /// rendering. Registering an app as a login item is a decision about the user's
 /// machine that outlives the app, and an app that quietly makes it for them —
 /// even to "repair" a `notFound` — has helped itself to something it was not
-/// given. Every registration in this type happens inside a method the user's own
-/// press calls, and `attemptRegistration()` exists so that press can be named
-/// for what it does.
+/// given.
+///
+/// ## And nothing registers on a single press either
+///
+/// **App Review rejected this app under Guideline 2.4.5(iii)** for setting
+/// itself to auto-launch "without user consent", having pressed the button this
+/// type used to call `attemptRegistration()` — labelled *Try registration*, in
+/// the General settings pane, which a reviewer read as an ACCOUNT registration.
+/// It registered a login item immediately, and so did moving the switch. Both
+/// were a press away from changing the user's machine with nothing on screen
+/// naming what would change.
+///
+/// So a press no longer registers. It records a `consentRequest`, the surface
+/// asks in words what confirming does, and `confirmConsent()` is the **only**
+/// method in this type that reaches the service's registration — one call site,
+/// so a future edit cannot add a second path to it without moving that call.
+/// `MacSurfaceGuardTests` COUNTS that call site, which is why this sentence
+/// describes it rather than spelling it out.
+///
+/// `cancelConsent()`, dismissal and `refresh()` all leave the system untouched.
+///
+/// Turning it OFF stays direct. Consent is required for taking residency on
+/// somebody's Mac, not for giving it up, and a confirmation in front of the
+/// off switch would make the setting harder to leave than to enter.
 @MainActor
 public final class LoginItemPreference: ObservableObject {
     @Published public private(set) var state: LoginItemState
@@ -137,6 +173,13 @@ public final class LoginItemPreference: ObservableObject {
     /// line. What the surface does instead is say what is true and what to try.
     @Published public private(set) var lastRegistrationUnconfirmed = false
 
+    /// The registration a press has ASKED for and the user has not yet agreed
+    /// to. Non-nil is what puts the confirmation on screen.
+    ///
+    /// Nothing about it has touched the system: while this is set, the app is
+    /// exactly as registered as it was before the press.
+    @Published public private(set) var consentRequest: LoginItemConsentRequest?
+
     private let service: LoginItemService
 
     public init(service: LoginItemService) {
@@ -153,6 +196,11 @@ public final class LoginItemPreference: ObservableObject {
     public func refresh() {
         lastChangeRefused = false
         lastRegistrationUnconfirmed = false
+        // A pending request is dropped rather than carried across a re-read: it
+        // was raised against the state this call is replacing. Dropping it can
+        // only ever leave the app UNregistered, which is the safe direction for
+        // the one thing this type must never do by itself.
+        consentRequest = nil
         state = service.currentState()
     }
 
@@ -168,43 +216,76 @@ public final class LoginItemPreference: ObservableObject {
         }
     }
 
-    /// Turn it on or off, then re-read.
+    /// Move the switch.
     ///
-    /// The state written is always the system's answer, never the requested
-    /// value: enabling can legitimately produce `needsApproval` rather than
-    /// `on`, and a switch that snapped to "on" would be the app asserting
-    /// something macOS has not agreed to yet.
+    /// **Only one of the two directions acts.** Off unregisters immediately and
+    /// re-reads, as it always did. On does NOT register: it raises the consent
+    /// request, and the switch stays reading whatever macOS still says — which
+    /// is off — until the user confirms. That spring-back is the honest
+    /// rendering, because at that moment nothing has been registered.
     public func set(_ wanted: Bool) {
         guard offersToggle else { return }
         lastRegistrationUnconfirmed = false
         lastChangeRefused = false
+        guard !wanted else {
+            consentRequest = .turnOn
+            return
+        }
+        consentRequest = nil
         do {
-            if wanted { try service.enable() } else { try service.disable() }
+            try service.disable()
         } catch {
             lastChangeRefused = true
         }
-        // Re-read on BOTH paths. A refused enable can still have changed the
+        // Re-read on BOTH paths. A refused disable can still have changed the
         // registration, and reporting the pre-attempt state after a partial one
         // is how a settings screen starts lying.
         state = service.currentState()
     }
 
-    /// The remedy for `unconfirmed`: ask the system to register this app, once,
-    /// because the user pressed a button that says so.
+    /// The remedy for `unconfirmed`, as a REQUEST rather than the act.
     ///
-    /// Three outcomes, all of them reported rather than smoothed over. The call
-    /// throws — `lastChangeRefused`, with the same wording every refusal gets.
-    /// The call succeeds and the system now says `on` or `needsApproval` — the
-    /// ordinary result, and the state carries it. The call succeeds and the
-    /// system still says nothing is registered — `lastRegistrationUnconfirmed`,
-    /// which is neither of the first two and must not be described as either.
-    ///
-    /// It deliberately does NOT unregister on that third outcome. See
-    /// `lastRegistrationUnconfirmed`.
+    /// This is the button App Review pressed. It kept its name because the name
+    /// is what the surface's guard asserts on, and because from the user's side
+    /// it is still the same offer — what changed is that pressing it now asks
+    /// before it registers anything.
     public func attemptRegistration() {
         guard state == .unconfirmed else { return }
         lastChangeRefused = false
         lastRegistrationUnconfirmed = false
+        consentRequest = .registration
+    }
+
+    /// The user said yes, and this is the one method in this type that registers.
+    ///
+    /// The request's own guard is re-checked HERE rather than trusted from when
+    /// it was raised: a `refresh` between the press and the confirmation can
+    /// have moved the state, and confirming a registration for a situation that
+    /// no longer exists is the same unasked-for change by a slower route.
+    ///
+    /// The request is cleared BEFORE the work, so a second confirmation — a
+    /// double-click, a Touch Bar mirror of the same button — finds nothing to do
+    /// rather than registering twice.
+    ///
+    /// Outcomes are reported exactly as they were before consent existed. A
+    /// throw is `lastChangeRefused`. A success landing on `on` or `needsApproval`
+    /// is the ordinary result the state carries. A registration success that
+    /// leaves the system still reporting nothing is `lastRegistrationUnconfirmed`
+    /// — neither of the first two, and it deliberately does NOT unregister to
+    /// tidy itself up. See `lastRegistrationUnconfirmed`.
+    public func confirmConsent() {
+        guard let request = consentRequest else { return }
+        consentRequest = nil
+        lastChangeRefused = false
+        lastRegistrationUnconfirmed = false
+
+        switch request {
+        case .turnOn:
+            guard offersToggle else { return }
+        case .registration:
+            guard state == .unconfirmed else { return }
+        }
+
         do {
             try service.enable()
         } catch {
@@ -213,7 +294,15 @@ public final class LoginItemPreference: ObservableObject {
             return
         }
         state = service.currentState()
-        if state == .unconfirmed { lastRegistrationUnconfirmed = true }
+        if request == .registration, state == .unconfirmed {
+            lastRegistrationUnconfirmed = true
+        }
+    }
+
+    /// The user said no, or dismissed the confirmation. Nothing was registered
+    /// to undo, so this only puts the request down.
+    public func cancelConsent() {
+        consentRequest = nil
     }
 
     /// Hand the user to the place they can see and change this themselves.

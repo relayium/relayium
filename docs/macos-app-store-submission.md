@@ -130,6 +130,53 @@ The full description and What's New text still need owner approval. They must
 not imply that the relay can read user content, that every transfer is peer to
 peer, or that a web/Stripe subscription is managed by Apple.
 
+### Release note for `1.3.0 (18)` — drafted, not yet entered in App Store Connect
+
+Version `1.3.0` build `18` is the response to the App Review rejection under
+Guideline 2.4.5(iii): the app added itself to auto-launch at start up when the
+**Registration** button in Account ▸ General was pressed. Both routes into
+login-item registration now require an explicit confirmation, so the note below
+is a statement about behaviour that changed, not a marketing line.
+
+The **same text is used for the direct GitHub release and the App Store /
+TestFlight channel**, because the two channels ship the same build from the same
+source graph and a difference between them would be a difference nobody could
+justify. It is deliberately silent about the relay, peer-to-peer routing and
+subscription management, so it cannot make a claim this document forbids.
+
+What's New:
+
+> Open at Login now asks first. Turning it on opens a confirmation that says
+> exactly what will happen — Relayium is added to Login Items in System
+> Settings, and macOS opens it every time you log in to this Mac — and nothing
+> is added unless you confirm it. You can turn it off again in Relayium, or
+> under General ▸ Login Items in System Settings.
+>
+> The button that repairs a missing login-item record is now called **Add to
+> Login Items** instead of "Try registration", so it says what it does before
+> you press it. It asks for the same confirmation.
+
+What to Test (TestFlight):
+
+> In Settings ▸ General, switch **Open at Login** on and confirm that a
+> confirmation appears before anything is registered, that cancelling leaves the
+> switch off and adds nothing to System Settings ▸ General ▸ Login Items, and
+> that confirming adds exactly one Relayium entry there. Then switch it off
+> again and check the entry is gone. If the app reports that macOS has no
+> login-item record for it, press **Add to Login Items** and confirm the same
+> confirmation appears on that path too.
+>
+> The Device Inbox destination offers the same control from `LoginItemSetting`,
+> so repeat the switch-on and cancel there and confirm it behaves identically.
+
+Owner approval, 2026-08-20: the owner explicitly approved delivering
+`1.3.0 (18)` to the **direct GitHub release and macOS TestFlight, for testing**,
+and approved the text above for those two channels. That approval covers testing
+distribution only. It is **not** approval to resubmit this build to App Review,
+and it is **not** a public Mac App Store release; each of those remains a
+separate owner decision that has not been made. The full App Store description
+is still unapproved and unwritten.
+
 ## TestFlight state and information draft
 
 This section separates two states that are easy to conflate. **Upload
