@@ -81,25 +81,9 @@ describe("the macOS client version policy", () => {
     ]);
   });
 
-  it("is exactly the prepared source or the staged 1.2.10 cutover", () => {
+  it("is exactly the prepared source or the staged 1.2.11 cutover", () => {
     const expected = isPreparedCutover
       ? {
-          manifest: { available: true, version: "1.2.9", build: 15 },
-          macos: {
-            policyRevision: 2,
-            minimumSupportedVersion: "1.2.9",
-            minimumSupportedBuild: 15,
-            recommendedVersion: "1.2.9",
-            latestVersion: "1.2.9",
-          },
-          nextRelease: {
-            version: "1.2.10",
-            minimumSupportedVersion: "1.2.10",
-            minimumSupportedBuild: 16,
-            recommendedVersion: "1.2.10",
-          },
-        }
-      : {
           manifest: { available: true, version: "1.2.10", build: 16 },
           macos: {
             policyRevision: 3,
@@ -107,6 +91,22 @@ describe("the macOS client version policy", () => {
             minimumSupportedBuild: 16,
             recommendedVersion: "1.2.10",
             latestVersion: "1.2.10",
+          },
+          nextRelease: {
+            version: "1.2.11",
+            minimumSupportedVersion: "1.2.11",
+            minimumSupportedBuild: 17,
+            recommendedVersion: "1.2.11",
+          },
+        }
+      : {
+          manifest: { available: true, version: "1.2.11", build: 17 },
+          macos: {
+            policyRevision: 4,
+            minimumSupportedVersion: "1.2.11",
+            minimumSupportedBuild: 17,
+            recommendedVersion: "1.2.11",
+            latestVersion: "1.2.11",
           },
           nextRelease: undefined,
         };
@@ -143,16 +143,16 @@ describe("the macOS client version policy", () => {
       recommendedVersion: policy.macos.recommendedVersion,
     }).toEqual(isPreparedCutover
       ? {
-          policyRevision: 2,
-          minimumSupportedVersion: "1.2.9",
-          minimumSupportedBuild: 15,
-          recommendedVersion: "1.2.9",
-        }
-      : {
           policyRevision: 3,
           minimumSupportedVersion: "1.2.10",
           minimumSupportedBuild: 16,
           recommendedVersion: "1.2.10",
+        }
+      : {
+          policyRevision: 4,
+          minimumSupportedVersion: "1.2.11",
+          minimumSupportedBuild: 17,
+          recommendedVersion: "1.2.11",
         });
   });
 

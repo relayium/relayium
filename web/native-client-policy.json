@@ -6,5 +6,11 @@
     "minimumSupportedBuild": 16,
     "recommendedVersion": "1.2.10",
     "latestVersion": "1.2.10"
+  },
+  "nextRelease": {
+    "version": "1.2.11",
+    "minimumSupportedVersion": "1.2.11",
+    "minimumSupportedBuild": 17,
+    "recommendedVersion": "1.2.11"
   }
 }
