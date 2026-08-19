@@ -659,8 +659,15 @@ public final class InboxSendModel: ObservableObject {
     /// entirely for a text item, and `manifest(of:)` below hands the card an
     /// empty file list for a text plan. So this string is never sealed, never
     /// sent and never displayed.
+    ///
+    /// `nonisolated` because it is read inside the `Task.detached` that prepares
+    /// the message, which does not inherit this actor. That is sound rather than
+    /// a waiver: it is an immutable `Sendable` literal, not main-actor state, so
+    /// there is nothing for the detached read to race against. `stagingKey`
+    /// below stays isolated because every one of its reads is already on the
+    /// main actor.
     // nonlocalized: an internal staging label, never displayed and never sealed
-    static let messageStagingName = "message"
+    nonisolated static let messageStagingName = "message"
 
     /// The card for a message being staged. It carries the byte count and the
     /// target — never the message.
