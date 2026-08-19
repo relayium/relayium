@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import RelayiumAppKit
 import RelayiumKit
@@ -17,6 +18,7 @@ import RelayiumPeerKit
 //                     --counterpart <name> --run-tag <tag>
 //   LocalTransferPeer --role pair-sender     --origin ... --receive-root ... --run-tag ...
 //   LocalTransferPeer --role pair-receiver   --origin ... --receive-root ... --run-tag ...
+//   LocalTransferPeer --role inbox-endpoint  --origin ... --state-root <dir> --run-tag <tag>
 //
 // Secrets arrive in the ENVIRONMENT and never in argv:
 //   RELAYIUM_ACCEPTANCE_CONTROL_TOKEN   the control API bearer (required)
@@ -67,6 +69,13 @@ enum Role: String {
     /// because the whole point is that two SEPARATE macOS processes complete it.
     case inboxSender = "inbox-sender"
     case inboxReceiver = "inbox-receiver"
+    /// **A whole Device Inbox endpoint**: the receiving half and the sending
+    /// half in one process, over one durable state root, with the same three
+    /// seams `RelayiumApp` uses to join them. The two roles above each own one
+    /// half and hold no conversation index, so nothing built from them can
+    /// observe a sent row, a local deletion or a history that survives a
+    /// restart — which is the whole 1.2.11 contract. See `InboxEndpointRun`.
+    case inboxEndpoint = "inbox-endpoint"
 }
 
 /// The launch configuration, resolved once.
@@ -79,7 +88,8 @@ enum Config {
     static let role: Role = {
         guard let role = Role(rawValue: require("--role")) else {
             fail("--role must be one of nearby-receiver, nearby-sender, "
-                 + "pair-sender, pair-receiver, pair-link, inbox-sender, inbox-receiver")
+                 + "pair-sender, pair-receiver, pair-link, inbox-sender, "
+                 + "inbox-receiver, inbox-endpoint")
         }
         return role
     }()
@@ -113,6 +123,17 @@ enum Config {
     }()
 
     static let receiveRoot: URL? = option("--receive-root").map { URL(fileURLWithPath: $0) }
+
+    /// The ONE durable root a bidirectional endpoint owns: received files, the
+    /// files it sends, the pending-upload staging area and every account-scoped
+    /// store beneath it.
+    ///
+    /// Separate from `--receive-root` because it is a different promise. A
+    /// receive root is where files land; this is the whole of what an endpoint
+    /// must find again after it is torn down and rebuilt, which is exactly what
+    /// a no-resurrection claim rests on. A launcher restarts an endpoint by
+    /// starting a NEW process against the SAME value.
+    static let stateRoot: URL? = option("--state-root").map { URL(fileURLWithPath: $0) }
 }
 
 let role = Config.role
@@ -658,6 +679,730 @@ final class NearbySenderRun: @unchecked Sendable {
     func teardown() { host.teardown() }
 }
 
+// MARK: - Device Inbox, a BIDIRECTIONAL endpoint
+
+/// The extra batches a bidirectional endpoint sends, beside the shared
+/// `AcceptanceBatch` every run already compares byte for byte.
+///
+/// **Distinct names AND distinct bytes**, from the shared fixture and from each
+/// other, for exactly the reason `AcceptanceBatch` gives for its own per-file
+/// seeds: a direction — or a delivery that lost a race — carrying its
+/// neighbour's bytes under its own name still produces the right count, the
+/// right names and the right sizes, and only a digest can see it. Reusing
+/// `AcceptanceBatch.make` under another tag would have given distinct names and
+/// IDENTICAL bytes, which is the half that cannot fail.
+///
+/// The generator is eight lines rather than a call into the shared fixture
+/// because `AcceptanceBatch.deterministicBytes` is internal to `RelayiumPeerKit`
+/// and this executable is a different module. It is fixture arithmetic, not
+/// product logic: nothing below is a rule the app also implements.
+enum EndpointBatch {
+
+    /// `primary` is the shared mixed batch — a loose file, a two-level folder,
+    /// a zero-byte leaf in the MIDDLE of the stream and one file larger than a
+    /// single frame — so the forward direction keeps exactly the byte-integrity
+    /// property this suite has always asserted.
+    static func make(label: String, runTag: String) -> [(meta: FileMeta, bytes: [UInt8])] {
+        switch label {
+        case "reverse":
+            let tree = "reply-\(runTag)"
+            return [
+                entry(name: "reply-\(runTag).txt", path: nil, seed: 101, size: 61),
+                // Nested, so path fidelity is proven in BOTH directions rather
+                // than only the one the suite happened to start with.
+                entry(name: "nested.bin", path: "\(tree)/inner/nested.bin", seed: 102, size: 8_192),
+            ]
+        case "competing":
+            return [entry(name: "competing-\(runTag).bin", path: nil, seed: 103, size: 1_024)]
+        default:
+            return AcceptanceBatch.make(runTag: runTag)
+        }
+    }
+
+    private static func entry(name: String, path: String?, seed: UInt64, size: Int)
+        -> (meta: FileMeta, bytes: [UInt8]) {
+        let bytes = deterministicBytes(seed: seed, count: size)
+        return (FileMeta(name: name, size: bytes.count, path: path), bytes)
+    }
+
+    /// A fixed 64-bit LCG, seeded well clear of `AcceptanceBatch`'s 1…5.
+    /// Reproducible, so a failing run can be re-derived from its tag and its
+    /// digests re-checked by hand, and non-repeating, so no two files and no two
+    /// offsets inside one file carry the same bytes.
+    private static func deterministicBytes(seed: UInt64, count: Int) -> [UInt8] {
+        var state = seed &* 0x9E37_79B9_7F4A_7C15 &+ 0x1234_5678_9ABC_DEF
+        var out = [UInt8]()
+        out.reserveCapacity(count)
+        for _ in 0..<count {
+            state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            out.append(UInt8(truncatingIfNeeded: state >> 33))
+        }
+        return out
+    }
+
+    static func receipts(for batch: [(meta: FileMeta, bytes: [UInt8])]) -> [FileReceipt] {
+        batch.map { FileReceipt.forSource($0.meta, bytes: $0.bytes) }
+    }
+}
+
+/// **One macOS Device Inbox endpoint: the app's receiving half and its sending
+/// half, in one process, over one DURABLE state root.**
+///
+/// ## Why this role exists beside `inbox-sender` and `inbox-receiver`
+///
+/// Those two prove a delivery. They cannot prove a CONVERSATION: each owns one
+/// half of the feature, neither holds a conversation index, and the send half
+/// there is not wired to the receive half at all — so nothing in this suite
+/// could observe a sent row, a local deletion, or a history that survives a
+/// restart. 1.2.11 makes each conversation one bidirectional, erasable surface,
+/// and the only honest evidence for that is two processes that are each a whole
+/// endpoint.
+///
+/// ## What is production here, and what is substituted
+///
+/// The controller, the engine factory, the journal, the message stores, the
+/// conversation index, the send model, the uploader, the sender client and the
+/// session are the shipped ones, assembled from the same `AppEnvironment`
+/// factories `RelayiumApp` calls — including **the three seams that join the
+/// two halves**, installed here with the same shapes and the same weak capture
+/// the scene uses. Nothing below re-implements a rule the product owns: every
+/// assertion this role can support is read off a published model or off bytes
+/// this process wrote to disk.
+///
+/// Substituted, and only for what a headless process cannot have:
+///
+///  * the folder bookmark store and the device key store are the in-memory ones
+///    — the shipped pair are a `UserDefaults` bookmark and a keychain item in an
+///    access group this unsigned binary has no entitlement for, which
+///    `AppInboxHosts` already records failing closed before a byte moved. The
+///    consequence is stated rather than hidden: **a restart re-grants the folder
+///    and re-enrols with a fresh device key.** The row id is unchanged (it
+///    belongs to the credential), and every durable thing a no-resurrection
+///    claim rests on — the conversation index, both message stores, the journals
+///    and the received files — is on disk under `--state-root` and is reopened
+///    from exactly the same paths.
+///  * the account arrives as a bearer the launcher minted rather than through a
+///    sign-in form, exactly as the other inbox roles take it.
+///
+/// ## `presentingText: true`, and why this build may claim it
+///
+/// `InboxProtocol.announcedCapabilities(presentingText:)` documents the token as
+/// a claim about a SURFACE — that this receiver presents a text delivery AS
+/// text — and warns that a build rendering nothing must not make it. This one
+/// does render it: `/observed` reads every body back through
+/// `InboxController.message(for:)` and `sentMessage(for:)`, the production
+/// accessors, and reports the text. That read-back IS the surface, and the
+/// acceptance assertion "the receiver holds this exact text" is what consumes
+/// it. Announcing the base set instead would have made every text send in this
+/// run refuse with `textUnsupported` before anything left either Mac.
+@MainActor final class InboxEndpointRun {
+    private let controller: InboxController
+    private let deliveries: InboxSendModel
+    private let session: AccountSession
+    private let bridge: InboxSessionBridge
+    private let bearer: String
+
+    private let stateRoot: URL
+    private let receiveRoot: URL
+    private let accountsRoot: URL
+    /// Where the files this endpoint SENDS are read from — outside the pending
+    /// store's own root, because a user's chosen files are not in the app's
+    /// staging area and a fixture that put them there would be staging from the
+    /// one directory `PendingUploadStore` owns.
+    private let sourceRoot: URL
+
+    private var selfDeviceID = ""
+    private var selfDeviceName = ""
+
+    init(stateRoot: URL) throws {
+        let bearer = ProcessInfo.processInfo
+            .environment["RELAYIUM_ACCEPTANCE_ACCOUNT_TOKEN"] ?? ""
+        guard !bearer.isEmpty else {
+            fail("RELAYIUM_ACCEPTANCE_ACCOUNT_TOKEN is required for inbox-endpoint")
+        }
+        // Locals first, properties after: every directory below is derived from
+        // the one root, and building them as plain values keeps the whole layout
+        // readable in one place instead of spread across `self` assignments.
+        let receive = stateRoot.appendingPathComponent("receive", isDirectory: true)
+        let outgoing = stateRoot.appendingPathComponent("outgoing", isDirectory: true)
+        let stagingRoot = stateRoot.appendingPathComponent("staging", isDirectory: true)
+        let accounts = stateRoot.appendingPathComponent("store", isDirectory: true)
+            .appendingPathComponent("accounts", isDirectory: true)
+        for directory in [receive, outgoing, stagingRoot, accounts] {
+            try FileManager.default.createDirectory(at: directory,
+                                                    withIntermediateDirectories: true)
+        }
+        self.bearer = bearer
+        self.stateRoot = stateRoot
+        receiveRoot = receive
+        sourceRoot = outgoing
+        accountsRoot = accounts
+
+        let origin = Config.origin
+        // Account-scoped, and split into the same four directories
+        // `AppEnvironment` splits its own into — journals, `messages`,
+        // `sent-messages`, `conversations`. The split is not cosmetic: received
+        // records are named by CENTRAL's task id and sent ones by this Mac's job
+        // id, and nothing makes those namespaces disjoint, so one directory
+        // would let a replayed receive overwrite a message the user sent.
+        let accountDirectory: @Sendable (InboxAccountID) -> URL = { account in
+            accounts.appendingPathComponent(account.value, isDirectory: true)
+        }
+        let journalStore: @Sendable (InboxAccountID) -> InboxJournalStore? = { account in
+            InboxJournalStore(directory: accountDirectory(account))
+        }
+        let messageStore: @Sendable (InboxAccountID) -> InboxMessageStore? = { account in
+            InboxMessageStore(directory: accountDirectory(account)
+                .appendingPathComponent("messages", isDirectory: true))
+        }
+        let sentMessageStore: @Sendable (InboxAccountID) -> InboxMessageStore? = { account in
+            InboxMessageStore(directory: accountDirectory(account)
+                .appendingPathComponent("sent-messages", isDirectory: true))
+        }
+        let conversationStore: @Sendable (InboxAccountID) -> InboxConversationStore? = { account in
+            InboxConversationStore(directory: accountDirectory(account)
+                .appendingPathComponent("conversations", isDirectory: true))
+        }
+
+        let folderStore = InMemoryInboxFolderStore()
+        let receiving = InboxController(runtime: InboxRuntime(
+            folder: InboxReceiveFolder(store: folderStore),
+            makeEngine: AppEnvironment.makeInboxEngineFactory(
+                baseURL: origin, keys: InMemoryInboxDeviceKeyStore(),
+                journalStore: journalStore, messageStore: messageStore,
+                folderStore: folderStore),
+            // No notifier and no reveal, for the reason `AppInboxReceiverHost`
+            // records: a headless peer has no notification centre and must never
+            // hand a received path to the Finder.
+            messageStore: messageStore,
+            sentMessageStore: sentMessageStore,
+            conversationStore: conversationStore,
+            legacyReceipts: { account in
+                guard let journals = journalStore(account) else { return [] }
+                return try journals.completedReceipts()
+            },
+            // Wired, and it has to be: without it the controller learns no
+            // device NAMES, so `displayName(for:)` falls back to an id prefix
+            // and `isRemoved` can never answer. It is the production call.
+            deviceDirectory: { token in
+                try await InboxSenderClient(baseURL: origin, token: token).devices()
+            },
+            platform: AppEnvironment.inboxPlatform,
+            // See the type comment. This endpoint presents received text through
+            // `/observed`, so the claim is one it keeps.
+            capabilities: InboxProtocol.announcedCapabilities(presentingText: true),
+            appVersion: "acceptance"))
+        controller = receiving
+
+        // `drafts: nil`, exactly as `RelayiumApp` and `AppInboxSenderHost` pass
+        // it: a draft store is the authority to delete another process's only
+        // copy of a file, and nothing here can have come from one. The
+        // content-key store is in memory for the entitlement reason
+        // `AppInboxHosts` records — which also means a delivery still in flight
+        // does not survive this endpoint's restart, and the launcher restarts
+        // only once everything it is asserting on has reached `saved`.
+        let delivering = AppEnvironment.makeInboxSendModel(
+            baseURL: origin,
+            pending: PendingUploadSupport(store: PendingUploadStore(root: stagingRoot),
+                                          keys: InMemoryStoredLinkKeyStore()))
+        deliveries = delivering
+
+        // The credential reaches the session the way the app's does — through a
+        // token store `restore()` reads — so the account state this endpoint
+        // adopts is produced by the shipped `AccountSession`, not written here.
+        let tokens = InMemoryTokenStore()
+        try tokens.save(bearer)
+        session = AppEnvironment.makeSession(baseURL: origin, tokenStore: tokens)
+        bridge = InboxSessionBridge(controller: receiving)
+
+        bridge.observe(session.$state, bearer: { [session] in session.bearerToken })
+        delivering.observe(session.$state)
+
+        // **The three seams, copied in shape from `RelayiumApp` and nowhere
+        // else.** They are what make a sent delivery appear in the same local
+        // conversation as a received one, and they are the only reason this
+        // process can state a sender-side `saved`. Getting them wrong would not
+        // fail loudly — it would produce an endpoint whose conversations are
+        // half a product — so they are written here exactly as the scene writes
+        // them, weak capture included.
+        delivering.onSentHistory = { [weak receiving] event, body in
+            receiving?.recordSentHistory(event, messageBody: body)
+        }
+        // Separate from the above ON PURPOSE, as in the scene: a state change
+        // may never CREATE a row, or an update landing after a deletion would
+        // write the entry back — which is the resurrection this run asserts
+        // against, reintroduced one layer above the tombstones.
+        delivering.onSentStateChanged = { [weak receiving] accountId, job, state, task in
+            receiving?.updateSentHistory(accountID: accountId, jobID: job,
+                                         state: state, taskID: task)
+        }
+        delivering.isSentHistoryDeleted = { [weak receiving] accountId, job in
+            receiving?.isSentHistoryDeleted(accountID: accountId, jobID: job) ?? false
+        }
+    }
+
+    /// Adopt the account, grant the folder, switch unattended receiving on, and
+    /// learn which device row this credential authenticates as — in that order,
+    /// each step WAITED FOR rather than assumed.
+    ///
+    /// The waiting is the correctness, for the reason `AppInboxReceiverHost`
+    /// records: `chooseFolder` and `setPolicy` are account-scoped and silently
+    /// discard a grant issued before the session has been adopted.
+    func start() {
+        Task { @MainActor in
+            state.set(phase: "adopting")
+            await session.restore()
+            guard await waitFor({ [controller] in controller.isSignedIn }) else {
+                return state.failed("the endpoint never adopted the account: \(session.state)")
+            }
+            controller.chooseFolder(receiveRoot)
+            if let problem = controller.settingsError {
+                return state.failed("the receive folder was refused: \(problem)")
+            }
+            guard await waitFor({ [controller] in controller.folder.isChosen }) else {
+                return state.failed("the receive folder was not recorded")
+            }
+            controller.setPolicy(.auto)
+            if let problem = controller.settingsError {
+                return state.failed("unattended receiving was refused: \(problem)")
+            }
+            guard await waitFor({ [controller] in controller.policy == .auto }) else {
+                return state.failed("unattended receiving was not recorded")
+            }
+            // **Asked, not assumed.** The row id is minted server-side when a
+            // login is approved, so the only honest way to learn this
+            // endpoint's own identity is to ask which row the credential
+            // authenticates as. It is what lets the launcher assert that the
+            // peer id the OTHER endpoint attributed a delivery to is this
+            // endpoint's real row — authenticated attribution, checked across
+            // two processes rather than within one.
+            do {
+                let rows = try await InboxSenderClient(baseURL: Config.origin,
+                                                       token: bearer).devices()
+                guard let mine = rows.first(where: { $0.isCurrent }) else {
+                    return state.failed("central lists no current device for this credential")
+                }
+                selfDeviceID = mine.id
+                selfDeviceName = mine.name
+            } catch {
+                return state.failed("the account's device list could not be read: \(error)")
+            }
+            state.set("deviceID", selfDeviceID)
+            state.set("deviceName", selfDeviceName)
+            deliveries.refreshTargets(token: session.bearerToken ?? "")
+            state.set(phase: "ready")
+        }
+    }
+
+    /// Poll a main-actor condition with a real ceiling, so a stuck step is a
+    /// NAMED failure rather than a delivery the launcher later reports as never
+    /// having arrived.
+    private func waitFor(_ condition: @escaping () -> Bool,
+                         seconds: TimeInterval = 30) async -> Bool {
+        let deadline = Date().addingTimeInterval(seconds)
+        while Date() < deadline {
+            if condition() { return true }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        return condition()
+    }
+
+    func teardown() { controller.signedOut() }
+
+    // MARK: - the live view
+
+    /// Everything this endpoint can state, read off the production models and
+    /// off its own disk. Nothing here is derived and nothing is remembered: a
+    /// value that is not in a published model or in a file is not reported.
+    ///
+    /// Assembled key by key rather than as one literal: a single heterogeneous
+    /// `[String: Any]` this wide, with four nested `map`s inside it, is the
+    /// shape Swift's type checker gives up on, and the failure is a build error
+    /// about the expression rather than about anything wrong with the facts.
+    func observed() -> [String: Any] {
+        var out: [String: Any] = [:]
+        out["phase"] = state.phase
+        out["signedIn"] = controller.isSignedIn
+        out["folderChosen"] = controller.folder.isChosen
+        out["policy"] = String(describing: controller.policy)
+        out["runtimeState"] = String(describing: controller.state)
+        out["storeIssue"] = controller.conversationStoreIssue
+        out["selfDeviceID"] = selfDeviceID
+        out["selfDeviceName"] = selfDeviceName
+        out["accountID"] = controller.activeAccountID ?? ""
+        // The launcher walks these itself, so "the body is gone" is an
+        // observation about bytes on disk rather than a model reporting its own
+        // success.
+        out["stateRoot"] = stateRoot.path
+        out["receiveRoot"] = receiveRoot.path
+        out["accountsRoot"] = accountsRoot.path
+        out["directory"] = String(describing: deliveries.directory)
+        out["deletedTimelineIDs"] = controller.deletedTimelineIDs.sorted()
+        out["candidates"] = candidateFacts()
+        out["sends"] = sendFacts()
+        out["conversations"] = conversationFacts()
+        out["files"] = receipts().map(Self.encode(receipt:))
+        if let problem = controller.settingsError {
+            out["settingsError"] = String(describing: problem)
+        }
+        if let refusal = deliveries.refusal { out["refusal"] = String(describing: refusal) }
+        return out
+    }
+
+    /// The account's devices as the composer would offer them — blocked rows
+    /// INCLUDED, which is the product's own "truthful target list" rule and the
+    /// only way a launcher can assert that a device which never enrolled is
+    /// listed and not sendable rather than quietly missing.
+    private func candidateFacts() -> [[String: Any]] {
+        deliveries.candidates.map { candidate -> [String: Any] in
+            var row: [String: Any] = [:]
+            row["id"] = candidate.id
+            row["name"] = candidate.name
+            row["kind"] = candidate.kind
+            row["sendable"] = candidate.isSendable
+            row["canReceiveText"] = candidate.canReceiveText
+            row["availability"] = String(describing: candidate.availability)
+            return row
+        }
+    }
+
+    private func sendFacts() -> [[String: Any]] {
+        deliveries.items.map { item -> [String: Any] in
+            var row: [String: Any] = [:]
+            row["id"] = item.id
+            row["activity"] = String(describing: item.activity)
+            // The ONE predicate allowed to answer "has it arrived".
+            row["isSavedOnTarget"] = item.activity.isSavedOnTarget
+            row["targetDeviceID"] = item.targetDeviceID
+            row["fileCount"] = item.fileCount
+            row["byteCount"] = item.byteCount
+            if let name = item.targetName { row["targetName"] = name }
+            if let task = item.taskID { row["taskID"] = task }
+            return row
+        }
+    }
+
+    private static func encode(receipt: FileReceipt) -> [String: Any] {
+        var entry: [String: Any] = [:]
+        entry["name"] = receipt.name
+        entry["size"] = receipt.size
+        entry["sha256"] = receipt.sha256
+        if let path = receipt.path { entry["path"] = path }
+        return entry
+    }
+
+    /// The conversations exactly as the product projects them, in the store's
+    /// own `(at desc, id desc)` order — reported rather than re-sorted, so the
+    /// launcher's ordering assertion is about `InboxConversationStore` and not
+    /// about this method.
+    private func conversationFacts() -> [[String: Any]] {
+        controller.conversations.map { conversation -> [String: Any] in
+            var out: [String: Any] = [:]
+            out["peerDeviceID"] = conversation.peerDeviceID
+            out["peerName"] = controller.displayName(for: conversation)
+            out["peerNameSnapshot"] = conversation.peerNameSnapshot
+            out["unreadCount"] = conversation.unreadCount
+            out["isRemoved"] = controller.isRemoved(conversation.peerDeviceID)
+            out["entries"] = conversation.entries.map(entryFacts(_:))
+            return out
+        }
+    }
+
+    private func entryFacts(_ entry: InboxTimelineEntry) -> [String: Any] {
+        var row: [String: Any] = [:]
+        row["id"] = entry.id
+        row["direction"] = entry.direction.rawValue
+        row["kind"] = entry.kind.rawValue
+        // Milliseconds, so the launcher can assert the timeline really is
+        // non-increasing rather than taking the store's word for its own order.
+        row["atMillis"] = Int64(entry.at.timeIntervalSince1970 * 1000)
+        row["byteCount"] = entry.byteCount
+        row["fileCount"] = entry.fileCount
+        row["files"] = entry.files.map { reference -> [String: Any] in
+            ["name": reference.displayName, "path": reference.urlPath]
+        }
+        row["sentFiles"] = entry.sentFiles.map { snapshot -> [String: Any] in
+            ["name": snapshot.name, "size": snapshot.size]
+        }
+        if let sent = entry.sentState { row["sentState"] = sent.rawValue }
+        if let id = entry.taskID { row["taskID"] = id }
+        if let id = entry.jobID { row["jobID"] = id }
+        if let id = entry.messageID { row["messageID"] = id }
+        if let id = entry.sentMessageID { row["sentMessageID"] = id }
+        // **The body, through the production accessors and no other door.**
+        // `message(for:)` answers only for a received entry and
+        // `sentMessage(for:)` only for a sent one, each reading its own
+        // protected store — so a text reported here is a text the product itself
+        // would render, and a deleted one reports nothing because its file is
+        // gone.
+        if let body = controller.message(for: entry) ?? controller.sentMessage(for: entry) {
+            row["text"] = body.text
+        }
+        return row
+    }
+
+    /// Every file this endpoint has actually written, read back OFF DISK — not
+    /// out of a receipt list, for the reason `AppInboxReceiverHost` states: a
+    /// receiver that recorded a delivery it never committed would produce a
+    /// perfect receipt list.
+    private func receipts() -> [FileReceipt] {
+        guard let files = FileManager.default.enumerator(
+            at: receiveRoot, includingPropertiesForKeys: [.isRegularFileKey]) else { return [] }
+        var out: [FileReceipt] = []
+        for case let url as URL in files {
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?
+                .isRegularFile == true else { continue }
+            guard let digest = sha256Hex(contentsOf: url),
+                  let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
+            else { continue }
+            out.append(FileReceipt(name: url.lastPathComponent, path: relativePath(of: url),
+                                   size: size, sha256: digest))
+        }
+        return out.sorted { $0.name < $1.name }
+    }
+
+    /// The path under the receive root, or nil for a file that landed loose. A
+    /// receiver that flattened a tree would otherwise produce receipts a
+    /// name-and-digest comparison accepts.
+    private func relativePath(of url: URL) -> String? {
+        let root = receiveRoot.standardizedFileURL.path
+        let path = url.standardizedFileURL.path
+        guard path.hasPrefix(root + "/") else { return nil }
+        let relative = String(path.dropFirst(root.count + 1))
+        return relative.contains("/") ? relative : nil
+    }
+
+    // MARK: - the launcher's hand on the production paths
+
+    /// Every command drives a shipped model and reports what that model said.
+    ///
+    /// **Nothing here decides an outcome.** A refusal is the one
+    /// `InboxSendModel` published, a deletion's effect is read back out of
+    /// `InboxController.deletedTimelineIDs`, and a target is aimed at by id
+    /// without this fixture applying a sendability filter of its own — so a send
+    /// to a device that cannot receive is refused by the product's own guards
+    /// rather than declined here. There are two of those guards and the answer
+    /// reports both: `selectTarget` refuses to bind a blocked row, and the send
+    /// itself is issued regardless and refuses on its own terms.
+    func drive(_ command: String, _ body: [String: Any]) -> [String: Any] {
+        switch command {
+        case "refresh-targets":
+            deliveries.refreshTargets(token: session.bearerToken ?? "")
+            return ["ok": true]
+
+        case "refresh":
+            controller.refreshConversations()
+            return ["ok": true, "storeIssue": controller.conversationStoreIssue]
+
+        case "mark-read":
+            guard let peer = body["peer"] as? String, !peer.isEmpty else {
+                return ["error": "mark-read needs peer"]
+            }
+            controller.markConversationRead(peer)
+            return ["ok": true]
+
+        case "send-text":
+            guard let text = body["text"] as? String, !text.isEmpty else {
+                return ["error": "send-text needs text"]
+            }
+            guard let aimed = aim(body) else {
+                return ["error": "no candidate named \(body["name"] as? String ?? "-")",
+                        "candidates": deliveries.candidates.map(\.name)]
+            }
+            // Issued even when the model REFUSED the aim. A send this fixture
+            // declined would prove nothing about the product's guard, so the
+            // model is asked and its own answer is reported.
+            deliveries.sendText(text, token: session.bearerToken ?? "")
+            var out = aimed.facts
+            if let refusal = deliveries.refusal {
+                out["refusal"] = String(describing: refusal)
+                return out
+            }
+            out["ok"] = true
+            return out
+
+        case "send-files":
+            guard let aimed = aim(body) else {
+                return ["error": "no candidate named \(body["name"] as? String ?? "-")",
+                        "candidates": deliveries.candidates.map(\.name)]
+            }
+            let label = (body["batch"] as? String) ?? "primary"
+            let batch = EndpointBatch.make(label: label, runTag: Config.runTag)
+            let selection: [SelectedFile]
+            // Staged BEFORE the send and regardless of the aim, because
+            // `send(files:)` refuses an empty selection before it ever reaches
+            // its target guards — a refusal on an unstaged batch would be
+            // `noSelection` and would say nothing about the device addressed.
+            do { selection = try stage(batch, label: label) } catch {
+                return ["error": "could not write the batch to send: \(error)"]
+            }
+            deliveries.send(files: selection, sourceDraftId: nil,
+                            token: session.bearerToken ?? "")
+            var out = aimed.facts
+            if let refusal = deliveries.refusal {
+                out["refusal"] = String(describing: refusal)
+                return out
+            }
+            // The SENDER's own digests of the bytes it wrote, stated before the
+            // far side has done anything, so the comparison at the end is
+            // between two independent walks rather than one value copied twice.
+            out["ok"] = true
+            out["batch"] = label
+            out["receipts"] = EndpointBatch.receipts(for: batch).map(Self.encode(receipt:))
+            return out
+
+        case "send-competing":
+            return competing(body)
+
+        case "delete-entry":
+            guard let peer = body["peer"] as? String, !peer.isEmpty,
+                  let id = body["id"] as? String, !id.isEmpty else {
+                return ["error": "delete-entry needs peer and id"]
+            }
+            controller.deleteTimelineEntry(id, peerDeviceID: peer)
+            return ["ok": true,
+                    // Read back rather than assumed: the store REFUSES an id
+                    // belonging to another peer, so a deletion that did not
+                    // happen must not report that it did.
+                    "tombstoned": controller.deletedTimelineIDs.contains(id),
+                    "storeIssue": controller.conversationStoreIssue]
+
+        case "delete-conversation":
+            guard let peer = body["peer"] as? String, !peer.isEmpty else {
+                return ["error": "delete-conversation needs peer"]
+            }
+            guard let conversation = controller.conversations
+                .first(where: { $0.peerDeviceID == peer }) else {
+                return ["error": "no conversation with \(peer)"]
+            }
+            // **The ids the surface OBSERVED**, which is the product's own
+            // contract: a delivery committed between the screen being drawn and
+            // the user confirming has no tombstone and lands as a new unread
+            // item, rather than disappearing into a permanent peer-wide ban.
+            let observed = conversation.entryIDs
+            controller.deleteConversation(peerDeviceID: peer, observedEntryIDs: observed)
+            return ["ok": true, "observed": observed.sorted(),
+                    "tombstoned": controller.deletedTimelineIDs.sorted(),
+                    "storeIssue": controller.conversationStoreIssue]
+
+        default:
+            return ["error": "unknown command \(command)"]
+        }
+    }
+
+    /// **A genuine competing send, refused by the product's own guard.**
+    ///
+    /// Two sends are issued in ONE main-actor turn: `InboxSendModel` takes its
+    /// staging slot synchronously before the first call returns, so the second
+    /// call meets a staging task that is genuinely in flight. Nothing here
+    /// simulates contention, sets a flag, or reaches past a guard — the first
+    /// delivery goes on to complete, which is the half a broken guard would also
+    /// destroy, and the launcher asserts both halves.
+    private func competing(_ body: [String: Any]) -> [String: Any] {
+        guard let text = body["text"] as? String, !text.isEmpty else {
+            return ["error": "send-competing needs text"]
+        }
+        guard let aimed = aim(body) else {
+            return ["error": "no candidate named \(body["name"] as? String ?? "-")"]
+        }
+        let batch = EndpointBatch.make(label: "competing", runTag: Config.runTag)
+        let selection: [SelectedFile]
+        do { selection = try stage(batch, label: "competing") } catch {
+            return ["error": "could not write the competing batch: \(error)"]
+        }
+        deliveries.send(files: selection, sourceDraftId: nil, token: session.bearerToken ?? "")
+        // Captured BEFORE the second call, which clears `refusal` on entry.
+        let first = deliveries.refusal.map { String(describing: $0) }
+        deliveries.sendText(text, token: session.bearerToken ?? "")
+        let second = deliveries.refusal.map { String(describing: $0) }
+        var out = aimed.facts
+        out["ok"] = true
+        out["receipts"] = EndpointBatch.receipts(for: batch).map(Self.encode(receipt:))
+        if let first { out["first"] = first }
+        if let second { out["second"] = second }
+        return out
+    }
+
+    /// What asking `InboxSendModel` to aim at one named device produced.
+    ///
+    /// **The distinction the first version of this fixture lost.** "This account
+    /// has no device by that name" is the launcher's own mistake; "the model
+    /// REFUSED to aim at that device" is the product answering. Collapsing both
+    /// into `nil` made the fixture decline the send itself, so `InboxSendModel`
+    /// was never asked and the run asserted on a fixture error rather than on a
+    /// product guard.
+    private struct Aim {
+        /// The id the launcher asked for, always.
+        let requestedID: String
+        /// What `InboxSendModel.selectTarget` left in `selectedTargetID` — nil
+        /// when the model refused to hold this row.
+        let selectedID: String?
+        /// The block the MODEL publishes for that row, nil for a sendable one.
+        let block: String?
+
+        var isBound: Bool { selectedID != nil && selectedID == requestedID }
+
+        /// The facts every send answer carries, so a refusal can be read back to
+        /// the guard that produced it rather than guessed at from its name.
+        var facts: [String: Any] {
+            var out: [String: Any] = ["requestedTarget": requestedID,
+                                      "selectionRefused": !isBound]
+            if let selectedID { out["target"] = selectedID }
+            if let block { out["targetBlock"] = block }
+            return out
+        }
+    }
+
+    /// Aim at a target by NAME through the model's own door, and report what the
+    /// model did with the request.
+    ///
+    /// **No sendability filter, and no aim of the fixture's own.**
+    /// `AppInboxSenderHost.selectTarget(named:)` has a filter, which is right for
+    /// a role whose whole job is to wait for a target to become sendable — but it
+    /// would mean an adversarial send never reached `InboxSendModel`, and the
+    /// refusal a run asserts on would be this fixture's rather than the product's.
+    ///
+    /// The previous selection is cleared FIRST, and that is the correctness here:
+    /// `InboxSendModel.selectTarget` returns without touching `selectedTargetID`
+    /// when it refuses a blocked row, so reading the selection back afterwards
+    /// would report the PREVIOUS device and the send below would go to a machine
+    /// nobody addressed. Cleared first, a refused aim leaves the model holding
+    /// nothing and its own send guard answers.
+    private func aim(_ body: [String: Any]) -> Aim? {
+        guard let name = body["name"] as? String, !name.isEmpty,
+              let candidate = deliveries.candidates.first(where: { $0.name == name })
+        else { return nil }
+        deliveries.selectTarget(nil)
+        deliveries.selectTarget(candidate.id)
+        return Aim(requestedID: candidate.id,
+                   selectedID: deliveries.selectedTargetID,
+                   block: candidate.availability.block?.rawValue)
+    }
+
+    /// Write one batch where a person's own files would be, and describe it the
+    /// way the file picker would.
+    ///
+    /// Real files, because a device send reads real files: `PendingUploadStore
+    /// .prepare` copies them into the app's staging root, and a fabricated
+    /// in-memory selection would be a send this model has never been asked to
+    /// perform.
+    private func stage(_ batch: [(meta: FileMeta, bytes: [UInt8])],
+                       label: String) throws -> [SelectedFile] {
+        let source = sourceRoot.appendingPathComponent(label, isDirectory: true)
+        var selected: [SelectedFile] = []
+        for entry in batch {
+            let relative = entry.meta.path ?? entry.meta.name
+            let url = source.appendingPathComponent(relative)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                    withIntermediateDirectories: true)
+            try Data(entry.bytes).write(to: url)
+            selected.append(SelectedFile(url: url, relativePath: relative,
+                                         byteCount: Int64(entry.bytes.count)))
+        }
+        return selected
+    }
+}
+
 // MARK: - assembly
 
 /// **No default.** `AppEnvironment.defaultLinkReceiveDirectory()` is the user's
@@ -667,6 +1412,18 @@ final class NearbySenderRun: @unchecked Sendable {
 func requireReceiveRoot() -> URL {
     guard let root = Config.receiveRoot else {
         fail("--receive-root is required for \(role.rawValue)")
+    }
+    return root
+}
+
+/// **No default, for the same reason.** An endpoint with no state root would
+/// have to invent one, and the two things that would be wrong with any invented
+/// answer are the two this role exists to avoid: writing a person's real
+/// Downloads folder, and losing the durable stores between the run that wrote
+/// them and the restarted process that must find them unchanged.
+func requireStateRoot() -> URL {
+    guard let root = Config.stateRoot else {
+        fail("--state-root is required for \(role.rawValue)")
     }
     return root
 }
@@ -694,7 +1451,8 @@ final class RunBox {
     private var observeRun: (() -> [String: Any])?
 
     /// The roles a launcher can also SEND through. Nil for every role that runs
-    /// to a fixed script, which is all of them but `pair-link`.
+    /// to a fixed script, which is all of them but `pair-link` and
+    /// `inbox-endpoint`.
     private var driveRun: ((String, [String: Any]) -> [String: Any])?
 
     func observed() -> [String: Any]? { observeRun?() }
@@ -741,6 +1499,12 @@ final class RunBox {
                 let run = try InboxSenderRun(stagingRoot: requireReceiveRoot(),
                                              targetName: require("--counterpart"))
                 teardownRun = { run.teardown() }
+                run.start()
+            case .inboxEndpoint:
+                let run = try InboxEndpointRun(stateRoot: requireStateRoot())
+                teardownRun = { run.teardown() }
+                observeRun = { run.observed() }
+                driveRun = { command, body in run.drive(command, body) }
                 run.start()
             case .pairReceiver:
                 let run = try PairReceiverRun(receiveRoot: requireReceiveRoot())
@@ -841,10 +1605,12 @@ do {
                 }
                 return json(facts)
             },
-            // The launcher's own hand on the production send paths, for a role
-            // whose counterpart is a browser the launcher is also driving. Only
-            // `pair-link` answers; every other role runs to a fixed script and
-            // says so rather than silently accepting a command it ignores.
+            // The launcher's own hand on the production send paths, for the
+            // roles whose script the launcher owns rather than the peer:
+            // `pair-link`, whose counterpart is a browser, and `inbox-endpoint`,
+            // whose counterpart is a second Mac it also drives. Every other role
+            // runs to a fixed script and says so rather than silently accepting
+            // a command it ignores.
             .init(method: "POST", path: "/drive") { body in
                 let parsed = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
                 let command = (parsed?["command"] as? String) ?? ""
