@@ -1,16 +1,10 @@
 {
   "schema": 1,
   "macos": {
-    "policyRevision": 3,
-    "minimumSupportedVersion": "1.2.10",
-    "minimumSupportedBuild": 16,
-    "recommendedVersion": "1.2.10",
-    "latestVersion": "1.2.10"
-  },
-  "nextRelease": {
-    "version": "1.2.11",
+    "policyRevision": 4,
     "minimumSupportedVersion": "1.2.11",
     "minimumSupportedBuild": 17,
-    "recommendedVersion": "1.2.11"
+    "recommendedVersion": "1.2.11",
+    "latestVersion": "1.2.11"
   }
 }
