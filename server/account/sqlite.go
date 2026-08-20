@@ -915,6 +915,13 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		   ON pair_rooms(expires_at) WHERE closed_at = 0`,
 		// The purge pass, and account deletion, both walk closed rows.
 		`CREATE INDEX IF NOT EXISTS idx_pair_rooms_closed ON pair_rooms(closed_at)`,
+		// The account plan's retention window, snapshot when the room opened, so a
+		// later plan change cannot reach backwards into ciphertext already stored
+		// (PairRoom.RetentionSecs). DEFAULT 0 means "no snapshot", which
+		// pairRoomRetention reads as the Free floor rather than as no bound; the
+		// one-time migratePairRoomRetention gives existing rows a real value and
+		// rewrites the deadlines that were written under the old unbounded rule.
+		`ALTER TABLE pair_rooms ADD COLUMN retention_secs INTEGER NOT NULL DEFAULT 0`,
 		// The room a pre-uploaded object belongs to. '' for every other purpose,
 		// which is every row that predates this column.
 		`ALTER TABLE stored_files ADD COLUMN pair_room_id TEXT NOT NULL DEFAULT ''`,
@@ -1648,6 +1655,13 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		db.Close()
 		return nil, err
 	}
+	// Pair-room retention: give every existing room a plan snapshot and rewrite
+	// the deadlines that were written under the retired unbounded rule. Runs after
+	// the ALTER above, which is what creates the column it fills.
+	if err := migratePairRoomRetention(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	// The transfers table backed the retired share-link mode (one-time
 	// rendezvous tokens). Dropping it is idempotent and safe: tokens lived
 	// at most one hour, so nothing in an existing deployment still needs it.
@@ -1901,6 +1915,131 @@ func migrateInstallID(db *sql.DB) error {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_install_id
 		   ON devices(user_id, install_id) WHERE install_id <> ''`)
 	return err
+}
+
+// migratePairRoomRetention repairs every pair room written under the retired
+// "a joined room has no deadline" rule, in one crash-safe pass.
+//
+// TWO STEPS, in this order, because the second reads what the first writes.
+//
+// STEP 1 — SNAPSHOT. Every room with no snapshot (retention_secs = 0, which is
+// every row that predates the column) gets one from its owner's CURRENT plan.
+//
+// The owner's guidance allows an accurate plan-based backfill if the existing
+// schema permits one without risky coupling, and it does: users.plan_id and
+// plans.retention_secs are two plain columns in this same database, joined here
+// in SQL with no service-layer call, no entitlement recomputation and no network
+// read. Nothing here touches an email, a filename, a key or any other identifying
+// value — a retention window in seconds is not PII, and the join reads no column
+// that is.
+//
+// It is a proxy for the real thing, and the imprecision is named rather than
+// hidden: the true snapshot is the plan the account held when the room OPENED,
+// which no longer exists anywhere, and planForUser additionally lapses an expired
+// Apple subscription lazily — so an account whose paid subscription has ended but
+// has not yet been lapsed reads one tier high here. That error is bounded (at
+// most one tier, at most 1209600 seconds), it errs toward keeping a customer's
+// ciphertext rather than deleting it early, and reproducing the lapse logic in a
+// boot-time migration is exactly the risky coupling the guidance warns off.
+//
+// COALESCE supplies the conservative Free default wherever the join cannot
+// answer: a deleted user, a plan_id no longer in the plans table, or a plans row
+// with a nonsensical retention. That is the "Free default where the historical
+// snapshot is unavailable" case, and it is deterministic — the same database
+// migrates to the same numbers on every instance that runs it.
+//
+// Whatever the join DOES answer is then clamped to the same [Free, Max] window
+// pairRoomRetention enforces, floor as well as ceiling: MAX(Free, MIN(Max, …)).
+// The ceiling alone would let a plans row an admin has typoed BELOW the Free day
+// write that shorter window onto every one of that account's legacy rooms and
+// delete even Free ciphertext early — the mirror of the immortal object this
+// migration exists to remove, and the direction that loses data. The clamp is
+// inclusive at both ends, so all four real plan values migrate unchanged.
+//
+// STEP 2 — REBIND. Every OPEN room still carrying the legacy sentinel gets a
+// real deadline, and so does every object in it.
+//
+// This is the only write in the system permitted to move a deadline BACKWARDS,
+// and the sentinel is what licenses it: a row at pairRoomLegacyNoDeadline was
+// written by the old invariant and by nothing else, so the predicate cannot
+// catch a room whose deadline was legitimately earned. Every other mover of a
+// deadline in this codebase is monotonic-forward on purpose (touchPairRoomOn,
+// JoinPairRoom) and stays that way.
+//
+// The new deadline is computed in GO, by pairRoomExpiry, not by a second copy of
+// the rule in SQL. That is the same doctrine the rest of this feature runs on —
+// the deadline rule has one home in pairroom.go — and it is worth the row-at-a-
+// time loop here: the alternative is a migration that agrees with the product
+// rule only until somebody edits one of them.
+//
+// The objects are updated UNCONDITIONALLY rather than through the usual
+// `expires_at < ?` guard, for the same reason and with the same license: they
+// carry the sentinel too, so the monotonic guard would match none of them and
+// leave the exact immortal ciphertext this migration exists to bound. Room and
+// objects move inside migrateOnce's single transaction, so the atomic projection
+// of room and object deadlines survives the repair.
+//
+// A room whose recomputed deadline is already in the PAST is the expected case
+// for an abandoned room — it simply becomes visible to the existing GC backstop
+// (ListDeadPairRooms → SweepPairRooms → voidPairRoom), which settles its meters,
+// releases its storage quota and queues its blob delete intents through the
+// ordinary path. Nothing new deletes anything here; this migration only makes
+// the rooms reachable by the reclamation that was already written.
+func migratePairRoomRetention(db *sql.DB) error {
+	return migrateOnce(db, "backfill_pair_room_retention", func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(context.Background(),
+			`UPDATE pair_rooms SET retention_secs = MAX(?, MIN(?, COALESCE(
+			     (SELECT p.retention_secs FROM users u JOIN plans p ON p.id = u.plan_id
+			       WHERE u.id = pair_rooms.user_id AND p.retention_secs > 0), ?)))
+			  WHERE retention_secs <= 0`,
+			pairRoomFreeRetention, pairRoomMaxRetention, pairRoomFreeRetention); err != nil {
+			return err
+		}
+		rows, err := tx.QueryContext(context.Background(),
+			`SELECT `+pairRoomCols+` FROM pair_rooms
+			  WHERE closed_at = 0 AND expires_at = ?`, pairRoomLegacyNoDeadline)
+		if err != nil {
+			return err
+		}
+		var stale []PairRoom
+		for rows.Next() {
+			r, err := scanPairRoom(rows)
+			if err != nil {
+				rows.Close()
+				return err
+			}
+			stale = append(stale, r)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		rows.Close()
+		for _, r := range stale {
+			expiry := pairRoomExpiry(r)
+			if _, err := tx.ExecContext(context.Background(),
+				`UPDATE pair_rooms SET expires_at = ? WHERE id = ?`, expiry, r.ID); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(context.Background(),
+				`UPDATE stored_files SET expires_at = ? WHERE pair_room_id = ?`,
+				expiry, r.ID); err != nil {
+				return err
+			}
+		}
+		// Orphans last: a pair-room object whose room row is gone cannot be reached
+		// by the loop above, and one still carrying the sentinel would stay immortal
+		// forever with nothing left that could ever bound it. Measured from the
+		// object's own creation with the Free floor, because an object with no room
+		// has no snapshot to read and nothing else to measure from. Scoped to the
+		// sentinel, so it can only ever bound a row the old rule wrote.
+		_, err = tx.ExecContext(context.Background(),
+			`UPDATE stored_files SET expires_at = created_at + ?
+			  WHERE pair_room_id <> '' AND expires_at = ?
+			    AND NOT EXISTS (SELECT 1 FROM pair_rooms WHERE id = stored_files.pair_room_id)`,
+			pairRoomFreeRetention, pairRoomLegacyNoDeadline)
+		return err
+	})
 }
 
 func (s *SQLiteStore) Close() error {
@@ -4343,8 +4482,8 @@ func insertStoredFileOn(ctx context.Context, ex sqlExecer, f StoredFile) error {
 // statement.
 //
 // Both returned instants come from that one read: ExpiresAt is what the row now
-// carries (pairRoomNoDeadline once somebody has joined), RoomJoinDeadline is what
-// the CODE may be extended to, and they are different numbers on purpose.
+// carries (its plan retention window once somebody has joined), RoomJoinDeadline
+// is what the CODE may be extended to, and they are different numbers on purpose.
 func insertPairRoomObjectOn(ctx context.Context, tx *sql.Tx, f StoredFile) (StoredFileWrite, error) {
 	room, found, err := pairRoomRowOn(ctx, tx, f.PairRoomID)
 	if err != nil {

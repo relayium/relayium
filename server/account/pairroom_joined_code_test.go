@@ -16,8 +16,9 @@ import (
 //
 // The path that broke it is the one where the room's authoritative transaction
 // already KNOWS the answer and the caller projects one anyway. Finalize touches
-// the room (a no-op for a joined room — its expires_at is pairRoomNoDeadline, so
-// the monotonic UPDATE matches nothing), and then syncPairCode projects a join
+// the room — which for a joined room legitimately pushes its RETENTION deadline
+// out (pairRoomJoinedExpiry), and used to match nothing at all against an
+// immortal expires_at — and then syncPairCode projects a join
 // deadline out of the handler's snapshot with pairRoomProgressJoinDeadline, which
 // has never asked whether anybody joined. Same for the two other numbers a store
 // transaction hands back for the code to be extended to: the append's

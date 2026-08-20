@@ -47,7 +47,8 @@ Let `open` be when the room was created (the first pre-upload for that code) and
 
 ```
 joinDeadline = min( max(open, last) + JOIN_WINDOW , open + MAX_JOINABLE )
-expiry       = joined ? NEVER : joinDeadline
+joinedExpiry = max( max(joined, last) + RETENTION , joinDeadline )
+expiry       = joined ? joinedExpiry : joinDeadline
 joinable     = not closed and not joined and now < joinDeadline
 readable     = not closed and now < expiry
 ```
@@ -56,7 +57,7 @@ readable     = not closed and now < expiry
 |---|---|---|
 | `JOIN_WINDOW` | 300 s | the owner's rule: five minutes to join, measured from the last uploaded byte. The same 300 s the pairing code's registry TTL uses from the MINT — which is why the code has to be moved with the room rather than left to that TTL. |
 | `MAX_JOINABLE` | 6 h | absolute ceiling from `open`. Without it `JOIN_WINDOW` is an idle bound the CLIENT chooses by trickling. |
-| `NEVER` | — | a joined room's ciphertext has no expiry of any kind. Not a long deadline: none. |
+| `RETENTION` | 86400 / 259200 / 604800 / 1209600 s | the ACCOUNT PLAN's retention window — Free, Plus, Pro, Max — **snapshot when the room opened** and never re-read for that room again. |
 
 Read the first line twice: the deadline is measured from the last accepted byte,
 not from the mint and not from the upload's start. That single choice is both
@@ -88,8 +89,9 @@ nothing else:
   more time than it buys the room.
 - **A JOINED room extends nothing.** Once somebody is in the room there is no
   join deadline left to extend a code to, and the code is simply left to lapse
-  on whatever it already holds. It is never extended to `NEVER` — a code that
-  never expired would hold six of a million digits out of circulation for good —
+  on whatever it already holds. It is never extended to `joinedExpiry` — a code
+  living out a plan retention window would hold six of a million digits out of
+  circulation for days —
   and it is no longer extended to the join deadline either, which would keep the
   digits for another `JOIN_WINDOW` while buying nothing, because the room they
   name is full and its two peers are already connected. This is reachable by
@@ -123,27 +125,61 @@ longer exists. Revocation is owner-bound too, and refuses digits that have been
 minted again since the voided room's own deadline, because a void can run long
 after the deadline that caused it (the GC sweep is ten minutes behind).
 
-**Joining ends every clock.** A joined transfer is never cut off by one, and
-that is meant literally: there is no transfer deadline and no readability
-deadline either. Exactly three things remove a joined room's bytes, and none of
-them is a clock:
+**Joining ends the JOIN clock, and starts the retention one.** *(Changed
+2026-08-20 by an explicit owner decision. Earlier revisions of this document said
+a joined room's ciphertext had no expiry of any kind — see "What replaced NEVER"
+below for why that is retired and what was kept.)*
+
+A joined transfer is still never cut off mid-flight, and that is still meant
+literally. What ends a joined room now is one of four things:
 
 1. an explicit COMPLETION the receiver spends (§7);
 2. an explicit RELEASE the owning account asks for, one room at a time (§8);
-3. the account being deleted.
+3. the account being deleted;
+4. `joinedExpiry` passing — the account plan's retention window, measured from
+   the last thing that actually happened to the room.
 
-Both of the first two are things somebody DOES. A completion cannot fire on its
-own and no amount of time performs one; a release happens only because the owner
-named that room, by id, in a request. Neither adds a deadline of any kind to
-this rule, and neither may be turned into one. There is no route by which the
-server ends a joined room on its own, and no operator endpoint that removes one
-either — the account's own release is the manual exit, not an admin action.
+The first three are unchanged and are still things somebody DOES: a completion
+cannot fire on its own and no amount of time performs one, and a release happens
+only because the owner named that room, by id, in a request. There is still no
+operator endpoint that removes a joined room.
 
-What that leaves is a storage commitment whose ceiling is the owner's attention
-rather than a number: a room whose receiver cannot complete (§7.6 — every
-Firefox, Safari and phone receiver is in that class) sits until somebody
-releases it. Visible and reclaimable is not the same as bounded, which is why
-pre-upload is still off unless a deployment opts in.
+**What replaced `NEVER`, and what survived it.** All stored Relayium ciphertext
+follows the account plan's retention, and a pair-room object is stored
+ciphertext. The previous rule made it the one exception, and the exception was
+not theoretical: production accumulated four current-Free objects sitting at
+`math.MaxInt64`, days past the single day their account was entitled to, with
+nothing in the system that could ever have reclaimed them.
+
+The half of the rule that mattered is kept, and it is kept by the MEASUREMENT
+rather than by the absence of a clock:
+
+- `joinedExpiry` is measured from `last` — the last time the server itself
+  COMMITTED bytes for the room. A slow upload that is still landing chunks buys
+  itself another full retention window with every one, so it is never cut off
+  while it is still moving. Only the server's own committed bytes move it: a
+  read, a probe, a reconnect, a duplicate join notification and a refused upload
+  init all move nothing, so it is not a deadline a client can extend by asking.
+- `joined` is the floor for a room joined before its first chunk commits.
+- `joinDeadline` is a second floor, so joining can never move a room's expiry
+  BACKWARDS. It cannot with today's numbers — every plan's retention is far
+  longer than `MAX_JOINABLE` — and it is stated so that pricing a very short plan
+  cannot silently break the projection.
+
+**The snapshot does not follow the plan.** `RETENTION` is read once, when the
+room opens, and written onto the room. A later upgrade or downgrade governs the
+NEXT room and never reaches backwards into ciphertext already stored: a transfer
+uploaded on Pro keeps its seven days even if the account moves to Free an hour
+later, and a Free room does not grow into Max's fortnight because the account
+upgraded afterwards. A failed plan read at creation falls back to the LONGEST
+window any plan sells — bounded, never unbounded.
+
+What that leaves is a storage commitment bounded by a number the account is
+already billed under. A room whose receiver cannot complete (§7.6 — every
+Firefox, Safari and phone receiver is in that class) is now reclaimed at its plan
+deadline instead of sitting until somebody releases it. Pre-upload remains off
+unless a deployment opts in; that gate is unchanged by this, and is now a product
+decision rather than the price of a rule the server could not hold.
 The join is stamped exactly once — a reconnect does not re-stamp it.
 
 **Void means gone, now.** Every truth-bearing read or write of a pair-room
@@ -160,8 +196,8 @@ pass. An unfinished pre-upload is the same ciphertext as a finished one.
 
 **The join is observed by the server**, from the pairing code's signaling room
 reaching two participants — never from a client claiming it. A client-asserted
-join would be a free jump from a five-minute deadline to no deadline at all,
-handed to the one party the deadline constrains.
+join would be a free jump from a five-minute deadline to the account's whole
+retention window, handed to the one party the deadline constrains.
 
 The server's own observation is the only witness there is, so a join it cannot
 write down is held in memory and retried — for as long as it takes — and while
@@ -456,9 +492,10 @@ are unreachable ciphertext: the keys can never be delivered, and an entry left i
 the "already uploaded" state is sent over neither transport — the user simply
 never sees the file arrive. The sender therefore returns those entries to the
 live-link lane. The bytes are spent either way; the transfer is not. The stored
-objects are not deleted, and nothing reclaims them on a clock: the room is joined
-by then, so §2 leaves it no deadline and §7.5 no fallback one. That ciphertext is
-held until the owner releases the room (§8) or the account is deleted — a
+objects are not deleted by this path: the room is joined by then, so §2 gives it
+the account's retention window and §7.5 no fallback deadline. That ciphertext is
+held until that window runs out, until the owner releases the room (§8), or until
+the account is deleted — a
 completion is not coming for it, because the peer that would have spent one never
 learned the keys.
 
@@ -553,8 +590,9 @@ without a rule reads as "the receiver joined and then nothing happened".
   5xx, one dropped socket — permanently disable the retry the sender is
   faithfully performing on every reconnect, so the receiver shows a "try again"
   that can never try and the objects stay in storage: the room is joined, so §2
-  leaves it no deadline and §7.5 no fallback one, and nothing but an explicit
-  completion, the owner's own release (§8) or account deletion ever removes them.
+  gives it the account's retention window and §7.5 no fallback deadline, and
+  nothing but that window running out, an explicit completion, the owner's own
+  release (§8) or account deletion ever removes them.
   A failure the receiver cannot survive by retrying (the ciphertext is gone; the
   key does not open its object) IS permanent, and must not be re-offered either —
   a retry there is a request with a guaranteed failure behind it.
@@ -563,9 +601,9 @@ without a rule reads as "the receiver joined and then nothing happened".
   Resending is cheaper and cannot get out of sync.
 - **A receiver that never got a handoff MUST NOT claim success.** It reports that
   the sender left before handing over the keys. The objects are not deleted by
-  that report and no clock deletes them either — the room is joined, so they are
-  held until the owner releases the room or the account is deleted (§2, §7.5,
-  §8) — but nothing is silently half-transferred.
+  that report — the room is joined, so they are held until its retention window
+  runs out, or until the owner releases the room or the account is deleted (§2,
+  §7.5, §8) — but nothing is silently half-transferred.
 - **A partial failure is reported as partial.** "All or nothing" is the rule for
   what the receiver CLAIMS, not a description of what a disk contains: on a save
   target that flushes each file as it closes (a chosen folder, per-file browser
@@ -748,9 +786,10 @@ one yet (the CLI and the native clients receive, and do not complete). Nothing i
 this section is reachable on a deployment with pre-upload off; Relayium's
 official production deployment is in that state today.
 
-§2 says a joined room's ciphertext has no deadline. Completion is the
-receiver-controlled way §2 allows one to end, and it is the only exit the
-RECEIVER can reach: the transfer ends because the receiver says it has the file.
+§2 gives a joined room's ciphertext the account's retention window. Completion is
+the receiver-controlled way §2 allows one to end EARLY, and it is the only exit
+the RECEIVER can reach: the transfer ends because the receiver says it has the
+file, rather than because the window ran out.
 The owner's release (§8) is the account-controlled exit, and it exists because
 §7.6 means a large class of receivers can never honestly say it. Account
 deletion remains the final, account-wide exit.
@@ -913,10 +952,10 @@ device has taken delivery, and nothing between here and the user's disk can
 still fail."** The two errors are not symmetric, and every ambiguity below
 resolves the same way:
 
-- Not completing costs the SENDER storage — and §2 means it: a joined room has
-  no deadline and §7.5 has not given it a fallback one, so an object nobody
-  completes is held until its owner releases the room (§8) or the account is
-  deleted.
+- Not completing costs the SENDER storage for the whole retention window — and
+  §2 means it: §7.5 gives a joined room no fallback deadline, so an object nobody
+  completes is held for its full plan window unless the owner releases the room
+  (§8) or the account is deleted.
 - Completing early costs the USER the file, permanently.
 
 Neither side is bounded by a clock, which is why the second one decides. Storage
@@ -942,9 +981,9 @@ That table also says plainly who this feature reaches: today only desktop
 Chromium-family browsers have the File System Access API, so a Firefox, Safari
 or phone receiver saves its files perfectly and completes nothing. Their
 senders' ciphertext is then in the position §2 describes with no completion ever
-coming for it: no clock touches it, and the only thing that ends it is the owner
-releasing that room by hand (§8) — or deleting the account. This is the majority
-case, not the edge one, and §7.5 turns on it.
+coming for it: it is held for the whole retention window, and the only things
+that end it sooner are the owner releasing that room by hand (§8) or deleting the
+account. This is the majority case, not the edge one, and §7.5 turns on it.
 
 **The boundary is the whole batch, then the object.**
 
@@ -996,9 +1035,10 @@ suffered nor any way to act on.
 
 §7 is the receiver's exit and §7.6 says who can reach it: only a browser that
 commits files to disk itself. Everyone else — Firefox, Safari, every phone, the
-CLI, the native clients — saves the files and completes nothing, and §2 gives
-the room no clock. Without this section that ciphertext is billed to an account
-that cannot see it, cannot name it and cannot release it, which is the one
+CLI, the native clients — saves the files and completes nothing, and §2 holds the
+room for its whole retention window. Without this section that ciphertext is
+billed to an account that cannot see it, cannot name it and cannot release it,
+which is the one
 combination an account surface may not leave standing. The charge is correct and
 stays; the invisibility was the defect.
 

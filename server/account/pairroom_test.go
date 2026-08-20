@@ -515,7 +515,7 @@ func TestFailedSingleShotUploadIsStillBilled(t *testing.T) {
 // because the previous implementation satisfied every gentler version of it: it
 // kept a 24-hour window, called it storage rather than transfer, and deleted the
 // ciphertext at the end of it anyway.
-func TestJoinEndsTheDeadlineAndImposesNoDeadlineAtAll(t *testing.T) {
+func TestJoinEndsTheJoinClockAndImposesThePlanRetentionWindow(t *testing.T) {
 	h := newPairHarness(t)
 	h.mintCode("666666", "")
 	id := h.preUpload(t, "666666", bytes.Repeat([]byte("J"), 2048), 2)
@@ -540,12 +540,22 @@ func TestJoinEndsTheDeadlineAndImposesNoDeadlineAtAll(t *testing.T) {
 		t.Fatalf("a repeated join moved the deadline %d -> %d", firstExpiry, room.ExpiresAt)
 	}
 
-	// A year later — past any window anyone would call a backstop — every truth-
-	// bearing path still says the ciphertext is there. Each of these deletes on a
-	// passed deadline, so passing all four is the assertion that no deadline
-	// passed: the public read, the room sweep GC would run, and the file sweep GC
-	// would run.
-	h.advance(365 * 24 * 3600)
+	// The deadline it landed on is the account's plan retention measured from the
+	// join, and it is a REAL instant — never the sentinel the old rule wrote.
+	if want := room.JoinedAt + pairRoomFreeRetention; firstExpiry != want {
+		t.Fatalf("joined expiry %d, want the join plus the free window %d", firstExpiry, want)
+	}
+	if firstExpiry == pairRoomLegacyNoDeadline {
+		t.Fatal("a joined room is still unbounded")
+	}
+
+	// AN HOUR SHORT of that window, every truth-bearing path still says the
+	// ciphertext is there. Each of these deletes on a passed deadline, so passing
+	// all four is the assertion that the JOIN clock is over: the public read, the
+	// room sweep GC would run, and the file sweep GC would run. This is the half
+	// of the owner's original rule that survives — no five-minute join deadline
+	// and no repeated-join re-stamp reaches a transfer that has been joined.
+	h.advance(pairRoomFreeRetention - 3600 - 660)
 	h.svc.SweepPairRooms(ctx, h.now)
 	expired, err := h.store.ListExpiredStoredFiles(ctx, h.now)
 	if err != nil {
@@ -553,14 +563,25 @@ func TestJoinEndsTheDeadlineAndImposesNoDeadlineAtAll(t *testing.T) {
 	}
 	for _, f := range expired {
 		if f.ID == id {
-			t.Fatal("a joined room's object was listed as expired a year later — a clock was imposed on a joined transfer")
+			t.Fatal("a joined room's object was listed as expired inside its retention window")
 		}
 	}
 	if status, _ := h.getAnon(t, "/api/files/"+id+"/blob"); status != 200 {
-		t.Fatalf("blob a year after joining: %d, want 200 — a joined transfer was cut off by a clock", status)
+		t.Fatalf("blob inside the retention window: %d, want 200 — a joined transfer was cut off early", status)
 	}
 	if !h.blobExists(t, sf.BlobKey) {
-		t.Fatal("a joined room's ciphertext was deleted by a clock")
+		t.Fatal("a joined room's ciphertext was deleted inside its retention window")
+	}
+
+	// Past it, the room is reclaimable. A year is emphatically past it, and this
+	// is the assertion the retired invariant could not make: the bytes go.
+	h.advance(365 * 24 * 3600)
+	h.svc.SweepPairRooms(ctx, h.now)
+	if status, _ := h.getAnon(t, "/api/files/"+id+"/blob"); status == 200 {
+		t.Fatal("a joined room's ciphertext is still readable a year past its retention window")
+	}
+	if h.blobExists(t, sf.BlobKey) {
+		t.Fatal("a joined room's ciphertext survived a year past its retention window")
 	}
 }
 
@@ -742,8 +763,13 @@ func TestPairRoomHoldsNoKeyMaterial(t *testing.T) {
 		t.Fatalf("rows: %v", err)
 	}
 	sort.Strings(cols)
+	// retention_secs is a plan window in seconds, snapshot at creation. It is a
+	// number the pricing page publishes, tells nobody anything about the file, and
+	// is here for the same reason expires_at is: the room's deadline has to be
+	// derivable from the room. Everything this test exists to keep out — key,
+	// filename, plaintext size, receiver identity — is still out.
 	want := []string{"closed_at", "code", "created_at", "expires_at", "id", "joined_at",
-		"last_upload_at", "user_id"}
+		"last_upload_at", "retention_secs", "user_id"}
 	if !reflect.DeepEqual(cols, want) {
 		t.Fatalf("pair_rooms columns = %v, want exactly %v", cols, want)
 	}

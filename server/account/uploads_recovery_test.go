@@ -783,8 +783,16 @@ func TestObservedJoinSurvivesAPersistentWriteFailureAndLandsOnRetry(t *testing.T
 	if !found || room.JoinedAt != joinedAt {
 		t.Fatalf("join stamped at %d, want the observed instant %d (%+v)", room.JoinedAt, joinedAt, room)
 	}
-	if room.ExpiresAt != pairRoomNoDeadline {
-		t.Fatalf("a joined room still carries a deadline: %d", room.ExpiresAt)
+	// The join buys the room its account's retention window measured from the
+	// observed instant — a real deadline now, not the absent one this used to
+	// assert, and still far enough out that the transfer this queue exists to
+	// protect is nowhere near it.
+	if want := pairRoomJoinedExpiry(room); room.ExpiresAt != want {
+		t.Fatalf("joined room expiry %d, want %d", room.ExpiresAt, want)
+	}
+	if room.ExpiresAt != joinedAt+pairRoomFreeRetention {
+		t.Fatalf("expiry %d, want the observed join plus the free window %d",
+			room.ExpiresAt, joinedAt+pairRoomFreeRetention)
 	}
 	if status, _ := h.getAnon(t, "/api/files/"+id+"/blob"); status != 200 {
 		t.Fatalf("blob after the queued join landed: %d, want 200", status)
@@ -819,10 +827,10 @@ func TestAQueuedJoinIsNeverGivenUpOnHoweverLongTheDatabaseIsDown(t *testing.T) {
 		t.Fatal("a failed join was reported as success")
 	}
 
-	// Well past every ceiling this room has: four times the absolute joinability
-	// cap, with the retry and the GC backstop both given their chance at each
-	// step.
-	for range 4 {
+	// Well past every ceiling this room has: eight times the absolute joinability
+	// cap — two days, comfortably past the account's whole retention window too —
+	// with the retry and the GC backstop both given their chance at each step.
+	for range 8 {
 		h.advance(pairRoomMaxJoinable + 1)
 		h.svc.RetryPairRoomJoins(ctx)
 		h.svc.SweepPairRooms(ctx, h.now)
@@ -847,14 +855,32 @@ func TestAQueuedJoinIsNeverGivenUpOnHoweverLongTheDatabaseIsDown(t *testing.T) {
 	if !found || room.JoinedAt != joinedAt {
 		t.Fatalf("join stamped at %d, want the observed instant %d (%+v)", room.JoinedAt, joinedAt, room)
 	}
-	if room.ExpiresAt != pairRoomNoDeadline {
-		t.Fatalf("a joined room still carries a deadline: %d", room.ExpiresAt)
+	// ...and it lands with a BOUNDED deadline, measured from that observed
+	// instant. Which was two days ago, so the window this room was entitled to
+	// has already run out and its ciphertext is reclaimable rather than immortal.
+	// That is the deliberate half of the change: holding the observation is what
+	// stops a JOIN clock from deleting a live transfer, and it was never a licence
+	// to keep an abandoned room's bytes forever.
+	if room.ExpiresAt != joinedAt+pairRoomFreeRetention {
+		t.Fatalf("expiry %d, want the observed join plus the free window %d",
+			room.ExpiresAt, joinedAt+pairRoomFreeRetention)
 	}
-	if status, _ := h.getAnon(t, "/api/files/"+id+"/blob"); status != 200 {
-		t.Fatalf("blob after the long-delayed join landed: %d, want 200", status)
+	if room.ExpiresAt >= h.now {
+		t.Fatalf("a room joined %ds ago still has %ds left", h.now-joinedAt, room.ExpiresAt-h.now)
+	}
+	if status, _ := h.getAnon(t, "/api/files/"+id+"/blob"); status == 200 {
+		t.Fatal("ciphertext past its whole retention window is still readable")
 	}
 	if h.svc.pairJoins.held("626262") {
 		t.Fatal("a join that landed is still queued")
+	}
+	// The ordinary GC backstop is what reclaims it — no new deletion path.
+	h.svc.SweepPairRooms(ctx, h.now)
+	if room, _, _ := h.store.GetPairRoom(ctx, sf.PairRoomID); room.ClosedAt == 0 {
+		t.Fatal("an abandoned joined room past its deadline was not reclaimed")
+	}
+	if h.blobExists(t, sf.BlobKey) {
+		t.Fatal("the reclaimed room's ciphertext is still on disk")
 	}
 }
 
@@ -1025,8 +1051,9 @@ func (h *pairHarness) assertNotJoined(t *testing.T, roomID string) {
 	if got.JoinedAt != 0 {
 		t.Fatalf("a stranger's queued join stamped this room as joined at %d", got.JoinedAt)
 	}
-	if got.ExpiresAt == pairRoomNoDeadline {
-		t.Fatal("a stranger's queued join gave this room an unbounded storage window")
+	if want := pairRoomJoinDeadline(got); got.ExpiresAt != want {
+		t.Fatalf("a stranger's queued join moved this room's deadline to %d, want the "+
+			"unjoined join deadline %d", got.ExpiresAt, want)
 	}
 }
 

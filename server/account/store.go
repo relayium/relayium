@@ -725,9 +725,9 @@ type StoredFileWrite struct {
 	ExpiresAt int64
 	// RoomJoinDeadline is the instant that room is joinable until, from the same
 	// read — the number the pairing CODE is extended to, which is NOT ExpiresAt: a
-	// joined room's objects have no expiry at all (pairRoomNoDeadline), and a code
-	// extended to that would hold six of a million digits out of circulation for
-	// good.
+	// joined room's objects carry their account plan's retention window
+	// (pairRoomJoinedExpiry), and a code extended to that would hold six of a
+	// million digits out of circulation for days.
 	//
 	// 0 for an object with no room, for a refused insert, and for a room somebody
 	// has already joined — which is the same "nothing to extend to" the two other

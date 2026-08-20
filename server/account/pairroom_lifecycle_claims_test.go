@@ -27,16 +27,29 @@ import (
 // that had stopped being true.
 //
 // THE RULE THIS PINS (docs/protocol/relayium-pair-room-v1.md §2). A joined room's
-// ciphertext leaves in exactly three ways, none of which is a clock:
+// ciphertext leaves in exactly four ways:
 //
 //  1. the RECEIVER completes it              (pairroom_complete.go)
 //  2. the OWNING ACCOUNT releases the room   (pairroom_owner.go)
 //  3. the account is deleted                 (purge)
+//  4. its plan RETENTION window runs out     (pairRoomJoinedExpiry + the sweep)
 //
-// There is no fourth. In particular there is no admin or operator route that
+// REWRITTEN 2026-08-20, deliberately, which is the path the previous version of
+// this guard named for itself: "if a deadline was genuinely introduced, the
+// protocol moves first and this guard is rewritten rather than deleted". The
+// protocol moved first. Cause 4 is new and the three before it are unchanged.
+//
+// The owner's decision is that all stored ciphertext follows the account plan's
+// retention, pair rooms included; the retired rule made them the one exception
+// and production grew four current-Free objects at math.MaxInt64 to prove what
+// the exception cost. Note what cause 4 is NOT: it is not a deadline on a
+// TRANSFER. Genuine committed bytes push it out, so an upload still moving is
+// still never cut off — what it bounds is abandonment.
+//
+// There is still no fifth. In particular there is no admin or operator route that
 // removes one — grep the mux: the only two pair-room routes are the account's own
-// (handlers.go) — and no sweep ages one out. Text claiming otherwise sends a
-// reader looking for a control nobody built.
+// (handlers.go). Text claiming otherwise sends a reader looking for a control
+// nobody built.
 //
 // WHAT THIS DELIBERATELY DOES NOT DO. It does not require a phrasing. Banning the
 // sentences that were actually wrong, and requiring that each of the three causes
@@ -51,8 +64,9 @@ func TestPairRoomLifecycleCommentsNameEveryCauseAndInventNone(t *testing.T) {
 				t.Errorf("%s:%d says %q.\n%s\n"+
 					"A joined room's ciphertext ends when its receiver completes it\n"+
 					"(pairroom_complete.go), when the owner releases the room\n"+
-					"(pairroom_owner.go), or when the account is deleted — and never on a\n"+
-					"clock.", file, lineOf(src, idx), stale.text, stale.why)
+					"(pairroom_owner.go), when the account is deleted, or when its plan\n"+
+					"retention window runs out (pairRoomJoinedExpiry).",
+					file, lineOf(src, idx), stale.text, stale.why)
 			}
 		}
 	}
@@ -61,29 +75,36 @@ func TestPairRoomLifecycleCommentsNameEveryCauseAndInventNone(t *testing.T) {
 // The positive half, on the one file that owns the rule. Banning stale sentences
 // keeps a comment from being wrong; it cannot keep one from going quiet, and a
 // silent invariant list is how the owner's release becomes undiscoverable again.
-func TestPairRoomInvariantsNameAllThreeExits(t *testing.T) {
+func TestPairRoomInvariantsNameAllFourExits(t *testing.T) {
 	src := readClaimSource(t, "pairroom.go")
 	for _, exit := range []struct{ token, why string }{
 		{"pairroom_complete.go", "the receiver's completion — the exit that is not always reachable (protocol §7.6)"},
 		{"pairroom_owner.go", "the owner's release — the exit that always exists"},
-		{"deleted", "account deletion — the last exit"},
+		{"deleted", "account deletion"},
+		{"pairRoomJoinedExpiry", "the plan retention window — the exit that needs nobody to act"},
 	} {
 		if !strings.Contains(src, exit.token) {
 			t.Errorf("pairroom.go no longer mentions %s (%s).\n"+
 				"Invariant 5 is the whole storage argument for this feature; a reader who\n"+
-				"cannot find one of its three exits from the file that states it will\n"+
+				"cannot find one of its four exits from the file that states it will\n"+
 				"conclude the exit does not exist.", exit.token, exit.why)
 		}
 	}
-	// No clock, said out loud. Invariant 5 IS this sentence; a version of the file
-	// that stopped claiming it would most likely be one where somebody added a
-	// backstop deadline, which is the exact change this project has already
-	// reverted once (see pairRoomNoDeadline).
-	if !strings.Contains(src, "no clock") && !strings.Contains(src, "NO deadline") {
-		t.Error("pairroom.go no longer states that a joined room is on no clock.\n" +
-			"That is invariant 5. If a deadline was genuinely introduced, the protocol\n" +
-			"(docs/protocol/relayium-pair-room-v1.md §2, §7.5) moves first and this\n" +
-			"guard is rewritten deliberately rather than deleted.")
+	// The BOUND, said out loud, and its two halves. A version of this file that
+	// stopped stating either one is most likely a version where somebody restored
+	// the unbounded rule — which is the change this project has now reverted in
+	// both directions, once toward "no clock" and once away from it.
+	if !strings.Contains(src, "retention") {
+		t.Error("pairroom.go no longer states that a joined room is bounded by its plan\n" +
+			"retention window. That is invariant 5 as it now stands. If the rule genuinely\n" +
+			"changed again, the protocol (docs/protocol/relayium-pair-room-v1.md §2, §7.5)\n" +
+			"moves first and this guard is rewritten deliberately rather than deleted.")
+	}
+	if !strings.Contains(src, "LastUploadAt") && !strings.Contains(src, "last_upload_at") {
+		t.Error("pairroom.go no longer ties the joined deadline to committed upload\n" +
+			"progress. That half is what keeps the owner's original rule true: a transfer\n" +
+			"that is still moving bytes is never cut off. A retention window measured from\n" +
+			"anything a client can move, or from the join alone, is a different rule.")
 	}
 }
 
@@ -133,6 +154,26 @@ var staleLifecycleClaims = []struct{ text, why string }{
 		"GET /api/pair-rooms and DELETE /api/pair-rooms/{id} are exactly those two\n" +
 			"ways. (Describing the state BEFORE they existed is fine — put it in the\n" +
 			"past tense so it cannot be read as current.)",
+	},
+	{
+		"has no expiry of any kind",
+		"Retired 2026-08-20. A joined room's ciphertext expires at its plan\n" +
+			"retention window (pairRoomJoinedExpiry). Describing the OLD rule is fine —\n" +
+			"put it in the past tense so it cannot be read as current.",
+	},
+	{
+		"no transfer deadline",
+		"Same retirement. There is a deadline; what makes it not a TRANSFER deadline\n" +
+			"is that committed bytes push it out, and that is the thing to say.",
+	},
+	{
+		"there is no clock",
+		"Same retirement. There is a clock, and pairRoomJoinedExpiry is it.",
+	},
+	{
+		"and by nothing else",
+		"This closed the retired three-exit list. There are four exits now, and the\n" +
+			"fourth is the retention window.",
 	},
 	{
 		"stored until the account is deleted",
