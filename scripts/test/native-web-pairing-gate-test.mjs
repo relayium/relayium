@@ -459,6 +459,10 @@ for (const [marker, why] of [
     "both role assignments — see above; one side proved is half the role space unproved"],
   ["compared_sas",
     "the SAS comparison — the one cell where the two clients' derived digits are put side by side"],
+  ["browser_half_landed_on_mac",
+    "the phase barrier — the run's contract is BIDIRECTIONAL transfer, and without this wait the Mac"
+    + " is driven while the browser is still sending, so a red round cannot be told apart from an"
+    + " interleaving the gate never set out to exercise"],
 ]) {
   check(
     acceptanceSource.includes(marker),
@@ -478,6 +482,46 @@ check(
   + ` a run that reports the half it happened to get is how the shipped regression was written off`,
 );
 
+// ── 6. the phase barrier is a barrier ───────────────────────────────────────
+//
+// Three ways to keep the marker above and lose the property it names, none of
+// which anything else in this repository can see: let the wait time out without
+// failing, move it after the Mac is driven, or weaken what it waits FOR.
+
+check(
+  /\|\|\s*fail "the browser's message and file never reached the Mac/.test(acceptanceSource)
+  && /\|\|\s*fail "the browser half exited before its message and file reached the Mac/
+    .test(acceptanceSource),
+  `${ACCEPTANCE}'s phase barrier no longer FAILS when the browser's half never lands or the browser`
+  + ` exits under it; a barrier that falls through on timeout restores the crossing it removed and`
+  + ` reports it as a byte comparison failure`,
+);
+
+// Ordering is the whole point: the same wait placed after the two /drive calls
+// keeps every marker and proves nothing.
+const barrierAt = acceptanceSource.indexOf(`fail "the browser's message and file never reached the Mac`);
+const driveAt = acceptanceSource.indexOf("POST /drive");
+check(
+  barrierAt >= 0 && driveAt >= 0 && barrierAt < driveAt,
+  `${ACCEPTANCE} drives the Mac before it waits for the browser's half to land; the barrier must`
+  + ` complete BEFORE the first /drive call or the two sides cross exactly as they did before it`,
+);
+
+// And what it waits for stays exact: the browser's own message text, the file's
+// own name, and that file's digest. Dropping the digest would let a partially
+// written receipt satisfy the barrier that the comparison below would reject.
+const barrierCall = acceptanceSource.split("\n")
+  .find((line) => line.includes('browser_half_landed_on_mac "$observed"'));
+check(
+  barrierCall !== undefined
+  && barrierCall.includes("$web_message_text")
+  && barrierCall.includes("$web_file_name")
+  && barrierCall.includes("$web_file_sha"),
+  `${ACCEPTANCE}'s phase barrier no longer waits on the exact browser message, file name AND file`
+  + ` digest (found: ${barrierCall ?? "no call at all"}); anything less can be satisfied by bytes`
+  + ` the final comparison would reject`,
+);
+
 if (failures.length > 0) {
   for (const failure of failures) process.stderr.write(`FAIL: ${failure}\n`);
   process.stderr.write(`\n${failures.length} delivery-gate assertion(s) failed\n`);
@@ -488,5 +532,6 @@ process.stdout.write(
   `ok: ${ACCEPTANCE} runs in exactly one hosted macOS job, every owning tree `
   + `(${REQUIRED_PATHS.join(", ")}) triggers it, the wire-vector zero-diff gate runs before it, `
   + `neither may skip or be advisory, and the acceptance still proves both role assignments, `
-  + `the SAS agreement and a real browser against a real server\n`,
+  + `the SAS agreement, a real browser against a real server, and a phase barrier that waits for `
+  + `the browser's exact message and file digest before the Mac is driven\n`,
 );
