@@ -38,8 +38,10 @@ import (
 //  2. SAME MACHINERY. Placement, daily quota, storage cap, traffic cap,
 //     max-file-size, expiry and GC are the share path's, byte for byte. Nothing
 //     about a pair-room object is cheaper or free. The one deliberate exception
-//     is retention, and only after a join: a share's plan retention cap is a
-//     deadline, and invariant 5 says a joined transfer has none.
+//     is WHERE retention is measured from, and only after a join: a share's
+//     window runs from its upload, while a joined room's runs from the later of
+//     the join and the last committed byte (invariant 5). The window itself is
+//     the same plan retention.
 //  3. EVERY ACCEPTED BYTE IS BILLED. Traffic is metered per committed append
 //     (uploads_resumable.go), so a cancelled, failed or never-joined upload is
 //     billed for exactly what moved. The abuse argument for rule 4 depends on
@@ -55,24 +57,27 @@ import (
 //     credential that can reach it. Extension is owner-bound, forward-only and
 //     never a resurrection, so it can neither steal nor revive somebody else's
 //     six digits.
-//  5. JOINING ENDS EVERY CLOCK. Once a second participant is in the room there
-//     is NO deadline of any kind on the ciphertext — not a transfer deadline and
-//     not a readability one. This is the owner's rule taken literally, which is
-//     why it is expensive, and it leaves EXACTLY THREE ways a joined room's bytes
-//     go — none of them a clock, and every one of them somebody acting:
-//     · the RECEIVER completes it (pairroom_complete.go): it proves it holds the
+//  5. JOINING ENDS THE JOIN CLOCK AND STARTS THE RETENTION ONE. Until somebody
+//     joins, the joinability deadlines of invariant 4 govern. Once a second
+//     participant is in the room, the ciphertext carries the room owner plan's
+//     retention SNAPSHOT, clamped to [1 day, 14 days] and measured from the
+//     later of the join and the last byte the server itself committed
+//     (pairRoomJoinedExpiry). Only the server's own committed progress moves
+//     that base, and each commit buys another full window, so an upload that is
+//     still moving bytes is never cut off by this clock; what the clock bounds
+//     is ABANDONMENT. Four things end a joined room:
+//     - the RECEIVER completes it (pairroom_complete.go): it proves it holds the
 //     file key, the object goes, and the room goes with it when that was the
 //     last one;
-//     · the OWNING ACCOUNT releases the whole room (pairroom_owner.go), by id,
+//     - the OWNING ACCOUNT releases the whole room (pairroom_owner.go), by id,
 //     once, having been shown what it is holding;
-//     · the account is deleted (PurgeTransientUserData / ArchiveAndPurgeUser).
-//     There is no fourth, and in particular no admin route that removes one and
-//     no sweep that ages one out. Both of the first two are capabilities
-//     somebody exercises rather than clocks — they add nothing that expires — so
-//     this invariant is exactly what it always was. What is still open is what
-//     becomes of a joined room whose owner never looks: pre-upload therefore
-//     stays off unless a deployment turns it on (Service.SetPreUpload). See
-//     invariant 8.
+//     - the account is deleted (PurgeTransientUserData / ArchiveAndPurgeUser);
+//     - the retention deadline passes, which is what reclaims a room nobody ever
+//     completes or releases.
+//     The first three are capabilities somebody exercises, and each removes the
+//     bytes SOONER than the deadline would. There is still no admin route that
+//     removes a joined room. Pre-upload nevertheless stays off unless a
+//     deployment turns it on (Service.SetPreUpload); see invariant 8.
 //  6. VOID MEANS GONE, NOW — AND GONE MEANS EVERYTHING THE ROOM HELD. Every
 //     truth-bearing read or write of a pair-room object re-derives the room's
 //     liveness and, if the room is over, closes it. The close is ONE database
@@ -93,7 +98,7 @@ import (
 //     Holding the id (and the key the server never saw) is the whole capability.
 //  8. OFF UNLESS TURNED ON. A deployment must opt in (Service.SetPreUpload)
 //     before a single room can be created.
-//     Both feature-specific exits from rule 5 are now BUILT AND WIRED: a sender
+//     Both feature-specific exits from rule 5 are BUILT AND WIRED: a sender
 //     records a completion capability at finalize and the Web receiver spends it
 //     (pairroom_complete.go), and the owning account can see every joined room it
 //     is holding and release one (pairroom_owner.go). Production still stays OFF,
@@ -104,21 +109,22 @@ import (
 //       a service-worker stream hands the bytes to the BROWSER and the client
 //       never learns whether they landed, so it must not speak for them. That
 //       covers Firefox, Safari and every phone: they save perfectly and complete
-//       nothing (docs/protocol/relayium-pair-room-v1.md §7.6). Those rooms end
-//       when their owner releases them, or not at all.
-//     · THE RESIDUAL LIFETIME IS AN OWNER DECISION AND IS STILL OPEN. What
+//       nothing (docs/protocol/relayium-pair-room-v1.md §7.6). Those rooms are
+//       reclaimed when their retention window runs out, unless their owner ends
+//       them by hand first.
+//     - THE RESIDUAL LIFETIME IS NOW ANSWERED, AND THE ANSWER HAS A PRICE. What
 //       happens to a joined room whose receiver never completes — declines,
-//       closes the tab, never arrives at all — is unanswered, and
-//       pairroom_owner.go is NOT that answer: it is a control the account
-//       operates, so a room whose owner never looks is exactly where it was. It
-//       is deliberately still unanswered here: a decline is not a completion, and
-//       inventing a fallback expiry would be exactly the reinterpretation of rule
-//       5 this file already refused once.
-//     · THE ROLLOUT GATES ARE NOT CLOSED. Enabling this is a storage commitment
-//       whose shape depends on both of the above.
-//     So the gate is still not a feature flag for a half-built feature: every
-//     half is finished on its own terms. It is the honest way to hold rule 5 as
-//     written instead of quietly trading it for a number.
+//       closes the tab, never arrives at all — is rule 5's retention deadline:
+//       the room is held for its plan's snapshot and then reclaimed. That is a
+//       bound rather than an open question, but for the class above it is also
+//       the ORDINARY path, so enabling this commits the deployment to storing a
+//       plan window's worth of ciphertext per abandoned transfer.
+//     - THE ROLLOUT GATE IS A PRODUCT DECISION. Enabling this is a storage
+//       commitment whose size is now a number the account is already billed
+//       under, and whether that default is acceptable is the owner's call.
+//     So the gate is not a feature flag for a half-built feature: every half is
+//     finished on its own terms, and rule 5 is held by a bound rather than
+//     traded away.
 
 // StoredPurposePairRoom is ciphertext uploaded during a pairing code's wait, to
 // be handed to whoever joins that code's room. Bound to one room for its whole
@@ -380,7 +386,7 @@ func pairRoomJoinedExpiry(r PairRoom) int64 {
 //
 // It is pairRoomJoinDeadline while nobody has joined, and NOTHING once somebody
 // has. The second half is invariant 5 read for what it costs rather than for what
-// it grants: joining ends every clock, so there is no later instant a receiver
+// it grants: joining ends JOINABILITY, so there is no later instant a receiver
 // may still arrive at, and a code extended past the join would hold six of a
 // million digits out of circulation while buying nothing at all — the room it
 // names is full and its two peers are already connected. 0 is "extend nothing",
@@ -824,9 +830,9 @@ func (s *Service) notePairRoomUpload(ctx context.Context, room PairRoom, at int6
 //
 // It is deliberately driven from the SERVER's own observation of the room's
 // membership rather than from anything a client says. A client-asserted "they
-// joined" would be a free jump from a five-minute deadline to no deadline at
-// all, which would make the product's one visible promise about pre-upload
-// untrue at the request of the party it constrains.
+// joined" would be a free jump from a five-minute deadline to the account's
+// whole retention window, which would make the product's one visible promise
+// about pre-upload untrue at the request of the party it constrains.
 //
 // A code with no pre-upload has no room row and this is a no-op — the
 // overwhelmingly common case, and why it must be cheap and must never fail a
@@ -1075,8 +1081,8 @@ func (q *pairJoinQueue) pending(code string) (observedJoin, bool) {
 // that they "could not have been timely anyway", which is simply false, and its
 // effect was to hand the room back the five-minute deadline the join had
 // already ended — so the next sweep deleted a receiver's ciphertext on a clock
-// that stopped hours before. Joining ends every clock (invariant 5); an
-// unwritten join may not quietly restart one.
+// that stopped hours before. Joining ends the join deadline (invariant 5); an
+// unwritten join may not quietly restart it.
 //
 // What makes holding an entry indefinitely SAFE is not time but identity: a
 // retry resolves the room by id when the id is known, and otherwise refuses a
@@ -1484,13 +1490,14 @@ func (s *Service) SweepPairRooms(ctx context.Context, now int64) {
 	// Hygiene for the one room shape neither a deadline nor a completion can
 	// reach: JOINED, open, and holding nothing at all.
 	//
-	// A joined room has no deadline (invariant 5), so the pass above cannot see
-	// it, and a completion closes the room only when the completion is what
-	// empties it. What falls between them is ordinary rather than exotic: the last
-	// object is completed while an upload is still in flight — which correctly
-	// leaves the room open, because that upload is entitled to finish — and the
-	// upload is then abandoned instead of finalized, so the generic reaper takes
-	// its session and nothing is left. Without this the row is immortal.
+	// A joined room's deadline is a retention window away (invariant 5), so the
+	// pass above cannot reach it for days, and a completion closes the room only
+	// when the completion is what empties it. What falls between them is ordinary
+	// rather than exotic: the last object is completed while an upload is still in
+	// flight — which correctly leaves the room open, because that upload is
+	// entitled to finish — and the upload is then abandoned instead of finalized,
+	// so the generic reaper takes its session and nothing is left. Without this
+	// the row sits out a full plan window holding nothing.
 	//
 	// It reclaims no bytes, because there are none: a room that holds no object and
 	// no session has no ciphertext, no blob and no slot left. What it does still owe
