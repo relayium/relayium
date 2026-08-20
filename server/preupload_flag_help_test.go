@@ -102,24 +102,47 @@ func TestPreUploadFlagHelpDoesNotClaimThereIsNoCompletionLifecycle(t *testing.T)
 		}
 	}
 
-	// No clock, in either direction. §2's rule is that a joined room has no
-	// expiry of any kind, and neither §7's completion nor §8's release is one —
-	// so help that describes this storage as timed would be describing a server
-	// that does not exist, and would hide the exact commitment the reader opened
-	// -h to size.
-	for _, timer := range []string{
-		"expires after",
-		"auto-expire",
-		"automatically expire",
-		"fallback expiry",
-		"retention period",
+	// The clock, in BOTH directions — and this block has flipped once, which is
+	// the strongest proof this file needs guards at all. Invariant 5
+	// (account/pairroom.go) used to say nothing the server runs ever ends a
+	// joined room, and this block banned every timer word accordingly. That
+	// invariant was deliberately replaced: a joined room's ciphertext is now
+	// retained for its owner plan's retention SNAPSHOT, clamped to 1-14 days and
+	// measured from the later of the join and the last committed byte. Help that
+	// still calls this storage unbounded would describe the server that existed
+	// before that change, and hide the exact commitment the reader opened -h to
+	// size — now in the direction that promises permanence the server no longer
+	// delivers.
+	for _, stale := range []string{
+		"no expiry",
+		"never expires",
+		"nothing the server runs ever ends",
+		"no timer",
 	} {
-		if strings.Contains(line, timer) {
-			t.Errorf("-enable-preupload help says %q, which would mean a joined room is on a\n"+
-				"clock. It is not: nothing the server runs ever ends one (pairroom.go\n"+
-				"invariant 5). If a timer was genuinely added, that is a protocol change\n"+
-				"and docs/protocol/relayium-pair-room-v1.md §2 and §7.5 have to move\n"+
-				"first.\nhelp: %s", timer, line)
+		if strings.Contains(line, stale) {
+			t.Errorf("-enable-preupload help claims %q, which would mean a joined room is not\n"+
+				"on a clock. It is: pairroom.go invariant 5 retains its ciphertext for the\n"+
+				"owner plan's retention snapshot and reclaims it when that window runs\n"+
+				"out. If the clock was genuinely removed again, that is a protocol change\n"+
+				"and docs/protocol/relayium-pair-room-v1.md has to move first.\nhelp: %s",
+				stale, line)
+		}
+	}
+
+	// The positive half of the same contract: the bound itself, stated where the
+	// operator sizes the commitment. Each token is a different load-bearing fact
+	// of invariant 5, and dropping any one of them re-opens the unbounded
+	// reading this block was rewritten to reject.
+	for _, bound := range []struct{ token, why string }{
+		{"retention", "the window is the plan's retention snapshot (pairRoomRetention)"},
+		{"1-14 days", "the clamp that makes the commitment bounded (pairRoomFreeRetention..pairRoomMaxRetention)"},
+		{"owner plan", "whose plan sets the window — the room owner's, not the receiver's"},
+	} {
+		if !strings.Contains(line, bound.token) {
+			t.Errorf("-enable-preupload help no longer states %q (%s).\n"+
+				"Bounded owner-plan retention is the storage commitment now; help that\n"+
+				"drops it leaves the operator sizing an unbounded obligation that no\n"+
+				"longer exists.\nhelp: %s", bound.token, bound.why, line)
 		}
 	}
 
@@ -208,10 +231,12 @@ func TestPreUploadFlagHelpDoesNotClaimThereIsNoCompletionLifecycle(t *testing.T)
 func TestPreUploadEnabledLogNamesEveryWayAJoinedRoomEnds(t *testing.T) {
 	line := preUploadEnabledLog(t)
 
-	// All three causes, and nothing that implies a fourth. This is the whole
-	// lifecycle of a joined room's ciphertext (docs/protocol/
-	// relayium-pair-room-v1.md §2), and each one is a different person's action:
-	// the receiver's, the account's, and the account's again by deleting itself.
+	// All three early exits, each a different person's action: the receiver's,
+	// the account's, and the account's again by deleting itself. They are no
+	// longer the whole lifecycle — the retention deadline of pairroom.go
+	// invariant 5 is the fourth ending and the only one that needs nobody — but
+	// they are the three ways a room ends SOONER than that deadline, and this
+	// log is where an operator learns them.
 	for _, cause := range []struct{ token, why string }{
 		{"complete", "the receiver's completion (pairroom_complete.go)"},
 		{"/api/pair-rooms", "the owner's release (pairroom_owner.go)"},
@@ -219,34 +244,58 @@ func TestPreUploadEnabledLogNamesEveryWayAJoinedRoomEnds(t *testing.T) {
 	} {
 		if !strings.Contains(line, cause.token) {
 			t.Errorf("the pre-upload ENABLED log does not mention %s.\n"+
-				"A joined room's ciphertext ends in exactly three ways and this log is\n"+
-				"where an operator learns them.\nlog: %s", cause.why, line)
+				"A joined room's ciphertext ends by its retention deadline or by one of\n"+
+				"exactly three earlier exits, and this log is where an operator learns\n"+
+				"them.\nlog: %s", cause.why, line)
 		}
 	}
 
-	// The negative half, and it is the one that was wrong before: the log used to
-	// say a room nobody completes "has no expiry" and stop there, which is true
-	// and useless — it named the problem and not the control that answers it.
+	// The negative half, which has now been wrong in BOTH directions. First the
+	// log said a room nobody completes "has no expiry" and stopped — true then,
+	// and useless. Then release and completion shipped, and finally the no-clock
+	// rule itself was deliberately replaced by bounded owner-plan retention. So
+	// besides the two old stale sentences, every claim of the infinite/no-clock
+	// contract — that this storage has no expiry, no deadline, no clock — is now
+	// the falsehood, and it is the expensive one: an operator promised
+	// permanence will budget for storage the server actually reclaims, and a
+	// user promised it loses files.
 	for _, stale := range []string{
 		"a room nobody completes has no expiry",
 		"an operator or account deletion",
 		"until the account is deleted, and nothing else",
+		"no expiry",
+		"never expires",
+		"nothing expires",
+		"no clock",
+		"not on a clock",
 	} {
 		if strings.Contains(line, stale) {
 			t.Errorf("the pre-upload ENABLED log still says %q.\n"+
-				"The owner can list and release joined pair-room storage\n"+
-				"(server/account/pairroom_owner.go), so a room nobody completes has an\n"+
-				"end — it just is not a clock.\nlog: %s", stale, line)
+				"A joined room's ciphertext is on a clock now: pairroom.go invariant 5\n"+
+				"retains it for the owner plan's retention snapshot and reclaims it when\n"+
+				"that window runs out. If the clock was genuinely removed again, the\n"+
+				"protocol doc moves first.\nlog: %s", stale, line)
 		}
 	}
 
-	// Still no clock, said in the log too. If this ever needs to change, the
-	// protocol moves first.
-	if !strings.Contains(line, "clock") {
-		t.Errorf("the pre-upload ENABLED log no longer says that nothing expires on a\n" +
-			"clock. That is the property the whole storage commitment follows from\n" +
-			"(pairroom.go invariant 5); an operator who assumes a retention window\n" +
-			"will size this wrong in the one direction that costs money.")
+	// The clock, said in the log too — the same bounded contract the flag help
+	// states, because the log is read by an operator with no -h in front of
+	// them. Each token is a separate promise: the window exists, whose plan
+	// sizes it, that live progress is never cut off by it, and that abandoned
+	// rooms are actually cleaned up when it runs out.
+	for _, bound := range []struct{ token, why string }{
+		{"retention", "the bounded window itself (pairroom.go invariant 5)"},
+		{"owner plan", "whose plan sets the window — the room owner's, not the receiver's"},
+		{"refreshes", "genuine upload progress moves the deadline, so a moving transfer is never reclaimed mid-flight"},
+		{"reclaimed", "the cleanup that finally ends a room nobody completes and nobody releases"},
+	} {
+		if !strings.Contains(line, bound.token) {
+			t.Errorf("the pre-upload ENABLED log no longer states %q (%s).\n"+
+				"Bounded owner-plan retention is the property the whole storage\n"+
+				"commitment follows from; a log that drops it sends the operator back to\n"+
+				"the unbounded reading, which is now the one that costs money.\nlog: %s",
+				bound.token, bound.why, line)
+		}
 	}
 }
 

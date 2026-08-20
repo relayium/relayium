@@ -30,6 +30,16 @@
 # workspace, agree on the SAS, and each receives the other's message and file
 # with the bytes compared by digest.
 #
+# The two directions are SEQUENCED, and the sequence is part of the contract
+# rather than an accident of timing. A round runs in three phases: the link
+# opens, the browser's message and file land on the Mac, and only then does the
+# Mac send its own. Both waits are gated on the Mac's `/observed` production
+# projection, never on a sleep. What this therefore proves is bidirectional
+# transfer. It is deliberately NOT a claim about SIMULTANEOUS cross-initiation:
+# nothing here holds both endpoints at a known point, so an unsequenced run
+# would sample one arbitrary interleaving per round and report it as though the
+# whole ordering space had been covered.
+#
 # ## Both role assignments
 #
 # `linkRole` gives the smaller hub id the offer, and the hub assigns ids per
@@ -50,6 +60,14 @@
 # fails when the fix is reverted. What this run proves is the thing no unit test
 # can: that two DIFFERENT implementations agree — one workspace, one SAS, and the
 # same bytes — over a real hub and real WebRTC, in both role assignments.
+#
+# Nor does it prove anything about two peers sending INTO each other. The phase
+# barrier in the round loop is why: before it, the Mac was driven the instant the link
+# opened while the browser was independently sending, and the crossing text
+# requests and file offers made a red run ambiguous between a real cross-client
+# disagreement and an interleaving this gate never set out to exercise. Proving
+# concurrent cross-initiation needs a harness that can release both sides at a
+# known point; it is worth building, and it is not this file.
 #
 # ## Where this runs
 #
@@ -98,6 +116,53 @@ web_file_body="from the browser: 端到端 — 9876543210"
 
 sha_of_string() { printf '%b' "$1" | shasum -a 256 | cut -d' ' -f1; }
 hex_of_string() { printf '%b' "$1" | od -An -tx1 | tr -d ' \n'; }
+
+# Every derived form of the four payloads, resolved once. The phase barrier below
+# waits on the SAME strings and the SAME digest the final comparison asserts, and
+# a barrier that could be satisfied by bytes the comparison would reject is worse
+# than no barrier: it would report agreement it had not waited for.
+mac_message_text="$(printf '%b' "$mac_message")"
+web_message_text="$(printf '%b' "$web_message")"
+mac_file_body_text="$(printf '%b' "$mac_file_body")"
+web_file_body_text="$(printf '%b' "$web_file_body")"
+mac_file_hex="$(hex_of_string "$mac_file_body")"
+web_file_sha="$(sha_of_string "$web_file_body")"
+
+# **Has the browser's half LANDED on the Mac, exactly?**
+#
+# Reads the Mac's own `/observed` production projection -- what `LinkCounterpart`
+# recorded from the models the app's writers filled in, not a side channel this
+# script keeps -- and requires both halves of the browser's send: the exact
+# message text, and a received file with the exact name whose SHA-256 matches the
+# bytes the browser was told to send. The digest is what makes a partially
+# written file wait rather than pass: a half-flushed receipt hashes differently.
+#
+# Prints a one-line progress report either way, so a stall names the half that is
+# missing instead of ending as one undifferentiated timeout. Exit 0 means landed.
+browser_half_landed_on_mac() {
+  python3 - "$1" "$2" "$3" "$4" <<'BARRIER'
+import json, sys
+
+try:
+    observed = json.loads(sys.argv[1])
+except Exception:
+    print("the Mac returned no readable observation")
+    sys.exit(1)
+message, name, sha = sys.argv[2], sys.argv[3], sys.argv[4].lower()
+
+got_message = message in observed.get("messages", [])
+files = observed.get("files", [])
+named = [f for f in files if f.get("name") == name]
+got_file = any(f.get("sha256", "").lower() == sha for f in named)
+
+print("message %s, file %s (messages=%d, files=%s)"
+      % ("landed" if got_message else "pending",
+         "landed" if got_file else ("still writing" if named else "pending"),
+         len(observed.get("messages", [])),
+         sorted(f.get("name", "?") for f in files) or "none"))
+sys.exit(0 if got_message and got_file else 1)
+BARRIER
+}
 
 acceptance_begin
 acceptance_build "$repo/server" "$repo/apps/RelayiumKit"
@@ -187,9 +252,9 @@ while [ "$round" -lt "$max_rounds" ]; do
     cd "$repo/web" && node e2e/native-pairing-browser.mjs \
       --origin "$origin" --code "$code" --out "$browser_out" \
       --debug-port "$((9460 + round))" --verify "$verify_mode" \
-      --message "$(printf '%b' "$web_message")" \
-      --file-name "$web_file_name" --file-body "$(printf '%b' "$web_file_body")" \
-      --expect-name "$mac_file_name" --expect-message "$(printf '%b' "$mac_message")"
+      --message "$web_message_text" \
+      --file-name "$web_file_name" --file-body "$web_file_body_text" \
+      --expect-name "$mac_file_name" --expect-message "$mac_message_text"
   ) >"$run_root/browser-$round.log" 2>&1 &
   browser_pid=$!
   register_child "browser-$round" "$browser_pid"
@@ -217,20 +282,73 @@ while [ "$round" -lt "$max_rounds" ]; do
   done
   [ "$linked" = "1" ] \
     || fail "the Mac never reached an OPEN link/1 workspace: $(control "$mac_port" GET /observed)"
-  say "-- the Mac reached a link/1 workspace"
+  say "-- phase 1/3: the Mac reached a link/1 workspace"
+
+  # -- phase barrier: the browser's half must have LANDED before the Mac sends --
+  #
+  # **The contract here is BIDIRECTIONAL transfer, not simultaneous
+  # cross-initiation.** Before this wait, the shell drove the Mac's message and
+  # file the moment the link opened while the browser was independently sending
+  # its own, so the two text requests and the two file offers crossed on the wire
+  # in an order nothing in this script controls. A red run then said "the Mac did
+  # not receive the browser's message" without distinguishing the cross-client
+  # DISAGREEMENT this gate exists to catch from an interleaving it never meant to
+  # exercise -- the same "fails about half the time" shape that got the shipped
+  # regression written off, arriving this time from the harness rather than from
+  # the product.
+  #
+  # Simultaneous cross-initiation is a real property and worth proving; it is a
+  # DIFFERENT property, and proving it needs a harness that can hold both sides
+  # at a known point rather than a coin flip inside the one gate that has to stay
+  # readable. So this barrier is ordering, not tolerance: it relaxes no timeout,
+  # removes no assertion, waits on the production projection rather than on a
+  # clock, and leaves both directions, both role assignments and every byte
+  # comparison below untouched.
+  #
+  # Deadlock-free by construction: the browser sends its message and its file
+  # BEFORE it waits for anything from the Mac (`e2e/native-pairing-browser.mjs`),
+  # so nothing it is blocked on sits behind this barrier.
+  browser_half_landed=0
+  progress="not yet observed"
+  for tick in $(seq 1 240); do
+    observed="$(control "$mac_port" GET /observed || echo '{}')"
+    case "$observed" in
+      *legacyFallback*) fail "the Mac fell back to the LEGACY wire while waiting for the browser's half: $observed" ;;
+    esac
+    # The link ENDING mid-barrier is its own failure, and a prompt one: waiting
+    # out the full bound on a workspace that has already closed would report a
+    # timeout for something that is not slow.
+    case "$observed" in
+      *'"linkPhase": "open('*|*'"linkPhase":"open('*) : ;;
+      *) fail "the link left its open workspace before the browser's half arrived: $observed" ;;
+    esac
+    if progress="$(browser_half_landed_on_mac "$observed" "$web_message_text" "$web_file_name" "$web_file_sha")"; then
+      browser_half_landed=1
+      break
+    fi
+    kill -0 "$browser_pid" 2>/dev/null \
+      || fail "the browser half exited before its message and file reached the Mac ($progress): $(tail -30 "$run_root/browser-$round.log")"
+    if [ $((tick % 20)) -eq 0 ]; then
+      say "-- still waiting for the browser's half ($((tick / 2))s): $progress"
+    fi
+    sleep 0.5
+  done
+  [ "$browser_half_landed" = "1" ] \
+    || fail "the browser's message and file never reached the Mac within 120s ($progress)"
+  say "-- phase 2/3: the browser's half landed on the Mac: $progress"
 
   control "$mac_port" POST /drive \
     "$(printf '{"command":"message","body":%s}' "$(python3 -c '
 import json, sys
-print(json.dumps(sys.argv[1]))' "$(printf '%b' "$mac_message")")")" >/dev/null \
+print(json.dumps(sys.argv[1]))' "$mac_message_text")")" >/dev/null \
     || fail "the Mac refused to send a message"
   control "$mac_port" POST /drive \
     "$(python3 -c '
 import json, sys
 print(json.dumps({"command": "files", "name": sys.argv[1], "contents": sys.argv[2]}))' \
-      "$mac_file_name" "$(printf '%b' "$mac_file_body")")" >/dev/null \
+      "$mac_file_name" "$mac_file_body_text")" >/dev/null \
     || fail "the Mac refused to send a file"
-  say "-- the Mac sent a message and a file"
+  say "-- phase 3/3: the Mac sent a message and a file; the browser is waiting for both"
 
   wait "$browser_pid" \
     || fail "the browser half failed: $(tail -40 "$run_root/browser-$round.log")"
@@ -241,9 +359,9 @@ print(json.dumps({"command": "files", "name": sys.argv[1], "contents": sys.argv[
   printf '%s\n' "$mac_observed" >"$run_root/mac-$round.json"
 
   python3 - "$browser_out" "$run_root/mac-$round.json" \
-    "$(printf '%b' "$mac_message")" "$(printf '%b' "$web_message")" \
-    "$mac_file_name" "$(hex_of_string "$mac_file_body")" \
-    "$web_file_name" "$(sha_of_string "$web_file_body")" <<'PY' || fail "round $round did not agree"
+    "$mac_message_text" "$web_message_text" \
+    "$mac_file_name" "$mac_file_hex" \
+    "$web_file_name" "$web_file_sha" <<'PY' || fail "round $round did not agree"
 import json, sys
 
 browser = json.load(open(sys.argv[1]))
