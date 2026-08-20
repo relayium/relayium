@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -15,22 +16,37 @@ import (
 	"time"
 )
 
+// What Stripe remembers about one used Idempotency-Key: the request that first
+// used it, the refund that request created, and the exact response body Stripe
+// replays for it. The response is FROZEN at creation, so a replay reports what
+// the refund was when the key was consumed, not what it has since become.
+type duplicateStripeIdempotentRefund struct {
+	fingerprint, refundID, response string
+}
+
 type duplicateStripeState struct {
 	mu                           sync.Mutex
 	active, refunded, failRefund bool
 	deletes, refundPosts         int
-	refunds                      map[string]int64
-	refundKeys                   map[string]string
-	refundRecords                map[string]duplicateRefundObservation
-	identityDrift                bool
-	providerRefundFailedOnce     bool
-	nextRefundStatus             string
-	historicalRenewal            bool
-	invoiceListCalls             int
-	liabilitiesAtDelete          func() int
-	historyEmptyMore             bool
-	historyNonadvancing          bool
-	refundActionMetadata         bool
+	// refundPosts counts provider refund CREATIONS -- a new refund object, or a
+	// creation the provider rejected outright. refundAttempts counts every HTTP
+	// POST /v1/refunds, including the idempotent replays production is entitled
+	// to send when a second command reaches the provider with the same key.
+	// Conflating the two makes a safe replay indistinguishable from a second
+	// refund, which is the one thing this fake exists to tell apart.
+	refundAttempts, refundReplays, refundKeyConflicts int
+	refunds                                           map[string]int64
+	refundKeys                                        map[string]duplicateStripeIdempotentRefund
+	refundRecords                                     map[string]duplicateRefundObservation
+	identityDrift                                     bool
+	providerRefundFailedOnce                          bool
+	nextRefundStatus                                  string
+	historicalRenewal                                 bool
+	invoiceListCalls                                  int
+	liabilitiesAtDelete                               func() int
+	historyEmptyMore                                  bool
+	historyNonadvancing                               bool
+	refundActionMetadata                              bool
 }
 
 func newDuplicateStripe(t *testing.T, state *duplicateStripeState, multi bool) (*stripeClient, func()) {
@@ -162,23 +178,44 @@ func newDuplicateStripe(t *testing.T, state *duplicateStripeState, multi bool) (
 				fmt.Fprintf(w, `{"id":%q,"status":%q,"payment_intent":%q,"amount":%d}`, record.RefundID, record.Status, record.PaymentIntentID, record.Amount)
 			}
 			io.WriteString(w, `],"has_more":false}`)
+		// Stripe's idempotency contract, which production DEPENDS on: a refund POST
+		// carries a stable `duplicate-refund:<action id>:<invoice payment id>` key,
+		// and `beginDuplicateRefundProviderMutation` deliberately lets a second
+		// command through with that same key once the first guard has committed but
+		// before its observation is durably bound. The whole handler runs under
+		// state.mu, so the key's first use -- consuming the key, creating the refund
+		// object and moving the charge -- is ONE atomic step no concurrent request
+		// can interleave with or repeat.
 		case "POST /v1/refunds":
+			// Every HTTP attempt. Creations are counted separately, below.
+			state.refundAttempts++
 			if state.failRefund {
 				state.refundPosts++
 				http.Error(w, `{"error":{"message":"temporary"}}`, http.StatusInternalServerError)
 				return
 			}
 			if state.refundKeys == nil {
-				state.refundKeys = map[string]string{}
+				state.refundKeys = map[string]duplicateStripeIdempotentRefund{}
 			}
-			key := r.Header.Get("Idempotency-Key")
-			if refundID := state.refundKeys[key]; refundID != "" {
-				record := state.refundRecords[refundID]
-				fmt.Fprintf(w, `{"id":%q,"status":%q,"payment_intent":%q,"amount":%d}`, record.RefundID, record.Status, record.PaymentIntentID, record.Amount)
+			_ = r.ParseForm()
+			// The whole request is the fingerprint, not just the amount: reusing a key
+			// with a different payment intent, amount or action metadata is a caller
+			// bug Stripe refuses outright, and silently answering it with the first
+			// refund would hide exactly the confusion this test is looking for.
+			key, fingerprint := r.Header.Get("Idempotency-Key"), r.Form.Encode()
+			if cached, used := state.refundKeys[key]; used && key != "" {
+				if cached.fingerprint != fingerprint {
+					state.refundKeyConflicts++
+					http.Error(w, `{"error":{"type":"idempotency_error","message":"Keys for idempotent requests can only be used with the same parameters they were first used with."}}`, http.StatusBadRequest)
+					return
+				}
+				// A faithful replay: the frozen original response, no new refund
+				// object, and not one cent moved on the charge.
+				state.refundReplays++
+				io.WriteString(w, cached.response)
 				return
 			}
 			state.refundPosts++
-			_ = r.ParseForm()
 			var amount int64
 			fmt.Sscan(r.Form.Get("amount"), &amount)
 			paymentIntent := r.Form.Get("payment_intent")
@@ -196,7 +233,10 @@ func newDuplicateStripe(t *testing.T, state *duplicateStripeState, multi bool) (
 				refundID = "re_failed"
 			}
 			record := duplicateRefundObservation{RefundID: refundID, PaymentIntentID: paymentIntent, Status: status, Amount: amount}
-			state.refundKeys[key] = refundID
+			response := fmt.Sprintf(`{"id":%q,"status":%q,"payment_intent":%q,"amount":%d}`, refundID, status, paymentIntent, amount)
+			if key != "" {
+				state.refundKeys[key] = duplicateStripeIdempotentRefund{fingerprint: fingerprint, refundID: refundID, response: response}
+			}
 			state.refundRecords[refundID] = record
 			if status == "succeeded" && state.refunds != nil {
 				state.refunds[paymentIntent] += amount
@@ -204,7 +244,7 @@ func newDuplicateStripe(t *testing.T, state *duplicateStripeState, multi bool) (
 			} else {
 				state.refunded = status == "succeeded"
 			}
-			fmt.Fprintf(w, `{"id":%q,"status":%q,"payment_intent":%q,"amount":%d}`, refundID, status, paymentIntent, amount)
+			io.WriteString(w, response)
 		default:
 			if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/refunds/") {
 				id := strings.TrimPrefix(r.URL.Path, "/v1/refunds/")
@@ -1033,37 +1073,363 @@ func TestDuplicateRefundOperatorRejectsIdentityDriftAndMissingInvoice(t *testing
 	}
 }
 
+// The complete set of outcomes a CONCURRENT operator command may return here,
+// derived from the code the two commands actually run rather than relaxed to
+// "any error".
+//
+// Both commands carry the same actor and reason, so `prepareDuplicateRefundAction`
+// hands the second one the SAME action row, and every provider POST is keyed
+// `duplicate-refund:<action id>:<invoice payment id>`. A loser that reaches the
+// provider therefore REPLAYS the winner's refund instead of creating a second
+// one, and what it can still report is a CAS/stale observation of state the
+// winner had already advanced -- on a path that moved no money.
+//
+// Everything outside this list is a finding, not noise: a provider failure, a
+// pending or reopened refund, a proof that does not match the winner's, or any
+// other `stripe:` constituent error means the two commands disagreed about
+// money and must fail this test rather than be retried away. Compared with `==`
+// rather than a prefix or `strings.Contains`, because "...stale duplicate
+// refund action" is a prefix of "...stale duplicate refund action error".
+var duplicateRefundSafeConcurrentErrors = []string{
+	// canonicalDuplicateRefundObservations: the loser read the charge's
+	// AmountRefunded before the winner's refund landed and the refund list after
+	// it. The two provider reads disagree with EACH OTHER, not with AmountPaid,
+	// so this is the torn read the sentinel exists for -- a path that moved no
+	// money and is finished by relisting evidence.
+	errDuplicateRefundCanonicalSnapshotStale.Error(),
+	// ResolveDuplicateRefund: the loser listed its evidence before the winner
+	// advanced the row.
+	"account: duplicate refund evidence is stale; list evidence again",
+	// prepareDuplicateRefundAction: the same race seen from inside the action
+	// transaction, and the two ownership guards around it.
+	"account: duplicate refund evidence changed before action creation; list evidence again",
+	"account: duplicate refund action ownership conflict",
+	"account: duplicate refund liability changed during an active action",
+	// beginDuplicateRefundProviderMutation and finishDuplicateRefundAction:
+	// the action's liability snapshot no longer matches the row.
+	"account: duplicate refund action liability snapshot is stale",
+	// markDuplicateRefundActionError: the loser's error write lost its own CAS.
+	"account: stale duplicate refund action error",
+	// finishDuplicateRefundAction: the winner reached the terminal write first.
+	"account: duplicate refund action is not finalizable",
+	"account: stale duplicate refund action",
+	"account: stale duplicate refund job",
+}
+
+// What the provider had actually been asked to do at one instant, with the
+// question production actually turns on -- how many refunds were CREATED --
+// kept apart from how many times it was ASKED. A second command replaying the
+// winner's idempotency key is a POST attempt and not a refund.
+type duplicateRefundLedger struct {
+	creations, attempts, replays, keyConflicts int
+	amounts                                    map[string]int64
+	records                                    map[string]duplicateRefundObservation
+}
+
+// The provider's ledger, copied under the fake's own lock so it can be sampled
+// while the other command is still in flight.
+func (s *duplicateStripeState) sampleRefundLedger() duplicateRefundLedger {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sample := duplicateRefundLedger{
+		creations:    s.refundPosts,
+		attempts:     s.refundAttempts,
+		replays:      s.refundReplays,
+		keyConflicts: s.refundKeyConflicts,
+		amounts:      make(map[string]int64, len(s.refunds)),
+		records:      make(map[string]duplicateRefundObservation, len(s.refundRecords)),
+	}
+	for intent, amount := range s.refunds {
+		sample.amounts[intent] = amount
+	}
+	for id, record := range s.refundRecords {
+		sample.records[id] = record
+	}
+	return sample
+}
+
+// One concurrent command's outcome, judged rather than discarded.
+//
+// ResolveDuplicateRefund composes two conflicts when the loser's failed command
+// then ALSO loses the CAS to persist its own error note to an action the winner
+// has already advanced: `<execute conflict>; persist operator evidence: <save
+// conflict>`. That composition is judged by its parts -- each must be a safe
+// conflict on its own, exactly matched -- because both legs read state and
+// moved no money; an unsafe leg anywhere still fails the test.
+func requireSafeConcurrentRefundOutcome(t *testing.T, stage string, res DuplicateRefundOperatorResult, err error) {
+	t.Helper()
+	if err == nil {
+		if res.ActionID == "" || res.State != "succeeded" {
+			t.Fatalf("%s: succeeded with result %+v", stage, res)
+		}
+		return
+	}
+	for _, part := range strings.Split(err.Error(), "; persist operator evidence: ") {
+		safe := false
+		for _, candidate := range duplicateRefundSafeConcurrentErrors {
+			safe = safe || part == candidate
+		}
+		if !safe {
+			t.Fatalf("%s: unsafe concurrent outcome %v (result %+v)", stage, err, res)
+		}
+	}
+	// None of the safe conflicts reach a provider mutation, so none of them
+	// may claim the action succeeded or report it blocked/failed.
+	if res.State != "" && res.State != "prepared" {
+		t.Fatalf("%s: conflict %q reported state %q", stage, err, res.State)
+	}
+}
+
+// The money invariant, asserted at EVERY observation point rather than inferred
+// from the final total: two canonical constituents allow two CREATED refunds and
+// not one more, no payment intent may be refunded past what it captured, no
+// payment intent outside the two may be touched, and no payment intent may carry
+// a second refund record.
+//
+// The count deliberately bounded here is refund CREATION, not POST attempts.
+// Production is entitled to send the same key twice -- both commands share one
+// action, so both build the same `duplicate-refund:<action id>:<invoice payment
+// id>` key, and the guard in `beginDuplicateRefundProviderMutation` closes after
+// the winner commits it rather than before -- and the provider must answer the
+// second one from its idempotency cache. Bounding attempts instead would have
+// failed this test on the one behavior it is supposed to certify as safe.
+func assertNoDuplicateOverRefund(t *testing.T, sample duplicateRefundLedger, stage string) {
+	t.Helper()
+	if sample.keyConflicts > 0 {
+		t.Fatalf("%s: %d refund POSTs reused an idempotency key with a DIFFERENT request; the provider rejected them and the two commands disagreed about what to refund", stage, sample.keyConflicts)
+	}
+	if sample.creations > 2 {
+		t.Fatalf("%s: %d provider refunds were created; the two canonical constituents allow 2 (%d POST attempts, %d idempotent replays)", stage, sample.creations, sample.attempts, sample.replays)
+	}
+	if sample.attempts < sample.creations || sample.attempts != sample.creations+sample.replays {
+		t.Fatalf("%s: %d POST attempts cannot account for %d creations and %d replays", stage, sample.attempts, sample.creations, sample.replays)
+	}
+	captured := map[string]int64{"pi_a": 200, "pi_b": 300}
+	for intent, amount := range sample.amounts {
+		limit, ok := captured[intent]
+		if !ok {
+			t.Fatalf("%s: refunded an unexpected payment intent %q (%d)", stage, intent, amount)
+		}
+		if amount > limit {
+			t.Fatalf("%s: %s refunded %d, past the %d it captured", stage, intent, amount, limit)
+		}
+	}
+	perIntent := map[string]int{}
+	for _, record := range sample.records {
+		perIntent[record.PaymentIntentID]++
+		if perIntent[record.PaymentIntentID] > 1 {
+			t.Fatalf("%s: %s carries %d refund records; a replayed idempotency key must not create a second (%d POST attempts, %d replays): %+v",
+				stage, record.PaymentIntentID, perIntent[record.PaymentIntentID], sample.attempts, sample.replays, sample.records)
+		}
+	}
+}
+
 func TestDuplicateRefundOperatorConcurrentCommandsDoNotDoubleRefund(t *testing.T) {
 	store := newTestStore(t)
 	state := &duplicateStripeState{active: true, refunds: map[string]int64{}}
 	client, closeServer := newDuplicateStripe(t, state, true)
 	defer closeServer()
 	job := prepareCanceledManualDuplicate(t, store, client, state)
+
+	type outcome struct {
+		res DuplicateRefundOperatorResult
+		err error
+	}
 	start := make(chan struct{})
-	errs := make(chan error, 2)
+	outcomes := make(chan outcome, 2)
 	for i := 0; i < 2; i++ {
 		go func() {
 			<-start
-			_, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "concurrent audit")
-			errs <- err
+			res, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "concurrent audit")
+			outcomes <- outcome{res: res, err: err}
 		}()
 	}
 	close(start)
-	for i := 0; i < 2; i++ {
-		<-errs // a SQLite/CAS loser may retry; provider safety is the invariant.
+	// The provider ledger is SAMPLED as each result arrives -- the second command
+	// is still running at the first sample, which is exactly when an over-refund
+	// would be visible -- and both samples are judged only once both commands
+	// have returned, so a failure never tears the store and the provider fake
+	// down underneath a live command.
+	var results [2]outcome
+	var samples [2]duplicateRefundLedger
+	for i := range results {
+		results[i] = <-outcomes
+		samples[i] = state.sampleRefundLedger()
 	}
-	got, _, _ := store.DuplicateRefundBySubscription(context.Background(), "sub_dup")
-	if state.refundPosts != 2 || (got.State != "terminal" && got.State != "manual") {
-		t.Fatalf("posts=%d job=%+v", state.refundPosts, got)
+	for i := range results {
+		stage := fmt.Sprintf("concurrent command %d", i+1)
+		requireSafeConcurrentRefundOutcome(t, stage, results[i].res, results[i].err)
+		assertNoDuplicateOverRefund(t, samples[i], "after "+stage)
 	}
-	if got.State != "terminal" {
-		if _, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "concurrent audit"); err != nil {
+
+	// Converging is the OPERATOR's job, not the race's. A loser can leave the
+	// row short of terminal, and the documented recovery is another command with
+	// freshly listed evidence. Bounded by an attempt count AND a wall-clock
+	// deadline so a wedged store fails here instead of hanging the package, and
+	// deterministic: every retry is the same command, and each one is held to the
+	// same safe-outcome and no-over-refund assertions as the concurrent pair.
+	const maxConvergenceAttempts = 8
+	deadline := time.Now().Add(30 * time.Second)
+	got, _, err := store.DuplicateRefundBySubscription(context.Background(), "sub_dup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for attempt := 1; got.State != "terminal"; attempt++ {
+		if attempt > maxConvergenceAttempts || time.Now().After(deadline) {
+			t.Fatalf("job never converged to terminal within %d retries: %+v", attempt-1, got)
+		}
+		if got.State != "manual" {
+			t.Fatalf("convergence retry %d found state %q, which no operator retry can finish: %+v", attempt, got.State, got)
+		}
+		stage := fmt.Sprintf("convergence retry %d", attempt)
+		res, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "concurrent audit")
+		requireSafeConcurrentRefundOutcome(t, stage, res, err)
+		assertNoDuplicateOverRefund(t, state.sampleRefundLedger(), "after "+stage)
+		if got, _, err = store.DuplicateRefundBySubscription(context.Background(), "sub_dup"); err != nil {
 			t.Fatal(err)
 		}
 	}
-	got, _, _ = store.DuplicateRefundBySubscription(context.Background(), "sub_dup")
-	if got.State != "terminal" || state.refundPosts != 2 {
-		t.Fatalf("final posts=%d job=%+v", state.refundPosts, got)
+
+	// -- terminal, and exactly the two canonical refunds --
+	final := state.sampleRefundLedger()
+	assertNoDuplicateOverRefund(t, final, "final")
+	if got.State != "terminal" || !got.RefundComplete {
+		t.Fatalf("final job=%+v", got)
+	}
+	if final.creations != 2 {
+		t.Fatalf("final provider refund creations=%d, want the two canonical constituents (%d POST attempts, %d idempotent replays)", final.creations, final.attempts, final.replays)
+	}
+	// The replays are not incidental -- they are the safe outcome this test
+	// exists to distinguish from a second refund, so they are allowed to happen
+	// and required to have moved nothing when they did.
+	if final.attempts != final.creations+final.replays {
+		t.Fatalf("final POST attempts=%d, want %d creations plus %d replays", final.attempts, final.creations, final.replays)
+	}
+	if len(final.amounts) != 2 || final.amounts["pi_a"] != 200 || final.amounts["pi_b"] != 300 {
+		t.Fatalf("final refunded amounts=%v, want pi_a=200, pi_b=300 and nothing else", final.amounts)
+	}
+	byIntent := map[string]duplicateRefundObservation{}
+	for _, record := range final.records {
+		if previous, seen := byIntent[record.PaymentIntentID]; seen {
+			t.Fatalf("final: %s carries a duplicated refund: %+v and %+v", record.PaymentIntentID, previous, record)
+		}
+		byIntent[record.PaymentIntentID] = record
+	}
+	if len(byIntent) != 2 {
+		t.Fatalf("final: %d refunded payment intents, want exactly pi_a and pi_b: %+v", len(byIntent), final.records)
+	}
+	for _, want := range []struct {
+		intent string
+		amount int64
+	}{{"pi_a", 200}, {"pi_b", 300}} {
+		record, ok := byIntent[want.intent]
+		if !ok || record.Status != "succeeded" || record.Amount != want.amount {
+			t.Fatalf("final: %s refund record=%+v, want one succeeded refund of %d", want.intent, record, want.amount)
+		}
+	}
+}
+
+// The torn read this fix exists for, exercised directly: the charge snapshot
+// (AmountRefunded) was read BEFORE a legitimate concurrent refund landed, and
+// the refund list was read AFTER it. The succeeded total disagrees with the
+// stale snapshot while staying within the immutable AmountPaid, and the only
+// acceptable outcome is the recognizable retryable conflict -- never success,
+// and never the hard over-refund error.
+func TestDuplicateRefundStaleChargeSnapshotWithNewerRefundListIsRetryableConflict(t *testing.T) {
+	state := &duplicateStripeState{refunds: map[string]int64{}, refundRecords: map[string]duplicateRefundObservation{
+		"re_concurrent": {RefundID: "re_concurrent", InvoicePaymentID: "inpay_a", PaymentIntentID: "pi_a", Status: "succeeded", Amount: 200},
+	}}
+	client, closeServer := newDuplicateStripe(t, state, true)
+	defer closeServer()
+	stale := CanonicalStripeInvoicePayment{InvoicePaymentID: "inpay_a", PaymentType: "payment_intent", PaymentIntentID: "pi_a", ChargeID: "ch_a", AmountPaid: 200, ChargeAmount: 200, AmountRefunded: 0}
+	observations, err := client.canonicalDuplicateRefundObservations(context.Background(), stale)
+	if !errors.Is(err, errDuplicateRefundCanonicalSnapshotStale) || observations != nil {
+		t.Fatalf("stale charge snapshot err=%v observations=%+v", err, observations)
+	}
+	// The opposite tear: the charge already shows the refund the list has not
+	// caught up to. Same read conflict, same retryable classification.
+	shortList := stale
+	shortList.AmountRefunded = 200
+	state.mu.Lock()
+	delete(state.refundRecords, "re_concurrent")
+	state.mu.Unlock()
+	if _, err := client.canonicalDuplicateRefundObservations(context.Background(), shortList); !errors.Is(err, errDuplicateRefundCanonicalSnapshotStale) {
+		t.Fatalf("stale refund list err=%v", err)
+	}
+	if state.refundAttempts != 0 {
+		t.Fatalf("observation read posted %d refunds", state.refundAttempts)
+	}
+}
+
+// A succeeded-refund total past the immutable AmountPaid is real money loss and
+// must remain a hard error, distinguishable from the retryable snapshot
+// conflict no matter what the stale AmountRefunded snapshot claims.
+func TestDuplicateRefundSucceededTotalPastAmountPaidIsHardOverRefund(t *testing.T) {
+	state := &duplicateStripeState{refunds: map[string]int64{}, refundRecords: map[string]duplicateRefundObservation{
+		"re_first":  {RefundID: "re_first", InvoicePaymentID: "inpay_a", PaymentIntentID: "pi_a", Status: "succeeded", Amount: 200},
+		"re_second": {RefundID: "re_second", InvoicePaymentID: "inpay_a", PaymentIntentID: "pi_a", Status: "succeeded", Amount: 100},
+	}}
+	client, closeServer := newDuplicateStripe(t, state, true)
+	defer closeServer()
+	for _, snapshot := range []int64{0, 200} {
+		payment := CanonicalStripeInvoicePayment{InvoicePaymentID: "inpay_a", PaymentType: "payment_intent", PaymentIntentID: "pi_a", ChargeID: "ch_a", AmountPaid: 200, ChargeAmount: 200, AmountRefunded: snapshot}
+		_, err := client.canonicalDuplicateRefundObservations(context.Background(), payment)
+		if err == nil || errors.Is(err, errDuplicateRefundCanonicalSnapshotStale) || !strings.Contains(err.Error(), "exceeds amount paid") {
+			t.Fatalf("snapshot=%d over-refund err=%v", snapshot, err)
+		}
+	}
+}
+
+// A hostile or corrupted provider response can report a refund amount near
+// MaxInt64. A post-add check would wrap the running total negative and
+// misclassify this catastrophic over-refund as the RETRYABLE stale-snapshot
+// conflict, so the guard must reject the amount before adding it. The list is
+// served sorted by refund ID, so re_wrap_a's legitimate 200 fills AmountPaid
+// exactly before re_wrap_b's MaxInt64 arrives -- the precise order that wraps.
+func TestDuplicateRefundNearMaxInt64AmountIsHardOverRefundNotStale(t *testing.T) {
+	state := &duplicateStripeState{refunds: map[string]int64{}, refundRecords: map[string]duplicateRefundObservation{
+		"re_wrap_a": {RefundID: "re_wrap_a", InvoicePaymentID: "inpay_a", PaymentIntentID: "pi_a", Status: "succeeded", Amount: 200},
+		"re_wrap_b": {RefundID: "re_wrap_b", InvoicePaymentID: "inpay_a", PaymentIntentID: "pi_a", Status: "succeeded", Amount: math.MaxInt64},
+	}}
+	client, closeServer := newDuplicateStripe(t, state, true)
+	defer closeServer()
+	payment := CanonicalStripeInvoicePayment{InvoicePaymentID: "inpay_a", PaymentType: "payment_intent", PaymentIntentID: "pi_a", ChargeID: "ch_a", AmountPaid: 200, ChargeAmount: 200, AmountRefunded: 200}
+	observations, err := client.canonicalDuplicateRefundObservations(context.Background(), payment)
+	if err == nil || errors.Is(err, errDuplicateRefundCanonicalSnapshotStale) || !strings.Contains(err.Error(), "exceeds amount paid") || observations != nil {
+		t.Fatalf("near-MaxInt64 refund err=%v observations=%+v", err, observations)
+	}
+}
+
+// The retryable conflict end to end: an operator command that observes the torn
+// read must leave the action prepared with zero provider mutations, and the
+// documented recovery -- relist evidence, run the same command -- must converge
+// to exactly the canonical refunds once the provider reads agree again.
+func TestDuplicateRefundOperatorRetriesStaleSnapshotWithoutExtraProviderRefund(t *testing.T) {
+	store := newTestStore(t)
+	state := &duplicateStripeState{active: true, refunds: map[string]int64{}, refundRecords: map[string]duplicateRefundObservation{
+		"re_external_pi_a": {RefundID: "re_external_pi_a", InvoicePaymentID: "inpay_a", PaymentIntentID: "pi_a", Status: "succeeded", Amount: 50},
+	}}
+	client, closeServer := newDuplicateStripe(t, state, true)
+	defer closeServer()
+	job := prepareCanceledManualDuplicate(t, store, client, state)
+	// The charge still reports amount_refunded=0 for pi_a while the refund list
+	// already carries the succeeded 50: the exact torn pair a concurrent
+	// legitimate refund produces.
+	result, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "stale snapshot audit")
+	if !errors.Is(err, errDuplicateRefundCanonicalSnapshotStale) || result.State != "prepared" || state.refundPosts != 0 {
+		t.Fatalf("torn read result=%+v posts=%d err=%v", result, state.refundPosts, err)
+	}
+	got, _, _ := store.DuplicateRefundBySubscription(context.Background(), "sub_dup")
+	if got.State != "manual" || got.RefundComplete {
+		t.Fatalf("torn read advanced the job: %+v", got)
+	}
+	// The provider reads agree again: the charge has caught up to the refund.
+	state.mu.Lock()
+	state.refunds["pi_a"] = 50
+	state.mu.Unlock()
+	result, err = resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "stale snapshot audit")
+	if err != nil || result.State != "succeeded" || state.refundPosts != 2 || state.refunds["pi_a"] != 200 || state.refunds["pi_b"] != 300 {
+		t.Fatalf("retry result=%+v posts=%d refunds=%v err=%v", result, state.refundPosts, state.refunds, err)
 	}
 }
 

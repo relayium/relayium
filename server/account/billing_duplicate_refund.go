@@ -72,6 +72,14 @@ type duplicateRefundLiabilityQueryer interface {
 }
 
 var errDuplicateRefundProviderFailed = errors.New("stripe: duplicate refund provider reported a terminal failed refund")
+
+// The charge's AmountRefunded and the refund list are two separate provider
+// reads; a legitimate concurrent refund landing between them makes them
+// disagree without any money being wrong. That disagreement is a retryable
+// read conflict -- the operator relists evidence and the next command reads a
+// consistent pair -- and must stay distinguishable from a real over-refund,
+// which is measured against the immutable AmountPaid, never the snapshot.
+var errDuplicateRefundCanonicalSnapshotStale = errors.New("stripe: duplicate refund canonical charge snapshot is stale; list evidence again")
 var errDuplicateRefundPending = errors.New("stripe: duplicate refund remains pending")
 var errDuplicateRefundReopened = errors.New("account: duplicate refund failure reopened operator reconciliation")
 
@@ -443,8 +451,8 @@ func (c *stripeClient) canonicalDuplicateRefundObservations(ctx context.Context,
 			}
 			switch detail.Status {
 			case "succeeded":
-				if detail.Amount > payment.AmountRefunded-succeeded {
-					return nil, errors.New("stripe: duplicate refund succeeded amount exceeds canonical total")
+				if detail.Amount > payment.AmountPaid-succeeded {
+					return nil, errors.New("stripe: duplicate refund succeeded amount exceeds amount paid")
 				}
 				succeeded += detail.Amount
 			case "pending", "requires_action", "failed", "canceled":
@@ -463,7 +471,7 @@ func (c *stripeClient) canonicalDuplicateRefundObservations(ctx context.Context,
 		query.Set("starting_after", last)
 	}
 	if succeeded != payment.AmountRefunded {
-		return nil, errors.New("stripe: duplicate refund list does not equal canonical refunded amount")
+		return nil, errDuplicateRefundCanonicalSnapshotStale
 	}
 	sort.Slice(observations, func(i, j int) bool { return observations[i].RefundID < observations[j].RefundID })
 	return observations, nil
