@@ -193,37 +193,50 @@ var pairRoomJoinWindow = signal.CodeTTLSeconds
 // 10^6 held by an account that is being billed for every byte it uploads.
 const pairRoomMaxJoinable int64 = 6 * 3600
 
-// pairRoomNoDeadline is the expiry of a room somebody has joined: none.
+// pairRoomLegacyNoDeadline is what a joined room's expiry USED to be: none.
 //
-// The owner's rule is literal — "once a peer has joined, a long transfer is
-// never cut off by that clock" — and this is what taking it literally costs. An
-// earlier version of this file put a 24-hour "storage backstop" here and argued
-// that a day is so far past any real transfer that it is not a deadline. That
-// argument is wrong on its own terms: at 24 hours the object stops being
-// readable and its bytes are deleted, which is a deadline whatever it is called.
-// A rule the code reinterprets is not the rule.
+// An earlier version of this file read the owner's rule — "once a peer has
+// joined, a long transfer is never cut off by that clock" — as "a joined room
+// has no clock at all", and materialized that as math.MaxInt64 on the room and
+// on every object inside it. It argued that a 24-hour storage backstop is a
+// deadline whatever it is called, and it was right about that; what it missed is
+// that the alternative is not "no rule" but "no bound", and an unbounded object
+// is not something this product sells.
 //
-// So there is no clock. A joined room's ciphertext leaves when a receiver
-// COMPLETES it (pairroom_complete.go), when the owning account RELEASES the room
-// (pairroom_owner.go), or when that account is deleted — and by nothing else.
-// Note what those two are and are not: capabilities somebody spends, one by the
-// receiver once it has the file and one by the owner once it has decided the
-// transfer is over. Neither is a deadline wearing another name, neither can fire
-// on its own, and no amount of time passing performs either. This constant is
-// therefore untouched by both and stays what it says — never.
+// That reading is retired by an explicit owner decision (2026-08-20): ALL stored
+// ciphertext follows the account plan's retention, pair rooms included — Free
+// 86400, Plus 259200, Pro 604800, Max 1209600. Production had four current-Free
+// pair-room objects sitting at MaxInt64, days past the one day their account was
+// entitled to, which is what the old reading cost in practice.
 //
-// What that leaves is a commitment bounded by attention rather than by a number:
-// a receiver that cannot commit files to disk itself never completes at all
-// (§7.6), so those rooms wait for an owner who may never look. Until the owner
-// has answered what becomes of one, pre-upload stays off unless a deployment
-// opts in (Service.SetPreUpload): the honest way to hold a rule we cannot yet
-// price is to not run the feature, not to quietly weaken the rule.
+// What the owner's original rule bought is kept, but paid for differently: see
+// pairRoomJoinedExpiry, where the deadline is measured from genuine accepted
+// upload progress, so a transfer that is still moving bytes still cannot be cut
+// off by the clock. The bound is on ABANDONMENT, which is the case the old rule
+// never had an answer for.
 //
-// Materialized as a real column value rather than a NULL/flag so every generic
-// mechanism keeps working untouched: the GC's expired-file sweep, liveFile's
-// expiry test, ListDeadPairRooms and CurrentStorage all compare against
-// expires_at, and "never" is simply a timestamp none of them will reach.
-const pairRoomNoDeadline int64 = math.MaxInt64
+// The constant survives its own rule for exactly one reason: it is the sentinel
+// the one-time migration recognizes. A row still carrying this value was written
+// under the old invariant, and is the only kind of row the backfill is permitted
+// to move BACKWARDS (migratePairRoomRetention). Nothing derives a deadline from
+// it any more.
+const pairRoomLegacyNoDeadline int64 = math.MaxInt64
+
+// pairRoomFreeRetention is the Free plan's retention window, and the value the
+// lifecycle falls back to when a room's snapshot is missing or nonsensical — a
+// row written before retention_secs existed, or one whose snapshot did not
+// survive whatever wrote it. Conservative on purpose: a room that cannot prove
+// it was entitled to more gets the floor every account is entitled to, and that
+// floor is a real bound rather than "never".
+const pairRoomFreeRetention int64 = 86400
+
+// pairRoomMaxRetention is the ceiling any single room's snapshot may express:
+// the longest retention any plan sells (Max, 14 days), which is also the
+// server's RELAYIUM_FILE_TTL_MAX default. It bounds the SNAPSHOT rather than
+// trusting whatever the plans table happens to hold, so an admin typo in
+// retention_secs cannot reintroduce an effectively immortal object through the
+// one path that has no client-supplied TTL to clamp.
+const pairRoomMaxRetention int64 = 1209600
 
 // pairRoomPurgeAfter is how long a CLOSED room row is kept before GC drops it.
 // The ciphertext is already gone by then (closing deletes it); this is only the
@@ -267,6 +280,19 @@ type PairRoom struct {
 	// and written by the same call that changes an input to it, so SQL never has
 	// to re-derive the rule and the two can never disagree.
 	ExpiresAt int64
+	// RetentionSecs is the account plan's retention window, in seconds, SNAPSHOT
+	// at the instant this room was created and never re-read for it again.
+	//
+	// A snapshot rather than a join back to the account, because the owner's rule
+	// is that a plan change must not act retroactively: ciphertext stored under
+	// Pro does not lose four days because the account downgraded to Plus an hour
+	// later, and it does not gain seven because the account upgraded to Max. The
+	// room is billed and bounded by what its owner was entitled to when it opened.
+	//
+	// 0 on rows written before this column existed. pairRoomRetention, not this
+	// field, is what the lifecycle reads — it supplies the floor and the ceiling
+	// so no caller has to remember either.
+	RetentionSecs int64
 }
 
 // pairRoomJoinDeadline is the instant after which nobody may still join this
@@ -280,15 +306,72 @@ func pairRoomJoinDeadline(r PairRoom) int64 {
 // pairRoomExpiry is the instant this room's ciphertext stops being readable —
 // the value projected onto every one of its objects.
 //
-// Before anyone joins it is the join deadline: nobody came, so there is nothing
-// left to deliver and the bytes are void. After a join there is no instant at
-// all (pairRoomNoDeadline), which is what makes "joining imposes no transfer
-// deadline" literally rather than approximately true.
+// Before anyone joins it is the join deadline, unchanged: nobody came, so there
+// is nothing left to deliver and the bytes are void.
+//
+// After a join it is the room's own plan retention measured from the last thing
+// that really happened to it (pairRoomJoinedExpiry), replacing the "no instant
+// at all" this used to return. Pair-room ciphertext is stored ciphertext, and
+// all stored ciphertext follows the account plan's retention.
 func pairRoomExpiry(r PairRoom) int64 {
 	if r.JoinedAt > 0 {
-		return pairRoomNoDeadline
+		return pairRoomJoinedExpiry(r)
 	}
 	return pairRoomJoinDeadline(r)
+}
+
+// pairRoomRetention is the room's snapshotted retention window, floored and
+// capped — the whole rule in one inclusive clamp to [Free, Max].
+//
+// Both bounds live HERE, on the read, rather than only at the write, so that no
+// row already in the database can express a window the product does not sell —
+// whatever put it there. A pre-migration row (0), a snapshot taken from a plans
+// row an admin has since edited, and a negative value from a corrupted write all
+// land inside the same window every plan lives in, and every one of them is a
+// row some future caller will read without knowing its provenance.
+//
+// The floor is Free rather than the row's own claim because a room that cannot
+// prove an entitlement gets the entitlement every account has. That is why the
+// floor applies to a POSITIVE snapshot below Free too, and not only to 0 or to a
+// negative: an admin typo that writes 3600 into a plans row is exactly as
+// unentitled to shorten a Free room's ciphertext to an hour as a corrupted write
+// is, and the product sells four windows of which the shortest is a day. The
+// clamp is inclusive at both ends, so every real plan value passes through it
+// unchanged.
+func pairRoomRetention(r PairRoom) int64 {
+	return max(pairRoomFreeRetention, min(r.RetentionSecs, pairRoomMaxRetention))
+}
+
+// pairRoomJoinedExpiry is the deadline a JOINED room carries: its snapshotted
+// retention, measured from the later of the join and the last committed byte.
+//
+// Both halves of that base are load-bearing:
+//
+//   - last_upload_at is how the owner's original rule survives the change. The
+//     server moves it only when it has actually COMMITTED bytes for the room
+//     (touchPairRoomOn), so it cannot be advanced by a client's claim, by a
+//     reconnect, by a probe, or by a request that uploaded nothing. Genuine
+//     progress therefore buys another full retention window every time it lands,
+//     and an upload that is still running is still never cut off by this clock.
+//     What IS now bounded is abandonment — the case the old rule answered with
+//     "wait for an owner who may never look".
+//   - joined_at is the floor for the room that has been joined but has no
+//     committed bytes yet. Without it that room's base is 0 and its ciphertext
+//     would be born expired in 1970.
+//
+// pairRoomJoinDeadline is a second floor, so that JOINING can never move a
+// room's expiry BACKWARDS. It cannot today — every plan's retention is at least
+// 86400 against a join deadline capped at MAX_JOINABLE, six hours — but the room
+// row and its objects are projected atomically from this single number, and a
+// monotonicity that holds only by arithmetic coincidence stops holding the first
+// time somebody prices a plan below six hours. Cheap here, and it is the kind of
+// thing nobody re-derives when they change a number in the plans table.
+//
+// It is never pairRoomLegacyNoDeadline and no input makes it so: the base is a
+// real timestamp and pairRoomRetention is bounded above.
+func pairRoomJoinedExpiry(r PairRoom) int64 {
+	base := max(r.JoinedAt, r.LastUploadAt)
+	return max(base+pairRoomRetention(r), pairRoomJoinDeadline(r))
 }
 
 // pairRoomCodeDeadline is the instant this room's pairing CODE may be kept alive
@@ -304,9 +387,9 @@ func pairRoomExpiry(r PairRoom) int64 {
 // which syncPairCodeTo already treats as a no-op.
 //
 // Distinct from pairRoomExpiry, which answers the other question about the same
-// joined room: its ciphertext has no deadline (pairRoomNoDeadline), while its
-// code has no future. One is unbounded and the other is over, and collapsing
-// them either strands the receiver or immortalizes the digits.
+// joined room: its ciphertext still has a retention window to live out, while
+// its code has no future at all. One is measured in days and the other is over,
+// and collapsing them either strands the receiver or immortalizes the digits.
 func pairRoomCodeDeadline(r PairRoom) int64 {
 	if r.JoinedAt > 0 {
 		return 0
@@ -347,8 +430,9 @@ func pairRoomProgressExpiry(r PairRoom, at int64) int64 {
 // somebody is already in, which is not a window that exists (pairRoomCodeDeadline).
 //
 // It is deliberately the join deadline and never pairRoomExpiry: a joined room's
-// expiry is "never" (pairRoomNoDeadline), and a code that never expired would
-// hold six of a million digits out of circulation for good.
+// expiry is a retention window measured in DAYS (pairRoomJoinedExpiry), and a
+// code extended to that would hold six of a million digits out of circulation
+// for the length of a plan's retention while the room it names is already full.
 func pairRoomProgressJoinDeadline(r PairRoom, at int64) int64 {
 	if at > r.LastUploadAt {
 		r.LastUploadAt = at
@@ -388,10 +472,10 @@ func pairRoomLive(r PairRoom, now int64) bool {
 // one statement ago has no business being projected from.
 //
 // It targets the JOIN deadline, never pairRoomExpiry. For an unjoined room they
-// are the same number. For a joined one the room's expiry is "never"
-// (pairRoomNoDeadline) and a code that never expired would hold six of a million
-// digits out of circulation for good — while buying nothing, since the room it
-// names is full and the peers are already connected.
+// are the same number. For a joined one the room's expiry is its plan retention
+// window (pairRoomJoinedExpiry) and a code extended to that would hold six of a
+// million digits out of circulation for days — while buying nothing, since the
+// room it names is full and the peers are already connected.
 //
 // The ceiling comes for free: pairRoomJoinDeadline is already bounded by
 // pairRoomMaxJoinable from the moment the room opened, so a trickled upload
@@ -520,6 +604,40 @@ func (s *Service) pairRoomAdmission(ctx context.Context, userID string) error {
 	return nil
 }
 
+// pairRoomRetentionFor snapshots the account plan's retention window for a room
+// that is about to be created. Read ONCE, written onto the room, and never
+// re-read for that room again — see PairRoom.RetentionSecs for why a plan change
+// must not reach backwards into ciphertext already stored.
+//
+// A plan-read failure falls back to the LONGEST retention any plan sells rather
+// than to Free. planRetentionCap's fail-open reasoning applies here unchanged: a
+// transient read error must not silently clamp a paying account's ciphertext to
+// the free window, where it would disappear a day later with no signal. What is
+// different is where "open" stops. planRetentionCap can return 0 for "no cap"
+// because its callers are clamping a TTL the client supplied, which the global
+// clampTTL bounds anyway; this path has no client TTL and no other clamp behind
+// it, so an uncapped answer here is precisely the unbounded object this change
+// exists to remove. The longest bounded window is therefore the fail-open value.
+//
+// The asymmetry is deliberate and worth stating: the cost of being wrong upward
+// is at most thirteen extra days of storage for one room whose plan read failed;
+// the cost of being wrong downward is a paying customer's transfer deleted
+// thirteen days early.
+//
+// A SUCCESSFUL read is clamped to the same [Free, Max] window pairRoomRetention
+// enforces, floor included. planRetentionCap returns whatever the plans table
+// holds, and a plans row an admin has typoed to something below the Free day
+// would otherwise be snapshotted verbatim and delete that room's ciphertext
+// early — the one failure this path can cause that no later read can undo,
+// because the snapshot is taken once and never re-read.
+func (s *Service) pairRoomRetentionFor(ctx context.Context, userID string) int64 {
+	secs := s.planRetentionCap(ctx, userID)
+	if secs <= 0 {
+		return pairRoomMaxRetention
+	}
+	return max(pairRoomFreeRetention, min(secs, pairRoomMaxRetention))
+}
+
 // pairRoomForUpload resolves — creating it if this is the first pre-upload — the
 // room that an upload presenting `code` binds to.
 //
@@ -587,6 +705,7 @@ func (s *Service) pairRoomForUpload(ctx context.Context, userID, code string) (P
 			return PairRoom{}, aerr
 		}
 		candidate := PairRoom{ID: authx.NewID(), Code: code, UserID: userID, CreatedAt: now}
+		candidate.RetentionSecs = s.pairRoomRetentionFor(ctx, userID)
 		candidate.ExpiresAt = pairRoomExpiry(candidate)
 		got, created, err := s.store.CreatePairRoomIfAbsent(ctx, candidate)
 		if err != nil {
@@ -661,10 +780,17 @@ func (s *Service) pairRoomStillOpen(ctx context.Context, roomID string) (PairRoo
 // append can move the row after the snapshot was taken; and a room somebody has
 // JOINED has no join deadline at all, while the projection computes one anyway
 // from created/last_upload and buys the registry another window of six digits
-// for a rendezvous that is already full. The touch's write is a no-op in that
-// second case (a joined room's expires_at is pairRoomNoDeadline, so the
-// monotonic UPDATE matches nothing) — so the code moved on the strength of a
-// database write that never happened.
+// for a rendezvous that is already full.
+//
+// Note what changed under the retention rule and what did not. The touch's write
+// is no longer a no-op for a joined room — genuine progress now legitimately
+// pushes its RETENTION deadline out (pairRoomJoinedExpiry), where it used to
+// match nothing against an immortal expires_at. So the argument no longer rests
+// on "the database write never happened"; it rests on the only thing it should
+// ever have rested on, which is that the transaction's own answer for the CODE
+// is 0 for a joined room (pairRoomCodeDeadline) whatever its storage deadline
+// did. The projection would still invent a window here; the row still refuses
+// to.
 //
 // THE HANDOFF IS STILL TWO STEPS, and no distributed transaction closes it. The
 // room lives in the database and the code lives in the signaling layer's memory;

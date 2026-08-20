@@ -11,12 +11,15 @@ import (
 // atomicity — the two writes that must not be seen apart are the room's deadline
 // and the deadline carried by the objects inside it.
 
-const pairRoomCols = `id, code, user_id, created_at, last_upload_at, joined_at, closed_at, expires_at`
+// retention_secs is LAST because it was added by ALTER TABLE; the list is
+// explicit everywhere so the order only has to agree with scanPairRoom and the
+// one INSERT below.
+const pairRoomCols = `id, code, user_id, created_at, last_upload_at, joined_at, closed_at, expires_at, retention_secs`
 
 func scanPairRoom(sc rowScanner) (PairRoom, error) {
 	var r PairRoom
 	err := sc.Scan(&r.ID, &r.Code, &r.UserID, &r.CreatedAt, &r.LastUploadAt,
-		&r.JoinedAt, &r.ClosedAt, &r.ExpiresAt)
+		&r.JoinedAt, &r.ClosedAt, &r.ExpiresAt, &r.RetentionSecs)
 	return r, err
 }
 
@@ -57,9 +60,9 @@ func (s *SQLiteStore) CreatePairRoomIfAbsent(ctx context.Context, r PairRoom) (P
 		return PairRoom{}, false, err
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO pair_rooms (`+pairRoomCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO pair_rooms (`+pairRoomCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		r.ID, r.Code, r.UserID, r.CreatedAt, r.LastUploadAt, r.JoinedAt, r.ClosedAt,
-		r.ExpiresAt); err != nil {
+		r.ExpiresAt, r.RetentionSecs); err != nil {
 		return PairRoom{}, false, err
 	}
 	return r, true, tx.Commit()

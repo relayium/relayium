@@ -1251,7 +1251,7 @@ func TestSweepLeavesAJoinedRoomThatStillHoldsSomething(t *testing.T) {
 	h.join(t, "330007")
 	room := h.roomOf(t, id)
 
-	h.advance(24 * 3600)
+	h.advance(12 * 3600)
 	h.svc.SweepPairRooms(context.Background(), h.now)
 
 	r, found, err := h.store.GetPairRoom(context.Background(), room.ID)
@@ -1261,8 +1261,10 @@ func TestSweepLeavesAJoinedRoomThatStillHoldsSomething(t *testing.T) {
 	if r.ClosedAt != 0 {
 		t.Fatal("the sweep closed a joined room that still held an object")
 	}
-	// The whole point: the ciphertext is still there, a day later, with no clock
-	// on it. That is invariant 5 and this change does not touch it.
+	// The whole point: the ciphertext is still there half a day later, twice over
+	// every JOIN ceiling the room has and well inside the account's retention
+	// window. What ends a joined room is a completion, a release, or that window
+	// running out — never this sweep while the room still holds something.
 	if s, got := h.getAnon(t, "/api/files/"+id+"/blob"); s != 200 || !bytes.Equal(got, blob) {
 		t.Fatalf("the object stopped being readable: %d, %d bytes", s, len(got))
 	}
