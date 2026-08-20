@@ -471,9 +471,21 @@ final class UITestAccountTransport: URLProtocol {
             "purchase":{"allowed":true,"blockedBy":""},
             "purchases":{"enabled":true,"reason":""}}
             """, as: AppleProductCatalog.self)
+        // A purchase token exists only after the server has durably acquired
+        // billing authority and created its attempt. The StoreKit fixture must
+        // therefore cross the same dispatch boundary as the shipping model.
+        offer("/api/billing/apple/purchase-dispatch", """
+            {"appAccountToken":"9b64af11-82b1-4fd5-bcc8-7e909465b45a",
+            "attemptId":"attempt_uitest"}
+            """, as: ApplePurchaseDispatch.self)
+        // The transaction intake completes a purchase dispatched by the
+        // server-authorized orchestration above.
         offer("/api/billing/apple/transaction", """
             {"applied":true,"planId":"pro","status":"active",
-            "expiresAt":4102444800,"provider":"apple"}
+            "expiresAt":4102444800,"provider":"apple",
+            "currentProductId":"\(monthlyProductID)",
+            "autoRenewProductId":"\(monthlyProductID)","renewalAt":4102444800,
+            "dispatchPending":false,"dispatchResolved":true}
             """, as: AppleTransactionResult.self)
         // Two rows, one of them this app's own: a list with a single anonymous
         // entry cannot show that Revoke is per-row, and "Revoke" alone is the
