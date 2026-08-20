@@ -311,8 +311,8 @@ GET    /api/uploads/{uploadId}                     → {"received": <int>,
     does not have.
 - Finalize returns `{"id": <string>, "expiresAt": <unix seconds>}`. `expiresAt`
   is the room's deadline, and it moves — treat it as a floor, not a promise. It
-  is the object's EXPIRY (so it is "no expiry" once somebody has joined), unlike
-  the append's and the probe's, which are the room's JOIN deadline.
+  is the object's EXPIRY (so it is `joinedExpiry` once somebody has joined),
+  unlike the append's and the probe's, which are the room's JOIN deadline.
   - Same read-never-project rule, and it decides more here than a response: the
     deadline the object is STORED with comes from the room's row inside the same
     transaction that inserts it. Finalize records the room's final progress
@@ -329,8 +329,8 @@ GET    /api/uploads/{uploadId}                     → {"received": <int>,
   - Present only for `purpose=pair_room`. An ordinary upload has no room, no
     code and no such instant, and its responses are byte-for-byte what they were.
   - It is the JOIN deadline, never the room's expiry. A joined room's expiry is
-    "no expiry" (§2), and a number a client counts down must be one the registry
-    actually holds, so this is that one.
+    a retention window measured in days (§2), and a number a client counts down
+    must be one the registry actually holds, so this is that one.
   - **Absent once the room is joined**, on both — the committed append, the
     overshoot ack and the probe alike. There is no instant left at which anybody
     may still join, which is the same `0` the code synchronization treats as
@@ -493,7 +493,7 @@ the "already uploaded" state is sent over neither transport — the user simply
 never sees the file arrive. The sender therefore returns those entries to the
 live-link lane. The bytes are spent either way; the transfer is not. The stored
 objects are not deleted by this path: the room is joined by then, so §2 gives it
-the account's retention window and §7.5 no fallback deadline. That ciphertext is
+the account's retention window. That ciphertext is
 held until that window runs out, until the owner releases the room (§8), or until
 the account is deleted — a
 completion is not coming for it, because the peer that would have spent one never
@@ -590,9 +590,9 @@ without a rule reads as "the receiver joined and then nothing happened".
   5xx, one dropped socket — permanently disable the retry the sender is
   faithfully performing on every reconnect, so the receiver shows a "try again"
   that can never try and the objects stay in storage: the room is joined, so §2
-  gives it the account's retention window and §7.5 no fallback deadline, and
-  nothing but that window running out, an explicit completion, the owner's own
-  release (§8) or account deletion ever removes them.
+  gives it the account's retention window, and nothing but that window running
+  out, an explicit completion, the owner's own release (§8) or account deletion
+  ever removes them.
   A failure the receiver cannot survive by retrying (the ciphertext is gone; the
   key does not open its object) IS permanent, and must not be re-offered either —
   a retry there is a request with a guaranteed failure behind it.
@@ -919,30 +919,32 @@ because a resume that looked like a finish would delete ciphertext mid-transfer.
 
 **GC hygiene.** A joined room that ends up holding nothing — the last object
 completed while an upload was still in flight, and that upload then abandoned
-rather than finalized — is reachable by ordinary use and can be closed by neither
-a deadline (a joined room has none) nor a completion (there is nothing left to
-complete). A sweep closes such rooms after a grace period long enough that
-"holds nothing" is settled rather than momentary.
+rather than finalized — is reachable by ordinary use, and neither of the two
+things that would normally close it is prompt: its retention deadline is a plan
+window away, and no completion can fire because there is nothing left to
+complete. A sweep closes such rooms after a grace period long enough that
+"holds nothing" is settled rather than momentary, so the row does not sit out a
+full window describing nothing.
 
 ### 7.5 What is deliberately NOT decided here
 
 - **A decline is not a completion.** A receiver that refuses the batch has not
   taken delivery, and treating the two the same would delete a sender's
   ciphertext on the strength of a user saying "no thanks".
-- **There is no fallback expiry.** What becomes of a joined room nobody ever
-  completes is an open owner decision. Inventing a timer to stand in for one
-  would be exactly the reinterpretation of §2 that this document already refused
-  once: a rule the code reinterprets is not the rule. §8 is not that answer and
-  must not be read as one: it is a control the account operates, so a room whose
-  owner never looks at it is exactly where it was.
-- Until those are answered, pre-upload stays off, and this is a rollout decision
-  rather than a switch. Both halves the flag was waiting on now exist — the Web
-  receiver posts completions (§7.6) and the owner can see and release what is
-  left (§8) — so what remains is not a missing mechanism but an unresolved
-  shape: §7.6 is explicit that a large class of browsers (Firefox, Safari, every
-  phone) can never honestly complete at all, so for those senders the storage is
-  ended by hand or not at all. Whether that is an acceptable default for a
-  production deployment is the owner's call, and nothing in §7 or §8 makes it.
+- **There is no SHORTER fallback expiry.** What becomes of a joined room nobody
+  ever completes is answered by §2 and by nothing else: the room is held for its
+  plan's retention snapshot and reclaimed when that window runs out. No timer
+  shorter than that window stands in for a completion. §8 is not that answer
+  either: it is a control the account operates, so a room whose owner never
+  looks at it is ended by its deadline rather than by the control.
+- Pre-upload still stays off unless a deployment opts in, and that is now a
+  rollout decision rather than a missing mechanism. Both halves the flag was
+  waiting on exist — the Web receiver posts completions (§7.6) and the owner can
+  see and release what is left (§8). What remains is the SIZE of the commitment:
+  §7.6 is explicit that a large class of browsers (Firefox, Safari, every phone)
+  can never honestly complete at all, so for those senders every transfer is
+  stored for a full plan window unless somebody ends it by hand. Whether that is
+  an acceptable default for a production deployment is the owner's call.
 
 ### 7.6 When a receiver may spend it
 
@@ -953,14 +955,14 @@ still fail."** The two errors are not symmetric, and every ambiguity below
 resolves the same way:
 
 - Not completing costs the SENDER storage for the whole retention window — and
-  §2 means it: §7.5 gives a joined room no fallback deadline, so an object nobody
-  completes is held for its full plan window unless the owner releases the room
-  (§8) or the account is deleted.
+  §2 means it: an object nobody completes is held for its full plan window
+  unless the owner releases the room (§8) or the account is deleted.
 - Completing early costs the USER the file, permanently.
 
-Neither side is bounded by a clock, which is why the second one decides. Storage
-the owner can see, price, measure and reclaim by hand (§8) is not the same kind
-of loss as a file that no longer exists anywhere.
+Only the first is bounded by a clock, which is why the second one decides.
+Storage that runs out on its own, and that the owner can see, price, measure and
+reclaim by hand sooner (§8), is not the same kind of loss as a file that no
+longer exists anywhere.
 
 **A save destination MUST declare which of two things its commit means.** The
 Web models this as `SaveTarget.delivery` (`web/src/lib/filesink.ts`), and the
@@ -1042,9 +1044,10 @@ which is the one
 combination an account surface may not leave standing. The charge is correct and
 stays; the invisibility was the defect.
 
-**This is not a fallback expiry and must never become one** (§7.5). Nothing
-fires. The server never releases a room on its own, and a release happens only
-because the account named one room, by id, in one request.
+**This is not the room's expiry and must not be read as one** — §2's retention
+deadline is what reclaims a room nobody releases. Nothing in this section fires
+on its own: the server never RELEASES a room by itself, and a release happens
+only because the account named one room, by id, in one request.
 
 ### 8.1 Listing what is held
 
