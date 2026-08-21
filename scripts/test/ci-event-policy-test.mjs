@@ -52,7 +52,7 @@
 // time this file does:
 //
 //  1. `assertParserReadsTheWorkflowSubset()` parses an embedded fixture that
-//     exercises every construct these five workflows use — block mappings and
+//     exercises every construct these six workflows use — block mappings and
 //     sequences, inline sequences, `|` and `>-` block scalars, anchors and
 //     aliases, quoted values containing `#`, and the `on:` key surviving as the
 //     string "on" rather than YAML 1.1's boolean — and asserts the exact
@@ -84,6 +84,7 @@ const workflowsDir = resolve(repoRoot, ".github/workflows");
 const GOVERNED = [
   { file: "go.yml", dispatch: true },
   { file: "macos.yml", dispatch: true },
+  { file: "ios.yml", dispatch: true },
   { file: "web.yml", dispatch: true },
   { file: "native-web-pairing.yml", dispatch: true },
   { file: "repo-hygiene.yml", dispatch: false },
@@ -283,7 +284,7 @@ function deepEqual(a, b) {
 }
 
 /**
- * Every construct the five governed workflows actually use, parsed and compared
+ * Every construct the six governed workflows actually use, parsed and compared
  * against the exact object it must produce.
  *
  * Each line here corresponds to something real: `paths: &paths` / `*paths` is
@@ -695,6 +696,240 @@ if (nightly) {
     );
   }
 }
+
+// ── 5. the native split, and the path boundaries that make it real ──────────
+//
+// macOS and iOS shared one workflow file. `macos.yml` carried an `ios-build`
+// job — two iOS xcodebuilds, an iOS UI smoke and three acceptance runs — behind
+// a filter of `apps/**` plus `scripts/**`. The consequence was not a broken
+// build but a permanently mis-sized one: every macOS-only change started an iOS
+// runner, every iOS-only change started the macOS signing lane, and a Go-shard
+// or release-script edit started both.
+//
+// The split is a FILE split because it had to be. A path filter is per-workflow:
+// no arrangement of jobs, `if:` conditions or matrices inside one file can make
+// two platforms trigger on different trees. So the correction is only real if
+// two things stay true together — the jobs live in the right file, AND each
+// file's filter actually selects its own platform. Either one alone is
+// cosmetic, and both are invisible to YAML validity, actionlint and every other
+// check in this repository.
+//
+// The failure this section exists to name out loud is the regression, not the
+// abstraction: `ios-build` reappearing in `macos.yml`, or one native filter
+// growing back to `apps/**`.
+
+const MACOS = "macos.yml";
+const IOS = "ios.yml";
+const SHARED_KIT = "apps/RelayiumKit/**";
+const IOS_PROJECT = "-project apps/ios/Relayium.xcodeproj";
+const MACOS_PROJECT = "-project apps/mac/Relayium.xcodeproj";
+
+/**
+ * A GitHub path filter compiled to a regular expression.
+ *
+ * `**` crosses `/`, a single `*` does not, and everything else is literal —
+ * which is what makes `server/account/deviceinbox*` in web.yml match
+ * `deviceinbox.go` but not a file in a subdirectory. Every regex
+ * metacharacter is escaped, so `.github/workflows/go.yml` cannot match
+ * `xgithub/workflows/go.yml` through an unescaped dot.
+ */
+function pathFilterToRegExp(pattern) {
+  let re = "";
+  for (let k = 0; k < pattern.length; k += 1) {
+    const ch = pattern[k];
+    if (ch === "*") {
+      if (pattern[k + 1] === "*") { re += "[\\s\\S]*"; k += 1; } else { re += "[^/]*"; }
+    } else if ("\\^$.|?+()[]{}".includes(ch)) {
+      re += `\\${ch}`;
+    } else {
+      re += ch;
+    }
+  }
+  return new RegExp(`^${re}$`);
+}
+
+const matchesFilter = (patterns, path) =>
+  patterns.some((pattern) => pathFilterToRegExp(pattern).test(path));
+
+/** The `push` path filter of a governed workflow, or null when it has none. */
+function pathsOf(file) {
+  const push = docs.get(file)?.on?.push;
+  const paths = push && typeof push === "object" ? push.paths : undefined;
+  return Array.isArray(paths) ? paths : null;
+}
+
+/** Everything a job actually executes or configures, comments excluded. */
+const jobBodies = (file) => Object.entries(docs.get(file)?.jobs ?? {})
+  .map(([name, job]) => [name, JSON.stringify(job ?? null)]);
+
+const workflowBody = (file) => jobBodies(file).map(([, body]) => body).join("\n");
+
+// 5a. The regression, named. A job key is the one thing a reader greps for and
+//     the one thing a careless revert restores wholesale.
+if (docs.get(MACOS)) {
+  check(
+    !("ios-build" in (docs.get(MACOS).jobs ?? {})),
+    `${MACOS} contains an \`ios-build\` job again. That job is iOS work — two iOS xcodebuilds, `
+    + `the iOS UI smoke and the local/built-App acceptance — and it belongs to ${IOS}. While it `
+    + `lives here, macOS and iOS share one path filter and one set of triggers, so the two `
+    + `platforms cannot be started independently no matter what the filter says.`,
+  );
+}
+
+// 5b. And the same regression arriving under a different job name. The name is
+//     a convention; compiling the iOS project is the fact.
+if (docs.get(MACOS)) {
+  const offenders = jobBodies(MACOS)
+    .filter(([, body]) => body.includes("apps/ios/"))
+    .map(([name]) => name);
+  check(
+    offenders.length === 0,
+    `${MACOS} job(s) ${offenders.join(", ")} reference \`apps/ios/\`. Renaming \`ios-build\` does `
+    + `not separate the platforms; hosting ANY iOS build, test or acceptance in the macOS `
+    + `workflow puts it back behind the macOS triggers.`,
+  );
+}
+if (docs.get(IOS)) {
+  const offenders = jobBodies(IOS)
+    .filter(([, body]) => body.includes("apps/mac/"))
+    .map(([name]) => name);
+  check(
+    offenders.length === 0,
+    `${IOS} job(s) ${offenders.join(", ")} reference \`apps/mac/\`. The iOS workflow must contain `
+    + `only iOS-relevant jobs, or the split is one-directional and macOS work runs twice.`,
+  );
+}
+
+// 5c. Moved, not copied. A "split" that leaves the old job in place doubles the
+//     cost of the exact change it was meant to make cheaper, and both runs are
+//     green so nothing reports it.
+for (const [marker, home, what] of [
+  [IOS_PROJECT, IOS, "the iOS app build"],
+  [MACOS_PROJECT, MACOS, "the macOS app build"],
+]) {
+  const hosts = GOVERNED.map((g) => g.file).filter((file) => workflowBody(file).includes(marker));
+  check(
+    hosts.length === 1 && hosts[0] === home,
+    `${what} (\`${marker}\`) runs in ${hosts.length ? hosts.join(", ") : "no governed workflow"}; `
+    + `want exactly ${home}. Two hosts is a duplicated macOS runner and no new evidence; zero is `
+    + `a platform that stopped being built at all.`,
+  );
+}
+
+// 5d. The shared package is the one tree that must start BOTH. It is what each
+//     app compiles against, and a change there can break either one alone —
+//     which is precisely what a per-platform split risks losing.
+for (const file of [MACOS, IOS]) {
+  const paths = pathsOf(file);
+  if (paths === null) continue;
+  check(
+    paths.includes(SHARED_KIT),
+    `${file}'s path filter does not list \`${SHARED_KIT}\`. RelayiumKit is shared source: a change `
+    + `there compiles into both native apps, so it must start both native workflows. Dropping it `
+    + `from one leaves that app's compatibility with the shared package unproven until something `
+    + `else happens to touch it.`,
+  );
+}
+
+// 5e. And the boundary in the other direction, asserted on the FILTER rather
+//     than on the list, so a coarse `apps/**` fails here even though it "looks
+//     like" it contains the right trees.
+if (pathsOf(MACOS)) {
+  check(
+    !matchesFilter(pathsOf(MACOS), "apps/ios/Relayium/RelayiumApp.swift"),
+    `${MACOS}'s path filter matches iOS-only source. An iOS change would start the macOS signing `
+    + `lane — the certificate import, the notarization-capable jobs, the UI smoke — for a tree `
+    + `none of them build. This is what \`apps/**\` did before the split.`,
+  );
+}
+if (pathsOf(IOS)) {
+  check(
+    !matchesFilter(pathsOf(IOS), "apps/mac/Relayium/AccountView.swift"),
+    `${IOS}'s path filter matches macOS-only source, so a macOS change starts an iOS runner that `
+    + `builds nothing it changed.`,
+  );
+}
+
+// 5f. Each filtered workflow must be able to see edits to ITSELF. Without this,
+//     a change to a workflow's own triggers is merged having never run under
+//     them.
+for (const { file } of GOVERNED) {
+  const paths = pathsOf(file);
+  if (paths === null) continue;
+  check(
+    matchesFilter(paths, `.github/workflows/${file}`),
+    `${file}'s path filter does not match \`.github/workflows/${file}\`, so an edit to this `
+    + `workflow does not run this workflow and lands unverified.`,
+  );
+}
+
+// 5g. The whole trigger matrix, as behaviour rather than as a list of globs.
+//
+// Each row is a real file and the exact set of governed, path-filtered
+// workflows that must start for it. Asserting the SET is what catches a filter
+// that is too broad and one that is too narrow with the same check — a list
+// comparison only ever catches the edit somebody already thought about.
+//
+// Workflows with no path filter are excluded and asserted separately below;
+// they run on everything by construction, so including them would make every
+// row say the same thing.
+const FILTERED = GOVERNED.map((g) => g.file).filter((file) => pathsOf(file) !== null);
+
+const PATH_MATRIX = [
+  ["server/account/pairroom.go", ["go.yml", "native-web-pairing.yml"],
+    "server-only: no native runner may start"],
+  ["server/go.mod", ["go.yml", "native-web-pairing.yml"],
+    "the server module: still not a native trigger"],
+  ["web/src/lib/pair.ts", ["native-web-pairing.yml", "web.yml"],
+    "web-only: no native runner may start"],
+  ["apps/mac/Relayium/AccountView.swift", ["macos.yml", "native-web-pairing.yml"],
+    "macOS-only source: no iOS runner"],
+  ["apps/mac/scripts/package-dmg.sh", ["macos.yml", "native-web-pairing.yml"],
+    "a macOS release script the macOS `test` job runs: macOS, not iOS"],
+  ["apps/ios/Relayium/RelayiumApp.swift", ["ios.yml", "native-web-pairing.yml"],
+    "iOS-only source: no macOS signing lane"],
+  ["apps/RelayiumKit/Sources/RelayiumKit/Crypto/SealedBox.swift",
+    ["ios.yml", "macos.yml", "native-web-pairing.yml"],
+    "SHARED source: both native workflows, or one app's break goes unseen"],
+  ["scripts/ios-ui-session-acceptance.sh", ["ios.yml", "native-web-pairing.yml"],
+    "the iOS built-App acceptance: the workflow that runs it"],
+  ["scripts/lib/local-acceptance.sh", ["ios.yml", "native-web-pairing.yml"],
+    "the isolation library those acceptance runs are built from"],
+  ["scripts/local-transfer-cleanup-test.sh", ["ios.yml", "native-web-pairing.yml"],
+    "the launcher's own failure-path test, run by the iOS job"],
+  ["scripts/go-race-shard.go", ["go.yml", "native-web-pairing.yml"],
+    "a Go helper: it used to start the macOS signing lane through `scripts/**`"],
+  [".github/workflows/macos.yml", ["macos.yml"], "a workflow edit starts its own workflow only"],
+  [".github/workflows/ios.yml", ["ios.yml"], "and the same for the new one"],
+  [".github/workflows/go.yml", ["go.yml"], "and for an unrelated one"],
+  ["apps/README.md", ["native-web-pairing.yml"],
+    "documentation under apps/: not an input to any native build, so neither native workflow "
+    + "starts. `apps/**` matched it only because it was coarse"],
+  ["docs/billing-transparency.md", [],
+    "a document no governed, path-filtered workflow builds from"],
+];
+
+for (const [path, want, why] of PATH_MATRIX) {
+  const got = FILTERED.filter((file) => matchesFilter(pathsOf(file), path)).sort();
+  check(
+    deepEqual(got, [...want].sort()),
+    `changing "${path}" starts [${got.join(", ")}]; want [${want.join(", ")}] — ${why}.`,
+  );
+}
+
+// The matrix above only means what it says if the excluded workflows really are
+// the unfiltered ones. `repo-hygiene.yml` is deliberately unfiltered: it hosts
+// this guard and the other cross-cutting ones, which must run on every change.
+// Only files that actually parsed are judged here: a workflow reported missing
+// above has no filter to have lost, and saying so twice buries the real cause.
+const unfiltered = GOVERNED.map((g) => g.file)
+  .filter((file) => docs.has(file) && pathsOf(file) === null);
+check(
+  deepEqual(unfiltered, ["repo-hygiene.yml"]),
+  `the set of governed workflows with NO push path filter is [${unfiltered.join(", ")}], want `
+  + `[repo-hygiene.yml]. A workflow that lost its filter runs on every change — including the `
+  + `macOS signing lane on a documentation edit — and the matrix above would stop covering it.`,
+);
 
 // ── report ──────────────────────────────────────────────────────────────────
 
