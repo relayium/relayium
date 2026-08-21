@@ -47,10 +47,22 @@ implementation, and they are gated. From `web/`:
 - `npm run gen:vectors` is the writing form — run it and commit the result with
   the Web change that moved the wire.
 
-CI runs the verifying form in `.github/workflows/native-web-pairing.yml`, before
-the macOS-native ↔ real-browser pairing acceptance in the same job. Without it, a
-`transfer.ts` change plus a forgotten regeneration leaves every Swift vector
+CI runs the verifying form in `.github/workflows/compat.yml`, and only there.
+That workflow has no path filter, so the check runs on every pull request and
+every `main` push regardless of which trees changed, and it is fail-closed —
+finite timeout, no `if:`, no `continue-on-error`, no retry. It does not depend on
+the macOS-native ↔ real-browser pairing acceptance in
+`.github/workflows/native-web-pairing.yml`, and there is no ordering between the
+two: they are separate workflows, GitHub starts them independently, and the
+pairing acceptance is path-filtered while this check is not. Without this check,
+a `transfer.ts` change plus a forgotten regeneration leaves every Swift vector
 suite green against the OLD wire.
+
+Always-run and fail-closed are properties of the workflow file. Whether a red
+result *blocks a merge* is GitHub branch protection on `main` — the status
+context `compat / wire-vectors` — which is repository configuration, is not
+established anywhere in this repository, and is recorded as an outstanding
+operational requirement in `docs/CI-PLATFORM-BOUNDARY.md`.
 
 ## macOS app
 

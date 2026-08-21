@@ -1,0 +1,122 @@
+name: compat
+# The always-required compatibility gate: the cheap, platform-independent checks
+# that judge a CONTRACT between two implementations, and that every platform —
+# present and future — has to pass before anything expensive starts.
+#
+# ## Why this is a workflow of its own rather than a job somewhere else
+#
+# It used to be the first step of `native-web-pairing.yml`, which is a 45-minute
+# macOS job behind a path filter. Both of those are wrong for a contract check:
+#
+#   * `npm run test:vectors` needs a checkout and Node. It does NOT need a macOS
+#     runner, a Go toolchain, a Chrome, an `npm ci` or a Vite build, and running
+#     it inside a job that has all of those means the seconds-long answer waits
+#     behind minutes of setup that have nothing to do with it.
+#   * A path filter is per-WORKFLOW. As the first step of a filtered workflow,
+#     the vector gate ran only when that workflow's own trees changed — so the
+#     moment a filter is narrowed, or a NEW platform root appears with its own
+#     workflow, the wire-compatibility check silently stops covering it. A gate
+#     that a new platform can bypass by existing is not a gate.
+#
+# So this file has deliberately NO `paths:` filter. It runs on every pull
+# request and every `main` push, it is cheap enough to do that, and a future
+# `apps/android/**` or `apps/windows/**` cannot route around it.
+#
+# ## What belongs here, and what does not
+#
+# Belongs: a check that is seconds long, needs no platform runner, and asserts
+# that two independent implementations of one wire still agree.
+#
+# Does not belong: anything that builds or signs a platform artifact, anything
+# needing a macOS/Windows runner, and anything slow enough that always-on would
+# be expensive. Those are the heavy per-platform workflows — `macos.yml`,
+# `ios.yml`, `native-web-pairing.yml` — and they stay filtered.
+#
+# ## "Always-required" here is a property of this file, not of the repository
+#
+# Everything above is enforceable in workflow code and is enforced there: no
+# `paths:` on either event, no job-level `if:`, no `continue-on-error`, no retry,
+# a finite timeout, and a real command. That makes this gate always-RUN and
+# fail-closed — it starts on every pull request and every `main` push, and it
+# reports red when the contract breaks.
+#
+# It does not, by itself, make a red result BLOCK a merge. That is a GitHub
+# branch-protection setting on `main`, it lives in repository configuration
+# rather than in this repository's source, and nothing in this file can assert
+# it. The check to require there is named:
+#
+#     compat / wire-vectors
+#
+# (the workflow's `name:` and the job key, joined the way GitHub renders a status
+# context). Until somebody adds that exact context to the `main` protection rule,
+# treat this gate as always-run and fail-closed but NOT merge-required, and do
+# not describe it as a required status anywhere. `docs/CI-PLATFORM-BOUNDARY.md`
+# records it as an outstanding operational requirement for the same reason.
+#
+# `docs/CI-PLATFORM-BOUNDARY.md` states the whole boundary;
+# `scripts/test/ci-event-policy-test.mjs` is what enforces it, because none of
+# it is visible to YAML validity or to actionlint.
+on:
+  push:
+    # Only `main`. A branch push used to start this workflow AND its pull
+    # request start a second, identical run of the same commit. The
+    # pull_request trigger below is what gates branch work; this one exists so
+    # `main` itself is never unverified.
+    branches:
+      - main
+    # Deliberately no `paths:` here and none under `pull_request:`. See the
+    # header: a filter is exactly how a new platform root would inherit an
+    # exemption from the compatibility contract without anybody deciding to
+    # grant it.
+  pull_request:
+  workflow_dispatch:
+
+# Supersede a pull request's own earlier runs, and nothing else. Identical to
+# the rule in every other governed workflow, and asserted by
+# `scripts/test/ci-event-policy-test.mjs`: group by PR NUMBER when there is one
+# and by `github.run_id` — unique per run — otherwise, so a PR supersedes only
+# itself and nothing can ever cancel a `main` or dispatch run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # No secrets, so this runs on fork pull requests like any other check.
+  # Deliberately no job-level `if:`, no `continue-on-error` and no retry: a
+  # compatibility gate that may skip, may be advisory, or may be re-rolled until
+  # it agrees is indistinguishable from no gate, and the policy test asserts the
+  # absence of all three.
+  wire-vectors:
+    runs-on: ubuntu-latest
+    # Seconds of real work. The bound is generous only so a runner that is
+    # merely slow does not read as drift, and finite so a wedged run cannot hold
+    # a slot until GitHub's 6-hour default expires.
+    timeout-minutes: 10
+    steps:
+      # Third-party actions are pinned to a full commit SHA (with the
+      # human-readable version in a trailing comment) so a compromised or
+      # retagged upstream release can't silently change what runs here.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # Node only, and deliberately no `cache: npm`: this job never runs
+      # `npm ci`. `check-wire-vectors.mjs` and both generators import nothing
+      # but `node:` builtins, so restoring a dependency cache would be pure
+      # latency for a job whose whole point is being seconds long.
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      # `apps/RelayiumKit/Tests/Fixtures/*-wire-vectors.json` are transcriptions
+      # of the Web implementation that the Swift suites assert against. If the
+      # Web wire moves and the fixtures are not regenerated, every Swift vector
+      # test still passes — against the OLD wire — and the two implementations
+      # have diverged with a green board.
+      #
+      # The verifying form is observably read-only: it regenerates, compares and
+      # restores what it found. The writing form (`gen:vectors`) must never
+      # appear in CI, and `scripts/test/native-web-pairing-gate-test.mjs`
+      # asserts that.
+      - name: Regenerate the cross-language wire vectors and require zero diff
+        working-directory: web
+        run: npm run test:vectors

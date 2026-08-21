@@ -42,3 +42,7 @@ server/relayium-node
 # category as the session directory above: evidence for a review, reproducible
 # from the wrapper, and specific to the machine that captured it.
 /output/
+# The same evidence dropped at the repository ROOT instead — a screenshot pasted
+# into a review or a bug report. Root-anchored on purpose: a product asset that
+# happens to be named screenshot-*.png under web/ or apps/ is still tracked.
+/screenshot-*.png

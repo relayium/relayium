@@ -37,6 +37,24 @@
 // syntactically valid — no YAML check, and no linter GitHub runs, would object
 // to any of them — and the next signal would be a race reaching production.
 //
+// ## And the platform boundary
+//
+// Section 6 governs which workflow owns which platform, which is the same class
+// of invisible property one level up. `apps/mac/**` belongs to `macos.yml` and
+// `apps/ios/**` to `ios.yml`; `apps/RelayiumKit/**` is APPLE-SHARED and fans out
+// to both on purpose; `compat.yml` is the always-on, unfiltered wire-
+// compatibility gate every platform must pass. The failure mode is not a broken
+// build but an inherited one: a coarse `apps/**` or `scripts/**` filter silently
+// adopts the next platform root the day somebody creates it, so a future
+// `apps/android/` change would start a macOS runner that builds nothing it
+// touched — exactly what `apps/**` did to iOS before the native split. The
+// checks are written against COMPILED GLOBS rather than against the literal
+// lists, so "too broad" and "too narrow" fail the same way, and section 7 mutates
+// the parsed workflows to prove each of them can actually fail.
+//
+// `docs/CI-PLATFORM-BOUNDARY.md` states the boundary in prose. This file is what
+// makes it true.
+//
 // ## Why the YAML parser is written out here, and what checks IT
 //
 // Same reason as macos-publish-order-test.mjs and native-web-pairing-gate-test.mjs:
@@ -52,7 +70,7 @@
 // time this file does:
 //
 //  1. `assertParserReadsTheWorkflowSubset()` parses an embedded fixture that
-//     exercises every construct these six workflows use — block mappings and
+//     exercises every construct these governed workflows use — block mappings and
 //     sequences, inline sequences, `|` and `>-` block scalars, anchors and
 //     aliases, quoted values containing `#`, and the `on:` key surviving as the
 //     string "on" rather than YAML 1.1's boolean — and asserts the exact
@@ -66,6 +84,7 @@
 // install first would trade a checkable risk for an outage that blocks merges.
 
 import { readFile } from "node:fs/promises";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -86,6 +105,10 @@ const GOVERNED = [
   { file: "macos.yml", dispatch: true },
   { file: "ios.yml", dispatch: true },
   { file: "web.yml", dispatch: true },
+  // The always-on, deliberately UNFILTERED compatibility gate. It is in this
+  // list — and not merely in section 6 — so it is bound by the same trigger and
+  // concurrency policy as every heavy workflow it runs in front of.
+  { file: "compat.yml", dispatch: true },
   { file: "native-web-pairing.yml", dispatch: true },
   { file: "repo-hygiene.yml", dispatch: false },
 ];
@@ -284,7 +307,7 @@ function deepEqual(a, b) {
 }
 
 /**
- * Every construct the six governed workflows actually use, parsed and compared
+ * Every construct the governed workflows actually use, parsed and compared
  * against the exact object it must produce.
  *
  * Each line here corresponds to something real: `paths: &paths` / `*paths` is
@@ -758,9 +781,36 @@ function pathsOf(file) {
   return Array.isArray(paths) ? paths : null;
 }
 
+/**
+ * A job with the whole-line shell comments inside its `run:` block scalars
+ * removed.
+ *
+ * The YAML parser above already drops YAML comments, but a `run: |` block is a
+ * SCALAR: everything indented under it survives verbatim, shell comments
+ * included. So a job that merely explains a command owns it as far as a text
+ * search is concerned, and every ownership question in this file is a text
+ * search — `-project apps/mac/Relayium.xcodeproj` written inside a `# was:`
+ * line in ios.yml would report macOS as having two heavy owners, which is a
+ * red board for a workflow that builds nothing of the sort. It fails the other
+ * way too: the real command deleted and its rationale left behind reads as a
+ * platform still being built.
+ *
+ * These jobs comment themselves at length and name the commands they are
+ * explaining, so this is not hypothetical tidiness — it is the difference
+ * between asserting the code and agreeing with the prose.
+ */
+function withoutRunComments(job) {
+  const copy = structuredClone(job ?? null);
+  for (const step of copy?.steps ?? []) {
+    if (typeof step?.run !== "string") continue;
+    step.run = step.run.split("\n").filter((line) => !/^\s*#/.test(line)).join("\n");
+  }
+  return copy;
+}
+
 /** Everything a job actually executes or configures, comments excluded. */
 const jobBodies = (file) => Object.entries(docs.get(file)?.jobs ?? {})
-  .map(([name, job]) => [name, JSON.stringify(job ?? null)]);
+  .map(([name, job]) => [name, JSON.stringify(withoutRunComments(job))]);
 
 const workflowBody = (file) => jobBodies(file).map(([, body]) => body).join("\n");
 
@@ -882,29 +932,53 @@ const PATH_MATRIX = [
     "the server module: still not a native trigger"],
   ["web/src/lib/pair.ts", ["native-web-pairing.yml", "web.yml"],
     "web-only: no native runner may start"],
-  ["apps/mac/Relayium/AccountView.swift", ["macos.yml", "native-web-pairing.yml"],
-    "macOS-only source: no iOS runner"],
-  ["apps/mac/scripts/package-dmg.sh", ["macos.yml", "native-web-pairing.yml"],
-    "a macOS release script the macOS `test` job runs: macOS, not iOS"],
-  ["apps/ios/Relayium/RelayiumApp.swift", ["ios.yml", "native-web-pairing.yml"],
-    "iOS-only source: no macOS signing lane"],
+  ["apps/mac/Relayium/AccountView.swift", ["macos.yml"],
+    "macOS-only source: no iOS runner, and no pairing runner either. The acceptance builds "
+    + "`server` and `apps/RelayiumKit` and serves the Web bundle; it never reads, compiles or "
+    + "serves a file under apps/mac, so watching this tree would buy a 45-minute macOS runner "
+    + "for evidence the run cannot produce. The app's logic lives in apps/RelayiumKit, which the "
+    + "pairing filter does name"],
+  ["apps/mac/scripts/package-dmg.sh", ["macos.yml"],
+    "a macOS release script the macOS `test` job runs: macOS, not iOS, and not the pairing "
+    + "acceptance, which does not package a DMG"],
+  ["apps/ios/Relayium/RelayiumApp.swift", ["ios.yml"],
+    "iOS-only source: no macOS signing lane, and — since the pairing filter was narrowed off "
+    + "`apps/**` — no 45-minute macOS pairing runner either. That acceptance builds "
+    + "apps/RelayiumKit and the Web bundle; nothing under apps/ios is an input to it"],
   ["apps/RelayiumKit/Sources/RelayiumKit/Crypto/SealedBox.swift",
     ["ios.yml", "macos.yml", "native-web-pairing.yml"],
     "SHARED source: both native workflows, or one app's break goes unseen"],
-  ["scripts/ios-ui-session-acceptance.sh", ["ios.yml", "native-web-pairing.yml"],
-    "the iOS built-App acceptance: the workflow that runs it"],
+  ["scripts/ios-ui-session-acceptance.sh", ["ios.yml"],
+    "the iOS built-App acceptance: the workflow that runs it, and only that one. The pairing "
+    + "workflow does not source this script, and `scripts/**` is gone from its filter"],
   ["scripts/lib/local-acceptance.sh", ["ios.yml", "native-web-pairing.yml"],
     "the isolation library those acceptance runs are built from"],
-  ["scripts/local-transfer-cleanup-test.sh", ["ios.yml", "native-web-pairing.yml"],
-    "the launcher's own failure-path test, run by the iOS job"],
-  ["scripts/go-race-shard.go", ["go.yml", "native-web-pairing.yml"],
-    "a Go helper: it used to start the macOS signing lane through `scripts/**`"],
+  ["scripts/local-transfer-cleanup-test.sh", ["ios.yml"],
+    "the launcher's own failure-path test, run by the iOS job and by nothing else"],
+  ["scripts/go-race-shard.go", ["go.yml"],
+    "a Go helper: it used to start the macOS signing lane through `scripts/**`, and then the "
+    + "macOS pairing runner through the same glob in the pairing filter. Both are gone"],
+  ["scripts/native-web-pairing-acceptance.sh", ["native-web-pairing.yml"],
+    "the acceptance script itself: named one file at a time, so it starts its own workflow and "
+    + "no other"],
   [".github/workflows/macos.yml", ["macos.yml"], "a workflow edit starts its own workflow only"],
   [".github/workflows/ios.yml", ["ios.yml"], "and the same for the new one"],
   [".github/workflows/go.yml", ["go.yml"], "and for an unrelated one"],
-  ["apps/README.md", ["native-web-pairing.yml"],
-    "documentation under apps/: not an input to any native build, so neither native workflow "
-    + "starts. `apps/**` matched it only because it was coarse"],
+  ["apps/README.md", [],
+    "documentation under apps/: not an input to any native build and not an input to the "
+    + "pairing acceptance either, so NO path-filtered workflow starts. `apps/**` in the pairing "
+    + "filter matched it only because it was coarse"],
+  ["apps/android/app/src/main/kotlin/Main.kt", [],
+    "a platform root that does not exist yet: no current workflow may adopt it. This is the "
+    + "whole point of removing `apps/**` — the day somebody creates this file, the ONLY thing "
+    + "that runs is what its own new workflow says, plus the unfiltered always-on gates"],
+  ["apps/windows/Relayium/App.xaml.cs", [],
+    "the same, for the other plausible future root"],
+  ["scripts/android-emulator-acceptance.sh", [],
+    "a future Android script: `scripts/**` in a macOS-runner workflow is how it would have "
+    + "inherited a macOS runner without anybody choosing that"],
+  ["scripts/windows-package.ps1", [],
+    "and the same for a future Windows packaging script"],
   ["docs/billing-transparency.md", [],
     "a document no governed, path-filtered workflow builds from"],
 ];
@@ -925,11 +999,1070 @@ for (const [path, want, why] of PATH_MATRIX) {
 const unfiltered = GOVERNED.map((g) => g.file)
   .filter((file) => docs.has(file) && pathsOf(file) === null);
 check(
-  deepEqual(unfiltered, ["repo-hygiene.yml"]),
+  deepEqual(unfiltered, ["compat.yml", "repo-hygiene.yml"]),
   `the set of governed workflows with NO push path filter is [${unfiltered.join(", ")}], want `
-  + `[repo-hygiene.yml]. A workflow that lost its filter runs on every change — including the `
-  + `macOS signing lane on a documentation edit — and the matrix above would stop covering it.`,
+  + `[compat.yml, repo-hygiene.yml]. Both are unfiltered ON PURPOSE and for the same reason — `
+  + `repo-hygiene hosts the cross-cutting guards, compat hosts the wire-compatibility contract `
+  + `every platform must pass — and both must therefore run on every change. A THIRD entry is a `
+  + `workflow that lost its filter and now runs on every change, including the macOS signing `
+  + `lane on a documentation edit; a MISSING entry is a gate that a new platform root can `
+  + `bypass by existing. Either way the matrix above stops covering it.`,
 );
+
+// ── 6. platform roots, their owners, and the always-on compatibility gate ───
+//
+// Section 5 separated macOS from iOS. This section states the RULE that split
+// was an instance of, so the next platform cannot re-create the same defect by
+// simply existing.
+//
+//   * A platform root (`apps/mac`, `apps/ios`, one day `apps/android` or
+//     `apps/windows`) has exactly ONE heavy owner: the workflow that builds,
+//     tests, signs and releases it. Nothing else may start a heavy build from
+//     that root.
+//   * `apps/RelayiumKit` is APPLE-SHARED, not cross-platform. It is Swift and it
+//     links WebRTC and Sodium through SwiftPM, so it fans out to macOS AND iOS
+//     deliberately — and to nothing else.
+//   * A truly cross-platform contract — the cross-language wire vectors — is a
+//     FAST gate and lives in `compat.yml`, which has no path filter at all, so
+//     every platform present and future has to pass it. Unfiltered and
+//     fail-closed is what this file asserts; making a red result block a merge
+//     is branch protection (`compat / wire-vectors`) and is not asserted here.
+//   * A workflow may watch a tree it does not own only when that tree is a real
+//     INPUT — something the run reads, compiles or serves. `apps/mac/**` is the
+//     worked example in the other direction: `native-web-pairing.yml` speaks FOR
+//     the macOS app, builds `apps/RelayiumKit` and `server` and serves the Web
+//     bundle, and never reads a file under `apps/mac/`, so it does not watch it.
+//   * A future platform root and the workflow that owns it are created in the
+//     SAME commit. A root with no workflow is source nothing compiles; a
+//     workflow with no root is a placeholder reporting a green check for a
+//     platform that does not exist, which reads as coverage and is not.
+//
+// All of it is invisible to YAML validity and to actionlint: a filter widened
+// back to `apps/**` is valid, a placeholder `echo` job is valid, and
+// `continue-on-error: true` on the compatibility gate is valid. Section 7 then
+// mutates the parsed workflows to prove every assertion here can actually fail,
+// because a policy check that cannot fail is the most expensive kind of green.
+//
+// `docs/CI-PLATFORM-BOUNDARY.md` is the prose. This is the enforcement.
+
+const COMPAT = "compat.yml";
+const NWP = "native-web-pairing.yml";
+const SHARED_APPLE_ROOT = "apps/RelayiumKit";
+const SHARED_APPLE_SAMPLE = "apps/RelayiumKit/Sources/RelayiumKit/Crypto/SealedBox.swift";
+const VECTOR_COMMAND = "npm run test:vectors";
+const VECTOR_WRITER = "gen:vectors";
+
+/** This file, and the unfiltered workflow that has to execute it. */
+const SELF_TEST = "scripts/test/ci-event-policy-test.mjs";
+const SELF_HOST = "repo-hygiene.yml";
+const SELF_COMMAND = `node ${SELF_TEST}`;
+/** Minutes. This file parses a handful of small YAML documents; it needs seconds. */
+const SELF_TIMEOUT_MAX = 10;
+
+/** The platform roots that exist today, and the one workflow that owns each. */
+const PLATFORM_OWNERS = [
+  {
+    label: "macOS",
+    root: "apps/mac",
+    workflow: MACOS,
+    marker: MACOS_PROJECT,
+    sample: "apps/mac/Relayium/AccountView.swift",
+  },
+  {
+    label: "iOS",
+    root: "apps/ios",
+    workflow: IOS,
+    marker: IOS_PROJECT,
+    sample: "apps/ios/Relayium/RelayiumApp.swift",
+  },
+];
+
+/**
+ * The platform roots that do NOT exist yet, named here on purpose.
+ *
+ * Naming them is what turns "nothing to check" into a checkable rule: today the
+ * assertion is that neither the root nor its workflow exists, and the moment
+ * either appears alone this file says so. `build` is the evidence that the
+ * workflow does real work rather than echoing — the one property a placeholder
+ * cannot fake without becoming a real build.
+ */
+const FUTURE_PLATFORMS = [
+  {
+    label: "Android",
+    root: "apps/android",
+    workflow: "android.yml",
+    sample: "apps/android/app/src/main/kotlin/Main.kt",
+    build: /gradlew|gradle\b|sdkmanager|kotlinc|\badb\b/,
+  },
+  {
+    label: "Windows",
+    root: "apps/windows",
+    workflow: "windows.yml",
+    sample: "apps/windows/Relayium/App.xaml.cs",
+    build: /msbuild|dotnet\s|cargo\s|cmake\b|signtool|Invoke-Pester/,
+  },
+];
+
+/** Every workflow file on disk, with whole-line comments removed. */
+const stripComments = (text) => text.split("\n").filter((line) => !/^\s*#/.test(line)).join("\n");
+const workflowTexts = new Map(
+  readdirSync(workflowsDir)
+    .filter((name) => /\.ya?ml$/.test(name))
+    .map((name) => [name, stripComments(readFileSync(resolve(workflowsDir, name), "utf8"))]),
+);
+
+/**
+ * The directories directly under `apps/`, read from disk rather than listed.
+ *
+ * This is what makes the future-platform rule non-vacuous: the day somebody
+ * runs `mkdir apps/android`, this set changes and the checks below have
+ * something to disagree with. A hard-coded list could not notice.
+ */
+const appRoots = (() => {
+  try {
+    return readdirSync(resolve(repoRoot, "apps"), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => `apps/${entry.name}`)
+      .sort();
+  } catch {
+    return [];
+  }
+})();
+
+/**
+ * Everything the checks below read, in one mutable value.
+ *
+ * Section 7 hands them a MODIFIED copy of this and requires them to complain,
+ * which is only possible because they read a world rather than module state.
+ */
+function realWorld() {
+  return {
+    governed: GOVERNED.map((entry) => ({ ...entry })),
+    docs: new Map([...docs].map(([file, doc]) => [file, structuredClone(doc)])),
+    texts: new Map(workflowTexts),
+    roots: new Set(appRoots),
+  };
+}
+
+const wPaths = (world, file) => {
+  const push = world.docs.get(file)?.on?.push;
+  const paths = push && typeof push === "object" ? push.paths : undefined;
+  return Array.isArray(paths) ? paths : null;
+};
+
+/** Would a change to `path` start `file`? Compiled globs, not list membership. */
+const wTriggers = (world, file, path) => {
+  const paths = wPaths(world, file);
+  if (paths === null) return world.docs.has(file); // no filter: everything starts it
+  return matchesFilter(paths, path);
+};
+
+// Comments stripped for the same reason as in `jobBodies`: ownership is a
+// property of the command, not of the sentence next to it.
+const wJobBody = (world, file) =>
+  JSON.stringify(Object.values(world.docs.get(file)?.jobs ?? {}).map(withoutRunComments));
+
+/**
+ * The run lines of a job that are actual work.
+ *
+ * A placeholder job is syntactically a job: it has a runner, a timeout and a
+ * step. What it does not have is a command, and `echo`/`true`/`exit 0` is how
+ * one is written. Everything else counts, so this cannot be satisfied by
+ * commenting the real command out either.
+ */
+function realRunLines(job) {
+  return (job?.steps ?? [])
+    .flatMap((step) => String(step?.run ?? "").split("\n"))
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("#"))
+    .filter((line) => !/^(echo\b|printf\b|true$|:$|exit 0$|set\s+-|shopt\b)/.test(line));
+}
+
+/**
+ * Every platform-boundary complaint about one world, as messages.
+ *
+ * Returning rather than pushing is the whole design: the real world's messages
+ * are appended to `failures`, and section 7 asserts that specific mutations
+ * produce specific messages.
+ */
+function platformBoundaryFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+
+  const governedFiles = world.governed.map((entry) => entry.file);
+  const filtered = governedFiles.filter((file) => wPaths(world, file) !== null);
+  const allPlatforms = [...PLATFORM_OWNERS, ...FUTURE_PLATFORMS];
+
+  // 6a. One platform root, one heavy owner — asserted from the build command
+  //     rather than from a job name, and from the FILTER rather than from the
+  //     path list, so "too broad" and "too narrow" both fail here.
+  for (const platform of PLATFORM_OWNERS) {
+    const hosts = governedFiles.filter((file) => wJobBody(world, file).includes(platform.marker));
+    need(
+      hosts.length === 1 && hosts[0] === platform.workflow,
+      `platform root ${platform.root}: the ${platform.label} app build (\`${platform.marker}\`) `
+      + `runs in [${hosts.join(", ")}]; want exactly [${platform.workflow}]. A platform root has `
+      + `exactly one heavy owner — two hosts is a second platform runner per commit and no new `
+      + `evidence, zero is a platform that quietly stopped being built.`,
+    );
+    need(
+      wTriggers(world, platform.workflow, platform.sample),
+      `platform root ${platform.root}: its owning workflow ${platform.workflow} does not trigger `
+      + `on "${platform.sample}". An owner its own root cannot start is not an owner, and the `
+      + `platform lands unbuilt with a green board.`,
+    );
+    for (const other of allPlatforms) {
+      if (other.root === platform.root) continue;
+      if (!world.docs.has(other.workflow)) continue;
+      need(
+        !wTriggers(world, other.workflow, platform.sample),
+        `platform root ${platform.root} also starts ${other.workflow}, which owns ${other.root}. `
+        + `Platform roots do not fan out: a change under ${platform.root} must not start another `
+        + `platform's heavy build. This is exactly what a coarse \`apps/**\` filter does, and it `
+        + `is what the macOS/iOS split was for.`,
+      );
+    }
+  }
+
+  // 6b. No governed filter may be coarse enough to adopt a root by accident —
+  //     stated twice, once as the literal glob a reader greps for and once as
+  //     behaviour, because a future `apps/*/**` would pass the literal check.
+  for (const file of filtered) {
+    const paths = wPaths(world, file);
+    for (const bare of ["apps/**", "apps/*", "apps/*/**", "scripts/**", "scripts/*"]) {
+      need(
+        !paths.includes(bare),
+        `${file}'s path filter lists the bare glob \`${bare}\`. It matches trees that are not `
+        + `inputs to this workflow today AND every tree somebody adds tomorrow, so the next `
+        + `platform root or platform script inherits this runner without anybody choosing that. `
+        + `Name the files and directories this workflow actually consumes.`,
+      );
+    }
+    const spanned = allPlatforms.filter((p) => matchesFilter(paths, p.sample)).map((p) => p.root);
+    need(
+      spanned.length <= 1,
+      `${file}'s path filter matches more than one platform root (${spanned.join(", ")}). One `
+      + `workflow that starts on two platforms' source cannot be started for one of them alone, `
+      + `no matter how its jobs are conditioned — path filters are per-workflow.`,
+    );
+  }
+
+  // 6c. The Apple-shared package: exactly two owners, and not one more.
+  const appleOwners = PLATFORM_OWNERS
+    .filter((platform) => wTriggers(world, platform.workflow, SHARED_APPLE_SAMPLE))
+    .map((platform) => platform.workflow)
+    .sort();
+  need(
+    deepEqual(appleOwners, [IOS, MACOS].sort()),
+    `the Apple-shared package ${SHARED_APPLE_ROOT} fans out to [${appleOwners.join(", ")}]; want `
+    + `exactly [${[IOS, MACOS].sort().join(", ")}]. Both native apps compile against it, so a `
+    + `change there can break either one alone; dropping it from one filter leaves that app's `
+    + `compatibility with the shared package unproven until something else happens to touch it.`,
+  );
+  for (const platform of PLATFORM_OWNERS) {
+    const paths = wPaths(world, platform.workflow);
+    if (paths === null) continue;
+    need(
+      paths.includes(`${SHARED_APPLE_ROOT}/**`),
+      `${platform.workflow}'s path filter no longer names \`${SHARED_APPLE_ROOT}/**\`. Stated `
+      + `separately from the fan-out check above so the reason survives a filter that happens to `
+      + `match the shared package through some broader glob.`,
+    );
+  }
+  for (const future of FUTURE_PLATFORMS) {
+    if (!world.docs.has(future.workflow)) continue;
+    need(
+      !wTriggers(world, future.workflow, SHARED_APPLE_SAMPLE),
+      `${future.workflow} triggers on ${SHARED_APPLE_ROOT}. That package is APPLE-SHARED, not `
+      + `cross-platform: it is Swift, it links WebRTC and Sodium through SwiftPM, and nothing `
+      + `outside macOS and iOS compiles it. A ${future.label} workflow watching it burns a runner `
+      + `on every Apple change and proves nothing. Truly cross-platform contracts belong in `
+      + `${COMPAT}.`,
+    );
+  }
+
+  // 6d. The pairing acceptance is a macOS+browser gate, not an iOS one — and
+  //     narrowing it past its OWN inputs is asserted in the same place, because
+  //     that is the failure a "make the filter smaller" edit actually causes.
+  if (world.docs.has(NWP)) {
+    const ios = PLATFORM_OWNERS.find((platform) => platform.root === "apps/ios");
+    need(
+      !wTriggers(world, NWP, ios.sample),
+      `${NWP} triggers on ${ios.root}. Its acceptance compiles ${SHARED_APPLE_ROOT} and the Web `
+      + `bundle and drives a macOS peer against a real Chrome; no file under ${ios.root} is an `
+      + `input to it. An iOS-only change would start a 45-minute macOS runner that builds nothing `
+      + `it touched.`,
+    );
+    // The INPUTS, each of which the run actually reads, compiles or serves.
+    // Every entry here was checked against the script rather than against the
+    // workflow's own prose: `scripts/native-web-pairing-acceptance.sh` builds
+    // `server` and `apps/RelayiumKit` (`swift build --product
+    // LocalTransferPeer`) and `vite build`s `web/`, and sources exactly one
+    // library. Nothing else is loaded.
+    for (const [input, why] of [
+      [SHARED_APPLE_SAMPLE, "the Swift half it actually compiles"],
+      ["web/src/lib/pair.ts", "the browser half's own pairing code"],
+      ["server/account/pairroom.go", "the real hub the two clients meet on"],
+      ["scripts/native-web-pairing-acceptance.sh", "the acceptance script itself"],
+      ["scripts/lib/local-acceptance.sh", "the isolation library that script sources"],
+    ]) {
+      need(
+        wTriggers(world, NWP, input),
+        `${NWP} no longer triggers on "${input}" — ${why}. Narrowing a filter past the run's own `
+        + `inputs disables the gate as effectively as deleting the step, and is cheaper to do by `
+        + `accident.`,
+      );
+    }
+    // And the tree that is NOT an input, stated in the same place, because the
+    // two errors are one decision made in opposite directions and a file that
+    // only asserted the narrowing would invite the widening.
+    //
+    // `apps/mac/**` is what this acceptance SPEAKS FOR and is still not what it
+    // reads: the app target is SwiftUI views over `RelayiumAppKit`, which lives
+    // under `apps/RelayiumKit/**` and IS watched above. An apps/mac-only change
+    // must therefore start `macos.yml` — plus the two unfiltered always-on
+    // workflows — and no 45-minute macOS pairing runner.
+    const mac = PLATFORM_OWNERS.find((platform) => platform.root === "apps/mac");
+    need(
+      !wTriggers(world, NWP, mac.sample),
+      `${NWP} triggers on ${mac.root} ("${mac.sample}"), which is not an input to it. The `
+      + `acceptance builds \`server\` and ${SHARED_APPLE_ROOT} and serves the Web bundle; no file `
+      + `under ${mac.root} is read, compiled or served by the run, so this filter charges a `
+      + `45-minute macOS runner per commit for evidence it cannot produce. The macOS app's own `
+      + `logic is in ${SHARED_APPLE_ROOT}, which this filter already names.`,
+    );
+  }
+
+  // 6e. Absence or completeness, for the roots that do not exist yet.
+  const known = new Set([
+    ...PLATFORM_OWNERS.map((platform) => platform.root),
+    ...FUTURE_PLATFORMS.map((future) => future.root),
+    SHARED_APPLE_ROOT,
+  ]);
+  for (const root of [...world.roots].sort()) {
+    need(
+      known.has(root),
+      `unknown platform root "${root}" exists under apps/. Every root is either a platform with `
+      + `exactly one owning workflow or the Apple-shared package; a root this policy has never `
+      + `heard of is source with no declared owner, no declared filter and no declared release `
+      + `pipeline. Add it to PLATFORM_OWNERS or FUTURE_PLATFORMS in the same commit that creates `
+      + `it, together with the workflow that builds it.`,
+    );
+  }
+  for (const future of FUTURE_PLATFORMS) {
+    const rootExists = world.roots.has(future.root);
+    const workflowExists = world.texts.has(future.workflow);
+
+    need(
+      !(rootExists && !workflowExists),
+      `${future.root}/ exists but .github/workflows/${future.workflow} does not. A platform root `
+      + `and the workflow that owns it are created in the SAME commit: until then nothing `
+      + `compiles, tests or signs that source, and the board is green only because nobody asked.`,
+    );
+    need(
+      !(workflowExists && !rootExists),
+      `.github/workflows/${future.workflow} exists but ${future.root}/ does not. A platform `
+      + `workflow with no real source is a placeholder — it reports a green ${future.label} check `
+      + `for a platform that does not exist, which is worse than an absent check because it looks `
+      + `like coverage.`,
+    );
+    if (!rootExists || !workflowExists) continue;
+
+    need(
+      world.governed.some((entry) => entry.file === future.workflow),
+      `${future.workflow} exists but is not in this test's GOVERNED list, so the push/pull_request `
+      + `and concurrency policy above does not bind it — it may run twice per commit, or cancel a `
+      + `\`main\` run, and nothing would say so. Add it there in the same commit.`,
+    );
+    const doc = world.docs.get(future.workflow);
+    if (!doc) {
+      need(false, `${future.workflow} exists but was not parsed, so nothing below judged it.`);
+      continue;
+    }
+    need(
+      wTriggers(world, future.workflow, future.sample),
+      `${future.workflow} does not trigger on its own root ${future.root} (tried `
+      + `"${future.sample}"). A platform workflow pointed at the wrong root is a check that never `
+      + `runs, and its platform ships unbuilt behind a green board.`,
+    );
+    for (const other of allPlatforms) {
+      if (other.root === future.root) continue;
+      need(
+        !wTriggers(world, future.workflow, other.sample),
+        `${future.workflow} also triggers on ${other.root}, which it does not build.`,
+      );
+    }
+    const jobs = Object.entries(doc.jobs ?? {});
+    const buildJobs = jobs.filter(
+      ([, job]) => future.build.test(runText(job)) && realRunLines(job).length > 0,
+    );
+    need(
+      buildJobs.length >= 1,
+      `${future.workflow} has no job that actually builds or tests ${future.root}: no run step `
+      + `matching ${future.build} whose command is more than an \`echo\`. A workflow that only `
+      + `echoes reports a green ${future.label} check for source nobody compiled.`,
+    );
+    for (const [name, job] of jobs) {
+      const timeout = Number(job["timeout-minutes"]);
+      need(
+        Number.isFinite(timeout) && timeout > 0,
+        `${future.workflow}/${name}: timeout-minutes is `
+        + `${JSON.stringify(job["timeout-minutes"])}, want a finite positive number.`,
+      );
+      need(
+        job["continue-on-error"] === undefined,
+        `${future.workflow}/${name}: continue-on-error makes this platform's gate advisory.`,
+      );
+      need(
+        !/retry|retries/i.test(runText(job)),
+        `${future.workflow}/${name}: a retry appeared; a platform build that is re-rolled until it `
+        + `passes reports the run that agreed rather than the code.`,
+      );
+    }
+  }
+
+  // 6f. The always-on compatibility gate: unfiltered, cheap, fail-closed, finite.
+  //
+  //     All four are properties of the workflow FILE, which is the only thing
+  //     this test can read. They make the gate always-RUN — it starts on every
+  //     triggering event and reports red when the contract breaks. They do not
+  //     make a red result BLOCK a merge: that is branch protection on `main`,
+  //     the status context `compat / wire-vectors`, and it lives in repository
+  //     settings rather than in this repository's source. Nothing below is
+  //     evidence that it is configured, and no message here should be read as
+  //     claiming it is.
+  need(
+    world.texts.has(COMPAT),
+    `${COMPAT} is missing. It is the always-required wire-compatibility gate — the one check `
+    + `every platform, present and future, has to pass — and nothing else in this repository runs `
+    + `\`${VECTOR_COMMAND}\`.`,
+  );
+  const compat = world.docs.get(COMPAT);
+  if (compat) {
+    need(
+      wPaths(world, COMPAT) === null,
+      `${COMPAT} gained a push path filter (${JSON.stringify(wPaths(world, COMPAT))}). It must `
+      + `have none: a filter is precisely how a new platform root — or a tree somebody narrowed — `
+      + `stops being covered by the cross-language contract without anybody deciding to exempt it. `
+      + `Always-required means always-run.`,
+    );
+    const pr = compat.on?.pull_request;
+    need(
+      !(pr && typeof pr === "object" && pr.paths),
+      `${COMPAT} gained a pull_request path filter, so branch work can reach \`main\` without the `
+      + `compatibility gate having run on it.`,
+    );
+    const jobs = Object.entries(compat.jobs ?? {});
+    need(jobs.length >= 1, `${COMPAT} has no jobs, so the always-on gate checks nothing.`);
+    for (const [name, job] of jobs) {
+      need(
+        job["runs-on"] === "ubuntu-latest",
+        `${COMPAT}/${name} runs on ${JSON.stringify(job["runs-on"])}; the always-on gate must stay `
+        + `on the cheapest hosted runner. A macOS or Windows runner here turns a seconds-long `
+        + `contract check into a platform build charged on every single commit, and the first `
+        + `response to that bill is to add the path filter the check must not have.`,
+      );
+      const timeout = Number(job["timeout-minutes"]);
+      need(
+        Number.isFinite(timeout) && timeout > 0,
+        `${COMPAT}/${name}: timeout-minutes is ${JSON.stringify(job["timeout-minutes"])}, want a `
+        + `finite positive number. An unbounded always-on job holds a runner for GitHub's 6-hour `
+        + `default on every commit.`,
+      );
+      need(
+        job["continue-on-error"] === undefined,
+        `${COMPAT}/${name}: continue-on-error makes the compatibility gate advisory, and an `
+        + `advisory contract check is indistinguishable from no contract check.`,
+      );
+      need(
+        job.if === undefined,
+        `${COMPAT}/${name}: a job-level "if:" lets the always-on gate skip itself. It reads no `
+        + `secrets and must run on every triggering event, fork pull requests included.`,
+      );
+      const text = runText(job);
+      need(
+        !/retry|retries/i.test(text),
+        `${COMPAT}/${name}: a retry appeared. This gate compares frozen bytes against their `
+        + `generator; there is nothing intermittent for a retry to smooth over, so a retry here `
+        + `only hides a real divergence.`,
+      );
+      need(
+        !/\|\|\s*(true|:|echo|exit 0)/.test(text),
+        `${COMPAT}/${name}: a command swallows its own exit status, so the gate reports green `
+        + `after failing.`,
+      );
+      need(
+        realRunLines(job).length > 0,
+        `${COMPAT}/${name}: has no real run step — every run line is an \`echo\` or a no-op. A `
+        + `placeholder job reports a green compatibility check for a contract nobody verified.`,
+      );
+      for (const step of job.steps ?? []) {
+        need(
+          step["continue-on-error"] === undefined,
+          `${COMPAT}/${name}: a step sets continue-on-error, which lets the gate report green `
+          + `after failing.`,
+        );
+        need(
+          step.if === undefined,
+          `${COMPAT}/${name}: a step sets "if:", and a gate that can skip itself is not a gate.`,
+        );
+      }
+    }
+  }
+
+  // 6g. And the command itself: once, in the right place, in the verifying form.
+  const vectorHosts = [...world.texts]
+    .filter(([, text]) => text.includes(VECTOR_COMMAND))
+    .map(([file]) => file)
+    .sort();
+  need(
+    deepEqual(vectorHosts, [COMPAT]),
+    `\`${VECTOR_COMMAND}\` runs in [${vectorHosts.join(", ")}]; want exactly [${COMPAT}]. Zero `
+    + `hosts is the cross-language wire contract silently unchecked — every Swift vector suite `
+    + `would keep passing against the OLD wire. Two hosts is the same seconds-long check paid for `
+    + `twice, and historically one of them sat behind a path filter a new platform could bypass.`,
+  );
+  const writers = [...world.texts]
+    .filter(([, text]) => text.includes(VECTOR_WRITER))
+    .map(([file]) => file)
+    .sort();
+  need(
+    writers.length === 0,
+    `[${writers.join(", ")}] run the WRITING form of the vector generator (\`${VECTOR_WRITER}\`). `
+    + `CI must verify the tracked bytes, never regenerate them — a gate that rewrites the fixture `
+    + `it is checking agrees with whatever it just produced.`,
+  );
+
+  // 6h. And the one property none of the above can establish about itself:
+  //     that something actually RUNS this file, on everything, fail-closed.
+  //
+  //     Every assertion in sections 5–7 is worth exactly what its execution is
+  //     worth. Delete the step that invokes it and all of them go quiet: no
+  //     YAML breaks, actionlint is happy, the board is green, and the next
+  //     signal is a coarse filter charging a macOS runner on a documentation
+  //     edit — or a platform root that never got built. The same is true of the
+  //     cheaper edits: a job-level `if:`, a `continue-on-error:`, or a `|| true`
+  //     on the command each leave the invocation visibly present and its verdict
+  //     unable to stop anything.
+  //
+  //     It must be the UNFILTERED host, too. Behind a path filter this policy
+  //     would run only when the trees that filter happens to name change, which
+  //     is the exact defect section 6f exists to reject one level down: a check
+  //     every change must pass, reachable only by some changes.
+  //
+  //     And the invocation must be BOUNDED by a number somebody chose. A job
+  //     with no `timeout-minutes` inherits GitHub's six-hour default, so this
+  //     policy hanging — a parser loop on a malformed document, a runner that
+  //     never finishes booting — holds a runner for six hours on every commit
+  //     instead of turning the board red in minutes. A declared bound far above
+  //     what the work takes is the same default wearing a number, so the
+  //     ceiling is asserted in both directions.
+  const selfHostDoc = world.docs.get(SELF_HOST);
+  need(
+    selfHostDoc !== undefined,
+    `${SELF_HOST} is missing, and it is what runs \`${SELF_COMMAND}\` on every pull request and `
+    + `every \`main\` push. Without it nothing in this file is executed and every assertion above `
+    + `is inert.`,
+  );
+  if (selfHostDoc) {
+    need(
+      wPaths(world, SELF_HOST) === null,
+      `${SELF_HOST} gained a push path filter (${JSON.stringify(wPaths(world, SELF_HOST))}). It `
+      + `hosts this policy, which judges .github/workflows/ and apps/ as a whole, so a filter `
+      + `means the boundary is only checked when the trees that filter happens to name change — `
+      + `the same exemption-by-omission section 6f rejects for ${COMPAT}.`,
+    );
+    const selfPr = selfHostDoc.on?.pull_request;
+    need(
+      !(selfPr && typeof selfPr === "object" && selfPr.paths),
+      `${SELF_HOST} gained a pull_request path filter, so branch work can reach \`main\` without `
+      + `this policy having run on it.`,
+    );
+
+    // Found by the COMMAND, so renaming the job is allowed and losing its
+    // invocation is not.
+    const hosts = Object.entries(selfHostDoc.jobs ?? {})
+      .filter(([, job]) => realRunLines(job).some((line) => line.includes(SELF_COMMAND)));
+    need(
+      hosts.length === 1,
+      `${hosts.length} job(s) in ${SELF_HOST} run \`${SELF_COMMAND}\`; want exactly one. Zero is `
+      + `this entire policy file present in the repository and executed by nothing — the most `
+      + `expensive kind of green, because the assertions still read as coverage. Two is the same `
+      + `seconds-long check charged twice.`,
+    );
+    for (const [name, job] of hosts) {
+      need(
+        job.if === undefined,
+        `${SELF_HOST}/${name}: a job-level "if:" lets the job that runs \`${SELF_COMMAND}\` skip `
+        + `itself. This policy reads no secrets and must run on every triggering event, fork pull `
+        + `requests included.`,
+      );
+      need(
+        job["continue-on-error"] === undefined,
+        `${SELF_HOST}/${name}: continue-on-error makes this policy advisory. An advisory boundary `
+        + `check reports the same green as a passing one and stops nothing.`,
+      );
+      const timeout = Number(job["timeout-minutes"]);
+      need(
+        Number.isFinite(timeout) && timeout > 0,
+        `${SELF_HOST}/${name}: timeout-minutes is ${JSON.stringify(job["timeout-minutes"])}, want `
+        + `a finite positive number. Undeclared, this job inherits GitHub's 6-hour default, so a `
+        + `hang in the policy that gates every commit holds a runner for six hours instead of `
+        + `reporting red in minutes.`,
+      );
+      need(
+        !(Number.isFinite(timeout) && timeout > SELF_TIMEOUT_MAX),
+        `${SELF_HOST}/${name}: timeout-minutes is ${JSON.stringify(job["timeout-minutes"])}, above `
+        + `the ${SELF_TIMEOUT_MAX}-minute ceiling. This policy parses a few small YAML documents `
+        + `and finishes in seconds; a bound that large is the 6-hour default wearing a number, and `
+        + `it buys nothing that a real hang would not spend.`,
+      );
+      for (const step of job.steps ?? []) {
+        need(
+          step["continue-on-error"] === undefined,
+          `${SELF_HOST}/${name}: a step sets continue-on-error, which lets the job report green `
+          + `after this policy failed.`,
+        );
+        need(
+          step.if === undefined,
+          `${SELF_HOST}/${name}: a step sets "if:", and a policy that can skip itself is not a `
+          + `policy.`,
+        );
+      }
+      const selfLine = realRunLines(job).find((line) => line.includes(SELF_COMMAND));
+      need(
+        !/\|\|\s*(true|:|echo|exit 0)/.test(selfLine ?? ""),
+        `${SELF_HOST}/${name}: the \`${SELF_COMMAND}\` command swallows its own exit status `
+        + `("${(selfLine ?? "").trim()}"), so every failure above is reported as a pass.`,
+      );
+    }
+  }
+
+  return out;
+}
+
+for (const message of platformBoundaryFailures(realWorld())) failures.push(message);
+
+// ── 7. the proof that section 6 can fail ────────────────────────────────────
+//
+// Every check above reads a world instead of module state precisely so this can
+// exist. Each case below breaks ONE property in a copy of the real workflows and
+// requires the matching complaint by its own wording — not merely "something
+// failed", which a broken parser or an unrelated typo would also satisfy.
+//
+// This is the guard against the most expensive outcome available here: a policy
+// file that passes because it is asserting nothing.
+
+/** Set a workflow's push and pull_request filters together, the way the anchor does. */
+function withPaths(world, file, paths) {
+  const on = world.docs.get(file).on;
+  on.push.paths = paths;
+  on.pull_request = { ...(on.pull_request ?? {}), paths };
+  return world;
+}
+
+/** Mutate the first job of a workflow. */
+function withJob(world, file, mutate) {
+  const jobs = world.docs.get(file).jobs;
+  mutate(jobs[Object.keys(jobs)[0]]);
+  return world;
+}
+
+/**
+ * Mutate the job in `file` that runs `command`, and the step carrying it.
+ *
+ * Throwing when no such job exists is deliberate: a mutation that silently
+ * stopped applying would leave the world unbroken, and the case below it would
+ * pass by asserting nothing — the failure this whole section exists to prevent.
+ */
+function withCommandJob(world, file, command, mutate) {
+  for (const [name, job] of Object.entries(world.docs.get(file)?.jobs ?? {})) {
+    const step = (job.steps ?? []).find((s) => String(s?.run ?? "").includes(command));
+    if (step) { mutate(job, step, name); return world; }
+  }
+  throw new Error(`no job in ${file} runs ${command}`);
+}
+
+/** A plausible future platform workflow, as the parser would have produced it. */
+function syntheticPlatform({ workflow, root, run, timeout = "30" }) {
+  return {
+    name: workflow.replace(/\.ya?ml$/, ""),
+    on: {
+      push: { branches: ["main"], paths: [`${root}/**`, `.github/workflows/${workflow}`] },
+      pull_request: { paths: [`${root}/**`, `.github/workflows/${workflow}`] },
+      workflow_dispatch: null,
+    },
+    concurrency: { group: GROUP, "cancel-in-progress": CANCEL },
+    jobs: {
+      build: {
+        "runs-on": "ubuntu-latest",
+        "timeout-minutes": timeout,
+        steps: [
+          { uses: "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd" },
+          { name: "Build", run: `${run}\n` },
+        ],
+      },
+    },
+  };
+}
+
+/** Add a workflow to a world as if it were on disk and governed. */
+function addWorkflow(world, file, doc) {
+  world.docs.set(file, doc);
+  world.texts.set(file, JSON.stringify(doc));
+  world.governed.push({ file, dispatch: true });
+  return world;
+}
+
+const ANDROID = FUTURE_PLATFORMS.find((future) => future.root === "apps/android");
+
+const MUTATIONS = [
+  {
+    name: "native-web-pairing.yml regains a bare `apps/**` filter",
+    mutate: (world) => withPaths(world, NWP, [
+      "apps/**", "web/**", "server/**", `.github/workflows/${NWP}`,
+    ]),
+    expect: /native-web-pairing\.yml triggers on apps\/ios/,
+  },
+  {
+    name: "a governed workflow regains a bare `scripts/**` filter",
+    mutate: (world) => withPaths(world, IOS, [
+      "apps/ios/**", "apps/RelayiumKit/**", "scripts/**", `.github/workflows/${IOS}`,
+    ]),
+    expect: /ios\.yml's path filter lists the bare glob `scripts\/\*\*`/,
+  },
+  {
+    name: "macos.yml adopts apps/ios, re-welding the two Apple platforms",
+    mutate: (world) => withPaths(world, MACOS, [
+      "apps/mac/**", "apps/ios/**", "apps/RelayiumKit/**", `.github/workflows/${MACOS}`,
+    ]),
+    expect: /platform root apps\/ios also starts macos\.yml/,
+  },
+  {
+    name: "ios.yml stops watching the Apple-shared package",
+    mutate: (world) => withPaths(world, IOS, [
+      "apps/ios/**", `.github/workflows/${IOS}`,
+    ]),
+    expect: /apps\/RelayiumKit fans out to \[macos\.yml\]/,
+  },
+  {
+    name: "an apps/android root appears with no android.yml",
+    mutate: (world) => { world.roots.add("apps/android"); return world; },
+    expect: /apps\/android\/ exists but \.github\/workflows\/android\.yml does not/,
+  },
+  {
+    name: "an android.yml placeholder appears with no apps/android source",
+    mutate: (world) => addWorkflow(world, ANDROID.workflow, syntheticPlatform({
+      workflow: ANDROID.workflow, root: ANDROID.root, run: "./gradlew assembleDebug",
+    })),
+    expect: /android\.yml exists but apps\/android\/ does not/,
+  },
+  {
+    name: "android.yml and apps/android both exist, but the job only echoes",
+    mutate: (world) => {
+      world.roots.add(ANDROID.root);
+      return addWorkflow(world, ANDROID.workflow, syntheticPlatform({
+        workflow: ANDROID.workflow, root: ANDROID.root, run: 'echo "android build: TODO"',
+      }));
+    },
+    expect: /android\.yml has no job that actually builds or tests apps\/android/,
+  },
+  {
+    name: "android.yml exists but its filter names the wrong root",
+    mutate: (world) => {
+      world.roots.add(ANDROID.root);
+      addWorkflow(world, ANDROID.workflow, syntheticPlatform({
+        workflow: ANDROID.workflow, root: ANDROID.root, run: "./gradlew assembleDebug",
+      }));
+      return withPaths(world, ANDROID.workflow, [
+        "apps/mac/**", `.github/workflows/${ANDROID.workflow}`,
+      ]);
+    },
+    expect: /android\.yml does not trigger on its own root apps\/android/,
+  },
+  {
+    name: "android.yml claims the Apple-shared package as cross-platform",
+    mutate: (world) => {
+      world.roots.add(ANDROID.root);
+      addWorkflow(world, ANDROID.workflow, syntheticPlatform({
+        workflow: ANDROID.workflow, root: ANDROID.root, run: "./gradlew assembleDebug",
+      }));
+      return withPaths(world, ANDROID.workflow, [
+        "apps/android/**", "apps/RelayiumKit/**", `.github/workflows/${ANDROID.workflow}`,
+      ]);
+    },
+    expect: /android\.yml triggers on apps\/RelayiumKit/,
+  },
+  {
+    name: "android.yml's build job loses its timeout",
+    mutate: (world) => {
+      world.roots.add(ANDROID.root);
+      addWorkflow(world, ANDROID.workflow, syntheticPlatform({
+        workflow: ANDROID.workflow, root: ANDROID.root, run: "./gradlew assembleDebug",
+      }));
+      return withJob(world, ANDROID.workflow, (job) => { delete job["timeout-minutes"]; });
+    },
+    expect: /android\.yml\/build: timeout-minutes is undefined/,
+  },
+  {
+    name: "android.yml's build job becomes advisory",
+    mutate: (world) => {
+      world.roots.add(ANDROID.root);
+      addWorkflow(world, ANDROID.workflow, syntheticPlatform({
+        workflow: ANDROID.workflow, root: ANDROID.root, run: "./gradlew assembleDebug",
+      }));
+      return withJob(world, ANDROID.workflow, (job) => { job["continue-on-error"] = "true"; });
+    },
+    expect: /android\.yml\/build: continue-on-error makes this platform's gate advisory/,
+  },
+  {
+    name: "android.yml's build job retries until it agrees",
+    mutate: (world) => {
+      world.roots.add(ANDROID.root);
+      addWorkflow(world, ANDROID.workflow, syntheticPlatform({
+        workflow: ANDROID.workflow,
+        root: ANDROID.root,
+        run: "./gradlew assembleDebug || ./gradlew assembleDebug # retry once",
+      }));
+      return world;
+    },
+    expect: /android\.yml\/build: a retry appeared/,
+  },
+  {
+    name: "an unknown apps/ root appears with no declared owner",
+    mutate: (world) => { world.roots.add("apps/linux"); return world; },
+    expect: /unknown platform root "apps\/linux" exists under apps\//,
+  },
+  {
+    name: "compat.yml gains a push path filter",
+    mutate: (world) => withPaths(world, COMPAT, ["web/**", `.github/workflows/${COMPAT}`]),
+    expect: /compat\.yml gained a push path filter/,
+  },
+  {
+    name: "compat.yml gains a pull_request-only path filter",
+    mutate: (world) => {
+      world.docs.get(COMPAT).on.pull_request = { paths: ["web/**"] };
+      return world;
+    },
+    expect: /compat\.yml gained a pull_request path filter/,
+  },
+  {
+    name: "compat.yml moves onto a platform runner",
+    mutate: (world) => withJob(world, COMPAT, (job) => { job["runs-on"] = "macos-15"; }),
+    expect: /compat\.yml\/wire-vectors runs on "macos-15"/,
+  },
+  {
+    name: "compat.yml's job becomes advisory",
+    mutate: (world) => withJob(world, COMPAT, (job) => { job["continue-on-error"] = "true"; }),
+    expect: /continue-on-error makes the compatibility gate advisory/,
+  },
+  {
+    name: "compat.yml's gate step becomes advisory",
+    mutate: (world) => withJob(world, COMPAT, (job) => {
+      job.steps[job.steps.length - 1]["continue-on-error"] = "true";
+    }),
+    expect: /compat\.yml\/wire-vectors: a step sets continue-on-error/,
+  },
+  {
+    name: "compat.yml's gate step can skip itself",
+    mutate: (world) => withJob(world, COMPAT, (job) => {
+      job.steps[job.steps.length - 1].if = "github.event_name == 'push'";
+    }),
+    expect: /compat\.yml\/wire-vectors: a step sets "if:"/,
+  },
+  {
+    name: "compat.yml's job can skip itself",
+    mutate: (world) => withJob(world, COMPAT, (job) => { job.if = "github.actor != 'dependabot'"; }),
+    expect: /compat\.yml\/wire-vectors: a job-level "if:"/,
+  },
+  {
+    name: "compat.yml loses its timeout",
+    mutate: (world) => withJob(world, COMPAT, (job) => { delete job["timeout-minutes"]; }),
+    expect: /compat\.yml\/wire-vectors: timeout-minutes is undefined/,
+  },
+  {
+    name: "compat.yml retries the contract check until it agrees",
+    mutate: (world) => withJob(world, COMPAT, (job) => {
+      job.steps[job.steps.length - 1].run = "npm run test:vectors --retries 3";
+    }),
+    expect: /compat\.yml\/wire-vectors: a retry appeared/,
+  },
+  {
+    name: "compat.yml swallows the contract check's exit status",
+    mutate: (world) => withJob(world, COMPAT, (job) => {
+      job.steps[job.steps.length - 1].run = "npm run test:vectors || true";
+    }),
+    expect: /compat\.yml\/wire-vectors: a command swallows its own exit status/,
+  },
+  {
+    name: "compat.yml becomes a placeholder that only echoes",
+    mutate: (world) => withJob(world, COMPAT, (job) => {
+      job.steps[job.steps.length - 1].run = 'echo "wire vectors: TODO"';
+    }),
+    expect: /compat\.yml\/wire-vectors: has no real run step/,
+  },
+  // These two break the SAME check in opposite directions, so each demands the
+  // host list it actually produces rather than the shared tail of the message.
+  // Matching `want exactly [compat.yml]` would have let either mutation be
+  // satisfied by the other's complaint — and, worse, by the complaint from a
+  // world where the check had stopped working altogether.
+  {
+    name: "the vector command reappears in native-web-pairing.yml as well",
+    mutate: (world) => {
+      world.texts.set(NWP, `${world.texts.get(NWP)}\n        run: ${VECTOR_COMMAND}\n`);
+      return world;
+    },
+    expect: /`npm run test:vectors` runs in \[compat\.yml, native-web-pairing\.yml\]/,
+  },
+  {
+    name: "the vector command disappears from every workflow",
+    mutate: (world) => {
+      world.texts.set(COMPAT, world.texts.get(COMPAT).replace(VECTOR_COMMAND, "npm run check"));
+      return world;
+    },
+    expect: /`npm run test:vectors` runs in \[\]; want exactly \[compat\.yml\]/,
+  },
+  {
+    name: "compat.yml is deleted outright",
+    mutate: (world) => { world.texts.delete(COMPAT); world.docs.delete(COMPAT); return world; },
+    expect: /compat\.yml is missing/,
+  },
+  {
+    name: "a workflow starts running the WRITING form of the generator",
+    mutate: (world) => {
+      world.texts.set(COMPAT, world.texts.get(COMPAT).replace(VECTOR_COMMAND, "npm run gen:vectors"));
+      return world;
+    },
+    expect: /run the WRITING form of the vector generator/,
+  },
+  {
+    name: "the pairing filter re-adopts apps/mac, which the acceptance never reads",
+    mutate: (world) => withPaths(world, NWP, [
+      "apps/mac/**", "apps/RelayiumKit/**", "web/**", "server/**",
+      "scripts/native-web-pairing-acceptance.sh", "scripts/lib/local-acceptance.sh",
+      `.github/workflows/${NWP}`,
+    ]),
+    expect: /native-web-pairing\.yml triggers on apps\/mac .*which is not an input to it/,
+  },
+  // A marker inside a `run:` block's own shell comment must NOT create
+  // ownership. This is the only case here that asserts an ABSENCE, and it is
+  // the direction that costs a red board on correct code: ios.yml explaining a
+  // macOS command would otherwise report macOS as having two heavy owners.
+  {
+    name: "a macOS build marker appears inside an ios.yml run-block comment",
+    mutate: (world) => {
+      const jobs = world.docs.get(IOS).jobs;
+      const job = jobs[Object.keys(jobs)[0]];
+      (job.steps ??= []).push({
+        name: "Note the macOS counterpart",
+        run: `# the macOS half of this is ${MACOS_PROJECT}, built in ${MACOS}\nxcodebuild -list\n`,
+      });
+      return world;
+    },
+    refute: /platform root apps\/mac: the macOS app build .* runs in \[ios\.yml, macos\.yml\]/,
+  },
+  // ── the self-host check (6h) ─────────────────────────────────────────────
+  {
+    name: "repo-hygiene.yml stops running this policy at all",
+    mutate: (world) => withCommandJob(world, SELF_HOST, SELF_COMMAND, (job, step) => {
+      step.run = 'echo "ci-event-policy: TODO"';
+    }),
+    expect: /0 job\(s\) in repo-hygiene\.yml run `node scripts\/test\/ci-event-policy-test\.mjs`/,
+  },
+  {
+    name: "the job that runs this policy becomes advisory",
+    mutate: (world) => withCommandJob(world, SELF_HOST, SELF_COMMAND, (job) => {
+      job["continue-on-error"] = "true";
+    }),
+    expect: /repo-hygiene\.yml\/ci-event-policy: continue-on-error makes this policy advisory/,
+  },
+  {
+    name: "the job that runs this policy is allowed to skip itself",
+    mutate: (world) => withCommandJob(world, SELF_HOST, SELF_COMMAND, (job) => {
+      job.if = "github.actor != 'dependabot[bot]'";
+    }),
+    expect: /repo-hygiene\.yml\/ci-event-policy: a job-level "if:"/,
+  },
+  {
+    name: "the step that runs this policy is allowed to skip itself",
+    mutate: (world) => withCommandJob(world, SELF_HOST, SELF_COMMAND, (job, step) => {
+      step.if = "github.event_name == 'push'";
+    }),
+    expect: /repo-hygiene\.yml\/ci-event-policy: a step sets "if:"/,
+  },
+  {
+    name: "this policy's command swallows its own exit status",
+    mutate: (world) => withCommandJob(world, SELF_HOST, SELF_COMMAND, (job, step) => {
+      step.run = `${step.run} || true`;
+    }),
+    expect: /repo-hygiene\.yml\/ci-event-policy: the `node scripts\/test\/ci-event-policy-test\.mjs` command swallows/,
+  },
+  {
+    name: "the job that runs this policy loses its timeout",
+    mutate: (world) => withCommandJob(world, SELF_HOST, SELF_COMMAND, (job) => {
+      delete job["timeout-minutes"];
+    }),
+    expect: /repo-hygiene\.yml\/ci-event-policy: timeout-minutes is undefined, want a finite positive number/,
+  },
+  {
+    name: "the job that runs this policy declares a zero timeout",
+    mutate: (world) => withCommandJob(world, SELF_HOST, SELF_COMMAND, (job) => {
+      job["timeout-minutes"] = "0";
+    }),
+    expect: /repo-hygiene\.yml\/ci-event-policy: timeout-minutes is "0", want a finite positive number/,
+  },
+  {
+    name: "the job that runs this policy declares a non-numeric timeout",
+    mutate: (world) => withCommandJob(world, SELF_HOST, SELF_COMMAND, (job) => {
+      job["timeout-minutes"] = "soon";
+    }),
+    expect: /repo-hygiene\.yml\/ci-event-policy: timeout-minutes is "soon", want a finite positive number/,
+  },
+  {
+    name: "the job that runs this policy declares a timeout above the ceiling",
+    mutate: (world) => withCommandJob(world, SELF_HOST, SELF_COMMAND, (job) => {
+      job["timeout-minutes"] = "360";
+    }),
+    expect: /repo-hygiene\.yml\/ci-event-policy: timeout-minutes is "360", above the 10-minute ceiling/,
+  },
+  {
+    name: "repo-hygiene.yml gains a push path filter, hiding this policy behind it",
+    mutate: (world) => withPaths(world, SELF_HOST, [
+      "web/**", `.github/workflows/${SELF_HOST}`,
+    ]),
+    expect: /repo-hygiene\.yml gained a push path filter/,
+  },
+];
+
+for (const { name, mutate, expect, refute } of MUTATIONS) {
+  let got;
+  try {
+    got = platformBoundaryFailures(mutate(realWorld()));
+  } catch (err) {
+    check(false, `the platform-boundary mutation "${name}" threw instead of reporting: ${err.message}`);
+    continue;
+  }
+  const rendered = got.length === 0 ? "no failures at all" : `[\n    ${got.join("\n    ")}\n  ]`;
+  if (expect) {
+    check(
+      got.some((message) => expect.test(message)),
+      `the platform-boundary policy did NOT complain about "${name}". Expected a message matching `
+      + `${expect}; got ${rendered}. `
+      + `A check that cannot fail for the reason it was written is not a check, and this one would `
+      + `report green while the boundary it names is already gone.`,
+    );
+  }
+  // The opposite obligation. A boundary that fires on shapes which are actually
+  // fine gets widened until it fires on nothing, so the false positive and the
+  // missing check have the same destination.
+  if (refute) {
+    check(
+      !got.some((message) => refute.test(message)),
+      `the platform-boundary policy complained about "${name}", which is a legitimate shape. `
+      + `Expected NO message matching ${refute}; got ${rendered}.`,
+    );
+  }
+}
 
 // ── report ──────────────────────────────────────────────────────────────────
 
