@@ -48,10 +48,26 @@ name: compat
 #     compat / wire-vectors
 #
 # (the workflow's `name:` and the job key, joined the way GitHub renders a status
-# context). Until somebody adds that exact context to the `main` protection rule,
-# treat this gate as always-run and fail-closed but NOT merge-required, and do
-# not describe it as a required status anywhere. `docs/CI-PLATFORM-BOUNDARY.md`
-# records it as an outstanding operational requirement for the same reason.
+# context).
+#
+# THAT CONTEXT IS NOW REQUIRED ON `main`. As of 2026-08-21, after PR #6 merged as
+# `24a29ec6`, `main` protection is enabled and was verified by re-reading the
+# settings after the write: strict required status checks, exactly one required
+# context, bound to GitHub Actions `app_id` 15368; enforce_admins false; force
+# pushes and deletions disabled. The API reports the context as `wire-vectors`
+# while the merge box renders `compat / wire-vectors` — a rendering difference,
+# not a substituted check; the `app_id` binding is what stops a differently-owned
+# check of the same job name from satisfying the rule.
+#
+# So this gate MAY be described as merge-required, because it is. The earlier
+# instruction here — to treat it as NOT merge-required — is stale and superseded,
+# as is any statement elsewhere calling it an outstanding operational
+# requirement.
+#
+# Still NOT observed, and deliberately not claimed: a real pull request showing
+# the check required in its merge box, and a merge actually blocked while it is
+# red. Enforcement is verified by settings read-back only; the observation is
+# tracked in `docs/CI-PLATFORM-BOUNDARY.md` and closed on the next real PR.
 #
 # `docs/CI-PLATFORM-BOUNDARY.md` states the whole boundary;
 # `scripts/test/ci-event-policy-test.mjs` is what enforces it, because none of
