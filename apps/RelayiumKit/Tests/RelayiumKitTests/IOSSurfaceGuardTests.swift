@@ -123,11 +123,33 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let scheme = try String(contentsOf: schemeURL, encoding: .utf8)
         XCTAssertTrue(scheme.contains("RelayiumUITests.xctest"))
 
-        let workflowURL = appsRoot.deletingLastPathComponent()
-            .appendingPathComponent(".github/workflows/macos.yml")
-        let workflow = try String(contentsOf: workflowURL, encoding: .utf8)
-        XCTAssertTrue(workflow.contains("-only-testing:RelayiumUITests test"),
+        // Hosted CI must actually RUN the shell asserted above, not just compile
+        // it. That step moved: `ios-build` left `macos.yml` for a dedicated
+        // `ios.yml`, so this once read the macOS workflow and would now pass on
+        // a file that no longer builds iOS at all. Read the new owner, and read
+        // it inside the smoke step rather than anywhere in the file — `macos.yml`
+        // drives a target *also* called `RelayiumUITests`, so the bare argument
+        // is not by itself evidence that the iOS shell ran.
+        let workflowsRoot = appsRoot.deletingLastPathComponent()
+            .appendingPathComponent(".github/workflows")
+        let iosWorkflow = try String(
+            contentsOf: workflowsRoot.appendingPathComponent("ios.yml"), encoding: .utf8)
+        let smokeStep = try XCTUnwrap(iosWorkflow.components(
+            separatedBy: "- name: Run iOS primary-task UI smoke")
+            .dropFirst().first?.components(separatedBy: "\n      - name: ").first,
+            "ios.yml has no step that drives the iOS shell")
+        XCTAssertTrue(smokeStep.contains("-project apps/ios/Relayium.xcodeproj"),
+                      "the runtime smoke no longer drives the iOS project")
+        XCTAssertTrue(smokeStep.contains("-only-testing:RelayiumUITests test"),
                       "CI compiles iOS but never runs its shell")
+        // And the move must have been a MOVE. If `macos.yml` reaches into the
+        // iOS project again, the split is cosmetic: two workflows drive the same
+        // simulator and every macOS-only change pays for an iOS runner.
+        let macWorkflow = try String(
+            contentsOf: workflowsRoot.appendingPathComponent("macos.yml"), encoding: .utf8)
+        XCTAssertFalse(macWorkflow.contains("apps/ios/"),
+                       "macos.yml drives the iOS project again, so the iOS shell "
+                       + "smoke is hosted twice instead of moved")
     }
 
     /// Nearby, pairing-code and stored sending are three destinations for the

@@ -1,0 +1,196 @@
+name: ios
+# The iOS half of the native product, split out of `macos.yml`.
+#
+# It lived there because both targets need a macOS runner and, at the time, the
+# iOS app was one compile step. It grew a device-Release build, a UI smoke and
+# three acceptance runs, and the two platforms stayed welded together: every
+# macOS-only change started an iOS runner and every iOS-only change started the
+# macOS signing lane. Splitting the FILE is what makes the path filters below
+# able to tell the two apart at all — a filter is per-workflow, so no filter
+# inside one file could ever have separated them.
+#
+# What each tree in the filter is an input TO, so a future edit can tell which
+# entries are load-bearing:
+#
+#   apps/ios/**          the app this workflow builds and drives
+#   apps/RelayiumKit/**  the SHARED package both native apps compile against;
+#                        it is deliberately in this filter AND in macos.yml's,
+#                        because a change there can break either app alone
+#   scripts/...          the three acceptance runs below and the isolation
+#                        library they are built from, named one file at a time
+#                        rather than as `scripts/**` so a Go-shard or
+#                        release-script edit does not start an iOS runner
+#
+# `server/**` is deliberately ABSENT even though the acceptance step compiles a
+# throwaway server from it: this workflow is the iOS gate, not a server gate,
+# and `go.yml` owns server changes. The consequence is recorded honestly — a
+# server change that breaks the local acceptance is caught by the next iOS-side
+# change rather than at once. That is the pre-existing behaviour of the job in
+# `macos.yml`, preserved rather than silently widened.
+on:
+  push:
+    # Only `main`. A branch push used to start this workflow AND its pull
+    # request start a second, identical run of the same commit. The
+    # pull_request trigger below is what gates branch work; this one exists so
+    # `main` itself is never unverified.
+    branches:
+      - main
+    # Defined once and aliased below, the way `web.yml` and
+    # `native-web-pairing.yml` already do it. Two hand-maintained copies drift,
+    # and a filter that is narrower on `pull_request` than on `push` is a gate
+    # that passes on the branch and is simply not run after the merge.
+    paths: &paths
+      - 'apps/ios/**'
+      - 'apps/RelayiumKit/**'
+      - 'scripts/ios-ui-session-acceptance.sh'
+      - 'scripts/local-transfer-acceptance.sh'
+      - 'scripts/local-transfer-cleanup-test.sh'
+      - 'scripts/lib/local-acceptance.sh'
+      - '.github/workflows/ios.yml'
+  pull_request:
+    paths: *paths
+  # The manual escape hatch for testing the workflow itself, matching every
+  # other governed workflow. It carries no inputs: nothing here signs,
+  # notarizes, publishes or consumes a build number, so there is no release
+  # contract to gate.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Supersede a pull request's own earlier runs, and nothing else. Identical to
+# the rule in every other governed workflow, and asserted by
+# `scripts/test/ci-event-policy-test.mjs`: group by PR NUMBER when there is one
+# and by `github.run_id` — unique per run — otherwise, so a PR supersedes only
+# itself and nothing can ever cancel a `main` or dispatch run. `github.workflow`
+# is part of the key, so this workflow's runs never share a group with
+# `macos.yml`'s.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # The iOS app compiles against the same shared package as macOS, so a
+  # `apps/RelayiumKit/**` change that breaks it has to fail here rather than the
+  # next time somebody opens Xcode. Unsigned and simulator-only: this is compile
+  # evidence, not a release path, and there is nothing to distribute. No
+  # secrets, so it runs on fork pull requests like macOS's `test` job does.
+  #
+  # The job keeps its `ios-build` name across the move so a failing check reads
+  # the same as it did in `macos.yml`; `ci-event-policy-test.mjs` asserts that
+  # this is now the ONLY workflow that owns it.
+  #
+  # `[macos-only]` in a `main` commit message still skips this job. That marker
+  # was written for pushes that must not compile or package iOS, and a shared
+  # `apps/RelayiumKit/**` change can still carry it, so the escape hatch is
+  # preserved rather than dropped as newly redundant.
+  #
+  # The condition is REWRITTEN, and this is the one behavioural change the split
+  # required. It read `event_name == 'pull_request' || (event_name == 'push' &&
+  # !contains(...))`, which skipped the job on `workflow_dispatch` — correct in
+  # `macos.yml`, where a dispatch meant a macOS signing/notarization/publication
+  # run that must not build iOS. In THIS file a dispatch means "run the iOS
+  # gate", and the old form would have made the manual trigger above a dead
+  # control that always skipped. Pull requests and pushes are unaffected: the
+  # new form is equivalent for both, including the `[macos-only]` skip.
+  ios-build:
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[macos-only]')
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # The acceptance step below builds the throwaway local server from
+      # `server/` with `go build`, and the macOS runner image ships no Go on
+      # PATH. Pinned and version-file-driven like every other Go job here, so
+      # the acceptance server is compiled by the same toolchain the server
+      # module declares.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: Toolchain versions
+        run: |
+          xcodebuild -version
+          go version
+      # `generic/platform=iOS Simulator` builds for the simulator SDK without
+      # booting a device or needing a runtime download.
+      - name: Build (unsigned, iOS Simulator)
+        run: |
+          xcodebuild -project apps/ios/Relayium.xcodeproj -scheme Relayium \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/dd-ios" \
+            CODE_SIGNING_ALLOWED=NO build
+      # TestFlight uses the device Release graph, not the simulator Debug graph.
+      # Keep signing disabled here so forks can still exercise the compiler,
+      # while catching release-only settings and device-SDK failures before an
+      # archive consumes a build number.
+      - name: Build (unsigned, iOS Device Release)
+        run: |
+          xcodebuild -project apps/ios/Relayium.xcodeproj -scheme Relayium \
+            -destination 'generic/platform=iOS' -configuration Release \
+            -derivedDataPath "$RUNNER_TEMP/dd-ios-release" \
+            CODE_SIGNING_ALLOWED=NO build
+      # A compile cannot prove that TabView produced five usable screens. Pick
+      # an installed iPhone runtime by id so this remains independent of the
+      # device marketing name on each macOS runner image.
+      - name: Run iOS primary-task UI smoke
+        run: |
+          set -euo pipefail
+          device_id="$(xcrun simctl list devices available -j \
+            | /usr/bin/python3 -c 'import json, sys
+          data = json.load(sys.stdin)
+          print(next(device["udid"]
+                     for devices in data["devices"].values()
+                     for device in devices
+                     if device.get("isAvailable")
+                     and device.get("name", "").startswith("iPhone")))')"
+          [ -n "$device_id" ] || {
+            echo "::error::no available iPhone Simulator runtime"; exit 1; }
+          xcodebuild -project apps/ios/Relayium.xcodeproj -scheme Relayium \
+            -destination "platform=iOS Simulator,id=$device_id" \
+            -derivedDataPath "$RUNNER_TEMP/dd-ios" \
+            -only-testing:RelayiumUITests test
+      # The step above is deliberately offline: with no origin passed, the app
+      # resolves production, `UITestMode.allowsResidency` is false, and every
+      # `LocalSessionUITests` path SKIPS. That is why they can share the target
+      # without slowing the smoke down — and why they need this step, which
+      # starts a throwaway server and a real counterpart process first so the
+      # skips become real transfers.
+      #
+      # Both local acceptance runs are here rather than in `test`, together,
+      # because they share one launcher (`scripts/lib/local-acceptance.sh`) and
+      # one pair of built binaries. T2a proves the transport between two host
+      # processes; T2b drives the built App's own UI over it and is what the Q0
+      # iOS matrix cells rest on. The cleanup test proves neither strands a
+      # child process when it fails.
+      #
+      # `RELAYIUM_ACCEPTANCE_DERIVED_DATA` reuses the app this job already
+      # built; without it the acceptance run would compile the whole app a
+      # second time.
+      #
+      # `TMPDIR` is pinned to the runner's own temp so the per-run root a FAILED
+      # run keeps is somewhere the upload step below can find it. The launcher
+      # creates it under `${TMPDIR:-/tmp}`, which on a macOS runner is neither
+      # `/tmp` nor `RUNNER_TEMP` by default.
+      - name: Run local transfer and built-App session acceptance
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          scripts/local-transfer-acceptance.sh
+          scripts/local-transfer-cleanup-test.sh
+          RELAYIUM_ACCEPTANCE_DERIVED_DATA="$RUNNER_TEMP/dd-ios" \
+            scripts/ios-ui-session-acceptance.sh
+      # A failed acceptance run keeps its per-run root for diagnosis, and the
+      # xcodebuild log inside it is the only record of which UI step stopped.
+      # Failure-only and short-lived, exactly as the UI-smoke `.xcresult` upload
+      # is: nothing in that root is signing or notarization material, but it is
+      # a public repository and an artifact is not a place to leave anything by
+      # default.
+      - name: Retain acceptance diagnosis
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-session-acceptance-diagnosis
+          path: ${{ runner.temp }}/relayium-acceptance-*/**/*.log
+          retention-days: 7
+          if-no-files-found: ignore
