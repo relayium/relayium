@@ -73,10 +73,36 @@
 #
 # `.github/workflows/native-web-pairing.yml`, job `pairing`, on `macos-15` — the
 # only hosted job with all four of a macOS runner, a Go toolchain, the Web
-# bundle's dependencies and a real Chrome. That workflow triggers on `apps/**`,
-# `web/**`, `server/**` and `scripts/**`, because every one of those is an input
-# to this run. It cannot live in `macos.yml`: path filters are per-workflow, and
-# naming `web/**` there would start the signing job on every web change.
+# bundle's dependencies and a real Chrome.
+#
+# That workflow starts on a `main` push, on a pull request, or by manual
+# dispatch. Both the push and the pull_request events carry the SAME path list —
+# one YAML anchor, so they cannot drift — and that list is exactly:
+#
+#     apps/RelayiumKit/**
+#     web/**
+#     server/**
+#     scripts/native-web-pairing-acceptance.sh
+#     scripts/lib/local-acceptance.sh
+#     .github/workflows/native-web-pairing.yml
+#
+# and nothing else. Every entry is something this run reads, compiles or serves:
+# `acceptance_build` builds `$repo/server` and `$repo/apps/RelayiumKit` (`swift
+# build --product LocalTransferPeer`), the browser half is served the `vite
+# build` of `web/`, this file is the run, `lib/local-acceptance.sh` is the only
+# library it sources, and the workflow names itself so an edit to its own
+# triggers runs under them.
+#
+# `apps/mac/**` is deliberately NOT in that list, which is worth stating because
+# this is the macOS acceptance. The app target is SwiftUI views over
+# `RelayiumAppKit`, and that package is inside `apps/RelayiumKit/` — so the logic
+# proved here does start the run, while no file under `apps/mac/` is read,
+# compiled or served by it. A macOS-app-only change starts `macos.yml`, plus the
+# unfiltered always-on `compat.yml` and `repo-hygiene.yml`, and not a 45-minute
+# pairing runner that would rebuild nothing it touched.
+#
+# It cannot live in `macos.yml`: path filters are per-workflow, and naming
+# `web/**` there would start the signing job on every web change.
 #
 # `scripts/test/native-web-pairing-gate-test.mjs` (run by `repo-hygiene.yml` on
 # every push) asserts all of that, plus that this script still contains the

@@ -21,24 +21,68 @@ name: native-web-pairing
 #
 # So the acceptance has one home, and this file is it. Nothing else in the
 # repository invokes that script; `scripts/test/native-web-pairing-gate-test.mjs`
-# runs on every push (via `repo-hygiene.yml`) and fails if that stops being true,
-# if this file's path filter stops covering an owning tree, or if the vector gate
-# stops running before the acceptance.
+# runs on every push (via `repo-hygiene.yml`) and fails if that stops being true
+# or if this file's path filter stops covering an owning tree.
 #
-# ## Why the path filter is this broad
+# ## Why the wire-vector gate is NOT here any more
 #
-# Every one of these trees is a real INPUT to the run, not a neighbour of it:
+# `npm run test:vectors` used to be this job's first step. It judges the same
+# cross-language contract from the frozen-bytes side, it takes seconds, and it
+# needs nothing but a checkout and Node — so hosting it here made it wait behind
+# a macOS runner, a Go toolchain, an `npm ci` and a Chrome install, and, worse,
+# put it BEHIND this workflow's path filter. A contract check that only runs
+# when one platform's trees change is a contract check a second platform can
+# bypass by existing. It now lives in `compat.yml`, which has no path filter at
+# all and therefore runs on every change. See `docs/CI-PLATFORM-BOUNDARY.md`.
 #
-#   apps/**    the native half — RelayiumKit, the link workspace, the peer binary
-#   web/**     the bundle the browser half loads, the e2e harness and driver,
-#              and the wire-vector generators the first step re-runs
-#   server/**  the real hub: /api/pair, the pairing room, the ws join budget
-#   scripts/** the acceptance itself and the shared isolation library
+# ## Why the path filter is exactly this list
+#
+# Every tree named below is a real INPUT to the run — something this job reads,
+# compiles or serves — and not merely a neighbour of one:
+#
+#   apps/RelayiumKit/**  the native half that is actually compiled. The
+#                        acceptance runs `swift build --product
+#                        LocalTransferPeer` against this package, and the peer
+#                        binary, the link workspace and the `AppEnvironment`
+#                        that assembles it all live inside it
+#   web/**               the bundle the browser half loads, and the e2e harness
+#                        and driver it is driven through
+#   server/**            the real hub: /api/pair, the pairing room, the ws join
+#                        budget the script paces itself against
+#   scripts/...          the acceptance itself and the shared isolation library
+#                        it sources, named ONE FILE AT A TIME
 #
 # The 1.2.5 regression this exists to catch — two capable peers reaching
 # different conclusions about what the other could speak — was authored on one
 # side of that list and observed on the other. A filter that named only the
 # native tree would have let its own fix's counterpart land unwatched.
+#
+# What is deliberately GONE, and why:
+#
+#   apps/mac/** the shipped macOS app is what this acceptance SPEAKS FOR, and it
+#               is still not an input to it. `scripts/native-web-pairing-
+#               acceptance.sh` builds exactly two trees — `server` and
+#               `apps/RelayiumKit` — and serves the Web bundle; no file under
+#               `apps/mac/` is read, compiled or served by the run. The app
+#               target holds SwiftUI views over `RelayiumAppKit`, and that
+#               package is inside `apps/RelayiumKit/**`, which IS watched — so
+#               the logic this acceptance exercises still triggers it. An
+#               apps/mac-only change therefore starts `macos.yml`, plus the
+#               always-on `compat.yml` and `repo-hygiene.yml`, and not a
+#               45-minute pairing runner that would rebuild nothing it touched.
+#   apps/**     matched `apps/ios/**`, so an iOS-only change started a
+#               45-minute macOS pairing runner that builds nothing it touched —
+#               and it matched `apps/README.md`, which is an input to nothing.
+#               It would also have silently adopted a future `apps/android/**`
+#               or `apps/windows/**` root the day it appeared.
+#   scripts/**  matched every Go, release and iOS script in the repository, and
+#               would likewise adopt a future Android or Windows script into
+#               this macOS runner. The two files this run actually sources are
+#               named instead.
+#
+# `scripts/test/ci-event-policy-test.mjs` asserts all of that as BEHAVIOUR — it
+# compiles these globs and checks which files they match — because every one of
+# those widenings leaves the YAML valid and actionlint happy.
 on:
   push:
     # Only `main`. A branch push used to start this workflow AND its pull
@@ -48,10 +92,11 @@ on:
     branches:
       - main
     paths: &paths
-      - 'apps/**'
+      - 'apps/RelayiumKit/**'
       - 'web/**'
       - 'server/**'
-      - 'scripts/**'
+      - 'scripts/native-web-pairing-acceptance.sh'
+      - 'scripts/lib/local-acceptance.sh'
       - '.github/workflows/native-web-pairing.yml'
   pull_request:
     paths: *paths
@@ -130,20 +175,6 @@ jobs:
           fi
           [ -x "$chrome" ] || { echo "::error::Google Chrome did not install"; exit 1; }
           "$chrome" --version
-      # FIRST, and before the acceptance, because it is seconds long and because
-      # it judges the same cross-language contract from the other direction. The
-      # acceptance proves two live implementations agree over a real transport;
-      # this proves the frozen bytes the Swift suites assert against are still
-      # what the Web implementation produces. A drifted fixture makes every Swift
-      # vector suite a test of the OLD wire, and no amount of live agreement
-      # would say so.
-      #
-      # `npm run test:vectors` is the verifying form and is observably read-only:
-      # it regenerates, compares, and restores what it found. `npm run
-      # gen:vectors` is the writing form and must never appear in CI.
-      - name: Regenerate the cross-language wire vectors and require zero diff
-        working-directory: web
-        run: npm run test:vectors
       # The cell nothing else in this repository can fill: no fake WebSocket, no
       # BroadcastChannel room, no Swift-authored "peer". A real server, a real
       # pairing code minted through /api/pair, the macOS app's own link workspace
