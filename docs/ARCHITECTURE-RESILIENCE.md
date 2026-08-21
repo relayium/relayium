@@ -302,7 +302,7 @@ rather than as one sentence.
 
 | Channel | What ships it today | Is merge deploy? |
 | --- | --- | --- |
-| **Central server + web** | `relayium-ops/deploy/auto-deploy.sh`, run by a **5-minute cron** that tracks the product repository's **`origin/main`** | **Yes.** A merge to `main` reaches central production within about five minutes, with no separate promotion decision. |
+| **Central server + web** | `relayium-ops/deploy/auto-deploy.sh`, run by a **5-minute cron** | **Depends on which mode the ops repository is in — check, do not assume.** Before the promotion-pin cutover the cron tracks this repository's `origin/main` and **merge is deploy**. After it, the cron deploys the commit `relayium-ops/deploy/production-pin` names and **merge deploys nothing**. See "Which mode is production in?" below. |
 | **CLI / node tags** | `.github/workflows/auto-release.yml` cuts a **weekly, green-gated tag**; `release.yml` builds and signs what that tag names | **No.** Merging does not cut a tag, and a tag is a deliberate, scheduled, gate-checked act. |
 | **Node fleet** | **Operator promotion, which already exists.** A fleet node moves to a new version on an operator decision, not on a merge. | **No — already solved.** This channel is the model, not the problem. |
 | **Native releases** (macOS/iOS) | Their own signing, notarization, packaging and store/update-feed pipelines | **No.** No merge publishes a native artifact. |
@@ -312,27 +312,61 @@ tag cutter for the CLI/node release line. Attributing the central production
 deploy to it — as earlier drafts of this review did — points every promotion
 conversation at the wrong repository.
 
-### The actual gap, and where it must be fixed
+### Which mode is production in?
+
+This repository cannot answer that from its own contents, because the mechanism
+lives entirely in `relayium-ops`. **Do not infer it from this document.** Check:
+
+- **Ask the operator who owns production.** This is the fastest and most
+  reliable answer, and the only one available to someone without ops access.
+- **If you have read access to `relayium-ops`:** the file
+  `deploy/production-pin` exists on its `main`, and `deploy/auto-deploy.sh`
+  reads it. Both present ⇒ pin-aware.
+- **If you have read access to the deploy log** (`operator only`): a pin-aware
+  tick logs `up to date (pinned <sha>)` or
+  `promoting <old> -> <new> (promotion instance <ops-sha>)`. The pre-cutover
+  script logs `up to date (<sha>)` and `deploying <old> -> <new>` — no
+  parenthesised `pinned`, and no promotion instance.
+
+**Both modes are described below.** Neither is presented as the current truth,
+because which one is live is an ops-repository fact with its own delivery
+schedule.
+
+### The gap, and how it is closed
 
 Only the **first row** has the problem: for the central server and web there is
 no separate decision between *"this code is correct"* and *"this code is now
 serving users."* Every merge is therefore implicitly a production change, which
 makes ordinary review carry production risk it was never scoped for.
 
-**Direction — NOT implemented here, and NOT implementable from this repository:**
-introduce a **deliberate immutable production promotion pointer** — a ref, tag or
-artifact digest naming exactly which already-merged, already-green commit is
-serving central production. Merge lands code; promotion moves the pointer; two
-decisions, two records.
+**Before the cutover — merge is deploy.** The moment a branch merges to `main`,
+the next cron tick serves it to real users. There is no window in which code is
+on `main` but not live.
 
-> **Hard boundary.** The promotion pointer is **ops-first**: the authoritative
-> change is to `relayium-ops/deploy/auto-deploy.sh` and its cron, not to anything
-> in this repository. It therefore requires a **separate `relayium-ops` design
-> and review lease**, and is deliberately **deferred out of this P0 pass**.
-> Nothing in this document authorises a `relayium-ops`, fleet, deploy or
-> production change.
+**After the cutover — merge lands code; a promotion deploys it.**
+`relayium-ops/deploy/production-pin` is a committed file naming exactly one
+already-merged, already-green product commit; the cron deploys that and nothing
+else. Promotion is a commit to `relayium-ops` made with its `deploy/promote.sh`
+from an operator workstation, which verifies the target is a full immutable SHA,
+is an ancestor of `origin/main`, and has a completed/successful hosted GitHub
+Actions wire-vector run before it will write anything. Two decisions, two
+records.
 
-Constraints the future ops-side design must satisfy:
+The promotion gate reads that run from the **check-runs API**, so it matches the
+API name `wire-vectors` — the same name, and for the same reason, that branch
+protection's required context uses above. `compat / wire-vectors` is the merge
+box's rendering of it, not a second check; §3 covers why that distinction is
+load-bearing and what enforces the job-name uniqueness both rely on.
+
+> **Hard boundary, unchanged.** The promotion pointer is **ops-first**: the
+> authoritative change is to `relayium-ops/deploy/auto-deploy.sh`, not to
+> anything in this repository. It is designed, implemented and reviewed under a
+> **separate `relayium-ops` lease**
+> (`docs/superpowers/specs/2026-08-21-product-promotion-pin-design.md` in that
+> repository). Nothing in this document authorises a `relayium-ops`, fleet,
+> deploy or production change, and no product code changes for it.
+
+Constraints the ops-side design satisfies:
 
 - **Fail-closed.** If the pointer is missing, unreadable, malformed, or names a
   commit the host cannot verify, auto-deploy **must not deploy anything** and
@@ -363,6 +397,13 @@ Constraints the future ops-side design must satisfy:
 - **A promotion is auditable:** who promoted what, from which green run, and what
   the previous pointer was — so rollback is "move the pointer back", not
   "reconstruct the last good state".
+
+One consequence is worth stating here rather than only in the ops repository,
+because it changes what a product author should expect: **a rollback to an older
+commit rebuilds from scratch.** The selective-build fast path keys on which paths
+differ, not on which direction they differ in, so rolling back across a `web/` or
+`server/` change costs a full build — and, if the older release's schema needs an
+index migration on start, that too.
 
 ---
 
@@ -409,9 +450,13 @@ All five items below are **complete**; the count and the enumeration match.
 
 ### P1 — close the structural gaps
 
-6. **Merge/deploy separation for the central server and web** (§7): design and
-   review in `relayium-ops` under **its own lease**, ops-first and fail-closed,
-   then implement. **Not started, and deliberately not started here.**
+6. **Merge/deploy separation for the central server and web** (§7):
+   **designed and implemented in `relayium-ops` under its own lease**
+   (`deploy/production-pin`, `deploy/promote.sh`, the pin gate in
+   `deploy/auto-deploy.sh`), ops-first and fail-closed. **Awaiting independent
+   acceptance review and delivery in that repository; not yet cut over.** No
+   product code is involved, and nothing in this repository changed for it
+   beyond this document and `docs/HOTFIX-RUNBOOK.md`.
 7. **Declare the `relayium-ops` ↔ product contract** (§1): make the product
    paths, readiness signalling and health endpoints that ops depends on an
    explicit, checked interface rather than an implicit one.
