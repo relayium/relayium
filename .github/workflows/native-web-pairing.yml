@@ -41,6 +41,12 @@ name: native-web-pairing
 # native tree would have let its own fix's counterpart land unwatched.
 on:
   push:
+    # Only `main`. A branch push used to start this workflow AND its pull
+    # request start a second, identical run of the same commit. The
+    # pull_request trigger below is what gates branch work; this one exists so
+    # `main` itself is never unverified.
+    branches:
+      - main
     paths: &paths
       - 'apps/**'
       - 'web/**'
@@ -50,6 +56,22 @@ on:
   pull_request:
     paths: *paths
   workflow_dispatch:
+
+# Supersede a pull request's own earlier runs, and nothing else.
+#
+# The group key is the PR NUMBER, so pushing three times to a branch leaves one
+# live run instead of three. Every non-PR event falls back to `github.run_id`,
+# which is unique per run, so no two such runs ever share a group and nothing
+# outside a pull request can cancel anything.
+#
+# `github.ref` is the obvious fallback and is WRONG here: it puts every `main`
+# run in one group, and GitHub cancels an older PENDING run in a group when a
+# newer one arrives even with `cancel-in-progress: false`. Two quick merges
+# would silently drop the first commit's verification, and the branch would show
+# a cancelled — not failed, not missing — check for a commit nobody tested.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

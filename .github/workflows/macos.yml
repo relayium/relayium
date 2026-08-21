@@ -4,6 +4,12 @@ name: macos
 # hatch for testing the workflow itself.
 on:
   push:
+    # Only `main`. A branch push used to start this workflow AND its pull
+    # request start a second, identical run of the same commit. The
+    # pull_request trigger below is what gates branch work; this one exists so
+    # `main` itself is never unverified.
+    branches:
+      - main
     paths:
       - 'apps/**'
       # The local acceptance launcher and the shared isolation library. Without
@@ -44,18 +50,35 @@ on:
         default: false
         type: boolean
 
-# One execution owns a commit at a time. A release dispatch for an exact SHA
-# supersedes the push verification it is about to repeat; this prevents two
-# complete signed UI suites consuming runners for the same immutable source.
 permissions:
   contents: read
 
+# Supersede a pull request's own earlier runs, and nothing else.
+#
+# The group key is the PR NUMBER, so pushing three times to a branch leaves one
+# live run instead of three. Every non-PR event falls back to `github.run_id`,
+# which is unique per run, so no two such runs ever share a group and nothing
+# outside a pull request can cancel anything.
+#
+# This REPLACES a `macos-${{ github.sha }}` group whose cancel-in-progress was
+# `github.event_name == 'workflow_dispatch'`, i.e. a release dispatch cancelled
+# the push verification of the same commit. That saved a runner and cost
+# release trust in both directions:
+#
+#   * `push` is now restricted to `main`, so the duplicate that grouping existed
+#     to collapse — a branch push plus its pull request — no longer happens at
+#     all, and the remaining `main` run is the one nobody should cancel;
+#   * a `github.sha` group is shared by every dispatch for that SHA, and GitHub
+#     cancels an older PENDING run in a group even when cancel-in-progress is
+#     false. A second dispatch could therefore drop a queued signing,
+#     notarization or publication run for the same immutable source.
+#
+# Under run_id nothing outside a pull request can cancel anything, which is the
+# correct default for a workflow that imports a Developer ID certificate and can
+# publish an immutable GitHub Release.
 concurrency:
-  group: macos-${{ github.sha }}
-  # A release dispatch may supersede the automatic push check for the same
-  # immutable source. The reverse is forbidden: a delayed push event must never
-  # cancel signing, notarization, or publication already in progress.
-  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   contract:

@@ -1,7 +1,32 @@
 name: repo-hygiene
 on:
   push:
+    # Only `main`. This workflow has no path filter, so a branch push ran it
+    # for every commit and its pull request ran it again for the same tree.
+    # The pull_request trigger below is what gates branch work; this one
+    # exists so `main` itself is never unverified.
+    branches:
+      - main
   pull_request:
+
+# Supersede a pull request's own earlier runs, and nothing else.
+#
+# The group key is the PR NUMBER, so pushing three times to a branch leaves one
+# live run instead of three. Every non-PR event falls back to `github.run_id`,
+# which is unique per run, so no two such runs ever share a group and nothing
+# outside a pull request can cancel anything.
+#
+# `github.ref` is the obvious fallback and is WRONG here: it puts every `main`
+# run in one group, and GitHub cancels an older PENDING run in a group when a
+# newer one arrives even with `cancel-in-progress: false`. Two quick merges
+# would silently drop the first commit's verification, and the branch would show
+# a cancelled — not failed, not missing — check for a commit nobody tested.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 jobs:
   no-production-identifiers:
@@ -60,7 +85,8 @@ jobs:
       # either way and actionlint is happy either way, so without this the only
       # signal would be a third unrecoverable release. It lives in repo-hygiene
       # rather than in the web suite because it guards `.github/workflows/`,
-      # which no path filter in `web.yml` covers, and this workflow runs on every
+      # which no path filter in `web.yml` covers, and this workflow has no path
+      # filter of its own, so it runs on every pull request and every `main`
       # push. No dependencies, so there is nothing to install.
       - name: macos publish job orders validation before the immutable release
         run: node scripts/test/macos-publish-order-test.mjs
@@ -84,11 +110,63 @@ jobs:
       # acceptance step deleted, with `web/**` dropped from its path filter, with
       # `continue-on-error: true` added, or with the two steps swapped. The next
       # signal after any of those would be another cross-client regression
-      # reaching a user. So it is asserted here, where there is no path filter
-      # and every push runs it — the same reason macos-publish-order lives here.
-      # No dependencies, so there is nothing to install.
+      # reaching a user. So it is asserted here, where there is no path filter,
+      # so every pull request and every `main` push runs it — the same reason
+      # macos-publish-order lives here. No dependencies, so there is nothing to
+      # install.
       - name: native/web pairing acceptance and wire-vector gates are wired
         run: node scripts/test/native-web-pairing-gate-test.mjs
+
+  ci-event-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      # Which events start a workflow, and which runs may cancel which, are
+      # invisible to every other check in this repository. The YAML stays valid
+      # when `push` loses its `branches: [main]` filter — and every workflow
+      # then runs twice per commit on a branch with an open pull request, both
+      # green. It stays valid when the concurrency group moves back to
+      # `github.ref`, which lets a second merge cancel the first commit's
+      # PENDING verification even with cancel-in-progress false, leaving `main`
+      # showing a cancelled check for code nobody tested.
+      #
+      # The same file also holds the race lane's shape: the eight-way account
+      # shard matrix, the separate non-account job, no retries, and the nightly
+      # serial lane staying non-gating. Delete the matrix and one shard's tests
+      # silently stop being race-checked; give the nightly a pull_request
+      # trigger and the ~44 minute lane the split replaced is a gate again.
+      #
+      # It lives here for the same reason as macos-publish-order: this workflow
+      # has no path filter, so it runs on every pull request and every `main`
+      # push. No dependencies, so there is nothing to install.
+      - name: workflow trigger, concurrency and race-lane policy
+        run: node scripts/test/ci-event-policy-test.mjs
+
+  go-race-shard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      # go.yml runs `server/account` as eight `-run`-filtered jobs. Nothing in
+      # that arrangement can notice a test assigned to NO shard: all eight go
+      # green and the test has simply stopped being race-checked. The suite
+      # proves the partition over the recorded 1904-name corpus — union equal to
+      # the corpus, all 28 shard pairs disjoint, every name exactly once — pins
+      # the shard hash by value, and checks the emitted `-run` regex is anchored
+      # on both ends so `^TestUser` cannot also drag TestUserDelete into a second
+      # shard.
+      #
+      # It never builds ./account (the corpus is a checked-in snapshot), so it
+      # belongs in this always-on lane rather than behind go.yml's path filter.
+      # The live list is re-proved on every shard job by the helper itself.
+      - name: account race shard assignment is a partition
+        run: sh scripts/test/go-race-shard-test.sh
 
   server-tag:
     runs-on: ubuntu-latest

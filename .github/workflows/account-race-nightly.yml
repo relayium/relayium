@@ -1,0 +1,71 @@
+name: account-race-nightly
+# The coverage the eight-way race split in `go.yml` cannot have.
+#
+# `go.yml`'s race-account matrix runs `server/account` as eight separate
+# processes, each with `-run` restricted to its own ~238 top-level tests. That
+# is what makes each shard's timeout finite and meaningful, and it structurally
+# hides one class of defect: a race that only appears when two particular tests
+# share a process, or when one runs before another. Shared package state, a
+# global left mutated, an init-order assumption, a `t.Setenv` neighbour — none
+# of it is visible to a shard that never loads the other test.
+#
+# So the whole package still runs serially somewhere, in one process, with
+# `-shuffle=on` so the order differs between runs and an ordering dependence
+# surfaces as a failure rather than as a permanently green accident.
+#
+# ## Why this is not a gate
+#
+# It is the ~44-minute lane the split replaced, and putting it back in front of
+# every pull request would undo the change. It runs on a schedule and on
+# demand, on `main`'s current state, and reports by failing — not by blocking a
+# merge. That is a deliberate trade: ordering defects are rare and are not
+# usually introduced by the commit that reveals them, so finding one a day late
+# is acceptable where a 44-minute PR wait is not.
+#
+# It must never be given a `push:` or `pull_request:` trigger. If it acquires
+# one it becomes the monolithic gate again, and
+# `scripts/test/ci-event-policy-test.mjs` fails if that happens.
+on:
+  schedule:
+    # 03:17 America/Los_Angeles-ish, in UTC; the offset minute keeps it off the
+    # hour, where GitHub's scheduler is most contended and most likely to skip.
+    - cron: '17 11 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never cancel a run of this workflow. Each run is a distinct sample of a
+# shuffled order, so a superseded one is lost evidence rather than redundant
+# work, and `github.run_id` is unique per run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  serial-shuffled:
+    runs-on: ubuntu-latest
+    # Diagnostic, not a budget with margin. The monolithic lane measured
+    # ~43m35s hosted and `-shuffle=on` does not change the work, only its
+    # order; the bounds below are roughly 2.5x that, because the point of this
+    # lane is to produce a goroutine dump or a race report, and a run cut short
+    # at its own measurement produces neither. Nothing waits on it, so a long
+    # bound costs only runner minutes once a day.
+    timeout-minutes: 130
+    steps:
+      # Third-party actions are pinned to a full commit SHA (with the
+      # human-readable version in a trailing comment) so a compromised or
+      # retagged upstream release can't silently change what runs here.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: Toolchain version
+        run: go version
+      # No -run filter, no sharding, no retry, and -count=1 so a failure is not
+      # laundered by a cached result. The shuffle seed is printed by go test
+      # itself, so a failing order can be replayed with -shuffle=<seed>.
+      - name: go test -race -shuffle=on (full serial account)
+        working-directory: server
+        run: go test -race -count=1 -shuffle=on -timeout 120m ./account

@@ -26,10 +26,9 @@ func TestCountingConnTallies(t *testing.T) {
 
 func TestRegistrySnapshotAttributes(t *testing.T) {
 	reg := newAllocRegistry(nil)
-	src := &net.UDPAddr{IP: net.IPv4(192, 168, 1, 5), Port: 12345}
 	relay := &net.UDPAddr{IP: net.IPv4(10, 0, 0, 1), Port: 50000}
 	c := reg.wrap(fakePC{}, relay)
-	reg.created(src, relay, "6000:userX.123456")
+	reg.created(relay, "6000:userX.123456")
 	c.WriteTo(make([]byte, 250), &net.UDPAddr{})
 
 	snap := reg.snapshot()
@@ -50,12 +49,12 @@ func TestRegistrySnapshotAttributes(t *testing.T) {
 func TestAllocIDUniquePerAllocation(t *testing.T) {
 	reg := newAllocRegistry(nil)
 	relay := &net.UDPAddr{IP: net.IPv4(10, 0, 0, 1), Port: 50000}
-	srcA := &net.UDPAddr{IP: net.IPv4(192, 168, 1, 5), Port: 1111}
-	srcB := &net.UDPAddr{IP: net.IPv4(192, 168, 1, 6), Port: 2222}
 
-	reg.wrap(fakePC{}, relay)
-	reg.created(srcA, relay, "6000:userA.1")
-	reg.closeAlloc(srcA)
+	connA := reg.wrap(fakePC{}, relay)
+	reg.created(relay, "6000:userA.1")
+	if err := connA.Close(); err != nil {
+		t.Fatalf("close A: %v", err)
+	}
 	first := reg.snapshot() // final flush of A, then evicted
 	if len(first) != 1 {
 		t.Fatalf("want A reported once, got %d", len(first))
@@ -64,7 +63,7 @@ func TestAllocIDUniquePerAllocation(t *testing.T) {
 
 	// Same relay port reused for user B.
 	reg.wrap(fakePC{}, relay)
-	reg.created(srcB, relay, "6000:userB.2")
+	reg.created(relay, "6000:userB.2")
 	second := reg.snapshot()
 	if len(second) != 1 {
 		t.Fatalf("want only B live, got %d", len(second))
@@ -81,13 +80,14 @@ func TestAllocIDUniquePerAllocation(t *testing.T) {
 // evicted, so it stops refreshing central recorded_at and the map stays bounded.
 func TestClosedAllocEvictedAfterFinalSnapshot(t *testing.T) {
 	reg := newAllocRegistry(nil)
-	src := &net.UDPAddr{IP: net.IPv4(192, 168, 1, 5), Port: 3333}
 	relay := &net.UDPAddr{IP: net.IPv4(10, 0, 0, 2), Port: 51000}
 	c := reg.wrap(fakePC{}, relay)
-	reg.created(src, relay, "6000:userX.9")
+	reg.created(relay, "6000:userX.9")
 	c.WriteTo(make([]byte, 500), &net.UDPAddr{})
 
-	reg.closeAlloc(src)
+	if err := c.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
 	if got := reg.snapshot(); len(got) != 1 || got[0].RelayedBytes != 500 {
 		t.Fatalf("closed alloc must flush once with final bytes, got %+v", got)
 	}
