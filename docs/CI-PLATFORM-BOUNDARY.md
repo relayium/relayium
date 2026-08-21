@@ -89,17 +89,18 @@ existing. So `compat.yml` has no `paths:` at all, on either event, and it is
 fail-closed: finite timeout, no `if:`, no `continue-on-error`, no retry, no
 placeholder job.
 
-#### Always-run and fail-closed is not the same as "required status"
+#### Always-run and fail-closed is one half; the required status is the other
 
 Everything in the paragraph above is a property of the workflow **file**, and it
 is enforced there and asserted by `scripts/test/ci-event-policy-test.mjs`. It
 means the gate *starts* on every pull request and every `main` push and *reports
 red* when the cross-language contract breaks.
 
-It does not mean a red result blocks a merge. That is a GitHub **branch
-protection** rule on `main`, it lives in repository settings rather than in this
-repository's source, and no test here can see it. The status context to require
-is:
+By itself that does not make a red result **block** a merge. That is a GitHub
+**branch protection** rule on `main`; it lives in repository settings rather than
+in this repository's source, and **no test here can see it** — which is why this
+paragraph, and not an assertion, is where its state is recorded. The status
+context is:
 
 ```
 compat / wire-vectors
@@ -107,11 +108,55 @@ compat / wire-vectors
 
 — the workflow's `name:` and the job key, joined the way GitHub renders a check.
 
-**This is an outstanding operational requirement, not a description of the
-current configuration.** Nothing in this repository establishes that the context
-has been added to the `main` protection rule. Until someone confirms it there,
-describe `compat.yml` as always-run and fail-closed, and do not describe it as
-merge-required or as a required check.
+**That context is now required on `main`.** As of **2026-08-21**, after PR #6
+merged as `24a29ec6`, `main` protection is enabled and was verified by re-reading
+the settings after the write: **strict** required status checks, **exactly one
+required context**, bound to GitHub Actions **`app_id` 15368**; `enforce_admins`
+false; force pushes and deletions disabled; no required reviews; no push
+restrictions. The API reports the context as `wire-vectors` while the merge box
+renders `compat / wire-vectors` — a **rendering difference, not a substituted
+check**. The `app_id` binding is what stops a differently-owned check with the
+same job name from satisfying the rule.
+
+**What `app_id` covers, and what covers the rest.** The binding answers exactly
+one substitution: a **differently owned** check — another GitHub App, or an
+external service posting a commit status — publishing the context
+`wire-vectors` and satisfying the requirement on behalf of a gate that never
+ran. It cannot answer the **same-repository** case, because there the impostor
+is not differently owned. A job key `wire-vectors` declared in a second workflow
+in this repository is GitHub Actions, it is `app_id` 15368, and it reports the
+same context name; which run the merge box reconciles the single requirement
+against is not something this repository controls. A cheap unrelated lane could
+then stand in for the contract gate, and it would report **green**, not missing.
+
+That half is enforced in source, not in settings: **`scripts/test/ci-event-policy-test.mjs`
+§6j asserts that `compat.yml` declares a job named `wire-vectors` and that no
+other workflow file declares one.** It scans **every** `.github/workflows/*.yml`
+file on disk rather than the list of workflows this policy parses, because
+`release.yml`, `auto-release.yml` and anything added tomorrow can declare a job
+name just as well as a governed workflow can. Both directions are asserted: the
+positive half fails loudly if the job is renamed or `compat.yml` is gone, so
+"nothing else declares it" can never pass in a tree where nothing declares it at
+all. Renaming this job silently un-requires the gate, which is why the name is
+pinned by a test.
+
+The two are complementary and neither is optional: **`app_id` blocks a
+differently-owned check of the same name; executable job-name uniqueness blocks
+a same-repository, same-app GitHub Actions collision.** Neither is evidence
+about the other, and the assertion is about the **name** — it is not evidence
+that the context is required, which remains a settings property recorded in the
+paragraph above.
+
+So `compat.yml` **may** now be described as merge-required, because it is. Any
+statement in this repository or its history that calls it an outstanding
+operational requirement is **stale and superseded**.
+
+**One piece of evidence is still missing, and is deliberately not claimed:** the
+enforcement is verified by **settings read-back only**. No real pull request has
+yet been observed showing the check as required in its merge box, and **no merge
+has been observed blocked while the check is red**. That observation is tracked
+as an open item (`docs/ARCHITECTURE-RESILIENCE.md` §9, P1) and should be closed
+on the next real pull request rather than assumed from the settings.
 
 **What belongs in the fast lane:** a check that is seconds long, needs no
 platform runner, and asserts that two independent implementations of one wire

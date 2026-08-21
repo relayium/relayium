@@ -30,6 +30,27 @@ permissions:
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    # Finite, and chosen rather than inherited. This job cross-compiles the two
+    # binary families for every declared goos/goarch pair, archives and
+    # checksums them, signs the checksums with the release key, publishes the
+    # GitHub release and then attests build provenance for each archive. Real
+    # runs finish well inside this bound; it is deliberately generous because a
+    # release lane that times out on a merely slow runner wastes a tag, and
+    # finite because the alternative — GitHub's 6-hour default — means a wedged
+    # release job sits holding a runner with the signing key materialized on
+    # disk.
+    #
+    # What the bound actually buys is a FINITE exposure window: the runner is
+    # torn down when it fires, taking the ephemeral $RUNNER_TEMP key file with
+    # it. It is not a promise that cleanup ran. The `if: always()` step below is
+    # best effort — GitHub schedules it on ordinary step failure and on
+    # cancellation, but a job killed by this overall timeout is not guaranteed
+    # to reach it or to finish it. So the safety boundary is that the key
+    # material stays ephemeral and runner-scoped — written 0600 under
+    # $RUNNER_TEMP on a throwaway runner, never to the workspace, a cache or an
+    # artifact — and the timeout caps how long that runner, and the key on it,
+    # can exist at all.
+    timeout-minutes: 45
     steps:
       # Third-party actions are pinned to a full commit SHA (with the human-readable
       # version in a trailing comment) so a compromised or retagged upstream release

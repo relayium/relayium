@@ -80,22 +80,45 @@ jobs:
   # the same as it did in `macos.yml`; `ci-event-policy-test.mjs` asserts that
   # this is now the ONLY workflow that owns it.
   #
-  # `[macos-only]` in a `main` commit message still skips this job. That marker
-  # was written for pushes that must not compile or package iOS, and a shared
-  # `apps/RelayiumKit/**` change can still carry it, so the escape hatch is
-  # preserved rather than dropped as newly redundant.
+  # This job has NO job-level `if:`, and must not regain one.
   #
-  # The condition is REWRITTEN, and this is the one behavioural change the split
-  # required. It read `event_name == 'pull_request' || (event_name == 'push' &&
-  # !contains(...))`, which skipped the job on `workflow_dispatch` — correct in
-  # `macos.yml`, where a dispatch meant a macOS signing/notarization/publication
-  # run that must not build iOS. In THIS file a dispatch means "run the iOS
-  # gate", and the old form would have made the manual trigger above a dead
-  # control that always skipped. Pull requests and pushes are unaffected: the
-  # new form is equivalent for both, including the `[macos-only]` skip.
+  # It used to honour a `[macos-only]` marker in a `main` commit message: a push
+  # whose head commit message contained that string skipped the iOS build
+  # outright. The marker was inherited from `macos.yml` — where a dispatch meant
+  # a macOS signing/notarization/publication run that must not build iOS — and
+  # it was carried across the native split rather than re-examined.
+  #
+  # It is REMOVED, and that is the one behavioural change here. An escape hatch
+  # in a gate is not a gate:
+  #
+  #   * the skip is invisible where it matters. A skipped check does not report
+  #     red; it reports nothing, and a merge box reads that as "not a problem".
+  #   * it is available to exactly the commit least likely to deserve it. Nobody
+  #     types a skip marker on a calm afternoon.
+  #   * it applied to `push` on `main` — AFTER review, where this workflow is the
+  #     only thing that would have compiled iOS at all.
+  #   * the case it was justified by is the case that most needed the build. A
+  #     shared `apps/RelayiumKit/**` change carrying the marker is precisely a
+  #     change where BOTH Apple consumers have to compile; skipping iOS there
+  #     leaves the shared package broken for one app behind a green board.
+  #
+  # A push that genuinely must not build iOS should not be matching this
+  # workflow's path filter in the first place. If it does match, the honest fix
+  # is the filter, not a marker that overrides it.
+  #
+  # `scripts/test/ci-event-policy-test.mjs` asserts that neither this marker nor
+  # any other commit-message condition returns to this file.
   ios-build:
-    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[macos-only]')
     runs-on: macos-15
+    # Finite, and chosen rather than inherited. This job builds two full
+    # xcodebuild graphs (simulator Debug and device Release), runs a UI smoke on
+    # a booted simulator, and then three acceptance runs that compile a
+    # throwaway Go server and drive the built app over it. Real work is
+    # comfortably inside this bound; the bound exists so a wedged run — a
+    # simulator that never finishes booting, an acceptance child that never
+    # exits — gives a PAID macOS runner back in minutes instead of holding it
+    # for GitHub's 6-hour default.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       # The acceptance step below builds the throwaway local server from

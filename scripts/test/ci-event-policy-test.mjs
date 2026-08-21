@@ -55,6 +55,32 @@
 // `docs/CI-PLATFORM-BOUNDARY.md` states the boundary in prose. This file is what
 // makes it true.
 //
+// ## And the paid-runner budget
+//
+// Section 6i governs the two most expensive lanes, `ios.yml` and `release.yml`,
+// against two failures that leave the YAML perfectly valid. A job with no
+// `timeout-minutes` inherits GitHub's SIX-HOUR default, so one wedged run holds
+// a paid macOS runner — or a release job with the signing key on disk — for six
+// hours instead of turning the board red in minutes; both files had no timeout
+// at all. And `ios.yml` honoured a `[macos-only]` marker in a `main` commit
+// message, which let a commit message skip the iOS build: a skipped check does
+// not report red, it reports nothing, so the skip was invisible in the merge box
+// on the one branch where this workflow is the only thing that compiles iOS.
+// Both are fixed, and both are asserted here — including the GENERAL shape of
+// the escape, so it cannot return as `[skip-ios]` or any other spelling.
+//
+// ## And the name the required check is required BY
+//
+// Section 6j is the one property of `main`'s branch protection that source can
+// hold up its half of. Protection requires exactly one context — the job name
+// `wire-vectors`, bound to GitHub Actions `app_id` 15368 — and that binding
+// stops a differently-owned check of the same name from satisfying it. It does
+// nothing about a SECOND job named `wire-vectors` in this repository: that is
+// the same app posting the same context, so an unrelated green lane can stand in
+// for the contract gate. Section 6j therefore asserts, across every workflow
+// file on disk rather than only the governed ones, that `compat.yml` still
+// declares that job and that nothing else declares it.
+//
 // ## Why the YAML parser is written out here, and what checks IT
 //
 // Same reason as macos-publish-order-test.mjs and native-web-pairing-gate-test.mjs:
@@ -426,6 +452,37 @@ for (const file of files) {
     check(false, `${file} is missing. It is named in this test's policy list, so removing or `
       + `renaming it without updating that list would silently drop it from the trigger and `
       + `concurrency policy.`);
+    continue;
+  }
+  try {
+    docs.set(file, parseYaml(text));
+  } catch (err) {
+    check(false, `${file} could not be parsed: ${err.message}`);
+  }
+}
+
+/**
+ * Workflows this file parses for their RUNNER BUDGET and escape hatches only.
+ *
+ * `release.yml` is deliberately NOT in `GOVERNED`. It is tag-triggered, has no
+ * `concurrency:` block and answers to none of the trigger rules in sections 1-3,
+ * so listing it there would assert things about it that are not true. But it is
+ * one of the two most expensive lanes here — the other is `ios.yml`, which IS
+ * governed — and section 6i has to be able to read its jobs.
+ *
+ * Parsed here rather than in the loop above so `assertParseWasNotVacuous()`
+ * keeps applying its `on`/`concurrency`/`jobs` rule to governed workflows only.
+ * A parse failure is still a reported failure, not a silent skip.
+ */
+const BUDGET_ONLY = ["release.yml"];
+for (const file of BUDGET_ONLY) {
+  let text;
+  try {
+    text = await readFile(resolve(workflowsDir, file), "utf8");
+  } catch {
+    check(false, `${file} is missing. It is named in this test's runner-budget list, so removing `
+      + `or renaming it without updating that list would silently drop it from the timeout and `
+      + `escape-hatch policy in section 6i.`);
     continue;
   }
   try {
@@ -1052,6 +1109,54 @@ const SHARED_APPLE_SAMPLE = "apps/RelayiumKit/Sources/RelayiumKit/Crypto/SealedB
 const VECTOR_COMMAND = "npm run test:vectors";
 const VECTOR_WRITER = "gen:vectors";
 
+/**
+ * The job key `compat.yml` declares — and therefore the second half of the
+ * required status context `compat / wire-vectors`, which GitHub renders as the
+ * workflow's `name:` and the job key joined.
+ *
+ * It is a constant here because section 6j asserts BOTH directions of it: that
+ * `compat.yml` still declares this exact name, and that nothing else in this
+ * repository declares it too.
+ */
+const COMPAT_JOB = "wire-vectors";
+
+const RELEASE = "release.yml";
+
+/**
+ * The commit-message escape that used to live in `ios.yml`, and the general
+ * shape of it.
+ *
+ * `[macos-only]` in a `main` commit message skipped the iOS build outright. The
+ * literal marker is rejected so it cannot come back verbatim; the regexp is
+ * rejected so it cannot come back as `[skip-ios]`, `[no-ci]` or any other
+ * spelling of "let whoever writes the commit decide whether the gate runs".
+ */
+const SKIP_MARKER = "[macos-only]";
+const COMMIT_MESSAGE_CONDITION = /head_commit|event\.commits|\.message\b/;
+
+/**
+ * The two most expensive lanes, and what a job in each is allowed to cost.
+ *
+ * `max` is asserted in BOTH directions for the same reason the self-host bound
+ * is: absent, a job inherits GitHub's six-hour default; declared at some large
+ * number, it is that same default wearing a disguise. The ceilings sit above
+ * the real bounds these files carry, so a deliberate adjustment is possible and
+ * a six-hour "bound" is not.
+ */
+const RUNNER_BUDGETS = [
+  {
+    file: IOS,
+    max: 90,
+    why: "a PAID macOS runner is held by a build that will never finish — a simulator that never "
+      + "boots, an acceptance child that never exits",
+  },
+  {
+    file: RELEASE,
+    max: 60,
+    why: "a wedged release job holds a runner with the release signing key materialized on disk",
+  },
+];
+
 /** This file, and the unfiltered workflow that has to execute it. */
 const SELF_TEST = "scripts/test/ci-event-policy-test.mjs";
 const SELF_HOST = "repo-hygiene.yml";
@@ -1161,6 +1266,47 @@ const wTriggers = (world, file, path) => {
 // property of the command, not of the sentence next to it.
 const wJobBody = (world, file) =>
   JSON.stringify(Object.values(world.docs.get(file)?.jobs ?? {}).map(withoutRunComments));
+
+/**
+ * The job keys a workflow file declares — for EVERY workflow file on disk, not
+ * only the parsed ones.
+ *
+ * A parsed document is authoritative wherever one exists. For every other file
+ * the keys are read structurally from the comment-stripped source: the `jobs:`
+ * mapping at column 0, then the keys at the first indentation level under it,
+ * stopping at the next top-level key. Deeper lines — a step's `name:`, a `run:`
+ * block scalar's contents — sit at a greater indent and are skipped by the
+ * equality test, so a command that happens to contain `wire-vectors:` cannot be
+ * mistaken for a job.
+ *
+ * Reading the text rather than parsing every file is deliberate. The parser in
+ * this file covers the subset the GOVERNED workflows use and THROWS on anything
+ * it does not understand, so parsing all ten workflows to look up one name would
+ * turn an unrelated construct in an unrelated workflow — `auto-release.yml`
+ * today, anything added tomorrow — into a policy failure with nothing wrong.
+ * Job-name collision does not need a governed workflow to happen in, so the
+ * lookup must not need one either.
+ */
+function jobKeysOf(world, file) {
+  const doc = world.docs.get(file);
+  if (doc) return Object.keys(doc.jobs ?? {});
+  const text = world.texts.get(file);
+  if (text === undefined) return [];
+  const keys = [];
+  let indent = null;
+  let inJobs = false;
+  for (const line of text.split("\n")) {
+    if (line.trim() === "") continue;
+    if (/^jobs:\s*$/.test(line)) { inJobs = true; continue; }
+    if (!inJobs) continue;
+    if (/^\S/.test(line)) break; // the next top-level key ends the jobs mapping
+    const match = /^(\s+)([A-Za-z0-9_][\w.-]*):/.exec(line);
+    if (!match) continue;
+    if (indent === null) indent = match[1].length;
+    if (match[1].length === indent) keys.push(match[2]);
+  }
+  return keys;
+}
 
 /**
  * The run lines of a job that are actual work.
@@ -1430,7 +1576,8 @@ function platformBoundaryFailures(world) {
   //     the status context `compat / wire-vectors`, and it lives in repository
   //     settings rather than in this repository's source. Nothing below is
   //     evidence that it is configured, and no message here should be read as
-  //     claiming it is.
+  //     claiming it is. The one half of that context this file CAN check is its
+  //     job name, and section 6j does.
   need(
     world.texts.has(COMPAT),
     `${COMPAT} is missing. It is the always-required wire-compatibility gate — the one check `
@@ -1638,6 +1785,178 @@ function platformBoundaryFailures(world) {
     }
   }
 
+  // 6i. The paid-runner budget, and the absence of commit-message escapes.
+  //
+  //     Two properties of the two most expensive lanes in this repository.
+  //     Neither is visible to YAML validity or to actionlint, neither is covered
+  //     by anything above, and both were live defects until they were fixed.
+  //
+  //     TIMEOUTS. A job with no `timeout-minutes` inherits GitHub's SIX-HOUR
+  //     default. Both `ios.yml` and `release.yml` had none. On `ios.yml` that is
+  //     a paid macOS runner held for six hours by a simulator that never booted;
+  //     on `release.yml` it is a wedged release job sitting for six hours with
+  //     the signing key materialized on disk. The ceiling is asserted in the
+  //     other direction too, exactly as in 6h: a bound declared far above what
+  //     the work takes is the six-hour default wearing a number.
+  //
+  //     ESCAPES. `ios.yml` honoured a `[macos-only]` marker in a `main` commit
+  //     message, which let a commit message skip the iOS build. A skipped check
+  //     does not report red — it reports NOTHING — so the skip was invisible in
+  //     the merge box, it applied on `main` after review where this workflow is
+  //     the only thing that compiles iOS at all, and it was reachable by exactly
+  //     the commit least likely to deserve it. The removal is asserted rather
+  //     than remembered, in three independent ways: the literal marker must not
+  //     reappear in either file; no job- or step-level condition may read a
+  //     commit message, whatever marker it names; and `ios.yml` must carry no
+  //     job-level `if:` at all.
+  //
+  //     The marker check reads the COMMENT-STRIPPED text, so both files may
+  //     still explain in prose what was removed and why — which they do. That
+  //     text comes from `world.texts`, which is loaded from every workflow file
+  //     on disk and therefore covers `release.yml` even though it is parsed for
+  //     its budget only and is deliberately absent from `GOVERNED`. Its presence
+  //     is ASSERTED rather than assumed: a budget file whose text never reached
+  //     the world would make the marker check inspect the empty string and pass,
+  //     which is the same silent non-assertion section 7 exists to prevent.
+  for (const budget of RUNNER_BUDGETS) {
+    const doc = world.docs.get(budget.file);
+    need(
+      doc !== undefined,
+      `${budget.file} is missing or did not parse, so its runner budget and its escape hatches `
+      + `are unchecked. It is named in this policy on purpose: dropping it from the list is how `
+      + `an expensive lane stops being bounded without anybody deciding to unbound it.`,
+    );
+    if (!doc) continue;
+
+    const jobs = Object.entries(doc.jobs ?? {});
+    need(
+      jobs.length >= 1,
+      `${budget.file} parsed with no jobs, so every per-job assertion below would pass by `
+      + `inspecting nothing.`,
+    );
+
+    for (const [name, job] of jobs) {
+      const declared = JSON.stringify(job["timeout-minutes"]);
+      const timeout = Number(job["timeout-minutes"]);
+      need(
+        Number.isFinite(timeout) && timeout > 0,
+        `${budget.file}/${name}: timeout-minutes is ${declared}, want a finite positive number. `
+        + `Undeclared, this job inherits GitHub's 6-hour default, so ${budget.why}.`,
+      );
+      need(
+        !(Number.isFinite(timeout) && timeout > budget.max),
+        `${budget.file}/${name}: timeout-minutes is ${declared}, above the ${budget.max}-minute `
+        + `ceiling. A bound that large is the 6-hour default wearing a number — it would not stop `
+        + `the case it exists for, where ${budget.why}.`,
+      );
+
+      for (const condition of [job.if, ...(job.steps ?? []).map((step) => step?.if)]) {
+        if (typeof condition !== "string") continue;
+        need(
+          !COMMIT_MESSAGE_CONDITION.test(condition),
+          `${budget.file}/${name}: a condition reads the commit message (${JSON.stringify(condition)}). `
+          + `Whatever marker it names, that is the \`${SKIP_MARKER}\` escape returning in a new `
+          + `spelling: it hands the decision about whether this gate runs to whoever writes the `
+          + `commit, and a skipped check reports nothing rather than red.`,
+        );
+      }
+    }
+
+    const text = world.texts.get(budget.file);
+    need(
+      text !== undefined,
+      `${budget.file} is parsed for its runner budget but its comment-stripped source never `
+      + `reached this world, so the \`${SKIP_MARKER}\` marker check below would inspect nothing `
+      + `and report a pass. The text and the parsed document have to arrive together.`,
+    );
+    need(
+      !(text ?? "").includes(SKIP_MARKER),
+      `${budget.file} contains the \`${SKIP_MARKER}\` commit-message marker again, outside a `
+      + `whole-line comment. That escape let a commit message skip the iOS build; an escape hatch `
+      + `in a gate is not a gate.`,
+    );
+  }
+
+  //     And the general form, for the one file the escape actually lived in.
+  //     A step-level `if:` is still fine — the failure-only diagnosis upload is
+  //     one — because a step that runs only on failure cannot skip the build.
+  const iosDoc = world.docs.get(IOS);
+  if (iosDoc) {
+    for (const [name, job] of Object.entries(iosDoc.jobs ?? {})) {
+      need(
+        job.if === undefined,
+        `${IOS}/${name}: a job-level "if:" is back (${JSON.stringify(job.if)}). This job is the `
+        + `only thing in this repository that compiles iOS; it reads no secrets, so it runs on `
+        + `fork pull requests, and it must run on every event its path filter admits. A job-level `
+        + `condition is exactly where the \`${SKIP_MARKER}\` escape lived.`,
+      );
+    }
+  }
+
+  // 6j. The job half of the required status context, and the collision the
+  //     `app_id` binding cannot see.
+  //
+  //     `main`'s protection requires exactly one context. The API reports it as
+  //     the job name `wire-vectors`, bound to GitHub Actions `app_id` 15368, and
+  //     the merge box renders it `compat / wire-vectors` — the workflow's
+  //     `name:` and the job key joined.
+  //
+  //     The `app_id` binding answers exactly one threat: a DIFFERENTLY OWNED
+  //     check — another GitHub App, or an external service posting a commit
+  //     status — publishing the same context name and satisfying the requirement
+  //     on behalf of a gate that never ran. It cannot answer the other one. A
+  //     job key `wire-vectors` declared in a SECOND workflow in this repository
+  //     is GitHub Actions, it is `app_id` 15368, and it produces a status with
+  //     the same job name. Which run the merge box then reconciles the single
+  //     requirement against is not a property this repository controls, so a
+  //     green `wire-vectors` from some cheap unrelated lane can stand in for the
+  //     cross-language contract gate — and it reports green, not missing.
+  //
+  //     Branch protection cannot prevent that; a settings read-back cannot
+  //     detect it; and it leaves every workflow file syntactically valid. Only
+  //     uniqueness of the name inside this repository prevents it, and that is
+  //     checkable here, so it is checked here.
+  //
+  //     Both directions are asserted, because either alone would be vacuous.
+  //     "No OTHER workflow declares it" passes trivially in a tree where
+  //     `compat.yml` is gone or its job has been renamed — precisely the tree
+  //     where the required context is satisfied by nothing at all. So the
+  //     positive half comes first, and it fails loudly.
+  //
+  //     The scan covers EVERY workflow file on disk rather than the GOVERNED
+  //     list: `release.yml`, `auto-release.yml` and anything added tomorrow can
+  //     declare a job name just as well as a governed workflow can, and a rule
+  //     that only inspected the governed set would miss the collision in the
+  //     files least likely to be reviewed for it. See `jobKeysOf`.
+  //
+  //     This asserts the NAME, not the setting. It is not evidence that the
+  //     context is required, and it does not license any change to branch
+  //     protection or to a workflow's job names — renaming this job would
+  //     silently un-require the gate, which is why the name is pinned here.
+  const compatJobNames = jobKeysOf(world, COMPAT);
+  need(
+    compatJobNames.includes(COMPAT_JOB),
+    `${COMPAT} declares no job named \`${COMPAT_JOB}\`; it declares `
+    + `[${compatJobNames.join(", ")}]. That name is half of the required status context `
+    + `\`compat / ${COMPAT_JOB}\`: rename or remove the job and \`main\`'s single required check `
+    + `is a context nothing in this repository ever reports, so the requirement is satisfied by `
+    + `no run rather than by a passing one. It also makes the uniqueness check below vacuous — `
+    + `there is nothing left for a second workflow to collide with.`,
+  );
+  const jobNameHosts = [...world.texts.keys()]
+    .filter((file) => file !== COMPAT)
+    .filter((file) => jobKeysOf(world, file).includes(COMPAT_JOB))
+    .sort();
+  need(
+    jobNameHosts.length === 0,
+    `[${jobNameHosts.join(", ")}] also declare a job named \`${COMPAT_JOB}\`, which is the job `
+    + `half of \`main\`'s single required status context \`compat / ${COMPAT_JOB}\`. This is the `
+    + `one substitution the \`app_id\` binding cannot stop: a second job of this name in this `
+    + `repository is the SAME app, so its status carries the same context and the requirement can `
+    + `be satisfied by a lane that never checked the wire contract. Give the job a different name `
+    + `— only ${COMPAT} may declare \`${COMPAT_JOB}\`.`,
+  );
+
   return out;
 }
 
@@ -1715,6 +2034,10 @@ function addWorkflow(world, file, doc) {
 }
 
 const ANDROID = FUTURE_PLATFORMS.find((future) => future.root === "apps/android");
+
+/** A governed workflow that is parsed, and a real one that deliberately is not. */
+const WEB = "web.yml";
+const AUTO_RELEASE = "auto-release.yml";
 
 const MUTATIONS = [
   {
@@ -2032,6 +2355,119 @@ const MUTATIONS = [
     ]),
     expect: /repo-hygiene\.yml gained a push path filter/,
   },
+  // 6i, one property at a time. Each of these was the real state of the tree
+  // until the architecture-resilience P0 pass, so none of them is hypothetical.
+  {
+    name: "ios.yml loses its runner timeout and inherits GitHub's 6-hour default",
+    mutate: (world) => withJob(world, IOS, (job) => { delete job["timeout-minutes"]; }),
+    expect: /ios\.yml\/ios-build: timeout-minutes is undefined, want a finite positive number/,
+  },
+  {
+    name: "release.yml loses its runner timeout",
+    mutate: (world) => withJob(world, RELEASE, (job) => { delete job["timeout-minutes"]; }),
+    expect: /release\.yml\/goreleaser: timeout-minutes is undefined, want a finite positive number/,
+  },
+  {
+    name: "release.yml declares a bound that is the 6-hour default wearing a number",
+    mutate: (world) => withJob(world, RELEASE, (job) => { job["timeout-minutes"] = "360"; }),
+    expect: /release\.yml\/goreleaser: timeout-minutes is "360", above the 60-minute ceiling/,
+  },
+  {
+    name: "ios.yml declares a non-numeric timeout, which GitHub would ignore",
+    mutate: (world) => withJob(world, IOS, (job) => { job["timeout-minutes"] = "soon"; }),
+    expect: /ios\.yml\/ios-build: timeout-minutes is "soon", want a finite positive number/,
+  },
+  {
+    name: "the [macos-only] escape returns to ios.yml under a different marker",
+    mutate: (world) => withJob(world, IOS, (job) => {
+      job.if = "!contains(github.event.head_commit.message, '[skip-ios]')";
+    }),
+    expect: /ios\.yml\/ios-build: a condition reads the commit message/,
+  },
+  {
+    name: "a release step learns to skip itself on a commit-message marker",
+    mutate: (world) => withJob(world, RELEASE, (job) => {
+      job.steps[0].if = "!contains(github.event.head_commit.message, '[no-release]')";
+    }),
+    expect: /release\.yml\/goreleaser: a condition reads the commit message/,
+  },
+  {
+    name: "ios.yml regains a job-level condition of any shape",
+    mutate: (world) => withJob(world, IOS, (job) => { job.if = "github.actor != 'nobody'"; }),
+    expect: /ios\.yml\/ios-build: a job-level "if:" is back/,
+  },
+  {
+    name: "the literal [macos-only] marker returns to ios.yml as live YAML",
+    mutate: (world) => {
+      world.texts.set(IOS, `${world.texts.get(IOS)}\n    if: "${SKIP_MARKER}"\n`);
+      return world;
+    },
+    expect: /ios\.yml contains the `\[macos-only\]` commit-message marker again/,
+  },
+  {
+    // The opposite obligation: a step that runs only when the job already
+    // failed cannot skip a build, and `ios.yml` carries exactly one. A budget
+    // check that fired on it would be widened until it fired on nothing.
+    name: "a failure-only diagnosis step keeps its `if:`",
+    mutate: (world) => withJob(world, IOS, (job) => {
+      job.steps[job.steps.length - 1].if = "failure()";
+    }),
+    refute: /ios\.yml\/ios-build: a condition reads the commit message/,
+  },
+  {
+    // 6i again, in the direction the check itself can fail SILENTLY. The marker
+    // assertion reads `world.texts`, and a budget lane whose text never arrives
+    // would have it inspect the empty string and report a pass — the same
+    // non-assertion this whole section exists to prevent. So the guard that
+    // catches that has its own mutation, exactly like every rule it protects.
+    name: "release.yml's comment-stripped source never reaches this world",
+    mutate: (world) => { world.texts.delete(RELEASE); return world; },
+    expect: /release\.yml is parsed for its runner budget but its comment-stripped source never reached this world/,
+  },
+  // ── the required status context's job name (6j) ──────────────────────────
+  // A collision here is the one substitution `app_id` 15368 cannot refuse,
+  // because the impostor is the same app. Both cases below leave every workflow
+  // valid, actionlint quiet and the board green.
+  {
+    name: "web.yml declares a second job named wire-vectors — same repo, same app, same context",
+    mutate: (world) => {
+      world.docs.get(WEB).jobs[COMPAT_JOB] = {
+        "runs-on": "ubuntu-latest",
+        "timeout-minutes": "5",
+        steps: [{ name: "Check", run: "npm run check\n" }],
+      };
+      return world;
+    },
+    expect: /\[web\.yml\] also declare a job named `wire-vectors`/,
+  },
+  {
+    // And in a workflow this policy deliberately does not parse, which is where
+    // the collision is least likely to be noticed by a reader. Scanning only
+    // GOVERNED would report green on this tree.
+    name: "auto-release.yml, which is not parsed here, declares a wire-vectors job",
+    mutate: (world) => {
+      const text = world.texts.get(AUTO_RELEASE);
+      world.texts.set(AUTO_RELEASE, text.replace(
+        /^jobs:\s*$/m,
+        `jobs:\n  ${COMPAT_JOB}:\n    runs-on: ubuntu-latest\n    steps:\n      - run: exit 0\n`,
+      ));
+      return world;
+    },
+    expect: /\[auto-release\.yml\] also declare a job named `wire-vectors`/,
+  },
+  {
+    // The non-vacuity half. In this world the uniqueness check above is
+    // trivially satisfied — nothing collides with a name nothing declares —
+    // while `main`'s single required context is reported by no run at all.
+    name: "compat.yml's job is renamed, so the required context is reported by nothing",
+    mutate: (world) => {
+      const jobs = world.docs.get(COMPAT).jobs;
+      jobs.vectors = jobs[COMPAT_JOB];
+      delete jobs[COMPAT_JOB];
+      return world;
+    },
+    expect: /compat\.yml declares no job named `wire-vectors`; it declares \[vectors\]/,
+  },
 ];
 
 for (const { name, mutate, expect, refute } of MUTATIONS) {
@@ -2071,4 +2507,7 @@ if (failures.length > 0) {
   for (const message of failures) console.error(`  ✗ ${message}\n`);
   process.exit(1);
 }
-console.log(`ci-event-policy-test: OK (${GOVERNED.length} governed workflows + ${NIGHTLY})`);
+console.log(
+  `ci-event-policy-test: OK (${GOVERNED.length} governed workflows + ${NIGHTLY}`
+  + `, runner budget on ${RUNNER_BUDGETS.map((b) => b.file).join(" and ")})`,
+);
