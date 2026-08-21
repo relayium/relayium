@@ -26,14 +26,13 @@ func TestActiveAllocsCountsOnlyLiveAllocations(t *testing.T) {
 	reg := newAllocRegistry(nil)
 	relayA := &net.UDPAddr{IP: net.IPv4(10, 0, 0, 1), Port: 50000}
 	relayB := &net.UDPAddr{IP: net.IPv4(10, 0, 0, 1), Port: 50001}
-	srcA := &net.UDPAddr{IP: net.IPv4(192, 168, 1, 5), Port: 1111}
 
 	if got := reg.activeAllocs(); got != 0 {
 		t.Fatalf("idle node: activeAllocs = %d, want 0", got)
 	}
 
-	reg.wrap(fakePC{}, relayA)
-	reg.created(srcA, relayA, "6000:userA.1")
+	connA := reg.wrap(fakePC{}, relayA)
+	reg.created(relayA, "6000:userA.1")
 	// B is live but has NOT been joined to a username yet — it is still a real
 	// in-flight transfer, and len(Usage) would not see it.
 	reg.wrap(fakePC{}, relayB)
@@ -41,9 +40,11 @@ func TestActiveAllocsCountsOnlyLiveAllocations(t *testing.T) {
 		t.Fatalf("two live allocations: activeAllocs = %d, want 2", got)
 	}
 
-	// A ends. It is no longer active, even though snapshot still owes central
-	// one final byte report for it.
-	reg.closeAlloc(srcA)
+	// A ends: its relay socket closes. It is no longer active, even though
+	// snapshot still owes central one final byte report for it.
+	if err := connA.Close(); err != nil {
+		t.Fatalf("close A: %v", err)
+	}
 	if got := reg.activeAllocs(); got != 1 {
 		t.Fatalf("after one allocation closed: activeAllocs = %d, want 1", got)
 	}
@@ -65,9 +66,8 @@ func TestSendHeartbeatReportsActiveTransfers(t *testing.T) {
 	reg := newAllocRegistry(nil)
 	relayA := &net.UDPAddr{IP: net.IPv4(10, 0, 0, 1), Port: 50000}
 	relayB := &net.UDPAddr{IP: net.IPv4(10, 0, 0, 1), Port: 50001}
-	srcA := &net.UDPAddr{IP: net.IPv4(192, 168, 1, 5), Port: 1111}
 	reg.wrap(fakePC{}, relayA)
-	reg.created(srcA, relayA, "6000:userA.1")
+	reg.created(relayA, "6000:userA.1")
 	reg.wrap(fakePC{}, relayB)
 
 	var got heartbeatBody

@@ -124,21 +124,65 @@ func blobGates(gauge *blobUsage, storageDir string) (diskUsed func() int64, disk
 	}
 }
 
+// nodeEventHandler is every pion lifecycle callback this node installs, which
+// is one: the username join. It is a named function rather than a literal
+// inside newTURNServer so the ABSENCE of the others is itself testable — see
+// TestNodeEventHandlerHasNoAddressKeyedRetirement, and newTURNServer below for
+// why OnAllocationDeleted must stay absent.
+func nodeEventHandler(reg *allocRegistry) turn.EventHandler {
+	return turn.EventHandler{
+		OnAllocationCreated: func(srcAddr, dstAddr net.Addr, protocol, username, realm string, relayAddr net.Addr, requestedPort int) {
+			// Join the byte counter, found by relayAddr, to the authenticating
+			// username. srcAddr is deliberately unused: nothing in the registry
+			// is keyed by a client address any more.
+			reg.created(relayAddr, username)
+		},
+	}
+}
+
 // newTURNServer builds the node's pion TURN server: a counting relay generator
 // wired to reg, plus an auth handler that rejects expired credentials and — the
 // local cost cap (workstream B) — refuses new allocations once lim is over the
 // monthly relay cap.
 //
-// This is also where BOTH of allocRegistry.closeAlloc's unstated invariants are
-// actually true, not merely assumed: OnAllocationCreated below is wired
-// unconditionally into EventHandler (pion calls it right after every successful
-// AllocatePacketConn, no path skips it), and PacketConnConfigs carries exactly
-// ONE entry, so every allocation this node ever serves comes from this single
-// generator and srcAddr can't collide across two configs. Adding a second
-// PacketConnConfig, or moving to a pion version that can abandon an allocation
-// after AllocatePacketConn without firing OnAllocationDeleted, breaks
-// closeAlloc's bookkeeping silently (see its doc comment) — change either
-// deliberately, not as a side effect of something else here.
+// The registry does not depend on any pion callback to retire an allocation.
+// The relay socket countingGenerator hands pion IS a countingPacketConn that
+// owns its own registry entry, and pion closes that socket on every path that
+// ends an allocation — including the throwaway sockets GetRandomEvenPort
+// allocates for an EVEN-PORT request and discards without ever creating an
+// allocation. That last path is proven to leak permanently against a real pion
+// server in TestEvenPortAllocateLeaksProbeSocketsBeforeTheFix. Whether it was
+// the trigger behind the fleet's stuck active_transfers is a separate question
+// the node's own records cannot now answer; the fix does not rest on it, since
+// retiring on Close closes the proven leak either way.
+//
+// OnAllocationDeleted is therefore deliberately NOT wired. It carries only
+// srcAddr, dstAddr, protocol, username and realm — nothing that identifies WHICH
+// allocation ended. A client that finishes one allocation and immediately opens
+// another from the same source port produces two allocations with identical
+// callback arguments, so a callback delayed past the second one's creation
+// would retire the LIVE allocation. There is no version of that lookup that is
+// safe, and pion closes the relay socket inside Manager.DeleteAllocation
+// BEFORE firing the callback, so the callback can only ever be later and less
+// specific than the signal we already have. Removing it costs nothing and
+// removes the misattribution outright.
+//
+// The tradeoff, stated plainly: retirement now depends on pion closing the
+// relay socket. A future pion that ended an allocation while leaving its relay
+// socket open would leave the entry counted as live — but that socket would
+// still be bound and still able to receive, so "live" would be the honest
+// answer, and pion would be leaking the fd regardless. The previous arrangement
+// failed in the opposite, worse direction: it under-counted by retiring
+// allocations that were still running, and over-counted forever when a socket
+// was never an allocation at all.
+//
+// OnAllocationCreated stays wired unconditionally, because it is the only
+// source of the TURN username: without it an allocation is counted as live and
+// relays bytes, but sendHeartbeat cannot attribute those bytes to an account.
+//
+// PacketConnConfigs still carries exactly ONE entry. Nothing in the registry
+// depends on that any more — allocIDs are unique per socket regardless — but a
+// second config would double the relay generator, so add one deliberately.
 func newTURNServer(udpConn net.PacketConn, publicIP string, minPort, maxPort int, realm, turnSecret string, reg *allocRegistry, lim *limits) (*turn.Server, error) {
 	gen := &countingGenerator{
 		reg: reg,
@@ -164,14 +208,7 @@ func newTURNServer(udpConn net.PacketConn, publicIP string, minPort, maxPort int
 			password := longTermPassword(turnSecret, username)
 			return turn.GenerateAuthKey(username, realm, password), true
 		},
-		EventHandler: turn.EventHandler{
-			OnAllocationCreated: func(srcAddr, dstAddr net.Addr, protocol, username, realm string, relayAddr net.Addr, requestedPort int) {
-				reg.created(srcAddr, relayAddr, username) // join counter (by relayAddr) to username; index by srcAddr
-			},
-			OnAllocationDeleted: func(srcAddr, dstAddr net.Addr, protocol, username, realm string) {
-				reg.closeAlloc(srcAddr) // stop re-reporting; evicted after one final flush
-			},
-		},
+		EventHandler: nodeEventHandler(reg),
 		PacketConnConfigs: []turn.PacketConnConfig{{
 			PacketConn:            udpConn,
 			RelayAddressGenerator: gen,
@@ -404,6 +441,29 @@ func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir, 
 	// either order gives the same answer (activeAllocs ignores closed entries),
 	// but taking it first keeps the two reads from being confused for one.
 	active := reg.activeAllocs()
+	// The breakdown behind that number. The fleet's stuck active_transfers
+	// (0/16/28/16/16, never falling) could not be attributed from the node at
+	// all, because the node reported one integer and kept no record of what was
+	// in it; diagnosing it meant reading pion's source, and the trigger that
+	// actual incident had is no longer recoverable. This line is what makes a
+	// recurrence answerable from a log instead: see allocStats for how to read
+	// it.
+	//
+	// statsForHeartbeat, not stats, decides whether there is anything to say.
+	// RetiredUnjoined is cumulative, so "non-zero" would mean one line every
+	// ~30s forever after a node's first EVEN-PORT request; it reports growth
+	// instead. See its doc comment.
+	//
+	// It is a SECOND sample, taken just after the count above, so under load its
+	// `live` can differ from the reported activeTransfers by an allocation or
+	// two. That is deliberate — holding one lock across both would put the
+	// diagnostic on the metric's critical path — and it does not matter, because
+	// what this line is read for is a TREND in the unattributed figures, not an
+	// instantaneous total.
+	if st, report := reg.statsForHeartbeat(); report {
+		log.Printf("relayium-node: relay sockets live=%d unattributed=%d retired-awaiting-flush=%d retired-unattributed-total=%d",
+			st.Live, st.LiveUnjoined, st.AwaitingFlush, st.RetiredUnjoined)
+	}
 	samples := reg.snapshot()
 	usage := make([]usageItem, 0, len(samples))
 	var total int64

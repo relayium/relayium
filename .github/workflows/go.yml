@@ -7,19 +7,46 @@ name: go
 # failed binary/web swap back automatically.
 on:
   push:
+    # Only `main`. A branch push used to start this workflow AND its pull
+    # request start a second, identical run of the same commit — two full race
+    # lanes for one change. The pull_request trigger below is what gates branch
+    # work; this one exists so `main` itself is never unverified.
+    branches:
+      - main
     paths:
       - 'server/**'
+      - 'scripts/go-race-shard.go'
       - '.github/workflows/go.yml'
   pull_request:
     paths:
       - 'server/**'
+      - 'scripts/go-race-shard.go'
       - '.github/workflows/go.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+# Supersede a pull request's own earlier runs, and nothing else.
+#
+# The group key is the PR NUMBER, so pushing three times to a branch leaves one
+# live run instead of three. Every non-PR event falls back to `github.run_id`,
+# which is unique per run, so no two such runs ever share a group and nothing
+# outside a pull request can cancel anything.
+#
+# `github.ref` is the obvious fallback and is WRONG here: it puts every `main`
+# run in one group, and GitHub cancels an older PENDING run in a group when a
+# newer one arrives even with `cancel-in-progress: false`. Two quick merges
+# would silently drop the first commit's verification, and `main` would show a
+# cancelled — not failed, not missing — check for a commit nobody tested.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Fast gate: everything that answers "is this code even correct" in ~3
-  # minutes. Split from the race job on purpose — a compile break should not
-  # wait behind a twenty-minute race detector run to be reported.
+  # minutes. Split from the race jobs on purpose — a compile break should not
+  # wait behind a race detector run to be reported.
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -56,37 +83,117 @@ jobs:
   # sweep, the metering worker, the node storage prober — and the failure mode
   # of a data race there is a corrupted ledger or a wedged deploy, found in
   # production rather than in a red build.
-  race:
+  #
+  # ## Why this is eight jobs and not one
+  #
+  # It was one `go test -race -timeout 45m ./...`, measured at ~43m35s. Every
+  # previous response to that lane was to raise its timeout: 10m, then 25m,
+  # then 45m, under a 60m job bound. A budget that close to the measurement is
+  # not a hang detector — the lane fails by expiring before it fails by finding
+  # a race, and run 31616382749 did exactly that at 1500.972s with no race and
+  # no failed assertion, which reads like a hang in the code rather than a
+  # budget that was too small.
+  #
+  # `server/account` is essentially all of it: 1904 top-level tests, 714.694s
+  # locally against ~2615s hosted, i.e. this runner is ~3.66x slower.
+  #
+  # All eight shards were measured locally on 2026-08-21, same machine as that
+  # 714.694s baseline:
+  #
+  #     shard 0  177.9s   shard 4  123.1s
+  #     shard 1  133.6s   shard 5  156.8s
+  #     shard 2  172.0s   shard 6  164.3s
+  #     shard 3  155.2s   shard 7  150.6s
+  #
+  # The slowest is 177.9s, which is 24.9% of the serial run rather than the
+  # 13.4% its test COUNT would predict — the tests are not equal in cost, and
+  # every shard re-pays the package's fixed setup, so the eight together use
+  # ~1233s of CPU against 714.694s serial. That is the trade: ~1.7x the total
+  # machine time for ~4x less wall clock on the critical path.
+  #
+  # Scaled by the measured 3.66x runner factor, the slowest shard projects to
+  # ~651s (~10.9 min) hosted. The 20m per-package budget is therefore ~1.8x the
+  # projection, and the 25m job budget leaves ~10 min on top for checkout,
+  # toolchain setup, module download and the race build. Both stay finite on
+  # purpose: unlike the 45m budget against a 43m35s measurement they replace,
+  # exceeding either of these means a hang worth its goroutine dump rather than
+  # a number to raise again.
+  #
+  # Sharding hides one class it cannot see: a race that only appears when two
+  # tests run in the same process, or in a particular order. That is what
+  # account-race-nightly.yml exists for — do not delete it as redundant.
+  race-account:
+    name: race account shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
-    # The account package alone runs ~12 min locally and much longer on a
-    # runner. Both bounds below exist because the FIRST version of this workflow
-    # hit Go's default 10-minute PER-PACKAGE timeout and reported it as a test
-    # failure with a goroutine dump — which reads like a hang in the code, not
-    # a budget that was simply too small.
-    #
-    # Raised again after run 31616382749 (exact SHA): every race package except
-    # account passed, and account showed no race and no failed assertion — it
-    # was terminated exactly at 1500.972s by the then-25m per-package timeout,
-    # i.e. the budget expired, the test did not fail. The identical full account
-    # race passed locally in 714.694s, so the hosted runner is at least ~2.1x
-    # slower here and its true duration is still unmeasured (only bounded from
-    # below). The per-package budget is therefore ~3.8x the local measurement,
-    # and the job budget leaves ~15 min on top for checkout, toolchain setup,
-    # module download and the remaining packages. Both stay finite on purpose:
-    # if a package ever exceeds these, that is a hang worth a goroutine dump,
-    # not a number to keep raising.
-    timeout-minutes: 60
+    timeout-minutes: 25
+    strategy:
+      # One shard failing must not cancel the other seven. A race is usually
+      # reported by exactly one shard, and cancelling the rest would hide
+      # whether the others were clean and turn a rerun into a guess.
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
+      # scripts/go-race-shard.go lists the package's top-level tests and hashes
+      # each name to a shard, so all eight jobs derive the same partition from
+      # the source alone with no index file to keep in sync. It proves the
+      # partition on every invocation — every test in exactly one shard, the
+      # union equal to the list, no shard empty — and exits non-zero otherwise,
+      # so eight green jobs cannot between them have run nothing.
+      #
+      # Listing and running happen in ONE step so the ~11KB anchored regex never
+      # has to survive a trip through GITHUB_ENV. The helper lists with -race so
+      # this build populates the cache the test run immediately reuses.
+      #
       # If this ever goes red intermittently, do not paper over it with a retry:
       # a flaky test here is usually a real timing assumption. The first one
       # found was a test seeding an exemption window from wall time and then
       # asserting the boundary at request time, which only held if setup
       # finished inside a second.
-      - name: go test -race
+      - name: go test -race (account shard ${{ matrix.shard }} of 8)
         working-directory: server
-        run: go test -race -timeout 45m ./...
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN_REGEX="$(go run ../scripts/go-race-shard.go -shards 8 -shard '${{ matrix.shard }}')"
+          go test -race -count=1 -timeout 20m -run "$RUN_REGEX" ./account
+
+  # Every package EXCEPT account, which the shards above cover. The list is
+  # enumerated from `go list ./...` at run time rather than written out here, so
+  # a new package is race-checked the moment it exists — a hand-maintained list
+  # is the one that silently stops covering things.
+  race-rest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: go test -race (every package except account)
+        working-directory: server
+        # Named explicitly because the last line DEPENDS on word splitting, and
+        # that is a bash behaviour. It is already the runner default; stating it
+        # means a future default change turns into a different shell rather than
+        # into one `go test` argument containing 26 newline-separated package
+        # paths, which fails in a way that reads like a broken package list.
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Exactly one package is excluded, matched in full so a future
+          # `account/...` subpackage is still covered here.
+          PKGS="$(go list ./... | grep -v '^github.com/relayium/relayium/account$')"
+          if [ -z "$PKGS" ]; then
+            echo "go list produced no packages outside account" >&2
+            exit 1
+          fi
+          echo "$PKGS"
+          # Word splitting is the point: this is a package list.
+          # shellcheck disable=SC2086
+          go test -race -count=1 -timeout 20m $PKGS
