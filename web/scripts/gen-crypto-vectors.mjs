@@ -69,6 +69,29 @@ const hkey = await crypto.subtle.importKey("raw", raRaw, { name: "HMAC", hash: "
 const macBuf = new Uint8Array(await crypto.subtle.sign("HMAC", hkey, new TextEncoder().encode(payload)));
 const mac = btoa(String.fromCharCode(...macBuf));
 
+// text-stream keys (crypto.ts `TEXT_KEY_DOMAIN` / `textKeyBytes`).
+//
+// Unlike the resume-auth pair above these are deliberately NOT sorted: that key
+// is shared and must be symmetric, these are per direction, and crypto_kx
+// already hands the peers mirrored secrets. Sorting would collapse both
+// directions onto one key and put two producers back on one nonce counter.
+//
+// This block used to be printed by `web/src/lib/text-vectors.test.ts` for a
+// human to paste in, which gave crypto-vectors.json two authors and cost it a
+// zero-diff gate. It is derived here so the generator is the file's only author
+// and check-wire-vectors.mjs can hold it to the same standard as the two wire
+// fixtures. text-vectors.test.ts still recomputes these values from crypto.ts
+// and asserts them, so the web implementation and this generator stay pinned to
+// each other rather than this file simply becoming the new unchecked truth.
+const TEXT_KEY_DOMAIN = "relayium-text-v1\0";
+const textKeyBytes = (sessionKey) => {
+  const domain = new TextEncoder().encode(TEXT_KEY_DOMAIN);
+  const input = new Uint8Array(domain.length + sessionKey.length);
+  input.set(domain, 0);
+  input.set(sessionKey, domain.length);
+  return s.crypto_generichash(32, input, null);
+};
+
 const out = {
   alice: { pub: hex(alice.publicKey), sec: hex(alice.privateKey) },
   bob: { pub: hex(bob.publicKey), sec: hex(bob.privateKey) },
@@ -77,6 +100,13 @@ const out = {
   commit: { nonce: hex(nonce), value: hex(commit) },
   aead: { keyHex: hex(keyRaw), seq, ptHex: hex(pt), ctHex: hex(ct) },
   resumeAuth: { keyHex: hex(raRaw), payload, mac },
+  textKeys: {
+    domain: TEXT_KEY_DOMAIN,
+    aliceTextSend: hex(textKeyBytes(aliceK.sharedTx)),
+    aliceTextRecv: hex(textKeyBytes(aliceK.sharedRx)),
+    bobTextSend: hex(textKeyBytes(bobK.sharedTx)),
+    bobTextRecv: hex(textKeyBytes(bobK.sharedRx)),
+  },
 };
 writeFileSync("../apps/RelayiumKit/Tests/Fixtures/crypto-vectors.json", JSON.stringify(out, null, 2) + "\n");
 console.log("wrote crypto-vectors.json");

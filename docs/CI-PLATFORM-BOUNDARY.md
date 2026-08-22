@@ -71,7 +71,8 @@ Two kinds of CI work, two sets of rules:
 | Example        | `compat.yml`                   | `macos.yml`, `ios.yml`, `native-web-pairing.yml` |
 | Runner         | `ubuntu-latest`                | `macos-15` (and any future platform runner) |
 | Path filter    | **none** — always runs         | narrow, and names its real inputs    |
-| Duration       | seconds                        | minutes to tens of minutes           |
+| Dependencies   | production closure only, from the lockfile | whatever the platform build needs |
+| Duration       | seconds (~1.2s install, ~0.5s check) | minutes to tens of minutes     |
 | May skip?      | never                          | when no owned tree changed           |
 
 `compat.yml` carries `npm run test:vectors`: it regenerates
@@ -81,20 +82,66 @@ not, every Swift vector suite keeps passing **against the old wire**, and the tw
 implementations have diverged with a green board.
 
 That check used to be the first step of `native-web-pairing.yml`, which was wrong
-twice over. It waited behind a macOS runner, a Go toolchain, an `npm ci` and a
-Chrome install for an answer that needs a checkout and Node; and, worse, it sat
-**behind that workflow's path filter**. A contract check that only runs when one
-platform's trees change is a contract check the next platform bypasses simply by
-existing. So `compat.yml` has no `paths:` at all, on either event, and it is
-fail-closed: finite timeout, no `if:`, no `continue-on-error`, no retry, no
-placeholder job.
+twice over. It waited behind a macOS runner, a Go toolchain, a *full* `npm ci`
+and a Chrome install for an answer that needs a checkout, Node and `web/`'s
+**production** dependencies; and, worse, it sat **behind that workflow's path
+filter**. A contract check that only runs when one platform's trees change is a
+contract check the next platform bypasses simply by existing. So `compat.yml` has
+no `paths:` at all, on either event, and it is fail-closed: finite timeout, no
+`if:`, no `continue-on-error`, no retry, no placeholder job.
+
+#### The fast lane is not dependency-free, and saying it was cost a red gate
+
+This section used to say the gate needed "a checkout and Node", and `compat.yml`
+said in a comment that it "never runs `npm ci`". Both were true until commit
+`5619f062` added `gen-crypto-vectors.mjs` to the gate's table. That generator
+imports `libsodium-wrappers` — a **production** dependency, not a `node:`
+builtin — so from that commit the required gate could not run on a clean runner
+at all. It was reviewed as green because a developer checkout already had
+`web/node_modules` present; a fresh runner gets `ERR_MODULE_NOT_FOUND` before a
+single byte is compared.
+
+The lesson is not "install more". A required, always-on gate failing for a reason
+unrelated to the contract it checks is the shortest path to somebody making it
+advisory, so the install is scoped as tightly as it can be and still work:
+
+```yaml
+- name: Install the production dependency closure the generators import
+  working-directory: web
+  run: npm ci --ignore-scripts --omit=dev
+```
+
+- **`npm ci`, never `npm install`** — the tree is resolved from
+  `package-lock.json` exactly and the lockfile is never rewritten in the job. A
+  gate that compares frozen bytes is installed from frozen bytes.
+- **`--omit=dev`** — 31 packages instead of the whole tree. The generators need
+  `libsodium-wrappers`; they do not need Vite, Vitest, `svelte-check` or
+  TypeScript.
+- **`--ignore-scripts`** — nothing in that closure needs a lifecycle script, and
+  two packages in it (`yargs`, `get-caller-file`) declare `prepare` scripts
+  shelling out to `tsc` and `npm run compile`, which `--omit=dev` deliberately
+  did not install.
+- **No `cache: npm`.** Measured from tracked bytes with an empty npm cache, the
+  install is ~1.2s against ~0.5s for the check itself. A `setup-node` cache
+  restore-and-save round trip is not reliably cheaper than that, and it would put
+  a shared mutable artifact in the path of the one check that gates every merge.
+
+`scripts/test/ci-event-policy-test.mjs` asserts the install's presence, its
+position **before** the gate command, its working directory and each of those
+flags, and mutates the parsed workflow to prove every one of those assertions can
+fail. The general rule the episode produced: **when a gate gains a generator, it
+inherits that generator's imports** — check the dependency closure of what the
+required lane actually executes, not what it executed when the lane was written.
 
 #### Always-run and fail-closed is one half; the required status is the other
 
-Everything in the paragraph above is a property of the workflow **file**, and it
-is enforced there and asserted by `scripts/test/ci-event-policy-test.mjs`. It
-means the gate *starts* on every pull request and every `main` push and *reports
-red* when the cross-language contract breaks.
+Everything described above about `compat.yml` — no path filter, finite timeout,
+no `if:`, no `continue-on-error`, no retry, no placeholder job, and the pinned
+dependency install that lets it run at all — is a property of the workflow
+**file**, and it is enforced there and asserted by
+`scripts/test/ci-event-policy-test.mjs`. It means the gate *starts* on every pull
+request and every `main` push and *reports red* when the cross-language contract
+breaks.
 
 By itself that does not make a red result **block** a merge. That is a GitHub
 **branch protection** rule on `main`; it lives in repository settings rather than

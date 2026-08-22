@@ -6,11 +6,36 @@
     "Swift test target can only load resources from inside its own package; the other",
     "two read this same file by relative path, so there is exactly one copy.",
     "",
-    "Hand-authored, not generated. Regenerating it from an implementation would make",
-    "it agree with whatever that implementation currently does, which is the opposite",
-    "of what a frozen vector is for. Every `accept.canonical` string below is the ONE",
-    "byte sequence all three encoders must produce, and every `refuse.json` must be",
-    "rejected with the named reason by all three decoders.",
+    "HYBRID, and never regenerated from an implementation. Deriving these vectors",
+    "from a codec would make them agree with whatever that codec currently does,",
+    "which is the opposite of what a frozen vector is for. Every `accept.canonical`",
+    "string below is the ONE byte sequence all three encoders must produce, and every",
+    "`refuse.json` must be rejected with the named reason by all three decoders.",
+    "",
+    "Hand-authored, and carried through the generator value for value - never",
+    "derived, corrected or overwritten: this header, `version`, `bounds`, every",
+    "`accept[].name` and `accept[].items`, all of `refuse`, all of `generated`.",
+    "Derived by `web/scripts/gen-device-inbox-manifest-vectors.mjs`, and NOT to be",
+    "edited here: `accept[].canonical`, `accept[].kind`, `accept[].total`. That",
+    "generator reads the hand-authored half out of this same file and re-derives the",
+    "other three fields from its own transcription of relayium-device-inbox-v3.md",
+    "(and, through v3 section 2, v2 sections 6-10); it imports no Go, TypeScript or",
+    "Swift manifest code, so it can disagree with all three. `compat / wire-vectors`",
+    "runs it and requires these bytes back unchanged.",
+    "",
+    "It does not copy your bytes, though. It parses this whole file and writes the",
+    "whole file back, so the two-space indentation, the key order, the JSON escaping",
+    "and the escaped U+2028/U+2029 below are the generator's output form, not yours.",
+    "A hand-authored VALUE survives that round trip exactly; a hand-authored spelling",
+    "of one does not - write 1e3 and it comes back 1000. Byte identity is a fixed",
+    "point this file was normalized into, not a promise your bytes are left alone:",
+    "edit the values freely, then run the generator and commit what it writes.",
+    "",
+    "So: changing an item list is a contract change - edit it, run",
+    "`npm run gen:vectors` from web/, review the moved canonical bytes, commit both.",
+    "Editing a canonical string by hand to quiet a red suite is not, and fails that",
+    "gate. U+2028/U+2029 are escaped in THIS file and raw inside the canonical",
+    "strings it describes; both are deliberate.",
     "",
     "`reason` is a stable token, mapped to each language's own error type by its test.",
     "A vector with `anyRefusal: true` must be REFUSED by all three, but its exact",
@@ -36,7 +61,13 @@
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"report.pdf\",\"size\":1024}]}",
       "kind": "file",
       "total": 1024,
-      "items": [{ "kind": "file", "name": "report.pdf", "size": 1024 }]
+      "items": [
+        {
+          "kind": "file",
+          "name": "report.pdf",
+          "size": 1024
+        }
+      ]
     },
     {
       "name": "several files keep manifest order",
@@ -44,9 +75,21 @@
       "kind": "file",
       "total": 3,
       "items": [
-        { "kind": "file", "name": "b.txt", "size": 2 },
-        { "kind": "file", "name": "a.txt", "size": 1 },
-        { "kind": "file", "name": "c.txt", "size": 0 }
+        {
+          "kind": "file",
+          "name": "b.txt",
+          "size": 2
+        },
+        {
+          "kind": "file",
+          "name": "a.txt",
+          "size": 1
+        },
+        {
+          "kind": "file",
+          "name": "c.txt",
+          "size": 0
+        }
       ]
     },
     {
@@ -54,77 +97,140 @@
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"trip/day 1/IMG_0001.jpg\",\"size\":4096}]}",
       "kind": "file",
       "total": 4096,
-      "items": [{ "kind": "file", "name": "trip/day 1/IMG_0001.jpg", "size": 4096 }]
+      "items": [
+        {
+          "kind": "file",
+          "name": "trip/day 1/IMG_0001.jpg",
+          "size": 4096
+        }
+      ]
     },
     {
       "name": "an empty file is a real file",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"empty\",\"size\":0}]}",
       "kind": "file",
       "total": 0,
-      "items": [{ "kind": "file", "name": "empty", "size": 0 }]
+      "items": [
+        {
+          "kind": "file",
+          "name": "empty",
+          "size": 0
+        }
+      ]
     },
     {
       "name": "non-ASCII names are emitted raw, never escaped",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"发票 2026.pdf\",\"size\":7}]}",
       "kind": "file",
       "total": 7,
-      "items": [{ "kind": "file", "name": "发票 2026.pdf", "size": 7 }]
+      "items": [
+        {
+          "kind": "file",
+          "name": "发票 2026.pdf",
+          "size": 7
+        }
+      ]
     },
     {
       "name": "quote and backslash are the only structural escapes",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"say \\\"hi\\\".txt\",\"size\":5}]}",
       "kind": "file",
       "total": 5,
-      "items": [{ "kind": "file", "name": "say \"hi\".txt", "size": 5 }]
+      "items": [
+        {
+          "kind": "file",
+          "name": "say \"hi\".txt",
+          "size": 5
+        }
+      ]
     },
     {
       "name": "U+2028 is raw here and escaped by some encoders; this pins ours",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"line\u2028sep.txt\",\"size\":1}]}",
       "kind": "file",
       "total": 1,
-      "items": [{ "kind": "file", "name": "line\u2028sep.txt", "size": 1 }]
+      "items": [
+        {
+          "kind": "file",
+          "name": "line\u2028sep.txt",
+          "size": 1
+        }
+      ]
     },
     {
       "name": "HTML-significant characters are raw, not \\u003c escaped",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a<b>&c.txt\",\"size\":1}]}",
       "kind": "file",
       "total": 1,
-      "items": [{ "kind": "file", "name": "a<b>&c.txt", "size": 1 }]
+      "items": [
+        {
+          "kind": "file",
+          "name": "a<b>&c.txt",
+          "size": 1
+        }
+      ]
     },
     {
       "name": "the drive-prefix rule is measured in bytes, not code units",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"é:1.txt\",\"size\":1}]}",
       "kind": "file",
       "total": 1,
-      "items": [{ "kind": "file", "name": "é:1.txt", "size": 1 }]
+      "items": [
+        {
+          "kind": "file",
+          "name": "é:1.txt",
+          "size": 1
+        }
+      ]
     },
     {
       "name": "the largest exactly-representable size",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"huge.bin\",\"size\":9007199254740991}]}",
       "kind": "file",
       "total": 9007199254740991,
-      "items": [{ "kind": "file", "name": "huge.bin", "size": 9007199254740991 }]
+      "items": [
+        {
+          "kind": "file",
+          "name": "huge.bin",
+          "size": 9007199254740991
+        }
+      ]
     },
     {
       "name": "text carries only its length, and no name",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"text\",\"size\":11}]}",
       "kind": "text",
       "total": 11,
-      "items": [{ "kind": "text", "size": 11 }]
+      "items": [
+        {
+          "kind": "text",
+          "size": 11
+        }
+      ]
     },
     {
       "name": "the shortest message",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"text\",\"size\":1}]}",
       "kind": "text",
       "total": 1,
-      "items": [{ "kind": "text", "size": 1 }]
+      "items": [
+        {
+          "kind": "text",
+          "size": 1
+        }
+      ]
     },
     {
       "name": "the longest message",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"text\",\"size\":65536}]}",
       "kind": "text",
       "total": 65536,
-      "items": [{ "kind": "text", "size": 65536 }]
+      "items": [
+        {
+          "kind": "text",
+          "size": 65536
+        }
+      ]
     }
   ],
   "refuse": [

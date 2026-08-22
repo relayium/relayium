@@ -1136,6 +1136,39 @@ const VECTOR_COMMAND = "npm run test:vectors";
 const VECTOR_WRITER = "gen:vectors";
 
 /**
+ * The working directory both halves of the gate must declare.
+ *
+ * `web/` is where `package.json`, `package-lock.json` and the generators live.
+ * An install that lands anywhere else reports success and leaves the gate's own
+ * `node_modules` missing.
+ */
+const VECTOR_WORKDIR = "web";
+
+/** Any dependency install, in the forms npm accepts — including the wrong ones. */
+const ANY_NPM_INSTALL = /\bnpm\s+(ci|install|i)\b/;
+/** The only form allowed here: resolved from the lockfile, never rewriting it. */
+const VECTOR_INSTALL = /\bnpm\s+ci\b/;
+
+/**
+ * The flags that keep the gate's install minimal and deterministic, each with
+ * the reason it is not decoration.
+ */
+const VECTOR_INSTALL_FLAGS = [
+  {
+    flag: "--omit=dev",
+    why: "the generators import `libsodium-wrappers` and nothing else from the tree; pulling Vite, "
+      + "Vitest, svelte-check and TypeScript into a seconds-long contract check is how it becomes "
+      + "slow enough that somebody adds the path filter it must never have",
+  },
+  {
+    flag: "--ignore-scripts",
+    why: "`yargs` and `get-caller-file` in that closure declare `prepare` scripts shelling out to "
+      + "`tsc` and `npm run compile`, and TypeScript is a devDependency `--omit=dev` deliberately "
+      + "does not install",
+  },
+];
+
+/**
  * The job key `compat.yml` declares — and therefore the second half of the
  * required status context `compat / wire-vectors`, which GitHub renders as the
  * workflow's `name:` and the job key joined.
@@ -1683,7 +1716,78 @@ function platformBoundaryFailures(world) {
     }
   }
 
-  // 6g. And the command itself: once, in the right place, in the verifying form.
+  // 6g. And the command itself: once, in the right place, in the verifying
+  //     form — plus the dependency closure it cannot run without.
+  //
+  //     The install half was added after `gen-crypto-vectors.mjs` joined the
+  //     gate's table in `5619f062`. That generator imports `libsodium-wrappers`,
+  //     a PRODUCTION dependency rather than a `node:` builtin, so from that
+  //     commit on a job with no dependency tree could not run this gate at all.
+  //     It passed review because a developer checkout already had
+  //     `web/node_modules` sitting there; a clean runner — which is every
+  //     runner — got ERR_MODULE_NOT_FOUND. That is the worst shape a required
+  //     gate can fail in: red for a reason unrelated to the contract it exists
+  //     to check, which is the shortest path to somebody making it advisory.
+  //
+  //     So the install is asserted as strictly as the command: present, BEFORE
+  //     the command, in the same declared working directory, in the
+  //     lockfile-respecting form, and carrying each flag that keeps it minimal.
+  //     Its fail-closed properties are not re-checked here — 6f already bans a
+  //     step-level `if:`, a step-level `continue-on-error:` and a swallowed exit
+  //     status across every step of this job, install included.
+  const compatDoc = world.docs.get(COMPAT);
+  for (const [jobName, job] of Object.entries(compatDoc?.jobs ?? {})) {
+    const steps = job?.steps ?? [];
+    const runOf = (step) => String(step?.run ?? "");
+    const gateAt = steps.findIndex((step) => runOf(step).includes(VECTOR_COMMAND));
+    // No gate command in this job is a different defect, and the host check
+    // below is what reports it. Nothing here would be meaningful.
+    if (gateAt === -1) continue;
+
+    const installAt = steps.findIndex((step) => ANY_NPM_INSTALL.test(runOf(step)));
+    need(
+      installAt !== -1,
+      `${COMPAT}/${jobName} runs \`${VECTOR_COMMAND}\` with no dependency install before it. The `
+      + `gate's own generators import \`libsodium-wrappers\`, a production dependency, so on a `
+      + `clean runner this job dies with ERR_MODULE_NOT_FOUND before it compares a single byte. It `
+      + `only appears to work on a machine that already has a stale \`web/node_modules\`.`,
+    );
+    if (installAt === -1) continue;
+
+    const installRun = runOf(steps[installAt]).trim();
+    need(
+      VECTOR_INSTALL.test(installRun),
+      `${COMPAT}/${jobName}: the dependency install is \`${installRun}\`, which is not \`npm ci\`. `
+      + `\`npm install\` may resolve a version \`package-lock.json\` does not name and may rewrite `
+      + `the lockfile in place, so the bytes this gate compares would depend on the day it ran. A `
+      + `gate that compares frozen bytes is installed from frozen bytes.`,
+    );
+    need(
+      installAt < gateAt,
+      `${COMPAT}/${jobName} installs its dependencies AFTER the gate command (install at step `
+      + `${installAt + 1}, \`${VECTOR_COMMAND}\` at step ${gateAt + 1}). The generators resolve `
+      + `their imports the moment they start; an install that follows them runs too late to be the `
+      + `reason they worked.`,
+    );
+    for (const { flag, why } of VECTOR_INSTALL_FLAGS) {
+      need(
+        installRun.includes(flag),
+        `${COMPAT}/${jobName}: the dependency install dropped \`${flag}\` (\`${installRun}\`). `
+        + `It is not decoration — ${why}.`,
+      );
+    }
+    for (const [label, index] of [["dependency install", installAt], ["gate command", gateAt]]) {
+      need(
+        steps[index]["working-directory"] === VECTOR_WORKDIR,
+        `${COMPAT}/${jobName}: the ${label} declares working-directory `
+        + `${JSON.stringify(steps[index]["working-directory"])}, want `
+        + `${JSON.stringify(VECTOR_WORKDIR)}. Both halves must run in the tree that holds `
+        + `\`package.json\`, \`package-lock.json\` and the generators; an install that lands `
+        + `somewhere else succeeds loudly and leaves the gate's \`node_modules\` missing.`,
+      );
+    }
+  }
+
   const vectorHosts = [...world.texts]
     .filter(([, text]) => text.includes(VECTOR_COMMAND))
     .map(([file]) => file)
@@ -2052,6 +2156,27 @@ function withCommandJob(world, file, command, mutate) {
   throw new Error(`no job in ${file} runs ${command}`);
 }
 
+/**
+ * Mutate the dependency-install step of `compat.yml`'s gate job.
+ *
+ * Throws for the same reason `withCommandJob` does, and it is not hypothetical:
+ * while this helper was being written, deleting the install step from the real
+ * workflow made the cases below die with `Cannot set properties of undefined`.
+ * That is a legible-enough failure only by accident. Naming it means a future
+ * reader learns which step vanished instead of which property was undefined.
+ */
+function withInstallStep(world, mutate) {
+  for (const [name, job] of Object.entries(world.docs.get(COMPAT)?.jobs ?? {})) {
+    const steps = job.steps ?? [];
+    const at = steps.findIndex((step) => VECTOR_INSTALL.test(String(step?.run ?? "")));
+    if (at !== -1) { mutate(steps[at], job, at, name); return world; }
+  }
+  throw new Error(
+    `no job in ${COMPAT} has an \`npm ci\` step to mutate. The dependency install this case exists `
+    + `to protect is already gone, so the case cannot prove anything about it.`,
+  );
+}
+
 /** A plausible future platform workflow, as the parser would have produced it. */
 function syntheticPlatform({ workflow, root, run, timeout = "30" }) {
   return {
@@ -2268,11 +2393,63 @@ const MUTATIONS = [
     expect: /compat\.yml\/wire-vectors: a command swallows its own exit status/,
   },
   {
+    // EVERY run step, not just the gate's. When the job gained a real dependency
+    // install this case silently stopped working: echoing only the last step
+    // left `npm ci` behind as a real run line, so the job was no longer a
+    // placeholder, the complaint never came, and the case passed by asserting
+    // nothing. Neutralising all of them restores what it was written to prove.
     name: "compat.yml becomes a placeholder that only echoes",
     mutate: (world) => withJob(world, COMPAT, (job) => {
-      job.steps[job.steps.length - 1].run = 'echo "wire vectors: TODO"';
+      for (const step of job.steps) if (step.run) step.run = 'echo "wire vectors: TODO"';
     }),
     expect: /compat\.yml\/wire-vectors: has no real run step/,
+  },
+  // ── the dependency closure the gate cannot run without ────────────────────
+  //
+  // `5619f062` put a generator that imports `libsodium-wrappers` behind this
+  // gate while the job installed nothing. These are the shapes that would let
+  // that return: no install, a late install, a non-deterministic one, one
+  // missing a flag, or one aimed at the wrong tree.
+  {
+    name: "compat.yml drops the dependency install entirely",
+    mutate: (world) => withInstallStep(world, (step, job, at) => { job.steps.splice(at, 1); }),
+    expect: /runs `npm run test:vectors` with no dependency install before it/,
+  },
+  {
+    name: "the dependency install moves after the gate command",
+    mutate: (world) => withInstallStep(world, (step, job, at) => {
+      job.steps.push(...job.steps.splice(at, 1));
+    }),
+    expect: /installs its dependencies AFTER the gate command \(install at step 4, `npm run test:vectors` at step 3\)/,
+  },
+  {
+    name: "the deterministic install is weakened to `npm install`",
+    mutate: (world) => withInstallStep(world, (step) => {
+      step.run = "npm install --ignore-scripts --omit=dev";
+    }),
+    expect: /the dependency install is `npm install --ignore-scripts --omit=dev`, which is not `npm ci`/,
+  },
+  {
+    name: "the install stops omitting devDependencies",
+    mutate: (world) => withInstallStep(world, (step) => { step.run = "npm ci --ignore-scripts"; }),
+    expect: /the dependency install dropped `--omit=dev`/,
+  },
+  {
+    name: "the install starts running package lifecycle scripts again",
+    mutate: (world) => withInstallStep(world, (step) => { step.run = "npm ci --omit=dev"; }),
+    expect: /the dependency install dropped `--ignore-scripts`/,
+  },
+  {
+    name: "the dependency install is aimed at the wrong tree",
+    mutate: (world) => withInstallStep(world, (step) => { step["working-directory"] = "server"; }),
+    expect: /the dependency install declares working-directory "server", want "web"/,
+  },
+  {
+    name: "the gate command loses its working directory and runs at the repo root",
+    mutate: (world) => withCommandJob(world, COMPAT, VECTOR_COMMAND, (job, step) => {
+      delete step["working-directory"];
+    }),
+    expect: /the gate command declares working-directory undefined, want "web"/,
   },
   // These two break the SAME check in opposite directions, so each demands the
   // host list it actually produces rather than the shared tail of the message.
