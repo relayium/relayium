@@ -202,3 +202,46 @@ jobs:
       # run itself needs a signed build and three peers and cannot run here.
       - name: macOS UI acceptance selector mapping
         run: sh scripts/test/macos-ui-selection-test.sh
+
+  dependency-pinning:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      # How SPECIFIC a dependency reference is, is invisible to every other check
+      # here. `actions/checkout@v6` is valid YAML, actionlint accepts it, and
+      # every job stays green while upstream keeps the right to repoint that tag
+      # at a different commit — including the jobs that sign the CLI, notarize
+      # the macOS app and create an immutable GitHub Release. The same is true of
+      # `from:` on the crypto package the entire end-to-end promise rests on, of
+      # a Package.resolved that says one thing on macOS and another on iOS, and
+      # of a lockfile entry that quietly starts resolving from somebody else's
+      # host.
+      #
+      # The rules are not all the same strength, and the script says so rather
+      # than flattening them into one claim. A 40-hex `uses:` pin and a
+      # Package.resolved `revision` name an immutable object. `exact: "0.11.0"`
+      # is a fixed version CONSTRAINT — the resolver cannot pick another release,
+      # but the tag behind it lives upstream. `node-version: 24` is a mutable
+      # major SELECTOR, and rule 4 only requires that every lane name the SAME
+      # major, so no lane silently tests a runtime no other lane does.
+      #
+      # This gate is deterministic and offline: it reads the tracked files and
+      # compares references to themselves and to each other. It does not reach a
+      # vulnerability database — `govulncheck` (go.yml) and `npm audit`
+      # (web.yml) do that today, per pull request and blocking. It also does not
+      # prove a build CONSUMED these files unchanged; nothing here yet passes
+      # `-onlyUsePackageVersionsFromResolvedFile`. docs/DEPENDENCY-POLICY.md
+      # records both, and being behind latest is never a failure here.
+      #
+      # It lives in repo-hygiene for the same reason as macos-publish-order: this
+      # workflow has no path filter, so it runs on every pull request and every
+      # `main` push, and its subjects (`.github/workflows/`, `apps/**`, `web/`)
+      # are covered by no single other lane. The suite also mutates an in-memory
+      # copy of the repository on every run to prove each rule can still fail; no
+      # dependencies, so there is nothing to install.
+      - name: dependency references are pinned and internally consistent
+        run: node scripts/test/dependency-pinning-test.mjs
