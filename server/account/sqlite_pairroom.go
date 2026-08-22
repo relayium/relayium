@@ -16,6 +16,29 @@ import (
 // one INSERT below.
 const pairRoomCols = `id, code, user_id, created_at, last_upload_at, joined_at, closed_at, expires_at, retention_secs`
 
+// pairRoomUploadInFlight is the SQL predicate for "this upload_sessions row is
+// still holding something for its room". Every query that asks whether a room
+// is busy, releasable or empty uses it, so the four cannot drift apart.
+//
+// It is NOT simply "a row exists", and that stopped being an acceptable
+// approximation when finalize stopped deleting its session row (see
+// handleUploadFinalize). A cleanly finalized upload leaves a done tombstone
+// behind for up to pendingUploadTTL, purely so a repeated finalize can be told
+// 409 — but the transfer it describes is over, its bytes are a stored_files row,
+// and nothing about it is arriving. Counting it would tell the owner their room
+// is still uploading for an hour after it finished, refuse the release they
+// asked for, and keep GC from ever collecting an emptied room.
+//
+// The recovery state (unresolved_at > 0) is deliberately still counted. It is
+// done = 1 too, but for the opposite reason: its node never said how much it
+// took, so its blob is the only remaining evidence of a bill nobody can
+// reconstruct, and a close is what durably transfers that obligation
+// (enqueueBilledNodeDeleteOn, in closePairRoomOn). Letting a room look empty
+// while one of those is outstanding would be the underbill the state exists to
+// prevent. Keeping it counted is also exactly the behaviour these four queries
+// had before the tombstone existed, so nothing but the tombstone changes.
+const pairRoomUploadInFlight = `(done = 0 OR unresolved_at > 0)`
+
 func scanPairRoom(sc rowScanner) (PairRoom, error) {
 	var r PairRoom
 	err := sc.Scan(&r.ID, &r.Code, &r.UserID, &r.CreatedAt, &r.LastUploadAt,
@@ -333,7 +356,8 @@ func (s *SQLiteStore) CloseOwnedPairRoom(ctx context.Context, userID, id string,
 	}
 	var busy int
 	if err := tx.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM upload_sessions WHERE pair_room_id = ?)`, id).Scan(&busy); err != nil {
+		`SELECT EXISTS(SELECT 1 FROM upload_sessions
+		                WHERE pair_room_id = ? AND `+pairRoomUploadInFlight+`)`, id).Scan(&busy); err != nil {
 		return PairRoomClosure{}, PairRoomOwnerReleaseGone, err
 	}
 	if busy != 0 {
@@ -376,9 +400,29 @@ func closePairRoomOn(ctx context.Context, tx *sql.Tx, id string, at, holdUntil i
 	if err := rows.Err(); err != nil {
 		return PairRoomClosure{}, err
 	}
-	// Every session bound to the room, in every state — see (2) above.
+	// Every session bound to the room whose blob this closure still has to
+	// reclaim, in every state — see (2) above. Its ROW goes either way (the
+	// DELETE at the end of this transaction takes all of them); what this query
+	// decides is which blobs the physical phase is handed.
+	//
+	// `blob_key NOT IN stored_files` is what excludes a cleanly finalized
+	// session's tombstone, and only that. A finalize reuses its session's blob
+	// key for the object it creates, so a tombstone names the SAME bytes as the
+	// stored_files row three statements above — which this close is already
+	// reclaiming, as an object. Handing it out twice would delete one blob twice
+	// per closure and graft a redundant billing obligation onto the object's own
+	// delete intent, which is the arithmetic this method is least able to afford
+	// being sloppy about.
+	//
+	// It is the same clause, for the same reason, as ListOrphanDoneUploadSessions
+	// — and, like that one, it deliberately keeps every session whose blob has no
+	// object: an open upload, a recovery-state row, and a finalize that claimed
+	// its session and died before persisting anything. That last one is a done
+	// row whose blob nothing else will ever name, and losing it here would leak
+	// the blob forever (TestTheVoidTakesASessionATerminalClaimAlreadyOwns).
 	srows, err := tx.QueryContext(ctx,
-		`SELECT `+uploadSessionCols+` FROM upload_sessions WHERE pair_room_id = ?`, id)
+		`SELECT `+uploadSessionCols+` FROM upload_sessions
+		  WHERE pair_room_id = ? AND blob_key NOT IN (SELECT blob_key FROM stored_files)`, id)
 	if err != nil {
 		return PairRoomClosure{}, err
 	}
@@ -538,7 +582,9 @@ func (s *SQLiteStore) ListPairRoomHoldings(ctx context.Context, userID string, l
 	}
 	rows, err := s.reader().QueryContext(ctx,
 		`SELECT r.id, r.created_at, r.joined_at, COUNT(f.id), COALESCE(SUM(f.size), 0),
-		        NOT EXISTS (SELECT 1 FROM upload_sessions u WHERE u.pair_room_id = r.id)
+		        NOT EXISTS (SELECT 1 FROM upload_sessions
+		                     WHERE upload_sessions.pair_room_id = r.id
+		                       AND `+pairRoomUploadInFlight+`)
 		   FROM pair_rooms r JOIN stored_files f ON f.pair_room_id = r.id
 		  WHERE `+pairRoomHoldingWhere+`
 		  GROUP BY r.id
@@ -720,7 +766,8 @@ func pairRoomHoldsNothingOn(ctx context.Context, tx *sql.Tx, roomID string) (boo
 	var any int
 	err := tx.QueryRowContext(ctx,
 		`SELECT EXISTS(SELECT 1 FROM stored_files   WHERE pair_room_id = ?)
-		     OR EXISTS(SELECT 1 FROM upload_sessions WHERE pair_room_id = ?)`,
+		     OR EXISTS(SELECT 1 FROM upload_sessions WHERE pair_room_id = ?
+		                                               AND `+pairRoomUploadInFlight+`)`,
 		roomID, roomID).Scan(&any)
 	return any == 0, err
 }
@@ -775,7 +822,8 @@ func (s *SQLiteStore) CloseEmptyJoinedPairRooms(ctx context.Context, before, at 
 		`SELECT `+pairRoomCols+` FROM pair_rooms
 		  WHERE closed_at = 0 AND joined_at > 0 AND created_at <= ?
 		    AND NOT EXISTS (SELECT 1 FROM stored_files    WHERE pair_room_id = pair_rooms.id)
-		    AND NOT EXISTS (SELECT 1 FROM upload_sessions WHERE pair_room_id = pair_rooms.id)
+		    AND NOT EXISTS (SELECT 1 FROM upload_sessions WHERE pair_room_id = pair_rooms.id
+		                                                    AND `+pairRoomUploadInFlight+`)
 		  LIMIT ?`, before, limit)
 	if err != nil {
 		return nil, err

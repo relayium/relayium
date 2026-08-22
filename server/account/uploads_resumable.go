@@ -1123,7 +1123,13 @@ func nodeLabelForLog(nodeID string) string {
 
 // handleUploadFinalize (POST /api/files/uploads/{uploadId}/finalize) commits the
 // upload: it reserves the daily quota against the real byte count, creates the
-// stored-file row, records stats/metering, and drops the session.
+// stored-file row, and records stats/metering.
+//
+// The session is claimed terminally, NOT deleted. Success and refusal alike
+// leave the row behind as this upload's tombstone, which is the only thing that
+// can tell a repeated finalize (409) apart from an upload that never existed
+// (404); PurgeDoneUploadSessions collects it once it is idle past
+// pendingUploadTTL. See the fail closure and the tail of this handler.
 func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u User) {
 	sess, ok, err := s.store.GetUploadSession(r.Context(), r.PathValue("uploadId"), u.ID)
 	if err != nil {
@@ -1192,11 +1198,24 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	// fail refunds it so a file rejected by the later storage-cap gate doesn't
 	// leave the user charged daily quota for bytes that never landed.
 	var reservedUploadID string
-	// fail drops the partial blob + the (already done-claimed) session row and
-	// writes the given HTTP error.
+	// fail drops the partial blob and writes the given HTTP error. The session
+	// row STAYS — done-claimed, and now this upload's tombstone.
+	//
+	// It used to be deleted here, and deleting it is what made a refusal
+	// indistinguishable from an upload that never existed. The claim above is
+	// terminal, so the retry a lost response guarantees cannot re-run this
+	// finalize; with the row gone that retry got 404 "no such upload", which
+	// reads as "your id is wrong" rather than "this one is already spent" —
+	// and it is the same 404 an outsider gets, so a client could not tell the
+	// two apart either. The row answers 409 instead, once, for as long as it
+	// lives.
+	//
+	// Nothing is leaked by keeping it: the blob went on the line above, so the
+	// reaper's orphan pass finds nothing left to drop, and the row itself is
+	// purged by PurgeDoneUploadSessions once it is idle past pendingUploadTTL.
+	// It occupies no open-session slot either — that cap counts done = 0.
 	fail := func(msg string, code int) {
 		s.dropUploadBlob(r.Context(), sess.NodeID, sess.BlobKey)
-		_ = s.store.DeleteUploadSession(r.Context(), sess.ID)
 		if reservedUploadID != "" {
 			_ = s.store.RefundUpload(r.Context(), reservedUploadID)
 		}
@@ -1356,7 +1375,24 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	// (The meter for this object was settled above, before any gate could refuse
 	// it.)
 	_ = s.store.AddUploadStat(r.Context(), u.ID, size)
-	_ = s.store.DeleteUploadSession(r.Context(), sess.ID)
+	// The session row is deliberately NOT deleted, for the reason the fail path
+	// above keeps its own: it is the only thing that can tell a second finalize
+	// of this upload apart from a finalize of an upload that never existed. The
+	// object is persisted, the claim is terminal, and a retry — of which there
+	// is one whenever this response is lost — must hear 409, not 404.
+	//
+	// This is also what made the racing case indeterminate: five concurrent
+	// finalizes answered 409 only if the winner's DELETE had not yet landed when
+	// the losers read the row, and 404 if it had. Nothing raced except the
+	// delete; removing it removes the race
+	// (TestRacingFinalizesLandOneObjectAndItCarriesTheVerifier).
+	//
+	// The row costs nothing that matters. It holds no open-session slot (the cap
+	// counts done = 0), its blob is now referenced by a stored_files row so the
+	// reaper's orphan pass is excluded from it by construction, and
+	// PurgeDoneUploadSessions collects the row itself once it is idle past
+	// pendingUploadTTL.
+
 	// The row's own deadline, which for a pre-upload is the room's and never the
 	// session TTL sf still carries. This number is what the sender counts down and
 	// treats as certainty about its code, so it has to be the one that landed.
@@ -1371,7 +1407,16 @@ func (s *Service) handleUploadStatus(w http.ResponseWriter, r *http.Request, u U
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	if !ok {
+	// Missing, wrong owner, or terminal: 404, the same answer handleUploadChunk
+	// gives. This endpoint exists to tell a client where to resume from, and a
+	// done session has nowhere to resume to — the offset it would report is a
+	// number no PATCH may ever act on. Reporting it would be the one way a
+	// terminal session still looked open, and it was the reason a tombstone
+	// could not simply be kept: the row that answers a repeated finalize 409
+	// must not also answer a status probe 200. (Before the tombstone, done rows
+	// were deleted so promptly that this was mostly unreachable; the recovery
+	// state, which is done = 1 for an hour at a time, always could reach it.)
+	if !ok || sess.Done {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
