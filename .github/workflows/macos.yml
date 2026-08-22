@@ -108,6 +108,15 @@ concurrency:
 jobs:
   contract:
     runs-on: macos-15
+    # Finite, and chosen rather than inherited. Outside a workflow_dispatch the
+    # whole step below is skipped, so the job is a checkout; the 32 successful
+    # runs in this workflow's recent history took 61s at worst and 24s on
+    # average. Only a release dispatch reaches the one `xcodebuild
+    # -showBuildSettings`, which reads the project rather than building it. The
+    # bound is far above either path and exists for the third case: a wedged
+    # `xcodebuild` gives a PAID macOS runner back in minutes instead of holding
+    # it for GitHub's 6-hour default.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Validate release contract
@@ -133,6 +142,13 @@ jobs:
   # No secrets, so this runs on pull requests from forks like any other check.
   test:
     runs-on: macos-15
+    # Finite, and chosen rather than inherited. This job is one `swift test`
+    # over the shared package plus four release-script tests; the 59 successful
+    # runs in recent history took 5.5 minutes at worst and 3.5 on average. The
+    # bound leaves room for a cold SwiftPM resolve and for the package to keep
+    # growing, and still turns a `swift test` that never exits red in minutes
+    # rather than holding a PAID macOS runner for GitHub's 6-hour default.
+    timeout-minutes: 20
     steps:
       # Third-party actions are pinned to a full commit SHA (with the
       # human-readable version in a trailing comment) so a compromised or
@@ -235,6 +251,17 @@ jobs:
     needs: [test, contract]
     runs-on: macos-15
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # Finite, and chosen rather than inherited, with the widest headroom in this
+    # file because this job has the widest spread. It builds TWO full xcodebuild
+    # graphs — the Mac App Store target unsigned, then the signed Release — then
+    # re-signs the Sparkle components, verifies signature and entitlements, and
+    # packages and verifies the DMG. The 47 successful runs in recent history
+    # ranged from about 15 minutes on average to 30.3 at worst, so the bound is
+    # roughly twice the slowest real run rather than a round number. It has to
+    # be a bound and not the default: this job imports the Developer ID
+    # certificate, so a wedged run holds a PAID macOS runner with the signing
+    # key materialized in a keychain on disk.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Import signing certificate
@@ -535,6 +562,20 @@ jobs:
     needs: [ui-smoke, signed-build]
     if: github.event_name == 'workflow_dispatch' && (inputs.notarize || inputs.validate_notary_credentials || inputs.validate_sparkle_key || inputs.release_version != '')
     runs-on: macos-15
+    # Finite, and derived from Apple's wait rather than from this job's observed
+    # runtime. Every real notarization in recent history finished in 63-84
+    # seconds end to end, with Apple's own queue answering in 35-50, so an
+    # observation-scaled bound would be about two minutes. That number would be
+    # WRONG here: `apps/mac/scripts/notarize-dmg.sh` submits with
+    # `--wait --timeout 45m`, so a slow notary day is a legitimate 45-minute
+    # wait, and a bound below it would kill the job mid-wait and burn a
+    # notarization submission for a run that was going to succeed. The bound is
+    # therefore Apple's 45-minute wait plus room for the provenance check,
+    # stapling, Gatekeeper assessment, release staging and artifact upload that
+    # follow it — and it is still a bound, so a submission that never returns at
+    # all gives the runner back instead of holding it for 6 hours with the
+    # notarization API key on disk.
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -760,6 +801,14 @@ jobs:
     needs: notarize-stage
     if: github.event_name == 'workflow_dispatch' && inputs.publish_release
     runs-on: ubuntu-latest
+    # Finite, and chosen rather than inherited. The cheapest job here — it runs
+    # on a free Linux runner and the 5 successful runs in recent history took
+    # 3.8 minutes at worst — but the one with the least recoverable failure: it
+    # publishes an immutable GitHub Release and writes the appcast to `main`. A
+    # bound is what stops a wedged publication from sitting half-done for six
+    # hours while the release it was supposed to announce is neither published
+    # nor visibly failed.
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
