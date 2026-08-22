@@ -125,7 +125,7 @@ jobs:
       # say the opposite.
       #
       # It was true until `gen-crypto-vectors.mjs` joined the gate's table in
-      # `4342cc6e`: before that, `check-wire-vectors.mjs` and both generators
+      # `5619f062`: before that, `check-wire-vectors.mjs` and both generators
       # imported nothing but `node:` builtins. That generator imports
       # `libsodium-wrappers` — a PRODUCTION dependency — so from that commit on a
       # runner with no dependency tree cannot run this gate at all. It went

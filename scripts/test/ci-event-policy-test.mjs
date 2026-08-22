@@ -1720,7 +1720,7 @@ function platformBoundaryFailures(world) {
   //     form — plus the dependency closure it cannot run without.
   //
   //     The install half was added after `gen-crypto-vectors.mjs` joined the
-  //     gate's table in `4342cc6e`. That generator imports `libsodium-wrappers`,
+  //     gate's table in `5619f062`. That generator imports `libsodium-wrappers`,
   //     a PRODUCTION dependency rather than a `node:` builtin, so from that
   //     commit on a job with no dependency tree could not run this gate at all.
   //     It passed review because a developer checkout already had
@@ -2406,7 +2406,7 @@ const MUTATIONS = [
   },
   // ── the dependency closure the gate cannot run without ────────────────────
   //
-  // `4342cc6e` put a generator that imports `libsodium-wrappers` behind this
+  // `5619f062` put a generator that imports `libsodium-wrappers` behind this
   // gate while the job installed nothing. These are the shapes that would let
   // that return: no install, a late install, a non-deterministic one, one
   // missing a flag, or one aimed at the wrong tree.

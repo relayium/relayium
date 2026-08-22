@@ -49,7 +49,7 @@
 // four-space indentation comes back two. Byte identity between this generator's
 // input and its output is therefore a FIXED POINT rather than a preservation
 // guarantee — it holds because the tracked file was first normalized into this
-// generator's own output form (commit `74972146`), and reaching it again is
+// generator's own output form (commit `db0864d5`), and reaching it again is
 // exactly what the zero-diff gate measures.
 //
 // The tracked file is therefore this generator's INPUT as well as its output.

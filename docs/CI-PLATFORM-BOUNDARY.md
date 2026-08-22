@@ -94,7 +94,7 @@ no `paths:` at all, on either event, and it is fail-closed: finite timeout, no
 
 This section used to say the gate needed "a checkout and Node", and `compat.yml`
 said in a comment that it "never runs `npm ci`". Both were true until commit
-`4342cc6e` added `gen-crypto-vectors.mjs` to the gate's table. That generator
+`5619f062` added `gen-crypto-vectors.mjs` to the gate's table. That generator
 imports `libsodium-wrappers` — a **production** dependency, not a `node:`
 builtin — so from that commit the required gate could not run on a clean runner
 at all. It was reviewed as green because a developer checkout already had

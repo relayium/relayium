@@ -199,7 +199,7 @@ must never blur.
   JSON escaping and the U+2028/U+2029 pass are the generator's output form. Byte
   identity between the tracked file and a regenerated one is the **fixed point**
   of that reserialization — reached by normalizing the fixture into that form
-  first (`74972146`) — and it is what `check-wire-vectors.mjs` measures when it
+  first (`db0864d5`) — and it is what `check-wire-vectors.mjs` measures when it
   requires the tracked bytes back unchanged. The generator's independence is
   load-bearing: one that called a shipped encoder would assert `x == x` and stay
   green through the escaping divergence these vectors exist to catch. The
