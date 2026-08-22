@@ -61,6 +61,61 @@
 // keys through `crypto.ts` and asserts the committed values, which is the half
 // this gate cannot do: this file proves the fixture is what the generator
 // produces, that suite proves the generator agrees with the shipped web code.
+//
+// ## Why `device-inbox-manifest-v3-vectors.json` is here on different terms
+//
+// Nothing above is retracted; this fixture simply is not the same kind of
+// object, and pretending it was would have kept it out of the gate forever.
+//
+// The three fixtures above are generated end to end — the generator invents the
+// keys, the frames and the plaintexts, so there is nothing in the file a human
+// wrote and "the generator is the only author" is trivially true. The
+// device-inbox fixture is a HYBRID and always will be. Most of it is judgement
+// that cannot be derived from anything: 55 documents that must be REFUSED and
+// the named clause each must be refused under, 6 boundary cases the consumers
+// build for themselves, and the item lists and case names of the accept
+// vectors. Its own header says, correctly, that regenerating it from an
+// implementation would make it agree with whatever that implementation
+// currently does.
+//
+// But three fields inside each accept case are not judgement at all. Given the
+// item list, `canonical`, `kind` and `total` are a pure function of the
+// protocol — and `canonical` is the single most dangerous string in the whole
+// file, because all three implementations assert AGAINST it rather than
+// re-deriving it. A mistyped canonical byte string is not a red test; it is a
+// wrong contract that Go, TypeScript and Swift are then all required to match,
+// and the three of them agreeing is precisely what everyone reads as proof.
+//
+// So `gen-device-inbox-manifest-vectors.mjs` owns those three fields and
+// nothing else. It reads the tracked file for the hand-authored half and carries
+// every one of those values through untouched — deriving, correcting and
+// overwriting none of them — and derives the rest from a transcription of
+// `docs/protocol/relayium-device-inbox-v3.md` (and, through v3 §2's explicit
+// adoption, v2 §6-§10) that imports no implementation — not
+// `web/src/lib/inbox-manifest.ts`, not `server/internal/inboxmanifest`, not
+// RelayiumKit. That independence is load-bearing here in a way it is not for
+// the fixtures above: a generator that called the shipped encoder would assert
+// `x == x` and stay green through any escaping change, which is the exact class
+// of divergence the device-inbox vectors were written to catch.
+//
+// One thing this gate's own framing must not blur for the hybrid: that
+// generator does not copy bytes. It parses the fixture and reserializes all of
+// it, so the outer formatting — indentation, key order, JSON escaping, the
+// U+2028/U+2029 pass — is the generator's rather than the tracked file's.
+// Hand-authored VALUES survive that round trip exactly; hand-authored spellings
+// of them do not. The byte identity this gate requires is the FIXED POINT of
+// that reserialization, reachable because the fixture was normalized into the
+// generator's output form first — not a promise that the hand-authored bytes
+// were left alone. It is still the right thing to measure: it is red for a
+// hand-edited canonical string and red for an unregenerated item list, which is
+// the whole job.
+//
+// The split of duties is the same as `crypto-vectors.json`'s, one layer over:
+// this gate proves the committed canonical bytes are what the SPEC transcription
+// produces from the committed item lists, and the three language suites prove
+// their own encoders produce those same bytes. Neither half can be inferred
+// from the other, and a hand-edit of a canonical string to quiet a red suite now
+// fails here.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -73,11 +128,22 @@ const repoRoot = resolve(webRoot, "..");
 
 /**
  * Every generator whose output is a tracked cross-language fixture AND whose
- * generator is that fixture's only author.
+ * generator is the only author of the FIELDS IT OWNS.
+ *
+ * That last clause used to read "the fixture's only author", which was true of
+ * the first three and was the reason `crypto-vectors.json` stayed out of this
+ * table until its second author was removed. It is deliberately widened rather
+ * than dropped: the device-inbox entry has a permanent second author — the
+ * human who writes the refusals and the item lists — and single authorship per
+ * FIELD is what the gate actually needs. The two failure modes it prevents,
+ * a stale fixture and a hand-edited one, are properties of the generated
+ * fields, not of the file. See the section above for what that costs and why it
+ * is still worth doing.
  *
  * `generator` is relative to `web/` because the generators write their output
  * through a path relative to the current directory; they are run with `web/` as
- * the working directory for that reason and no other.
+ * the working directory for that reason and no other. The device-inbox
+ * generator READS through the same relative path for the same reason.
  */
 const VECTORS = [
   {
@@ -104,6 +170,16 @@ const VECTORS = [
     // the section above for what that took and why it was worth it.
     generator: "scripts/gen-crypto-vectors.mjs",
     fixture: "apps/RelayiumKit/Tests/Fixtures/crypto-vectors.json",
+  },
+  {
+    // The Device Inbox v3 manifest. The odd one out in this table, and the
+    // section below says why: its generator does not invent the vectors, it
+    // derives three fields inside vectors a human wrote. It is here because the
+    // fields it derives — `canonical` above all — have exactly the failure mode
+    // this gate exists for, and because the half it does NOT own is the half no
+    // generator could produce.
+    generator: "scripts/gen-device-inbox-manifest-vectors.mjs",
+    fixture: "apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json",
   },
 ];
 

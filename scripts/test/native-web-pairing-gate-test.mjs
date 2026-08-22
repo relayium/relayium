@@ -925,6 +925,11 @@ for (const name of guardHosts) {
 }
 
 // ── 6. the vector gate is wired end to end ──────────────────────────────────
+//
+// Two halves: the command exists and is wired to a documented script (below),
+// and the table that command iterates still names the registrations CI depends
+// on (6a/6b). The second half is what stops the gate from shrinking one array
+// line at a time while every assertion above stays green.
 
 check(
   existsSync(resolve(repoRoot, VECTOR_CHECKER)),
@@ -947,24 +952,201 @@ check(
   + ` documented command is a check people delete`,
 );
 
-if (existsSync(resolve(repoRoot, VECTOR_CHECKER))) {
-  const checker = await readFile(resolve(repoRoot, VECTOR_CHECKER), "utf8");
-  // The fixture the delivery blocker named, plus the generator that owns it.
-  // Both are asserted to be IN the checker's table and to exist on disk, so
-  // renaming either without updating the table fails here rather than silently
-  // reducing what the gate covers.
-  const REQUIRED_VECTORS = [
-    ["web/scripts/gen-realtime-wire-vectors.mjs", "scripts/gen-realtime-wire-vectors.mjs"],
-    ["apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json",
-      "apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json"],
-  ];
-  for (const [onDisk, inTable] of REQUIRED_VECTORS) {
+/**
+ * The registrations that must survive inside `check-wire-vectors.mjs`'s table.
+ *
+ * Not every fixture in that table is listed here, and that is on purpose: this
+ * is the floor, not an inventory. Each entry is a contract whose ONLY
+ * enforcement is that the checker still names it, so dropping one line from a
+ * JavaScript array would otherwise reduce what CI covers with nothing turning
+ * red anywhere. `store-wire-vectors.json` and `crypto-vectors.json` are checked
+ * by the same shape as everything else; these two have a reason to be pinned by
+ * name here.
+ *
+ * `headerMustName` exists for the hybrid fixture only. That file is partly
+ * hand-authored, so it carries a header telling the next editor which fields are
+ * theirs and which are the generator's. A header that fell out of date — the
+ * "hand-authored, not generated" text it used to carry — is an instruction to do
+ * the exact thing the gate now rejects, so the header is required to name its
+ * generator.
+ */
+const REQUIRED_VECTORS = [
+  {
+    generator: "web/scripts/gen-realtime-wire-vectors.mjs",
+    fixture: "apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json",
+    why: "the realtime wire vectors are the cross-language contract this gate exists for"
+      + " — the delivery blocker that caused it named this fixture",
+  },
+  {
+    generator: "web/scripts/gen-device-inbox-manifest-vectors.mjs",
+    fixture: "apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json",
+    headerMustName: "gen-device-inbox-manifest-vectors.mjs",
+    why: "the Device Inbox v3 manifest is asserted by Go, TypeScript AND Swift against those"
+      + " frozen `canonical` strings rather than re-derived, so an unregenerated or hand-edited"
+      + " canonical byte string is not a red test — it is a wrong contract all three"
+      + " implementations are then required to match, and the three of them agreeing is exactly"
+      + " what everyone reads as proof",
+  },
+];
+
+/**
+ * A JavaScript source with its whole-line `//` comments removed.
+ *
+ * Same reason `stripComments` exists for the workflows, and it matters more
+ * here: `check-wire-vectors.mjs` explains at length why each fixture is in its
+ * table, and that prose NAMES every generator and every fixture path. Matching
+ * raw text would let the table entry be deleted while the paragraph explaining
+ * it survives — and the paragraph is the part nobody deletes.
+ */
+const stripJsComments = (text) =>
+  text.split("\n").filter((line) => !/^\s*\/\//.test(line)).join("\n");
+
+/**
+ * `Map<path, string>` -> complaints. Pure, so section 6b can break it on a copy.
+ */
+function registrationFailures(texts) {
+  const out = [];
+  const checker = texts.get(VECTOR_CHECKER);
+  if (checker === undefined) {
+    out.push(`${VECTOR_CHECKER} does not exist, but ${COMPAT_WORKFLOW} runs "${VECTOR_CHECK}"`);
+    return out;
+  }
+  const code = stripJsComments(checker);
+  for (const entry of REQUIRED_VECTORS) {
+    // The table stores generator paths relative to `web/`, because that is the
+    // working directory it runs them in.
+    const inTable = entry.generator.replace(/^web\//, "");
+    for (const [named, kind] of [[inTable, "generator"], [entry.fixture, "fixture"]]) {
+      if (!code.includes(named)) {
+        out.push(
+          `${VECTOR_CHECKER}'s VECTORS table no longer names the ${kind} "${named}" in CODE`
+          + ` (a mention in a comment does not count): ${entry.why}`,
+        );
+      }
+    }
+    if (!existsSync(resolve(repoRoot, entry.generator))) {
+      out.push(`${entry.generator} does not exist, but ${VECTOR_CHECKER} is required to run it`);
+    }
+    if (!existsSync(resolve(repoRoot, entry.fixture))) {
+      out.push(`${entry.fixture} does not exist, but the vector gate is required to reproduce it`);
+    }
+    if (entry.headerMustName === undefined) continue;
+    const header = texts.get(entry.fixture);
+    if (header !== undefined && !header.includes(entry.headerMustName)) {
+      out.push(
+        `${entry.fixture}'s "_" header no longer names "${entry.headerMustName}". That header is`
+        + ` the only thing telling the next editor which fields are the generator's; one that`
+        + ` still reads "hand-authored, not generated" instructs them to hand-edit the derived`
+        + ` bytes, which is the edit the zero-diff gate rejects`,
+      );
+    }
+  }
+  return out;
+}
+
+/** The real sources these assertions are about, read once and reused by 6b. */
+const registrationSources = new Map();
+for (const path of [VECTOR_CHECKER, ...REQUIRED_VECTORS.map((entry) => entry.fixture)]) {
+  const full = resolve(repoRoot, path);
+  if (existsSync(full)) registrationSources.set(path, await readFile(full, "utf8"));
+}
+for (const message of registrationFailures(registrationSources)) failures.push(message);
+
+// ── 6b. the proof that section 6 can fail ───────────────────────────────────
+//
+// Section 6 is a list of strings that must appear in another file, which is the
+// single easiest kind of assertion to write in a way that can never fail — a
+// typo'd path, a match against prose that always contains the name, a table read
+// from the wrong file. Each case below deletes ONE registration and requires the
+// complaint that names it.
+//
+// The third case is the one that motivated 6b: the checker's own header prose
+// names every generator and fixture in the table, so a version of section 6 that
+// matched raw text would report a commented-out registration as present.
+
+const REGISTRATION_MUTATIONS = [
+  {
+    name: "the device-inbox v3 generator is dropped from the checker's table",
+    mutate: (texts) => withText(
+      texts, VECTOR_CHECKER,
+      '    generator: "scripts/gen-device-inbox-manifest-vectors.mjs",\n', "",
+    ),
+    expect: /no longer names the generator "scripts\/gen-device-inbox-manifest-vectors\.mjs" in CODE/,
+  },
+  {
+    name: "the device-inbox v3 fixture is dropped from the checker's table",
+    mutate: (texts) => withText(
+      texts, VECTOR_CHECKER,
+      '    fixture: "apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json",\n', "",
+    ),
+    expect: /no longer names the fixture "apps\/RelayiumKit\/Tests\/Fixtures\/device-inbox-manifest-v3-vectors\.json" in CODE/,
+  },
+  {
+    name: "the device-inbox v3 registration is commented out, leaving the prose that names it",
+    mutate: (texts) => withText(
+      texts, VECTOR_CHECKER,
+      '    generator: "scripts/gen-device-inbox-manifest-vectors.mjs",\n'
+      + '    fixture: "apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json",\n',
+      '    // generator: "scripts/gen-device-inbox-manifest-vectors.mjs",\n'
+      + '    // fixture: "apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json",\n',
+    ),
+    expect: /a mention in a comment does not count/,
+  },
+  {
+    name: "the realtime registration is dropped from the checker's table",
+    mutate: (texts) => withText(
+      texts, VECTOR_CHECKER,
+      '    generator: "scripts/gen-realtime-wire-vectors.mjs",\n', "",
+    ),
+    expect: /no longer names the generator "scripts\/gen-realtime-wire-vectors\.mjs" in CODE/,
+  },
+  {
+    name: "the hybrid fixture's header reverts to claiming it is hand-authored",
+    mutate: (texts) => withText(
+      texts, "apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json",
+      "gen-device-inbox-manifest-vectors.mjs", "a human, carefully",
+    ),
+    expect: /"_" header no longer names "gen-device-inbox-manifest-vectors\.mjs"/,
+  },
+  // And the other direction, for the same reason the workflow section carries a
+  // `refute` case: a fixture that IS registered must not be reported merely
+  // because an unrelated table entry moved around it.
+  {
+    name: "an unrelated fourth entry is added to the table, and nothing is missing",
+    mutate: (texts) => withText(
+      texts, VECTOR_CHECKER,
+      "const VECTORS = [\n",
+      "const VECTORS = [\n  {\n"
+      + '    generator: "scripts/gen-something-else.mjs",\n'
+      + '    fixture: "apps/RelayiumKit/Tests/Fixtures/something-else.json",\n  },\n',
+    ),
+    refute: /no longer names the/,
+  },
+];
+
+for (const { name, mutate, expect, refute } of REGISTRATION_MUTATIONS) {
+  let got;
+  try {
+    got = registrationFailures(mutate(new Map(registrationSources)));
+  } catch (err) {
+    check(false, `the registration mutation "${name}" threw instead of reporting: ${err.message}`);
+    continue;
+  }
+  const rendered = got.length === 0 ? "no failures at all" : `[\n    ${got.join("\n    ")}\n  ]`;
+  if (expect) {
     check(
-      checker.includes(inTable),
-      `${VECTOR_CHECKER} no longer names "${inTable}"; the realtime wire vectors are the`
-      + ` cross-language contract this gate exists for`,
+      got.some((message) => expect.test(message)),
+      `the vector-registration policy did NOT complain about "${name}". Expected a message`
+      + ` matching ${expect}; got ${rendered}. A registration list that cannot fail is a`
+      + ` registration list that quietly shrinks.`,
     );
-    check(existsSync(resolve(repoRoot, onDisk)), `${onDisk} does not exist`);
+  }
+  if (refute) {
+    check(
+      !got.some((message) => refute.test(message)),
+      `the vector-registration policy complained about "${name}", which is a legitimate shape.`
+      + ` Expected NO message matching ${refute}; got ${rendered}.`,
+    );
   }
 }
 
@@ -1073,5 +1255,9 @@ process.stdout.write(
   + `${MUTATIONS.length} mutations prove each of those can fail (and one that a legitimate `
   + `\`--write\` step is not reported), and the acceptance still proves both role assignments, `
   + `the SAS agreement, a real browser against a real server, and a phase barrier that waits for `
-  + `the browser's exact message and file digest before the Mac is driven\n`,
+  + `the browser's exact message and file digest before the Mac is driven, and `
+  + `${REQUIRED_VECTORS.length} vector registration(s) `
+  + `(${REQUIRED_VECTORS.map((entry) => entry.fixture).join(", ")}) are still named in `
+  + `${VECTOR_CHECKER}'s table in code rather than in prose, which `
+  + `${REGISTRATION_MUTATIONS.length} further mutations prove can fail\n`,
 );

@@ -36,7 +36,7 @@ survives a split unchanged or gets worse:
 | --- | --- | --- |
 | Mixed-scope, long-lived dirty worktrees | At the 2026-08-21 audit point: **16 registered checkouts in total, 10 of them dirty**. `ios-device-inbox` 144 dirty paths, `ios-0.2.0-alignment` 108, primary checkout 23. | **No.** The same uncommitted work would be spread across more checkouts, in more repos, with no home rule and no archive policy. |
 | Merge to `main` *is* deploy for the central server and web | The central deploy is `relayium-ops/deploy/auto-deploy.sh`, run by a **5-minute cron that tracks the product repository's `origin/main`**. A merged `main` commit therefore reaches the central production host without any separate promotion decision. | **No.** Each repo would still be tracked by a cron on its own `main`. This is a release-pipeline property, not a repository-layout property. |
-| Incomplete language-neutral contract coverage | `compat / wire-vectors` regenerates three fixtures — `realtime-wire-vectors.json`, `store-wire-vectors.json` and, since 2026-08-22, `crypto-vectors.json`. That last one was excluded for as long as it had **two authors** (`gen-crypto-vectors.mjs` plus a `textKeys` block pasted from `text-vectors.test.ts`); folding the text-key derivation into the generator gave it a single author, and `check-wire-vectors.mjs` now holds it to the same zero-diff gate. Device-inbox v3 still has fixtures on both sides but **no regeneration gate**. | **Made worse.** Today a contract change and both implementations land in one commit that one gate judges. Across repos the same change becomes N commits, N reviews and a version-skew window. |
+| Incomplete language-neutral contract coverage | `compat / wire-vectors` regenerates four fixtures — `realtime-wire-vectors.json`, `store-wire-vectors.json` and, since 2026-08-22, `crypto-vectors.json` and `device-inbox-manifest-v3-vectors.json`. `crypto-vectors.json` was excluded for as long as it had **two authors** (`gen-crypto-vectors.mjs` plus a `textKeys` block pasted from `text-vectors.test.ts`); folding the text-key derivation into the generator gave it a single author, and `check-wire-vectors.mjs` now holds it to the same zero-diff gate. `device-inbox-manifest-v3-vectors.json` joined the same day under a **hybrid** rule, where `gen-device-inbox-manifest-vectors.mjs` owns `accept[].canonical`, `accept[].kind` and `accept[].total` and the refusals, bounds and item lists stay hand-authored. **Now open instead:** capability and error contracts, which have no fixture and no gate at all. | **Made worse.** Today a contract change and both implementations land in one commit that one gate judges. Across repos the same change becomes N commits, N reviews and a version-skew window. |
 | Large shared Apple `RelayiumKit` fan-out | 8 source modules; `RelayiumStoreKit → RelayiumAppKit → {RelayiumKit, RelayiumShareKit}`, and any `apps/RelayiumKit/**` change fans out to **both** Apple workflows | **No.** A separate `RelayiumKit` repo converts a compile error into a published-version bump plus a dependency-update PR in two consumers — more steps for the same coupling. |
 
 For a small, effectively single-owner team the monorepo's central property is
@@ -184,8 +184,28 @@ must never blur.
   `web/src/lib/text-vectors.test.ts` is not a second author: it independently
   recomputes the committed text keys through the shipped Web `crypto.ts`, which is
   the half the zero-diff gate cannot do;
-- device-inbox manifest fixtures, per protocol version — fixtures exist on both
-  sides, **no regeneration gate**;
+- device-inbox manifest fixtures, per protocol version — **gated today** for v3
+  (2026-08-22). This one is a **hybrid**, and the distinction is the point: most of
+  `device-inbox-manifest-v3-vectors.json` is judgement no generator can produce —
+  55 documents that must be refused and the named clause for each, the boundary
+  declarations, and the accept vectors' item lists and case names — while
+  `accept[].canonical`, `accept[].kind` and `accept[].total` are a pure function of
+  the protocol. `web/scripts/gen-device-inbox-manifest-vectors.mjs` owns exactly
+  those three fields, derives them from a hand transcription of
+  `docs/protocol/relayium-device-inbox-v3.md` that imports no Go, TypeScript or
+  Swift manifest code, and carries every other value through untouched — it
+  derives, corrects and overwrites none of them. It does not copy bytes, though:
+  it parses the fixture and reserializes all of it, so indentation, key order,
+  JSON escaping and the U+2028/U+2029 pass are the generator's output form. Byte
+  identity between the tracked file and a regenerated one is the **fixed point**
+  of that reserialization — reached by normalizing the fixture into that form
+  first (`74972146`) — and it is what `check-wire-vectors.mjs` measures when it
+  requires the tracked bytes back unchanged. The generator's independence is
+  load-bearing: one that called a shipped encoder would assert `x == x` and stay
+  green through the escaping divergence these vectors exist to catch. The
+  admission also widened the table's own rule from "the generator is the fixture's
+  only author" to "the only author of the fields it owns", which is what the gate
+  actually needs;
 - **capability and error contracts — TARGET STATE, not current state.** No
   generated fixture and no zero-diff gate exists for these today. They are listed
   here because this is where they belong once built, and a reader must not take
@@ -465,12 +485,18 @@ All five items below are **complete**; the count and the enumeration match.
 7. **Declare the `relayium-ops` ↔ product contract** (§1): make the product
    paths, readiness signalling and health endpoints that ops depends on an
    explicit, checked interface rather than an implicit one.
-8. **Finish crypto and device-inbox conformance fixtures.** The crypto half is
-   **complete (2026-08-22)**: text-key derivation now happens in
+8. **Finish crypto and device-inbox conformance fixtures — COMPLETE
+   (2026-08-22).** The crypto half: text-key derivation now happens in
    `gen-crypto-vectors.mjs`, giving `crypto-vectors.json` a single author, and the
    fixture is registered in `web/scripts/check-wire-vectors.mjs` under the same
-   zero-diff gate as the realtime and stored wires. **Still open:** the device-inbox
-   v3 manifest fixtures, which exist on both sides with no regeneration gate.
+   zero-diff gate as the realtime and stored wires. The device-inbox half: the v3
+   manifest fixture is registered under that same gate on the hybrid terms
+   described in §4, with `gen-device-inbox-manifest-vectors.mjs` as the sole author
+   of its derived fields, and `scripts/test/native-web-pairing-gate-test.mjs` now
+   pins that registration by name — in code, not in prose — so it cannot be
+   dropped from the table silently. **Nothing about the device-inbox conformance
+   fixtures remains open.** What this does NOT cover is item 12: capability and
+   error contracts still have no fixture and no gate.
 9. **Observe required-check enforcement on a real pull request** (§2): a merge
    box showing the check as required, and a merge actually blocked while it is
    red. Until then, protection is settings read-back only.
@@ -484,7 +510,10 @@ All five items below are **complete**; the count and the enumeration match.
 
 11. **Narrow the Swift dependency graph** along real seams only (§4).
 12. **Build the capability and error contract fixtures** that §4 lists as target
-    state, and put them under the same zero-diff gate.
+    state, and put them under the same zero-diff gate. **Still open, and now the
+    only open member of that category** — the wire, crypto and device-inbox
+    fixtures are all gated as of 2026-08-22, so a reader who remembers this
+    category as "mostly ungated" is reading a superseded state.
 13. **A per-platform client minimum-version policy**, so server-side contract
     evolution has a stated floor per platform instead of an implicit one.
 14. **Versioned web artifact and iOS release automation**, so promotion in §7 has
