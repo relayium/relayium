@@ -245,3 +245,43 @@ jobs:
       # dependencies, so there is nothing to install.
       - name: dependency references are pinned and internally consistent
         run: node scripts/test/dependency-pinning-test.mjs
+
+  dependabot-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      # `.github/dependabot.yml` is the only file here that grants a robot the
+      # right to CHANGE the references `dependency-pinning` insists are precise.
+      # Nothing else in this repository can see it widen. The YAML stays valid,
+      # GitHub keeps accepting it, and every job stays green when an `ignore:`
+      # block appears — majors then stop opening pull requests entirely and the
+      # queue looks healthier than it is — or when `github-actions` or `swift` is
+      # added, both of which docs/DEPENDENCY-POLICY.md deliberately leaves
+      # unconfigured (deferred items 1 and 5: the `upload-artifact` major
+      # divergence must not be "resolved" by a bot, and Swift bumps mean nothing
+      # without the vector tests and a real build the paused iOS lane cannot
+      # supply). The same is true of the cap growing, the two ecosystems drifting
+      # onto one weekday, a group widening to swallow majors, and of
+      # `target-branch`, `reviewers`, `registries` or
+      # `insecure-external-code-execution` appearing.
+      #
+      # The script is offline and reads one tracked file. It has no YAML
+      # dependency for the same reason as the jobs above — `web/` is the only
+      # Node project here and this must run with nothing installed — so it
+      # carries a narrow parser that DIAGNOSES tabs, odd indentation, duplicate
+      # keys, unknown keys and missing keys rather than skipping what it cannot
+      # read. It also mutates an in-memory copy on every run, one mutation per
+      # rule class, to prove each rule can still fail.
+      #
+      # It lives in repo-hygiene for the same reason as macos-publish-order:
+      # this workflow has no path filter, so it runs on every pull request and
+      # every `main` push, and `.github/dependabot.yml` is covered by no other
+      # lane. What it cannot check is whether Dependabot is ENABLED, whether
+      # security alerts are on, or whether anything is a required check — those
+      # are live repository settings, not tree state.
+      - name: Dependabot update automation stays bounded and reviewable
+        run: node scripts/test/dependabot-policy-test.mjs

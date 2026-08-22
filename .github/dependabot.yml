@@ -1,0 +1,104 @@
+# Dependabot version updates — the layer-3 half of docs/DEPENDENCY-POLICY.md.
+#
+# Layer 3 is "freshness, expressed as reviewed update pull requests". This file
+# is what produces those pull requests. It does not decide anything: every PR it
+# opens is read, its upstream changelog is read, and declining or deferring an
+# update is a legitimate outcome. Nothing here auto-merges, and nothing here can
+# — auto-merge is a repository/workflow setting, not a key in this file, and it
+# is deliberately not enabled anywhere.
+#
+# ## Only two ecosystems, on purpose
+#
+# `gomod` at /server and `npm` at /web. That is the whole list, and the other
+# ecosystems in this tree are unconfigured for stated reasons, not by oversight:
+#
+#   * `github-actions` — docs/DEPENDENCY-POLICY.md deferred item 1 records that
+#     `actions/upload-artifact` sits at two different majors here on purpose,
+#     because collapsing them changes artifact layout and download semantics and
+#     needs compatibility evidence from the jobs that CONSUME the artifacts. A
+#     bot must not be the thing that "resolves" that. It also touches the lanes
+#     that sign the CLI, notarize the macOS app and create an immutable release.
+#   * `swift` — deferred item 5. Bumping the crypto and transport packages under
+#     the native apps only means something with the vector tests and a real
+#     build behind it, and the iOS lane is paused.
+#   * `docker` and everything else — no subject in this repository.
+#
+# ## Why grouped minor+patch, but never grouped majors
+#
+# Each group here is restricted to `minor` and `patch`. Majors are NOT ignored
+# anywhere in this file — there is no `ignore:` block at all — so a major update
+# still opens as its own pull request under the same limit, where it is visible
+# and reviewable on its own. That is the entire point of the arrangement: a
+# major folded into a grouped "chore(deps)" PR is a major nobody read. The cost
+# is that a busy week of majors can consume the cap; a suppressed major that
+# nobody ever sees costs more.
+#
+# `open-pull-requests-limit: 3` per ecosystem is a bound on review load, not a
+# target. When the cap is full Dependabot stops opening new ones until some are
+# closed, which is the correct failure direction for a queue a human drains.
+#
+# ## Scheduling
+#
+# Different weekdays and different off-hour times in Asia/Dubai, so the two
+# ecosystems never land in the same batch and never open mid-workday. GitHub
+# treats the schedule as approximate — this buys separation, not precision.
+#
+# Changing this file: see "Changing a pin" in docs/DEPENDENCY-POLICY.md, and
+# note that scripts/test/dependabot-policy-test.mjs asserts the shape below
+# (both ecosystems, the cadence, the cap, the groups, the absence of ignore
+# rules and of registries/reviewers/target-branch/insecure execution). It runs
+# in the `dependabot-policy` job of .github/workflows/repo-hygiene.yml.
+version: 2
+updates:
+  # Go modules for the server. `server/go.sum` already hash-verifies whatever
+  # lands here on every build, so the review question is behavioural, not
+  # integrity: what changed upstream, and does the server still pass its lanes.
+  - package-ecosystem: "gomod"
+    directory: "/server"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+      timezone: "Asia/Dubai"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps/go)"
+    groups:
+      # One group for the whole module graph. Go has no production/development
+      # split in `go.mod`, so a dependency-type filter would mean nothing here.
+      go-minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Web dependencies. Split production from development because they carry
+  # different risk: a production bump ships to users, a development bump moves
+  # the build and test toolchain only, and reviewing them in one diff means
+  # reviewing neither.
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "05:00"
+      timezone: "Asia/Dubai"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps/web)"
+    groups:
+      web-production-minor-and-patch:
+        dependency-type: "production"
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      web-development-minor-and-patch:
+        dependency-type: "development"
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"

@@ -71,6 +71,32 @@ instead expressed as update pull requests that a human reads: the diff, the
 upstream changelog, and the tests are the evidence, and declining or deferring
 an update is a legitimate outcome that leaves the tree green.
 
+*Current reality:* `.github/dependabot.yml` is tracked, and it configures
+**version updates for exactly two ecosystems** — `gomod` at `/server` and `npm`
+at `/web`. Both are weekly and bounded: distinct weekdays at distinct off-hour
+times in `Asia/Dubai`, so the two batches never arrive together or mid-workday,
+and `open-pull-requests-limit: 3` each, so the queue has a ceiling a human can
+drain. Minor and patch updates are grouped (one group for Go, which has no
+production/development split in `go.mod`; a production group and a development
+group for npm, because a bump that ships to users and a bump that moves the
+build toolchain are not the same review). Majors are **not** ignored anywhere —
+there is no `ignore:` block in the file — so a major still opens as its own
+pull request, visible on its own, under the same cap.
+
+Every one of those pull requests is a **reviewed** pull request. Nothing
+auto-merges: auto-merge is a repository/workflow setting rather than a key in
+that file, and it is deliberately not enabled anywhere. `swift` and
+`github-actions` are deliberately **unconfigured** — see deferred items 5 and 1.
+`scripts/test/dependabot-policy-test.mjs` asserts this shape, in the
+`dependabot-policy` job of `.github/workflows/repo-hygiene.yml`.
+
+*Not covered by that file:* **security** alerts and automated security fixes are
+a different mechanism, and they are live repository settings rather than tree
+state. They are not enabled by anything in this commit and cannot be. That
+remains open work: Codex enables them and reads the resulting state back after
+this merges. Until that read-back exists, this document claims nothing about
+whether this repository is being told about advisories out of band.
+
 Layer 1 exists so that layers 2 and 3 are meaningful. You cannot ask "does this
 version have an advisory" or "is this version current" about a reference that
 does not name a version.
@@ -176,7 +202,17 @@ Stated plainly, because a pinning gate is easy to over-read:
   status checks, and whether Dependabot alerts or updates are switched on are
   repository settings, not tracked files. This gate cannot see them, and a green
   `dependency-pinning` job says nothing about whether it is *required* to be
-  green before a merge.
+  green before a merge. The same is true of the newer `dependabot-policy` job:
+  it runs on every pull request, and it is **not** a required check.
+
+  A live settings read on 2026-08-23 recorded that `main`'s protection requires
+  **only the wire-vector check**, and that no repository ruleset is configured.
+  That is a point-in-time observation of something outside this tree — it can
+  change without any commit, and re-reading it is deferred item 3. Its practical
+  consequence is the one that matters here: **a green tick on a Dependabot pull
+  request does not mean the checks that would catch the update ran and passed.**
+  Every such pull request still needs a deliberate Codex/owner review and an
+  explicit wait for all the relevant checks, not just the required one.
 
 ## Deferred work
 
@@ -188,7 +224,11 @@ Recorded so it is not reconstructed later. Each item states its revisit trigger.
    this deliberately, because collapsing them is a behavioural change (artifact
    layout and download semantics differ across that action's majors) and must be
    done with compatibility evidence from the jobs that consume the artifacts, not
-   as a pinning cleanup. *Trigger:* the next time either lane's artifact handling
+   as a pinning cleanup. This is also why `github-actions` is absent from
+   `.github/dependabot.yml` while item 4 ships Go and npm: an update bot would
+   "resolve" the divergence by bumping one side, which is the outcome this item
+   exists to prevent. The `dependabot-policy` gate fails if that ecosystem is
+   added. *Trigger:* the next time either lane's artifact handling
    is touched, or the next deliberate bump of that action.
    Status: `recorded`.
 2. **Select an exact GoReleaser binary version before enforcing one.**
@@ -200,33 +240,69 @@ Recorded so it is not reconstructed later. Each item states its revisit trigger.
    that publishes the CLI. This gate does not yet check the `version:` input.
    *Trigger:* before the next CLI release, or when the release lane is next
    modified. Status: `recorded`.
-3. **Verify live branch protection and Dependabot settings.** No
-   `.github/dependabot.yml` is tracked in this repository. Whether alerts or
-   automated updates are enabled in repository settings, and whether the
-   `repo-hygiene / dependency-pinning` context is a required check, is not
-   knowable from the tree and has not been confirmed here. *Trigger:* an
-   owner-side settings review; this is an `OWNER-ACTIONS.md` candidate rather
-   than a code task. Status: `recorded`.
-4. **Add isolated ecosystem update automation — after item 3.** Update
-   automation should be introduced one ecosystem at a time (Actions, then npm),
-   each in its own configuration with its own review lane, so a noisy ecosystem
-   cannot bury the others and so item 1's divergence is not "resolved" by a bot.
-   Enabling it before branch protection is confirmed would mean unreviewed
-   update pull requests against an unknown merge policy. *Trigger:* item 3
-   resolved. Status: `deferred`.
+3. **Verify live branch protection and Dependabot settings.** Partly answered,
+   and the remainder is live-setting work rather than a code task.
+   `.github/dependabot.yml` is now tracked (see layer 3), so the *version
+   update* half is no longer unknown. What is still outside this tree:
+   * A live read on 2026-08-23 found that `main`'s protection requires **only
+     the wire-vector check** and that **no ruleset** is configured. Neither
+     `repo-hygiene / dependency-pinning` nor the new
+     `repo-hygiene / dependabot-policy` is a required check. Both run on every
+     pull request; neither blocks a merge today. Whether to require them is a
+     separate decision, because making a check required changes what a red
+     result means for unrelated work.
+   * Whether **Dependabot security alerts and automated security fixes** are
+     switched on is still unknown and unaffected by this commit. Codex enables
+     them and reads the resulting state back **after** this merges; until that
+     read-back, do not treat advisory notification as covered.
+   *Trigger:* the read-back above, and any later change to `main`'s protection.
+   Status: `in progress`.
+4. **Add isolated ecosystem update automation.** Delivered for **Go and npm
+   only**, with the shape described under layer 3 and asserted by
+   `scripts/test/dependabot-policy-test.mjs`. The original entry proposed
+   "Actions, then npm"; the order was inverted deliberately, because item 1's
+   `upload-artifact` major divergence is exactly the thing a bot must not be the
+   one to resolve, so `github-actions` is the ecosystem that stays out rather
+   than the one that goes first.
+
+   The precondition this item placed on item 3 is satisfied in the sense that
+   mattered — the merge policy is now *known* rather than assumed — but it is
+   known to be **weak**: only the wire-vector check is required. That does not
+   make these pull requests unreviewed, because nothing auto-merges and each one
+   is read; it does mean the review cannot lean on a green tick. Every
+   Dependabot pull request needs the relevant checks watched explicitly.
+
+   Note what "relevant" means here. The Apple lanes stay out on their own path
+   filters — `macos.yml` on `apps/mac/**` plus `apps/RelayiumKit/**`, `ios.yml`
+   on `apps/ios/**` plus `apps/RelayiumKit/**`, neither of which a
+   `server/go.mod` or `web/package.json` change touches. But a Go or npm update is **not** a one-job pull request:
+   `compat.yml` has no path filter at all and runs on everything,
+   `native-web-pairing.yml` filters on `web/**` and `server/**` and so runs on
+   both of these ecosystems, and `repo-hygiene.yml` has no path filter either.
+   That is correct behaviour — a web or server dependency can break exactly the
+   cross-client agreement those lanes exist to catch — and it is the reason the
+   cap is 3 and the weekdays are separated.
+
+   Remaining scope, tracked as its own work: `github-actions` (item 1) and
+   `swift` (item 5). *Trigger:* those items' own triggers. Status: `completed`
+   for Go and npm on 2026-08-23; the other two ecosystems are separately
+   deferred below.
 5. **Swift update automation stays deferred while iOS is paused.** The Swift
    packages here are the crypto and transport under the native apps; bumping
    either requires the vector tests and a real build to mean anything, and the
    iOS lane is not currently in a state to provide that evidence. Manual, exact,
-   reviewed bumps remain the policy. *Trigger:* iOS work resuming. Status:
-   `deferred`.
+   reviewed bumps remain the policy, and `.github/dependabot.yml` deliberately
+   contains no `swift` entry — the `dependabot-policy` gate fails if one is
+   added, so this stays a decision rather than a drift. *Trigger:* iOS work
+   resuming. Status: `deferred`.
 6. **Evaluate scheduled Swift/Actions vulnerability coverage that needs no
    secrets.** Layer 2 for the npm graph has an obvious shape; for SwiftPM and for
    GitHub Actions it does not, and the candidates must be assessed for whether
    they can run without credentials, without pushing this repository's dependency
    graph to a third party, and on a schedule rather than per-commit. Nothing has
-   been selected. *Trigger:* item 4 landing, or a published advisory affecting a
-   pinned Swift package. Status: `recorded`.
+   been selected. *Trigger:* item 4 has now landed for Go and npm, so this
+   trigger is live; or a published advisory affecting a pinned Swift package.
+   Status: `recorded`.
 
 7. **Make builds consume the resolved files, then prove it.** SwiftPM automatic
    resolution is not disabled in any lane, so a build may resolve and rewrite
