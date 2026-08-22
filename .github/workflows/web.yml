@@ -5,9 +5,21 @@ name: web
 # them, and only listing `web/**` would let a server-side change land with a
 # green board while the cross-implementation contract was already broken.
 #
-# Deliberately surgical rather than `server/**`: everything else in the server
-# is covered by its own workflow, and widening this one would re-run the full
-# web suite plus the accessibility scan on every unrelated backend change.
+# It names one DOCUMENT for the same reason. `docs/billing-transparency.md` is
+# not built or served here; it is READ, as test input, by
+# `web/scripts/pages/billing-doc-pointers.test.mjs`, which runs inside the
+# `npm test` step below and asserts that every `symbol` (`path:line`) pointer in
+# that document still resolves to the definition it names. The test lives in
+# this suite, so the file it reads has to start this suite: without the entry an
+# edit to the document is merged having never run the only gate that judges it,
+# and the failure surfaces later against an innocent commit that did touch
+# `web/**`.
+#
+# Deliberately surgical rather than `server/**` or `docs/**`: everything else in
+# the server is covered by its own workflow, and no other document is an input
+# to anything here. Widening either glob would re-run the full web suite, the
+# accessibility scan and three headless-Chrome journeys on every unrelated
+# backend or documentation change. One package, and one document, at a time.
 on:
   push:
     # Only `main`. A branch push used to start this workflow AND its pull
@@ -24,6 +36,7 @@ on:
       - 'server/account/taskobject.go'
       - 'server/account/files.go'
       - 'server/account/uploads_resumable.go'
+      - 'docs/billing-transparency.md'
       - '.github/workflows/web.yml'
   pull_request:
     paths: *paths

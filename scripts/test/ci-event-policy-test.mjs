@@ -980,8 +980,13 @@ for (const { file } of GOVERNED) {
 // Workflows with no path filter are excluded and asserted separately below;
 // they run on everything by construction, so including them would make every
 // row say the same thing.
-const FILTERED = GOVERNED.map((g) => g.file).filter((file) => pathsOf(file) !== null);
-
+//
+// The matrix is evaluated against a WORLD rather than against module state, for
+// the same reason section 6 is: section 7 hands it a mutated copy of the real
+// workflows and requires the matching row to complain. A row asserted only
+// against the checked-in filters is a row nobody has ever seen fail, and the
+// most expensive thing in this file is a check that passes because it cannot
+// fail. The real-world call sits next to section 6's, just above section 7.
 const PATH_MATRIX = [
   ["server/account/pairroom.go", ["go.yml", "native-web-pairing.yml"],
     "server-only: no native runner may start"],
@@ -1036,16 +1041,37 @@ const PATH_MATRIX = [
     + "inherited a macOS runner without anybody choosing that"],
   ["scripts/windows-package.ps1", [],
     "and the same for a future Windows packaging script"],
-  ["docs/billing-transparency.md", [],
-    "a document no governed, path-filtered workflow builds from"],
+  ["docs/billing-transparency.md", ["web.yml"],
+    "a document that is TEST INPUT, which is why it is not in the empty-set group above. "
+    + "`web/scripts/pages/billing-doc-pointers.test.mjs` reads this file and asserts every "
+    + "`symbol` (`path:line`) pointer in it still resolves, and that test runs inside web.yml's "
+    + "`npm test` step — so the document is an input to that suite exactly like a source file, "
+    + "and an edit to it must start the suite that judges it. Exactly web.yml and nothing else: "
+    + "no other governed workflow runs that test. Named one file at a time rather than through "
+    + "`docs/**`, which would start the full web suite, the accessibility scan and three "
+    + "headless-Chrome journeys for every unrelated document in the repository"],
 ];
 
-for (const [path, want, why] of PATH_MATRIX) {
-  const got = FILTERED.filter((file) => matchesFilter(pathsOf(file), path)).sort();
-  check(
-    deepEqual(got, [...want].sort()),
-    `changing "${path}" starts [${got.join(", ")}]; want [${want.join(", ")}] — ${why}.`,
-  );
+/**
+ * Every trigger-matrix disagreement about one world, as messages.
+ *
+ * Mirrors `platformBoundaryFailures`: it returns rather than pushes, so the
+ * real world's messages become failures at the call site and section 7 can
+ * assert that a specific mutation produces a specific row's complaint.
+ */
+function pathMatrixFailures(world) {
+  const out = [];
+  const filtered = world.governed
+    .map((entry) => entry.file)
+    .filter((file) => wPaths(world, file) !== null);
+  for (const [path, want, why] of PATH_MATRIX) {
+    const got = filtered.filter((file) => matchesFilter(wPaths(world, file), path)).sort();
+    if (deepEqual(got, [...want].sort())) continue;
+    out.push(
+      `changing "${path}" starts [${got.join(", ")}]; want [${want.join(", ")}] — ${why}.`,
+    );
+  }
+  return out;
 }
 
 // The matrix above only means what it says if the excluded workflows really are
@@ -1961,13 +1987,20 @@ function platformBoundaryFailures(world) {
 }
 
 for (const message of platformBoundaryFailures(realWorld())) failures.push(message);
+for (const message of pathMatrixFailures(realWorld())) failures.push(message);
 
-// ── 7. the proof that section 6 can fail ────────────────────────────────────
+// ── 7. the proof that sections 5g and 6 can fail ────────────────────────────
 //
 // Every check above reads a world instead of module state precisely so this can
 // exist. Each case below breaks ONE property in a copy of the real workflows and
 // requires the matching complaint by its own wording — not merely "something
 // failed", which a broken parser or an unrelated typo would also satisfy.
+//
+// Both world-driven check sets run against each mutated world: the platform
+// boundary and the trigger matrix. A mutation is free to disturb rows it was
+// not written for — the assertion is that the named complaint is PRESENT, never
+// that it is alone — and a trigger-matrix row is only worth having once some
+// mutation has actually made it fail.
 //
 // This is the guard against the most expensive outcome available here: a policy
 // file that passes because it is asserting nothing.
@@ -1978,6 +2011,23 @@ function withPaths(world, file, paths) {
   on.push.paths = paths;
   on.pull_request = { ...(on.pull_request ?? {}), paths };
   return world;
+}
+
+/**
+ * Remove exactly one entry from a workflow's shared filter.
+ *
+ * Derived from the world rather than restated as a replacement list, so it
+ * removes ONE thing however the filter grows later, and throws when the entry
+ * is already gone — the same discipline as `withCommandJob`. A mutation that
+ * quietly stopped removing anything would leave the world unbroken, and the
+ * case below it would pass while asserting nothing.
+ */
+function withoutPath(world, file, path) {
+  const paths = wPaths(world, file);
+  if (paths === null || !paths.includes(path)) {
+    throw new Error(`${file}'s path filter does not list ${path}, so there is nothing to remove`);
+  }
+  return withPaths(world, file, paths.filter((entry) => entry !== path));
 }
 
 /** Mutate the first job of a workflow. */
@@ -2456,6 +2506,17 @@ const MUTATIONS = [
     expect: /\[auto-release\.yml\] also declare a job named `wire-vectors`/,
   },
   {
+    // The trigger-matrix half, and the row this file learned the hard way: the
+    // document is not source, so nothing about web.yml LOOKS wrong without it.
+    // Removing the one entry is exactly the edit a reader tidying a "docs file
+    // in a web workflow" would make, and it is silent — `npm test` still runs
+    // billing-doc-pointers.test.mjs, just never on a commit that only touched
+    // the document it reads.
+    name: "web.yml stops watching the billing document its own test suite reads",
+    mutate: (world) => withoutPath(world, WEB, "docs/billing-transparency.md"),
+    expect: /changing "docs\/billing-transparency\.md" starts \[\]; want \[web\.yml\]/,
+  },
+  {
     // The non-vacuity half. In this world the uniqueness check above is
     // trivially satisfied — nothing collides with a name nothing declares —
     // while `main`'s single required context is reported by no run at all.
@@ -2473,16 +2534,17 @@ const MUTATIONS = [
 for (const { name, mutate, expect, refute } of MUTATIONS) {
   let got;
   try {
-    got = platformBoundaryFailures(mutate(realWorld()));
+    const world = mutate(realWorld());
+    got = [...platformBoundaryFailures(world), ...pathMatrixFailures(world)];
   } catch (err) {
-    check(false, `the platform-boundary mutation "${name}" threw instead of reporting: ${err.message}`);
+    check(false, `the CI trigger-policy mutation "${name}" threw instead of reporting: ${err.message}`);
     continue;
   }
   const rendered = got.length === 0 ? "no failures at all" : `[\n    ${got.join("\n    ")}\n  ]`;
   if (expect) {
     check(
       got.some((message) => expect.test(message)),
-      `the platform-boundary policy did NOT complain about "${name}". Expected a message matching `
+      `the CI trigger policy did NOT complain about "${name}". Expected a message matching `
       + `${expect}; got ${rendered}. `
       + `A check that cannot fail for the reason it was written is not a check, and this one would `
       + `report green while the boundary it names is already gone.`,
@@ -2494,7 +2556,7 @@ for (const { name, mutate, expect, refute } of MUTATIONS) {
   if (refute) {
     check(
       !got.some((message) => refute.test(message)),
-      `the platform-boundary policy complained about "${name}", which is a legitimate shape. `
+      `the CI trigger policy complained about "${name}", which is a legitimate shape. `
       + `Expected NO message matching ${refute}; got ${rendered}.`,
     );
   }
