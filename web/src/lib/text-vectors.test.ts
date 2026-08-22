@@ -3,14 +3,24 @@ import { readFileSync } from "node:fs";
 import { ready, textKeyBytes, TEXT_KEY_DOMAIN, seal, generateKeyPair, deriveSession, signResume, verifyResume } from "./crypto";
 import { TextSender, TEXT_MAX_BYTES, KIND_TEXT_ENC } from "./text-wire";
 
-// The Swift port is verified against fixtures generated HERE, by the web
+// The Swift port is verified against fixtures generated from the web
 // implementation, so they are a cross-check between the two ports rather than a
 // restatement of either. This suite is the other half of that: it recomputes the
 // committed fixtures and fails if the web side drifts from them, so the two can
 // never silently diverge.
 //
-// To regenerate after a deliberate change: PRINT_TEXT_VECTORS=1 npx vitest run
-// src/lib/text-vectors.test.ts   — then paste the printed blocks into the fixtures.
+// This suite is a CONSUMER of the fixtures, not one of their authors. Both blocks
+// it checks used to be printed here for a human to paste in — which is what gave
+// `crypto-vectors.json` two authors and cost it a zero-diff gate — but the
+// generators own them outright now (`scripts/gen-crypto-vectors.mjs` derives
+// `textKeys`; `scripts/gen-realtime-wire-vectors.mjs` reproduces the kind-9
+// frames), and `scripts/check-wire-vectors.mjs` holds both files byte-identical to
+// what those generators produce.
+//
+// So: regenerate with `npm run gen:vectors`, never by pasting. What this suite adds
+// on top of that gate is the claim the gate cannot make — that the generators still
+// agree with the shipped `crypto.ts` / `text-wire.ts` the product actually runs.
+// PRINT_TEXT_VECTORS=1 still dumps the computed blocks, for reading a diff by eye.
 
 const CRYPTO = "../apps/RelayiumKit/Tests/Fixtures/crypto-vectors.json";
 const WIRE = "../apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json";
