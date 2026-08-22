@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/mail"
 	"net/smtp"
+	"net/url"
 	"strings"
 	"time"
 
@@ -34,43 +35,146 @@ type Mailer interface {
 	SendAccountDeleted(ctx context.Context, email string) error
 }
 
-// LogMailer prints the link instead of sending it. For local development only.
-type LogMailer struct{ Log *log.Logger }
+// LogMailer records mail events on a log instead of sending them. It exists so
+// a deployment without SMTP still boots and still tells an operator that a mail
+// event happened — not so that credentials end up in a log file.
+//
+// By default it is REDACTED: the recipient's local part is masked, and a
+// credential-bearing link is reduced to its URL path, because the token lives in
+// the query or the fragment. Anything that does not parse is replaced outright,
+// so no caller-controlled bytes (newlines, control characters, terminal escapes)
+// can be written into the log.
+//
+// The zero value is usable and safe: a nil Log falls back to the standard
+// logger, and RevealLinks defaults to false.
+type LogMailer struct {
+	Log *log.Logger
+
+	// RevealLinks prints the full recipient and the full credential-bearing
+	// link. It defeats every redaction in this type and is for local
+	// development only. Exactly one non-test production site constructs it
+	// true — the `dev-log-links` mail transport in the server's main package,
+	// which the server accepts only when no SMTP is configured AND the base URL
+	// is a literal local address. Do not set it anywhere else.
+	RevealLinks bool
+}
+
+// redactedPlaceholder is what a value that could not be parsed becomes. It is a
+// constant, never derived from the input, so a malformed address or link cannot
+// smuggle bytes into the log.
+const redactedPlaceholder = "[redacted]"
+
+// logf writes through the configured logger, or the standard one when the
+// LogMailer was built as a zero value.
+func (m *LogMailer) logf(format string, args ...any) {
+	l := m.Log
+	if l == nil {
+		l = log.Default()
+	}
+	l.Printf(format, args...)
+}
+
+// maskEmail keeps only what an operator needs to correlate a log line with a
+// user report: the first rune of the local part and the domain. An address that
+// does not parse as exactly one RFC 5322 address is not echoed at all.
+func maskEmail(email string) string {
+	a, err := mail.ParseAddress(email)
+	if err != nil {
+		return redactedPlaceholder
+	}
+	at := strings.LastIndex(a.Address, "@")
+	if at <= 0 || at+1 >= len(a.Address) {
+		return redactedPlaceholder
+	}
+	local, domain := a.Address[:at], a.Address[at+1:]
+	first := []rune(local)[0]
+	return string(first) + "***@" + domain
+}
+
+// linkPath reduces a credential-bearing link to its escaped path. The token is
+// carried in the query or the fragment, so both are dropped, and so are the
+// host and any userinfo. A link that is not an absolute http(s) URL with a host
+// is not echoed at all. url.Parse rejects raw control bytes and EscapedPath
+// percent-encodes the rest, which is what keeps a crafted link from injecting a
+// second line into the log.
+func linkPath(link string) string {
+	u, err := url.Parse(link)
+	if err != nil {
+		return redactedPlaceholder
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return redactedPlaceholder
+	}
+	if u.Host == "" {
+		return redactedPlaceholder
+	}
+	p := u.EscapedPath()
+	if p == "" {
+		p = "/"
+	}
+	return p
+}
+
+// logLink records one credential-bearing mail event under the redaction rules
+// above. RevealLinks restores the plaintext for local development.
+func (m *LogMailer) logLink(kind, email, link string) {
+	if m.RevealLinks {
+		m.logf("%s for %s: %s", kind, email, link)
+		return
+	}
+	m.logf("%s for %s: link redacted (path %s); set -mail-transport=dev-log-links locally to print it",
+		kind, maskEmail(email), linkPath(link))
+}
 
 func (m *LogMailer) SendMagicLink(_ context.Context, email, link string) error {
-	m.Log.Printf("magic link for %s: %s", email, link)
+	m.logLink("magic link", email, link)
 	return nil
 }
 
 func (m *LogMailer) SendVerifyEmail(_ context.Context, email, link string) error {
-	m.Log.Printf("verify email for %s: %s", email, link)
+	m.logLink("verify email", email, link)
 	return nil
 }
 
 func (m *LogMailer) SendPasswordReset(_ context.Context, email, link string) error {
-	m.Log.Printf("password reset for %s: %s", email, link)
+	m.logLink("password reset", email, link)
 	return nil
 }
 
 func (m *LogMailer) SendAccountDeletionConfirm(_ context.Context, email, link string) error {
-	m.Log.Printf("account deletion confirm for %s: %s", email, link)
+	m.logLink("account deletion confirm", email, link)
 	return nil
 }
 
 func (m *LogMailer) SendAccountDeletionScheduled(_ context.Context, email string, purgeAt int64, reactivateLink string) error {
-	m.Log.Printf("account deletion scheduled for %s, purge at %s: reactivate via %s",
-		email, time.Unix(purgeAt, 0).UTC().Format(time.RFC1123), reactivateLink)
+	m.logDeletion("account deletion scheduled", email, purgeAt, reactivateLink)
 	return nil
 }
 
 func (m *LogMailer) SendAccountDeletionReminder(_ context.Context, email string, purgeAt int64, reactivateLink string) error {
-	m.Log.Printf("account deletion reminder for %s, purge at %s: reactivate via %s",
-		email, time.Unix(purgeAt, 0).UTC().Format(time.RFC1123), reactivateLink)
+	m.logDeletion("account deletion reminder", email, purgeAt, reactivateLink)
 	return nil
 }
 
+// logDeletion records a deletion-lifecycle event. The purge time is not a
+// credential and stays readable; the reactivation link is a credential and is
+// redacted exactly like every other link.
+func (m *LogMailer) logDeletion(kind, email string, purgeAt int64, reactivateLink string) {
+	when := time.Unix(purgeAt, 0).UTC().Format(time.RFC1123)
+	if m.RevealLinks {
+		m.logf("%s for %s, purge at %s: reactivate via %s", kind, email, when, reactivateLink)
+		return
+	}
+	m.logf("%s for %s, purge at %s: reactivation link redacted (path %s)",
+		kind, maskEmail(email), when, linkPath(reactivateLink))
+}
+
 func (m *LogMailer) SendAccountDeleted(_ context.Context, email string) error {
-	m.Log.Printf("account deleted (purged) for %s", email)
+	if m.RevealLinks {
+		m.logf("account deleted (purged) for %s", email)
+		return nil
+	}
+	m.logf("account deleted (purged) for %s", maskEmail(email))
 	return nil
 }
 

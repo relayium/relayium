@@ -92,6 +92,8 @@ func main() {
 	smtpFrom := flag.String("smtp-from", envStr("RELAYIUM_SMTP_FROM", "noreply@relayium.com"), "magic link From address")
 	smtpUser := flag.String("smtp-user", envStr("RELAYIUM_SMTP_USER", ""), "SMTP username (set with -smtp-pass for authenticated providers; empty = unauthenticated relay)")
 	smtpPass := flag.String("smtp-pass", envStr("RELAYIUM_SMTP_PASS", ""), "SMTP password (used with -smtp-user)")
+	mailTransport := flag.String("mail-transport", envStr("RELAYIUM_MAIL_TRANSPORT", mailTransportAuto),
+		`mail transport: "auto" (SMTP when -smtp-addr is set, otherwise a REDACTED log), "smtp" (require SMTP; refuse to boot without -smtp-addr), or "dev-log-links" (print full credential links; requires no SMTP and a literal local base URL — local development only)`)
 	turnSecret := flag.String("turn-secret", envStr("RELAYIUM_TURN_SECRET", ""), "coturn static-auth-secret (empty disables TURN)")
 	turnURLs := flag.String("turn-urls", envStr("RELAYIUM_TURN_URLS", ""), "comma-separated TURN URLs (e.g. turn:host:3478,turns:host:5349)")
 	// 默认留空：见下面 defaultSTUNFrom 的注释——默认值不再是第三方 STUN。
@@ -216,6 +218,20 @@ func main() {
 	}
 	if *adminTOTPSecret != "" && *adminPass == "" {
 		log.Printf("WARNING: RELAYIUM_ADMIN_TOTP_SECRET set but admin password empty; /admin disabled, 2FA ignored")
+	}
+
+	// Mail transport is resolved here, for the same reason: a contradictory
+	// mail configuration must be a failed boot on every startup, not a surprise
+	// the first time someone asks for a password reset. The plan is also what
+	// authorizes plaintext links, so it is decided once, before anything else
+	// can read the flags.
+	mailCfg, err := planMail(*mailTransport, *smtpAddr, *smtpFrom, *smtpUser, *baseURL)
+	if err != nil {
+		log.Fatalf("mail: %v", err)
+	}
+	log.Print(mailCfg.Summary)
+	for _, w := range mailCfg.Warnings {
+		log.Print(w)
 	}
 
 	// Web Sign in with Apple's .p8 key must parse at boot, not on the first
@@ -555,8 +571,12 @@ func main() {
 		// without accounts it is simply not registered — LAN transfer is unaffected.
 		log.Printf("WARNING: open db: %v — account features disabled; LAN transfer unaffected", dbErr)
 	} else {
-		var mailer account.Mailer = &account.LogMailer{Log: log.Default()}
-		if *smtpAddr != "" {
+		// The ONLY production construction of a link-revealing LogMailer. Its
+		// RevealLinks value comes from the validated plan above, never from a
+		// flag read here — see planMail for the three conditions that must hold
+		// together before it can be true.
+		var mailer account.Mailer = &account.LogMailer{Log: log.Default(), RevealLinks: mailCfg.RevealLinks}
+		if mailCfg.UseSMTP {
 			mailer = account.NewSMTPMailer(*smtpAddr, *smtpFrom, *smtpUser, *smtpPass)
 		}
 		acct := account.NewService(store, mailer, account.Config{

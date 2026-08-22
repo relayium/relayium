@@ -137,6 +137,12 @@ async function startServer() {
       RELAYIUM_DB: join(tmp, "relayium.db"),
       RELAYIUM_BLOB_DIR: blobs,
       RELAYIUM_BASE_URL: BASE,
+      // This run reads the verification link out of the server log (see
+      // createAccount). The server redacts credential links by default now, so
+      // the plaintext-link transport has to be asked for explicitly. It is
+      // accepted only because BASE is a literal loopback address and no SMTP is
+      // configured here.
+      RELAYIUM_MAIL_TRANSPORT: "dev-log-links",
       RELAYIUM_STATIC: join(webDir, "dist"),
       // No env file from the developer's own checkout may leak in.
       RELAYIUM_ENV_FILE: join(tmp, "no-such.env"),

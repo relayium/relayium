@@ -30,6 +30,7 @@ exec go run . \
   -db "$state/relayium.db" \
   -blob-dir "$state/blobs" \
   -release-check=false \
+  -mail-transport dev-log-links \
   -enable-google=false \
   -enable-apple=false \
   -enable-magic=false \
