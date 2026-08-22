@@ -1,0 +1,85 @@
+# ROLLBACK-FLOOR — the oldest STILL-SUPPORTED server binary a CURRENT database
+# must run: the floor of the version range a rollback is allowed to land in.
+#
+# Rolling the server back is a real operation: deploy/auto-deploy.sh swaps a new
+# binary in, and when the new one fails its health check the previous binary is
+# put back and pointed at the SAME SQLite file the new one has already opened,
+# migrated and written to. Nothing in `go test ./...` covers that direction.
+# Every migration test in server/account runs one binary forward over an old
+# file; not one of them ever hands a NEWER file to an OLDER binary, which is the
+# only direction a rollback actually takes.
+#
+# This file names the exact commit that binary is built from, and
+# scripts/test/db-rollback-harness.sh builds it — the real binary, from these
+# exact git objects — and drives one shared database through
+# floor -> HEAD -> floor -> HEAD.
+#
+# ## Format
+#
+# Blank lines and lines whose first character is `#` are ignored. Exactly ONE
+# significant line must remain, and it must match, byte for byte:
+#
+#     commit <40 lowercase hex digits>
+#
+# Anything else is a parse failure, not a default: see parseRollbackFloor in
+# server/rollback_floor_test.go, which is the authoritative reader. The harness
+# applies the same rule independently in shell so a floor that only one of them
+# can read fails both.
+#
+# ## What this commit is
+#
+# 7b3c6f4973e19ade7cd7bfa1699c745b60accf86 is the oldest rollback baseline this
+# repository still supports — the bottom of the supported range, not a mirror of
+# whatever is deployed at this moment. It was chosen because it is
+# PRODUCTION-VERIFIED: it is a commit that really ran in production, so a
+# rollback landing on it is an operation that can actually happen rather than a
+# hypothetical version gap.
+#
+# It carries the billing-deletion journal shape (server/account/billing_deletion.go),
+# the metered upload path (server/account/files.go) and the usage_periods /
+# usage_monthly accounting semantics (server/account/sqlite.go), which are the
+# three places where a database written by a newer binary could plausibly stop
+# an older one.
+#
+# ## It may lag production, and lagging is the safe direction
+#
+# This line is NOT kept in step with the deployed commit, and production moving
+# forward is not by itself a reason to touch it. Deploys happen continuously;
+# the supported rollback floor changes far more rarely, so this record is
+# expected to sit behind production, potentially by a long way.
+#
+# That gap is conservative rather than risky. A floor OLDER than the binary an
+# operator would really be put back onto makes the harness exercise a strictly
+# LONGER version gap: it can go red on an incompatibility no real rollback would
+# ever meet, but it cannot go green on one a real rollback would hit. An
+# over-aggressive floor has the opposite, dangerous asymmetry. When in doubt,
+# leave this line alone.
+#
+# ## Advancing it
+#
+# Raising this line is its own deliberate change, never a side effect of a
+# deploy and never bundled into the change that made the gate go red. All three
+# of the following must hold:
+#
+#   1. A NEWER COMMIT IS ESTABLISHED AS THE ACTUAL ROLLBACK BASELINE — not
+#      merely "production moved past the old one", but that the newer commit is
+#      genuinely the oldest binary an operator would now be rolled back onto and
+#      everything below it is out of support. Until that is true of a specific
+#      newer commit, this line stays exactly where it is.
+#   2. THE ADVANCE IS A LATER CANDIDATE CHANGE. It lands as its own reviewed
+#      change on top of the work that established the new baseline, so the move
+#      can be judged on its own evidence.
+#   3. THE CANDIDATE'S HEAD STAYS DIFFERENT FROM IT. A floor equal to the tree
+#      under test is not a rollback at all; the harness refuses it outright
+#      (both binaries would hash the same) and so should any reviewer.
+#
+# The commit must also be an ancestor of HEAD and must contain a buildable
+# server/ tree; the guards refuse it otherwise.
+#
+# ## The one edit this record exists to forbid
+#
+# Moving this line to make a FAILING rollback pass. A floor chosen so the gate
+# goes green proves nothing about the binary an operator would really roll back
+# to — it deletes the evidence instead of producing it. If the harness goes red,
+# the finding is the incompatibility it just discovered, never a newer floor.
+commit 7b3c6f4973e19ade7cd7bfa1699c745b60accf86
