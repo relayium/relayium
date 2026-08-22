@@ -62,6 +62,8 @@ definitions in [`server/main.go`](../server/main.go). The essentials:
 |---|---|
 | `RELAYIUM_ADDR` | Listen address inside the container. Default `:8080`; leave it alone unless you changed the Dockerfile. |
 | `RELAYIUM_BASE_URL` | Public URL of your instance, e.g. `https://relayium.example.com`. Used to build links (magic-link email, join links) and to decide whether session cookies get the `Secure` flag — set it to your real `https://` URL. |
+| `RELAYIUM_MAIL_TRANSPORT` | How verification / password-reset / deletion emails leave the server: `auto` (default), `smtp`, or `dev-log-links`. See [Email delivery](#email-delivery) below — **set this to `smtp` on a real deployment** so a missing SMTP address fails the boot instead of silently sending nothing. |
+| `RELAYIUM_SMTP_ADDR` / `RELAYIUM_SMTP_FROM` / `RELAYIUM_SMTP_USER` / `RELAYIUM_SMTP_PASS` | Your outbound SMTP relay. `host:port`, the From header, and optional credentials (leave user/pass empty for an unauthenticated local relay). See [Email delivery](#email-delivery). |
 | `RELAYIUM_DB` | SQLite database path. The Docker image already points this at `/data/relayium.db` inside the persisted volume. |
 | `RELAYIUM_BLOB_DIR` | Directory for stored-transfer ciphertext blobs. Docker image default: `/data/blobs`. |
 | `RELAYIUM_STATIC` | Built SPA directory the Go server falls back to serving. Docker image default: `/app/web/dist`. |
@@ -86,6 +88,95 @@ unset.
 Secrets belong in `server/.env` with mode `0600` — never on the command line,
 where `ps` or `/proc/<pid>/environ` would expose them. `server/.env` is
 git-ignored by default; never commit real secrets to your fork.
+
+## Email delivery
+
+Relayium sends email for four things: **email verification**, **password
+reset**, **account-deletion confirmation**, and — if you turned it on —
+**magic-link sign-in**. Every one of those messages carries a single-use link
+whose token *is* a credential: whoever holds it can take over the account.
+
+`RELAYIUM_MAIL_TRANSPORT` decides how those messages leave the server. The
+resolved choice is printed on the first lines of the log at every startup, so
+you never have to guess which one is live.
+
+| Value | What happens |
+|---|---|
+| `auto` (default) | Uses SMTP when `RELAYIUM_SMTP_ADDR` is set. **With no SMTP address, no email is delivered at all** — the events go to the log with the recipient masked and the link reduced to its path, and the server warns you at boot. Your users cannot finish verification or a password reset. |
+| `smtp` | Requires SMTP. When `RELAYIUM_SMTP_ADDR` is missing or empty **the server refuses to start**. Boot checks only that an address is present; it does not resolve, connect to or authenticate against the relay. |
+| `dev-log-links` | Prints the full links, tokens included, to the log. Local development only — see the warning below. |
+
+**Use `smtp` for anything real.** The difference matters the day the SMTP
+address fails to load or is left unset: under `auto` the server comes up
+healthy and quietly stops emailing anyone, and you find out from a user who
+cannot reset their password. Under `smtp` that same empty address fails the
+boot, which your process supervisor and your deployment both notice
+immediately.
+
+What `smtp` does **not** check is whether the relay works. Startup only
+verifies that `RELAYIUM_SMTP_ADDR` is non-empty — nothing is resolved,
+connected to or authenticated at boot. A host that is mistyped but still
+non-empty, an unreachable port, a TLS failure or a wrong password therefore
+surfaces on the first message that is actually sent, when that send fails. Send
+yourself a verification or password-reset email after changing these settings,
+or probe the relay separately (for example with `swaks`, or `openssl s_client
+-starttls smtp -connect mail.example.com:587`), rather than reading a
+successful boot as proof that mail is being delivered.
+
+```
+RELAYIUM_MAIL_TRANSPORT=smtp
+RELAYIUM_SMTP_ADDR=mail.example.com:587
+RELAYIUM_SMTP_FROM=noreply@example.com
+RELAYIUM_SMTP_USER=noreply@example.com
+RELAYIUM_SMTP_PASS=...
+```
+
+Go upgrades the connection with STARTTLS before sending credentials, so the
+usual authenticated submission providers on port 587 work. Leave
+`RELAYIUM_SMTP_USER` and `RELAYIUM_SMTP_PASS` empty for an unauthenticated
+local relay such as `127.0.0.1:25`. Give `RELAYIUM_SMTP_FROM` a real address at
+a domain you control with SPF/DKIM set up, or your mail lands in spam.
+
+### What the log shows, and why
+
+Outside `dev-log-links`, a mail event is recorded like this:
+
+```
+verify email for f***@example.com: link redacted (path /verify-email); ...
+```
+
+The local part of the address is masked, and the token — which lives in the
+query string — is never written. That is deliberate: application logs get
+shipped to aggregators, attached to bug reports and read by more people than
+the mailbox itself, and a log line containing a live reset link is an account
+takeover waiting to be found. An address or link that does not parse is
+replaced outright rather than echoed, so nothing can forge log lines through it.
+
+### `dev-log-links` — local development only
+
+> **Warning.** `dev-log-links` prints complete sign-in, verification,
+> password-reset and account-deletion links, tokens included, into the log.
+> Anyone who can read that log can take over any account on the instance. Never
+> use it on a shared, hosted or production instance.
+
+Because that is so easy to leave switched on by accident, the server refuses it
+unless **all three** of these hold at once:
+
+1. you selected `dev-log-links` explicitly — no configuration reaches it by default;
+2. no SMTP address is configured; and
+3. `RELAYIUM_BASE_URL` points at a **literal** local address: `localhost`, or a
+   loopback / private / link-local IP such as `127.0.0.1`, `[::1]`,
+   `192.168.1.10` or `10.0.0.5`.
+
+A *hostname* is refused even when it currently resolves to a local address —
+the server does no name lookup, precisely so that no DNS answer can talk a
+public deployment into printing credentials. If any condition fails, startup
+fails with a message naming the one that did.
+
+Relayium's own local harnesses (`scripts/start-device-inbox-v2-local.sh`, the
+shared acceptance launcher, and the Device Inbox end-to-end run) pass
+`-mail-transport dev-log-links` for exactly this reason: they read the
+verification link back out of the log to stand in for a user clicking it.
 
 ## Admin dashboard (optional, and NOT read-only)
 

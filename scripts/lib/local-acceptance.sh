@@ -382,6 +382,7 @@ acceptance_start_server() {
     -blob-dir "$run_root/blobs" \
     -static "$static_dir" \
     -stun-urls "$loopback_stun" \
+    -mail-transport dev-log-links \
     >"$run_root/server.log" 2>&1 &
   server_pid=$!
   register_child server "$server_pid"
@@ -518,9 +519,12 @@ acceptance_create_account() {
     --data-binary "@$run_root/register.json" >/dev/null \
     || fail "could not register the acceptance account"
 
-  # The server has no SMTP configured, so it logs the verification link instead
-  # of sending one. Reading it here is the local equivalent of the user clicking
-  # it.
+  # The server has no SMTP configured and was started with
+  # `-mail-transport dev-log-links`, so it logs the verification link in
+  # plaintext instead of sending one. Reading it here is the local equivalent of
+  # the user clicking it. Without that transport the link is REDACTED to its
+  # path and this read finds nothing — which is the point: a real deployment
+  # must not leave account-takeover links in its log.
   #
   # `grep -m1` rather than `grep | head -1`: under `set -o pipefail` the head
   # closing the pipe can take grep down with SIGPIPE, which turns a working read
