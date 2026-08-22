@@ -8,10 +8,12 @@ name: compat
 # It used to be the first step of `native-web-pairing.yml`, which is a 45-minute
 # macOS job behind a path filter. Both of those are wrong for a contract check:
 #
-#   * `npm run test:vectors` needs a checkout and Node. It does NOT need a macOS
-#     runner, a Go toolchain, a Chrome, an `npm ci` or a Vite build, and running
-#     it inside a job that has all of those means the seconds-long answer waits
-#     behind minutes of setup that have nothing to do with it.
+#   * `npm run test:vectors` needs a checkout, Node, and the PRODUCTION half of
+#     `web/`'s dependency tree — `gen-crypto-vectors.mjs` imports
+#     `libsodium-wrappers`. It does NOT need a macOS runner, a Go toolchain, a
+#     Chrome, a Vite build, or any devDependency, and running it inside a job
+#     that has all of those means the seconds-long answer waits behind minutes
+#     of setup that have nothing to do with it.
 #   * A path filter is per-WORKFLOW. As the first step of a filtered workflow,
 #     the vector gate ran only when that workflow's own trees changed — so the
 #     moment a filter is narrowed, or a NEW platform root appears with its own
@@ -116,13 +118,50 @@ jobs:
       # human-readable version in a trailing comment) so a compromised or
       # retagged upstream release can't silently change what runs here.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      # Node only, and deliberately no `cache: npm`: this job never runs
-      # `npm ci`. `check-wire-vectors.mjs` and both generators import nothing
-      # but `node:` builtins, so restoring a dependency cache would be pure
-      # latency for a job whose whole point is being seconds long.
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 24
+      # This job DOES need a dependency install, and the comment here used to
+      # say the opposite.
+      #
+      # It was true until `gen-crypto-vectors.mjs` joined the gate's table in
+      # `4342cc6e`: before that, `check-wire-vectors.mjs` and both generators
+      # imported nothing but `node:` builtins. That generator imports
+      # `libsodium-wrappers` — a PRODUCTION dependency — so from that commit on a
+      # runner with no dependency tree cannot run this gate at all. It went
+      # unnoticed because a developer checkout already has `web/node_modules`
+      # lying around; a clean runner gets ERR_MODULE_NOT_FOUND and the gate is
+      # red for a reason that has nothing to do with the contract it checks,
+      # which is the shortest path to somebody making it advisory.
+      #
+      # So: the smallest deterministic closure that actually runs the
+      # generators, and nothing else.
+      #
+      #   * `npm ci`, never `npm install` — the tree comes from
+      #     `package-lock.json` exactly, and the lockfile is never rewritten
+      #     here. A gate that compares frozen bytes is installed from frozen
+      #     bytes.
+      #   * `--omit=dev` — the generators need `libsodium-wrappers`; they do not
+      #     need Vite, Vitest, svelte-check or TypeScript. 31 packages rather
+      #     than the whole tree.
+      #   * `--ignore-scripts` — nothing in that closure needs a lifecycle
+      #     script to work, and two packages in it (`yargs`, `get-caller-file`)
+      #     declare `prepare` scripts shelling out to `tsc` and `npm run
+      #     compile`, which `--omit=dev` has deliberately not installed.
+      #
+      # Deliberately still no `cache: npm`. Measured from tracked bytes only
+      # with an empty npm cache, this install is ~1.2s against ~0.5s for the
+      # gate itself; a setup-node cache restore-and-save round trip is not
+      # reliably cheaper than that, and it would put a shared mutable artifact
+      # in the path of the one check that gates every merge. A second that may
+      # not exist is not worth that blast radius.
+      #
+      # Presence, ordering, working directory and each flag are asserted by
+      # `scripts/test/ci-event-policy-test.mjs`; none of it is visible to YAML
+      # validity or to actionlint.
+      - name: Install the production dependency closure the generators import
+        working-directory: web
+        run: npm ci --ignore-scripts --omit=dev
       # `apps/RelayiumKit/Tests/Fixtures/*-wire-vectors.json` are transcriptions
       # of the Web implementation that the Swift suites assert against. If the
       # Web wire moves and the fixtures are not regenerated, every Swift vector
