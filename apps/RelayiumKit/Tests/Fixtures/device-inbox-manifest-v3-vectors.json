@@ -36,7 +36,13 @@
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"report.pdf\",\"size\":1024}]}",
       "kind": "file",
       "total": 1024,
-      "items": [{ "kind": "file", "name": "report.pdf", "size": 1024 }]
+      "items": [
+        {
+          "kind": "file",
+          "name": "report.pdf",
+          "size": 1024
+        }
+      ]
     },
     {
       "name": "several files keep manifest order",
@@ -44,9 +50,21 @@
       "kind": "file",
       "total": 3,
       "items": [
-        { "kind": "file", "name": "b.txt", "size": 2 },
-        { "kind": "file", "name": "a.txt", "size": 1 },
-        { "kind": "file", "name": "c.txt", "size": 0 }
+        {
+          "kind": "file",
+          "name": "b.txt",
+          "size": 2
+        },
+        {
+          "kind": "file",
+          "name": "a.txt",
+          "size": 1
+        },
+        {
+          "kind": "file",
+          "name": "c.txt",
+          "size": 0
+        }
       ]
     },
     {
@@ -54,77 +72,140 @@
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"trip/day 1/IMG_0001.jpg\",\"size\":4096}]}",
       "kind": "file",
       "total": 4096,
-      "items": [{ "kind": "file", "name": "trip/day 1/IMG_0001.jpg", "size": 4096 }]
+      "items": [
+        {
+          "kind": "file",
+          "name": "trip/day 1/IMG_0001.jpg",
+          "size": 4096
+        }
+      ]
     },
     {
       "name": "an empty file is a real file",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"empty\",\"size\":0}]}",
       "kind": "file",
       "total": 0,
-      "items": [{ "kind": "file", "name": "empty", "size": 0 }]
+      "items": [
+        {
+          "kind": "file",
+          "name": "empty",
+          "size": 0
+        }
+      ]
     },
     {
       "name": "non-ASCII names are emitted raw, never escaped",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"发票 2026.pdf\",\"size\":7}]}",
       "kind": "file",
       "total": 7,
-      "items": [{ "kind": "file", "name": "发票 2026.pdf", "size": 7 }]
+      "items": [
+        {
+          "kind": "file",
+          "name": "发票 2026.pdf",
+          "size": 7
+        }
+      ]
     },
     {
       "name": "quote and backslash are the only structural escapes",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"say \\\"hi\\\".txt\",\"size\":5}]}",
       "kind": "file",
       "total": 5,
-      "items": [{ "kind": "file", "name": "say \"hi\".txt", "size": 5 }]
+      "items": [
+        {
+          "kind": "file",
+          "name": "say \"hi\".txt",
+          "size": 5
+        }
+      ]
     },
     {
       "name": "U+2028 is raw here and escaped by some encoders; this pins ours",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"line\u2028sep.txt\",\"size\":1}]}",
       "kind": "file",
       "total": 1,
-      "items": [{ "kind": "file", "name": "line\u2028sep.txt", "size": 1 }]
+      "items": [
+        {
+          "kind": "file",
+          "name": "line\u2028sep.txt",
+          "size": 1
+        }
+      ]
     },
     {
       "name": "HTML-significant characters are raw, not \\u003c escaped",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a<b>&c.txt\",\"size\":1}]}",
       "kind": "file",
       "total": 1,
-      "items": [{ "kind": "file", "name": "a<b>&c.txt", "size": 1 }]
+      "items": [
+        {
+          "kind": "file",
+          "name": "a<b>&c.txt",
+          "size": 1
+        }
+      ]
     },
     {
       "name": "the drive-prefix rule is measured in bytes, not code units",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"é:1.txt\",\"size\":1}]}",
       "kind": "file",
       "total": 1,
-      "items": [{ "kind": "file", "name": "é:1.txt", "size": 1 }]
+      "items": [
+        {
+          "kind": "file",
+          "name": "é:1.txt",
+          "size": 1
+        }
+      ]
     },
     {
       "name": "the largest exactly-representable size",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"huge.bin\",\"size\":9007199254740991}]}",
       "kind": "file",
       "total": 9007199254740991,
-      "items": [{ "kind": "file", "name": "huge.bin", "size": 9007199254740991 }]
+      "items": [
+        {
+          "kind": "file",
+          "name": "huge.bin",
+          "size": 9007199254740991
+        }
+      ]
     },
     {
       "name": "text carries only its length, and no name",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"text\",\"size\":11}]}",
       "kind": "text",
       "total": 11,
-      "items": [{ "kind": "text", "size": 11 }]
+      "items": [
+        {
+          "kind": "text",
+          "size": 11
+        }
+      ]
     },
     {
       "name": "the shortest message",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"text\",\"size\":1}]}",
       "kind": "text",
       "total": 1,
-      "items": [{ "kind": "text", "size": 1 }]
+      "items": [
+        {
+          "kind": "text",
+          "size": 1
+        }
+      ]
     },
     {
       "name": "the longest message",
       "canonical": "{\"v\":3,\"items\":[{\"kind\":\"text\",\"size\":65536}]}",
       "kind": "text",
       "total": 65536,
-      "items": [{ "kind": "text", "size": 65536 }]
+      "items": [
+        {
+          "kind": "text",
+          "size": 65536
+        }
+      ]
     }
   ],
   "refuse": [
