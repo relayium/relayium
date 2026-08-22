@@ -17,12 +17,30 @@ on:
       - 'server/**'
       - 'scripts/go-race-shard.go'
       - 'scripts/test/db-rollback-harness.sh'
+      # The fuzz campaign's own two files. Neither runs here — the campaign is
+      # scheduled, never gating (see .github/workflows/go-fuzz-nightly.yml) —
+      # but an edit to either must still start THIS workflow, because that is
+      # what runs each fuzz target's `f.Add` seeds as ordinary tests and what
+      # proves the module the inventory script enumerates still builds. Without
+      # these two lines a change to the discovery script or to the campaign
+      # lands having run no Go test at all.
+      - 'scripts/list-go-fuzz-targets.sh'
+      - '.github/workflows/go-fuzz-nightly.yml'
       - '.github/workflows/go.yml'
   pull_request:
     paths:
       - 'server/**'
       - 'scripts/go-race-shard.go'
       - 'scripts/test/db-rollback-harness.sh'
+      # The fuzz campaign's own two files. Neither runs here — the campaign is
+      # scheduled, never gating (see .github/workflows/go-fuzz-nightly.yml) —
+      # but an edit to either must still start THIS workflow, because that is
+      # what runs each fuzz target's `f.Add` seeds as ordinary tests and what
+      # proves the module the inventory script enumerates still builds. Without
+      # these two lines a change to the discovery script or to the campaign
+      # lands having run no Go test at all.
+      - 'scripts/list-go-fuzz-targets.sh'
+      - '.github/workflows/go-fuzz-nightly.yml'
       - '.github/workflows/go.yml'
   workflow_dispatch:
 

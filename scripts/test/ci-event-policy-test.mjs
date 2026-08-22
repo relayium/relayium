@@ -49,7 +49,7 @@
 // `apps/android/` change would start a macOS runner that builds nothing it
 // touched — exactly what `apps/**` did to iOS before the native split. The
 // checks are written against COMPILED GLOBS rather than against the literal
-// lists, so "too broad" and "too narrow" fail the same way, and section 7 mutates
+// lists, so "too broad" and "too narrow" fail the same way, and section 8 mutates
 // the parsed workflows to prove each of them can actually fail.
 //
 // `docs/CI-PLATFORM-BOUNDARY.md` states the boundary in prose. This file is what
@@ -109,6 +109,7 @@
 // guard gates every pull request, and giving it a Python or npm dependency to
 // install first would trade a checkable risk for an outage that blocks merges.
 
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -140,6 +141,15 @@ const GOVERNED = [
 ];
 
 const NIGHTLY = "account-race-nightly.yml";
+
+/**
+ * The fuzz campaign, and the script that tells it what to fuzz.
+ *
+ * Named here for the same reason every other file in this section is: dropping
+ * either from this list would take the whole of section 7 with it, silently.
+ */
+const FUZZ_NIGHTLY = "go-fuzz-nightly.yml";
+const FUZZ_INVENTORY = "scripts/list-go-fuzz-targets.sh";
 
 const GROUP = "${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}";
 const CANCEL = "${{ github.event_name == 'pull_request' }}";
@@ -442,7 +452,7 @@ assertParserReadsTheWorkflowSubset();
 
 // ── load every governed workflow ────────────────────────────────────────────
 
-const files = [...GOVERNED.map((g) => g.file), NIGHTLY];
+const files = [...GOVERNED.map((g) => g.file), NIGHTLY, FUZZ_NIGHTLY];
 const docs = new Map();
 for (const file of files) {
   let text;
@@ -982,11 +992,12 @@ for (const { file } of GOVERNED) {
 // row say the same thing.
 //
 // The matrix is evaluated against a WORLD rather than against module state, for
-// the same reason section 6 is: section 7 hands it a mutated copy of the real
+// the same reason section 6 is: section 8 hands it a mutated copy of the real
 // workflows and requires the matching row to complain. A row asserted only
 // against the checked-in filters is a row nobody has ever seen fail, and the
 // most expensive thing in this file is a check that passes because it cannot
-// fail. The real-world call sits next to section 6's, just above section 7.
+// fail. The real-world call sits next to section 6's and section 7's, just
+// above section 8.
 const PATH_MATRIX = [
   ["server/account/pairroom.go", ["go.yml", "native-web-pairing.yml"],
     "server-only: no native runner may start"],
@@ -1020,6 +1031,16 @@ const PATH_MATRIX = [
   ["scripts/go-race-shard.go", ["go.yml"],
     "a Go helper: it used to start the macOS signing lane through `scripts/**`, and then the "
     + "macOS pairing runner through the same glob in the pairing filter. Both are gone"],
+  [FUZZ_INVENTORY, ["go.yml"],
+    "the fuzz campaign's discovery script. It never runs on a pull request — the campaign is "
+    + "scheduled — but it enumerates the Go module, so an edit to it must start the workflow "
+    + "that proves that module still builds and that every fuzz target's seeds still pass. "
+    + "Exactly go.yml: no native runner has any business starting for a Go helper"],
+  [`.github/workflows/${FUZZ_NIGHTLY}`, ["go.yml"],
+    "the campaign workflow itself. It is not in GOVERNED and has no path filter of its own — "
+    + "it is scheduled — so nothing would otherwise run a single Go test on a commit that only "
+    + "edits it, and its `-fuzz` invocation names targets that live in the Go module go.yml "
+    + "compiles"],
   ["scripts/native-web-pairing-acceptance.sh", ["native-web-pairing.yml"],
     "the acceptance script itself: named one file at a time, so it starts its own workflow and "
     + "no other"],
@@ -1056,7 +1077,7 @@ const PATH_MATRIX = [
  * Every trigger-matrix disagreement about one world, as messages.
  *
  * Mirrors `platformBoundaryFailures`: it returns rather than pushes, so the
- * real world's messages become failures at the call site and section 7 can
+ * real world's messages become failures at the call site and section 8 can
  * assert that a specific mutation produces a specific row's complaint.
  */
 function pathMatrixFailures(world) {
@@ -1122,7 +1143,7 @@ check(
 //
 // All of it is invisible to YAML validity and to actionlint: a filter widened
 // back to `apps/**` is valid, a placeholder `echo` job is valid, and
-// `continue-on-error: true` on the compatibility gate is valid. Section 7 then
+// `continue-on-error: true` on the compatibility gate is valid. Section 8 then
 // mutates the parsed workflows to prove every assertion here can actually fail,
 // because a policy check that cannot fail is the most expensive kind of green.
 //
@@ -1417,9 +1438,26 @@ const appRoots = (() => {
 })();
 
 /**
+ * Does the fuzz campaign's discovery script exist?
+ *
+ * Read from disk rather than assumed, and carried in the world below, so
+ * section 8 can delete it and require section 7 to notice. A campaign whose
+ * inventory script is gone still parses, still schedules and still declares a
+ * matrix expression — it just discovers nothing, every night, quietly.
+ */
+const fuzzInventoryExists = (() => {
+  try {
+    readFileSync(resolve(repoRoot, FUZZ_INVENTORY));
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+/**
  * Everything the checks below read, in one mutable value.
  *
- * Section 7 hands them a MODIFIED copy of this and requires them to complain,
+ * Section 8 hands them a MODIFIED copy of this and requires them to complain,
  * which is only possible because they read a world rather than module state.
  */
 function realWorld() {
@@ -1428,6 +1466,7 @@ function realWorld() {
     docs: new Map([...docs].map(([file, doc]) => [file, structuredClone(doc)])),
     texts: new Map(workflowTexts),
     roots: new Set(appRoots),
+    inventory: fuzzInventoryExists,
   };
 }
 
@@ -1510,7 +1549,7 @@ function realRunLines(job) {
  * Every platform-boundary complaint about one world, as messages.
  *
  * Returning rather than pushing is the whole design: the real world's messages
- * are appended to `failures`, and section 7 asserts that specific mutations
+ * are appended to `failures`, and section 8 asserts that specific mutations
  * produce specific messages.
  */
 function platformBoundaryFailures(world) {
@@ -2088,7 +2127,7 @@ function platformBoundaryFailures(world) {
   //     its budget only and is deliberately absent from `GOVERNED`. Its presence
   //     is ASSERTED rather than assumed: a budget file whose text never reached
   //     the world would make the marker check inspect the empty string and pass,
-  //     which is the same silent non-assertion section 7 exists to prevent.
+  //     which is the same silent non-assertion section 8 exists to prevent.
   for (const budget of RUNNER_BUDGETS) {
     const doc = world.docs.get(budget.file);
     need(
@@ -2285,18 +2324,490 @@ function platformBoundaryFailures(world) {
   return out;
 }
 
+
+// ── 7. the fuzz campaign: scheduled, discovered, bounded, and never a gate ──
+//
+// Every `Fuzz…` target in `server/` is two things at once, and the difference
+// is the whole of this section.
+//
+//   * As an ordinary test it runs its `f.Add` seeds and stops. That is
+//     milliseconds, it is deterministic, and `go test ./...` in `go.yml`
+//     already does it on every pull request. A crash the campaign once found
+//     becomes a seed, and the seed is what keeps it from coming back.
+//   * With `-fuzz` it GENERATES inputs until a clock runs out. That is timed,
+//     non-deterministic, and worth ten minutes per target — on a schedule, not
+//     in front of a merge.
+//
+// Both halves fail silently in opposite directions, and neither failure is
+// visible to YAML validity or to actionlint:
+//
+//   * `-fuzz` added to a gating workflow adds its `-fuzztime` to every change
+//     and makes a merge gate's verdict depend on the minute it ran. The
+//     symptom is an intermittently red required check, and the first response
+//     to that is always to make it advisory.
+//   * The campaign given a hand-written target list keeps working forever after
+//     it stops being complete: a target nobody adds to the list is never
+//     fuzzed, every listed job is green, and the only signal is the crash that
+//     campaign would have found. Same for a `pull_request:` trigger appearing
+//     on it, for `fail-fast` reverting to its `true` default and cancelling
+//     seven targets over one crash, for the crasher upload losing its
+//     `if: failure()`, and for a budget going unbounded.
+//
+// So the campaign is asserted here as a shape: schedule and manual only, a
+// discovery step that derives the matrix, one bounded command per target, and a
+// crasher artifact retained finitely on failure. Written against a world like
+// sections 5g and 6, so section 8 can break each rule and require the
+// complaint.
+//
+// Deliberately NOT asserted, because this wave does not do them: a persisted or
+// cached corpus, and any commit of generated inputs back to the repository.
+
+/** Minutes, from a `10m` / `600s` style Go duration; NaN when unreadable. */
+function goDurationMinutes(text) {
+  const match = /^(\d+)(ms|m|s|h)$/.exec(text ?? "");
+  if (!match) return NaN;
+  const value = Number(match[1]);
+  switch (match[2]) {
+    case "h": return value * 60;
+    case "m": return value;
+    case "s": return value / 60;
+    default: return value / 60000;
+  }
+}
+
+/**
+ * Every fuzz-campaign complaint about one world, as messages.
+ *
+ * Same contract as `platformBoundaryFailures`: it returns rather than pushes.
+ */
+function fuzzCampaignFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+
+  // 7a. No workflow that gates a change may generate inputs. This is the rule
+  //     the whole split exists for, and it is checked over the GOVERNED set
+  //     rather than over the campaign, because the regression is `-fuzz`
+  //     appearing somewhere else.
+  for (const file of world.governed.map((entry) => entry.file)) {
+    for (const [name, job] of Object.entries(world.docs.get(file)?.jobs ?? {})) {
+      need(
+        !/\s-fuzz(time)?[\s=]/.test(runText(job)),
+        `${file}/${name} runs a timed fuzz campaign (\`-fuzz\`). This workflow gates pull `
+        + `requests: fuzzing here adds its whole \`-fuzztime\` to every change and makes the `
+        + `gate's verdict depend on which inputs the fuzzer happened to generate that minute. `
+        + `The seeds already run as ordinary tests; generation belongs in ${FUZZ_NIGHTLY}.`,
+      );
+    }
+  }
+
+  need(
+    world.inventory,
+    `${FUZZ_INVENTORY} is missing, and it is what tells the campaign which targets exist. `
+    + `Without it ${FUZZ_NIGHTLY} still parses, still schedules and still declares a matrix — it `
+    + `just discovers nothing, every night, and reports the failure of a step nobody reads.`,
+  );
+
+  const doc = world.docs.get(FUZZ_NIGHTLY);
+  need(
+    doc !== undefined,
+    `${FUZZ_NIGHTLY} is missing or unparseable. It is the only place in this repository that `
+    + `generates fuzz inputs; without it every \`Fuzz…\` target is a seed-corpus regression test `
+    + `and nothing ever looks for a new crash.`,
+  );
+  if (!doc) return out;
+
+  // 7b. Scheduled and manual, and nothing else. Stated as an exact key set:
+  //     `push` and `pull_request` are the two that make it a gate, and a
+  //     `pull_request_target` or a `workflow_run` would be a way for somebody
+  //     else's commit to start ten minutes of compute per target.
+  const on = doc.on ?? {};
+  const triggers = Object.keys(on).sort();
+  need(
+    !("push" in on) && !("pull_request" in on),
+    `${FUZZ_NIGHTLY} gained a \`push\` or \`pull_request\` trigger. That puts ten minutes per `
+    + `target in front of every change and makes a merge gate non-deterministic — the exact `
+    + `arrangement this workflow exists to keep out of the gating lanes.`,
+  );
+  need(
+    deepEqual(triggers, ["schedule", "workflow_dispatch"]),
+    `${FUZZ_NIGHTLY}'s triggers are [${triggers.join(", ")}]; want exactly `
+    + `[schedule, workflow_dispatch]. A campaign is something somebody starts or something the `
+    + `clock starts; any other event hands the decision to spend this compute to whoever can `
+    + `cause that event.`,
+  );
+
+  // 7c. Read-only, and no secret in reach. It runs generated inputs through
+  //     production parsing code; it must not be able to publish, deploy or
+  //     authenticate as anything.
+  need(
+    deepEqual(doc.permissions, { contents: "read" }),
+    `${FUZZ_NIGHTLY}'s permissions are ${JSON.stringify(doc.permissions)}, want `
+    + `{"contents":"read"}. This workflow feeds generated bytes to production parsers; a write `
+    + `token in that job is a write token reachable from whatever those bytes make the code do.`,
+  );
+  const jobs = Object.entries(doc.jobs ?? {});
+  need(jobs.length >= 1, `${FUZZ_NIGHTLY} has no jobs, so the campaign fuzzes nothing.`);
+  const wholeBody = JSON.stringify(doc.jobs ?? {});
+  need(
+    !/secrets\./.test(wholeBody),
+    `${FUZZ_NIGHTLY} reads a \`secrets.\` value. Nothing here needs one: it checks out a public `
+    + `tree, builds it and runs it against generated input.`,
+  );
+
+  // 7d. Bounded, non-advisory, non-retrying — for every job, so a future third
+  //     job inherits the rule instead of escaping it.
+  for (const [name, job] of jobs) {
+    const timeout = Number(job["timeout-minutes"]);
+    need(
+      Number.isFinite(timeout) && timeout > 0,
+      `${FUZZ_NIGHTLY}/${name}: timeout-minutes is ${JSON.stringify(job["timeout-minutes"])}, `
+      + `want a finite positive number. Fuzzing is the one workload here that will genuinely run `
+      + `forever if allowed to, so an unbounded job holds a runner for GitHub's six-hour default `
+      + `every night.`,
+    );
+    need(
+      job["continue-on-error"] === undefined,
+      `${FUZZ_NIGHTLY}/${name}: continue-on-error makes the campaign advisory, so a reproducible `
+      + `crash reports as a green night.`,
+    );
+    const text = runText(job);
+    need(
+      !/retry|retries/i.test(text),
+      `${FUZZ_NIGHTLY}/${name}: a retry appeared. A fuzz failure is a saved, minimized input that `
+      + `reproduces; re-rolling the search until it agrees discards the one artifact the run `
+      + `exists to produce.`,
+    );
+    need(
+      !/\|\|\s*(true|:|echo|exit 0)/.test(text),
+      `${FUZZ_NIGHTLY}/${name}: a command swallows its own exit status, so a crash reports green.`,
+    );
+    for (const step of job.steps ?? []) {
+      need(
+        step["continue-on-error"] === undefined,
+        `${FUZZ_NIGHTLY}/${name}: a step sets continue-on-error, which lets a crash report green.`,
+      );
+    }
+  }
+
+  // 7e. The target list is DISCOVERED. Two halves, and each is vacuous without
+  //     the other: a discovery step whose output nothing consumes, and a matrix
+  //     expression pointing at a job that discovers nothing.
+  const discovery = jobs.filter(([, job]) => runText(job).includes(FUZZ_INVENTORY));
+  need(
+    discovery.length === 1,
+    `${discovery.length} job(s) in ${FUZZ_NIGHTLY} run \`${FUZZ_INVENTORY}\`; want exactly one. `
+    + `Zero is a hand-maintained target list, which is the failure this whole arrangement is `
+    + `built to avoid: it keeps working after it stops being complete, and a target nobody `
+    + `remembered to add is simply never fuzzed behind a green board.`,
+  );
+  const [discoveryName, discoveryJob] = discovery[0] ?? [];
+  if (discoveryJob) {
+    const text = runText(discoveryJob);
+    need(
+      /list-go-fuzz-targets\.sh\s+--json/.test(text),
+      `${FUZZ_NIGHTLY}/${discoveryName} never asks \`${FUZZ_INVENTORY}\` for its \`--json\` form, `
+      + `which is the only output shaped like a matrix. The human form would be consumed as one `
+      + `opaque string and the matrix would have a single meaningless entry.`,
+    );
+    need(
+      /GITHUB_OUTPUT/.test(text),
+      `${FUZZ_NIGHTLY}/${discoveryName} does not write to \`$GITHUB_OUTPUT\`, so whatever it `
+      + `discovered stays inside the step and the matrix below reads an empty value.`,
+    );
+    need(
+      Object.keys(discoveryJob.outputs ?? {}).length > 0,
+      `${FUZZ_NIGHTLY}/${discoveryName} declares no \`outputs:\`, so nothing it discovered leaves `
+      + `the job — a step output is not a job output.`,
+    );
+    // Counted over the COMMANDS, not the comments: the sentences around this
+    // step name the script repeatedly and on purpose, and none of them runs it.
+    const invocations =
+      (runText(withoutRunComments(discoveryJob)).match(/list-go-fuzz-targets\.sh/g) ?? []).length;
+    need(
+      invocations === 1,
+      `${FUZZ_NIGHTLY}/${discoveryName} invokes \`${FUZZ_INVENTORY}\` ${invocations} times; want `
+      + `exactly one. The script compiles every test binary in the module to list the targets `
+      + `inside it, so a second call — the obvious one being a human-readable log line next to `
+      + `the \`--json\` form the matrix needs — pays that whole cost twice. And it asks the `
+      + `module twice: the list printed for a reader and the list the campaign fans out over `
+      + `become two independent answers that are equal only by assumption, so a discrepancy `
+      + `between them is invisible in exactly the log somebody would consult to find it. `
+      + `Capture one invocation and echo what was captured.`,
+    );
+  }
+
+  const campaigns = jobs.filter(([, job]) => /go test\b[^\n]*-fuzz\b/.test(runText(job)));
+  need(
+    campaigns.length === 1,
+    `${campaigns.length} job(s) in ${FUZZ_NIGHTLY} actually invoke \`go test -fuzz\`; want exactly `
+    + `one. Zero is a workflow that discovers its targets every night and fuzzes none of them, `
+    + `which reports a green campaign for a search that never ran.`,
+  );
+  const [campaignName, campaign] = campaigns[0] ?? [];
+  if (campaign) {
+    const matrix = campaign.strategy?.matrix;
+    need(
+      typeof matrix === "string" && /fromJSON\(\s*needs\./.test(matrix),
+      `${FUZZ_NIGHTLY}/${campaignName}: strategy.matrix is ${JSON.stringify(matrix)}, want a `
+      + `\`fromJSON(needs.…)\` expression. A literal matrix is a hand-maintained target list `
+      + `wearing YAML: it cannot notice a target that was added and never listed, and it goes `
+      + `green either way.`,
+    );
+    if (typeof matrix === "string" && discoveryName) {
+      need(
+        matrix.includes(`needs.${discoveryName}.outputs.`),
+        `${FUZZ_NIGHTLY}/${campaignName}: its matrix does not read an output of `
+        + `\`${discoveryName}\`, the job that runs \`${FUZZ_INVENTORY}\` (matrix is `
+        + `${JSON.stringify(matrix)}). A matrix fed by anything else is not fed by discovery.`,
+      );
+      const needs = campaign.needs;
+      need(
+        needs === discoveryName || (Array.isArray(needs) && needs.includes(discoveryName)),
+        `${FUZZ_NIGHTLY}/${campaignName}: does not declare \`needs: ${discoveryName}\` `
+        + `(needs is ${JSON.stringify(needs)}), so the matrix reads an output of a job that may `
+        + `not have run.`,
+      );
+    }
+    need(
+      campaign.strategy?.["fail-fast"] === "false",
+      `${FUZZ_NIGHTLY}/${campaignName}: strategy.fail-fast is `
+      + `${JSON.stringify(campaign.strategy?.["fail-fast"])}, want false. These are independent `
+      + `searches over independent code; one target crashing must not cancel the others and turn `
+      + `their verdicts into "unknown".`,
+    );
+
+    // 7f. One bounded command, anchored on the target it was given.
+    const text = runText(campaign);
+    need(
+      /-run\s+'\^\$'/.test(text),
+      `${FUZZ_NIGHTLY}/${campaignName}: the fuzz command has no \`-run '^$'\`, so every ordinary `
+      + `test in the package runs again here — they already ran on the pull request, and their `
+      + `time comes out of the fuzz budget.`,
+    );
+    need(
+      /-fuzz\s+'\^\$\{\{\s*matrix\.target\s*\}\}\$'/.test(text),
+      `${FUZZ_NIGHTLY}/${campaignName}: the \`-fuzz\` pattern is not the anchored `
+      + `\`'^\${{ matrix.target }}$'\`. Unanchored, one job's pattern also matches a future `
+      + `target whose name extends it, and that target is then fuzzed twice while its own job `
+      + `runs a shorter search.`,
+    );
+    need(
+      /-count=1/.test(text),
+      `${FUZZ_NIGHTLY}/${campaignName}: the fuzz command dropped \`-count=1\`, so a cached PASS `
+      + `can stand in for a campaign that never ran.`,
+    );
+
+    const fuzzTime = goDurationMinutes(/-fuzztime\s+(\S+)/.exec(text)?.[1]);
+    const testTimeout = goDurationMinutes(/-timeout\s+(\S+)/.exec(text)?.[1]);
+    const jobTimeout = Number(campaign["timeout-minutes"]);
+    need(
+      Number.isFinite(fuzzTime) && fuzzTime > 0,
+      `${FUZZ_NIGHTLY}/${campaignName}: no finite \`-fuzztime\`. Fuzzing without one runs until `
+      + `the job timeout kills it, which reports as a timed-out job rather than as a clean `
+      + `campaign that found nothing.`,
+    );
+    need(
+      Number.isFinite(testTimeout) && testTimeout > 0,
+      `${FUZZ_NIGHTLY}/${campaignName}: no finite \`-timeout\` on the go test command, so Go's `
+      + `10-minute default applies and would kill a longer campaign as a test timeout.`,
+    );
+    need(
+      !(Number.isFinite(fuzzTime) && Number.isFinite(testTimeout)) || fuzzTime < testTimeout,
+      `${FUZZ_NIGHTLY}/${campaignName}: \`-fuzztime\` (${fuzzTime}m) is not below the go test `
+      + `\`-timeout\` (${testTimeout}m). The harness would kill the campaign at its own budget `
+      + `and print a goroutine dump for a run that was doing exactly what it was told.`,
+    );
+    need(
+      !(Number.isFinite(testTimeout) && Number.isFinite(jobTimeout)) || testTimeout < jobTimeout,
+      `${FUZZ_NIGHTLY}/${campaignName}: the go test \`-timeout\` (${testTimeout}m) is not below `
+      + `the job's timeout-minutes (${jobTimeout}). The job bound would fire first and cancel the `
+      + `runner before Go could write the crasher or the dump that explains why.`,
+    );
+
+    // 7g. The crasher artifact: the only durable output a failing night has.
+    const uploads = (campaign.steps ?? []).filter(
+      (step) => String(step?.uses ?? "").startsWith("actions/upload-artifact@"),
+    );
+    need(
+      uploads.length === 1,
+      `${FUZZ_NIGHTLY}/${campaignName}: ${uploads.length} upload-artifact step(s); want exactly `
+      + `one. A crash writes a minimized, reproducing input under testdata/fuzz/; without the `
+      + `upload the finding is a log line nobody can replay, and the corpus is not persisted `
+      + `anywhere else in this wave.`,
+    );
+    for (const step of uploads) {
+      need(
+        step.if === "failure()",
+        `${FUZZ_NIGHTLY}/${campaignName}: the crasher upload's \`if:\` is `
+        + `${JSON.stringify(step.if)}, want "failure()". On a clean night there is nothing to `
+        + `collect, and an unconditional upload publishes an empty artifact that reads as `
+        + `"a crash was found and is empty".`,
+      );
+      need(
+        /^actions\/upload-artifact@[0-9a-f]{40}$/.test(String(step.uses)),
+        `${FUZZ_NIGHTLY}/${campaignName}: the crasher upload is \`${step.uses}\`, not pinned to a `
+        + `full 40-character commit SHA. Every third-party action in this repository is; a tag `
+        + `can be moved by a compromised or careless upstream, and this step runs in a job that `
+        + `has just executed attacker-shaped input.`,
+      );
+      const retention = Number(step.with?.["retention-days"]);
+      need(
+        Number.isFinite(retention) && retention > 0,
+        `${FUZZ_NIGHTLY}/${campaignName}: the crasher upload's retention-days is `
+        + `${JSON.stringify(step.with?.["retention-days"])}, want a finite positive number. `
+        + `The repository default outlives the fix, and a nightly job that keeps failing `
+        + `accumulates one artifact per night.`,
+      );
+      need(
+        typeof step.with?.path === "string" && step.with.path.includes("testdata/fuzz"),
+        `${FUZZ_NIGHTLY}/${campaignName}: the crasher upload's path is `
+        + `${JSON.stringify(step.with?.path)}, which does not name testdata/fuzz — the directory `
+        + `\`go test -fuzz\` writes a failing input to. An upload aimed elsewhere succeeds and `
+        + `collects nothing.`,
+      );
+      // The artifact name has to VARY per matrix row, and `matrix.id` is the
+      // one field the inventory script guarantees is unique across rows — it
+      // checks the ids for collision separately from the (package, target)
+      // pairs, because flattening `/` to `-` is not injective. `matrix.target`
+      // is the tempting alternative and is wrong: two packages may each define
+      // a `FuzzDecode`, and then two jobs upload one artifact name.
+      need(
+        typeof step.with?.name === "string" && step.with.name.includes("matrix.id"),
+        `${FUZZ_NIGHTLY}/${campaignName}: the crasher upload's name is `
+        + `${JSON.stringify(step.with?.name)}, which is not derived from \`matrix.id\`. A name `
+        + `that is constant, or that varies only by \`matrix.target\`, is shared by two jobs the `
+        + `moment two packages define a target of the same name — and two jobs uploading one `
+        + `artifact name lose one of the two minimized inputs, on a run that is red for a `
+        + `different reason and where nobody is counting artifacts. \`matrix.id\` is the field `
+        + `\`${FUZZ_INVENTORY}\` proves unique before it emits the matrix.`,
+      );
+    }
+  }
+
+  return out;
+}
+
 for (const message of platformBoundaryFailures(realWorld())) failures.push(message);
 for (const message of pathMatrixFailures(realWorld())) failures.push(message);
+for (const message of fuzzCampaignFailures(realWorld())) failures.push(message);
 
-// ── 7. the proof that sections 5g and 6 can fail ────────────────────────────
+// ── 7h. the inventory script's own fail-closed proof, actually executed ─────
+//
+// Everything above reads the campaign's YAML. None of it can say whether
+// `scripts/list-go-fuzz-targets.sh` still FAILS on the shape it promises to
+// reject, and that script's id-collision guard is unfalsifiable against this
+// repository: no two packages in `server/` flatten to one matrix id, so the
+// guard has never been observed to fail and is indistinguishable from a broken
+// one. Section 7g's artifact-name check rests entirely on it — `matrix.id` is
+// only safe to name an artifact by because that guard proves it unique.
+//
+// The script answers this itself with `--self-test`: it runs its own `--json`
+// form as a child process against a fake `go` that replies from a fixture, so
+// it compiles nothing, reads no Go source, needs no toolchain and finishes in
+// well under a second. That is not a fuzz run and does not belong on a
+// schedule, and it must not sit in `go.yml` either — that lane is path-filtered
+// to `server/**` and friends, so the proof would be absent from most commits.
+// Here it runs in the always-on repo-hygiene lane, on every pull request and
+// every `main` push, next to the YAML assertions it backs.
+//
+// Shelling out from a policy test has exactly one failure mode worth designing
+// against: a harness that reports green whatever the child did. So the exit
+// status is the only thing consulted, it is reported verbatim, and the call
+// below is proved to propagate a nonzero one.
+
+/**
+ * Runs `scripts/list-go-fuzz-targets.sh` with `args` and returns complaints
+ * about how it exited — nothing about what it printed, which is the script's
+ * own business and is reproduced here only as diagnostics.
+ *
+ * The script and the working directory are both resolved from `repoRoot`, not
+ * from `process.cwd()`: this file is run from the repository root in CI and
+ * from a `scripts/` shell by hand, and a relative spawn would turn the second
+ * into a confusing ENOENT.
+ *
+ * Bounded three ways, because a hung child here would hold the repo-hygiene
+ * lane to its 10-minute job timeout and report as an infrastructure fault: no
+ * inherited stdin, a wall-clock `timeout` far above the sub-second run it
+ * expects, and a finite `maxBuffer`.
+ */
+function inventoryScriptFailures(args) {
+  const out = [];
+  const label = `${FUZZ_INVENTORY} ${args.join(" ")}`;
+  const run = spawnSync(resolve(repoRoot, FUZZ_INVENTORY), args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 120_000,
+    maxBuffer: 8 * 1024 * 1024,
+  });
+
+  if (run.error) {
+    out.push(
+      `\`${label}\` could not be executed: ${run.error.message}. It is the fail-closed proof `
+      + `behind section 7's \`matrix.id\` assertion, and a script that cannot be run proves `
+      + `nothing — an unreadable or non-executable file must fail here rather than be skipped.`,
+    );
+    return out;
+  }
+
+  const diagnostics = [run.stdout, run.stderr]
+    .map((stream) => String(stream ?? "").trimEnd())
+    .filter(Boolean)
+    .join("\n")
+    .split("\n")
+    .map((line) => `      ${line}`)
+    .join("\n") || "      (no output)";
+
+  if (run.signal) {
+    out.push(
+      `\`${label}\` was killed by ${run.signal} rather than exiting. It compiles nothing and `
+      + `finishes in well under a second, so reaching the harness timeout means it is hung or `
+      + `waiting on input, not slow. Its output so far:\n${diagnostics}`,
+    );
+    return out;
+  }
+
+  if (run.status !== 0) {
+    out.push(
+      `\`${label}\` exited ${run.status}. That script's own checks are what make section 7's `
+      + `\`matrix.id\` artifact name safe, and \`--self-test\` fails only if a fail-closed `
+      + `check stopped failing closed — including the id-collision guard this repository cannot `
+      + `otherwise falsify. Its output:\n${diagnostics}`,
+    );
+  }
+  return out;
+}
+
+for (const message of inventoryScriptFailures(["--self-test"])) failures.push(message);
+
+// The proof that the call above propagates a failure instead of reporting the
+// child's exit status as green — the one thing that would make it a check that
+// cannot fail, and the reason it takes its arguments rather than hard-coding
+// them. The script rejects an unknown argument with status 2, which costs one
+// argv comparison, touches nothing and needs no fixture; any other nonzero exit
+// would do, and this is the cheapest one that is guaranteed not to depend on
+// the state of the module.
+{
+  const probe = "--not-a-flag";
+  const got = inventoryScriptFailures([probe]);
+  check(
+    got.some((message) => message.includes(`${probe}\` exited 2.`)),
+    `running \`${FUZZ_INVENTORY} ${probe}\` — which that script rejects with status 2 — `
+    + `produced ${got.length === 0 ? "no complaint" : JSON.stringify(got)}, so the harness that `
+    + `runs \`--self-test\` above does not propagate a nonzero exit. Every self-test failure `
+    + `would then report as a green policy run, which is worse than not running it at all.`,
+  );
+}
+
+// ── 8. the proof that sections 5g, 6 and 7 can fail ─────────────────────────
 //
 // Every check above reads a world instead of module state precisely so this can
 // exist. Each case below breaks ONE property in a copy of the real workflows and
 // requires the matching complaint by its own wording — not merely "something
 // failed", which a broken parser or an unrelated typo would also satisfy.
 //
-// Both world-driven check sets run against each mutated world: the platform
-// boundary and the trigger matrix. A mutation is free to disturb rows it was
+// All three world-driven check sets run against each mutated world: the
+// platform boundary, the trigger matrix and the fuzz campaign. A mutation is free to disturb rows it was
 // not written for — the assertion is that the named complaint is PRESENT, never
 // that it is alone — and a trigger-matrix row is only worth having once some
 // mutation has actually made it fail.
@@ -3000,13 +3511,252 @@ const MUTATIONS = [
     },
     expect: /compat\.yml declares no job named `wire-vectors`; it declares \[vectors\]/,
   },
+  // ── the fuzz campaign (7) ────────────────────────────────────────────────
+  //
+  // Each of these leaves every workflow valid, actionlint quiet and the board
+  // green. Several of them leave the campaign RUNNING, too — just running less,
+  // or running the wrong thing, which is the shape that never gets noticed.
+  {
+    name: "the campaign becomes a gate again",
+    mutate: (world) => {
+      world.docs.get(FUZZ_NIGHTLY).on.pull_request = null;
+      return world;
+    },
+    expect: /go-fuzz-nightly\.yml gained a `push` or `pull_request` trigger/,
+  },
+  {
+    name: "the campaign loses its schedule and only ever runs when asked",
+    mutate: (world) => {
+      delete world.docs.get(FUZZ_NIGHTLY).on.schedule;
+      return world;
+    },
+    expect: /go-fuzz-nightly\.yml's triggers are \[workflow_dispatch\]/,
+  },
+  {
+    name: "the campaign gains a write token",
+    mutate: (world) => {
+      world.docs.get(FUZZ_NIGHTLY).permissions = { contents: "write" };
+      return world;
+    },
+    expect: /permissions are \{"contents":"write"\}/,
+  },
+  {
+    name: "the campaign reads a secret",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, "go test -run", (job, step) => {
+      step.env = { TOKEN: "${{ secrets.SOME_TOKEN }}" };
+    }),
+    expect: /reads a `secrets\.` value/,
+  },
+  {
+    name: "the discovered matrix is replaced by a hand-written list",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, "go test -run", (job) => {
+      job.strategy.matrix = {
+        include: [{ package: "github.com/relayium/relayium/internal/dltoken", target: "FuzzSignVerify", id: "x" }],
+      };
+    }),
+    expect: /want a `fromJSON\(needs\.…\)` expression/,
+  },
+  {
+    name: "the matrix is fed by something other than the discovery job",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, "go test -run", (job) => {
+      job.strategy.matrix = "${{ fromJSON(needs.build.outputs.matrix) }}";
+    }),
+    expect: /its matrix does not read an output of `discover`/,
+  },
+  {
+    name: "the campaign stops depending on the job that discovers its targets",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, "go test -run", (job) => {
+      delete job.needs;
+    }),
+    expect: /does not declare `needs: discover`/,
+  },
+  {
+    name: "one target's crash cancels every other target",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, "go test -run", (job) => {
+      delete job.strategy["fail-fast"];
+    }),
+    expect: /strategy\.fail-fast is undefined, want false/,
+  },
+  {
+    name: "the discovery step stops asking for the machine-readable form",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, FUZZ_INVENTORY, (job, step) => {
+      step.run = String(step.run).replace(/ --json/g, "");
+    }),
+    expect: /never asks `scripts\/list-go-fuzz-targets\.sh` for its `--json` form/,
+  },
+  {
+    name: "discovery is replaced by a list the workflow carries itself",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, FUZZ_INVENTORY, (job, step) => {
+      step.run = 'echo "matrix={\\"include\\":[]}" >> "$GITHUB_OUTPUT"\n';
+    }),
+    expect: /want exactly one\. Zero is a hand-maintained target list/,
+  },
+  {
+    name: "the discovery job keeps its step output to itself",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, FUZZ_INVENTORY, (job) => {
+      delete job.outputs;
+    }),
+    expect: /declares no `outputs:`/,
+  },
+  {
+    // The shape this workflow actually shipped with, and the reason the check
+    // exists: a human-readable call added above the `--json` one for the log.
+    // Everything still works. It just enumerates the module twice, and the two
+    // answers are never compared.
+    name: "the discovery step lists the module a second time for the log",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, FUZZ_INVENTORY, (job, step) => {
+      step.run = `scripts/list-go-fuzz-targets.sh\n${String(step.run)}`;
+    }),
+    expect: /invokes `scripts\/list-go-fuzz-targets\.sh` 2 times; want exactly one/,
+  },
+  {
+    // A comment that names the script must NOT count as running it, or the
+    // check above would fire on the real workflow, which explains itself at
+    // length. This case asserts the count is taken over commands.
+    name: "a comment mentioning the inventory script is not an invocation",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, FUZZ_INVENTORY, (job, step) => {
+      step.run = `# scripts/list-go-fuzz-targets.sh is what this runs\n${String(step.run)}`;
+    }),
+    refute: /invokes `scripts\/list-go-fuzz-targets\.sh` \d+ times/,
+  },
+  {
+    name: "two campaign jobs can collide on one crasher artifact name",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, "go test -run", (job) => {
+      const upload = (job.steps ?? []).find(
+        (step) => String(step?.uses ?? "").startsWith("actions/upload-artifact@"),
+      );
+      upload.with.name = "fuzz-crashers-${{ matrix.target }}";
+    }),
+    expect: /which is not derived from `matrix\.id`/,
+  },
+  {
+    name: "the inventory script is deleted from the repository",
+    mutate: (world) => { world.inventory = false; return world; },
+    expect: /scripts\/list-go-fuzz-targets\.sh is missing, and it is what tells the campaign/,
+  },
+  {
+    name: "the campaign job loses its timeout",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, "go test -run", (job) => {
+      delete job["timeout-minutes"];
+    }),
+    expect: /go-fuzz-nightly\.yml\/fuzz: timeout-minutes is undefined/,
+  },
+  {
+    name: "the campaign fuzzes until something else stops it",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, "go test -run", (job, step) => {
+      step.run = String(step.run).replace(/-fuzztime \S+ /, "");
+    }),
+    expect: /no finite `-fuzztime`/,
+  },
+  {
+    name: "the fuzz budget grows past the harness timeout that bounds it",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, "go test -run", (job, step) => {
+      step.run = String(step.run).replace(/-fuzztime \S+/, "-fuzztime 30m");
+    }),
+    expect: /is not below the go test `-timeout`/,
+  },
+  {
+    name: "the harness timeout grows past the job budget that bounds it",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, "go test -run", (job, step) => {
+      step.run = String(step.run).replace(/-timeout \S+/, "-timeout 90m");
+    }),
+    expect: /is not below the job's timeout-minutes/,
+  },
+  {
+    name: "the `-fuzz` pattern loses its anchors and adopts its neighbours",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, "go test -run", (job, step) => {
+      step.run = String(step.run).replace(/-fuzz '[^']*'/, "-fuzz ${{ matrix.target }}");
+    }),
+    expect: /the `-fuzz` pattern is not the anchored/,
+  },
+  {
+    name: "the campaign swallows the crash it just found",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, "go test -run", (job, step) => {
+      step.run = `${String(step.run).trimEnd()} || true\n`;
+    }),
+    expect: /go-fuzz-nightly\.yml\/fuzz: a command swallows its own exit status/,
+  },
+  {
+    name: "the crasher upload runs on every night, crash or not",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, "go test -run", (job) => {
+      const upload = job.steps.find((step) => String(step?.uses ?? "").includes("upload-artifact"));
+      delete upload.if;
+    }),
+    expect: /the crasher upload's `if:` is undefined, want "failure\(\)"/,
+  },
+  {
+    name: "the crasher upload moves to a floating tag",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, "go test -run", (job) => {
+      const upload = job.steps.find((step) => String(step?.uses ?? "").includes("upload-artifact"));
+      upload.uses = "actions/upload-artifact@v7";
+    }),
+    expect: /not pinned to a full 40-character commit SHA/,
+  },
+  {
+    name: "the crasher artifact is kept for however long the default says",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, "go test -run", (job) => {
+      const upload = job.steps.find((step) => String(step?.uses ?? "").includes("upload-artifact"));
+      delete upload.with["retention-days"];
+    }),
+    expect: /retention-days is undefined/,
+  },
+  {
+    name: "the crasher upload is aimed at a directory go test never writes",
+    mutate: (world) => withCommandJob(world, FUZZ_NIGHTLY, "go test -run", (job) => {
+      const upload = job.steps.find((step) => String(step?.uses ?? "").includes("upload-artifact"));
+      upload.with.path = "server/coverage";
+    }),
+    expect: /which does not name testdata\/fuzz/,
+  },
+  {
+    name: "the whole campaign workflow is deleted",
+    mutate: (world) => {
+      world.docs.delete(FUZZ_NIGHTLY);
+      world.texts.delete(FUZZ_NIGHTLY);
+      return world;
+    },
+    expect: /go-fuzz-nightly\.yml is missing or unparseable/,
+  },
+  {
+    // The other direction, and the expensive one: fuzzing that migrates back
+    // into a lane every change waits for.
+    name: "go.yml starts generating fuzz inputs on every pull request",
+    mutate: (world) => withCommandJob(world, "go.yml", "go test ./...", (job, step) => {
+      step.run = "go test -fuzz '^Fuzz' -fuzztime 10m ./...\n";
+    }),
+    expect: /go\.yml\/test runs a timed fuzz campaign/,
+  },
+  {
+    name: "go.yml stops watching the script that decides what gets fuzzed",
+    mutate: (world) => withoutPath(world, "go.yml", FUZZ_INVENTORY),
+    expect: /changing "scripts\/list-go-fuzz-targets\.sh" starts \[\]; want \[go\.yml\]/,
+  },
+  {
+    name: "go.yml stops watching the campaign workflow itself",
+    mutate: (world) => withoutPath(world, "go.yml", `.github/workflows/${FUZZ_NIGHTLY}`),
+    expect: /changing "\.github\/workflows\/go-fuzz-nightly\.yml" starts \[\]; want \[go\.yml\]/,
+  },
+  {
+    // The false positive that would get 7a widened until it caught nothing:
+    // running the DISCOVERY script on a pull request is a legitimate thing to
+    // want, and its name contains the letters the fuzz check looks for.
+    name: "go.yml runs the inventory script as an ordinary check",
+    mutate: (world) => withCommandJob(world, "go.yml", "go test ./...", (job, step) => {
+      step.run = `${String(step.run).trimEnd()}\n${FUZZ_INVENTORY}\n`;
+    }),
+    refute: /go\.yml\/test runs a timed fuzz campaign/,
+  },
 ];
 
 for (const { name, mutate, expect, refute } of MUTATIONS) {
   let got;
   try {
     const world = mutate(realWorld());
-    got = [...platformBoundaryFailures(world), ...pathMatrixFailures(world)];
+    got = [
+      ...platformBoundaryFailures(world),
+      ...pathMatrixFailures(world),
+      ...fuzzCampaignFailures(world),
+    ];
   } catch (err) {
     check(false, `the CI trigger-policy mutation "${name}" threw instead of reporting: ${err.message}`);
     continue;
@@ -3041,6 +3791,6 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(
-  `ci-event-policy-test: OK (${GOVERNED.length} governed workflows + ${NIGHTLY}`
+  `ci-event-policy-test: OK (${GOVERNED.length} governed workflows + ${NIGHTLY} + ${FUZZ_NIGHTLY}`
   + `, runner budget on ${RUNNER_BUDGETS.map((b) => b.file).join(", ")})`,
 );

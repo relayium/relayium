@@ -1,0 +1,148 @@
+name: go-fuzz-nightly
+# The fuzz campaign, and the reason it is not in `go.yml`.
+#
+# Every `Fuzz…` target in the server module is also an ordinary test: `go test
+# ./...` runs its `f.Add` seeds and nothing else, in milliseconds, on every pull
+# request. That is deliberate — a seed corpus is a regression suite, and it is
+# what keeps a crash the campaign once found from coming back.
+#
+# GENERATING new inputs is a different thing entirely. It is timed rather than
+# finite, it is non-deterministic by construction, and a target that finds
+# something on the four hundred millionth input finds it on a schedule, not in
+# front of a merge. Putting `-fuzz` in a gating workflow would add ten minutes
+# per target to every change and make the gate's verdict depend on the day it
+# ran; `scripts/test/ci-event-policy-test.mjs` fails if any governed workflow
+# acquires one.
+#
+# It must never be given a `push:` or `pull_request:` trigger, for the same
+# reason `account-race-nightly.yml` must not. The same policy test fails if it
+# does.
+#
+# ## Why the target list is discovered rather than written here
+#
+# A matrix listing the targets by hand keeps working forever after it stops
+# being complete: a target added and never listed is simply never fuzzed, all
+# the listed jobs stay green, and the only signal is the crash this campaign
+# would have found. So `scripts/list-go-fuzz-targets.sh` derives the list from
+# `go list` and `go test -list` and fails closed on zero targets, an
+# unattributable name, a duplicate (package, target) pair, or two distinct pairs
+# whose generated `id`s collide — the `id` names both the job below and its
+# crasher artifact, and flattening a package path's `/` to `-` is not injective.
+# The `discover` job below feeds exactly what that script printed into the
+# matrix, from ONE invocation of it.
+on:
+  schedule:
+    # Off the hour, where GitHub's scheduler is most contended and most likely
+    # to skip a run, and away from account-race-nightly's 11:17.
+    - cron: '43 9 * * *'
+  workflow_dispatch:
+
+# Read-only, and nothing else. This workflow builds a package and runs it
+# against generated inputs; it publishes nothing, deploys nothing and needs no
+# secret. A crasher is uploaded as a run artifact, which `contents: read`
+# already permits, and is deliberately NOT committed back: a campaign that
+# writes to the repository it is fuzzing is a campaign that can push whatever
+# it was fed.
+permissions:
+  contents: read
+
+# Never cancel a run. Each campaign is its own sample of a random search, so a
+# superseded run is lost evidence rather than redundant work, and
+# `github.run_id` is unique per run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # One cheap job whose only output is the list the campaign fans out over.
+  # Separate from the fuzzing on purpose: a discovery failure — the module does
+  # not build, no targets found, output this script cannot attribute to a
+  # package — has to report as itself rather than as "every fuzz job failed".
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
+    steps:
+      # Third-party actions are pinned to a full commit SHA (with the
+      # human-readable version in a trailing comment) so a compromised or
+      # retagged upstream release can't silently change what runs here.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: Toolchain version
+        run: go version
+      # The script validates every package path and target name against a
+      # charset before printing them, which is what makes it safe for the fuzz
+      # job below to interpolate them into a shell command. It exits non-zero on
+      # anything it cannot account for rather than emitting a shorter list.
+      #
+      # Invoked EXACTLY ONCE. The script compiles every test binary in the
+      # module to list the targets inside it, so a second call for a
+      # human-readable log pays that whole cost again — and, worse, asks the
+      # module a second time: the list a reader sees in the log and the list the
+      # matrix fans out over would be two separate answers, equal only by
+      # assumption. One call, captured; the log echoes that same string.
+      - name: Discover fuzz targets
+        id: targets
+        run: |
+          set -euo pipefail
+          MATRIX="$(scripts/list-go-fuzz-targets.sh --json)"
+          echo "$MATRIX"
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+
+  # One job per target, so a crash names the target that produced it and the
+  # other targets still get their full budget.
+  fuzz:
+    needs: discover
+    name: fuzz ${{ matrix.id }}
+    runs-on: ubuntu-latest
+    # 10 minutes of fuzzing, 12 for the test binary, 15 for the job. The gap
+    # between the first two absorbs the build, the seed-corpus baseline and up
+    # to a minute of crash minimization; the gap to the third absorbs checkout
+    # and toolchain setup. All three are finite on purpose — an unbounded fuzz
+    # job holds a runner for GitHub's six-hour default, and a campaign that
+    # cannot end is not a campaign, it is a bill.
+    timeout-minutes: 15
+    strategy:
+      # A crash in one target must not cancel the others. They are independent
+      # searches over independent code, and cancelling the rest would turn one
+      # finding into an unknown verdict for every other target.
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      # `-run '^$'` so the package's ordinary tests do not run again here; they
+      # already ran on the pull request. `-count=1` so nothing is served from
+      # the test cache. Both the target and the package are anchored, so
+      # `^FuzzDecode$` cannot also start a future `FuzzDecodeManifest`.
+      #
+      # No retry. A fuzz failure is a reproducible input written to
+      # testdata/fuzz/ — re-rolling the dice until the campaign agrees discards
+      # the one artifact the run exists to produce.
+      - name: go test -fuzz ${{ matrix.target }}
+        working-directory: server
+        run: go test -run '^$' -fuzz '^${{ matrix.target }}$' -fuzztime 10m -count=1 -timeout 12m ${{ matrix.package }}
+      # Only on failure, because on success there is nothing to collect: the
+      # generated corpus lives in the runner's build cache and is deliberately
+      # not persisted or committed in this first wave. A crasher is different —
+      # it is the minimized input that reproduces, and without it the finding is
+      # a log line nobody can replay.
+      - name: Upload crashers
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-crashers-${{ matrix.id }}
+          path: server/**/testdata/fuzz/**
+          # Long enough to reproduce and fix, short enough that a run of failing
+          # nights does not accumulate storage indefinitely.
+          retention-days: 14
+          # A build break also reaches this step and leaves no crasher behind;
+          # that is the job's failure to report, not a second one.
+          if-no-files-found: warn
