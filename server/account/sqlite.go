@@ -4171,9 +4171,15 @@ func (s *SQLiteStore) ListExpiredOpenUploadSessions(ctx context.Context, before 
 
 // ListOrphanDoneUploadSessions returns finalized (done=1) sessions idle since
 // at/before `before` whose blob is NOT referenced by any stored_files row — a
-// finalize that crashed (or whose DeleteUploadSession failed) after claiming
-// done but before persisting the file. Their partial blobs would otherwise leak
-// forever, since the open-session reaper only ever looks at done=0 rows.
+// finalize that crashed after claiming done but before persisting the file.
+// Their partial blobs would otherwise leak forever, since the open-session
+// reaper only ever looks at done=0 rows.
+//
+// A finalize that REFUSED the object matches this clause too, and harmlessly:
+// it keeps its row as a tombstone but drops its own blob on the way out, so
+// this pass finds nothing left to delete. A finalize that SUCCEEDED never
+// matches, tombstone and all — its blob is referenced by the stored_files row
+// it wrote.
 //
 // `unresolved_at = 0` keeps the recovery state out of it, and that clause is
 // load-bearing rather than tidy: this pass DROPS BLOBS, and an unresolved
