@@ -122,6 +122,11 @@ type appleTxResult struct {
 	Status    string `json:"status"`
 	ExpiresAt int64  `json:"expiresAt"`
 	Provider  string `json:"provider"`
+	// The dispatch-convergence half of the body. A client may not finish a
+	// transaction while a dispatch is still pending, so these are part of the
+	// contract rather than diagnostics.
+	DispatchPending  bool `json:"dispatchPending"`
+	DispatchResolved bool `json:"dispatchResolved"`
 }
 
 func (f *appleTxFixture) mustAccept(t *testing.T, jws string) (appleTxResult, string) {
@@ -272,6 +277,17 @@ func TestSubmittedPurchaseProofResolvesAttemptWhenCanonicalLatestIsRenewal(t *te
 	}
 }
 
+// An UNPROVEN dispatch must apply the canonical lifecycle and still refuse to
+// let the client finish the transaction.
+//
+// "Unproven" is a deferred subscription-group change: the dispatch is for one
+// product and the verified fact describes a different one, so the dispatched
+// purchase may still be an open sheet or an Ask-to-Buy approval. This case used
+// to be reached by transactionReason=="RENEWAL" as well, which was wrong -- a
+// RESTORE AFTER A RENEWAL carrying this dispatch's own token and product proves
+// the dispatch converged, and refusing it stranded the attempt forever. That
+// direction now has its own positive test,
+// TestRestoreAfterRenewalResolvesTheDispatchItBelongsTo.
 func TestAppliedLifecycleWithUnresolvedPurchaseAttemptReturnsConflict(t *testing.T) {
 	f := newAppleTxFixture(t)
 	dispatchToken := "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
@@ -279,7 +295,7 @@ func TestAppliedLifecycleWithUnresolvedPurchaseAttemptReturnsConflict(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	attempt, created, err := f.store.DispatchAppleBillingPurchase(context.Background(), authority, testAppleProduct, dispatchToken, time.Now().Unix())
+	attempt, created, err := f.store.DispatchAppleBillingPurchase(context.Background(), authority, "com.relayium.app.deferred.target", dispatchToken, time.Now().Unix())
 	if err != nil || !created {
 		t.Fatalf("dispatch=%+v created=%v err=%v", attempt, created, err)
 	}

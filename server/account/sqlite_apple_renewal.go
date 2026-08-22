@@ -172,16 +172,57 @@ func (s *SQLiteStore) applyAuthorizedAppleLifecycle(ctx context.Context, ev Sour
 		return SubscriptionApply{}, err
 	}
 	hasAttempt := err == nil
-	immediatePurchase := attemptProduct == ev.AppleDispatchProductID && ev.AppleDispatchPurchase
+	// WHAT PROVES THIS DISPATCH CONVERGED.
+	//
+	// Two facts, and BOTH are load-bearing:
+	//
+	//   1. the attribution token in the verified payload is the one THIS attempt
+	//      minted (subject.AttemptID == attemptID). An older token bound to an
+	//      earlier attempt must never release a newer one;
+	//   2. the delivered product is the product that was dispatched. A DEFERRED
+	//      subscription-group change is the case this rule exists for: a renewal
+	//      of the current product, or an unrelated subscription's renewal, proves
+	//      nothing about a dispatch that may still be an open sheet or an
+	//      Ask-to-Buy approval. Releasing on it would re-arm the account while a
+	//      real charge is still in flight.
+	//
+	// WHAT WAS WRONG. Three additional conditions were required and none of them
+	// proved anything about ownership, so each independently stranded a dispatch
+	// forever while the customer's entitlement was already correct:
+	//
+	//   - transactionReason=="PURCHASE", so a RESTORE AFTER A RENEWAL (which
+	//     carries RENEWAL) could never resolve the dispatch it belonged to;
+	//   - the product read from ev.AppleDispatchProductID, a field ONLY the
+	//     authenticated transaction handler ever set -- so a NOTIFICATION-FIRST
+	//     delivery could never match it, however exactly the product agreed;
+	//   - result.Applied, so an ALREADY-ACCOUNTED stale submission or a duplicate
+	//     JWS resolved nothing, when "there was nothing left to apply" is itself
+	//     the evidence that this account already owns the subscription.
+	//
+	// The product is now read from ev.BillingProductID, which every Apple path
+	// sets from the verified transaction (see appleSourceEvent), so the same
+	// question is asked of a notification and of an intake call.
+	//
+	// A Sandbox transaction never reaches this line on a Production authority --
+	// the environment guards above return first -- so a zero-charge test
+	// transaction can never release a real dispatch.
 	resolveAttempt := hasAttempt && hasSubject && subject.AttemptID == attemptID &&
-		immediatePurchase
+		ev.BillingProductID != "" && attemptProduct == ev.BillingProductID
 
 	result, err := applySourceTx(ctx, tx, ev)
 	if err != nil {
+		if errors.Is(err, ErrAppleSubscriptionConflict) {
+			// A SECOND distinct live Apple subscription reached this account. The
+			// apply is rolled back on purpose so entitlement stays unchanged and the
+			// attempt stays unfinished, which is why the evidence has to be written
+			// outside this transaction rather than in it.
+			_ = tx.Rollback()
+			s.recordAppleSecondSubscriptionIncident(ctx, ev, environment, attemptID)
+		}
 		return SubscriptionApply{}, err
 	}
+	result.PurchaseAttemptPending = hasAttempt
 	if result.Applied {
-		result.PurchaseAttemptPending = hasAttempt
 		if _, err := tx.ExecContext(ctx, `INSERT INTO apple_billing_external_subjects(environment,external_id,user_id,bundle_id)
  VALUES(?,?,?,?) ON CONFLICT(environment,external_id) DO UPDATE SET
  user_id=excluded.user_id,bundle_id=excluded.bundle_id
@@ -195,23 +236,27 @@ func (s *SQLiteStore) applyAuthorizedAppleLifecycle(ctx context.Context, ev Sour
 				return SubscriptionApply{}, err
 			}
 		}
-		if resolveAttempt {
-			res, err := tx.ExecContext(ctx, `UPDATE billing_purchase_attempts SET state='resolved' WHERE id=? AND user_id=? AND epoch=? AND state IN ('prepared','dispatched')`, attemptID, ev.UserID, authority.Epoch)
+	}
+	// Deliberately OUTSIDE the result.Applied branch: an already-accounted or
+	// stale verified fact resolves the dispatch it converged with, and it is a
+	// CAS on state='dispatched', so a second arrival affects zero rows and
+	// changes nothing.
+	if resolveAttempt {
+		res, err := tx.ExecContext(ctx, `UPDATE billing_purchase_attempts SET state='resolved' WHERE id=? AND user_id=? AND epoch=? AND state IN ('prepared','dispatched')`, attemptID, ev.UserID, authority.Epoch)
+		if err != nil {
+			return SubscriptionApply{}, err
+		}
+		if n, err := res.RowsAffected(); err != nil || n != 1 {
 			if err != nil {
 				return SubscriptionApply{}, err
 			}
-			if n, err := res.RowsAffected(); err != nil || n != 1 {
-				if err != nil {
-					return SubscriptionApply{}, err
-				}
-				return SubscriptionApply{}, ErrBillingAuthorityConflict
-			}
-			if err := advanceBillingAuthorityGenerationTx(ctx, tx, authority, ev.Now); err != nil {
-				return SubscriptionApply{}, err
-			}
-			result.PurchaseAttemptPending = false
-			result.PurchaseAttemptResolved = true
+			return SubscriptionApply{}, ErrBillingAuthorityConflict
 		}
+		if err := advanceBillingAuthorityGenerationTx(ctx, tx, authority, ev.Now); err != nil {
+			return SubscriptionApply{}, err
+		}
+		result.PurchaseAttemptPending = false
+		result.PurchaseAttemptResolved = true
 	}
 	return result, tx.Commit()
 }

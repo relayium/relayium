@@ -135,8 +135,6 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 		writeAppleTransactionError(w, http.StatusForbidden, "token_mismatch")
 		return
 	}
-	dispatchPurchase := tx.TransactionReason == "PURCHASE"
-	dispatchProductID := tx.ProductID
 	if s.appleSubscriptions == nil {
 		writeAppleTransactionError(w, http.StatusServiceUnavailable, "reconciliation_unavailable")
 		return
@@ -201,9 +199,14 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
+	// SourceEvent.AppleDispatchPurchase / .AppleDispatchProductID are no longer
+	// set. Resolving a dispatch on transactionReason=="PURCHASE" and an exactly
+	// matching product stranded every restore-after-renewal and every
+	// already-accounted submission; resolution is now ownership convergence in
+	// applyAuthorizedAppleLifecycle. The two fields stay declared in
+	// entitlement.go, which is outside this lease's writable scope, and are
+	// recorded as a follow-up removal.
 	event := appleSourceEventWithRenewal(u.ID, tx, product, renewalState, now)
-	event.AppleDispatchPurchase = dispatchPurchase
-	event.AppleDispatchProductID = dispatchProductID
 	res, err := atomic.ApplyAuthorizedAppleLifecycle(r.Context(), event, renewalState, tx.AppAccountToken, tx.Environment)
 	switch {
 	case errors.Is(err, ErrBillingAuthorityConflict), errors.Is(err, ErrBillingPurchaseAmbiguous):

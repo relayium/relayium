@@ -408,47 +408,10 @@ func (s *SQLiteStore) DispatchBillingPurchase(ctx context.Context, authority Bil
 	return out, true, tx.Commit()
 }
 
-func (s *SQLiteStore) DispatchAppleBillingPurchase(ctx context.Context, authority BillingAuthority, productID, candidateToken string, now int64) (BillingPurchaseAttempt, bool, error) {
-	if authority.Provider != ProviderApple || !validAppAccountToken(candidateToken) {
-		return BillingPurchaseAttempt{}, false, ErrBillingAuthorityConflict
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return BillingPurchaseAttempt{}, false, err
-	}
-	defer tx.Rollback()
-	if frozen, err := billingUserFrozenTx(ctx, tx, authority.UserID, now); err != nil || frozen {
-		if err != nil {
-			return BillingPurchaseAttempt{}, false, err
-		}
-		return BillingPurchaseAttempt{}, false, ErrBillingAuthorityConflict
-	}
-	var current BillingAuthority
-	if err := tx.QueryRowContext(ctx, `SELECT user_id,provider,external_scope,apple_environment,apple_account_token,epoch,intent_id,created_at,updated_at FROM billing_authorities WHERE user_id=?`, authority.UserID).
-		Scan(&current.UserID, &current.Provider, &current.ExternalScope, &current.AppleEnvironment, &current.AppleAccountToken, &current.Epoch, &current.IntentID, &current.CreatedAt, &current.UpdatedAt); err != nil {
-		return BillingPurchaseAttempt{}, false, err
-	}
-	if current != authority {
-		return BillingPurchaseAttempt{}, false, ErrBillingAuthorityConflict
-	}
-	var out BillingPurchaseAttempt
-	err = tx.QueryRowContext(ctx, `SELECT id,user_id,provider,external_scope,product_id,state,provider_ref,provider_session_id,provider_subscription_id,apple_account_token,epoch,created_at FROM billing_purchase_attempts WHERE user_id=? AND epoch=? AND state IN ('prepared','dispatched')`, authority.UserID, authority.Epoch).
-		Scan(&out.ID, &out.UserID, &out.Provider, &out.ExternalScope, &out.ProductID, &out.State, &out.ProviderURL, &out.ProviderSessionID, &out.ProviderSubscriptionID, &out.AppleAccountToken, &out.Epoch, &out.CreatedAt)
-	if err == nil {
-		return out, false, nil
-	}
-	if err != sql.ErrNoRows {
-		return BillingPurchaseAttempt{}, false, err
-	}
-	out = BillingPurchaseAttempt{ID: authx.NewID(), UserID: authority.UserID, Provider: ProviderApple, ExternalScope: authority.ExternalScope, ProductID: productID, State: "dispatched", AppleAccountToken: candidateToken, Epoch: authority.Epoch, CreatedAt: now}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO billing_purchase_attempts(id,user_id,provider,external_scope,product_id,state,provider_ref,apple_account_token,epoch,created_at) VALUES(?,?,?,?,?,'dispatched','',?,?,?)`, out.ID, out.UserID, out.Provider, out.ExternalScope, out.ProductID, out.AppleAccountToken, out.Epoch, out.CreatedAt); err != nil {
-		return BillingPurchaseAttempt{}, false, err
-	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO apple_billing_subjects(app_account_token,user_id,attempt_id,bundle_id,authority_epoch,created_at) VALUES(?,?,?,?,?,?)`, candidateToken, out.UserID, out.ID, out.ExternalScope, out.Epoch, now); err != nil {
-		return BillingPurchaseAttempt{}, false, err
-	}
-	return out, true, tx.Commit()
-}
+// DispatchAppleBillingPurchase and the Apple attempt state machine live in
+// billing_apple_attempt.go: what may re-open a StoreKit sheet is now a bound
+// continuation capability rather than a bare retry, and keeping that decision in
+// one auditable file is the point.
 
 func appleBillingSubjectTx(ctx context.Context, tx *sql.Tx, token string) (AppleBillingSubject, bool, error) {
 	if !validAppAccountToken(token) {

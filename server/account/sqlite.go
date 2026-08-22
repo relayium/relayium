@@ -1234,6 +1234,101 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		`ALTER TABLE billing_purchase_attempts ADD COLUMN provider_session_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE billing_purchase_attempts ADD COLUMN provider_subscription_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE billing_purchase_attempts ADD COLUMN apple_account_token TEXT NOT NULL DEFAULT ''`,
+		// The continuation capability that lets ONE app instance re-open a StoreKit
+		// sheet it already held authority for, after an explicit .userCancelled.
+		// Every column is additive with a default, so a rolling deploy can run the
+		// old and new binaries against the same file in either order: '' is exactly
+		// the legacy one-shot client, which is the safe default rather than
+		// something the new code must remember to apply.
+		//
+		// continuation_verifier holds sha256(secret) and NEVER the secret. The raw
+		// value is returned once, at arming, and exists nowhere at rest.
+		`ALTER TABLE billing_purchase_attempts ADD COLUMN continuation_verifier BLOB NOT NULL DEFAULT X''`,
+		`ALTER TABLE billing_purchase_attempts ADD COLUMN app_instance_id TEXT NOT NULL DEFAULT ''`,
+		// '' legacy | armed | cancelled | locked. Deliberately NOT a new value of
+		// billing_purchase_attempts.state: that column carries a CHECK constraint
+		// SQLite cannot alter, so extending it would force a full table rebuild of
+		// the one table that gates money, and would have to preserve the partial
+		// unique index that enforces one unresolved attempt per generation. Keeping
+		// state's vocabulary exactly as it is leaves every existing query, index and
+		// CHECK untouched. See docs/superpowers/specs/2026-08-22-apple-purchase-cancel-recovery-design.md.
+		`ALTER TABLE billing_purchase_attempts ADD COLUMN continuation_state TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE billing_purchase_attempts ADD COLUMN client_outcome TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE billing_purchase_attempts ADD COLUMN outcome_at INTEGER NOT NULL DEFAULT 0`,
+		// The identity of the arm that is CURRENTLY open -- set by the initial arm
+		// and atomically replaced by every accepted resume. A StoreKit outcome must
+		// present this exact value, so a delayed or duplicated report from a
+		// PREVIOUS arm cannot move the state of the sheet that is open now. Without
+		// it, (attempt, instance, secret) authenticate the caller but not the cycle,
+		// and a stale cancellation could re-open a second sheet while the first was
+		// still able to charge. '' is the legacy one-shot client.
+		`ALTER TABLE billing_purchase_attempts ADD COLUMN arm_request_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE billing_purchase_attempts ADD COLUMN resume_count INTEGER NOT NULL DEFAULT 0`,
+		// Every arm identity ever SPENT by one attempt, for the whole life of that
+		// attempt. billing_purchase_attempts.arm_request_id names only the arm that
+		// is open NOW, so a predicate against it can refuse a replay of the current
+		// id and nothing else: an id from two or more arms ago compares unequal and
+		// was, before this table, accepted again. That is a money-loss path, not an
+		// aesthetic one -- re-arming under a resurrected id makes a delayed duplicate
+		// report from the ORIGINAL arm match the CURRENT one, which drags a live
+		// armed sheet back to cancelled and buys another sheet while the first can
+		// still charge. The server cannot assume a client-generated identifier is
+		// never reused, accidentally or maliciously, so exact non-reuse is stored
+		// rather than inferred.
+		//
+		// The PRIMARY KEY is the enforcement, not an index for one: reserving an id
+		// IS the insert, so the check and the claim are the same atomic act inside
+		// the same transaction as the cancelled->armed replacement. A read-then-write
+		// check would leave a window two concurrent resumes could both pass. It is
+		// exact and unbounded for the attempt -- deliberately NOT a last-N window,
+		// which would let the N+1th-oldest id come back.
+		//
+		// Rolling-safe and additive: a brand-new table an older binary never reads
+		// or writes, so old and new binaries share one file in either order. A row
+		// armed by a binary that predates this table simply has no history; the
+		// resume path backfills its current arm id before reserving a new one, so
+		// the invariant heals on first use instead of needing a data migration.
+		//
+		// It holds NO secret and no provider material: arm ids are opaque, bounded,
+		// client-authored strings, and the capability secret lives only as the
+		// sha256 in continuation_verifier. There is deliberately no REFERENCES to
+		// billing_purchase_attempts: the attempt ledger SURVIVES a hard purge while
+		// this device-capability material is deleted by it, and an FK would make
+		// that legitimate asymmetry impossible.
+		`CREATE TABLE IF NOT EXISTS apple_purchase_arm_ids (
+ attempt_id TEXT NOT NULL,
+ user_id TEXT NOT NULL,
+ arm_request_id TEXT NOT NULL,
+ -- When the id was RECORDED, not necessarily when its sheet was armed: a row
+ -- backfilled by the resume path carries the backfilling request's timestamp.
+ -- It is evidence for an operator, never an input to any decision -- nothing
+ -- here is released by a clock.
+ armed_at INTEGER NOT NULL,
+ PRIMARY KEY(attempt_id,arm_request_id))`,
+		// The hard purge deletes this material by account, so it must not table-scan.
+		`CREATE INDEX IF NOT EXISTS idx_apple_purchase_arm_id_user ON apple_purchase_arm_ids(user_id)`,
+		// Durable, non-secret evidence that one Relayium account was reached by a
+		// SECOND distinct live Apple subscription. Written in its own transaction
+		// because the apply that discovers it is rolled back on purpose: entitlement
+		// must stay unchanged. It records only identities this schema already stores
+		// elsewhere -- never a JWS, a raw token or a continuation secret -- and it is
+		// NOT a claim that Relayium reversed or prevented Apple's charge.
+		`CREATE TABLE IF NOT EXISTS apple_billing_incidents (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL,
+ kind TEXT NOT NULL,
+ bundle_id TEXT NOT NULL DEFAULT '',
+ environment TEXT NOT NULL DEFAULT '',
+ incoming_external_id TEXT NOT NULL DEFAULT '',
+ existing_external_id TEXT NOT NULL DEFAULT '',
+ incoming_product_id TEXT NOT NULL DEFAULT '',
+ attempt_id TEXT NOT NULL DEFAULT '',
+ detected_at INTEGER NOT NULL,
+ last_seen_at INTEGER NOT NULL DEFAULT 0,
+ observations INTEGER NOT NULL DEFAULT 1)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_apple_billing_incident_identity
+ ON apple_billing_incidents(user_id,kind,incoming_external_id,existing_external_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_apple_billing_incident_user ON apple_billing_incidents(user_id,detected_at)`,
 		`CREATE TABLE IF NOT EXISTS apple_billing_subjects (
  app_account_token TEXT PRIMARY KEY,
  user_id TEXT NOT NULL,
@@ -2842,6 +2937,70 @@ func (s *SQLiteStore) ArchiveAndPurgeUser(ctx context.Context, userID string, no
 		// provider's purchase path.
 		{`UPDATE apple_billing_subjects SET deleted_at=? WHERE user_id=? AND deleted_at=0`, []any{now, userID}},
 		{`UPDATE apple_billing_external_subjects SET deleted_at=? WHERE user_id=? AND deleted_at=0`, []any{now, userID}},
+		// The financial attempt ledger SURVIVES the hard purge, for the same reason
+		// the tombstones above do: a late Ask-to-Buy approval or renewal can still
+		// arrive for a purged account, and resolving it needs the dispatch's
+		// attribution (user_id, epoch, product_id, apple_account_token, state).
+		// Deleting the row would not make that fact go away -- it would make it
+		// unattributable, which is the failure mode the tombstones exist to
+		// prevent.
+		//
+		// The DEVICE AND CAPABILITY material the continuation protocol added is a
+		// different question, and it is scrubbed here. app_instance_id identifies
+		// one app install on one device, arm_request_id is a client-generated
+		// identity for one sheet, continuation_verifier is the capability's
+		// sha256, and client_outcome / outcome_at / resume_count are that
+		// capability's bookkeeping. NONE of them is evidence of a charge: no
+		// money-related question is answered by any of them, and no late Apple
+		// fact is resolved by any of them (see applyAuthorizedAppleLifecycle,
+		// which locates the attempt by user_id/epoch/provider/state and then reads
+		// only its id and product_id -- every one of which is preserved below, and
+		// not one of which is scrubbed here). Retaining a
+		// deleted account's device identity indefinitely would contradict the
+		// same "no user-attributed material retained" model that already forced
+		// usage_periods and apple_billing_incidents into this delete set.
+		//
+		// continuation_state is set to '' -- appleContinuationLegacy -- which is
+		// the FAIL-CLOSED choice and not merely the schema default. Every guard on
+		// the continuation path refuses a scrubbed row INDEPENDENTLY: capabilityMatches
+		// requires a non-empty app_instance_id and a 32-byte verifier, armMatches
+		// requires a non-empty stored arm id, and the resume predicate matches only
+		// continuation_state IN ('armed','cancelled'). So the refusal does not rest
+		// on the state column alone -- a scrubbed row cannot be armed, resumed or
+		// reported against even if one guard were later removed. Leaving 'armed' or
+		// 'cancelled' behind would instead describe a live sheet for an account that
+		// no longer exists; 'locked' would assert a StoreKit outcome that was never
+		// observed. '' asserts only what is true after the scrub: this row carries
+		// no continuation capability.
+		{`UPDATE billing_purchase_attempts SET
+		    continuation_state='',
+		    continuation_verifier=X'',
+		    app_instance_id='',
+		    arm_request_id='',
+		    client_outcome='',
+		    outcome_at=0,
+		    resume_count=0
+		  WHERE user_id=?`, []any{userID}},
+		// The spent-arm-id history goes with the scrub above, and for the same
+		// reason: an arm id is a client-authored identity for one StoreKit sheet
+		// on one app install, so it is device/capability material and not
+		// evidence of a charge. No money question is answered by it and no late
+		// Apple fact is resolved by it -- applyAuthorizedAppleLifecycle finds the
+		// attempt by user_id/epoch/provider/state and reads only its id and
+		// product_id, none of which lives here. Retaining it would keep a deleted
+		// account's per-device sheet history indefinitely, exactly what forced
+		// usage_periods and apple_billing_incidents into this delete set.
+		//
+		// DELETE rather than scrub, because unlike the attempt row there is no
+		// financial column to preserve: the whole row is capability material.
+		// Losing it cannot reopen the reuse hole it exists to close, because the
+		// attempt it belonged to is left scrubbed to continuation_state='' by the
+		// statement above -- capabilityMatches, armMatches and the resume
+		// predicate each refuse that row independently, so nothing can be armed,
+		// resumed or reported against it and no arm id can be spent on it again.
+		// This is also why the table carries no REFERENCES: the attempt ledger
+		// and its tombstones survive the purge on purpose while this does not.
+		{`DELETE FROM apple_purchase_arm_ids WHERE user_id=?`, []any{userID}},
 		// Per-provider subscription state. It carries user_id and a real
 		// REFERENCES users(id), so it must go before the users row — and it must
 		// go at all: leaving it would retain a purged account's billing history
@@ -2869,6 +3028,17 @@ func (s *SQLiteStore) ArchiveAndPurgeUser(ctx context.Context, userID string, no
 		               ELSE original_transaction_id END IN (
 		            SELECT external_id FROM subscription_sources
 		             WHERE user_id=? AND provider='apple')`, []any{userID, userID}},
+		// Financial-incident evidence is user-attributed by construction (user_id
+		// plus that account's Apple subscription identities), so a hard purge must
+		// take it for the same reason it takes subscription_sources and
+		// usage_periods: leaving it would retain a purged account's billing
+		// identity and orphan a row per deleted account forever. The evidence is
+		// not lost with it -- each incident is also emitted as a log line when it
+		// is recorded, and the apple_billing_subjects tombstones above still
+		// quarantine any late Apple fact for the same subscription. Deliberately
+		// NOT in the confirm-time transient purge: an account inside the grace
+		// window can still reactivate, and it must come back with its evidence.
+		{`DELETE FROM apple_billing_incidents WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM subscription_sources WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM nodes WHERE owner_type='user' AND owner_user_id=?`, []any{userID}},
 	}

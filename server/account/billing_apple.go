@@ -21,9 +21,25 @@ func (s *Service) handleAppleAccountToken(w http.ResponseWriter, _ *http.Request
 
 // handleApplePurchaseDispatch is the one server permission that may precede a
 // StoreKit sheet. It binds the account permanently to this Apple app and emits
-// exactly one dispatch for the authority generation. A retry after any client
-// outcome must reconcile Transaction.updates/restore; it never gets a second
-// permission to call Product.purchase.
+// exactly one dispatch for the authority generation.
+//
+// A LEGACY request -- one carrying no `appInstanceId` -- is unchanged in every
+// respect: it gets exactly one dispatch, and its retry after any client outcome
+// gets 409 `purchase_reconciliation_required` and must reconcile through
+// Transaction.updates/restore. Old released clients stay strict one-shot
+// clients, which is the whole point of delivering this server-first.
+//
+// A NEW-PROTOCOL request additionally binds a continuation capability (see
+// billing_apple_attempt.go) and, if this account already holds an unresolved
+// attempt that the SAME capability holder explicitly reported as
+// `.userCancelled` FOR THE ARM THAT IS CURRENTLY OPEN, resumes it: same attempt,
+// same attribution token, no new row, no new secret. Nothing about account
+// identity or possession of the `appAccountToken` is retry authority.
+//
+// Every new-protocol dispatch names its arm with `armRequestId`, the initial one
+// included. That name is both the idempotency key for a lost response and the
+// identity a later outcome report must present, which is what stops a duplicate
+// report from an earlier arm re-opening a second sheet.
 func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Request, u User) {
 	if s.appleTx == nil {
 		writeAppleTransactionError(w, http.StatusServiceUnavailable, "verifier_unavailable")
@@ -32,6 +48,11 @@ func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Req
 	var in struct {
 		BundleID  string `json:"bundleId"`
 		ProductID string `json:"productId"`
+		// Additive. Absent on every released client, which is exactly what makes
+		// them strict one-shot.
+		AppInstanceID      string `json:"appInstanceId"`
+		ArmRequestID       string `json:"armRequestId"`
+		ContinuationSecret string `json:"continuationSecret"`
 	}
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
 	dec.DisallowUnknownFields()
@@ -42,6 +63,25 @@ func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Req
 	app, ok := s.appleTx.ConfiguredApp(in.BundleID)
 	if !ok || app.BundleID != in.BundleID {
 		writeAppleTransactionError(w, http.StatusBadRequest, "unknown_bundle")
+		return
+	}
+	// `appInstanceId` alone selects the protocol. A new-protocol request must also
+	// name the arm it is asking for -- on the INITIAL arm as much as on a resume,
+	// because that name is what a later outcome report has to present to prove it
+	// belongs to the sheet that is open now. `continuationSecret` is the only
+	// resume-specific half: there is nothing to prove on a first arm.
+	//
+	// A malformed shape is a 400 rather than a capability refusal: the client
+	// should be told it built the request wrong, not that its capability failed.
+	if in.AppInstanceID != "" {
+		if !validAppleContinuationID(in.AppInstanceID) || !validAppleContinuationID(in.ArmRequestID) {
+			writeAppleTransactionError(w, http.StatusBadRequest, "invalid_request")
+			return
+		}
+	} else if in.ArmRequestID != "" || in.ContinuationSecret != "" {
+		// A legacy client sends neither. Half a capability with no instance is
+		// malformed, and must not be silently downgraded to a one-shot dispatch.
+		writeAppleTransactionError(w, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	if enabled, err := s.applePurchasesEnabled(r.Context()); err != nil {
@@ -84,7 +124,7 @@ func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Req
 	}
 	authorities, ok := s.Store().(interface {
 		AcquireBillingAuthority(context.Context, BillingAuthorityRequest) (BillingAuthority, error)
-		DispatchAppleBillingPurchase(context.Context, BillingAuthority, string, string, int64) (BillingPurchaseAttempt, bool, error)
+		ArmAppleBillingPurchase(context.Context, BillingAuthority, AppleDispatchRequest) (AppleDispatchOutcome, error)
 	})
 	if !ok {
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -99,16 +139,111 @@ func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Req
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	attempt, created, err := authorities.DispatchAppleBillingPurchase(r.Context(), authority, in.ProductID, candidate, s.now().Unix())
+	outcome, err := authorities.ArmAppleBillingPurchase(r.Context(), authority, AppleDispatchRequest{
+		ProductID: in.ProductID, CandidateToken: candidate,
+		AppInstanceID: in.AppInstanceID, ContinuationSecret: in.ContinuationSecret,
+		ArmRequestID: in.ArmRequestID, Now: s.now().Unix(),
+	})
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	if !created {
-		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "purchase_reconciliation_required", "provider": ProviderApple})
+	if outcome.Refusal != "" {
+		// `purchase_outcome_required` deliberately does NOT say this account has a
+		// subscription. The attempt it names has moved no money: the sheet was
+		// authorized and the client has not yet said what StoreKit did.
+		status := http.StatusConflict
+		if outcome.Refusal == appleRefusalCapabilityCode {
+			status = http.StatusForbidden
+		}
+		httpx.WriteJSON(w, status, map[string]string{"error": outcome.Refusal, "provider": ProviderApple})
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]string{"appAccountToken": attempt.AppleAccountToken, "attemptId": attempt.ID})
+	body := map[string]string{"appAccountToken": outcome.Attempt.AppleAccountToken, "attemptId": outcome.Attempt.ID}
+	// The raw continuation secret exists in exactly one response, ever. A resume
+	// deliberately does not re-issue it -- the client already holds it, and that
+	// is what makes a lost resume response replayable without arming twice.
+	if outcome.Secret != "" {
+		body["continuationSecret"] = outcome.Secret
+	}
+	httpx.WriteJSON(w, http.StatusOK, body)
+}
+
+// handleApplePurchaseOutcome records what StoreKit actually did with a sheet
+// this server authorized.
+//
+// It accepts ONLY the exact continuation capability -- same user, bundle,
+// attempt, authority generation, app instance, a secret whose SHA-256 matches
+// the stored verifier under crypto/subtle, and the `armRequestId` of the arm
+// that is CURRENTLY open. Account authentication alone is not enough, and
+// neither is possession of the appAccountToken.
+//
+// The arm id is what makes this a report about one SHEET rather than about one
+// client: every other fact survives a resume unchanged, so a duplicate report
+// issued before an earlier resume would otherwise still authenticate and could
+// move a live armed attempt back to cancelled, authorizing a second sheet while
+// the first could still charge. A report naming any previous arm is refused with
+// the same uniform answer as a wrong secret.
+//
+// The report is a capability-authored ASSERTION, not signed provider proof:
+// Apple signs transactions, never the absence of one. It is therefore trusted
+// for exactly one thing -- releasing a dispatch the same capability holder
+// armed -- and grants, finishes and prices nothing. Only `userCancelled` becomes
+// resumable; `pending`, an error, an unknown result and silence stay locked.
+func (s *Service) handleApplePurchaseOutcome(w http.ResponseWriter, r *http.Request, u User) {
+	if s.appleTx == nil {
+		writeAppleTransactionError(w, http.StatusServiceUnavailable, "verifier_unavailable")
+		return
+	}
+	var in struct {
+		BundleID           string `json:"bundleId"`
+		AttemptID          string `json:"attemptId"`
+		AppInstanceID      string `json:"appInstanceId"`
+		ArmRequestID       string `json:"armRequestId"`
+		ContinuationSecret string `json:"continuationSecret"`
+		Outcome            string `json:"outcome"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&in); err != nil || dec.Decode(new(json.RawMessage)) != io.EOF {
+		writeAppleTransactionError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	app, ok := s.appleTx.ConfiguredApp(in.BundleID)
+	if !ok || app.BundleID != in.BundleID {
+		writeAppleTransactionError(w, http.StatusBadRequest, "unknown_bundle")
+		return
+	}
+	if in.AttemptID == "" || !validAppleOutcome(in.Outcome) ||
+		!validAppleContinuationID(in.AppInstanceID) || !validAppleContinuationID(in.ArmRequestID) ||
+		in.ContinuationSecret == "" {
+		writeAppleTransactionError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	outcomes, ok := s.Store().(interface {
+		RecordAppleBillingPurchaseOutcome(context.Context, AppleOutcomeRequest) (AppleOutcomeResult, error)
+	})
+	if !ok {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	res, err := outcomes.RecordAppleBillingPurchaseOutcome(r.Context(), AppleOutcomeRequest{
+		UserID: u.ID, AttemptID: in.AttemptID, BundleID: in.BundleID,
+		AppInstanceID: in.AppInstanceID, ContinuationSecret: in.ContinuationSecret,
+		ArmRequestID: in.ArmRequestID, Outcome: in.Outcome, Now: s.now().Unix(),
+	})
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !res.Accepted {
+		// One uniform answer for every capability failure, so this endpoint is not
+		// an oracle for which particular fact was wrong. No part of the presented
+		// material is logged.
+		writeAppleTransactionError(w, http.StatusForbidden, appleRefusalCapabilityCode)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]bool{"resumable": res.Resumable})
 }
 
 // applePurchaseMustBeManagedByApple keeps unproven deferred subscription-group

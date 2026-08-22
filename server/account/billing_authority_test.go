@@ -321,6 +321,12 @@ func TestAuthorizedAppleLifecyclePromotesSandboxToProductionAndNeverRegresses(t 
 	}
 }
 
+// This negative changes BOTH halves of the resolution rule at once: the stale
+// renewal names "plus.monthly" while the newer open attempt dispatched
+// "pro.monthly". It is kept exactly as it is -- it is the ordinary field shape --
+// but it does NOT isolate the token-ownership guard, because the product half
+// refuses first. TestAnOldTokenCarryingTheDispatchedProductCannotResolveANewerAttempt
+// below is the one that does.
 func TestAppleRenewalAndOldTokenCannotResolveANewerPurchaseAttempt(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
@@ -361,6 +367,108 @@ func TestAppleRenewalAndOldTokenCannotResolveANewerPurchaseAttempt(t *testing.T)
 	src, ok, err := store.GetSubscriptionSource(ctx, u.ID, ProviderApple)
 	if err != nil || !ok || src.PeriodEnd != renewal.PeriodEnd {
 		t.Fatalf("old subscription lifecycle was blocked: source=%+v ok=%v err=%v", src, ok, err)
+	}
+}
+
+// The dispatch-resolution rule in sqlite_apple_renewal.go has TWO load-bearing
+// halves, and this test isolates the FIRST one:
+//
+//  1. the attribution token in the verified payload is the one THIS attempt
+//     minted -- `subject.AttemptID == attemptID`. An older token bound to an
+//     earlier attempt must never release a newer one;
+//  2. the delivered product is the product that was dispatched.
+//
+// The existing old-token negative above varies both facts together, so the
+// product half refuses first and deleting the ownership guard outright leaves it
+// green. That is a real gap on a money path: the guard is what stops a delayed
+// renewal of an ALREADY-OWNED subscription from being read as convergence of a
+// DIFFERENT, still-open sheet.
+//
+// So here the account re-dispatches the SAME product it already bought -- the
+// ordinary shape after a lapse, a downgrade-and-return, or a cancelled
+// re-purchase -- and the stale renewal of the old subscription therefore carries
+// the EXACT product the newer attempt dispatched. Every other precondition for
+// resolution is satisfied. The token-ownership guard is the only thing left, and
+// what it prevents is concrete: resolving an attempt whose StoreKit sheet may
+// still be open, AND advancing the authority generation, which together
+// authorize a second concurrent charge.
+func TestAnOldTokenCarryingTheDispatchedProductCannotResolveANewerAttempt(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	u, _ := store.UpsertUserByEmail(ctx, "authority-apple-old-token-same-product@example.test", "")
+	// ONE product for the whole test. That is the entire point: the product half
+	// of the rule must be satisfied, not merely absent.
+	const product = "plus.monthly"
+	firstToken := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	authority, err := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{UserID: u.ID, Provider: ProviderApple, ExternalScope: testBundleIOS, AppleAccountToken: firstToken, Now: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, created, err := store.DispatchAppleBillingPurchase(ctx, authority, product, firstToken, 101)
+	if err != nil || !created {
+		t.Fatalf("first dispatch=%+v created=%v err=%v", first, created, err)
+	}
+	purchase := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "plus", Status: "active", Cycle: "monthly", PeriodEnd: 1000, ExternalID: "production:original", ExternalScope: testBundleIOS, BillingProductID: product, AppleTransactionReason: "PURCHASE", ApplePurchaseDateMS: 102000, AppleDispatchPurchase: true, AppleDispatchProductID: product, EventAt: 200, Now: 102}
+	if result, err := store.ApplyAuthorizedAppleSource(ctx, purchase, firstToken, appleEnvProduction, product); err != nil || !result.Applied {
+		t.Fatalf("first purchase result=%+v err=%v", result, err)
+	}
+	afterFirst, _, _ := store.BillingAuthority(ctx, u.ID)
+	if afterFirst.Epoch == authority.Epoch {
+		t.Fatalf("the first purchase did not advance the generation: %+v", afterFirst)
+	}
+
+	// A NEWER sheet for the SAME product, under its own freshly minted token.
+	secondToken := "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+	second, created, err := store.DispatchAppleBillingPurchase(ctx, afterFirst, product, secondToken, 103)
+	if err != nil || !created {
+		t.Fatalf("second dispatch=%+v created=%v err=%v", second, created, err)
+	}
+	if second.ID == first.ID {
+		t.Fatalf("the second dispatch reused the first attempt %q", second.ID)
+	}
+
+	// The delayed renewal of the OLD subscription, presented under the OLD token,
+	// carrying exactly the product the open attempt dispatched.
+	stale := purchase
+	stale.EventAt = 202
+	stale.Now = 104
+	stale.PeriodEnd = 2000
+	stale.AppleTransactionReason = "RENEWAL"
+	stale.AppleDispatchPurchase = false
+	stale.AppleDispatchProductID = ""
+	if result, err := store.ApplyAuthorizedAppleSource(ctx, stale, firstToken, appleEnvProduction, product); err != nil || !result.Applied {
+		t.Fatalf("the old subscription's own lifecycle must still apply: result=%+v err=%v", result, err)
+	}
+
+	// The guard under test: the newer sheet is untouched.
+	var state string
+	if err := store.db.QueryRowContext(ctx, `SELECT state FROM billing_purchase_attempts WHERE id=?`, second.ID).Scan(&state); err != nil || state != "dispatched" {
+		t.Fatalf("an old token carrying the dispatched product resolved a newer attempt: state=%q err=%v", state, err)
+	}
+	// ...and neither is the authority generation, which is the half that would
+	// actually authorize the second charge.
+	afterStale, _, _ := store.BillingAuthority(ctx, u.ID)
+	if afterStale.Epoch != afterFirst.Epoch || afterStale.IntentID != afterFirst.IntentID {
+		t.Fatalf("an old token advanced the authority generation: before=%+v after=%+v", afterFirst, afterStale)
+	}
+
+	// Entitlement semantics are PRESERVED, not traded away for the guard: the old
+	// subscription's own renewal still projects.
+	src, ok, err := store.GetSubscriptionSource(ctx, u.ID, ProviderApple)
+	if err != nil || !ok || src.PeriodEnd != stale.PeriodEnd {
+		t.Fatalf("the old subscription lifecycle was blocked: source=%+v ok=%v err=%v", src, ok, err)
+	}
+
+	// Finally, prove this test isolates what it claims to. If a later edit makes
+	// the products differ, the product half starts refusing first and everything
+	// above would keep passing for the WRONG reason -- exactly the gap this test
+	// exists to close. Assert the isolation rather than trusting the constant.
+	var attemptProduct string
+	if err := store.db.QueryRowContext(ctx, `SELECT product_id FROM billing_purchase_attempts WHERE id=?`, second.ID).Scan(&attemptProduct); err != nil {
+		t.Fatal(err)
+	}
+	if attemptProduct != stale.BillingProductID || attemptProduct == "" {
+		t.Fatalf("this test no longer isolates the token-ownership guard: open attempt dispatched %q while the stale fact carried %q", attemptProduct, stale.BillingProductID)
 	}
 }
 

@@ -231,6 +231,13 @@ func (s *Service) routeMux() *http.ServeMux {
 	// handleAppleAccountToken for why it is not a credential.
 	mux.HandleFunc("POST /api/billing/apple/account-token", s.RequireAuth(s.handleAppleAccountToken))
 	mux.HandleFunc("POST /api/billing/apple/purchase-dispatch", s.RequireAuth(s.handleApplePurchaseDispatch))
+	// What StoreKit actually did with the sheet the dispatch above authorized.
+	// RequireAuth for the same reason its neighbours carry it, but the session is
+	// only half the check: this endpoint accepts nothing without the exact
+	// continuation capability issued with that dispatch, because being the
+	// account owner is not authority to re-open a purchase sheet. See
+	// billing_apple_attempt.go.
+	mux.HandleFunc("POST /api/billing/apple/purchase-outcome", s.RequireAuth(s.handleApplePurchaseOutcome))
 	// The signed-transaction intake the token above exists to be attached to.
 	// RequireAuth for the same reason: it is a native call with a bearer token,
 	// and the caller's identity is half the decision — the other half is Apple's
