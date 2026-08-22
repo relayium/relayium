@@ -376,7 +376,19 @@ public enum AppleSubscriptionPresentation {
                 return blockedNotice(blockedBy: provider, language: language)
             case .verifierUnavailable:
                 return L10n.t(.subscriptionErrorNotReady, language: language)
-            case .reconciliationUnavailable:
+            case .reconciliationUnavailable, .purchaseOutcomeRequired, .continuationRejected:
+                // All three together, and for the same reason `.invalidTransaction`
+                // and `.decoding` are grouped above: the user-facing FACT and the
+                // REPAIR are identical. A sheet whose outcome was never reported,
+                // a capability this device can no longer present, and canonical
+                // status being unavailable all mean "Apple has not confirmed this
+                // yet, and reconciliation will converge it" — which is exactly
+                // what this sentence says, and it is true of each.
+                //
+                // Deliberately NOT distinguished on screen. The two continuation
+                // cases differ in what the CLIENT must do next, not in anything
+                // the user can act on, and naming the capability would describe a
+                // mechanism the product never told them about.
                 return L10n.t(.subscriptionErrorReconciliation, language: language)
             case .unknownBundle:
                 return L10n.t(.subscriptionErrorWrongBuild, language: language)

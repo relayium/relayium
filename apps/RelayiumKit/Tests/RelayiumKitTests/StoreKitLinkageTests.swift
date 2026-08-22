@@ -339,10 +339,30 @@ final class StoreKitLinkageTests: XCTestCase {
 
         // Everything the product actually needs is the same on both, so the App
         // Store build is not a quietly reduced app.
-        let shared = Set(directPlist.keys).subtracting(
-            ["com.apple.security.temporary-exception.mach-lookup.global-name"])
-        XCTAssertEqual(Set(plist.keys), shared,
-                       "the two builds claim different capabilities: \(Set(plist.keys)) vs \(shared)")
+        //
+        // **Exactly two keys are allowed to differ, one in each direction, and
+        // both are deliberate.** The set is written out rather than the
+        // comparison loosened to a subset, so a THIRD divergence — a capability
+        // quietly dropped from one build, or claimed by one and not the other —
+        // still fails here.
+        //
+        //  * Sparkle's Mach-lookup exception is direct-only: the App Store is
+        //    that build's update mechanism and review does not grant a second one.
+        //  * `com.apple.developer.applesignin` is App Store-only: Apple grants it
+        //    per provisioning profile and the Developer ID profile does not carry
+        //    it, so claiming it there would fail to sign. The direct build keeps
+        //    browser sign-in, which is unchanged and present in BOTH.
+        let directOnly = ["com.apple.security.temporary-exception.mach-lookup.global-name"]
+        let appStoreOnly = ["com.apple.developer.applesignin"]
+        XCTAssertEqual(Set(plist.keys).subtracting(appStoreOnly),
+                       Set(directPlist.keys).subtracting(directOnly),
+                       "the two builds claim different capabilities: "
+                       + "\(Set(plist.keys)) vs \(Set(directPlist.keys))")
+        // Each exclusive key really is exclusive, in the direction claimed.
+        XCTAssertNotNil(plist["com.apple.developer.applesignin"],
+                        "the Mac App Store build lost its Apple sign-in entitlement")
+        XCTAssertNil(directPlist["com.apple.developer.applesignin"],
+                     "the Developer ID build claims an entitlement its profile cannot grant")
     }
 
     /// A feed URL in an App Store build is a promise to download and run code

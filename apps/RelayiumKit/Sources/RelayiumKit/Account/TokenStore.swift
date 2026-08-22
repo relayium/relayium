@@ -40,12 +40,28 @@ public final class KeychainTokenStore: TokenStore {
     /// without this the accessibility asked for in `save` is not enforced.
     /// Internal rather than private so the shape can be asserted by tests that
     /// have no entitlement to exercise the real keychain.
+    ///
+    /// `kSecAttrSynchronizable: false` is written out rather than left to the
+    /// default, and it is load-bearing for every item this type stores. An
+    /// item that synced through iCloud Keychain would appear on the user's
+    /// other devices — which is wrong for all three callers and for a different
+    /// reason each time: the bearer is one device's session, the installation
+    /// identity exists precisely to distinguish this machine from a clone of it,
+    /// and the Apple purchase capability's entire claim is "the same app
+    /// instance on the same device", which a synced copy makes false while
+    /// handing a second Mac authority to re-arm a purchase sheet.
+    ///
+    /// It also constrains reads: omitting the key matches only
+    /// non-synchronizable items anyway, so stating it keeps the add and the
+    /// query describing the same item rather than relying on two defaults
+    /// agreeing.
     var baseQuery: [String: Any] {
         var q: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecUseDataProtectionKeychain as String: true,
+            kSecAttrSynchronizable as String: false,
         ]
         if let accessGroup {
             q[kSecAttrAccessGroup as String] = accessGroup

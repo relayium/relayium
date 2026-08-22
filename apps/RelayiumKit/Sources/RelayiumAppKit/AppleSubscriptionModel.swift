@@ -108,9 +108,36 @@ public enum AppleSubmission: Equatable {
     /// The cost of being wrong in the other direction is a transaction the store
     /// keeps re-offering, which is visible, harmless, and self-correcting the
     /// moment a submission is accepted.
+    ///
+    /// ## The two independent reasons a 200 permits a finish
+    ///
+    /// `applied` and `dispatchResolved` answer **different questions**, and the
+    /// rule is their disjunction rather than their conjunction:
+    ///
+    ///  * `applied` says *this exact JWS was durably recorded by this call*;
+    ///  * `dispatchResolved` says *the purchase attempt this transaction belongs
+    ///    to has reached a settled state on the server* — the fact is accounted
+    ///    for, whether or not this particular call is what recorded it.
+    ///
+    /// **The previous rule required `applied`, and that was wrong.** After the
+    /// cancellation-recovery batch the server answers the real, ordinary triplet
+    /// `applied=false, dispatchPending=false, dispatchResolved=true` when it
+    /// converges on a transaction it has **already** accounted for — a
+    /// redelivery of something a previous submission recorded. Requiring
+    /// `applied` made that a permanent non-finish: the store would redeliver the
+    /// same transaction forever, and every redelivery would receive the same
+    /// answer. A transaction the server says is resolved is exactly the one that
+    /// no longer needs redelivering.
+    ///
+    /// **`dispatchPending && !dispatchResolved` is the one shape that must never
+    /// finish, and `applied` does not rescue it.** A dispatch still pending and
+    /// not yet resolved means an arm may still be open — the server has not
+    /// settled whose purchase this is or whether another sheet can still charge.
+    /// Finishing there discards the redelivery that reconciliation depends on,
+    /// so it is refused even when this call recorded the JWS.
     public var permitsFinish: Bool {
         if case .accepted(let result) = self {
-            return result.applied && (!result.dispatchPending || result.dispatchResolved)
+            return result.dispatchResolved || (result.applied && !result.dispatchPending)
         }
         return false
     }
@@ -247,6 +274,25 @@ public final class AppleSubscriptionModel: ObservableObject {
     /// what makes the server's answer — not this model's — what the app renders.
     private let refreshAccount: @MainActor () async -> Void
 
+    /// Where this device's purchase-continuation capability is kept, and `nil`
+    /// when this build has none.
+    ///
+    /// **`nil` is the LEGACY client, exactly and only.** It sends no capability
+    /// fields and gets one dispatch per authority generation — byte-for-byte the
+    /// behaviour of every released build, **including that build's defect**: it
+    /// has no way to report an outcome, so a cancelled sheet is never released
+    /// and the account can never buy again. `Transaction.updates` and `restore`
+    /// do not repair that; they redeliver signed transactions, and a
+    /// cancellation produces none. That deadlock is what the capability exists
+    /// to remove.
+    ///
+    /// It is not a fallback this model may choose when something fails; it is
+    /// the shape of a host that cannot store a secret at all.
+    private let continuation: ApplePurchaseCapabilityRepository?
+    /// This installation's stable app-instance identity. Read once, because the
+    /// server stores it verbatim and a second value would be a second instance.
+    private let appInstanceID: String?
+
     private var updateTask: Task<Void, Never>?
     private var generation = 0
 
@@ -254,12 +300,25 @@ public final class AppleSubscriptionModel: ObservableObject {
                 billing: AppleBillingService,
                 bundleID: String,
                 bearer: @escaping @MainActor () -> String?,
-                refreshAccount: @escaping @MainActor () async -> Void) {
+                refreshAccount: @escaping @MainActor () async -> Void,
+                continuation: ApplePurchaseCapabilityRepository? = nil,
+                appInstanceID: String? = nil) {
         self.store = store
         self.billing = billing
         self.bundleID = bundleID
         self.bearer = bearer
         self.refreshAccount = refreshAccount
+        // Both halves or neither. An instance id with nowhere to keep the secret
+        // would send new-protocol requests it could never report the outcome of,
+        // which is strictly worse than being a legacy client: it arms a sheet and
+        // then deadlocks the account.
+        if let continuation, let appInstanceID, ApplePurchaseIdentity.isValid(appInstanceID) {
+            self.continuation = continuation
+            self.appInstanceID = appInstanceID
+        } else {
+            self.continuation = nil
+            self.appInstanceID = nil
+        }
     }
 
     deinit {
@@ -463,37 +522,54 @@ public final class AppleSubscriptionModel: ObservableObject {
             return
         }
 
-        let dispatch: ApplePurchaseDispatch
-        do {
-            dispatch = try await billing.dispatchApplePurchase(bundleID: bundleID,
-                                                               productID: productID,
-                                                               token: token)
-        } catch {
-            guard !superseded(g) else { return }
-            state = .failed(Self.failure(for: error))
-            return
-        }
+        // Permission to open exactly one sheet, plus the arm identity that
+        // permission is named by. Everything about the continuation capability —
+        // planning, persisting, and failing closed — happens in here, BEFORE the
+        // store is asked to charge anybody.
+        guard let armed = await arm(productID: productID, token: token, generation: g) else { return }
         guard !superseded(g) else { return }
+        let dispatch = armed.dispatch
 
         let outcome: StorePurchaseOutcome
         do {
             outcome = try await store.purchase(productID: productID,
                                                appAccountToken: dispatch.appAccountToken)
         } catch {
+            // **The store threw, and that is not a cancellation.** It is
+            // reported as `failed`, which locks the attempt: an error says
+            // nothing about whether Apple will charge, and re-arming on one is
+            // the double-charge path this protocol exists to close.
+            //
+            // Reported BEFORE the supersession guard, and awaited: a newer
+            // purchase must not find this arm still open, and dropping the
+            // report because the screen moved on would leave the account
+            // deadlocked on an arm nobody will ever resolve.
+            await report(.failed, for: armed, token: token)
             guard !superseded(g) else { return }
             state = .failed(Self.failure(for: error))
             return
         }
-        guard !superseded(g) else { return }
 
         switch outcome {
         case .userCancelled:
+            // **The one resumable outcome**, and the only one the server will
+            // re-arm on. Reported before the supersession guard for the same
+            // reason a thrown error is: this is what releases the dispatch.
+            await report(.userCancelled, for: armed, token: token)
+            guard !superseded(g) else { return }
             // The whole meaning of cancelling is that nothing happened. No
             // submission, no finish, and no error the user did not cause.
             state = .idle
         case .pending:
+            // Ask to Buy or a bank approval. It may still become a real charge,
+            // so it LOCKS rather than releasing: `pending` is not `cancelled`,
+            // and the server is told which one it was.
+            await report(.pending, for: armed, token: token)
+            guard !superseded(g) else { return }
             state = .deferred
         case .delivered(let delivery):
+            await report(.success, for: armed, token: token)
+            guard !superseded(g) else { return }
             state = .submitting
             switch await settle(delivery) {
             case .accepted(let result):
@@ -509,6 +585,328 @@ public final class AppleSubscriptionModel: ObservableObject {
                 state = .failed(failure)
             }
         }
+    }
+
+    // MARK: - arming one sheet
+
+    /// One authorized sheet, and the identity its outcome must be reported under.
+    private struct ArmedSheet {
+        let dispatch: ApplePurchaseDispatch
+        /// `nil` for a legacy client: there is no capability, so there is
+        /// nothing to report and nothing that could re-arm.
+        let capability: ApplePurchaseCapability?
+        /// The arm this sheet is open under. Held separately from the
+        /// capability so a report is bound to the identity that was ACTUALLY
+        /// opened, not to whatever the store has drifted to since.
+        let armRequestID: String?
+    }
+
+    /// **Get permission to open exactly one StoreKit sheet.**
+    ///
+    /// Returns `nil` after setting a truthful failure state; the caller then
+    /// asks nothing of the store.
+    ///
+    /// The capability is persisted **before** this returns and therefore before
+    /// the sheet opens. That ordering is the whole safety property: a crash
+    /// between the server arming and this device recording the secret would
+    /// leave the account armed against a capability nobody holds, which is a
+    /// permanent deadlock rather than a lost retry.
+    private func arm(productID: String, token: String, generation g: Int) async -> ArmedSheet? {
+        guard let continuation, let appInstanceID else {
+            // LEGACY: no capability fields, one dispatch, strict one-shot.
+            do {
+                let dispatch = try await billing.dispatchApplePurchase(
+                    bundleID: bundleID, productID: productID, continuation: nil, token: token)
+                return ArmedSheet(dispatch: dispatch, capability: nil, armRequestID: nil)
+            } catch {
+                guard !superseded(g) else { return nil }
+                state = .failed(Self.failure(for: error))
+                return nil
+            }
+        }
+
+        // At most two passes, and the bound is deliberate rather than a `while`.
+        // Pass one discharges at most one thing already owed — an unconfirmed
+        // resume left by a lost response, or an outcome report recorded and
+        // never confirmed — and pass two arms the product the user actually
+        // chose. The two owed things are mutually exclusive by construction, and
+        // discharging either clears it, so no input can make this loop again.
+        //
+        // Falling out of the loop is itself fail-closed: it means a pass
+        // replayed something and the store could not persist the answer, so the
+        // refusal below opens no sheet and the replay is simply owed again.
+        for _ in 0..<2 {
+            guard let freshArm = ApplePurchaseIdentity.freshArmRequestID() else {
+                // The system CSPRNG refused. Arming with a guessable or empty
+                // identity would spend the one name this sheet could report
+                // under, so nothing is sent at all.
+                state = .failed(.billing(.continuationRejected))
+                return nil
+            }
+            let plan = ApplePurchaseContinuation.plan(capability: continuation.load(),
+                                                      productID: productID,
+                                                      appInstanceID: appInstanceID,
+                                                      freshArmRequestID: freshArm)
+            switch plan {
+            case let .blocked(refusal):
+                // Both refusals fail closed, and neither is retried as a fresh
+                // dispatch: a sheet whose outcome nobody reported may still
+                // charge.
+                //
+                // `sheetOutstanding` now means no outcome was ever RECORDED —
+                // a sheet genuinely open, or a process that died between the
+                // server arming and StoreKit answering. A recorded one is
+                // replayed by the `.replayOutcome` case below and never reaches
+                // here, which matters because reconciliation through
+                // `Transaction.updates`/restore converges only the outcomes that
+                // produced a signed transaction. A cancellation produces none,
+                // so for that half of this state there is nothing to reconcile
+                // with and the recorded replay is the only path back.
+                state = .failed(.billing(refusal == .locked
+                                         ? .continuationRejected
+                                         : .purchaseOutcomeRequired))
+                return nil
+
+            case let .replayOutcome(capability, armID, outcome):
+                // **Something is already owed, so nothing may be armed yet.**
+                // This client recorded a report and never learned whether it
+                // landed. It is replayed EXACTLY — same arm, same outcome, same
+                // secret — which the server reads back idempotently rather than
+                // as a second statement.
+                //
+                // No outcome is widened here. `deliver` applies the answer
+                // through `applying(_:to:forArm:serverResumable:)`, which needs
+                // BOTH the reported outcome and the server to be resumable
+                // before the phase can become `cancelled`; a replayed `pending`,
+                // `failed` or `success` therefore locks, and the next pass
+                // refuses rather than arming.
+                switch await deliver(outcome, for: capability, arm: armID, token: token) {
+                case .undelivered:
+                    guard !superseded(g) else { return nil }
+                    // Fail closed, and truthfully: the server still has not
+                    // heard what StoreKit did, which is exactly what
+                    // `purchaseOutcomeRequired` says. The recorded intent
+                    // survives, so the next attempt — or the next launch —
+                    // replays this same report again.
+                    state = .failed(.billing(.purchaseOutcomeRequired))
+                    return nil
+                case .delivered:
+                    guard !superseded(g) else { return nil }
+                    // The stored phase now reflects the SERVER's answer. The
+                    // second pass re-plans from it: `cancelled` becomes one
+                    // fresh resume, and anything else becomes `.blocked`, which
+                    // is refused above rather than armed here. Deciding it there
+                    // keeps one place in this type that maps a refusal.
+                    continue
+                }
+
+            case let .initialArm(instance, armID, product):
+                do {
+                    let dispatch = try await billing.dispatchApplePurchase(
+                        bundleID: bundleID, productID: product,
+                        continuation: ApplePurchaseContinuationFields(
+                            appInstanceID: instance, armRequestID: armID,
+                            continuationSecret: nil),
+                        token: token)
+                    // No secret means this deployment is running the legacy
+                    // protocol. Behave as a one-shot client rather than
+                    // inventing a capability the server never issued.
+                    guard let capability = ApplePurchaseContinuation.armed(
+                        attemptID: dispatch.attemptId, appInstanceID: instance,
+                        secret: dispatch.continuationSecret,
+                        armRequestID: armID, productID: product) else {
+                        return ArmedSheet(dispatch: dispatch, capability: nil, armRequestID: nil)
+                    }
+                    // Persisted BEFORE the sheet. A save that fails must stop
+                    // the purchase: opening a sheet whose outcome could never be
+                    // reported is what deadlocks the account.
+                    do { try continuation.save(capability) } catch {
+                        state = .failed(.billing(.continuationRejected))
+                        return nil
+                    }
+                    return ArmedSheet(dispatch: dispatch, capability: capability, armRequestID: armID)
+                } catch {
+                    guard !superseded(g) else { return nil }
+                    state = .failed(Self.failure(for: error))
+                    return nil
+                }
+
+            case let .resume(capability, armID, product),
+                 let .replayResume(capability, armID, product):
+                // **Recorded before it is sent, on both arms of this case.** A
+                // replay is already recorded and re-recording it is a no-op with
+                // the same bytes; a first resume must be recorded or a lost
+                // response strands the account on an identity it never learned.
+                let intent = ApplePurchaseContinuation.recordingResumeIntent(
+                    capability, armRequestID: armID, productID: product)
+                do { try continuation.save(intent) } catch {
+                    state = .failed(.billing(.continuationRejected))
+                    return nil
+                }
+                let dispatch: ApplePurchaseDispatch
+                do {
+                    dispatch = try await billing.dispatchApplePurchase(
+                        bundleID: bundleID, productID: product,
+                        continuation: capability.fields(forArm: armID),
+                        token: token)
+                } catch {
+                    guard !superseded(g) else { return nil }
+                    state = .failed(Self.failure(for: error))
+                    return nil
+                }
+                let confirmed = ApplePurchaseContinuation.confirmedArm(
+                    intent, armRequestID: armID, productID: product)
+                do { try continuation.save(confirmed) } catch {
+                    state = .failed(.billing(.continuationRejected))
+                    return nil
+                }
+                guard product == productID else {
+                    // A replay discharged an older resume for a DIFFERENT
+                    // product than the user just chose. That sheet is now armed
+                    // and was never opened, so no charge is possible — and this
+                    // client knows that more certainly than a real cancellation
+                    // does. Report it as cancelled to release the dispatch, then
+                    // let the second pass arm what was actually asked for.
+                    let released = await report(
+                        .userCancelled,
+                        for: ArmedSheet(dispatch: dispatch, capability: confirmed,
+                                        armRequestID: armID),
+                        token: token)
+                    guard released else {
+                        state = .failed(.billing(.purchaseOutcomeRequired))
+                        return nil
+                    }
+                    continue
+                }
+                return ArmedSheet(dispatch: dispatch, capability: confirmed, armRequestID: armID)
+            }
+        }
+        // Both passes ran without arming the chosen product.
+        state = .failed(.billing(.purchaseOutcomeRequired))
+        return nil
+    }
+
+    /// **Tell the server what StoreKit did with the arm that was open.**
+    ///
+    /// Returns whether the server accepted the report AND called the attempt
+    /// resumable — which requires a cancellation and the server's own agreement,
+    /// and is false for everything else including a report that never landed.
+    ///
+    /// A legacy sheet reports nothing and answers `false`: there is no
+    /// capability, so there is no dispatch to release and no second sheet this
+    /// could authorize.
+    ///
+    /// **The report is written down before it is sent.** That ordering is the
+    /// whole recovery property. A cancellation produces no signed transaction,
+    /// so if the request or its response is lost there is nothing for
+    /// `Transaction.updates` or `restore` to redeliver and *nothing* converges
+    /// the attempt — the stored phase stays `armed` and every later purchase is
+    /// refused for ever. Recording the intent first turns that permanent lockout
+    /// into a replay the next attempt performs before it may plan anything.
+    ///
+    /// **Local state moves only if the report names the arm that is still
+    /// open.** `applying(_:to:forArm:serverResumable:)` returns `nil` otherwise,
+    /// and this drops it — that is what stops a late completion from an earlier
+    /// sheet cancelling or retiring a newer one, across a restart as well as
+    /// within a run, because both sides of that comparison come from the
+    /// persisted value.
+    @discardableResult
+    private func report(_ outcome: ApplePurchaseOutcome,
+                        for armed: ArmedSheet,
+                        token: String) async -> Bool {
+        guard let continuation, let capability = armed.capability,
+              let armRequestID = armed.armRequestID else { return false }
+        // Re-read rather than trusting the value captured before the sheet: a
+        // concurrent path may have moved or retired the capability while the
+        // user was inside StoreKit.
+        let stored = continuation.load()
+        if let stored, stored.armRequestID != armRequestID {
+            // **Stale, so inert.** `armRequestID` moves only on an authoritative
+            // 200, so the server has already superseded the arm this report is
+            // about and nothing is waiting on it. Not sent, not recorded, and
+            // nothing local moved.
+            return false
+        }
+        if let stored,
+           let recorded = ApplePurchaseContinuation.recordingOutcomeIntent(
+               stored, outcome: outcome, forArm: armRequestID) {
+            // BEFORE the request, and a failure to persist is deliberately NOT
+            // fatal here, unlike the save that precedes a sheet: the report is
+            // owed whatever happens, sending it can only converge the attempt,
+            // and refusing to send because the record failed would guarantee the
+            // very lockout the record exists to prevent.
+            try? continuation.save(recorded)
+            return await deliver(outcome, for: recorded,
+                                 arm: armRequestID, token: token) == .delivered(resumable: true)
+        }
+        // Nothing could be recorded against: the capability was retired or its
+        // read failed, or a resume is unconfirmed so which arm is open is not
+        // known here. The report is still sent, from the value captured when the
+        // sheet was armed — it can only converge the attempt — but NOTHING is
+        // written, so a retired capability is never resurrected and an
+        // unconfirmed resume is not overwritten. `applying` refuses the answer
+        // for the same reasons, so no local state moves either.
+        return await deliver(outcome, for: capability,
+                             arm: armRequestID, token: token) == .delivered(resumable: true)
+    }
+
+    /// What became of one outcome report.
+    private enum OutcomeReport: Equatable {
+        /// The request never completed. The recorded intent stands and is owed
+        /// again; **nothing local moved**, because silence is not a cancellation.
+        case undelivered
+        /// The server answered, and this is what it said about re-arming.
+        case delivered(resumable: Bool)
+    }
+
+    /// Send one **recorded** outcome report and apply whatever the server said.
+    ///
+    /// Separate from ``report(_:for:token:)`` because a replay enters here
+    /// directly: the intent it is replaying was recorded on some earlier attempt,
+    /// possibly in an earlier process, and must not be re-derived from anything
+    /// StoreKit says now.
+    private func deliver(_ outcome: ApplePurchaseOutcome,
+                         for capability: ApplePurchaseCapability,
+                         arm armRequestID: String,
+                         token: String) async -> OutcomeReport {
+        let resumable: Bool
+        do {
+            resumable = try await billing.reportApplePurchaseOutcome(
+                bundleID: bundleID,
+                attemptID: capability.attemptID,
+                continuation: capability.fields(forArm: armRequestID),
+                outcome: outcome,
+                token: token)
+        } catch {
+            // **Not delivered, so nothing local may move.** The server — which
+            // also heard nothing — stays armed for the same reason. The recorded
+            // intent is what makes this recoverable rather than terminal.
+            return .undelivered
+        }
+        // Re-read again: this may be a replay planned from a value that has
+        // since moved, and the answer must be applied to what is actually
+        // stored.
+        guard let continuation, let current = continuation.load(),
+              let next = ApplePurchaseContinuation.applying(outcome, to: current,
+                                                            forArm: armRequestID,
+                                                            serverResumable: resumable) else {
+            return .delivered(resumable: resumable)
+        }
+        // A failed save leaves the intent recorded, so the next attempt replays
+        // a report the server has already accepted — which it answers
+        // idempotently rather than treating as a second statement.
+        try? continuation.save(next)
+        return .delivered(resumable: resumable)
+    }
+
+    /// Retire the capability, on authoritative convergence and nothing else.
+    ///
+    /// Called when the server reports the attempt resolved. **Never on a clock,
+    /// a TTL or a launch count** — a time-based release would re-open the
+    /// double-charge window on a device whose clock is wrong.
+    private func retireCapabilityIfResolved(_ result: AppleTransactionResult) {
+        guard result.dispatchResolved else { return }
+        continuation?.retire()
     }
 
     // MARK: - restoring
@@ -735,6 +1133,16 @@ public final class AppleSubscriptionModel: ObservableObject {
                 signedRenewalInfo: delivery.renewalJWS,
                 token: token)
             submission = .accepted(result)
+            // **Authoritative convergence, and the only thing that retires a
+            // capability.** The server has settled this attempt, so the secret
+            // can no longer authorize anything and keeping it is a stored credential
+            // with no purpose. Nothing else releases it — not a clock, not a TTL,
+            // not a launch count.
+            //
+            // Done here rather than on the purchase path because this is the one
+            // place every route converges: a foreground purchase, a background
+            // renewal through `Transaction.updates`, and a restore all settle here.
+            retireCapabilityIfResolved(result)
         } catch {
             submission = .refused(Self.failure(for: error))
         }

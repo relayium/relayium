@@ -43,12 +43,203 @@ final class AppleBillingClientTests: XCTestCase {
             })
         let out = try await client().dispatchApplePurchase(
             bundleID: "com.relayium.mac", productID: "com.relayium.mac.pro.monthly",
-            token: "rlm_app_T")
+            continuation: nil, token: "rlm_app_T")
         XCTAssertEqual(out.attemptId, "attempt-one")
         let body = try XCTUnwrap(JSONSerialization.jsonObject(
             with: Data(StubURLProtocol.lastBodyBytes)) as? [String: String])
         XCTAssertEqual(body, ["bundleId": "com.relayium.mac",
                               "productId": "com.relayium.mac.pro.monthly"])
+    }
+
+    // MARK: - the continuation protocol on the wire
+
+    /// **The initial arm: instance and arm identity present, secret ABSENT.**
+    ///
+    /// Absent rather than `null`. The server decodes with
+    /// `DisallowUnknownFields` and selects the protocol on whether
+    /// `appInstanceId` is present at all, so the exact key set is the contract —
+    /// asserted as a whole dictionary, not key by key, because an extra key is
+    /// as much a 400 as a missing one.
+    func testTheInitialArmSendsTheInstanceAndArmButNoSecret() async throws {
+        StubURLProtocol.stub = .init(
+            status: 200,
+            body: Data(#"{"appAccountToken":"3f2504e0-4f89-41d3-9a0c-0305e82c3301","attemptId":"attempt-1","continuationSecret":"S3CR3T"}"#.utf8))
+        let out = try await client().dispatchApplePurchase(
+            bundleID: "com.relayium.mac", productID: "pro.monthly",
+            continuation: ApplePurchaseContinuationFields(
+                appInstanceID: "instance-A", armRequestID: "arm-1", continuationSecret: nil),
+            token: "rlm_app_T")
+        XCTAssertEqual(out.continuationSecret, "S3CR3T")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: Data(StubURLProtocol.lastBodyBytes)) as? [String: String])
+        XCTAssertEqual(body, ["bundleId": "com.relayium.mac",
+                              "productId": "pro.monthly",
+                              "appInstanceId": "instance-A",
+                              "armRequestId": "arm-1"])
+        XCTAssertNil(body["continuationSecret"], "a first arm has nothing to prove")
+    }
+
+    /// A resume carries the secret, and the server does not re-issue one — which
+    /// is what makes a lost resume response replayable without a second arm.
+    func testAResumeSendsTheSecretAndGetsNoNewOne() async throws {
+        StubURLProtocol.stub = .init(
+            status: 200,
+            body: Data(#"{"appAccountToken":"3f2504e0-4f89-41d3-9a0c-0305e82c3301","attemptId":"attempt-1"}"#.utf8))
+        let out = try await client().dispatchApplePurchase(
+            bundleID: "com.relayium.mac", productID: "plus.monthly",
+            continuation: ApplePurchaseContinuationFields(
+                appInstanceID: "instance-A", armRequestID: "arm-2",
+                continuationSecret: "S3CR3T"),
+            token: "rlm_app_T")
+        XCTAssertNil(out.continuationSecret)
+        XCTAssertEqual(out.attemptId, "attempt-1", "a resume reuses the same attempt")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: Data(StubURLProtocol.lastBodyBytes)) as? [String: String])
+        XCTAssertEqual(body, ["bundleId": "com.relayium.mac",
+                              "productId": "plus.monthly",
+                              "appInstanceId": "instance-A",
+                              "armRequestId": "arm-2",
+                              "continuationSecret": "S3CR3T"])
+    }
+
+    /// **Every field the outcome endpoint requires, and every outcome word.**
+    ///
+    /// The vocabulary is the server's own — `userCancelled`, `pending`,
+    /// `failed`, `success` — and a value outside it is a 400, so it is asserted
+    /// literally rather than derived from the case name at the assertion site.
+    func testTheOutcomeReportCarriesEveryRequiredFieldAndVocabulary() async throws {
+        let expected: [ApplePurchaseOutcome: String] = [
+            .userCancelled: "userCancelled", .pending: "pending",
+            .failed: "failed", .success: "success",
+        ]
+        XCTAssertEqual(expected.count, ApplePurchaseOutcome.allCases.count)
+        for outcome in ApplePurchaseOutcome.allCases {
+            StubURLProtocol.stub = .init(
+                status: 200,
+                body: Data(#"{"resumable":true}"#.utf8),
+                check: { req in
+                    XCTAssertEqual(req.url?.path, "/api/billing/apple/purchase-outcome")
+                    XCTAssertEqual(req.httpMethod, "POST")
+                    XCTAssertEqual(req.value(forHTTPHeaderField: "Authorization"), "Bearer rlm_app_T")
+                    // The secret reaches the BODY and nothing else.
+                    XCTAssertNil(req.url?.query)
+                })
+            _ = try await client().reportApplePurchaseOutcome(
+                bundleID: "com.relayium.mac", attemptID: "attempt-1",
+                continuation: ApplePurchaseContinuationFields(
+                    appInstanceID: "instance-A", armRequestID: "arm-2",
+                    continuationSecret: "S3CR3T"),
+                outcome: outcome, token: "rlm_app_T")
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(
+                with: Data(StubURLProtocol.lastBodyBytes)) as? [String: String])
+            XCTAssertEqual(body, ["bundleId": "com.relayium.mac",
+                                  "attemptId": "attempt-1",
+                                  "appInstanceId": "instance-A",
+                                  "armRequestId": "arm-2",
+                                  "continuationSecret": "S3CR3T",
+                                  "outcome": expected[outcome]])
+        }
+    }
+
+    /// The server's answer is passed through as itself. **Only a cancellation is
+    /// resumable**, and this client does not re-derive that from the outcome it
+    /// sent — it reports what the server said.
+    func testTheOutcomeAnswerIsTheServersOwnResumableVerdict() async throws {
+        for resumable in [true, false] {
+            StubURLProtocol.stub = .init(status: 200,
+                                         body: Data("{\"resumable\":\(resumable)}".utf8))
+            let answer = try await client().reportApplePurchaseOutcome(
+                bundleID: "com.relayium.mac", attemptID: "attempt-1",
+                continuation: ApplePurchaseContinuationFields(
+                    appInstanceID: "i", armRequestID: "a", continuationSecret: "S"),
+                outcome: .userCancelled, token: "t")
+            XCTAssertEqual(answer, resumable)
+        }
+    }
+
+    /// **A report with no secret is never sent.** An arm identity is spent once
+    /// ever, so spending one on a request certain to be refused would burn the
+    /// name this sheet has to report under.
+    func testAReportWithNoSecretIsRefusedWithoutSpendingTheArm() async {
+        StubURLProtocol.stub = .init(status: 200, body: Data(#"{"resumable":true}"#.utf8))
+        for secret in [nil, ""] as [String?] {
+            await XCTAssertThrowsErrorAsync(try await self.client().reportApplePurchaseOutcome(
+                bundleID: "com.relayium.mac", attemptID: "attempt-1",
+                continuation: ApplePurchaseContinuationFields(
+                    appInstanceID: "i", armRequestID: "a", continuationSecret: secret),
+                outcome: .userCancelled, token: "t")) {
+                XCTAssertEqual($0 as? AppleBillingError, .continuationRejected)
+            }
+        }
+        XCTAssertTrue(StubURLProtocol.lastBodyBytes.isEmpty, "a doomed report was sent anyway")
+    }
+
+    /// **The uniform capability refusal, on both endpoints.**
+    ///
+    /// `403 continuation_invalid` is deliberately NOT mapped to
+    /// `purchaseAuthorityManaged`: nothing about the account's billing authority
+    /// is wrong, this client's capability is, and the two have different repairs.
+    /// It must never become a fresh one-shot dispatch — the capability being
+    /// unusable says nothing about whether a sheet is open.
+    func testTheUniformCapabilityRefusalIsItsOwnCase() async {
+        StubURLProtocol.stub = .init(
+            status: 403, body: Data(#"{"error":"continuation_invalid","provider":"apple"}"#.utf8))
+        await XCTAssertThrowsErrorAsync(try await self.client().dispatchApplePurchase(
+            bundleID: "com.relayium.mac", productID: "p",
+            continuation: ApplePurchaseContinuationFields(
+                appInstanceID: "i", armRequestID: "a", continuationSecret: "S"),
+            token: "t")) {
+            XCTAssertEqual($0 as? AppleBillingError, .continuationRejected)
+        }
+        // The outcome endpoint answers every capability failure with a bare 403.
+        StubURLProtocol.stub = .init(status: 403, body: Data())
+        await XCTAssertThrowsErrorAsync(try await self.client().reportApplePurchaseOutcome(
+            bundleID: "com.relayium.mac", attemptID: "attempt-1",
+            continuation: ApplePurchaseContinuationFields(
+                appInstanceID: "i", armRequestID: "a", continuationSecret: "S"),
+            outcome: .userCancelled, token: "t")) {
+            XCTAssertEqual($0 as? AppleBillingError, .continuationRejected)
+        }
+    }
+
+    /// **`409 purchase_outcome_required` is its own case, and it is not a charge.**
+    ///
+    /// It means a sheet this account armed has not said what StoreKit did. Kept
+    /// apart from `purchaseAuthorityManaged` because the repair is the client's
+    /// own — report the arm's outcome — rather than a durable billing conflict.
+    func testAnArmedSheetAwaitingItsOutcomeIsItsOwnCase() async {
+        StubURLProtocol.stub = .init(
+            status: 409,
+            body: Data(#"{"error":"purchase_outcome_required","provider":"apple"}"#.utf8))
+        await XCTAssertThrowsErrorAsync(try await self.client().dispatchApplePurchase(
+            bundleID: "com.relayium.mac", productID: "p",
+            continuation: ApplePurchaseContinuationFields(
+                appInstanceID: "i", armRequestID: "a", continuationSecret: "S"),
+            token: "t")) {
+            XCTAssertEqual($0 as? AppleBillingError, .purchaseOutcomeRequired)
+        }
+    }
+
+    /// **No error this client raises carries the secret**, on either endpoint and
+    /// on any status. An error is the value most likely to be logged.
+    func testNoBillingErrorEverCarriesTheSecret() async {
+        let secret = "TEST-SECRET-NOT-REAL"
+        let fields = ApplePurchaseContinuationFields(
+            appInstanceID: "instance-A", armRequestID: "arm-2", continuationSecret: secret)
+        for status in [400, 401, 403, 409, 429, 500, 503] {
+            StubURLProtocol.stub = .init(status: status, body: Data(#"{"error":"nope"}"#.utf8))
+            do {
+                _ = try await client().reportApplePurchaseOutcome(
+                    bundleID: "com.relayium.mac", attemptID: "attempt-1",
+                    continuation: fields, outcome: .userCancelled, token: "t")
+                XCTFail("status \(status) did not fail")
+            } catch {
+                XCTAssertFalse(String(describing: error).contains(secret))
+                XCTAssertFalse(String(reflecting: error).contains(secret))
+            }
+        }
+        // And the field carrier itself, which is what an error path would print.
+        XCTAssertFalse(String(describing: fields).contains(secret))
     }
 
     func testAnExistingAuthorityOrDispatchIsNotASecondPurchasePermission() async {
@@ -57,7 +248,7 @@ final class AppleBillingClientTests: XCTestCase {
                 status: 409,
                 body: Data("{\"error\":\"\(code)\",\"provider\":\"apple\"}".utf8))
             await XCTAssertThrowsErrorAsync(try await self.client().dispatchApplePurchase(
-                bundleID: "com.relayium.mac", productID: "p", token: "t")) {
+                bundleID: "com.relayium.mac", productID: "p", continuation: nil, token: "t")) {
                 XCTAssertEqual($0 as? AppleBillingError,
                                .purchaseAuthorityManaged(provider: "apple"))
             }

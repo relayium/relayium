@@ -67,5 +67,34 @@
 	<array>
 		<string>7PVYUG4YQS.com.relayium.shared</string>
 	</array>
+	<!-- **The ONE key this file adds that the direct build must never carry.**
+
+	     Native Sign in with Apple. `Default` is the ordinary value and the only
+	     one this product needs: it authorizes a first-party `ASAuthorizationAppleIDProvider`
+	     request. The alternative, `Shared`, is for sharing an Apple ID
+	     relationship across a developer's other apps and web domains, which
+	     Relayium does not do — claiming it would be asking review for a
+	     capability the product has no use for.
+
+	     **Why it is here and NOT in `Relayium/Relayium.entitlements`.** Apple
+	     grants this entitlement per provisioning profile, and the Developer ID
+	     profile does not carry it. A direct-download binary claiming it would
+	     fail to sign; one presenting the control without it would fail at
+	     runtime, in front of the user, on a credential path.
+
+	     The absence over there is enforced structurally rather than by this
+	     comment: `Distribution/AppStoreDistribution.swift` — which is a member
+	     of THIS target only — is the sole file in either app that imports
+	     `AuthenticationServices` for an Apple ID, so the direct target has no
+	     call path to `ASAuthorizationController` at all.
+	     `MacAppleSignInGuardTests` checks both halves.
+
+	     **Browser sign-in is unaffected and stays in this build.** The native
+	     control is an addition beside the device-flow button, never a
+	     replacement for it, so a Mac App Store user has both routes. -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 </dict>
 </plist>

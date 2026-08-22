@@ -1,3 +1,4 @@
+import AuthenticationServices
 import RelayiumAppKit
 import RelayiumKit
 import RelayiumStoreKit
@@ -57,12 +58,26 @@ enum AppDistribution {
         // broken beyond anything this surface should paper over, so it gets no
         // model rather than one that asks the server about "".
         guard let bundleID = Bundle.main.bundleIdentifier, !bundleID.isEmpty else { return nil }
+        // **The purchase-continuation capability, which is what makes a
+        // cancelled sheet recoverable.** Without it a user who opens the
+        // StoreKit sheet and presses Cancel can never buy again: the server has
+        // armed one dispatch for the authority generation and nothing resolves
+        // it.
+        //
+        // `nil` is a legitimate answer and is NOT patched around — a locked or
+        // unavailable keychain gives no capability, and this build then behaves
+        // exactly like every released one: strict one-shot, reconciling through
+        // `Transaction.updates`/restore. Arming a sheet whose outcome could
+        // never be reported would deadlock the account instead.
+        let continuation = AppEnvironment.makeApplePurchaseContinuation()
         return AppleSubscriptionModel(
             store: StoreKitSubscriptionStore(),
             billing: AppEnvironment.makeAppleBillingService(),
             bundleID: bundleID,
             bearer: bearer,
-            refreshAccount: refreshAccount)
+            refreshAccount: refreshAccount,
+            continuation: continuation?.repository,
+            appInstanceID: continuation?.appInstanceID)
     }
 }
 
@@ -112,4 +127,153 @@ struct AppUpdatesSettingsTab: View {
     let updates: AppUpdates
 
     var body: some View { EmptyView() }
+}
+
+/// **Native Sign in with Apple — the Mac App Store build's control.**
+///
+/// Its twin in `DirectDistribution.swift` is an `EmptyView`, and the difference
+/// is target MEMBERSHIP rather than an `#if`: the direct target does not compile
+/// this file, so it cannot contain `ASAuthorizationAppleIDRequest` however its
+/// source is edited. That is the same mechanism, and the same reasoning, that
+/// keeps Sparkle out of this build and StoreKit out of that one — an absence
+/// enforced by the project rather than by a conditional somebody can flip.
+///
+/// It matters here for a concrete reason: `com.apple.developer.applesignin` is
+/// an entitlement Apple grants per provisioning profile. The direct build's
+/// profile does not carry it, and a Developer ID binary that called
+/// `ASAuthorizationController` would fail at runtime in front of the user rather
+/// than at build time in front of an engineer.
+///
+/// **This is additive, never a replacement.** `LoginView` renders the browser
+/// device-flow sign-in unconditionally in every distribution, this control
+/// included; a Mac App Store user gets both. `MacAppleSignInGuardTests` reads
+/// the sources and the project file to keep all of that true.
+///
+/// The exchange itself is deliberately not reimplemented: the nonce, the OAuth
+/// `state` correlation, the credential read and `AccountSession.logInWithApple`
+/// are the same hardened path the iOS app has shipped, and duplicating any of it
+/// here would be a second copy of security-sensitive logic to keep correct.
+struct AppleSignInSection: View {
+    /// Which half of the form is showing. Apple's own control carries the
+    /// wording — "Sign in with" against "Sign up with" — which is why there is
+    /// no catalog key for its label.
+    let mode: AuthMode
+    /// The shared auth operation is running. The control stays in the layout,
+    /// disabled: a second authorization started over an in-flight exchange would
+    /// race it for the same session, and a control that vanishes mid-submit
+    /// takes the card's height with it.
+    let isBusy: Bool
+
+    @EnvironmentObject private var session: AccountSession
+    /// Apple's two system styles are light-on-dark and dark-on-light; the
+    /// guidance is to pick the one the background calls for.
+    @Environment(\.colorScheme) private var colorScheme
+    /// The nonce and OAuth state of the ONE authorization allowed to complete.
+    /// A completion whose `state` does not match this is a late callback from an
+    /// attempt the view has moved on from, and is dropped.
+    @State private var attempt: AppleSignInAttempt?
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                line
+                Text(L10n.t(.loginAppleDivider))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                line
+            }
+            // Hidden from VoiceOver: the button below is the control, and the
+            // rule is a visual separator with nothing to announce.
+            .accessibilityHidden(true)
+
+            SignInWithAppleButton(mode == .register ? .signUp : .signIn) { request in
+                let fresh = AppleSignInAttempt.fresh()
+                attempt = fresh
+                // Full name and email are what Apple sends on the FIRST
+                // authorization; without them a brand-new account could not be
+                // created at all.
+                request.requestedScopes = [.fullName, .email]
+                // Raw, not hashed: Apple echoes this value verbatim in the
+                // identity token's `nonce` claim and the server compares it for
+                // equality. A SHA-256 would never match.
+                request.nonce = fresh.nonce
+                // The nonce binds the token cryptographically; `state` binds the
+                // callback to the attempt this view still holds a nonce for.
+                request.state = fresh.state
+                session.dismissAccountAccessError()
+            } onCompletion: { result in
+                complete(result)
+            }
+            .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+            .frame(height: 28)
+            .frame(maxWidth: 280)
+            .disabled(isBusy)
+            .opacity(isBusy ? 0.4 : 1)
+            // Opacity alone would leave an action that cannot be taken in the
+            // accessibility tree.
+            .accessibilityHidden(isBusy)
+            .accessibilityIdentifier("account.apple")
+        }
+    }
+
+    /// The rule either side of "or". The system's own separator colour rather
+    /// than a chosen opacity, so it tracks Increase Contrast.
+    private var line: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.10))
+            .frame(height: 1)
+            .frame(maxWidth: 120)
+    }
+
+    /// The result of one Apple authorization.
+    ///
+    /// Three outcomes, and the difference between them is what the user sees: a
+    /// cancellation says nothing at all, a credential missing what the exchange
+    /// needs says so without claiming a server refused it, and a complete
+    /// credential goes to the session, which owns everything after.
+    private func complete(_ result: Result<ASAuthorization, Error>) {
+        // A completion with no pending attempt is stale — an authorization this
+        // view no longer holds a nonce for — and there is nothing honest to do
+        // with it.
+        guard let attempt else { return }
+
+        switch result {
+        case let .success(authorization):
+            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+                self.attempt = nil
+                session.reportAppleSignInFailure(AppleSignInError.unexpectedCredential)
+                return
+            }
+            // Correlated BEFORE the attempt is consumed, so an older callback
+            // cannot erase a newer pending authorization. Without this
+            // comparison a late completion would be sent with the NEWER
+            // request's nonce and come back looking like a server rejection.
+            guard attempt.matches(returnedState: credential.state) else { return }
+            self.attempt = nil
+            do {
+                let fields = try AppleSignInCredential.read(
+                    identityToken: credential.identityToken,
+                    authorizationCode: credential.authorizationCode)
+                // Apple sends the name on the first authorization only. Empty
+                // afterwards, and empty is what the server is given — a name
+                // derived from the address would be one this app made up.
+                let name = AppleSignInName.format(givenName: credential.fullName?.givenName,
+                                                  familyName: credential.fullName?.familyName)
+                Task {
+                    await session.logInWithApple(idToken: fields.idToken,
+                                                 authorizationCode: fields.authorizationCode,
+                                                 nonce: attempt.nonce,
+                                                 name: name)
+                }
+            } catch {
+                session.reportAppleSignInFailure(error)
+            }
+        case let .failure(error):
+            self.attempt = nil
+            // Cancelling asks for nothing to happen, and an error sentence is
+            // something happening. Everything else is reported.
+            if (error as? ASAuthorizationError)?.code == .canceled { return }
+            session.reportAppleSignInFailure(AppleSignInError.authorizationFailed)
+        }
+    }
 }

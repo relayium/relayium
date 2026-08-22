@@ -3353,9 +3353,29 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "the shared Device Inbox surface holds the form's mode itself")
         XCTAssertFalse(shared.contains("switch mode"),
                        "the shared Device Inbox surface branches on the form's mode")
+        // The distribution seam is exempt from the NAME for the same reason
+        // `DeviceInboxSurface` is: from 1.3.1 both halves take the form's mode as
+        // an input — Apple's own control carries the wording and picks "Sign in
+        // with" against "Sign up with" from it — so they must be able to say
+        // `AuthMode` in a parameter. They still may not OWN or DECIDE it, which
+        // is what this guard actually means, so both are held to the same two
+        // substantive clauses below rather than simply excused.
+        let seams = ["Distribution/AppStoreDistribution.swift",
+                     "Distribution/DirectDistribution.swift"]
+        for name in seams {
+            let seam = try source(named: name)
+            let holdsIt = seam.components(separatedBy: "\n")
+                .contains { $0.contains("@State") && $0.contains("AuthMode") }
+            XCTAssertFalse(holdsIt, "\(name) holds the form's mode itself")
+            XCTAssertFalse(seam.contains("switch mode"),
+                           "\(name) branches on the form's mode")
+            // It receives the mode; it does not source one.
+            XCTAssertTrue(seam.contains("let mode: AuthMode"),
+                          "\(name) no longer takes the mode as an input")
+        }
         for (name, text) in try sources(under: macRoot, atLeast: 20)
         where name != "LoginView.swift" && name != "Components/CapabilityGateView.swift"
-            && name != "DeviceInbox/DeviceInboxSurface.swift" {
+            && name != "DeviceInbox/DeviceInboxSurface.swift" && !seams.contains(name) {
             XCTAssertFalse(text.contains("AuthMode"),
                            "\(name) must not decide the form's mode")
         }
@@ -3431,48 +3451,95 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the browser fallback must be labelled for what it does")
         XCTAssertTrue(login.contains("startBrowserLogin()"),
                       "and must still work — this renames a claim, it does not remove a feature")
-        for (name, text) in try sources(under: macRoot, atLeast: 20) {
+        // **The browser control never becomes an Apple claim, in either build.**
+        //
+        // From 1.3.1 the Mac App Store target DOES ship a real
+        // `SignInWithAppleButton`, so the old repository-wide ban on those
+        // symbols is gone — it is replaced, not relaxed, by the per-track rule in
+        // `MacAppleSignInGuardTests`, which asserts the App Store build has the
+        // control and the Developer ID build has no call path to one.
+        //
+        // What survives here is the claim this test was actually named for: the
+        // BROWSER control is labelled for the browser. It must not be renamed to
+        // Apple, and it must not be replaced by the native control — including in
+        // the build that now has one, where the two sit side by side.
+        for (name, text) in try sources(under: macRoot, atLeast: 20)
+        where name != "Distribution/AppStoreDistribution.swift" {
             for appleism in ["SignInWithAppleButton", "ASAuthorizationAppleID",
                              "ASAuthorizationController", "signInWithApple"] {
                 XCTAssertFalse(text.contains(appleism),
                                "\(name) claims native Apple sign-in: \(appleism)")
             }
         }
+        // The App Store seam is the ONE exemption, and it is exempt for the
+        // control only — the browser button above still lives in shared source
+        // and is still reached by both targets.
+        XCTAssertFalse(try source(named: "Distribution/DirectDistribution.swift")
+            .contains("SignInWithAppleButton"),
+                       "the Developer ID seam gained the native control")
         XCTAssertTrue(try source(named: "BrowserSignIn.swift")
             .contains("ASWebAuthenticationSession"),
                       "the sheet is a web session, which is what the label now says")
         let entitlements = try String(
             contentsOf: macRoot.appendingPathComponent("Relayium.entitlements"), encoding: .utf8)
         XCTAssertFalse(entitlements.contains("applesignin"),
-                       "this slice adds no Apple entitlement")
+                       "the Developer ID build must never carry the Apple entitlement")
     }
 
-    /// iOS gaining native Sign in with Apple does not give macOS one.
+    /// **Native Sign in with Apple belongs to the Mac App Store track alone.**
     ///
-    /// The iOS slice ships a real `SignInWithAppleButton`, an Apple entitlement
-    /// and a hardened server exchange. None of it crosses: the shipped evidence
-    /// is that a Developer ID (outside the Mac App Store) distribution cannot
-    /// carry `com.apple.developer.applesignin`, so a Mac build with that button
-    /// would either fail to sign or fail at the first authorization. Until a
-    /// Mac App Store track exists, the honest macOS control is the browser
-    /// sign-in it already has, labelled as one.
+    /// This guard used to say macOS had none at all, and it stated its own
+    /// expiry: *"Until a Mac App Store track exists, the honest macOS control is
+    /// the browser sign-in it already has."* That track now exists, so 1.3.1
+    /// adds the real control to it — and the rule becomes two-sided rather than
+    /// disappearing.
+    ///
+    /// The reasoning that made the old rule right is exactly what scopes the new
+    /// one: `com.apple.developer.applesignin` is granted per provisioning
+    /// profile, the Developer ID profile does not carry it, and a direct-download
+    /// binary presenting the control would fail at the first authorization — in
+    /// front of the user, on a credential path.
+    ///
+    /// So what is asserted here is the DEVELOPER ID half, which is the half that
+    /// can still be broken by an ordinary edit to shared source. The App Store
+    /// half — that the control exists, is Apple's own, and routes through the
+    /// existing hardened exchange — lives in `MacAppleSignInGuardTests` beside
+    /// the entitlement and project-membership checks it depends on.
     ///
     /// The shared layer is exempt on purpose: `AccountSession.logInWithApple`
-    /// and `AppleSignIn.swift` are platform-free value logic, and the thing
-    /// that would make macOS claim the feature is the AppKit-level control and
-    /// the entitlement — which is what this asserts the absence of.
-    func testMacDidNotInheritTheIOSNativeAppleSignIn() throws {
-        for (name, text) in try sources(under: macRoot, atLeast: 20) {
+    /// and `AppleSignIn.swift` are platform-free value logic reached by both
+    /// platforms, and the thing that makes a BUILD claim the feature is the
+    /// AppKit-level control plus the entitlement.
+    func testNativeAppleSignInIsMacAppStoreOnly() throws {
+        // Every macOS source EXCEPT the App Store seam — which is a member of
+        // `RelayiumAppStore` and of nothing else, so nothing here is compiled
+        // into the Developer ID product.
+        for (name, text) in try sources(under: macRoot, atLeast: 20)
+        where name != "Distribution/AppStoreDistribution.swift" {
             for symbol in ["SignInWithAppleButton", "ASAuthorizationAppleID",
                            "logInWithApple", "AppleSignInAttempt"] {
                 XCTAssertFalse(text.contains(symbol),
-                               "\(name) adopts native Apple sign-in on macOS: \(symbol)")
+                               "\(name) puts native Apple sign-in in the Developer ID build: \(symbol)")
             }
         }
+        // And the seam really is the exemption rather than a hole: the App Store
+        // file has the control, its Developer ID twin does not.
+        XCTAssertTrue(try source(named: "Distribution/AppStoreDistribution.swift")
+            .contains("SignInWithAppleButton"),
+                      "the Mac App Store build lost its native Apple control")
+        XCTAssertFalse(try source(named: "Distribution/DirectDistribution.swift")
+            .contains("SignInWithAppleButton"))
         let entitlements = try String(
             contentsOf: macRoot.appendingPathComponent("Relayium.entitlements"), encoding: .utf8)
         XCTAssertFalse(entitlements.contains("applesignin"),
                        "the Developer ID macOS build cannot carry this entitlement")
+        // The Mac App Store build's entitlements do — otherwise the control
+        // above is one that cannot work.
+        let appStore = try String(
+            contentsOf: macRoot.appendingPathComponent("../RelayiumAppStore/Relayium.entitlements"),
+            encoding: .utf8)
+        XCTAssertTrue(appStore.contains("com.apple.developer.applesignin"),
+                      "the Mac App Store build presents a control it is not entitled to")
     }
 
     // MARK: - Universal Link hand-off

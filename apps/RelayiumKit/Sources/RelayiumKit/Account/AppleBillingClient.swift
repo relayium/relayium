@@ -21,8 +21,28 @@ public protocol AppleBillingService {
     /// product the server has no mapping for, and the failure would land after
     /// the customer had been charged. A binary cannot be corrected; a row can.
     func appleCatalog(bundleID: String, token: String) async throws -> AppleProductCatalog
+    /// Ask permission to open one StoreKit sheet.
+    ///
+    /// `continuation` is the additive new-protocol half. Passing `nil` produces
+    /// the byte-for-byte LEGACY request — no `appInstanceId`, no `armRequestId`,
+    /// no `continuationSecret` — which the server answers with strict one-shot
+    /// behaviour. That is not a fallback the client may choose on a failure: it
+    /// is the shape an old build sends, kept expressible so this method has one
+    /// implementation rather than two.
     func dispatchApplePurchase(bundleID: String, productID: String,
+                               continuation: ApplePurchaseContinuationFields?,
                                token: String) async throws -> ApplePurchaseDispatch
+    /// Report what StoreKit actually did with a sheet the server authorized.
+    ///
+    /// Answers whether the server considers the attempt resumable — true only
+    /// for an explicit user cancellation. Every capability failure is a single
+    /// uniform refusal, so this throws `continuationRejected` without saying
+    /// which fact was wrong.
+    func reportApplePurchaseOutcome(bundleID: String,
+                                    attemptID: String,
+                                    continuation: ApplePurchaseContinuationFields,
+                                    outcome: ApplePurchaseOutcome,
+                                    token: String) async throws -> Bool
     /// Submit one signed App Store transaction, exactly as the store handed it
     /// over, and report what the server made of it.
     func submitAppleTransaction(signedTransactionInfo: String,
@@ -35,10 +55,92 @@ public protocol AppleBillingService {
 public struct ApplePurchaseDispatch: Codable, Equatable, Sendable {
     public let appAccountToken: UUID
     public let attemptId: String
-    public init(appAccountToken: UUID, attemptId: String) {
+    /// **The raw continuation secret, and it appears in exactly one response,
+    /// ever** — the INITIAL arm's. A resume deliberately does not re-issue it,
+    /// because the client already holds it, and that is precisely what makes a
+    /// lost resume response replayable without arming a second sheet.
+    ///
+    /// `nil` therefore means one of two things and the caller must not confuse
+    /// them: this was a resume (the secret is already stored), or the server is
+    /// running the legacy protocol and no capability exists at all.
+    ///
+    /// It is excluded from `CustomStringConvertible` below rather than trusted
+    /// to never be printed.
+    public let continuationSecret: String?
+
+    public init(appAccountToken: UUID, attemptId: String, continuationSecret: String? = nil) {
         self.appAccountToken = appAccountToken
         self.attemptId = attemptId
+        self.continuationSecret = continuationSecret
     }
+}
+
+extension ApplePurchaseDispatch: CustomStringConvertible, CustomDebugStringConvertible {
+    /// **Never the secret.** A dispatch reaches error paths, and the default
+    /// synthesized description of a struct prints every stored property — which
+    /// would put a live capability into whatever caught it.
+    public var description: String {
+        "ApplePurchaseDispatch(attemptId: \(attemptId), continuationSecret: "
+            + (continuationSecret == nil ? "nil)" : "<redacted>)")
+    }
+    public var debugDescription: String { description }
+}
+
+/// The three client-authored fields that turn a legacy dispatch into a
+/// new-protocol one, and that authenticate an outcome report.
+///
+/// They travel together because the server treats them as one capability: an
+/// instance without an arm id is malformed and is refused with `400`, not
+/// silently downgraded to a one-shot dispatch.
+public struct ApplePurchaseContinuationFields: Equatable, Sendable {
+    /// Stable for the life of this installation. Proves *the same app instance
+    /// on the same device*, which is the most the design claims — StoreKit does
+    /// not expose the signed-in Apple ID.
+    public let appInstanceID: String
+    /// Names the one logical sheet this request is about. Fresh per arm, and
+    /// spent once ever; repeating one is a replay read, never a second arm.
+    public let armRequestID: String
+    /// `nil` on the initial arm — there is nothing to prove on a first arm —
+    /// and required on every resume and every outcome report.
+    public let continuationSecret: String?
+
+    public init(appInstanceID: String, armRequestID: String, continuationSecret: String?) {
+        self.appInstanceID = appInstanceID
+        self.armRequestID = armRequestID
+        self.continuationSecret = continuationSecret
+    }
+}
+
+extension ApplePurchaseContinuationFields: CustomStringConvertible, CustomDebugStringConvertible {
+    public var description: String {
+        "ApplePurchaseContinuationFields(appInstanceID: \(appInstanceID), "
+            + "armRequestID: \(armRequestID), continuationSecret: "
+            + (continuationSecret == nil ? "nil)" : "<redacted>)")
+    }
+    public var debugDescription: String { description }
+}
+
+/// What StoreKit did with one sheet, in the server's own vocabulary.
+///
+/// **Only `userCancelled` is resumable**, and the mapping into these cases is
+/// the security-relevant step: a `pending` purchase, a thrown store error and a
+/// result this build does not recognise all mean *Apple may still charge*, and
+/// translating any of them into a cancellation would authorize a second sheet
+/// over a live one.
+///
+/// `Codable` is declared here rather than added by the app layer in an
+/// extension: the client persists a recorded outcome report so a lost one can be
+/// replayed, and a retroactive conformance to a type this module owns would put
+/// the encoding of a money-critical value outside the type that defines it.
+public enum ApplePurchaseOutcome: String, Codable, Equatable, Sendable, CaseIterable {
+    case userCancelled
+    case pending
+    case failed
+    case success
+
+    /// The one case the server will re-arm on. Stated here so no call site
+    /// re-derives it with a `==` that a fifth case could silently fall through.
+    public var isResumable: Bool { self == .userCancelled }
 }
 
 public extension AppleBillingService {
@@ -282,6 +384,27 @@ public enum AppleBillingError: Error, Equatable {
     /// The account is durably managed by another billing channel/app, or an
     /// earlier Apple dispatch is unresolved. It is not a transient retry.
     case purchaseAuthorityManaged(provider: String)
+    /// 403 `continuation_invalid` — the uniform capability refusal.
+    ///
+    /// Wrong secret, wrong instance, a prior or already-spent arm identity, a
+    /// stale authority generation, a resolved attempt and a locked one all
+    /// arrive as this single code, deliberately: the endpoint is not an oracle
+    /// for which particular fact was wrong.
+    ///
+    /// **It must never be downgraded into a fresh legacy dispatch.** The
+    /// capability being unusable says nothing about whether a sheet is open, and
+    /// retrying without one is how a second concurrent purchase would be armed.
+    case continuationRejected
+    /// 409 `purchase_outcome_required` — a sheet this account armed has not
+    /// reported what StoreKit did with it.
+    ///
+    /// **No money has moved on the attempt this names.** It is separate from
+    /// `purchaseAuthorityManaged` because the repair is different and is the
+    /// client's own: report the outcome of the arm that is open, after which a
+    /// fresh arm may buy any eligible product. It is also what an honest second
+    /// client gets while another one holds the sheet, which is the property that
+    /// keeps two sheets from being authorized at once.
+    case purchaseOutcomeRequired
     /// 503 `verifier_unavailable` — this deployment holds no Apple trust roots
     /// and can verify nothing. The shipping default today.
     case verifierUnavailable
@@ -309,12 +432,22 @@ public enum AppleBillingError: Error, Equatable {
 
 extension AccountClient: AppleBillingService {
 	public func dispatchApplePurchase(bundleID: String, productID: String,
+	                                  continuation: ApplePurchaseContinuationFields?,
 	                                  token: String) async throws -> ApplePurchaseDispatch {
 		var req = URLRequest(url: baseURL.appendingPathComponent("api/billing/apple/purchase-dispatch"))
 		req.httpMethod = "POST"
 		req.setValue("application/json", forHTTPHeaderField: "Content-Type")
 		req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-		req.httpBody = try JSONEncoder().encode(ApplePurchaseDispatchRequest(bundleId: bundleID, productId: productID))
+		// The three additive fields are OMITTED entirely when there is no
+		// capability, rather than sent empty. The server selects the protocol on
+		// `appInstanceId`'s presence and refuses `""` as malformed, and it
+		// decodes with `DisallowUnknownFields`, so an encoder that emitted
+		// `null`s would turn every legacy dispatch into a 400.
+		req.httpBody = try JSONEncoder().encode(ApplePurchaseDispatchRequest(
+			bundleId: bundleID, productId: productID,
+			appInstanceId: continuation?.appInstanceID,
+			armRequestId: continuation?.armRequestID,
+			continuationSecret: continuation?.continuationSecret))
 		let (data, resp) = try await appleSend(req)
 		switch resp.statusCode {
 		case 200:
@@ -322,14 +455,68 @@ extension AccountClient: AppleBillingService {
 			      let uuid = UUID(uuidString: body.appAccountToken), !body.attemptId.isEmpty else {
 				throw AppleBillingError.decoding
 			}
-			return ApplePurchaseDispatch(appAccountToken: uuid, attemptId: body.attemptId)
+			return ApplePurchaseDispatch(appAccountToken: uuid, attemptId: body.attemptId,
+			                             continuationSecret: body.continuationSecret)
 		case 401: throw AppleBillingError.notSignedIn
+		case 403:
+			// New-protocol only: the uniform capability refusal. It is
+			// deliberately NOT `purchaseAuthorityManaged` — nothing about the
+			// account's billing authority is wrong, this client's capability is —
+			// and it must never be retried as a fresh one-shot dispatch.
+			let body = try? JSONDecoder().decode(AppleErrorBody.self, from: data)
+			if body?.error == "continuation_invalid" { throw AppleBillingError.continuationRejected }
+			throw AppleBillingError.server(status: 403)
 		case 409:
 			let body = try? JSONDecoder().decode(AppleErrorBody.self, from: data)
+			// A sheet this account armed has not reported its outcome yet. It is
+			// NOT an authority conflict and NOT a charge: reconciling means
+			// reporting what StoreKit did, or letting updates/restore converge.
+			if body?.error == "purchase_outcome_required" { throw AppleBillingError.purchaseOutcomeRequired }
 			if body?.error == "billing_authority_conflict" || body?.error == "purchase_reconciliation_required" || body?.error == "manage_with_apple" {
 				throw AppleBillingError.purchaseAuthorityManaged(provider: body?.provider ?? "apple")
 			}
 			throw AppleBillingError.server(status: 409)
+		case 429: throw AppleBillingError.rateLimited
+		default: throw AppleBillingError.server(status: resp.statusCode)
+		}
+	}
+
+	/// `POST /api/billing/apple/purchase-outcome`.
+	///
+	/// Every field is required by the server and every one is sent: the bundle,
+	/// the attempt, the app instance, the arm that is open, the secret, and the
+	/// outcome. The secret reaches the request body and nowhere else — not the
+	/// URL, not a header, not a log line, and not this method's errors.
+	public func reportApplePurchaseOutcome(bundleID: String,
+	                                       attemptID: String,
+	                                       continuation: ApplePurchaseContinuationFields,
+	                                       outcome: ApplePurchaseOutcome,
+	                                       token: String) async throws -> Bool {
+		// A report with no secret cannot authenticate and must not be spent: the
+		// arm id is single-use for ever, so sending one that is certain to be
+		// refused would burn the identity this sheet needs to report with.
+		guard let secret = continuation.continuationSecret, !secret.isEmpty else {
+			throw AppleBillingError.continuationRejected
+		}
+		var req = URLRequest(url: baseURL.appendingPathComponent("api/billing/apple/purchase-outcome"))
+		req.httpMethod = "POST"
+		req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+		req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+		req.httpBody = try JSONEncoder().encode(ApplePurchaseOutcomeRequest(
+			bundleId: bundleID, attemptId: attemptID,
+			appInstanceId: continuation.appInstanceID,
+			armRequestId: continuation.armRequestID,
+			continuationSecret: secret,
+			outcome: outcome.rawValue))
+		let (data, resp) = try await appleSend(req)
+		switch resp.statusCode {
+		case 200:
+			guard let body = try? JSONDecoder().decode(ApplePurchaseOutcomeBody.self, from: data) else {
+				throw AppleBillingError.decoding
+			}
+			return body.resumable
+		case 401: throw AppleBillingError.notSignedIn
+		case 403: throw AppleBillingError.continuationRejected
 		case 429: throw AppleBillingError.rateLimited
 		default: throw AppleBillingError.server(status: resp.statusCode)
 		}
@@ -498,8 +685,35 @@ extension AccountClient: AppleBillingService {
     }
 }
 
-private struct ApplePurchaseDispatchRequest: Encodable { let bundleId: String; let productId: String }
-private struct ApplePurchaseDispatchBody: Decodable { let appAccountToken: String; let attemptId: String }
+/// The dispatch request body.
+///
+/// The three capability fields are `String?` and `JSONEncoder` omits a `nil`
+/// optional key entirely — which is the required legacy shape, not a
+/// convenience. The server decodes with `DisallowUnknownFields` and selects the
+/// protocol on whether `appInstanceId` is present at all.
+private struct ApplePurchaseDispatchRequest: Encodable {
+    let bundleId: String
+    let productId: String
+    let appInstanceId: String?
+    let armRequestId: String?
+    let continuationSecret: String?
+}
+private struct ApplePurchaseDispatchBody: Decodable {
+    let appAccountToken: String
+    let attemptId: String
+    /// Present on the initial arm only. Absent on a resume and on every legacy
+    /// answer, which is why it decodes as optional rather than defaulting.
+    let continuationSecret: String?
+}
+private struct ApplePurchaseOutcomeRequest: Encodable {
+    let bundleId: String
+    let attemptId: String
+    let appInstanceId: String
+    let armRequestId: String
+    let continuationSecret: String
+    let outcome: String
+}
+private struct ApplePurchaseOutcomeBody: Decodable { let resumable: Bool }
 
 /// The whole request body of the transaction endpoint. One stored property, so
 /// the encoded document has exactly one key — which is what the server's

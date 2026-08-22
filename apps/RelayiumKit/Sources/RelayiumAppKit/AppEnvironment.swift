@@ -137,6 +137,85 @@ public enum AppEnvironment {
                            accessGroup: nil)
     }
 
+    /// The keychain account holding this device's Apple purchase-continuation
+    /// capability — the attempt, the arm, and the raw 32-byte secret.
+    ///
+    /// Its own account, beside the bearer and the installation identity rather
+    /// than inside either. Sign-out clears the bearer; a capability sharing that
+    /// item would be destroyed by every logout, and losing the secret is the one
+    /// failure this protocol cannot recover from — the server would stay armed
+    /// against a capability nobody holds.
+    // nonlocalized: a keychain account key
+    public static let applePurchaseCapabilityAccount = "apple-purchase-capability"
+
+    /// The keychain account holding this installation's Apple **app-instance**
+    /// identity.
+    ///
+    /// Deliberately NOT `installationIdentityAccount`. That value is a device-row
+    /// lookup hint the server already consults on a different code path; reusing
+    /// it would tie a billing capability's device binding to an identifier whose
+    /// lifecycle is owned by device authentication. Two purposes, two items, so
+    /// neither can be rotated or cleared on the other's behalf.
+    // nonlocalized: a keychain account key
+    public static let appleAppInstanceAccount = "apple-app-instance-id"
+
+    /// The store for the purchase-continuation capability.
+    ///
+    /// **No access group, deliberately.** A group is a share: an item in the
+    /// team group is readable by the Share extension and anything else signed
+    /// into it. The extension holds no bearer and buys nothing, and a capability
+    /// two processes can read is one that two of them could present.
+    ///
+    /// Accessibility comes from `KeychainTokenStore.accessibility` —
+    /// `…AfterFirstUnlockThisDeviceOnly` — and the item is explicitly
+    /// non-synchronizable, so neither an iCloud Keychain sync nor a backup
+    /// restore puts this device's purchase capability on another Mac.
+    public static func makeApplePurchaseCapabilityStore(
+        _ configuration: KeychainConfiguration = keychainConfiguration
+    ) -> KeychainTokenStore {
+        KeychainTokenStore(service: configuration.service,
+                           account: applePurchaseCapabilityAccount,
+                           accessGroup: nil)
+    }
+
+    /// The store for the Apple app-instance identity. Same isolation rules and
+    /// the same reasons as the capability store above.
+    public static func makeAppleAppInstanceStore(
+        _ configuration: KeychainConfiguration = keychainConfiguration
+    ) -> KeychainTokenStore {
+        KeychainTokenStore(service: configuration.service,
+                           account: appleAppInstanceAccount,
+                           accessGroup: nil)
+    }
+
+    /// The purchase-continuation capability store and this installation's stable
+    /// Apple app-instance identity, or `nil` when either is unavailable.
+    ///
+    /// **`nil` means "be a legacy one-shot client", and that is the safe
+    /// answer.** A model given an instance id but nowhere to keep the secret
+    /// would send new-protocol requests whose outcome it could never report —
+    /// arming a sheet and then deadlocking the account, which is strictly worse
+    /// than the one-shot behaviour every released build already has. So the two
+    /// halves are returned together or not at all, and `AppleSubscriptionModel`
+    /// enforces the same pairing at its initialiser.
+    ///
+    /// The identity is minted and memoized by `InstallationIdentityProvider` —
+    /// the product's existing audited "read it, or create it once" path — over
+    /// this capability's OWN keychain account, so it is never the device-auth
+    /// installation identity and neither can be rotated on the other's behalf.
+    @MainActor
+    public static func makeApplePurchaseContinuation(
+        _ configuration: KeychainConfiguration = keychainConfiguration
+    ) -> (repository: ApplePurchaseCapabilityRepository, appInstanceID: String)? {
+        let identity = InstallationIdentityProvider(
+            store: makeAppleAppInstanceStore(configuration))
+        guard let appInstanceID = identity.current(),
+              ApplePurchaseIdentity.isValid(appInstanceID) else { return nil }
+        return (ApplePurchaseCapabilityRepository(
+                    store: makeApplePurchaseCapabilityStore(configuration)),
+                appInstanceID)
+    }
+
     /// Built through the configuration so a test can assert the keychain query
     /// for a platform it is not running on.
     public static func makeTokenStore(

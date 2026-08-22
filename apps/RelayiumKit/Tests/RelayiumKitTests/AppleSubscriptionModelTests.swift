@@ -133,6 +133,28 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
     /// Submissions from this 1-based call number onwards park until released.
     /// `nil` holds nothing.
     private var _holdSubmitAfter: Int?
+    /// The continuation half of every dispatch, in order, including the `nil`s a
+    /// legacy client sends. Recorded so a test can assert the exact wire shape.
+    private var _dispatchContinuations: [ApplePurchaseContinuationFields?] = []
+    private var _dispatchProductIDs: [String] = []
+    private var _reports: [ReportedOutcome] = []
+    private var _outcomeFailures: [Error] = []
+    /// What a delivered report ANSWERS as `resumable`, consumed in order; the
+    /// last repeats. Empty means the honest answer for the outcome that was
+    /// reported. Scripted separately from the request so a test can drive the
+    /// real server shape where a 200 says `resumable: false` to a cancellation.
+    private var _outcomeResumables: [Bool] = []
+    /// What the next dispatch answers as `continuationSecret`. `nil` is the
+    /// LEGACY server: no capability is issued at all.
+    private var _mintSecret: String?
+
+    struct ReportedOutcome: Equatable {
+        let attemptID: String
+        let appInstanceID: String
+        let armRequestID: String
+        let secret: String?
+        let outcome: ApplePurchaseOutcome
+    }
 
     init(journal: PurchaseJournal, accountToken: UUID) {
         self.journal = journal
@@ -155,6 +177,16 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
     func holdSubmit(after calls: Int) { sync { _holdSubmitAfter = calls } }
     func releaseSubmit() { sync { _holdSubmitAfter = nil } }
 
+    func setMintedSecret(_ value: String?) { sync { _mintSecret = value } }
+    /// Failures for `reportApplePurchaseOutcome`, consumed in order; the last
+    /// repeats. Empty means every report succeeds.
+    func setOutcomeFailures(_ values: [Error]) { sync { _outcomeFailures = values } }
+    func setOutcomeResumables(_ values: [Bool]) { sync { _outcomeResumables = values } }
+
+    var dispatchContinuations: [ApplePurchaseContinuationFields?] { sync { _dispatchContinuations } }
+    var dispatchProductIDs: [String] { sync { _dispatchProductIDs } }
+    var reports: [ReportedOutcome] { sync { _reports } }
+
     var catalogBundleIDs: [String] { sync { _catalogBundleIDs } }
     var catalogBearers: [String] { sync { _catalogBearers } }
     var submittedJWS: [String] { sync { _submittedJWS } }
@@ -172,9 +204,14 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
     }
 
     func dispatchApplePurchase(bundleID: String, productID: String,
+                               continuation: ApplePurchaseContinuationFields?,
                                token: String) async throws -> ApplePurchaseDispatch {
         journal.record("accountToken")
-        sync { _accountTokenBearers.append(token) }
+        sync {
+            _accountTokenBearers.append(token)
+            _dispatchContinuations.append(continuation)
+            _dispatchProductIDs.append(productID)
+        }
         let configured: Result<ApplePurchaseDispatch, Error>? = sync {
             guard let first = _dispatches.first else { return nil }
             if _dispatches.count > 1 { _dispatches.removeFirst() }
@@ -182,7 +219,32 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
         }
         if let configured { return try configured.get() }
         return ApplePurchaseDispatch(appAccountToken: try sync { _accountToken }.get(),
-                                     attemptId: "attempt-one")
+                                     attemptId: "attempt-one",
+                                     continuationSecret: sync { _mintSecret })
+    }
+
+    func reportApplePurchaseOutcome(bundleID: String,
+                                    attemptID: String,
+                                    continuation: ApplePurchaseContinuationFields,
+                                    outcome: ApplePurchaseOutcome,
+                                    token: String) async throws -> Bool {
+        journal.record("outcome")
+        sync { _reports.append(ReportedOutcome(attemptID: attemptID,
+                                               appInstanceID: continuation.appInstanceID,
+                                               armRequestID: continuation.armRequestID,
+                                               secret: continuation.continuationSecret,
+                                               outcome: outcome)) }
+        if let failure: Error = sync({
+            guard let first = _outcomeFailures.first else { return nil }
+            if _outcomeFailures.count > 1 { _outcomeFailures.removeFirst() }
+            return first
+        }) { throw failure }
+        if let scripted: Bool = sync({
+            guard let first = _outcomeResumables.first else { return nil }
+            if _outcomeResumables.count > 1 { _outcomeResumables.removeFirst() }
+            return first
+        }) { return scripted }
+        return outcome.isResumable
     }
 
     func submitAppleTransaction(signedTransactionInfo: String,
@@ -350,6 +412,43 @@ final class AppleSubscriptionModelTests: XCTestCase {
         return Rig(model: model, store: store, billing: billing, journal: journal, bearer: box)
     }
 
+    /// A rig that speaks the **continuation protocol**, over a capability store
+    /// a test can inspect and pre-seed.
+    ///
+    /// `makeRig` above deliberately builds a LEGACY model instead — no
+    /// capability, no instance — which is why every other test in this file goes
+    /// on proving the shipped one-shot behaviour unchanged.
+    private func makeContinuationRig(
+        store capabilityStore: InMemoryApplePurchaseCapabilityStore,
+        bearer: String? = "rlm_app_T",
+        appInstanceID: String = "instance-A"
+    ) -> Rig {
+        let journal = PurchaseJournal()
+        let store = FakeStore(journal: journal)
+        let billing = FakeBilling(journal: journal, accountToken: Fixture.accountToken)
+        billing.setMintedSecret("TEST-SECRET-NOT-REAL")
+        let box = BearerBox(bearer)
+        let model = AppleSubscriptionModel(
+            store: store, billing: billing, bundleID: Fixture.bundleID,
+            bearer: { box.current },
+            refreshAccount: { journal.record("refresh") },
+            continuation: ApplePurchaseCapabilityRepository(store: capabilityStore),
+            appInstanceID: appInstanceID)
+        return Rig(model: model, store: store, billing: billing, journal: journal, bearer: box)
+    }
+
+    private func makeReadyContinuationRig(
+        store capabilityStore: InMemoryApplePurchaseCapabilityStore,
+        appInstanceID: String = "instance-A"
+    ) async -> Rig {
+        let rig = makeContinuationRig(store: capabilityStore, appInstanceID: appInstanceID)
+        rig.store.setOffers(.success(Fixture.offers(Fixture.catalog)))
+        await rig.model.loadOffers()
+        rig.store.setPurchase(.success(.delivered(Fixture.delivery)))
+        rig.billing.setSubmissions([.success(Fixture.entitlement)])
+        return rig
+    }
+
     /// A rig whose offers are already loaded, which is the precondition every
     /// purchase has.
     ///
@@ -386,6 +485,81 @@ final class AppleSubscriptionModelTests: XCTestCase {
             XCTAssertFalse(AppleSubmission.refused(failure).permitsFinish,
                            "\(failure) permits a finish")
         }
+    }
+
+    /// **Every one of the eight `(applied, dispatchPending, dispatchResolved)`
+    /// shapes, enumerated rather than sampled.**
+    ///
+    /// The rule is `dispatchResolved || (applied && !dispatchPending)`, and it
+    /// is written here as a table instead of as the expression again — a test
+    /// that re-derives the implementation agrees with any bug the
+    /// implementation has.
+    ///
+    /// Two rows are the reason this test exists, and neither is theoretical:
+    ///
+    ///  * `(false, false, true)` is the **exact triplet a production server
+    ///    returns today** after the cancellation-recovery batch, when it
+    ///    converges on a transaction it has already accounted for. The previous
+    ///    `applied`-requiring rule answered `false` here, which meant StoreKit
+    ///    redelivered that transaction forever and every redelivery got the same
+    ///    answer. It MUST finish.
+    ///  * `(true, true, false)` MUST NOT finish even though this call recorded
+    ///    the JWS: a dispatch still pending and unresolved may still have an arm
+    ///    open, and the redelivery is what reconciliation depends on.
+    ///
+    /// The pair `(false, true, false)` / `(true, true, false)` together state
+    /// the unresolved-pending refusal for BOTH values of `applied`, and
+    /// `(false, true, true)` / `(true, true, true)` state that `dispatchResolved`
+    /// dominates `dispatchPending` either way.
+    func testTheFinishRuleIsExhaustiveOverEveryDispatchShape() {
+        // (applied, dispatchPending, dispatchResolved, may finish)
+        let table: [(Bool, Bool, Bool, Bool)] = [
+            (false, false, false, false),  // nothing recorded, nothing settled
+            (false, false, true,  true),   // THE REAL PRODUCTION RESPONSE
+            (false, true,  false, false),  // unresolved pending, not applied
+            (false, true,  true,  true),   // resolved dominates pending
+            (true,  false, false, true),   // recorded by this call, no dispatch question
+            (true,  false, true,  true),   // both reasons at once
+            (true,  true,  false, false),  // unresolved pending, applied does NOT rescue it
+            (true,  true,  true,  true),   // resolved dominates pending
+        ]
+        for (applied, pending, resolved, expected) in table {
+            let result = AppleTransactionResult(
+                applied: applied, planId: "pro", status: "active",
+                expiresAt: 1_786_000_000, provider: "apple",
+                dispatchPending: pending, dispatchResolved: resolved)
+            XCTAssertEqual(
+                AppleSubmission.accepted(result).permitsFinish, expected,
+                "applied=\(applied) dispatchPending=\(pending) dispatchResolved=\(resolved)")
+        }
+        // The table covers every combination exactly once, so a row silently
+        // dropped in an edit is a failure rather than thinner coverage.
+        XCTAssertEqual(Set(table.map { [$0.0, $0.1, $0.2] }).count, 8)
+        // No refusal finishes, whatever the accepted table says.
+        for failure in Fixture.everyRefusal {
+            XCTAssertFalse(AppleSubmission.refused(failure).permitsFinish)
+        }
+    }
+
+    /// The production shape again, driven through the **whole purchase path**
+    /// rather than asserted on the value in isolation.
+    ///
+    /// `testAnUnappliedRedeliveryRemainsAvailableForReconciliation` above is its
+    /// deliberate opposite: same `applied=false`, but nothing resolved, so the
+    /// transaction stays with the store. The two together are what separate "not
+    /// applied" from "not settled".
+    func testAResolvedStaleAcceptanceFinishesTheTransaction() async {
+        let rig = await makeReadyRig()
+        let resolvedStale = AppleTransactionResult(applied: false, planId: "plus", status: "active",
+                                                   expiresAt: 1_786_000_000, provider: "apple",
+                                                   dispatchPending: false, dispatchResolved: true)
+        rig.store.setPurchase(.success(.delivered(Fixture.delivery)))
+        rig.billing.setSubmissions([.success(resolvedStale)])
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id],
+                       "a resolved acceptance was left for endless redelivery")
+        XCTAssertEqual(rig.model.state, .completed(resolvedStale))
     }
 
     // MARK: - the successful purchase, in order
@@ -469,7 +643,15 @@ final class AppleSubscriptionModelTests: XCTestCase {
 
     /// A client outcome is not provider authority. Once the server emitted a
     /// dispatch, a modified client must not turn Cancel or Ask to Buy into a
-    /// second StoreKit sheet. Recovery is Transaction.updates/restore only.
+    /// second StoreKit sheet.
+    ///
+    /// This drives the LEGACY model, which has no capability and therefore no
+    /// way to report an outcome at all. For `pending` the store still redelivers
+    /// if it becomes a charge; for `userCancelled` **nothing recovers it** —
+    /// there is no signed transaction for `Transaction.updates` or `restore` to
+    /// carry — which is the deadlock the continuation protocol exists to remove.
+    /// Refusing the second sheet is still correct here: a legacy client cannot
+    /// prove the first one is closed.
     func testAnUnresolvedDispatchNeverOpensASecondStoreKitSheet() async {
         for firstOutcome in [StorePurchaseOutcome.userCancelled, .pending] {
             let rig = await makeReadyRig()
@@ -1396,5 +1578,502 @@ final class AppleSubscriptionModelTests: XCTestCase {
             try? await Task.sleep(nanoseconds: 10_000_000)
         }
         XCTFail("condition never held", file: file, line: line)
+    }
+}
+
+// MARK: - the purchase-continuation protocol, through the real purchase path
+
+/// The cancellation-recovery protocol driven end to end.
+///
+/// `ApplePurchaseContinuationTests` proves the state machine's rules in
+/// isolation. This proves the **purchase path actually uses them**: that a
+/// cancellation is reported and released, that a resume reuses the attempt, that
+/// `pending` and a thrown store error lock instead, and that a legacy build is
+/// byte-for-byte unchanged.
+extension AppleSubscriptionModelTests {
+
+    /// **A legacy build sends no capability fields at all.**
+    ///
+    /// The additive protocol is server-first, so an already-released client must
+    /// keep getting exactly one dispatch and its old one-shot safety. Asserted as
+    /// `nil` on the wire rather than as "some fields missing".
+    func testALegacyBuildSendsNoContinuationFields() async {
+        let rig = await makeReadyRig()
+        await rig.model.purchase(productID: Fixture.catalog[0])
+        XCTAssertEqual(rig.billing.dispatchContinuations, [nil])
+        XCTAssertTrue(rig.billing.reports.isEmpty,
+                      "a legacy client reported an outcome it has no capability for")
+    }
+
+    /// The initial arm carries the instance and a fresh identity and no secret,
+    /// and the secret the server returns is **persisted before the sheet opens**.
+    func testTheInitialArmPersistsTheCapabilityBeforeTheSheet() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        let sent = try XCTUnwrap(rig.billing.dispatchContinuations.first ?? nil)
+        XCTAssertEqual(sent.appInstanceID, "instance-A")
+        XCTAssertNil(sent.continuationSecret, "a first arm has nothing to prove")
+        XCTAssertTrue(ApplePurchaseIdentity.isValid(sent.armRequestID))
+
+        let stored = try XCTUnwrap(ApplePurchaseCapabilityRepository(store: capabilityStore).load())
+        XCTAssertEqual(stored.appInstanceID, "instance-A")
+        XCTAssertEqual(stored.armRequestID, sent.armRequestID,
+                       "the stored arm is not the one the sheet was opened under")
+        XCTAssertEqual(stored.secret, "TEST-SECRET-NOT-REAL")
+    }
+
+    /// **Cancel, then buy again — the defect this whole protocol exists for.**
+    ///
+    /// The cancellation is reported under the arm that was open, and the second
+    /// purchase resumes the SAME attempt with a FRESH arm identity and the
+    /// secret. Before this protocol the second purchase was refused for ever.
+    func testACancelledPurchaseCanBeResumedWithAFreshArm() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+
+        rig.store.setPurchase(.success(.userCancelled))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+        XCTAssertEqual(rig.model.state, .idle)
+
+        let cancellation = try XCTUnwrap(rig.billing.reports.first)
+        XCTAssertEqual(cancellation.outcome, .userCancelled)
+        XCTAssertEqual(cancellation.attemptID, "attempt-one")
+        XCTAssertEqual(cancellation.secret, "TEST-SECRET-NOT-REAL")
+        let firstArm = cancellation.armRequestID
+        XCTAssertEqual(ApplePurchaseCapabilityRepository(store: capabilityStore).load()?.phase,
+                       .cancelled)
+
+        rig.store.setPurchase(.success(.delivered(Fixture.delivery)))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        let resume = try XCTUnwrap(rig.billing.dispatchContinuations.last ?? nil)
+        XCTAssertEqual(resume.continuationSecret, "TEST-SECRET-NOT-REAL",
+                       "a resume must present the capability")
+        XCTAssertNotEqual(resume.armRequestID, firstArm,
+                          "a spent arm identity was re-presented")
+        XCTAssertTrue(ApplePurchaseIdentity.isValid(resume.armRequestID))
+        XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement))
+    }
+
+    /// **A cancelled sheet is not a promise to buy the same thing next.**
+    ///
+    /// The resume names the product the user actually chose, and the stored
+    /// capability moves with it — convergence is exact on product, so an attempt
+    /// left naming the abandoned one charges correctly and then never resolves.
+    func testACancelledPurchaseCanResumeOnADifferentProduct() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+
+        rig.store.setPurchase(.success(.userCancelled))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        rig.store.setPurchase(.success(.delivered(Fixture.delivery)))
+        await rig.model.purchase(productID: Fixture.catalog[1])
+
+        XCTAssertEqual(rig.billing.dispatchProductIDs.last, Fixture.catalog[1])
+        let stored = try XCTUnwrap(ApplePurchaseCapabilityRepository(store: capabilityStore).load())
+        XCTAssertEqual(stored.productID, Fixture.catalog[1],
+                       "the attempt still names the abandoned product")
+        XCTAssertEqual(stored.attemptID, "attempt-one", "a resume must not mint a new attempt")
+    }
+
+    /// **`pending` locks, and locked is terminal.** Ask to Buy may still become a
+    /// real charge, so it is reported as `pending` — never as a cancellation —
+    /// and the next purchase is refused rather than arming a second sheet.
+    func testAPendingPurchaseLocksAndNeverReArms() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+
+        rig.store.setPurchase(.success(.pending))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+        XCTAssertEqual(rig.model.state, .deferred)
+        XCTAssertEqual(rig.billing.reports.map(\.outcome), [.pending])
+        XCTAssertEqual(ApplePurchaseCapabilityRepository(store: capabilityStore).load()?.phase,
+                       .locked)
+
+        let dispatchesBefore = rig.billing.dispatchContinuations.count
+        rig.store.setPurchase(.success(.delivered(Fixture.delivery)))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+        XCTAssertEqual(rig.billing.dispatchContinuations.count, dispatchesBefore,
+                       "a locked attempt armed another sheet")
+        XCTAssertEqual(rig.model.state, .failed(.billing(.continuationRejected)))
+    }
+
+    /// **A thrown store error is not a cancellation.** It is reported as
+    /// `failed`, which locks — an error says nothing about whether Apple charged.
+    func testAThrownStoreErrorLocksRatherThanReleasing() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+
+        struct StoreFailure: Error {}
+        rig.store.setPurchase(.failure(StoreFailure()))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.billing.reports.map(\.outcome), [.failed])
+        XCTAssertEqual(ApplePurchaseCapabilityRepository(store: capabilityStore).load()?.phase,
+                       .locked)
+    }
+
+    /// A delivered purchase reports `success`, which also locks: the attempt is
+    /// resolved by the transaction, not by re-arming.
+    func testADeliveredPurchaseReportsSuccess() async {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+        await rig.model.purchase(productID: Fixture.catalog[0])
+        XCTAssertEqual(rig.billing.reports.map(\.outcome), [.success])
+    }
+
+    /// **Silence is not a cancellation.** A process that died with the sheet open
+    /// leaves `armed`, and a relaunch must refuse rather than open a second one.
+    ///
+    /// This is the case where **nothing was recorded** — the process died before
+    /// StoreKit answered, so there is no report to replay. The refusal is the
+    /// outcome-required answer. If the sheet had completed, the store redelivers
+    /// the transaction and reconciliation converges it; if it was cancelled and
+    /// the report was recorded, `testALostCancellationIsReplayedBeforeOneFreshArm`
+    /// covers the replay instead.
+    func testARestartWithAnUnreportedSheetRefusesToArmAgain() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        try ApplePurchaseCapabilityRepository(store: capabilityStore).save(
+            ApplePurchaseCapability(attemptID: "attempt-one", appInstanceID: "instance-A",
+                                    secret: "TEST-SECRET-NOT-REAL", armRequestID: "arm-crashed",
+                                    productID: Fixture.catalog[0], phase: .armed))
+        // A brand-new model over the same store is what a relaunch is.
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertTrue(rig.billing.dispatchContinuations.isEmpty,
+                      "a crashed sheet was silently re-armed")
+        XCTAssertEqual(rig.model.state, .failed(.billing(.purchaseOutcomeRequired)))
+    }
+
+    /// **A lost resume response is replayed with the SAME arm and product**, so
+    /// the server reads its own answer back instead of authorizing a second
+    /// sheet under an identity this client would otherwise never have learned.
+    func testALostResumeResponseReplaysTheSameArm() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+
+        rig.store.setPurchase(.success(.userCancelled))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        // The resume's response is lost.
+        rig.billing.setDispatches([.failure(AppleBillingError.network)])
+        rig.store.setPurchase(.success(.delivered(Fixture.delivery)))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+        let attempted = try XCTUnwrap(rig.billing.dispatchContinuations.last ?? nil)
+        let intent = try XCTUnwrap(
+            ApplePurchaseCapabilityRepository(store: capabilityStore).load()?.unconfirmedResume)
+        XCTAssertEqual(intent.armRequestID, attempted.armRequestID,
+                       "the arm that was sent was not recorded for replay")
+
+        // The retry replays it byte for byte.
+        rig.billing.setDispatches([])
+        await rig.model.purchase(productID: Fixture.catalog[0])
+        let replayed = try XCTUnwrap(rig.billing.dispatchContinuations.last ?? nil)
+        XCTAssertEqual(replayed.armRequestID, intent.armRequestID,
+                       "a second logical sheet was armed after a lost response")
+        XCTAssertEqual(rig.billing.dispatchProductIDs.last, intent.productID)
+    }
+
+    // MARK: - a report that was recorded and never confirmed delivered
+
+    /// The outcome reports the server received, checked for length first.
+    ///
+    /// Subscripting `reports` directly **traps** when a regression sends fewer of
+    /// them, which aborts the whole run instead of failing one test — and a
+    /// mutation battery cannot read a crash. This records the real count as a
+    /// failure and stops just this test.
+    private func reports(_ billing: FakeBilling, count: Int,
+                         file: StaticString = #filePath,
+                         line: UInt = #line) throws -> [FakeBilling.ReportedOutcome] {
+        let all = billing.reports
+        XCTAssertEqual(all.count, count, "unexpected number of outcome reports",
+                       file: file, line: line)
+        return try XCTUnwrap(all.count == count ? all : nil, file: file, line: line)
+    }
+
+    /// **An undelivered outcome report moves nothing local, but it is written
+    /// down.**
+    ///
+    /// The phase staying `armed` is the fail-closed half and was always right.
+    /// The recorded intent is the half that was missing: a cancellation produces
+    /// **no signed transaction**, so there is nothing for `Transaction.updates`
+    /// or `restore` to redeliver and *nothing* reconciles the attempt. Without
+    /// the record, one dropped packet left this account refused for ever.
+    func testAnUndeliveredOutcomeReportStaysArmedAndIsRecordedForReplay() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+
+        rig.billing.setOutcomeFailures([AppleBillingError.network])
+        rig.store.setPurchase(.success(.userCancelled))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        let armed = try XCTUnwrap(ApplePurchaseCapabilityRepository(store: capabilityStore).load())
+        XCTAssertEqual(armed.phase, .armed, "an undelivered cancellation was believed anyway")
+        let sent = try XCTUnwrap(rig.billing.dispatchContinuations.last ?? nil)
+        XCTAssertEqual(armed.unconfirmedOutcome,
+                       ApplePurchaseOutcomeIntent(armRequestID: sent.armRequestID,
+                                                  outcome: .userCancelled),
+                       "the report was not recorded, so nothing can ever replay it")
+    }
+
+    /// **The lost cancellation is replayed on the next attempt, and only then is
+    /// one fresh sheet armed.**
+    ///
+    /// The exact schedule the correction exists for: cancel, lose the report,
+    /// come back. The replay must be the SAME arm, the SAME outcome and the SAME
+    /// secret, must precede any new arm, and must produce exactly one new sheet.
+    func testALostCancellationIsReplayedBeforeOneFreshArm() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+
+        rig.billing.setOutcomeFailures([AppleBillingError.network])
+        rig.store.setPurchase(.success(.userCancelled))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+        let firstArm = try XCTUnwrap(rig.billing.dispatchContinuations.last ?? nil).armRequestID
+        XCTAssertEqual(rig.journal.count("purchase"), 1)
+
+        // The server is reachable again, and the user tries the other product.
+        rig.billing.setOutcomeFailures([])
+        rig.store.setPurchase(.success(.delivered(Fixture.delivery)))
+        await rig.model.purchase(productID: Fixture.catalog[1])
+
+        // Report identity: the replay is byte-for-byte the report that was lost.
+        let sent = try reports(rig.billing, count: 3)
+        XCTAssertEqual(sent[1], sent[0], "the replay was not the identical report")
+        XCTAssertEqual(sent[0].armRequestID, firstArm)
+        XCTAssertEqual(sent[0].outcome, .userCancelled)
+        // Exactly one fresh arm followed, for the product actually chosen.
+        XCTAssertNotEqual(sent[2].armRequestID, firstArm,
+                          "the new sheet reused a spent arm identity")
+        XCTAssertEqual(sent[2].outcome, .success)
+        XCTAssertEqual(rig.billing.dispatchProductIDs, [Fixture.catalog[0], Fixture.catalog[1]])
+        XCTAssertEqual(rig.billing.dispatchContinuations.count, 2,
+                       "the replay armed a dispatch of its own")
+        XCTAssertEqual(rig.journal.count("purchase"), 2,
+                       "the replay opened a StoreKit sheet, or a second one was armed")
+    }
+
+    /// **A lost RESPONSE is the same client fact as a lost request, and the
+    /// replay is idempotent.**
+    ///
+    /// The server recorded the cancellation and the answer never arrived, so it
+    /// answers the replay `resumable: true` again rather than treating it as a
+    /// second statement — which is what `continuation_state IN (armed,cancelled)`
+    /// on both the read and the write predicate gives. The client must send the
+    /// identical request, including the attempt and the secret, and arm once.
+    func testALostSuccessfulResponseReplaysIdempotentlyOnTheSameArm() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+
+        // Delivered and applied by the server; only the answer was lost.
+        rig.billing.setOutcomeFailures([AppleBillingError.decoding])
+        rig.store.setPurchase(.success(.userCancelled))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        rig.billing.setOutcomeFailures([])
+        rig.billing.setOutcomeResumables([true])   // the idempotent re-acceptance
+        rig.store.setPurchase(.success(.delivered(Fixture.delivery)))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        let sent = try reports(rig.billing, count: 3)
+        XCTAssertEqual(sent[1], sent[0],
+                       "the replay differed from the report whose answer was lost")
+        XCTAssertEqual(sent[0].attemptID, sent[1].attemptID)
+        XCTAssertEqual(sent[0].secret, sent[1].secret)
+        XCTAssertEqual(rig.journal.count("purchase"), 2, "more than one fresh sheet was opened")
+        XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement))
+    }
+
+    /// **The record survives a relaunch**, which is the crash this mechanism
+    /// exists for: recorded, process died, and the next launch still owes it.
+    ///
+    /// A brand-new model over the same capability store is what a restart is.
+    func testARecordedCancellationIsReplayedAfterARestart() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let first = await makeReadyContinuationRig(store: capabilityStore)
+        first.billing.setOutcomeFailures([AppleBillingError.network])
+        first.store.setPurchase(.success(.userCancelled))
+        await first.model.purchase(productID: Fixture.catalog[0])
+        let lost = try XCTUnwrap(first.billing.reports.last)
+
+        // Relaunch: a different model, a different fake server, the same store.
+        let restarted = await makeReadyContinuationRig(store: capabilityStore)
+        restarted.store.setPurchase(.success(.delivered(Fixture.delivery)))
+        await restarted.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(restarted.billing.reports.first, lost,
+                       "the relaunched app did not replay the report it owed")
+        XCTAssertEqual(restarted.journal.count("purchase"), 1,
+                       "the relaunched app opened more than one sheet")
+        XCTAssertEqual(restarted.billing.dispatchContinuations.count, 1,
+                       "a dispatch was armed before the owed report was answered")
+    }
+
+    /// **A replay that still fails opens no sheet**, and the report stays owed.
+    ///
+    /// Fail-closed, truthfully: `purchaseOutcomeRequired` is exactly "the server
+    /// has not been told what StoreKit did". Nothing is armed and StoreKit is
+    /// never asked.
+    func testAReplayThatStillFailsOpensNoSheet() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+
+        rig.billing.setOutcomeFailures([AppleBillingError.network])
+        rig.store.setPurchase(.success(.userCancelled))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+        let recorded = try XCTUnwrap(
+            ApplePurchaseCapabilityRepository(store: capabilityStore).load()?.unconfirmedOutcome)
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.model.state, .failed(.billing(.purchaseOutcomeRequired)))
+        XCTAssertEqual(rig.journal.count("purchase"), 1, "a sheet opened while a report was owed")
+        XCTAssertEqual(rig.billing.dispatchContinuations.count, 1, "a second dispatch was armed")
+        // **Attempted once, then it gives up for this attempt.** An undelivered
+        // replay must fail closed immediately rather than fall through to the
+        // planner again: retrying inside one purchase spends the user's time on
+        // a server that is not answering, and the only thing that could then end
+        // the loop is its own bound.
+        let sent = try reports(rig.billing, count: 2)
+        XCTAssertEqual(sent[1], sent[0], "the replay was not the identical report")
+        XCTAssertEqual(ApplePurchaseCapabilityRepository(store: capabilityStore).load()?.unconfirmedOutcome,
+                       recorded, "the still-owed report was forgotten")
+    }
+
+    /// **The server's `resumable: false` is authoritative, even for a
+    /// cancellation this client is certain of.**
+    ///
+    /// `RecordAppleBillingPurchaseOutcome` short-circuits an already-locked
+    /// attempt to `Accepted: true, Resumable: false` whatever outcome was
+    /// requested. Believing the request instead of the answer would plan a resume
+    /// the server must refuse, while it still holds an attempt that may charge.
+    func testAServerThatRefusesToResumeNeverAllowsARearm() async {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+
+        rig.billing.setOutcomeResumables([false])
+        rig.store.setPurchase(.success(.userCancelled))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+        XCTAssertEqual(ApplePurchaseCapabilityRepository(store: capabilityStore).load()?.phase,
+                       .locked, "a cancellation the server refused to resume was believed anyway")
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.model.state, .failed(.billing(.continuationRejected)))
+        XCTAssertEqual(rig.journal.count("purchase"), 1, "a second sheet was armed")
+        XCTAssertEqual(rig.billing.dispatchContinuations.count, 1)
+    }
+
+    /// The same rule through the REPLAY path: a lost report whose replay is
+    /// answered `resumable: false` locks and arms nothing.
+    func testAReplayTheServerRefusesToResumeLocksRatherThanArming() async {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+
+        rig.billing.setOutcomeFailures([AppleBillingError.network])
+        rig.store.setPurchase(.success(.userCancelled))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        rig.billing.setOutcomeFailures([])
+        rig.billing.setOutcomeResumables([false])
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(ApplePurchaseCapabilityRepository(store: capabilityStore).load()?.phase, .locked)
+        XCTAssertEqual(rig.model.state, .failed(.billing(.continuationRejected)))
+        XCTAssertEqual(rig.journal.count("purchase"), 1, "a sheet opened after a refused replay")
+        XCTAssertEqual(rig.billing.dispatchContinuations.count, 1)
+    }
+
+    /// **Generalizing the record to every outcome cannot widen one.**
+    ///
+    /// `pending` and a thrown store error are recorded and replayed **as
+    /// themselves**, the server answers them honestly, and both lock. This is the
+    /// proof that a replay path built for cancellations did not become a way for
+    /// any other outcome to reach a second sheet.
+    func testALostNonCancellationReplaysAsItselfAndStaysLocked() async throws {
+        for (label, outcome, purchase) in [
+            ("pending", ApplePurchaseOutcome.pending,
+             Result<StorePurchaseOutcome, Error>.success(.pending)),
+            ("thrown", ApplePurchaseOutcome.failed, .failure(AppleBillingError.network)),
+        ] {
+            let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+            let rig = await makeReadyContinuationRig(store: capabilityStore)
+            rig.billing.setOutcomeFailures([AppleBillingError.network])
+            rig.store.setPurchase(purchase)
+            await rig.model.purchase(productID: Fixture.catalog[0])
+
+            XCTAssertEqual(
+                ApplePurchaseCapabilityRepository(store: capabilityStore).load()?.unconfirmedOutcome?.outcome,
+                outcome, "\(label) was not recorded as itself")
+
+            rig.billing.setOutcomeFailures([])
+            await rig.model.purchase(productID: Fixture.catalog[0])
+
+            let sent = try reports(rig.billing, count: 2)
+            XCTAssertEqual(sent[1], sent[0], "\(label) did not replay as itself")
+            XCTAssertEqual(ApplePurchaseCapabilityRepository(store: capabilityStore).load()?.phase,
+                           .locked, "\(label) reached a resumable phase")
+            XCTAssertEqual(rig.model.state, .failed(.billing(.continuationRejected)))
+            XCTAssertEqual(rig.journal.count("purchase"), 1,
+                           "\(label) armed a second sheet")
+            XCTAssertEqual(rig.billing.dispatchContinuations.count, 1)
+        }
+    }
+
+    /// **A record naming an older arm cannot touch a newer one.**
+    ///
+    /// `armRequestID` moves only on an authoritative 200, so the server has
+    /// already superseded the arm this record is about. It is neither replayed
+    /// nor sent, and the live arm is refused on its own merits.
+    func testAStaleRecordedOutcomeCannotReleaseANewerArm() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        try ApplePurchaseCapabilityRepository(store: capabilityStore).save(
+            ApplePurchaseCapability(
+                attemptID: "attempt-one", appInstanceID: "instance-A",
+                secret: "TEST-SECRET-NOT-REAL", armRequestID: "arm-live",
+                productID: Fixture.catalog[0], phase: .armed,
+                unconfirmedOutcome: ApplePurchaseOutcomeIntent(armRequestID: "arm-old",
+                                                                outcome: .userCancelled)))
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.model.state, .failed(.billing(.purchaseOutcomeRequired)))
+        XCTAssertTrue(rig.billing.reports.isEmpty, "a stale record was sent to the server")
+        XCTAssertTrue(rig.billing.dispatchContinuations.isEmpty, "a stale record armed a dispatch")
+        XCTAssertEqual(rig.journal.count("purchase"), 0, "a stale record opened a sheet")
+        XCTAssertEqual(ApplePurchaseCapabilityRepository(store: capabilityStore).load()?.armRequestID,
+                       "arm-live", "the live arm was moved by a stale record")
+    }
+
+    /// **The capability is retired on authoritative convergence, and only then.**
+    /// The server reporting the dispatch resolved is what releases it — never a
+    /// clock, a TTL or a launch count.
+    func testTheCapabilityIsRetiredOnlyWhenTheServerResolvesTheAttempt() async {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+
+        // An accepted-but-unresolved answer keeps it: the attempt is still open.
+        rig.billing.setSubmissions([.success(AppleTransactionResult(
+            applied: true, planId: "pro", status: "active", expiresAt: 1_786_000_000,
+            provider: "apple", dispatchPending: false, dispatchResolved: false))])
+        await rig.model.purchase(productID: Fixture.catalog[0])
+        XCTAssertNotNil(ApplePurchaseCapabilityRepository(store: capabilityStore).load(),
+                        "the capability was retired before the attempt resolved")
+
+        // The resolved answer retires it.
+        let resolved = await makeReadyContinuationRig(store: capabilityStore)
+        resolved.billing.setSubmissions([.success(AppleTransactionResult(
+            applied: false, planId: "pro", status: "active", expiresAt: 1_786_000_000,
+            provider: "apple", dispatchPending: false, dispatchResolved: true))])
+        resolved.model.startObservingUpdates()
+        resolved.store.deliverUpdate(Fixture.delivery)
+        await waitFor(resolved) { $0.journal.count("submit") >= 1 }
+        XCTAssertNil(ApplePurchaseCapabilityRepository(store: capabilityStore).load(),
+                     "a resolved attempt left its capability behind")
     }
 }

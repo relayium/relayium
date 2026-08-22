@@ -238,3 +238,37 @@ struct UpdateSettingsView: View {
         return formatter.string(from: date)
     }
 }
+
+/// **No native Sign in with Apple in the direct-download build.**
+///
+/// `EmptyView` contributes nothing to the layout, so `LoginView` renders exactly
+/// what it always has: the email/password form and the **browser** device-flow
+/// sign-in, which stays present and functional here as it does in every
+/// distribution. Nothing is removed by this file; a control is simply not added.
+///
+/// **The absence is structural rather than conditional**, and that is the point.
+/// This file is a member of `Relayium` and of nothing else, and its twin —
+/// which does declare the real `SignInWithAppleButton` — is a member of
+/// `RelayiumAppStore` and of nothing else. So this target never compiles
+/// `AuthenticationServices` for an Apple ID at all, and there is no call path
+/// that could reach `ASAuthorizationController` however the shared sources are
+/// edited. An `#if` would leave that reachability one edit away.
+///
+/// The reason it must be structural: `com.apple.developer.applesignin` is
+/// granted per provisioning profile, and the Developer ID profile does not carry
+/// it. A binary that presented the control anyway would fail at runtime, in
+/// front of the user, on a credential path — the worst place to discover a
+/// packaging mistake. `MacAppleSignInGuardTests` asserts both halves: no
+/// entitlement in the direct build's file, and no Apple-authorization symbol in
+/// anything this target compiles.
+///
+/// Apple sign-in is still reachable in this build, through the browser: whatever
+/// the user picks on relayium.com — including Apple — is the browser's business,
+/// which is why the shared control there is named for the browser rather than
+/// for a mechanism this target does not implement.
+struct AppleSignInSection: View {
+    let mode: AuthMode
+    let isBusy: Bool
+
+    var body: some View { EmptyView() }
+}

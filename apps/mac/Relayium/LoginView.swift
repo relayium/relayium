@@ -105,6 +105,25 @@ struct LoginView: View {
                 }
             }
 
+            // **Native Sign in with Apple, in the builds that have it.**
+            //
+            // A distribution seam, not a conditional: this resolves to the real
+            // system control in the Mac App Store target and to an `EmptyView`
+            // in the direct-download one, by target file membership. This file
+            // is shared source and contains no Apple-authorization code of its
+            // own — see `Distribution/AppStoreDistribution.swift`.
+            //
+            // Present in BOTH modes, like iOS: an Apple authorization creates
+            // the account when there is none and signs in when there is, so
+            // hiding it on the create-account half would hide the shorter way to
+            // do exactly what that half is for.
+            //
+            // **It is placed ABOVE the browser control and never replaces it.**
+            // The browser device flow below is unconditional in every
+            // distribution, this one included.
+            AppleSignInSection(mode: mode, isBusy: form.isBusy)
+                .frame(maxWidth: 280)
+
             // Sign-in only. The device flow signs an existing account in; it is
             // not a second way to create one, and offering it beside the
             // create-account fields would imply it was.
@@ -117,6 +136,10 @@ struct LoginView: View {
                 // just relayium.com in a sheet and a poll of the device-code
                 // endpoints. Whatever the user picks over there, including
                 // Apple, is the browser's business.
+                //
+                // **Still true of the direct build, and still the only Apple
+                // route there.** In the Mac App Store build the native control
+                // above is an ADDITION beside this, never a replacement for it.
                 Button(L10n.t(.loginBrowserSignIn)) { startBrowserLogin() }
                     .disabled(form.isBusy || browserBusy)
 
