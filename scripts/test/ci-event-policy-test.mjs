@@ -1194,13 +1194,49 @@ const SKIP_MARKER = "[macos-only]";
 const COMMIT_MESSAGE_CONDITION = /head_commit|event\.commits|\.message\b/;
 
 /**
- * The two most expensive lanes, and what a job in each is allowed to cost.
+ * Apple's own notarization wait, READ from the script that submits.
+ *
+ * `notarize-stage`'s bound is the one in this repository that must not be
+ * tightened toward its observed runtime. Every real notarization in recent
+ * history finished in about a minute, so an observation-scaled bound would be
+ * about two — and it would kill a legitimately slow notary day mid-wait and
+ * burn the submission. The floor is therefore whatever `--wait --timeout` the
+ * submitting script itself allows, parsed rather than remembered: a comment
+ * asserting "keep this above 45m" goes stale the moment somebody edits the
+ * script, and the two numbers disagreeing silently is the whole failure.
+ */
+const NOTARY_SCRIPT = "apps/mac/scripts/notarize-dmg.sh";
+const notaryWaitMinutes = (() => {
+  try {
+    return Number(readFileSync(resolve(repoRoot, NOTARY_SCRIPT), "utf8").match(/--timeout\s+(\d+)m\b/)?.[1]);
+  } catch {
+    return NaN;
+  }
+})();
+
+/**
+ * The most expensive lanes, and what a job in each is allowed to cost.
  *
  * `max` is asserted in BOTH directions for the same reason the self-host bound
  * is: absent, a job inherits GitHub's six-hour default; declared at some large
  * number, it is that same default wearing a disguise. The ceilings sit above
  * the real bounds these files carry, so a deliberate adjustment is possible and
  * a six-hour "bound" is not.
+ *
+ * An entry declares EITHER a whole-file `max`/`why`, when every job in the file
+ * does comparable work, OR a `jobs` map naming each job separately. `macos.yml`
+ * needs the second form and would be actively harmed by the first: its jobs run
+ * from a sub-minute checkout to a double `xcodebuild` plus signing and a
+ * 45-minute Apple notarization wait. One number covering all six would have to
+ * be the largest of them, which is how a `contract` job that hangs for an hour
+ * reads as "inside budget" — a global bound raised until it fits the slowest
+ * job is the six-hour default with extra steps. The `jobs` form is also checked
+ * for COMPLETENESS in both directions: a job with no entry fails, and an entry
+ * naming no job fails, so adding or renaming a macOS job forces a decision
+ * instead of silently landing in the unbudgeted case.
+ *
+ * Every `max` below sits above a bound this repository has actually measured;
+ * the reasoning for each number is in the comment above the job it bounds.
  */
 const RUNNER_BUDGETS = [
   {
@@ -1214,7 +1250,94 @@ const RUNNER_BUDGETS = [
     max: 60,
     why: "a wedged release job holds a runner with the release signing key materialized on disk",
   },
+  {
+    file: MACOS,
+    why: "a PAID macOS runner is held by work that will never finish",
+    jobs: {
+      // Declared 10. A checkout on most events; its one step is skipped
+      // outside a workflow_dispatch, and only a release dispatch reaches
+      // `xcodebuild -showBuildSettings`.
+      contract: {
+        max: 15,
+        why: "a PAID macOS runner is held by a release-contract check that reads a project file",
+      },
+      // Declared 20. One `swift test` over the shared package, plus four
+      // release-script tests.
+      test: {
+        max: 30,
+        why: "a PAID macOS runner is held by a `swift test` that never exits",
+      },
+      // Declared per shard in the matrix: 30 and 35.
+      "ui-smoke": {
+        max: 45,
+        why: "a PAID macOS runner is held by a UI test driving an app that never became ready, "
+          + "with the signing certificate materialized in a keychain on disk",
+      },
+      // Declared 60, the widest bound here and the widest measured spread.
+      "signed-build": {
+        max: 75,
+        why: "a PAID macOS runner is held by a wedged build with the Developer ID signing key "
+          + "materialized in a keychain on disk",
+      },
+      // Declared 55: Apple's own `--wait --timeout 45m`, plus the stapling,
+      // assessment, staging and upload that follow it. Deliberately the one
+      // bound in this file NOT scaled from observed runtime — see the comment
+      // on the job.
+      "notarize-stage": {
+        max: 70,
+        why: "a PAID macOS runner is held by a notarization submission that never returns, with "
+          + "the notary API key materialized on disk",
+        min: notaryWaitMinutes,
+        minSource: `\`${NOTARY_SCRIPT}\`'s own \`--wait --timeout\``,
+        minWhy: "a bound at or below Apple's wait kills a slow-but-succeeding notarization "
+          + "mid-wait and burns the submission, which is a worse outcome than the runner time it "
+          + "saves",
+      },
+      // Declared 15. A free Linux runner, and the least recoverable job here.
+      publish: {
+        max: 20,
+        why: "a half-finished publication holds a runner while the release it was supposed to "
+          + "announce is neither published nor visibly failed",
+      },
+    },
+  },
 ];
+
+/**
+ * Every minute value a job's `timeout-minutes` can actually take at run time.
+ *
+ * A plain `timeout-minutes: 60` has one. `macos.yml`'s `ui-smoke` declares
+ * `timeout-minutes: ${{ matrix.timeout }}`, which is not a number at all: the
+ * real bounds are the `timeout` of each `strategy.matrix.include` entry, and
+ * `Number("${{ matrix.timeout }}")` is `NaN`. Reading the declared string alone
+ * would therefore report the shard-per-shard bounds this file deliberately
+ * carries as "not a finite positive number" — so a budget that could not
+ * resolve a matrix would push whoever hit it toward deleting the matrix and
+ * declaring one flat number, which is the outcome this whole section exists to
+ * prevent.
+ *
+ * Returns `{ unresolved }` rather than an empty list when the expression names
+ * a matrix the job does not have. An empty list would make every assertion
+ * below iterate over nothing and pass, which is a silent non-assertion.
+ */
+function timeoutValues(job) {
+  const raw = job["timeout-minutes"];
+  const key = typeof raw === "string"
+    ? raw.trim().match(/^\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}$/)?.[1]
+    : undefined;
+  if (key === undefined) {
+    return { values: [{ where: "timeout-minutes", declared: JSON.stringify(raw), value: Number(raw) }] };
+  }
+  const include = job.strategy?.matrix?.include;
+  if (!Array.isArray(include) || include.length === 0) return { unresolved: key };
+  return {
+    values: include.map((entry, index) => ({
+      where: `include[${index}]'s \`${key}\` (read by \`timeout-minutes\`)`,
+      declared: JSON.stringify(entry?.[key]),
+      value: Number(entry?.[key]),
+    })),
+  };
+}
 
 /** This file, and the unfiltered workflow that has to execute it. */
 const SELF_TEST = "scripts/test/ci-event-policy-test.mjs";
@@ -1917,17 +2040,35 @@ function platformBoundaryFailures(world) {
 
   // 6i. The paid-runner budget, and the absence of commit-message escapes.
   //
-  //     Two properties of the two most expensive lanes in this repository.
-  //     Neither is visible to YAML validity or to actionlint, neither is covered
-  //     by anything above, and both were live defects until they were fixed.
+  //     Two properties of the most expensive lanes in this repository. Neither
+  //     is visible to YAML validity or to actionlint, neither is covered by
+  //     anything above, and both were live defects until they were fixed.
   //
   //     TIMEOUTS. A job with no `timeout-minutes` inherits GitHub's SIX-HOUR
-  //     default. Both `ios.yml` and `release.yml` had none. On `ios.yml` that is
-  //     a paid macOS runner held for six hours by a simulator that never booted;
-  //     on `release.yml` it is a wedged release job sitting for six hours with
-  //     the signing key materialized on disk. The ceiling is asserted in the
-  //     other direction too, exactly as in 6h: a bound declared far above what
-  //     the work takes is the six-hour default wearing a number.
+  //     default. `ios.yml`, `release.yml` and five of `macos.yml`'s six jobs had
+  //     none. On `ios.yml` that is a paid macOS runner held for six hours by a
+  //     simulator that never booted; on `release.yml` it is a wedged release job
+  //     sitting for six hours with the signing key materialized on disk; on
+  //     `macos.yml` it was every lane that imports the Developer ID certificate,
+  //     submits to Apple's notary, or publishes an immutable GitHub Release. The
+  //     ceiling is asserted in the other direction too, exactly as in 6h: a
+  //     bound declared far above what the work takes is the six-hour default
+  //     wearing a number.
+  //
+  //     PER JOB, NOT PER FILE. `macos.yml` is budgeted job by job because its
+  //     jobs are not comparable: `contract` is measured in seconds and
+  //     `notarize-stage` legitimately waits out Apple's 45-minute notary
+  //     timeout. A single file-wide ceiling would have to be the largest of
+  //     them, so it would pass a `contract` job wedged for an hour — the exact
+  //     shape of "fix the slow job by raising the global timeout". The per-job
+  //     form is enforced for completeness in BOTH directions, because a list
+  //     that silently stops covering a job is indistinguishable from no list.
+  //
+  //     MATRIX BOUNDS. `ui-smoke` declares `timeout-minutes: ${{ matrix.timeout
+  //     }}` and carries a real per-shard bound in each `include` entry. Those
+  //     entries are what is checked; reading the unresolved expression as a
+  //     number would call the shard bounds invalid and push the next editor
+  //     toward replacing them with one flat number.
   //
   //     ESCAPES. `ios.yml` honoured a `[macos-only]` marker in a `main` commit
   //     message, which let a commit message skip the iOS build. A skipped check
@@ -1966,19 +2107,60 @@ function platformBoundaryFailures(world) {
     );
 
     for (const [name, job] of jobs) {
-      const declared = JSON.stringify(job["timeout-minutes"]);
-      const timeout = Number(job["timeout-minutes"]);
+      // Which ceiling applies to THIS job. A file declaring per-job budgets has
+      // to name every job it declares: an unnamed one is not "unbounded by
+      // decision", it is a job somebody added without deciding, and the
+      // per-value checks below would then have no ceiling to compare against.
+      const perJob = budget.jobs?.[name];
       need(
-        Number.isFinite(timeout) && timeout > 0,
-        `${budget.file}/${name}: timeout-minutes is ${declared}, want a finite positive number. `
-        + `Undeclared, this job inherits GitHub's 6-hour default, so ${budget.why}.`,
+        budget.jobs === undefined || perJob !== undefined,
+        `${budget.file}/${name}: this policy declares per-job runner budgets for ${budget.file} `
+        + `and none for \`${name}\`, so its bound is whatever the file happens to say and nothing `
+        + `checks it. It budgets [${Object.keys(budget.jobs ?? {}).join(", ")}]. Add \`${name}\` `
+        + `with a ceiling justified by what it actually does — a new job on a PAID runner is `
+        + `exactly the case this section exists for.`,
       );
+      const max = perJob?.max ?? (budget.jobs === undefined ? budget.max : undefined);
+      const why = perJob?.why ?? budget.why;
+      // A floor is declared only where a bound BELOW the work is the expensive
+      // mistake. It is asserted to be readable first: an unparsed floor is
+      // `NaN`, every `value < NaN` is false, and the check would pass by
+      // comparing against nothing.
+      const min = perJob?.min;
       need(
-        !(Number.isFinite(timeout) && timeout > budget.max),
-        `${budget.file}/${name}: timeout-minutes is ${declared}, above the ${budget.max}-minute `
-        + `ceiling. A bound that large is the 6-hour default wearing a number — it would not stop `
-        + `the case it exists for, where ${budget.why}.`,
+        min === undefined || Number.isFinite(min),
+        `${budget.file}/${name}: its runner-budget floor came out ${String(min)} rather `
+        + `than a number, so nothing below it can be rejected. The floor is read from `
+        + `${perJob?.minSource ?? "its declared source"}; if that moved or changed shape, the `
+        + `floor has to follow it rather than quietly stop applying.`,
       );
+
+      const resolved = timeoutValues(job);
+      need(
+        resolved.unresolved === undefined,
+        `${budget.file}/${name}: timeout-minutes reads \`matrix.${resolved.unresolved}\`, but this `
+        + `job declares no \`strategy.matrix.include\` entries to resolve it against, so it has no `
+        + `readable bound at all. GitHub would substitute nothing and fall back to the 6-hour `
+        + `default, so ${why}.`,
+      );
+      for (const { where, declared, value } of resolved.values ?? []) {
+        need(
+          Number.isFinite(value) && value > 0,
+          `${budget.file}/${name}: ${where} is ${declared}, want a finite positive number. `
+          + `Undeclared, this job inherits GitHub's 6-hour default, so ${why}.`,
+        );
+        need(
+          max === undefined || !(Number.isFinite(value) && value > max),
+          `${budget.file}/${name}: ${where} is ${declared}, above the ${max}-minute `
+          + `ceiling. A bound that large is the 6-hour default wearing a number — it would not stop `
+          + `the case it exists for, where ${why}.`,
+        );
+        need(
+          !(Number.isFinite(min) && Number.isFinite(value) && value <= min),
+          `${budget.file}/${name}: ${where} is ${declared}, at or below the ${min}-minute floor `
+          + `set by ${perJob?.minSource}. ${perJob?.minWhy}.`,
+        );
+      }
 
       for (const condition of [job.if, ...(job.steps ?? []).map((step) => step?.if)]) {
         if (typeof condition !== "string") continue;
@@ -1990,6 +2172,19 @@ function platformBoundaryFailures(world) {
           + `commit, and a skipped check reports nothing rather than red.`,
         );
       }
+    }
+
+    // The other direction. A budget for a job that no longer exists enforces
+    // nothing, and renaming a job is precisely how it stops being enforced
+    // while the list still looks complete.
+    for (const budgeted of Object.keys(budget.jobs ?? {})) {
+      need(
+        (doc.jobs ?? {})[budgeted] !== undefined,
+        `${budget.file} declares no job named \`${budgeted}\`, but this policy carries a runner `
+        + `budget for it; it declares [${jobs.map(([n]) => n).join(", ")}]. A budget naming a job `
+        + `that is gone is a budget enforcing nothing, and the job it used to name has moved into `
+        + `the unbudgeted case without anybody deciding that.`,
+      );
     }
 
     const text = world.texts.get(budget.file);
@@ -2138,6 +2333,24 @@ function withoutPath(world, file, path) {
 function withJob(world, file, mutate) {
   const jobs = world.docs.get(file).jobs;
   mutate(jobs[Object.keys(jobs)[0]]);
+  return world;
+}
+
+/**
+ * Mutate the job called `name`, and throw when the file does not declare it.
+ *
+ * `withJob` above selects POSITIONALLY, which is safe only while the file has
+ * one job. `macos.yml` has six, and every case below names the one it breaks in
+ * its own expectation — so selecting by position would silently retarget the
+ * day somebody reorders two YAML keys, and the case would then pass while
+ * asserting nothing about the job it claims to be about. Throwing on an absent
+ * name is the point: a mutation that stopped applying must be a loud error, not
+ * a green case.
+ */
+function withNamedJob(world, file, name, mutate) {
+  const job = world.docs.get(file)?.jobs?.[name];
+  if (job === undefined) throw new Error(`${file} declares no job named ${name}`);
+  mutate(job);
   return world;
 }
 
@@ -2604,6 +2817,87 @@ const MUTATIONS = [
     mutate: (world) => withJob(world, IOS, (job) => { job["timeout-minutes"] = "soon"; }),
     expect: /ios\.yml\/ios-build: timeout-minutes is "soon", want a finite positive number/,
   },
+  // The macOS lane, budgeted per job. Each case below names ONE job, and each
+  // uses `withNamedJob` so a reorder of `macos.yml`'s six jobs is a thrown
+  // error rather than a case that quietly moves to a different job.
+  {
+    // The job that imports the Developer ID certificate. Unbounded, a wedged
+    // build holds a paid runner for six hours with the signing key on disk.
+    name: "macos.yml's signing build loses its timeout and inherits the 6-hour default",
+    mutate: (world) => withNamedJob(world, MACOS, "signed-build", (job) => {
+      delete job["timeout-minutes"];
+    }),
+    expect: /macos\.yml\/signed-build: timeout-minutes is undefined, want a finite positive number/,
+  },
+  {
+    // The per-job point. `contract` reads a project file in seconds; 60 minutes
+    // would be inside `signed-build`'s bound and is nowhere near this job's.
+    // A single file-wide ceiling could not tell these two apart.
+    name: "macos.yml's contract check is raised to a bound that only its slowest sibling deserves",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      job["timeout-minutes"] = "60";
+    }),
+    expect: /macos\.yml\/contract: timeout-minutes is "60", above the 15-minute ceiling/,
+  },
+  {
+    // The matrix bound is a real bound and is checked as one.
+    name: "macos.yml's device-inbox UI shard is raised past the ui-smoke ceiling",
+    mutate: (world) => withNamedJob(world, MACOS, "ui-smoke", (job) => {
+      job.strategy.matrix.include[1].timeout = "300";
+    }),
+    expect: /macos\.yml\/ui-smoke: include\[1\]'s `timeout` \(read by `timeout-minutes`\) is "300", above the 45-minute ceiling/,
+  },
+  {
+    // An include entry that stops carrying the key the expression reads. GitHub
+    // substitutes nothing, so the job runs with no timeout at all.
+    name: "macos.yml's app-shell UI shard drops the matrix key its timeout reads",
+    mutate: (world) => withNamedJob(world, MACOS, "ui-smoke", (job) => {
+      delete job.strategy.matrix.include[0].timeout;
+    }),
+    expect: /macos\.yml\/ui-smoke: include\[0\]'s `timeout` \(read by `timeout-minutes`\) is undefined, want a finite positive number/,
+  },
+  {
+    // The expression survives but the matrix it reads does not. Iterating an
+    // empty include list would have passed by inspecting nothing.
+    name: "macos.yml's ui-smoke keeps a matrix timeout expression with no matrix behind it",
+    mutate: (world) => withNamedJob(world, MACOS, "ui-smoke", (job) => { delete job.strategy; }),
+    expect: /macos\.yml\/ui-smoke: timeout-minutes reads `matrix\.timeout`, but this job declares no `strategy\.matrix\.include` entries/,
+  },
+  {
+    // Tightening this one is the expensive direction: below Apple's own wait,
+    // a slow-but-succeeding notarization is killed mid-wait and the submission
+    // is burned.
+    name: "macos.yml's notarize-stage is tightened below the wait its own script allows",
+    mutate: (world) => withNamedJob(world, MACOS, "notarize-stage", (job) => {
+      job["timeout-minutes"] = "30";
+    }),
+    expect: /macos\.yml\/notarize-stage: timeout-minutes is "30", at or below the 45-minute floor/,
+  },
+  {
+    // A new paid-runner job arriving with no budget decided for it.
+    name: "macos.yml gains a job this policy has no budget for",
+    mutate: (world) => {
+      world.docs.get(MACOS).jobs["ui-acceptance"] = {
+        "runs-on": "macos-15",
+        "timeout-minutes": "120",
+        steps: [{ name: "Acceptance", run: "true\n" }],
+      };
+      return world;
+    },
+    expect: /macos\.yml\/ui-acceptance: this policy declares per-job runner budgets for macos\.yml and none for `ui-acceptance`/,
+  },
+  {
+    // And the other direction: a rename moves a budgeted job into the
+    // unbudgeted case while the budget list still looks complete.
+    name: "macos.yml renames a budgeted job, so its budget names nothing",
+    mutate: (world) => {
+      const jobs = world.docs.get(MACOS).jobs;
+      jobs.notarize = jobs["notarize-stage"];
+      delete jobs["notarize-stage"];
+      return world;
+    },
+    expect: /macos\.yml declares no job named `notarize-stage`, but this policy carries a runner budget for it/,
+  },
   {
     name: "the [macos-only] escape returns to ios.yml under a different marker",
     mutate: (world) => withJob(world, IOS, (job) => {
@@ -2748,5 +3042,5 @@ if (failures.length > 0) {
 }
 console.log(
   `ci-event-policy-test: OK (${GOVERNED.length} governed workflows + ${NIGHTLY}`
-  + `, runner budget on ${RUNNER_BUDGETS.map((b) => b.file).join(" and ")})`,
+  + `, runner budget on ${RUNNER_BUDGETS.map((b) => b.file).join(", ")})`,
 );
