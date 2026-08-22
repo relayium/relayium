@@ -16,11 +16,13 @@ on:
     paths:
       - 'server/**'
       - 'scripts/go-race-shard.go'
+      - 'scripts/test/db-rollback-harness.sh'
       - '.github/workflows/go.yml'
   pull_request:
     paths:
       - 'server/**'
       - 'scripts/go-race-shard.go'
+      - 'scripts/test/db-rollback-harness.sh'
       - '.github/workflows/go.yml'
   workflow_dispatch:
 
@@ -197,3 +199,79 @@ jobs:
           # Word splitting is the point: this is a package list.
           # shellcheck disable=SC2086
           go test -race -count=1 -timeout 20m $PKGS
+
+  # The one lane that runs an OLD server binary against a NEW database.
+  #
+  # deploy/auto-deploy.sh rolls a failed swap back by putting the previous
+  # binary in front of the file the new one already opened, migrated and wrote
+  # to. Every migration test in server/account runs one binary FORWARD over an
+  # old file; none of them ever hands a newer file to an older binary, so the
+  # rollback direction had no coverage at all — and the failure it would find is
+  # a production instance that will not start, discovered at the worst moment.
+  #
+  # scripts/test/db-rollback-harness.sh builds two real binaries — the commit in
+  # server/ROLLBACK-FLOOR and this worktree — and drives one shared SQLite file
+  # through floor -> HEAD -> floor -> HEAD over the public HTTP surface.
+  #
+  # server/ROLLBACK-FLOOR names the oldest STILL-SUPPORTED rollback baseline,
+  # not the currently deployed commit. It is expected to sit behind production
+  # and must not be advanced just because a deploy happened; see that file for
+  # the three conditions an advance has to meet. For this job the consequence is
+  # simply that the floor-to-HEAD gap only ever grows, which makes the exercise
+  # stricter over time rather than staler.
+  #
+  # Isolated from `test` on purpose. It is the only job here that needs full git
+  # history, it costs two server builds, and a rollback failure is a different
+  # answer from a compile failure: sharing a job would make one of them wait for
+  # the other and report as the other.
+  #
+  # 20 minutes against a measured ~7s of stage time. That is not a padded
+  # estimate — nothing in the stages scales with the runner, so anything
+  # approaching the budget is a hung server or a wedged database rather than a
+  # slow one. The budget does have to absorb two real things beyond the stages:
+  # the two server builds, and just under 6.5 minutes of deliberate waiting if
+  # the harness's month-window gate lands near a UTC month boundary — its 360s
+  # margin plus a 5s settle, hard-capped at 420s (the gate refuses to start
+  # the stages inside the margin, because /api/me/usage answers per calendar
+  # month and a straddling run would report the reset as an accounting
+  # mismatch). Both fit with room to spare.
+  rollback-floor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # The floor is an ANCESTOR of HEAD, and the default depth-1 checkout
+          # does not contain an ancestor's objects. Without full history the
+          # harness cannot build the floor binary at all, and the reachability
+          # test below has nothing to check — which is exactly why that test
+          # skips elsewhere and is made strict here.
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          # Keyed on HEAD's go.sum only. The floor commit has its own, possibly
+          # different, dependency graph, so the floor build is the one that may
+          # still fetch from the module proxy. That is expected: this job is not
+          # offline, and the harness does not claim to be. Integrity comes from
+          # each tree's own go.sum, and GOFLAGS=-mod=readonly in the harness
+          # stops either build from rewriting go.mod/go.sum to make itself
+          # compile.
+          cache-dependency-path: server/go.sum
+      # The harness builds with GOTOOLCHAIN=local, so this is the toolchain both
+      # binaries are compiled with, and a tree asking for a newer Go fails here
+      # rather than silently downloading one. Recorded for the same reason as in
+      # `test`.
+      - name: Toolchain version
+        run: go version
+      # Fail on an unreadable or unreachable floor record BEFORE spending two
+      # server builds on it. RELAYIUM_ROLLBACK_FLOOR_STRICT turns the
+      # shallow-clone skips in server/rollback_floor_test.go into failures; this
+      # is the one job with the history to make that meaningful.
+      - name: rollback floor record parses and points at a real ancestor
+        working-directory: server
+        env:
+          RELAYIUM_ROLLBACK_FLOOR_STRICT: '1'
+        run: go test -count=1 -timeout 5m -run 'RollbackFloor' ./
+      - name: real-binary SQLite rollback evidence
+        run: scripts/test/db-rollback-harness.sh
