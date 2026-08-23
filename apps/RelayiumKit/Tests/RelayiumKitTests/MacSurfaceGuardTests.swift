@@ -441,73 +441,193 @@ final class MacSurfaceGuardTests: XCTestCase {
     }
 
     func testMacRuntimeSuiteIsAHostedProductGate() throws {
-        let workflowURL = try repoRoot.appendingPathComponent(".github/workflows/macos.yml")
-        let workflow = try String(contentsOf: workflowURL, encoding: .utf8)
-        XCTAssertTrue(workflow.contains("Run macOS product-flow UI smoke"),
+        // The hosted macOS gate is TWO files, and that boundary is now part of
+        // what this test has to hold. `macos.yml` is the reusable, read-only CI
+        // half: it launches the product flows, then signs and packages, and it
+        // holds no notary key, no Sparkle key and no write access to this
+        // repository. `macos-release.yml` CALLS it and owns everything that
+        // leaves the machine — notarization first, publication after.
+        //
+        // Reading one file could not tell those two architectures apart. A gate
+        // that only read `macos.yml` would pass for a release lane that never
+        // called it, and a gate that only read `macos-release.yml` would pass
+        // for a lane that published a package no product flow had ever launched.
+        // So both halves are asserted, and so is the call between them.
+        let ciURL = try repoRoot.appendingPathComponent(".github/workflows/macos.yml")
+        let releaseURL = try repoRoot.appendingPathComponent(".github/workflows/macos-release.yml")
+        let ci = try String(contentsOf: ciURL, encoding: .utf8)
+        let release = try String(contentsOf: releaseURL, encoding: .utf8)
+
+        // --- The CI half still launches the product, and still does it first.
+        XCTAssertTrue(ci.contains("Run macOS product-flow UI smoke"),
                       "CI compiles macOS but never launches its product flows")
-        let uiJob = try XCTUnwrap(workflow.range(of: "  ui-smoke:"))
-        let signedJob = try XCTUnwrap(workflow.range(of: "  signed-build:"))
-        let notarizeJob = try XCTUnwrap(workflow.range(of: "  notarize-stage:"))
-        let publishJob = try XCTUnwrap(workflow.range(of: "  publish:"))
-        let runtimeStep = try XCTUnwrap(workflow.range(of:
+        let uiJob = try XCTUnwrap(ci.range(of: "\n  ui-smoke:\n"))
+        let signedJob = try XCTUnwrap(ci.range(of: "\n  signed-build:\n"))
+        let runtimeStep = try XCTUnwrap(ci.range(of:
             "      - name: Run macOS product-flow UI smoke (${{ matrix.shard }})"))
         XCTAssertGreaterThan(runtimeStep.lowerBound, uiJob.lowerBound)
         XCTAssertLessThan(runtimeStep.lowerBound, signedJob.lowerBound)
-        XCTAssertTrue(workflow.contains("Install UI provisioning profiles"),
+        XCTAssertTrue(ci.contains("Install UI provisioning profiles"),
                       "the UI app needs its certificate and profiles")
-        XCTAssertTrue(workflow.contains("needs: [test, contract]"),
-                      "signed packaging must wait for cheap contract gates")
-        XCTAssertTrue(workflow.contains("needs: [ui-smoke, signed-build]"),
-                      "notarization must wait for every mandatory UI shard and package")
-        XCTAssertTrue(workflow.contains("needs: notarize-stage"),
-                      "publication bypasses the notarized candidate")
-        XCTAssertLessThan(signedJob.lowerBound, notarizeJob.lowerBound)
+        // Each dependency invariant is asserted INSIDE the job that must carry
+        // it. One `contains` over the whole file was satisfied by a single
+        // surviving copy, and after the split these two jobs are everything
+        // this file still gates.
+        XCTAssertNotNil(ci.range(of: "needs: [test, contract]",
+                                 range: uiJob.lowerBound..<signedJob.lowerBound),
+                        "the UI shards no longer wait for the cheap contract gates")
+        XCTAssertNotNil(ci.range(of: "needs: [test, contract]",
+                                 range: signedJob.lowerBound..<ci.endIndex),
+                        "signed packaging must wait for cheap contract gates")
+
+        // The CI half is callable, and the ONE value it hands across the file
+        // boundary is the artifact name its signing job actually used. Bracket
+        // form, not `jobs.signed-build`: a hyphen in a property path parses as
+        // subtraction, so the dotted spelling evaluates to the empty string and
+        // reaches the caller as "no signed build" rather than as an error.
+        XCTAssertTrue(ci.contains("  workflow_call:"),
+                      "the CI half is not callable, so the release lane cannot depend on it")
+        XCTAssertTrue(ci.contains("value: ${{ jobs['signed-build'].outputs.signed_artifact }}"),
+                      "the CI half does not report the artifact name its caller must download")
+        XCTAssertFalse(ci.contains("jobs.signed-build.outputs"),
+                       "the dotted property path silently evaluates to an empty artifact name")
+
+        // Nothing that leaves this repository may live in the read-only half.
+        // These absences have teeth: each names a capability whose reappearance
+        // here would mean the CI lane had regained release authority — and the
+        // whole point of the split is that a pull request runs this file.
+        XCTAssertNil(ci.range(of: "\n  notarize-stage:\n"),
+                     "notarization moved back into the reusable CI workflow")
+        XCTAssertNil(ci.range(of: "\n  publish:\n"),
+                     "publication moved back into the reusable CI workflow")
+        XCTAssertFalse(ci.contains("apps/mac/scripts/notarize-dmg.sh"),
+                       "the reusable CI workflow submits to Apple's notary")
+        XCTAssertFalse(ci.contains("MACOS_SPARKLE_PRIVATE_KEY") || ci.contains("MACOS_NOTARY"),
+                       "the reusable CI workflow can read release material it has no job for")
+        XCTAssertFalse(ci.contains("permissions:\n  contents: write")
+                        || ci.contains("    permissions:\n      contents: write"),
+                       "the reusable CI workflow can write to this repository")
+
+        // --- The release half calls that gate rather than reproducing it.
+        let buildJob = try XCTUnwrap(release.range(of: "\n  build:\n"))
+        let notarizeJob = try XCTUnwrap(release.range(of: "\n  notarize-stage:\n"))
+        let publishJob = try XCTUnwrap(release.range(of: "\n  publish:\n"))
+        XCTAssertNotNil(release.range(of: "uses: ./.github/workflows/macos.yml",
+                                      range: buildJob.lowerBound..<notarizeJob.lowerBound),
+                        "the release lane does not run the macOS product gate at all")
+        // The YAML key, not the words: this file discusses `secrets: inherit`
+        // in prose precisely because it is the thing it must not do.
+        XCTAssertNil(release.range(of: "\n    secrets: inherit"),
+                     "the release lane hands the CI half every secret this repository holds")
+        XCTAssertLessThan(buildJob.lowerBound, notarizeJob.lowerBound)
         XCTAssertLessThan(notarizeJob.lowerBound, publishJob.lowerBound)
-        let downloadedTool = try XCTUnwrap(workflow.range(
+        // Depending on the whole call is STRICTLY stronger than the
+        // `[ui-smoke, signed-build]` this used to read: a caller job succeeds
+        // only when every job it called succeeded, so `contract` and `test`
+        // now gate notarization too — and two job names from another file
+        // cannot be depended on from here at all.
+        XCTAssertNotNil(release.range(of: "needs: build",
+                                      range: notarizeJob.lowerBound..<publishJob.lowerBound),
+                        "notarization does not wait for the whole called CI workflow")
+        XCTAssertFalse(release.contains("needs: [ui-smoke, signed-build]"),
+                       "notarization names jobs of another workflow instead of the call itself")
+        XCTAssertNotNil(release.range(of: "needs: notarize-stage",
+                                      range: publishJob.lowerBound..<release.endIndex),
+                        "publication bypasses the notarized candidate")
+
+        // The artifact name crosses the file boundary as a VALUE, and the empty
+        // case is rejected before anything is downloaded: a skipped
+        // `signed-build` satisfies `needs:` and contributes an EMPTY output, so
+        // an empty name has to fail as "nothing was built" rather than as a
+        // missing file on a runner that has already been paid for.
+        let notarizeRange = notarizeJob.lowerBound..<publishJob.lowerBound
+        XCTAssertNotNil(release.range(of: "SIGNED_ARTIFACT: ${{ needs.build.outputs.signed_artifact }}",
+                                      range: notarizeRange),
+                        "the notarization job never reads the artifact name the build reported")
+        XCTAssertNotNil(release.range(of: "there is nothing to notarize", range: notarizeRange),
+                        "an empty artifact name is no longer rejected before the download")
+        XCTAssertNotNil(release.range(of: "name: ${{ needs.build.outputs.signed_artifact }}",
+                                      range: notarizeRange),
+                        "the download does not use the name the build actually uploaded")
+        XCTAssertFalse(release.contains("relayium-macos-signed-"),
+                       "the release lane re-derives the signed artifact name instead of consuming it")
+
+        // The artifact-pin, checksum and tool-restoration order, unchanged in
+        // strength and re-anchored to the file that now owns those steps.
+        let downloadedTool = try XCTUnwrap(release.range(
             of: "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
-            range: notarizeJob.lowerBound..<publishJob.lowerBound))
-        let checksumAtArtifactRoot = try XCTUnwrap(workflow.range(
+            range: notarizeRange))
+        let checksumAtArtifactRoot = try XCTUnwrap(release.range(
             of: "(cd \"$RUNNER_TEMP\" && shasum -a 256 -c Relayium.dmg.sha256)",
-            range: notarizeJob.lowerBound..<publishJob.lowerBound))
-        let mountedArtifact = try XCTUnwrap(workflow.range(
+            range: notarizeRange))
+        let mountedArtifact = try XCTUnwrap(release.range(
             of: "hdiutil attach \"$RUNNER_TEMP/Relayium.dmg\"",
-            range: notarizeJob.lowerBound..<publishJob.lowerBound))
-        let restoredTool = try XCTUnwrap(workflow.range(
+            range: notarizeRange))
+        let restoredTool = try XCTUnwrap(release.range(
             of: "chmod 0755 \"$RUNNER_TEMP/release-tools/generate_appcast\"",
-            range: notarizeJob.lowerBound..<publishJob.lowerBound))
-        let executableGuard = try XCTUnwrap(workflow.range(
+            range: notarizeRange))
+        let executableGuard = try XCTUnwrap(release.range(
             of: "test -x \"$RUNNER_TEMP/release-tools/generate_appcast\"",
-            range: notarizeJob.lowerBound..<publishJob.lowerBound))
-        let firstToolInvocation = try XCTUnwrap(workflow.range(
+            range: notarizeRange))
+        let firstToolInvocation = try XCTUnwrap(release.range(
             of: "| \"$tools/generate_appcast\"",
-                range: notarizeJob.lowerBound..<publishJob.lowerBound))
+            range: notarizeRange))
         XCTAssertLessThan(downloadedTool.lowerBound, checksumAtArtifactRoot.lowerBound)
         XCTAssertLessThan(checksumAtArtifactRoot.lowerBound, mountedArtifact.lowerBound)
         XCTAssertLessThan(downloadedTool.lowerBound, restoredTool.lowerBound)
         XCTAssertLessThan(restoredTool.lowerBound, executableGuard.lowerBound)
         XCTAssertLessThan(executableGuard.lowerBound, firstToolInvocation.lowerBound)
-        XCTAssertTrue(workflow.contains("permissions:\n  contents: read"))
-        XCTAssertTrue(workflow.contains("signedDmgSha256")
-            && workflow.contains("Finalize notarized package provenance"))
-        XCTAssertTrue(workflow.contains(
-            "(cd \"$RUNNER_TEMP\" && shasum -a 256 Relayium.dmg > Relayium.dmg.sha256)"),
+        XCTAssertNotNil(release.range(
+            of: "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+            range: publishJob.lowerBound..<release.endIndex),
+            "the publishing runner downloads its candidate from an unpinned action")
+
+        // Both halves are read-only at the top, and exactly one job in either
+        // file widens it — the one that publishes.
+        XCTAssertTrue(ci.contains("permissions:\n  contents: read"),
+                      "the reusable CI workflow is no longer read-only by default")
+        XCTAssertTrue(release.contains("permissions:\n  contents: read"),
+                      "the release workflow is no longer read-only by default")
+        XCTAssertEqual(
+            release.components(separatedBy: "    permissions:\n      contents: write").count - 1, 1,
+            "write access is no longer scoped to exactly one job")
+        XCTAssertNotNil(release.range(of: "    permissions:\n      contents: write",
+                                      range: publishJob.lowerBound..<release.endIndex),
+                        "the job holding write access is not `publish`")
+
+        // Provenance is recorded where the package is BUILT and rewritten where
+        // its bytes CHANGE: stapling rewrites the DMG, so the checksum the
+        // publisher verifies has to be taken after notarization, in the file
+        // that notarizes.
+        XCTAssertTrue(ci.contains("signedDmgSha256") && ci.contains("Record signed package provenance"),
+                      "the signed package no longer records its own provenance")
+        XCTAssertNotNil(release.range(of: "Finalize notarized package provenance", range: notarizeRange),
+                        "the stapled bytes would be published under a pre-notarization checksum")
+        XCTAssertNotNil(release.range(
+            of: "(cd \"$RUNNER_TEMP\" && shasum -a 256 Relayium.dmg > Relayium.dmg.sha256)",
+            range: notarizeRange),
             "the notarized artifact checksum must name a portable basename")
-        XCTAssertFalse(workflow.contains(
-            "shasum -a 256 \"$RUNNER_TEMP/Relayium.dmg\" > \"$RUNNER_TEMP/Relayium.dmg.sha256\""),
-            "a runner-absolute checksum cannot be verified by the publish runner")
-        XCTAssertTrue(workflow.contains(
-            "release=\"$RUNNER_TEMP/release\"\n          cd \"$release\"\n          shasum -a 256 -c Relayium.dmg.sha256"),
+        for (workflow, name) in [(ci, "macos.yml"), (release, "macos-release.yml")] {
+            XCTAssertFalse(workflow.contains(
+                "shasum -a 256 \"$RUNNER_TEMP/Relayium.dmg\" > \"$RUNNER_TEMP/Relayium.dmg.sha256\""),
+                "\(name): a runner-absolute checksum cannot be verified by the publish runner")
+        }
+        XCTAssertNotNil(release.range(
+            of: "release=\"$RUNNER_TEMP/release\"\n          cd \"$release\"\n          shasum -a 256 -c Relayium.dmg.sha256",
+            range: publishJob.lowerBound..<release.endIndex),
             "publication must verify the portable checksum from its artifact root")
+
+        // The shards themselves, in the file that runs them.
         for testClass in ["AppShellUITests", "DeviceInboxUITests",
                           "SubscriptionUITests", "LocalSessionUITests"] {
-            XCTAssertTrue(workflow.contains("RelayiumUITests/\(testClass)"),
+            XCTAssertTrue(ci.contains("RelayiumUITests/\(testClass)"),
                           "the hosted shards omit \(testClass)")
         }
-        XCTAssertTrue(workflow.contains(
+        XCTAssertTrue(ci.contains(
             "xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium"))
-        XCTAssertTrue(workflow.contains("-destination 'platform=macOS'"))
-        XCTAssertTrue(workflow.contains("only+=(\"-only-testing:$class\")"))
-        XCTAssertTrue(workflow.contains("timeout: 30") && workflow.contains("timeout: 35"),
+        XCTAssertTrue(ci.contains("-destination 'platform=macOS'"))
+        XCTAssertTrue(ci.contains("only+=(\"-only-testing:$class\")"))
+        XCTAssertTrue(ci.contains("timeout: 30") && ci.contains("timeout: 35"),
                       "a hosted desktop failure can occupy the runner indefinitely")
     }
 
