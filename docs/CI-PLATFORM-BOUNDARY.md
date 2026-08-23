@@ -677,7 +677,7 @@ always appears**.
 | # | Action | Required contexts after | Status |
 |---|---|---|---|
 | 1 | Merge the gate. It reports; nothing requires it. | `{wire-vectors}` | **done — PR #36 merged 2026-08-23 as `55e38d3f`** |
-| 2 | Observe `merge-gate` green on an ordinary pull request. | `{wire-vectors}` | **in progress — half proven by PR #36; this pull request is the probe for the other half. This is where the repository is** |
+| 2 | Observe `merge-gate` green on an ordinary pull request. | `{wire-vectors}` | **done — PR #37, head `c1aae73f`, aggregate run `32660352957` green with all eight conditional lanes skipped. This is where the repository is** |
 | 3 | Protection edit A: `contexts: ["wire-vectors","merge-gate"]`. | `{wire-vectors, merge-gate}` | pending |
 | 4 | Observe a red gate actually blocking (`mergeStateStatus: BLOCKED`). | unchanged | pending |
 | 5 | Fold `compat.yml` in as an unconditional lane, **keeping** its own `pull_request:` and its `push: main`. | unchanged | pending |
@@ -696,24 +696,28 @@ a pull request editing `merge-gate.yml`, `select-lanes.mjs` and the shared
 fixture is a **control-file** change and the selector fails closed to every
 lane. That is the designed behaviour, and it bounds what PR #36 is evidence of:
 it proves the `selected ⇒ success` half of the two-way rule and **nothing about**
-the `not-selected ⇒ skipped` half, which as of this writing still has no hosted
-observation at all.
+the `not-selected ⇒ skipped` half, which PR #37 observed separately and is
+recorded next.
 
-**Step 2 is therefore in progress, and this pull request is its probe.** No
-hosted run has yet been seen with any conditional lane skipped, so the claim
-"`merge-gate` is green on an ordinary pull request" is not yet supported for the
-ordinary case — the only case observed so far is the fail-closed one. This
-change is documentation-only: it edits a single file under `docs/`, which
-selects no conditional lane. Its hosted run is expected to show **all eight
-conditional lanes skipped**, **`repo-hygiene` successful**, and the **top-level
-`merge-gate` job successful** — a green gate whose green comes from skips rather
-than from work. That expectation is a prediction, not a result. The run does not
-exist yet and its ID cannot be known in advance. Once the first hosted run on
-this pull request's head produces that outcome, **its exact run ID will be
-recorded here, in this paragraph and in the table row above, before this pull
-request is merged**; until that ID is written down, step 2 stays `in progress`.
-If the run instead shows a lane running, a lane failing, or a gate result other
-than success, that discrepancy — not the prediction — is what gets recorded.
+**Step 2 is done, and this is exactly what its run observed.** This pull request
+is documentation-only: it edits a single file under `docs/`, which selects no
+conditional lane. Its first hosted run, on the exact head
+`c1aae73fa55f3668ff41ba89a174937b41bc3313`, is `merge-gate` workflow run
+`32660352957`, **completed with conclusion `success`**. On that run all eight
+conditional jobs — `web`, `go`, `macos`, `ios`, `swift-package`,
+`native-web-pairing`, `contracts` and `ops-contract` — **completed with
+conclusion `skipped`**, all **15 `repo-hygiene` jobs completed `success`**, and
+the top-level `merge-gate` job **completed `success`**. The separate `compat`
+run `32660352805` on the same head also completed `success`, which is the
+still-required `wire-vectors` context reporting independently of the gate. **No
+product lane ran.**
+
+That is the first hosted observation of the `not-selected ⇒ skipped` half, and
+it shows the aggregate accepting that shape: a green gate whose green comes from
+skips rather than from work, on an ordinary pull request rather than the
+fail-closed control-file case. Together with PR #36's `selected ⇒ success`
+half, both directions of the two-way rule now rest on a recorded hosted run
+rather than on a derivation.
 
 **Steps 3-7 are open, and none of them is claimed here.** No protection edit has
 been made: `wire-vectors` is still the only required context, and **`merge-gate`
