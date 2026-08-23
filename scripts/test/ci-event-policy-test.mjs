@@ -139,6 +139,15 @@ const GOVERNED = [
   // package path) belongs to `scripts/test/swift-ci-boundary-test.mjs`.
   { file: "swift-package.yml", dispatch: true },
   { file: "web.yml", dispatch: true },
+  // The root contract tree's own lane. It is here for the reason this list
+  // exists at all: a workflow absent from it is bound by none of the trigger,
+  // concurrency or path rules below, and nothing says so.
+  // `scripts/test/contract-ci-policy-test.mjs` may strengthen what this lane
+  // must CONTAIN, but it reads none of the repository-wide rules here and
+  // therefore cannot stand in for them. `dispatch: false`, matching the
+  // workflow: it starts on every change to the tree it owns, and a manual run
+  // would produce nothing a push does not.
+  { file: "contracts.yml", dispatch: false },
   // The always-on, deliberately UNFILTERED compatibility gate. It is in this
   // list — and not merely in section 6 — so it is bound by the same trigger and
   // concurrency policy as every heavy workflow it runs in front of.
@@ -1129,6 +1138,17 @@ const PATH_MATRIX = [
   [".github/workflows/macos.yml", ["macos.yml"], "a workflow edit starts its own workflow only"],
   [".github/workflows/ios.yml", ["ios.yml"], "and the same for the new one"],
   [".github/workflows/go.yml", ["go.yml"], "and for an unrelated one"],
+  ["contracts/device-inbox-admission-v1.json", ["contracts.yml"],
+    "the root contract tree: exactly its own lane, and no consumer suite. All three consumer "
+    + "tests read this document, but each already lives in a tree its own workflow watches, so "
+    + "naming it in go.yml, web.yml or swift-package.yml would spend the eight-shard race lane, "
+    + "the full browser suite and a PAID macOS runner on a document two `go test` functions read "
+    + "in milliseconds. What that lane must CONTAIN is "
+    + "`scripts/test/contract-ci-policy-test.mjs`; this row is what keeps the lane inside THIS "
+    + "file's governed inventory, because a workflow dropped from that list is bound by none of "
+    + "the trigger, concurrency or runner-budget rules above"],
+  [".github/workflows/contracts.yml", ["contracts.yml"],
+    "and the contract lane's own edit starts itself only, like every other workflow here"],
   ["apps/README.md", [],
     "documentation under apps/: not an input to any native build and not an input to the "
     + "pairing acceptance either, so NO path-filtered workflow starts. `apps/**` in the pairing "
@@ -1374,6 +1394,43 @@ const RUNNER_BUDGETS = [
     max: 60,
     why: "a PAID macOS runner is held by an acceptance whose Chrome, Go server or Swift peer "
       + "never became ready, with two live clients waiting on each other",
+  },
+  {
+    // The root contract tree's lane. The `jobs` form, even though two of the
+    // three jobs are alike, because the third is not: `swift-contract` holds a
+    // PAID macOS runner and pays a cold SwiftPM build, while the other two are
+    // free Linux runners doing seconds of work. A single file-wide ceiling
+    // would have to be the macOS number, and a `go-contract` job wedged for
+    // twenty minutes would then read as inside budget — the exact shape 6i
+    // exists to reject. It is also what makes a FOURTH consumer job fail here
+    // until somebody budgets it.
+    file: "contracts.yml",
+    why: "a runner is held by a contract check that never exits",
+    jobs: {
+      // Declared 10. A checkout, `setup-go`, one package build and two named
+      // test functions reading one JSON document. 15 leaves room for a cold
+      // module download on a runner with no cache.
+      "go-contract": {
+        max: 15,
+        why: "a runner is held by a `go test` selector that never exits, in a job whose real "
+          + "work is two test functions reading one JSON document",
+      },
+      // Declared 10. `npm ci --ignore-scripts` for the Vitest closure, then one
+      // Vitest file. Same shape, same evidence, same ceiling as the Go half.
+      "web-contract": {
+        max: 15,
+        why: "a runner is held by an `npm ci` or a single Vitest file that never exits",
+      },
+      // Declared 25, and deliberately the same number `swift-package.yml`'s own
+      // job carries: this job pays the SAME cold SwiftPM resolve and package
+      // build before running five filtered test cases measured at 0.7s
+      // locally. 30 is therefore that job's ceiling reused for the same cold
+      // build, not a fresh measurement of five test cases.
+      "swift-contract": {
+        max: 30,
+        why: "a PAID macOS runner is held by a `swift test` that never exits",
+      },
+    },
   },
   {
     file: IOS,
@@ -3470,6 +3527,7 @@ const ANDROID = FUTURE_PLATFORMS.find((future) => future.root === "apps/android"
 
 /** A governed workflow that is parsed, and a real one that deliberately is not. */
 const WEB = "web.yml";
+const CONTRACTS = "contracts.yml";
 const AUTO_RELEASE = "auto-release.yml";
 
 /**
@@ -3961,6 +4019,88 @@ const MUTATIONS = [
       return world;
     },
     expect: /macos\.yml declares no job named `notarize-stage`, but this policy carries a runner budget for it/,
+  },
+  // The contract lane. A workflow that landed after every rule above was
+  // written is the case this section is least likely to cover by accident, so
+  // both halves of its registration — the governed list and the runner budget —
+  // are deleted and corrupted here, one at a time.
+  {
+    // The registration itself, removed. The workflow keeps running and keeps
+    // reporting green; what stops, silently, is every trigger, concurrency and
+    // path rule in this file binding it. A per-lane policy elsewhere cannot
+    // notice this, because it never reads this list.
+    name: "contracts.yml is dropped from the governed inventory",
+    mutate: (world) => {
+      world.governed = world.governed.filter((entry) => entry.file !== CONTRACTS);
+      return world;
+    },
+    expect: /changing "contracts\/device-inbox-admission-v1\.json" starts \[\]; want \[contracts\.yml\]/,
+  },
+  {
+    // And the lane leaving the world entirely — renamed, deleted or unparseable
+    // — while the budget still names it. The budget then bounds nothing.
+    name: "contracts.yml is renamed out from under its runner budget",
+    mutate: (world) => { world.docs.delete(CONTRACTS); return world; },
+    expect: /contracts\.yml is missing or did not parse, so its runner budget/,
+  },
+  {
+    name: "the contract lane's PAID macOS job loses its bound",
+    mutate: (world) => withNamedJob(world, CONTRACTS, "swift-contract", (job) => {
+      delete job["timeout-minutes"];
+    }),
+    expect: /contracts\.yml\/swift-contract: timeout-minutes is undefined, want a finite positive number/,
+  },
+  {
+    // The other direction: the bound kept, raised until it is the six-hour
+    // default wearing a number.
+    name: "the contract lane's PAID macOS job is raised past its cold-build ceiling",
+    mutate: (world) => withNamedJob(world, CONTRACTS, "swift-contract", (job) => {
+      job["timeout-minutes"] = "300";
+    }),
+    expect: /contracts\.yml\/swift-contract: timeout-minutes is "300", above the 30-minute ceiling/,
+  },
+  {
+    // The per-job point, inside this file: 25 minutes is `swift-contract`'s
+    // legitimate cold-build bound and nowhere near a Go test selector's. A
+    // file-wide ceiling could not tell the two apart.
+    name: "the contract lane's Go job is raised to its macOS sibling's bound",
+    mutate: (world) => withNamedJob(world, CONTRACTS, "go-contract", (job) => {
+      job["timeout-minutes"] = "25";
+    }),
+    expect: /contracts\.yml\/go-contract: timeout-minutes is "25", above the 15-minute ceiling/,
+  },
+  {
+    name: "the contract lane's Web job loses its bound",
+    mutate: (world) => withNamedJob(world, CONTRACTS, "web-contract", (job) => {
+      delete job["timeout-minutes"];
+    }),
+    expect: /contracts\.yml\/web-contract: timeout-minutes is undefined, want a finite positive number/,
+  },
+  {
+    // A fourth consumer arriving with no budget decided for it — the shape a
+    // new platform's contract job takes on the day it lands.
+    name: "the contract lane gains a consumer job this policy has no budget for",
+    mutate: (world) => {
+      world.docs.get(CONTRACTS).jobs["android-contract"] = {
+        "runs-on": "ubuntu-latest",
+        "timeout-minutes": "10",
+        steps: [{ name: "The Android half", run: "./gradlew contractTest\n" }],
+      };
+      return world;
+    },
+    expect: /contracts\.yml\/android-contract: this policy declares per-job runner budgets for contracts\.yml and none for `android-contract`/,
+  },
+  {
+    // And the rename that moves a budgeted job into the unbudgeted case while
+    // the list still looks complete.
+    name: "a budgeted contract job is renamed, so its budget names nothing",
+    mutate: (world) => {
+      const jobs = world.docs.get(CONTRACTS).jobs;
+      jobs["swift-contracts"] = jobs["swift-contract"];
+      delete jobs["swift-contract"];
+      return world;
+    },
+    expect: /contracts\.yml declares no job named `swift-contract`, but this policy carries a runner budget for it/,
   },
   {
     name: "the [macos-only] escape returns to ios.yml under a different marker",
