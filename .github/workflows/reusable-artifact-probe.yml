@@ -1,0 +1,145 @@
+# TEMPORARY — NEVER MERGE. Synthetic P2 probe, delete with its callee.
+#
+# Drives .github/workflows/reusable-artifact-probe-callee.yml twice: once with
+# the producer running (outputs must survive the workflow_call boundary and the
+# artifact must round-trip byte-identical), once with the producer skipped (to
+# observe what GitHub actually reports — this run DEFINES that answer, it is not
+# asserted here).
+name: TEMPORARY NEVER MERGE — reusable artifact probe (caller)
+
+on:
+  pull_request:
+
+# Literal prefix, distinct from the callee's `p2-probe-callee-` group so the
+# caller can never cancel the workflows it is calling.
+concurrency:
+  group: p2-probe-caller-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # No `timeout-minutes` on the two `uses:` jobs — GitHub rejects that key on a
+  # reusable-workflow call. The callee caps its own job at 5 minutes.
+  normal:
+    name: normal (producer runs)
+    uses: ./.github/workflows/reusable-artifact-probe-callee.yml
+    with:
+      skip_producer: false
+    # Explicit mapping, never `secrets: inherit`. Reusing an existing repository
+    # secret proves the mapping path resolves without creating a new secret; the
+    # callee only ever logs PRESENT/ABSENT.
+    secrets:
+      PROBE_SECRET: ${{ secrets.MACOS_SIGNING_CERT_P12_BASE64 }}
+
+  consume:
+    name: consume (outputs + artifact round-trip)
+    needs: normal
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Both reusable-workflow outputs must be non-empty
+        env:
+          ARTIFACT_NAME: ${{ needs.normal.outputs.artifact_name }}
+          PRODUCER_MARKER: ${{ needs.normal.outputs.producer_marker }}
+        run: |
+          set -euo pipefail
+          fail=0
+          if [ -z "${ARTIFACT_NAME:-}" ]; then
+            echo "::error::artifact_name came back EMPTY — the jobs['artifact-producer'] index form did not propagate"
+            fail=1
+          fi
+          if [ -z "${PRODUCER_MARKER:-}" ]; then
+            echo "::error::producer_marker came back EMPTY"
+            fail=1
+          fi
+          echo "artifact_name=${ARTIFACT_NAME}"
+          echo "producer_marker=${PRODUCER_MARKER}"
+          exit "$fail"
+
+      # Downloads by the value that travelled through the workflow_call
+      # boundary, not by a hardcoded guess — that is what makes this a test.
+      - name: Download by needs.normal.outputs.artifact_name
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.normal.outputs.artifact_name }}
+          path: downloaded
+
+      - name: Byte-compare against the exact expected content
+        run: |
+          set -euo pipefail
+          # Same literal the callee wrote. Independently asserting the 33-byte
+          # length means a divergence between the two files cannot pass quietly.
+          printf 'relayium-p2-probe-fixed-bytes-v1\n' > expected.txt
+          [ "$(wc -c < expected.txt)" -eq 33 ]
+          cmp expected.txt downloaded/probe-payload.txt
+          echo "artifact round-tripped byte-identical (33 bytes)"
+
+  skipped-producer:
+    name: skipped-producer (producer skipped)
+    uses: ./.github/workflows/reusable-artifact-probe-callee.yml
+    with:
+      skip_producer: true
+    secrets:
+      PROBE_SECRET: ${{ secrets.MACOS_SIGNING_CERT_P12_BASE64 }}
+
+  observe-skipped:
+    name: observe-skipped (record, do not assert)
+    # `always()` so this records the outcome whatever GitHub decides the skipped
+    # caller job's result is — success, skipped, or something else. Asserting a
+    # value here would presuppose the answer this probe exists to find.
+    if: always()
+    needs: skipped-producer
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Print raw needs context and both returned outputs
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          ARTIFACT_NAME: ${{ needs['skipped-producer'].outputs.artifact_name }}
+          PRODUCER_MARKER: ${{ needs['skipped-producer'].outputs.producer_marker }}
+        run: |
+          set -euo pipefail
+          echo "--- toJSON(needs) ---"
+          echo "$NEEDS_JSON"
+          echo "--- returned outputs (quoted so empty vs absent is visible) ---"
+          echo "artifact_name=[${ARTIFACT_NAME}]"
+          echo "producer_marker=[${PRODUCER_MARKER}]"
+
+  verdict:
+    name: P2 VERDICT (temporary — never merge)
+    if: always()
+    needs: [normal, consume, skipped-producer, observe-skipped]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Decide
+        env:
+          NORMAL: ${{ needs.normal.result }}
+          CONSUME: ${{ needs.consume.result }}
+          # Hyphenated job ids need the index form in `needs` too.
+          SKIPPED: ${{ needs['skipped-producer'].result }}
+          OBSERVE: ${{ needs['observe-skipped'].result }}
+        run: |
+          set -euo pipefail
+          echo "normal           = ${NORMAL}"
+          echo "consume          = ${CONSUME}"
+          echo "observe-skipped  = ${OBSERVE}"
+          # Reported, deliberately NOT asserted: this run is what establishes
+          # the real result of a caller job whose callee skipped every job.
+          echo "skipped-producer = ${SKIPPED}   (observed only — no expected value is whitelisted)"
+          fail=0
+          [ "$NORMAL" = "success" ]  || { echo "::error::normal did not succeed (${NORMAL})"; fail=1; }
+          [ "$CONSUME" = "success" ] || { echo "::error::consume did not succeed (${CONSUME})"; fail=1; }
+          [ "$OBSERVE" = "success" ] || { echo "::error::observe-skipped did not succeed (${OBSERVE}) — the skipped-producer outcome was not recorded"; fail=1; }
+          if [ "$fail" -eq 0 ]; then
+            echo "P2 VERDICT: PASS — reusable outputs propagated from a hyphenated job id and the artifact round-tripped."
+          fi
+          exit "$fail"

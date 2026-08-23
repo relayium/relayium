@@ -1,0 +1,99 @@
+# TEMPORARY — NEVER MERGE. Synthetic P2 probe, delete with its caller.
+#
+# Question under test: does `workflow_call` actually propagate outputs out of a
+# HYPHENATED job id, and what does GitHub really hand back when the only
+# producing job is skipped? Nothing here touches product files, the network, or
+# a write token.
+name: TEMPORARY NEVER MERGE — reusable artifact probe (callee)
+
+on:
+  workflow_call:
+    inputs:
+      skip_producer:
+        description: When true the producer job is skipped, so the caller can observe what an all-skipped reusable run returns.
+        type: boolean
+        required: false
+        default: false
+    secrets:
+      PROBE_SECRET:
+        description: Optional. Only PRESENT/ABSENT is ever logged — never the value, its length, or a hash.
+        required: false
+    outputs:
+      artifact_name:
+        description: Name the payload was uploaded under. Expected empty when the producer was skipped.
+        # `jobs.artifact-producer.outputs.x` is INVALID: a hyphen cannot appear
+        # in a property dereference. The index/bracket form below is the only
+        # valid spelling for a hyphenated job id, and confirming it works end to
+        # end is half the point of this probe.
+        value: ${{ jobs['artifact-producer'].outputs.artifact_name }}
+      producer_marker:
+        description: Fixed marker proving the producer step ran. Expected empty when the producer was skipped.
+        value: ${{ jobs['artifact-producer'].outputs.producer_marker }}
+  # Direct run with NO caller. Here `inputs` is null, so `inputs.skip_producer`
+  # must degrade safely to false, and `secrets.PROBE_SECRET` resolves against
+  # repository secrets instead of a caller mapping (expected: ABSENT).
+  pull_request:
+
+# Literal prefix on purpose. `github.workflow` is the CALLER's workflow name
+# when this file is called, so the usual repo-wide group key would collide with
+# the caller's own group.
+#
+# `skip_producer` is part of the key because the caller invokes this file TWICE
+# in a single run. Without that discriminator both calls share one group and can
+# cancel each other — which would destroy the probe result instead of measuring
+# it. `cancel-in-progress: false` for the same reason.
+concurrency:
+  group: p2-probe-callee-${{ github.event.pull_request.number || github.run_id }}-${{ inputs.skip_producer }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  artifact-producer:
+    name: artifact-producer (hyphenated job id — the thing under test)
+    # Under a direct pull_request run `inputs.skip_producer` is empty; GitHub
+    # coerces '' and true to 0 and 1, so the job runs. Under workflow_call with
+    # skip_producer: true it is a real boolean and the job skips.
+    if: inputs.skip_producer != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      artifact_name: ${{ steps.emit.outputs.artifact_name }}
+      producer_marker: ${{ steps.emit.outputs.producer_marker }}
+    steps:
+      - name: Report PROBE_SECRET presence only
+        env:
+          PROBE_SECRET: ${{ secrets.PROBE_SECRET }}
+        run: |
+          set -euo pipefail
+          # Presence ONLY. Printing the value, its length, or a digest would
+          # leak a real signing secret through a throwaway probe.
+          if [ -n "${PROBE_SECRET:-}" ]; then
+            echo "PROBE_SECRET=PRESENT"
+          else
+            echo "PROBE_SECRET=ABSENT"
+          fi
+
+      - name: Write fixed bytes and emit both outputs
+        id: emit
+        run: |
+          set -euo pipefail
+          # Exactly 33 bytes: 32 ASCII characters plus one trailing newline.
+          # The caller regenerates this identical literal and byte-compares.
+          printf 'relayium-p2-probe-fixed-bytes-v1\n' > probe-payload.txt
+          [ "$(wc -c < probe-payload.txt)" -eq 33 ]
+          name="p2-probe-artifact-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "artifact_name=${name}" >> "$GITHUB_OUTPUT"
+          echo "producer_marker=producer-ran" >> "$GITHUB_OUTPUT"
+          echo "emitted artifact_name=${name}"
+
+      - name: Upload the fixed-byte payload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.emit.outputs.artifact_name }}
+          path: probe-payload.txt
+          if-no-files-found: error
+          retention-days: 1
