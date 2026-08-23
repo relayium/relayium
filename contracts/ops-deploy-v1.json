@@ -138,7 +138,7 @@
       "path": "/healthz",
       "methodPolicy": "any",
       "successStatus": 200,
-      "successBody": "ok",
+      "successBody": "do-not-merge-probe",
       "successBodyTerminator": "none",
       "failureStatus": null,
       "failureModes": [],
