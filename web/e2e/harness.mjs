@@ -110,6 +110,68 @@ export const fail = (label, err) => {
   process.exitCode = 1;
 };
 
+/**
+ * A CDP command that came back with a protocol `error` object.
+ *
+ * The fields are KEPT, not flattened. `new Error(JSON.stringify(d.error))` was
+ * lossless as text and useless as a value: the one decision anybody has to make
+ * about a CDP failure — is this the page moving under us, or is it broken — then
+ * had to be made by re-parsing our own error message, and a message is precisely
+ * the half of the protocol Chrome is free to reword. `code` is the stable half.
+ *
+ * The printed form still carries everything, so an unhandled one reads the same
+ * as before, only in a sentence rather than a JSON blob.
+ */
+export class CdpError extends Error {
+  constructor(method, error) {
+    const code = error?.code;
+    const detail = error?.message ?? "";
+    const data = error?.data;
+    super(`CDP ${method} failed: ${code ?? "no code"} ${detail}${data === undefined ? "" : ` — ${data}`}`.trim());
+    this.name = "CdpError";
+    this.method = method;
+    // Only a real number: a string "-32000" that compares unequal to every code
+    // below would silently disable the classifier rather than fail.
+    this.code = typeof code === "number" ? code : undefined;
+    this.cdpMessage = detail;
+    if (data !== undefined) this.data = data;
+  }
+}
+
+/**
+ * The exact `-32000` messages that mean "the page moved while I was asking".
+ *
+ * Enumerated rather than pattern-matched, and deliberately short. `-32000` alone
+ * is Chrome's generic server error — it also covers a node that no longer
+ * exists, a frame that was never attached and a dozen other REAL failures, so
+ * retrying on the code would turn genuine regressions into 45-second timeouts
+ * with the cause thrown away. Anything not on this list fails loudly, which is
+ * the direction it should fail in if Chrome ever rewords one of these.
+ */
+const NAVIGATION_TRANSIENTS = new Set([
+  "Inspected target navigated or closed",
+  "Cannot find context with specified id",
+  "Execution context was destroyed",
+  "Execution context with given id not found",
+]);
+
+/** Chrome is inconsistent about the trailing full stop between these messages
+ *  and between versions; nothing else about them is normalised. */
+const cdpMessageKey = (message) => String(message ?? "").trim().replace(/\.+$/, "");
+
+/**
+ * Is this the page navigating, and nothing else?
+ *
+ * Note what it does NOT accept: a plain `Error` (the evaluate watchdog, a page
+ * exception), a different code, or `-32001 Session with given id not found`,
+ * which is a detached session — permanent, and never worth a retry.
+ */
+export function isNavigationTransient(err) {
+  return err instanceof CdpError
+    && err.code === -32000
+    && NAVIGATION_TRANSIENTS.has(cdpMessageKey(err.cdpMessage));
+}
+
 // ── 一个够用的 CDP 客户端（不引第三方依赖）───────────────────────────────────
 export function cdp(wsUrl) {
   const ws = new WebSocket(wsUrl);
@@ -123,9 +185,9 @@ export function cdp(wsUrl) {
   ws.onmessage = (m) => {
     const d = JSON.parse(m.data);
     if (d.id && pending.has(d.id)) {
-      const { resolve, reject } = pending.get(d.id);
+      const { method, resolve, reject } = pending.get(d.id);
       pending.delete(d.id);
-      d.error ? reject(new Error(JSON.stringify(d.error))) : resolve(d.result);
+      d.error ? reject(new CdpError(method, d.error)) : resolve(d.result);
     } else if (d.method) handlers.forEach((h) => h(d));
   };
   return {
@@ -134,7 +196,9 @@ export function cdp(wsUrl) {
     send: (method, params = {}, sessionId) =>
       new Promise((resolve, reject) => {
         const i = ++id;
-        pending.set(i, { resolve, reject });
+        // The method travels with the pending call: the reply carries only an
+        // id, and a CDP error naming no command is one a reader cannot place.
+        pending.set(i, { method, resolve, reject });
         ws.send(JSON.stringify({ id: i, method, params, sessionId }));
       }),
     close: () => ws.close(),
@@ -217,7 +281,34 @@ export async function newTab(browser, url, initScript, { lanSeed = distinctLanSe
   const { targetId } = await browser.send("Target.createTarget", { url: "about:blank" });
   const { sessionId } = await browser.send("Target.attachToTarget", { targetId, flatten: true });
   const errors = [];
+  /**
+   * Why the tab's death is TRACKED rather than read out of the error text.
+   *
+   * A target that has been closed and a target that is mid-navigation answer
+   * the same `Runtime.evaluate` with the same words: `-32000 Inspected target
+   * navigated or closed`. That sentence names both, and Chrome will not tell
+   * them apart for us. Retrying the navigation is the entire point of the wait
+   * below; retrying the closed one is a 45-second wait for a tab that is never
+   * coming back, ending in a timeout that blames the assertion instead of the
+   * close. The Target events are the only thing that knows which happened, so
+   * the first one that arrives wins and every later wait fails at once.
+   */
+  let gone = null;
+  const markGone = (reason) => { if (gone === null) gone = reason; };
   browser.on((msg) => {
+    // Before the session filter, deliberately: a flat session's detach is
+    // reported on the BROWSER session, so `msg.sessionId` is undefined on the
+    // one event that matters most here and the filter would drop it.
+    if (msg.method === "Target.detachedFromTarget"
+        && (msg.params?.sessionId === sessionId || msg.params?.targetId === targetId)) {
+      markGone(`was detached from the debugger (${msg.params?.reason ?? "no reason given"})`);
+    }
+    if (msg.method === "Target.targetCrashed" && msg.params?.targetId === targetId) {
+      markGone("crashed");
+    }
+    if (msg.method === "Target.targetDestroyed" && msg.params?.targetId === targetId) {
+      markGone("was closed");
+    }
     if (msg.sessionId !== sessionId) return;
     if (msg.method === "Runtime.exceptionThrown") {
       const d = msg.params.exceptionDetails;
@@ -265,11 +356,87 @@ export async function newTab(browser, url, initScript, { lanSeed = distinctLanSe
     }
     return r.result?.value;
   };
+  /**
+   * The one way a wait ends because the tab itself ended.
+   *
+   * `err` is whatever the poll was holding when the lifecycle state was read: a
+   * protocol error when the poll threw, and nothing at all when it answered
+   * normally or had not been issued yet. It is passed through, never invented.
+   * A `cause` the run did not actually produce — a synthetic error, or the
+   * transient from some earlier poll — would send a reader looking for a
+   * protocol failure that never happened, and the tab's ending is already the
+   * whole diagnosis.
+   */
+  const tabIsGone = (what, err) => (err === undefined
+    ? new Error(`gave up waiting for ${what}: the tab ${gone}`)
+    : new Error(`gave up waiting for ${what}: the tab ${gone} — ${err.message}`, { cause: err }));
+
+  /**
+   * Poll `expression` until it is truthy, or the budget runs out.
+   *
+   * The retry lives HERE and nowhere else. A wait is by definition a statement
+   * that the page is still settling, so a poll that lands in the middle of a
+   * navigation has learned nothing and asking again is honest. `evaluate` is the
+   * opposite: a single question at a single moment, whose caller wrote the line
+   * because it believed the page was already there. Retrying that one would turn
+   * "your assumption about the page was wrong" into a silent second chance.
+   *
+   * Hosted run 32619074912 is the failure this exists for: `history.back()`,
+   * then the very next poll on the /me device list, and Chrome answered `-32000
+   * Inspected target navigated or closed`. The same source had passed the same
+   * job on the PR minutes earlier — the back navigation and the poll are simply
+   * racing, and the loser was whichever the runner happened to schedule first.
+   */
   const waitFor = async (expression, what, timeoutMs = 45_000) => {
+    // Computed once, and never again. Recomputing it after a retry is what
+    // would turn a page that navigates every 200ms into a wait with no end —
+    // a transient has to cost budget exactly like any other unsuccessful poll.
     const deadline = Date.now() + timeoutMs;
+    let lastTransient = null;
+    let transients = 0;
     for (;;) {
-      if (await evaluate(expression)) return;
-      if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+      // The tab's death is checked around the poll, not only inside its catch.
+      // A `Target` event is not something the next `Runtime.evaluate` is
+      // obliged to report: it can arrive while this loop is sleeping, and a
+      // poll issued afterwards may still answer an ordinary `false` — from a
+      // renderer that Chrome has already told us is detached, destroyed or
+      // crashed. Reading the lifecycle state only when a poll happens to throw
+      // makes a real close indistinguishable from a slow page, and turns it
+      // into a timeout blaming the assertion. So: before every poll…
+      if (gone !== null) throw tabIsGone(what);
+      let observed = false;
+      try {
+        observed = Boolean(await evaluate(expression));
+      } catch (err) {
+        // Lifecycle first, wording second, never the other way round. This is
+        // the case where the message is actively misleading: a closed tab says
+        // it "navigated or closed" too, and reading the message first would
+        // spend the whole budget retrying a target that no longer exists.
+        if (gone !== null) throw tabIsGone(what, err);
+        // Everything else — a page exception, the evaluate watchdog, any other
+        // CDP failure — is the caller's answer, and it gets it immediately.
+        if (!isNavigationTransient(err)) throw err;
+        lastTransient = err;
+        transients++;
+      }
+      // A condition that was actually observed is the answer, even if the tab
+      // ended a moment later: the wait got the thing it was waiting for, and
+      // failing it on the ending would be inventing a failure.
+      if (observed) return;
+      // …and after every poll that did not observe it. This is the half the
+      // catch cannot reach: the event landed DURING the poll and the poll still
+      // returned normally, so nothing threw and nothing else will look.
+      if (gone !== null) throw tabIsGone(what);
+      if (Date.now() > deadline) {
+        // A wait that ended in transients did NOT observe the condition, and
+        // says so with the reason attached. Without the count and the last
+        // error this reads as an ordinary product failure, which is exactly the
+        // misdiagnosis the hosted run above cost.
+        throw new Error(lastTransient === null
+          ? `timed out waiting for ${what}`
+          : `timed out waiting for ${what} after ${timeoutMs}ms — the page kept navigating out from under the check `
+            + `(${transients} transient CDP error${transients === 1 ? "" : "s"}, last: ${lastTransient.message})`);
+      }
       await sleep(250);
     }
   };
