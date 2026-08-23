@@ -133,7 +133,65 @@ jobs:
       - name: Toolchain versions
         run: |
           xcodebuild -version
+          swift --version
           go version
+      # The iOS project, privacy, distribution, icon and version guards are
+      # XCTest cases in the SHARED package, not in the iOS project — so
+      # `xcodebuild` never runs them, and `swift test` runs only in `macos.yml`,
+      # whose path filter deliberately excludes `apps/ios/**`. An iOS-only pull
+      # request therefore compiled the app and accepted its UI while nothing
+      # executed the guards that read `apps/ios/Relayium.xcodeproj`, its
+      # `PrivacyInfo.xcprivacy`, its signing configuration, its icon set or the
+      # version it shares with its share extension. Those are exactly the inputs
+      # an iOS-only change edits.
+      #
+      # Five selectors — four whole classes and one single method — named one at
+      # a time rather than as a pattern: a regex like `IOS.*` would silently
+      # adopt the next `IOS…Tests` class somebody writes and, far worse, could be
+      # widened to the whole suite — 200-plus test files and every WebRTC and
+      # account case with it — without looking like a change of scope.
+      # `--filter` is a UNION, so this runs these five and nothing else.
+      #
+      # The fifth is a METHOD, not a class, and that is deliberate.
+      # `BundleVersionTests` covers both native apps; only
+      # `testTheIOSAppAndItsExtensionShipOneVersion` reads `apps/ios`; its one
+      # sibling reads `apps/mac`, which this workflow does not trigger on.
+      # SwiftPM's `Target.Class/method` filter syntax is what makes the narrow
+      # selection possible; pulling in the whole class instead would run macOS
+      # assertions on an iOS-only change.
+      #
+      # `scripts/test/ci-event-policy-test.mjs` asserts the exact five, in both
+      # directions and by equality; that each resolves to a class file — and,
+      # for the method, to a case — that actually exists, since a `--filter`
+      # matching nothing exits 0; and that the step cannot be weakened into a
+      # no-op or a whole-suite run.
+      #
+      # First, before the two xcodebuild graphs: these are seconds of file
+      # reading, and an iOS project change that breaks one should turn the board
+      # red without paying for a simulator build first. The whole suite stays in
+      # `macos.yml`, which is the only place `swift test` runs unfiltered.
+      #
+      # TWO BOUNDS, and the tighter one belongs here. `ios-build`'s
+      # `timeout-minutes: 75` above is a budget for two simulator builds; this
+      # step compiles the shared package and reads files, and finishes in
+      # minutes. Inheriting 75 would let a wedged `swift test` hold a PAID
+      # macOS runner for over an hour before the board turns red, so the step
+      # carries its own smaller number — well above the real runtime, well
+      # below the job's. `timeout-minutes` is valid GitHub Actions syntax on a
+      # step; the policy test requires this one to stay finite, positive and
+      # within 40 minutes, and separately requires the carrier job to keep the
+      # finite budget section 6i governs. Neither bound can silently become
+      # GitHub's six-hour default, and neither replaces the other.
+      - name: iOS project, privacy, distribution, icon and version guards
+        working-directory: apps/RelayiumKit
+        timeout-minutes: 25
+        run: |
+          swift test \
+            --filter 'RelayiumKitTests.IOSSurfaceGuardTests' \
+            --filter 'RelayiumKitTests.IOSPrivacyManifestTests' \
+            --filter 'RelayiumKitTests.IOSDistributionSigningTests' \
+            --filter 'RelayiumKitTests.IOSAppIconAssetTests' \
+            --filter 'RelayiumKitTests.BundleVersionTests/testTheIOSAppAndItsExtensionShipOneVersion'
       # `generic/platform=iOS Simulator` builds for the simulator SDK without
       # booting a device or needing a runtime download.
       - name: Build (unsigned, iOS Simulator)

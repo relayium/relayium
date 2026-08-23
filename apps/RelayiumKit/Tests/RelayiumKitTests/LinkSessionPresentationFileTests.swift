@@ -651,13 +651,9 @@ final class LinkSessionPresentationFileTests: XCTestCase {
             .joined(separator: "\n")
     }
 
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → …/apps
+    /// `apps/`, discovered rather than counted, and checked for existing.
     private var appsRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
+        get throws { try RepoRoot.apps() }
     }
 
     /// Nothing but its ONE owner constructs one, including when macOS reaches
@@ -670,20 +666,19 @@ final class LinkSessionPresentationFileTests: XCTestCase {
         // and source both.
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
 
-        let roots = [appsRoot.appendingPathComponent("RelayiumKit/Sources"),
-                     appsRoot.appendingPathComponent("ios"),
-                     appsRoot.appendingPathComponent("mac")]
+        // Each root must exist. `RepoRoot.directory` throws with the path it
+        // wanted, where a missing root used to be skipped one line below and the
+        // scan then reported clean over nothing.
+        let roots = try ["apps/RelayiumKit/Sources", "apps/ios", "apps/mac"]
+            .map { try RepoRoot.directory($0) }
         var scanned = 0
+        // The files this guard is ABOUT, excluded from its own scan.
+        let owners = ["LinkFilePresentationModel.swift", "LinkSessionAttempt.swift"]
         for root in roots {
-            guard FileManager.default.fileExists(atPath: root.path) else { continue }
-            let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)?
-                .compactMap { $0 as? URL }
-                .filter { $0.pathExtension == "swift"
-                    && $0.lastPathComponent != "LinkFilePresentationModel.swift"
-                    && $0.lastPathComponent != "LinkSessionAttempt.swift" }
-            for file in try XCTUnwrap(files) {
+            for file in try RepoRoot.swiftFiles(in: root)
+            where !owners.contains(file.lastPathComponent) {
                 scanned += 1
-                let text = code((try? String(contentsOf: file, encoding: .utf8)) ?? "")
+                let text = code(try RepoRoot.text(of: file))
                 XCTAssertFalse(text.contains("LinkFilePresentationModel("),
                                "\(file.lastPathComponent) constructs a file presentation model")
                 XCTAssertFalse(text.contains("recordOutgoingBatch("),
@@ -697,7 +692,7 @@ final class LinkSessionPresentationFileTests: XCTestCase {
     /// runtime to call, no bridge to invalidate, and no key, codec, identity or
     /// transport anywhere in it.
     func testTheFileProjectionSendsNothingAndBuildsNoLink() throws {
-        let url = appsRoot
+        let url = try appsRoot
             .appendingPathComponent("RelayiumKit/Sources/RelayiumAppKit/LinkFilePresentationModel.swift")
         let source = code(try String(contentsOf: url, encoding: .utf8))
         XCTAssertFalse(source.isEmpty, "the projection source must be readable")

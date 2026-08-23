@@ -47,22 +47,18 @@ import XCTest
 /// two — which is exactly the part a re-layout drops silently.
 final class IOSSurfaceGuardTests: XCTestCase {
 
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → …/apps
+    /// `apps/`, discovered rather than counted, and checked for existing.
     private var appsRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // RelayiumKitTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // RelayiumKit
-            .deletingLastPathComponent()   // apps
+        get throws { try RepoRoot.apps() }
     }
 
-    private var iosRoot: URL { appsRoot.appendingPathComponent("ios/Relayium") }
+    private var iosRoot: URL { get throws { try RepoRoot.directory("apps/ios/Relayium") } }
 
     /// The view-model layer, which is where a credential actually passes
     /// through: `AccountSession` holds the bearer, and `ErrorCopy` formats
     /// failures around it.
     private var appKitRoot: URL {
-        appsRoot.appendingPathComponent("RelayiumKit/Sources/RelayiumAppKit")
+        get throws { try RepoRoot.directory("apps/RelayiumKit/Sources/RelayiumAppKit") }
     }
 
     func testIOSRuntimeSmokeIsWiredWithoutPublishingNearbyPresence() throws {
@@ -110,17 +106,14 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "nothing empties the receive folder, so the completion path "
                       + "passes once per simulator and then fails on its own leftovers")
 
-        let uiURL = appsRoot.appendingPathComponent(
-            "ios/RelayiumUITests/AppShellUITests.swift")
-        let ui = try String(contentsOf: uiURL, encoding: .utf8)
+        let ui = try RepoRoot.text("apps/ios/RelayiumUITests/AppShellUITests.swift")
         for task in ["Receive", "Send", "Direct", "Nearby", "Account"] {
             XCTAssertTrue(ui.contains("(tab: \"\(task)\""),
                           "the runtime smoke omits \(task)")
         }
 
-        let schemeURL = appsRoot.appendingPathComponent(
-            "ios/Relayium.xcodeproj/xcshareddata/xcschemes/Relayium.xcscheme")
-        let scheme = try String(contentsOf: schemeURL, encoding: .utf8)
+        let scheme = try RepoRoot.text(
+            "apps/ios/Relayium.xcodeproj/xcshareddata/xcschemes/Relayium.xcscheme")
         XCTAssertTrue(scheme.contains("RelayiumUITests.xctest"))
 
         // Hosted CI must actually RUN the shell asserted above, not just compile
@@ -130,10 +123,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // it inside the smoke step rather than anywhere in the file — `macos.yml`
         // drives a target *also* called `RelayiumUITests`, so the bare argument
         // is not by itself evidence that the iOS shell ran.
-        let workflowsRoot = appsRoot.deletingLastPathComponent()
-            .appendingPathComponent(".github/workflows")
-        let iosWorkflow = try String(
-            contentsOf: workflowsRoot.appendingPathComponent("ios.yml"), encoding: .utf8)
+        let iosWorkflow = try RepoRoot.text(".github/workflows/ios.yml")
         let smokeStep = try XCTUnwrap(iosWorkflow.components(
             separatedBy: "- name: Run iOS primary-task UI smoke")
             .dropFirst().first?.components(separatedBy: "\n      - name: ").first,
@@ -145,8 +135,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // And the move must have been a MOVE. If `macos.yml` reaches into the
         // iOS project again, the split is cosmetic: two workflows drive the same
         // simulator and every macOS-only change pays for an iOS runner.
-        let macWorkflow = try String(
-            contentsOf: workflowsRoot.appendingPathComponent("macos.yml"), encoding: .utf8)
+        let macWorkflow = try RepoRoot.text(".github/workflows/macos.yml")
         XCTAssertFalse(macWorkflow.contains("apps/ios/"),
                        "macos.yml drives the iOS project again, so the iOS shell "
                        + "smoke is hosted twice instead of moved")
@@ -192,9 +181,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(nearby.contains("L10n.t(residency.isPaused ? .nearbyPausedBody"),
                        "the explanation is still derived from the pause flag")
 
-        let uiURL = appsRoot.appendingPathComponent(
-            "ios/RelayiumUITests/AppShellUITests.swift")
-        let ui = try String(contentsOf: uiURL, encoding: .utf8)
+        let ui = try RepoRoot.text("apps/ios/RelayiumUITests/AppShellUITests.swift")
         XCTAssertTrue(ui.contains("testStoppedNearbyReceivingAsksForActionWithoutPretendingToWork"),
                       "no runtime path drives the off state")
         XCTAssertTrue(ui.contains("app.buttons[\"Pause receiving\"].exists"))
@@ -551,13 +538,13 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// this guard may miss nothing, and may only be too strict in a case that is
     /// trivially fixed by moving the comment to its own line.
     private func sources() throws -> [(name: String, text: String)] {
-        try sources(under: iosRoot, atLeast: 12)
+        try sources(under: try iosRoot, atLeast: 12)
     }
 
     /// The app's own `Info.plist`, read as a plist rather than as text, so what
     /// is asserted is what the app actually declares.
     private func infoPlist() throws -> [String: Any] {
-        let data = try Data(contentsOf: iosRoot.appendingPathComponent("Info.plist"))
+        let data = try Data(contentsOf: try iosRoot.appendingPathComponent("Info.plist"))
         return try XCTUnwrap(
             try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
                 as? [String: Any])
@@ -608,8 +595,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// Both roots, because the credential passes through both: the app renders
     /// the session, and `AccountSession`/`ErrorCopy` hold and format it.
     func testNothingInTheAppOrViewModelLayerLogs() throws {
-        let scanned = try sources(under: iosRoot, atLeast: 12)
-            + sources(under: appKitRoot, atLeast: 40)
+        let scanned = try sources(under: try iosRoot, atLeast: 12)
+            + sources(under: try appKitRoot, atLeast: 40)
         for (name, text) in scanned {
             for call in ["print(", "NSLog(", "os_log(", "debugPrint(", "dump("] {
                 XCTAssertFalse(text.contains(call),
@@ -641,7 +628,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// `LINK_PAIRING_ROOM_SUPPORT` is the other half, at the wire, and
     /// `PeerCapabilityRegistryTests` pins it against the constant's own source.
     func testTheiOSTargetNamesNothingThatComposesALinkRoom() throws {
-        for (name, text) in try sources(under: iosRoot, atLeast: 12) {
+        for (name, text) in try sources(under: try iosRoot, atLeast: 12) {
             for symbol in ["LinkSessionFactory", "LinkRoomRouter",
                            "LinkRoomSession", "LinkSessionAttempt", "LinkSessionRuntime",
                            "LinkPairingRoom", "LinkRoomHandle", "watchPairingCode"] {
@@ -662,20 +649,20 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// file would now fail here, which is what stops the iOS half being switched
     /// off by a merge that looks like a revert.
     func testTheLinkCompositionIsBuiltOnBothPlatforms() throws {
-        let workspace = try code(at: appKitRoot.appendingPathComponent("LinkWorkspaceModel.swift"))
+        let workspace = try code(at: try appKitRoot.appendingPathComponent("LinkWorkspaceModel.swift"))
         XCTAssertFalse(workspace.contains("#if os(macOS)"),
                        "LinkWorkspaceModel is iOS's workspace too and must not be compiled out")
 
         // The link-aware liveness overload MUST be shared: a link uses neither
         // legacy model, so an iOS link observed by the two-model overload would
         // have its surface released the instant it started.
-        let presence = try code(at: appKitRoot.appendingPathComponent("TransferPresence.swift"))
+        let presence = try code(at: try appKitRoot.appendingPathComponent("TransferPresence.swift"))
         XCTAssertFalse(presence.contains("#if os(macOS)"),
                        "the link-aware liveness overload must exist in the iOS build")
 
         // `AppEnvironment` keeps a platform split, and it is the RIGHT one: the
         // macOS factory takes a pairing-room handle and the iOS one does not.
-        let environment = try code(at: appKitRoot.appendingPathComponent("AppEnvironment.swift"))
+        let environment = try code(at: try appKitRoot.appendingPathComponent("AppEnvironment.swift"))
         XCTAssertTrue(environment.contains("#if os(macOS)"),
                       "the pairing-room link factory must not exist in an iOS build")
         XCTAssertTrue(environment.contains("connectPairingSocket:"),
@@ -701,7 +688,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
     ///    backgrounds, the room is left, and the user returns to a workspace
     ///    that looks open on a connection that died with the foreground.
     func testTheiOSAppComposesTheLinkOnceAndWiresIt() throws {
-        let app = try code(at: iosRoot.appendingPathComponent("RelayiumApp.swift"))
+        let app = try code(at: try iosRoot.appendingPathComponent("RelayiumApp.swift"))
         XCTAssertEqual(app.components(separatedBy: "AppEnvironment.makeLinkWorkspaceModel").count - 1, 1,
                        "the link must be composed exactly once")
         XCTAssertTrue(app.contains("observeSessions(fileModel: files, textModel: texts, link: unified)"),
@@ -728,7 +715,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// broken. So the app must read the model's property, and must not name the
     /// resolver.
     func testTheLinkReceivesIntoTheResidencyOwnedDirectory() throws {
-        let app = try code(at: iosRoot.appendingPathComponent("RelayiumApp.swift"))
+        let app = try code(at: try iosRoot.appendingPathComponent("RelayiumApp.swift"))
         XCTAssertTrue(app.contains("receiveDirectory: { files.saveDirectory }"),
                       "the link must read the directory residency installed")
         // Not `ReceiveDestination` anywhere in the app file: residency is the
@@ -754,7 +741,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
     func testThePairingCodeSurfaceIsHandedNoLink() throws {
         for name in ["DirectView.swift", "DirectTextSessionView.swift",
                      "DirectFileSessionView.swift"] {
-            let url = iosRoot.appendingPathComponent(name)
+            let url = try iosRoot.appendingPathComponent(name)
             guard FileManager.default.fileExists(atPath: url.path) else { continue }
             let view = try code(at: url)
             for symbol in ["LinkWorkspaceModel", "NearbyLinkWorkspaceView",
@@ -763,7 +750,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
                                "\(name) names \(symbol): the Direct tab composes no link/1")
             }
         }
-        let root = try code(at: iosRoot.appendingPathComponent("RootView.swift"))
+        let root = try code(at: try iosRoot.appendingPathComponent("RootView.swift"))
         XCTAssertEqual(root.components(separatedBy: "link: link,").count - 1, 1,
                        "the link is handed to more than one tab")
     }
@@ -776,7 +763,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// actually asks it, rather than reimplementing the rule inline where the
     /// two could drift.
     func testTheNearbyTabAsksOneRuleAboutTheModePicker() throws {
-        let view = try code(at: iosRoot.appendingPathComponent("NearbyView.swift"))
+        let view = try code(at: try iosRoot.appendingPathComponent("NearbyView.swift"))
         XCTAssertTrue(view.contains("NearbyConnectPresentation.showsModePicker"),
                       "the picker's visibility must come from the shared rule")
         XCTAssertTrue(view.contains("NearbyConnectPresentation.sendChoice"),
@@ -793,7 +780,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// told which it opens. Every one of those is the wrong answer on a phone,
     /// and each would compile silently.
     func testTheiOSWorkspaceUsesPlatformControlsRatherThanTheMacOnes() throws {
-        let view = try code(at: iosRoot.appendingPathComponent("NearbyLinkWorkspaceView.swift"))
+        let view = try code(at: try iosRoot.appendingPathComponent("NearbyLinkWorkspaceView.swift"))
         for macOnly in ["NSOpenPanel", "TextEditor", "keyboardShortcut",
                         "chooseForLinkSend", "Metrics.readingMeasure"] {
             XCTAssertFalse(view.contains(macOnly),
@@ -1364,7 +1351,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// boundary to every subdomain, including ones the service may later point
     /// somewhere else.
     func testTheEntitlementsFileClaimsOnlyAppleSignInAndAppLinks() throws {
-        let data = try Data(contentsOf: iosRoot.appendingPathComponent("Relayium.entitlements"))
+        let data = try Data(contentsOf: try iosRoot.appendingPathComponent("Relayium.entitlements"))
         let plist = try XCTUnwrap(
             try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
                 as? [String: Any])
@@ -1395,10 +1382,12 @@ final class IOSSurfaceGuardTests: XCTestCase {
 
     // MARK: - the share extension is a second TARGET, and a second process
 
-    private var shareRoot: URL { appsRoot.appendingPathComponent("ios/RelayiumShare") }
+    private var shareRoot: URL {
+        get throws { try RepoRoot.directory("apps/ios/RelayiumShare") }
+    }
 
     private func shareSources() throws -> [(name: String, text: String)] {
-        try sources(under: shareRoot, atLeast: 2)
+        try sources(under: try shareRoot, atLeast: 2)
     }
 
     /// The app files the extension's Sources phase also compiles.
@@ -1439,7 +1428,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// would let this target be launched for a link it has no screen for. Apple
     /// Sign-In would be a sign-in flow inside somebody else's share sheet.
     func testTheExtensionClaimsOnlyTheAppGroup() throws {
-        let data = try Data(contentsOf: shareRoot.appendingPathComponent("RelayiumShare.entitlements"))
+        let data = try Data(contentsOf: try shareRoot.appendingPathComponent("RelayiumShare.entitlements"))
         let plist = try XCTUnwrap(
             try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
                 as? [String: Any])
@@ -1533,7 +1522,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// crosses the target boundary.
     func testTheExtensionCompilesExactlyThreeSharedComponentsFromTheApp() throws {
         let project = try String(
-            contentsOf: appsRoot.appendingPathComponent("ios/Relayium.xcodeproj/project.pbxproj"),
+            contentsOf: try appsRoot.appendingPathComponent("ios/Relayium.xcodeproj/project.pbxproj"),
             encoding: .utf8)
 
         let marker = "PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section"
@@ -1723,9 +1712,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // And the model behind it offers no such call at all: `SharedDraftHost`
         // is `finish()` and `cancelled()`, which are the two an extension of this
         // point actually has.
-        let source = appsRoot.appendingPathComponent(
-            "RelayiumKit/Sources/RelayiumShareKit/SharedDraftPreparation.swift")
-        let model = try String(contentsOf: source, encoding: .utf8)
+        let model = try RepoRoot.text(
+            "apps/RelayiumKit/Sources/RelayiumShareKit/SharedDraftPreparation.swift")
         XCTAssertTrue(model.contains("func finish()"))
         XCTAssertTrue(model.contains("func cancelled()"))
         XCTAssertFalse(model.contains("func openHostApp"))
@@ -1741,7 +1729,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// everywhere and fails on most of them is worse than one that appears where
     /// it works.
     func testTheExtensionActivatesOnlyForFilesImagesAndMovies() throws {
-        let data = try Data(contentsOf: shareRoot.appendingPathComponent("Info.plist"))
+        let data = try Data(contentsOf: try shareRoot.appendingPathComponent("Info.plist"))
         let plist = try XCTUnwrap(
             try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
                 as? [String: Any])
@@ -1801,7 +1789,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// share-sheet row the user taps: what belongs there is the app the files
     /// are going to, not the target that builds the extension.
     func testTheExtensionDeclaresTheBrandAsItsShareSheetDisplayName() throws {
-        let data = try Data(contentsOf: shareRoot.appendingPathComponent("Info.plist"))
+        let data = try Data(contentsOf: try shareRoot.appendingPathComponent("Info.plist"))
         let plist = try XCTUnwrap(
             try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
                 as? [String: Any])
@@ -1826,7 +1814,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// and a bundle id that is not a suffix of the app's is rejected at install.
     func testTheProjectEmbedsExactlyOneShareExtension() throws {
         let project = try String(
-            contentsOf: appsRoot.appendingPathComponent("ios/Relayium.xcodeproj/project.pbxproj"),
+            contentsOf: try appsRoot.appendingPathComponent("ios/Relayium.xcodeproj/project.pbxproj"),
             encoding: .utf8)
 
         XCTAssertEqual(project.components(separatedBy: "com.apple.product-type.app-extension").count - 1, 1,
@@ -1869,7 +1857,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// settings, so the settings are what this reads.
     func testTheExtensionShipsTheSameVersionAsTheAppItIsEmbeddedIn() throws {
         let project = try String(
-            contentsOf: appsRoot.appendingPathComponent("ios/Relayium.xcodeproj/project.pbxproj"),
+            contentsOf: try appsRoot.appendingPathComponent("ios/Relayium.xcodeproj/project.pbxproj"),
             encoding: .utf8)
 
         /// Every distinct value a build setting is given anywhere in the project.
@@ -1898,7 +1886,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // And neither plist hard-codes one, which would make the settings above
         // decorative.
         for plistPath in ["ios/Relayium/Info.plist", "ios/RelayiumShare/Info.plist"] {
-            let text = try String(contentsOf: appsRoot.appendingPathComponent(plistPath),
+            let text = try String(contentsOf: try appsRoot.appendingPathComponent(plistPath),
                                   encoding: .utf8)
             XCTAssertTrue(text.contains("$(MARKETING_VERSION)"), "\(plistPath) pins its own version")
             XCTAssertTrue(text.contains("$(CURRENT_PROJECT_VERSION)"),
@@ -2016,10 +2004,9 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// entitlement is a site claiming an app that will not open. Neither shows
     /// up on the simulator, where the association is not fetched at all.
     func testTheSiteAssociationNamesThisAppForTheTwoRoutablePaths() throws {
-        let aasa = repoRoot
-            .appendingPathComponent("web/public/.well-known/apple-app-site-association")
         let json = try XCTUnwrap(
-            try JSONSerialization.jsonObject(with: try Data(contentsOf: aasa))
+            try JSONSerialization.jsonObject(with: try RepoRoot.data(
+                "web/public/.well-known/apple-app-site-association"))
                 as? [String: Any])
         let applinks = try XCTUnwrap(json["applinks"] as? [String: Any])
         let details = try XCTUnwrap(applinks["details"] as? [[String: Any]])
@@ -2343,15 +2330,9 @@ final class IOSSurfaceGuardTests: XCTestCase {
 
     // MARK: - what the root README may claim about this app
 
-    /// The repository root, one level above `apps` — derived from `#filePath`
-    /// like `appsRoot`, so this reads the checkout the test was compiled from
-    /// rather than whatever directory the runner happens to start in.
-    private var repoRoot: URL { appsRoot.deletingLastPathComponent() }
-
     /// One row of the concise root README delivery-status table.
     private func deliveryStatusEntry(_ platform: String) throws -> String {
-        let readme = try String(contentsOf: repoRoot.appendingPathComponent("README.md"),
-                                encoding: .utf8)
+        let readme = try RepoRoot.text("README.md")
         let row = try XCTUnwrap(readme.split(separator: "\n").first {
             $0.hasPrefix("| **\(platform)** |")
         }, "the README no longer has a `\(platform)` delivery-status row")
@@ -2387,8 +2368,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// notifications" would claim the routing does not exist. It has to be named
     /// as unverified rather than as absent, so both halves are asserted.
     func testTheReadmeNextEntryScopesTheRemainingIOSWork() throws {
-        let readme = try String(contentsOf: repoRoot.appendingPathComponent("README.md"),
-                                encoding: .utf8)
+        let readme = try RepoRoot.text("README.md")
         XCTAssertTrue(readme.contains("[`docs/`](docs/)"),
                       "the concise README no longer points detailed future work to docs")
         XCTAssertFalse(readme.contains("- **Next:"),
@@ -3828,7 +3808,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // Read as a plist, not as text: the file's comment enumerates the
         // capabilities it deliberately does NOT claim, so a text scan would
         // fail on the very documentation of the absence it is checking for.
-        let data = try Data(contentsOf: iosRoot.appendingPathComponent("Relayium.entitlements"))
+        let data = try Data(contentsOf: try iosRoot.appendingPathComponent("Relayium.entitlements"))
         let entitlements = try XCTUnwrap(
             try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
                 as? [String: Any])
@@ -4026,7 +4006,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
                           "the generated pairing code lost \(required)")
         }
         let ui = try String(
-            contentsOf: appsRoot.appendingPathComponent(
+            contentsOf: try appsRoot.appendingPathComponent(
                 "ios/RelayiumUITests/AppShellUITests.swift"), encoding: .utf8)
         XCTAssertTrue(ui.contains("testCreatingATextCodeStaysOnDirectAndShowsEveryHandoff"),
                       "no runtime path drives the iOS pairing-code handoff")
@@ -4112,9 +4092,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// apps then look like two products.
     func testTheAccentColourIsOneBrandedAssetSharedWithTheMac() throws {
         func colorset(_ target: String) throws -> [[String: Any]] {
-            let url = appsRoot.appendingPathComponent(
-                "\(target)/Assets.xcassets/AccentColor.colorset/Contents.json")
-            let json = try JSONSerialization.jsonObject(with: try Data(contentsOf: url))
+            let json = try JSONSerialization.jsonObject(with: try RepoRoot.data(
+                "apps/\(target)/Assets.xcassets/AccentColor.colorset/Contents.json"))
             return try XCTUnwrap((json as? [String: Any])?["colors"] as? [[String: Any]])
         }
         // The channel values themselves, which is the only part of a colorset
@@ -4164,7 +4143,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
                                               "green": "0x3A", "blue": "0xED"])
 
         let project = try String(
-            contentsOf: appsRoot.appendingPathComponent("ios/Relayium.xcodeproj/project.pbxproj"),
+            contentsOf: try appsRoot.appendingPathComponent("ios/Relayium.xcodeproj/project.pbxproj"),
             encoding: .utf8)
         XCTAssertEqual(project.components(
             separatedBy: "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;").count - 1,
@@ -4441,7 +4420,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
 
         // The floor the project actually declares, not a number repeated here.
         let project = try String(
-            contentsOf: appsRoot.appendingPathComponent("ios/Relayium.xcodeproj/project.pbxproj"),
+            contentsOf: try appsRoot.appendingPathComponent("ios/Relayium.xcodeproj/project.pbxproj"),
             encoding: .utf8)
         let targets = project.components(separatedBy: "IPHONEOS_DEPLOYMENT_TARGET = ")
             .dropFirst()

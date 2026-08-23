@@ -12,12 +12,14 @@ import XCTest
 /// slot completeness, PNG header geometry, alpha topology, and colour *family*
 /// at named sample points.
 final class AppIconAssetTests: XCTestCase {
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → repo root.
-    private var repoRoot: URL {
-        (0..<5).reduce(URL(fileURLWithPath: #filePath)) { u, _ in u.deletingLastPathComponent() }
+    /// The catalog and the icon set, each of which must exist: a slot table
+    /// compared against a missing directory is a comparison against nothing.
+    private var catalog: URL {
+        get throws { try RepoRoot.directory("apps/mac/Relayium/Assets.xcassets") }
     }
-    private var catalog: URL { repoRoot.appendingPathComponent("apps/mac/Relayium/Assets.xcassets") }
-    private var iconSet: URL { catalog.appendingPathComponent("AppIcon.appiconset") }
+    private var iconSet: URL {
+        get throws { try RepoRoot.directory("apps/mac/Relayium/Assets.xcassets/AppIcon.appiconset") }
+    }
     /// macOS needs an asset per size — Apple, "Configuring your app icon".
     /// 10 slots over 7 distinct pixel sizes; 32/256/512 are referenced twice.
     private let slots = [(16, 1), (16, 2), (32, 1), (32, 2), (128, 1),
@@ -27,7 +29,7 @@ final class AppIconAssetTests: XCTestCase {
     private struct Manifest: Decodable { let images: [Entry] }
     private func manifest() throws -> Manifest {
         try JSONDecoder().decode(Manifest.self,
-            from: Data(contentsOf: iconSet.appendingPathComponent("Contents.json")))
+            from: Data(contentsOf: try iconSet.appendingPathComponent("Contents.json")))
     }
 
     func testTenMacSlotsMatchingTheSlotTable() throws {
@@ -43,14 +45,16 @@ final class AppIconAssetTests: XCTestCase {
         XCTAssertEqual(names.count, 10)
         XCTAssertEqual(Set(names).count, 7)
         for n in Set(names) {
-            XCTAssertTrue(FileManager.default.fileExists(atPath: iconSet.appendingPathComponent(n).path), n)
+            XCTAssertTrue(
+                FileManager.default.fileExists(atPath: try iconSet.appendingPathComponent(n).path),
+                n)
         }
     }
     /// IHDR read directly — width, height, bit depth, colour type. No decoder.
     func testEachPNGHeaderMatchesItsSlot() throws {
         for e in try manifest().images {
             let want = Int(e.size.split(separator: "x")[0])! * Int(e.scale.dropLast())!
-            let d = try Data(contentsOf: iconSet.appendingPathComponent(e.filename!))
+            let d = try Data(contentsOf: try iconSet.appendingPathComponent(e.filename!))
             func be32(_ o: Int) -> Int { d[o...o+3].reduce(0) { $0 << 8 | Int($1) } }
             XCTAssertEqual(Array(d[1...3]), Array("PNG".utf8))
             XCTAssertEqual(be32(16), want, e.filename!)
@@ -72,20 +76,20 @@ final class AppIconAssetTests: XCTestCase {
         XCTAssertTrue(g.r > 200 && g.g > 200 && g.b > 200, "glyph is white")
     }
     func testAccentColorSetAndIconNameAreDeclared() throws {
-        let accent = try String(contentsOf:
-            catalog.appendingPathComponent("AccentColor.colorset/Contents.json"), encoding: .utf8)
+        let accent = try RepoRoot.text(
+            "apps/mac/Relayium/Assets.xcassets/AccentColor.colorset/Contents.json")
         XCTAssertTrue(accent.contains("0x6D"), "light accent #6d28d9")
         XCTAssertTrue(accent.contains("0x7C"), "dark accent #7c3aed")
         XCTAssertTrue(accent.contains("luminosity"), "a dark appearance variant must be declared")
-        let plist = try String(contentsOf:
-            repoRoot.appendingPathComponent("apps/mac/Relayium/Info.plist"), encoding: .utf8)
+        let plist = try RepoRoot.text("apps/mac/Relayium/Info.plist")
         XCTAssertTrue(plist.contains("<key>CFBundleIconName</key>"))
         XCTAssertTrue(plist.contains("<string>AppIcon</string>"))
     }
     /// The catalog must ship; the artwork source and the renderer must not.
-    func testOnlyTheCatalogSitsInsideTheSynchronizedRoot() {
+    func testOnlyTheCatalogSitsInsideTheSynchronizedRoot() throws {
         let fm = FileManager.default
-        XCTAssertTrue(catalog.path.hasSuffix("/apps/mac/Relayium/Assets.xcassets"))
+        let repoRoot = try RepoRoot.url()
+        XCTAssertTrue(try catalog.path.hasSuffix("/apps/mac/Relayium/Assets.xcassets"))
         XCTAssertTrue(fm.fileExists(atPath: repoRoot.appendingPathComponent("apps/mac/Brand/AppIcon.svg").path))
         for shipped in ["apps/mac/Relayium/AppIcon.svg", "apps/mac/Relayium/Brand",
                         "apps/mac/Relayium/tools"] {
@@ -108,7 +112,7 @@ final class AppIconAssetTests: XCTestCase {
     /// Colour components are un-premultiplied, so a comparison is about hue
     /// rather than about coverage.
     private func rgba(of filename: String) throws -> (Int, Int) -> Pixel {
-        let url = iconSet.appendingPathComponent(filename)
+        let url = try iconSet.appendingPathComponent(filename)
         let source = try XCTUnwrap(CGImageSourceCreateWithURL(url as CFURL, nil), filename)
         let image = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil), filename)
         let w = image.width, h = image.height

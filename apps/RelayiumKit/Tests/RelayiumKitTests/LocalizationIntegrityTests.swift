@@ -376,12 +376,7 @@ final class LocalizationIntegrityTests: XCTestCase {
     private func assertAppDeclaresTheNine(at relativePath: String,
                                           file: StaticString = #filePath,
                                           line: UInt = #line) throws {
-        let infoPlist = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // RelayiumKitTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // RelayiumKit
-            .deletingLastPathComponent()   // apps
-            .appendingPathComponent(relativePath)
+        let infoPlist = try RepoRoot.url("apps/" + relativePath)
         let plist = try XCTUnwrap(NSDictionary(contentsOf: infoPlist) as? [String: Any],
                                   "cannot read \(infoPlist.path)", file: file, line: line)
         let declared = try XCTUnwrap(plist["CFBundleLocalizations"] as? [String],

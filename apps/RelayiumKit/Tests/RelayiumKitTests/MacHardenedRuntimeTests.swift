@@ -39,11 +39,6 @@ import XCTest
 /// `com.relayium.mac`, and both Share extensions share `com.relayium.mac.Share`
 /// (`StoreKitLinkageTests`).
 final class MacHardenedRuntimeTests: XCTestCase {
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → repo root.
-    private var repoRoot: URL {
-        (0..<5).reduce(URL(fileURLWithPath: #filePath)) { u, _ in u.deletingLastPathComponent() }
-    }
-
     private func configurations(ofTarget target: String) throws -> [String: [String: String]] {
         try MacProjectFile().configurations(ofTarget: target)
     }
@@ -89,7 +84,7 @@ final class MacHardenedRuntimeTests: XCTestCase {
             ("RelayiumAppStore", "apps/mac/RelayiumAppStore/Relayium.entitlements"),
             ("RelayiumShareAppStore", "apps/mac/RelayiumShare/RelayiumShare.entitlements"),
         ] {
-            let data = try Data(contentsOf: repoRoot.appendingPathComponent(entitlements))
+            let data = try RepoRoot.data(entitlements)
             let plist = try XCTUnwrap(
                 try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
                     as? [String: Any])

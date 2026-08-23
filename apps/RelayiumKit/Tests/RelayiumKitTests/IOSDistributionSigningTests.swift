@@ -20,10 +20,6 @@ import XCTest
 /// plist exist for this project — so that is where they are read from, the same
 /// way `BundleVersionTests` reads the versions.
 final class IOSDistributionSigningTests: XCTestCase {
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → repo root.
-    private var repoRoot: URL {
-        (0..<5).reduce(URL(fileURLWithPath: #filePath)) { u, _ in u.deletingLastPathComponent() }
-    }
 
     /// Every `XCBuildConfiguration` block in the iOS project, as its
     /// configuration name plus its settings.
@@ -37,10 +33,7 @@ final class IOSDistributionSigningTests: XCTestCase {
     /// ` = ` lines of their own and are skipped; `name = <configuration>;`
     /// closes the block.
     private func configurations() throws -> [(name: String, settings: [String: String])] {
-        let project = try String(
-            contentsOf: repoRoot.appendingPathComponent(
-                "apps/ios/Relayium.xcodeproj/project.pbxproj"),
-            encoding: .utf8)
+        let project = try RepoRoot.text("apps/ios/Relayium.xcodeproj/project.pbxproj")
         return project
             .components(separatedBy: "isa = XCBuildConfiguration;")
             .dropFirst()
@@ -147,7 +140,7 @@ final class IOSDistributionSigningTests: XCTestCase {
     /// statement belongs.
     func testNeitherBundleDeclaresExportCompliance() throws {
         for path in ["apps/ios/Relayium/Info.plist", "apps/ios/RelayiumShare/Info.plist"] {
-            let data = try Data(contentsOf: repoRoot.appendingPathComponent(path))
+            let data = try RepoRoot.data(path)
             let plist = try XCTUnwrap(
                 try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
                     as? [String: Any])

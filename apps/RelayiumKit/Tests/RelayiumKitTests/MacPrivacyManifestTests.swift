@@ -17,15 +17,11 @@ import XCTest
 ///     list names it* — an omission no diff would show, which is why those
 ///     lists are read here.
 final class MacPrivacyManifestTests: XCTestCase {
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → repo root.
-    private var repoRoot: URL {
-        (0..<5).reduce(URL(fileURLWithPath: #filePath)) { u, _ in u.deletingLastPathComponent() }
-    }
     /// Any plist in the repo — the manifests, and the entitlements read beside
     /// them. Parsed rather than searched as text: these files explain their own
     /// absences at length, so a substring check answers the prose.
     private func parsedPlist(_ path: String) throws -> [String: Any] {
-        let data = try Data(contentsOf: repoRoot.appendingPathComponent(path))
+        let data = try RepoRoot.data(path)
         return try XCTUnwrap(
             try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
                 as? [String: Any])
@@ -39,17 +35,13 @@ final class MacPrivacyManifestTests: XCTestCase {
         })
     }
     private func swiftSources(under relative: String) throws -> String {
-        let root = repoRoot.appendingPathComponent(relative)
-        let names = try FileManager.default.subpathsOfDirectory(atPath: root.path)
-            .filter { $0.hasSuffix(".swift") }
-        XCTAssertFalse(names.isEmpty, "no sources under \(relative)")
-        return try names.map {
-            try String(contentsOf: root.appendingPathComponent($0), encoding: .utf8)
-        }.joined(separator: "\n")
+        // Throws on a missing root AND on a root with no Swift in it: both make
+        // an "this API is never called" assertion pass over nothing.
+        return try RepoRoot.swiftFiles(under: relative)
+            .map { try RepoRoot.text(of: $0) }
+            .joined(separator: "\n")
     }
-    private func text(_ relative: String) throws -> String {
-        try String(contentsOf: repoRoot.appendingPathComponent(relative), encoding: .utf8)
-    }
+    private func text(_ relative: String) throws -> String { try RepoRoot.text(relative) }
     /// The declared types, in file order, with the three flags Apple requires of
     /// each entry.
     private func collected(_ plist: [String: Any]) throws -> [(type: String, entry: [String: Any])] {
@@ -291,9 +283,7 @@ final class MacPrivacyManifestTests: XCTestCase {
     /// WHICH target a name is excluded from, and a substring search over the
     /// project answers a different one.
     private func membershipExceptions() throws -> [(target: String, excluded: [String])] {
-        let project = try String(
-            contentsOf: repoRoot.appendingPathComponent(
-                "apps/mac/Relayium.xcodeproj/project.pbxproj"), encoding: .utf8)
+        let project = try RepoRoot.text("apps/mac/Relayium.xcodeproj/project.pbxproj")
         let marker = "isa = PBXFileSystemSynchronizedBuildFileExceptionSet;"
         return try project.components(separatedBy: marker).dropFirst().map { chunk in
             // The exception set's own object block: it holds no nested braces,
@@ -349,9 +339,7 @@ final class MacPrivacyManifestTests: XCTestCase {
     /// And the folders those exceptions apply to are the ones the manifests are
     /// in — otherwise the guard above is checking lists that govern nothing.
     func testEachManifestSitsInASynchronizedFolderBothChannelsBuildFrom() throws {
-        let project = try String(
-            contentsOf: repoRoot.appendingPathComponent(
-                "apps/mac/Relayium.xcodeproj/project.pbxproj"), encoding: .utf8)
+        let project = try RepoRoot.text("apps/mac/Relayium.xcodeproj/project.pbxproj")
         for (folder, targets) in [("Relayium", ["Relayium", "RelayiumAppStore"]),
                                   ("RelayiumShare", ["RelayiumShare", "RelayiumShareAppStore"])] {
             XCTAssertTrue(project.contains("isa = PBXFileSystemSynchronizedRootGroup;"),
@@ -361,9 +349,8 @@ final class MacPrivacyManifestTests: XCTestCase {
                     "Exceptions for \"\(folder)\" folder in \"\(target)\" target"),
                     "\(target) no longer builds from the \(folder) folder")
             }
-            let manifest = repoRoot.appendingPathComponent("apps/mac/\(folder)/PrivacyInfo.xcprivacy")
-            XCTAssertTrue(FileManager.default.fileExists(atPath: manifest.path),
-                          "\(folder) has no privacy manifest to synchronize")
+            XCTAssertNoThrow(try RepoRoot.url("apps/mac/\(folder)/PrivacyInfo.xcprivacy"),
+                             "\(folder) has no privacy manifest to synchronize")
         }
     }
 

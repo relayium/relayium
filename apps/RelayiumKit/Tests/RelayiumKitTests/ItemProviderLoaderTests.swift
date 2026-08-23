@@ -446,12 +446,8 @@ final class ItemProviderLoaderTests: XCTestCase {
     /// Whole-line comments are dropped first, because the file above *explains*
     /// the absence and names the call in doing so.
     func testTheLoaderDoesNotResurrectTheEscapeHatch() throws {
-        let source = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // RelayiumKitTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // RelayiumKit
-            .appendingPathComponent("Sources/RelayiumShareKit/SharedDraftItemLoading.swift")
-        let code = try String(contentsOf: source, encoding: .utf8)
+        let code = try RepoRoot
+            .text("apps/RelayiumKit/Sources/RelayiumShareKit/SharedDraftItemLoading.swift")
             .split(separator: "\n", omittingEmptySubsequences: false)
             .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
             .joined(separator: "\n")

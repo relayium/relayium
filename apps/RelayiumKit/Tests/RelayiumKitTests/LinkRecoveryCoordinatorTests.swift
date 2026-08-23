@@ -2008,14 +2008,9 @@ final class LinkRecoveryCoordinatorTests: XCTestCase {
             .joined(separator: "\n")
     }
 
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → the kit's sources.
     private func kitSource(_ name: String) throws -> String {
-        let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Sources/RelayiumKit/Realtime/\(name)")
-        let source = code(try String(contentsOf: url, encoding: .utf8))
+        let source = code(
+            try RepoRoot.text("apps/RelayiumKit/Sources/RelayiumKit/Realtime/\(name)"))
         XCTAssertFalse(source.isEmpty, "\(name) must be readable")
         return source
     }

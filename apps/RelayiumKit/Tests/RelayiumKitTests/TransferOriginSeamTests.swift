@@ -617,13 +617,9 @@ final class TransferOriginSeamTests: XCTestCase {
 
     // MARK: - reading the sources these guards are about
 
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → …/apps
+    /// `apps/`, discovered rather than counted, and checked for existing.
     private var appsRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // RelayiumKitTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // RelayiumKit
-            .deletingLastPathComponent()   // apps
+        get throws { try RepoRoot.apps() }
     }
 
     /// A shared-package source with its whole-line comments dropped.

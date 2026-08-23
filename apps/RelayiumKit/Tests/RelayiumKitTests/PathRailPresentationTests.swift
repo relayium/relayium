@@ -1,4 +1,15 @@
+// The only AppKit import in this target, and the two tests below are the only
+// reason for it: they ask the SYSTEM whether an SF Symbol resolves, which is a
+// question no cross-platform model can answer. The guard is `os(macOS)` rather
+// than `canImport(AppKit)` so it says what it means — this target runs under
+// `swift test` on macOS, and these two tests must run there.
+//
+// A guard is also the easiest way to delete a test without deleting it: get the
+// condition wrong and the two methods below simply stop existing, silently and
+// greenly. `testTheSymbolTestsAreCompiledInOnMacOS` is what makes that loud.
+#if os(macOS)
 import AppKit
+#endif
 import XCTest
 @testable import RelayiumAppKit
 @testable import RelayiumShareKit
@@ -251,6 +262,7 @@ final class PathRailPresentationTests: XCTestCase {
     /// A missing SF Symbol renders as nothing at all, silently, and the stop
     /// keeps its label — so the rail looks merely plain rather than broken, and
     /// a screenshot review would not necessarily catch it.
+    #if os(macOS)
     func testEveryRailSymbolResolvesOnThisSystem() {
         let done = UploadState.done(link: "x", expiresAt: 0, keyWarning: nil)
         let all = PathRailPresentation.storedSend(.idle)
@@ -278,5 +290,23 @@ final class PathRailPresentationTests: XCTestCase {
                                     accessibilityDescription: nil),
                             "\(surface.rawValue) names an SF Symbol that does not exist")
         }
+    }
+    #endif
+
+    /// **The two tests above still exist on the platform this suite runs on.**
+    ///
+    /// A `#if` around a test is invisible when it is wrong: the methods are not
+    /// reported as skipped, they are not reported at all, and the suite goes on
+    /// being green with two fewer assertions in it. `instancesRespond(to:)`
+    /// reads the ObjC runtime — which is where XCTest discovers them from — so
+    /// this fails for exactly the edit that would otherwise remove them.
+    func testTheSymbolTestsAreCompiledInOnMacOS() {
+        #if os(macOS)
+        for name in ["testEveryRailSymbolResolvesOnThisSystem",
+                     "testEverySurfaceSymbolResolvesOnThisSystem"] {
+            XCTAssertTrue(Self.instancesRespond(to: Selector(name)),
+                          "\(name) was compiled out on macOS — the AppKit guard is wrong")
+        }
+        #endif
     }
 }

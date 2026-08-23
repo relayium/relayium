@@ -19,16 +19,8 @@ import XCTest
 /// carry `$(MARKETING_VERSION)` and `$(CURRENT_PROJECT_VERSION)`, so that is
 /// where they are read from.
 final class BundleVersionTests: XCTestCase {
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → repo root.
-    private var repoRoot: URL {
-        (0..<5).reduce(URL(fileURLWithPath: #filePath)) { u, _ in u.deletingLastPathComponent() }
-    }
-
     private func settings(_ platform: String, _ key: String) throws -> [String] {
-        let project = try String(
-            contentsOf: repoRoot.appendingPathComponent(
-                "apps/\(platform)/Relayium.xcodeproj/project.pbxproj"),
-            encoding: .utf8)
+        let project = try RepoRoot.text("apps/\(platform)/Relayium.xcodeproj/project.pbxproj")
         return project
             .components(separatedBy: "\n")
             .compactMap { line in

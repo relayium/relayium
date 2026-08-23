@@ -33,20 +33,18 @@ import XCTest
 /// sources and the project files that decide what a binary contains.
 final class StoreKitLinkageTests: XCTestCase {
 
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → …/apps
-    private var appsRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // RelayiumKitTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // RelayiumKit
-            .deletingLastPathComponent()   // apps
+    /// `apps/` and the trees under it, discovered rather than counted, and each
+    /// checked for existing.
+    private var appsRoot: URL { get throws { try RepoRoot.apps() } }
+    private var packageRoot: URL { get throws { try RepoRoot.package() } }
+    private var sourcesRoot: URL {
+        get throws { try RepoRoot.directory("apps/RelayiumKit/Sources") }
     }
-
-    private var packageRoot: URL { appsRoot.appendingPathComponent("RelayiumKit") }
-    private var sourcesRoot: URL { packageRoot.appendingPathComponent("Sources") }
-    private var adapterRoot: URL { sourcesRoot.appendingPathComponent("RelayiumStoreKit") }
-    private var iosRoot: URL { appsRoot.appendingPathComponent("ios") }
-    private var macRoot: URL { appsRoot.appendingPathComponent("mac") }
+    private var adapterRoot: URL {
+        get throws { try RepoRoot.directory("apps/RelayiumKit/Sources/RelayiumStoreKit") }
+    }
+    private var iosRoot: URL { get throws { try RepoRoot.directory("apps/ios") } }
+    private var macRoot: URL { get throws { try RepoRoot.directory("apps/mac") } }
 
     /// Every Swift source under a root, as (path relative to `apps/`, code).
     ///
@@ -63,6 +61,7 @@ final class StoreKitLinkageTests: XCTestCase {
             .sorted()
         XCTAssertGreaterThanOrEqual(names.count, minimum,
                                     "found \(names.count) sources at \(root.path)")
+        let appsPrefix = try appsRoot.path + "/"
         return try names.map { name in
             let raw = try String(contentsOf: root.appendingPathComponent(name), encoding: .utf8)
             let code = raw.components(separatedBy: "\n")
@@ -73,7 +72,7 @@ final class StoreKitLinkageTests: XCTestCase {
                 }
                 .joined(separator: "\n")
             let relative = root.appendingPathComponent(name).path
-                .replacingOccurrences(of: appsRoot.path + "/", with: "")
+                .replacingOccurrences(of: appsPrefix, with: "")
             return (relative, code)
         }
     }
@@ -82,13 +81,13 @@ final class StoreKitLinkageTests: XCTestCase {
     /// package source. Deliberately not the tests — a test naming StoreKit is a
     /// test, not a product.
     private func everyShippableSource() throws -> [(path: String, code: String)] {
-        try sources(under: sourcesRoot, atLeast: 60)
-            + sources(under: iosRoot, atLeast: 12)
-            + sources(under: macRoot, atLeast: 30)
+        try sources(under: try sourcesRoot, atLeast: 60)
+            + sources(under: try iosRoot, atLeast: 12)
+            + sources(under: try macRoot, atLeast: 30)
     }
 
     private func projectText(_ platform: String) throws -> String {
-        try String(contentsOf: appsRoot.appendingPathComponent(
+        try String(contentsOf: try appsRoot.appendingPathComponent(
             "\(platform)/Relayium.xcodeproj/project.pbxproj"), encoding: .utf8)
     }
 
@@ -157,7 +156,7 @@ final class StoreKitLinkageTests: XCTestCase {
     /// never heard of in-app purchase.
     func testTheSeamAndTheModelAreExpressedInPlainValues() throws {
         for name in ["SubscriptionStore.swift", "AppleSubscriptionModel.swift"] {
-            let code = try sources(under: sourcesRoot.appendingPathComponent("RelayiumAppKit"),
+            let code = try sources(under: try sourcesRoot.appendingPathComponent("RelayiumAppKit"),
                                    atLeast: 40).first { $0.path.hasSuffix(name) }?.code
             let source = try XCTUnwrap(code, "\(name) is gone from RelayiumAppKit")
             XCTAssertFalse(source.contains("import StoreKit"))
@@ -315,7 +314,7 @@ final class StoreKitLinkageTests: XCTestCase {
     /// A build that dropped the framework but kept the exception would link
     /// nothing and still claim it.
     func testTheAppStoreEntitlementsCarryNoSparkleException() throws {
-        let data = try Data(contentsOf: macRoot
+        let data = try Data(contentsOf: try macRoot
             .appendingPathComponent("RelayiumAppStore/Relayium.entitlements"))
         let plist = try XCTUnwrap(
             try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
@@ -328,7 +327,7 @@ final class StoreKitLinkageTests: XCTestCase {
 
         // And the direct build still has it, so this is a difference between the
         // two rather than a capability quietly removed from both.
-        let direct = try Data(contentsOf: macRoot
+        let direct = try Data(contentsOf: try macRoot
             .appendingPathComponent("Relayium/Relayium.entitlements"))
         let directPlist = try XCTUnwrap(
             try PropertyListSerialization.propertyList(from: direct, options: [], format: nil)
@@ -369,7 +368,7 @@ final class StoreKitLinkageTests: XCTestCase {
     /// Apple did not review. The three Sparkle keys go with the framework.
     func testTheAppStoreInfoPlistCarriesNoSparkleKeysAndIsOtherwiseTheSame() throws {
         func plist(_ path: String) throws -> [String: Any] {
-            let data = try Data(contentsOf: macRoot.appendingPathComponent(path))
+            let data = try Data(contentsOf: try macRoot.appendingPathComponent(path))
             return try XCTUnwrap(
                 try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
                     as? [String: Any])
@@ -410,7 +409,7 @@ final class StoreKitLinkageTests: XCTestCase {
         XCTAssertEqual(share, ["RelayiumShareKit"],
                        "the Share extension reached account or purchase code: \(share)")
 
-        let sources = try sources(under: iosRoot, atLeast: 14)
+        let sources = try sources(under: try iosRoot, atLeast: 14)
         XCTAssertEqual(sources.filter { $0.code.contains("import RelayiumStoreKit") }.map(\.path),
                        ["ios/Relayium/AppleSubscriptions.swift"])
         XCTAssertTrue(sources.first { $0.path.hasSuffix("RelayiumApp.swift") }?.code
@@ -446,7 +445,7 @@ final class StoreKitLinkageTests: XCTestCase {
         // comment-stripping loader, because each of these files EXPLAINS that it
         // does not import Sparkle — and a raw scan would fail on the prose
         // documenting the absence it is checking.
-        let macSources = try sources(under: macRoot, atLeast: 30)
+        let macSources = try sources(under: try macRoot, atLeast: 30)
         for name in ["mac/Relayium/RelayiumApp.swift",
                      "mac/Relayium/Settings/SettingsView.swift",
                      "mac/Relayium/AccountView.swift"] {
@@ -460,7 +459,7 @@ final class StoreKitLinkageTests: XCTestCase {
         // And there is exactly one implementation of each seam name per target.
         for name in ["enum AppDistribution", "final class AppUpdates",
                      "struct AppUpdatesMenuItem", "struct AppUpdatesSettingsTab"] {
-            let declaring = try sources(under: macRoot, atLeast: 30)
+            let declaring = try sources(under: try macRoot, atLeast: 30)
                 .filter { $0.code.contains(name) }.map(\.path).sorted()
             XCTAssertEqual(declaring,
                            ["mac/Relayium/Distribution/AppStoreDistribution.swift",
@@ -477,7 +476,7 @@ final class StoreKitLinkageTests: XCTestCase {
     /// gained `RelayiumStoreKit` as a dependency. StoreKit would then be in the
     /// direct binary too, with no source naming it.
     func testTheManifestKeepsTheAdapterALeaf() throws {
-        let raw = try String(contentsOf: packageRoot.appendingPathComponent("Package.swift"),
+        let raw = try String(contentsOf: try packageRoot.appendingPathComponent("Package.swift"),
                              encoding: .utf8)
         let manifest = raw.components(separatedBy: "\n")
             .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
@@ -528,7 +527,7 @@ final class StoreKitLinkageTests: XCTestCase {
     /// without anybody deciding to.
     func testThereIsNoStoreKitConfigurationFile() throws {
         let found = try FileManager.default
-            .subpathsOfDirectory(atPath: appsRoot.path)
+            .subpathsOfDirectory(atPath: try appsRoot.path)
             .filter { $0.hasSuffix(".storekit") }
         XCTAssertEqual(found, [], "a StoreKit configuration file appeared: \(found)")
     }
@@ -557,7 +556,7 @@ final class StoreKitLinkageTests: XCTestCase {
         }
         // The two exempt files are entirely inside `#if DEBUG`, so nothing they
         // name reaches a shipped binary.
-        for root in [macRoot, iosRoot] {
+        for root in [try macRoot, try iosRoot] {
             for name in ["UITestMode.swift", "UITestSubscriptions.swift"] {
                 let text = try String(contentsOf: root.appendingPathComponent("Relayium/\(name)"),
                                       encoding: .utf8)
@@ -568,7 +567,7 @@ final class StoreKitLinkageTests: XCTestCase {
         // And the model takes its bundle identity rather than a catalog: there
         // is no default, no constant and no plist entry to find.
         let model = try String(
-            contentsOf: sourcesRoot.appendingPathComponent(
+            contentsOf: try sourcesRoot.appendingPathComponent(
                 "RelayiumAppKit/AppleSubscriptionModel.swift"), encoding: .utf8)
         XCTAssertTrue(model.contains("private let bundleID: String"),
                       "the purchase model no longer takes its identity from the build")
@@ -586,7 +585,7 @@ final class StoreKitLinkageTests: XCTestCase {
     /// existing button would satisfy all of them and leave direct-download users
     /// with no way to change a plan at all.
     func testOnlyTheDirectMacBuildKeepsTheWebsitePlanHandoff() throws {
-        let mac = try String(contentsOf: appsRoot.appendingPathComponent(
+        let mac = try String(contentsOf: try appsRoot.appendingPathComponent(
             "mac/Relayium/AccountView.swift"),
                              encoding: .utf8)
         XCTAssertTrue(mac.contains("Button(L10n.t(.accountManagePlan))"))
@@ -596,7 +595,7 @@ final class StoreKitLinkageTests: XCTestCase {
         // required — see the call site — so both are pinned here.
         XCTAssertTrue(mac.contains("AppDistribution.channel.showsWebPlanHandoff && subscription == nil"),
                       "the web hand-off is no longer gated on the distribution channel")
-        let ios = try String(contentsOf: appsRoot.appendingPathComponent(
+        let ios = try String(contentsOf: try appsRoot.appendingPathComponent(
             "ios/Relayium/AccountSummaryView.swift"),
                              encoding: .utf8)
         XCTAssertTrue(ios.contains("IOSAppleSubscriptions.channel.showsWebPlanHandoff"),
@@ -606,7 +605,7 @@ final class StoreKitLinkageTests: XCTestCase {
         XCTAssertTrue(ios.contains("IOSAppleSubscriptions.channel.offersInAppPurchase"),
                       "the iOS StoreKit surface is no longer gated on the distribution channel")
         XCTAssertTrue(ios.contains("AppleSubscriptionCard("))
-        let subscriptions = try String(contentsOf: iosRoot.appendingPathComponent(
+        let subscriptions = try String(contentsOf: try iosRoot.appendingPathComponent(
             "Relayium/AppleSubscriptions.swift"), encoding: .utf8)
         XCTAssertTrue(subscriptions.contains("channel: AppDistributionChannel = .iosAppStore"),
                       "the iOS purchase boundary does not declare its distribution channel")
@@ -630,7 +629,7 @@ final class StoreKitLinkageTests: XCTestCase {
     /// reviewer checks a destination without leaving the app.
     func testThePurchaseSurfaceLinksThePrivacyPolicyAndTheTerms() throws {
         let card = try XCTUnwrap(
-            try sources(under: macRoot, atLeast: 30)
+            try sources(under: try macRoot, atLeast: 30)
                 .first { $0.path == "mac/Relayium/Subscription/AppleSubscriptionCard.swift" }?.code,
             "the purchase card is gone")
         // Whitespace-normalised: how the call is wrapped is nobody's contract.
@@ -686,7 +685,7 @@ final class StoreKitLinkageTests: XCTestCase {
     }
 
     func testTheIOSPurchaseSurfaceCarriesUnconditionalLegalLinks() throws {
-        let card = try String(contentsOf: iosRoot.appendingPathComponent(
+        let card = try String(contentsOf: try iosRoot.appendingPathComponent(
             "Relayium/AppleSubscriptions.swift"), encoding: .utf8)
         let flat = card.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         for (label, url) in [(".subscriptionPrivacy", "AppEnvironment.privacyWebURL"),
@@ -727,7 +726,7 @@ final class StoreKitLinkageTests: XCTestCase {
     /// The adapter exists, is one file, and is buildable — the test target links
     /// it, so this test file compiling at all is most of the claim.
     func testTheAdapterIsOneFileAndTypeChecksAgainstTheSeam() throws {
-        let files = try FileManager.default.subpathsOfDirectory(atPath: adapterRoot.path)
+        let files = try FileManager.default.subpathsOfDirectory(atPath: try adapterRoot.path)
             .filter { $0.hasSuffix(".swift") }.sorted()
         XCTAssertEqual(files, ["StoreKitSubscriptionStore.swift"])
         // Named through the seam's type, so a signature that drifted from

@@ -287,12 +287,8 @@ final class PeerCapabilityRegistryTests: XCTestCase {
     /// preprocessor directives, so a comment-stripping reader would be reading
     /// something other than what compiles.
     private func registrySource() throws -> String {
-        let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Sources/RelayiumKit/Realtime/PeerCapabilityRegistry.swift")
-        return try String(contentsOf: url, encoding: .utf8)
+        try RepoRoot.text(
+            "apps/RelayiumKit/Sources/RelayiumKit/Realtime/PeerCapabilityRegistry.swift")
     }
 
     /// Transport replacement is a SEPARATE decision and this batch did not make

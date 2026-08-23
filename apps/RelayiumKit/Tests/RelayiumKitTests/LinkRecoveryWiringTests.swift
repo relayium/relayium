@@ -92,7 +92,7 @@ final class LinkRecoveryWiringTests: XCTestCase {
     /// driver with no signalling under it may fail its own attempt at any moment
     /// on its private queue, and this test is about the seam, not the cadence —
     /// which `LinkRecoveryCoordinatorTests` pins deterministically.
-    func testACoordinatorOnTheRealFactoryAllocatesARealAttempt() {
+    func testACoordinatorOnTheRealFactoryAllocatesARealAttempt() throws {
         let held = identity()
         let signaling = SignalingClient(channel: SilentChannel(), name: "peer-a")
         let current = FakeHandle()
@@ -124,14 +124,8 @@ final class LinkRecoveryWiringTests: XCTestCase {
 
     // MARK: - source guards
 
-    private var wiringSource: String {
-        let packageRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // RelayiumKitTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // RelayiumKit
-        let file = packageRoot.appendingPathComponent(
-            "Sources/RelayiumKit/Realtime/WebRTCLinkRecovery.swift")
-        return (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+    private func wiringSource() throws -> String {
+        try RepoRoot.text("apps/RelayiumKit/Sources/RelayiumKit/Realtime/WebRTCLinkRecovery.swift")
     }
 
     private func code(_ source: String) -> String {
@@ -149,8 +143,8 @@ final class LinkRecoveryWiringTests: XCTestCase {
     /// is pinned here — a factory that derived keys would hand a "rebuild" a
     /// second `LinkCodecs`, which is two AEAD sequences under one pair of
     /// session keys.
-    func testTheProductionFactoryConstructsNoCryptography() {
-        let source = code(wiringSource)
+    func testTheProductionFactoryConstructsNoCryptography() throws {
+        let source = code(try wiringSource())
         XCTAssertFalse(source.isEmpty, "the wiring source must be readable")
         for forbidden in ["HandshakeState", "LinkCodecs(", "generateKeyPair(", "deriveSession(",
                           "deriveResumeAuth(", "deriveTextKey(", "LinkIdentity("] {
@@ -159,21 +153,15 @@ final class LinkRecoveryWiringTests: XCTestCase {
         }
     }
 
-    private var coordinatorSource: String {
-        let packageRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let file = packageRoot.appendingPathComponent(
-            "Sources/RelayiumKit/Realtime/LinkRecovery.swift")
-        return (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+    private func coordinatorSource() throws -> String {
+        try RepoRoot.text("apps/RelayiumKit/Sources/RelayiumKit/Realtime/LinkRecovery.swift")
     }
 
     /// The pure coordinator stays pure: it must be buildable and testable with
     /// no WebRTC under it at all, which is what makes its timers, staleness and
     /// ordering ordinary unit tests rather than a two-peer run.
-    func testTheCoordinatorSourceImportsNoWebRTC() {
-        let source = coordinatorSource
+    func testTheCoordinatorSourceImportsNoWebRTC() throws {
+        let source = try coordinatorSource()
         XCTAssertFalse(source.isEmpty, "the coordinator source must be readable")
         XCTAssertFalse(code(source).contains("import WebRTC"))
     }
@@ -181,8 +169,8 @@ final class LinkRecoveryWiringTests: XCTestCase {
     /// The coordinator constructs no cryptography either. It HOLDS one identity
     /// and hands it to a factory; a `LinkCodecs` built here would be the second
     /// AEAD sequence the whole feature exists to prevent.
-    func testTheCoordinatorConstructsNoCryptography() {
-        let source = code(coordinatorSource)
+    func testTheCoordinatorConstructsNoCryptography() throws {
+        let source = code(try coordinatorSource())
         XCTAssertFalse(source.isEmpty, "the coordinator source must be readable")
         for forbidden in ["HandshakeState", "LinkCodecs(", "generateKeyPair(", "deriveSession(",
                           "deriveResumeAuth(", "deriveTextKey(", "LinkIdentity("] {
@@ -203,8 +191,8 @@ final class LinkRecoveryWiringTests: XCTestCase {
     /// read the RESERVATION (`attemptSlotIsFree`) rather than a claimed
     /// transport, or an offer arriving while the factory is still building finds
     /// a slot that is taken but does not say so.
-    func testCheapRefusalsPrecedeTheHMACOnInboundRebuildOffers() {
-        let source = code(coordinatorSource)
+    func testCheapRefusalsPrecedeTheHMACOnInboundRebuildOffers() throws {
+        let source = code(try coordinatorSource())
         guard let body = source.range(of: "public func receiveResumeOffer") else {
             return XCTFail("receiveResumeOffer is no longer where this guard looks")
         }

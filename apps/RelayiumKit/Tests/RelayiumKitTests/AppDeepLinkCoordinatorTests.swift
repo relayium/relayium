@@ -708,7 +708,7 @@ final class AppDeepLinkCoordinatorTests: XCTestCase {
     /// green while restoring one main-actor `Task` per chunk of every transfer a
     /// link waits behind.
     func testTheWatcherSubscribesToTheEdgeSignalRatherThanEveryPublish() throws {
-        let coordinator = try String(contentsOf: coordinatorSource, encoding: .utf8)
+        let coordinator = try String(contentsOf: try coordinatorSource, encoding: .utf8)
         let code = coordinator.split(separator: "\n", omittingEmptySubsequences: false)
             .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
             .joined(separator: "\n")
@@ -725,13 +725,11 @@ final class AppDeepLinkCoordinatorTests: XCTestCase {
                        "the coordinator keeps a history of links again")
     }
 
-    /// …/Tests/RelayiumKitTests/<this file> → the coordinator's own source.
+    /// The coordinator's own source, which must exist.
     private var coordinatorSource: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // RelayiumKitTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // RelayiumKit
-            .appendingPathComponent("Sources/RelayiumAppKit/AppDeepLinkCoordinator.swift")
+        get throws {
+            try RepoRoot.url("apps/RelayiumKit/Sources/RelayiumAppKit/AppDeepLinkCoordinator.swift")
+        }
     }
 
     // MARK: - the router's half
