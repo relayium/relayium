@@ -17,11 +17,13 @@ the product side moves:
   has already decided the release is going out;
 * a changed readiness body or status turns a healthy release into a rollback.
 
-This is **phase A**: the product half publishes and proves the contract. The
-`relayium-ops` consumer that reads it and enforces it against the deploy script
-is a separate, serialized batch, and until it lands the cross-repository item is
-not complete. Nothing in the deploy path reads this document yet, and nothing on
-this side changed behaviour to create it.
+Phase A published and proved the contract on the product side. Phase B1 added
+the `relayium-ops` reader that compares the deploy script's own literals to this
+document, and phase B2 activates its row on the consumer roll below. A
+serialized phase B3 is still outstanding: it must vendor this exact product
+commit into `relayium-ops` and tighten enforcement there, so the
+cross-repository item is **not** complete yet. Nothing on this side changed
+behaviour to create the contract.
 
 ## What is frozen, and only what is frozen
 
@@ -49,7 +51,7 @@ and freezing them here would make an ops decision need a product release.
 ### It is a document, not a command source
 
 `program` and `argv` are **data**. Nothing in this repository — and nothing the
-ops consumer will add — executes a command string out of this file. A consumer
+ops consumer adds — executes a command string out of this file. A consumer
 compares its own hardcoded invocation against these values and fails when they
 disagree; it never spawns them.
 
@@ -57,14 +59,15 @@ disagree; it never spawns them.
 
 `consumers` is a **status** list, not a membership list: each entry carries the
 repository it lives in, whether its enforcement is `active` or `pending`, and the
-reader that performs it. The `relayium-ops` half that reads this document and
-enforces it against the deploy script does not exist yet, so it is recorded as
-**pending** rather than published as current.
+reader that performs it. The `relayium-ops` half now exists and is recorded as
+**active**: `deploy/test/ops-deploy-contract-test.sh` reads this document and
+holds the deploy script's own literals to it. It is verified in that repository,
+not here — nothing on this side can open it.
 
 | Consumer | Status | Repository | Reader, and where it runs |
 | -------- | ------ | ---------- | ------------------------- |
 | `go` | active | `relayium` | `server/ops_deploy_contract_test.go` — the runtime half. `go.yml`'s `go test ./...` for source changes; `ops-deploy-contract.yml` for a contract-only edit |
-| `ops` | pending | `relayium-ops` | none yet. Phase B adds the reader that compares the deploy script's own literals to this document, and flips this row to `active` |
+| `ops` | active | `relayium-ops` | `deploy/test/ops-deploy-contract-test.sh` — the deploy-script half. Runs in `relayium-ops`, and is verified there rather than here |
 | `product-policy` | active | `relayium` | `scripts/test/ops-deploy-contract-test.mjs` — the declarative half. `repo-hygiene.yml`, which carries **no** path filter |
 
 The `Consumer` and `Status` columns of that table are checked, and exactly those
@@ -125,7 +128,7 @@ contract is the source of truth by construction, and what is checked is its
 *structure*: that `outputFlag` appears exactly once in `argv` and is immediately
 followed by the placeholder naming the artifact the build writes. Renaming the
 flag in one place and not the other fails; renaming it in both is a declarative
-change the ops consumer must then mirror, which is what phase B is for.
+change the ops consumer must then mirror on its own side.
 
 ### Root-entry classification is a gate on purpose
 
