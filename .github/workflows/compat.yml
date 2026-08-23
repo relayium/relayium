@@ -1,3 +1,33 @@
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║ TEMPORARY PROBE EDIT — NEVER MERGE.                                      ║
+# ║                                                                          ║
+# ║ Everything in this file marked `PROBE-ONLY` belongs to the throwaway     ║
+# ║ Aggregate merge-gate reusable-Ubuntu probe driven by                     ║
+# ║ `.github/workflows/merge-gate-probe.yml`. It is three edits:             ║
+# ║                                                                          ║
+# ║   1. `on.workflow_call` was ADDED, so this lane can be invoked as a      ║
+# ║      reusable workflow. That is the whole point of the probe.            ║
+# ║   2. `on.pull_request` was REMOVED, so the probe PR produces exactly     ║
+# ║      one run of this lane (the CALLED one) instead of two runs of the    ║
+# ║      same commit that the verdict job could not tell apart.              ║
+# ║   3. `concurrency.group` no longer keys on `github.workflow`, which in   ║
+# ║      a CALLED run resolves to the CALLER's name and would collide with   ║
+# ║      the other called lane.                                              ║
+# ║                                                                          ║
+# ║ `push: main` and `workflow_dispatch` behavior, the job, its command,     ║
+# ║ permissions, timeout and the deliberate ABSENCE of any `paths:` filter   ║
+# ║ are unchanged. Reverting is: delete the PROBE-ONLY blocks, re-add the    ║
+# ║ one `pull_request:` line, and put `${{ github.workflow }}` back.         ║
+# ║                                                                          ║
+# ║ NOTE, expected and not a probe failure: this lane's job is the ONE       ║
+# ║ required status context on `main` (`compat / wire-vectors`). With        ║
+# ║ `pull_request` removed it does not run as its own check on the probe     ║
+# ║ PR, so that PR cannot satisfy branch protection and cannot be merged.    ║
+# ║ Edits 2 and 3 also knowingly violate                                     ║
+# ║ `scripts/test/ci-event-policy-test.mjs`, so `repo-hygiene.yml` is        ║
+# ║ expected to be RED. Those files are out of scope and were not            ║
+# ║ touched. NEVER MERGE.                                                    ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
 name: compat
 # The always-required compatibility gate: the cheap, platform-independent checks
 # that judge a CONTRACT between two implementations, and that every platform —
@@ -86,7 +116,30 @@ on:
     # header: a filter is exactly how a new platform root would inherit an
     # exemption from the compatibility contract without anybody deciding to
     # grant it.
-  pull_request:
+  # ── PROBE-ONLY, NEVER MERGE ───────────────────────────────────────────────
+  # A bare `pull_request:` used to sit here and is REMOVED for the probe.
+  # Semantic being protected: the probe PR must produce ONE run of this lane —
+  # the one the caller invokes — because the verdict job reads a job RESULT and
+  # could not distinguish the called run from an identical
+  # independently-triggered run of the same commit. This lane carries no
+  # `paths:` filter on either event, so restoring the trigger is a literal
+  # one-line re-add and the comment above it is untouched.
+  #
+  # Semantic under test: that this lane is callable at all, and what a called
+  # run observes. `workflow_call` is not an event of its own — a called run
+  # reports the CALLER's `event_name`/`ref` — which the probe step in
+  # `wire-vectors` asserts rather than assumes.
+  workflow_call:
+    inputs:
+      probe_assert_pull_request:
+        # PROBE-ONLY. Defaults to false so the surviving `push: main` and
+        # `workflow_dispatch` triggers, where the `inputs` context holds no such
+        # key and this reads as null, run byte-for-byte as they did before. Only
+        # a caller that passes true arms the assertion.
+        description: 'PROBE-ONLY (never merge): assert the called run observes event_name=pull_request.'
+        type: boolean
+        required: false
+        default: false
   workflow_dispatch:
 
 # Supersede a pull request's own earlier runs, and nothing else. Identical to
@@ -94,8 +147,24 @@ on:
 # `scripts/test/ci-event-policy-test.mjs`: group by PR NUMBER when there is one
 # and by `github.run_id` — unique per run — otherwise, so a PR supersedes only
 # itself and nothing can ever cancel a `main` or dispatch run.
+#
+# ── PROBE-ONLY, NEVER MERGE ─────────────────────────────────────────────────
+# Semantic under test: in a CALLED workflow, `github.workflow` resolves to the
+# CALLER's workflow name, not this file's. The repository-standard key is
+# `${{ github.workflow }}-<pr number>`; under one caller that expands to the
+# SAME string for every lane that caller invokes, so `compat` and
+# `ops-deploy-contract` would share a single group and — with
+# `cancel-in-progress` true on a pull request — cancel each other mid-run. The
+# verdict would then read `cancelled` for a lane that was never allowed to
+# finish, and the probe would be measuring its own concurrency key.
+#
+# The literal lane prefix below is what keeps the two called lanes in separate
+# groups. It is the ONLY change: the PR-number key, the `github.run_id`
+# fallback for non-PR events, and `cancel-in-progress` are untouched, so this
+# lane still supersedes its OWN earlier run and still cannot cancel anything
+# outside a pull request. Revert by restoring `${{ github.workflow }}`.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  group: probe-lane-compat-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -114,6 +183,31 @@ jobs:
     # a slot until GitHub's 6-hour default expires.
     timeout-minutes: 10
     steps:
+      # ── PROBE-ONLY, NEVER MERGE — delete with the probe ──────────────────
+      # Semantic under test: what a reusable workflow OBSERVES when it is
+      # called. A called run does not report a `workflow_call` event; it reports
+      # the CALLER's `event_name` and `ref`. This step is the evidence for that
+      # claim rather than an assumption about it, so `test` — not a print — is
+      # what decides: a called run that does not see `pull_request` fails the
+      # lane and the verdict job reports it.
+      #
+      # It is placed before `checkout` because it reads nothing from the tree,
+      # and it is skipped entirely on `push: main` and `workflow_dispatch`,
+      # where the `inputs` context holds no such key and the `if` reads as null.
+      # It changes no existing step, command, permission or bound. It does add a
+      # step to a sequence `scripts/test/ci-event-policy-test.mjs` asserts by
+      # position, which is part of the expected-RED `repo-hygiene.yml` result
+      # described in the header and is not a probe failure.
+      - name: 'PROBE (never merge): the called run observes the caller event'
+        if: ${{ inputs.probe_assert_pull_request }}
+        env:
+          PROBE_EVENT_NAME: ${{ github.event_name }}
+          PROBE_REF: ${{ github.ref }}
+          PROBE_CALLER_WORKFLOW: ${{ github.workflow }}
+        run: |
+          printf 'called lane=compat event_name=%s ref=%s github.workflow=%s\n' \
+            "$PROBE_EVENT_NAME" "$PROBE_REF" "$PROBE_CALLER_WORKFLOW"
+          test "$PROBE_EVENT_NAME" = 'pull_request'
       # Third-party actions are pinned to a full commit SHA (with the
       # human-readable version in a trailing comment) so a compromised or
       # retagged upstream release can't silently change what runs here.

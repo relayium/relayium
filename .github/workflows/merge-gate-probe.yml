@@ -1,0 +1,179 @@
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║ TEMPORARY PROBE — NEVER MERGE. DELETE THIS FILE.                         ║
+# ║                                                                          ║
+# ║ The Aggregate merge-gate reusable-Ubuntu probe (P0). It exists to answer ║
+# ║ questions about GitHub's reusable-workflow behavior with a real hosted   ║
+# ║ run, on a throwaway pull request, and then to be deleted along with the  ║
+# ║ `PROBE-ONLY` blocks it required in `compat.yml` and                      ║
+# ║ `ops-deploy-contract.yml`. Nothing here is a gate anybody should keep.   ║
+# ║                                                                          ║
+# ║ Both callees and the verdict run on free Ubuntu runners only; nothing    ║
+# ║ here can start a PAID macOS runner.                                      ║
+# ║                                                                          ║
+# ║ The four semantics under test:                                           ║
+# ║                                                                          ║
+# ║   A. CALLABILITY — that `compat.yml` and `ops-deploy-contract.yml` can   ║
+# ║      be invoked as reusable workflows at all, from a `pull_request`      ║
+# ║      caller, by local `./.github/workflows/...` path.                    ║
+# ║   B. OBSERVED EVENT — what a CALLED lane sees. `workflow_call` is not    ║
+# ║      an event of its own: the called run should report the CALLER's      ║
+# ║      `event_name` and `ref`. Each callee asserts `pull_request` in a     ║
+# ║      probe-only step rather than printing and hoping.                    ║
+# ║   C. SKIPPED CALL RESULT — what a reusable-call job behind `if: false`   ║
+# ║      reports to `needs`. The `not-selected` job below is that question,  ║
+# ║      and it must cost nothing: it is observed, never run.                ║
+# ║   D. CONCURRENCY ISOLATION — that a rapid probe update supersedes the    ║
+# ║      older PROBE run without the two called lanes cancelling each        ║
+# ║      other. See the `concurrency` blocks in both callees for the         ║
+# ║      collision this avoids.                                              ║
+# ║                                                                          ║
+# ║ The verdict is a two-way rule, not a whitelist: `compat` and             ║
+# ║ `ops-contract` must be exactly `success`, `not-selected` must be exactly ║
+# ║ `skipped`, and ANY other value — `failure`, `cancelled`, a `success`     ║
+# ║ where a `skipped` was expected — exits nonzero. There is no              ║
+# ║ `continue-on-error` anywhere in this file, so a red verdict stays red.   ║
+# ║                                                                          ║
+# ║ Expected on the probe PR and NOT a probe failure: removing the           ║
+# ║ `pull_request` triggers and re-keying the callee concurrency groups      ║
+# ║ knowingly violates `scripts/test/ci-event-policy-test.mjs` and the       ║
+# ║ filter-parity check that `scripts/test/contract-ci-policy-test.mjs`      ║
+# ║ applies to the ops lane. The always-on `repo-hygiene.yml` is therefore   ║
+# ║ expected to be RED. It is a separate workflow and is not read by the     ║
+# ║ verdict job below.                                                       ║
+# ║                                                                          ║
+# ║ Also expected: `compat`'s job is the ONE required status context on      ║
+# ║ `main`, and with its `pull_request` trigger removed the probe PR cannot  ║
+# ║ satisfy branch protection at all. That is a property of the probe, not   ║
+# ║ a defect: it must never merge. NEVER MERGE.                              ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+name: merge-gate-probe (TEMPORARY — NEVER MERGE)
+
+on:
+  # PROBE-ONLY: `pull_request` and nothing else, with NO path filter, so the
+  # probe starts on the probe PR whatever that PR happens to touch. There is
+  # deliberately no `push:` trigger — a run of this file on `main` is exactly
+  # what this branch must never produce — and no `workflow_dispatch`, because a
+  # manual run outside a pull request could not answer semantic B at all.
+  pull_request:
+
+# PROBE-ONLY: read-only, and note what is NOT here — no `secrets: inherit` and
+# no `secrets:` mapping on any call below. A called workflow receives only the
+# secrets its caller hands it, and this probe hands over none, so neither lane
+# can borrow an identity while running under a temporary file.
+permissions:
+  contents: read
+
+# PROBE-ONLY — semantic D. The group is a literal, unmistakably probe-specific
+# prefix plus the PR number, so it can only ever match ANOTHER RUN OF THIS
+# PROBE on the same pull request: pushing three fixes to the probe branch
+# leaves one live probe run instead of three.
+#
+# What it deliberately does NOT match is either callee's group
+# (`probe-lane-compat-*`, `probe-lane-ops-deploy-contract-*`). Keying this on
+# `${{ github.workflow }}` like the repository's ordinary lanes would be the
+# bug under test: `github.workflow` inside a called run resolves to THIS
+# workflow's name, so caller and both callees would share one group and a
+# supersede would land on a lane rather than on the older probe.
+#
+# `github.run_id` is the fallback for completeness; with a `pull_request`-only
+# trigger the left side is always present.
+concurrency:
+  group: merge-gate-probe-caller-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  # ── semantic A + B: the two SELECTED reusable calls ───────────────────────
+  # PROBE-ONLY. Local-path `uses:`, so each callee is resolved at the same
+  # commit as this caller — the PR head — and no `@ref` can drift. Each is
+  # passed the probe-only input that arms its `event_name` assertion; both must
+  # come back exactly `success`.
+  #
+  # Both lanes are single free Ubuntu jobs (`compat`'s `wire-vectors` and the
+  # ops lane's `go-contract`), so the whole probe costs two Ubuntu jobs plus
+  # the verdict.
+  compat:
+    uses: ./.github/workflows/compat.yml
+    with:
+      probe_assert_pull_request: true
+
+  ops-contract:
+    uses: ./.github/workflows/ops-deploy-contract.yml
+    with:
+      probe_assert_pull_request: true
+
+  # ── semantic C: the NOT-SELECTED reusable call ────────────────────────────
+  # PROBE-ONLY. A third reusable-call job that must never run. `if: false` is a
+  # constant, so this is not a race and not a condition that could evaluate
+  # true on some future event: the question is only what a reusable-call job
+  # reports to `needs` when it is skipped, and the answer must be exactly
+  # `skipped`.
+  #
+  # It calls `ops-deploy-contract.yml` rather than `compat.yml` so that if
+  # `if: false` were somehow not honored, the mistake lands on the ops lane
+  # rather than on the one whose job name is the repository's required status
+  # context. The `with:` is present so this job is IDENTICAL to the selected
+  # `ops-contract` call in every respect except the `if`, which is what makes
+  # the comparison between them meaningful.
+  not-selected:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    uses: ./.github/workflows/ops-deploy-contract.yml
+    with:
+      probe_assert_pull_request: true
+
+  # ── the verdict ───────────────────────────────────────────────────────────
+  # PROBE-ONLY. Stable id and name, and both say what they are: this job is
+  # temporary and must never survive into `main`.
+  #
+  # `if: always()` is required rather than convenient — `not-selected` is a
+  # skipped dependency, which would otherwise skip this job too and the probe
+  # would report nothing at all. It is NOT a way of tolerating failure: the
+  # step below is what decides, and it has no `continue-on-error`.
+  probe-verdict-temporary-never-merge:
+    name: 'PROBE VERDICT (temporary — never merge)'
+    if: always()
+    needs:
+      - compat
+      - ops-contract
+      - not-selected
+    runs-on: ubuntu-latest
+    # Finite by policy. This job checks out nothing, installs nothing and runs
+    # one shell step; five minutes is far past any honest run and still refuses
+    # to hold a slot for GitHub's 6-hour default.
+    timeout-minutes: 5
+    steps:
+      # No `uses:` anywhere in this job: no third-party action, floating or
+      # pinned, and no checkout. The three results arrive through the `needs`
+      # context, so there is nothing to poll and nothing to wait on — by the
+      # time this step runs, GitHub has already settled all three.
+      #
+      # Hyphenated job ids MUST be read with bracket notation; `needs.ops-contract`
+      # would parse as a subtraction, not a property.
+      - name: 'Enforce the two-way rule (temporary — never merge)'
+        env:
+          PROBE_COMPAT: ${{ needs.compat.result }}
+          PROBE_OPS_CONTRACT: ${{ needs['ops-contract'].result }}
+          PROBE_NOT_SELECTED: ${{ needs['not-selected'].result }}
+        run: |
+          # Print first and unconditionally, so the three observed values are in
+          # the log whether the rule passes or fails — a failing probe that does
+          # not say what it saw is a probe that has to be run again.
+          printf 'selected     compat       = %s  (want: success)\n' "$PROBE_COMPAT"
+          printf 'selected     ops-contract = %s  (want: success)\n' "$PROBE_OPS_CONTRACT"
+          printf 'not selected not-selected = %s  (want: skipped)\n' "$PROBE_NOT_SELECTED"
+
+          # The two-way rule. Exact string equality in both directions and no
+          # whitelist: `failure`, `cancelled`, an empty value, or a `success`
+          # from the job that was supposed to be skipped all fall through to
+          # rc=1. Every check is evaluated before exiting so one run reports
+          # every violation rather than only the first.
+          rc=0
+          [ "$PROBE_COMPAT" = 'success' ] || rc=1
+          [ "$PROBE_OPS_CONTRACT" = 'success' ] || rc=1
+          [ "$PROBE_NOT_SELECTED" = 'skipped' ] || rc=1
+
+          if [ "$rc" -ne 0 ]; then
+            printf 'PROBE VERDICT: FAIL — the two-way rule was not satisfied.\n' >&2
+          else
+            printf 'PROBE VERDICT: PASS — selected are success, not-selected is skipped.\n'
+          fi
+          exit "$rc"
