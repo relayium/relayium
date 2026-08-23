@@ -4,14 +4,14 @@
   "documentation": "docs/OPS-DEPLOY-CONTRACT.md",
   "consumers": [
     { "id": "go", "repository": "relayium", "status": "active", "reader": "server/ops_deploy_contract_test.go" },
-    { "id": "ops", "repository": "relayium-ops", "status": "pending", "reader": null },
+    { "id": "ops", "repository": "relayium-ops", "status": "active", "reader": "deploy/test/ops-deploy-contract-test.sh" },
     { "id": "product-policy", "repository": "relayium", "status": "active", "reader": "scripts/test/ops-deploy-contract-test.mjs" }
   ],
   "vocabularies": {
     "artifactKinds": ["directory", "executable", "symlink"],
     "bodyTerminators": ["newline", "none"],
     "consumerRepositories": ["relayium", "relayium-ops"],
-    "consumerStatuses": ["active", "pending"],
+    "consumerStatuses": ["active"],
     "inputClasses": ["directoryPrefix", "file"],
     "methodPolicies": ["any"],
     "pathKinds": ["childOf", "exact"],

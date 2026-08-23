@@ -267,12 +267,18 @@ function schemaFailures(world) {
 
   // Consumers. A STATUS list, not a membership list.
   //
-  // The relayium-ops half that reads this document and enforces it against the
-  // deploy script does not exist yet. A flat `["go", "ops"]` had no way to say
-  // so, so a planned reader was published as a current one — while the reader
-  // that does run on every commit was not listed at all. Each entry now carries
-  // the repository it lives in and whether it is active or pending. Phase B
-  // flips `ops` to active and fills in its reader without touching this schema.
+  // A flat `["go", "ops"]` had no way to separate a reader that exists from one
+  // that is planned, so the relayium-ops half was published as current while it
+  // was still unwritten — and the reader that does run on every commit was not
+  // listed at all. Each entry now carries the repository it lives in and its
+  // enforcement status as two different facts.
+  //
+  // Phase B has landed: all three readers exist and every row is `active`, so
+  // `pending` was removed from `vocabularies.consumerStatuses` rather than left
+  // as a term available to an unreviewed edit. The status rules below are still
+  // written generically, against `status`/`reader` rather than against today's
+  // single term: a later contract that needs a non-active status must add the
+  // term back in the same reviewed change, and these rules already hold it.
   const consumers = Array.isArray(contract.consumers) ? contract.consumers : [];
   const consumerIDs = consumers.map((consumer) => consumer?.id);
   need(
@@ -1046,7 +1052,7 @@ function consumerTableFailures(world) {
 
   // A table row per consumer: `| \`id\` | status |`. Matched by both columns, so
   // a status that moved in the JSON and not in the table fails — which is the
-  // precise shape of publishing a pending consumer as a current one.
+  // precise shape of a roll that changed while the page a reader trusts did not.
   if (text !== null) {
     const statuses = (contract.vocabularies?.consumerStatuses ?? []).filter((term) => /^[a-z]+$/.test(term));
     const rows = new Map();
@@ -1060,8 +1066,8 @@ function consumerTableFailures(world) {
         `${doc}'s consumer table records ${JSON.stringify(consumer?.id)} as `
         + `${JSON.stringify(rows.get(consumer?.id) ?? null)}; ${CONTRACT_FILE} declares `
         + `${JSON.stringify(consumer?.status)}. That table is what a reader believes, and a `
-        + `document that shows a pending consumer as current is the claim this column exists to `
-        + `stop being makeable.`,
+        + `document that shows a status this contract has moved on from is the claim this column `
+        + `exists to stop being makeable.`,
       );
     }
     for (const id of rows.keys()) {
@@ -1143,9 +1149,21 @@ const MUTATIONS = [
     expect: /probe\.methods is .*want a non-empty, sorted, duplicate-free list of upper-case/s,
   },
   {
+    // Aimed at `consumerStatuses` because that is the vocabulary that just lost
+    // a term: `pending` was real until the last consumer went active. Declaring
+    // it again with no pending consumer must fail, or the closed vocabulary
+    // reopens exactly where it was closed — and a future pending consumer is
+    // then free to arrive without the contract change that should carry it.
+    //
+    // This is the one case here that is deliberately pinned to a term rather
+    // than to the state, because "the term we just retired" is the property. A
+    // contract that legitimately reintroduces `pending` with a pending consumer
+    // makes this a no-op, and the guard in the runner then names this case and
+    // asks for it to be re-aimed — which is the failure the old hard-coded
+    // cases never produced.
     name: "a vocabulary gains a term nothing uses",
-    mutate: (w) => { w.contract.vocabularies.programs = ["cargo", "go", "npm"]; return w; },
-    expect: /vocabularies\.programs declares \["cargo"\], which nothing in this contract uses/,
+    mutate: (w) => { w.contract.vocabularies.consumerStatuses = ["active", "pending"]; return w; },
+    expect: /vocabularies\.consumerStatuses declares \["pending"\], which nothing in this contract uses/,
   },
 
   // ── closed vocabularies and cross-references ──────────────────────────────
@@ -1259,10 +1277,27 @@ const MUTATIONS = [
   },
   {
     // The exact lie the flat list told: enforcement that does not exist yet,
-    // recorded as current.
-    name: "the pending ops consumer is published as active",
-    mutate: (w) => { consumer(w, "ops").status = "active"; return w; },
-    expect: /consumers\["ops"\] is active but names no reader/,
+    // recorded as current. This case used to flip `ops` from pending to active
+    // and became a no-op the moment that row went active for real, so it is now
+    // selected BY STATE — an active consumer loses the reader that justifies its
+    // status, whichever row currently holds it.
+    name: "an active consumer keeps its status but loses its reader",
+    mutate: (w) => {
+      const active = (w.contract.consumers ?? [])
+        .filter((c) => c?.status === "active" && c?.reader !== null);
+      // Prefer a consumer outside this repository, because stripping a LOCAL
+      // reader also trips the rule that every reader running here must be on
+      // the roll, and this case is meant to break one property. Fall back to
+      // any active consumer rather than fail: the roll is only ever without an
+      // external one, never without an active one.
+      const target = active.find((c) => c?.repository !== LOCAL_REPOSITORY) ?? active[0];
+      if (target === undefined) {
+        throw new Error(`${CONTRACT_FILE}.consumers declares no active reader to strip`);
+      }
+      target.reader = null;
+      return w;
+    },
+    expect: /consumers\["[a-z][a-z0-9-]*"\] is active but names no reader/,
   },
   {
     name: "a reader that runs is recorded as pending",
@@ -1302,9 +1337,19 @@ const MUTATIONS = [
     expect: /places reader "scripts\/test\/ops-deploy-contract-test\.mjs" in "relayium-ops", but this repository tracks that exact path/,
   },
   {
-    name: "the doc keeps a status the document has moved on from",
-    mutate: (w) => setDoc(w, docText(w).replace("| `ops` | pending |", "| `ops` | active |")),
-    expect: /consumer table records "ops" as "active"; contracts\/ops-deploy-v1\.json declares "pending"/,
+    // Was written as a literal swap of `| `ops` | pending |`, which stopped
+    // changing a byte once that row went active. It now deletes whatever status
+    // row the page currently carries for `ops`, so the table falls silent about
+    // a consumer the JSON still declares — the same disagreement, reached from
+    // whatever state the roll is in. Matched on the id column only; nothing here
+    // reads a sentence, a count or any other column.
+    name: "the doc drops the status row for a consumer the contract declares",
+    mutate: (w) => {
+      const id = consumer(w, "ops").id;
+      const row = new RegExp(`^\\|\\s*\`${id}\`\\s*\\|[^\\n]*\\n`, "m");
+      return setDoc(w, docText(w).replace(row, ""));
+    },
+    expect: /consumer table records "ops" as null; contracts\/ops-deploy-v1\.json declares "[a-z]+"/,
   },
   {
     name: "the doc lists a consumer the document does not declare",
@@ -1499,14 +1544,47 @@ for (const consumer of world.contract.consumers ?? []) {
 
 for (const message of judge(world)) check(false, message);
 
+/** Every input a rule above reads, in one comparable string.
+ *
+ *  A case that leaves the world byte-identical asserts nothing, and it does not
+ *  announce itself: it can still "pass" on a complaint some OTHER rule was
+ *  already making. That is not hypothetical. Two cases here were written as
+ *  literal edits of the state of the day — flipping `ops` from pending to
+ *  active, and rewriting `| `ops` | pending |` in the page — and the commit that
+ *  made `ops` genuinely active turned both into no-ops. Requiring a mutation to
+ *  MOVE the world is what makes "break the property by the state it is in"
+ *  checkable rather than a convention. The whole world, not just the contract:
+ *  some cases break the tracked tree or the documentation text instead. */
+const fingerprint = (w) => JSON.stringify({
+  contract: w.contract,
+  tracked: w.tracked,
+  trackedSet: sorted([...w.trackedSet]),
+  rootEntries: sorted([...w.rootEntries]),
+  untrackedExists: sorted([...w.untrackedExists]),
+  manifests: sorted([...w.manifests.keys()]).map((key) => [key, w.manifests.get(key)]),
+  sources: sorted([...w.sources.keys()]).map((key) => [key, w.sources.get(key)]),
+});
+const unmutated = fingerprint(world);
+
 let mutationsProven = 0;
 for (const mutation of MUTATIONS) {
   let messages;
+  let moved;
   try {
-    messages = judge(mutation.mutate(clone(world)));
+    const mutated = mutation.mutate(clone(world));
+    // Before judging: judging fills the lazy source and manifest caches.
+    moved = fingerprint(mutated) !== unmutated;
+    messages = judge(mutated);
   } catch (error) {
     check(false, `the mutation "${mutation.name}" could not be applied: ${error.message}. A mutation `
       + `that stopped applying leaves the world unbroken and its case passes while asserting nothing.`);
+    continue;
+  }
+  if (!moved) {
+    check(false, `the mutation "${mutation.name}" left the world byte-identical. A case that changes `
+      + `nothing proves nothing: it can only be satisfied by a complaint another rule was already `
+      + `making. Break the property by the state the document is in, not by a literal that happened `
+      + `to be true when the case was written.`);
     continue;
   }
   if (messages.some((message) => mutation.expect.test(message))) {
