@@ -85,12 +85,15 @@ const defaultWorkflowsDir = resolve(repoRoot, ".github/workflows");
  * `repo-hygiene` is deliberately absent. It carries no path filter, the gate
  * calls it with no `if:`, and a lane that always runs has nothing to select.
  * `compat` is absent for the same reason and no longer for a different one:
- * the gate now calls it, unconditionally, and `compat.yml` carries no `paths:`
+ * the gate calls it, unconditionally, and `compat.yml` carries no `paths:`
  * filter either — so there is nothing here to select and the gate requires it
- * to SUCCEED on every pull request rather than to match a selection. It is
- * still the one called lane that keeps its own `pull_request:` trigger, because
- * it reports the bare `wire-vectors` context `main` requires; see
- * docs/CI-PLATFORM-BOUNDARY.md for the staged order.
+ * to SUCCEED on every pull request rather than to match a selection. It no
+ * longer keeps its own `pull_request:` trigger either: protection edit B made
+ * `merge-gate` the sole required context, so the bare `wire-vectors` compat
+ * reported directly stopped gating pull requests and the duplicate run came
+ * out. Its `push: main` trigger stays permanently, because that check run is
+ * what `relayium-ops`' `deploy/promote.sh` reads before promoting; see
+ * docs/CI-PLATFORM-BOUNDARY.md for the staged order and where it now stands.
  */
 export const LANES = [
   { id: "web", workflow: "web.yml" },
