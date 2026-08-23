@@ -57,8 +57,9 @@
 //
 // ## And the paid-runner budget
 //
-// Section 6i governs the two most expensive lanes, `ios.yml` and `release.yml`,
-// against two failures that leave the YAML perfectly valid. A job with no
+// Section 6i governs the most expensive lanes — `ios.yml`, `release.yml` and,
+// since the macOS split, `macos-release.yml` — against two failures that leave
+// the YAML perfectly valid. A job with no
 // `timeout-minutes` inherits GitHub's SIX-HOUR default, so one wedged run holds
 // a paid macOS runner — or a release job with the signing key on disk — for six
 // hours instead of turning the board red in minutes; both files had no timeout
@@ -68,6 +69,27 @@
 // on the one branch where this workflow is the only thing that compiles iOS.
 // Both are fixed, and both are asserted here — including the GENERAL shape of
 // the escape, so it cannot return as `[skip-ios]` or any other spelling.
+//
+// ## And the CI/release boundary
+//
+// Section 6m governs the newest one, and it is the only section here about a
+// boundary between two FILES. `macos.yml` used to be both the workflow that runs
+// on every push and pull request AND the workflow holding `contents: write`, a
+// `gh release create`, a `git push origin …:main`, an Apple notary key and the
+// Sparkle private signing key. What separated an ordinary pull request from an
+// immutable public release was a job-level `if:` — correct, and one edit from
+// not being there.
+//
+// It is now two files: `macos.yml` is a read-only reusable CALLEE with no
+// release operation in it at all, and `macos-release.yml` is the sole manual
+// entry point, the sole holder of `contents: write`, and the caller. Section 6m
+// asserts the exact input, secret, output, job, permission and `needs` shape of
+// both, that the notarization job downloads the artifact the build NAMED behind
+// a guard against that name being empty, and that no release operation is
+// reachable with every input at its default. Section 2 gained the concurrency
+// half of the same split: a reusable callee may not key its group on `${{
+// github.workflow }}`, which inside a called workflow is the CALLER's name and
+// deadlocks the two against each other.
 //
 // ## And the name the required check is required BY
 //
@@ -129,7 +151,19 @@ const workflowsDir = resolve(repoRoot, ".github/workflows");
  */
 const GOVERNED = [
   { file: "go.yml", dispatch: true },
-  { file: "macos.yml", dispatch: true },
+  // `dispatch: false`, and that is the whole macOS CI/release split stated in
+  // one field. This file is the reusable CI CALLEE: it runs on every push to
+  // `main` and every pull request, and it is started manually by nothing. Every
+  // reason to start it by hand was a release reason, and release moved to
+  // `macos-release.yml` — which is deliberately absent from this list, because
+  // it has no `push` and no `pull_request` and section 1 would assert things
+  // about it that must not be true. Section 6m binds it instead, and section 6i
+  // budgets it.
+  //
+  // A `workflow_dispatch:` reappearing here fails this entry AND section 6m: it
+  // is where the five release inputs and the jobs that read them came back
+  // from.
+  { file: "macos.yml", dispatch: false },
   { file: "ios.yml", dispatch: true },
   // The shared Swift package's own lane. It is here for the same reason every
   // other filtered workflow is — its triggers, its concurrency and its
@@ -177,7 +211,53 @@ const NIGHTLY = "account-race-nightly.yml";
 const FUZZ_NIGHTLY = "go-fuzz-nightly.yml";
 const FUZZ_INVENTORY = "scripts/list-go-fuzz-targets.sh";
 
-const GROUP = "${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}";
+/**
+ * The macOS pair: the read-only CI callee, and the manual release caller.
+ *
+ * They were one file. `macos.yml` carried a `workflow_dispatch` with five
+ * inputs, and its notarization and publication jobs sat beside the ordinary
+ * push/pull_request lanes — so the workflow that runs on every commit was also
+ * the workflow holding `contents: write`, a `gh release create`, a `git push
+ * origin …:main`, an Apple notary key and the Sparkle private key. The only
+ * thing between an ordinary CI event and an immutable public release was a
+ * job-level `if:`, and an `if:` is one edit away from not being there.
+ *
+ * Now `macos-release.yml` is the sole manual entry point and CALLS `macos.yml`
+ * as a reusable workflow, so a release builds through the same signed-build lane
+ * every pull request already runs. Section 6m is what keeps that boundary from
+ * being reassembled by a copy.
+ */
+const MACOS = "macos.yml";
+const MACOS_RELEASE = "macos-release.yml";
+
+/**
+ * The concurrency key, in two halves.
+ *
+ * The SUFFIX is repository-wide and is the whole of the rule stated at the top
+ * of this file: group by PR number when there is one, by `github.run_id`
+ * otherwise. Nothing may deviate from it.
+ *
+ * The PREFIX is `${{ github.workflow }}` for every workflow that is neither a
+ * reusable callee nor the caller of one — which is all of them but two.
+ *
+ * `macos.yml` and `macos-release.yml` carry LITERAL prefixes instead, and that
+ * is not a style choice. Inside a called workflow `github.workflow` is the
+ * CALLER's name, so the shared expression puts the caller's jobs and the
+ * callee's jobs in one group under one `github.run_id`: the callee queues
+ * behind the caller, and the caller waits for the callee. Two literals nothing
+ * else uses make the groups disjoint by construction, whatever either file is
+ * renamed to later.
+ */
+const GROUP_SUFFIX = "${{ github.event.pull_request.number || github.run_id }}";
+const DEFAULT_GROUP_PREFIX = "${{ github.workflow }}";
+const LITERAL_GROUP_PREFIX = new Map([
+  [MACOS, "macos-ci"],
+  [MACOS_RELEASE, "macos-release"],
+]);
+const groupPrefix = (file) => LITERAL_GROUP_PREFIX.get(file) ?? DEFAULT_GROUP_PREFIX;
+const expectedGroup = (file) => `${groupPrefix(file)}-${GROUP_SUFFIX}`;
+/** The default shape, for the parser fixture and for synthetic platforms below. */
+const GROUP = `${DEFAULT_GROUP_PREFIX}-${GROUP_SUFFIX}`;
 const CANCEL = "${{ github.event_name == 'pull_request' }}";
 
 const ACCOUNT_PKG = "github.com/relayium/relayium/account";
@@ -377,6 +457,15 @@ function deepEqual(a, b) {
  * shell step, the `${{ ... }}` concurrency values are quoted expressions
  * containing braces, and `on:` is the key YAML 1.1 would otherwise turn into
  * the boolean `true` and hide from every check below.
+ *
+ * The `workflow_call:` block and the `uses:`/`with:`/`secrets:` job arrived with
+ * the macOS CI/release split, and section 6m reads every one of them. The output
+ * value is the fixture's most load-bearing line: `jobs['signed-build']` carries a
+ * single-quoted string INSIDE an unquoted scalar, and a parser that treated that
+ * quote as the start of a quoted value — or that dropped everything after a `#`
+ * it never sees here but would in a sibling line — would hand 6m a mangled
+ * expression and its bracket-syntax check would pass or fail for the wrong
+ * reason.
  */
 function assertParserReadsTheWorkflowSubset() {
   const fixture = [
@@ -391,6 +480,18 @@ function assertParserReadsTheWorkflowSubset() {
     "  pull_request:",
     "    paths: *paths",
     "  workflow_dispatch:",
+    "  workflow_call:",
+    "    inputs:",
+    "      release_version:",
+    "        required: false",
+    "        default: ''",
+    "        type: string",
+    "    secrets:",
+    "      MACOS_SIGNING_CERT_PASSWORD:",
+    "        required: false",
+    "    outputs:",
+    "      signed_artifact:",
+    "        value: ${{ jobs['signed-build'].outputs.signed_artifact }}",
     "",
     "# a full-line comment",
     "concurrency:",
@@ -398,6 +499,12 @@ function assertParserReadsTheWorkflowSubset() {
     "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
     "",
     "jobs:",
+    "  caller:",
+    "    uses: ./.github/workflows/macos.yml",
+    "    with:",
+    "      release_version: ${{ inputs.release_version }}",
+    "    secrets:",
+    "      MACOS_SIGNING_CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}",
     "  build:",
     "    runs-on: ubuntu-latest",
     "    timeout-minutes: 25",
@@ -427,9 +534,21 @@ function assertParserReadsTheWorkflowSubset() {
       push: { branches: ["main"], paths: ["web/**", ".github/workflows/web.yml"] },
       pull_request: { paths: ["web/**", ".github/workflows/web.yml"] },
       workflow_dispatch: null,
+      workflow_call: {
+        inputs: { release_version: { required: "false", default: "", type: "string" } },
+        secrets: { MACOS_SIGNING_CERT_PASSWORD: { required: "false" } },
+        outputs: {
+          signed_artifact: { value: "${{ jobs['signed-build'].outputs.signed_artifact }}" },
+        },
+      },
     },
     concurrency: { group: GROUP, "cancel-in-progress": CANCEL },
     jobs: {
+      caller: {
+        uses: "./.github/workflows/macos.yml",
+        with: { release_version: "${{ inputs.release_version }}" },
+        secrets: { MACOS_SIGNING_CERT_PASSWORD: "${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}" },
+      },
       build: {
         "runs-on": "ubuntu-latest",
         "timeout-minutes": "25",
@@ -510,7 +629,16 @@ for (const file of files) {
  * keeps applying its `on`/`concurrency`/`jobs` rule to governed workflows only.
  * A parse failure is still a reported failure, not a silent skip.
  */
-const BUDGET_ONLY = ["release.yml"];
+/*
+ * `macos-release.yml` joins it for a different reason, and belongs in neither
+ * `GOVERNED` nor the trigger rules: it has no `push` and no `pull_request` by
+ * design — it is the manual release entry point — so section 1 would assert
+ * things about it that must not be true. What it does have is the two most
+ * dangerous jobs in this repository, one of them on a PAID macOS runner, and
+ * section 6i has to bound both. Its dispatch-only shape, its concurrency and its
+ * whole boundary against the CI half are asserted in section 6m instead.
+ */
+const BUDGET_ONLY = ["release.yml", MACOS_RELEASE];
 for (const file of BUDGET_ONLY) {
   let text;
   try {
@@ -536,7 +664,12 @@ for (const file of BUDGET_ONLY) {
  * though the workflow said so.
  */
 function assertParseWasNotVacuous() {
-  for (const file of files) {
+  // `macos-release.yml` is included even though it is BUDGET_ONLY: sections 6i
+  // and 6m read its triggers, its concurrency and its jobs, so an empty parse
+  // of it would make both of them pass by inspecting nothing. `release.yml` is
+  // not — it genuinely declares no `concurrency:` block, and demanding one here
+  // would be asserting a property it never had.
+  for (const file of [...files, MACOS_RELEASE]) {
     const doc = docs.get(file);
     if (!doc) continue; // already reported as missing or unparseable
     check(
@@ -619,37 +752,15 @@ for (const { file, dispatch } of GOVERNED) {
 }
 
 // ── 2. concurrency: PR number, run_id for everything else ───────────────────
+//
+// Moved into `concurrencyFailures(world)`, beside the other world functions, so
+// section 8 can break each of its rules and require the complaint. The rules did
+// not change by moving: the same files, the same suffix, and — since the macOS
+// CI/release split — a per-file PREFIX, a ban on `github.workflow` in a reusable
+// callee, and uniqueness across every file governed here.
 
-for (const file of files) {
-  const doc = docs.get(file);
-  if (!doc) continue;
-  const group = doc.concurrency?.group;
-  const cancel = doc.concurrency?.["cancel-in-progress"];
-
-  check(
-    group === GROUP,
-    `${file}: concurrency.group is ${JSON.stringify(group)}, want ${JSON.stringify(GROUP)}.`,
-  );
-  check(
-    cancel === CANCEL,
-    `${file}: concurrency.cancel-in-progress is ${JSON.stringify(cancel)}, want `
-    + `${JSON.stringify(CANCEL)} — only a pull request may supersede its own earlier run.`,
-  );
-  // Stated separately from the equality check above so the reason survives a
-  // future edit that reformats the expression.
-  check(
-    typeof group !== "string" || !group.includes("github.ref"),
-    `${file}: concurrency.group keys on \`github.ref\`. Every \`main\` run then shares one `
-    + `group, and GitHub cancels an older PENDING run in a group even with `
-    + `cancel-in-progress: false — so a quick second merge silently cancels the first `
-    + `commit's verification and main shows a cancelled check for untested code.`,
-  );
-  check(
-    typeof group !== "string" || group.includes("github.run_id"),
-    `${file}: concurrency.group has no \`github.run_id\` fallback, so non-PR events share a `
-    + `group and can cancel one another.`,
-  );
-}
+/** Every file whose concurrency block this policy binds. */
+const CONCURRENCY_GOVERNED = [...files, MACOS_RELEASE];
 
 // ── 3. the account race lane is sharded, and the shards really run ──────────
 
@@ -834,7 +945,8 @@ if (nightly) {
 // abstraction: `ios-build` reappearing in `macos.yml`, or one native filter
 // growing back to `apps/**`.
 
-const MACOS = "macos.yml";
+// `MACOS` and `MACOS_RELEASE` are declared at the top of this file, beside the
+// concurrency prefixes their split made necessary.
 const IOS = "ios.yml";
 
 // ── 6k's subjects, declared beside the workflows they are about ─────────────
@@ -1518,6 +1630,39 @@ const RUNNER_BUDGETS = [
         why: "a PAID macOS runner is held by a wedged build with the Developer ID signing key "
           + "materialized in a keychain on disk",
       },
+      // `notarize-stage` and `publish` are NOT here any more, and their absence
+      // is enforced rather than merely true: the per-job completeness rule
+      // below fails in both directions, so a budget naming a job `macos.yml`
+      // no longer declares is a failure, and either job restored into this file
+      // would land in the unbudgeted case and fail there. Their budgets moved
+      // WITH them, to the `macos-release.yml` entry below — 6m asserts that
+      // they moved rather than were dropped.
+    },
+  },
+  {
+    // The manual release entry point. Its two executable jobs are the two most
+    // dangerous in this repository, and they are the same two jobs — with the
+    // same work, the same evidence and the same numbers — that used to sit in
+    // `macos.yml`. The ceilings moved unchanged; nothing about what they do
+    // changed, only which file they are in.
+    //
+    // The `jobs` form, and not because the two differ by an order of magnitude
+    // — though they do. It is what makes a THIRD job added to the release lane
+    // fail until somebody budgets it, which on a workflow that notarizes and
+    // publishes is the case worth forcing a decision on.
+    file: MACOS_RELEASE,
+    why: "a runner is held by a release step that will never finish",
+    jobs: {
+      // The reusable call. A caller job declares no `timeout-minutes` — GitHub
+      // rejects a workflow whose `uses:` job carries one — so it is budgeted
+      // by exemption rather than by a number, and the exemption is asserted:
+      // the loop below requires a caller job to declare no bound at all, and
+      // every job the call actually starts is budgeted under `macos.yml`.
+      build: {
+        caller: true,
+        why: "a reusable call cannot carry its own bound; the jobs it starts are budgeted in "
+          + "`macos.yml`",
+      },
       // Declared 55: Apple's own `--wait --timeout 45m`, plus the stapling,
       // assessment, staging and upload that follow it. Deliberately the one
       // bound in this file NOT scaled from observed runtime — see the comment
@@ -1736,6 +1881,7 @@ const fuzzInventoryExists = (() => {
 function realWorld() {
   return {
     governed: GOVERNED.map((entry) => ({ ...entry })),
+    budgetOnly: [...BUDGET_ONLY],
     docs: new Map([...docs].map(([file, doc]) => [file, structuredClone(doc)])),
     texts: new Map(workflowTexts),
     roots: new Set(appRoots),
@@ -2359,18 +2505,23 @@ function platformBoundaryFailures(world) {
   //     anything above, and both were live defects until they were fixed.
   //
   //     TIMEOUTS. A job with no `timeout-minutes` inherits GitHub's SIX-HOUR
-  //     default. `ios.yml`, `release.yml` and five of `macos.yml`'s six jobs had
-  //     none. On `ios.yml` that is a paid macOS runner held for six hours by a
-  //     simulator that never booted; on `release.yml` it is a wedged release job
-  //     sitting for six hours with the signing key materialized on disk; on
-  //     `macos.yml` it was every lane that imports the Developer ID certificate,
-  //     submits to Apple's notary, or publishes an immutable GitHub Release. The
+  //     default. `ios.yml`, `release.yml` and five of the six jobs `macos.yml`
+  //     carried at the time had none. On `ios.yml` that is a paid macOS runner
+  //     held for six hours by a simulator that never booted; on `release.yml` it
+  //     is a wedged release job sitting for six hours with the signing key
+  //     materialized on disk; across the macOS lanes it was every job that
+  //     imports the Developer ID certificate, submits to Apple's notary, or
+  //     publishes an immutable GitHub Release — the certificate-importing ones
+  //     are `macos.yml`'s CI jobs, and the notarizing and publishing ones have
+  //     since moved to `macos-release.yml`, where they are budgeted. The
   //     ceiling is asserted in the other direction too, exactly as in 6h: a
   //     bound declared far above what the work takes is the six-hour default
   //     wearing a number.
   //
-  //     PER JOB, NOT PER FILE. `macos.yml` is budgeted job by job because its
-  //     jobs are not comparable: `contract` is measured in seconds and
+  //     PER JOB, NOT PER FILE. Both macOS lanes are budgeted job by job because
+  //     their jobs are not comparable: in `macos.yml`, `contract` is measured in
+  //     seconds while `signed-build` pays a cold signed build; in
+  //     `macos-release.yml`, `publish` is a free Linux runner while
   //     `notarize-stage` legitimately waits out Apple's 45-minute notary
   //     timeout. A single file-wide ceiling would have to be the largest of
   //     them, so it would pass a `contract` job wedged for an hour — the exact
@@ -2421,11 +2572,62 @@ function platformBoundaryFailures(world) {
     );
 
     for (const [name, job] of jobs) {
+      // Checked before the caller exemption below, so a reusable-caller job is
+      // still bound by it. A caller carries no bound of its own, but it does
+      // carry an `if:` — and a commit-message escape there would skip the whole
+      // called workflow, which is every gate at once.
+      for (const condition of [job.if, ...(job.steps ?? []).map((step) => step?.if)]) {
+        if (typeof condition !== "string") continue;
+        need(
+          !COMMIT_MESSAGE_CONDITION.test(condition),
+          `${budget.file}/${name}: a condition reads the commit message (${JSON.stringify(condition)}). `
+          + `Whatever marker it names, that is the \`${SKIP_MARKER}\` escape returning in a new `
+          + `spelling: it hands the decision about whether this gate runs to whoever writes the `
+          + `commit, and a skipped check reports nothing rather than red.`,
+        );
+      }
+
+      const perJob = budget.jobs?.[name];
+      // A job that CALLS a reusable workflow is bounded by exemption, not by a
+      // number. GitHub rejects a workflow outright when a `uses:` job declares
+      // `timeout-minutes`, so the ordinary rule below — a finite positive bound
+      // under a ceiling — cannot be satisfied by one and would push whoever hit
+      // it toward inlining the called workflow back into this file, which is the
+      // split this policy exists to hold.
+      //
+      // The exemption is not a hole: the caller starts no runner of its own, and
+      // every job it does start carries its own bound inside the callee, where
+      // this same section budgets it job by job. Both halves are asserted — the
+      // policy must DECLARE the exemption (`caller: true`), and the job must
+      // carry no bound.
+      const isCaller = typeof job.uses === "string" && job.uses !== "";
+      need(
+        !isCaller || perJob?.caller === true,
+        `${budget.file}/${name} calls a reusable workflow (\`uses: ${job.uses}\`) but this policy `
+        + `does not declare it a caller. A \`uses:\` job cannot carry \`timeout-minutes\`, so it `
+        + `is budgeted by the callee's own per-job bounds instead; mark it \`caller: true\` and `
+        + `make sure the workflow it calls is itself budgeted here. Silence would mean a job `
+        + `nobody budgeted and nobody exempted.`,
+      );
+      need(
+        !isCaller || job["timeout-minutes"] === undefined,
+        `${budget.file}/${name} calls a reusable workflow AND declares \`timeout-minutes: `
+        + `${JSON.stringify(job["timeout-minutes"])}\`. GitHub rejects the whole workflow for `
+        + `that — the release lane would stop running entirely, which on a manual entry point is `
+        + `discovered at the moment somebody needs to publish. Bound the callee's jobs instead.`,
+      );
+      need(
+        !perJob?.caller || isCaller,
+        `${budget.file}/${name} is declared a reusable caller in this policy but its job has no `
+        + `\`uses:\`. An exemption pointed at a job that now runs its own steps is a PAID runner `
+        + `with no bound and no ceiling, exempted by a line nobody re-read.`,
+      );
+      if (isCaller) continue;
+
       // Which ceiling applies to THIS job. A file declaring per-job budgets has
       // to name every job it declares: an unnamed one is not "unbounded by
       // decision", it is a job somebody added without deciding, and the
       // per-value checks below would then have no ceiling to compare against.
-      const perJob = budget.jobs?.[name];
       need(
         budget.jobs === undefined || perJob !== undefined,
         `${budget.file}/${name}: this policy declares per-job runner budgets for ${budget.file} `
@@ -2473,17 +2675,6 @@ function platformBoundaryFailures(world) {
           !(Number.isFinite(min) && Number.isFinite(value) && value <= min),
           `${budget.file}/${name}: ${where} is ${declared}, at or below the ${min}-minute floor `
           + `set by ${perJob?.minSource}. ${perJob?.minWhy}.`,
-        );
-      }
-
-      for (const condition of [job.if, ...(job.steps ?? []).map((step) => step?.if)]) {
-        if (typeof condition !== "string") continue;
-        need(
-          !COMMIT_MESSAGE_CONDITION.test(condition),
-          `${budget.file}/${name}: a condition reads the commit message (${JSON.stringify(condition)}). `
-          + `Whatever marker it names, that is the \`${SKIP_MARKER}\` escape returning in a new `
-          + `spelling: it hands the decision about whether this gate runs to whoever writes the `
-          + `commit, and a skipped check reports nothing rather than red.`,
         );
       }
     }
@@ -3286,11 +3477,28 @@ function iosGuardStepFailures(world) {
 // Only macOS jobs, because only they carry the paid-runner multiplier. An
 // unbudgeted `ubuntu-latest` job is a real cost and a much smaller one, and 6f
 // and 6h already bound the always-on lanes.
+//
+// The sweep covers the BUDGET-ONLY files too, and that is not a widening for its
+// own sake. `macos-release.yml` is not governed — it has no `push` and no
+// `pull_request` by design — and it holds a `macos-15` notarization job. A sweep
+// restricted to the governed list would have looked complete while the one
+// unbudgeted PAID lane in this repository sat in the file that submits to Apple
+// with the notary key on disk. A file in neither list is still caught: it would
+// be in no policy at all, which 6m and the missing-file checks report.
 function macosBudgetFailures(world) {
   const out = [];
   const need = (ok, message) => { if (!ok) out.push(message); };
 
-  for (const { file } of world.governed) {
+  const swept = [
+    ...world.governed.map((entry) => entry.file),
+    ...(world.budgetOnly ?? []),
+  ];
+  need(
+    swept.length > 0,
+    `this policy swept no workflow files for unbudgeted PAID runners at all, so every check `
+    + `below passed by iterating over nothing.`,
+  );
+  for (const file of swept) {
     for (const [name, job] of Object.entries(world.docs.get(file)?.jobs ?? {})) {
       if (!String(job?.["runs-on"] ?? "").startsWith("macos")) continue;
       const ceiling = governedCeiling(file, name);
@@ -3316,11 +3524,732 @@ function macosBudgetFailures(world) {
   return out;
 }
 
+// ── 2 (continued). the concurrency rules, as a world function ──────────────
+//
+// The suffix is repository-wide. The PREFIX is per file, because two of them
+// cannot use `${{ github.workflow }}`: see `LITERAL_GROUP_PREFIX`. Three rules
+// follow from that, and all three are asserted here — the exact group each file
+// must carry, the ban on `github.workflow` in a reusable CALLEE, and uniqueness
+// of the resolved prefixes across every file governed here.
+function concurrencyFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+
+  for (const file of CONCURRENCY_GOVERNED) {
+    const doc = world.docs.get(file);
+    if (!doc) continue;
+    const group = doc.concurrency?.group;
+    const cancel = doc.concurrency?.["cancel-in-progress"];
+
+    need(
+      group === expectedGroup(file),
+      `${file}: concurrency.group is ${JSON.stringify(group)}, want `
+      + `${JSON.stringify(expectedGroup(file))}.`,
+    );
+    need(
+      cancel === CANCEL,
+      `${file}: concurrency.cancel-in-progress is ${JSON.stringify(cancel)}, want `
+      + `${JSON.stringify(CANCEL)} — only a pull request may supersede its own earlier run.`,
+    );
+    // Stated separately from the equality check above so the reason survives a
+    // future edit that reformats the expression.
+    need(
+      typeof group !== "string" || !group.includes("github.ref"),
+      `${file}: concurrency.group keys on \`github.ref\`. Every \`main\` run then shares one `
+      + `group, and GitHub cancels an older PENDING run in a group even with `
+      + `cancel-in-progress: false — so a quick second merge silently cancels the first `
+      + `commit's verification and main shows a cancelled check for untested code.`,
+    );
+    need(
+      typeof group !== "string" || group.includes("github.run_id"),
+      `${file}: concurrency.group has no \`github.run_id\` fallback, so non-PR events share a `
+      + `group and can cancel one another.`,
+    );
+    // A reusable CALLEE may not key on `${{ github.workflow }}`, whatever else
+    // its group says. Stated as a property of `workflow_call` rather than of a
+    // file name, so the next callee this repository grows is bound by it on the
+    // day it lands.
+    //
+    // In a called workflow that expression is the CALLER's workflow name, not
+    // this file's. The caller and the callee then share one group under one
+    // `github.run_id`: GitHub holds the callee's jobs behind the caller's, and
+    // the caller cannot finish until the callee does. That is a deadlock, and it
+    // is invisible to YAML validity, to actionlint and to every run that never
+    // exercised the call.
+    if (doc.on && typeof doc.on === "object" && "workflow_call" in doc.on) {
+      need(
+        typeof group !== "string" || !group.includes("github.workflow"),
+        `${file}: it is a reusable workflow (\`on: workflow_call\`) and its concurrency.group `
+        + `keys on \`github.workflow\`. Inside a called workflow that expression is the CALLER's `
+        + `name, so the caller's jobs and this file's jobs land in one group under one `
+        + `\`github.run_id\` — the callee queues behind the caller that is waiting for it, and `
+        + `the release run hangs until it is cancelled by hand. A reusable callee needs a LITERAL `
+        + `prefix nothing else uses; \`LITERAL_GROUP_PREFIX\` is where to declare it.`,
+      );
+    }
+  }
+
+  // And the property no single file can hold up its own half of: the prefixes
+  // are DISTINCT.
+  //
+  // `${{ github.workflow }}` is unique by construction — it is the file's own
+  // `name:`. A literal is not: `macos-ci` and `macos-release` are two strings
+  // somebody typed, and two workflows that resolve to the same prefix share a
+  // group. For the pair this exists for, that is exactly the deadlock the rule
+  // above prevents in the other direction — a literal `macos-release` in
+  // `macos.yml` would collide with the caller's `${{ github.workflow }}` just as
+  // surely as the expression itself did.
+  //
+  // So each file's prefix is resolved to what it will actually be at run time:
+  // the literal where one is declared, and the workflow's `name:` where it is
+  // not.
+  const resolvedPrefixes = new Map();
+  for (const file of CONCURRENCY_GOVERNED) {
+    const doc = world.docs.get(file);
+    if (!doc) continue;
+    // Read off the group the file ACTUALLY declares, not off the policy table
+    // above. The table says what each prefix should be; this says what it is,
+    // and a collision introduced by editing a group is exactly the edit this
+    // rule exists to catch.
+    const group = typeof doc.concurrency?.group === "string" ? doc.concurrency.group : "";
+    const declared = group.endsWith(`-${GROUP_SUFFIX}`)
+      ? group.slice(0, -(GROUP_SUFFIX.length + 1))
+      : group;
+    // `${{ github.workflow }}` is not a prefix, it is a lookup: at run time it
+    // is this file's own `name:`, so that is what it is compared as.
+    const resolved = declared === DEFAULT_GROUP_PREFIX ? doc.name : declared;
+    need(
+      typeof resolved === "string" && resolved !== "",
+      `${file}: its concurrency prefix resolves to ${JSON.stringify(resolved)}. A file with no `
+      + `\`name:\` and no literal prefix has no resolvable group at all, and the uniqueness check `
+      + `below would compare it against nothing.`,
+    );
+    if (typeof resolved !== "string" || resolved === "") continue;
+    const owner = resolvedPrefixes.get(resolved);
+    need(
+      owner === undefined,
+      `${file} and ${owner} both resolve their concurrency group to the prefix `
+      + `${JSON.stringify(resolved)}, so every run of one shares a group with every run of the `
+      + `other. Between a reusable caller and its callee that is a deadlock — the callee queues `
+      + `behind the caller waiting for it. Between any other two it is one workflow cancelling or `
+      + `blocking another's verification, and the board reports a CANCELLED check rather than a `
+      + `missing one.`,
+    );
+    if (owner === undefined) resolvedPrefixes.set(resolved, file);
+  }
+
+  return out;
+}
+
+
+// ── 6m. the CI/release boundary, stated fail-closed ────────────────────────
+//
+// The one section here that is about a boundary between two FILES rather than
+// about a property of one.
+//
+// `macos.yml` used to be both halves. It ran on every push to `main` and every
+// pull request, and it also held `contents: write`, a `gh release create`, a
+// `git push origin …:main`, an Apple notary API key and the Sparkle private
+// signing key. Those release jobs were gated on `github.event_name ==
+// 'workflow_dispatch' && inputs.…` — conditions that were correct, and that were
+// the ONLY thing between an ordinary pull request and an immutable public
+// release. One edited `if:`, one new job that forgot one, one input default
+// flipped, and the YAML stays valid, actionlint stays happy, and the next signal
+// is a public release nobody authorized.
+//
+// The split replaces that condition with a structure. `macos.yml` cannot publish
+// because it contains nothing that publishes; `macos-release.yml` is the sole
+// manual entry point, holds the only `contents: write` job in either file, and
+// CALLS `macos.yml` so a release is built by the same signed-build lane every
+// pull request already runs — not by a second pipeline that resembles it.
+//
+// Structure is only worth what the assertion that it stayed structural is worth,
+// so every load-bearing part of it is named here rather than described:
+//
+//   * the callee's exact input set, secret set and output, with safe defaults —
+//     an input or secret the callee does not need is one a future caller can be
+//     asked to supply, and the notary and Sparkle secrets are deliberately not
+//     among them;
+//   * the caller's exact forwarding, written out one secret per line rather than
+//     `secrets: inherit`, which would hand the CI half every secret this
+//     repository holds, invisibly, and would keep growing as secrets are added;
+//   * where each job lives, what it needs, and which single job may write;
+//   * that the notarization job downloads the artifact the build NAMED, guarded
+//     against that name being empty — which is what a skipped `signed-build`
+//     produces, and what a dotted `jobs.signed-build` output expression produces;
+//   * that no release or notarization operation is reachable with every input at
+//     its default.
+//
+// Written as a world function, like every section above, so section 8 can break
+// each rule and require the complaint.
+
+/** The callee's `workflow_call` inputs: exactly these, all optional, CI defaults. */
+const CALL_INPUTS = [
+  { name: "release_version", type: "string", default: "" },
+  { name: "notarize", type: "boolean", default: "false" },
+  { name: "publish_release", type: "boolean", default: "false" },
+];
+
+/** The callee's `workflow_call` secrets: signing and profile material only. */
+const CALL_SECRETS = [
+  "MACOS_SIGNING_CERT_P12_BASE64",
+  "MACOS_SIGNING_CERT_PASSWORD",
+  "MACOS_PROVISIONING_PROFILE_BASE64",
+  "MACOS_SHARE_PROVISIONING_PROFILE_BASE64",
+];
+
+/**
+ * The caller's five dispatch inputs, verbatim: order, type, requiredness,
+ * default and description.
+ *
+ * Verbatim because these are the operator's controls and they MOVED. A
+ * description that drifted during the move is a lever whose label no longer
+ * describes what it does, on the one workflow in this repository that can create
+ * something permanent.
+ */
+const DISPATCH_INPUTS = [
+  {
+    name: "notarize",
+    type: "boolean",
+    required: "true",
+    default: "false",
+    description: "Submit the signed DMG to Apple, staple it, and run Gatekeeper verification",
+  },
+  {
+    name: "validate_notary_credentials",
+    type: "boolean",
+    required: "true",
+    default: "false",
+    description: "Authenticate to Apple without submitting software",
+  },
+  {
+    name: "validate_sparkle_key",
+    type: "boolean",
+    required: "true",
+    default: "false",
+    description: "Sign a disposable appcast entry and prove the update key matches the app",
+  },
+  {
+    name: "release_version",
+    type: "string",
+    required: "false",
+    default: "",
+    description: "Stage immutable public-release metadata for this app version (for example 1.0)",
+  },
+  {
+    name: "publish_release",
+    type: "boolean",
+    required: "true",
+    default: "false",
+    description:
+      "Publish the versioned GitHub Release and deliver its appcast/download metadata to main",
+  },
+];
+
+/** The jobs each half declares, exactly. */
+const CI_JOBS = ["contract", "test", "ui-smoke", "signed-build"];
+const RELEASE_JOBS = ["build", "notarize-stage", "publish"];
+
+/** The job in the callee whose output the caller consumes, and the output's name. */
+const SIGNED_JOB = "signed-build";
+const SIGNED_OUTPUT = "signed_artifact";
+const SIGNED_STEP = "package_identity";
+/** What the caller reads it as. One string, used by the guard and the download. */
+const SIGNED_REF = `\${{ needs.build.outputs.${SIGNED_OUTPUT} }}`;
+
+/**
+ * Release material that may exist in the release workflow and nowhere else —
+ * and, inside that workflow, only in the job that submits to Apple.
+ */
+const RELEASE_SECRETS = [
+  "MACOS_NOTARY_KEY_P8_BASE64",
+  "MACOS_NOTARY_KEY_ID",
+  "MACOS_NOTARY_ISSUER_ID",
+  "MACOS_SPARKLE_PRIVATE_KEY",
+];
+
+/** Operations an ordinary CI event must not be able to reach at all. */
+const IRREVERSIBLE = [
+  ["gh release create", "creates an immutable public release"],
+  ["gh release upload", "replaces the assets of an existing one"],
+  ["gh release edit", "rewrites a published release"],
+  ["notarytool", "spends an Apple notarization submission"],
+  ["git push", "writes to a branch of this repository"],
+  ["secrets.GITHUB_TOKEN", "materializes the token those operations authenticate with"],
+  ["contents: write", "grants that token the permission to do them"],
+];
+
+function releaseBoundaryFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+
+  const ci = world.docs.get(MACOS);
+  const release = world.docs.get(MACOS_RELEASE);
+  need(
+    ci !== undefined,
+    `${MACOS} is missing or did not parse, so the whole CI/release boundary below is unchecked. `
+    + `It is the reusable callee this repository's macOS release is built by; a release that `
+    + `cannot find it does not fail closed, it fails at dispatch time on the one workflow nobody `
+    + `runs until they need it.`,
+  );
+  need(
+    release !== undefined,
+    `${MACOS_RELEASE} is missing or did not parse. It is the SOLE manual entry point for macOS `
+    + `notarization and publication; without it the release path is gone, and the pressure that `
+    + `creates is to put those jobs back into ${MACOS}, where an ordinary pull request can reach `
+    + `them.`,
+  );
+  if (!ci || !release) return out;
+
+  // ── the callee is CI, and read-only ──────────────────────────────────────
+  const ciOn = ci.on ?? {};
+  need(
+    "workflow_call" in ciOn,
+    `${MACOS} declares no \`workflow_call:\`, so ${MACOS_RELEASE} cannot call it and a release `
+    + `would have to rebuild the app through some second definition of the same lane. One build `
+    + `definition is the point: the bytes that get notarized are the bytes every pull request `
+    + `already built.`,
+  );
+  need(
+    !("workflow_dispatch" in ciOn),
+    `${MACOS} has a \`workflow_dispatch:\` again. Every reason to start this file by hand is a `
+    + `release reason, and release lives in ${MACOS_RELEASE}; a dispatch here is where the five `
+    + `release inputs and the jobs that read them come back.`,
+  );
+
+  const call = ciOn.workflow_call && typeof ciOn.workflow_call === "object"
+    ? ciOn.workflow_call
+    : {};
+  const declaredInputs = Object.keys(call.inputs ?? {});
+  need(
+    deepEqual(declaredInputs, CALL_INPUTS.map((input) => input.name)),
+    `${MACOS}'s \`workflow_call\` declares inputs [${declaredInputs.join(", ")}]; want exactly `
+    + `[${CALL_INPUTS.map((input) => input.name).join(", ")}]. Fewer is a caller passing something `
+    + `nothing reads. MORE is the release surface growing back into the CI half one input at a `
+    + `time — every input this file declares is one a job here may start acting on.`,
+  );
+  for (const want of CALL_INPUTS) {
+    const input = call.inputs?.[want.name];
+    if (input === undefined || typeof input !== "object") continue;
+    need(
+      input.required === "false" || input.required === undefined,
+      `${MACOS}'s \`workflow_call\` input \`${want.name}\` is \`required: `
+      + `${JSON.stringify(input.required)}\`. These three must be OPTIONAL: \`push\` and `
+      + `\`pull_request\` supply no inputs at all, and a required call input is a caller-side `
+      + `error rather than a default.`,
+    );
+    need(
+      input.default === want.default,
+      `${MACOS}'s \`workflow_call\` input \`${want.name}\` defaults to `
+      + `${JSON.stringify(input.default)}, want ${JSON.stringify(want.default)}. The defaults ARE `
+      + `the CI behaviour — an empty version and both booleans false is what an ordinary push `
+      + `means. A default that names a release turns every caller that omits it into a release.`,
+    );
+    need(
+      input.type === want.type,
+      `${MACOS}'s \`workflow_call\` input \`${want.name}\` is \`type: `
+      + `${JSON.stringify(input.type)}\`, want ${JSON.stringify(want.type)}.`,
+    );
+  }
+
+  const declaredSecrets = Object.keys(call.secrets ?? {});
+  need(
+    deepEqual(declaredSecrets.slice().sort(), CALL_SECRETS.slice().sort()),
+    `${MACOS}'s \`workflow_call\` declares secrets [${declaredSecrets.join(", ")}]; want exactly `
+    + `[${CALL_SECRETS.join(", ")}]. These four are the signing certificate and the two `
+    + `provisioning profiles, which its own jobs use. The notary key and the Sparkle private key `
+    + `are deliberately absent: no job here reads them, and a callee that declares a secret it `
+    + `never uses is a callee a future caller can be asked to hand one to.`,
+  );
+
+  const output = call.outputs?.[SIGNED_OUTPUT];
+  need(
+    output !== undefined && typeof output === "object",
+    `${MACOS}'s \`workflow_call\` declares no \`${SIGNED_OUTPUT}\` output. It is the only value `
+    + `the caller gets from this file, and without it the notarization job has to re-derive the `
+    + `artifact name from inputs it hopes still agree with what the build used.`,
+  );
+  const value = typeof output?.value === "string" ? output.value : "";
+  need(
+    value.includes(`jobs['${SIGNED_JOB}']`) || value.includes(`jobs["${SIGNED_JOB}"]`),
+    `${MACOS}'s \`${SIGNED_OUTPUT}\` output is ${JSON.stringify(value)}, which does not read `
+    + `\`jobs['${SIGNED_JOB}']\` in BRACKET form. A hyphen in a property path is parsed as `
+    + `subtraction, so \`jobs.${SIGNED_JOB}.outputs.…\` evaluates to the empty string — the `
+    + `workflow stays valid, the output is silently empty, and the caller downloads nothing under `
+    + `a name it was never given.`,
+  );
+  need(
+    value.includes(`outputs.${SIGNED_OUTPUT}`),
+    `${MACOS}'s \`${SIGNED_OUTPUT}\` output is ${JSON.stringify(value)}, which does not read the `
+    + `\`${SIGNED_JOB}\` job's \`${SIGNED_OUTPUT}\` output.`,
+  );
+
+  // The job half of the same wire: one canonical name, emitted once and consumed
+  // by both the upload and the output.
+  const signed = ci.jobs?.[SIGNED_JOB];
+  need(
+    signed !== undefined,
+    `${MACOS} declares no \`${SIGNED_JOB}\` job, which is what produces the artifact the release `
+    + `notarizes and what the workflow output above reads.`,
+  );
+  if (signed) {
+    const jobOutput = signed.outputs?.[SIGNED_OUTPUT];
+    need(
+      typeof jobOutput === "string" && jobOutput.includes(`steps.${SIGNED_STEP}.outputs.`),
+      `${MACOS}/${SIGNED_JOB}: its \`${SIGNED_OUTPUT}\` job output is `
+      + `${JSON.stringify(jobOutput)}, which does not read a \`${SIGNED_STEP}\` step output. The `
+      + `artifact name has to come from the step that COMPUTED it; re-deriving it in the mapping `
+      + `is a second copy of the naming expression, and the first rename makes the caller ask for `
+      + `an artifact this run never uploaded.`,
+    );
+    const stepName = /steps\.[A-Za-z0-9_]+\.outputs\.([A-Za-z0-9_-]+)/.exec(jobOutput ?? "")?.[1];
+    const upload = (signed.steps ?? []).find(
+      (step) => String(step?.uses ?? "").startsWith("actions/upload-artifact"),
+    );
+    need(
+      upload !== undefined,
+      `${MACOS}/${SIGNED_JOB} uploads no artifact, so there is nothing for the release workflow `
+      + `to download and the output above names a build that was never published to the run.`,
+    );
+    need(
+      stepName === undefined
+        || String(upload?.with?.name ?? "").includes(`steps.${SIGNED_STEP}.outputs.${stepName}`),
+      `${MACOS}/${SIGNED_JOB}: the upload names the artifact `
+      + `${JSON.stringify(upload?.with?.name)}, which is not the same `
+      + `\`steps.${SIGNED_STEP}.outputs.${stepName}\` value the job output publishes. One `
+      + `canonical name, emitted once and read by both — two expressions that agree today is `
+      + `exactly the shape that stops agreeing under an edit to one of them.`,
+    );
+    const emitted = (signed.steps ?? [])
+      .filter((step) => step?.id === SIGNED_STEP)
+      .map((step) => String(step?.run ?? ""))
+      .join("\n");
+    need(
+      stepName === undefined || emitted.includes(`${stepName}=`),
+      `${MACOS}/${SIGNED_JOB}: no \`${SIGNED_STEP}\` step writes \`${stepName}=\` to `
+      + `\`$GITHUB_OUTPUT\`, so the job output and the upload both read a step output nothing `
+      + `sets — an empty artifact name that fails in the CALLER, one paid signing run later.`,
+    );
+  }
+
+  // ── and it can reach none of the irreversible operations ─────────────────
+  need(
+    deepEqual(Object.keys(ci.jobs ?? {}), CI_JOBS),
+    `${MACOS} declares jobs [${Object.keys(ci.jobs ?? {}).join(", ")}]; want exactly `
+    + `[${CI_JOBS.join(", ")}]. This file runs on every push to \`main\` and every pull request; `
+    + `a job added here is a job an ordinary CI event runs, and the two that are NOT here — `
+    + `\`notarize-stage\` and \`publish\` — are the reason the split exists.`,
+  );
+  need(
+    deepEqual(ci.permissions, { contents: "read" }),
+    `${MACOS} declares top-level permissions ${JSON.stringify(ci.permissions)}, want `
+    + `{"contents":"read"}. This workflow reads the repository, builds and signs; it writes `
+    + `nothing back, and the token it is handed should not be able to.`,
+  );
+  for (const [name, job] of Object.entries(ci.jobs ?? {})) {
+    need(
+      job.permissions === undefined,
+      `${MACOS}/${name} declares its own \`permissions:\` (${JSON.stringify(job.permissions)}). `
+      + `No job in the CI half may widen the read-only default — a job-level block is precisely `
+      + `how \`contents: write\` came to live in a workflow that runs on every pull request.`,
+    );
+  }
+  const ciText = world.texts.get(MACOS) ?? "";
+  need(
+    ciText !== "",
+    `${MACOS}'s comment-stripped source never reached this world, so every absence check below `
+    + `would inspect the empty string and report a pass.`,
+  );
+  for (const [command, why] of IRREVERSIBLE) {
+    need(
+      !ciText.includes(command),
+      `${MACOS} contains \`${command}\`, which ${why}. That file runs on every push to \`main\` `
+      + `and every pull request. Whatever condition guards it, the guard is one edit from not `
+      + `being there — which is the state this split replaced. The operations that cannot be `
+      + `undone live in ${MACOS_RELEASE}, behind a manual dispatch, and nowhere else.`,
+    );
+  }
+  for (const secret of RELEASE_SECRETS) {
+    need(
+      !ciText.includes(secret),
+      `${MACOS} references \`${secret}\`. The notary key and the Sparkle private signing key are `
+      + `release material: a workflow that materializes them on a runner reachable from a pull `
+      + `request has made them reachable from a pull request, whether or not anything uses them `
+      + `there yet.`,
+    );
+  }
+
+  // ── the caller is manual, and is the only thing that can release ─────────
+  const releaseOn = release.on ?? {};
+  need(
+    deepEqual(Object.keys(releaseOn), ["workflow_dispatch"]),
+    `${MACOS_RELEASE} triggers on [${Object.keys(releaseOn).join(", ")}]; want exactly `
+    + `[workflow_dispatch]. A \`push\`, \`pull_request\` or \`schedule\` trigger here makes an `
+    + `automatic event able to start the jobs that notarize and publish — which is the whole of `
+    + `what the split removed, restored in one line.`,
+  );
+  const dispatch = releaseOn.workflow_dispatch;
+  const dispatchInputs = dispatch && typeof dispatch === "object"
+    ? Object.keys(dispatch.inputs ?? {})
+    : [];
+  need(
+    deepEqual(dispatchInputs, DISPATCH_INPUTS.map((input) => input.name)),
+    `${MACOS_RELEASE}'s dispatch inputs are [${dispatchInputs.join(", ")}]; want exactly `
+    + `[${DISPATCH_INPUTS.map((input) => input.name).join(", ")}], in that order. These are the `
+    + `operator's five controls and they MOVED here from ${MACOS}; an input dropped in the move `
+    + `is a decision that can no longer be made, and one added is a lever with no history behind `
+    + `its default.`,
+  );
+  for (const want of DISPATCH_INPUTS) {
+    const input = dispatch && typeof dispatch === "object" ? dispatch.inputs?.[want.name] : undefined;
+    if (input === undefined || typeof input !== "object") continue;
+    for (const key of ["type", "required", "default", "description"]) {
+      need(
+        input[key] === want[key],
+        `${MACOS_RELEASE}'s dispatch input \`${want.name}\` declares ${key} `
+        + `${JSON.stringify(input[key])}, want ${JSON.stringify(want[key])}. These five were `
+        + `copied from ${MACOS} verbatim; a value that drifted during the move is a control whose `
+        + `label or default no longer describes what it does, on the one workflow here that can `
+        + `create something permanent.`,
+      );
+    }
+  }
+  need(
+    deepEqual(release.permissions, { contents: "read" }),
+    `${MACOS_RELEASE} declares top-level permissions ${JSON.stringify(release.permissions)}, want `
+    + `{"contents":"read"}. Only \`publish\` needs more, and it declares that for itself; a `
+    + `top-level write would hand it to the reusable call and to the notarization job as well.`,
+  );
+  need(
+    deepEqual(Object.keys(release.jobs ?? {}), RELEASE_JOBS),
+    `${MACOS_RELEASE} declares jobs [${Object.keys(release.jobs ?? {}).join(", ")}]; want exactly `
+    + `[${RELEASE_JOBS.join(", ")}]. The build is a CALL, not a copy; a fourth job here is `
+    + `unbudgeted release work, and a missing one is a stage of the release that moved somewhere `
+    + `less guarded.`,
+  );
+
+  // The call itself: local, explicit, forwarding exactly four secrets.
+  const build = release.jobs?.build;
+  if (build) {
+    need(
+      build.uses === `./.github/workflows/${MACOS}`,
+      `${MACOS_RELEASE}/build declares \`uses: ${JSON.stringify(build.uses)}\`, want `
+      + `\`./.github/workflows/${MACOS}\`. It must call THIS repository's CI half at the commit `
+      + `being released — a remote or tagged reference would notarize bytes built by a definition `
+      + `that is not the one under review.`,
+    );
+    const passed = Object.keys(build.with ?? {});
+    need(
+      deepEqual(passed, CALL_INPUTS.map((input) => input.name)),
+      `${MACOS_RELEASE}/build passes [${passed.join(", ")}]; want exactly `
+      + `[${CALL_INPUTS.map((input) => input.name).join(", ")}] — the inputs the callee declares `
+      + `and its jobs read. Passing an input the callee does not declare fails the run; omitting `
+      + `one silently releases under the callee's CI default.`,
+    );
+    for (const want of CALL_INPUTS) {
+      const wired = build.with?.[want.name];
+      need(
+        wired === undefined || String(wired).includes(`inputs.${want.name}`),
+        `${MACOS_RELEASE}/build wires \`${want.name}\` to ${JSON.stringify(wired)}, which does `
+        + `not read this workflow's own \`inputs.${want.name}\`. A control wired to the wrong `
+        + `input reports the operator's decision to a job that was never given it.`,
+      );
+    }
+    need(
+      typeof build.secrets === "object" && build.secrets !== null && !Array.isArray(build.secrets),
+      `${MACOS_RELEASE}/build declares \`secrets: ${JSON.stringify(build.secrets)}\`. It must be `
+      + `an explicit MAPPING, never \`inherit\`: \`inherit\` hands the callee every secret this `
+      + `repository holds — the notary key and the Sparkle private key included — invisibly, and `
+      + `keeps doing so as new secrets are added. The CI half needs four, uses four, and is given `
+      + `four.`,
+    );
+    const forwarded = Object.keys(
+      typeof build.secrets === "object" && build.secrets !== null ? build.secrets : {},
+    );
+    need(
+      deepEqual(forwarded.slice().sort(), CALL_SECRETS.slice().sort()),
+      `${MACOS_RELEASE}/build forwards secrets [${forwarded.join(", ")}]; want exactly `
+      + `[${CALL_SECRETS.join(", ")}]. Forwarding fewer breaks the signing steps with a message `
+      + `that names a runbook rather than this line; forwarding more sends release material into `
+      + `the half that must not be able to release.`,
+    );
+    need(
+      build.permissions === undefined,
+      `${MACOS_RELEASE}/build declares \`permissions: ${JSON.stringify(build.permissions)}\`. A `
+      + `caller's permission block is passed to the called workflow; the CI half is read-only and `
+      + `must stay that way when a release run is what started it.`,
+    );
+  }
+
+  // The two release stages: order, guard, and the artifact they actually read.
+  const notarize = release.jobs?.["notarize-stage"];
+  if (notarize) {
+    need(
+      notarize.needs === "build",
+      `${MACOS_RELEASE}/notarize-stage declares \`needs: ${JSON.stringify(notarize.needs)}\`, want `
+      + `\`build\`. Depending on the CALL means depending on every job inside it — \`contract\`, `
+      + `\`test\`, \`ui-smoke\` and \`signed-build\` — so nothing here can start while any part of `
+      + `the macOS gate is red. Naming individual jobs of a called workflow is not possible, and `
+      + `naming nothing would let a notarization run against a failed build.`,
+    );
+    const steps = notarize.steps ?? [];
+    const downloadAt = steps.findIndex(
+      (step) => String(step?.uses ?? "").startsWith("actions/download-artifact"),
+    );
+    need(
+      downloadAt !== -1,
+      `${MACOS_RELEASE}/notarize-stage downloads no artifact, so whatever it notarizes is not the `
+      + `signed package the build produced.`,
+    );
+    need(
+      downloadAt === -1 || steps[downloadAt]?.with?.name === SIGNED_REF,
+      `${MACOS_RELEASE}/notarize-stage downloads the artifact named `
+      + `${JSON.stringify(steps[downloadAt]?.with?.name)}, want ${JSON.stringify(SIGNED_REF)}. `
+      + `Re-deriving the name here from \`github.sha\` and \`inputs.release_version\` is a second `
+      + `copy of the callee's naming expression in a second file: the first rename makes this `
+      + `download look for something this run never uploaded, and it fails after the signing `
+      + `runner has already been paid for.`,
+    );
+    const guardAt = steps.findIndex(
+      (step) => typeof step?.run === "string"
+        && Object.values(step?.env ?? {}).some((v) => String(v) === SIGNED_REF),
+    );
+    need(
+      guardAt !== -1,
+      `${MACOS_RELEASE}/notarize-stage has no step that reads ${JSON.stringify(SIGNED_REF)} into `
+      + `a shell variable and checks it. A SKIPPED job satisfies \`needs:\` and contributes EMPTY `
+      + `outputs — \`signed-build\` is skipped on a fork pull request, and a dotted `
+      + `\`jobs.signed-build\` output expression evaluates to the empty string — so without a `
+      + `guard this job asks for an artifact named "" and fails on a missing artifact rather than `
+      + `on the reason there is no artifact.`,
+    );
+    need(
+      guardAt === -1 || downloadAt === -1 || guardAt < downloadAt,
+      `${MACOS_RELEASE}/notarize-stage checks the build's artifact name at step ${guardAt + 1}, `
+      + `AFTER the download at step ${downloadAt + 1}. A guard that runs after the thing it `
+      + `guards is not a guard.`,
+    );
+    const guard = guardAt === -1 ? "" : String(steps[guardAt]?.run ?? "");
+    need(
+      guardAt === -1 || (/-z\s+"?\$/.test(guard) && /exit\s+1/.test(guard)),
+      `${MACOS_RELEASE}/notarize-stage's artifact-name check does not FAIL on an empty value `
+      + `(${JSON.stringify(guard.trim())}). Reading the value and continuing is the same as not `
+      + `reading it.`,
+    );
+    need(
+      steps[guardAt]?.if === undefined,
+      `${MACOS_RELEASE}/notarize-stage's artifact-name guard carries \`if: `
+      + `${JSON.stringify(steps[guardAt]?.if)}\`. A conditional guard is a guard that can skip `
+      + `itself, and a skipped step reports nothing rather than red.`,
+    );
+  }
+
+  const publish = release.jobs?.publish;
+  if (publish) {
+    need(
+      publish.needs === "notarize-stage",
+      `${MACOS_RELEASE}/publish declares \`needs: ${JSON.stringify(publish.needs)}\`, want `
+      + `\`notarize-stage\`. Publication consumes the notarized, stapled bytes and the staged `
+      + `metadata that job produces; a publish that does not wait for it would create an `
+      + `immutable release around whatever the build alone left behind.`,
+    );
+    need(
+      deepEqual(publish.permissions, { contents: "write" }),
+      `${MACOS_RELEASE}/publish declares permissions ${JSON.stringify(publish.permissions)}, want `
+      + `{"contents":"write"} — declared on the job, not on the workflow. It is the only job in `
+      + `either macOS workflow that may write to this repository, and the narrowest place to say `
+      + `so is the job itself.`,
+    );
+  }
+  const writers = Object.entries(release.jobs ?? {})
+    .filter(([, job]) => job?.permissions?.contents === "write")
+    .map(([name]) => name);
+  need(
+    deepEqual(writers, ["publish"]),
+    `[${writers.join(", ")}] hold \`contents: write\` in ${MACOS_RELEASE}; want exactly `
+    + `[publish]. Ordinary signed builds, credential checks and notarization candidates cannot `
+    + `publish anything, and that is a property of which job holds the token rather than of what `
+    + `each job happens to run today.`,
+  );
+
+  // The notarization material lives in ONE job of ONE file.
+  for (const secret of RELEASE_SECRETS) {
+    const hosts = Object.entries(release.jobs ?? {})
+      .filter(([, job]) => JSON.stringify(job).includes(secret))
+      .map(([name]) => name);
+    need(
+      deepEqual(hosts, ["notarize-stage"]),
+      `\`${secret}\` is referenced by [${hosts.join(", ")}] in ${MACOS_RELEASE}; want exactly `
+      + `[notarize-stage]. Zero is the notarization or the update signature quietly not `
+      + `happening; more than one is release material materialized on a runner that has no reason `
+      + `to hold it.`,
+    );
+  }
+
+  // ── and nothing releases on the defaults ─────────────────────────────────
+  //
+  // Every input above defaults to false or empty. With all of them left alone
+  // this workflow must build and stop, so each release stage is required to
+  // condition on a dispatch AND on an input that is not at its default. A stage
+  // whose `if:` lost that clause runs on every dispatch — including the one
+  // somebody starts to get a signed build.
+  for (const [name, levers] of [
+    ["notarize-stage", ["inputs.notarize", "inputs.validate_notary_credentials",
+      "inputs.validate_sparkle_key", "inputs.release_version"]],
+    ["publish", ["inputs.publish_release"]],
+  ]) {
+    const condition = release.jobs?.[name]?.if;
+    need(
+      typeof condition === "string" && condition.includes("github.event_name == 'workflow_dispatch'"),
+      `${MACOS_RELEASE}/${name} declares \`if: ${JSON.stringify(condition)}\`, which does not `
+      + `require \`github.event_name == 'workflow_dispatch'\`. It is redundant today — this `
+      + `workflow has no other trigger — and it is the assertion that survives the day somebody `
+      + `adds one.`,
+    );
+    for (const lever of levers) {
+      need(
+        typeof condition === "string" && condition.includes(lever),
+        `${MACOS_RELEASE}/${name}'s condition (${JSON.stringify(condition)}) no longer reads `
+        + `\`${lever}\`. Every input defaults to false or empty; a stage that stops asking runs on `
+        + `a dispatch where the operator asked for nothing but a signed build.`,
+      );
+    }
+  }
+
+  // ── the budgets moved with the jobs ──────────────────────────────────────
+  const ciBudget = RUNNER_BUDGETS.find((entry) => entry.file === MACOS);
+  const releaseBudget = RUNNER_BUDGETS.find((entry) => entry.file === MACOS_RELEASE);
+  need(
+    releaseBudget !== undefined,
+    `\`RUNNER_BUDGETS\` has no entry for ${MACOS_RELEASE}, so the notarization job — a PAID macOS `
+    + `runner holding Apple's notary key — and the publication job are bounded by whatever the `
+    + `file happens to say, compared against nothing.`,
+  );
+  for (const job of ["notarize-stage", "publish"]) {
+    need(
+      releaseBudget?.jobs?.[job] !== undefined,
+      `\`RUNNER_BUDGETS\` budgets no \`${job}\` job for ${MACOS_RELEASE}. Its budget MOVED with `
+      + `the job rather than being dropped; a job that arrives in a new file with no ceiling is `
+      + `the 6-hour default returning by way of a move nobody finished.`,
+    );
+    need(
+      ciBudget?.jobs?.[job] === undefined,
+      `\`RUNNER_BUDGETS\` still budgets \`${job}\` under ${MACOS}, which no longer declares it. A `
+      + `budget naming a job that is gone enforces nothing, and it makes the list look complete `
+      + `while the job it used to name is budgeted somewhere else or nowhere.`,
+    );
+  }
+
+  return out;
+}
+
 for (const message of platformBoundaryFailures(realWorld())) failures.push(message);
 for (const message of pathMatrixFailures(realWorld())) failures.push(message);
 for (const message of fuzzCampaignFailures(realWorld())) failures.push(message);
 for (const message of iosGuardStepFailures(realWorld())) failures.push(message);
 for (const message of macosBudgetFailures(realWorld())) failures.push(message);
+for (const message of concurrencyFailures(realWorld())) failures.push(message);
+for (const message of releaseBoundaryFailures(realWorld())) failures.push(message);
 
 // ── 7h. the inventory script's own fail-closed proof, actually executed ─────
 //
@@ -4030,11 +4959,11 @@ const MUTATIONS = [
     // Tightening this one is the expensive direction: below Apple's own wait,
     // a slow-but-succeeding notarization is killed mid-wait and the submission
     // is burned.
-    name: "macos.yml's notarize-stage is tightened below the wait its own script allows",
-    mutate: (world) => withNamedJob(world, MACOS, "notarize-stage", (job) => {
+    name: "macos-release.yml's notarize-stage is tightened below the wait its own script allows",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "notarize-stage", (job) => {
       job["timeout-minutes"] = "30";
     }),
-    expect: /macos\.yml\/notarize-stage: timeout-minutes is "30", at or below the 45-minute floor/,
+    expect: /macos-release\.yml\/notarize-stage: timeout-minutes is "30", at or below the 45-minute floor/,
   },
   {
     // A new paid-runner job arriving with no budget decided for it.
@@ -4052,14 +4981,14 @@ const MUTATIONS = [
   {
     // And the other direction: a rename moves a budgeted job into the
     // unbudgeted case while the budget list still looks complete.
-    name: "macos.yml renames a budgeted job, so its budget names nothing",
+    name: "macos-release.yml renames a budgeted job, so its budget names nothing",
     mutate: (world) => {
-      const jobs = world.docs.get(MACOS).jobs;
+      const jobs = world.docs.get(MACOS_RELEASE).jobs;
       jobs.notarize = jobs["notarize-stage"];
       delete jobs["notarize-stage"];
       return world;
     },
-    expect: /macos\.yml declares no job named `notarize-stage`, but this policy carries a runner budget for it/,
+    expect: /macos-release\.yml declares no job named `notarize-stage`, but this policy carries a runner budget for it/,
   },
   // The contract lane. A workflow that landed after every rule above was
   // written is the case this section is least likely to cover by accident, so
@@ -4695,6 +5624,277 @@ const MUTATIONS = [
     },
     expect: /web\.yml\/mac-smoke: timeout-minutes is undefined/,
   },
+  // ── the macOS CI/release boundary (sections 2 and 6m) ────────────────────
+  //
+  // Every case below is a shape the split removed, written the way it would
+  // actually come back: one line edited in a file that stays valid.
+  {
+    // The deadlock. `macos.yml` is a reusable callee, and inside one
+    // `github.workflow` is the CALLER's name.
+    name: "the reusable callee's concurrency group goes back to ${{ github.workflow }}",
+    mutate: (world) => {
+      world.docs.get(MACOS).concurrency.group = GROUP;
+      return world;
+    },
+    expect: /macos\.yml: it is a reusable workflow \(`on: workflow_call`\) and its concurrency\.group/,
+  },
+  {
+    // The same collision reached from the other side: two literals that agree.
+    name: "the release caller and the CI callee resolve to the same group prefix",
+    mutate: (world) => {
+      world.docs.get(MACOS_RELEASE).concurrency.group = `macos-ci-${GROUP_SUFFIX}`;
+      return world;
+    },
+    expect: /both resolve their concurrency group to the prefix "macos-ci"/,
+  },
+  {
+    name: "the CI callee gains a manual dispatch again",
+    mutate: (world) => {
+      world.docs.get(MACOS).on.workflow_dispatch = null;
+      return world;
+    },
+    expect: /macos\.yml has a `workflow_dispatch:` again/,
+  },
+  {
+    name: "the CI callee declares an input no job reads",
+    mutate: (world) => {
+      world.docs.get(MACOS).on.workflow_call.inputs.validate_sparkle_key = {
+        required: "false", default: "false", type: "boolean",
+      };
+      return world;
+    },
+    expect: /macos\.yml's `workflow_call` declares inputs \[.*validate_sparkle_key/,
+  },
+  {
+    // The default IS the CI behaviour: an ordinary push passes no inputs.
+    name: "a call input defaults to a release rather than to CI",
+    mutate: (world) => {
+      world.docs.get(MACOS).on.workflow_call.inputs.notarize.default = "true";
+      return world;
+    },
+    expect: /input `notarize` defaults to "true", want "false"/,
+  },
+  {
+    name: "the CI callee declares the notary key among its secrets",
+    mutate: (world) => {
+      world.docs.get(MACOS).on.workflow_call.secrets.MACOS_NOTARY_KEY_P8_BASE64 = {
+        required: "false",
+      };
+      return world;
+    },
+    expect: /macos\.yml's `workflow_call` declares secrets \[.*MACOS_NOTARY_KEY_P8_BASE64/,
+  },
+  {
+    // Valid YAML, valid expression syntax, silently empty at run time.
+    name: "the signed-artifact output is written in dotted rather than bracket form",
+    mutate: (world) => {
+      world.docs.get(MACOS).on.workflow_call.outputs.signed_artifact.value =
+        "${{ jobs.signed-build.outputs.signed_artifact }}";
+      return world;
+    },
+    expect: /does not read `jobs\['signed-build'\]` in BRACKET form/,
+  },
+  {
+    // Two copies of one naming expression, in two files.
+    name: "the signed upload re-derives the artifact name instead of reading the step output",
+    mutate: (world) => withNamedJob(world, MACOS, "signed-build", (job) => {
+      const upload = job.steps.find((step) => String(step.uses ?? "").startsWith("actions/upload-artifact"));
+      upload.with.name = "relayium-macos-signed-${{ github.sha }}-${{ inputs.release_version || 'ci' }}";
+    }),
+    expect: /the upload names the artifact .*which is not the same/,
+  },
+  {
+    name: "the step that computes the artifact name stops writing it to GITHUB_OUTPUT",
+    mutate: (world) => withNamedJob(world, MACOS, "signed-build", (job) => {
+      const step = job.steps.find((s) => s.id === "package_identity");
+      step.run = step.run.replace(/artifact_name=/g, "unused_name=");
+    }),
+    expect: /no `package_identity` step writes `artifact_name=` to/,
+  },
+  {
+    name: "a publish job is restored into the workflow that runs on every pull request",
+    mutate: (world) => {
+      world.docs.get(MACOS).jobs.publish = {
+        "runs-on": "ubuntu-latest",
+        "timeout-minutes": "15",
+        permissions: { contents: "write" },
+        steps: [{ name: "publish", run: "gh release create macos-v1.0\n" }],
+      };
+      return world;
+    },
+    expect: /macos\.yml declares jobs \[.*publish\]; want exactly/,
+  },
+  {
+    name: "a CI job widens the read-only default for itself",
+    mutate: (world) => withNamedJob(world, MACOS, "signed-build", (job) => {
+      job.permissions = { contents: "write" };
+    }),
+    expect: /macos\.yml\/signed-build declares its own `permissions:`/,
+  },
+  {
+    // The text half of the same boundary: an operation, not a job name.
+    name: "an irreversible command appears in the CI half's source",
+    mutate: (world) => {
+      world.texts.set(MACOS, `${world.texts.get(MACOS)}\n      run: gh release create macos-v1.0\n`);
+      return world;
+    },
+    expect: /macos\.yml contains `gh release create`/,
+  },
+  {
+    name: "the release workflow gains an automatic trigger",
+    mutate: (world) => {
+      world.docs.get(MACOS_RELEASE).on.push = { branches: ["main"] };
+      return world;
+    },
+    expect: /macos-release\.yml triggers on \[workflow_dispatch, push\]; want exactly \[workflow_dispatch\]/,
+  },
+  {
+    // The operator's controls moved; a label that drifted in the move describes
+    // something else now.
+    name: "a dispatch input's description drifts from the one that moved",
+    mutate: (world) => {
+      world.docs.get(MACOS_RELEASE).on.workflow_dispatch.inputs.publish_release.description =
+        "Publish the release";
+      return world;
+    },
+    expect: /dispatch input `publish_release` declares description/,
+  },
+  {
+    name: "the reusable call forwards every secret this repository holds",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "build", (job) => {
+      job.secrets = "inherit";
+    }),
+    expect: /macos-release\.yml\/build declares `secrets: "inherit"`/,
+  },
+  {
+    name: "the reusable call forwards release material into the CI half",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "build", (job) => {
+      job.secrets.MACOS_SPARKLE_PRIVATE_KEY = "${{ secrets.MACOS_SPARKLE_PRIVATE_KEY }}";
+    }),
+    expect: /macos-release\.yml\/build forwards secrets \[.*MACOS_SPARKLE_PRIVATE_KEY/,
+  },
+  {
+    // GitHub rejects the whole workflow for this, and a manual entry point is
+    // where that is discovered at the worst possible moment.
+    name: "the reusable caller declares a timeout GitHub will reject",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "build", (job) => {
+      job["timeout-minutes"] = "60";
+    }),
+    expect: /macos-release\.yml\/build calls a reusable workflow AND declares `timeout-minutes/,
+  },
+  {
+    // The exemption pointed at a job that now runs its own steps.
+    name: "the exempted caller job becomes a real job with no bound",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "build", (job) => {
+      delete job.uses;
+      delete job.with;
+      delete job.secrets;
+      job["runs-on"] = "macos-15";
+      job.steps = [{ name: "build", run: "xcodebuild build\n" }];
+    }),
+    expect: /macos-release\.yml\/build is declared a reusable caller in this policy but its job has no/,
+  },
+  {
+    name: "notarization stops depending on the whole build",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "notarize-stage", (job) => {
+      delete job.needs;
+    }),
+    expect: /macos-release\.yml\/notarize-stage declares `needs: undefined`/,
+  },
+  {
+    name: "notarization re-derives the artifact name instead of reading the build's output",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "notarize-stage", (job) => {
+      const download = job.steps.find((s) => String(s.uses ?? "").startsWith("actions/download-artifact"));
+      download.with.name = "relayium-macos-signed-${{ github.sha }}-${{ inputs.release_version || 'ci' }}";
+    }),
+    expect: /macos-release\.yml\/notarize-stage downloads the artifact named/,
+  },
+  {
+    // A skipped `signed-build` contributes an EMPTY output, and `needs:` is
+    // satisfied either way.
+    name: "the empty-artifact guard is removed from the notarization job",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "notarize-stage", (job) => {
+      job.steps = job.steps.filter(
+        (step) => !Object.values(step.env ?? {}).some((v) => String(v).includes("needs.build.outputs")),
+      );
+    }),
+    expect: /macos-release\.yml\/notarize-stage has no step that reads/,
+  },
+  {
+    name: "the empty-artifact guard runs after the download it guards",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "notarize-stage", (job) => {
+      const at = job.steps.findIndex(
+        (step) => Object.values(step.env ?? {}).some((v) => String(v).includes("needs.build.outputs")),
+      );
+      const [guard] = job.steps.splice(at, 1);
+      job.steps.push(guard);
+    }),
+    expect: /AFTER the download at step/,
+  },
+  {
+    name: "the empty-artifact guard reads the value without failing on it",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "notarize-stage", (job) => {
+      const guard = job.steps.find(
+        (step) => Object.values(step.env ?? {}).some((v) => String(v).includes("needs.build.outputs")),
+      );
+      guard.run = 'echo "artifact is $SIGNED_ARTIFACT"\n';
+    }),
+    expect: /artifact-name check does not FAIL on an empty value/,
+  },
+  {
+    name: "repository write spreads to a second job in the release workflow",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "notarize-stage", (job) => {
+      job.permissions = { contents: "write" };
+    }),
+    expect: /\[notarize-stage, publish\] hold `contents: write`/,
+  },
+  {
+    name: "the Sparkle private key is materialized outside the notarization job",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "publish", (job) => {
+      job.steps[0].env = { SPARKLE: "${{ secrets.MACOS_SPARKLE_PRIVATE_KEY }}" };
+    }),
+    expect: /`MACOS_SPARKLE_PRIVATE_KEY` is referenced by \[notarize-stage, publish\]/,
+  },
+  {
+    // Every input defaults to false or empty; a stage that stops asking runs on
+    // the dispatch somebody started to get a signed build.
+    name: "the notarization stage stops asking whether notarization was requested",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "notarize-stage", (job) => {
+      job.if = "github.event_name == 'workflow_dispatch'";
+    }),
+    expect: /macos-release\.yml\/notarize-stage's condition .* no longer reads `inputs\.notarize`/,
+  },
+  {
+    name: "publication stops asking whether publication was requested",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "publish", (job) => {
+      job.if = "github.event_name == 'workflow_dispatch'";
+    }),
+    expect: /macos-release\.yml\/publish's condition .* no longer reads `inputs\.publish_release`/,
+  },
+  {
+    // The floor, which moved with the job: below Apple's own `--wait --timeout`
+    // a slow-but-succeeding notarization is killed mid-wait and the submission
+    // is burned.
+    name: "the moved notarization budget drops below Apple's own wait",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "notarize-stage", (job) => {
+      job["timeout-minutes"] = "40";
+    }),
+    expect: /macos-release\.yml\/notarize-stage: timeout-minutes is "40", at or below the/,
+  },
+  {
+    // 6l reaching the BUDGET-ONLY files. Before the split this sweep covered the
+    // governed list only, and the release lane is deliberately not governed.
+    name: "the release workflow gains a macOS job that RUNNER_BUDGETS covers nowhere",
+    mutate: (world) => {
+      world.docs.get(MACOS_RELEASE).jobs["mac-extra"] = {
+        "runs-on": "macos-15",
+        "timeout-minutes": "30",
+        steps: [{ name: "extra", run: "xcrun something\n" }],
+      };
+      return world;
+    },
+    expect: /macos-release\.yml\/mac-extra runs on "macos-15" — a PAID runner — and section 6i declares no runner-budget ceiling/,
+  },
   // The two cases that used to sit here — `macos.yml`'s unfiltered `swift test`
   // gaining a `--filter`, and a legitimate fast pre-check beside it — moved
   // with their rule to `scripts/test/swift-ci-boundary-test.mjs`, which now
@@ -4711,6 +5911,8 @@ for (const { name, mutate, expect, refute } of MUTATIONS) {
       ...fuzzCampaignFailures(world),
       ...iosGuardStepFailures(world),
       ...macosBudgetFailures(world),
+      ...concurrencyFailures(world),
+      ...releaseBoundaryFailures(world),
     ];
   } catch (err) {
     check(false, `the CI trigger-policy mutation "${name}" threw instead of reporting: ${err.message}`);
@@ -4747,5 +5949,7 @@ if (failures.length > 0) {
 }
 console.log(
   `ci-event-policy-test: OK (${GOVERNED.length} governed workflows + ${NIGHTLY} + ${FUZZ_NIGHTLY}`
-  + `, runner budget on ${RUNNER_BUDGETS.map((b) => b.file).join(", ")})`,
+  + `, runner budget on ${RUNNER_BUDGETS.map((b) => b.file).join(", ")}`
+  + `, concurrency on ${CONCURRENCY_GOVERNED.length} files`
+  + `, ${MACOS} read-only and ${MACOS_RELEASE} the sole release entry point)`,
 );
