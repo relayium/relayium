@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// scripts/test/contract-ci-policy-test.mjs — who owns `contracts/`, what a
-// contract-only edit is allowed to start, and what the lane that judges it may
-// cost.
+// scripts/test/contract-ci-policy-test.mjs — who owns each document in
+// `contracts/`, what a contract-only edit is allowed to start, and what the lane
+// that judges it may cost.
 //
 // ## The decision this file makes executable
 //
@@ -18,18 +18,29 @@
 // and would require widening `swift-package.yml` past the two entries that make
 // it the one workflow guaranteed to see every file in the package.
 //
-// So the tree got a lane of its own, `contracts.yml`, running the three smallest
-// commands that judge the three implementations. That decision has two halves
-// and this file asserts both, because either alone is a regression:
+// So the tree got cheap lanes of its own, running the smallest commands that
+// judge each document's implementations. That decision has two halves and this
+// file asserts both, because either alone is a regression:
 //
-//   * a contract-only edit starts `contracts.yml` and the two ALWAYS-ON gates,
-//     and starts none of the heavy product lanes;
+//   * a contract-only edit starts THAT document's lane and the two ALWAYS-ON
+//     gates, and starts none of the heavy product lanes;
 //   * an ordinary Go, Web or Swift source change still starts its own owning
 //     suite, and that suite still EXECUTES the consumer test.
 //
 // Drop the first and a document edit costs a paid macOS signing lane. Drop the
 // second and the consumer tests exist in trees whose suites no longer run them,
 // which is the same green-board-over-nothing shape with an extra file.
+//
+// ## Per document, not per tree
+//
+// `contracts.yml`'s filter was `contracts/**` while the tree held one document,
+// on the recorded argument that a second should join the lane with no workflow
+// edit. `contracts/ops-deploy-v1.json` refuted it: that document has no Swift
+// and no TypeScript consumer, so a tree-wide filter would have charged a PAID
+// macOS runner and an `npm ci` for every edit to it. Each document now names its
+// own lane and its own consumers, and the guarantee the tree-wide filter used to
+// give for free — that no contract file can exist unowned — is rule 1's orphan
+// check, evaluated against the directory on disk.
 //
 // ## Why this is its own file
 //
@@ -77,10 +88,9 @@ function check(ok, message) {
 // ── the subjects, stated once ───────────────────────────────────────────────
 
 const CONTRACT_TREE = "contracts";
-const CONTRACT_FILE = "contracts/device-inbox-admission-v1.json";
-const CONTRACT_DOC = "docs/DEVICE-INBOX-ADMISSION-CONTRACT.md";
 
 const CONTRACTS = "contracts.yml";
+const OPS_DEPLOY = "ops-deploy-contract.yml";
 const GO = "go.yml";
 const WEB = "web.yml";
 const SWIFT_PACKAGE = "swift-package.yml";
@@ -89,52 +99,120 @@ const HYGIENE = "repo-hygiene.yml";
 
 /** The lanes a document edit must never start. Each is a paid runner, a signing
  *  identity, a browser matrix or an eight-shard race — and not one of them opens
- *  the contract. */
+ *  a contract. */
 const HEAVY_LANES = ["macos.yml", "ios.yml", "native-web-pairing.yml", GO, WEB];
 
-/** This file, and the unfiltered workflow that has to execute it. */
-const SELF_TEST = "scripts/test/contract-ci-policy-test.mjs";
-const SELF_COMMAND = `node ${SELF_TEST}`;
-/** Minutes. This parses a handful of small YAML documents and reads four files. */
-const SELF_TIMEOUT_MAX = 5;
+/**
+ * The declarative policies this tree owns, and the ceiling each may cost in the
+ * unfiltered workflow that has to execute them.
+ *
+ * Both are pure file readers with no dependency to install, which is the whole
+ * reason they can live in a lane with no path filter.
+ */
+const SELF_TESTS = [
+  { test: "scripts/test/contract-ci-policy-test.mjs", timeoutMax: 5 },
+  { test: "scripts/test/ops-deploy-contract-test.mjs", timeoutMax: 5 },
+];
 
 /**
- * The three consumers, the workflow that owns each for an ORDINARY source
- * change, and the command in that workflow which actually executes it.
+ * The contract tree, one entry per DOCUMENT.
  *
- * `runs` is checked against the workflow's real steps, not assumed: a suite that
- * stopped running the file its tree owns is the failure this column exists for.
+ * ## Why ownership is per contract file and not per tree
+ *
+ * `contracts.yml`'s filter used to be `contracts/**`, on the recorded argument
+ * that a second document should join the lane with no workflow edit at all.
+ * `contracts/ops-deploy-v1.json` is that second document and it refuted the
+ * argument: it has no Swift and no TypeScript consumer, so under a tree-wide
+ * filter every edit to it would have taken a PAID macOS runner and an `npm ci`
+ * to re-run two jobs that cannot open it — which is the same "charge a lane for
+ * a file nobody reads" shape the contract lane was created to avoid.
+ *
+ * So each document names its own lane and its own consumers. What the tree-wide
+ * filter used to guarantee for free — that no contract file can exist with no
+ * owner — is now rule 1's orphan check, asserted directly against the tree on
+ * disk.
+ *
+ * `runs` and `contractCommand` are checked against the workflows' real steps,
+ * not assumed: a suite that stopped running the file its tree owns is the
+ * failure those columns exist for.
  */
-const CONSUMERS = [
+const OWNERSHIP = [
   {
-    language: "Go",
-    test: "server/account/deviceinbox_admission_contract_test.go",
-    workflow: GO,
-    runs: "go test ./...",
-    contractJob: "go-contract",
-    contractCommand: "go test ./account/ -run '^TestDeviceInboxAdmissionContract' -count=1",
-    workingDirectory: "server",
+    contract: `${CONTRACT_TREE}/device-inbox-admission-v1.json`,
+    doc: "docs/DEVICE-INBOX-ADMISSION-CONTRACT.md",
+    lane: CONTRACTS,
+    // Three implementations parse this document independently and compare it to
+    // the constants they already ship, so all three are checked — including the
+    // paid macOS one, deliberately costed in `contracts.yml`'s own header.
+    consumers: [
+      {
+        language: "Go",
+        test: "server/account/deviceinbox_admission_contract_test.go",
+        workflow: GO,
+        runs: "go test ./...",
+        contractJob: "go-contract",
+        contractCommand: "go test ./account/ -run '^TestDeviceInboxAdmissionContract' -count=1",
+        workingDirectory: "server",
+        paidRunner: false,
+      },
+      {
+        language: "Web",
+        test: "web/src/lib/device-inbox-admission-contract.test.ts",
+        workflow: WEB,
+        runs: "npm test",
+        contractJob: "web-contract",
+        contractCommand: "npx vitest run src/lib/device-inbox-admission-contract.test.ts",
+        workingDirectory: "web",
+        paidRunner: false,
+      },
+      {
+        language: "Swift",
+        test: "apps/RelayiumKit/Tests/RelayiumKitTests/DeviceInboxAdmissionContractTests.swift",
+        workflow: SWIFT_PACKAGE,
+        runs: "swift test",
+        contractJob: "swift-contract",
+        contractCommand:
+          "swift test --filter 'RelayiumKitTests.DeviceInboxAdmissionContractTests'",
+        workingDirectory: "apps/RelayiumKit",
+        paidRunner: true,
+      },
+    ],
   },
   {
-    language: "Web",
-    test: "web/src/lib/device-inbox-admission-contract.test.ts",
-    workflow: WEB,
-    runs: "npm test",
-    contractJob: "web-contract",
-    contractCommand: "npx vitest run src/lib/device-inbox-admission-contract.test.ts",
-    workingDirectory: "web",
-  },
-  {
-    language: "Swift",
-    test: "apps/RelayiumKit/Tests/RelayiumKitTests/DeviceInboxAdmissionContractTests.swift",
-    workflow: SWIFT_PACKAGE,
-    runs: "swift test",
-    contractJob: "swift-contract",
-    contractCommand:
-      "swift test --filter 'RelayiumKitTests.DeviceInboxAdmissionContractTests'",
-    workingDirectory: "apps/RelayiumKit",
+    contract: `${CONTRACT_TREE}/ops-deploy-v1.json`,
+    doc: "docs/OPS-DEPLOY-CONTRACT.md",
+    lane: OPS_DEPLOY,
+    // ONE consumer in a lane, and one free Ubuntu runner. The document's other
+    // consumer is `scripts/test/ops-deploy-contract-test.mjs`, which needs no
+    // toolchain and therefore runs in the UNFILTERED `repo-hygiene.yml` on every
+    // commit — see `SELF_TESTS`. That is the more important half: it re-checks
+    // every declared product path against `git ls-files`, so a `web/` or
+    // `server/` change that invalidates the contract fails on the commit that
+    // makes it. Listing it here as well would run one check twice for one
+    // answer.
+    consumers: [
+      {
+        language: "Go",
+        test: "server/ops_deploy_contract_test.go",
+        workflow: GO,
+        runs: "go test ./...",
+        contractJob: "go-contract",
+        contractCommand: "go test ./ -run '^TestOpsDeployContract' -count=1",
+        workingDirectory: "server",
+        paidRunner: false,
+      },
+    ],
   },
 ];
+
+/** Every consumer of every contract, each still knowing which document and lane
+ *  it belongs to. */
+const CONSUMERS = OWNERSHIP.flatMap((owner) =>
+  owner.consumers.map((consumer) => ({ ...consumer, contract: owner.contract, lane: owner.lane })));
+
+/** The lanes this tree owns, and the exact filter each must carry. */
+const LANE_FILTERS = new Map(
+  OWNERSHIP.map((owner) => [owner.lane, [owner.contract, `.github/workflows/${owner.lane}`]]));
 
 // ── a parser for the YAML subset these workflows use ────────────────────────
 
@@ -464,8 +542,29 @@ function loadWorld() {
       throw new Error(`${name} did not parse: ${error.message}`);
     }
   }
-  return { texts, docs, sources: new Map() };
+  return { texts, docs, sources: new Map(), treeFiles: contractTreeFiles() };
 }
+
+/**
+ * Every file in the contract tree, repository-relative and recursive.
+ *
+ * Read from the DIRECTORY rather than from a list in this file. That is the
+ * whole point of the orphan rule below: a third contract has to appear here the
+ * moment it is committed, without anyone remembering to add it, or the rule
+ * would only ever check the documents somebody already thought about.
+ */
+function contractTreeFiles(root = CONTRACT_TREE) {
+  const absolute = resolve(repoRoot, root);
+  if (!existsSync(absolute)) return [];
+  return readdirSync(absolute, { withFileTypes: true })
+    .flatMap((entry) => (entry.isDirectory()
+      ? contractTreeFiles(`${root}/${entry.name}`)
+      : [`${root}/${entry.name}`]))
+    .sort();
+}
+
+/** The tree's files, from the world so a mutation can add one. */
+const treeFiles = (world) => world.treeFiles ?? [];
 
 /** A workflow's push path filter, or null when it declares none. */
 function wPaths(world, file) {
@@ -493,96 +592,132 @@ function realRunLines(job) {
 
 const deepEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-// ── 1. the tree exists, and its consumers really read it ────────────────────
+// ── 1. every contract has an owner, and its consumers really read it ────────
 //
-// Everything below is a claim about a document three tests open. If the document
-// is gone, or a test stopped naming it, every ownership rule is reasoning about
-// a file nobody reads — the direction that decays without anyone editing a
+// Everything below is a claim about documents that tests open. If a document is
+// gone, or a test stopped naming it, every ownership rule is reasoning about a
+// file nobody reads — the direction that decays without anyone editing a
 // workflow.
+//
+// The orphan check is new with the second contract. While the lane's filter was
+// `contracts/**` the tree could not hold an unowned file; now that ownership is
+// per document, "somebody added a third contract and gave it no lane" is a real
+// state, it leaves every workflow valid, and nothing but this rule notices.
 
 function ownershipFailures(world) {
   const out = [];
   const need = (ok, message) => { if (!ok) out.push(message); };
 
-  const contract = source(world, CONTRACT_FILE);
-  need(
-    contract !== null,
-    `${CONTRACT_FILE} does not exist, but ${CONTRACTS} exists to run three tests against it and `
-    + `this policy exists to bound what that costs. A lane whose subject is gone reports green `
-    + `over nothing.`,
-  );
-  if (contract !== null) {
-    let parsed = null;
-    try { parsed = JSON.parse(contract); } catch (error) {
-      need(false, `${CONTRACT_FILE} is not valid JSON: ${error.message}`);
+  for (const owner of OWNERSHIP) {
+    const contract = source(world, owner.contract);
+    need(
+      contract !== null,
+      `${owner.contract} does not exist, but ${owner.lane} exists to run `
+      + `${owner.consumers.length} test(s) against it and this policy exists to bound what that `
+      + `costs. A lane whose subject is gone reports green over nothing.`,
+    );
+    if (contract !== null) {
+      let parsed = null;
+      try { parsed = JSON.parse(contract); } catch (error) {
+        need(false, `${owner.contract} is not valid JSON: ${error.message}`);
+      }
+      if (parsed !== null) {
+        need(
+          parsed.documentation === owner.doc,
+          `${owner.contract} points at ${JSON.stringify(parsed.documentation)}; want `
+          + `${JSON.stringify(owner.doc)}.`,
+        );
+        need(
+          source(world, owner.doc) !== null,
+          `${owner.contract} points at ${owner.doc}, which does not exist. A contract that cannot `
+          + `be explained is one the next author re-derives from its consumers.`,
+        );
+      }
     }
-    if (parsed !== null) {
-      need(
-        parsed.documentation === CONTRACT_DOC,
-        `${CONTRACT_FILE} points at ${JSON.stringify(parsed.documentation)}; want `
-        + `${JSON.stringify(CONTRACT_DOC)}.`,
-      );
-      need(
-        source(world, CONTRACT_DOC) !== null,
-        `${CONTRACT_FILE} points at ${CONTRACT_DOC}, which does not exist. A contract that cannot `
-        + `be explained is one the next author re-derives from three test files.`,
-      );
-    }
+  }
+
+  // No orphan. Every file in the tree is claimed by exactly one lane's filter,
+  // evaluated with GitHub's own ordered semantics rather than by list
+  // membership — an entry that a later negation takes back out is present in
+  // the list and owns nothing.
+  const laneFilters = [...LANE_FILTERS.keys()]
+    .map((lane) => [lane, wPaths(world, lane)]);
+  for (const file of treeFiles(world)) {
+    const owners = laneFilters
+      .filter(([, filter]) => filterStarts(filter, [file]))
+      .map(([lane]) => lane)
+      .sort();
+    need(
+      owners.length === 1,
+      `${file} is started by ${owners.length} contract lane(s) [${owners.join(", ")}]; want exactly `
+      + `one. While ${CONTRACTS}'s filter was \`${CONTRACT_TREE}/**\` the tree could not hold an `
+      + `unowned file; ownership is per DOCUMENT now, so a contract added with no lane is judged by `
+      + `nothing until somebody happens to touch a consumer tree — and two lanes for one file is `
+      + `two runners for one answer.`,
+    );
   }
 
   for (const consumer of CONSUMERS) {
     const text = source(world, consumer.test);
     need(
       text !== null,
-      `the ${consumer.language} consumer test ${consumer.test} does not exist, so ${CONTRACTS}'s `
+      `the ${consumer.language} consumer test ${consumer.test} does not exist, so ${consumer.lane}'s `
       + `${consumer.contractJob} job runs a selector that matches nothing — which most test `
       + `runners report as success.`,
     );
     // The claim that this file reads the contract is PROVED, not repeated. A
     // test that quietly stopped opening the document would leave a lane
-    // charging three runners for a file nobody reads.
+    // charging a runner for a file nobody reads.
     need(
-      text === null || text.includes(CONTRACT_FILE),
-      `${consumer.test} does not name ${CONTRACT_FILE} verbatim. This policy, `
-      + `${CONTRACTS}'s filter and the whole ownership argument rest on that file being an INPUT `
-      + `to this test; if it is not, the lane is cost with no answer attached.`,
+      text === null || text.includes(consumer.contract),
+      `${consumer.test} does not name ${consumer.contract} verbatim. This policy, ${consumer.lane}'s `
+      + `filter and the whole ownership argument rest on that file being an INPUT to this test; if `
+      + `it is not, the lane is cost with no answer attached.`,
     );
   }
   return out;
 }
 
-// ── 2. a contract-only edit starts the cheap lane, and nothing heavy ────────
+// ── 2. a contract edit starts its own lane, and nothing heavy ───────────────
 
 function triggerFailures(world) {
   const out = [];
   const need = (ok, message) => { if (!ok) out.push(message); };
 
-  const edits = [
-    [CONTRACT_FILE],
-    [`${CONTRACT_TREE}/some-future-contract-v1.json`],
-    [CONTRACT_FILE, `${CONTRACT_TREE}/nested/another.json`],
-  ];
-
-  for (const files of edits) {
+  for (const owner of OWNERSHIP) {
+    const files = [owner.contract];
     need(
-      filterStarts(wPaths(world, CONTRACTS), files),
-      `a change to ${files.join(", ")} does NOT start ${CONTRACTS} `
-      + `(filter ${JSON.stringify(wPaths(world, CONTRACTS))}). The contract tree would then be `
-      + `judged by no workflow at all until somebody happened to touch server, web or the Swift `
-      + `package.`,
+      filterStarts(wPaths(world, owner.lane), files),
+      `a change to ${owner.contract} does NOT start ${owner.lane} `
+      + `(filter ${JSON.stringify(wPaths(world, owner.lane))}). That document would then be judged `
+      + `by no workflow at all until somebody happened to touch a consumer tree.`,
     );
     for (const heavy of HEAVY_LANES) {
       need(
         !filterStarts(wPaths(world, heavy), files),
-        `a change confined to ${files.join(", ")} starts ${heavy} `
+        `a change confined to ${owner.contract} starts ${heavy} `
         + `(filter ${JSON.stringify(wPaths(world, heavy))}). That lane opens no file under `
         + `${CONTRACT_TREE}/: it is a paid macOS runner, a signing identity, a browser matrix or `
-        + `an eight-shard race lane charged for a JSON document. The contract lane exists so it `
+        + `an eight-shard race lane charged for a JSON document. The contract lanes exist so it `
         + `does not have to be.`,
       );
     }
+    // The OTHER tree's lane must stay out of it. This is the cost the split was
+    // argued about: a deploy-contract edit that started `contracts.yml` would
+    // take a PAID macOS runner and an `npm ci` to re-run two jobs that cannot
+    // open the document.
+    for (const other of OWNERSHIP) {
+      if (other.lane === owner.lane) continue;
+      need(
+        !filterStarts(wPaths(world, other.lane), files),
+        `a change confined to ${owner.contract} also starts ${other.lane}, whose jobs are `
+        + `[${other.consumers.map((c) => c.contractJob).join(", ")}] and which opens `
+        + `${other.contract}, not this one`
+        + `${other.consumers.some((c) => c.paidRunner) ? " — including a PAID macOS runner" : ""}.`,
+      );
+    }
     // The two always-on gates carry no filter at all, which is what makes them
-    // impossible to route around — including by a future contract tree.
+    // impossible to route around — including by a future contract.
     for (const always of [COMPAT, HYGIENE]) {
       need(
         wPaths(world, always) === null,
@@ -591,45 +726,45 @@ function triggerFailures(world) {
       );
       need(
         filterStarts(wPaths(world, always), files),
-        `a change to ${files.join(", ")} does not start ${always}`,
+        `a change to ${owner.contract} does not start ${always}`,
       );
     }
-  }
 
-  // The contract lane must not be started by trees it cannot judge. Its filter
-  // is the tree plus its own file, and a wider entry is a cheap lane growing
-  // into an always-on one nobody costed.
-  const paths = wPaths(world, CONTRACTS);
-  need(
-    deepEqual(paths, [`${CONTRACT_TREE}/**`, `.github/workflows/${CONTRACTS}`]),
-    `${CONTRACTS}'s path filter is ${JSON.stringify(paths)}; want exactly `
-    + `["${CONTRACT_TREE}/**", ".github/workflows/${CONTRACTS}"]. Two entries and no exclusion, `
-    + `for the same reason ${SWIFT_PACKAGE} has two: this lane owns one tree and must see every `
-    + `file in it, and an exclusion here would create a contract file with no owner at all.`,
-  );
-  need(
-    deepEqual(paths, world.docs.get(CONTRACTS)?.on?.pull_request?.paths ?? null),
-    `${CONTRACTS}'s push and pull_request filters differ. The two lists are aliased from one `
-    + `anchor precisely so they cannot: a lane that is narrower on pull_request passes on the `
-    + `branch and is simply not run after the merge.`,
-  );
-
-  // And the other direction: an ordinary source change must NOT start this lane.
-  for (const consumer of CONSUMERS) {
+    // A lane must not be started by trees it cannot judge. Its filter is its own
+    // document plus its own file, and a wider entry is a cheap lane growing into
+    // an always-on one nobody costed.
+    const paths = wPaths(world, owner.lane);
     need(
-      !filterStarts(paths, [consumer.test]),
-      `editing ${consumer.test} starts ${CONTRACTS} as well as ${consumer.workflow}. That is two `
-      + `lanes for one answer — and for Swift, two PAID macOS runners — because `
-      + `${consumer.workflow} already executes this test.`,
+      deepEqual(paths, LANE_FILTERS.get(owner.lane)),
+      `${owner.lane}'s path filter is ${JSON.stringify(paths)}; want exactly `
+      + `${JSON.stringify(LANE_FILTERS.get(owner.lane))}. Two entries and no exclusion: the `
+      + `document it owns, and itself. \`${CONTRACT_TREE}/**\` here is what put a Swift runner on `
+      + `a document Swift never opens.`,
     );
+    need(
+      deepEqual(paths, world.docs.get(owner.lane)?.on?.pull_request?.paths ?? null),
+      `${owner.lane}'s push and pull_request filters differ. The two lists are aliased from one `
+      + `anchor precisely so they cannot: a lane that is narrower on pull_request passes on the `
+      + `branch and is simply not run after the merge.`,
+    );
+
+    // And the other direction: an ordinary source change must NOT start it.
+    for (const consumer of CONSUMERS) {
+      need(
+        !filterStarts(paths, [consumer.test]),
+        `editing ${consumer.test} starts ${owner.lane} as well as ${consumer.workflow}. That is two `
+        + `lanes for one answer — and for Swift, two PAID macOS runners — because `
+        + `${consumer.workflow} already executes this test.`,
+      );
+    }
   }
   return out;
 }
 
 // ── 3. the owning suites still run the consumer tests ───────────────────────
 //
-// The cheap lane is only defensible while the ordinary path is intact. If
-// `go.yml` stopped running `go test ./...`, or `web.yml` its suite, the consumer
+// The cheap lanes are only defensible while the ordinary path is intact. If
+// `go.yml` stopped running `go test ./...`, or `web.yml` its suite, a consumer
 // test would live in a tree whose workflow no longer executes it, and a source
 // change that broke the contract would land green.
 
@@ -656,158 +791,170 @@ function owningSuiteFailures(world) {
   return out;
 }
 
-// ── 4. what the contract lane may cost ──────────────────────────────────────
+// ── 4. what the contract lanes may cost ─────────────────────────────────────
 
 function laneFailures(world) {
   const out = [];
   const need = (ok, message) => { if (!ok) out.push(message); };
 
-  const doc = world.docs.get(CONTRACTS);
-  need(doc !== undefined, `${CONTRACTS} is missing or did not parse.`);
-  if (doc === undefined) return out;
+  for (const owner of OWNERSHIP) {
+    const lane = owner.lane;
+    const doc = world.docs.get(lane);
+    need(doc !== undefined, `${lane} is missing or did not parse.`);
+    if (doc === undefined) continue;
 
-  const text = world.texts.get(CONTRACTS) ?? "";
+    const text = world.texts.get(lane) ?? "";
 
-  // 4a. No secret, no signing identity, no artifact, no retry. This lane reads
-  //     a document and compares it to three implementations: it publishes
-  //     nothing and has no identity to borrow, so anything in this list is
-  //     either dead weight or a release path growing in a cheap workflow.
-  for (const [pattern, what] of [
-    [/secrets\./, "reads a repository secret"],
-    [/upload-artifact|download-artifact/, "uploads or downloads a build artifact"],
-    [/codesign|notarytool|productsign|xcrun\s+altool|softwareupdate/,
-      "signs, notarizes or mutates the runner's system state"],
-    [/\bretry\b|\bretries\b/i, "retries"],
-  ]) {
-    need(
-      !pattern.test(text),
-      `${CONTRACTS} ${what} (matched ${pattern}). This lane judges a JSON document against three `
-      + `implementations. Anything in that list is either a release path growing in the cheapest `
-      + `workflow to edit, or something intermittent being smoothed over on a gate whose whole `
-      + `job is to be deterministic.`,
-    );
-  }
-  need(
-    doc.permissions?.contents === "read" && Object.keys(doc.permissions ?? {}).length === 1,
-    `${CONTRACTS} declares permissions ${JSON.stringify(doc.permissions)}; want exactly `
-    + `{contents: read}. A read-only token is what makes "this lane publishes nothing" a property `
-    + `of the workflow rather than of its current steps.`,
-  );
-
-  // 4b. Exactly the three jobs, each running exactly the smallest owning
-  //     command, from the right directory, fail-closed and finite.
-  const jobNames = Object.keys(doc.jobs ?? {}).sort();
-  need(
-    deepEqual(jobNames, CONSUMERS.map((c) => c.contractJob).sort()),
-    `${CONTRACTS} declares jobs [${jobNames.join(", ")}]; want exactly `
-    + `[${CONSUMERS.map((c) => c.contractJob).sort().join(", ")}] — one per implementation that `
-    + `parses the contract. A fourth job here is work nobody costed on a lane that starts on `
-    + `every document edit.`,
-  );
-
-  for (const consumer of CONSUMERS) {
-    const job = doc.jobs?.[consumer.contractJob];
-    if (job === undefined) {
-      need(false, `${CONTRACTS} declares no job ${consumer.contractJob}`);
-      continue;
-    }
-    const step = (job.steps ?? []).find((s) => String(s?.run ?? "").includes(consumer.contractCommand));
-    need(
-      step !== undefined,
-      `${CONTRACTS}/${consumer.contractJob} does not run `
-      + `\`${consumer.contractCommand}\`. That exact command is the SMALLEST one that judges the `
-      + `${consumer.language} half: a broader one re-runs a suite ${consumer.workflow} already `
-      + `owns, on a lane started by every document edit.`,
-    );
-    if (step !== undefined) {
+    // 4a. No secret, no signing identity, no artifact, no retry. These lanes
+    //     read a document and compare it to an implementation: they publish
+    //     nothing and have no identity to borrow, so anything in this list is
+    //     either dead weight or a release path growing in a cheap workflow.
+    for (const [pattern, what] of [
+      [/secrets\./, "reads a repository secret"],
+      [/upload-artifact|download-artifact/, "uploads or downloads a build artifact"],
+      [/codesign|notarytool|productsign|xcrun\s+altool|softwareupdate/,
+        "signs, notarizes or mutates the runner's system state"],
+      [/\bretry\b|\bretries\b/i, "retries"],
+    ]) {
       need(
-        step["working-directory"] === consumer.workingDirectory,
-        `${CONTRACTS}/${consumer.contractJob} runs its command from `
-        + `${JSON.stringify(step["working-directory"])}; want `
-        + `${JSON.stringify(consumer.workingDirectory)}, which is where its toolchain resolves `
-        + `the project.`,
+        !pattern.test(text),
+        `${lane} ${what} (matched ${pattern}). This lane judges a JSON document against its `
+        + `implementations. Anything in that list is either a release path growing in the cheapest `
+        + `workflow to edit, or something intermittent being smoothed over on a gate whose whole `
+        + `job is to be deterministic.`,
       );
     }
-    const timeout = Number(job["timeout-minutes"]);
     need(
-      Number.isFinite(timeout) && timeout > 0,
-      `${CONTRACTS}/${consumer.contractJob}: timeout-minutes is `
-      + `${JSON.stringify(job["timeout-minutes"])}, want a finite positive number. Undeclared, a `
-      + `job inherits GitHub's SIX-HOUR default — and this one holds a `
-      + `${String(job["runs-on"])} runner.`,
+      doc.permissions?.contents === "read" && Object.keys(doc.permissions ?? {}).length === 1,
+      `${lane} declares permissions ${JSON.stringify(doc.permissions)}; want exactly `
+      + `{contents: read}. A read-only token is what makes "this lane publishes nothing" a property `
+      + `of the workflow rather than of its current steps.`,
     );
+
+    // 4b. Exactly one job per consumer, each running exactly the smallest owning
+    //     command, from the right directory, fail-closed and finite.
+    const wantJobs = owner.consumers.map((c) => c.contractJob).sort();
+    const jobNames = Object.keys(doc.jobs ?? {}).sort();
     need(
-      job.if === undefined,
-      `${CONTRACTS}/${consumer.contractJob}: a job-level "if:" lets this check skip itself, and a `
-      + `skipped check reports NOTHING rather than red.`,
+      deepEqual(jobNames, wantJobs),
+      `${lane} declares jobs [${jobNames.join(", ")}]; want exactly [${wantJobs.join(", ")}] — one `
+      + `per implementation that parses ${owner.contract}. An extra job here is work nobody costed `
+      + `on a lane that starts on every edit to that document.`,
     );
-    need(
-      job["continue-on-error"] === undefined,
-      `${CONTRACTS}/${consumer.contractJob}: continue-on-error makes the only run of the `
-      + `${consumer.language} contract check advisory.`,
-    );
-    need(
-      realRunLines(job).length > 0,
-      `${CONTRACTS}/${consumer.contractJob}: every run line is an echo or a no-op, so it reports `
-      + `green for a comparison nobody made.`,
-    );
-    const swallows = realRunLines(job).find((line) => /\|\|\s*(true|:|echo|exit 0)/.test(line));
-    need(
-      swallows === undefined,
-      `${CONTRACTS}/${consumer.contractJob}: a command swallows its own exit status `
-      + `(${JSON.stringify(swallows ?? "")}), so the job reports green after the comparison failed.`,
-    );
-    for (const s of job.steps ?? []) {
+
+    for (const consumer of owner.consumers) {
+      const job = doc.jobs?.[consumer.contractJob];
+      if (job === undefined) {
+        need(false, `${lane} declares no job ${consumer.contractJob}`);
+        continue;
+      }
+      const step = (job.steps ?? []).find((s) => String(s?.run ?? "").includes(consumer.contractCommand));
       need(
-        s.if === undefined,
-        `${CONTRACTS}/${consumer.contractJob}: a step sets "if:", and a check that can skip itself `
-        + `is not a check.`,
+        step !== undefined,
+        `${lane}/${consumer.contractJob} does not run \`${consumer.contractCommand}\`. That exact `
+        + `command is the SMALLEST one that judges the ${consumer.language} half: a broader one `
+        + `re-runs a suite ${consumer.workflow} already owns, on a lane started by every edit to `
+        + `${owner.contract}.`,
+      );
+      if (step !== undefined) {
+        need(
+          step["working-directory"] === consumer.workingDirectory,
+          `${lane}/${consumer.contractJob} runs its command from `
+          + `${JSON.stringify(step["working-directory"])}; want `
+          + `${JSON.stringify(consumer.workingDirectory)}, which is where its toolchain resolves `
+          + `the project.`,
+        );
+      }
+      const timeout = Number(job["timeout-minutes"]);
+      need(
+        Number.isFinite(timeout) && timeout > 0,
+        `${lane}/${consumer.contractJob}: timeout-minutes is `
+        + `${JSON.stringify(job["timeout-minutes"])}, want a finite positive number. Undeclared, a `
+        + `job inherits GitHub's SIX-HOUR default — and this one holds a `
+        + `${String(job["runs-on"])} runner.`,
       );
       need(
-        s["continue-on-error"] === undefined,
-        `${CONTRACTS}/${consumer.contractJob}: a step sets continue-on-error.`,
+        job.if === undefined,
+        `${lane}/${consumer.contractJob}: a job-level "if:" lets this check skip itself, and a `
+        + `skipped check reports NOTHING rather than red.`,
+      );
+      need(
+        job["continue-on-error"] === undefined,
+        `${lane}/${consumer.contractJob}: continue-on-error makes the only run of the `
+        + `${consumer.language} contract check advisory.`,
+      );
+      need(
+        realRunLines(job).length > 0,
+        `${lane}/${consumer.contractJob}: every run line is an echo or a no-op, so it reports `
+        + `green for a comparison nobody made.`,
+      );
+      const swallows = realRunLines(job).find((line) => /\|\|\s*(true|:|echo|exit 0)/.test(line));
+      need(
+        swallows === undefined,
+        `${lane}/${consumer.contractJob}: a command swallows its own exit status `
+        + `(${JSON.stringify(swallows ?? "")}), so the job reports green after the comparison failed.`,
+      );
+      for (const s of job.steps ?? []) {
+        need(
+          s.if === undefined,
+          `${lane}/${consumer.contractJob}: a step sets "if:", and a check that can skip itself `
+          + `is not a check.`,
+        );
+        need(
+          s["continue-on-error"] === undefined,
+          `${lane}/${consumer.contractJob}: a step sets continue-on-error.`,
+        );
+      }
+    }
+
+    // 4c. A PAID runner only where the consumer table says one is unavoidable.
+    //     This is the cost the whole design was arguing about; leaving it
+    //     unasserted is how the free jobs quietly move to macOS for a toolchain
+    //     convenience — and it is what keeps the deploy-contract lane, whose
+    //     table declares NO paid consumer, on Ubuntu forever.
+    for (const [name, job] of Object.entries(doc.jobs ?? {})) {
+      const paid = String(job["runs-on"] ?? "").startsWith("macos");
+      const wantPaid = owner.consumers.some((c) => c.contractJob === name && c.paidRunner);
+      need(
+        paid === wantPaid,
+        `${lane}/${name} runs on ${JSON.stringify(job["runs-on"])}, and its consumer entry says `
+        + `paidRunner=${wantPaid}. A job may hold a PAID macOS runner only where no other runner `
+        + `can build its implementation.`,
       );
     }
   }
 
-  // 4c. Only ONE job may be a paid runner, and it is the Swift one. This is the
-  //     cost this whole design was arguing about; leaving it unasserted is how
-  //     the other two quietly move to macOS for a toolchain convenience.
-  for (const [name, job] of Object.entries(doc.jobs ?? {})) {
-    const paid = String(job["runs-on"] ?? "").startsWith("macos");
-    const wantPaid = name === "swift-contract";
-    need(
-      paid === wantPaid,
-      `${CONTRACTS}/${name} runs on ${JSON.stringify(job["runs-on"])}. Exactly one job here may `
-      + `hold a PAID macOS runner — the Swift one, because no other runner can build the package. `
-      + `The Go and Web halves are ubuntu work and must stay there.`,
-    );
-  }
-
-  // 4d. This policy is itself executed, in the one workflow that cannot be
-  //     filtered away.
+  // 4d. Both declarative policies are themselves executed, in the one workflow
+  //     that cannot be filtered away.
   const hygiene = world.docs.get(HYGIENE);
-  const hosted = Object.values(hygiene?.jobs ?? {}).some((job) =>
-    realRunLines(job).some((line) => line.includes(SELF_COMMAND)));
-  need(
-    hosted,
-    `no job in ${HYGIENE} runs \`${SELF_COMMAND}\`. ${HYGIENE} carries no path filter, which is `
-    + `the only place a rule about which workflows a contract edit starts can be checked on a `
-    + `commit that starts none of them.`,
-  );
   need(
     wPaths(world, HYGIENE) === null,
-    `${HYGIENE} has grown a path filter, so this policy no longer runs on every commit.`,
+    `${HYGIENE} has grown a path filter, so these policies no longer run on every commit.`,
   );
-  for (const [name, job] of Object.entries(hygiene?.jobs ?? {})) {
-    if (!realRunLines(job).some((line) => line.includes(SELF_COMMAND))) continue;
-    const timeout = Number(job["timeout-minutes"]);
+  for (const self of SELF_TESTS) {
+    const command = `node ${self.test}`;
+    const hosts = Object.entries(hygiene?.jobs ?? {})
+      .filter(([, job]) => realRunLines(job).some((line) => line.includes(command)));
     need(
-      Number.isFinite(timeout) && timeout > 0 && timeout <= SELF_TIMEOUT_MAX,
-      `${HYGIENE}/${name} hosts this policy with timeout-minutes `
-      + `${JSON.stringify(job["timeout-minutes"])}; want a finite number no greater than `
-      + `${SELF_TIMEOUT_MAX}.`,
+      hosts.length > 0,
+      `no job in ${HYGIENE} runs \`${command}\`. ${HYGIENE} carries no path filter, which is the `
+      + `only place a rule about which workflows a contract edit starts — and, for the deploy `
+      + `contract, whether a product path it names still exists — can be checked on a commit that `
+      + `starts none of the filtered lanes.`,
     );
+    need(
+      source(world, self.test) !== null,
+      `${self.test} does not exist, but ${HYGIENE} is required to run it.`,
+    );
+    for (const [name, job] of hosts) {
+      const timeout = Number(job["timeout-minutes"]);
+      need(
+        Number.isFinite(timeout) && timeout > 0 && timeout <= self.timeoutMax,
+        `${HYGIENE}/${name} hosts ${self.test} with timeout-minutes `
+        + `${JSON.stringify(job["timeout-minutes"])}; want a finite number no greater than `
+        + `${self.timeoutMax}.`,
+      );
+    }
   }
   return out;
 }
@@ -823,6 +970,7 @@ function clone(world) {
     texts: new Map(world.texts),
     docs: new Map([...world.texts].map(([name, text]) => [name, parseYaml(text)])),
     sources: new Map(world.sources),
+    treeFiles: [...world.treeFiles],
   };
 }
 
@@ -842,6 +990,9 @@ function withCommandJob(world, file, command, mutate) {
   throw new Error(`no job in ${file} runs ${command}`);
 }
 
+const DEVICE_INBOX = OWNERSHIP[0];
+const OPS_CONTRACT = OWNERSHIP[1];
+
 const MUTATIONS = [
   // ── ownership ─────────────────────────────────────────────────────────────
   {
@@ -853,23 +1004,49 @@ const MUTATIONS = [
     expect: /does not name contracts\/device-inbox-admission-v1\.json verbatim/,
   },
   {
-    name: "the contract stops pointing at a document that exists",
+    name: "the deploy contract's Go consumer stops reading it",
     mutate: (w) => {
-      const parsed = JSON.parse(source(w, CONTRACT_FILE));
+      w.sources.set(OPS_CONTRACT.consumers[0].test, "package main\n// nothing here opens a document\n");
+      return w;
+    },
+    expect: /does not name contracts\/ops-deploy-v1\.json verbatim/,
+  },
+  {
+    name: "a contract stops pointing at a document that exists",
+    mutate: (w) => {
+      const parsed = JSON.parse(source(w, OPS_CONTRACT.contract));
       parsed.documentation = "docs/NO-SUCH-DOCUMENT.md";
-      w.sources.set(CONTRACT_FILE, JSON.stringify(parsed));
+      w.sources.set(OPS_CONTRACT.contract, JSON.stringify(parsed));
       return w;
     },
     expect: /points at "docs\/NO-SUCH-DOCUMENT\.md"; want/,
   },
+  {
+    // The state the tree-wide filter used to make impossible: a third contract
+    // lands, no lane names it, every workflow stays valid, and it is judged by
+    // nothing.
+    name: "a third contract lands in the tree with no lane naming it",
+    mutate: (w) => {
+      w.treeFiles = [...w.treeFiles, `${CONTRACT_TREE}/relay-node-registration-v1.json`].sort();
+      return w;
+    },
+    expect: /relay-node-registration-v1\.json is started by 0 contract lane\(s\) \[\]; want exactly one/,
+  },
+  {
+    // And the other side of the same rule: the old tree-wide filter, restored,
+    // now means two lanes answer for one file.
+    name: "the Device Inbox lane goes back to owning the whole tree",
+    mutate: (w) => withPaths(w, CONTRACTS,
+      [`${CONTRACT_TREE}/**`, `.github/workflows/${CONTRACTS}`]),
+    expect: /ops-deploy-v1\.json is started by 2 contract lane\(s\) \[contracts\.yml, ops-deploy-contract\.yml\]/,
+  },
 
   // ── the trigger boundary ──────────────────────────────────────────────────
   {
-    // The rule the whole design turns on, applied literally: naming the
-    // document in the consumer's filter starts an eight-shard race lane on a
-    // JSON edit.
-    name: "go.yml names the contract in its own filter",
-    mutate: (w) => withPaths(w, GO, [...wPaths(w, GO), CONTRACT_FILE]),
+    // The rule the whole design turns on, applied literally: naming a document
+    // in the consumer's filter starts an eight-shard race lane on a JSON edit.
+    name: "go.yml names a contract in its own filter",
+    mutate: (w) => withPaths(w, GO, [...wPaths(w, GO), DEVICE_INBOX.contract]),
     expect: /starts go\.yml \(filter .*device-inbox-admission-v1\.json/,
   },
   {
@@ -878,26 +1055,34 @@ const MUTATIONS = [
     expect: /starts web\.yml \(filter .*contracts\/\*\*/,
   },
   {
+    // The cost the split was argued about: an ops-contract edit reaching the
+    // three-consumer lane and taking a PAID macOS runner for a document Swift
+    // never opens.
+    name: "the deploy contract is added to the three-consumer lane's filter",
+    mutate: (w) => withPaths(w, CONTRACTS,
+      [DEVICE_INBOX.contract, OPS_CONTRACT.contract, `.github/workflows/${CONTRACTS}`]),
+    expect: /a change confined to contracts\/ops-deploy-v1\.json also starts contracts\.yml.*PAID macOS runner/s,
+  },
+  {
     // Invisible to list membership and to YAML validity: the entry is present,
     // and a later negation takes it back out.
-    name: "the contract lane's own filter excludes the tree it owns",
-    mutate: (w) => withPaths(w, CONTRACTS,
-      [`${CONTRACT_TREE}/**`, `.github/workflows/${CONTRACTS}`, `!${CONTRACT_TREE}/**`]),
-    expect: /does NOT start contracts\.yml/,
+    name: "the deploy lane's own filter excludes the document it owns",
+    mutate: (w) => withPaths(w, OPS_DEPLOY,
+      [...LANE_FILTERS.get(OPS_DEPLOY), `!${CONTRACT_TREE}/**`]),
+    expect: /does NOT start ops-deploy-contract\.yml/,
   },
   {
-    name: "the contract lane's filter grows an entry nobody costed",
-    mutate: (w) => withPaths(w, CONTRACTS,
-      [`${CONTRACT_TREE}/**`, `.github/workflows/${CONTRACTS}`, "docs/**"]),
-    expect: /contracts\.yml's path filter is .*docs\/\*\*.*want exactly/s,
+    name: "the deploy lane's filter grows an entry nobody costed",
+    mutate: (w) => withPaths(w, OPS_DEPLOY, [...LANE_FILTERS.get(OPS_DEPLOY), "server/**"]),
+    expect: /ops-deploy-contract\.yml's path filter is .*server\/\*\*.*want exactly/s,
   },
   {
-    name: "the contract lane is narrower on pull_request than on push",
+    name: "the deploy lane is narrower on pull_request than on push",
     mutate: (w) => {
-      w.docs.get(CONTRACTS).on.pull_request.paths = [`.github/workflows/${CONTRACTS}`];
+      w.docs.get(OPS_DEPLOY).on.pull_request.paths = [`.github/workflows/${OPS_DEPLOY}`];
       return w;
     },
-    expect: /contracts\.yml's push and pull_request filters differ/,
+    expect: /ops-deploy-contract\.yml's push and pull_request filters differ/,
   },
   {
     name: "the always-on compat gate grows a path filter",
@@ -928,14 +1113,31 @@ const MUTATIONS = [
     }),
     expect: /swift-package\.yml no longer runs `swift test`/,
   },
+  {
+    // The deploy contract's Go consumer lives under `server/**`, so `go.yml` is
+    // what runs it on an ordinary server change. Break that and a server edit
+    // can invalidate the frozen health surface and land green.
+    name: "go.yml stops running the suite that contains both Go consumer tests",
+    mutate: (w) => withCommandJob(w, GO, "go test ./...", (job, step) => {
+      step.run = "go build ./...\n";
+    }),
+    expect: /go\.yml no longer runs `go test \.\/\.\.\.`/,
+  },
 
-  // ── what the lane costs ───────────────────────────────────────────────────
+  // ── what the lanes cost ───────────────────────────────────────────────────
   {
     name: "the Go contract job widens to the whole server suite",
     mutate: (w) => withCommandJob(w, CONTRACTS, "go test ./account/", (job, step) => {
       step.run = "go test ./...\n";
     }),
     expect: /contracts\.yml\/go-contract does not run `go test \.\/account\//,
+  },
+  {
+    name: "the deploy contract job widens to the whole root package",
+    mutate: (w) => withCommandJob(w, OPS_DEPLOY, "-run '^TestOpsDeployContract'", (job, step) => {
+      step.run = "go test ./ -count=1\n";
+    }),
+    expect: /ops-deploy-contract\.yml\/go-contract does not run `go test \.\/ -run/,
   },
   {
     name: "the Web contract job widens to the whole Vitest suite",
@@ -952,11 +1154,18 @@ const MUTATIONS = [
     expect: /contracts\.yml\/swift-contract: timeout-minutes is undefined/,
   },
   {
+    name: "the deploy contract job loses its timeout",
+    mutate: (w) => withCommandJob(w, OPS_DEPLOY, "-run '^TestOpsDeployContract'", (job) => {
+      delete job["timeout-minutes"];
+    }),
+    expect: /ops-deploy-contract\.yml\/go-contract: timeout-minutes is undefined/,
+  },
+  {
     name: "a contract job swallows its own exit status",
-    mutate: (w) => withCommandJob(w, CONTRACTS, "go test ./account/", (job, step) => {
+    mutate: (w) => withCommandJob(w, OPS_DEPLOY, "-run '^TestOpsDeployContract'", (job, step) => {
       step.run = `${String(step.run).trim()} || true\n`;
     }),
-    expect: /contracts\.yml\/go-contract: a command swallows its own exit status/,
+    expect: /ops-deploy-contract\.yml\/go-contract: a command swallows its own exit status/,
   },
   {
     name: "a contract job is made advisory",
@@ -967,55 +1176,90 @@ const MUTATIONS = [
   },
   {
     name: "a contract job gains a condition it can skip itself with",
-    mutate: (w) => withCommandJob(w, CONTRACTS, "npx vitest run", (job) => {
+    mutate: (w) => withCommandJob(w, OPS_DEPLOY, "-run '^TestOpsDeployContract'", (job) => {
       job.if = "github.event_name == 'push'";
     }),
-    expect: /contracts\.yml\/web-contract: a job-level "if:"/,
+    expect: /ops-deploy-contract\.yml\/go-contract: a job-level "if:"/,
   },
   {
     name: "the cheap ubuntu half moves onto a paid macOS runner",
     mutate: (w) => withCommandJob(w, CONTRACTS, "go test ./account/", (job) => {
       job["runs-on"] = "macos-15";
     }),
-    expect: /contracts\.yml\/go-contract runs on "macos-15"/,
+    expect: /contracts\.yml\/go-contract runs on "macos-15", and its consumer entry says paidRunner=false/,
   },
   {
-    name: "the lane gains a fourth job nobody costed",
+    // The deploy lane has NO paid consumer at all, so this is the direction its
+    // ubuntu-only claim decays in.
+    name: "the deploy lane takes a paid macOS runner",
+    mutate: (w) => withCommandJob(w, OPS_DEPLOY, "-run '^TestOpsDeployContract'", (job) => {
+      job["runs-on"] = "macos-15";
+    }),
+    expect: /ops-deploy-contract\.yml\/go-contract runs on "macos-15", and its consumer entry says paidRunner=false/,
+  },
+  {
+    name: "a lane gains a job nobody costed",
     mutate: (w) => {
-      w.docs.get(CONTRACTS).jobs.publish = {
+      w.docs.get(OPS_DEPLOY).jobs.publish = {
         "runs-on": "ubuntu-latest", "timeout-minutes": 5, steps: [{ run: "echo publish\n" }],
       };
       return w;
     },
-    expect: /contracts\.yml declares jobs \[.*publish.*\]; want exactly/,
+    expect: /ops-deploy-contract\.yml declares jobs \[.*publish.*\]; want exactly/,
   },
   {
-    name: "the lane's permissions widen past read",
+    name: "a lane's permissions widen past read",
     mutate: (w) => {
-      w.docs.get(CONTRACTS).permissions = { contents: "write" };
+      w.docs.get(OPS_DEPLOY).permissions = { contents: "write" };
       return w;
     },
-    expect: /contracts\.yml declares permissions .*"write".*want exactly/s,
+    expect: /ops-deploy-contract\.yml declares permissions .*"write".*want exactly/s,
   },
   {
-    name: "the lane grows a secret",
+    name: "a lane grows a secret",
     mutate: (w) => {
-      w.texts.set(CONTRACTS, `${w.texts.get(CONTRACTS)}\n          token: \${{ secrets.GH_TOKEN }}\n`);
+      w.texts.set(OPS_DEPLOY, `${w.texts.get(OPS_DEPLOY)}\n          token: \${{ secrets.GH_TOKEN }}\n`);
       return w;
     },
-    expect: /contracts\.yml reads a repository secret/,
+    expect: /ops-deploy-contract\.yml reads a repository secret/,
   },
   {
     name: "this policy stops being executed by the unfiltered workflow",
     mutate: (w) => {
       for (const job of Object.values(w.docs.get(HYGIENE).jobs ?? {})) {
         for (const step of job.steps ?? []) {
-          if (String(step.run ?? "").includes(SELF_COMMAND)) step.run = "echo skipped\n";
+          if (String(step.run ?? "").includes(SELF_TESTS[0].test)) step.run = "echo skipped\n";
         }
       }
       return w;
     },
-    expect: new RegExp(`no job in ${HYGIENE.replace(".", "\\.")} runs`),
+    expect: new RegExp(`no job in ${HYGIENE.replace(".", "\\.")} runs \`node ${SELF_TESTS[0].test.replace(/[.\/]/g, "\\$&")}\``),
+  },
+  {
+    // The deploy contract's always-on half. Losing it is the quiet one: the
+    // filtered lane still reports green on contract edits, and the check that a
+    // declared product path still exists simply stops running.
+    name: "the deploy contract's always-on filesystem policy stops being executed",
+    mutate: (w) => {
+      for (const job of Object.values(w.docs.get(HYGIENE).jobs ?? {})) {
+        for (const step of job.steps ?? []) {
+          if (String(step.run ?? "").includes(SELF_TESTS[1].test)) step.run = "echo skipped\n";
+        }
+      }
+      return w;
+    },
+    expect: new RegExp(`no job in ${HYGIENE.replace(".", "\\.")} runs \`node ${SELF_TESTS[1].test.replace(/[.\/]/g, "\\$&")}\``),
+  },
+  {
+    name: "an always-on policy is hosted with an unbounded timeout",
+    mutate: (w) => {
+      for (const [, job] of Object.entries(w.docs.get(HYGIENE).jobs ?? {})) {
+        if (!realRunLines(job).some((line) => line.includes(SELF_TESTS[1].test))) continue;
+        delete job["timeout-minutes"];
+      }
+      return w;
+    },
+    expect: /hosts scripts\/test\/ops-deploy-contract-test\.mjs with timeout-minutes undefined/,
   },
 ];
 
@@ -1026,9 +1270,12 @@ const judge = (world) => RULES.flatMap((rule) => rule(world));
 
 const world = loadWorld();
 // Warm the source cache so a mutation can replace a file the rules will read.
-source(world, CONTRACT_FILE);
-source(world, CONTRACT_DOC);
+for (const owner of OWNERSHIP) {
+  source(world, owner.contract);
+  source(world, owner.doc);
+}
 for (const consumer of CONSUMERS) source(world, consumer.test);
+for (const self of SELF_TESTS) source(world, self.test);
 
 for (const message of judge(world)) check(false, message);
 
@@ -1059,8 +1306,10 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `contract-ci-policy-test: OK (${CONTRACTS} owns ${CONTRACT_TREE}/ in ${CONSUMERS.length} finite, `
-  + `secret-free jobs — one PAID macOS runner, two ubuntu — while ${HEAVY_LANES.join(", ")} stay `
-  + `out of a document edit and still own their own consumer tests; ordered last-match-wins path `
+  `contract-ci-policy-test: OK (${OWNERSHIP.length} contracts in ${CONTRACT_TREE}/, each owned by `
+  + `exactly one of [${[...LANE_FILTERS.keys()].join(", ")}] over ${CONSUMERS.length} finite, `
+  + `secret-free jobs — one PAID macOS runner, ${CONSUMERS.length - 1} ubuntu — while `
+  + `${HEAVY_LANES.join(", ")} stay out of a document edit and still own their own consumer tests; `
+  + `${world.treeFiles.length} tree files checked for an owner; ordered last-match-wins path `
   + `semantics compiled and proved; ${mutationsProven} mutations prove each rule can fail)`,
 );

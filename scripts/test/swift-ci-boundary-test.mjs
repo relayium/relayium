@@ -135,11 +135,26 @@ const CONTRACTS = "contracts.yml";
 const CONTRACTS_SWIFT_JOB = "swift-contract";
 const CONTRACTS_SWIFT_FILTER = `${SWIFT_TEST_TARGET}.DeviceInboxAdmissionContractTests`;
 
+/**
+ * The product↔ops deploy contract's lane.
+ *
+ * It has NO Swift opinion at all — one Ubuntu job running one `go test`
+ * selector — and it is named here for exactly that reason. Section 1's closed-set
+ * rule requires every path-filtered workflow in the repository to be in `PARSED`,
+ * because "no workflow but `swift-package.yml` starts on an ordinary Swift test"
+ * is a claim about ALL of them and a lane outside the list is a lane the claim
+ * was never checked against. Registering it here is what keeps that set closed;
+ * it grants the lane nothing, and the Swift rules below simply find nothing in
+ * it to complain about — which is the correct answer for a lane that must never
+ * grow a macOS runner.
+ */
+const OPS_DEPLOY_CONTRACT = "ops-deploy-contract.yml";
+
 /** This file, and the unfiltered workflow that has to execute it. */
 const SELF_TEST = "scripts/test/swift-ci-boundary-test.mjs";
 const SELF_HOST = "repo-hygiene.yml";
 const SELF_COMMAND = `node ${SELF_TEST}`;
-/** Minutes. This parses eight small YAML documents and reads six files; it needs seconds. */
+/** Minutes. This parses nine small YAML documents and reads six files; it needs seconds. */
 const SELF_TIMEOUT_MAX = 5;
 
 /**
@@ -152,7 +167,9 @@ const SELF_TIMEOUT_MAX = 5;
  * repository, not only the ones with a Swift opinion, and section 1 asserts that
  * the list still matches what is on disk.
  */
-const PARSED = [SWIFT_PACKAGE, MACOS, IOS, NWP, GO, WEB, CONTRACTS, "compat.yml", SELF_HOST];
+const PARSED = [
+  SWIFT_PACKAGE, MACOS, IOS, NWP, GO, WEB, CONTRACTS, OPS_DEPLOY_CONTRACT, "compat.yml", SELF_HOST,
+];
 
 /**
  * The workflows that must NOT start for a change confined to the package's test
@@ -1071,9 +1088,11 @@ function laneFailures(w) {
 
   // 1g. The contract lane must not reach into the package's own tree.
   //
-  //     It watches `contracts/**`. The moment its filter also names a package
-  //     path, an ordinary Swift edit starts BOTH macOS lanes for one answer —
-  //     the exact duplication this file was created to remove.
+  //     It watches exactly one document in `contracts/` — the tree's ownership
+  //     is per file since `ops-deploy-contract.yml` joined it. The moment its
+  //     filter also names a package path, an ordinary Swift edit starts BOTH
+  //     macOS lanes for one answer — the exact duplication this file was
+  //     created to remove.
   const contractPaths = wPaths(w, CONTRACTS);
   need(
     contractPaths === null || !contractPaths.some((p) => String(p).includes(SWIFT_PACKAGE_DIR)),

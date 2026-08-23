@@ -218,6 +218,36 @@ jobs:
       - name: root contract tree CI ownership and cost boundary
         run: node scripts/test/contract-ci-policy-test.mjs
 
+  ops-deploy-contract-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      # The declarative half of `contracts/ops-deploy-v1.json`: the document
+      # that freezes what relayium-ops' auto-deploy path already assumes about
+      # this repository — which paths rebuild what, from which directory, with
+      # which argv, where the artifacts land, and the listener port.
+      #
+      # It lives HERE, in the workflow with no path filter, and that placement is
+      # the point rather than a convenience. The failure this contract exists to
+      # catch is a PRODUCT change: a build input renamed, a working directory
+      # moved, an npm script gone, a new top-level tree that the deploy would
+      # silently record as shipped without rebuilding anything. Filtered to
+      # `contracts/**` the check would only run on commits that edit the
+      # contract — never on the commit that invalidates it. Anchored in
+      # `git ls-files`, `web/package.json`'s own scripts map and the repository
+      # root's real entries, it fails on the commit that makes the change.
+      #
+      # Pure file reads: no Go toolchain, no npm install, no network, no build.
+      # The Go half — that the real /healthz and /readyz handlers answer exactly
+      # what the document says, in every readiness failure branch — needs a Go
+      # toolchain and is `ops-deploy-contract.yml` plus go.yml's `go test ./...`.
+      - name: product-to-ops deploy contract, schema and on-disk build boundary
+        run: node scripts/test/ops-deploy-contract-test.mjs
+
   go-race-shard:
     runs-on: ubuntu-latest
     steps:

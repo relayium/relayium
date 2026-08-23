@@ -212,12 +212,21 @@ a workflow.
 
 ### The `contracts/` tree
 
-`contracts/` now exists. Its first member is
-`contracts/device-inbox-admission-v1.json` — a root-level, versioned,
-runtime-neutral document that three implementations parse independently and
-compare to the constants they already ship. See
-[the admission contract](DEVICE-INBOX-ADMISSION-CONTRACT.md) for what it freezes
-and why.
+`contracts/` now holds two documents:
+
+| Contract | What it freezes | Consumers |
+| -------- | --------------- | --------- |
+| [`device-inbox-admission-v1.json`](DEVICE-INBOX-ADMISSION-CONTRACT.md) | the Device Inbox admission vocabulary three implementations must agree on | Go, Web, Swift |
+| [`ops-deploy-v1.json`](OPS-DEPLOY-CONTRACT.md) | the product facts `relayium-ops`' auto-deploy path already assumes: build inputs, working directories, argv, artifacts, listener port, health surface | see [its own consumer table](OPS-DEPLOY-CONTRACT.md#consumers) — the document carries each reader's status, and this page deliberately does not restate it |
+
+Both are root-level, versioned, runtime-neutral documents that their consumers
+parse independently and compare to what they already ship. The second one's
+consumer set is a **status** list — enforcement that is planned is recorded as
+such rather than published as current — and `ops-deploy-contract-test.mjs` holds
+that list to the readers that actually run. This page deliberately keeps no copy
+of it, not even a count: a restatement here is a page nobody edits when a phase
+lands, and no test reads English, so it would simply be wrong and stay wrong.
+That is how these two came to contradict each other once already.
 
 A contract tree is **truly cross-platform**, not Apple-shared, and it does not go
 into a heavy Apple filter merely because Swift consumes it.
@@ -244,8 +253,11 @@ and the same protection is available for a fraction of the cost.
 
 #### What it starts instead
 
-`contracts.yml`, whose filter is exactly `contracts/**` and its own file, running
-the three smallest commands that judge the three implementations:
+A cheap lane per **document** — not per tree. Each names exactly its own contract
+and its own file, and runs the smallest commands that judge that document's
+implementations:
+
+`contracts.yml`, filtered to `contracts/device-inbox-admission-v1.json`:
 
 | Job | Runner | Command |
 | --- | ------ | ------- |
@@ -253,10 +265,17 @@ the three smallest commands that judge the three implementations:
 | `web-contract` | `ubuntu-latest` | `npx vitest run src/lib/device-inbox-admission-contract.test.ts` |
 | `swift-contract` | `macos-15` | `swift test --filter 'RelayiumKitTests.DeviceInboxAdmissionContractTests'` |
 
+`ops-deploy-contract.yml`, filtered to `contracts/ops-deploy-v1.json`:
+
+| Job | Runner | Command |
+| --- | ------ | ------- |
+| `go-contract` | `ubuntu-latest` | `go test ./ -run '^TestOpsDeployContract' -count=1` |
+
 plus the two workflows that carry **no** path filter and therefore cannot be
 routed around: `compat.yml` and `repo-hygiene.yml`. A contract-only edit starts
 no macOS or iOS product build, no signing, no UI test, no native pairing
-acceptance, no Go race lane and no browser acceptance.
+acceptance, no Go race lane and no browser acceptance — and, since the split, no
+lane belonging to a document it did not change.
 
 **The other direction is unchanged.** The three consumer tests live inside
 `server/**`, `web/**` and `apps/RelayiumKit/**`, so an ordinary source change
@@ -282,26 +301,65 @@ test class, to run from the package directory, and to keep its filter out of
 `apps/RelayiumKit/**`. The repository's **sole unfiltered** `swift test` is still
 `swift-package.yml`'s, and that rule is untouched.
 
+#### Why ownership moved from the tree to the document
+
+The rule recorded here when the tree held one document was that a second would
+join `contracts.yml` with no workflow edit at all — deliberately, and it was why
+the filter was `contracts/**` rather than the file.
+
+`contracts/ops-deploy-v1.json` refuted it. That document has **no** Swift and no
+TypeScript consumer, so under the tree-wide filter every edit to it would have
+started `web-contract` (an `npm ci` for a test that does not exist for it) and
+`swift-contract` (a **paid** macOS runner and a cold SwiftPM resolve for a
+document Swift never opens) to re-run two checks that cannot see it. That is the
+same "charge a lane for a file nobody reads" shape the contract lane was created
+to avoid, pointed the other way.
+
+So each document names its own lane. What the tree-wide filter used to guarantee
+for free — that a contract file cannot exist with no owner — is now asserted
+directly: `contract-ci-policy-test.mjs` lists `contracts/` **on disk** and
+requires every file in it to be started by exactly one lane. A third contract
+added with no lane fails that rule on the commit that adds it.
+
 #### Where the rules live
 
 `scripts/test/contract-ci-policy-test.mjs` owns this tree's admission decision:
-which workflows a contract-only edit starts, which it must not, that the owning
-suites still execute the consumer tests, that each consumer still opens the
-document, and what the lane may cost — commands, working directories, finite
-timeouts, read-only permissions and the absence of secrets. It compiles each
-`paths:` list and evaluates it the way GitHub does, ordered and last-match-wins,
-and 21 mutations prove every rule can fail. `swift-ci-boundary-test.mjs` owns the
-Swift half; `ci-event-policy-test.mjs` continues to own repository-wide trigger,
-concurrency and runner-budget properties.
+which lane a contract-only edit starts, which lanes it must not (including the
+*other* contract's), that every file in the tree has exactly one owner, that the
+owning suites still execute the consumer tests, that each consumer still opens
+its document, and what each lane may cost — commands, working directories,
+finite timeouts, read-only permissions, the absence of secrets, and which jobs
+may hold a paid runner. It compiles each `paths:` list and evaluates it the way
+GitHub does, ordered and last-match-wins, and 31 mutations prove every rule can
+fail. `swift-ci-boundary-test.mjs` owns the Swift half;
+`ci-event-policy-test.mjs` continues to own repository-wide trigger, concurrency
+and runner-budget properties, and both contract lanes are in its governed
+inventory and its runner-budget list.
+
+#### The deploy contract's always-on half
+
+`contracts/ops-deploy-v1.json` is the first contract whose consumers are not all
+in filtered lanes, and deliberately so. Its declarative consumer,
+`scripts/test/ops-deploy-contract-test.mjs`, needs no toolchain — no Go, no
+`npm install`, no browser — so it runs in `repo-hygiene.yml`, which carries no
+path filter.
+
+That placement is the point rather than a convenience. The failure this contract
+exists to catch is a **product** change: a build input renamed, a working
+directory moved, an npm script gone, a new top-level tree the deploy would
+silently record as shipped without rebuilding anything. Filtered to the contract,
+the check would only ever run on commits that edit the contract — never on the
+commit that invalidates it.
 
 #### The next contract
 
-`contracts.yml` watches `contracts/**`, so a second document joins the lane with
-no workflow edit at all — deliberately, and it is why the filter is the tree
-rather than the file. What a new contract still owes: its own consumer tests
-inside the trees their suites already watch, a row in `CONSUMERS` in the policy
-test, and a mutation proving that row can fail. A contract tree that starts
-nothing is a contract nobody re-checks.
+What a new contract owes: its own consumer tests inside the trees their suites
+already watch; a lane naming exactly that document, or an existing lane widened
+to it with the cost argued; an entry in `OWNERSHIP` in
+`contract-ci-policy-test.mjs`; registration in `ci-event-policy-test.mjs`'s
+governed inventory, routing table and runner budgets; and a mutation proving each
+of those can fail. Until the lane exists, the orphan rule fails — a contract that
+starts nothing is a contract nobody re-checks.
 
 
 ## Fast compatibility gates vs heavy builds
@@ -666,10 +724,17 @@ touches only `apps/RelayiumKit/Tests/`, and the checks it starts.
 * `.github/workflows/swift-package.yml` — the shared package's own suite, and the
   sole owner of an unfiltered `swift test`
 * `scripts/test/swift-ci-boundary-test.mjs` — who owns `apps/RelayiumKit/`, in code
-* `.github/workflows/contracts.yml` — the root contract tree's own lane
-* `scripts/test/contract-ci-policy-test.mjs` — who owns `contracts/`, what a
-  document edit may start, and what that lane may cost, in code
+* `.github/workflows/contracts.yml` — the Device Inbox admission contract's lane
+* `.github/workflows/ops-deploy-contract.yml` — the product↔ops deploy
+  contract's lane
+* `scripts/test/contract-ci-policy-test.mjs` — who owns each document in
+  `contracts/`, what an edit to it may start, and what that lane may cost, in
+  code
+* `scripts/test/ops-deploy-contract-test.mjs` — the deploy contract's closed
+  schema and its on-disk build boundary, run unfiltered on every commit
 * `docs/DEVICE-INBOX-ADMISSION-CONTRACT.md` — the first root contract itself
+* `docs/OPS-DEPLOY-CONTRACT.md` — the second, and the product half of the
+  deployment interface
 * `.github/workflows/macos.yml`, `.github/workflows/ios.yml` — the heavy owners
 * `.github/workflows/native-web-pairing.yml` — the cross-client acceptance
 * `.github/workflows/repo-hygiene.yml` — the unfiltered host that runs the
