@@ -656,29 +656,22 @@ final class LinkSessionFactoryTests: XCTestCase {
             .joined(separator: "\n")
     }
 
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → …/apps
+    /// `apps/`, discovered rather than counted, and checked for existing.
     private var appsRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
+        get throws { try RepoRoot.apps() }
     }
 
     /// Every Swift source under the app targets, as code with comments removed.
     private func appSources() throws -> [(name: String, code: String)] {
-        let roots = [appsRoot.appendingPathComponent("RelayiumKit/Sources"),
-                     appsRoot.appendingPathComponent("ios"),
-                     appsRoot.appendingPathComponent("mac")]
+        // Each root must exist. `RepoRoot.directory` throws with the path it
+        // wanted, where a missing root used to be skipped one line below and the
+        // scan then reported clean over nothing.
+        let roots = try ["apps/RelayiumKit/Sources", "apps/ios", "apps/mac"]
+            .map { try RepoRoot.directory($0) }
         var sources: [(String, String)] = []
         for root in roots {
-            guard FileManager.default.fileExists(atPath: root.path) else { continue }
-            let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)?
-                .compactMap { $0 as? URL }
-                .filter { $0.pathExtension == "swift" }
-            for file in try XCTUnwrap(files) {
-                sources.append((file.lastPathComponent,
-                                code((try? String(contentsOf: file, encoding: .utf8)) ?? "")))
+            for file in try RepoRoot.swiftFiles(in: root) {
+                sources.append((file.lastPathComponent, code(try RepoRoot.text(of: file))))
             }
         }
         XCTAssertGreaterThan(sources.count, 50, "the scan really reached the app sources")
@@ -686,7 +679,7 @@ final class LinkSessionFactoryTests: XCTestCase {
     }
 
     private func factorySource() throws -> String {
-        let url = appsRoot
+        let url = try appsRoot
             .appendingPathComponent("RelayiumKit/Sources/RelayiumAppKit/LinkSessionFactory.swift")
         let source = code(try String(contentsOf: url, encoding: .utf8))
         XCTAssertFalse(source.isEmpty, "the factory source must be readable")

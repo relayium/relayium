@@ -1945,7 +1945,7 @@ final class LinkSessionRuntimeTests: XCTestCase {
 
     /// And the runtime does not issue that start in the first place: an ended
     /// runtime is terminal, so `start()` finds a state it cannot leave.
-    func testAStartAfterStopStartsNothing() {
+    func testAStartAfterStopStartsNothing() throws {
         let h = harness()
         h.runtime.stop()
         h.runtime.start()
@@ -1969,26 +1969,20 @@ final class LinkSessionRuntimeTests: XCTestCase {
             .joined(separator: "\n")
     }
 
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → …/apps
+    /// `apps/`, discovered rather than counted, and checked for existing.
     private var appsRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
+        get throws { try RepoRoot.apps() }
     }
 
-    private var runtimeSource: String {
-        let url = appsRoot
-            .appendingPathComponent("RelayiumKit/Sources/RelayiumAppKit/LinkSessionRuntime.swift")
-        return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+    private func runtimeSource() throws -> String {
+        try RepoRoot.text("apps/RelayiumKit/Sources/RelayiumAppKit/LinkSessionRuntime.swift")
     }
 
     /// The runtime composes; it never derives. A `LinkCodecs` built here would be
     /// a second AEAD sequence under one pair of session keys, and a second
     /// `LinkIdentity` is how the two lanes end up on different ones.
-    func testTheRuntimeConstructsNoCryptographyAndNoSecondIdentity() {
-        let source = code(runtimeSource)
+    func testTheRuntimeConstructsNoCryptographyAndNoSecondIdentity() throws {
+        let source = code(try runtimeSource())
         XCTAssertFalse(source.isEmpty, "the runtime source must be readable")
         for forbidden in ["HandshakeState", "LinkCodecs(", "generateKeyPair(", "deriveSession(",
                           "deriveResumeAuth(", "deriveTextKey(", "LinkIdentity("] {
@@ -2000,8 +1994,8 @@ final class LinkSessionRuntimeTests: XCTestCase {
     /// The one route belongs to the file driver, installed inside `onReady`.
     /// Pinned as source as well as behaviour, because an overwrite AFTER
     /// readiness is a lost lane that only a live peer would reveal.
-    func testTheRuntimeNeverInstallsAFrameRoute() {
-        let source = code(runtimeSource)
+    func testTheRuntimeNeverInstallsAFrameRoute() throws {
+        let source = code(try runtimeSource())
         XCTAssertFalse(source.isEmpty, "the runtime source must be readable")
         XCTAssertFalse(source.contains("onFrame ="),
                        "the frame route is the file driver's and the coordinator's, never this one's")
@@ -2067,8 +2061,8 @@ final class LinkSessionRuntimeTests: XCTestCase {
     /// coordinator's. And any terminal transition made here would be a second
     /// layer releasing one room, which is how an admission goes idle under a link
     /// that is still live.
-    func testTheRuntimeMakesExactlyOneAdmissionTransitionAndItIsTheOpen() {
-        let source = code(runtimeSource)
+    func testTheRuntimeMakesExactlyOneAdmissionTransitionAndItIsTheOpen() throws {
+        let source = code(try runtimeSource())
         XCTAssertFalse(source.isEmpty, "the runtime source must be readable")
 
         XCTAssertEqual(source.components(separatedBy: "admission?.").count - 1, 1,
@@ -2092,7 +2086,7 @@ final class LinkSessionRuntimeTests: XCTestCase {
     /// for a link that is already gone. The window is a few instructions wide, so
     /// no behavioural test can be relied on to catch it.
     func testTheRoomIsOpenedUnderTheSameLockThatClaimsTheLink() throws {
-        let source = code(runtimeSource)
+        let source = code(try runtimeSource())
         XCTAssertFalse(source.isEmpty, "the runtime source must be readable")
 
         let claim = try XCTUnwrap(source.range(of: "state = .active(owner: owner"))
@@ -2114,8 +2108,8 @@ final class LinkSessionRuntimeTests: XCTestCase {
     /// restore exactly the inversion this batch removed — and it would restore it
     /// in a window a few instructions wide, which a behavioural test can only
     /// catch if it happens to hold a barrier open in the right place.
-    func testEveryEventLeavesThroughTheOneConsumer() {
-        let source = code(runtimeSource)
+    func testEveryEventLeavesThroughTheOneConsumer() throws {
+        let source = code(try runtimeSource())
         XCTAssertFalse(source.isEmpty, "the runtime source must be readable")
         XCTAssertEqual(source.components(separatedBy: "onEvent(").count - 1, 1,
                        "`onEvent` is called from `deliver` and from nowhere else")
@@ -2131,20 +2125,19 @@ final class LinkSessionRuntimeTests: XCTestCase {
         // and source both.
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
 
-        let roots = [appsRoot.appendingPathComponent("RelayiumKit/Sources"),
-                     appsRoot.appendingPathComponent("ios"),
-                     appsRoot.appendingPathComponent("mac")]
+        // Each root must exist. `RepoRoot.directory` throws with the path it
+        // wanted, where a missing root used to be skipped one line below and the
+        // scan then reported clean over nothing.
+        let roots = try ["apps/RelayiumKit/Sources", "apps/ios", "apps/mac"]
+            .map { try RepoRoot.directory($0) }
         var scanned = 0
+        // The files this guard is ABOUT, excluded from its own scan.
+        let owners = ["LinkSessionRuntime.swift", "LinkSessionFactory.swift"]
         for root in roots {
-            guard FileManager.default.fileExists(atPath: root.path) else { continue }
-            let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)?
-                .compactMap { $0 as? URL }
-                .filter { $0.pathExtension == "swift"
-                    && $0.lastPathComponent != "LinkSessionRuntime.swift"
-                    && $0.lastPathComponent != "LinkSessionFactory.swift" }
-            for file in try XCTUnwrap(files) {
+            for file in try RepoRoot.swiftFiles(in: root)
+            where !owners.contains(file.lastPathComponent) {
                 scanned += 1
-                let text = code((try? String(contentsOf: file, encoding: .utf8)) ?? "")
+                let text = code(try RepoRoot.text(of: file))
                 XCTAssertFalse(text.contains("LinkSessionRuntime("),
                                "\(file.lastPathComponent) constructs a session runtime")
             }

@@ -1287,14 +1287,8 @@ final class LinkLaneOwnerTests: XCTestCase {
 
     // ── 10. source guards ───────────────────────────────────────────────────
 
-    private var ownerSource: String {
-        let packageRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // RelayiumKitTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // RelayiumKit
-        let file = packageRoot.appendingPathComponent(
-            "Sources/RelayiumKit/Realtime/LinkLaneOwner.swift")
-        return (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+    private func ownerSource() throws -> String {
+        try RepoRoot.text("apps/RelayiumKit/Sources/RelayiumKit/Realtime/LinkLaneOwner.swift")
     }
 
     private func code(_ source: String) -> String {
@@ -1312,8 +1306,8 @@ final class LinkLaneOwnerTests: XCTestCase {
     /// Pinned as source, because the failure is a WINDOW rather than a state: a
     /// transport that terminates between two property writes finds a half-wired
     /// owner, and every behavioural test here would still pass.
-    func testTheOwnerInstallsItsHooksAtomically() {
-        let source = code(ownerSource)
+    func testTheOwnerInstallsItsHooksAtomically() throws {
+        let source = code(try ownerSource())
         XCTAssertFalse(source.isEmpty, "the owner source must be readable")
         XCTAssertTrue(source.contains("installOwnerHooks("),
                       "the four hooks must be installed as one step")
@@ -1327,8 +1321,8 @@ final class LinkLaneOwnerTests: XCTestCase {
     /// The owner composes; it never derives. A `LinkCodecs` built here would be
     /// a second AEAD sequence under one pair of session keys, and a second
     /// `LinkIdentity` is how the two lanes end up on different ones.
-    func testTheOwnerConstructsNoCryptographyAndNoSecondIdentity() {
-        let source = code(ownerSource)
+    func testTheOwnerConstructsNoCryptographyAndNoSecondIdentity() throws {
+        let source = code(try ownerSource())
         XCTAssertFalse(source.isEmpty, "the owner source must be readable")
         for forbidden in ["HandshakeState", "LinkCodecs(", "generateKeyPair(", "deriveSession(",
                           "deriveResumeAuth(", "deriveTextKey(", "LinkIdentity("] {
@@ -1350,16 +1344,9 @@ final class LinkLaneOwnerTests: XCTestCase {
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
 
         let entitled: Set<String> = ["LinkLaneOwner.swift", "LinkSessionRuntime.swift"]
-        let sources = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Sources")
-        let files = FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil)?
-            .compactMap { $0 as? URL }
-            .filter { $0.pathExtension == "swift" && !entitled.contains($0.lastPathComponent) }
-        for file in try XCTUnwrap(files) {
-            let text = code((try? String(contentsOf: file, encoding: .utf8)) ?? "")
+        for file in try RepoRoot.swiftFiles(under: "apps/RelayiumKit/Sources")
+        where !entitled.contains(file.lastPathComponent) {
+            let text = code(try RepoRoot.text(of: file))
             XCTAssertFalse(text.contains("LinkLaneOwner("),
                            "\(file.lastPathComponent) constructs a lane owner")
         }

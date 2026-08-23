@@ -24,14 +24,13 @@ import XCTest
 ///     check, a bundle-path sniff or any other runtime heuristic.
 final class MacAppleSignInGuardTests: XCTestCase {
 
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → …/apps
-    private var appsRoot: URL {
-        (0..<4).reduce(URL(fileURLWithPath: #filePath)) { u, _ in u.deletingLastPathComponent() }
+    private var macRoot: URL {
+        get throws { try RepoRoot.directory("apps/mac") }
     }
-    private var macRoot: URL { appsRoot.appendingPathComponent("mac") }
 
+    /// A source under `apps/`, which must exist.
     private func read(_ relativePath: String) throws -> String {
-        try String(contentsOf: appsRoot.appendingPathComponent(relativePath), encoding: .utf8)
+        try RepoRoot.text("apps/" + relativePath)
     }
 
     /// Source with whole-line comments removed.
@@ -168,7 +167,7 @@ final class MacAppleSignInGuardTests: XCTestCase {
     /// build to satisfy a guard — removing the very capability claim 1 exists to
     /// protect — so what is banned is the Apple-ID surface itself.
     func testTheDirectBuildHasNoAppleAuthorizationCallPath() throws {
-        let names = try FileManager.default.subpathsOfDirectory(atPath: macRoot.path)
+        let names = try FileManager.default.subpathsOfDirectory(atPath: try macRoot.path)
             .filter { $0.hasSuffix(".swift") }
             .sorted()
         XCTAssertGreaterThan(names.count, 30, "the scan found almost nothing")
@@ -218,7 +217,7 @@ final class MacAppleSignInGuardTests: XCTestCase {
                           "\(target) does not exclude \(excluded)")
         }
         // Exactly one declaration of the seam type per target.
-        let names = try FileManager.default.subpathsOfDirectory(atPath: macRoot.path)
+        let names = try FileManager.default.subpathsOfDirectory(atPath: try macRoot.path)
             .filter { $0.hasSuffix(".swift") }.sorted()
         let declaring = try names.filter {
             try code("mac/\($0)").contains("struct AppleSignInSection: View")

@@ -19,14 +19,7 @@ import XCTest
 ///     notice them disagreeing.
 final class SupportedVersionSurfaceTests: XCTestCase {
 
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → repo root.
-    private var repoRoot: URL {
-        (0..<5).reduce(URL(fileURLWithPath: #filePath)) { url, _ in url.deletingLastPathComponent() }
-    }
-
-    private func text(_ path: String) throws -> String {
-        try String(contentsOf: repoRoot.appendingPathComponent(path), encoding: .utf8)
-    }
+    private func text(_ path: String) throws -> String { try RepoRoot.text(path) }
 
     private func macSource(_ name: String) throws -> String {
         try text("apps/mac/Relayium/\(name)")
@@ -425,7 +418,7 @@ final class SupportedVersionSurfaceTests: XCTestCase {
     // MARK: - the version graph
 
     private func policyDocument() throws -> [String: Any] {
-        let data = try Data(contentsOf: repoRoot.appendingPathComponent("web/native-client-policy.json"))
+        let data = try RepoRoot.data("web/native-client-policy.json")
         return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
 
@@ -488,8 +481,7 @@ final class SupportedVersionSurfaceTests: XCTestCase {
 
         // And the served document decodes through the shipped decoder, floor and
         // all — the file this repository publishes is one this binary accepts.
-        let published = try Data(contentsOf: repoRoot.appendingPathComponent(
-            "web/public/apps/macos/client-policy.json"))
+        let published = try RepoRoot.data("web/public/apps/macos/client-policy.json")
         let decoded = try SupportedVersionPolicy.decode(published)
         XCTAssertEqual(decoded.minimumSupported, minimum)
         XCTAssertEqual(decoded.minimumSupportedBuild, minimumBuild)

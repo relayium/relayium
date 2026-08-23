@@ -810,6 +810,45 @@ if (nightly) {
 
 const MACOS = "macos.yml";
 const IOS = "ios.yml";
+
+// ── 6k's subjects, declared beside the workflows they are about ─────────────
+//
+// The SwiftPM package both native apps compile against, and the XCTest work in
+// it that reads `apps/ios` — the project file, the privacy manifest, the
+// distribution/signing configuration, the icon set, and the version the app
+// shares with its share extension.
+//
+// They are named here, one at a time, for the same reason `GOVERNED` is: the
+// list IS the assertion. A pattern would silently adopt or silently drop
+// whatever matched it next, and the failure mode this section exists for is a
+// gate that stopped covering something without anybody deciding to stop.
+const SWIFT_PACKAGE_DIR = "apps/RelayiumKit";
+const SWIFT_TEST_TARGET = "RelayiumKitTests";
+const SWIFT_TEST_TARGET_DIR = `${SWIFT_PACKAGE_DIR}/Tests/${SWIFT_TEST_TARGET}`;
+
+// Everything after `RelayiumKitTests.` in one `--filter`, in SwiftPM's own
+// syntax: a bare class name selects the whole class, and `Class/method` selects
+// exactly one case.
+//
+// Four are whole classes because every case in them reads `apps/ios`. The fifth
+// is a single method because its class is not iOS-only:
+// `BundleVersionTests` also carries `testTheMacAppAndItsExtensionShipOneVersion`,
+// which reads `apps/mac` — a tree this workflow deliberately does not trigger
+// on. Selecting the class would run a macOS assertion on an iOS-only change;
+// selecting the method runs the iOS half and nothing else.
+const IOS_GUARD_SELECTORS = [
+  "IOSSurfaceGuardTests",
+  "IOSPrivacyManifestTests",
+  "IOSDistributionSigningTests",
+  "IOSAppIconAssetTests",
+  "BundleVersionTests/testTheIOSAppAndItsExtensionShipOneVersion",
+];
+/** The class half of a selector — what has to exist as a file on disk. */
+const selectorClass = (selector) => String(selector).split("/")[0];
+/** The method half, or `undefined` for a whole-class selector. */
+const selectorMethod = (selector) => String(selector).split("/")[1];
+/** An `apps/ios`-only change, as a path — the case section 6k exists for. */
+const IOS_GUARD_SAMPLE = "apps/ios/Relayium.xcodeproj/project.pbxproj";
 const SHARED_KIT = "apps/RelayiumKit/**";
 const IOS_PROJECT = "-project apps/ios/Relayium.xcodeproj";
 const MACOS_PROJECT = "-project apps/mac/Relayium.xcodeproj";
@@ -1438,6 +1477,61 @@ const appRoots = (() => {
 })();
 
 /**
+ * The Swift test target's own file names, read from disk.
+ *
+ * Section 6k names five guard SELECTORS that `ios.yml` must execute by
+ * `--filter`. A filter naming a class that does not exist is not a smaller
+ * gate, it is a `swift test` invocation matching nothing — so the names are
+ * checked against the files that declare them, and carried in the world so
+ * section 8 can delete one and require the complaint.
+ */
+const swiftTestFiles = (() => {
+  try {
+    return readdirSync(resolve(repoRoot, SWIFT_TEST_TARGET_DIR), { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".swift"))
+      .map((entry) => entry.name)
+      .sort();
+  } catch {
+    return [];
+  }
+})();
+
+/**
+ * `Class/method` for every XCTest case the target declares.
+ *
+ * The class-file check above is not enough for a `Class/method` selector: the
+ * file can exist while the method it names has been renamed, and `swift test`
+ * would then match NOTHING and exit 0. That is the same silent non-gate the
+ * file check exists to prevent, one level in, so the method half is resolved
+ * too rather than trusted to a one-off run at authoring time.
+ *
+ * A deliberately shallow scan, not a Swift parser: track the most recent
+ * `class X:` declaration and attribute each `func testY(` that follows it. It
+ * over-reports only if a nested type re-declares a `test…` method, which would
+ * make a selector look resolvable that is not — so the assertion below is
+ * paired with the class-file check rather than replacing it.
+ */
+const swiftTestMethods = (() => {
+  const out = new Set();
+  for (const name of swiftTestFiles) {
+    let text;
+    try {
+      text = readFileSync(resolve(repoRoot, SWIFT_TEST_TARGET_DIR, name), "utf8");
+    } catch {
+      continue;
+    }
+    let current;
+    for (const line of text.split("\n")) {
+      const declared = line.match(/\bclass\s+([A-Za-z_][A-Za-z0-9_]*)\s*:/);
+      if (declared) { current = declared[1]; continue; }
+      const method = line.match(/\bfunc\s+(test[A-Za-z0-9_]*)\s*\(/);
+      if (method && current) out.add(`${current}/${method[1]}`);
+    }
+  }
+  return [...out].sort();
+})();
+
+/**
  * Does the fuzz campaign's discovery script exist?
  *
  * Read from disk rather than assumed, and carried in the world below, so
@@ -1467,6 +1561,8 @@ function realWorld() {
     texts: new Map(workflowTexts),
     roots: new Set(appRoots),
     inventory: fuzzInventoryExists,
+    testFiles: [...swiftTestFiles],
+    testMethods: [...swiftTestMethods],
   };
 }
 
@@ -2687,9 +2783,337 @@ function fuzzCampaignFailures(world) {
   return out;
 }
 
+// ── 6k. the iOS guard selectors an iOS-only pull request actually EXECUTES ──
+//
+// The same class of invisible gap as section 6, one level in. Section 6 governs
+// which workflow a platform root STARTS; this governs what that workflow then
+// runs, and the two are not the same claim.
+//
+// What was wrong: the guards that read `apps/ios/Relayium.xcodeproj`, its
+// `PrivacyInfo.xcprivacy`, its signing configuration, its icon set and the
+// version it shares with its share extension are XCTest cases in the SHARED
+// SwiftPM package, not tests in the iOS project. `xcodebuild` never runs them.
+// `swift test` runs in exactly one place — `macos.yml`'s `test` job — and
+// `macos.yml`'s path filter deliberately EXCLUDES `apps/ios/**`, because
+// section 5 split the two Apple platforms apart on purpose. So an iOS-only pull
+// request compiled the app, drove its UI, ran three acceptance runs, and
+// executed none of the guards written about the files it had just edited.
+// Everything was green and nothing had read them.
+//
+// `ios.yml` now runs those five selectors by name. The failure modes that leave
+// the YAML valid, in rough order of how plausible each is:
+//
+//   * a filter is dropped, and that guard silently stops running;
+//   * every filter is dropped, and the step becomes the WHOLE 233-file suite on
+//     a paid macOS runner — which reads as "more testing" while actually being
+//     the change section 5 split the workflows to prevent;
+//   * a selector survives a rename and now matches NOTHING, which `swift test`
+//     reports as success;
+//   * `|| true`, `continue-on-error` or an `if:` turns the step into a no-op
+//     that reports nothing rather than red;
+//   * the step's own bound goes away or is raised past the point of being a
+//     bound, and a wedged `swift test` runs on toward the job's much larger
+//     budget on a PAID runner;
+//   * the carrier job's bound goes away too, and that wedged run holds the
+//     runner for GitHub's six-hour default;
+//   * the whole-suite run leaves `macos.yml`, so nothing runs it anywhere.
+//
+// Each is asserted, and section 8 mutates each one to prove the assertion fires.
+//
+// TWO BOUNDS, NESTED, AND BOTH GOVERNED. `timeout-minutes` is valid GitHub
+// Actions syntax on a step as well as on a job, and here both are wanted,
+// because they bound different things. The carrier job's budget covers the
+// whole iOS lane — two `xcodebuild` graphs on a paid macOS runner — and section
+// 6i justifies that number against measured runtime. This step compiles the
+// shared package and reads files. Giving it only the job's budget would mean a
+// wedged `swift test` sits on a PAID runner for the better part of the lane's
+// whole allowance before anything reports red, so the step carries the tighter
+// bound and the job keeps the outer one.
+//
+// Nesting is only safe while BOTH are checked, which is what this section does:
+// the step's own `timeout-minutes` must be finite, positive and no larger than
+// `IOS_GUARD_STEP_CEILING`, and the carrier job must still declare the finite
+// budget inside the ceiling section 6i sets for `ios.yml` — read from
+// `RUNNER_BUDGETS` below rather than restated here, so the two cannot disagree.
+// Deleting either, or raising the step's until it no longer bounds anything, is
+// mutated below.
+
+/** The `--filter` arguments of a `swift test` command, in order. */
+function swiftTestFilters(run) {
+  return [...String(run).matchAll(/--filter[=\s]+['"]?([^'"\s\\]+)/g)].map((m) => m[1]);
+}
+
+/**
+ * The largest `timeout-minutes` the iOS guard step may declare for itself.
+ *
+ * Not derived from anything, because there is nothing to derive it from: 6i
+ * budgets JOBS against measured runtime and knows nothing about step keys. The
+ * step's real work is a shared-package build plus five file-reading test
+ * classes — minutes, not tens of minutes. 40 is chosen far enough above that to
+ * absorb a cold SwiftPM build on a slow runner without ever firing on a healthy
+ * run, and far enough below `ios-build`'s own budget that the step still fails
+ * first when the run is wedged. Raising it past this is a decision about how
+ * long a paid runner may sit on a hung `swift test`; make it here.
+ */
+const IOS_GUARD_STEP_CEILING = 40;
+
+/**
+ * The ceiling section 6i already holds `file`/`jobName` to, or `undefined`.
+ *
+ * Derived rather than restated: 6k asserts the guard step's carrier job is
+ * bounded, and a second copy of the number here would be free to drift above
+ * 6i's the day somebody edits one of them.
+ */
+function governedCeiling(file, jobName) {
+  const budget = RUNNER_BUDGETS.find((entry) => entry.file === file);
+  if (budget === undefined) return undefined;
+  return budget.jobs === undefined ? budget.max : budget.jobs[jobName]?.max;
+}
+
+/**
+ * `ios.yml`'s iOS guard step: the exact selectors, where the bound lives, and
+ * the shapes that would turn the step into nothing.
+ */
+function iosGuardStepFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+
+  need(
+    IOS_GUARD_SELECTORS.length > 0,
+    `this policy names no iOS guard selectors at all, so every check below would pass by `
+    + `inspecting an empty list.`,
+  );
+
+  const doc = world.docs.get(IOS);
+  need(
+    doc !== undefined,
+    `${IOS} is missing or did not parse, so nothing here can say which tests an iOS-only pull `
+    + `request runs.`,
+  );
+  if (!doc) return out;
+
+  // Which job carries it, and the step itself. Selected by COMMAND rather than
+  // by step name: the name is prose and may be reworded, while `swift test` is
+  // the thing that either runs or does not.
+  const carriers = [];
+  for (const [jobName, job] of Object.entries(doc.jobs ?? {})) {
+    for (const step of job.steps ?? []) {
+      if (String(step?.run ?? "").includes("swift test")) carriers.push({ jobName, job, step });
+    }
+  }
+  need(
+    carriers.length > 0,
+    `${IOS} runs no \`swift test\` at all. The iOS project, privacy, distribution, icon and `
+    + `version guards [${IOS_GUARD_SELECTORS.join(", ")}] are XCTest cases in `
+    + `${SWIFT_PACKAGE_DIR}, not tests in the Xcode project, so \`xcodebuild\` does not run them `
+    + `— and ${MACOS}, the only other place \`swift test\` runs, does not trigger on `
+    + `\`apps/ios/**\`. Without this step an iOS-only pull request compiles the app and accepts `
+    + `its UI while nothing reads the project file, the privacy manifest, the signing `
+    + `configuration, the icon set or the bundle version it just changed.`,
+  );
+  need(
+    carriers.length <= 1,
+    `${IOS} runs \`swift test\` in ${carriers.length} steps `
+    + `(${carriers.map((c) => `${c.jobName}/${JSON.stringify(c.step?.name)}`).join(", ")}). `
+    + `Which one is the guard gate is then a matter of reading order, and a filter dropped from `
+    + `one of them is invisible. Keep it to one step.`,
+  );
+  if (carriers.length === 0) return out;
+
+  const { jobName, job, step } = carriers[0];
+  const run = String(step.run ?? "");
+  const where = `${IOS}/${jobName}`;
+
+  // The workflow has to START on an iOS-only change for any of this to matter.
+  // Read through the compiled globs the rest of this file uses, so "the filter
+  // was narrowed" fails here too rather than only in section 6.
+  need(
+    wTriggers(world, IOS, IOS_GUARD_SAMPLE),
+    `${where}: ${IOS} runs the iOS guard selectors but does not trigger on ${IOS_GUARD_SAMPLE}, `
+    + `so an iOS-only pull request never starts the job that runs them.`,
+  );
+
+  need(
+    step["working-directory"] === SWIFT_PACKAGE_DIR,
+    `${where}: the guard step's \`working-directory\` is `
+    + `${JSON.stringify(step["working-directory"])}, want ${JSON.stringify(SWIFT_PACKAGE_DIR)}. `
+    + `\`swift test\` resolves its package from the working directory; anywhere else it either `
+    + `fails or tests a different package.`,
+  );
+
+  // The exact set, in both directions, by EQUALITY. A missing selector is a
+  // guard that stopped running; an extra one is a scope change that has to be a
+  // decision, made here, rather than a line added to a YAML file. Matching by
+  // prefix instead would accept `…BundleVersionTests` — the whole class,
+  // including its macOS case — as if it were the method this policy names.
+  const filters = swiftTestFilters(run);
+  const wanted = IOS_GUARD_SELECTORS.map((selector) => `${SWIFT_TEST_TARGET}.${selector}`);
+  need(
+    filters.length > 0,
+    `${where}: the guard step runs \`swift test\` with NO \`--filter\`, which is the entire `
+    + `${SWIFT_TEST_TARGET} suite — every WebRTC, account, realtime and localization case — on a `
+    + `PAID macOS runner, started by every \`apps/ios/**\` change. That is not a stricter gate, `
+    + `it is the whole-suite run section 5 moved out of this workflow. The unfiltered suite is `
+    + `${MACOS}/test's job; this step runs [${IOS_GUARD_SELECTORS.join(", ")}].`,
+  );
+  for (const selector of IOS_GUARD_SELECTORS) {
+    const want = `${SWIFT_TEST_TARGET}.${selector}`;
+    need(
+      filters.includes(want),
+      `${where}: the guard step does not filter for exactly \`${want}\`. It runs `
+      + `[${filters.join(", ") || "nothing"}]. That selector is a guard over \`apps/ios\` `
+      + `inputs, and dropping it stops that guard running on the only workflow an iOS-only `
+      + `change starts — silently, because a test that is not selected is not reported as `
+      + `skipped, it is not reported at all.`,
+    );
+    const className = selectorClass(selector);
+    need(
+      world.testFiles.includes(`${className}.swift`),
+      `${where}: the guard step filters for \`${want}\`, but `
+      + `${SWIFT_TEST_TARGET_DIR}/${className}.swift does not exist. A \`--filter\` that matches `
+      + `no test is not a smaller gate; either the class was renamed and this list has to follow `
+      + `it, or it was deleted and that has to be a decision.`,
+    );
+    const method = selectorMethod(selector);
+    need(
+      method === undefined || world.testMethods.includes(`${className}/${method}`),
+      `${where}: the guard step filters for \`${want}\`, but ${SWIFT_TEST_TARGET_DIR} declares no `
+      + `\`${className}.${method}\`. \`swift test\` treats a filter that matches nothing as a `
+      + `successful run of zero tests, so this is a guard that reports green while reading `
+      + `nothing at all. Follow the rename here, or decide the case is gone.`,
+    );
+  }
+  for (const filter of filters) {
+    need(
+      wanted.includes(filter),
+      `${where}: the guard step filters for ${JSON.stringify(filter)}, which this policy does not `
+      + `name; it names [${wanted.join(", ")}]. Widening what an \`apps/ios/**\` change runs on a `
+      + `PAID macOS runner is a decision; make it by adding the selector to `
+      + `\`IOS_GUARD_SELECTORS\` here, where the cost is visible, rather than by a line in a YAML `
+      + `file. A pattern such as \`${SWIFT_TEST_TARGET}\` alone would match the whole suite, and `
+      + `a bare \`${SWIFT_TEST_TARGET}.BundleVersionTests\` would pull in the macOS case this `
+      + `workflow does not trigger on.`,
+    );
+  }
+
+  // The two ways to keep the step and remove the gate.
+  need(
+    !/\|\|\s*true/.test(run) && !/;\s*exit\s+0/.test(run),
+    `${where}: the guard step's command swallows its own failure `
+    + `(${JSON.stringify(run.trim())}). A gate that cannot report red is not a gate — and a step `
+    + `that always succeeds is invisible in the merge box, exactly like the \`[macos-only]\` `
+    + `marker section 6i removed from this file.`,
+  );
+  need(
+    step["continue-on-error"] !== true && job["continue-on-error"] !== true,
+    `${where}: the guard step or its job sets \`continue-on-error: true\`, so a failing guard `
+    + `reports green.`,
+  );
+  need(
+    step.if === undefined,
+    `${where}: the guard step carries \`if: ${step.if}\`. A conditional gate is the escape hatch `
+    + `section 6i removed from this workflow: a skipped step does not report red, it reports `
+    + `nothing, and the merge box reads that as "not a problem".`,
+  );
+
+  // The inner bound, on the step. See the section note above: it is the one
+  // that fires first on a wedged run, and it is checked here because section 6i
+  // budgets jobs and cannot see step keys.
+  const stepBound = Number(step["timeout-minutes"]);
+  need(
+    Number.isFinite(stepBound) && stepBound > 0,
+    `${where}: the guard step declares \`timeout-minutes: `
+    + `${JSON.stringify(step["timeout-minutes"])}\`, want a finite positive number. \`swift `
+    + `test\` here compiles the shared package and reads files; without its own bound a wedged `
+    + `run falls back to the carrier job's much larger budget and sits on a PAID macOS runner `
+    + `for most of the iOS lane's whole allowance before the board turns red. The job's bound is `
+    + `checked separately below and does not replace this one.`,
+  );
+  need(
+    !(Number.isFinite(stepBound) && stepBound > IOS_GUARD_STEP_CEILING),
+    `${where}: the guard step is bounded at `
+    + `${JSON.stringify(step["timeout-minutes"])} minutes, above the `
+    + `${IOS_GUARD_STEP_CEILING}-minute ceiling this section sets for it. The step's work is a `
+    + `shared-package build and five file-reading test classes; a bound that large no longer `
+    + `bounds it, and the wedged run it is supposed to cut short would instead be left to the `
+    + `carrier job. Either the step grew work that belongs elsewhere, or the number was raised `
+    + `to make a slow run pass — both are decisions, and \`IOS_GUARD_STEP_CEILING\` is where to `
+    + `make them.`,
+  );
+
+  // And the outer bound, on the carrier job — independently governed by section
+  // 6i. The step's bound above does not stand in for it: a step key bounds one
+  // step, while everything else in this job, including two `xcodebuild` graphs,
+  // is held by the job's budget alone.
+  const ceiling = governedCeiling(IOS, jobName);
+  need(
+    Number.isFinite(ceiling),
+    `${where}: section 6i declares no runner-budget ceiling for this job `
+    + `(\`RUNNER_BUDGETS\` gives ${String(ceiling)}), so the bound check below has nothing to `
+    + `compare against and would pass by not comparing. 6k deliberately reads 6i's number rather `
+    + `than carrying its own; if the budget moved or was renamed, this has to follow it.`,
+  );
+  const resolved = timeoutValues(job);
+  need(
+    resolved.unresolved === undefined,
+    `${where}: the guard step's carrier job reads \`matrix.${resolved.unresolved}\` for its `
+    + `\`timeout-minutes\` and declares no \`strategy.matrix.include\` to resolve it against, so `
+    + `the guard step has no readable bound at all and falls back to GitHub's 6-hour default.`,
+  );
+  const values = resolved.values ?? [];
+  need(
+    resolved.unresolved !== undefined || values.length > 0,
+    `${where}: the guard step's carrier job resolved to no \`timeout-minutes\` values at all, so `
+    + `every bound assertion below would pass by iterating over nothing.`,
+  );
+  for (const { declared, value } of values) {
+    need(
+      Number.isFinite(value) && value > 0,
+      `${where}: the guard step's carrier job declares \`timeout-minutes: ${declared}\`, want a `
+      + `finite positive number. This step is the guard gate's only home and the job is its only `
+      + `bound; undeclared, a wedged \`swift test\` holds a PAID macOS runner for GitHub's `
+      + `6-hour default.`,
+    );
+    need(
+      !Number.isFinite(ceiling) || !(Number.isFinite(value) && value > ceiling),
+      `${where}: the guard step's carrier job is bounded at ${declared} minutes, outside the `
+      + `${ceiling}-minute ceiling section 6i budgets for ${IOS}. The guard step inherits that `
+      + `bound and nothing narrower, so a bound that large is the 6-hour default wearing a `
+      + `number.`,
+    );
+  }
+
+  // And the whole suite still runs SOMEWHERE. Filtering here is only safe
+  // because `macos.yml` keeps running it unfiltered.
+  const macTests = [];
+  for (const [macJob, mac] of Object.entries(world.docs.get(MACOS)?.jobs ?? {})) {
+    for (const macStep of mac.steps ?? []) {
+      if (String(macStep?.run ?? "").includes("swift test")) macTests.push({ macJob, macStep });
+    }
+  }
+  need(
+    macTests.length > 0,
+    `${MACOS} runs no \`swift test\`. Filtering the run in ${IOS} down to `
+    + `[${IOS_GUARD_SELECTORS.join(", ")}] is only safe while the FULL ${SWIFT_TEST_TARGET} `
+    + `suite still runs somewhere, and ${MACOS} is where it runs.`,
+  );
+  need(
+    macTests.length === 0
+      || macTests.some(({ macStep }) => swiftTestFilters(macStep.run).length === 0),
+    `${MACOS} runs \`swift test\` only with \`--filter\` `
+    + `(${macTests.map(({ macJob, macStep }) => `${macJob}: ${swiftTestFilters(macStep.run).join(", ")}`).join("; ")}). `
+    + `Nothing then runs the full ${SWIFT_TEST_TARGET} suite on any workflow, and ${IOS}'s `
+    + `deliberately narrow step would be the only Swift testing left.`,
+  );
+
+  return out;
+}
+
+
 for (const message of platformBoundaryFailures(realWorld())) failures.push(message);
 for (const message of pathMatrixFailures(realWorld())) failures.push(message);
 for (const message of fuzzCampaignFailures(realWorld())) failures.push(message);
+for (const message of iosGuardStepFailures(realWorld())) failures.push(message);
 
 // ── 7h. the inventory script's own fail-closed proof, actually executed ─────
 //
@@ -2937,6 +3361,25 @@ const ANDROID = FUTURE_PLATFORMS.find((future) => future.root === "apps/android"
 /** A governed workflow that is parsed, and a real one that deliberately is not. */
 const WEB = "web.yml";
 const AUTO_RELEASE = "auto-release.yml";
+
+/**
+ * Mutate `ios.yml`'s iOS guard step, and the job carrying it.
+ *
+ * Throws when no such step exists, for the same reason `withCommandJob` does: a
+ * mutation that silently stopped applying leaves the world unbroken, and the
+ * case below it then passes while asserting nothing.
+ */
+function withGuardStep(world, mutate) {
+  for (const [name, job] of Object.entries(world.docs.get(IOS)?.jobs ?? {})) {
+    const steps = job.steps ?? [];
+    const at = steps.findIndex((step) => String(step?.run ?? "").includes("swift test"));
+    if (at !== -1) { mutate(steps[at], job, steps, at, name); return world; }
+  }
+  throw new Error(
+    `no step in ${IOS} runs \`swift test\`, so the iOS guard gate this case is about is already `
+    + `gone and the case cannot prove anything about it.`,
+  );
+}
 
 const MUTATIONS = [
   {
@@ -3746,6 +4189,169 @@ const MUTATIONS = [
     }),
     refute: /go\.yml\/test runs a timed fuzz campaign/,
   },
+
+  // ── the iOS guard gate (6k) ──────────────────────────────────────────────
+  {
+    // The most likely edit of all: one line deleted from a six-line command,
+    // in a diff that still shows `swift test` running.
+    name: "ios.yml drops one class from the iOS guard filter",
+    mutate: (world) => withGuardStep(world, (step) => {
+      step.run = String(step.run)
+        .split("\n")
+        .filter((line) => !line.includes("IOSPrivacyManifestTests"))
+        .join("\n");
+    }),
+    expect: /does not filter for exactly `RelayiumKitTests\.IOSPrivacyManifestTests`/,
+  },
+  {
+    // The same edit against the one selector that is a METHOD. It is the most
+    // droppable line in the command — the longest, the odd one out, and the
+    // only one whose class is already covered by `macos.yml`'s unfiltered run,
+    // so losing it looks like deduplication rather than a hole.
+    name: "ios.yml drops the iOS bundle-version method from the guard filter",
+    mutate: (world) => withGuardStep(world, (step) => {
+      step.run = String(step.run)
+        .split("\n")
+        .filter((line) => !line.includes("testTheIOSAppAndItsExtensionShipOneVersion"))
+        .join("\n");
+    }),
+    expect: /does not filter for exactly `RelayiumKitTests\.BundleVersionTests\/testTheIOSAppAndItsExtensionShipOneVersion`/,
+  },
+  {
+    // Widening the method selector back to its class is not "more coverage":
+    // it drags `testTheMacAppAndItsExtensionShipOneVersion` — which reads
+    // `apps/mac`, a tree this workflow does not trigger on — onto every
+    // iOS-only pull request.
+    name: "ios.yml widens the version method selector to its whole class",
+    mutate: (world) => withGuardStep(world, (step) => {
+      step.run = String(step.run)
+        .replace("BundleVersionTests/testTheIOSAppAndItsExtensionShipOneVersion",
+          "BundleVersionTests");
+    }),
+    expect: /filters for "RelayiumKitTests\.BundleVersionTests", which this policy does not name/,
+  },
+  {
+    // The rename that leaves the YAML valid and the gate empty: `swift test`
+    // treats a filter matching nothing as a successful run of zero tests.
+    name: "the guard's version method is renamed out from under its filter",
+    mutate: (world) => {
+      world.testMethods = world.testMethods
+        .filter((name) => name !== "BundleVersionTests/testTheIOSAppAndItsExtensionShipOneVersion");
+      return world;
+    },
+    expect: /declares no `BundleVersionTests\.testTheIOSAppAndItsExtensionShipOneVersion`/,
+  },
+  {
+    // The opposite failure, and the expensive one: the gate is "strengthened"
+    // into the whole 233-file suite on a paid runner, started by every
+    // `apps/ios/**` change — undoing the native split from the inside.
+    name: "ios.yml's guard step loses every filter and runs the whole suite",
+    mutate: (world) => withGuardStep(world, (step) => { step.run = "swift test\n"; }),
+    expect: /runs `swift test` with NO `--filter`/,
+  },
+  {
+    name: "ios.yml's guard filter is widened to the whole test target",
+    mutate: (world) => withGuardStep(world, (step) => {
+      step.run = "swift test --filter 'RelayiumKitTests'\n";
+    }),
+    expect: /filters for "RelayiumKitTests", which this policy does not name/,
+  },
+  {
+    name: "ios.yml's guard step swallows its own failure",
+    mutate: (world) => withGuardStep(world, (step) => {
+      step.run = `${String(step.run).trimEnd()} || true\n`;
+    }),
+    expect: /swallows its own failure/,
+  },
+  {
+    name: "ios.yml's guard step is made advisory with continue-on-error",
+    mutate: (world) => withGuardStep(world, (step) => { step["continue-on-error"] = true; }),
+    expect: /continue-on-error: true`, so a failing guard/,
+  },
+  {
+    name: "ios.yml's guard step regains a commit-message-shaped escape hatch",
+    mutate: (world) => withGuardStep(world, (step) => {
+      step.if = "!contains(github.event.head_commit.message, '[skip-guards]')";
+    }),
+    expect: /carries `if: /,
+  },
+  {
+    // The inner bound goes away and the wedged run is left to the job's much
+    // larger budget. Nothing else in the step's shape changes, so this is the
+    // deletion that reads as tidying up a duplicate.
+    name: "ios.yml's guard step loses its own bound",
+    mutate: (world) => withGuardStep(world, (step) => { delete step["timeout-minutes"]; }),
+    expect: /the guard step declares `timeout-minutes: undefined`, want a finite positive number/,
+  },
+  {
+    // And the same bound kept but raised until it stops being one — the shape a
+    // "just make CI pass" edit takes, which an undefined-check alone would miss.
+    name: "ios.yml's guard step raises its bound past the point of bounding anything",
+    mutate: (world) => withGuardStep(world, (step) => { step["timeout-minutes"] = 70; }),
+    expect: /the guard step is bounded at 70 minutes, above the 40-minute ceiling/,
+  },
+  {
+    name: "the guard step's carrier job loses its finite bound",
+    mutate: (world) => withGuardStep(world, (step, job) => { delete job["timeout-minutes"]; }),
+    expect: /the guard step's carrier job declares `timeout-minutes: undefined`, want a finite positive number/,
+  },
+  {
+    name: "the guard step's carrier job is bounded outside its governed ceiling",
+    mutate: (world) => withGuardStep(world, (step, job) => { job["timeout-minutes"] = 300; }),
+    expect: /the guard step's carrier job is bounded at 300 minutes, outside the 90-minute ceiling/,
+  },
+  {
+    name: "the iOS guard step is deleted outright",
+    mutate: (world) => withGuardStep(world, (step, job, steps, at) => { steps.splice(at, 1); }),
+    expect: /ios\.yml runs no `swift test` at all/,
+  },
+  {
+    name: "ios.yml stops triggering on the iOS project it runs guards over",
+    mutate: (world) => withPaths(world, IOS, [
+      "apps/RelayiumKit/**", `.github/workflows/${IOS}`,
+    ]),
+    expect: /runs the iOS guard selectors but does not trigger on apps\/ios/,
+  },
+  {
+    name: "a filtered guard class no longer exists in the test target",
+    mutate: (world) => {
+      world.testFiles = world.testFiles.filter((name) => name !== "IOSAppIconAssetTests.swift");
+      return world;
+    },
+    expect: /IOSAppIconAssetTests\.swift does not exist/,
+  },
+  {
+    name: "the class behind the method selector no longer exists in the test target",
+    mutate: (world) => {
+      world.testFiles = world.testFiles.filter((name) => name !== "BundleVersionTests.swift");
+      return world;
+    },
+    expect: /BundleVersionTests\.swift does not exist/,
+  },
+  {
+    // Filtering in `ios.yml` is only safe while the whole suite still runs
+    // somewhere. This is the edit that quietly makes it unsafe.
+    name: "macos.yml's swift test gains a filter, so nothing runs the whole suite",
+    mutate: (world) => withCommandJob(world, MACOS, "swift test", (job, step) => {
+      step.run = "swift test --filter 'RelayiumKitTests.AeadTests'\n";
+    }),
+    expect: /runs `swift test` only with `--filter`/,
+  },
+  {
+    // The false positive that would get 6k widened until it caught nothing: a
+    // SECOND, filtered `swift test` in `macos.yml` beside the unfiltered one is
+    // a legitimate shape — a fast pre-check — and must not read as "the whole
+    // suite stopped running".
+    name: "macos.yml adds a fast filtered swift test beside its unfiltered one",
+    mutate: (world) => withNamedJob(world, MACOS, "test", (job) => {
+      job.steps.unshift({
+        name: "swift test (fast pre-check)",
+        "working-directory": SWIFT_PACKAGE_DIR,
+        run: "swift test --filter 'RelayiumKitTests.AeadTests'\n",
+      });
+    }),
+    refute: /runs `swift test` only with `--filter`/,
+  },
 ];
 
 for (const { name, mutate, expect, refute } of MUTATIONS) {
@@ -3756,6 +4362,7 @@ for (const { name, mutate, expect, refute } of MUTATIONS) {
       ...platformBoundaryFailures(world),
       ...pathMatrixFailures(world),
       ...fuzzCampaignFailures(world),
+      ...iosGuardStepFailures(world),
     ];
   } catch (err) {
     check(false, `the CI trigger-policy mutation "${name}" threw instead of reporting: ${err.message}`);

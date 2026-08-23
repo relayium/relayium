@@ -328,10 +328,6 @@ final class InstallationIdentityTests: XCTestCase {
     // MARK: - helpers
 
     private func sourceOfInstallationIdentity() throws -> String {
-        let root = (0..<5).reduce(URL(fileURLWithPath: #filePath)) { u, _ in u.deletingLastPathComponent() }
-        return try String(
-            contentsOf: root.appendingPathComponent(
-                "apps/RelayiumKit/Sources/RelayiumKit/Account/InstallationIdentity.swift"),
-            encoding: .utf8)
+        try RepoRoot.text("apps/RelayiumKit/Sources/RelayiumKit/Account/InstallationIdentity.swift")
     }
 }

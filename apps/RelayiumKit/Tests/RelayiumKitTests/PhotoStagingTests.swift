@@ -58,11 +58,7 @@ final class PhotoStagingTests: XCTestCase {
     }
 
     private var photoStagingSourceURL: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // RelayiumKitTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // RelayiumKit
-            .appendingPathComponent("Sources/RelayiumAppKit/PhotoStaging.swift")
+        get throws { try RepoRoot.url("apps/RelayiumKit/Sources/RelayiumAppKit/PhotoStaging.swift") }
     }
 
     // MARK: - naming
@@ -299,7 +295,7 @@ final class PhotoStagingTests: XCTestCase {
     /// No global mutable current-batch context — the reason step 1 can be
     /// static at all.
     func testPhotoStagingDeclaresNoMutableStatic() throws {
-        let source = try String(contentsOf: photoStagingSourceURL, encoding: .utf8)
+        let source = try String(contentsOf: try photoStagingSourceURL, encoding: .utf8)
         XCTAssertFalse(source.contains("static var"))
         XCTAssertFalse(source.contains("TaskLocal"))
     }

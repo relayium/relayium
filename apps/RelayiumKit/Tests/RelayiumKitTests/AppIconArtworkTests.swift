@@ -6,13 +6,7 @@ import XCTest
 /// three copies from drifting — a source-parity test, so it imports no module
 /// and simply reads the files, the pattern `IOSSurfaceGuardTests` already uses.
 final class AppIconArtworkTests: XCTestCase {
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → repo root.
-    private var repoRoot: URL {
-        (0..<5).reduce(URL(fileURLWithPath: #filePath)) { u, _ in u.deletingLastPathComponent() }
-    }
-    private func text(_ p: String) throws -> String {
-        try String(contentsOf: repoRoot.appendingPathComponent(p), encoding: .utf8)
-    }
+    private func text(_ p: String) throws -> String { try RepoRoot.text(p) }
     private let macSVG = "apps/mac/Brand/AppIcon.svg"
     private let webSources = ["web/public/favicon.svg", "web/src/lib/Logo.svelte"]
     private let glyph = "M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5"
