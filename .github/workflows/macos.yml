@@ -426,7 +426,17 @@ jobs:
       contents: write
     steps:
       - name: Announce start only
-        run: echo "probe-write-perm started; see the Set up job log section for the effective token permissions"
+        run: |
+          echo "probe-write-perm started; see the Set up job log section for the effective token permissions"
+          # TEMPORARY PROBE — NEVER MERGE. A deliberate cancellation window, and
+          # the only reason this step is not a bare echo. The probe asks what
+          # GitHub does to an IN-FLIGHT reusable-workflow call when the pull
+          # request head is superseded, so the run has to still be live when the
+          # next push lands: 90 seconds is long enough for Codex to push the
+          # superseding commit by hand and short enough to sit far under this
+          # job's 5-minute budget. It holds a free Ubuntu runner, performs no
+          # write, and comes out with the rest of the probe.
+          sleep 90
 
   notarize-stage:
     needs: [ui-smoke, signed-build]
