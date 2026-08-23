@@ -84,9 +84,13 @@ const defaultWorkflowsDir = resolve(repoRoot, ".github/workflows");
  *
  * `repo-hygiene` is deliberately absent. It carries no path filter, the gate
  * calls it with no `if:`, and a lane that always runs has nothing to select.
- * `compat.yml` is absent for the migration's sake: it holds the context `main`
- * requires today and moves into the gate in its own change, after the gate is
- * required. See docs/CI-PLATFORM-BOUNDARY.md.
+ * `compat` is absent for the same reason and no longer for a different one:
+ * the gate now calls it, unconditionally, and `compat.yml` carries no `paths:`
+ * filter either — so there is nothing here to select and the gate requires it
+ * to SUCCEED on every pull request rather than to match a selection. It is
+ * still the one called lane that keeps its own `pull_request:` trigger, because
+ * it reports the bare `wire-vectors` context `main` requires; see
+ * docs/CI-PLATFORM-BOUNDARY.md for the staged order.
  */
 export const LANES = [
   { id: "web", workflow: "web.yml" },
