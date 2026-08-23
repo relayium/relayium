@@ -141,6 +141,130 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        + "smoke is hosted twice instead of moved")
     }
 
+    /// The preselection seam: it must exist, it must stay event-driven, it must
+    /// stay out of Release, and the one test that relies on it must keep the
+    /// precondition that makes its result mean anything.
+    ///
+    /// Every assertion here is about a way this repair silently stops being a
+    /// repair. Deleting the seam turns the failed-upload test into a test that
+    /// taps Send with nothing staged and then reports a missing *Resume upload*
+    /// — a red naming the wrong thing. Replacing the two publishers with a
+    /// sleep or a retry turns a determinism fix into a longer flake. Letting the
+    /// injection reach the Release half puts a selection in front of a person
+    /// who never made one. And dropping the `pendingFile.0` wait removes the
+    /// only thing that distinguishes "the upload failed" from "there was
+    /// nothing to upload".
+    func testThePreselectionSeamIsDeterministicAndAbsentFromRelease() throws {
+        let mode = try XCTUnwrap(try sources().first { $0.name == "UITestMode.swift" }?.text)
+        let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" }?.text)
+        let halves = mode.components(separatedBy: "#else")
+        XCTAssertEqual(halves.count, 2, "UITestMode lost its Debug/Release split")
+        let debugHalf = try XCTUnwrap(halves.first)
+        let releaseHalf = try XCTUnwrap(halves.last)
+
+        // 1. The seam exists, and injects through the callback the real picker
+        //    uses. A different entry point would be a different code path.
+        XCTAssertTrue(debugHalf.contains("--relayium-ui-testing-preselect-fixture"),
+                      "the preselected-fixture argument is not in the Debug half")
+        XCTAssertTrue(debugHalf.contains("send.chooseFiles(.success([url]))"),
+                      "the preselection no longer injects through the same "
+                      + "SendSelectionModel callback SendView's fileImporter calls")
+
+        // 2. It waits on the two refusals `chooseFiles` actually carries — a
+        //    ready account and an idle upload model — by observing them.
+        let seam = try XCTUnwrap(debugHalf.components(
+            separatedBy: "final class UITestPreselection").dropFirst().first?
+            .components(separatedBy: "enum UITestMode").first,
+            "UITestPreselection is gone, so nothing stages a selection without "
+            + "the system document browser")
+        XCTAssertTrue(seam.contains("Publishers.CombineLatest(session.$state, upload.$state)"),
+                      "the preselection stopped waiting on the account and upload "
+                      + "state it needs both of")
+        XCTAssertTrue(seam.contains("case .ready = session.state"),
+                      "the preselection no longer requires a ready account, so it "
+                      + "can be dropped by chooseFiles' account refusal")
+        XCTAssertTrue(seam.contains("case .idle = upload.state"),
+                      "the preselection no longer requires an idle upload model, so "
+                      + "it can be dropped by chooseFiles' busy refusal")
+        XCTAssertTrue(seam.contains("FileManager.default.fileExists(atPath: url.path)"),
+                      "the preselection can inject a URL whose bytes nobody wrote")
+        // 3. Event-driven, and provably not the thing it replaced. A timer, a
+        //    sleep or a delayed re-attempt would make this a slower race.
+        for banned in ["Task.sleep", "asyncAfter", "Timer", "usleep", "sleep("] {
+            XCTAssertFalse(seam.contains(banned),
+                           "the preselection waits by \(banned) instead of by the "
+                           + "state changes the models publish")
+        }
+        // 4. One shot, cancelled explicitly rather than left subscribed.
+        XCTAssertTrue(seam.contains("func cancel()"),
+                      "the preselection has no explicit cancellation")
+        XCTAssertTrue(seam.contains("observation?.cancel()"),
+                      "the preselection never cancels its own subscription")
+
+        // 5. Absent from Release — not folded to false, ABSENT. The Release half
+        //    must contain the inert entry point and no injection at all.
+        XCTAssertTrue(releaseHalf.contains("static func preselectPendingFixture"),
+                      "the Release half lost the inert preselection entry point, so "
+                      + "a shipped build no longer compiles the call site")
+        XCTAssertFalse(releaseHalf.contains("chooseFiles("),
+                       "a shipped build can inject a file selection nobody made")
+        XCTAssertFalse(releaseHalf.contains("UITestPreselection"),
+                       "a shipped build can construct the acceptance preselection")
+
+        // 6. Wired once, at the app-scoped construction point, and AFTER the
+        //    session observation it depends on being installed first.
+        XCTAssertEqual(app.components(separatedBy:
+            "UITestMode.preselectPendingFixture(into: sending, upload: uploads, "
+            + "session: account)").count - 1, 1,
+            "the preselection is not wired exactly once at app construction")
+        let observe = try XCTUnwrap(app.range(of: "sending.observe(account.$state)"))
+        let preselect = try XCTUnwrap(app.range(of: "UITestMode.preselectPendingFixture("))
+        XCTAssertTrue(observe.upperBound <= preselect.lowerBound,
+                      "the preselection subscribes to the session before the send "
+                      + "model does, so it can act on an account the model has not "
+                      + "been told about")
+
+        // 7. The test it repairs keeps the precondition, and stops paying for
+        //    the picker presentation it was losing.
+        let ui = try RepoRoot.text("apps/ios/RelayiumUITests/AppShellUITests.swift")
+        let repaired = try XCTUnwrap(ui.components(
+            separatedBy: "func testAFailedUploadKeepsTheWorkAndOffersToCarryOn()")
+            .dropFirst().first?.components(separatedBy: "\n    /// ").first,
+            "the repaired upload-failure test is gone")
+        XCTAssertTrue(repaired.contains("--relayium-ui-testing-preselect-fixture"),
+                      "the upload-failure test no longer uses the deterministic seam")
+        XCTAssertTrue(repaired.contains("\"pendingFile.0\""),
+                      "the upload-failure test taps Send without first proving a "
+                      + "file was staged, so a lost selection reports itself as a "
+                      + "missing Resume upload")
+        XCTAssertTrue(repaired.contains("the preselected fixture never became a pending send"),
+                      "the staged-file precondition lost the message that names it")
+        XCTAssertFalse(repaired.contains("DOC.browsingModeTabBar"),
+                       "the upload-failure test opens the system document browser "
+                       + "again, which is the presentation race this replaced")
+        for assertion in ["Resume upload", "Discard saved copy", "#k="] {
+            XCTAssertTrue(repaired.contains(assertion),
+                          "the upload-failure test dropped its \(assertion) assertion")
+        }
+
+        // 8. And the picker is still covered FOR REAL. These two are about the
+        //    system browser, the security scope and the expansion; the seam must
+        //    never spread into them.
+        for picker in ["func testPendingSendNamesTheFileAndItsSizeBeforeTransfer()",
+                       "func testASignedInStoredSendNamesTheFileItWouldUpload()"] {
+            let body = try XCTUnwrap(ui.components(separatedBy: picker)
+                .dropFirst().first?.components(separatedBy: "\n    /// ").first,
+                "the dedicated real-picker test \(picker) is gone")
+            XCTAssertTrue(body.contains("DOC.browsingModeTabBar"),
+                          "\(picker) stopped driving the real system document browser")
+            XCTAssertTrue(body.contains("tapStagedFixture(named:"),
+                          "\(picker) no longer selects the fixture through the browser")
+            XCTAssertFalse(body.contains("--relayium-ui-testing-preselect-fixture"),
+                           "\(picker) was switched to the injection seam, so nothing "
+                           + "exercises the picker any more")
+        }
+    }
+
     /// Nearby, pairing-code and stored sending are three destinations for the
     /// same promise: before Send, the user can inspect every file and its size.
     func testEverySendSurfaceShowsThePendingFileNamesAndSizes() throws {
