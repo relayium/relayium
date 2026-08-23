@@ -676,13 +676,51 @@ always appears**.
 
 | # | Action | Required contexts after | Status |
 |---|---|---|---|
-| 1 | Merge the gate. It reports; nothing requires it. | `{wire-vectors}` | **done in source; this is where the repository is** |
-| 2 | Observe `merge-gate` green on an ordinary pull request. | `{wire-vectors}` | pending |
+| 1 | Merge the gate. It reports; nothing requires it. | `{wire-vectors}` | **done — PR #36 merged 2026-08-23 as `55e38d3f`** |
+| 2 | Observe `merge-gate` green on an ordinary pull request. | `{wire-vectors}` | **in progress — half proven by PR #36; this pull request is the probe for the other half. This is where the repository is** |
 | 3 | Protection edit A: `contexts: ["wire-vectors","merge-gate"]`. | `{wire-vectors, merge-gate}` | pending |
 | 4 | Observe a red gate actually blocking (`mergeStateStatus: BLOCKED`). | unchanged | pending |
 | 5 | Fold `compat.yml` in as an unconditional lane, **keeping** its own `pull_request:` and its `push: main`. | unchanged | pending |
 | 6 | Protection edit B: `contexts: ["merge-gate"]`. | `{merge-gate}` | pending |
 | 7 | Remove `pull_request:` from `compat.yml`. `push: main` stays, permanently. | `{merge-gate}` | pending |
+
+**Step 1 is done, and exactly what its run does and does not prove.** The gate
+described above is merged behaviour, not a proposal: PR #36 landed as
+`55e38d3f`, and its exact head `963a9348` produced aggregate run
+`32658307007` with **44 of 44 jobs successful**, the top-level `merge-gate` job
+among them. The separate `compat` run `32658306913` on the same head also
+passed, which is the still-required `wire-vectors` context reporting
+independently of the gate. All eight conditional lanes ran alongside
+`repo-hygiene` — not because the diff happened to touch all of them, but because
+a pull request editing `merge-gate.yml`, `select-lanes.mjs` and the shared
+fixture is a **control-file** change and the selector fails closed to every
+lane. That is the designed behaviour, and it bounds what PR #36 is evidence of:
+it proves the `selected ⇒ success` half of the two-way rule and **nothing about**
+the `not-selected ⇒ skipped` half, which as of this writing still has no hosted
+observation at all.
+
+**Step 2 is therefore in progress, and this pull request is its probe.** No
+hosted run has yet been seen with any conditional lane skipped, so the claim
+"`merge-gate` is green on an ordinary pull request" is not yet supported for the
+ordinary case — the only case observed so far is the fail-closed one. This
+change is documentation-only: it edits a single file under `docs/`, which
+selects no conditional lane. Its hosted run is expected to show **all eight
+conditional lanes skipped**, **`repo-hygiene` successful**, and the **top-level
+`merge-gate` job successful** — a green gate whose green comes from skips rather
+than from work. That expectation is a prediction, not a result. The run does not
+exist yet and its ID cannot be known in advance. Once the first hosted run on
+this pull request's head produces that outcome, **its exact run ID will be
+recorded here, in this paragraph and in the table row above, before this pull
+request is merged**; until that ID is written down, step 2 stays `in progress`.
+If the run instead shows a lane running, a lane failing, or a gate result other
+than success, that discrepancy — not the prediction — is what gets recorded.
+
+**Steps 3-7 are open, and none of them is claimed here.** No protection edit has
+been made: `wire-vectors` is still the only required context, and **`merge-gate`
+is not required on `main`**. No red gate has been observed blocking a merge —
+the never-merged red probe of step 4 has **not** been performed, so "a red gate
+blocks the merge" remains a derivation from its exit status, not an observation.
+Steps 5 and 7 are untouched.
 
 Steps 5-7 are three moves and not one for a specific reason: converting
 `compat.yml` in one shot renames its check to `compat / wire-vectors`, so the
