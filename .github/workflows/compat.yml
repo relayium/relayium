@@ -21,7 +21,8 @@ name: compat
 #     that a new platform can bypass by existing is not a gate.
 #
 # So this file has deliberately NO `paths:` filter. It runs on every pull
-# request and every `main` push, it is cheap enough to do that, and a future
+# request — through `merge-gate.yml`, which calls it unconditionally — and on
+# every `main` push, it is cheap enough to do that, and a future
 # `apps/android/**` or `apps/windows/**` cannot route around it.
 #
 # ## What belongs here, and what does not
@@ -37,10 +38,11 @@ name: compat
 # ## "Always-required" here is a property of this file, not of the repository
 #
 # Everything above is enforceable in workflow code and is enforced there: no
-# `paths:` on either event, no job-level `if:`, no `continue-on-error`, no retry,
+# `paths:` on any event, no job-level `if:`, no `continue-on-error`, no retry,
 # a finite timeout, and a real command. That makes this gate always-RUN and
-# fail-closed — it starts on every pull request and every `main` push, and it
-# reports red when the contract breaks.
+# fail-closed — it starts on every pull request, through the gate that calls it
+# with no condition, and on every `main` push, and it reports red when the
+# contract breaks.
 #
 # It does not, by itself, make a red result BLOCK a merge. That is a GitHub
 # branch-protection setting on `main`, it lives in repository configuration
@@ -52,119 +54,121 @@ name: compat
 # (the workflow's `name:` and the job key, joined the way GitHub renders a status
 # context).
 #
-# THAT CONTEXT IS NOW REQUIRED ON `main`. As of 2026-08-21, after PR #6 merged as
-# `24a29ec6`, `main` protection is enabled and was verified by re-reading the
-# settings after the write: strict required status checks, bound to GitHub
-# Actions `app_id` 15368; enforce_admins false; force pushes and deletions
-# disabled. It is no longer the ONLY required context — protection edit A added
-# `merge-gate` beside it, read back as `strict: true` with exactly
-# `wire-vectors` and `merge-gate` — and it is still required, which is why the
-# `pull_request:` trigger below has not been removed. The API reports the
-# context as `wire-vectors` while the merge box renders `compat / wire-vectors`
-# — a rendering difference, not a substituted check; the `app_id` binding is
-# what stops a differently-owned check of the same job name from satisfying the
-# rule.
+# THAT CONTEXT IS NO LONGER WHAT `main` REQUIRES, and the difference is the
+# whole of the migration this file has just finished.
 #
-# So this gate MAY be described as merge-required, because it is. The earlier
-# instruction here — to treat it as NOT merge-required — is stale and superseded,
-# as is any statement elsewhere calling it an outstanding operational
-# requirement.
+# `main` protection is enabled and strict, bound to GitHub Actions `app_id`
+# 15368, with force pushes and deletions disabled. It required the bare
+# `wire-vectors` from 2026-08-21 (PR #6, `24a29ec6`); protection edit A added
+# `merge-gate` beside it; protection edit B then narrowed the set to
+# `merge-gate` ALONE, read back after the write as `strict: true` with that one
+# context. So the string above is the context `merge-gate.yml` sees this file
+# report as the `compat` lane it calls, and it reaches the merge button through
+# the aggregate's verdict rather than on its own.
 #
-# A merge HAS since been observed blocked by a red required check: the
-# never-merged red probe PR #38 turned `merge-gate` red and GitHub reported
-# `mergeStateStatus: BLOCKED`. That closes the observation this comment used to
-# say was missing for enforcement in general; it was `merge-gate` rather than
-# this file's own context that was red, and that distinction is recorded in
-# `docs/CI-PLATFORM-BOUNDARY.md` rather than claimed away here.
+# The bare `wire-vectors` has NOT stopped mattering; it stopped being
+# branch-required. `relayium-ops`' `deploy/promote.sh` refuses to promote a
+# `main` commit that has no green check run named `wire-vectors` ON THAT COMMIT,
+# and the `push: main` trigger below is the only thing that puts one there —
+# `merge-gate.yml` runs on `pull_request` only. That is why `push: main` is
+# permanent here and why removing it would wedge production promotion rather
+# than fail a pull request.
+#
+# The `app_id` binding still answers what it always answered: a differently
+# owned check publishing the same context name cannot satisfy the requirement
+# on behalf of a gate that never ran. What it cannot answer — a SECOND job named
+# `wire-vectors` in this repository — is asserted in source instead, by section
+# 6j of `scripts/test/ci-event-policy-test.mjs`.
+#
+# So this gate MAY be described as merge-required, because it is — now through
+# `merge-gate`. The earlier instruction here — to treat it as NOT merge-required
+# — is stale and superseded, as is any statement elsewhere calling it an
+# outstanding operational requirement.
+#
+# A merge HAS been observed blocked by a red required check: the never-merged
+# red probe PR #38 turned `merge-gate` red and GitHub reported
+# `mergeStateStatus: BLOCKED`. That was `merge-gate` rather than this file's own
+# context, and the distinction is recorded in `docs/CI-PLATFORM-BOUNDARY.md`
+# rather than claimed away here.
 #
 # `docs/CI-PLATFORM-BOUNDARY.md` states the whole boundary;
 # `scripts/test/ci-event-policy-test.mjs` is what enforces it, because none of
 # it is visible to YAML validity or to actionlint.
 #
-# ## Two entry points on purpose, for exactly one migration step
+# ## One pull-request entry point, permanently
 #
-# `merge-gate.yml` now CALLS this file as an unconditional reusable lane, and
-# this file ALSO keeps its own `pull_request:` trigger. Every other lane the
-# gate calls gave its direct trigger up, and this one deliberately has not —
-# not yet.
+# `merge-gate.yml` CALLS this file as an unconditional reusable lane, and that
+# call is now the ONLY way a pull request reaches it. This file carried its own
+# `pull_request:` trigger for exactly one migration step — while the bare
+# `wire-vectors` was still a required context, dropping the direct trigger would
+# have left that context reported by no run at all, and an ABSENT required
+# context blocks every pull request rather than failing one. Protection edit B
+# closed that window by requiring `merge-gate` alone, so the direct trigger is
+# gone and this workflow runs ONCE per pull request again.
 #
-# Through the gate this workflow's job reports as `compat / wire-vectors`.
-# Directly it reports as the bare `wire-vectors`, and that bare string is still
-# one of `main`'s two required contexts. Dropping `pull_request:` in the same
-# change that adds `workflow_call:` would therefore stop the required context
-# appearing at all, and an absent required context blocks every pull request
-# until protection is edited. So the direct trigger stays until protection
-# requires `merge-gate` alone; `docs/CI-PLATFORM-BOUNDARY.md` carries the
-# staged order and where it currently stands.
-#
-# Running this gate twice for a few seconds per pull request is the price of
-# never opening that window, and it is bounded: it is the cheapest workflow in
-# the repository.
+# Bringing `pull_request:` back would restore the duplicate — two identical runs
+# of the same commit, nothing reading the second — and
+# `scripts/test/ci-event-policy-test.mjs` fails by name if it returns. The two
+# triggers that remain are permanent: `push: main` for the promotion check run
+# described above, and `workflow_call:` for the gate. Without the latter the
+# gate's `uses:` is unresolvable, the WHOLE aggregate run fails to load, and
+# `merge-gate` reports nothing rather than red.
 on:
   push:
-    # Only `main`. A branch push used to start this workflow AND its pull
-    # request start a second, identical run of the same commit. The
-    # pull_request trigger below is what gates branch work; this one exists so
-    # `main` itself is never unverified.
+    # Only `main`, and permanently. `merge-gate.yml` runs on `pull_request`
+    # only, so this is the ONE event that puts a check run named `wire-vectors`
+    # on a `main` commit — which is exactly what `relayium-ops`'
+    # `deploy/promote.sh` reads before it promotes. Branch work is gated by the
+    # aggregate calling this file, not by anything here.
     branches:
       - main
-    # Deliberately no `paths:` here and none under `pull_request:`. See the
-    # header: a filter is exactly how a new platform root would inherit an
+    # Deliberately no `paths:` here, and none on any other event either. See
+    # the header: a filter is exactly how a new platform root would inherit an
     # exemption from the compatibility contract without anybody deciding to
     # grant it.
-  pull_request:
   workflow_dispatch:
-  # The aggregate merge gate's entry point. It calls this file with no `with:`
-  # block at all, so the one input below takes the default that names the
-  # caller.
+  # The aggregate merge gate's entry point, and the only way a pull request
+  # reaches this file. It calls with no `with:` block at all — and there is
+  # nothing to pass: this workflow declares NO inputs, deliberately.
+  #
+  # It ran on every pull request in the repository before the gate existed and
+  # it does so now, so an input here would be the widest behaviour switch it is
+  # possible to add — a lever any caller could pull to make the always-on
+  # compatibility gate check less. The transitional `concurrency_scope`
+  # discriminator that lived here is gone with the second entry point it existed
+  # to tell apart; the concurrency group below no longer needs one.
   workflow_call:
-    inputs:
-      # NOT a behaviour switch. Nothing in `jobs:` reads it, and nothing may:
-      # its only consumer is the `concurrency.group` below, and its only job is
-      # to tell a CALLED run apart from a DIRECT one.
-      #
-      # The underscore is deliberate. A hyphen in an expression property path
-      # is parsed as SUBTRACTION, so `inputs.concurrency-scope` would evaluate
-      # to the empty string, every called run would fall back to `direct`, and
-      # the two entry points would silently share one group again — valid YAML,
-      # valid expression syntax, and the exact cancellation this input exists
-      # to prevent.
-      concurrency_scope:
-        description: 'Concurrency discriminator only: which entry point started this run. Read by concurrency.group and by nothing else.'
-        required: false
-        default: 'merge-gate'
-        type: string
 
-# Supersede a pull request's own earlier runs of the SAME entry point, and
-# nothing else.
+# Supersede a pull request's own earlier run of this lane, and nothing else.
 #
 # The suffix is the repository-wide rule, unchanged and asserted by
 # `scripts/test/ci-event-policy-test.mjs`: group by PR NUMBER when there is one
 # and by `github.run_id` — unique per run — otherwise, so a PR supersedes only
 # itself and nothing can ever cancel a `main` or dispatch run.
 #
-# The prefix is where this file stopped matching the others, and it is
-# load-bearing twice over.
+# The prefix is a LITERAL nothing else uses, which is what every other called
+# lane carries and for the same reason: it may not be `${{ github.workflow }}`,
+# because inside a CALLED workflow that expression is the CALLER's name —
+# `merge-gate` — so the called run would land in the caller's own group under
+# one `github.run_id`. The callee then queues behind the caller that is waiting
+# for it: a deadlock, invisible to YAML validity and to actionlint. `compat-lane`
+# is distinct from `merge-gate` and from every other lane's literal, so the
+# groups are disjoint by construction whatever any file is renamed to later.
 #
-#   * It may no longer be `${{ github.workflow }}`. Inside a CALLED workflow
-#     that expression is the CALLER's name — `merge-gate` — so the called run
-#     would land in the caller's own group under one `github.run_id`. The
-#     callee then queues behind the caller that is waiting for it: a deadlock,
-#     invisible to YAML validity and to actionlint.
-#   * It carries the entry-point discriminator, because on one pull request
-#     this file runs TWICE — once directly and once through the gate — against
-#     the SAME `github.event.pull_request.number`. A shared group with
-#     `cancel-in-progress` true would make whichever run started second CANCEL
-#     the first, and a cancelled run reports `cancelled` rather than red: the
-#     required `wire-vectors` context would vanish, or the gate would judge a
-#     cancelled lane. `merge-gate` and `direct` are two different strings, so
-#     the two groups are disjoint by construction.
+# It no longer carries an entry-point discriminator, and does not need one. This
+# file had two entry points for one migration step, and the two runs of one pull
+# request shared a `github.event.pull_request.number`; the discriminator is what
+# kept them from cancelling each other. With the direct `pull_request:` trigger
+# gone, the only run keyed by a PR number is the CALLED one — `push` and
+# `workflow_dispatch` supply no pull request, so they key on `github.run_id`,
+# which is unique per run and cannot collide with anything, including with each
+# other.
 #
-# `cancel-in-progress` is unchanged and still applies WITHIN each group, so a
-# pull request still supersedes its own earlier direct run and its own earlier
-# called run, separately.
+# `cancel-in-progress` is unchanged: a pull request still supersedes its own
+# earlier called run, and a `main` or dispatch run can never be superseded at
+# all.
 concurrency:
-  group: compat-${{ inputs.concurrency_scope || 'direct' }}-${{ github.event.pull_request.number || github.run_id }}
+  group: compat-lane-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:

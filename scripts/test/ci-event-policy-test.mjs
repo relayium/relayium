@@ -94,14 +94,22 @@
 // ## And the name the required check is required BY
 //
 // Section 6j is the one property of `main`'s branch protection that source can
-// hold up its half of. Protection requires exactly one context — the job name
-// `wire-vectors`, bound to GitHub Actions `app_id` 15368 — and that binding
-// stops a differently-owned check of the same name from satisfying it. It does
-// nothing about a SECOND job named `wire-vectors` in this repository: that is
-// the same app posting the same context, so an unrelated green lane can stand in
-// for the contract gate. Section 6j therefore asserts, across every workflow
-// file on disk rather than only the governed ones, that `compat.yml` still
-// declares that job and that nothing else declares it.
+// hold up its half of. Protection now requires exactly one context — the
+// aggregate's `merge-gate` job — and the `app_id` 15368 binding stops a
+// differently-owned check of the same name from satisfying it.
+//
+// The job name `wire-vectors` is still pinned there, and dropping the direct
+// `pull_request:` trigger from `compat.yml` did not stop it mattering. It is
+// half of `compat / wire-vectors`, the context the aggregate consumes as its
+// `compat` lane, and it is the whole of the bare `wire-vectors` check run that
+// `compat.yml`'s permanent `push: main` trigger puts on a `main` commit —
+// which `relayium-ops`' `deploy/promote.sh` reads before it promotes. Neither
+// the `app_id` binding nor any settings read-back can see a SECOND job named
+// `wire-vectors` in this repository: that is the same app posting the same
+// context, so an unrelated green lane can stand in for the contract gate.
+// Section 6j therefore asserts, across every workflow file on disk rather than
+// only the governed ones, that `compat.yml` still declares that job and that
+// nothing else declares it.
 //
 // ## Why the YAML parser is written out here, and what checks IT
 //
@@ -157,20 +165,20 @@ const workflowsDir = resolve(repoRoot, ".github/workflows");
  *               that call is now the ONLY way a pull request reaches it.
  *   `directPr`  this file still carries its own `pull_request:` trigger.
  *
- * `call` and `directPr` are opposites on every lane EXCEPT `compat.yml`, and
- * that exception is a fact about the migration rather than a rule. `compat.yml`
- * owns the bare context `main` still requires (`wire-vectors`); called, the
- * same job reports as `compat / wire-vectors`. Removing its direct trigger in
- * the change that adds `workflow_call:` would therefore leave the required
- * context reported by no run at all, and an ABSENT required context blocks
- * every pull request rather than failing one. So compat is the one file with
- * BOTH — deliberately running twice per pull request for a few seconds — until
- * protection requires `merge-gate` alone. Section 6o binds the concurrency
- * discriminator that keeps those two runs from cancelling each other.
+ * `call` and `directPr` are opposites on every lane, with no exception left.
+ * `compat.yml` was the one file with BOTH, and that was a fact about the
+ * migration rather than a rule: while the bare `wire-vectors` was a required
+ * context, removing compat's direct trigger in the change that added
+ * `workflow_call:` would have left that context reported by no run at all, and
+ * an ABSENT required context blocks every pull request rather than failing one.
+ * Protection edit B made `merge-gate` the sole required context, the direct
+ * trigger went with it, and the row below now reads `directPr: false` like
+ * every other. Section 6o binds what compat may not grow back.
  *
- * On every OTHER lane a `pull_request:` reappearing is a lane running TWICE per
- * commit with nothing paying for it — once directly, once through the gate —
- * which is exactly the duplicate this repository removed once already.
+ * On EVERY lane, compat included, a `pull_request:` reappearing is a lane
+ * running TWICE per commit with nothing paying for it — once directly, once
+ * through the gate — which is exactly the duplicate this repository removed
+ * once already.
  */
 const GOVERNED = [
   { file: "go.yml", dispatch: true, call: true, directPr: false },
@@ -218,15 +226,22 @@ const GOVERNED = [
   // The always-on, deliberately UNFILTERED compatibility gate. It is in this
   // list — and not merely in section 6 — so it is bound by the same trigger and
   // concurrency policy as every heavy workflow it runs in front of.
-  // The ONE lane with BOTH `call: true` and `directPr: true`, and the only row
-  // here where those two are not opposites. It declares `wire-vectors`, one of
-  // the two contexts `main` requires today; called, that job reports as
-  // `compat / wire-vectors` instead. Dropping the direct trigger now would
-  // leave the bare context reported by nothing, so both entry points stay open
-  // until protection requires `merge-gate` alone — the LAST step of the
-  // migration, not this one. docs/CI-PLATFORM-BOUNDARY.md carries the staged
-  // order; section 6o binds what the two entry points must not do to each other.
-  { file: "compat.yml", dispatch: true, call: true, directPr: true },
+  //
+  // `directPr: false` is the LAST step of the compat migration, and it is
+  // permanent. This file used to be the one row where `call` and `directPr`
+  // were not opposites, because it declared `wire-vectors` and that bare string
+  // was a required context; called, the same job reports as
+  // `compat / wire-vectors`, so dropping the direct trigger any earlier would
+  // have left the requirement reported by nothing. Protection edit B narrowed
+  // `main` to the sole context `merge-gate`, which closed that window, and the
+  // duplicate run went with it.
+  //
+  // `push: main` and `workflow_dispatch` stay. The first is not tidiness: it is
+  // the only event that puts a bare `wire-vectors` check run on a `main`
+  // commit, and `relayium-ops`' `deploy/promote.sh` refuses to promote without
+  // one. docs/CI-PLATFORM-BOUNDARY.md carries the staged order; section 6o
+  // binds the entry points and the input surface this file may not grow back.
+  { file: "compat.yml", dispatch: true, call: true, directPr: false },
   { file: "native-web-pairing.yml", dispatch: true, call: true, directPr: false },
   { file: "repo-hygiene.yml", dispatch: false, call: true, directPr: false },
 ];
@@ -316,32 +331,29 @@ const GATE_LANES = new Map([
 const GATE_ALWAYS = ["compat", "repo-hygiene"];
 
 /**
- * `compat.yml`'s entry-point discriminator, in the three pieces that make it
- * work, plus the group prefix they build.
+ * `compat.yml`'s concurrency prefix: one literal, nothing else uses it.
  *
- * Section 6o is what asserts them. They are declared up here because
- * `LITERAL_GROUP_PREFIX` below needs the prefix, and section 2's exact-group
- * equality is the first thing that would notice the discriminator being edited
- * away.
+ * Declared up here because `LITERAL_GROUP_PREFIX` below needs it, and section
+ * 2's exact-group equality is the first thing that would notice it being edited
+ * away. Section 6o asserts the properties behind it.
  *
- * `compat.yml` is the only workflow in this repository reachable through TWO
- * entry points on ONE pull request — directly, and through `merge-gate.yml`.
- * Both runs see the same `github.event.pull_request.number`, so the
- * repository-wide suffix alone puts them in the SAME group; with
- * `cancel-in-progress` true, whichever started second would cancel the first.
- * A cancelled run reports `cancelled`, not red: either the required bare
- * `wire-vectors` context stops appearing, or the aggregate judges a cancelled
- * lane. The input's DEFAULT names the caller and the fallback names the direct
- * events, and because those two strings differ the groups are disjoint.
+ * This used to be a literal stem plus a `${{ inputs.concurrency_scope ||
+ * 'direct' }}` discriminator, and that was load-bearing for exactly one
+ * migration step: `compat.yml` was then reachable through TWO entry points on
+ * ONE pull request — directly, and through `merge-gate.yml` — and both runs saw
+ * the same `github.event.pull_request.number`, so the repository-wide suffix
+ * alone put them in the SAME group. With `cancel-in-progress` true the second
+ * to start cancelled the first, silently, because a cancelled run reports
+ * `cancelled` rather than red.
+ *
+ * The direct `pull_request:` trigger is gone, so the collision it prevented
+ * cannot occur: the only run keyed by a pull request number is the CALLED one,
+ * and `push` and `workflow_dispatch` key on `github.run_id`, which is unique
+ * per run. A discriminator with one entry point left to discriminate is an
+ * input on the always-on compatibility gate and nothing else, so it went with
+ * the trigger. Section 6o is what stops either coming back.
  */
-const COMPAT_SCOPE_INPUT = "concurrency_scope";
-/** What a CALLED run resolves to: the `workflow_call` input's default. */
-const COMPAT_CALLED_SCOPE = "merge-gate";
-/** What a DIRECT run resolves to: `push`, `pull_request` and dispatch supply no inputs. */
-const COMPAT_DIRECT_SCOPE = "direct";
-const COMPAT_SCOPE_EXPR =
-  `\${{ inputs.${COMPAT_SCOPE_INPUT} || '${COMPAT_DIRECT_SCOPE}' }}`;
-const COMPAT_GROUP_PREFIX = `compat-${COMPAT_SCOPE_EXPR}`;
+const COMPAT_GROUP_PREFIX = "compat-lane";
 
 /**
  * The concurrency key, in two halves.
@@ -364,9 +376,10 @@ const COMPAT_GROUP_PREFIX = `compat-${COMPAT_SCOPE_EXPR}`;
  * behind the caller that is waiting for it. Literals nothing else uses make the
  * groups disjoint by construction, whatever any file is renamed to later.
  *
- * `compat.yml`'s prefix is a literal stem plus one more discriminator, because
- * it is the only file reachable through two entry points on one pull request.
- * `COMPAT_GROUP_PREFIX` above carries that reasoning; section 6o asserts it.
+ * `compat.yml` carries an ordinary literal like every other called lane. It
+ * briefly needed a discriminator on top of one, because it was the only file
+ * reachable through two entry points on a single pull request;
+ * `COMPAT_GROUP_PREFIX` above carries what that was for and why it is gone.
  */
 const GROUP_SUFFIX = "${{ github.event.pull_request.number || github.run_id }}";
 const DEFAULT_GROUP_PREFIX = "${{ github.workflow }}";
@@ -374,11 +387,6 @@ const LITERAL_GROUP_PREFIX = new Map([
   [MACOS, "macos-ci"],
   [MACOS_RELEASE, "macos-release"],
   [AGGREGATE, "merge-gate"],
-  // The one entry that is not a bare literal, and it is still not an
-  // expression in the banned sense: the STEM is a literal nothing else uses,
-  // and what follows resolves from this file's own `workflow_call` input rather
-  // than from `github.workflow` — which inside a called run would be the
-  // caller's name. See `COMPAT_GROUP_PREFIX` above and section 6o.
   // Spelled out rather than written as `COMPAT`: that constant is declared far
   // below, and a `const` referenced above its declaration is a TDZ
   // ReferenceError at module load — this whole file would fail to run.
@@ -867,14 +875,16 @@ const runText = (job) => (job?.steps ?? []).map((s) => s?.run ?? "").join("\n");
 //     wedge every production promotion with `required check absent`, mid
 //     incident. That reasoning lives in a different repository, so the rule is
 //     encoded here.
-//   * `pull_request:` is FORBIDDEN on every lane the gate calls EXCEPT
-//     `compat.yml`, where it is required. Keeping both on an ordinary
-//     converted lane runs it twice per commit for nothing, once directly and
-//     once through the gate. On `compat.yml` running twice is the whole point
-//     for one migration step: the direct run is what reports the bare
-//     `wire-vectors` context `main` still requires, and the called run is what
-//     the aggregate judges. The table above carries which is which, and
-//     section 6o carries what the two runs must not do to each other.
+//   * `pull_request:` is FORBIDDEN on every lane the gate calls, with no
+//     exception left. Keeping it on a converted lane runs that lane twice per
+//     commit for nothing, once directly and once through the gate. On
+//     `compat.yml` running twice WAS the whole point, for one migration step:
+//     the direct run reported the bare `wire-vectors` context `main` then
+//     required, and the called run was what the aggregate judged. Protection
+//     edit B made `merge-gate` the sole required context, so the direct trigger
+//     is gone and the ban is now uniform. Section 6o carries what compat may
+//     not grow back, including the concurrency discriminator that existed only
+//     to keep those two runs apart.
 //   * `workflow_call:` is required on exactly the lanes the gate calls. Without
 //     it the gate's `uses:` is unresolvable and the WHOLE run fails to load, so
 //     `merge-gate` never reports at all and the merge box shows a missing
@@ -936,21 +946,16 @@ function triggerFailures(world) {
           + `duplicate this repository already removed once.`}`,
     );
 
-    // Only a lane that still owns its own pull-request entry point can have two
-    // filters to disagree with each other.
-    if (directPr) {
-      const pushPaths = push && typeof push === "object" ? (push.paths ?? null) : null;
-      const prPaths = on.pull_request && typeof on.pull_request === "object"
-        ? (on.pull_request.paths ?? null)
-        : null;
-      need(
-        JSON.stringify(pushPaths) === JSON.stringify(prPaths),
-        `${file}: \`push.paths\` and \`pull_request.paths\` differ (${JSON.stringify(pushPaths)} `
-        + `vs ${JSON.stringify(prPaths)}). A change must trigger the same checks on a pull `
-        + `request as on main, or a gate that passes on the branch is simply not run after the `
-        + `merge.`,
-      );
-    }
+    // The `push.paths === pull_request.paths` comparison that used to sit here
+    // went with the last direct pull-request trigger, and deliberately rather
+    // than by omission. It could only ever apply to a lane owning BOTH filtered
+    // events, `compat.yml` was the last such lane, and what the rule protected
+    // — a filter narrower on one event than the other — is structurally
+    // impossible with one filtered event left. Keeping it would have left an
+    // assertion no mutation in section 8 can reach, in a file whose whole
+    // authority is that each of its rules is proven able to fail.
+    // `scripts/test/contract-ci-policy-test.mjs` dropped the same comparison
+    // for the same reason when its two lanes converted.
 
     need(
       ("workflow_dispatch" in on) === dispatch,
@@ -2381,12 +2386,12 @@ function platformBoundaryFailures(world) {
       + `stops being covered by the cross-language contract without anybody deciding to exempt it. `
       + `Always-required means always-run.`,
     );
-    const pr = compat.on?.pull_request;
-    need(
-      !(pr && typeof pr === "object" && pr.paths),
-      `${COMPAT} gained a pull_request path filter, so branch work can reach \`main\` without the `
-      + `compatibility gate having run on it.`,
-    );
+    // There is no `pull_request` filter left to check here. This file's direct
+    // pull-request trigger is gone — section 1 fails by name if it returns —
+    // and a pull request now reaches the gate only through `merge-gate.yml`,
+    // which is itself unfiltered and calls this lane with no `if:`. The
+    // unfiltered-ness that matters is therefore the `push` filter asserted
+    // above plus the aggregate's own shape, which section 6n owns.
     const jobs = Object.entries(compat.jobs ?? {});
     need(jobs.length >= 1, `${COMPAT} has no jobs, so the always-on gate checks nothing.`);
     for (const [name, job] of jobs) {
@@ -2872,10 +2877,18 @@ function platformBoundaryFailures(world) {
   // 6j. The job half of the required status context, and the collision the
   //     `app_id` binding cannot see.
   //
-  //     `main`'s protection requires exactly one context. The API reports it as
-  //     the job name `wire-vectors`, bound to GitHub Actions `app_id` 15368, and
-  //     the merge box renders it `compat / wire-vectors` — the workflow's
-  //     `name:` and the job key joined.
+  //     `main`'s protection requires exactly one context, and since protection
+  //     edit B that context is the aggregate's `merge-gate` job, bound to
+  //     GitHub Actions `app_id` 15368.
+  //
+  //     `wire-vectors` is still the job name this section pins, and dropping
+  //     compat's direct trigger did not change why. It is half of
+  //     `compat / wire-vectors` — the check the aggregate consumes as its
+  //     `compat` lane, and what the merge box renders from this workflow's
+  //     `name:` and the job key joined — and it is the whole of the bare
+  //     `wire-vectors` check run that `compat.yml`'s permanent `push: main`
+  //     trigger puts on a `main` commit for `relayium-ops`' `deploy/promote.sh`
+  //     to read before promoting.
   //
   //     The `app_id` binding answers exactly one threat: a DIFFERENTLY OWNED
   //     check — another GitHub App, or an external service posting a commit
@@ -2913,12 +2926,13 @@ function platformBoundaryFailures(world) {
   need(
     compatJobNames.includes(COMPAT_JOB),
     `${COMPAT} declares no job named \`${COMPAT_JOB}\`; it declares `
-    + `[${compatJobNames.join(", ")}]. That name is half of the required status context `
-    + `\`compat / ${COMPAT_JOB}\`, and the bare \`${COMPAT_JOB}\` is one of \`main\`'s two `
-    + `required contexts: rename or remove the job and that requirement names something nothing `
-    + `in this repository ever reports, so it is satisfied by `
-    + `no run rather than by a passing one. It also makes the uniqueness check below vacuous — `
-    + `there is nothing left for a second workflow to collide with.`,
+    + `[${compatJobNames.join(", ")}]. That name is half of \`compat / ${COMPAT_JOB}\`, the `
+    + `context ${AGGREGATE} consumes as its \`compat\` lane, and it is the whole of the bare `
+    + `\`${COMPAT_JOB}\` check run that \`push: main\` puts on a \`main\` commit for `
+    + `\`relayium-ops\`' \`deploy/promote.sh\` to read before promoting: rename or remove the `
+    + `job and the aggregate judges a lane reporting nothing while production promotion wedges `
+    + `on \`required check absent\`. It also makes the uniqueness check below vacuous — there is `
+    + `nothing left for a second workflow to collide with.`,
   );
   const jobNameHosts = [...world.texts.keys()]
     .filter((file) => file !== COMPAT)
@@ -2927,8 +2941,8 @@ function platformBoundaryFailures(world) {
   need(
     jobNameHosts.length === 0,
     `[${jobNameHosts.join(", ")}] also declare a job named \`${COMPAT_JOB}\`, which is the job `
-    + `half of the required status context \`compat / ${COMPAT_JOB}\`, whose bare form is one of `
-    + `\`main\`'s two required contexts. This is the `
+    + `half of \`compat / ${COMPAT_JOB}\` and, in its bare form, the check run production `
+    + `promotion reads off a \`main\` commit. This is the `
     + `one substitution the \`app_id\` binding cannot stop: a second job of this name in this `
     + `repository is the SAME app, so its status carries the same context and the requirement can `
     + `be satisfied by a lane that never checked the wire contract. Give the job a different name `
@@ -4753,180 +4767,142 @@ function aggregateGateFailures(world) {
   return out;
 }
 
-// ── 6o. compat's two entry points, and the discriminator between them ──────
+// ── 6o. compat's single entry point, and the surface it may not grow back ──
 //
-// `compat.yml` is the only workflow in this repository a single pull request
-// starts TWICE: once through its own `pull_request:` trigger, and once as
-// `merge-gate.yml`'s unconditional `compat` lane. Section 1 asserts that both
-// entry points exist. This section asserts that they cannot destroy each other,
-// which is a completely different property and is invisible to everything else
-// here — including actionlint, which is happy with either shape.
+// `compat.yml` was, for exactly one migration step, the only workflow in this
+// repository a single pull request started TWICE: once through its own
+// `pull_request:` trigger, and once as `merge-gate.yml`'s unconditional
+// `compat` lane. Section 1 asserts the trigger shape that ended that and is now
+// permanent — direct `pull_request:` absent, `workflow_call:` and `push: main`
+// present. This section asserts what that shape LEFT BEHIND, which is a
+// different property and is invisible to everything else here, actionlint
+// included.
 //
-// The failure it exists to stop, in full:
+// Three of them, and each is one edit from coming back:
 //
-//   The repository-wide concurrency suffix is
-//   `${{ github.event.pull_request.number || github.run_id }}`, and BOTH runs
-//   see the same pull request number — inside a called workflow the event
-//   context is the CALLER's, and the caller's event is that same
-//   `pull_request`. So on a bare prefix the two runs share one group. With
-//   `cancel-in-progress` true — which is correct and stays — whichever run
-//   started second CANCELS the first. A cancelled run reports `cancelled`, not
-//   red, so the damage is silent in both directions: the direct run dies and
-//   the bare `wire-vectors` context `main` requires stops appearing at all
-//   (an ABSENT required check, not a failing one, which blocks every pull
-//   request with nothing naming the cause), or the called run dies and the
-//   aggregate judges a `cancelled` lane it will report red for a reason that
-//   has nothing to do with the change set.
+//   * NO `workflow_call` inputs, at all. The transitional `concurrency_scope`
+//     input was a concurrency discriminator and nothing else — its only
+//     consumer was the group below — and it went with the second entry point it
+//     existed to tell apart. This file runs on every pull request in the
+//     repository, so an input here is the widest behaviour switch it is
+//     possible to add: a lever any caller can pull to make the always-on
+//     compatibility gate check LESS when it is called than when it is not.
+//     `merge-gate.yml` also calls it with no `with:` block at all, so a
+//     REQUIRED input would additionally be a caller-side syntax error — the
+//     entire gate run fails to load and `merge-gate` reports nothing rather
+//     than red. Banning the whole surface covers both, and is the only form of
+//     the rule that survives somebody re-adding an input under a new name.
+//   * NO job reading `inputs.` anything, which is the same lever one level
+//     down. `concurrency:` is evaluated before any job runs, so a value read
+//     only there cannot gate work; a value read inside `jobs:` can.
+//   * A concurrency group that is the literal prefix plus the repository-wide
+//     suffix and carries no expression of its own. Section 2 asserts the exact
+//     string; this asserts WHY it has that shape. An `inputs.` term reappearing
+//     in the group is the discriminator returning, and a discriminator can only
+//     be for telling apart an entry point that must not exist. A prefix equal
+//     to `merge-gate.yml`'s own is the caller/callee DEADLOCK: GitHub holds the
+//     callee's jobs behind the caller's, and the caller cannot finish until the
+//     callee does, so the run hangs until it is cancelled by hand.
 //
-// The fix is one string: an optional `workflow_call` input whose DEFAULT names
-// the caller, read by `concurrency.group` and by nothing else, with an explicit
-// fallback for the events that supply no inputs at all. Two different strings,
-// two disjoint groups, and `cancel-in-progress` keeps working WITHIN each.
-//
-// Every piece of that is one edit from being undone silently, so each is
-// asserted separately: that the input exists and is optional; that it is a
-// string typed `string`; that its default is the caller's name; that the group
-// actually reads it; that the fallback is present and DIFFERENT; that the two
-// resolved groups differ from each other and from the caller's own group; and
-// that no job has started reading the input as a behaviour switch.
-function compatDualEntryFailures(world) {
+// The cancellation the discriminator used to prevent cannot recur while the
+// trigger shape holds. Only the CALLED run is keyed by
+// `github.event.pull_request.number` — inside a called workflow the event
+// context is the caller's, and the caller's event is that `pull_request` — and
+// `push` and `workflow_dispatch` key on `github.run_id`, which is unique per
+// run and therefore collides with nothing, including with each other. That is a
+// consequence of section 1's rules rather than of anything asserted here, which
+// is why this section binds the residue instead of restating them.
+function compatEntryPointFailures(world) {
   const out = [];
   const need = (ok, message) => { if (!ok) out.push(message); };
 
-  // Non-vacuity, about this file's own constants rather than about the tree.
-  // Every comparison below is against these two strings; if a future edit made
-  // them equal, every check here would keep passing while asserting that the
-  // two entry points share a group.
+  // Non-vacuity, about this file's own constant rather than about the tree.
+  // Every group rule below compares against it; an empty constant would make
+  // `startsWith` true for any string at all, and an expression-valued one would
+  // reintroduce exactly what the group must no longer contain.
   need(
-    COMPAT_CALLED_SCOPE !== COMPAT_DIRECT_SCOPE
-      && COMPAT_CALLED_SCOPE !== "" && COMPAT_DIRECT_SCOPE !== "",
-    `this policy's own scope constants are ${JSON.stringify(COMPAT_CALLED_SCOPE)} and `
-    + `${JSON.stringify(COMPAT_DIRECT_SCOPE)}. They must be two DIFFERENT non-empty strings: `
-    + `every rule below compares the called group against the direct one, so equal or empty `
-    + `constants would make this whole section pass while asserting nothing.`,
+    typeof COMPAT_GROUP_PREFIX === "string"
+      && COMPAT_GROUP_PREFIX !== ""
+      && !COMPAT_GROUP_PREFIX.includes("${{"),
+    `this policy's own \`COMPAT_GROUP_PREFIX\` is ${JSON.stringify(COMPAT_GROUP_PREFIX)}. It must `
+    + `be a NON-EMPTY LITERAL: the rules below compare the workflow's declared group against it, `
+    + `so an empty constant would make them pass for any group at all and an expression-valued `
+    + `one would assert back the very shape this section exists to keep out.`,
   );
 
   const doc = world.docs.get(COMPAT);
   need(
     doc !== undefined,
     `${COMPAT} is missing or did not parse, so nothing below is checked — including whether the `
-    + `run that reports \`main\`'s bare \`wire-vectors\` context can still be cancelled by the `
-    + `gate's call of the same file.`,
+    + `one gate no change in this repository can route around has grown a caller-controlled `
+    + `behaviour switch.`,
   );
   if (!doc) return out;
 
+  // -- the input surface, which must be empty -------------------------------
   const on = doc.on && typeof doc.on === "object" ? doc.on : {};
   const call = on.workflow_call && typeof on.workflow_call === "object" ? on.workflow_call : {};
   const declaredInputs = Object.keys(call.inputs ?? {});
   need(
-    deepEqual(declaredInputs, [COMPAT_SCOPE_INPUT]),
-    `${COMPAT}'s \`workflow_call\` declares inputs [${declaredInputs.join(", ")}]; want exactly `
-    + `[${COMPAT_SCOPE_INPUT}]. Fewer removes the only thing telling a called run apart from a `
-    + `direct one. MORE is a compatibility gate growing a lever a caller can pull — this file `
-    + `runs on every pull request in the repository, so an input here is the widest behaviour `
-    + `switch it is possible to add.`,
+    declaredInputs.length === 0,
+    `${COMPAT}'s \`workflow_call\` declares inputs [${declaredInputs.join(", ")}]; want NONE. This `
+    + `file runs on every pull request in the repository, through ${AGGREGATE}'s unconditional `
+    + `call, so an input here is the widest behaviour switch it is possible to add — a lever a `
+    + `caller can pull to make the always-on compatibility gate check less. The one input this `
+    + `file ever had was a concurrency discriminator for a second entry point that no longer `
+    + `exists. A REQUIRED one is worse still: ${AGGREGATE} passes no \`with:\` block, so the `
+    + `ENTIRE gate run would fail to load and \`${GATE_JOB}\` would report nothing rather than red.`,
   );
 
-  const input = call.inputs?.[COMPAT_SCOPE_INPUT];
-  if (input !== undefined && typeof input === "object") {
-    need(
-      input.required === "false" || input.required === undefined,
-      `${COMPAT}'s \`workflow_call\` input \`${COMPAT_SCOPE_INPUT}\` is \`required: `
-      + `${JSON.stringify(input.required)}\`. It must be OPTIONAL. ${AGGREGATE} calls this file `
-      + `with no \`with:\` block at all, so a required input is a caller-side syntax error: the `
-      + `ENTIRE gate run fails to load and \`${GATE_JOB}\` reports nothing rather than red.`,
-    );
-    need(
-      input.type === "string",
-      `${COMPAT}'s \`workflow_call\` input \`${COMPAT_SCOPE_INPUT}\` is \`type: `
-      + `${JSON.stringify(input.type)}\`, want "string". It is interpolated straight into the `
-      + `concurrency group; a boolean or number would resolve to something the group's other `
-      + `half was never written against.`,
-    );
-    need(
-      input.default === COMPAT_CALLED_SCOPE,
-      `${COMPAT}'s \`workflow_call\` input \`${COMPAT_SCOPE_INPUT}\` defaults to `
-      + `${JSON.stringify(input.default)}, want ${JSON.stringify(COMPAT_CALLED_SCOPE)}. That `
-      + `default IS the called run's identity: ${AGGREGATE} deliberately passes no \`with:\`, so `
-      + `a default equal to the direct fallback — or an empty one, which falls THROUGH to the `
-      + `fallback — puts the called run back in the direct run's group and hands one of them a `
-      + `cancellation.`,
-    );
-  }
-
-  // The input stays what it says it is. `concurrency:` is evaluated before any
-  // job runs, so this value cannot gate work without becoming a lever every
-  // caller of this file can pull — on the one workflow no change in this
-  // repository can route around.
-  //
-  // Asserted BEFORE the group is parsed, and deliberately: the group checks
-  // below bail out when the discriminator term is missing entirely, and this
-  // rule is about the jobs rather than about the group. Ordering it after that
-  // bail-out would make a file that lost its discriminator ALSO stop being
-  // checked for a job reading the input — two regressions, one message.
+  // The same lever one level down. Asserted separately from the declaration
+  // above and deliberately: a job may read an input the CALLER declares nowhere
+  // — it evaluates to the empty string — so a read inside `jobs:` is its own
+  // regression even when `workflow_call` is clean.
   const jobsText = JSON.stringify(doc.jobs ?? {});
+  const inputRead = /inputs[.\['"]+([A-Za-z0-9_-]*)/.exec(jobsText);
   need(
-    !new RegExp(`inputs[.\\['"]+${COMPAT_SCOPE_INPUT}`).test(jobsText),
-    `${COMPAT}: a job reads \`inputs.${COMPAT_SCOPE_INPUT}\`. It is a concurrency discriminator `
-    + `and nothing else. A job that reads it turns the caller's identity into a BEHAVIOUR switch `
-    + `on the always-on compatibility gate, which is exactly how a gate acquires a way to check `
-    + `less when it is called than when it is not.`,
+    inputRead === null,
+    `${COMPAT}: a job reads \`inputs.${inputRead?.[1] ?? ""}\`. Nothing in \`jobs:\` may read an `
+    + `input here. \`concurrency:\` is evaluated before any job runs, which is why a value read `
+    + `only there cannot gate work — but a value read inside a job turns the caller's identity `
+    + `into a BEHAVIOUR switch on the always-on compatibility gate, and that is exactly how a `
+    + `gate acquires a way to check less when it is called than when it is not.`,
   );
 
+  // -- the concurrency group, and the two shapes it must never take ---------
   const group = typeof doc.concurrency?.group === "string" ? doc.concurrency.group : "";
-  const expr = /\$\{\{\s*inputs\.([A-Za-z0-9_-]+)\s*\|\|\s*'([^']*)'\s*\}\}/.exec(group);
   need(
-    expr !== null,
-    `${COMPAT}: concurrency.group is ${JSON.stringify(group)} and contains no `
-    + `\`\${{ inputs.<name> || '<direct fallback>' }}\` term. Without it both entry points resolve `
-    + `to the same group on the same pull request number and the later run cancels the earlier `
-    + `one — silently, because a cancelled check is neither green nor red.`,
-  );
-  if (expr === null) return out;
-
-  const [term, readInput, fallback] = expr;
-  need(
-    readInput === COMPAT_SCOPE_INPUT,
-    `${COMPAT}: concurrency.group reads \`inputs.${readInput}\`, but the \`workflow_call\` input `
-    + `is \`${COMPAT_SCOPE_INPUT}\`. An input nothing reads and a read of an input nothing `
-    + `declares both evaluate to the empty string, so EVERY run — called or direct — falls back `
-    + `to ${JSON.stringify(fallback)} and the discriminator is gone while the YAML still looks `
-    + `like it is there. A hyphen is the usual way in: \`inputs.a-b\` is parsed as SUBTRACTION.`,
+    group.startsWith(`${COMPAT_GROUP_PREFIX}-`),
+    `${COMPAT}: concurrency.group is ${JSON.stringify(group)}, which does not start with the `
+    + `literal prefix \`${COMPAT_GROUP_PREFIX}-\`. A called lane needs a literal nothing else `
+    + `uses: inside a called workflow \`\${{ github.workflow }}\` is the CALLER's name, so `
+    + `anything derived from it puts this file in ${AGGREGATE}'s own group — the callee queues `
+    + `behind the caller that is waiting for it, and the run hangs until somebody cancels it.`,
   );
   need(
-    fallback === COMPAT_DIRECT_SCOPE,
-    `${COMPAT}: concurrency.group falls back to ${JSON.stringify(fallback)}, want `
-    + `${JSON.stringify(COMPAT_DIRECT_SCOPE)}. \`push\`, \`pull_request\` and \`workflow_dispatch\` `
-    + `supply no inputs, so this literal is the direct run's whole identity — an EXPLICIT one, `
-    + `because an empty fallback would make the direct group a bare \`compat--<number>\` that the `
-    + `next edit cannot tell from a mistake.`,
-  );
-
-  // The property all of the above exists for, stated as the two strings GitHub
-  // will actually compare at run time.
-  const resolveScope = (scope) => group.replace(term, scope);
-  const calledGroup = resolveScope(
-    typeof input?.default === "string" && input.default !== "" ? input.default : fallback,
-  );
-  const directGroup = resolveScope(fallback);
-  need(
-    calledGroup !== directGroup,
-    `${COMPAT}: a called run and a direct run of the same pull request both resolve `
-    + `concurrency.group to ${JSON.stringify(calledGroup)}. They are ONE group, `
-    + `cancel-in-progress is true on a pull request, and the second to start cancels the first. `
-    + `Either \`main\`'s bare \`wire-vectors\` context stops reporting, or ${AGGREGATE} judges a `
-    + `cancelled \`compat\` lane and reports red for a reason unrelated to the change set.`,
+    !/inputs\s*[.\['"]/.test(group),
+    `${COMPAT}: concurrency.group is ${JSON.stringify(group)} and reads an \`inputs.\` term `
+    + `again. That is the call-vs-direct discriminator coming back, and a discriminator has `
+    + `exactly one purpose: telling apart two entry points on one pull request. This file has `
+    + `ONE — ${AGGREGATE}'s call — because protection now requires \`${GATE_JOB}\` alone and the `
+    + `direct \`pull_request:\` trigger is gone. A term here is either dead weight on the group `
+    + `or the second entry point being prepared; section 1 is what fails if it actually returns.`,
   );
 
   const gateGroup = typeof world.docs.get(AGGREGATE)?.concurrency?.group === "string"
     ? world.docs.get(AGGREGATE).concurrency.group
     : "";
+  const prefixOf = (value) => (value.endsWith(`-${GROUP_SUFFIX}`)
+    ? value.slice(0, -(GROUP_SUFFIX.length + 1))
+    : value);
+  const compatPrefix = prefixOf(group);
+  const gatePrefix = prefixOf(gateGroup);
   need(
-    calledGroup !== gateGroup && directGroup !== gateGroup,
-    `${COMPAT} resolves a concurrency group equal to ${AGGREGATE}'s own `
-    + `(${JSON.stringify(gateGroup)}). Caller and callee in one group is a DEADLOCK, not a `
-    + `cancellation: GitHub holds the callee's jobs behind the caller's, and the caller cannot `
-    + `finish until the callee does. The run hangs until it is cancelled by hand.`,
+    compatPrefix === "" || gatePrefix === "" || compatPrefix !== gatePrefix,
+    `${COMPAT} and ${AGGREGATE} share the concurrency prefix ${JSON.stringify(compatPrefix)}. `
+    + `Caller and callee in one group is a DEADLOCK, not a cancellation: GitHub holds the `
+    + `callee's jobs behind the caller's, and the caller cannot finish until the callee does. The `
+    + `run hangs until it is cancelled by hand, and \`${GATE_JOB}\` reports nothing at all.`,
   );
 
   return out;
@@ -4941,7 +4917,7 @@ for (const message of macosBudgetFailures(realWorld())) failures.push(message);
 for (const message of concurrencyFailures(realWorld())) failures.push(message);
 for (const message of releaseBoundaryFailures(realWorld())) failures.push(message);
 for (const message of aggregateGateFailures(realWorld())) failures.push(message);
-for (const message of compatDualEntryFailures(realWorld())) failures.push(message);
+for (const message of compatEntryPointFailures(realWorld())) failures.push(message);
 
 // ── 7h. the inventory script's own fail-closed proof, actually executed ─────
 //
@@ -5508,17 +5484,16 @@ const MUTATIONS = [
     expect: /unknown platform root "apps\/linux" exists under apps\//,
   },
   {
+    // `push.paths` set directly rather than through `withPaths`, which also
+    // writes a `pull_request:` key: this file no longer has that trigger, and
+    // a mutation that quietly restored it would be breaking two rules while
+    // claiming to break one.
     name: "compat.yml gains a push path filter",
-    mutate: (world) => withPaths(world, COMPAT, ["web/**", `.github/workflows/${COMPAT}`]),
-    expect: /compat\.yml gained a push path filter/,
-  },
-  {
-    name: "compat.yml gains a pull_request-only path filter",
     mutate: (world) => {
-      world.docs.get(COMPAT).on.pull_request = { paths: ["web/**"] };
+      world.docs.get(COMPAT).on.push.paths = ["web/**", `.github/workflows/${COMPAT}`];
       return world;
     },
-    expect: /compat\.yml gained a pull_request path filter/,
+    expect: /compat\.yml gained a push path filter/,
   },
   {
     name: "compat.yml moves onto a platform runner",
@@ -6980,12 +6955,13 @@ const MUTATIONS = [
     ),
     expect: /UNCONDITIONAL_LANES roster is \["none"\]/,
   },
-  // -- compat as the gate's second unconditional lane, and its two entry
-  //    points (6o, and the trigger shape in 1) ----------------------------
+  // -- compat as the gate's second unconditional lane, and the single entry
+  //    point it now has (6o, and the trigger shape in 1) ------------------
   //
   // Every case here leaves the YAML valid and actionlint silent, and all but
   // one leave the board GREEN — which is the point: the damage they describe is
-  // a check that stops reporting or a run that gets cancelled, not a red one.
+  // a check that stops reporting, a run that gets cancelled, or a gate that
+  // quietly checks less, not a red one.
   {
     // The whole reason compat is called unconditionally rather than as a ninth
     // conditional lane: with it demoted out of this roster the aggregate stops
@@ -7003,7 +6979,9 @@ const MUTATIONS = [
   {
     // The lane deleted from the caller side. The wire-compatibility contract
     // stops being part of what the required aggregate judges, and `merge-gate`
-    // goes green without it.
+    // goes green without it. Since protection edit B this is also the only way
+    // a pull request reaches compat at all, so the contract would go unchecked
+    // rather than merely unjudged.
     name: "the gate stops calling the compatibility lane at all",
     mutate: (world) => {
       delete world.docs.get(AGGREGATE).jobs.compat;
@@ -7012,8 +6990,8 @@ const MUTATIONS = [
     expect: /merge-gate\.yml declares jobs \[.*\]; want exactly \[.*compat.*\]/,
   },
   {
-    // The unconditional half of the no-secrets rule, which did not exist until
-    // this change: `compat` runs on every pull request including a fork's.
+    // The unconditional half of the no-secrets rule: `compat` runs on every
+    // pull request including a fork's.
     name: "an unconditional lane is forwarded the signing certificate",
     mutate: (world) => withGateJob(world, "compat", (job) => {
       job.secrets = { MACOS_SIGNING_CERT_P12_BASE64: "${{ secrets.MACOS_SIGNING_CERT_P12_BASE64 }}" };
@@ -7038,111 +7016,150 @@ const MUTATIONS = [
     expect: /merge-gate\.yml\/compat has grown an `if:/,
   },
   {
-    // The migration finished one step early. The bare `wire-vectors` context
-    // `main` still requires would be reported by NO run at all — an absent
-    // required check blocks every pull request and names no cause.
-    name: "compat loses the direct trigger that reports the still-required bare context",
-    mutate: (world) => withoutTrigger(world, COMPAT, "pull_request"),
-    expect: /compat\.yml: `pull_request` is absent, want present/,
+    // The duplicate, restored. This is the edit protection edit B made
+    // possible to remove, and the one a future reader is most likely to make
+    // "back" out of the belief that compat still owes `main` a bare
+    // `wire-vectors` on a pull request. It does not: that check run is owed on
+    // `main` commits, and `push: main` below is what provides it.
+    name: "compat takes its own direct pull_request trigger back",
+    mutate: (world) => withTrigger(world, COMPAT, "pull_request"),
+    expect: /compat\.yml: `pull_request` is present, want absent/,
   },
   {
-    // And the other direction: the gate's `uses:` becomes unresolvable, the
-    // ENTIRE run fails to load, and `merge-gate` reports nothing rather than
-    // red.
+    // The opposite direction, and now the whole board: the gate's `uses:`
+    // becomes unresolvable, the ENTIRE aggregate run fails to load, and
+    // `merge-gate` reports nothing rather than red. With no direct trigger
+    // left, this is also the edit that stops the compatibility contract being
+    // checked on pull requests at all.
     name: "compat stops being callable while the gate still calls it",
     mutate: (world) => withoutTrigger(world, COMPAT, "workflow_call"),
     expect: /compat\.yml: `workflow_call` is absent, want present/,
   },
   {
-    // THE cancellation. Same prefix for both entry points, same pull request
-    // number, cancel-in-progress true: the second run kills the first, and a
-    // cancelled check is neither green nor red.
-    name: "compat's called and direct runs collapse into one concurrency group",
+    // The permanent `push: main` trigger, removed. Nothing on a pull request
+    // changes and the board stays green — while every `main` commit stops
+    // carrying a bare `wire-vectors` check run and `relayium-ops`'
+    // `deploy/promote.sh` wedges production promotion with
+    // `required check absent`.
+    name: "compat loses the push trigger production promotion reads",
+    mutate: (world) => withoutTrigger(world, COMPAT, "push"),
+    expect: /compat\.yml: lost its `push` trigger/,
+  },
+  {
+    // `push` kept, but no longer restricted to `main`.
+    name: "compat's push trigger is widened past main",
+    mutate: (world) => {
+      world.docs.get(COMPAT).on.push.branches = ["main", "release/**"];
+      return world;
+    },
+    expect: /compat\.yml: `push\.branches` is \["main","release\/\*\*"\], want exactly \["main"\]/,
+  },
+  {
+    // The manual entry point, removed. It is the only way to re-run this gate
+    // against a `main` commit whose check run was lost, which is what the
+    // promotion path reads.
+    name: "compat loses the manual dispatch that can re-report a main commit",
+    mutate: (world) => withoutTrigger(world, COMPAT, "workflow_dispatch"),
+    expect: /compat\.yml: workflow_dispatch is absent, want present/,
+  },
+  {
+    // The input surface, reopened — under a NEW name, which is why the rule
+    // bans the surface rather than one spelling. Nothing about the YAML looks
+    // wrong, and the gate has acquired a lever every caller can pull.
+    name: "compat regains a workflow_call input, under a name nothing used before",
+    mutate: (world) => {
+      world.docs.get(COMPAT).on.workflow_call = {
+        inputs: {
+          skip_vectors: { required: "false", default: "false", type: "boolean" },
+        },
+      };
+      return world;
+    },
+    expect: /compat\.yml's `workflow_call` declares inputs \[skip_vectors\]; want NONE/,
+  },
+  {
+    // And the transitional input specifically, put back exactly as it was. It
+    // was legitimate for one migration step and is not legitimate now: there is
+    // one entry point left for it to discriminate.
+    name: "compat regains the transitional concurrency discriminator input",
+    mutate: (world) => {
+      world.docs.get(COMPAT).on.workflow_call = {
+        inputs: {
+          concurrency_scope: { required: "false", default: "merge-gate", type: "string" },
+        },
+      };
+      return world;
+    },
+    expect: /compat\.yml's `workflow_call` declares inputs \[concurrency_scope\]; want NONE/,
+  },
+  {
+    // The lever one level down, and it does not need a declared input to work:
+    // an undeclared read evaluates to the empty string, so this compiles, runs,
+    // and lets the gate skip itself for a caller.
+    name: "compat starts reading a caller-supplied input inside a job",
+    mutate: (world) => withNamedJob(world, COMPAT, COMPAT_JOB, (job) => {
+      job.if = "inputs.skip_vectors != 'true'";
+    }),
+    expect: /compat\.yml: a job reads `inputs\.skip_vectors`/,
+  },
+  {
+    // The discriminator returning in the group. Harmless-looking, and it can
+    // only be there to tell apart an entry point section 1 forbids.
+    name: "compat's concurrency group regains a call-vs-direct discriminator",
+    mutate: (world) => {
+      const doc = world.docs.get(COMPAT);
+      doc.concurrency.group =
+        `compat-\${{ inputs.concurrency_scope || 'direct' }}-${GROUP_SUFFIX}`;
+      return world;
+    },
+    expect: /compat\.yml: concurrency\.group is ".*" and reads an `inputs\.` term/,
+  },
+  {
+    // The literal prefix, replaced by something that is not it. Section 2's
+    // exact-string rule fires too; this case exists so the REASON — a called
+    // lane needs a literal nothing else uses — is proven able to fail on its
+    // own wording.
+    name: "compat's concurrency group loses its literal lane prefix",
     mutate: (world) => {
       world.docs.get(COMPAT).concurrency.group = `compat-${GROUP_SUFFIX}`;
       return world;
     },
-    expect: /compat\.yml: concurrency\.group is "compat-.*" and contains no/,
+    expect: /compat\.yml: concurrency\.group is "compat-.*", which does not start with the literal prefix `compat-lane-`/,
   },
   {
-    // The subtler shape: the term is still there, but the fallback was made
-    // equal to the input's default, so both entry points resolve to the same
-    // string. Nothing about the YAML looks wrong.
-    name: "compat's direct fallback is set equal to the called default",
+    // Caller and callee in one group: the deadlock, not the cancellation.
+    name: "compat is given the aggregate's own concurrency prefix",
     mutate: (world) => {
-      const doc = world.docs.get(COMPAT);
-      doc.concurrency.group = doc.concurrency.group.replace(
-        `|| '${COMPAT_DIRECT_SCOPE}'`,
-        `|| '${COMPAT_CALLED_SCOPE}'`,
-      );
+      world.docs.get(COMPAT).concurrency.group = `merge-gate-${GROUP_SUFFIX}`;
       return world;
     },
-    // Required by the COLLAPSE message specifically, not by the fallback-value
-    // check that also fires: this case exists to prove the two resolved groups
-    // are actually compared, so it must fail on that comparison.
-    expect: /both resolve concurrency\.group to "compat-merge-gate-\$\{\{ github\.event/,
+    expect: /compat\.yml and merge-gate\.yml share the concurrency prefix "merge-gate"/,
   },
   {
-    // The fallback renamed to something that is still DIFFERENT from the
-    // default, so the groups do not collapse and only the exact-value rule
-    // fires. Without this case the rule above would be the only thing pinning
-    // the direct literal, and it passes for any two distinct strings.
-    name: "compat's direct fallback is renamed to a string nothing else knows",
+    // The suffix half of the repository-wide rule. Without the `github.run_id`
+    // fallback every `main` push and every dispatch of this file shares one
+    // group, and GitHub cancels an older PENDING run in a group even with
+    // cancel-in-progress false — so the `main` commit that promotion reads gets
+    // a CANCELLED check rather than a green one.
+    name: "compat's concurrency group loses its run_id fallback",
     mutate: (world) => {
-      const doc = world.docs.get(COMPAT);
-      doc.concurrency.group = doc.concurrency.group.replace(
-        `|| '${COMPAT_DIRECT_SCOPE}'`,
-        "|| 'pr'",
-      );
+      world.docs.get(COMPAT).concurrency.group =
+        `${COMPAT_GROUP_PREFIX}-\${{ github.event.pull_request.number }}`;
       return world;
     },
-    expect: /compat\.yml: concurrency\.group falls back to "pr", want "direct"/,
+    expect: /compat\.yml: concurrency\.group has no `github\.run_id` fallback/,
   },
   {
-    // The hyphen trap, aimed at the discriminator: `inputs.a-b` is parsed as
-    // SUBTRACTION, evaluates to the empty string, and every called run silently
-    // falls back to the direct group.
-    name: "compat's discriminator reads an input name nothing declares",
+    // The cancel policy, widened past pull requests. A `main` run could then be
+    // superseded by the next `main` run, and the superseded commit's
+    // `wire-vectors` check run reports `cancelled` — which promotion reads as
+    // not-green on a commit that was never actually checked.
+    name: "compat starts cancelling its own main runs",
     mutate: (world) => {
-      const doc = world.docs.get(COMPAT);
-      doc.concurrency.group = doc.concurrency.group.replace(
-        `inputs.${COMPAT_SCOPE_INPUT}`,
-        "inputs.concurrency-scope",
-      );
+      world.docs.get(COMPAT).concurrency["cancel-in-progress"] = "true";
       return world;
     },
-    expect: /compat\.yml: concurrency\.group reads `inputs\.concurrency-scope`/,
-  },
-  {
-    // The default that names the caller, emptied. An empty default falls
-    // THROUGH the `||` to the direct fallback, so the called run rejoins the
-    // direct run's group.
-    name: "compat's call input loses the default that identifies the caller",
-    mutate: (world) => {
-      world.docs.get(COMPAT).on.workflow_call.inputs[COMPAT_SCOPE_INPUT].default = "";
-      return world;
-    },
-    expect: /input `concurrency_scope` defaults to ""/,
-  },
-  {
-    // A required input on a callee the gate deliberately calls with no `with:`.
-    // Caller-side syntax error: the whole run fails to load and the required
-    // context reports nothing at all.
-    name: "compat's call input becomes required while the gate passes no inputs",
-    mutate: (world) => {
-      world.docs.get(COMPAT).on.workflow_call.inputs[COMPAT_SCOPE_INPUT].required = "true";
-      return world;
-    },
-    expect: /input `concurrency_scope` is `required: "true"`/,
-  },
-  {
-    // The discriminator becoming a behaviour switch on the one gate no change
-    // in this repository can route around.
-    name: "compat starts reading the caller's identity inside a job",
-    mutate: (world) => withNamedJob(world, COMPAT, COMPAT_JOB, (job) => {
-      job.if = `inputs.${COMPAT_SCOPE_INPUT} != 'merge-gate'`;
-    }),
-    expect: /compat\.yml: a job reads `inputs\.concurrency_scope`/,
+    expect: /compat\.yml: concurrency\.cancel-in-progress is "true", want/,
   },
   // The two cases that used to sit here — `macos.yml`'s unfiltered `swift test`
   // gaining a `--filter`, and a legitimate fast pre-check beside it — moved
@@ -7164,7 +7181,7 @@ for (const { name, mutate, expect, refute } of MUTATIONS) {
       ...concurrencyFailures(world),
       ...releaseBoundaryFailures(world),
       ...aggregateGateFailures(world),
-      ...compatDualEntryFailures(world),
+      ...compatEntryPointFailures(world),
     ];
   } catch (err) {
     check(false, `the CI trigger-policy mutation "${name}" threw instead of reporting: ${err.message}`);

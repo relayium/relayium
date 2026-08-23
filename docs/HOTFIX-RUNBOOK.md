@@ -237,15 +237,18 @@ Three consequences:
 
    It refuses anything that is not a full immutable SHA, is not an ancestor of
    `origin/main`, or does not have a completed/successful hosted wire-vector
-   run — the run the merge box shows as `compat / wire-vectors` (§5). Use
-   `--dry-run` first if you want to see the decision without writing anything.
+   run — the `wire-vectors` run that `compat.yml`'s permanent `push: main`
+   trigger puts on that `main` commit (§5). Use `--dry-run` first if you want to
+   see the decision without writing anything.
    The host converges on its next 5-minute tick; `promote.sh` performs no
    production access itself.
 
    If it refuses with `required check 'compat / wire-vectors' is absent`, the
    run is probably fine and `PROMOTE_REQUIRED_CHECK` is wrong. `promote.sh`
    matches the **check-runs API** name, which is the bare job id
-   `wire-vectors`; the slash-joined form is a UI label the API never returns.
+   `wire-vectors`; the slash-joined form is how the **called** lane renders on a
+   pull request, prefixed by the caller's job id, and is not what the API returns
+   for the direct `push: main` run promotion reads.
    Do not reach for `--allow-unverified-checks` to get past that message —
    overriding a green gate because it was asked the wrong question puts an
    unproven commit into production during an incident.
@@ -300,30 +303,39 @@ about a Go change.
 | `apps/RelayiumKit/**` | **both** Apple workflows — it is shared, and it fans out on purpose |
 | A platform root under `apps/` | that root's single heavy owner workflow, and only that one |
 
-**`compat / wire-vectors` is required regardless of what you changed.** It is
-unfiltered by design — it runs on every pull request and every `main` push — and
-it is **the** required status check on `main`, bound to GitHub Actions
-`app_id` 15368. It is the one check no change and no future platform can route
-around. See `docs/CI-PLATFORM-BOUNDARY.md`.
+**The compat lane is required regardless of what you changed.** It is unfiltered
+by design — no `paths:` filter on any event — and it reaches every pull request
+through `merge-gate`, which calls it **unconditionally** and cannot report green
+unless it succeeds; it has no direct `pull_request:` trigger of its own any more.
+On `main` it still runs directly on `push: branches: [main]`, and that run is the
+bare `wire-vectors` check `promote.sh` reads (§3.1) — a promotion check, not a
+pull-request context. The required status check on `main` is now `merge-gate`
+alone, bound to GitHub Actions `app_id` 15368. Compat is still the one gate no
+change and no future platform can route around. See
+`docs/CI-PLATFORM-BOUNDARY.md`.
 
 **Where to look for the lanes above: `merge-gate`, not the lane's own name.**
-Every filtered lane in the table is now a **reusable workflow** called by
-`.github/workflows/merge-gate.yml`, and none of them has a `pull_request:`
-trigger of its own any more. On a pull request you will not find a top-level
-`go` or `web` run; you will find one `merge-gate` run whose check names are
-prefixed by the caller job id — `go / test`, `macos / signed-build`,
-`ops-contract / go-contract`. The aggregate's own job, `merge-gate`, prints a
+Every lane in the table is now a **reusable workflow** called by
+`.github/workflows/merge-gate.yml` — `compat.yml` included — and none of them has
+a `pull_request:` trigger of its own any more. On a pull request you will not
+find a top-level `go`, `web` or `compat` run; you will find one `merge-gate` run
+whose check names are prefixed by the caller job id — `go / test`,
+`macos / signed-build`, `ops-contract / go-contract`,
+`compat / wire-vectors`. The aggregate's own job, `merge-gate`, prints a
 lane/selected/result table and is red if any selected lane failed **or** if any
 unselected lane ran. On `main` the lanes still run directly under their own
 names, because every lane keeps its `push: branches: [main]` trigger — which is
 also what `promote.sh` reads, and why that trigger must never be removed.
 
-**`merge-gate` is not yet a required context.** As of this writing `main` still
-requires exactly `wire-vectors` and nothing else; the gate reports but does not
-block. `docs/CI-PLATFORM-BOUNDARY.md` carries the staged protection migration and
-its current position. Until that migration reaches its second protection edit, a
-red lane inside `merge-gate` does **not** stop a merge — so during an incident,
-read the gate's table yourself rather than trusting the merge button.
+**`merge-gate` is the required context.** Protection edit B narrowed `main` to
+exactly `merge-gate`, written and then read back as `strict: true`; the bare
+`wire-vectors` is no longer branch-required, and a red lane inside `merge-gate`
+does stop a merge — observed at `mergeStateStatus: BLOCKED` on the never-merged
+red probe PR #38, under the two-context set edit A left. **No second red probe
+has been run against the sole-`merge-gate` protection**, so during an incident
+still read the gate's lane table yourself rather than trusting the merge button
+alone. `docs/CI-PLATFORM-BOUNDARY.md` carries the staged protection migration and
+its current position.
 
 Evidence must come from a **hosted run on the real trigger**. A local pass is a
 useful signal, not acceptance evidence.
@@ -336,7 +348,7 @@ Under time pressure the cheapest-looking move is to make the gate agree with you
 None of the following is permitted in a hotfix, and each is asserted
 mechanically by `scripts/test/ci-event-policy-test.mjs`:
 
-- adding a `paths:` filter to `compat.yml`, on either event;
+- adding a `paths:` filter to `compat.yml`, on any event;
 - adding a `paths:` filter to `merge-gate.yml`, or a `push:` trigger — a required
   context that sometimes does not report blocks every pull request that does not
   select it, and routing `main` through the gate would stop the lanes from

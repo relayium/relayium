@@ -110,20 +110,43 @@ check, and it is not presented as one.
 
 ## 2. Correction: `main` protection is present, not absent
 
-Several audit statements say `main` is unprotected. **They are stale.** As of
-2026-08-21, after PR #6 merged as `24a29ec6`:
+Several audit statements say `main` is unprotected. **They are stale.**
+Protection was enabled on 2026-08-21, after PR #6 merged as `24a29ec6`, and the
+required set has since been edited twice:
 
-- `main` protection is **enabled**, verified by re-reading the settings after the
-  write: **strict** required status checks, **exactly one context**, bound to
-  **GitHub Actions `app_id` 15368**; `enforce_admins` false; force pushes false;
-  deletions false; no required reviews; no push restrictions.
-- The API context reads `wire-vectors` while the merge box renders
-  `compat / wire-vectors`. **This is a rendering difference, not a substituted
-  check.** The `app_id` binding is what prevents a differently-owned check of the
-  same job name from satisfying the rule.
+- `main` protection is **enabled**, verified by re-reading the settings after
+  every write: **strict** required status checks, **exactly one context**, bound
+  to **GitHub Actions `app_id` 15368**; `enforce_admins` false; force pushes
+  false; deletions false; no required reviews; no push restrictions.
+- **That one context is now `merge-gate`, not `wire-vectors`.** The original
+  single context was the bare `wire-vectors`; protection edit A added
+  `merge-gate` beside it, and **protection edit B narrowed the set to
+  `merge-gate` alone**, read back after the write as `strict: true` with exactly
+  that one context. The two-step order is why no required context was ever left
+  reported by nothing. `docs/CI-PLATFORM-BOUNDARY.md` carries the staged
+  migration and its current position.
+- **The wire-vector contract still reaches the merge button, through the
+  aggregate.** `merge-gate.yml` calls `compat.yml` **unconditionally** — no
+  `if:`, no `with:`, and no `paths:` on the lane itself — and cannot go green
+  unless that lane succeeds. `compat.yml` no longer has a direct `pull_request:`
+  entry point of its own. What moved is which name protection names, not whether
+  the contract blocks a merge.
+- **The bare `wire-vectors` check run did not stop mattering; its consumer
+  changed.** `compat.yml` keeps its permanent `push: branches: [main]` trigger,
+  so every `main` commit still carries a directly-triggered `wire-vectors` check
+  run, and `relayium-ops` `deploy/promote.sh` refuses to promote a commit that
+  lacks one (§7). It is a deployment/promotion check consumed across the
+  repository boundary — it is **not** a PR-required branch-protection context any
+  more.
+- The two names are different runs rather than one rendering. `wire-vectors` is
+  what the check-runs API returns for the direct `push: main` run, and it is the
+  name `promote.sh` matches; `compat / wire-vectors` is how the **called** lane
+  renders on a pull request, prefixed by the caller's job id. Neither is a
+  required context; `merge-gate` is. The `app_id` binding is what prevents a
+  differently-owned check of the same job name from satisfying the rule.
 - **`app_id` covers one substitution; job-name uniqueness covers the other.**
   The binding refuses a **differently owned** check — another App, or an external
-  service posting a status — that reports the context `wire-vectors` for a gate
+  service posting a status — that reports the required context for a gate
   that never ran. It cannot refuse a **second job of the same name in this
   repository**: that is the same app, `app_id` 15368, reporting the same
   context, so an unrelated green lane could satisfy the single requirement.
@@ -132,10 +155,13 @@ Several audit statements say `main` is unprotected. **They are stale.** As of
   `scripts/test/ci-event-policy-test.mjs` §6j asserts that `compat.yml` declares
   the `wire-vectors` job **and** that no other workflow file on disk declares
   one, scanning every workflow rather than only the parsed set, with mutation
-  evidence for both directions. The assertion pins the **name**; it is not, and
-  must not be read as, evidence that the context is required.
+  evidence for both directions. Since protection edit B that assertion guards the
+  name `promote.sh` matches on a `main` commit (§7) rather than the name branch
+  protection requires. The assertion pins the **name**; it is not, and must not
+  be read as, evidence that the context is required.
 - The wire-vector contract is therefore **required at merge time by repository
-  configuration**, not merely fail-closed by workflow design. `OA-021` is
+  configuration** — through `merge-gate`, which cannot report green without its
+  `compat` lane — not merely fail-closed by workflow design. `OA-021` is
   complete.
 
 **Any statement to the contrary is superseded, wherever it appears.** The two
@@ -145,11 +171,17 @@ requirement" paragraph in `docs/CI-PLATFORM-BOUNDARY.md` and the matching
 delivered item 3). They previously instructed readers to describe a
 now-required check as not required.
 
-**Still not observed, and deliberately not claimed: a real pull request showing
-the check as required in its merge box, and a merge actually blocked while that
-check is red.** Protection is verified by **settings read-back only**. This is
-tracked as an open evidence item, and both corrected texts say so in place:
-confirm it on the next real pull request rather than asserting it now.
+**Both halves of that evidence have since been observed.** A real merge box
+showed the required check reporting `isRequired: true` (PR #25), and a
+never-merged red probe — PR #38, exact head `33e4e3b5`, run `32660811500` — was
+read at `mergeStateStatus: BLOCKED` while `merge-gate` was red, then closed
+unmerged. That probe ran under the two-context set protection edit A left.
+
+**Still pending, and deliberately not claimed: the hosted evidence for removing
+compat's direct pull-request entry, and a second red probe against the
+sole-`merge-gate` protection edit B installed.** Neither is inferred from the
+settings read-back; confirm each on the pull request that carries it rather than
+asserting it now. §9 item 9 tracks both.
 
 ---
 
@@ -389,10 +421,15 @@ observed deciding on a live cron tick, with the service's process and start
 timestamp unchanged across it — no build, no release swap, no restart.
 
 The promotion gate reads that run from the **check-runs API**, so it matches the
-API name `wire-vectors` — the same name, and for the same reason, that branch
-protection's required context uses above. `compat / wire-vectors` is the merge
-box's rendering of it, not a second check; §3 covers why that distinction is
-load-bearing and what enforces the job-name uniqueness both rely on.
+API name `wire-vectors` — the name `compat.yml`'s permanent `push: branches:
+[main]` trigger reports on a `main` commit, which is why that trigger is
+permanent. Branch protection no longer requires that name: since protection edit
+B the sole required context is `merge-gate`, which reaches the same contract
+through its unconditional `compat` lane (§2). So the bare check run is a
+promotion signal consumed here, not a pull-request gate, and
+`compat / wire-vectors` is how that lane renders when the aggregate calls it, not
+a second check; §3 covers why that distinction is load-bearing and what enforces
+the job-name uniqueness both rely on.
 
 > **Hard boundary, unchanged.** The promotion pointer is **ops-first**: the
 > authoritative change is to `relayium-ops/deploy/auto-deploy.sh`, not to
@@ -528,16 +565,23 @@ All five items below are **complete**; the count and the enumeration match.
    dropped from the table silently. **Nothing about the device-inbox conformance
    fixtures remains open.** What this does NOT cover is item 12: capability and
    error contracts still have no fixture and no gate.
-9. **Observe required-check enforcement on a real pull request** (§2). This item
-   has two halves, and they are now in different states.
+9. **Observe required-check enforcement on a real pull request** (§2). Both
+   original halves are now closed by observation; the item itself stays open on
+   the narrower evidence named at the end.
 
    **The "shown as required" half is closed.** `ACTIVE-WORK.md` records PR #25
-   merging with the exact required `wire-vectors` check reporting
+   merging with the then-required bare `wire-vectors` check reporting
    `isRequired: true` — a real merge box, not a settings read-back. Recorded here
    because nothing else did.
 
-   **The "red actually blocks" half is still open**, and is deliberately not
-   inferred from the settings. Closing it means an intentionally red pull
+   **The "red actually blocks" half is closed too, and by observation rather
+   than by derivation from the settings.** A never-merged red probe — PR #38,
+   exact head `33e4e3b5`, run `32660811500` — was observed at
+   `mergeStateStatus: BLOCKED` with `merge-gate` red, and was then closed
+   unmerged. It ran under the two-context set protection edit A left, so **no
+   second red probe has yet been run against the sole-`merge-gate` protection
+   edit B installed**; that repeat is still pending and is likewise not inferred
+   from the settings. Either observation means an intentionally red pull
    request observed at `mergeStateStatus: BLOCKED`, with the head commit's
    check-runs enumerated directly — never `statusCheckRollup`, which is
    presentation state and was once misread as "all checks successful" on a pull
@@ -547,8 +591,8 @@ All five items below are **complete**; the count and the enumeration match.
    explicit bypass, which is a separate and deliberate property of the current
    settings.
 
-   **The aggregate-gate half is delivered in source and is awaiting its
-   protection edit.** `.github/workflows/merge-gate.yml` now runs unfiltered on
+   **The aggregate-gate half is delivered, and both protection edits are
+   made.** `.github/workflows/merge-gate.yml` now runs unfiltered on
    every pull request, calls each lane as a reusable workflow, and reports one
    always-present job — `merge-gate` — that enforces a two-way rule: `select`
    must have succeeded, the `needs` key set must equal a hardcoded roster
@@ -560,14 +604,23 @@ All five items below are **complete**; the count and the enumeration match.
    `scripts/test/fixtures/ci-path-selection.mjs`, and fails closed to "every
    lane" on every error path.
 
-   **What is not yet true: `merge-gate` is not a required context.**
-   `wire-vectors` remains the only one `main` requires. The gate reports and is
-   required by nothing, which is step 1 of the staged migration in
-   `docs/CI-PLATFORM-BOUNDARY.md`; steps 3 and 6 are the protection edits, and
-   this item closes only when the red-blocking observation above has been made
-   against the required aggregate. `compat.yml` deliberately keeps its own
-   `pull_request:` trigger until then, because folding it in early would rename
-   the one context protection currently requires.
+   **What is now true: `merge-gate` is the only context `main` requires.**
+   Protection edit A made the required set `{wire-vectors, merge-gate}` and
+   protection edit B narrowed it to `{merge-gate}`, each written and then read
+   back as `strict: true` with exactly those contexts. `compat.yml` was folded in
+   as an unconditional called lane first — PR #39, head `9d6ba08c`, aggregate run
+   `32665499037` — so the rename of its check never left a required context
+   reported by nothing. Its direct `pull_request:` entry is then removed in
+   source, while `push: branches: [main]`, `workflow_dispatch:` and
+   `workflow_call:` stay permanently: that `push: main` run is the bare
+   `wire-vectors` check `promote.sh` reads (§7), a promotion signal rather than a
+   pull-request context. The staged migration and its current position are in
+   `docs/CI-PLATFORM-BOUNDARY.md`.
+
+   **This item does not close yet.** Two pieces of evidence are outstanding and
+   are not claimed here: the hosted run proving compat reports exactly once per
+   pull request with the aggregate judging that single called lane, and the
+   second red probe against the sole-`merge-gate` protection described above.
 
    **One cost this creates, and it is the owner's to price rather than inherit:**
    `strict: true` plus a required aggregate means every merge to `main`

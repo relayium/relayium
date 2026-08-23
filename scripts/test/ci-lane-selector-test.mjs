@@ -81,13 +81,18 @@ const GATE_JOB = "merge-gate";
  * carries no `paths:` filter at all — a wire-compatibility contract a new
  * platform can route around by existing is not a contract — so there is nothing
  * for the selector to select and the gate requires it to SUCCEED on every pull
- * request. It is also the one called lane that KEEPS its own `pull_request:`
- * trigger, which is why section 1's ban on that trigger iterates the selector's
- * lanes rather than every lane the gate calls: `compat.yml` still reports the
- * bare `wire-vectors` context `main` requires, and removing the direct trigger
- * before protection stops requiring it would leave that context reported by
- * nothing. `scripts/test/ci-event-policy-test.mjs` §6o owns the concurrency
- * discriminator that keeps the two runs from cancelling each other.
+ * request.
+ *
+ * It used also to be the one called lane that KEPT its own `pull_request:`
+ * trigger, and that exception is gone: protection edit B made `merge-gate` the
+ * sole required context, so the bare `wire-vectors` compat reported directly
+ * stopped being what a pull request is judged against, and the direct trigger
+ * came out. Section 1's ban on that trigger still iterates the SELECTOR's lanes
+ * rather than every lane the gate calls, because those are the lanes this file
+ * owns; compat's trigger shape — `push: main` and `workflow_call` present,
+ * `pull_request` absent, permanently — is asserted by
+ * `scripts/test/ci-event-policy-test.mjs`'s GOVERNED table, and §6o there owns
+ * the input and concurrency surface the retired discriminator left behind.
  */
 const UNCONDITIONAL = ["compat", "repo-hygiene"];
 

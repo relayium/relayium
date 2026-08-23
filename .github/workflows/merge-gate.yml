@@ -30,16 +30,18 @@ name: merge-gate
 #
 # ## Migration state
 #
-# `main` now requires TWO contexts: `wire-vectors` and `merge-gate`. This
-# workflow is required, and `compat.yml` is called here as an unconditional
-# lane — while ALSO keeping its own `pull_request:` trigger.
+# `main` requires exactly ONE context: `merge-gate`. Protection edit A added it
+# beside the bare `wire-vectors`; protection edit B then removed `wire-vectors`,
+# and the settings read back after that write as `strict: true` with this
+# workflow's job as the sole requirement.
 #
-# Both halves of that sentence are the migration. Called, `compat.yml`'s job
-# reports as `compat / wire-vectors`; directly it reports as the bare
-# `wire-vectors`, which is still required. Taking the direct trigger away in the
-# same change would leave `wire-vectors` reported by no run at all, and an
-# absent required context blocks every pull request. So compat runs twice for a
-# few seconds until protection requires `merge-gate` alone.
+# That is what let the last step happen: `compat.yml` no longer carries its own
+# `pull_request:` trigger, so the lane below is the only way a pull request
+# reaches it, and it reports once, as `compat / wire-vectors`. The bare
+# `wire-vectors` still appears on `main` commits — `compat.yml` keeps `push:
+# main` permanently, because `relayium-ops`' `deploy/promote.sh` reads that
+# check run before it promotes — but nothing about a pull request depends on it
+# any more.
 # docs/CI-PLATFORM-BOUNDARY.md carries the staged order and where it stands.
 on:
   # Unfiltered, and with no `push:`. `main` is verified by each lane's own
@@ -208,16 +210,17 @@ jobs:
   # pass, so it is judged like `repo-hygiene`: required to SUCCEED on every pull
   # request, never merely required to be skipped.
   #
-  # The one lane whose callee ALSO keeps its own `pull_request:` trigger, so on
-  # one pull request `compat.yml` runs twice: here as `compat / wire-vectors`,
-  # and directly as the bare `wire-vectors` that `main` still requires. Removing
-  # the direct trigger before protection stops requiring that context would
-  # leave it reported by nothing. The callee's `concurrency.group` carries a
-  # call-vs-direct discriminator so the two runs cannot cancel each other; see
-  # its own header.
+  # This lane is now the callee's ONLY pull-request entry point. `compat.yml`
+  # kept its own `pull_request:` trigger for one migration step, because the
+  # bare `wire-vectors` it reported directly was a required context and removing
+  # the trigger first would have left that context reported by nothing.
+  # Protection edit B dropped that requirement, the direct trigger went with it,
+  # and the transitional call-vs-direct concurrency discriminator went with the
+  # second entry point it existed to tell apart. The callee keeps `push: main`
+  # permanently for production promotion; see its own header.
   #
-  # No `with:` block, so the callee's `concurrency_scope` input takes its
-  # default — which is what names this caller.
+  # No `with:` block, and nothing to put in one: `compat.yml` deliberately
+  # declares no `workflow_call` inputs at all.
   compat:
     needs: select
     uses: ./.github/workflows/compat.yml

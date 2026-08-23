@@ -130,15 +130,20 @@ const GUARD_TEST = "scripts/test/native-web-pairing-gate-test.mjs";
  * request, CALLS each lane, and reports the one always-present context that can
  * be required.
  *
- * `compat.yml` is deliberately NOT in this list, and the reason narrowed rather
- * than went away. The gate now DOES call it, as an unconditional lane — but it
- * also still owns its own `pull_request:` trigger, because the called run
- * reports as `compat / wire-vectors` while `main`'s protection — and
- * `relayium-ops`' `deploy/promote.sh` — read the bare `wire-vectors`. Dropping
- * the direct trigger is the LAST step of that migration, not this one. So this
- * list stays what it is: the lanes whose only pull-request entry point is the
- * gate. Section 3c below is unchanged for exactly that reason, and still reads
- * `compat.yml` on both events.
+ * `compat.yml` is deliberately NOT in this list, and what keeps it out narrowed
+ * again rather than went away. The gate calls it as an unconditional lane and
+ * that call is now its ONLY pull-request entry point — its own `pull_request:`
+ * trigger went with protection edit B, which made `merge-gate` the sole
+ * required context, so the bare `wire-vectors` it used to report directly is no
+ * longer what a pull request is judged against. What this list is FOR is the
+ * caller-job-id assertions in section 2b, and compat's own caller shape is
+ * owned by `scripts/test/ci-event-policy-test.mjs` — its GOVERNED trigger table
+ * and its aggregate roster, in both directions. Restating it here would add a
+ * second place to update and no coverage. Section 3c below reads `compat.yml`'s
+ * `push` filter, which is the only filtered event it has left, and its `push:
+ * main` trigger, which is permanent: `relayium-ops`' `deploy/promote.sh` reads
+ * the bare `wire-vectors` check run off a `main` commit before it promotes, and
+ * nothing else puts one there.
  */
 const AGGREGATE = "merge-gate.yml";
 const ACCEPTANCE_GATE_JOB = "native-web-pairing";
@@ -296,9 +301,12 @@ function onBlock(workflow) {
  * `pull_request:`, and a reader that only saw the literal list would have
  * reported `pull_request` as unfiltered and passed for the wrong reason. The
  * live files carry the anchor with nothing aliasing it now — but section 4
- * writes an aliased `pull_request:` back to prove the duplicate-trigger rule
- * fires, and `compat.yml` is still read on both events, so alias resolution
- * stays load-bearing rather than vestigial.
+ * writes an aliased `pull_request:` back onto the pairing workflow to prove the
+ * duplicate-trigger rule fires, and that mutated text is read through this
+ * function, so alias resolution stays load-bearing rather than vestigial. It
+ * used also to be exercised by reading `compat.yml` on both events; that file
+ * has one filtered event left, and the mutation is now what keeps this code
+ * path honest.
  */
 function triggers(workflow) {
   const lines = onBlock(workflow);
@@ -783,12 +791,14 @@ function handoffFailures(sources) {
   //     reports red when the contract breaks. Whether a red result BLOCKS a
   //     merge is GitHub branch-protection configuration on `main`, which lives
   //     in repository settings, not in this repository's source, and is not
-  //     asserted anywhere here. That protection currently requires the bare
-  //     `wire-vectors` — reported by compat.yml's OWN `pull_request:` trigger —
-  //     and the top-level `merge-gate`. The CALLED run's context,
-  //     `compat / wire-vectors`, is not itself a required context: it reaches
-  //     the merge button only through the aggregate, which judges the `compat`
-  //     lane's result.
+  //     asserted anywhere here. That protection now requires the top-level
+  //     `merge-gate` and nothing else, after protection edit B removed the bare
+  //     `wire-vectors`. The CALLED run's context, `compat / wire-vectors`, is
+  //     not itself a required context either: it reaches the merge button only
+  //     through the aggregate, which judges the `compat` lane's result. The
+  //     bare `wire-vectors` still matters off the merge button — it is the
+  //     check run `relayium-ops`' `deploy/promote.sh` reads on a `main` commit,
+  //     which is why `push: main` is asserted below and is permanent.
   //     Nothing below should be read as evidence that any of it is configured.
   const compatWorkflow = sources.get(COMPAT_WORKFLOW);
   if (compatWorkflow === undefined) {
@@ -801,12 +811,20 @@ function handoffFailures(sources) {
     const compatTriggers = triggers(compatWorkflow);
     need(compatTriggers !== null, `${COMPAT_WORKFLOW} declares no "on:" block`);
     if (compatTriggers !== null) {
-      for (const event of ["push", "pull_request"]) {
+      // `push` only, and that is the permanent shape rather than a narrowing of
+      // this check. This file's own `pull_request:` trigger is gone: a pull
+      // request reaches the contract through `${AGGREGATE}`'s unconditional
+      // `compat` lane, and the gate carries no path filter of its own — section
+      // 2b already reads that off disk. `push` is the one filtered event left
+      // here, and the filter it must not have is asserted on it.
+      for (const event of ["push"]) {
         if (!compatTriggers.has(event)) {
           need(
             false,
-            `${COMPAT_WORKFLOW} does not run on ${event}; branch work would reach \`main\` with`
-            + ` the compatibility contract unverified`,
+            `${COMPAT_WORKFLOW} does not run on ${event}; a \`main\` commit would carry no`
+            + ` \`wire-vectors\` check run, and \`relayium-ops\`' \`deploy/promote.sh\` refuses to`
+            + ` promote without one — production promotion wedges rather than a pull request`
+            + ` failing`,
           );
           continue;
         }
@@ -947,15 +965,12 @@ const MUTATIONS = [
     ),
     expect: /compat\.yml gained a push path filter/,
   },
-  {
-    name: "compat.yml gains a pull_request path filter",
-    mutate: (s) => withText(
-      s, COMPAT_WORKFLOW,
-      "  pull_request:\n  workflow_dispatch:",
-      "  pull_request:\n    paths:\n      - 'web/**'\n  workflow_dispatch:",
-    ),
-    expect: /compat\.yml gained a pull_request path filter/,
-  },
+  // The `pull_request` counterpart of the case above is gone with the trigger
+  // it filtered. `compat.yml` has one filtered event left, so there is no second
+  // filter here to narrow — and whether the direct trigger may return at all is
+  // `scripts/test/ci-event-policy-test.mjs`'s rule, mutated there rather than
+  // restated here. Leaving the case in place would have meant a mutation whose
+  // anchor no longer exists, which `withText` correctly throws on.
   {
     name: "the pairing filter is widened back to the bare `apps/**`",
     mutate: (s) => withText(
@@ -1613,10 +1628,12 @@ process.stdout.write(
   + `${GUARD_HOST_GATE_JOB} call that runs this guard — "${VECTOR_CHECK}" runs exactly once and `
   + `only in `
   + `${COMPAT_WORKFLOW} — unfiltered on `
-  + `push/main and pull_request, on ubuntu-latest, finite, fail-closed in workflow code (whether `
-  + `it BLOCKS a merge is branch protection on \`main\`, which requires the bare \`wire-vectors\` `
-  + `and \`merge-gate\` contexts — the called \`compat / wire-vectors\` is consumed by the `
-  + `aggregate and is not itself a required context — none of which is asserted here) and in `
+  + `push/main, its only filtered event now that ${AGGREGATE} is its sole pull-request entry `
+  + `point, on ubuntu-latest, finite, fail-closed in workflow code (whether it BLOCKS a merge is `
+  + `branch protection on \`main\`, which requires \`merge-gate\` alone — the called `
+  + `\`compat / wire-vectors\` is consumed by the aggregate and is not itself a required `
+  + `context, while the bare \`wire-vectors\` remains the check run production promotion reads `
+  + `off a \`main\` commit — none of which is asserted here) and in `
   + `the verifying form — neither gate may skip or be advisory, `
   + `${MUTATIONS.length} mutations prove each of those can fail (and one that a legitimate `
   + `\`--write\` step is not reported), and the acceptance still proves both role assignments, `

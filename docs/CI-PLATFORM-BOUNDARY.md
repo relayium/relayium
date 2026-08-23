@@ -506,8 +506,9 @@ no `if:`, no `continue-on-error`, no retry, no placeholder job, and the pinned
 dependency install that lets it run at all — is a property of the workflow
 **file**, and it is enforced there and asserted by
 `scripts/test/ci-event-policy-test.mjs`. It means the gate *starts* on every pull
-request and every `main` push and *reports red* when the cross-language contract
-breaks.
+request — through `merge-gate.yml`, which calls it with no condition and is now
+its only pull-request entry point — and on every `main` push, and *reports red*
+when the cross-language contract breaks.
 
 By itself that does not make a red result **block** a merge. That is a GitHub
 **branch protection** rule on `main`; it lives in repository settings rather than
@@ -521,15 +522,25 @@ compat / wire-vectors
 
 — the workflow's `name:` and the job key, joined the way GitHub renders a check.
 
-**That context is now required on `main`.** As of **2026-08-21**, after PR #6
-merged as `24a29ec6`, `main` protection is enabled and was verified by re-reading
-the settings after the write: **strict** required status checks, **exactly one
-required context**, bound to GitHub Actions **`app_id` 15368**; `enforce_admins`
-false; force pushes and deletions disabled; no required reviews; no push
-restrictions. The API reports the context as `wire-vectors` while the merge box
-renders `compat / wire-vectors` — a **rendering difference, not a substituted
-check**. The `app_id` binding is what stops a differently-owned check with the
-same job name from satisfying the rule.
+**That context is no longer what `main` requires, and that is the end state
+rather than a gap.** It was: as of **2026-08-21**, after PR #6 merged as
+`24a29ec6`, `main` protection was enabled and verified by re-reading the settings
+after the write — **strict** required status checks, **exactly one required
+context**, bound to GitHub Actions **`app_id` 15368**; `enforce_admins` false;
+force pushes and deletions disabled; no required reviews; no push restrictions.
+The API reported the context as `wire-vectors` while the merge box rendered
+`compat / wire-vectors` — a **rendering difference, not a substituted check**.
+
+Protection edit A then added `merge-gate` beside it, and **protection edit B
+narrowed the set to `merge-gate` alone**, read back after the write as
+`strict: true` with that one context. So `compat / wire-vectors` reaches the
+merge button through the aggregate's verdict on its `compat` lane rather than on
+its own, and the bare `wire-vectors` is no longer branch-required at all. It has
+**not** stopped mattering: it is the check run `compat.yml`'s permanent
+`push: main` trigger puts on a `main` commit, and `relayium-ops`'
+`deploy/promote.sh` refuses to promote without one. The `app_id` binding still
+stops a differently-owned check with the same job name from satisfying a
+requirement.
 
 **What `app_id` covers, and what covers the rest.** The binding answers exactly
 one substitution: a **differently owned** check — another GitHub App, or an
@@ -560,9 +571,10 @@ about the other, and the assertion is about the **name** — it is not evidence
 that the context is required, which remains a settings property recorded in the
 paragraph above.
 
-So `compat.yml` **may** now be described as merge-required, because it is. Any
-statement in this repository or its history that calls it an outstanding
-operational requirement is **stale and superseded**.
+So `compat.yml` **may** now be described as merge-required, because it is —
+through `merge-gate`, which is the sole required context and judges the `compat`
+lane's result. Any statement in this repository or its history that calls it an
+outstanding operational requirement is **stale and superseded**.
 
 **That gap is now closed, and by an observation rather than a derivation.** It
 used to say enforcement was verified by settings read-back only, with no merge
@@ -579,12 +591,13 @@ merge has been observed blocked is **stale and superseded**; the mirrored open
 item in `docs/ARCHITECTURE-RESILIENCE.md` §9 is owed the same correction and is
 not edited here.
 
-**And `wire-vectors` is no longer the only required context.** Protection edit A
-has been made and read back: `main` is `strict: true` with required contexts
-**exactly `wire-vectors` and `merge-gate`**. Both are required today, which is
-what makes the compat migration below safe to start and is also why it cannot be
-finished in one step. Any statement that `merge-gate` is required by nothing is
-stale; `wire-vectors` being the sole requirement is stale with it.
+**And `merge-gate` is now the only required context.** Protection edit A was
+made and read back as `strict: true` with **exactly `wire-vectors` and
+`merge-gate`**; protection edit B was then made and read back as `strict: true`
+with **exactly `merge-gate`**. That two-step order is what made the compat
+migration below safe: at no point was a required context reported by nothing.
+Any statement that `merge-gate` is required by nothing is stale; so is
+`wire-vectors` being the sole requirement, and so is the two-context set.
 
 ### The aggregate merge gate
 
@@ -604,7 +617,7 @@ always present and judges what the lanes actually did.
 |---|---|
 | Conditional lanes | `web`, `go`, `macos`, `ios`, `swift-package`, `native-web-pairing`, `contracts`, `ops-contract` |
 | Unconditional lanes | `repo-hygiene` (no `if:`; it hosts the guards every change must pass) and `compat` (no `if:` and no `paths:` filter either; it hosts the wire-compatibility contract every platform must pass) |
-| Called *and* still directly triggered | `compat` — the only one, and only until protection stops requiring the bare `wire-vectors`. See the staged migration below |
+| Called *and* still directly triggered | none. `compat` was the only one, for one migration step, and its direct `pull_request:` came out once protection stopped requiring the bare `wire-vectors`. See the staged migration below |
 | Never called | `release.yml`, `auto-release.yml`, `account-race-nightly.yml`, `go-fuzz-nightly.yml`, `macos-release.yml` |
 
 **Which lanes a change selects is read from the lanes' own `push.paths`, and
@@ -673,30 +686,40 @@ therefore carries a literal prefix nothing else uses (`web-lane`, `go-lane`,
 `merge-gate`), and §2 asserts both the literals and that no two files resolve to
 the same one.
 
-**`compat.yml` needs one more discriminator than a literal, because it is
-reachable twice.** It is the only workflow here a single pull request starts
-through **two** entry points — directly, and as the gate's `compat` lane — and
-both runs see the *same* `github.event.pull_request.number`, because inside a
-called workflow the event context is the caller's. A bare `compat-` prefix would
-therefore put them in **one** group, and with `cancel-in-progress` true the
-second to start would **cancel** the first. A cancelled run reports `cancelled`,
-not red, so it fails silently in both directions: either the direct run dies and
-the required bare `wire-vectors` context stops reporting at all — an *absent*
-required check, which blocks every pull request and names no cause — or the
-called run dies and the aggregate reports red over a `cancelled` lane that has
-nothing to do with the change set. So the group is
-`compat-${{ inputs.concurrency_scope || 'direct' }}-<suffix>`: an optional
-`workflow_call` string input whose **default is `merge-gate`**, read by
-`concurrency.group` and by nothing else, with an explicit `direct` fallback for
-`push`, `pull_request` and `workflow_dispatch`, which supply no inputs. Two
-different strings, two disjoint groups, and `cancel-in-progress` still supersedes
-a pull request's own earlier run *within* each. The gate passes no `with:` block
-at all, so the default is what identifies the call.
-`ci-event-policy-test.mjs` §6o asserts the input, its optionality, its type, its
-default, that the group actually reads it, that the fallback is present and
-different, that the two resolved groups differ from each other and from the
-caller's own group, and that no job has started reading the input as a behaviour
-switch — with a mutation for each.
+**`compat.yml` carries an ordinary literal, `compat-lane`, and briefly needed
+more than one.** For one migration step it was the only workflow here a single
+pull request started through **two** entry points — directly, and as the gate's
+`compat` lane — and both runs saw the *same*
+`github.event.pull_request.number`, because inside a called workflow the event
+context is the caller's. A bare `compat-` prefix put them in **one** group, and
+with `cancel-in-progress` true the second to start would **cancel** the first. A
+cancelled run reports `cancelled`, not red, so it failed silently in both
+directions: either the direct run died and the then-required bare `wire-vectors`
+context stopped reporting at all — an *absent* required check, which blocks every
+pull request and names no cause — or the called run died and the aggregate
+reported red over a `cancelled` lane that had nothing to do with the change set.
+The fix was a `compat-${{ inputs.concurrency_scope || 'direct' }}` stem: an
+optional `workflow_call` string input defaulting to `merge-gate`, read by
+`concurrency.group` and by nothing else.
+
+**Both are gone with the second entry point.** The group is now
+`compat-lane-<suffix>` — a literal like every other called lane's, distinct from
+`merge-gate` and from each of them, and `compat.yml` declares **no
+`workflow_call` inputs at all**. The collision cannot recur while the trigger
+shape holds: the only run keyed by a pull request number is the **called** one,
+and `push` and `workflow_dispatch` key on `github.run_id`, which is unique per
+run. A discriminator with one entry point left to discriminate would be an input
+on the always-on compatibility gate and nothing else — the widest behaviour
+switch it is possible to add here, because no change in this repository can route
+around this file.
+
+`ci-event-policy-test.mjs` §6o asserts what that leaves: that `workflow_call`
+declares **no** inputs under any name, that no job reads `inputs.` anything, that
+the group starts with the literal `compat-lane-` prefix, that it reads no
+`inputs.` term, and that its prefix differs from `merge-gate.yml`'s — with a
+mutation for each, alongside §1's mutations for the direct `pull_request:`
+returning and for `workflow_call`, `push: main` or `workflow_dispatch`
+disappearing.
 
 **Secrets are forwarded one line at a time, never `inherit`.** `macos` is the
 only caller given any, and only the four signing and provisioning secrets its own
@@ -716,19 +739,19 @@ always appears**.
 | # | Action | Required contexts after | Status |
 |---|---|---|---|
 | 1 | Merge the gate. It reports; nothing requires it. | `{wire-vectors}` | **done — PR #36 merged 2026-08-23 as `55e38d3f`** |
-| 2 | Observe `merge-gate` green on an ordinary pull request. | `{wire-vectors}` | **done — PR #37, head `c1aae73f`, aggregate run `32660352957` green with all eight conditional lanes skipped. This is where the repository is** |
+| 2 | Observe `merge-gate` green on an ordinary pull request. | `{wire-vectors}` | **done — PR #37, head `c1aae73f`, aggregate run `32660352957` green with all eight conditional lanes skipped** |
 | 3 | Protection edit A: `contexts: ["wire-vectors","merge-gate"]`. | `{wire-vectors, merge-gate}` | **done — written and read back as `strict: true` with exactly those two contexts** |
 | 4 | Observe a red gate actually blocking (`mergeStateStatus: BLOCKED`). | unchanged | **done — never-merged red probe PR #38, head `33e4e3b5`, run `32660811500`; closed unmerged** |
-| 5 | Fold `compat.yml` in as an unconditional lane, **keeping** its own `pull_request:` and its `push: main`. | unchanged | **in progress — source delivered on this branch; no hosted evidence claimed yet. This is where the repository is** |
-| 6 | Protection edit B: `contexts: ["merge-gate"]`. | `{merge-gate}` | pending |
-| 7 | Remove `pull_request:` from `compat.yml`. `push: main` stays, permanently. | `{merge-gate}` | pending |
+| 5 | Fold `compat.yml` in as an unconditional lane, **keeping** its own `pull_request:` and its `push: main`. | unchanged | **done — PR #39, head `9d6ba08c`, aggregate run `32665499037` green 45/45 with no cancellation; direct compat run `32665498867` and the called `compat / wire-vectors` both passed. Merged as `2f072638`** |
+| 6 | Protection edit B: `contexts: ["merge-gate"]`. | `{merge-gate}` | **done — written and read back as `strict: true` with exactly `merge-gate`** |
+| 7 | Remove `pull_request:` from `compat.yml`. `push: main` stays, permanently. | `{merge-gate}` | **in progress — source delivered on this branch; no hosted evidence claimed yet. This is where the repository is** |
 
 **Step 1 is done, and exactly what its run does and does not prove.** The gate
 described above is merged behaviour, not a proposal: PR #36 landed as
 `55e38d3f`, and its exact head `963a9348` produced aggregate run
 `32658307007` with **44 of 44 jobs successful**, the top-level `merge-gate` job
 among them. The separate `compat` run `32658306913` on the same head also
-passed, which is the still-required `wire-vectors` context reporting
+passed, which was the then-still-required bare `wire-vectors` context reporting
 independently of the gate. All eight conditional lanes ran alongside
 `repo-hygiene` — not because the diff happened to touch all of them, but because
 a pull request editing `merge-gate.yml`, `select-lanes.mjs` and the shared
@@ -747,9 +770,9 @@ conditional jobs — `web`, `go`, `macos`, `ios`, `swift-package`,
 `native-web-pairing`, `contracts` and `ops-contract` — **completed with
 conclusion `skipped`**, all **15 `repo-hygiene` jobs completed `success`**, and
 the top-level `merge-gate` job **completed `success`**. The separate `compat`
-run `32660352805` on the same head also completed `success`, which is the
-still-required `wire-vectors` context reporting independently of the gate. **No
-product lane ran.**
+run `32660352805` on the same head also completed `success`, which was the
+then-still-required bare `wire-vectors` context reporting independently of the
+gate. **No product lane ran.**
 
 That is the first hosted observation of the `not-selected ⇒ skipped` half, and
 it shows the aggregate accepting that shape: a green gate whose green comes from
@@ -771,38 +794,56 @@ green. GitHub reported `mergeStateStatus: BLOCKED`. The probe was closed
 unmerged and its refs deleted. A red gate blocking a merge is now an
 **observation**.
 
-**Step 5 is in progress: its source is delivered, and none of its hosted
-evidence is claimed.** On this branch `merge-gate.yml` calls `compat.yml`
-unconditionally — no `if:`, no `with:`, no `secrets:` — `compat` joins
-`repo-hygiene` in the aggregate's `needs:` and in its hardcoded
-`UNCONDITIONAL_LANES` roster, and `compat.yml` gains `workflow_call:` while
+**Step 5 is done, and this is exactly what its run observed.** `merge-gate.yml`
+calls `compat.yml` unconditionally — no `if:`, no `with:`, no `secrets:` —
+`compat` joined `repo-hygiene` in the aggregate's `needs:` and in its hardcoded
+`UNCONDITIONAL_LANES` roster, and `compat.yml` gained `workflow_call:` while
 **keeping** its `pull_request:`, its `push: branches: [main]` and its
-`workflow_dispatch:`. The concurrency discriminator described above is what
-makes running twice safe. All of that is asserted locally by
-`ci-event-policy-test.mjs` (§1 for the trigger shape, §2 for the exact group,
-§6n for the caller and the roster, §6o for the discriminator) and by
+`workflow_dispatch:`. PR #39, exact head
+`9d6ba08c5245c9b71d031dc1870c2c87101cc94e`, produced aggregate run
+`32665499037` with **45 of 45 jobs successful and no cancellation**; the
+separate direct compat run `32665498867` and the called `compat / wire-vectors`
+lane both passed. That is the observation this section previously recorded as
+missing: the two contexts reporting side by side on one pull request, and the two
+concurrency groups staying disjoint on real infrastructure. PR #39 merged as
+`2f072638`.
+
+**Step 6 is done.** Protection edit B was written and then **read back**: `main`
+is `strict: true` with the required context **exactly `merge-gate`**. The bare
+`wire-vectors` is no longer required on a branch, which is what made step 7
+possible without ever leaving a required context reported by nothing.
+
+**Step 7 is in progress: its source is delivered on this branch, and none of its
+hosted evidence is claimed.** `compat.yml`'s direct `pull_request:` trigger is
+removed; `push: branches: [main]`, `workflow_dispatch:` and `workflow_call:` all
+stay, permanently. The transitional `concurrency_scope` input and the
+call-vs-direct discriminator are gone with the second entry point, leaving the
+literal `compat-lane` prefix and the repository-wide suffix. `merge-gate.yml`
+still calls the lane unconditionally and still requires it to succeed; only its
+migration comments changed. All of that is asserted locally by
+`ci-event-policy-test.mjs` (§1 for the permanent trigger shape, §2 for the exact
+group, §6n for the caller and the roster, §6o for the input and concurrency
+surface that must not come back), each with its own mutation, and by
 `ci-lane-selector-test.mjs`'s closure.
 
-**What step 5 has NOT produced yet, and is deliberately not claimed here:** no
-hosted run of this branch, so `compat / wire-vectors` and the bare
-`wire-vectors` have **not** been observed reporting side by side on one pull
-request, and the two concurrency groups have **not** been observed staying
-disjoint on real infrastructure. Those are the acceptance evidence for this step
-and belong to the pull request that carries it.
+**What step 7 has NOT produced yet, and is deliberately not claimed here:** no
+hosted run of this branch, so `compat` has **not** been observed reporting
+exactly once per pull request, the aggregate has **not** been observed judging
+that single called lane, and no second red probe has been run against the
+sole-`merge-gate` protection. Those are the acceptance evidence for this step and
+belong to the pull request that carries it.
 
-**Steps 6 and 7 are open and untouched.** Protection edit B has not been made —
-`wire-vectors` is still required — and `compat.yml` still carries its
-`pull_request:` trigger, which is the point of step 5 rather than an oversight.
-
-Steps 5-7 are three moves and not one for a specific reason: converting
+Steps 5-7 were three moves and not one for a specific reason: converting
 `compat.yml` in one shot renames its check to `compat / wire-vectors`, so the
-required `wire-vectors` context would stop appearing and every pull request would
-sit unsatisfiable until protection was edited. Running compat twice for a few
-seconds across two merges is the price of never opening that window. Steps 3 and
-6 are one API call each and reverse instantly; because every lane keeps its
-`push: main` trigger throughout, `main` verification never depends on the gate
-and is unaffected by a rollback. Any protection edit must use the bare API string
-`merge-gate` — the merge box's rendering is not the context.
+then-required `wire-vectors` context would have stopped appearing and every pull
+request would have sat unsatisfiable until protection was edited. Running compat
+twice for a few seconds across two merges was the price of never opening that
+window. Steps 3 and 6 are one API call each and reverse instantly; because every
+lane keeps its `push: main` trigger throughout — `compat.yml` included, which is
+why the bare `wire-vectors` check run production promotion reads is unaffected by
+any of this — `main` verification never depends on the gate and is unaffected by
+a rollback. Any protection edit must use the bare API string `merge-gate` — the
+merge box's rendering is not the context.
 
 #### What the gate cannot do, and what is deliberately deferred
 
@@ -841,10 +882,10 @@ Also deliberately deferred, and for stated reasons rather than by omission:
 #### One cost the owner should price rather than inherit
 
 `strict: true` ("require branches up to date") used to cost 8 seconds of re-run,
-because `wire-vectors` was the only required context. **Protection edit A has
-been made, so that is no longer the state**: `merge-gate` is required too, and
-**every merge to `main` now invalidates every open pull request** and forces a
-full re-selection — including, for any pull request touching `apps/`, a
+because `wire-vectors` was the only required context. **Protection edits A and B
+have been made, so that is no longer the state**: `merge-gate` is now the sole
+required context, and **every merge to `main` invalidates every open pull
+request** and forces a full re-selection — including, for any pull request touching `apps/`, a
 60-minute `signed-build` and a 75-minute `ios-build`. It compounds: because
 GitHub evaluates path filters against the cumulative three-dot diff, a pull
 request that *ever* touched `apps/ios` keeps selecting the iOS lane on every later
@@ -1007,12 +1048,13 @@ The **suffix** is repository-wide and has no exceptions. The **prefix** is a
 literal in every file the merge gate calls, plus the gate and the release
 workflow: `web-lane`, `go-lane`, `macos-ci`, `ios-lane`, `swift-package-lane`,
 `native-web-pairing-lane`, `contracts-lane`, `ops-deploy-contract-lane`,
-`repo-hygiene-lane`, `merge-gate`, `macos-release`. `compat.yml` carries a
-literal **stem** plus an entry-point discriminator —
-`compat-${{ inputs.concurrency_scope || 'direct' }}` — because it is the one
-file reachable through two entry points on one pull request; see
-[above](#the-aggregate-merge-gate). Only the two scheduled nightlies — the
-workflows nothing calls — still use `${{ github.workflow }}`.
+`repo-hygiene-lane`, `merge-gate`, `macos-release`, `compat-lane`. `compat.yml`
+briefly carried a literal **stem** plus an entry-point discriminator, because it
+was then the one file reachable through two entry points on one pull request;
+that is gone with the second entry point and it now carries a plain literal like
+every other called lane — see [above](#the-aggregate-merge-gate). Only the two
+scheduled nightlies — the workflows nothing calls — still use
+`${{ github.workflow }}`.
 
 ```yaml
 # .github/workflows/macos.yml — a reusable callee
