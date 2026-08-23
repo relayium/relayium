@@ -183,3 +183,4 @@
     "nonMatchingPaths": ["/", "/healthz/", "/healthzz", "/ready", "/readyz/"]
   }
 }
+
