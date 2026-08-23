@@ -57,17 +57,20 @@ name: macos
 # release operation is in this file to reach.
 on:
   push:
-    # Only `main`. A branch push used to start this workflow AND its pull
-    # request start a second, identical run of the same commit. The
-    # pull_request trigger below is what gates branch work; this one exists so
-    # `main` itself is never unverified.
+    # Only `main`, and this trigger is LOAD-BEARING. Branch work is gated by
+    # `merge-gate.yml`, which CALLS this file; this event is the only thing
+    # that verifies `main` itself, because the gate runs on `pull_request`
+    # only. No lane may lose it — `relayium-ops`' `deploy/promote.sh` reads
+    # check runs on the `main` commit, and a lane that stopped reporting there
+    # would wedge production promotion rather than fail visibly here.
     branches:
       - main
-    # Defined once and aliased below, the way `web.yml` and
-    # `native-web-pairing.yml` already do it. The two lists were previously
-    # maintained by hand, which is how a `push` filter and a `pull_request`
-    # filter drift into a gate that passes on the branch and never runs after
-    # the merge.
+    # This list is the merge gate's only statement of what this lane watches:
+    # `scripts/ci/select-lanes.mjs` reads it off disk and selects this lane from
+    # it and from nothing else, so an entry changed here changes what the gate
+    # requires. The `&paths` ANCHOR this list used to declare is gone with the
+    # `pull_request:` block that aliased it — an anchor nothing references is a
+    # dangling one, and the gate is the pull-request entry point now.
     #
     # ORDER IS LOAD-BEARING. GitHub applies these per file, in order, and the
     # last pattern that matches decides — so the negation has to follow
@@ -75,18 +78,25 @@ on:
     # the exclusion match first and be overridden immediately after, which
     # leaves the filter valid, leaves actionlint happy, and silently restores
     # the behaviour this entry exists to remove.
-    paths: &paths
+    paths:
       - 'apps/mac/**'
       - 'apps/RelayiumKit/**'
       - '!apps/RelayiumKit/Tests/**'
       - '.github/workflows/macos.yml'
-  pull_request:
-    paths: *paths
-  # Called by `.github/workflows/macos-release.yml`, and by nothing else. There
-  # is deliberately no `workflow_dispatch:` here any more: a manual run of this
+  # Called by `.github/workflows/macos-release.yml` and by
+  # `.github/workflows/merge-gate.yml`, and by nothing else. There is
+  # deliberately no `workflow_dispatch:` here any more: a manual run of this
   # file could import the signing certificate and build, which is exactly what a
   # push already does, and every reason to start it BY HAND is a release reason
   # that now belongs to the release workflow.
+  #
+  # The gate is the second caller and the reason this file no longer carries a
+  # `pull_request:` trigger of its own. A path-filtered lane that does not
+  # trigger emits no check run at all, so branch protection could never tell a
+  # passing macOS lane from one that was legitimately not selected; the gate
+  # calls this file, judges its result, and reports one always-present context.
+  # It passes NO `with:` block, so all three inputs below take their CI
+  # defaults, and only the four signing secrets — never `inherit`.
   #
   # Exactly three inputs, because exactly three are read below — `contract`
   # reads all three and `signed-build` reads `release_version`. An input no job
@@ -171,17 +181,16 @@ permissions:
 # Under run_id nothing outside a pull request can cancel anything, which is the
 # correct default for a workflow that imports a Developer ID certificate.
 #
-# The prefix is the LITERAL `macos-ci`, and that is the one place this file
-# departs from the repository-wide group shape. Every other governed workflow
-# keys on `${{ github.workflow }}`, which is correct for a workflow nobody
-# calls — but this one is a reusable callee, and inside a called workflow
-# `github.workflow` is the CALLER's name. Under the shared expression a release
-# run would put `macos-release.yml`'s own jobs and this file's jobs in one
-# group, keyed on one `github.run_id`, and the callee would queue behind the
-# caller that is waiting for it. A literal prefix that no other workflow uses
-# makes the two groups disjoint by construction, and
-# `scripts/test/ci-event-policy-test.mjs` asserts both the literal and its
-# uniqueness.
+# The prefix is the LITERAL `macos-ci`, for the reason every lane the merge
+# gate calls now carries one: inside a called workflow `${{ github.workflow }}`
+# is the CALLER's name. Under the shared expression a release run would put
+# `macos-release.yml`'s own jobs and this file's jobs in one group, keyed on one
+# `github.run_id`, and the callee would queue behind the caller that is waiting
+# for it — and every lane the gate calls would land in that one group together,
+# cancelling each other under a pull request's `cancel-in-progress`. A literal
+# prefix that no other workflow uses makes the groups disjoint by construction,
+# and `scripts/test/ci-event-policy-test.mjs` asserts both the literal and its
+# uniqueness across every file it governs.
 concurrency:
   group: macos-ci-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

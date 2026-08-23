@@ -1,13 +1,31 @@
 name: repo-hygiene
 on:
   push:
-    # Only `main`. This workflow has no path filter, so a branch push ran it
-    # for every commit and its pull request ran it again for the same tree.
-    # The pull_request trigger below is what gates branch work; this one
-    # exists so `main` itself is never unverified.
+    # Only `main`, and this trigger is LOAD-BEARING. Branch work is gated by
+    # `merge-gate.yml`, which CALLS this file unconditionally; this event is
+    # the only thing that verifies `main` itself, because the gate runs on
+    # `pull_request` only. No lane may lose it — `relayium-ops`'
+    # `deploy/promote.sh` reads check runs on the `main` commit, and a lane
+    # that stopped reporting there would wedge production promotion rather
+    # than fail visibly here.
     branches:
       - main
-  pull_request:
+  # Called by `.github/workflows/merge-gate.yml`, with NO condition, and by
+  # nothing else.
+  #
+  # This is the one lane the gate calls unconditionally, and it is the same
+  # property as having no path filter: the guards hosted here — the trigger
+  # policy, the platform boundary, the dependency pins, the contract ownership
+  # rules — are the checks every change must pass, so neither a filter nor an
+  # `if:` may stand between a pull request and them.
+  #
+  # It REPLACES this file's own `pull_request:` trigger. Keeping both would run
+  # all fourteen jobs twice for every commit on a branch with an open pull
+  # request, once directly and once through the gate;
+  # `scripts/test/ci-event-policy-test.mjs` asserts the direct trigger is gone.
+  #
+  # No `inputs:` and no `secrets:`: nothing here reads either.
+  workflow_call:
 
 # Supersede a pull request's own earlier runs, and nothing else.
 #
@@ -21,8 +39,19 @@ on:
 # newer one arrives even with `cancel-in-progress: false`. Two quick merges
 # would silently drop the first commit's verification, and the branch would show
 # a cancelled — not failed, not missing — check for a commit nobody tested.
+#
+# The prefix is a LITERAL, not `${{ github.workflow }}`, and that is a property
+# of being a reusable CALLEE rather than a style choice. Inside a called
+# workflow that expression is the CALLER's name, so every lane `merge-gate.yml`
+# calls would land in ONE group under one `github.run_id` — with
+# `cancel-in-progress` true on a pull request, the lanes would actively cancel
+# each other, and the gate would then be judging cancelled runs while every
+# lane reported `cancelled` rather than red. A literal prefix nothing else uses
+# makes the groups disjoint by construction, and
+# `scripts/test/ci-event-policy-test.mjs` asserts both the literal and that no
+# two files resolve to the same one.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  group: repo-hygiene-lane-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -31,6 +60,7 @@ permissions:
 jobs:
   no-production-identifiers:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       # Third-party actions are pinned to a full commit SHA (with the human-readable
       # version in a trailing comment) so a compromised or retagged upstream release
@@ -46,6 +76,7 @@ jobs:
 
   uninstall-node:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       # web/public/uninstall-node.sh deletes files on a stranger's machine, and
@@ -57,6 +88,7 @@ jobs:
 
   install-node:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       # web/public/install-node.sh decides what privileges a relay node has on
@@ -71,6 +103,7 @@ jobs:
 
   macos-publish-order:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
@@ -93,6 +126,7 @@ jobs:
 
   native-web-pairing-gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
@@ -250,6 +284,7 @@ jobs:
 
   go-race-shard:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -273,6 +308,7 @@ jobs:
 
   server-tag:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       # scripts/release/server-tag.sh decides which tag auto-release.yml treats
@@ -290,6 +326,7 @@ jobs:
 
   macos-ui-selection:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       # scripts/macos-ui-session-acceptance.sh starts one pairing counterpart
@@ -304,6 +341,40 @@ jobs:
       # run itself needs a signed build and three peers and cannot run here.
       - name: macOS UI acceptance selector mapping
         run: sh scripts/test/macos-ui-selection-test.sh
+
+  ci-lane-selector:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      # Which lanes a change set selects, and therefore which expensive lanes
+      # the merge gate calls at all.
+      #
+      # `scripts/ci/select-lanes.mjs` reads the lane workflows' own
+      # `push.paths` filters — the ONLY declaration of what watches what — and
+      # `merge-gate.yml` turns its answer into eight `if:` conditions. Two ways
+      # of getting that wrong are invisible to every other check here. Selecting
+      # too much costs a PAID macOS runner on a documentation edit. Selecting
+      # too little produces a GREEN required gate over code no lane compiled,
+      # which is the fail-open shape the aggregate exists to close, arriving
+      # through the aggregate itself.
+      #
+      # The suite judges the selector against
+      # `scripts/test/fixtures/ci-path-selection.mjs` — the same 28-row oracle
+      # `ci-event-policy-test.mjs` judges its own independent filter reader
+      # against, so emptying one lane's filter fails in both files from one
+      # edit — and it asserts the three-way closure that stops a new lane from
+      # being added and silently left ungated: every lane the selector names is
+      # `uses:`d by the gate AND listed in the gate's `needs:`.
+      #
+      # It lives here for the same reason as ci-event-policy: this workflow has
+      # no path filter, so a change anywhere gets judged by it. No dependencies,
+      # so there is nothing to install.
+      - name: merge-gate lane selection matches the lanes' own path filters
+        run: node scripts/test/ci-lane-selector-test.mjs
 
   dependency-pinning:
     runs-on: ubuntu-latest
