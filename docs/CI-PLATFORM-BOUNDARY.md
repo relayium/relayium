@@ -11,7 +11,8 @@ enforcement, and where the two disagree the test is right — see
 
 A **platform root** is one directory under `apps/` holding one platform's app
 source. Every root has exactly **one heavy owner**: the single workflow that
-builds, tests, signs and releases it.
+builds, tests and signs it. For macOS, *releasing* it is a second workflow — see
+[the macOS CI/release seam](#the-macos-cirelease-seam).
 
 | Root                | Heavy owner            | Runner     |
 | ------------------- | ---------------------- | ---------- |
@@ -39,6 +40,67 @@ below is stated as a property of filters rather than of jobs.
    "The workflow is about that platform" is not the test; `apps/mac/` fails it
    for the pairing acceptance, which speaks for the macOS app without reading a
    file from it. See [native-web-pairing](#the-one-cross-client-exception).
+4. Heavy ownership is about *building*, not about *releasing*. A root may have a
+   separate release workflow, and macOS does; the heavy owner stays the workflow
+   the path filter starts.
+
+### The macOS CI/release seam
+
+`apps/mac/`'s heavy owner is `macos.yml`, and its **release** entry point is
+`macos-release.yml`. The two are one pipeline joined by `workflow_call`, not two
+pipelines that resemble each other:
+
+| | `macos.yml` | `macos-release.yml` |
+| --- | --- | --- |
+| Triggers | `push` (main), `pull_request`, `workflow_call` | `workflow_dispatch` only |
+| Started by | every change under its filter | a person |
+| Jobs | `contract`, `test`, `ui-smoke`, `signed-build` | `build` (the call), `notarize-stage`, `publish` |
+| Permissions | `contents: read`, no job-level block | `contents: read`; `publish` alone declares `contents: write` |
+| Secrets | signing certificate and two provisioning profiles | those four are *forwarded* to the call; the notary key and Sparkle private key stay in `notarize-stage` |
+| Concurrency prefix | literal `macos-ci` | literal `macos-release` |
+
+**Why it is a file split, again.** It used to be one file. `macos.yml` ran on
+every push and pull request *and* held `contents: write`, a `gh release create`,
+a `git push origin …:main`, an Apple notary API key and the Sparkle private
+signing key. What stood between an ordinary pull request and an immutable public
+release was a job-level `if:` — correct, and one edit away from not being there.
+The split replaces that condition with a structure: `macos.yml` cannot publish
+because it contains nothing that publishes.
+
+**The release builds through CI, not beside it.** `macos-release.yml`'s `build`
+job is `uses: ./.github/workflows/macos.yml`. The bytes that get notarized come
+out of the same `signed-build` lane every pull request already runs — one build
+definition, one signing path, one provenance record.
+
+**Three details that are load-bearing rather than stylistic:**
+
+* The call forwards its four secrets **one line each**, never `secrets:
+  inherit`. `inherit` would hand the CI half every secret this repository holds —
+  the notary key and the Sparkle private key included — invisibly, and would keep
+  doing so as secrets are added.
+* `signed-build` emits the artifact name it used as a job output, and the
+  release workflow **downloads by that value**. Re-deriving the name in the
+  second file is a second copy of one expression, and the first rename makes the
+  download look for something the run never uploaded. The workflow output uses
+  bracket syntax — `jobs['signed-build']` — because a hyphen in a property path
+  parses as subtraction and the dotted spelling evaluates to the empty string.
+* `notarize-stage`'s first step **fails when that output is empty**. A skipped
+  job satisfies `needs:` and contributes empty outputs, so a skipped
+  `signed-build` (a fork pull request) or a dotted output expression would
+  otherwise reach the download as an artifact named `""`.
+
+**The caller job carries no `timeout-minutes`.** GitHub rejects a workflow whose
+`uses:` job declares one. That is not an unbounded job: every job the call starts
+is budgeted inside `macos.yml`, and `ci-event-policy-test.mjs` exempts caller jobs
+explicitly rather than by silence — a job declared a caller must have a `uses:`,
+and a `uses:` job must be declared a caller.
+
+Section 6m of `ci-event-policy-test.mjs` asserts all of it — exact input, secret,
+output, job, permission and `needs` sets on both files; the guard and its
+position; that no release operation is reachable with every input at its default;
+and that the two release jobs' runner budgets moved *with* them rather than being
+dropped. `scripts/test/macos-publish-order-test.mjs` reads the publish job in its
+new home and separately asserts that neither release job is *also* in `macos.yml`.
 
 ## Apple-shared vs truly cross-platform
 
@@ -658,10 +720,40 @@ concurrency:
   `cancel-in-progress: false`. Two quick merges would drop the first commit's
   verification, and `main` would show a *cancelled* check — which reads as
   "someone stopped it" rather than "this is untested".
-* **`github.workflow` is part of the key**, so `macos.yml` and `ios.yml` never
+* **`github.workflow` is part of the key**, so `ios.yml` and `web.yml` never
   share a group, and a future platform's runs cannot cancel another platform's.
 
 A new platform workflow copies this block unchanged.
+
+### Two exceptions, and why they are not optional
+
+The **suffix** is repository-wide and has no exceptions. The **prefix** has two:
+`macos.yml` uses the literal `macos-ci`, and `macos-release.yml` uses the literal
+`macos-release`.
+
+```yaml
+# .github/workflows/macos.yml — a reusable callee
+concurrency:
+  group: macos-ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+```
+
+`macos-release.yml` calls `macos.yml` as a reusable workflow, and **inside a
+called workflow `${{ github.workflow }}` is the *caller's* name**, not the
+callee's. Under the shared expression both files' jobs would land in one group,
+keyed on one `github.run_id`: the callee queues behind the caller, and the caller
+waits for the callee. That is a deadlock, it is invisible to YAML validity and to
+`actionlint`, and no run that never exercised the call would show it.
+
+Two literals nothing else uses make the groups disjoint by construction, whatever
+either file is renamed to later. `ci-event-policy-test.mjs` asserts three things
+about this and mutates each: the exact group per file; that a workflow declaring
+`on: workflow_call` does not key on `github.workflow` at all; and that no two
+governed files resolve to the same prefix — where a file using the shared
+expression resolves to its own `name:`.
+
+**Do not read `github.workflow` as safe in a reusable callee.** It is safe in
+every workflow nobody calls, which is every other workflow here.
 
 ## CI architecture is executable policy, not prose
 
@@ -685,8 +777,20 @@ is happy with all of it:
   `macos.yml`;
 * one of the four named fixture entries dropped from `go.yml` or `web.yml`, or
   the four replaced by the directory they live in;
-* a new `macos-15` job landing in a governed workflow that `RUNNER_BUDGETS`
-  covers nowhere.
+* a new `macos-15` job landing in a governed *or budget-only* workflow that
+  `RUNNER_BUDGETS` covers nowhere;
+* `macos.yml` regaining a `workflow_dispatch`, a `publish` job, a job-level
+  `permissions:`, a notary or Sparkle secret, or a `gh release create`;
+* the reusable call switching to `secrets: inherit`, which reads as *shorter*;
+* the `signed_artifact` output written as `jobs.signed-build.…`, which is valid
+  expression syntax that silently evaluates to the empty string;
+* the empty-artifact guard deleted, made conditional, or moved after the download
+  it guards;
+* `notarize-stage` or `publish` losing the input clause from its `if:`, so a
+  dispatch started for a signed build notarizes or publishes;
+* either macOS workflow's concurrency prefix changed to the other's, or the
+  reusable callee's group moved back to `${{ github.workflow }}` — a deadlock
+  between the caller and the callee that no run without the call would show.
 
 The next signal after any of those is a cross-client regression reaching a user,
 or a bill. So the boundary is asserted in code, on every pull request and every
@@ -761,6 +865,10 @@ written.
 * `docs/OPS-DEPLOY-CONTRACT.md` — the second, and the product half of the
   deployment interface
 * `.github/workflows/macos.yml`, `.github/workflows/ios.yml` — the heavy owners
+* `.github/workflows/macos-release.yml` — the macOS release entry point, and the
+  only workflow here that may write to this repository
+* `scripts/test/macos-publish-order-test.mjs` — the publication order inside that
+  workflow, and the absence of its jobs from the CI half
 * `.github/workflows/native-web-pairing.yml` — the cross-client acceptance
 * `.github/workflows/repo-hygiene.yml` — the unfiltered host that runs the
   policy guards listed here on every pull request and every `main` push

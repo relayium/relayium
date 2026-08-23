@@ -34,6 +34,24 @@
 // is another permanent release with nothing behind it. So the order is asserted
 // here, on every push, by repo-hygiene.
 //
+// ## Where the job lives now
+//
+// The publish job MOVED. It used to sit in `.github/workflows/macos.yml`, beside
+// the ordinary push/pull_request verification lanes, which made the workflow
+// that runs on every commit also the workflow holding `contents: write`, a `gh
+// release create` and a `git push origin …:main`. It now lives in
+// `.github/workflows/macos-release.yml`, which has no `push:` and no
+// `pull_request:` at all, and `macos-release.yml` calls in the other direction
+// — the release workflow invokes the CI workflow as a reusable build.
+//
+// So this file reads TWO workflows. The ordering assertions below are unchanged
+// and are made against the release workflow, where the job is; and one further
+// assertion is made against the CI workflow, that the job is not ALSO there.
+// That second half is what stops the split from being undone by a copy: a
+// publish or notarization job restored into `macos.yml` would be reachable from
+// an ordinary `pull_request` event, and every ordering rule below would still
+// pass while reasoning about the copy in the other file.
+//
 // Deliberately no YAML dependency. `web/` is the only Node project in this
 // repository and this test must run without it — and adding a parser to the
 // dependency graph of a release-safety check is the wrong trade. The publish job
@@ -46,7 +64,23 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const workflowPath = resolve(repoRoot, ".github/workflows/macos.yml");
+
+/** The workflow the publish job lives in, and the only manual release entry point. */
+const WORKFLOW = ".github/workflows/macos-release.yml";
+const workflowPath = resolve(repoRoot, WORKFLOW);
+
+/**
+ * The CI half, which must contain none of it.
+ *
+ * Read as text rather than parsed: the assertion is an ABSENCE, and the
+ * structural job scan below is enough to make it. A parser would add a
+ * dependency for the sake of a question that is answered by which keys exist.
+ */
+const CI_WORKFLOW = ".github/workflows/macos.yml";
+const ciWorkflowPath = resolve(repoRoot, CI_WORKFLOW);
+
+/** The jobs that may only ever exist in the release workflow. */
+const RELEASE_ONLY_JOBS = ["publish", "notarize-stage"];
 
 /** The seven archived locales, as in `web/scripts/pages/shared.mjs`. */
 const FROZEN_LANGS = ["ar", "de", "es", "fr", "ja", "ko", "pt"];
@@ -305,6 +339,83 @@ if (push >= 0) {
   );
 }
 
+// 7. And the half none of the above can see: the job is here and NOWHERE ELSE.
+//
+// Every rule above is a statement about one file. None of them notices a second
+// copy of the publish job living in the CI workflow — where it would be
+// reachable from `push` and `pull_request` rather than from a deliberate manual
+// dispatch, and where it would need `contents: write` on the workflow that runs
+// on every commit.
+//
+// That is not hypothetical: it is where the job WAS. The split is what made
+// `macos.yml` structurally unable to publish, and "structurally" is worth
+// exactly as much as the assertion that it stayed that way.
+//
+// Job keys are read the same way `jobLines` reads them — a two-space-indented
+// key — so a job restored under any of these names fails here regardless of what
+// its steps do. The command check that follows is the same rule stated against
+// behaviour, so a publish job renamed to something innocuous fails too.
+const ciWorkflow = await readFile(ciWorkflowPath, "utf8");
+
+/**
+ * The two-space-indented keys under the file's `jobs:` mapping, and only those.
+ *
+ * Scoped to the mapping rather than to the indentation alone: `on:` also has
+ * two-space children — `push:`, `pull_request:`, `workflow_call:` — and a scan
+ * that collected them would report trigger names as jobs in its own failure
+ * message. Stopping at the next column-0 key is what keeps the list honest.
+ */
+const ciJobs = (() => {
+  const out = [];
+  let inJobs = false;
+  for (const line of ciWorkflow.split("\n")) {
+    if (line.trim() === "" || /^\s*#/.test(line)) continue;
+    if (/^jobs:\s*$/.test(line)) { inJobs = true; continue; }
+    if (!inJobs) continue;
+    if (/^\S/.test(line)) break;
+    const key = /^ {2}([A-Za-z0-9_][\w.-]*):\s*$/.exec(line)?.[1];
+    if (key !== undefined) out.push(key);
+  }
+  return out;
+})();
+
+check(
+  ciJobs.length > 0,
+  `${CI_WORKFLOW} parsed to no jobs at all, so the absence checks below would pass by inspecting `
+  + `nothing. Either the file moved or its shape changed; this test names it on purpose.`,
+);
+for (const job of RELEASE_ONLY_JOBS) {
+  check(
+    !ciJobs.includes(job),
+    `${CI_WORKFLOW} declares a \`${job}\` job; it declares [${ciJobs.join(", ")}]. That job `
+    + `belongs to ${WORKFLOW} and only there. In ${CI_WORKFLOW} it is reachable from \`push\` and `
+    + `\`pull_request\`, it needs \`contents: write\` or a notarization key on the workflow that `
+    + `runs on every commit, and every ordering rule in this file would keep passing while `
+    + `judging the copy in the other file.`,
+  );
+}
+
+// The same boundary stated as behaviour rather than as a job name. `git push`
+// is deliberately not in this list: the CI workflow legitimately contains none,
+// but neither does it need a rule here — the three below are the operations
+// that create or replace something permanent, and a renamed job carrying any of
+// them is the defect regardless of what the key is called.
+const ciCode = ciWorkflow.split("\n").filter((line) => !/^\s*#/.test(line)).join("\n");
+for (const [command, why] of [
+  ["gh release create", "creates an immutable public release"],
+  ["gh release upload", "replaces the assets of one"],
+  ["notarytool", "spends an Apple notarization submission"],
+  ["contents: write", "grants the token that can push to `main`"],
+]) {
+  check(
+    !ciCode.includes(command),
+    `${CI_WORKFLOW} contains \`${command}\`, which ${why}. That workflow runs on every push to `
+    + `\`main\` and every pull request; the operations that cannot be undone live in `
+    + `${WORKFLOW}, behind a manual dispatch, and the separation is the only thing that makes `
+    + `an ordinary CI event unable to reach them.`,
+  );
+}
+
 if (failures.length > 0) {
   for (const failure of failures) process.stderr.write(`FAIL: ${failure}\n`);
   process.stderr.write(`\n${failures.length} publication-order assertion(s) failed\n`);
@@ -312,7 +423,8 @@ if (failures.length > 0) {
 }
 
 process.stdout.write(
-  `ok: the macos publish job writes, then stages, then judges the staged bytes, then `
+  `ok: ${WORKFLOW}'s publish job writes, then stages, then judges the staged bytes, then `
   + `freezes them, and only then creates the immutable release `
-  + `(${publish.length} steps, ${exec.length} commands checked)\n`,
+  + `(${publish.length} steps, ${exec.length} commands checked); `
+  + `${CI_WORKFLOW} declares none of [${RELEASE_ONLY_JOBS.join(", ")}]\n`,
 );
