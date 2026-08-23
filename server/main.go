@@ -73,6 +73,97 @@ func parseTURNRelays(s string) []account.RelayConfig {
 	return relays
 }
 
+// ── the deployment health surface ───────────────────────────────────────────
+//
+// The route patterns, the exact success bodies and the readiness failure modes
+// below are the product half of an interface relayium-ops already depends on:
+// its auto-deploy path polls http://127.0.0.1:8080/readyz after every restart
+// and matches the body as a whole line, and a rollback is what happens when it
+// does not. They are frozen in contracts/ops-deploy-v1.json, and
+// ops_deploy_contract_test.go drives THESE handlers — not a copy of them —
+// against that document.
+//
+// Extracted from main() for exactly that reason. Nothing else changed: same
+// patterns, same order of checks, same statuses, same bodies, same timeout.
+
+// healthzPath is the liveness route. `http.ServeMux` treats a pattern with no
+// trailing slash as an exact match, so /healthz/ is deliberately NOT this route.
+const healthzPath = "/healthz"
+
+// readyzPath is the readiness route the deploy path polls.
+const readyzPath = "/readyz"
+
+// healthzBody and readyzBody are written WITHOUT a trailing newline. The deploy
+// poll is `curl -sf ... | grep -qx ready`, which is satisfied either way — but
+// the contract freezes what is actually sent, not what a particular consumer
+// happens to tolerate.
+//
+// They are written for every method, including HEAD. net/http then suppresses
+// the entity body of a HEAD response at the server, so a HEAD probe is accepted,
+// answers 200 and carries the Content-Length — and delivers no bytes. That is
+// the wire behaviour, and contracts/ops-deploy-v1.json's probe.bodylessMethods
+// is where it is frozen.
+const healthzBody = "ok"
+const readyzBody = "ready"
+
+// readyzDatabaseTimeout bounds the readiness database ping. It is deliberately
+// short: a readiness probe that blocks is indistinguishable, to the deploy
+// script's own timeout, from a server that never came up.
+const readyzDatabaseTimeout = 2 * time.Second
+
+// readinessProbe is the set of dependencies /readyz consults, resolved fresh on
+// every request.
+//
+// A nil func is the "not available" state rather than a separate flag, so the
+// two ways each dependency can be unready — absent, and present but failing —
+// stay the two branches they have always been.
+type readinessProbe struct {
+	// pingDatabase is nil when the server started without a usable database.
+	pingDatabase func(ctx context.Context) error
+	// blobsReady is nil when the blob store is not open.
+	blobsReady func() error
+}
+
+// registerHealthRoutes installs the liveness and readiness routes on mux.
+//
+// probe is called once per readiness request so that dependencies wired after
+// registration are still observed.
+func registerHealthRoutes(mux *http.ServeMux, probe func() readinessProbe) {
+	mux.HandleFunc(healthzPath, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(healthzBody))
+	})
+	mux.HandleFunc(readyzPath, func(w http.ResponseWriter, r *http.Request) {
+		p := probe()
+		if p.pingDatabase == nil {
+			http.Error(w, "database unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), readyzDatabaseTimeout)
+		defer cancel()
+		if err := p.pingDatabase(ctx); err != nil {
+			http.Error(w, "database unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if p.blobsReady == nil {
+			http.Error(w, "blob storage unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if err := p.blobsReady(); err != nil {
+			http.Error(w, "blob storage unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(readyzBody))
+	})
+}
+
+// defaultListenAddress is the central service's listen address when neither
+// -addr nor RELAYIUM_ADDR overrides it. Its port is frozen in
+// contracts/ops-deploy-v1.json: the deploy path's readiness poll and its
+// post-restart API probe both address 127.0.0.1:8080 directly.
+const defaultListenAddress = ":8080"
+
 func main() {
 	// Load an optional .env file before computing flag defaults, so each flag
 	// can fall back to a RELAYIUM_* variable. Precedence: explicit CLI flag >
@@ -82,7 +173,7 @@ func main() {
 		log.Printf("WARNING: read env file: %v", err)
 	}
 
-	addr := flag.String("addr", envStr("RELAYIUM_ADDR", ":8080"), "listen address")
+	addr := flag.String("addr", envStr("RELAYIUM_ADDR", defaultListenAddress), "listen address")
 	static := flag.String("static", envStr("RELAYIUM_STATIC", "../web/dist"), "static files directory")
 	dbPath := flag.String("db", envStr("RELAYIUM_DB", "relayium.db"), "SQLite database path (':memory:' for ephemeral)")
 	baseURL := flag.String("base-url", envStr("RELAYIUM_BASE_URL", "http://localhost:8080"), "public base URL for links/redirects")
@@ -529,31 +620,21 @@ func main() {
 	var readyBlobs *storage.DiskStore
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
-	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
-		if dbErr != nil || store == nil {
-			http.Error(w, "database unavailable", http.StatusServiceUnavailable)
-			return
+	// Liveness and readiness. The bodies, statuses, exact route patterns and the
+	// two-second database bound are frozen in contracts/ops-deploy-v1.json,
+	// because the production deploy path polls /readyz and treats anything else
+	// as a failed release. The closure is read PER REQUEST, not captured once:
+	// readyBlobs is still nil here and is assigned further down, so a probe that
+	// snapshotted it would report "blob storage unavailable" forever.
+	registerHealthRoutes(mux, func() readinessProbe {
+		probe := readinessProbe{}
+		if dbErr == nil && store != nil {
+			probe.pingDatabase = store.Ping
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-		defer cancel()
-		if err := store.Ping(ctx); err != nil {
-			http.Error(w, "database unavailable", http.StatusServiceUnavailable)
-			return
+		if readyBlobs != nil {
+			probe.blobsReady = readyBlobs.Ready
 		}
-		if readyBlobs == nil {
-			http.Error(w, "blob storage unavailable", http.StatusServiceUnavailable)
-			return
-		}
-		if err := readyBlobs.Ready(); err != nil {
-			http.Error(w, "blob storage unavailable", http.StatusServiceUnavailable)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ready"))
+		return probe
 	})
 	mux.HandleFunc("/ws", wsRoute{
 		reqLimiter:   wsCodeLimiter,

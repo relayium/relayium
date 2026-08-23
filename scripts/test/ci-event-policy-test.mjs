@@ -148,6 +148,16 @@ const GOVERNED = [
   // workflow: it starts on every change to the tree it owns, and a manual run
   // would produce nothing a push does not.
   { file: "contracts.yml", dispatch: false },
+  // The product↔ops deploy contract's own lane. Same reason, same shape, and
+  // deliberately a SEPARATE entry rather than a fourth job in `contracts.yml`:
+  // that document has no Swift and no TypeScript consumer, so sharing the lane
+  // would put a PAID macOS runner and an `npm ci` on every edit to it. Which
+  // document each lane owns, and that no contract file is left unowned, is
+  // `scripts/test/contract-ci-policy-test.mjs`; this entry is what binds the new
+  // lane to the trigger, concurrency and runner-budget rules below. `dispatch:
+  // false`, matching the workflow: it starts on every change to the one document
+  // it owns, and a manual run would produce nothing a push does not.
+  { file: "ops-deploy-contract.yml", dispatch: false },
   // The always-on, deliberately UNFILTERED compatibility gate. It is in this
   // list — and not merely in section 6 — so it is bound by the same trigger and
   // concurrency policy as every heavy workflow it runs in front of.
@@ -1149,6 +1159,21 @@ const PATH_MATRIX = [
     + "the trigger, concurrency or runner-budget rules above"],
   [".github/workflows/contracts.yml", ["contracts.yml"],
     "and the contract lane's own edit starts itself only, like every other workflow here"],
+  ["contracts/ops-deploy-v1.json", ["ops-deploy-contract.yml"],
+    "the second root contract, and the reason `contracts.yml`'s filter is no longer "
+    + "`contracts/**`. Exactly its own lane: NOT contracts.yml, whose web-contract job would "
+    + "`npm ci` a Vitest closure for a test that does not exist here and whose swift-contract job "
+    + "would take a PAID macOS runner for a document Swift never opens; and not go.yml, even "
+    + "though its Go consumer lives under server/ — that test already runs inside `go test ./...` "
+    + "on any real server change, and naming the document in go.yml's filter would start the "
+    + "EIGHT-SHARD race lane for a JSON edit"],
+  [".github/workflows/ops-deploy-contract.yml", ["ops-deploy-contract.yml"],
+    "and the deploy contract lane's own edit starts itself only"],
+  ["docs/OPS-DEPLOY-CONTRACT.md", [],
+    "the deploy contract's prose. No job reads it, so no path-filtered workflow starts — the "
+    + "always-on `repo-hygiene.yml` already fails when the contract points at a document that is "
+    + "gone, which is the only claim this file carries. Deliberately NOT in the lane's filter, "
+    + "for the same reason `docs/DEVICE-INBOX-ADMISSION-CONTRACT.md` is not in contracts.yml's"],
   ["apps/README.md", [],
     "documentation under apps/: not an input to any native build and not an input to the "
     + "pairing acceptance either, so NO path-filtered workflow starts. `apps/**` in the pairing "
@@ -1431,6 +1456,21 @@ const RUNNER_BUDGETS = [
         why: "a PAID macOS runner is held by a `swift test` that never exits",
       },
     },
+  },
+  {
+    // The deploy contract's lane. One job, one free Ubuntu runner: the `jobs`
+    // form is not needed, and a single file-wide ceiling is honest here in a way
+    // it would not be for `contracts.yml`, whose three jobs differ by an order
+    // of magnitude in cost.
+    //
+    // Declared 10. A checkout, `setup-go`, one package build and a handful of
+    // test functions driving an in-process HTTP handler — plus one deliberate
+    // ~2s wait where the frozen readiness database bound is allowed to elapse.
+    // 15 leaves room for a cold module download on a runner with no cache.
+    file: "ops-deploy-contract.yml",
+    max: 15,
+    why: "a runner is held by a `go test` selector that never exits, in a job whose real work is "
+      + "a handful of test functions driving one HTTP handler in process",
   },
   {
     file: IOS,
@@ -3528,6 +3568,7 @@ const ANDROID = FUTURE_PLATFORMS.find((future) => future.root === "apps/android"
 /** A governed workflow that is parsed, and a real one that deliberately is not. */
 const WEB = "web.yml";
 const CONTRACTS = "contracts.yml";
+const OPS_DEPLOY_CONTRACT = "ops-deploy-contract.yml";
 const AUTO_RELEASE = "auto-release.yml";
 
 /**
@@ -4042,6 +4083,54 @@ const MUTATIONS = [
     name: "contracts.yml is renamed out from under its runner budget",
     mutate: (world) => { world.docs.delete(CONTRACTS); return world; },
     expect: /contracts\.yml is missing or did not parse, so its runner budget/,
+  },
+  // The deploy contract lane. Newest workflow in the inventory, so — by the same
+  // argument as the block above — both halves of its registration are deleted
+  // and corrupted here, one at a time.
+  {
+    // The registration removed. The lane keeps running and keeps reporting
+    // green; what stops, silently, is every trigger, concurrency and path rule
+    // in this file binding it.
+    name: "ops-deploy-contract.yml is dropped from the governed inventory",
+    mutate: (world) => {
+      world.governed = world.governed.filter((entry) => entry.file !== OPS_DEPLOY_CONTRACT);
+      return world;
+    },
+    expect: /changing "contracts\/ops-deploy-v1\.json" starts \[\]; want \[ops-deploy-contract\.yml\]/,
+  },
+  {
+    // And the lane leaving the world entirely — renamed, deleted or unparseable
+    // — while the budget still names it. The budget then bounds nothing.
+    name: "ops-deploy-contract.yml is renamed out from under its runner budget",
+    mutate: (world) => { world.docs.delete(OPS_DEPLOY_CONTRACT); return world; },
+    expect: /ops-deploy-contract\.yml is missing or did not parse, so its runner budget/,
+  },
+  {
+    name: "the deploy contract lane's only job loses its bound",
+    mutate: (world) => withNamedJob(world, OPS_DEPLOY_CONTRACT, "go-contract", (job) => {
+      delete job["timeout-minutes"];
+    }),
+    expect: /ops-deploy-contract\.yml\/go-contract: timeout-minutes is undefined, want a finite positive number/,
+  },
+  {
+    // The other direction: the bound kept, raised until it is the six-hour
+    // default wearing a number.
+    name: "the deploy contract lane's bound is raised past its ceiling",
+    mutate: (world) => withNamedJob(world, OPS_DEPLOY_CONTRACT, "go-contract", (job) => {
+      job["timeout-minutes"] = "300";
+    }),
+    expect: /ops-deploy-contract\.yml\/go-contract: timeout-minutes is "300", above the 15-minute ceiling/,
+  },
+  {
+    // The whole reason this lane is separate: a deploy-contract edit reaching
+    // the three-consumer lane and taking a PAID macOS runner with it.
+    name: "the deploy contract is routed back into the three-consumer lane",
+    mutate: (world) => withPaths(world, CONTRACTS, [
+      "contracts/device-inbox-admission-v1.json",
+      "contracts/ops-deploy-v1.json",
+      `.github/workflows/${CONTRACTS}`,
+    ]),
+    expect: /changing "contracts\/ops-deploy-v1\.json" starts \[contracts\.yml, ops-deploy-contract\.yml\]/,
   },
   {
     name: "the contract lane's PAID macOS job loses its bound",

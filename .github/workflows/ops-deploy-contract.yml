@@ -1,0 +1,110 @@
+name: ops-deploy-contract
+# The product↔ops deployment interface contract's own lane: the one command that
+# judges the Go runtime half of `contracts/ops-deploy-v1.json`, and nothing else.
+#
+# ## Why this is not a fourth job in `contracts.yml`
+#
+# `contracts.yml` was filtered to `contracts/**` because at the time the tree
+# held one document and every implementation of it read the same vocabulary.
+# This document's readers are the Go server test and the always-on product
+# policy, plus the ops deploy script once a later batch adds it. Neither of the
+# other two jobs in that lane can see any of them:
+#
+#   * `web-contract` would `npm ci` a Vitest closure to run a test file that does
+#     not exist for this contract;
+#   * `swift-contract` would take a **PAID macOS runner** and a cold SwiftPM
+#     resolve to run a filtered `swift test` against a document Swift never
+#     opens.
+#
+# So the tree's ownership moved from per-TREE to per-CONTRACT-FILE.
+# `contracts.yml` is now filtered to exactly the Device Inbox inputs and keeps
+# its own full consumer set; this file owns this document alone, on one free Ubuntu
+# runner. `scripts/test/contract-ci-policy-test.mjs` asserts both halves and, in
+# place of the tree-wide filter's guarantee, requires every file under
+# `contracts/` to be claimed by exactly one lane — so a third contract fails
+# until somebody gives it an owner.
+#
+# ## Why the declarative half is not here
+#
+# The other consumer of this contract, `scripts/test/ops-deploy-contract-test.mjs`,
+# needs no toolchain at all and runs in `repo-hygiene.yml`, which carries no path
+# filter. That is deliberate and is the more important half: it re-checks every
+# declared path, working directory, npm script and artifact against
+# `git ls-files`, so a `web/` or `server/` change that invalidates the contract
+# fails on the commit that makes it rather than on the next contract edit. Adding
+# it here too would run the same check twice for one answer.
+#
+# ## The other direction is unchanged
+#
+# `server/ops_deploy_contract_test.go` lives under `server/**`, so an ordinary
+# server change still starts `go.yml` and `go test ./...` still executes it. This
+# lane catches a document that stopped matching the server; that suite catches a
+# server that stopped matching the document. Neither substitutes for the other.
+on:
+  push:
+    # Only `main`. A branch push would otherwise start this workflow AND its
+    # pull request start a second, identical run of the same commit. The
+    # pull_request trigger below is what gates branch work; this one exists so
+    # `main` itself is never unverified.
+    branches:
+      - main
+    # The document and this file. NOT `contracts/**`: the tree now holds two
+    # contracts with different consumer sets, and a tree-wide filter here would
+    # start this lane for a Device Inbox edit whose Go test it does not run.
+    #
+    # `docs/OPS-DEPLOY-CONTRACT.md` is deliberately absent for the same reason
+    # `docs/DEVICE-INBOX-ADMISSION-CONTRACT.md` is absent from `contracts.yml`:
+    # no job here reads it, and the always-on `repo-hygiene.yml` already fails
+    # when the contract points at a document that is gone.
+    #
+    # `server/ops_deploy_contract_test.go` is absent too — it lives in a tree
+    # `go.yml` watches, and naming it here would start two lanes for one answer.
+    paths: &paths
+      - 'contracts/ops-deploy-v1.json'
+      - '.github/workflows/ops-deploy-contract.yml'
+  pull_request:
+    paths: *paths
+
+# Supersede a pull request's own earlier runs, and nothing else.
+#
+# The group key is the PR NUMBER, so pushing three times to a branch leaves one
+# live run instead of three. Every non-PR event falls back to `github.run_id`,
+# which is unique per run, so no two such runs ever share a group and nothing
+# outside a pull request can cancel anything.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Read-only, and no job below reads a secret. This lane compares a JSON document
+# to a Go HTTP handler: it publishes nothing, deploys nothing, contacts no host
+# and has no identity to borrow. In particular it performs no build — the
+# contract describes builds, and running one here would be minutes of work for an
+# answer the document already states.
+permissions:
+  contents: read
+
+jobs:
+  # ── the Go consumer ───────────────────────────────────────────────────────
+  go-contract:
+    runs-on: ubuntu-latest
+    # Seconds of real work behind a toolchain setup and a package build. The one
+    # deliberate cost inside it is the readiness case that lets the frozen
+    # two-second database bound actually elapse. Finite and chosen, so a wedged
+    # run turns the board red in minutes instead of holding a slot for GitHub's
+    # 6-hour default.
+    timeout-minutes: 10
+    steps:
+      # Third-party actions are pinned to a full commit SHA (with the
+      # human-readable version in a trailing comment) so a compromised or
+      # retagged upstream release can't silently change what runs here.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+      # One package, one named prefix of test functions, no `-race`. The race
+      # lane is `go.yml`'s eight shards and is not what a document edit needs;
+      # `-count=1` is what stops a cached PASS from answering for bytes that
+      # changed.
+      - name: The Go half of the ops deploy contract
+        working-directory: server
+        run: go test ./ -run '^TestOpsDeployContract' -count=1

@@ -1,6 +1,7 @@
 name: contracts
-# The root contract tree's own lane: the smallest command that judges each
-# implementation's agreement with `contracts/**`, and nothing else.
+# The Device Inbox admission contract's own lane: the smallest command that
+# judges each implementation's agreement with
+# `contracts/device-inbox-admission-v1.json`, and nothing else.
 #
 # ## Why this workflow exists rather than four filter entries
 #
@@ -56,16 +57,29 @@ on:
     # `main` itself is never unverified.
     branches:
       - main
-    # Two entries, and no exclusion, for the same reason `swift-package.yml`
-    # has two: this lane owns one tree, it must see every file in it, and an
-    # exclusion here would create a contract file with no owner at all.
+    # The Device Inbox contract and this file. This filter USED to be
+    # `contracts/**`, on the argument that a second document should join the
+    # lane with no workflow edit at all. `contracts/ops-deploy-v1.json` is that
+    # second document, and it showed the argument was wrong: it has no Swift and
+    # no TypeScript consumer, so under a tree-wide filter every edit to it would
+    # have taken a PAID macOS runner and an `npm ci` to re-run two jobs that
+    # cannot see it.
+    #
+    # So ownership of `contracts/` is per CONTRACT FILE, not per tree. This lane
+    # owns the Device Inbox admission contract and keeps all three consumers;
+    # `ops-deploy-contract.yml` owns the deploy contract on one Ubuntu runner.
+    # What the tree-wide filter used to guarantee — that no contract file can
+    # exist with no owner — is now asserted directly:
+    # `scripts/test/contract-ci-policy-test.mjs` requires every file under
+    # `contracts/` to be claimed by exactly one lane, so a third contract fails
+    # until somebody gives it one.
     #
     # The three consumer TESTS are deliberately absent. Each already lives in a
     # tree its own suite watches, so naming them here would start a second lane —
     # including a second PAID macOS runner for a Swift test that
     # `swift-package.yml` was about to run anyway — for one answer.
     paths: &paths
-      - 'contracts/**'
+      - 'contracts/device-inbox-admission-v1.json'
       - '.github/workflows/contracts.yml'
   pull_request:
     paths: *paths
