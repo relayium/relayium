@@ -676,13 +676,55 @@ always appears**.
 
 | # | Action | Required contexts after | Status |
 |---|---|---|---|
-| 1 | Merge the gate. It reports; nothing requires it. | `{wire-vectors}` | **done in source; this is where the repository is** |
-| 2 | Observe `merge-gate` green on an ordinary pull request. | `{wire-vectors}` | pending |
+| 1 | Merge the gate. It reports; nothing requires it. | `{wire-vectors}` | **done — PR #36 merged 2026-08-23 as `55e38d3f`** |
+| 2 | Observe `merge-gate` green on an ordinary pull request. | `{wire-vectors}` | **done — PR #37, head `c1aae73f`, aggregate run `32660352957` green with all eight conditional lanes skipped. This is where the repository is** |
 | 3 | Protection edit A: `contexts: ["wire-vectors","merge-gate"]`. | `{wire-vectors, merge-gate}` | pending |
 | 4 | Observe a red gate actually blocking (`mergeStateStatus: BLOCKED`). | unchanged | pending |
 | 5 | Fold `compat.yml` in as an unconditional lane, **keeping** its own `pull_request:` and its `push: main`. | unchanged | pending |
 | 6 | Protection edit B: `contexts: ["merge-gate"]`. | `{merge-gate}` | pending |
 | 7 | Remove `pull_request:` from `compat.yml`. `push: main` stays, permanently. | `{merge-gate}` | pending |
+
+**Step 1 is done, and exactly what its run does and does not prove.** The gate
+described above is merged behaviour, not a proposal: PR #36 landed as
+`55e38d3f`, and its exact head `963a9348` produced aggregate run
+`32658307007` with **44 of 44 jobs successful**, the top-level `merge-gate` job
+among them. The separate `compat` run `32658306913` on the same head also
+passed, which is the still-required `wire-vectors` context reporting
+independently of the gate. All eight conditional lanes ran alongside
+`repo-hygiene` — not because the diff happened to touch all of them, but because
+a pull request editing `merge-gate.yml`, `select-lanes.mjs` and the shared
+fixture is a **control-file** change and the selector fails closed to every
+lane. That is the designed behaviour, and it bounds what PR #36 is evidence of:
+it proves the `selected ⇒ success` half of the two-way rule and **nothing about**
+the `not-selected ⇒ skipped` half, which PR #37 observed separately and is
+recorded next.
+
+**Step 2 is done, and this is exactly what its run observed.** This pull request
+is documentation-only: it edits a single file under `docs/`, which selects no
+conditional lane. Its first hosted run, on the exact head
+`c1aae73fa55f3668ff41ba89a174937b41bc3313`, is `merge-gate` workflow run
+`32660352957`, **completed with conclusion `success`**. On that run all eight
+conditional jobs — `web`, `go`, `macos`, `ios`, `swift-package`,
+`native-web-pairing`, `contracts` and `ops-contract` — **completed with
+conclusion `skipped`**, all **15 `repo-hygiene` jobs completed `success`**, and
+the top-level `merge-gate` job **completed `success`**. The separate `compat`
+run `32660352805` on the same head also completed `success`, which is the
+still-required `wire-vectors` context reporting independently of the gate. **No
+product lane ran.**
+
+That is the first hosted observation of the `not-selected ⇒ skipped` half, and
+it shows the aggregate accepting that shape: a green gate whose green comes from
+skips rather than from work, on an ordinary pull request rather than the
+fail-closed control-file case. Together with PR #36's `selected ⇒ success`
+half, both directions of the two-way rule now rest on a recorded hosted run
+rather than on a derivation.
+
+**Steps 3-7 are open, and none of them is claimed here.** No protection edit has
+been made: `wire-vectors` is still the only required context, and **`merge-gate`
+is not required on `main`**. No red gate has been observed blocking a merge —
+the never-merged red probe of step 4 has **not** been performed, so "a red gate
+blocks the merge" remains a derivation from its exit status, not an observation.
+Steps 5 and 7 are untouched.
 
 Steps 5-7 are three moves and not one for a specific reason: converting
 `compat.yml` in one shot renames its check to `compat / wire-vectors`, so the
