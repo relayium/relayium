@@ -131,6 +131,13 @@ const GOVERNED = [
   { file: "go.yml", dispatch: true },
   { file: "macos.yml", dispatch: true },
   { file: "ios.yml", dispatch: true },
+  // The shared Swift package's own lane. It is here for the same reason every
+  // other filtered workflow is — its triggers, its concurrency and its
+  // push/pull_request path symmetry would otherwise be governed by nothing.
+  // WHAT it owns (the repository's sole unfiltered `swift test`, the ordered
+  // `!apps/RelayiumKit/Tests/**` exclusions, and which workflow starts on which
+  // package path) belongs to `scripts/test/swift-ci-boundary-test.mjs`.
+  { file: "swift-package.yml", dispatch: true },
   { file: "web.yml", dispatch: true },
   // The always-on, deliberately UNFILTERED compatibility gate. It is in this
   // list — and not merely in section 6 — so it is bound by the same trigger and
@@ -877,8 +884,41 @@ function pathFilterToRegExp(pattern) {
   return new RegExp(`^${re}$`);
 }
 
-const matchesFilter = (patterns, path) =>
-  patterns.some((pattern) => pathFilterToRegExp(pattern).test(path));
+/** Is this filter entry an exclusion? */
+const isNegation = (pattern) => typeof pattern === "string" && pattern.startsWith("!");
+
+/** The glob half of a filter entry, with any leading `!` removed. */
+const filterBody = (pattern) => (isNegation(pattern) ? String(pattern).slice(1) : String(pattern));
+
+/**
+ * Would GitHub start a workflow with this `paths:` filter for a change to
+ * `path`?
+ *
+ * ORDERED, LAST MATCH WINS — not `some()`. GitHub evaluates a `paths:` list
+ * against each changed file in order and the LAST pattern that matches decides:
+ * a `!` entry excludes, and a later positive entry can re-include what an
+ * earlier `!` excluded. A file no pattern matches does not match at all.
+ *
+ * Reading the list as an unordered `some()` was correct only while no filter in
+ * this repository carried a negation. Three now do — `macos.yml`, `ios.yml` and
+ * `native-web-pairing.yml` each follow `apps/RelayiumKit/**` with
+ * `!apps/RelayiumKit/Tests/**` — and under `some()` every file in that excluded
+ * subtree would still read as triggering, because the positive pattern matches
+ * it. Every trigger-matrix row below would then be judging a filter nobody had
+ * actually compiled.
+ *
+ * WHY those exclusions exist, and every way of getting one wrong, is
+ * `scripts/test/swift-ci-boundary-test.mjs`. This is only the semantics the
+ * rows here are read with.
+ */
+const matchesFilter = (patterns, path) => {
+  let matched = false;
+  for (const pattern of patterns) {
+    if (!pathFilterToRegExp(filterBody(pattern)).test(path)) continue;
+    matched = !isNegation(pattern);
+  }
+  return matched;
+};
 
 /** The `push` path filter of a governed workflow, or null when it has none. */
 function pathsOf(file) {
@@ -1058,8 +1098,11 @@ const PATH_MATRIX = [
     + "`apps/**` — no 45-minute macOS pairing runner either. That acceptance builds "
     + "apps/RelayiumKit and the Web bundle; nothing under apps/ios is an input to it"],
   ["apps/RelayiumKit/Sources/RelayiumKit/Crypto/SealedBox.swift",
-    ["ios.yml", "macos.yml", "native-web-pairing.yml"],
-    "SHARED source: both native workflows, or one app's break goes unseen"],
+    ["ios.yml", "macos.yml", "native-web-pairing.yml", "swift-package.yml"],
+    "SHARED source: both native workflows, or one app's break goes unseen — plus the pairing "
+    + "acceptance that compiles it and the package's own suite. The rest of that package's "
+    + "ownership, including the `!apps/RelayiumKit/Tests/**` exclusions the three heavy filters "
+    + "now carry, is `scripts/test/swift-ci-boundary-test.mjs`"],
   ["scripts/ios-ui-session-acceptance.sh", ["ios.yml"],
     "the iOS built-App acceptance: the workflow that runs it, and only that one. The pairing "
     + "workflow does not source this script, and `scripts/**` is gone from its filter"],
@@ -1300,6 +1343,39 @@ const notaryWaitMinutes = (() => {
  */
 const RUNNER_BUDGETS = [
   {
+    // Declared 25 for its one job. The command it runs is the one that used to
+    // sit in `macos.yml`'s `test` job, whose 59 recorded runs took
+    // 5.5 minutes at worst for this suite PLUS four release-script tests — so
+    // 5.5 bounds this command from above. 30 leaves room for a cold SwiftPM
+    // resolve and a fresh WebRTC/Sodium fetch on a runner with no cache.
+    //
+    // The `jobs` form rather than a file-wide `max`, even with one job, is
+    // deliberate: it is what makes a SECOND job added to this workflow fail
+    // until somebody budgets it.
+    file: "swift-package.yml",
+    why: "a PAID macOS runner is held by a `swift test` that never exits",
+    jobs: {
+      "swift-test": {
+        max: 30,
+        why: "a PAID macOS runner is held by a `swift test` that never exits",
+      },
+    },
+  },
+  {
+    // Declared 45. Worst case is eight rounds each preceded by a 65s wait for
+    // the server's own per-IP WebSocket join budget, on top of the Swift, Go
+    // and Vite builds and a Chrome install. 60 is above that and far below the
+    // 6-hour default this list exists to replace.
+    //
+    // It is here because 6l requires every governed macOS job to be budgeted
+    // somewhere, and this was the only one that was not — not by decision, but
+    // because the list predates the acceptance moving into its own file.
+    file: NWP,
+    max: 60,
+    why: "a PAID macOS runner is held by an acceptance whose Chrome, Go server or Swift peer "
+      + "never became ready, with two live clients waiting on each other",
+  },
+  {
     file: IOS,
     max: 90,
     why: "a PAID macOS runner is held by a build that will never finish — a simulator that never "
@@ -1321,11 +1397,17 @@ const RUNNER_BUDGETS = [
         max: 15,
         why: "a PAID macOS runner is held by a release-contract check that reads a project file",
       },
-      // Declared 20. One `swift test` over the shared package, plus four
-      // release-script tests.
+      // Declared 10. The unfiltered `swift test` moved to `swift-package.yml`;
+      // what is left is a checkout, two `-version` probes and four
+      // release-script tests that run entirely against mocked
+      // `codesign`/`hdiutil`/`xcrun` binaries and build nothing. The recorded
+      // evidence — 59 runs at 5.5 minutes worst — measured this job WITH the
+      // `swift test`, so it bounds the remaining subset from above; 15 is that
+      // bound rounded up, not a fresh measurement.
       test: {
-        max: 30,
-        why: "a PAID macOS runner is held by a `swift test` that never exits",
+        max: 15,
+        why: "a PAID macOS runner is held by a release-script test that never exits, in a job "
+          + "whose remaining work is four mocked shell tests",
       },
       // Declared per shard in the matrix: 30 and 35.
       "ui-smoke": {
@@ -3083,37 +3165,65 @@ function iosGuardStepFailures(world) {
     );
   }
 
-  // And the whole suite still runs SOMEWHERE. Filtering here is only safe
-  // because `macos.yml` keeps running it unfiltered.
-  const macTests = [];
-  for (const [macJob, mac] of Object.entries(world.docs.get(MACOS)?.jobs ?? {})) {
-    for (const macStep of mac.steps ?? []) {
-      if (String(macStep?.run ?? "").includes("swift test")) macTests.push({ macJob, macStep });
-    }
-  }
-  need(
-    macTests.length > 0,
-    `${MACOS} runs no \`swift test\`. Filtering the run in ${IOS} down to `
-    + `[${IOS_GUARD_SELECTORS.join(", ")}] is only safe while the FULL ${SWIFT_TEST_TARGET} `
-    + `suite still runs somewhere, and ${MACOS} is where it runs.`,
-  );
-  need(
-    macTests.length === 0
-      || macTests.some(({ macStep }) => swiftTestFilters(macStep.run).length === 0),
-    `${MACOS} runs \`swift test\` only with \`--filter\` `
-    + `(${macTests.map(({ macJob, macStep }) => `${macJob}: ${swiftTestFilters(macStep.run).join(", ")}`).join("; ")}). `
-    + `Nothing then runs the full ${SWIFT_TEST_TARGET} suite on any workflow, and ${IOS}'s `
-    + `deliberately narrow step would be the only Swift testing left.`,
-  );
+  // Filtering here is only safe while the FULL suite still runs somewhere, and
+  // that premise is asserted in `scripts/test/swift-ci-boundary-test.mjs`,
+  // which owns the shared package's CI ownership: exactly ONE unfiltered
+  // `swift test` exists in this repository, it is `swift-package.yml`'s
+  // `swift-test` job, and it runs from `apps/RelayiumKit`. That is strictly
+  // stronger than the rule that used to live here — which only asked whether
+  // `macos.yml` still ran one — and it is hosted by the same always-on
+  // `repo-hygiene.yml` this policy is.
 
   return out;
 }
 
 
+// ── 6l. every PAID runner in a governed workflow is budgeted at all ─────────
+//
+// 6i enforces per-job completeness INSIDE a file it already budgets. It cannot
+// notice a governed workflow that is in `RUNNER_BUDGETS` nowhere — which is how
+// `native-web-pairing.yml`, a 45-minute macOS lane, sat unbudgeted while the
+// list looked complete. A new macOS workflow lands the same way: its jobs
+// declare whatever they declare, and nothing compares the number to anything.
+//
+// Only macOS jobs, because only they carry the paid-runner multiplier. An
+// unbudgeted `ubuntu-latest` job is a real cost and a much smaller one, and 6f
+// and 6h already bound the always-on lanes.
+function macosBudgetFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+
+  for (const { file } of world.governed) {
+    for (const [name, job] of Object.entries(world.docs.get(file)?.jobs ?? {})) {
+      if (!String(job?.["runs-on"] ?? "").startsWith("macos")) continue;
+      const ceiling = governedCeiling(file, name);
+      need(
+        Number.isFinite(ceiling),
+        `${file}/${name} runs on ${JSON.stringify(job["runs-on"])} — a PAID runner — and section `
+        + `6i declares no runner-budget ceiling for it (\`RUNNER_BUDGETS\` gives `
+        + `${String(ceiling)}). Its \`timeout-minutes\` is then whatever the file happens to say `
+        + `and nothing compares it to anything, so the 6-hour default can return by way of a `
+        + `number nobody chose. Add the workflow, or the job, to \`RUNNER_BUDGETS\` with a `
+        + `ceiling justified by what it actually does.`,
+      );
+      for (const { where, declared, value } of timeoutValues(job).values ?? []) {
+        need(
+          Number.isFinite(value) && value > 0,
+          `${file}/${name}: ${where} is ${declared}, want a finite positive number. This job holds `
+          + `a PAID macOS runner; undeclared, it inherits GitHub's 6-hour default.`,
+        );
+      }
+    }
+  }
+
+  return out;
+}
+
 for (const message of platformBoundaryFailures(realWorld())) failures.push(message);
 for (const message of pathMatrixFailures(realWorld())) failures.push(message);
 for (const message of fuzzCampaignFailures(realWorld())) failures.push(message);
 for (const message of iosGuardStepFailures(realWorld())) failures.push(message);
+for (const message of macosBudgetFailures(realWorld())) failures.push(message);
 
 // ── 7h. the inventory script's own fail-closed proof, actually executed ─────
 //
@@ -4329,29 +4439,37 @@ const MUTATIONS = [
     expect: /BundleVersionTests\.swift does not exist/,
   },
   {
-    // Filtering in `ios.yml` is only safe while the whole suite still runs
-    // somewhere. This is the edit that quietly makes it unsafe.
-    name: "macos.yml's swift test gains a filter, so nothing runs the whole suite",
-    mutate: (world) => withCommandJob(world, MACOS, "swift test", (job, step) => {
-      step.run = "swift test --filter 'RelayiumKitTests.AeadTests'\n";
-    }),
-    expect: /runs `swift test` only with `--filter`/,
+    // 6l's own shape: a governed macOS lane that `RUNNER_BUDGETS` covers
+    // nowhere. This is what `native-web-pairing.yml` was before it had an
+    // entry, and what a new macOS workflow looks like on the day it lands.
+    name: "a governed workflow gains a macOS job that RUNNER_BUDGETS covers nowhere",
+    mutate: (world) => {
+      world.docs.get(WEB).jobs["mac-smoke"] = {
+        "runs-on": "macos-15",
+        "timeout-minutes": "30",
+        steps: [{ name: "smoke", run: "npm run smoke\n" }],
+      };
+      return world;
+    },
+    expect: /web\.yml\/mac-smoke runs on "macos-15" — a PAID runner — and section 6i declares no runner-budget ceiling/,
   },
   {
-    // The false positive that would get 6k widened until it caught nothing: a
-    // SECOND, filtered `swift test` in `macos.yml` beside the unfiltered one is
-    // a legitimate shape — a fast pre-check — and must not read as "the whole
-    // suite stopped running".
-    name: "macos.yml adds a fast filtered swift test beside its unfiltered one",
-    mutate: (world) => withNamedJob(world, MACOS, "test", (job) => {
-      job.steps.unshift({
-        name: "swift test (fast pre-check)",
-        "working-directory": SWIFT_PACKAGE_DIR,
-        run: "swift test --filter 'RelayiumKitTests.AeadTests'\n",
-      });
-    }),
-    refute: /runs `swift test` only with `--filter`/,
+    // The same job with no bound at all: a PAID macOS runner on GitHub's
+    // six-hour default.
+    name: "a governed macOS job appears with no finite bound",
+    mutate: (world) => {
+      world.docs.get(WEB).jobs["mac-smoke"] = {
+        "runs-on": "macos-15",
+        steps: [{ name: "smoke", run: "npm run smoke\n" }],
+      };
+      return world;
+    },
+    expect: /web\.yml\/mac-smoke: timeout-minutes is undefined/,
   },
+  // The two cases that used to sit here — `macos.yml`'s unfiltered `swift test`
+  // gaining a `--filter`, and a legitimate fast pre-check beside it — moved
+  // with their rule to `scripts/test/swift-ci-boundary-test.mjs`, which now
+  // owns where that command may live and mutates both shapes there.
 ];
 
 for (const { name, mutate, expect, refute } of MUTATIONS) {
@@ -4363,6 +4481,7 @@ for (const { name, mutate, expect, refute } of MUTATIONS) {
       ...pathMatrixFailures(world),
       ...fuzzCampaignFailures(world),
       ...iosGuardStepFailures(world),
+      ...macosBudgetFailures(world),
     ];
   } catch (err) {
     check(false, `the CI trigger-policy mutation "${name}" threw instead of reporting: ${err.message}`);

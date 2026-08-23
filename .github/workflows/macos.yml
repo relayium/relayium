@@ -12,10 +12,25 @@ name: macos
 #
 #   apps/mac/**          the app, its Share extension, its UI tests and every
 #                        release script this workflow runs
-#   apps/RelayiumKit/**  the SHARED package `swift test` covers and both native
-#                        apps compile against; deliberately in this filter AND
-#                        in ios.yml's, because a change there can break either
-#                        app alone
+#   apps/RelayiumKit/**  the SHARED package this workflow's app targets compile
+#                        against; deliberately in this filter AND in ios.yml's,
+#                        because a change there can break either app alone
+#
+# …minus one subtree. `!apps/RelayiumKit/Tests/**` follows the line above, and
+# GitHub evaluates a `paths:` list per file in order with the LAST match
+# winning, so the package's SOURCE still starts this workflow and the package's
+# own XCTest target and fixtures no longer do. Nothing under
+# `apps/RelayiumKit/Tests/` is compiled by `apps/mac/Relayium.xcodeproj`, read
+# by any release script here, or linked into the signed product — the app
+# targets build the package's library products, not its test target — so a
+# test-only edit used to start this whole workflow, and the `signed-build`
+# lane's `needs:` chain with it, to produce no evidence about the change at all.
+#
+# That subtree is not unwatched: `.github/workflows/swift-package.yml` owns the
+# package's own suite, has no such exclusion, and runs the repository's one
+# unfiltered `swift test`. A MIXED diff — a source file and a test file in the
+# same commit — still starts this workflow, because the source file is still a
+# positive match and one match is enough.
 #
 # `scripts/**` is deliberately GONE. After the move, no job in this file reads
 # anything under `scripts/` — the three acceptance runs that did are the iOS
@@ -41,9 +56,17 @@ on:
     # maintained by hand, which is how a `push` filter and a `pull_request`
     # filter drift into a gate that passes on the branch and never runs after
     # the merge.
+    #
+    # ORDER IS LOAD-BEARING. GitHub applies these per file, in order, and the
+    # last pattern that matches decides — so the negation has to follow
+    # `apps/RelayiumKit/**`, never precede it. Reordering the two lines makes
+    # the exclusion match first and be overridden immediately after, which
+    # leaves the filter valid, leaves actionlint happy, and silently restores
+    # the behaviour this entry exists to remove.
     paths: &paths
       - 'apps/mac/**'
       - 'apps/RelayiumKit/**'
+      - '!apps/RelayiumKit/Tests/**'
       - '.github/workflows/macos.yml'
   pull_request:
     paths: *paths
@@ -142,13 +165,23 @@ jobs:
   # No secrets, so this runs on pull requests from forks like any other check.
   test:
     runs-on: macos-15
-    # Finite, and chosen rather than inherited. This job is one `swift test`
-    # over the shared package plus four release-script tests; the 59 successful
-    # runs in recent history took 5.5 minutes at worst and 3.5 on average. The
-    # bound leaves room for a cold SwiftPM resolve and for the package to keep
-    # growing, and still turns a `swift test` that never exits red in minutes
-    # rather than holding a PAID macOS runner for GitHub's 6-hour default.
-    timeout-minutes: 20
+    # Finite, and chosen rather than inherited.
+    #
+    # This job used to be one unfiltered `swift test` over the shared package
+    # PLUS the four release-script tests below, and the 59 successful runs in
+    # recent history took 5.5 minutes at worst and 3.5 on average for both
+    # halves together. The `swift test` moved to
+    # `.github/workflows/swift-package.yml`; what is left is a checkout, two
+    # `-version` probes and four shell tests that run entirely against mocked
+    # `codesign`/`hdiutil`/`xcrun` binaries and build nothing.
+    #
+    # The remaining work is therefore bounded above by that same recorded 5.5
+    # minutes — it is a strict subset of what produced it — and 10 is the
+    # conservative bound chosen from that evidence rather than from a fresh
+    # measurement this branch has not taken. It still turns a wedged run red in
+    # minutes instead of holding a PAID macOS runner for GitHub's 6-hour
+    # default. Re-measure and lower it once this shape has its own run history.
+    timeout-minutes: 10
     steps:
       # Third-party actions are pinned to a full commit SHA (with the
       # human-readable version in a trailing comment) so a compromised or
@@ -160,9 +193,15 @@ jobs:
         run: |
           xcodebuild -version
           swift --version
-      - name: swift test
-        working-directory: apps/RelayiumKit
-        run: swift test
+      # The unfiltered `swift test` that used to run here now lives in
+      # `.github/workflows/swift-package.yml`, which is the repository's sole
+      # owner of it. It is not gone and it is not weaker: that workflow watches
+      # `apps/RelayiumKit/**` with no exclusion, so it starts on strictly MORE
+      # of the package than this filter does — including the test target and the
+      # fixtures this one now excludes. `scripts/test/swift-ci-boundary-test.mjs`
+      # asserts that exactly one unfiltered `swift test` exists and that it is
+      # that job, so this comment cannot decay into a step that quietly went
+      # missing.
       - name: Release script tests
         run: |
           apps/mac/scripts/test-package-dmg.sh

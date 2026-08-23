@@ -45,6 +45,28 @@ name: native-web-pairing
 #                        LocalTransferPeer` against this package, and the peer
 #                        binary, the link workspace and the `AppEnvironment`
 #                        that assembles it all live inside it
+#                        …minus `!apps/RelayiumKit/Tests/**`, which follows it.
+#                        `swift build` builds PRODUCTS; it does not compile the
+#                        package's test target, and this run loads no fixture
+#                        from it. A test-only edit therefore started a
+#                        45-minute Swift+Go+Chrome macOS runner that could not
+#                        observe the change — the same non-input cost
+#                        `apps/mac/**` is excluded for below, one directory in.
+#
+#                        The FIXTURES are deliberately NOT re-included after
+#                        that negation. `apps/RelayiumKit/Tests/Fixtures/` is
+#                        frozen-bytes input to the Swift, Go and Web vector
+#                        suites; this acceptance reads none of them. It mints a
+#                        live pairing code against a real server and drives two
+#                        live peers, so a fixture edit cannot change its
+#                        outcome. The workflows that DO consume those bytes name
+#                        the exact files: `swift-package.yml` (the whole
+#                        package), `go.yml` and `web.yml` (one fixture path per
+#                        consuming test), and `compat.yml` unfiltered.
+#
+#                        A MIXED diff — package source plus package tests in one
+#                        commit — still starts this workflow: the source file is
+#                        still a positive match and one match is enough.
 #   web/**               the bundle the browser half loads, and the e2e harness
 #                        and driver it is driven through
 #   server/**            the real hub: /api/pair, the pairing room, the ws join
@@ -82,7 +104,11 @@ name: native-web-pairing
 #
 # `scripts/test/ci-event-policy-test.mjs` asserts all of that as BEHAVIOUR — it
 # compiles these globs and checks which files they match — because every one of
-# those widenings leaves the YAML valid and actionlint happy.
+# those widenings leaves the YAML valid and actionlint happy. The
+# `!apps/RelayiumKit/Tests/**` entry below, its ordering and the fixtures that
+# must NOT be re-included under it belong to
+# `scripts/test/swift-ci-boundary-test.mjs`, which judges the same question for
+# all three heavy Apple/pairing filters at once.
 on:
   push:
     # Only `main`. A branch push used to start this workflow AND its pull
@@ -91,8 +117,12 @@ on:
     # `main` itself is never unverified.
     branches:
       - main
+    # ORDER IS LOAD-BEARING: GitHub applies these per file, in order, and the
+    # LAST match decides. The negation must follow `apps/RelayiumKit/**`, and
+    # nothing may re-include a subtree of it below.
     paths: &paths
       - 'apps/RelayiumKit/**'
+      - '!apps/RelayiumKit/Tests/**'
       - 'web/**'
       - 'server/**'
       - 'scripts/native-web-pairing-acceptance.sh'

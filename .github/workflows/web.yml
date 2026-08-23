@@ -37,6 +37,31 @@ on:
       - 'server/account/files.go'
       - 'server/account/uploads_resumable.go'
       - 'docs/billing-transparency.md'
+      # And three frozen-bytes FIXTURES, for exactly the same reason and named
+      # exactly as narrowly. They live in the Swift package because that is
+      # where they were frozen from, but three tests in this suite read them
+      # from disk and assert the TypeScript implementation still agrees with
+      # those bytes:
+      #
+      #   web/src/lib/caps-vectors.test.ts    realtime-wire + crypto
+      #   web/src/lib/text-vectors.test.ts    realtime-wire + crypto
+      #   web/src/lib/inbox-manifest.test.ts  device-inbox-manifest-v3
+      #
+      # A fixture regenerated without this suite running leaves those tests
+      # passing against bytes nobody re-checked on this side, and the divergence
+      # surfaces later against an innocent commit that touched `web/**`.
+      #
+      # THREE PATHS, not the `Tests/Fixtures/` tree and not
+      # `apps/RelayiumKit/**`. `store-wire-vectors.json` sits in that same
+      # directory and is deliberately absent: no test in this suite reads it —
+      # its only Web-side consumer is `web/scripts/check-wire-vectors.mjs`,
+      # which runs in the unfiltered `compat.yml` — so watching the directory
+      # would start the full web suite, the accessibility scan and three
+      # headless-Chrome journeys for a file this workflow never opens. One
+      # fixture per consuming test, the same discipline as the document above.
+      - 'apps/RelayiumKit/Tests/Fixtures/crypto-vectors.json'
+      - 'apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json'
+      - 'apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json'
       - '.github/workflows/web.yml'
   pull_request:
     paths: *paths

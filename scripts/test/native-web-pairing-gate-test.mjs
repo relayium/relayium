@@ -190,6 +190,36 @@ const BARE_GLOBS = ["apps/**", "scripts/**"];
  */
 const NON_INPUT_PATHS = ["apps/mac/**"];
 
+/**
+ * The subtree of a listed input that is NOT an input, and the exclusion that
+ * says so.
+ *
+ * `apps/RelayiumKit/**` above is real — the acceptance runs `swift build
+ * --product LocalTransferPeer` against this package. Its TEST TARGET is not:
+ * `swift build` builds PRODUCTS and never compiles `Tests/`, and this run loads
+ * no fixture from `Tests/Fixtures/` — it mints a live pairing code against a
+ * real server and drives two live peers, so frozen bytes cannot change its
+ * outcome. A test-only edit used to start a 45-minute Swift + Go + Chrome macOS
+ * runner that could not observe it: the same non-input cost `apps/mac/**` is
+ * excluded for, one directory in. `swift-package.yml` runs those files.
+ *
+ * ORDER IS LOAD-BEARING, which is why the two are named separately and their
+ * positions compared. GitHub evaluates a `paths:` list against each changed file
+ * in order and the LAST match wins, so the exclusion has to FOLLOW the positive
+ * it qualifies; swapped, it is overridden by that positive and does nothing,
+ * while the YAML stays valid and the diff reads as a reordering.
+ *
+ * This is the LITERAL form, in the file that explains why this particular filter
+ * is the list it is — the same division of labour `BARE_GLOBS` and
+ * `NON_INPUT_PATHS` already have. The compiled-glob behaviour of this exclusion,
+ * in this filter and in `macos.yml`'s and `ios.yml`'s, belongs to
+ * `scripts/test/swift-ci-boundary-test.mjs`: a narrowed negation, a re-included
+ * fixture directory and the package source that must still trigger are all
+ * judged there, against real paths, for all three heavy consumers at once.
+ */
+const PACKAGE_SOURCE_GLOB = "apps/RelayiumKit/**";
+const PACKAGE_TESTS_NEGATION = "!apps/RelayiumKit/Tests/**";
+
 const failures = [];
 function check(ok, message) {
   if (ok) return;
@@ -529,6 +559,29 @@ function handoffFailures(sources) {
           + ` The macOS app's logic lives in \`apps/RelayiumKit/**\`, which this filter does name.`,
         );
       }
+
+      // The exclusion that carves the package's test target back out of the
+      // input above it: present, and BELOW the positive it qualifies.
+      const sourceAt = paths.indexOf(PACKAGE_SOURCE_GLOB);
+      const negationAt = paths.indexOf(PACKAGE_TESTS_NEGATION);
+      need(
+        negationAt !== -1,
+        `${ACCEPTANCE_WORKFLOW}'s ${event} filter does not list "${PACKAGE_TESTS_NEGATION}"; it`
+        + ` lists [${paths.join(", ")}]. \`swift build --product LocalTransferPeer\` builds`
+        + ` PRODUCTS and never compiles the package's test target, and this run loads no fixture`
+        + ` from it — so without that entry a test-only edit starts a 45-minute Swift + Go +`
+        + ` Chrome macOS runner that cannot observe the change. \`swift-package.yml\` is what runs`
+        + ` those files.`,
+      );
+      need(
+        sourceAt === -1 || negationAt === -1 || negationAt > sourceAt,
+        `${ACCEPTANCE_WORKFLOW}'s ${event} filter lists "${PACKAGE_TESTS_NEGATION}" at position`
+        + ` ${negationAt + 1}, BEFORE "${PACKAGE_SOURCE_GLOB}" at position ${sourceAt + 1}. GitHub`
+        + ` applies a \`paths:\` list per changed file in order and the LAST match wins, so in that`
+        + ` order the exclusion is overridden by the very pattern it qualifies and does nothing at`
+        + ` all. The YAML stays valid, actionlint stays happy, the diff reads as a reordering, and`
+        + ` every run the entry removes comes back.`,
+      );
     }
   }
 
@@ -867,6 +920,38 @@ const MUTATIONS = [
       + "        run: npx prettier --write src\n",
     ),
     refute: /run the WRITING form of the vector generator/,
+  },
+
+  // ── the package's test target, carved back out of a real input ────────────
+  //
+  // Only the two LITERAL shapes, because only the literal form is this file's
+  // half: a narrowed negation, a re-included fixture directory and the package
+  // source that must still trigger are compiled-glob behaviour, and
+  // `scripts/test/swift-ci-boundary-test.mjs` mutates all of those against all
+  // three heavy consumers at once.
+  {
+    // The exclusion deleted. Cheap, invisible in a merge box, and it puts a
+    // 45-minute macOS runner back on every XCTest case added to a package this
+    // run compiles the products of.
+    name: "the !apps/RelayiumKit/Tests/** exclusion is deleted from the filter",
+    mutate: (s) => withText(
+      s, ACCEPTANCE_WORKFLOW,
+      "      - 'apps/RelayiumKit/**'\n      - '!apps/RelayiumKit/Tests/**'\n",
+      "      - 'apps/RelayiumKit/**'\n",
+    ),
+    expect: /filter does not list "!apps\/RelayiumKit\/Tests\/\*\*"/,
+  },
+  {
+    // The same two lines, swapped: under last-match-wins the exclusion is
+    // overridden by the pattern it qualifies and does nothing, while every
+    // membership check still passes.
+    name: "the exclusion is moved ABOVE the positive it qualifies",
+    mutate: (s) => withText(
+      s, ACCEPTANCE_WORKFLOW,
+      "      - 'apps/RelayiumKit/**'\n      - '!apps/RelayiumKit/Tests/**'\n",
+      "      - '!apps/RelayiumKit/Tests/**'\n      - 'apps/RelayiumKit/**'\n",
+    ),
+    expect: /lists "!apps\/RelayiumKit\/Tests\/\*\*" at position 1, BEFORE/,
   },
 ];
 
@@ -1248,7 +1333,10 @@ process.stdout.write(
   `ok: ${ACCEPTANCE} runs in exactly one hosted macOS job, every input tree `
   + `(${REQUIRED_PATHS.join(", ")}) triggers it, no bare ${BARE_GLOBS.join(" / ")} does and `
   + `neither does ${NON_INPUT_PATHS.join(" / ")} — which the run never reads, compiles or `
-  + `serves — "${VECTOR_CHECK}" runs exactly once and only in ${COMPAT_WORKFLOW} — unfiltered on `
+  + `serves — \`${PACKAGE_TESTS_NEGATION}\` follows \`${PACKAGE_SOURCE_GLOB}\` so the package's `
+  + `test target does not either (its compiled-glob behaviour is `
+  + `scripts/test/swift-ci-boundary-test.mjs's), "${VECTOR_CHECK}" runs exactly once and only in `
+  + `${COMPAT_WORKFLOW} — unfiltered on `
   + `push/main and pull_request, on ubuntu-latest, finite, fail-closed in workflow code (whether `
   + `it BLOCKS a merge is branch protection on the \`compat / wire-vectors\` context, which is `
   + `not asserted here) and in the verifying form — neither gate may skip or be advisory, `
