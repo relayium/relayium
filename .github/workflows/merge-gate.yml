@@ -20,8 +20,8 @@ on:
   # the called workflow, not on the gate.
   pull_request:
 
-# Read-only at the top level. Each job narrows or restates its own grant below;
-# nothing here needs write access to anything.
+# Read-only at the top level. Each job restates its own grant below; the `macos`
+# job currently widens it for the temporary A/B probe described there.
 permissions:
   contents: read
 
@@ -40,8 +40,15 @@ jobs:
   # THIS commit and cannot be repointed at another repository or ref. No
   # third-party action is used anywhere in this file.
   macos:
+    # TEMPORARY A/B PROBE GRANT — reverts with this probe, NEVER MERGE.
+    # Phase A ran this job at `contents: read` and GitHub returned a
+    # startup_failure with zero jobs, while `macos.yml` contains an
+    # always-running job that requests `contents: write`. Phase B raises the
+    # caller's grant to `write` purely to observe whether that alone is what the
+    # startup_failure was reporting. No job in either file attempts a write:
+    # nothing pushes, tags, releases, or calls the API with this token.
     permissions:
-      contents: read
+      contents: write
     uses: ./.github/workflows/macos.yml
     # Explicit, per-secret forwarding — never `secrets: inherit`. `inherit`
     # would hand the called workflow every secret this repository holds,
