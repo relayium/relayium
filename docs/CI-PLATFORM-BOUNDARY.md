@@ -52,8 +52,8 @@ pipelines that resemble each other:
 
 | | `macos.yml` | `macos-release.yml` |
 | --- | --- | --- |
-| Triggers | `push` (main), `pull_request`, `workflow_call` | `workflow_dispatch` only |
-| Started by | every change under its filter | a person |
+| Triggers | `push` (main), `workflow_call` | `workflow_dispatch` only |
+| Started by | a `main` push under its filter, `merge-gate.yml`, or `macos-release.yml` | a person |
 | Jobs | `contract`, `test`, `ui-smoke`, `signed-build` | `build` (the call), `notarize-stage`, `publish` |
 | Permissions | `contents: read`, no job-level block | `contents: read`; `publish` alone declares `contents: write` |
 | Secrets | signing certificate and two provisioning profiles | those four are *forwarded* to the call; the notary key and Sparkle private key stay in `notarize-stage` |
@@ -571,19 +571,180 @@ has been observed blocked while the check is red**. That observation is tracked
 as an open item (`docs/ARCHITECTURE-RESILIENCE.md` §9, P1) and should be closed
 on the next real pull request rather than assumed from the settings.
 
-**And one required context is all there is.** `wire-vectors` is the only context
-`main` protection requires. Every path-filtered lane on this page —
-`swift-package`, `ops-deploy-contract`, `contracts`, `go`, `web`, the heavy Apple
-owners — is fail-closed **as a workflow** and reports red when it runs, but none
-of them is required at merge time, and `repo-hygiene` is unfiltered without being
-required either. A lane that never starts and a lane that was skipped are the
-same absence to branch protection, so there is **no always-present, fail-closed
-aggregate status** that can say "every lane this diff selected finished green" —
-which is exactly why making a path-filtered check directly required would block
-every diff that legitimately does not select it. Designing that aggregate gate is
-its own scoped task, deliberately not attempted here; until it exists **and** a
-red required check has been observed actually blocking a merge, the required-gate
-half of this boundary is incomplete, and this page does not claim otherwise.
+**And one required context is still all there is.** `wire-vectors` remains the
+only context `main` protection requires **today**. The aggregate gate that will
+replace it now exists in source and reports on every pull request, but **nothing
+requires it yet**; the protection edit is a separate, staged step recorded below,
+and until it happens this page does not claim `merge-gate` is enforced.
+
+### The aggregate merge gate
+
+`.github/workflows/merge-gate.yml` is the answer to the problem this page used
+to record as open. A path-filtered lane that does not trigger emits **no check
+run at all** — not a skipped one, not a neutral one — so branch protection cannot
+tell "this lane passed" from "this lane was legitimately not selected" from "this
+lane never ran". Requiring a filtered context directly would wedge every pull
+request that legitimately does not select it; requiring none of them is the state
+that let PR #22 merge over a failed Device Inbox job and an in-progress iOS job.
+
+The gate is unfiltered, runs on `pull_request` only, calls each lane as a
+**reusable workflow**, and reports one top-level job — `merge-gate` — that is
+always present and judges what the lanes actually did.
+
+| | |
+|---|---|
+| Conditional lanes | `web`, `go`, `macos`, `ios`, `swift-package`, `native-web-pairing`, `contracts`, `ops-contract` |
+| Unconditional lanes | `repo-hygiene` (no `if:`; it hosts the guards every change must pass) |
+| Not called yet | `compat` — see the staged migration below |
+| Never called | `release.yml`, `auto-release.yml`, `account-race-nightly.yml`, `go-fuzz-nightly.yml`, `macos-release.yml` |
+
+**Which lanes a change selects is read from the lanes' own `push.paths`, and
+from nothing else.** `scripts/ci/select-lanes.mjs` compiles those filters the way
+GitHub does — ordered, last match wins — against the pull request's cumulative
+file list. There is deliberately **no** second declaration of the lane paths: a
+`.github/ci-lanes.json` would be a drift surface whose equivalence test is harder
+to get right than the selector.
+
+The change set comes from the **pull request files API**, not from local git, and
+that is canonical rather than convenient. GitHub evaluates `pull_request` path
+filters against the whole pull request's three-dot diff, not the newest commit,
+and `pulls/{n}/files` returns exactly that set. It also reports
+`previous_filename`: a rename out of `web/` must still run `web`, and
+`git diff --name-only` with default rename detection reports only the new path.
+**Under-selection is the single failure mode that produces a green gate over
+untested code**, so every uncertainty resolves the other way — the selector
+selects **every** conditional lane when the API fails, when `changed_files` is at
+or above GitHub's 3000-file cap, when the response is malformed or short, when a
+lane workflow is missing or its filter unreadable, when a filter entry is not one
+of the four permitted pattern shapes, or when the change touches a **control
+file** (`merge-gate.yml`, `select-lanes.mjs`, or the shared path-selection
+fixture). A pull request that edits the gate therefore buys a full macOS run.
+That is the honest price and it is deliberate.
+
+**The rule the aggregate enforces is two-way, not a whitelist.** A plain
+`success|skipped` whitelist passes a lane that *was* selected and then got
+skipped by a broken `if:` — the exact fail-open shape this gate exists to close.
+So: `select` must have succeeded; the key set of `needs` must equal a hardcoded
+roster **compared in both directions**; every unconditional lane must be
+`success`; and for every conditional lane, `selected` implies `success` **and**
+not-selected implies `skipped`. Anything else, including a lane that ran without
+being selected, is red. The step prints a lane/selected/result table before
+failing, so a red gate names the lane without opening the run.
+
+**Two implementations, one oracle.** `scripts/test/ci-event-policy-test.mjs`
+reads the same filters with a general YAML parser and a character-walking glob
+compiler; the selector carries a narrow `on.push.paths` extractor and a
+split-on-stars compiler. Both are judged against the 28 rows in
+`scripts/test/fixtures/ci-path-selection.mjs`, so emptying a lane's `push.paths`
+fails in both files from one edit. `scripts/test/ci-lane-selector-test.mjs` also
+asserts the three-way closure that stops a new lane from being added and silently
+left ungated: every lane the selector names is `uses:`d by the gate **and** listed
+in the aggregate's `needs:`.
+
+**Every lane keeps its `push: branches: [main]` trigger, permanently.** Only
+`pull_request:` moved. This is load-bearing beyond tidiness and the reasoning
+lives in a **different repository**: `relayium-ops`' `deploy/promote.sh` refuses
+to promote a `main` commit that has no green check run named `wire-vectors` **on
+that commit**, and `merge-gate.yml` runs on `pull_request` only. A future "finish
+the job, route everything through the gate" cleanup that dropped a lane's
+`push: main` would leave `main` commits with no check run and wedge every
+production promotion with `required check absent`, mid-incident — a
+false-negative gate, which this workspace's ledger ranks as an outage because it
+manufactures pressure to bypass the control. `ci-event-policy-test.mjs` §1
+asserts the rule so the next reader does not have to know the other repository.
+
+**Concurrency: literal prefixes, never `${{ github.workflow }}`.** Inside a
+called workflow that expression is the **caller's** name, so every lane the gate
+calls would land in one group under one `github.run_id` — and with
+`cancel-in-progress` true on a pull request they would actively cancel each
+other, leaving the aggregate to judge cancelled runs. Each converted lane
+therefore carries a literal prefix nothing else uses (`web-lane`, `go-lane`,
+`macos-ci`, `ios-lane`, `swift-package-lane`, `native-web-pairing-lane`,
+`contracts-lane`, `ops-deploy-contract-lane`, `repo-hygiene-lane`,
+`merge-gate`), and §2 asserts both the literals and that no two files resolve to
+the same one.
+
+**Secrets are forwarded one line at a time, never `inherit`.** `macos` is the
+only caller given any, and only the four signing and provisioning secrets its own
+jobs already use. `inherit` would hand those — and everything added later — to
+`web`, `go` and `contracts`, none of which reads a secret today.
+
+#### The staged protection migration, and where it currently stands
+
+The invariant held at every step is that **every required context is one that
+always appears**.
+
+| # | Action | Required contexts after | Status |
+|---|---|---|---|
+| 1 | Merge the gate. It reports; nothing requires it. | `{wire-vectors}` | **done in source; this is where the repository is** |
+| 2 | Observe `merge-gate` green on an ordinary pull request. | `{wire-vectors}` | pending |
+| 3 | Protection edit A: `contexts: ["wire-vectors","merge-gate"]`. | `{wire-vectors, merge-gate}` | pending |
+| 4 | Observe a red gate actually blocking (`mergeStateStatus: BLOCKED`). | unchanged | pending |
+| 5 | Fold `compat.yml` in as an unconditional lane, **keeping** its own `pull_request:` and its `push: main`. | unchanged | pending |
+| 6 | Protection edit B: `contexts: ["merge-gate"]`. | `{merge-gate}` | pending |
+| 7 | Remove `pull_request:` from `compat.yml`. `push: main` stays, permanently. | `{merge-gate}` | pending |
+
+Steps 5-7 are three moves and not one for a specific reason: converting
+`compat.yml` in one shot renames its check to `compat / wire-vectors`, so the
+required `wire-vectors` context would stop appearing and every pull request would
+sit unsatisfiable until protection was edited. Running compat twice for a few
+seconds across two merges is the price of never opening that window. Steps 3 and
+6 are one API call each and reverse instantly; because every lane keeps its
+`push: main` trigger throughout, `main` verification never depends on the gate
+and is unaffected by a rollback. Any protection edit must use the bare API string
+`merge-gate` — the merge box's rendering is not the context.
+
+#### What the gate cannot do, and what is deliberately deferred
+
+GitHub runs `pull_request` workflows from the **PR head**, so a pull request that
+edits `merge-gate.yml`, `select-lanes.mjs` or the shared fixture is judged by its
+own modified gate. Three one-line attacks — whitelist `failure`, set every lane
+`if: false`, make the selector return all-false — are undetectable by anything
+that also runs from the head. This is inherent to GitHub Actions and cannot be
+closed by any in-repo test.
+
+The control-file rule above stops the **accidental** version: an innocent gate
+edit runs every lane rather than none. It does nothing against a deliberate one.
+The mitigation is a small `pull_request_target` integrity workflow that runs from
+the **base** branch and fails when a pull request touches those three files
+without a maintainer-applied label. It is **deliberately deferred**: it is
+required before this repository accepts external contributions, and not required
+now, when the repository has exactly one writer. It would need its own review,
+because never checking out or executing head code is the standard
+`pull_request_target` foot-gun.
+
+Also deliberately deferred, and for stated reasons rather than by omission:
+
+- **`enforce_admins: true`** — it removes the owner's bypass, which is precisely
+  why it stays false during the migration: with no second approver it is the only
+  escape hatch if the gate wedges. Revisit once the gate has a merge-history
+  track record.
+- **CODEOWNERS and required reviews** — `require_code_owner_reviews` needs
+  `required_pull_request_reviews`, and GitHub does not let an author approve
+  their own pull request. On a single-owner repository that deadlocks every pull
+  request and the only way out is a bypass on every merge, which converts a real
+  gate into theatre. A `CODEOWNERS` file with no required-review setting is
+  inert. Revisit only when a second maintainer exists.
+- **A merge queue (`merge_group`)** — not configured, zero occurrences here. It
+  is the proper answer to the cost `strict` acquires below, and its own task.
+
+#### One cost the owner should price rather than inherit
+
+`strict: true` ("require branches up to date") costs 8 seconds of re-run today,
+because `wire-vectors` is the only required context. Once the aggregate is
+required, **every merge to `main` invalidates every open pull request** and
+forces a full re-selection — including, for any pull request touching `apps/`, a
+60-minute `signed-build` and a 75-minute `ios-build`. It compounds: because
+GitHub evaluates path filters against the cumulative three-dot diff, a pull
+request that *ever* touched `apps/ios` keeps selecting the iOS lane on every later
+push, so the invalidation is sticky per pull request rather than per commit.
+
+This is a real regression introduced by the objective, not by the design, and the
+options are to keep `strict` and accept the cost, drop it and accept semantic
+drift between pull-request-time and post-merge state, or adopt a merge queue. The
+merge queue was deferred on 2026-08-20 with the revisit trigger "a sustained >=3
+concurrent merges/day"; making an expensive aggregate required under `strict` is
+arguably a second, independent trigger for that same revisit.
 
 **What belongs in the fast lane:** a check that is seconds long, needs no
 platform runner, and asserts that two independent implementations of one wire
@@ -699,11 +860,11 @@ Every governed workflow uses the same rule, and
 ```yaml
 on:
   push:
-    branches: [main]          # main only
-  pull_request:
+    branches: [main]          # main only, and permanently — see below
+  workflow_call:              # the merge gate is the pull-request entry point
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  group: <literal-prefix>-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 ```
 
@@ -720,16 +881,23 @@ concurrency:
   `cancel-in-progress: false`. Two quick merges would drop the first commit's
   verification, and `main` would show a *cancelled* check — which reads as
   "someone stopped it" rather than "this is untested".
-* **`github.workflow` is part of the key**, so `ios.yml` and `web.yml` never
-  share a group, and a future platform's runs cannot cancel another platform's.
+* **The prefix is a literal per file**, so `ios.yml` and `web.yml` never share a
+  group and a future platform's runs cannot cancel another platform's. It used to
+  be `${{ github.workflow }}`, and that stopped being safe the day these lanes
+  became reusable callees — see below.
 
-A new platform workflow copies this block unchanged.
+A new platform workflow copies this block and gives itself a prefix nothing else
+uses.
 
-### Two exceptions, and why they are not optional
+### The prefix, and why it may not be `${{ github.workflow }}`
 
-The **suffix** is repository-wide and has no exceptions. The **prefix** has two:
-`macos.yml` uses the literal `macos-ci`, and `macos-release.yml` uses the literal
-`macos-release`.
+The **suffix** is repository-wide and has no exceptions. The **prefix** is a
+literal in every file the merge gate calls, plus the gate and the release
+workflow: `web-lane`, `go-lane`, `macos-ci`, `ios-lane`, `swift-package-lane`,
+`native-web-pairing-lane`, `contracts-lane`, `ops-deploy-contract-lane`,
+`repo-hygiene-lane`, `merge-gate`, `macos-release`. Only `compat.yml` and the two
+scheduled nightlies — the three workflows nothing calls — still use
+`${{ github.workflow }}`.
 
 ```yaml
 # .github/workflows/macos.yml — a reusable callee
@@ -738,22 +906,28 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 ```
 
-`macos-release.yml` calls `macos.yml` as a reusable workflow, and **inside a
-called workflow `${{ github.workflow }}` is the *caller's* name**, not the
-callee's. Under the shared expression both files' jobs would land in one group,
-keyed on one `github.run_id`: the callee queues behind the caller, and the caller
-waits for the callee. That is a deadlock, it is invisible to YAML validity and to
+`macos-release.yml` calls `macos.yml` as a reusable workflow, and
+`merge-gate.yml` calls nine lanes the same way — and **inside a called workflow
+`${{ github.workflow }}` is the *caller's* name**, not the callee's. Under the
+shared expression a caller's jobs and its callee's would land in one group, keyed
+on one `github.run_id`: the callee queues behind the caller, and the caller waits
+for the callee. That is a deadlock, it is invisible to YAML validity and to
 `actionlint`, and no run that never exercised the call would show it.
 
-Two literals nothing else uses make the groups disjoint by construction, whatever
-either file is renamed to later. `ci-event-policy-test.mjs` asserts three things
+Worse under the gate: all nine lanes would share that one group, and with
+`cancel-in-progress` true on a pull request they would actively **cancel each
+other** — leaving the aggregate to judge cancelled runs rather than red ones.
+
+Literals nothing else uses make the groups disjoint by construction, whatever any
+file is renamed to later. `ci-event-policy-test.mjs` asserts three things
 about this and mutates each: the exact group per file; that a workflow declaring
 `on: workflow_call` does not key on `github.workflow` at all; and that no two
 governed files resolve to the same prefix — where a file using the shared
 expression resolves to its own `name:`.
 
-**Do not read `github.workflow` as safe in a reusable callee.** It is safe in
-every workflow nobody calls, which is every other workflow here.
+**Do not read `github.workflow` as safe in a reusable callee.** It is safe only
+in a workflow nobody calls, which is now just `compat.yml` and the two scheduled
+nightlies.
 
 ## CI architecture is executable policy, not prose
 

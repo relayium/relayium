@@ -528,22 +528,61 @@ All five items below are **complete**; the count and the enumeration match.
    dropped from the table silently. **Nothing about the device-inbox conformance
    fixtures remains open.** What this does NOT cover is item 12: capability and
    error contracts still have no fixture and no gate.
-9. **Observe required-check enforcement on a real pull request** (§2): a merge
-   box showing the check as required, and a merge actually blocked while it is
-   red. Until then, protection is settings read-back only. **This is required
-   before the foundation work can be called complete**, and it is deliberately
-   not inferred from the settings.
+9. **Observe required-check enforcement on a real pull request** (§2). This item
+   has two halves, and they are now in different states.
 
-   Alongside it, and **still open**: `wire-vectors` is the only required context
-   on `main`, so every path-filtered lane — `swift-package`,
-   `ops-deploy-contract`, `contracts`, `go`, `web`, the heavy Apple owners — is
-   fail-closed as a workflow but not required at merge time. Branch protection
-   cannot tell a lane that was correctly not selected from one that never ran,
-   so there is **no always-present, fail-closed aggregate status** proving that
-   every lane a given diff selected actually finished. Making a path-filtered
-   check directly required is not the fix — it would block every diff that
-   legitimately does not select it. Designing that aggregate gate is the **next
-   separately scoped task**, and it is not attempted or designed here.
+   **The "shown as required" half is closed.** `ACTIVE-WORK.md` records PR #25
+   merging with the exact required `wire-vectors` check reporting
+   `isRequired: true` — a real merge box, not a settings read-back. Recorded here
+   because nothing else did.
+
+   **The "red actually blocks" half is still open**, and is deliberately not
+   inferred from the settings. Closing it means an intentionally red pull
+   request observed at `mergeStateStatus: BLOCKED`, with the head commit's
+   check-runs enumerated directly — never `statusCheckRollup`, which is
+   presentation state and was once misread as "all checks successful" on a pull
+   request that had a failed job, and never `gh pr checks` alone, which labels an
+   in-progress job `pending 0`. It must be proved at the API level and **not** by
+   attempting a merge: with `enforce_admins: false` the owner still has an
+   explicit bypass, which is a separate and deliberate property of the current
+   settings.
+
+   **The aggregate-gate half is delivered in source and is awaiting its
+   protection edit.** `.github/workflows/merge-gate.yml` now runs unfiltered on
+   every pull request, calls each lane as a reusable workflow, and reports one
+   always-present job — `merge-gate` — that enforces a two-way rule: `select`
+   must have succeeded, the `needs` key set must equal a hardcoded roster
+   compared in both directions, every unconditional lane must be `success`, and
+   every conditional lane must be `success` when selected and `skipped` when not.
+   Which lanes a change selects is read from the lanes' own `push.paths` by
+   `scripts/ci/select-lanes.mjs`, cross-validated against
+   `scripts/test/ci-event-policy-test.mjs` through the shared 28-row fixture
+   `scripts/test/fixtures/ci-path-selection.mjs`, and fails closed to "every
+   lane" on every error path.
+
+   **What is not yet true: `merge-gate` is not a required context.**
+   `wire-vectors` remains the only one `main` requires. The gate reports and is
+   required by nothing, which is step 1 of the staged migration in
+   `docs/CI-PLATFORM-BOUNDARY.md`; steps 3 and 6 are the protection edits, and
+   this item closes only when the red-blocking observation above has been made
+   against the required aggregate. `compat.yml` deliberately keeps its own
+   `pull_request:` trigger until then, because folding it in early would rename
+   the one context protection currently requires.
+
+   **One cost this creates, and it is the owner's to price rather than inherit:**
+   `strict: true` plus a required aggregate means every merge to `main`
+   invalidates every open pull request and forces a full re-selection, up to a
+   60-minute `signed-build` and a 75-minute `ios-build`. Because GitHub evaluates
+   path filters against the cumulative three-dot diff, that invalidation is
+   sticky per pull request rather than per commit. It plausibly fires the merge
+   queue's already-recorded revisit trigger. See `docs/CI-PLATFORM-BOUNDARY.md`.
+
+   **Deliberately deferred, with reasons:** a `pull_request_target` gate-integrity
+   workflow (required before external contributions, not before foundation
+   completion — a pull request is judged by its own head copy of the gate, and
+   the in-repo control-file rule stops only the accidental version of that);
+   `enforce_admins: true` (it is the migration's rollback path); CODEOWNERS and
+   required reviews (they deadlock a single-owner repository); and a merge queue.
 10. **A one-dirty-home rule plus archive classification** for the checkouts
     counted in §1. One home per line of work; everything else is classified
     **active**, **frozen-historical** or **archivable**, and archived

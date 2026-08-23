@@ -97,6 +97,25 @@ const SWIFT_PACKAGE = "swift-package.yml";
 const COMPAT = "compat.yml";
 const HYGIENE = "repo-hygiene.yml";
 
+/**
+ * The aggregate merge gate.
+ *
+ * Both contract lanes used to carry their own `pull_request:` trigger, aliased
+ * to the same `&paths` anchor as `push`. They no longer do, and the reason is
+ * not tidiness: a path-filtered workflow that does not trigger emits NO check
+ * run at all — not a skipped one, not a neutral one — so branch protection
+ * could never tell "this lane passed" from "this lane was legitimately not
+ * selected" from "this lane never ran". `merge-gate.yml` runs unfiltered on
+ * every pull request, CALLS each lane, and reports the one always-present
+ * context that can be required.
+ *
+ * That makes it load-bearing for everything below. Every rule in this file is a
+ * claim about which workflows a contract edit starts, and on a branch the
+ * answer is now "whatever the gate calls" — so the gate is read from disk and
+ * asserted in section 2b rather than assumed.
+ */
+const MERGE_GATE = "merge-gate.yml";
+
 /** The lanes a document edit must never start. Each is a paid runner, a signing
  *  identity, a browser matrix or an eight-shard race — and not one of them opens
  *  a contract. */
@@ -141,6 +160,11 @@ const OWNERSHIP = [
     contract: `${CONTRACT_TREE}/device-inbox-admission-v1.json`,
     doc: "docs/DEVICE-INBOX-ADMISSION-CONTRACT.md",
     lane: CONTRACTS,
+    // The caller job id in `merge-gate.yml`. Named per lane rather than derived
+    // from the file name because the two are deliberately allowed to differ:
+    // this tree's two lanes both declare a job literally called `go-contract`,
+    // and the caller job id is the prefix that tells the two check runs apart.
+    gateJob: "contracts",
     // Three implementations parse this document independently and compare it to
     // the constants they already ship, so all three are checked — including the
     // paid macOS one, deliberately costed in `contracts.yml`'s own header.
@@ -182,6 +206,10 @@ const OWNERSHIP = [
     contract: `${CONTRACT_TREE}/ops-deploy-v1.json`,
     doc: "docs/OPS-DEPLOY-CONTRACT.md",
     lane: OPS_DEPLOY,
+    // NOT `ops-deploy-contract`: see the note on the entry above. Both lanes
+    // declare `go-contract`, so the gate distinguishes their check runs by
+    // caller job id.
+    gateJob: "ops-contract",
     // ONE consumer in a lane, and one free Ubuntu runner. The document's other
     // consumer is `scripts/test/ops-deploy-contract-test.mjs`, which needs no
     // toolchain and therefore runs in the UNFILTERED `repo-hygiene.yml` on every
@@ -392,6 +420,7 @@ on:
       - '!contracts/draft/**'
   pull_request:
     paths: *paths
+  workflow_call:
 permissions:
   contents: read
 jobs:
@@ -422,6 +451,12 @@ jobs:
     blockScalar: "go build ./...\ngo test ./...\n",
     workingDirectory: "server",
     stepCount: 3,
+    // A bare `workflow_call:` is DECLARED with no value, and the shallower key
+    // after it still belongs to the enclosing mapping. Both halves matter:
+    // section 2b distinguishes "declared" from "absent", and a parser that
+    // descended into the bare key instead would swallow everything below it.
+    callDeclared: true,
+    callValue: null,
   };
   const got = {
     name: doc.name,
@@ -434,6 +469,8 @@ jobs:
     blockScalar: doc.jobs?.one?.steps?.[1]?.run,
     workingDirectory: doc.jobs?.one?.steps?.[1]?.["working-directory"],
     stepCount: doc.jobs?.one?.steps?.length,
+    callDeclared: Object.prototype.hasOwnProperty.call(doc.on ?? {}, "workflow_call"),
+    callValue: doc.on?.workflow_call ?? null,
   };
   if (JSON.stringify(got) !== JSON.stringify(want)) {
     console.error("contract-ci-policy-test: the YAML parser does not read its own fixture.");
@@ -741,12 +778,12 @@ function triggerFailures(world) {
       + `document it owns, and itself. \`${CONTRACT_TREE}/**\` here is what put a Swift runner on `
       + `a document Swift never opens.`,
     );
-    need(
-      deepEqual(paths, world.docs.get(owner.lane)?.on?.pull_request?.paths ?? null),
-      `${owner.lane}'s push and pull_request filters differ. The two lists are aliased from one `
-      + `anchor precisely so they cannot: a lane that is narrower on pull_request passes on the `
-      + `branch and is simply not run after the merge.`,
-    );
+    // The filter this lane carries is now its `push` filter and nothing else.
+    // There used to be a second, aliased copy under `pull_request:` and a rule
+    // comparing the two; both are gone with that trigger. What the comparison
+    // protected — a lane narrower on one event than the other — is structurally
+    // impossible with one filtered event left, and pull-request coverage is
+    // asserted in section 2b against the gate that now provides it.
 
     // And the other direction: an ordinary source change must NOT start it.
     for (const consumer of CONSUMERS) {
@@ -758,6 +795,104 @@ function triggerFailures(world) {
       );
     }
   }
+  return out;
+}
+
+// ── 2b. pull-request coverage comes from the gate, and is PROVED there ──────
+//
+// Both lanes' `push:` triggers above are still exact, and still only half the
+// story: `push` is restricted to `main`, so on a branch these lanes are reached
+// exclusively by `merge-gate.yml` calling them. That is a real improvement over
+// the aliased `pull_request:` filter it replaced — one always-present required
+// context instead of eight sometimes-present ones — and it is also a new way to
+// lose a lane silently, in three shapes that all leave every file valid:
+//
+//   * the lane drops `workflow_call:`, so the gate's `uses:` cannot resolve.
+//     GitHub then fails the WHOLE gate run to load, and the merge box shows a
+//     MISSING required check rather than a red one;
+//   * the gate stops calling the lane. The lane is fine, the gate is fine, and
+//     a contract edit is judged by nothing until it lands on `main`;
+//   * the gate itself grows a `pull_request` path filter, which re-creates the
+//     absent-check failure one level up and for every lane at once.
+//
+// None is visible to the rules above, to YAML validity or to actionlint, so the
+// gate is read from disk and each shape fails BY NAME. "The gate covers it" is
+// exactly the assumption this section exists to stop being an assumption.
+
+function gateReachabilityFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+
+  const gate = world.docs.get(MERGE_GATE);
+  need(
+    gate !== undefined,
+    `${MERGE_GATE} is missing or did not parse, and it is the ONLY way a pull request now reaches `
+    + `[${[...LANE_FILTERS.keys()].join(", ")}] — those lanes gave up their own \`pull_request\` `
+    + `trigger when it started calling them. Without it a contract edit is judged by nothing until `
+    + `it has already landed on \`main\`.`,
+  );
+
+  if (gate !== undefined) {
+    const on = gate.on && typeof gate.on === "object" ? gate.on : {};
+    need(
+      Object.prototype.hasOwnProperty.call(on, "pull_request"),
+      `${MERGE_GATE} declares no \`pull_request\` trigger (its \`on:\` is `
+      + `${JSON.stringify(Object.keys(on))}). It is the pull-request entry point for every lane `
+      + `below; without that event those lanes have none either, and a branch would carry no `
+      + `contract evidence at all.`,
+    );
+    const pr = on.pull_request;
+    const prPaths = pr !== null && typeof pr === "object" ? (pr.paths ?? null) : null;
+    need(
+      prPaths === null,
+      `${MERGE_GATE}'s \`pull_request\` trigger has grown a path filter `
+      + `(${JSON.stringify(prPaths)}). The gate is the one workflow that must start on EVERY pull `
+      + `request: a filtered gate emits no check run for the changes it skips, which is the `
+      + `absent-required-context failure these lanes were converted to avoid — restored one level `
+      + `up, and for all of them at once.`,
+    );
+  }
+
+  for (const owner of OWNERSHIP) {
+    const on = world.docs.get(owner.lane)?.on;
+    if (!on || typeof on !== "object") continue;
+
+    need(
+      Object.prototype.hasOwnProperty.call(on, "workflow_call"),
+      `${owner.lane} declares no \`workflow_call:\`, so ${MERGE_GATE}'s \`uses:\` cannot resolve `
+      + `it. That does not fail this lane; it fails the entire gate run to LOAD, so the one `
+      + `required context never reports and the merge box shows a missing check instead of a red `
+      + `one.`,
+    );
+    need(
+      !Object.prototype.hasOwnProperty.call(on, "pull_request"),
+      `${owner.lane} declares its own \`pull_request\` trigger again. ${MERGE_GATE} already calls `
+      + `it, so every commit on a branch with an open pull request runs this lane TWICE — once `
+      + `directly, once through the gate — and pays for ${owner.consumers.length} job(s) to answer `
+      + `one question`
+      + `${owner.consumers.some((c) => c.paidRunner) ? ", one of them on a PAID macOS runner" : ""}.`,
+    );
+
+    const callers = Object.entries(gate?.jobs ?? {})
+      .filter(([, job]) => job?.uses === `./.github/workflows/${owner.lane}`)
+      .map(([name]) => name)
+      .sort();
+    need(
+      callers.length === 1,
+      `${MERGE_GATE} declares ${callers.length} job(s) [${callers.join(", ")}] with `
+      + `\`uses: ./.github/workflows/${owner.lane}\`; want exactly one. Zero is a lane no pull `
+      + `request reaches at all now that its own trigger is gone — its filter still names `
+      + `${owner.contract}, and nothing would run on a change to it until the merge landed. Two is `
+      + `the same lane charged twice per pull request.`,
+    );
+    need(
+      callers.length !== 1 || callers[0] === owner.gateJob,
+      `${MERGE_GATE} calls ${owner.lane} from job "${callers[0]}"; want "${owner.gateJob}". The `
+      + `caller job id is the check-run prefix, and it is what tells this lane's \`go-contract\` `
+      + `apart from the other contract lane's job of the same name.`,
+    );
+  }
+
   return out;
 }
 
@@ -974,10 +1109,23 @@ function clone(world) {
   };
 }
 
+/**
+ * Replace a workflow's `push` path filter.
+ *
+ * `push` is the only filtered event these lanes have left. The previous version
+ * of this helper also wrote the same list under `pull_request`, mirroring the
+ * anchor the workflows used to carry — which now WRITES BACK the direct trigger
+ * section 2b forbids, so every path mutation would have raised an unrelated
+ * duplicate-run complaint alongside the one it meant to prove. It touches
+ * `push` alone, and a workflow with no `push` mapping to edit is reported as a
+ * mutation that could not be applied rather than as a rule that fired.
+ */
 function withPaths(world, file, paths) {
-  const on = world.docs.get(file).on;
+  const on = world.docs.get(file)?.on;
+  if (!on || typeof on !== "object" || !on.push || typeof on.push !== "object") {
+    throw new Error(`${file} declares no \`push\` mapping, so there is no path filter to replace`);
+  }
   on.push.paths = paths;
-  on.pull_request = { ...(on.pull_request ?? {}), paths };
   return world;
 }
 
@@ -1076,13 +1224,70 @@ const MUTATIONS = [
     mutate: (w) => withPaths(w, OPS_DEPLOY, [...LANE_FILTERS.get(OPS_DEPLOY), "server/**"]),
     expect: /ops-deploy-contract\.yml's path filter is .*server\/\*\*.*want exactly/s,
   },
+
+  // ── the gate that now carries pull requests (2b) ──────────────────────────
+  //
+  // The case these four replace mutated `on.pull_request.paths` directly. With
+  // that trigger gone the assignment throws a TypeError, which section 5 reports
+  // as "the mutation could not be applied" — a message about this file rather
+  // than about the policy, and one that would have passed for a rule that no
+  // longer exists. Each of these breaks a property that IS still real, and each
+  // fails by its own name.
   {
-    name: "the deploy lane is narrower on pull_request than on push",
+    // The direct trigger, restored. Both entry points then fire for every commit
+    // on a branch with an open pull request.
+    name: "the deploy lane takes its own pull_request trigger back",
     mutate: (w) => {
-      w.docs.get(OPS_DEPLOY).on.pull_request.paths = [`.github/workflows/${OPS_DEPLOY}`];
+      w.docs.get(OPS_DEPLOY).on.pull_request = { paths: [...LANE_FILTERS.get(OPS_DEPLOY)] };
       return w;
     },
-    expect: /ops-deploy-contract\.yml's push and pull_request filters differ/,
+    expect: /ops-deploy-contract\.yml declares its own `pull_request` trigger again/,
+  },
+  {
+    // The opposite edit, and the expensive one: no direct trigger AND nothing
+    // for the gate's `uses:` to resolve. The gate run fails to LOAD, so the one
+    // required context reports nothing at all.
+    name: "the deploy lane drops workflow_call, so the gate's uses: cannot resolve",
+    mutate: (w) => {
+      delete w.docs.get(OPS_DEPLOY).on.workflow_call;
+      return w;
+    },
+    expect: /ops-deploy-contract\.yml declares no `workflow_call:`/,
+  },
+  {
+    // Both files stay entirely valid and the lane simply stops being reachable
+    // from a pull request. This is the quiet one: the filter still names the
+    // document, and nothing runs on a change to it until the merge has landed.
+    name: "merge-gate stops calling the deploy lane",
+    mutate: (w) => {
+      delete w.docs.get(MERGE_GATE).jobs["ops-contract"];
+      return w;
+    },
+    expect: /merge-gate\.yml declares 0 job\(s\) \[\] with `uses: \.\/\.github\/workflows\/ops-deploy-contract\.yml`/,
+  },
+  {
+    // The lane is called from the WRONG caller job id. Both contract lanes
+    // declare a job called `go-contract`, and the caller id is the check-run
+    // prefix that keeps their two results distinguishable.
+    name: "merge-gate calls the deploy lane under the other lane's job id",
+    mutate: (w) => {
+      const jobs = w.docs.get(MERGE_GATE).jobs;
+      jobs["ops-deploy-contract"] = jobs["ops-contract"];
+      delete jobs["ops-contract"];
+      return w;
+    },
+    expect: /merge-gate\.yml calls ops-deploy-contract\.yml from job "ops-deploy-contract"; want "ops-contract"/,
+  },
+  {
+    // The gate itself filtered: it then emits no check run for the pull requests
+    // it skips, which is the absent-required-context failure the lanes were
+    // converted to avoid — reintroduced one level up and for all of them at once.
+    name: "the merge gate's pull_request trigger grows a path filter",
+    mutate: (w) => {
+      w.docs.get(MERGE_GATE).on.pull_request = { paths: ["web/**"] };
+      return w;
+    },
+    expect: /merge-gate\.yml's `pull_request` trigger has grown a path filter/,
   },
   {
     name: "the always-on compat gate grows a path filter",
@@ -1265,7 +1470,9 @@ const MUTATIONS = [
 
 // ── run ─────────────────────────────────────────────────────────────────────
 
-const RULES = [ownershipFailures, triggerFailures, owningSuiteFailures, laneFailures];
+const RULES = [
+  ownershipFailures, triggerFailures, gateReachabilityFailures, owningSuiteFailures, laneFailures,
+];
 const judge = (world) => RULES.flatMap((rule) => rule(world));
 
 const world = loadWorld();
@@ -1311,5 +1518,7 @@ console.log(
   + `secret-free jobs — one PAID macOS runner, ${CONSUMERS.length - 1} ubuntu — while `
   + `${HEAVY_LANES.join(", ")} stay out of a document edit and still own their own consumer tests; `
   + `${world.treeFiles.length} tree files checked for an owner; ordered last-match-wins path `
-  + `semantics compiled and proved; ${mutationsProven} mutations prove each rule can fail)`,
+  + `semantics compiled and proved; both lanes reachable from a pull request only through `
+  + `${MERGE_GATE}, whose unfiltered \`pull_request\` trigger and one caller job per lane are `
+  + `read from disk rather than assumed; ${mutationsProven} mutations prove each rule can fail)`,
 );

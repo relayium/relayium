@@ -138,19 +138,36 @@ import { dirname, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { PATH_MATRIX } from "./fixtures/ci-path-selection.mjs";
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const workflowsDir = resolve(repoRoot, ".github/workflows");
 
 // ── the policy, stated once ─────────────────────────────────────────────────
 
 /**
- * The workflows this policy binds, and whether each is expected to offer a
- * manual `workflow_dispatch`. Naming them explicitly is the point: a workflow
- * silently dropped from this list would stop being checked, so the list is the
- * assertion.
+ * The workflows this policy binds, and the exact TRIGGER SHAPE each is expected
+ * to have. Naming them explicitly is the point: a workflow silently dropped
+ * from this list would stop being checked, so the list is the assertion.
+ *
+ * Three fields, and the last two are the aggregate merge gate stated as data:
+ *
+ *   `dispatch`  a manual `workflow_dispatch:` is expected.
+ *   `call`      this file is a reusable CALLEE. `merge-gate.yml` calls it, and
+ *               that call is now the ONLY way a pull request reaches it.
+ *   `directPr`  this file still carries its own `pull_request:` trigger.
+ *
+ * `call` and `directPr` are opposites everywhere today, and that is a fact
+ * about the migration rather than a rule: `compat.yml` owns the context `main`
+ * currently requires (`wire-vectors`), so folding it into the gate would rename
+ * its check and leave the requirement satisfiable by no run at all. It keeps
+ * its direct trigger until the gate itself is required. Every other lane has
+ * already moved, and a `pull_request:` reappearing on one of them is a lane
+ * running TWICE per commit — once directly, once through the gate — which is
+ * exactly the duplicate this repository removed once already.
  */
 const GOVERNED = [
-  { file: "go.yml", dispatch: true },
+  { file: "go.yml", dispatch: true, call: true, directPr: false },
   // `dispatch: false`, and that is the whole macOS CI/release split stated in
   // one field. This file is the reusable CI CALLEE: it runs on every push to
   // `main` and every pull request, and it is started manually by nothing. Every
@@ -163,16 +180,16 @@ const GOVERNED = [
   // A `workflow_dispatch:` reappearing here fails this entry AND section 6m: it
   // is where the five release inputs and the jobs that read them came back
   // from.
-  { file: "macos.yml", dispatch: false },
-  { file: "ios.yml", dispatch: true },
+  { file: "macos.yml", dispatch: false, call: true, directPr: false },
+  { file: "ios.yml", dispatch: true, call: true, directPr: false },
   // The shared Swift package's own lane. It is here for the same reason every
   // other filtered workflow is — its triggers, its concurrency and its
   // push/pull_request path symmetry would otherwise be governed by nothing.
   // WHAT it owns (the repository's sole unfiltered `swift test`, the ordered
   // `!apps/RelayiumKit/Tests/**` exclusions, and which workflow starts on which
   // package path) belongs to `scripts/test/swift-ci-boundary-test.mjs`.
-  { file: "swift-package.yml", dispatch: true },
-  { file: "web.yml", dispatch: true },
+  { file: "swift-package.yml", dispatch: true, call: true, directPr: false },
+  { file: "web.yml", dispatch: true, call: true, directPr: false },
   // The root contract tree's own lane. It is here for the reason this list
   // exists at all: a workflow absent from it is bound by none of the trigger,
   // concurrency or path rules below, and nothing says so.
@@ -181,7 +198,7 @@ const GOVERNED = [
   // therefore cannot stand in for them. `dispatch: false`, matching the
   // workflow: it starts on every change to the tree it owns, and a manual run
   // would produce nothing a push does not.
-  { file: "contracts.yml", dispatch: false },
+  { file: "contracts.yml", dispatch: false, call: true, directPr: false },
   // The product↔ops deploy contract's own lane. Same reason, same shape, and
   // deliberately a SEPARATE entry rather than a fourth job in `contracts.yml`:
   // that document has no Swift and no TypeScript consumer, so sharing the lane
@@ -191,13 +208,18 @@ const GOVERNED = [
   // lane to the trigger, concurrency and runner-budget rules below. `dispatch:
   // false`, matching the workflow: it starts on every change to the one document
   // it owns, and a manual run would produce nothing a push does not.
-  { file: "ops-deploy-contract.yml", dispatch: false },
+  { file: "ops-deploy-contract.yml", dispatch: false, call: true, directPr: false },
   // The always-on, deliberately UNFILTERED compatibility gate. It is in this
   // list — and not merely in section 6 — so it is bound by the same trigger and
   // concurrency policy as every heavy workflow it runs in front of.
-  { file: "compat.yml", dispatch: true },
-  { file: "native-web-pairing.yml", dispatch: true },
-  { file: "repo-hygiene.yml", dispatch: false },
+  // The ONE lane still holding its own `pull_request:` trigger, and the only
+  // one with `call: false`. It declares `wire-vectors`, the single context
+  // `main` requires today; converting it renames that check to
+  // `compat / wire-vectors`, so it moves into the gate only after the gate
+  // itself is required. docs/CI-PLATFORM-BOUNDARY.md carries the staged order.
+  { file: "compat.yml", dispatch: true, call: false, directPr: true },
+  { file: "native-web-pairing.yml", dispatch: true, call: true, directPr: false },
+  { file: "repo-hygiene.yml", dispatch: false, call: true, directPr: false },
 ];
 
 const NIGHTLY = "account-race-nightly.yml";
@@ -231,28 +253,82 @@ const MACOS = "macos.yml";
 const MACOS_RELEASE = "macos-release.yml";
 
 /**
+ * The aggregate merge gate, and the pieces its correctness is spread across.
+ *
+ * It is deliberately NOT in `GOVERNED`: it has no `push` trigger and no path
+ * filter, so section 1 would assert things about it that must not be true, and
+ * section 5g's matrix excludes unfiltered workflows by construction. Section 6n
+ * binds it instead, and section 2 binds its concurrency.
+ *
+ * `GATE_JOB` is the required status context. Top-level job check names are bare
+ * in this repository's own API output — the required context is `wire-vectors`,
+ * not `compat / wire-vectors`, whatever the merge box renders — so this job
+ * reports as `merge-gate`, and section 6n asserts nothing else on disk may
+ * declare that name.
+ */
+const AGGREGATE = "merge-gate.yml";
+const GATE_JOB = "merge-gate";
+const SELECT_JOB = "select";
+const SELECTOR = "scripts/ci/select-lanes.mjs";
+const SELECTOR_TEST = "scripts/test/ci-lane-selector-test.mjs";
+
+/**
+ * The gate's conditional lanes, as `caller job id -> called workflow`.
+ *
+ * The id is not always the workflow's name. `contracts.yml` and
+ * `ops-deploy-contract.yml` both declare a job literally called `go-contract`,
+ * and the caller job id is the prefix that tells the two check runs apart —
+ * hence `ops-contract`.
+ */
+const GATE_LANES = new Map([
+  ["web", "web.yml"],
+  ["go", "go.yml"],
+  ["macos", MACOS],
+  ["ios", "ios.yml"],
+  ["swift-package", "swift-package.yml"],
+  ["native-web-pairing", "native-web-pairing.yml"],
+  ["contracts", "contracts.yml"],
+  ["ops-contract", "ops-deploy-contract.yml"],
+]);
+
+/** Called with no condition, because every change must pass what it hosts. */
+const GATE_ALWAYS = ["repo-hygiene"];
+
+/**
  * The concurrency key, in two halves.
  *
  * The SUFFIX is repository-wide and is the whole of the rule stated at the top
  * of this file: group by PR number when there is one, by `github.run_id`
  * otherwise. Nothing may deviate from it.
  *
- * The PREFIX is `${{ github.workflow }}` for every workflow that is neither a
- * reusable callee nor the caller of one — which is all of them but two.
+ * The PREFIX is `${{ github.workflow }}` only for a workflow that is neither a
+ * reusable callee nor the caller of one. Since the aggregate merge gate that is
+ * three files: `compat.yml`, which the gate does not call yet, and the two
+ * scheduled nightlies, which nothing calls at all.
  *
- * `macos.yml` and `macos-release.yml` carry LITERAL prefixes instead, and that
- * is not a style choice. Inside a called workflow `github.workflow` is the
- * CALLER's name, so the shared expression puts the caller's jobs and the
- * callee's jobs in one group under one `github.run_id`: the callee queues
- * behind the caller, and the caller waits for the callee. Two literals nothing
- * else uses make the groups disjoint by construction, whatever either file is
- * renamed to later.
+ * Every other file here carries a LITERAL prefix, and that is not a style
+ * choice. Inside a called workflow `github.workflow` is the CALLER's name, so
+ * the shared expression puts every lane `merge-gate.yml` calls into ONE group
+ * under one `github.run_id`. With `cancel-in-progress` true on a pull request
+ * the lanes then cancel each other, and the aggregate judges cancelled runs;
+ * between a caller and its callee it is a deadlock, because the callee queues
+ * behind the caller that is waiting for it. Literals nothing else uses make the
+ * groups disjoint by construction, whatever any file is renamed to later.
  */
 const GROUP_SUFFIX = "${{ github.event.pull_request.number || github.run_id }}";
 const DEFAULT_GROUP_PREFIX = "${{ github.workflow }}";
 const LITERAL_GROUP_PREFIX = new Map([
   [MACOS, "macos-ci"],
   [MACOS_RELEASE, "macos-release"],
+  [AGGREGATE, "merge-gate"],
+  ["web.yml", "web-lane"],
+  ["go.yml", "go-lane"],
+  ["ios.yml", "ios-lane"],
+  ["swift-package.yml", "swift-package-lane"],
+  ["native-web-pairing.yml", "native-web-pairing-lane"],
+  ["contracts.yml", "contracts-lane"],
+  ["ops-deploy-contract.yml", "ops-deploy-contract-lane"],
+  ["repo-hygiene.yml", "repo-hygiene-lane"],
 ]);
 const groupPrefix = (file) => LITERAL_GROUP_PREFIX.get(file) ?? DEFAULT_GROUP_PREFIX;
 const expectedGroup = (file) => `${groupPrefix(file)}-${GROUP_SUFFIX}`;
@@ -639,14 +715,27 @@ for (const file of files) {
  * whole boundary against the CI half are asserted in section 6m instead.
  */
 const BUDGET_ONLY = ["release.yml", MACOS_RELEASE];
-for (const file of BUDGET_ONLY) {
+
+/**
+ * Parsed for section 6n, and for nothing else.
+ *
+ * `merge-gate.yml` belongs in neither `GOVERNED` nor `BUDGET_ONLY`. It has no
+ * `push` and no path filter, so section 1 would assert things about it that
+ * must not be true and section 5g's matrix excludes it by construction; it
+ * holds no paid runner, so section 6i has nothing to budget. What it holds is
+ * the one status `main` can require, and section 6n is what keeps that status
+ * meaning what it says.
+ */
+const EXTRA_PARSED = [AGGREGATE];
+for (const file of [...BUDGET_ONLY, ...EXTRA_PARSED]) {
   let text;
   try {
     text = await readFile(resolve(workflowsDir, file), "utf8");
   } catch {
-    check(false, `${file} is missing. It is named in this test's runner-budget list, so removing `
-      + `or renaming it without updating that list would silently drop it from the timeout and `
-      + `escape-hatch policy in section 6i.`);
+    check(false, `${file} is missing. It is named in this test's runner-budget or aggregate-gate `
+      + `list, so removing or renaming it without updating that list would silently drop it from `
+      + `the timeout and escape-hatch policy in section 6i, or from the merge-gate policy in `
+      + `section 6n.`);
     continue;
   }
   try {
@@ -669,7 +758,7 @@ function assertParseWasNotVacuous() {
   // of it would make both of them pass by inspecting nothing. `release.yml` is
   // not — it genuinely declares no `concurrency:` block, and demanding one here
   // would be asserting a property it never had.
-  for (const file of [...files, MACOS_RELEASE]) {
+  for (const file of [...files, MACOS_RELEASE, ...EXTRA_PARSED]) {
     const doc = docs.get(file);
     if (!doc) continue; // already reported as missing or unparseable
     check(
@@ -701,54 +790,116 @@ function allSteps(doc) {
 
 const runText = (job) => (job?.steps ?? []).map((s) => s?.run ?? "").join("\n");
 
-// ── 1. push runs only on main, and pull_request is untouched ────────────────
+// ── 1. the trigger shape of every governed workflow ────────────────────
+//
+// Moved into `triggerFailures(world)`, beside the other world functions, so
+// section 8 can break each of its rules and require the complaint. The rules
+// themselves changed with the aggregate merge gate:
+//
+//   * `push: branches: [main]` is unchanged and is now LOAD-BEARING beyond
+//     tidiness. `merge-gate.yml` runs on `pull_request` only, so a lane's own
+//     `push` trigger is the only thing that puts a check run on the `main`
+//     commit — and `relayium-ops`' `deploy/promote.sh` refuses to promote a
+//     `main` commit whose `wire-vectors` check run is absent. A future "make
+//     everything go through the gate" cleanup that dropped a `push: main` would
+//     wedge every production promotion with `required check absent`, mid
+//     incident. That reasoning lives in a different repository, so the rule is
+//     encoded here.
+//   * `pull_request:` is now FORBIDDEN on every lane the gate calls and
+//     required only on `compat.yml`, which has not moved yet. Keeping both on a
+//     converted lane runs it twice per commit, once directly and once through
+//     the gate.
+//   * `workflow_call:` is required on exactly the lanes the gate calls. Without
+//     it the gate's `uses:` is unresolvable and the WHOLE run fails to load, so
+//     `merge-gate` never reports at all and the merge box shows a missing
+//     required check rather than a red one.
+//
+// The old `push.paths === pull_request.paths` rule went with the trigger it
+// compared against. What it protected — a filter that is narrower on one event
+// than the other — is now structurally impossible for a converted lane, because
+// there is only one filtered event left; and what each filter must actually
+// SELECT is asserted behaviourally by section 5g's matrix and, independently,
+// by `scripts/test/ci-lane-selector-test.mjs`.
 
-for (const { file, dispatch } of GOVERNED) {
-  const doc = docs.get(file);
-  if (!doc) continue;
-  const on = doc.on;
-  check(on && typeof on === "object", `${file}: no \`on:\` mapping`);
-  if (!on || typeof on !== "object") continue;
+function triggerFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
 
-  check("push" in on, `${file}: lost its \`push\` trigger, so \`main\` is no longer verified directly`);
-  check("pull_request" in on, `${file}: lost its \`pull_request\` trigger, so branch work is no longer gated`);
+  for (const { file, dispatch, call, directPr } of world.governed) {
+    const doc = world.docs.get(file);
+    if (!doc) continue;
+    const on = doc.on;
+    need(on && typeof on === "object", `${file}: no \`on:\` mapping`);
+    if (!on || typeof on !== "object") continue;
 
-  const push = on.push;
-  const branches = push && typeof push === "object" ? push.branches : undefined;
-  check(
-    Array.isArray(branches) && branches.length === 1 && branches[0] === "main",
-    `${file}: \`push.branches\` is ${JSON.stringify(branches)}, want exactly ["main"]. `
-    + `Without it a branch push and its pull request both run this workflow against the same `
-    + `tree — two identical runs per commit, both green, and nothing reports the duplicate.`,
-  );
+    need("push" in on, `${file}: lost its \`push\` trigger. That is the ONLY event that puts a `
+      + `check run on the \`main\` commit now that ${AGGREGATE} owns pull requests, and `
+      + `\`relayium-ops\`' \`deploy/promote.sh\` reads check runs on \`main\` before it promotes. `
+      + `A lane that loses this does not fail visibly here; it wedges production promotion with `
+      + `\`required check absent\`.`);
 
-  // The path filters decide what this workflow can SEE. They are cumulative
-  // between the two events by construction (web.yml and native-web-pairing.yml
-  // share one anchored list), and narrowing either one silently stops a tree
-  // from triggering its own gate.
-  const pushPaths = push && typeof push === "object" ? (push.paths ?? null) : null;
-  const prPaths = on.pull_request && typeof on.pull_request === "object"
-    ? (on.pull_request.paths ?? null)
-    : null;
-  const same = JSON.stringify(pushPaths) === JSON.stringify(prPaths);
-  check(
-    same,
-    `${file}: \`push.paths\` and \`pull_request.paths\` differ (${JSON.stringify(pushPaths)} vs `
-    + `${JSON.stringify(prPaths)}). A change must trigger the same checks on a pull request as `
-    + `on main, or a gate that passes on the branch is simply not run after the merge.`,
-  );
+    const push = on.push;
+    const branches = push && typeof push === "object" ? push.branches : undefined;
+    need(
+      Array.isArray(branches) && branches.length === 1 && branches[0] === "main",
+      `${file}: \`push.branches\` is ${JSON.stringify(branches)}, want exactly ["main"]. `
+      + `Without it a branch push and its pull request both run this workflow against the same `
+      + `tree — two identical runs per commit, both green, and nothing reports the duplicate.`,
+    );
 
-  check(
-    ("workflow_dispatch" in on) === dispatch,
-    `${file}: workflow_dispatch is ${"workflow_dispatch" in on ? "present" : "absent"}, `
-    + `want ${dispatch ? "present" : "absent"}`,
-  );
+    need(
+      ("workflow_call" in on) === (call === true),
+      `${file}: \`workflow_call\` is ${"workflow_call" in on ? "present" : "absent"}, want `
+      + `${call ? "present" : "absent"}. ${call
+        ? `${AGGREGATE} calls this file, and that call is the only way a pull request reaches it. `
+          + `Without the trigger the gate's \`uses:\` is unresolvable, the entire run fails to `
+          + `load, and the required context never reports at all.`
+        : `Nothing calls this file. A \`workflow_call:\` here is a second entry point nobody `
+          + `costed, and for ${COMPAT} it is the migration step that renames the context \`main\` `
+          + `currently requires.`}`,
+    );
 
-  check(
-    !("schedule" in on),
-    `${file}: gained a \`schedule\` trigger. Scheduled runs of a gating workflow burn runners `
-    + `on a tree nobody changed; put the scheduled lane in its own workflow.`,
-  );
+    need(
+      ("pull_request" in on) === (directPr === true),
+      `${file}: \`pull_request\` is ${"pull_request" in on ? "present" : "absent"}, want `
+      + `${directPr ? "present" : "absent"}. ${directPr
+        ? `This file has not moved into ${AGGREGATE} yet and is still its own pull-request entry `
+          + `point; losing the trigger leaves branch work ungated by it.`
+        : `${AGGREGATE} calls this file, so a direct trigger runs it TWICE for every commit on a `
+          + `branch with an open pull request — once directly, once through the gate. That is the `
+          + `duplicate this repository already removed once.`}`,
+    );
+
+    // Only a lane that still owns its own pull-request entry point can have two
+    // filters to disagree with each other.
+    if (directPr) {
+      const pushPaths = push && typeof push === "object" ? (push.paths ?? null) : null;
+      const prPaths = on.pull_request && typeof on.pull_request === "object"
+        ? (on.pull_request.paths ?? null)
+        : null;
+      need(
+        JSON.stringify(pushPaths) === JSON.stringify(prPaths),
+        `${file}: \`push.paths\` and \`pull_request.paths\` differ (${JSON.stringify(pushPaths)} `
+        + `vs ${JSON.stringify(prPaths)}). A change must trigger the same checks on a pull `
+        + `request as on main, or a gate that passes on the branch is simply not run after the `
+        + `merge.`,
+      );
+    }
+
+    need(
+      ("workflow_dispatch" in on) === dispatch,
+      `${file}: workflow_dispatch is ${"workflow_dispatch" in on ? "present" : "absent"}, `
+      + `want ${dispatch ? "present" : "absent"}`,
+    );
+
+    need(
+      !("schedule" in on),
+      `${file}: gained a \`schedule\` trigger. Scheduled runs of a gating workflow burn runners `
+      + `on a tree nobody changed; put the scheduled lane in its own workflow.`,
+    );
+  }
+
+  return out;
 }
 
 // ── 2. concurrency: PR number, run_id for everything else ───────────────────
@@ -760,7 +911,7 @@ for (const { file, dispatch } of GOVERNED) {
 // callee, and uniqueness across every file governed here.
 
 /** Every file whose concurrency block this policy binds. */
-const CONCURRENCY_GOVERNED = [...files, MACOS_RELEASE];
+const CONCURRENCY_GOVERNED = [...files, MACOS_RELEASE, ...EXTRA_PARSED];
 
 // ── 3. the account race lane is sharded, and the shards really run ──────────
 
@@ -1208,109 +1359,38 @@ for (const { file } of GOVERNED) {
 // most expensive thing in this file is a check that passes because it cannot
 // fail. The real-world call sits next to section 6's and section 7's, just
 // above section 8.
-const PATH_MATRIX = [
-  ["server/account/pairroom.go", ["go.yml", "native-web-pairing.yml"],
-    "server-only: no native runner may start"],
-  ["server/go.mod", ["go.yml", "native-web-pairing.yml"],
-    "the server module: still not a native trigger"],
-  ["web/src/lib/pair.ts", ["native-web-pairing.yml", "web.yml"],
-    "web-only: no native runner may start"],
-  ["apps/mac/Relayium/AccountView.swift", ["macos.yml"],
-    "macOS-only source: no iOS runner, and no pairing runner either. The acceptance builds "
-    + "`server` and `apps/RelayiumKit` and serves the Web bundle; it never reads, compiles or "
-    + "serves a file under apps/mac, so watching this tree would buy a 45-minute macOS runner "
-    + "for evidence the run cannot produce. The app's logic lives in apps/RelayiumKit, which the "
-    + "pairing filter does name"],
-  ["apps/mac/scripts/package-dmg.sh", ["macos.yml"],
-    "a macOS release script the macOS `test` job runs: macOS, not iOS, and not the pairing "
-    + "acceptance, which does not package a DMG"],
-  ["apps/ios/Relayium/RelayiumApp.swift", ["ios.yml"],
-    "iOS-only source: no macOS signing lane, and — since the pairing filter was narrowed off "
-    + "`apps/**` — no 45-minute macOS pairing runner either. That acceptance builds "
-    + "apps/RelayiumKit and the Web bundle; nothing under apps/ios is an input to it"],
-  ["apps/RelayiumKit/Sources/RelayiumKit/Crypto/SealedBox.swift",
-    ["ios.yml", "macos.yml", "native-web-pairing.yml", "swift-package.yml"],
-    "SHARED source: both native workflows, or one app's break goes unseen — plus the pairing "
-    + "acceptance that compiles it and the package's own suite. The rest of that package's "
-    + "ownership, including the `!apps/RelayiumKit/Tests/**` exclusions the three heavy filters "
-    + "now carry, is `scripts/test/swift-ci-boundary-test.mjs`"],
-  ["scripts/ios-ui-session-acceptance.sh", ["ios.yml"],
-    "the iOS built-App acceptance: the workflow that runs it, and only that one. The pairing "
-    + "workflow does not source this script, and `scripts/**` is gone from its filter"],
-  ["scripts/lib/local-acceptance.sh", ["ios.yml", "native-web-pairing.yml"],
-    "the isolation library those acceptance runs are built from"],
-  ["scripts/local-transfer-cleanup-test.sh", ["ios.yml"],
-    "the launcher's own failure-path test, run by the iOS job and by nothing else"],
-  ["scripts/go-race-shard.go", ["go.yml"],
-    "a Go helper: it used to start the macOS signing lane through `scripts/**`, and then the "
-    + "macOS pairing runner through the same glob in the pairing filter. Both are gone"],
-  [FUZZ_INVENTORY, ["go.yml"],
-    "the fuzz campaign's discovery script. It never runs on a pull request — the campaign is "
-    + "scheduled — but it enumerates the Go module, so an edit to it must start the workflow "
-    + "that proves that module still builds and that every fuzz target's seeds still pass. "
-    + "Exactly go.yml: no native runner has any business starting for a Go helper"],
-  [`.github/workflows/${FUZZ_NIGHTLY}`, ["go.yml"],
-    "the campaign workflow itself. It is not in GOVERNED and has no path filter of its own — "
-    + "it is scheduled — so nothing would otherwise run a single Go test on a commit that only "
-    + "edits it, and its `-fuzz` invocation names targets that live in the Go module go.yml "
-    + "compiles"],
-  ["scripts/native-web-pairing-acceptance.sh", ["native-web-pairing.yml"],
-    "the acceptance script itself: named one file at a time, so it starts its own workflow and "
-    + "no other"],
-  [".github/workflows/macos.yml", ["macos.yml"], "a workflow edit starts its own workflow only"],
-  [".github/workflows/ios.yml", ["ios.yml"], "and the same for the new one"],
-  [".github/workflows/go.yml", ["go.yml"], "and for an unrelated one"],
-  ["contracts/device-inbox-admission-v1.json", ["contracts.yml"],
-    "the root contract tree: exactly its own lane, and no consumer suite. All three consumer "
-    + "tests read this document, but each already lives in a tree its own workflow watches, so "
-    + "naming it in go.yml, web.yml or swift-package.yml would spend the eight-shard race lane, "
-    + "the full browser suite and a PAID macOS runner on a document two `go test` functions read "
-    + "in milliseconds. What that lane must CONTAIN is "
-    + "`scripts/test/contract-ci-policy-test.mjs`; this row is what keeps the lane inside THIS "
-    + "file's governed inventory, because a workflow dropped from that list is bound by none of "
-    + "the trigger, concurrency or runner-budget rules above"],
-  [".github/workflows/contracts.yml", ["contracts.yml"],
-    "and the contract lane's own edit starts itself only, like every other workflow here"],
-  ["contracts/ops-deploy-v1.json", ["ops-deploy-contract.yml"],
-    "the second root contract, and the reason `contracts.yml`'s filter is no longer "
-    + "`contracts/**`. Exactly its own lane: NOT contracts.yml, whose web-contract job would "
-    + "`npm ci` a Vitest closure for a test that does not exist here and whose swift-contract job "
-    + "would take a PAID macOS runner for a document Swift never opens; and not go.yml, even "
-    + "though its Go consumer lives under server/ — that test already runs inside `go test ./...` "
-    + "on any real server change, and naming the document in go.yml's filter would start the "
-    + "EIGHT-SHARD race lane for a JSON edit"],
-  [".github/workflows/ops-deploy-contract.yml", ["ops-deploy-contract.yml"],
-    "and the deploy contract lane's own edit starts itself only"],
-  ["docs/OPS-DEPLOY-CONTRACT.md", [],
-    "the deploy contract's prose. No job reads it, so no path-filtered workflow starts — the "
-    + "always-on `repo-hygiene.yml` already fails when the contract points at a document that is "
-    + "gone, which is the only claim this file carries. Deliberately NOT in the lane's filter, "
-    + "for the same reason `docs/DEVICE-INBOX-ADMISSION-CONTRACT.md` is not in contracts.yml's"],
-  ["apps/README.md", [],
-    "documentation under apps/: not an input to any native build and not an input to the "
-    + "pairing acceptance either, so NO path-filtered workflow starts. `apps/**` in the pairing "
-    + "filter matched it only because it was coarse"],
-  ["apps/android/app/src/main/kotlin/Main.kt", [],
-    "a platform root that does not exist yet: no current workflow may adopt it. This is the "
-    + "whole point of removing `apps/**` — the day somebody creates this file, the ONLY thing "
-    + "that runs is what its own new workflow says, plus the unfiltered always-on gates"],
-  ["apps/windows/Relayium/App.xaml.cs", [],
-    "the same, for the other plausible future root"],
-  ["scripts/android-emulator-acceptance.sh", [],
-    "a future Android script: `scripts/**` in a macOS-runner workflow is how it would have "
-    + "inherited a macOS runner without anybody choosing that"],
-  ["scripts/windows-package.ps1", [],
-    "and the same for a future Windows packaging script"],
-  ["docs/billing-transparency.md", ["web.yml"],
-    "a document that is TEST INPUT, which is why it is not in the empty-set group above. "
-    + "`web/scripts/pages/billing-doc-pointers.test.mjs` reads this file and asserts every "
-    + "`symbol` (`path:line`) pointer in it still resolves, and that test runs inside web.yml's "
-    + "`npm test` step — so the document is an input to that suite exactly like a source file, "
-    + "and an edit to it must start the suite that judges it. Exactly web.yml and nothing else: "
-    + "no other governed workflow runs that test. Named one file at a time rather than through "
-    + "`docs/**`, which would start the full web suite, the accessibility scan and three "
-    + "headless-Chrome journeys for every unrelated document in the repository"],
-];
+// The rows themselves now live in `scripts/test/fixtures/ci-path-selection.mjs`
+// and are imported at the top of this file. They moved for one reason: the
+// merge gate's `scripts/ci/select-lanes.mjs` reads the same filters with a
+// DIFFERENT implementation — a narrow `on.push.paths` extractor and a
+// split-on-stars glob compiler, where this file carries a general parser and a
+// character-walking one — and `scripts/test/ci-lane-selector-test.mjs` judges it
+// against these same rows.
+//
+// One oracle, two readers. Emptying a lane's `push.paths` now fails in BOTH
+// files from one edit, which is what makes the agreement evidence rather than a
+// coincidence. Had the rows been copied into the second test, a copy-paste
+// would have made the two implementations agree while both were wrong — and the
+// gate would be selecting lanes by a rule nothing had ever contradicted.
+//
+// A shared DATA fixture, not shared implementation. The repository's
+// no-shared-parser convention is about not needing `npm ci` in front of a guard
+// that gates every pull request; an imported array needs nothing installed.
+
+// Two rows spell out what this file otherwise reads through a constant, because
+// a fixture that imports its own subject is not a fixture. Assert the constants
+// and the rows still name the same files, or the extraction can drift silently.
+check(
+  PATH_MATRIX.some(([path]) => path === FUZZ_INVENTORY),
+  `the shared path-selection fixture has no row for \`${FUZZ_INVENTORY}\`. That row is what `
+  + `keeps the fuzz campaign's discovery script starting the Go lane and nothing else; the `
+  + `fixture spells the path out, so a rename here that the fixture did not follow leaves the `
+  + `row asserting something about a file that no longer exists.`,
+);
+check(
+  PATH_MATRIX.some(([path]) => path === `.github/workflows/${FUZZ_NIGHTLY}`),
+  `the shared path-selection fixture has no row for \`.github/workflows/${FUZZ_NIGHTLY}\`.`,
+);
 
 /**
  * Every trigger-matrix disagreement about one world, as messages.
@@ -4243,6 +4323,354 @@ function releaseBoundaryFailures(world) {
   return out;
 }
 
+
+// ── 6n. the aggregate merge gate, and what makes its green mean something ───
+//
+// This is the section about the one status `main`'s protection can require.
+//
+// Branch protection requires a CONTEXT, and a context satisfies a requirement
+// only if it reports. A path-filtered workflow that does not trigger emits no
+// check run at all, so protection cannot tell "this lane passed" from "this
+// lane was legitimately not selected" from "this lane never ran" — which is why
+// eight filtered lanes reported red over a merge button that still worked, and
+// why pull request #22 merged over a failed Device Inbox job and an in-progress
+// iOS job. `merge-gate.yml` is unfiltered, calls every lane, and reports one
+// job that is always present and judges what the lanes actually did.
+//
+// Every load-bearing part of that is invisible to YAML validity and to
+// actionlint, and each has a specific fail-open shape:
+//
+//   * A lane called and missing from the aggregate's `needs:` can FAIL while
+//     `merge-gate` reports success.
+//   * A lane in `needs:` and no longer called can only ever be skipped, and the
+//     two-way rule then requires it to stay skipped forever.
+//   * A condition written `needs.select.outputs.swift-package` is parsed as
+//     SUBTRACTION, evaluates to the empty string, and the lane silently never
+//     runs — while the gate stays green because it reads as "not selected".
+//   * A result whitelist of `success|skipped` passes a lane that WAS selected
+//     and then got skipped by a broken `if:`. That is the exact fail-open shape
+//     this gate exists to close, reintroduced one edit later. The rule has to
+//     be TWO-WAY: selected implies success, and not selected implies skipped.
+//   * `secrets: inherit` on any caller hands the signing certificate and the
+//     provisioning profiles to lanes that read no secret at all.
+//   * A second job named `merge-gate` anywhere is the same GitHub App posting
+//     the same context, so an unrelated green lane can satisfy the requirement
+//     on behalf of the aggregate that never ran — the one substitution the
+//     `app_id` binding cannot see. Same reasoning as 6j, different name.
+//
+// What this section does NOT assert is that the context is required. That is a
+// live repository setting, not tree state. `docs/CI-PLATFORM-BOUNDARY.md`
+// carries the staged protection migration and its current position.
+
+/** The exact result pairings the aggregate may accept, and nothing else. */
+const GATE_ACCEPTED = ["false:skipped", "true:success"];
+/** This gate parses a few JSON blobs; a bound far above that is the default. */
+const GATE_TIMEOUT_MAX = 10;
+
+function aggregateGateFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+
+  const gate = world.docs.get(AGGREGATE);
+  need(
+    gate !== undefined,
+    `${AGGREGATE} is missing or did not parse, so every rule below is unchecked. It is the only `
+    + `workflow that reports a status on every pull request regardless of what changed, and `
+    + `therefore the only one \`main\`'s protection can require without wedging the pull requests `
+    + `that legitimately select no filtered lane.`,
+  );
+  if (!gate) return out;
+
+  const lanes = [...GATE_LANES.keys()];
+  const roster = [SELECT_JOB, ...lanes, ...GATE_ALWAYS];
+  const jobs = gate.jobs ?? {};
+
+  // -- the trigger: unfiltered, pull_request, and nothing else --------------
+  need(
+    deepEqual(Object.keys(gate.on ?? {}), ["pull_request"]),
+    `${AGGREGATE} triggers on [${Object.keys(gate.on ?? {}).join(", ")}]; want exactly `
+    + `[pull_request]. A \`push:\` here would not help — \`main\` is verified by each lane's own `
+    + `\`push: branches: [main]\`, which is what puts a check run on the \`main\` commit for `
+    + `\`relayium-ops\`' \`deploy/promote.sh\` to read — and a \`schedule:\` would start every `
+    + `expensive lane on a tree nobody changed.`,
+  );
+  const prPaths = gate.on?.pull_request && typeof gate.on.pull_request === "object"
+    ? gate.on.pull_request.paths
+    : undefined;
+  need(
+    prPaths === undefined,
+    `${AGGREGATE} has grown a \`pull_request\` path filter (${JSON.stringify(prPaths)}). A `
+    + `filtered gate does not report on the changes it filters out, and a required context that `
+    + `sometimes does not report blocks every pull request that does not select it — which is `
+    + `precisely the state this workflow exists to replace.`,
+  );
+  need(
+    deepEqual(gate.permissions, { contents: "read" }),
+    `${AGGREGATE} declares top-level permissions ${JSON.stringify(gate.permissions)}, want `
+    + `{"contents":"read"}. A caller's permission block is passed to every workflow it calls, so `
+    + `a write here would hand a write token to the lane that imports a Developer ID certificate.`,
+  );
+
+  // -- the roster, compared in both directions ------------------------------
+  need(
+    deepEqual(Object.keys(jobs).slice().sort(), [...roster, GATE_JOB].sort()),
+    `${AGGREGATE} declares jobs [${Object.keys(jobs).join(", ")}]; want exactly `
+    + `[${[...roster, GATE_JOB].join(", ")}]. A lane added here and nowhere else is a lane the `
+    + `aggregate cannot see; a lane removed is coverage that went away without anything saying so.`,
+  );
+
+  // -- the selector job -----------------------------------------------------
+  const select = jobs[SELECT_JOB];
+  need(select !== undefined, `${AGGREGATE} declares no \`${SELECT_JOB}\` job, which is what reads `
+    + `the lanes' own path filters and decides which of them this change set requires.`);
+  if (select) {
+    const timeout = Number(select["timeout-minutes"]);
+    need(
+      Number.isFinite(timeout) && timeout > 0 && timeout <= GATE_TIMEOUT_MAX,
+      `${AGGREGATE}/${SELECT_JOB}: timeout-minutes is `
+      + `${JSON.stringify(select["timeout-minutes"])}, want a finite number no greater than `
+      + `${GATE_TIMEOUT_MAX}. This job reads one API page and a handful of YAML filters; unbounded `
+      + `it holds GitHub's six-hour default in front of every merge.`,
+    );
+    need(
+      deepEqual(select.permissions, { contents: "read", "pull-requests": "read" }),
+      `${AGGREGATE}/${SELECT_JOB} declares permissions ${JSON.stringify(select.permissions)}, `
+      + `want {"contents":"read","pull-requests":"read"}. It reads the pull request's file list `
+      + `and nothing else; a write scope here is a write token on every pull request.`,
+    );
+    need(
+      deepEqual(Object.keys(select.outputs ?? {}), lanes),
+      `${AGGREGATE}/${SELECT_JOB} publishes outputs [${Object.keys(select.outputs ?? {}).join(", ")}]; `
+      + `want exactly [${lanes.join(", ")}]. A lane with no selector output can never be `
+      + `selected, so its caller condition is false on every pull request and the aggregate `
+      + `happily requires it to stay skipped.`,
+    );
+    for (const lane of lanes) {
+      const value = select.outputs?.[lane];
+      if (value === undefined) continue;
+      need(
+        value === `\${{ steps.${SELECT_JOB}.outputs['${lane}'] }}`,
+        `${AGGREGATE}/${SELECT_JOB}'s \`${lane}\` output is ${JSON.stringify(value)}; want `
+        + `\`\${{ steps.${SELECT_JOB}.outputs['${lane}'] }}\` in BRACKET form. A hyphen in an `
+        + `expression property path is parsed as subtraction, so the dotted spelling evaluates to `
+        + `the empty string — valid YAML, valid expression syntax, and a lane that is never `
+        + `selected.`,
+      );
+    }
+    need(
+      runText(select).includes(`node ${SELECTOR}`),
+      `${AGGREGATE}/${SELECT_JOB} no longer runs \`node ${SELECTOR}\`. That script is the only `
+      + `thing that reads the lanes' own \`push.paths\`; without it the gate is selecting lanes by `
+      + `some second declaration of the same filters, which is the drift surface this design `
+      + `refused to create.`,
+    );
+    need(
+      select.if === undefined && select["continue-on-error"] === undefined,
+      `${AGGREGATE}/${SELECT_JOB} declares an \`if:\` or \`continue-on-error:\`. A selector that `
+      + `can skip itself or report green after failing makes every lane condition below false, `
+      + `and the aggregate would then require every lane to be skipped.`,
+    );
+  }
+
+  // -- the callers ----------------------------------------------------------
+  const gateText = world.texts.get(AGGREGATE) ?? "";
+  need(
+    gateText !== "",
+    `${AGGREGATE}'s comment-stripped source never reached this world, so the absence checks below `
+    + `would inspect the empty string and report a pass.`,
+  );
+  need(
+    !/secrets:\s*inherit/.test(gateText),
+    `${AGGREGATE} uses \`secrets: inherit\`. That hands the callee EVERY secret this repository `
+    + `holds — the signing certificate and both provisioning profiles today, whatever is added `
+    + `tomorrow — to lanes that read no secret at all, invisibly, and keeps doing so as the secret `
+    + `list grows. Forward secrets one line at a time, to the one lane that uses them.`,
+  );
+
+  for (const [lane, workflow] of [...GATE_LANES, ...GATE_ALWAYS.map((l) => [l, `${l}.yml`])]) {
+    const job = jobs[lane];
+    if (job === undefined) continue;
+    need(
+      job.uses === `./.github/workflows/${workflow}`,
+      `${AGGREGATE}/${lane} declares \`uses: ${JSON.stringify(job.uses)}\`; want `
+      + `\`./.github/workflows/${workflow}\`. A LOCAL path, so the lane that runs is the `
+      + `definition under review — a remote or tagged reference judges the pull request by `
+      + `somebody else's copy of the lane.`,
+    );
+    need(
+      world.texts.has(workflow),
+      `${AGGREGATE}/${lane} calls ${workflow}, which is not in .github/workflows/. GitHub fails `
+      + `the ENTIRE run to load, so \`${GATE_JOB}\` never reports: fail closed, but the merge box `
+      + `shows a MISSING required check rather than a red one, which is close to undiagnosable `
+      + `from the pull request.`,
+    );
+    need(
+      job["timeout-minutes"] === undefined,
+      `${AGGREGATE}/${lane} declares \`timeout-minutes:\` on a \`uses:\` job. GitHub rejects that `
+      + `key on a reusable-workflow call and the whole run fails to load; the budget belongs to `
+      + `the called workflow's own jobs, and section 6i already holds it there.`,
+    );
+    need(
+      job.with === undefined,
+      `${AGGREGATE}/${lane} passes \`with: ${JSON.stringify(job.with)}\`. The gate passes NO `
+      + `inputs: every callee's defaults are its CI defaults, and an input supplied here is a `
+      + `release lever an ordinary pull request just pulled.`,
+    );
+    need(
+      job.needs === SELECT_JOB,
+      `${AGGREGATE}/${lane} declares \`needs: ${JSON.stringify(job.needs)}\`, want `
+      + `\`${SELECT_JOB}\`. Every lane waits on the selection, including the unconditional ones — `
+      + `otherwise a lane starts before the job whose outputs its sibling conditions read.`,
+    );
+  }
+
+  for (const lane of lanes) {
+    const job = jobs[lane];
+    if (job === undefined) continue;
+    need(
+      job.if === `needs.${SELECT_JOB}.outputs['${lane}'] == 'true'`,
+      `${AGGREGATE}/${lane} declares \`if: ${JSON.stringify(job.if)}\`; want `
+      + `\`needs.${SELECT_JOB}.outputs['${lane}'] == 'true'\`. Two failures share this line. A `
+      + `constant or a widened condition runs a lane the change set did not select, which the `
+      + `aggregate's two-way rule then reports as red for the wrong reason; and the DOTTED `
+      + `spelling \`needs.${SELECT_JOB}.outputs.${lane}\` is parsed as subtraction, evaluates to `
+      + `the empty string, and the lane silently never runs at all.`,
+    );
+    const secrets = job.secrets;
+    if (lane === "macos") {
+      need(
+        typeof secrets === "object" && secrets !== null && !Array.isArray(secrets)
+          && deepEqual(Object.keys(secrets).slice().sort(), CALL_SECRETS.slice().sort()),
+        `${AGGREGATE}/macos forwards secrets ${JSON.stringify(secrets)}; want exactly the four `
+        + `signing and profile secrets [${CALL_SECRETS.join(", ")}], written one per line. Fewer `
+        + `breaks the signing steps with a message that names a runbook rather than this line; `
+        + `more sends release material into the half that must not be able to release.`,
+      );
+    } else {
+      need(
+        secrets === undefined,
+        `${AGGREGATE}/${lane} declares \`secrets: ${JSON.stringify(secrets)}\`. This lane reads no `
+        + `secret at all today, and a secret it is handed is a secret it can start reading.`,
+      );
+    }
+  }
+
+  for (const lane of GATE_ALWAYS) {
+    const job = jobs[lane];
+    if (job === undefined) continue;
+    need(
+      job.if === undefined,
+      `${AGGREGATE}/${lane} has grown an \`if: ${JSON.stringify(job.if)}\`. This lane hosts the `
+      + `guards every change must pass — it carries no path filter for the same reason — so `
+      + `nothing may stand between a pull request and it.`,
+    );
+  }
+
+  // -- the aggregate itself -------------------------------------------------
+  const aggregate = jobs[GATE_JOB];
+  need(aggregate !== undefined, `${AGGREGATE} declares no \`${GATE_JOB}\` job. That job key and `
+    + `its \`name:\` ARE the required status context; without it protection waits on a context `
+    + `nothing in this repository reports.`);
+  if (aggregate) {
+    need(
+      aggregate.name === GATE_JOB,
+      `${AGGREGATE}/${GATE_JOB} declares \`name: ${JSON.stringify(aggregate.name)}\`, want `
+      + `\`${GATE_JOB}\`. The check-run name is what branch protection matches. A job relying on `
+      + `its key today is one rename away from reporting a context nothing requires, and an `
+      + `un-required gate reports green by not being consulted.`,
+    );
+    need(
+      aggregate.if === "always()",
+      `${AGGREGATE}/${GATE_JOB} declares \`if: ${JSON.stringify(aggregate.if)}\`, want `
+      + `\`always()\`. Without it the aggregate is SKIPPED the moment any lane fails — and a `
+      + `skipped required context is an ABSENT one, so the merge box would show nothing rather `
+      + `than red.`,
+    );
+    const needs = Array.isArray(aggregate.needs) ? aggregate.needs : [aggregate.needs];
+    need(
+      deepEqual(needs.slice().sort(), roster.slice().sort()),
+      `${AGGREGATE}/${GATE_JOB} depends on [${needs.join(", ")}]; want exactly `
+      + `[${roster.join(", ")}]. Both directions matter. A lane called above and absent from `
+      + `\`needs:\` is invisible to the aggregate: it can fail while \`${GATE_JOB}\` reports `
+      + `success, which is the fail-open state this workflow exists to replace. A lane in `
+      + `\`needs:\` and no longer called can only ever be skipped.`,
+    );
+    const timeout = Number(aggregate["timeout-minutes"]);
+    need(
+      Number.isFinite(timeout) && timeout > 0 && timeout <= GATE_TIMEOUT_MAX,
+      `${AGGREGATE}/${GATE_JOB}: timeout-minutes is `
+      + `${JSON.stringify(aggregate["timeout-minutes"])}, want a finite number no greater than `
+      + `${GATE_TIMEOUT_MAX}. Unbounded, the one job every merge waits on inherits GitHub's `
+      + `six-hour default.`,
+    );
+
+    // The rule, read out of the step that enforces it.
+    const text = runText(aggregate);
+    const rosterOf = (name) => {
+      const value = new RegExp(`^\\s*${name}='([^']*)'\\s*$`, "m").exec(text)?.[1];
+      return value === undefined ? null : value.split(/\s+/).filter(Boolean);
+    };
+    const declaredConditional = rosterOf("CONDITIONAL_LANES");
+    const declaredAlways = rosterOf("UNCONDITIONAL_LANES");
+    need(
+      declaredConditional !== null && deepEqual(declaredConditional.slice().sort(), lanes.slice().sort()),
+      `${AGGREGATE}/${GATE_JOB}'s CONDITIONAL_LANES roster is `
+      + `${JSON.stringify(declaredConditional)}; want [${lanes.join(", ")}]. The roster is a `
+      + `hardcoded literal precisely so the aggregate fails on a missing key rather than `
+      + `iterating whatever it was handed — which means something has to keep it equal to the `
+      + `lanes, and this is it.`,
+    );
+    need(
+      declaredAlways !== null && deepEqual(declaredAlways, GATE_ALWAYS),
+      `${AGGREGATE}/${GATE_JOB}'s UNCONDITIONAL_LANES roster is `
+      + `${JSON.stringify(declaredAlways)}; want [${GATE_ALWAYS.join(", ")}]. A lane moved out of `
+      + `this roster stops being required to SUCCEED and starts being required to be SKIPPED — `
+      + `the wrong direction, and silently.`,
+    );
+
+    const accepted = [...text.matchAll(/^\s*'([^']*)'\)\s*;;\s*$/gm)].map((m) => m[1]).sort();
+    need(
+      deepEqual(accepted, GATE_ACCEPTED),
+      `${AGGREGATE}/${GATE_JOB} accepts the lane result pairings [${accepted.join(", ")}]; want `
+      + `exactly [${GATE_ACCEPTED.join(", ")}]. This is the TWO-WAY rule, and a whitelist is not `
+      + `a substitute for it: adding \`failure\` or \`cancelled\` makes a red lane green, and `
+      + `accepting \`true:skipped\` passes a lane that WAS selected and then got skipped by a `
+      + `broken condition — which is the exact fail-open shape this gate exists to close.`,
+    );
+    need(
+      /toJSON\(needs\)/.test(JSON.stringify(aggregate))
+        && /toJSON\(needs\.select\.outputs\)/.test(JSON.stringify(aggregate)),
+      `${AGGREGATE}/${GATE_JOB} no longer reads \`toJSON(needs)\` and `
+      + `\`toJSON(needs.select.outputs)\` into its environment. Those two blobs ARE the evidence `
+      + `it judges; a step that stopped reading one of them is judging a constant.`,
+    );
+    need(
+      /set -euo pipefail/.test(text),
+      `${AGGREGATE}/${GATE_JOB} dropped \`set -euo pipefail\`. Its rule is a shell loop over jq `
+      + `output, so an unset variable or a failed jq must abort rather than compare the empty `
+      + `string against an expectation and pass.`,
+    );
+  }
+
+  // -- and nothing else may carry the required name -------------------------
+  const gateNameHosts = [...world.texts.keys()]
+    .filter((file) => file !== AGGREGATE)
+    .filter((file) => jobKeysOf(world, file).includes(GATE_JOB)
+      || new RegExp(`^ {4}name: ${GATE_JOB}\\s*$`, "m").test(world.texts.get(file) ?? ""))
+    .sort();
+  need(
+    gateNameHosts.length === 0,
+    `[${gateNameHosts.join(", ")}] also declare a job named \`${GATE_JOB}\`. That is the aggregate `
+    + `status context: a second job of this name in this repository is the SAME GitHub App posting `
+    + `the SAME context, so an unrelated green lane can satisfy the requirement on behalf of a `
+    + `gate that never ran — and it reports green, not missing. This is the one substitution the `
+    + `\`app_id\` binding cannot stop, exactly as in 6j. Only ${AGGREGATE} may declare it.`,
+  );
+
+  return out;
+}
+
+for (const message of triggerFailures(realWorld())) failures.push(message);
 for (const message of platformBoundaryFailures(realWorld())) failures.push(message);
 for (const message of pathMatrixFailures(realWorld())) failures.push(message);
 for (const message of fuzzCampaignFailures(realWorld())) failures.push(message);
@@ -4250,6 +4678,7 @@ for (const message of iosGuardStepFailures(realWorld())) failures.push(message);
 for (const message of macosBudgetFailures(realWorld())) failures.push(message);
 for (const message of concurrencyFailures(realWorld())) failures.push(message);
 for (const message of releaseBoundaryFailures(realWorld())) failures.push(message);
+for (const message of aggregateGateFailures(realWorld())) failures.push(message);
 
 // ── 7h. the inventory script's own fail-closed proof, actually executed ─────
 //
@@ -4359,6 +4788,131 @@ for (const message of inventoryScriptFailures(["--self-test"])) failures.push(me
   );
 }
 
+// ── 7i. the lane selector's own fail-closed proof, actually executed ────────
+//
+// Section 6n reads `merge-gate.yml`. None of it can say whether
+// `scripts/ci/select-lanes.mjs` still FAILS CLOSED on the shapes it promises to
+// reject, and those branches are the least falsifiable code in this repository:
+// a files-API error, a 3000-file change set, a truncated response, an
+// unreadable lane filter. Each selects EVERY conditional lane, each has never
+// been observed happening, and a fail-closed branch nobody has seen fail is
+// indistinguishable from a broken one.
+//
+// The script answers this itself with `--self-test`, exactly as
+// `scripts/list-go-fuzz-targets.sh` does above: it drives its own reader,
+// vocabulary, matcher and every fail-closed condition in process, compiles
+// nothing, reads no network and finishes in well under a second.
+//
+// The direction that matters is UNDER-selection. Over-selection costs runner
+// minutes on a documentation edit; under-selection is a GREEN required gate
+// over code no lane compiled, arriving through the gate that exists to prevent
+// exactly that.
+//
+// Shelling out has one failure mode worth designing against — a harness that
+// reports green whatever the child did — so the exit status is the only thing
+// consulted, and the call is proved below to propagate a nonzero one.
+
+/**
+ * Runs `scripts/ci/select-lanes.mjs` with `args` and returns complaints about
+ * how it exited. Bounded the same three ways as `inventoryScriptFailures`: no
+ * inherited stdin, a wall-clock timeout far above the sub-second run it
+ * expects, and a finite `maxBuffer`.
+ */
+function selectorScriptFailures(args) {
+  const out = [];
+  const label = `${SELECTOR} ${args.join(" ")}`;
+  const run = spawnSync(process.execPath, [resolve(repoRoot, SELECTOR), ...args], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 120_000,
+    maxBuffer: 8 * 1024 * 1024,
+  });
+
+  if (run.error) {
+    out.push(
+      `\`${label}\` could not be executed: ${run.error.message}. It is the script the merge gate `
+      + `runs to decide which lanes to call at all, and a script that cannot be run proves `
+      + `nothing — an unreadable or moved file must fail here rather than be skipped.`,
+    );
+    return out;
+  }
+
+  const diagnostics = [run.stdout, run.stderr]
+    .map((stream) => String(stream ?? "").trimEnd())
+    .filter(Boolean)
+    .join("\n")
+    .split("\n")
+    .map((line) => `      ${line}`)
+    .join("\n") || "      (no output)";
+
+  if (run.signal) {
+    out.push(
+      `\`${label}\` was killed by ${run.signal} rather than exiting. It parses a handful of small `
+      + `YAML filters and finishes in well under a second, so reaching the harness timeout means `
+      + `it is hung, not slow — and a hung selector holds the job every merge waits on. Its `
+      + `output so far:\n${diagnostics}`,
+    );
+    return out;
+  }
+
+  if (run.status !== 0) {
+    out.push(
+      `\`${label}\` exited ${run.status}. That self-test is what proves the selector's `
+      + `fail-closed branches still fail closed and that its pattern vocabulary still refuses a `
+      + `shape it cannot compile. Its output:\n${diagnostics}`,
+    );
+  }
+  return out;
+}
+
+for (const message of selectorScriptFailures(["--self-test"])) failures.push(message);
+
+// The proof that the call above propagates a failure instead of reporting the
+// child's exit status as green. The script rejects an unknown argument with
+// status 2, which costs one argv comparison and needs no fixture.
+{
+  const probe = "--not-a-flag";
+  const got = selectorScriptFailures([probe]);
+  check(
+    got.some((message) => message.includes(`${probe}\` exited 2.`)),
+    `running \`${SELECTOR} ${probe}\` — which that script rejects with status 2 — produced `
+    + `${got.length === 0 ? "no complaint" : JSON.stringify(got)}, so the harness that runs `
+    + `\`--self-test\` above does not propagate a nonzero exit. Every self-test failure would `
+    + `then report as a green policy run, which is worse than not running it at all.`,
+  );
+}
+
+// And the suite that judges the selector against the SHARED fixture is itself
+// hosted where nothing can filter it away. Section 6h states the same rule for
+// this file; the reason is identical and the failure is worse, because the
+// selector decides whether the expensive lanes run at all.
+{
+  const hygiene = docs.get(SELF_HOST);
+  const hosts = Object.entries(hygiene?.jobs ?? {})
+    .filter(([, job]) => realRunLines(job).some((line) => line.includes(`node ${SELECTOR_TEST}`)));
+  check(
+    hosts.length === 1,
+    `${hosts.length} job(s) in ${SELF_HOST} run \`node ${SELECTOR_TEST}\`; want exactly one. That `
+    + `suite is what judges ${SELECTOR} against the shared path-selection fixture — the same `
+    + `oracle section 5g uses — so without it the two implementations stop being cross-validated `
+    + `and the gate's lane selection is checked by nothing.`,
+  );
+  for (const [name, job] of hosts) {
+    const timeout = Number(job["timeout-minutes"]);
+    check(
+      Number.isFinite(timeout) && timeout > 0 && timeout <= SELF_TIMEOUT_MAX,
+      `${SELF_HOST}/${name}: timeout-minutes is ${JSON.stringify(job["timeout-minutes"])}, want a `
+      + `finite number no greater than ${SELF_TIMEOUT_MAX}.`,
+    );
+    check(
+      job.if === undefined && job["continue-on-error"] === undefined,
+      `${SELF_HOST}/${name}: a job-level "if:" or continue-on-error lets the suite that judges `
+      + `the merge gate's lane selection skip itself or report green after failing.`,
+    );
+  }
+}
+
 // ── 8. the proof that sections 5g, 6 and 7 can fail ─────────────────────────
 //
 // Every check above reads a world instead of module state precisely so this can
@@ -4398,6 +4952,60 @@ function withoutPath(world, file, path) {
     throw new Error(`${file}'s path filter does not list ${path}, so there is nothing to remove`);
   }
   return withPaths(world, file, paths.filter((entry) => entry !== path));
+}
+
+/**
+ * Remove one trigger from a workflow, and throw when it is already gone.
+ *
+ * Throwing is the point, and it is the same discipline as `withoutPath`: a
+ * mutation that silently stopped applying leaves the world unbroken, and the
+ * case below it then passes while asserting nothing about the rule it names.
+ */
+function withoutTrigger(world, file, event) {
+  const on = world.docs.get(file)?.on;
+  if (!on || !(event in on)) {
+    throw new Error(`${file} does not declare an \`${event}\` trigger, so there is nothing to remove`);
+  }
+  delete on[event];
+  return world;
+}
+
+/** Give a workflow back a trigger it deliberately no longer has. */
+function withTrigger(world, file, event, value = null) {
+  const on = world.docs.get(file)?.on;
+  if (!on) throw new Error(`${file} has no \`on:\` mapping to add \`${event}\` to`);
+  if (event in on) throw new Error(`${file} already declares \`${event}\``);
+  on[event] = value;
+  return world;
+}
+
+/**
+ * Mutate one job of `merge-gate.yml`, and throw when it is not there.
+ *
+ * By name rather than by position, for the reason `withNamedJob` gives: the
+ * gate has eleven jobs and every case below names the one it breaks, so a
+ * positional selector would silently retarget the day two YAML keys are
+ * reordered.
+ */
+function withGateJob(world, name, mutate) {
+  const job = world.docs.get(AGGREGATE)?.jobs?.[name];
+  if (job === undefined) throw new Error(`${AGGREGATE} declares no job named ${name}`);
+  mutate(job);
+  return world;
+}
+
+/** Rewrite the aggregate step's shell, and require the anchor to still exist. */
+function withGateRule(world, from, to) {
+  const job = world.docs.get(AGGREGATE)?.jobs?.[GATE_JOB];
+  const step = (job?.steps ?? []).find((s) => String(s?.run ?? "").includes("CONDITIONAL_LANES"));
+  if (step === undefined) {
+    throw new Error(`${AGGREGATE}/${GATE_JOB} has no step declaring CONDITIONAL_LANES to mutate`);
+  }
+  if (!step.run.includes(from)) {
+    throw new Error(`${AGGREGATE}/${GATE_JOB}'s rule does not contain ${JSON.stringify(from)}`);
+  }
+  step.run = step.run.replace(from, to);
+  return world;
 }
 
 /** Mutate the first job of a workflow. */
@@ -5895,6 +6503,220 @@ const MUTATIONS = [
     },
     expect: /macos-release\.yml\/mac-extra runs on "macos-15" — a PAID runner — and section 6i declares no runner-budget ceiling/,
   },
+  // -- the aggregate merge gate (6n) and the trigger shape it rests on (1) --
+  //
+  // Every case here is a one-line edit away from being the real state of the
+  // tree, and each leaves the YAML valid, actionlint happy and — this is the
+  // whole point — the board GREEN.
+  {
+    // Without `workflow_call` the gate's `uses:` is unresolvable and the entire
+    // run fails to load, so the required context never reports at all.
+    name: "a lane stops being callable by the gate",
+    mutate: (world) => withoutTrigger(world, WEB, "workflow_call"),
+    expect: /web\.yml: `workflow_call` is absent, want present/,
+  },
+  {
+    // The duplicate-run regression, restored. Two identical runs per commit on
+    // any branch with an open pull request, both green.
+    name: "a lane regains its own pull_request trigger beside the gate's call",
+    mutate: (world) => withTrigger(world, "go.yml", "pull_request"),
+    expect: /go\.yml: `pull_request` is present, want absent/,
+  },
+  {
+    // S1-G, encoded here because the reasoning lives in `relayium-ops` and
+    // nothing in this repository would otherwise stop the cleanup that causes
+    // it: a `main` commit with no check run for promotion to read.
+    name: "a lane loses the push trigger production promotion reads",
+    mutate: (world) => withoutTrigger(world, "contracts.yml", "push"),
+    expect: /contracts\.yml: lost its `push` trigger/,
+  },
+  {
+    // A reusable callee keying on the caller's name: one group, one run_id, and
+    // lanes cancelling each other under a pull request's cancel-in-progress.
+    name: "a called lane keys its concurrency group on github.workflow again",
+    mutate: (world) => {
+      world.docs.get(IOS).concurrency.group = GROUP;
+      return world;
+    },
+    expect: /ios\.yml: it is a reusable workflow \(`on: workflow_call`\) and its concurrency\.group keys on `github\.workflow`/,
+  },
+  {
+    // Two literals somebody typed, colliding. Every run of one then shares a
+    // group with every run of the other.
+    name: "two lanes are given the same literal concurrency prefix",
+    mutate: (world) => {
+      world.docs.get("contracts.yml").concurrency.group = `go-lane-${GROUP_SUFFIX}`;
+      return world;
+    },
+    expect: /both resolve their concurrency group to the prefix "go-lane"/,
+  },
+  {
+    // The invisible one: the lane still runs, still reports, and the aggregate
+    // simply stops looking at it.
+    name: "a lane is dropped from the aggregate's needs",
+    mutate: (world) => withGateJob(world, GATE_JOB, (job) => {
+      job.needs = job.needs.filter((name) => name !== "macos");
+    }),
+    expect: /merge-gate\.yml\/merge-gate depends on \[.*\]; want exactly/,
+  },
+  {
+    // And the other half of the same closure: a lane in `needs:` that nothing
+    // calls any more can only ever be skipped.
+    name: "a lane stops being called while staying in the aggregate's needs",
+    mutate: (world) => {
+      delete world.docs.get(AGGREGATE).jobs.ios;
+      return world;
+    },
+    expect: /merge-gate\.yml declares jobs \[.*\]; want exactly/,
+  },
+  {
+    // The whitelist this design rejected, arriving one entry at a time.
+    name: "the aggregate starts accepting a failed lane",
+    mutate: (world) => withGateRule(
+      world,
+      "'false:skipped') ;;",
+      "'false:skipped') ;;\n              'true:failure') ;;",
+    ),
+    expect: /accepts the lane result pairings \[.*true:failure.*\]/,
+  },
+  {
+    // The half a `success|skipped` whitelist cannot see: a lane that WAS
+    // selected and then got skipped by a broken condition.
+    name: "the aggregate starts accepting a selected lane that was skipped",
+    mutate: (world) => withGateRule(
+      world,
+      "'true:success') ;;",
+      "'true:success') ;;\n              'true:skipped') ;;",
+    ),
+    expect: /accepts the lane result pairings \[.*true:skipped.*\]/,
+  },
+  {
+    // The condition stops reading the selection. The lane runs on every pull
+    // request, and the aggregate reports it red for not having been selected.
+    name: "a lane's condition becomes a constant",
+    mutate: (world) => withGateJob(world, "swift-package", (job) => { job.if = "true"; }),
+    expect: /merge-gate\.yml\/swift-package declares `if: "true"`/,
+  },
+  {
+    // The hyphen trap, in the direction that is silent: the dotted spelling is
+    // parsed as subtraction, so the condition is false forever and the lane
+    // never runs while the gate stays green because it reads as "not selected".
+    name: "a hyphenated lane's condition is written in dotted form",
+    mutate: (world) => withGateJob(world, "native-web-pairing", (job) => {
+      job.if = "needs.select.outputs.native-web-pairing == 'true'";
+    }),
+    expect: /merge-gate\.yml\/native-web-pairing declares `if: "needs\.select\.outputs\.native-web-pairing/,
+  },
+  {
+    // The same trap, in the other declaration of it.
+    name: "a hyphenated lane's selector output is published in dotted form",
+    mutate: (world) => withGateJob(world, SELECT_JOB, (job) => {
+      job.outputs["ops-contract"] = "${{ steps.select.outputs.ops-contract }}";
+    }),
+    expect: /merge-gate\.yml\/select's `ops-contract` output is .*BRACKET form/,
+  },
+  {
+    // The required context, renamed. Protection then waits on a string nothing
+    // reports, and a waiting requirement is not a passing one.
+    name: "the aggregate job loses the name the required context is bound to",
+    mutate: (world) => withGateJob(world, GATE_JOB, (job) => { delete job.name; }),
+    expect: /merge-gate\.yml\/merge-gate declares `name: undefined`/,
+  },
+  {
+    // The substitution the `app_id` binding cannot see, for the new context.
+    name: "a second job named merge-gate appears in another workflow",
+    mutate: (world) => {
+      const text = world.texts.get(AUTO_RELEASE);
+      world.texts.set(AUTO_RELEASE, text.replace(
+        /^jobs:\s*$/m,
+        `jobs:\n  ${GATE_JOB}:\n    runs-on: ubuntu-latest\n    steps:\n      - run: exit 0\n`,
+      ));
+      return world;
+    },
+    expect: /also declare a job named `merge-gate`/,
+  },
+  {
+    // Skipped rather than red the moment any lane fails, and a skipped required
+    // context is an absent one.
+    name: "the aggregate stops running when a lane fails",
+    mutate: (world) => withGateJob(world, GATE_JOB, (job) => { delete job.if; }),
+    expect: /merge-gate\.yml\/merge-gate declares `if: undefined`, want `always\(\)`/,
+  },
+  {
+    // The unconditional lane gains a condition, and the guards every change
+    // must pass acquire a way not to run.
+    name: "the unconditional hygiene lane gains a condition",
+    mutate: (world) => withGateJob(world, "repo-hygiene", (job) => {
+      job.if = "github.actor != 'dependabot[bot]'";
+    }),
+    expect: /merge-gate\.yml\/repo-hygiene has grown an `if:/,
+  },
+  {
+    // `inherit` on lanes that read no secret at all.
+    name: "the gate hands a callee every secret this repository holds",
+    mutate: (world) => {
+      world.texts.set(AGGREGATE, `${world.texts.get(AGGREGATE)}\n    secrets: inherit\n`);
+      return world;
+    },
+    expect: /merge-gate\.yml uses `secrets: inherit`/,
+  },
+  {
+    // A budget on a `uses:` job, which GitHub rejects outright: the whole run
+    // fails to load and the required context never reports.
+    name: "a caller job is given a timeout GitHub will reject",
+    mutate: (world) => withGateJob(world, "contracts", (job) => { job["timeout-minutes"] = "10"; }),
+    expect: /merge-gate\.yml\/contracts declares `timeout-minutes:` on a `uses:` job/,
+  },
+  {
+    // A release lever pulled by an ordinary pull request.
+    name: "the gate starts passing inputs to the macOS lane",
+    mutate: (world) => withGateJob(world, "macos", (job) => { job.with = { notarize: "true" }; }),
+    expect: /merge-gate\.yml\/macos passes `with:/,
+  },
+  {
+    // Release material handed to a lane that reads none.
+    name: "a cheap lane is forwarded the signing certificate",
+    mutate: (world) => withGateJob(world, "go", (job) => {
+      job.secrets = { MACOS_SIGNING_CERT_P12_BASE64: "${{ secrets.MACOS_SIGNING_CERT_P12_BASE64 }}" };
+    }),
+    expect: /merge-gate\.yml\/go declares `secrets:/,
+  },
+  {
+    // The gate itself behind a path filter: a required context that sometimes
+    // does not report blocks every pull request that does not select it.
+    name: "the aggregate gains a path filter",
+    mutate: (world) => {
+      world.docs.get(AGGREGATE).on.pull_request = { paths: ["web/**"] };
+      return world;
+    },
+    expect: /merge-gate\.yml has grown a `pull_request` path filter/,
+  },
+  {
+    // The selector stops running, so every output its conditions read is empty:
+    // every lane skipped, and the gate green over a change nothing compiled.
+    name: "the selector job stops invoking the selector",
+    mutate: (world) => withGateJob(world, SELECT_JOB, (job) => {
+      job.steps = job.steps.filter((step) => !String(step?.run ?? "").includes("select-lanes.mjs"));
+    }),
+    expect: /merge-gate\.yml\/select no longer runs `node scripts\/ci\/select-lanes\.mjs`/,
+  },
+  {
+    // The hardcoded roster drifting away from the jobs it judges.
+    name: "the aggregate's hardcoded roster loses a lane",
+    mutate: (world) => withGateRule(world, "swift-package native-web-pairing", "native-web-pairing"),
+    expect: /CONDITIONAL_LANES roster is \[.*\]; want \[.*swift-package.*\]/,
+  },
+  {
+    // An always-on lane demoted: it stops being required to SUCCEED and starts
+    // being required to be SKIPPED, which is the wrong direction and silent.
+    name: "the unconditional roster is emptied",
+    mutate: (world) => withGateRule(
+      world,
+      "UNCONDITIONAL_LANES='repo-hygiene'",
+      "UNCONDITIONAL_LANES='none'",
+    ),
+    expect: /UNCONDITIONAL_LANES roster is \["none"\]/,
+  },
   // The two cases that used to sit here — `macos.yml`'s unfiltered `swift test`
   // gaining a `--filter`, and a legitimate fast pre-check beside it — moved
   // with their rule to `scripts/test/swift-ci-boundary-test.mjs`, which now
@@ -5906,6 +6728,7 @@ for (const { name, mutate, expect, refute } of MUTATIONS) {
   try {
     const world = mutate(realWorld());
     got = [
+      ...triggerFailures(world),
       ...platformBoundaryFailures(world),
       ...pathMatrixFailures(world),
       ...fuzzCampaignFailures(world),
@@ -5913,6 +6736,7 @@ for (const { name, mutate, expect, refute } of MUTATIONS) {
       ...macosBudgetFailures(world),
       ...concurrencyFailures(world),
       ...releaseBoundaryFailures(world),
+      ...aggregateGateFailures(world),
     ];
   } catch (err) {
     check(false, `the CI trigger-policy mutation "${name}" threw instead of reporting: ${err.message}`);
@@ -5951,5 +6775,7 @@ console.log(
   `ci-event-policy-test: OK (${GOVERNED.length} governed workflows + ${NIGHTLY} + ${FUZZ_NIGHTLY}`
   + `, runner budget on ${RUNNER_BUDGETS.map((b) => b.file).join(", ")}`
   + `, concurrency on ${CONCURRENCY_GOVERNED.length} files`
-  + `, ${MACOS} read-only and ${MACOS_RELEASE} the sole release entry point)`,
+  + `, ${MACOS} read-only and ${MACOS_RELEASE} the sole release entry point`
+  + `, ${AGGREGATE} calling ${GATE_LANES.size} conditional + ${GATE_ALWAYS.length} unconditional `
+  + `lane(s) behind the job \`${GATE_JOB}\`)`,
 );

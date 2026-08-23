@@ -150,6 +150,34 @@ const CONTRACTS_SWIFT_FILTER = `${SWIFT_TEST_TARGET}.DeviceInboxAdmissionContrac
  */
 const OPS_DEPLOY_CONTRACT = "ops-deploy-contract.yml";
 
+/**
+ * The aggregate merge gate, and the caller job id `swift-package.yml` is called
+ * under.
+ *
+ * The package lane used to carry its own `pull_request:` trigger, aliased to
+ * the same `&paths` anchor as `push`, and a rule here compared the two lists.
+ * That trigger is gone. The reason is not tidiness: a path-filtered workflow
+ * that does not trigger emits NO check run at all, so branch protection could
+ * never tell "the package suite passed" from "the package suite was legitimately
+ * not selected" from "the package suite never ran" — and a filtered lane that
+ * reports nothing cannot be required. `merge-gate.yml` runs unfiltered on every
+ * pull request, CALLS each lane, and reports the one always-present context.
+ *
+ * So the symmetry rule is REPLACED, not dropped, and by a stronger claim: the
+ * lane declares `workflow_call:`, declares no `pull_request:`, and the gate
+ * really calls it on an unfiltered pull-request trigger. All three are read
+ * from `merge-gate.yml` on disk in section 1b, because "the gate covers it" is
+ * precisely the assumption that decays into a package suite nothing runs on a
+ * branch — the failure this whole file exists for, one level up.
+ *
+ * It is deliberately NOT in `PARSED`: that list is the closed set of PATH-
+ * FILTERED workflows section 1a compares against the repository, and the gate
+ * has no filter at all. It is parsed alongside them instead.
+ */
+const AGGREGATE = "merge-gate.yml";
+const SWIFT_PACKAGE_GATE_JOB = "swift-package";
+const SELF_HOST_GATE_JOB = "repo-hygiene";
+
 /** This file, and the unfiltered workflow that has to execute it. */
 const SELF_TEST = "scripts/test/swift-ci-boundary-test.mjs";
 const SELF_HOST = "repo-hygiene.yml";
@@ -545,11 +573,19 @@ function deepEqual(a, b) {
  * A hand-written parser is the one thing here that could make every rule below
  * pass vacuously: mis-read a workflow, get `undefined` where a rule expected a
  * value, and the rules are testing the parser's failure rather than the
- * boundary. Each line corresponds to something real — `paths: &paths` / `*paths`
- * is how every governed workflow shares one path list between `push` and
- * `pull_request`, the `!` entry is the exclusion this whole file is about, `run:
- * |` is every shell step, and `on:` is the key YAML 1.1 would otherwise turn
- * into the boolean `true` and hide from everything below.
+ * boundary. Each line corresponds to something real — `&paths` is the anchor
+ * every governed workflow still declares on its one remaining filtered event,
+ * the `*paths` alias is kept because the parser must not regress on a construct
+ * these files carried until the merge gate replaced their `pull_request:`
+ * trigger, the bare `workflow_call:` is that replacement and is what section 1b
+ * asks about by presence, the `!` entry is the exclusion this whole file is
+ * about, `run: |` is every shell step, and `on:` is the key YAML 1.1 would
+ * otherwise turn into the boolean `true` and hide from everything below.
+ *
+ * The bare-key case earns its line twice over: `workflow_call:` has no value and
+ * is followed by a SHALLOWER key, so a parser that descended into it would
+ * swallow `jobs:` whole and every rule below would read a workflow with no jobs
+ * in it.
  */
 function assertParserReadsTheWorkflowSubset() {
   const fixture = [
@@ -564,6 +600,7 @@ function assertParserReadsTheWorkflowSubset() {
     "      - '!apps/RelayiumKit/Tests/**'",
     "  pull_request:",
     "    paths: *paths",
+    "  workflow_call:",
     "  workflow_dispatch:",
     "jobs:",
     "  swift-test:",
@@ -585,6 +622,7 @@ function assertParserReadsTheWorkflowSubset() {
         paths: ["apps/RelayiumKit/**", "!apps/RelayiumKit/Tests/**"],
       },
       pull_request: { paths: ["apps/RelayiumKit/**", "!apps/RelayiumKit/Tests/**"] },
+      workflow_call: null,
       workflow_dispatch: null,
     },
     jobs: {
@@ -638,7 +676,11 @@ const workflowTexts = new Map(
 );
 
 const docs = new Map();
-for (const file of PARSED) {
+// `PARSED` plus the unfiltered aggregate gate. The gate is not part of the
+// closed filtered set section 1a checks, but sections 1b and 5 read it, and a
+// gate that vanished or stopped parsing must fail by name rather than leave
+// every reachability rule reasoning about `undefined`.
+for (const file of [...PARSED, AGGREGATE]) {
   const text = workflowTexts.get(file);
   if (text === undefined) {
     check(
@@ -904,14 +946,94 @@ function laneFailures(w) {
         + `\`Package.resolved\` — because it is the only one that still does. An exclusion here `
         + `creates a file with no owner at all.`,
       );
-      const prPaths = doc.on?.pull_request?.paths ?? null;
+      // The filter above is now the lane's ONLY filtered event. There used to
+      // be a second, aliased copy under `pull_request:` and a rule comparing
+      // the two; both went with that trigger. What the comparison protected — a
+      // filter narrower on one event than the other — cannot exist with one
+      // filtered event left, and pull-request coverage is asserted immediately
+      // below against the gate that actually provides it.
+    }
+
+    // 1b′. The package suite is still reachable from a pull request, PROVED
+    //      against `merge-gate.yml` rather than assumed.
+    //
+    //      `push` here is restricted to `main`, so on a branch this lane is
+    //      reached exclusively by the gate calling it. That is a better
+    //      arrangement than the aliased filter it replaced — one always-present
+    //      required context instead of eight sometimes-present ones — and it is
+    //      also a new way to lose the package suite silently, in three shapes
+    //      that each leave every file valid and actionlint happy:
+    //
+    //        * the lane drops `workflow_call:`, so the gate's `uses:` cannot
+    //          resolve. That fails the WHOLE gate run to LOAD, so the required
+    //          context reports nothing and the merge box shows a MISSING check
+    //          rather than a red one;
+    //        * the gate stops calling the lane. Both files are fine, and every
+    //          file in the package — the subtree three heavy filters exclude on
+    //          the strength of this lane covering it — is judged by nothing
+    //          until the merge has already landed;
+    //        * the gate itself grows a `pull_request` path filter, which is the
+    //          absent-check failure re-created one level up, for every lane.
+    const on = doc.on && typeof doc.on === "object" ? doc.on : {};
+    const declares = (key) => Object.prototype.hasOwnProperty.call(on, key);
+    need(
+      declares("workflow_call"),
+      `${SWIFT_PACKAGE} declares no \`workflow_call:\`, so ${AGGREGATE}'s \`uses:\` cannot `
+      + `resolve it. This does not merely skip the package suite: GitHub fails the entire gate run `
+      + `to LOAD, the one required context never reports, and the merge box shows a missing check `
+      + `instead of a red one — over a pull request nothing in the package was compiled for.`,
+    );
+    need(
+      !declares("pull_request"),
+      `${SWIFT_PACKAGE} declares its own \`pull_request\` trigger again. ${AGGREGATE} already `
+      + `calls it, so every commit on a branch with an open pull request runs the package suite `
+      + `TWICE — once directly, once through the gate — which is two PAID macOS runners for one `
+      + `answer, the exact duplication this boundary was created to remove.`,
+    );
+
+    const gate = w.docs.get(AGGREGATE);
+    need(
+      gate !== undefined,
+      `${AGGREGATE} is missing or did not parse, and it is the ONLY way a pull request now reaches `
+      + `${SWIFT_PACKAGE}. Without it the sole owner of the repository's unfiltered \`swift test\` `
+      + `runs on \`main\` and nowhere else, while three heavy filters keep excluding the subtree `
+      + `on the strength of it.`,
+    );
+    if (gate !== undefined) {
+      const gateOn = gate.on && typeof gate.on === "object" ? gate.on : {};
+      const gatePr = gateOn.pull_request;
+      const gatePrPaths = gatePr !== null && typeof gatePr === "object" ? (gatePr.paths ?? null) : null;
       need(
-        deepEqual(paths, prPaths),
-        `${SWIFT_PACKAGE}'s \`push.paths\` and \`pull_request.paths\` differ `
-        + `(${JSON.stringify(paths)} vs ${JSON.stringify(prPaths)}). The two lists are aliased `
-        + `from one anchor precisely so they cannot: a package suite that is narrower on `
-        + `\`pull_request\` passes on the branch and is simply not run after the merge, which is `
-        + `the shape that lets a broken shared package reach \`main\`.`,
+        Object.prototype.hasOwnProperty.call(gateOn, "pull_request"),
+        `${AGGREGATE} declares no \`pull_request\` trigger (its \`on:\` is `
+        + `${JSON.stringify(Object.keys(gateOn))}); it is the pull-request entry point every lane `
+        + `here gave up its own trigger for.`,
+      );
+      need(
+        gatePrPaths === null,
+        `${AGGREGATE}'s \`pull_request\` trigger has grown a path filter `
+        + `(${JSON.stringify(gatePrPaths)}). The gate is the one workflow that must start on EVERY `
+        + `pull request: a filtered gate emits no check run for what it skips, which is the `
+        + `absent-required-context failure the lanes were converted to avoid.`,
+      );
+
+      const callers = Object.entries(gate.jobs ?? {})
+        .filter(([, job]) => job?.uses === `./.github/workflows/${SWIFT_PACKAGE}`)
+        .map(([name]) => name)
+        .sort();
+      need(
+        callers.length === 1,
+        `${AGGREGATE} declares ${callers.length} job(s) [${callers.join(", ")}] with `
+        + `\`uses: ./.github/workflows/${SWIFT_PACKAGE}\`; want exactly one. Zero is a package `
+        + `suite no pull request reaches at all now that its own trigger is gone — an ordinary `
+        + `Swift test edit would start NO workflow on a branch, which is the zero-owner state this `
+        + `file's whole ownership matrix exists to reject. Two is two PAID macOS runners.`,
+      );
+      need(
+        callers.length !== 1 || callers[0] === SWIFT_PACKAGE_GATE_JOB,
+        `${AGGREGATE} calls ${SWIFT_PACKAGE} from job "${callers[0]}"; want `
+        + `"${SWIFT_PACKAGE_GATE_JOB}". The caller job id is the check-run prefix and the key the `
+        + `gate's own selector output and \`needs:\` roster are matched by name against.`,
       );
     }
 
@@ -1327,10 +1449,15 @@ function fixtureFailures(w) {
 // ── 5. this policy's own hosted, always-on evidence ─────────────────────────
 //
 // Everything above is true only if something runs it. `repo-hygiene.yml` has no
-// path filter, so it runs on every pull request and every `main` push — which is
-// also what makes an edit to THIS file, or to any workflow it judges, produce
-// its own hosted evidence rather than landing unverified behind a filter that
-// does not name it.
+// path filter, so it runs on every `main` push and — through `merge-gate.yml`,
+// which calls it with NO condition — on every pull request. That is what makes
+// an edit to THIS file, or to any workflow it judges, produce its own hosted
+// evidence rather than landing unverified behind a filter that does not name it.
+//
+// "No path filter" and "called unconditionally" are the same property stated at
+// the two levels that now exist, and both are asserted: a filter here, or an
+// `if:` on the gate's caller job, is one line each and either one lets a
+// boundary edit land with this policy never executed.
 
 function selfHostFailures(w) {
   const out = [];
@@ -1351,11 +1478,59 @@ function selfHostFailures(w) {
     + `fixture and consuming test this boundary reads, and the first one it forgot would be a `
     + `commit that changed the boundary without running its own guard.`,
   );
+  // Branch work reaches this host through the gate now, not through a trigger
+  // of its own. The old check asked whether a `pull_request:` this file no
+  // longer declares had grown a path filter — a question whose answer is now
+  // "no" for the wrong reason, and which would have kept reporting green with
+  // the host unreachable from a pull request entirely.
+  const selfOn = doc.on && typeof doc.on === "object" ? doc.on : {};
   need(
-    doc.on?.pull_request === null || doc.on?.pull_request?.paths === undefined,
-    `${SELF_HOST} gained a pull_request path filter, so branch work can reach \`main\` without `
-    + `this boundary ever being judged.`,
+    Object.prototype.hasOwnProperty.call(selfOn, "workflow_call"),
+    `${SELF_HOST} declares no \`workflow_call:\`, so ${AGGREGATE} cannot call it and branch work `
+    + `reaches \`main\` without this boundary ever being judged. It is worse than that in `
+    + `practice: an unresolvable \`uses:\` fails the entire gate run to load, so the required `
+    + `context reports nothing at all.`,
   );
+  need(
+    !Object.prototype.hasOwnProperty.call(selfOn, "pull_request"),
+    `${SELF_HOST} declares its own \`pull_request\` trigger again. ${AGGREGATE} already calls it `
+    + `unconditionally, so every commit on a branch with an open pull request runs all of this `
+    + `host's jobs twice for one answer.`,
+  );
+
+  const gate = w.docs.get(AGGREGATE);
+  need(
+    gate !== undefined,
+    `${AGGREGATE} is missing or did not parse, and it is what runs \`${SELF_COMMAND}\` on a pull `
+    + `request now that ${SELF_HOST} has no \`pull_request\` trigger of its own.`,
+  );
+  if (gate !== undefined) {
+    const callers = Object.entries(gate.jobs ?? {})
+      .filter(([, job]) => job?.uses === `./.github/workflows/${SELF_HOST}`)
+      .map(([name]) => name)
+      .sort();
+    need(
+      callers.length === 1,
+      `${AGGREGATE} declares ${callers.length} job(s) [${callers.join(", ")}] with `
+      + `\`uses: ./.github/workflows/${SELF_HOST}\`; want exactly one. Zero is this entire policy `
+      + `— and every other cross-cutting guard hosted there — not running on any pull request, `
+      + `while the filtered lanes keep reporting green.`,
+    );
+    need(
+      callers.length !== 1 || callers[0] === SELF_HOST_GATE_JOB,
+      `${AGGREGATE} calls ${SELF_HOST} from job "${callers[0]}"; want "${SELF_HOST_GATE_JOB}".`,
+    );
+    for (const name of callers) {
+      const caller = gate.jobs?.[name];
+      need(
+        caller?.if === undefined,
+        `${AGGREGATE}/${name} has grown \`if: ${JSON.stringify(caller?.if)}\`. This is the lane `
+        + `the gate must call with NO condition: it hosts the checks every change has to pass, and `
+        + `a condition here is the same hole a path filter on ${SELF_HOST} would be — reached by `
+        + `whichever pull requests the expression happens to select, and by no others.`,
+      );
+    }
+  }
 
   const jobs = Object.entries(doc.jobs ?? {})
     .filter(([, job]) => realRunLines(job).some((line) => line.includes(SELF_COMMAND)));
@@ -1427,11 +1602,21 @@ for (const rule of CHECKS) {
 // This is the guard against the most expensive outcome available here: a policy
 // file that passes because it is asserting nothing.
 
-/** Set a workflow's push and pull_request filters together, the way the anchor does. */
+/**
+ * Set a workflow's `push` path filter.
+ *
+ * `push` is the only filtered event these lanes have left. This helper used to
+ * write the same list under `pull_request` as well, mirroring the anchor the
+ * workflows carried — which would now WRITE BACK the direct trigger section 1b′
+ * forbids, so every path mutation below would raise an unrelated duplicate-run
+ * complaint beside the one it means to prove. It touches `push` alone.
+ */
 function withPaths(w, file, paths) {
-  const on = w.docs.get(file).on;
+  const on = w.docs.get(file)?.on;
+  if (!on || typeof on !== "object" || !on.push || typeof on.push !== "object") {
+    throw new Error(`${file} declares no \`push\` mapping, so there is no path filter to set`);
+  }
   on.push.paths = paths;
-  on.pull_request = { ...(on.pull_request ?? {}), paths };
   return w;
 }
 
@@ -1635,15 +1820,79 @@ const MUTATIONS = [
     },
     expect: /swift-package\.yml is missing or did not parse/,
   },
+
+  // ── reachability from a pull request, now the gate's job (1b′) ────────────
+  //
+  // The case these replace made `push` and `pull_request` disagree. With that
+  // trigger gone the two cannot disagree, so the mutation proved a rule that no
+  // longer exists. Each of these breaks a property that IS still real: the lane
+  // is reachable from a branch only while it declares `workflow_call:`, only
+  // while the gate calls it, and only while the gate itself starts on every
+  // pull request.
   {
-    // Push and pull_request drift apart: the package suite passes on the branch
-    // and is simply not run after the merge.
-    name: "swift-package.yml's pull_request filter drifts from its push filter",
+    // The direct trigger, restored beside the call. Two PAID macOS runners for
+    // every commit on a branch with an open pull request, one answer.
+    name: "swift-package.yml takes its own pull_request trigger back",
     mutate: (w) => {
-      w.docs.get(SWIFT_PACKAGE).on.pull_request = { paths: [`${SWIFT_PACKAGE_DIR}/Sources/**`] };
+      w.docs.get(SWIFT_PACKAGE).on.pull_request = {
+        paths: [PACKAGE_SOURCE_GLOB, `.github/workflows/${SWIFT_PACKAGE}`],
+      };
       return w;
     },
-    expect: /swift-package\.yml's `push\.paths` and `pull_request\.paths` differ/,
+    expect: /swift-package\.yml declares its own `pull_request` trigger again/,
+  },
+  {
+    // The opposite edit, and the one that takes the whole board with it: the
+    // gate's `uses:` stops resolving and the entire run fails to LOAD, so the
+    // required context reports nothing rather than red.
+    name: "swift-package.yml drops workflow_call, so the gate's uses: cannot resolve",
+    mutate: (w) => {
+      delete w.docs.get(SWIFT_PACKAGE).on.workflow_call;
+      return w;
+    },
+    expect: /swift-package\.yml declares no `workflow_call:`/,
+  },
+  {
+    // Both files stay valid and the package suite simply stops being reachable
+    // from a pull request, while three heavy filters keep excluding its subtree
+    // on the strength of it. This is the quiet, expensive one.
+    name: "merge-gate stops calling the package lane",
+    mutate: (w) => {
+      delete w.docs.get(AGGREGATE).jobs[SWIFT_PACKAGE_GATE_JOB];
+      return w;
+    },
+    expect: /merge-gate\.yml declares 0 job\(s\) \[\] with `uses: \.\/\.github\/workflows\/swift-package\.yml`/,
+  },
+  {
+    // The gate filtered: it emits no check run for the pull requests it skips,
+    // which is the absent-check failure the lanes were converted to avoid —
+    // reintroduced one level up and for every lane at once.
+    name: "the merge gate's pull_request trigger grows a path filter",
+    mutate: (w) => {
+      w.docs.get(AGGREGATE).on.pull_request = { paths: ["web/**"] };
+      return w;
+    },
+    expect: /merge-gate\.yml's `pull_request` trigger has grown a path filter/,
+  },
+  {
+    // The always-on host, made conditional at the CALLER instead of by a path
+    // filter on the callee. Same hole, one level up, and invisible to every
+    // rule that reads `repo-hygiene.yml` alone.
+    name: "merge-gate gives the repo-hygiene lane a condition it can skip under",
+    mutate: (w) => withNamedJob(w, AGGREGATE, SELF_HOST_GATE_JOB, (job) => {
+      job.if = "github.event.pull_request.draft == false";
+    }),
+    expect: /merge-gate\.yml\/repo-hygiene has grown `if:/,
+  },
+  {
+    // And the callee side of the same property: this policy's host stops being
+    // callable, so nothing executes it on a pull request at all.
+    name: "repo-hygiene.yml drops workflow_call, so nothing runs this policy on a pull request",
+    mutate: (w) => {
+      delete w.docs.get(SELF_HOST).on.workflow_call;
+      return w;
+    },
+    expect: /repo-hygiene\.yml declares no `workflow_call:`/,
   },
   {
     name: "swift-package.yml's job can skip itself",
@@ -1973,6 +2222,9 @@ console.log(
   + `mixed diffs judged by compiled last-match-wins semantics across the `
   + `${filteredOnDisk.length} path-filtered workflows on disk (${filteredOnDisk.join(", ")}); `
   + `${FIXTURE_INPUTS.length} fixture(s) named one path at a time by their real `
-  + `consumers and ${FIXTURE_NON_INPUTS.length} named by none; ${MUTATIONS.length} mutations `
-  + `prove each of those can fail)`,
+  + `consumers and ${FIXTURE_NON_INPUTS.length} named by none; the package lane and this `
+  + `policy's own host reachable from a pull request only through ${AGGREGATE}, whose `
+  + `unfiltered \`pull_request\` trigger, one caller job each and unconditional `
+  + `${SELF_HOST_GATE_JOB} call are read from disk rather than assumed; `
+  + `${MUTATIONS.length} mutations prove each of those can fail)`,
 );

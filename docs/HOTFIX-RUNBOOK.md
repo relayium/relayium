@@ -302,9 +302,28 @@ about a Go change.
 
 **`compat / wire-vectors` is required regardless of what you changed.** It is
 unfiltered by design — it runs on every pull request and every `main` push — and
-it is a **required status check on `main`**, bound to GitHub Actions
+it is **the** required status check on `main`, bound to GitHub Actions
 `app_id` 15368. It is the one check no change and no future platform can route
 around. See `docs/CI-PLATFORM-BOUNDARY.md`.
+
+**Where to look for the lanes above: `merge-gate`, not the lane's own name.**
+Every filtered lane in the table is now a **reusable workflow** called by
+`.github/workflows/merge-gate.yml`, and none of them has a `pull_request:`
+trigger of its own any more. On a pull request you will not find a top-level
+`go` or `web` run; you will find one `merge-gate` run whose check names are
+prefixed by the caller job id — `go / test`, `macos / signed-build`,
+`ops-contract / go-contract`. The aggregate's own job, `merge-gate`, prints a
+lane/selected/result table and is red if any selected lane failed **or** if any
+unselected lane ran. On `main` the lanes still run directly under their own
+names, because every lane keeps its `push: branches: [main]` trigger — which is
+also what `promote.sh` reads, and why that trigger must never be removed.
+
+**`merge-gate` is not yet a required context.** As of this writing `main` still
+requires exactly `wire-vectors` and nothing else; the gate reports but does not
+block. `docs/CI-PLATFORM-BOUNDARY.md` carries the staged protection migration and
+its current position. Until that migration reaches its second protection edit, a
+red lane inside `merge-gate` does **not** stop a merge — so during an incident,
+read the gate's table yourself rather than trusting the merge button.
 
 Evidence must come from a **hosted run on the real trigger**. A local pass is a
 useful signal, not acceptance evidence.
@@ -318,6 +337,18 @@ None of the following is permitted in a hotfix, and each is asserted
 mechanically by `scripts/test/ci-event-policy-test.mjs`:
 
 - adding a `paths:` filter to `compat.yml`, on either event;
+- adding a `paths:` filter to `merge-gate.yml`, or a `push:` trigger — a required
+  context that sometimes does not report blocks every pull request that does not
+  select it, and routing `main` through the gate would stop the lanes from
+  reporting the check runs `promote.sh` reads on the `main` commit;
+- **removing a lane's `push: branches: [main]` trigger.** It looks like tidy-up
+  once the gate owns pull requests. It wedges every production promotion with
+  `required check absent`, mid-incident;
+- widening a lane's caller condition in `merge-gate.yml` to a constant, or adding
+  `failure`, `cancelled` or `true:skipped` to the aggregate's accepted results —
+  the last one passes a lane that was selected and then skipped by a broken
+  condition, which is exactly the fail-open shape the gate exists to close;
+- adding `secrets: inherit` to any caller job;
 - adding a job-level `if:`, a `continue-on-error:`, a retry, or a `|| true` to a
   gate;
 - **reintroducing a commit-message escape** such as the former `[macos-only]`
@@ -507,6 +538,8 @@ Copy this into the work claim and close each item with evidence.
 - [ ] Diff is narrow: the fix, its test, nothing else — §4
 - [ ] Owning lane green on a **hosted** run — §5
 - [ ] `compat / wire-vectors` green — §5
+- [ ] `merge-gate` green, and its lane table read: every lane the change set
+      selected succeeded, every unselected lane skipped — §5
 - [ ] No gate weakened, skipped, filtered or escaped — §6
 - [ ] Every frozen and paused tree byte-for-byte untouched — §7
 - [ ] Independent review of the **diff and evidence**; findings disposed — §8

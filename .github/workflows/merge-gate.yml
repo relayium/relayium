@@ -1,0 +1,336 @@
+name: merge-gate
+# The one status `main`'s protection can require.
+#
+# ## The problem this file exists for
+#
+# Branch protection requires a CONTEXT, and a context only satisfies a
+# requirement if it reports. A path-filtered workflow that does not trigger
+# emits no check run at all — not a skipped one, not a neutral one, nothing —
+# so protection cannot tell "lane passed" from "lane skipped legitimately" from
+# "lane never ran". Requiring a filtered lane directly would therefore wedge
+# every pull request that legitimately does not select it, and requiring none
+# of them leaves `go`, `web`, `macos`, `ios`, `swift-package`,
+# `native-web-pairing`, `contracts` and `ops-deploy-contract` reporting red over
+# a merge button that still works. That is not theoretical: pull request #22
+# merged over a failed Device Inbox job and an in-progress iOS job, because only
+# `wire-vectors` was required.
+#
+# This workflow has NO path filter. It runs on every pull request, calls each
+# lane as a reusable workflow, and reports one job — `merge-gate` — that is
+# always present and judges what the lanes actually did. One always-present
+# context can be required; eight sometimes-present ones cannot.
+#
+# ## What it deliberately does not do
+#
+# There is no polling job, no waiter and no retry. `needs:` plus `if: always()`
+# already gives the aggregate every upstream result, so a job that burns minutes
+# watching the others would add cost and a second thing to get wrong. And a
+# retry inside a required gate turns an intermittent failure into a rerun that
+# passes, which is a recorded decision here, not a preference.
+#
+# ## Migration state
+#
+# `main` still requires `wire-vectors` and nothing else. This workflow reports
+# but is required by nothing until the protection edit that adds it, and
+# `compat.yml` — which owns `wire-vectors` — is deliberately NOT called here
+# yet, because folding it in renames its check and would leave the current
+# requirement satisfiable by no run at all. docs/CI-PLATFORM-BOUNDARY.md
+# carries the staged order.
+on:
+  # Unfiltered, and with no `push:`. `main` is verified by each lane's own
+  # `push: branches: [main]` trigger, which every lane keeps: `relayium-ops`'
+  # `deploy/promote.sh` refuses to promote a `main` commit without a green
+  # check-run named `wire-vectors` ON THAT COMMIT, and this workflow never runs
+  # on `main`. A future cleanup that routed `main` through the gate would wedge
+  # every production promotion with `required check absent`.
+  pull_request:
+
+permissions:
+  contents: read
+
+# A literal prefix nothing else uses, for the reason every called lane now has
+# one: inside a called workflow `${{ github.workflow }}` is the CALLER's name.
+# Caller and callee sharing a group is a deadlock — the callee queues behind the
+# caller that is waiting for it — and distinct literals remove it by
+# construction.
+concurrency:
+  group: merge-gate-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Which lanes this change set requires, decided from the lanes' own
+  # `push.paths` filters and from nothing else.
+  #
+  # The change set comes from the pull request FILES API rather than from local
+  # git, and that is the canonical source rather than a convenient one: GitHub
+  # evaluates `pull_request` path filters against the whole pull request's
+  # three-dot diff, not against the newest commit, and `pulls/{n}/files` returns
+  # exactly that cumulative set. It also reports `previous_filename`, which a
+  # `git diff --name-only` with default rename detection does not — and a rename
+  # out of `web/` that stopped selecting `web` is the one failure shape that
+  # produces a GREEN gate over untested code.
+  select:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      # Bracket form, every one of them, and not for consistency's sake: a
+      # hyphen in an expression property path is parsed as SUBTRACTION, so
+      # `steps.select.outputs.swift-package` silently evaluates to the empty
+      # string and the lane would never be selected. The dotted spelling stays
+      # valid YAML and valid expression syntax while meaning something else.
+      web: ${{ steps.select.outputs['web'] }}
+      go: ${{ steps.select.outputs['go'] }}
+      macos: ${{ steps.select.outputs['macos'] }}
+      ios: ${{ steps.select.outputs['ios'] }}
+      swift-package: ${{ steps.select.outputs['swift-package'] }}
+      native-web-pairing: ${{ steps.select.outputs['native-web-pairing'] }}
+      contracts: ${{ steps.select.outputs['contracts'] }}
+      ops-contract: ${{ steps.select.outputs['ops-contract'] }}
+    steps:
+      # Third-party actions are pinned to a full commit SHA (with the
+      # human-readable version in a trailing comment) so a compromised or
+      # retagged upstream release can't silently change what runs here.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      # Deliberately without `set -e`. This step must ALWAYS exit 0 and report
+      # what happened through an output, because the selector is what turns an
+      # API failure into "run every lane". A step that failed here instead would
+      # take the whole gate red on a transient API error, and a red required
+      # gate that nobody can turn green manufactures pressure to bypass it.
+      - name: Collect the pull request's cumulative file list
+        id: files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -uo pipefail
+          payload="$RUNNER_TEMP/pr-files.json"
+          if gh api "repos/$REPOSITORY/pulls/$PR_NUMBER/files" --paginate --slurp > "$payload"; then
+            status=ok
+          else
+            status="api-error-$?"
+            : > "$payload"
+          fi
+          echo "status is $status"
+          {
+            echo "payload=$payload"
+            echo "status=$status"
+          } >> "$GITHUB_OUTPUT"
+      # `changed_files` is read from the event rather than counted from the
+      # response on purpose: the two disagreeing is how a truncated or
+      # half-paginated read is detected, and at or above GitHub's 3000-file API
+      # cap the cumulative set is not knowable at all. Both select every lane.
+      - name: Select the lanes this change set requires
+        id: select
+        env:
+          LANE_SELECTOR_STATUS: ${{ steps.files.outputs.status }}
+          LANE_SELECTOR_FILES: ${{ steps.files.outputs.payload }}
+          LANE_SELECTOR_CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+        run: node scripts/ci/select-lanes.mjs >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # The lanes.
+  #
+  # No `timeout-minutes:` on any of these: GitHub rejects it on a `uses:` job,
+  # and the budget belongs to the called workflow's own jobs, where it already
+  # is. No `secrets: inherit` on any of them either — `inherit` would hand the
+  # signing certificate and the provisioning profiles to `web`, `go` and
+  # `contracts`, none of which reads a secret today, and would keep doing so as
+  # secrets are added.
+  # ---------------------------------------------------------------------------
+  web:
+    needs: select
+    if: needs.select.outputs['web'] == 'true'
+    uses: ./.github/workflows/web.yml
+
+  go:
+    needs: select
+    if: needs.select.outputs['go'] == 'true'
+    uses: ./.github/workflows/go.yml
+
+  # The only lane given secrets, and only the four its own jobs use. The notary
+  # key and the Sparkle private key are not among them and are not declared by
+  # the callee either; release lives in `macos-release.yml`.
+  #
+  # No `with:` block at all, so all three of the callee's inputs take their CI
+  # defaults — empty version, both booleans false.
+  macos:
+    needs: select
+    if: needs.select.outputs['macos'] == 'true'
+    uses: ./.github/workflows/macos.yml
+    secrets:
+      MACOS_SIGNING_CERT_P12_BASE64: ${{ secrets.MACOS_SIGNING_CERT_P12_BASE64 }}
+      MACOS_SIGNING_CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
+      MACOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.MACOS_PROVISIONING_PROFILE_BASE64 }}
+      MACOS_SHARE_PROVISIONING_PROFILE_BASE64: ${{ secrets.MACOS_SHARE_PROVISIONING_PROFILE_BASE64 }}
+
+  ios:
+    needs: select
+    if: needs.select.outputs['ios'] == 'true'
+    uses: ./.github/workflows/ios.yml
+
+  swift-package:
+    needs: select
+    if: needs.select.outputs['swift-package'] == 'true'
+    uses: ./.github/workflows/swift-package.yml
+
+  native-web-pairing:
+    needs: select
+    if: needs.select.outputs['native-web-pairing'] == 'true'
+    uses: ./.github/workflows/native-web-pairing.yml
+
+  contracts:
+    needs: select
+    if: needs.select.outputs['contracts'] == 'true'
+    uses: ./.github/workflows/contracts.yml
+
+  # The caller job id deliberately differs from the workflow name. `contracts`
+  # and `ops-deploy-contract` both declare a job literally named `go-contract`,
+  # and the caller job id is the prefix that tells the two check runs apart.
+  ops-contract:
+    needs: select
+    if: needs.select.outputs['ops-contract'] == 'true'
+    uses: ./.github/workflows/ops-deploy-contract.yml
+
+  # No `if:`. This lane hosts the cross-cutting guards — the trigger policy, the
+  # platform boundary, the dependency pins — which every change must pass, so it
+  # carries no path filter and gets no condition here either.
+  repo-hygiene:
+    needs: select
+    uses: ./.github/workflows/repo-hygiene.yml
+
+  # ---------------------------------------------------------------------------
+  # The aggregate.
+  #
+  # `name: merge-gate` is the required context string. Top-level job check names
+  # are bare in this repository's own API output — `wire-vectors`, not
+  # `compat / wire-vectors` — so this reports as `merge-gate`, and no other job
+  # in any workflow here may carry that name.
+  # ---------------------------------------------------------------------------
+  merge-gate:
+    name: merge-gate
+    # Without this the aggregate is skipped the moment any lane fails, and a
+    # skipped required context is an absent one: the merge box would show
+    # nothing rather than red.
+    if: always()
+    needs:
+      - select
+      - web
+      - go
+      - macos
+      - ios
+      - swift-package
+      - native-web-pairing
+      - contracts
+      - ops-contract
+      - repo-hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # The rule is TWO-WAY, and that is the whole point of this step.
+      #
+      # A plain `success|skipped` whitelist passes a lane that WAS selected and
+      # then got skipped by a broken `if:` — which is the exact fail-open shape
+      # this gate exists to close, reintroduced one edit later. So: selected
+      # implies success, AND not selected implies skipped. Anything else,
+      # including a lane that ran without being selected, is red.
+      #
+      # The roster is a hardcoded literal compared in BOTH directions against
+      # the jobs this workflow declares. A lane added above but omitted from
+      # `needs:` is invisible to the gate; a lane deleted from `needs:` is a
+      # silent coverage loss. Both fail by name.
+      #
+      # `jq` is preinstalled on `ubuntu-latest`, so there is nothing to install
+      # in front of the one job every merge waits on.
+      - name: Judge every lane
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          SELECTED: ${{ toJSON(needs.select.outputs) }}
+        run: |
+          set -euo pipefail
+
+          # The three rosters stay single-line, single-quoted, space-delimited
+          # literals, and that shape is load-bearing rather than stylistic:
+          # `scripts/test/ci-event-policy-test.mjs` and
+          # `scripts/test/ci-lane-selector-test.mjs` both read them back out of
+          # this file with `^\s*NAME='([^']*)'$` and compare them against the
+          # jobs declared above, in both directions. Only the DECLARATION is
+          # space-delimited, though: every consumer below turns it into newline
+          # records EXPLICITLY, so nothing here leans on unquoted expansion to
+          # do the splitting for it.
+          CONDITIONAL_LANES='web go macos ios swift-package native-web-pairing contracts ops-contract'
+          UNCONDITIONAL_LANES='repo-hygiene'
+          SELECT_JOB='select'
+
+          conditional_lanes=$(printf '%s' "$CONDITIONAL_LANES" | tr ' ' '\n')
+          unconditional_lanes=$(printf '%s' "$UNCONDITIONAL_LANES" | tr ' ' '\n')
+
+          problems=''
+          note() { problems="${problems}  - ${1}"$'\n'; }
+          # Newline records back to one space-joined line, for MESSAGES only.
+          # Nothing reads this back; it exists so a roster mismatch prints on one
+          # line instead of wrapping the failure list.
+          oneline() { printf '%s' "$1" | tr '\n' ' '; }
+
+          expected_roster=$(printf '%s\n%s\n%s\n' "$SELECT_JOB" "$conditional_lanes" "$unconditional_lanes" | sort)
+          observed_roster=$(printf '%s' "$NEEDS" | jq -r 'keys[]' | sort)
+          if [ "$expected_roster" != "$observed_roster" ]; then
+            note "this job depends on [$(oneline "$observed_roster")], but the roster it judges is [$(oneline "$expected_roster")]. A lane called above and missing from needs: is a lane the gate cannot see; a lane in needs: and no longer called is coverage that silently went away."
+          fi
+
+          expected_outputs=$(printf '%s\n' "$conditional_lanes" | sort)
+          observed_outputs=$(printf '%s' "$SELECTED" | jq -r 'keys[]' | sort)
+          if [ "$expected_outputs" != "$observed_outputs" ]; then
+            note "the selector published outputs for [$(oneline "$observed_outputs")]; the conditional roster is [$(oneline "$expected_outputs")]. A lane with no selector output can never be selected, and its caller if: would be false on every pull request."
+          fi
+
+          printf '%-20s  %-8s  %s\n' 'lane' 'selected' 'result'
+          printf '%-20s  %-8s  %s\n' '--------------------' '--------' '----------'
+
+          select_result=$(printf '%s' "$NEEDS" | jq -r 'if has("select") then .select.result else "missing" end')
+          printf '%-20s  %-8s  %s\n' "$SELECT_JOB" '-' "$select_result"
+          if [ "$select_result" != "success" ]; then
+            note "select: result is \"$select_result\", want \"success\" exactly. Every lane condition below reads its outputs, so a select that did not succeed means every lane skipped for a reason that has nothing to do with this change set."
+          fi
+
+          # `while read` over newline records, fed by a here-string rather than a
+          # pipe: a piped `while` runs in a SUBSHELL, and every `note` it made
+          # would be discarded on the way out — a gate that found problems and
+          # then reported none.
+          while IFS= read -r lane; do
+            selected=$(printf '%s' "$SELECTED" | jq -r --arg l "$lane" 'if has($l) then .[$l] else "missing" end')
+            result=$(printf '%s' "$NEEDS" | jq -r --arg l "$lane" 'if has($l) then .[$l].result else "missing" end')
+            printf '%-20s  %-8s  %s\n' "$lane" "$selected" "$result"
+            case "${selected}:${result}" in
+              'true:success') ;;
+              'false:skipped') ;;
+              'true:'*)
+                note "$lane: selected by this change set, but its result is \"$result\", want \"success\". A failed, cancelled or absent lane is red here — including one killed by its own timeout-minutes." ;;
+              'false:'*)
+                note "$lane: NOT selected by this change set, but its result is \"$result\", want \"skipped\". A lane that ran anyway means its caller condition no longer reads the selector." ;;
+              *)
+                note "$lane: the selector reported selected=\"$selected\", which is neither \"true\" nor \"false\". The gate does not guess which way an unreadable selection meant." ;;
+            esac
+          done <<< "$conditional_lanes"
+
+          while IFS= read -r lane; do
+            result=$(printf '%s' "$NEEDS" | jq -r --arg l "$lane" 'if has($l) then .[$l].result else "missing" end')
+            printf '%-20s  %-8s  %s\n' "$lane" 'always' "$result"
+            if [ "$result" != "success" ]; then
+              note "$lane: result is \"$result\", want \"success\". This lane carries no condition and must pass on every pull request."
+            fi
+          done <<< "$unconditional_lanes"
+
+          echo
+          if [ -n "$problems" ]; then
+            echo "merge-gate: this pull request has not passed the checks its change set selects." >&2
+            printf '%s' "$problems" >&2
+            exit 1
+          fi
+          echo "merge-gate: every selected lane succeeded and every unselected lane was skipped."

@@ -22,13 +22,21 @@ name: web
 # backend or documentation change. One package, and one document, at a time.
 on:
   push:
-    # Only `main`. A branch push used to start this workflow AND its pull
-    # request start a second, identical run of the same commit. The
-    # pull_request trigger below is what gates branch work; this one exists so
-    # `main` itself is never unverified.
+    # Only `main`, and this trigger is LOAD-BEARING. Branch work is gated by
+    # `merge-gate.yml`, which CALLS this file; this event is the only thing
+    # that verifies `main` itself, because the gate runs on `pull_request`
+    # only. No lane may lose it — `relayium-ops`' `deploy/promote.sh` reads
+    # check runs on the `main` commit, and a lane that stopped reporting there
+    # would wedge production promotion rather than fail visibly here.
     branches:
       - main
-    paths: &paths
+    # This list is the merge gate's only statement of what this lane watches:
+    # `scripts/ci/select-lanes.mjs` reads it off disk and selects this lane from
+    # it and from nothing else, so an entry changed here changes what the gate
+    # requires. The `&paths` ANCHOR this list used to declare is gone with the
+    # `pull_request:` block that aliased it — an anchor nothing references is a
+    # dangling one, and the gate is the pull-request entry point now.
+    paths:
       - 'web/**'
       - 'server/internal/inbox/**'
       - 'server/internal/inboxclient/**'
@@ -63,8 +71,24 @@ on:
       - 'apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json'
       - 'apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json'
       - '.github/workflows/web.yml'
-  pull_request:
-    paths: *paths
+  # Called by `.github/workflows/merge-gate.yml`, and by nothing else.
+  #
+  # This REPLACES this file's own `pull_request:` trigger, and the replacement
+  # is the whole point. A path-filtered workflow that does not trigger emits no
+  # check run AT ALL, so branch protection could never tell "this lane passed"
+  # from "this lane was legitimately not selected" from "this lane never ran" —
+  # which is why every filtered lane here reported red over a merge button that
+  # still worked. `merge-gate.yml` calls each lane, judges the results, and
+  # reports one always-present context that CAN be required.
+  #
+  # Restoring `pull_request:` here would run this lane twice for every commit
+  # on a branch with an open pull request: once directly, once through the gate.
+  # `scripts/test/ci-event-policy-test.mjs` asserts its absence for that reason.
+  #
+  # No `inputs:` and no `secrets:`. Nothing in this file reads either, and a
+  # callee that declares one it never uses is a callee a future caller can be
+  # asked to supply.
+  workflow_call:
   workflow_dispatch:
 
 # Supersede a pull request's own earlier runs, and nothing else.
@@ -79,8 +103,19 @@ on:
 # newer one arrives even with `cancel-in-progress: false`. Two quick merges
 # would silently drop the first commit's verification, and the branch would show
 # a cancelled — not failed, not missing — check for a commit nobody tested.
+#
+# The prefix is a LITERAL, not `${{ github.workflow }}`, and that is a property
+# of being a reusable CALLEE rather than a style choice. Inside a called
+# workflow that expression is the CALLER's name, so every lane `merge-gate.yml`
+# calls would land in ONE group under one `github.run_id` — with
+# `cancel-in-progress` true on a pull request, the lanes would actively cancel
+# each other, and the gate would then be judging cancelled runs while every
+# lane reported `cancelled` rather than red. A literal prefix nothing else uses
+# makes the groups disjoint by construction, and
+# `scripts/test/ci-event-policy-test.mjs` asserts both the literal and that no
+# two files resolve to the same one.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  group: web-lane-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
