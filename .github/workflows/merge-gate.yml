@@ -1,0 +1,81 @@
+name: merge-gate
+# TEMPORARY PROBE — NEVER MERGE.
+#
+# The single pull-request entry point for the macOS lane while this probe runs.
+# `macos.yml` has had its own `pull_request:` trigger removed, so a pull request
+# reaches it only by being CALLED from here as a reusable workflow. That is the
+# whole point of the probe: to observe, on real hosted runners, what a caller
+# actually delivers to a called workflow — the event name it sees, its inputs
+# at their defaults, which explicitly forwarded secrets arrive, and what the
+# permission grant resolves to — before any of it is relied on by a gate that
+# can block a merge.
+#
+# This file OBSERVES. It is not yet the fail-closed verdict: the final job below
+# prints the result of the macOS lane and exits 0 regardless. Turning that print
+# into a required, fail-closed check is a separate, deliberate change.
+on:
+  # No `paths:` filter, deliberately. A merge gate that skips on some diffs
+  # reports "success" for the pull requests it never examined, which is the
+  # exact failure mode a gate exists to prevent. Path filtering belongs inside
+  # the called workflow, not on the gate.
+  pull_request:
+
+# Read-only at the top level. Each job narrows or restates its own grant below;
+# nothing here needs write access to anything.
+permissions:
+  contents: read
+
+# Distinct from the called workflow's group (`macos-lane-…`) on purpose: a
+# reusable workflow inherits the CALLER's `github.workflow`, so a shared key
+# would make this gate and the lane it calls cancel each other.
+concurrency:
+  group: merge-gate-${{ github.event.pull_request.number || github.run_id }}
+  # This workflow has exactly one trigger, `pull_request`, so superseding an
+  # earlier run of the same pull request is always the correct behaviour: a new
+  # push to the branch makes the previous run's verdict stale.
+  cancel-in-progress: true
+
+jobs:
+  # Local path reference (`./`), so the called workflow is always the copy in
+  # THIS commit and cannot be repointed at another repository or ref. No
+  # third-party action is used anywhere in this file.
+  macos:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/macos.yml
+    # Explicit, per-secret forwarding — never `secrets: inherit`. `inherit`
+    # would hand the called workflow every secret this repository holds,
+    # including the notary key, the Sparkle signing key and anything added
+    # later, with no diff to review when that set grows. The four below are the
+    # signing/profile secrets the probe needs to observe arriving; the notary
+    # and Sparkle secrets are deliberately NOT forwarded, so even a mistake in
+    # the called workflow cannot reach Apple with valid credentials.
+    secrets:
+      MACOS_SIGNING_CERT_P12_BASE64: ${{ secrets.MACOS_SIGNING_CERT_P12_BASE64 }}
+      MACOS_SIGNING_CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
+      MACOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.MACOS_PROVISIONING_PROFILE_BASE64 }}
+      MACOS_SHARE_PROVISIONING_PROFILE_BASE64: ${{ secrets.MACOS_SHARE_PROVISIONING_PROFILE_BASE64 }}
+    # No `with:` block, deliberately. Every workflow_call input in `macos.yml`
+    # then takes its declared default — notarize false, validate_notary_
+    # credentials false, validate_sparkle_key false, release_version empty,
+    # publish_release false — which is what keeps that workflow's
+    # `notarize-stage` and `publish` jobs unreachable from a pull request.
+
+  merge-gate:
+    needs: macos
+    # `always()`, so the gate reports even when the called workflow fails, is
+    # cancelled, or skips: a gate that disappears with its dependency cannot be
+    # required.
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Observation only. The verdict this probe is gathering evidence FOR —
+      # failing the gate unless every needed job succeeded — is not implemented
+      # here on purpose. Printing it first proves what `needs` actually contains
+      # for a reusable-workflow job (result, and any outputs) before a merge
+      # depends on reading it correctly.
+      - name: Report reusable-workflow results
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: printf '%s\n' "$NEEDS_JSON"

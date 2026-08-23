@@ -51,11 +51,15 @@ on:
     # `main` itself is never unverified.
     branches:
       - main
-    # Defined once and aliased below, the way `web.yml` and
-    # `native-web-pairing.yml` already do it. The two lists were previously
-    # maintained by hand, which is how a `push` filter and a `pull_request`
-    # filter drift into a gate that passes on the branch and never runs after
-    # the merge.
+    # This list is the authoritative one, and for the duration of the P1 probe
+    # nothing aliases it: the `pull_request` trigger is supplied temporarily by
+    # `.github/workflows/merge-gate.yml`, which calls this workflow, so there is
+    # no second filter in this file to keep in sync. Restoring a direct
+    # `pull_request` trigger here means anchoring this list and aliasing it, the
+    # way `web.yml` and `native-web-pairing.yml` already do. The two lists were
+    # previously maintained by hand, which is how a `push` filter and a
+    # `pull_request` filter drift into a gate that passes on the branch and
+    # never runs after the merge.
     #
     # ORDER IS LOAD-BEARING. GitHub applies these per file, in order, and the
     # last pattern that matches decides — so the negation has to follow
@@ -63,13 +67,73 @@ on:
     # the exclusion match first and be overridden immediately after, which
     # leaves the filter valid, leaves actionlint happy, and silently restores
     # the behaviour this entry exists to remove.
-    paths: &paths
+    paths:
       - 'apps/mac/**'
       - 'apps/RelayiumKit/**'
       - '!apps/RelayiumKit/Tests/**'
       - '.github/workflows/macos.yml'
-  pull_request:
-    paths: *paths
+  # TEMPORARY PROBE — NEVER MERGE. The direct `pull_request:` trigger is
+  # removed for the duration of this probe so that a pull request reaches this
+  # file only through `.github/workflows/merge-gate.yml`, which calls it as a
+  # reusable workflow. Nothing aliases the push filter's path list any more, so
+  # its `&paths` anchor was dropped rather than left defined and unused.
+  # Restoring the trigger means re-adding a `pull_request:` trigger here whose
+  # filter matches the push list above — reintroduce the anchor and alias it
+  # with `*paths` so the two cannot drift apart by hand.
+  #
+  # The workflow_call inputs below mirror the workflow_dispatch release
+  # controls one for one, with the same safe defaults, so a caller that passes
+  # no `with:` block cannot reach notarization, staging or publication. They
+  # are `required: false` (dispatch marks them required-with-default) precisely
+  # so the caller can omit them and inherit those defaults.
+  workflow_call:
+    inputs:
+      notarize:
+        description: 'Submit the signed DMG to Apple, staple it, and run Gatekeeper verification'
+        required: false
+        default: false
+        type: boolean
+      validate_notary_credentials:
+        description: 'Authenticate to Apple without submitting software'
+        required: false
+        default: false
+        type: boolean
+      validate_sparkle_key:
+        description: 'Sign a disposable appcast entry and prove the update key matches the app'
+        required: false
+        default: false
+        type: boolean
+      release_version:
+        description: 'Stage immutable public-release metadata for this app version (for example 1.0)'
+        required: false
+        default: ''
+        type: string
+      publish_release:
+        description: 'Publish the versioned GitHub Release and deliver its appcast/download metadata to main'
+        required: false
+        default: false
+        type: boolean
+    # Every secret this workflow reads, except `GITHUB_TOKEN`, which is
+    # provided by the runner and must never be declared as a workflow_call
+    # secret. All optional: a caller that forwards only some of them leaves the
+    # rest empty rather than failing to start.
+    secrets:
+      MACOS_SIGNING_CERT_P12_BASE64:
+        required: false
+      MACOS_SIGNING_CERT_PASSWORD:
+        required: false
+      MACOS_PROVISIONING_PROFILE_BASE64:
+        required: false
+      MACOS_SHARE_PROVISIONING_PROFILE_BASE64:
+        required: false
+      MACOS_SPARKLE_PRIVATE_KEY:
+        required: false
+      MACOS_NOTARY_KEY_P8_BASE64:
+        required: false
+      MACOS_NOTARY_KEY_ID:
+        required: false
+      MACOS_NOTARY_ISSUER_ID:
+        required: false
   workflow_dispatch:
     inputs:
       notarize:
@@ -124,8 +188,14 @@ permissions:
 # Under run_id nothing outside a pull request can cancel anything, which is the
 # correct default for a workflow that imports a Developer ID certificate and can
 # publish an immutable GitHub Release.
+#
+# TEMPORARY PROBE — NEVER MERGE. The group key is a literal `macos-lane-`
+# prefix rather than `github.workflow` for the duration of this probe: called
+# as a reusable workflow, `github.workflow` resolves to the CALLER's name, so
+# this lane would otherwise share a group with `merge-gate.yml`'s own. The
+# cancellation rule below is unchanged.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  group: macos-lane-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -141,6 +211,50 @@ jobs:
     # it for GitHub's 6-hour default.
     timeout-minutes: 10
     steps:
+      # TEMPORARY PROBE — NEVER MERGE. First step in the file, before any
+      # checkout, so the log records what the reusable-workflow call actually
+      # delivered: the event this run sees (must be `pull_request`, not
+      # `workflow_call`), the ref/SHA pair, the caller's workflow name, and the
+      # five release inputs at their defaults. Non-secret context only — no
+      # secret name, value, length or presence appears here.
+      - name: Probe context
+        env:
+          NOTARIZE: ${{ inputs.notarize }}
+          VALIDATE_NOTARY_CREDENTIALS: ${{ inputs.validate_notary_credentials }}
+          VALIDATE_SPARKLE_KEY: ${{ inputs.validate_sparkle_key }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          PUBLISH_RELEASE: ${{ inputs.publish_release }}
+          CALLER_WORKFLOW: ${{ github.workflow }}
+        run: |
+          set -euo pipefail
+          echo "event_name=$GITHUB_EVENT_NAME"
+          echo "workflow=$CALLER_WORKFLOW"
+          echo "ref=$GITHUB_REF"
+          echo "ref_name=$GITHUB_REF_NAME"
+          echo "head_ref=${GITHUB_HEAD_REF:-}"
+          echo "base_ref=${GITHUB_BASE_REF:-}"
+          echo "sha=$GITHUB_SHA"
+          echo "repository=$GITHUB_REPOSITORY"
+          echo "run_id=$GITHUB_RUN_ID"
+          echo "inputs.notarize=${NOTARIZE:-<unset>}"
+          echo "inputs.validate_notary_credentials=${VALIDATE_NOTARY_CREDENTIALS:-<unset>}"
+          echo "inputs.validate_sparkle_key=${VALIDATE_SPARKLE_KEY:-<unset>}"
+          echo "inputs.release_version=${RELEASE_VERSION:-<empty>}"
+          echo "inputs.publish_release=${PUBLISH_RELEASE:-<unset>}"
+          # The two assertions this probe exists to make. Under the merge-gate
+          # caller the event must be `pull_request` and every release control
+          # must be at its safe default, which is what keeps `notarize-stage`
+          # and `publish` unreachable.
+          [ "$GITHUB_EVENT_NAME" = pull_request ] && echo "probe: pull_request event CONFIRMED" || echo "probe: event is NOT pull_request"
+          if [ "${NOTARIZE:-false}" != true ] \
+            && [ "${VALIDATE_NOTARY_CREDENTIALS:-false}" != true ] \
+            && [ "${VALIDATE_SPARKLE_KEY:-false}" != true ] \
+            && [ "${PUBLISH_RELEASE:-false}" != true ] \
+            && [ -z "${RELEASE_VERSION:-}" ]; then
+            echo "probe: default release inputs CONFIRMED"
+          else
+            echo "probe: release inputs are NOT at their defaults"
+          fi
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Validate release contract
         env:
@@ -231,60 +345,29 @@ jobs:
     runs-on: macos-15
     timeout-minutes: ${{ matrix.timeout }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Import UI signing certificate
+      # TEMPORARY PROBE — NEVER MERGE. This job's real body (checkout,
+      # certificate import, provisioning-profile install, xcodebuild, artifact
+      # upload, keychain teardown) is replaced for the duration of the probe by
+      # this single step. Its only question is whether a reusable-workflow call
+      # delivers the four explicitly forwarded signing secrets to this job at
+      # all. It reports PRESENT or ABSENT and nothing else: no value, no length,
+      # no prefix, no hash, no decode. Nothing is written to disk and no
+      # keychain is created, so there is nothing to tear down.
+      - name: Probe forwarded signing secrets (presence only)
         env:
           CERT_P12_BASE64: ${{ secrets.MACOS_SIGNING_CERT_P12_BASE64 }}
           CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
-        run: |
-          set -euo pipefail
-          [ -n "$CERT_P12_BASE64" ] && [ -n "$CERT_PASSWORD" ] || exit 1
-          keychain="$RUNNER_TEMP/ui-signing.keychain-db"
-          password="$(openssl rand -base64 24)"
-          cert="$RUNNER_TEMP/ui-cert.p12"
-          ( umask 077; printf '%s' "$CERT_P12_BASE64" | base64 --decode > "$cert" )
-          security create-keychain -p "$password" "$keychain"
-          security unlock-keychain -p "$password" "$keychain"
-          security import "$cert" -k "$keychain" -P "$CERT_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
-          security list-keychains -d user -s "$keychain"
-          rm -P "$cert"
-      - name: Install UI provisioning profiles
-        env:
           PROFILE_BASE64: ${{ secrets.MACOS_PROVISIONING_PROFILE_BASE64 }}
           SHARE_PROFILE_BASE64: ${{ secrets.MACOS_SHARE_PROVISIONING_PROFILE_BASE64 }}
         run: |
           set -euo pipefail
-          [ -n "$PROFILE_BASE64" ] && [ -n "$SHARE_PROFILE_BASE64" ] || exit 1
-          dir="$HOME/Library/MobileDevice/Provisioning Profiles"
-          mkdir -p "$dir"
-          ( umask 077; printf '%s' "$PROFILE_BASE64" | base64 --decode > "$dir/relayium.provisionprofile" )
-          ( umask 077; printf '%s' "$SHARE_PROFILE_BASE64" | base64 --decode > "$dir/relayium-share.provisionprofile" )
-      - name: Run macOS product-flow UI smoke (${{ matrix.shard }})
-        id: ui_smoke
-        env:
-          TEST_CLASSES: ${{ matrix.tests }}
-        run: |
-          set -euo pipefail
-          only=()
-          IFS=',' read -ra classes <<< "$TEST_CLASSES"
-          for class in "${classes[@]}"; do only+=("-only-testing:$class"); done
-          xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium \
-            -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/dd-mac-ui-${{ matrix.shard }}" \
-            "${only[@]}" test
-      - name: Upload macOS UI smoke failure evidence
-        if: failure() && steps.ui_smoke.outcome == 'failure'
-        continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: relayium-macos-ui-${{ matrix.shard }}-${{ github.sha }}-attempt-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/dd-mac-ui-${{ matrix.shard }}/Logs/Test/*.xcresult
-          if-no-files-found: warn
-          retention-days: 7
-      - name: Remove UI signing keychain
-        if: always()
-        run: security delete-keychain "$RUNNER_TEMP/ui-signing.keychain-db" || true
+          for name in CERT_P12_BASE64 CERT_PASSWORD PROFILE_BASE64 SHARE_PROFILE_BASE64; do
+            if [ -n "${!name-}" ]; then
+              echo "$name: PRESENT"
+            else
+              echo "$name: ABSENT"
+            fi
+          done
 
   signed-build:
     needs: [test, contract]
@@ -302,300 +385,48 @@ jobs:
     # key materialized in a keychain on disk.
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Import signing certificate
+      # TEMPORARY PROBE — NEVER MERGE. This job's real body (checkout,
+      # certificate import, provisioning-profile install, xcodebuild, artifact
+      # upload, keychain teardown) is replaced for the duration of the probe by
+      # this single step. Its only question is whether a reusable-workflow call
+      # delivers the four explicitly forwarded signing secrets to this job at
+      # all. It reports PRESENT or ABSENT and nothing else: no value, no length,
+      # no prefix, no hash, no decode. Nothing is written to disk and no
+      # keychain is created, so there is nothing to tear down.
+      - name: Probe forwarded signing secrets (presence only)
         env:
           CERT_P12_BASE64: ${{ secrets.MACOS_SIGNING_CERT_P12_BASE64 }}
           CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
-        run: |
-          set -euo pipefail
-          if [ -z "$CERT_P12_BASE64" ] || [ -z "$CERT_PASSWORD" ]; then
-            echo "::error::MACOS_SIGNING_CERT_P12_BASE64 / MACOS_SIGNING_CERT_PASSWORD are not set — see the macos-signing runbook in relayium-ops"
-            exit 1
-          fi
-          keychain="$RUNNER_TEMP/signing.keychain-db"
-          keychain_pw="$(openssl rand -base64 24)"
-          certfile="$RUNNER_TEMP/cert.p12"
-          ( umask 077; printf '%s' "$CERT_P12_BASE64" | base64 --decode > "$certfile" )
-          security create-keychain -p "$keychain_pw" "$keychain"
-          security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p "$keychain_pw" "$keychain"
-          security import "$certfile" -k "$keychain" -P "$CERT_PASSWORD" \
-            -T /usr/bin/codesign -T /usr/bin/security
-          # Without a partition list, codesign blocks on a GUI authorization
-          # prompt nobody can click and the job hangs until it times out.
-          security set-key-partition-list -S apple-tool:,apple:,codesign: \
-            -s -k "$keychain_pw" "$keychain" > /dev/null
-          # Put it on the search list without evicting the default keychain.
-          current_keychains=()
-          while IFS= read -r current; do
-            current="${current#\"}"
-            current="${current%\"}"
-            current_keychains+=("$current")
-          done < <(security list-keychains -d user)
-          security list-keychains -d user -s "$keychain" "${current_keychains[@]}"
-          rm -P "$certfile"
-          security find-identity -v -p codesigning "$keychain"
-      # keychain-access-groups is the entitlement that makes a profile
-      # mandatory — proven by building once without it, which succeeded. The
-      # profile carries keychain-access-groups = <team>.* by default, so there
-      # is nothing to configure on Apple's side beyond creating it.
-      - name: Install provisioning profile
-        env:
           PROFILE_BASE64: ${{ secrets.MACOS_PROVISIONING_PROFILE_BASE64 }}
-        run: |
-          set -euo pipefail
-          if [ -z "$PROFILE_BASE64" ]; then
-            echo "::error::MACOS_PROVISIONING_PROFILE_BASE64 is not set — see the macos-signing runbook in relayium-ops"
-            exit 1
-          fi
-          dir="$HOME/Library/MobileDevice/Provisioning Profiles"
-          mkdir -p "$dir"
-          ( umask 077; printf '%s' "$PROFILE_BASE64" | base64 --decode > "$dir/relayium.provisionprofile" )
-          # Name, not UUID: PROVISIONING_PROFILE_SPECIFIER in the project names
-          # "Relayium Mac", and a mismatch here fails at signing time with a
-          # message that does not mention this step.
-          security cms -D -i "$dir/relayium.provisionprofile" \
-            | plutil -extract Name raw -o - -
-      # A second profile, because the Share extension is a second bundle with its
-      # own App ID and its own App Groups entitlement. Without it the signed
-      # Release fails at the appex with "requires a provisioning profile", and
-      # the message does not mention this step.
-      - name: Install Share extension provisioning profile
-        env:
           SHARE_PROFILE_BASE64: ${{ secrets.MACOS_SHARE_PROVISIONING_PROFILE_BASE64 }}
         run: |
           set -euo pipefail
-          if [ -z "$SHARE_PROFILE_BASE64" ]; then
-            echo "::error::MACOS_SHARE_PROVISIONING_PROFILE_BASE64 is not set — see the macos-signing runbook in relayium-ops"
-            exit 1
-          fi
-          dir="$HOME/Library/MobileDevice/Provisioning Profiles"
-          mkdir -p "$dir"
-          ( umask 077; printf '%s' "$SHARE_PROFILE_BASE64" \
-            | base64 --decode > "$dir/relayium-share.provisionprofile" )
-          # Name, not UUID, for the reason above: the appex's
-          # PROVISIONING_PROFILE_SPECIFIER names "Relayium Mac Share Extension".
-          security cms -D -i "$dir/relayium-share.provisionprofile" \
-            | plutil -extract Name raw -o - -
-      # A successful compile cannot prove that the App scene opens, sidebar
-      # actions render the intended task, or Pairing Code stays on its owning
-      # surface. This runs here because the app and Share extension entitlements
-      # require the profiles installed above; stripping them for ad-hoc signing
-      # produces a different app that cannot load UI automation. The Debug-only
-      # launch argument keeps the hosted runner off the public Nearby rendezvous.
-      # The Mac App Store product, built unsigned.
-      #
-      # UNSIGNED deliberately, and it is the only build here that is: this
-      # target signs automatically, so Xcode resolves a Mac App Store
-      # certificate and profile against the signed-in account — credentials this
-      # workflow does not hold and must not create. What a compile CAN prove is
-      # the half that breaks silently — that the shared source really does build
-      # both ways through the distribution seam, that the App Store target's own
-      # file links the StoreKit adapter, and that its Share extension embeds. The
-      # linkage and entitlement claims are asserted from the project file and
-      # the plists by `StoreKitLinkageTests` in the Swift suite above.
-      #
-      # Its own derived-data path, because both macOS products build a
-      # `Relayium.app`: same app, two channels, so they share the product name
-      # on purpose, and separate paths keep one build from replacing the
-      # artifact a later step verifies.
-      - name: Build (Mac App Store target, unsigned)
-        run: |
-          xcodebuild -project apps/mac/Relayium.xcodeproj -scheme RelayiumAppStore \
-            -destination 'generic/platform=macOS' -configuration Release \
-            -derivedDataPath "$RUNNER_TEMP/dd-mas" \
-            CODE_SIGNING_ALLOWED=NO build
-      # And the two absences that decide whether the submission is even
-      # accepted, read off the built product rather than off the project.
-      - name: Verify the App Store product embeds no updater
-        run: |
-          set -euo pipefail
-          app="$RUNNER_TEMP/dd-mas/Build/Products/Release/Relayium.app"
-          [ -d "$app" ] || { echo "::error::the App Store product was not built"; exit 1; }
-          if [ -e "$app/Contents/Frameworks/Sparkle.framework" ]; then
-            echo "::error::the App Store build embeds Sparkle"; exit 1
-          fi
-          binary="$app/Contents/MacOS/Relayium"
-          linked="$(otool -L "$binary")"
-          printf '%s\n' "$linked"
-          if printf '%s' "$linked" | grep -q Sparkle; then
-            echo "::error::the App Store binary links Sparkle"; exit 1
-          fi
-          if ! printf '%s' "$linked" | grep -q StoreKit; then
-            echo "::error::the App Store binary does not link StoreKit"; exit 1
-          fi
-          [ -d "$app/Contents/PlugIns/RelayiumShare.appex" ] || {
-            echo "::error::the App Store build does not embed its Share extension"; exit 1; }
-      # The two files Apple requires of a submission, read off the built product.
-      #
-      # Their CONTENT is decided by `MacPrivacyManifestTests`, which re-derives
-      # the declarations from the source and the server storage they describe.
-      # What no Swift test can see is whether each file reached the bundle Apple
-      # actually opens: both app folders are synchronized, so membership is a
-      # filesystem fact rather than a project edit, and a manifest dropped from a
-      # target produces no diff, no build failure and no runtime symptom — just a
-      # rejected upload.
-      - name: Verify the App Store product ships both privacy manifests
-        run: |
-          bash apps/mac/scripts/verify-privacy-manifests.sh \
-            "$RUNNER_TEMP/dd-mas/Build/Products/Release/Relayium.app" "App Store"
-      - name: Build (signed, Release)
-        run: |
-          xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium \
-            -destination 'generic/platform=macOS' -configuration Release \
-            -derivedDataPath "$RUNNER_TEMP/dd" build
-      # Sparkle's prebuilt helpers carry distribution-inappropriate ad-hoc
-      # signatures. A normal `build` does not replace those nested signatures,
-      # so re-sign leaf-to-root and then restore the app's outer resource seal.
-      - name: Re-sign Sparkle distribution components
-        run: |
-          apps/mac/scripts/resign-sparkle.sh \
-            "$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app" \
-            "Developer ID Application"
-      # The reason this job exists. An entitlement regression compiles fine and
-      # passes swift test; it shows up as a runtime Keychain failure weeks later
-      # on somebody's machine.
-      - name: Verify signature and entitlements
-        run: |
-          set -euo pipefail
-          app="$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app"
-          codesign --verify --strict --verbose=2 "$app"
-          lipo "$app/Contents/MacOS/Relayium" -verify_arch arm64 x86_64 || {
-            echo "::error::Release executable is not universal (arm64 + x86_64)"; exit 1; }
-          signature_details="$(codesign -d --verbose=4 "$app" 2>&1)"
-          printf '%s\n' "$signature_details"
-          printf '%s\n' "$signature_details" | grep -q 'flags=.*runtime' || {
-            echo "::error::Hardened Runtime flag missing from the signed build"; exit 1; }
-          printf '%s\n' "$signature_details" | grep -q '^Timestamp=' || {
-            echo "::error::Secure timestamp missing from the signed build"; exit 1; }
-          sparkle="$app/Contents/Frameworks/Sparkle.framework/Versions/B"
-          for component in \
-            "$sparkle/Autoupdate" \
-            "$sparkle/Updater.app" \
-            "$sparkle/XPCServices/Installer.xpc" \
-            "$sparkle/XPCServices/Downloader.xpc"; do
-            details="$(codesign -d --verbose=4 "$component" 2>&1)"
-            printf '%s\n' "$details"
-            printf '%s\n' "$details" | grep -q 'TeamIdentifier=7PVYUG4YQS' || {
-              echo "::error::Sparkle component is not signed by the Relayium team: $component"; exit 1; }
-            printf '%s\n' "$details" | grep -q '^Timestamp=' || {
-              echo "::error::Sparkle component has no secure timestamp: $component"; exit 1; }
-          done
-          # The Share extension is a separate signature, a separate entitlement
-          # set and a separate notarization subject. Verifying the app alone
-          # would pass while the appex inside it was unsigned, un-hardened, or
-          # carrying an entitlement it has no business holding.
-          appex="$app/Contents/PlugIns/RelayiumShare.appex"
-          [ -d "$appex" ] || {
-            echo "::error::the Share extension is not embedded in the signed app"; exit 1; }
-          codesign --verify --strict --verbose=2 "$appex"
-          appex_details="$(codesign -d --verbose=4 "$appex" 2>&1)"
-          printf '%s\n' "$appex_details"
-          printf '%s\n' "$appex_details" | grep -q 'flags=.*runtime' || {
-            echo "::error::Hardened Runtime flag missing from the Share extension"; exit 1; }
-          printf '%s\n' "$appex_details" | grep -q '^Timestamp=' || {
-            echo "::error::Secure timestamp missing from the Share extension"; exit 1; }
-          appex_ents="$(codesign -d --entitlements - --xml "$appex" | plutil -convert xml1 -o - -)"
-          printf '%s\n' "$appex_ents"
-          printf '%s' "$appex_ents" | grep -q '7PVYUG4YQS.com.relayium.shared' || {
-            echo "::error::Share extension is not in the app's App Group"; exit 1; }
-          # The absences are the point: a staging process that gains the network
-          # or the Keychain stops being one.
-          for forbidden in keychain-access-groups network.client network.server \
-            associated-domains applesignin; do
-            if printf '%s' "$appex_ents" | grep -q "$forbidden"; then
-              echo "::error::Share extension claims $forbidden; it only stages files"; exit 1
+          for name in CERT_P12_BASE64 CERT_PASSWORD PROFILE_BASE64 SHARE_PROFILE_BASE64; do
+            if [ -n "${!name-}" ]; then
+              echo "$name: PRESENT"
+            else
+              echo "$name: ABSENT"
             fi
           done
-          ents="$(codesign -d --entitlements - --xml "$app" | plutil -convert xml1 -o - -)"
-          printf '%s\n' "$ents"
-          printf '%s' "$ents" | grep -q 'com.apple.security.application-groups' || {
-            echo "::error::app is not in the App Group its Share extension writes to"; exit 1; }
-          printf '%s' "$ents" | grep -q 'com.apple.security.app-sandbox' || {
-            echo "::error::app-sandbox entitlement missing from the signed build"; exit 1; }
-          # The expanded value, not $(AppIdentifierPrefix): an unexpanded prefix
-          # means the team never applied, and the app would fail at runtime.
-          printf '%s' "$ents" | grep -q '7PVYUG4YQS.com.relayium.shared' || {
-            echo "::error::keychain access group missing or unexpanded in the signed build"; exit 1; }
-          printf '%s' "$ents" | grep -q 'applinks:relayium.com' || {
-            echo "::error::relayium.com Associated Domain missing from the signed build"; exit 1; }
-          printf '%s' "$ents" | grep -q 'com.relayium.mac-spks' || {
-            echo "::error::Sparkle installer server entitlement missing from the signed build"; exit 1; }
-          printf '%s' "$ents" | grep -q 'com.relayium.mac-spki' || {
-            echo "::error::Sparkle installer client entitlement missing from the signed build"; exit 1; }
-          [ "$(plutil -extract SUEnableInstallerLauncherService raw -o - "$app/Contents/Info.plist")" = true ] || {
-            echo "::error::Sparkle Installer.xpc is not enabled"; exit 1; }
-          [ "$(plutil -extract SUFeedURL raw -o - "$app/Contents/Info.plist")" = \
-            "https://relayium.com/apps/macos/appcast.xml" ] || {
-            echo "::error::Sparkle feed URL is missing or unexpected"; exit 1; }
-          [ -n "$(plutil -extract SUPublicEDKey raw -o - "$app/Contents/Info.plist")" ] || {
-            echo "::error::Sparkle EdDSA public key is missing"; exit 1; }
-          get_task_allow="$(
-            printf '%s' "$ents" \
-              | plutil -extract com.apple.security.get-task-allow raw -o - - 2>/dev/null \
-              || true
-          )"
-          if [ "$get_task_allow" = "true" ]; then
-            echo "::error::Release build carries get-task-allow — it must not ship debuggable"
-            exit 1
-          fi
-      # The same two files in the direct download, which builds from the same
-      # synchronized folders, checked to the same exact sets. Only the App Store
-      # product is submitted, so this is not a store requirement — it is how an
-      # exclusion that removed a manifest from one channel gets noticed while
-      # both are still meant to be one app.
-      # Read-only: nothing here re-signs or repackages anything.
-      - name: Verify the direct product ships both privacy manifests
-        run: |
-          bash apps/mac/scripts/verify-privacy-manifests.sh \
-            "$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app" "direct"
-      # Exercise the exact packaging path intended for release: the script
-      # verifies the source signature, mounts the finished image, and verifies
-      # the copied app again before emitting its checksum.
-      - name: Package and verify DMG
-        run: |
-          apps/mac/scripts/package-dmg.sh \
-            "$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app" \
-            "$RUNNER_TEMP/Relayium.dmg" \
-            "Developer ID Application"
-      - name: Record signed package provenance
-        id: package_identity
-        env:
-          RELEASE_VERSION: ${{ inputs.release_version }}
-        run: |
-          set -euo pipefail
-          app="$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app"
-          build="$(defaults read "$app/Contents/Info" CFBundleVersion)"
-          version="$(defaults read "$app/Contents/Info" CFBundleShortVersionString)"
-          [ -z "$RELEASE_VERSION" ] || [ "$version" = "$RELEASE_VERSION" ]
-          hash="$(shasum -a 256 "$RUNNER_TEMP/Relayium.dmg" | awk '{print $1}')"
-          jq -n --arg repository "$GITHUB_REPOSITORY" --arg sha "$GITHUB_SHA" \
-            --arg version "$version" --arg build "$build" --arg hash "$hash" \
-            --arg attempt "$GITHUB_RUN_ATTEMPT" \
-            '{repository:$repository,sha:$sha,version:$version,build:$build,
-              signedDmgSha256:$hash,dmgSha256:$hash,runAttempt:$attempt}' \
-            > "$RUNNER_TEMP/provenance.json"
-          mkdir "$RUNNER_TEMP/release-tools"
-          cp "$RUNNER_TEMP/dd/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_appcast" \
-            "$RUNNER_TEMP/release-tools/generate_appcast"
-      - name: Upload signed package artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: relayium-macos-signed-${{ github.sha }}-${{ inputs.release_version || 'ci' }}
-          path: |
-            ${{ runner.temp }}/Relayium.dmg
-            ${{ runner.temp }}/Relayium.dmg.sha256
-            ${{ runner.temp }}/provenance.json
-            ${{ runner.temp }}/release-tools/generate_appcast
-          if-no-files-found: error
-          retention-days: 14
-      # This is a disposable acceptance check, not release publication. Sparkle
-      # refuses to add an EdDSA enclosure signature when the supplied private
-      # key does not derive the SUPublicEDKey embedded in the mounted app.
-      - name: Remove signing keychain
-        if: always()
-        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
+
+  # TEMPORARY PROBE — NEVER MERGE. Independent of every other job: no `needs`,
+  # no path or event condition, so it runs on every start of this workflow and
+  # its result is visible even when the macOS lane is skipped or red. Its only
+  # purpose is to make the hosted log state the effective token permissions for
+  # a job that REQUESTS `contents: write` while the caller grants the reusable
+  # workflow `contents: read` — GitHub prints the granted permission set in the
+  # "Set up job" section, and the intersection is what the probe is asking
+  # about. The step performs no write: no push, no tag, no release, no API
+  # call, no `GITHUB_TOKEN` use of any kind.
+  probe-write-perm:
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Announce start only
+        run: echo "probe-write-perm started; see the Set up job log section for the effective token permissions"
 
   notarize-stage:
     needs: [ui-smoke, signed-build]
