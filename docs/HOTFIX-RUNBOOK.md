@@ -288,20 +288,37 @@ not treat the merge as the handoff and walk away.
 
 ---
 
-## 5. Run the owning lane, plus the always-required contract gate
+## 5. Wait for every lane the change selects, through `merge-gate`
 
-Run the lane that **owns the code you changed**, and the compatibility gate that
-**everything** must pass. Not the full cross-platform suite: a paused lane must
-not be woken to ship a server fix, and a 45-minute macOS job is not evidence
-about a Go change.
+You do not choose which lanes run, and you may not merge on a subset of them.
+The selector reads each lane's own `push.paths` against the whole pull request's
+three-dot diff, `merge-gate` requires every selected lane to succeed, and
+`merge-gate` is the sole required context on `main`. So the rule during an
+incident is: **read the gate's lane/selected/result table and wait for the whole
+of it.** The table below is what to expect, not a menu.
 
-| You changed | Run |
+Not the full cross-platform suite either — the point of path selection is that a
+paused lane is not woken to ship a server fix. But "fewer lanes than everything"
+is the selector's decision, not yours.
+
+| You changed | What that selects |
 | --- | --- |
-| `server/**` | the Go lane (`go.yml`) — build, vet, unit and race checks — plus your reproducer |
-| `web/**` | the web lane (`web.yml`) |
+| `server/**` | the Go lane (`go.yml`) — build, vet, unit and race checks — **and `native-web-pairing.yml`, which is a `macos-15` runner**, because the acceptance starts the real hub from `server/`. Plus your reproducer |
+| `web/**` | the web lane (`web.yml`) — **and `native-web-pairing.yml`**, which `vite build`s and serves the bundle |
 | Wire formats or stored formats | **every** implementation, plus the wire-vector fixtures regenerated to a zero diff |
-| `apps/RelayiumKit/**` | **both** Apple workflows — it is shared, and it fans out on purpose |
+| `apps/RelayiumKit/**` (outside `Tests/`) | **both** Apple workflows, `swift-package.yml` and `native-web-pairing.yml` — it is shared, and it fans out on purpose |
 | A platform root under `apps/` | that root's single heavy owner workflow, and only that one |
+| Anything at all | `repo-hygiene` and `compat`, unconditionally — see below |
+
+**A server hotfix is not a `go.yml`-only event, and treating it as one is how a
+responder merges early.** `native-web-pairing.yml` names `server/**` in its
+filter because the run starts the real hub, so an urgent server fix legitimately
+selects a paid macOS lane that can take tens of minutes. That is the honest
+price of the change set. If it is genuinely intolerable for a given incident,
+the answer is a narrower diff or an owner decision recorded at the time — never
+merging while a selected lane is still running, and never reading a subset of
+green checks as the gate. The full ownership matrix is in
+`docs/CI-PLATFORM-BOUNDARY.md`.
 
 **The compat lane is required regardless of what you changed.** It is unfiltered
 by design — no `paths:` filter on any event — and it reaches every pull request
@@ -327,15 +344,21 @@ unselected lane ran. On `main` the lanes still run directly under their own
 names, because every lane keeps its `push: branches: [main]` trigger — which is
 also what `promote.sh` reads, and why that trigger must never be removed.
 
-**`merge-gate` is the required context.** Protection edit B narrowed `main` to
-exactly `merge-gate`, written and then read back as `strict: true`; the bare
-`wire-vectors` is no longer branch-required, and a red lane inside `merge-gate`
-does stop a merge — observed at `mergeStateStatus: BLOCKED` on the never-merged
-red probe PR #38, under the two-context set edit A left. **No second red probe
-has been run against the sole-`merge-gate` protection**, so during an incident
-still read the gate's lane table yourself rather than trusting the merge button
-alone. `docs/CI-PLATFORM-BOUNDARY.md` carries the staged protection migration and
-its current position.
+**`merge-gate` is the required context, and a red lane really does block.**
+Protection edit B narrowed `main` to exactly `merge-gate`, written and then read
+back as `strict: true`. That a red lane inside `merge-gate` stops a merge is an
+observation twice over: the never-merged red probe PR #38 under edit A's
+two-context set, and — under the configuration that actually ships — the
+never-merged red probe PR #41, head `cedec269`, aggregate run `32670589874`,
+read at `mergeStateStatus: BLOCKED` while protection reported the sole context
+`merge-gate`. Both were closed unmerged.
+
+**Read the gate's lane table anyway.** Not because the button is untrustworthy,
+but because the table is the only place that tells you *which* lanes your change
+set selected and whether every one of them is terminal. Under time pressure the
+failure mode is merging while a selected lane is still in progress, and a merge
+box cannot warn you about that the way the table can. `docs/CI-PLATFORM-BOUNDARY.md`
+carries the completed protection migration.
 
 Evidence must come from a **hosted run on the real trigger**. A local pass is a
 useful signal, not acceptance evidence.
@@ -548,7 +571,9 @@ Copy this into the work claim and close each item with evidence.
       the pinned commit until someone promotes — §3.1
 - [ ] Reproducer fails on the base SHA and passes after the fix — §4
 - [ ] Diff is narrow: the fix, its test, nothing else — §4
-- [ ] Owning lane green on a **hosted** run — §5
+- [ ] **Every** lane the change set selected green and **terminal** on a hosted
+      run — for a `server/**` or `web/**` fix that includes the `macos-15`
+      `native-web-pairing` lane, not the Go or web lane alone — §5
 - [ ] `compat / wire-vectors` green — §5
 - [ ] `merge-gate` green, and its lane table read: every lane the change set
       selected succeeded, every unselected lane skipped — §5

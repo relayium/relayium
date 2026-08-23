@@ -587,9 +587,29 @@ other seven conditional lanes skipped and every `repo-hygiene` job and the
 required `wire-vectors` stayed green. GitHub reported
 `mergeStateStatus: BLOCKED`. The probe was then closed unmerged
 (`mergedAt: null`) and its branch and worktree deleted. Any statement that no
-merge has been observed blocked is **stale and superseded**; the mirrored open
-item in `docs/ARCHITECTURE-RESILIENCE.md` §9 is owed the same correction and is
-not edited here.
+merge has been observed blocked is **stale and superseded**.
+
+**And it has since been observed a second time, under the protection that
+actually ships.** PR #38 ran while protection edit A still required *two*
+contexts, so it could not separate the aggregate's authority from the bare
+`wire-vectors` requirement. A second never-merged red probe — PR #41, exact head
+`cedec269c3d6d3d34f69e058bf89815a553fe405`, aggregate run `32670589874`,
+conclusion `failure` — repeated it with `merge-gate` as the **sole** required
+context. One deterministic invalid health `successBody` value selected the
+`ops-contract` lane; `ops-contract / go-contract`, `repo-hygiene /
+ops-deploy-contract-policy` and the top-level `merge-gate` went red, while
+`compat / wire-vectors` and every other applicable `repo-hygiene` job stayed
+green and the `web`, `go`, `macos`, `ios`, `swift-package`,
+`native-web-pairing` and `contracts` lanes skipped. GitHub reported
+`mergeStateStatus: BLOCKED` while protection read back `strict: true` with the
+sole context `merge-gate`. The probe was closed unmerged (`mergedAt: null`) and
+its refs and worktree deleted.
+
+The second red is not noise: `repo-hygiene / ops-deploy-contract-policy` is the
+always-on **declarative** consumer of the same contract, and it rejected the same
+value the filtered Go lane rejected. Two independent readers failing on one
+injected defect is the designed behaviour of the [always-on
+half](#the-deploy-contracts-always-on-half), not an unrelated failure.
 
 **And `merge-gate` is now the only required context.** Protection edit A was
 made and read back as `strict: true` with **exactly `wire-vectors` and
@@ -744,7 +764,15 @@ always appears**.
 | 4 | Observe a red gate actually blocking (`mergeStateStatus: BLOCKED`). | unchanged | **done — never-merged red probe PR #38, head `33e4e3b5`, run `32660811500`; closed unmerged** |
 | 5 | Fold `compat.yml` in as an unconditional lane, **keeping** its own `pull_request:` and its `push: main`. | unchanged | **done — PR #39, head `9d6ba08c`, aggregate run `32665499037` green 45/45 with no cancellation; direct compat run `32665498867` and the called `compat / wire-vectors` both passed. Merged as `2f072638`** |
 | 6 | Protection edit B: `contexts: ["merge-gate"]`. | `{merge-gate}` | **done — written and read back as `strict: true` with exactly `merge-gate`** |
-| 7 | Remove `pull_request:` from `compat.yml`. `push: main` stays, permanently. | `{merge-gate}` | **in progress — source delivered on this branch; no hosted evidence claimed yet. This is where the repository is** |
+| 7 | Remove `pull_request:` from `compat.yml`. `push: main` stays, permanently. | `{merge-gate}` | **done — PR #40, head `6c4b8e3d`, sole `merge-gate` run `32668325620` green 45/45 with no failure and no cancellation, and **no** separate direct compat run. Merged as `91768dc0`** |
+| 8 | Observe a red gate blocking under the **sole** required context. | `{merge-gate}` | **done — never-merged red probe PR #41, head `cedec269`, run `32670589874` red; `mergeStateStatus: BLOCKED`; closed unmerged** |
+
+**The migration is finished. Steps 1–8 are all done, and this table is now a
+record rather than a plan.** The delivered permanent shape is: protection
+`strict: true` with the sole required context `merge-gate`; `compat` with **no**
+direct pull-request entry, called unconditionally by the gate; every lane
+keeping its `push: branches: [main]` trigger forever, which is what leaves the
+bare `wire-vectors` check run on `main` intact for `relayium-ops`' promotion.
 
 **Step 1 is done, and exactly what its run does and does not prove.** The gate
 described above is merged behaviour, not a proposal: PR #36 landed as
@@ -813,25 +841,39 @@ is `strict: true` with the required context **exactly `merge-gate`**. The bare
 `wire-vectors` is no longer required on a branch, which is what made step 7
 possible without ever leaving a required context reported by nothing.
 
-**Step 7 is in progress: its source is delivered on this branch, and none of its
-hosted evidence is claimed.** `compat.yml`'s direct `pull_request:` trigger is
-removed; `push: branches: [main]`, `workflow_dispatch:` and `workflow_call:` all
-stay, permanently. The transitional `concurrency_scope` input and the
-call-vs-direct discriminator are gone with the second entry point, leaving the
-literal `compat-lane` prefix and the repository-wide suffix. `merge-gate.yml`
-still calls the lane unconditionally and still requires it to succeed; only its
-migration comments changed. All of that is asserted locally by
-`ci-event-policy-test.mjs` (§1 for the permanent trigger shape, §2 for the exact
-group, §6n for the caller and the roster, §6o for the input and concurrency
-surface that must not come back), each with its own mutation, and by
-`ci-lane-selector-test.mjs`'s closure.
+**Step 7 is done, and this is exactly what its run observed.** `compat.yml`'s
+direct `pull_request:` trigger is removed; `push: branches: [main]`,
+`workflow_dispatch:` and `workflow_call:` all stay, permanently. The transitional
+`concurrency_scope` input and the call-vs-direct discriminator are gone with the
+second entry point, leaving the literal `compat-lane` prefix and the
+repository-wide suffix. `merge-gate.yml` still calls the lane unconditionally and
+still requires it to succeed; only its migration comments changed. All of that is
+asserted locally by `ci-event-policy-test.mjs` (§1 for the permanent trigger
+shape, §2 for the exact group, §6n for the caller and the roster, §6o for the
+input and concurrency surface that must not come back), each with its own
+mutation, and by `ci-lane-selector-test.mjs`'s closure.
 
-**What step 7 has NOT produced yet, and is deliberately not claimed here:** no
-hosted run of this branch, so `compat` has **not** been observed reporting
-exactly once per pull request, the aggregate has **not** been observed judging
-that single called lane, and no second red probe has been run against the
-sole-`merge-gate` protection. Those are the acceptance evidence for this step and
-belong to the pull request that carries it.
+PR #40, exact head `6c4b8e3d380aa9027f9834a44bb39fc3e8190aeb`, produced its sole
+`merge-gate` run `32668325620` with **45 of 45 jobs successful**, no failure and
+no cancellation. **No separate direct `compat` workflow run occurred at all**,
+and that absence is the positive result rather than a missing observation: with
+the direct `pull_request:` entry gone there is exactly one compat run per pull
+request, the called one the aggregate judges. PR #40 merged normally as
+`91768dc09af0377e2bd77d5767f30e9951cf28a4`. Any statement that compat has not
+been observed reporting exactly once per pull request is **stale and
+superseded**.
+
+**Step 8 is done, and it is the evidence the sole-context edit owed.** The red
+probe PR #38 blocked under protection edit A's *two*-context set, which cannot
+distinguish the aggregate's authority from the bare `wire-vectors`
+requirement. PR #41 repeated the probe against the shipped configuration: exact
+head `cedec269c3d6d3d34f69e058bf89815a553fe405`, aggregate run `32670589874`,
+conclusion `failure`, `mergeStateStatus: BLOCKED`, protection read back
+`strict: true` with the sole context `merge-gate`, closed unmerged with its refs
+deleted. The full lane-by-lane result is recorded
+[above](#always-run-and-fail-closed-is-one-half-the-required-status-is-the-other).
+Any statement that no second red probe has been run against the sole-`merge-gate`
+protection is **stale and superseded**.
 
 Steps 5-7 were three moves and not one for a specific reason: converting
 `compat.yml` in one shot renames its check to `compat / wire-vectors`, so the

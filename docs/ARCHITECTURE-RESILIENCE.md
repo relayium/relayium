@@ -177,11 +177,16 @@ never-merged red probe — PR #38, exact head `33e4e3b5`, run `32660811500` — 
 read at `mergeStateStatus: BLOCKED` while `merge-gate` was red, then closed
 unmerged. That probe ran under the two-context set protection edit A left.
 
-**Still pending, and deliberately not claimed: the hosted evidence for removing
-compat's direct pull-request entry, and a second red probe against the
-sole-`merge-gate` protection edit B installed.** Neither is inferred from the
-settings read-back; confirm each on the pull request that carries it rather than
-asserting it now. §9 item 9 tracks both.
+**Both of those have since been delivered and observed, so nothing here is
+pending any more.** Removing compat's direct pull-request entry landed as PR #40,
+head `6c4b8e3d`, whose sole `merge-gate` run `32668325620` was green 45/45 with
+**no separate direct compat run** — the absence is the positive result, because
+there is now exactly one compat run per pull request and the aggregate judges it.
+PR #40 merged as `91768dc0`. The second red probe then ran against the shipped
+sole-context protection: PR #41, head `cedec269`, aggregate run `32670589874`
+red, `mergeStateStatus: BLOCKED`, protection read back `strict: true` with the
+sole context `merge-gate`, closed unmerged with its refs deleted. §9 item 9
+carries the lane detail.
 
 ---
 
@@ -565,9 +570,8 @@ All five items below are **complete**; the count and the enumeration match.
    dropped from the table silently. **Nothing about the device-inbox conformance
    fixtures remains open.** What this does NOT cover is item 12: capability and
    error contracts still have no fixture and no gate.
-9. **Observe required-check enforcement on a real pull request** (§2). Both
-   original halves are now closed by observation; the item itself stays open on
-   the narrower evidence named at the end.
+9. **Observe required-check enforcement on a real pull request** (§2).
+   **CLOSED — every half is now closed by observation rather than derivation.**
 
    **The "shown as required" half is closed.** `ACTIVE-WORK.md` records PR #25
    merging with the then-required bare `wire-vectors` check reporting
@@ -578,10 +582,23 @@ All five items below are **complete**; the count and the enumeration match.
    than by derivation from the settings.** A never-merged red probe — PR #38,
    exact head `33e4e3b5`, run `32660811500` — was observed at
    `mergeStateStatus: BLOCKED` with `merge-gate` red, and was then closed
-   unmerged. It ran under the two-context set protection edit A left, so **no
-   second red probe has yet been run against the sole-`merge-gate` protection
-   edit B installed**; that repeat is still pending and is likewise not inferred
-   from the settings. Either observation means an intentionally red pull
+   unmerged. It ran under the two-context set protection edit A left, which
+   cannot separate the aggregate's authority from the bare `wire-vectors`
+   requirement — so a **second** probe was run against the shipped
+   sole-`merge-gate` protection and it is what actually closes this half. PR #41,
+   exact head `cedec269c3d6d3d34f69e058bf89815a553fe405`, aggregate run
+   `32670589874`, conclusion `failure`: one deterministic invalid health
+   `successBody` selected the `ops-contract` lane, and `ops-contract /
+   go-contract`, `repo-hygiene / ops-deploy-contract-policy` and the top-level
+   `merge-gate` all went red while `compat / wire-vectors` and every other
+   applicable `repo-hygiene` job stayed green and the `web`, `go`, `macos`,
+   `ios`, `swift-package`, `native-web-pairing` and `contracts` lanes skipped.
+   GitHub reported `mergeStateStatus: BLOCKED` while protection read back
+   `strict: true` with the sole context `merge-gate`; the probe was closed
+   unmerged (`mergedAt: null`) and its refs and worktree deleted. The second red,
+   from the always-on declarative consumer, is the designed behaviour of a
+   contract with two independent readers, not an unrelated failure. Either
+   observation means an intentionally red pull
    request observed at `mergeStateStatus: BLOCKED`, with the head commit's
    check-runs enumerated directly — never `statusCheckRollup`, which is
    presentation state and was once misread as "all checks successful" on a pull
@@ -610,17 +627,20 @@ All five items below are **complete**; the count and the enumeration match.
    back as `strict: true` with exactly those contexts. `compat.yml` was folded in
    as an unconditional called lane first — PR #39, head `9d6ba08c`, aggregate run
    `32665499037` — so the rename of its check never left a required context
-   reported by nothing. Its direct `pull_request:` entry is then removed in
-   source, while `push: branches: [main]`, `workflow_dispatch:` and
-   `workflow_call:` stay permanently: that `push: main` run is the bare
-   `wire-vectors` check `promote.sh` reads (§7), a promotion signal rather than a
-   pull-request context. The staged migration and its current position are in
-   `docs/CI-PLATFORM-BOUNDARY.md`.
+   reported by nothing. Its direct `pull_request:` entry was then removed in
+   PR #40, head `6c4b8e3d`, merged as `91768dc0`, while `push: branches: [main]`,
+   `workflow_dispatch:` and `workflow_call:` stay permanently: that `push: main`
+   run is the bare `wire-vectors` check `promote.sh` reads (§7), a promotion
+   signal rather than a pull-request context. The staged migration is complete
+   and recorded in `docs/CI-PLATFORM-BOUNDARY.md`.
 
-   **This item does not close yet.** Two pieces of evidence are outstanding and
-   are not claimed here: the hosted run proving compat reports exactly once per
-   pull request with the aggregate judging that single called lane, and the
-   second red probe against the sole-`merge-gate` protection described above.
+   **This item is closed.** Both outstanding pieces of evidence were produced.
+   PR #40's sole `merge-gate` run `32668325620` was green 45/45 with **no
+   separate direct compat run** — compat now reports exactly once per pull
+   request and the aggregate judges that single called lane. PR #41 then supplied
+   the second red probe against the sole-`merge-gate` protection, described
+   above. Nothing about required-check enforcement remains derived from a
+   settings read-back.
 
    **One cost this creates, and it is the owner's to price rather than inherit:**
    `strict: true` plus a required aggregate means every merge to `main`
