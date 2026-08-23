@@ -58,11 +58,14 @@ disagree; it never spawns them.
 ## Consumers
 
 `consumers` is a **status** list, not a membership list: each entry carries the
-repository it lives in, whether its enforcement is `active` or `pending`, and the
-reader that performs it. The `relayium-ops` half now exists and is recorded as
-**active**: `deploy/test/ops-deploy-contract-test.sh` reads this document and
-holds the deploy script's own literals to it. It is verified in that repository,
-not here — nothing on this side can open it.
+repository it lives in, its enforcement status, and the reader that performs it.
+Every consumer is now `active`, and `active` is the only term left in
+`vocabularies.consumerStatuses`: the roll carried a `pending` row until B1's
+reader existed, and that term was removed together with it rather than left
+available to an edit nobody reviewed for it. The `relayium-ops` half now exists
+and is recorded as **active**: `deploy/test/ops-deploy-contract-test.sh` reads
+this document and holds the deploy script's own literals to it. It is verified
+in that repository, not here — nothing on this side can open it.
 
 | Consumer | Status | Repository | Reader, and where it runs |
 | -------- | ------ | ---------- | ------------------------- |
@@ -78,11 +81,17 @@ not declare. The `Repository` and `Reader` columns are documentation — read as
 free-form Markdown by a person, not by the test.
 
 The rules that hold the roll to reality are in the JSON, not in this page: an
-`active` consumer must name a reader and a `pending` one must not; a reader in
-this repository must be tracked, must exist on disk, and must still name
-`contracts/ops-deploy-v1.json` verbatim; and every reader that actually runs here
-must appear on the roll as `active`. The policy carries its own list of those
-local readers, so one cannot keep running while being dropped from the document.
+`active` consumer must name a reader; a reader in this repository must be
+tracked, must exist on disk, and must still name `contracts/ops-deploy-v1.json`
+verbatim; and every reader that actually runs here must appear on the roll as
+`active`. The policy carries its own list of those local readers, so one cannot
+keep running while being dropped from the document.
+
+Those status rules are written generically rather than against today's single
+term. Recording enforcement that does not run yet means adding a status back to
+`vocabularies.consumerStatuses` in the same reviewed contract change — and a
+term nothing uses is itself a failure, so the vocabulary cannot grow ahead of
+the roll.
 
 Nothing checks the sentences around the table, here or anywhere else. Prose is
 not an interface: a rule that held English phrases in a hand-picked set of files

@@ -11,7 +11,7 @@
     "artifactKinds": ["directory", "executable", "symlink"],
     "bodyTerminators": ["newline", "none"],
     "consumerRepositories": ["relayium", "relayium-ops"],
-    "consumerStatuses": ["active", "pending"],
+    "consumerStatuses": ["active"],
     "inputClasses": ["directoryPrefix", "file"],
     "methodPolicies": ["any"],
     "pathKinds": ["childOf", "exact"],
