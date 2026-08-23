@@ -17,7 +17,7 @@ builds, tests, signs and releases it.
 | ------------------- | ---------------------- | ---------- |
 | `apps/mac/`         | `.github/workflows/macos.yml` | `macos-15` |
 | `apps/ios/`         | `.github/workflows/ios.yml`   | `macos-15` |
-| `apps/RelayiumKit/` | *shared — see below*   | —          |
+| `apps/RelayiumKit/` | *shared — see [below](#the-shared-swift-package-source-tests-and-fixtures)* | `macos-15` for its own suite |
 
 Path filters in GitHub Actions are per-**workflow**, never per-job. No
 arrangement of jobs, `if:` conditions or matrices inside one file can make two
@@ -62,13 +62,188 @@ as cross-platform — adding it to every platform's filter — and the expensive
 is to treat a cross-platform contract as one platform's business, which is how a
 new client ships against a wire nobody re-checked.
 
+## The shared Swift package: source, tests and fixtures
+
+`apps/RelayiumKit/` is one directory and **three different kinds of input**, and
+treating it as one tree cost three macOS runners on every test-only commit.
+
+| Part | Who compiles or reads it |
+| ---- | ------------------------ |
+| `Sources/**`, `Package.swift`, `Package.resolved` | both app targets, the pairing acceptance's `LocalTransferPeer`, and the package's own suite |
+| `Tests/RelayiumKitTests/**` | the package's own suite, and nothing else |
+| `Tests/Fixtures/**` | the package's own suite, plus **named** Go and Web tests |
+
+`xcodebuild` compiles the package's **library products**, never its test target.
+No release script under `apps/mac/scripts/` opens a file in it. `swift build
+--product LocalTransferPeer` — all the pairing acceptance builds of the package —
+does not build it either. So a file under `Tests/` is an input to exactly one
+thing: `swift test`.
+
+Until `swift-package.yml` existed, the repository's only unfiltered `swift test`
+lived in `macos.yml`'s `test` job. That made the package's suite reachable *only*
+by starting the macOS workflow, which made the package's tests something the
+macOS filter had to name — and `ios.yml` and `native-web-pairing.yml` carried the
+same tree for the same reason. Adding one XCTest case started two full
+`xcodebuild` graphs, a simulator UI smoke, three acceptance runs and a 45-minute
+Swift + Go + Chrome pairing runner, and **not one of them could observe the
+change.**
+
+### Ownership matrix
+
+| Change | Starts (path-filtered workflows) |
+| ------ | -------------------------------- |
+| `Sources/**`, `Package.swift`, `Package.resolved` | `swift-package.yml`, `macos.yml`, `ios.yml`, `native-web-pairing.yml` |
+| `Tests/RelayiumKitTests/**` (any test, guards included) | `swift-package.yml` |
+| `Tests/Fixtures/device-inbox-manifest-v3-vectors.json` | `swift-package.yml`, `go.yml`, `web.yml` |
+| `Tests/Fixtures/crypto-vectors.json` | `swift-package.yml`, `web.yml` |
+| `Tests/Fixtures/realtime-wire-vectors.json` | `swift-package.yml`, `web.yml` |
+| `Tests/Fixtures/store-wire-vectors.json`, `Tests/Fixtures/account/**` | `swift-package.yml` |
+
+`compat.yml` and `repo-hygiene.yml` are unfiltered and run on **every** row
+above, and on everything else. They are omitted for that reason, not because
+they are optional.
+
+`swift-package.yml` watches `apps/RelayiumKit/**` with **no exclusion** and runs
+one job: the repository's **sole unfiltered `swift test`**. `ios.yml` still runs
+five named `--filter` selectors over `apps/ios` guards — that is the *other*
+direction, an `apps/ios/**` change, which `swift-package.yml` does not watch —
+and `macos.yml` runs no `swift test` at all any more. The uniqueness is asserted
+both structurally over the parsed workflows and as a text scan over every
+workflow file on disk, because a workflow the policy does not parse can run
+`swift test` just as well as one it does.
+
+### The ordered negation, and why order is load-bearing
+
+`macos.yml`, `ios.yml` and `native-web-pairing.yml` each keep
+`apps/RelayiumKit/**` and follow it with:
+
+```yaml
+      - 'apps/RelayiumKit/**'
+      - '!apps/RelayiumKit/Tests/**'
+```
+
+GitHub evaluates a `paths:` list **against each changed file, in order, and the
+last pattern that matches decides**. A `!` entry excludes; a later positive entry
+re-includes what an earlier `!` excluded; a file no pattern matches does not
+match at all. Three consequences, each enforced rather than remembered:
+
+* **Swapping the two lines silently undoes the exclusion** — the negation matches
+  first and the positive immediately overrides it. Valid YAML, happy
+  `actionlint`, and a diff that reads as a reordering.
+* **A filter of nothing but `!` entries matches no file at all**, so its workflow
+  never runs — which reports as *no check*, not as a red one. Every filtered
+  workflow must carry at least one positive pattern.
+* **A negation that is present, correctly ordered and simply wrong** — narrowed
+  to `!…/Tests/Fixtures/**`, or pointing at a renamed directory — passes every
+  literal list check. So the filters are compiled to regular expressions and
+  evaluated against real file paths, in both directions: an ordinary test must
+  reach no heavy lane, and the package's *source* must still reach all of them.
+
+### Mixed diffs still start everything
+
+A commit touching package **source and** package tests starts every heavy lane,
+because the source file is still a positive match and **one matching file is
+enough to start a workflow**. The isolation is about test-**only** and
+fixture-**only** changes; it never makes a real source change cheaper to merge.
+Three mixed diffs are asserted explicitly so a future "further optimisation"
+cannot quietly turn it into a source-change skip:
+
+| Diff | Starts |
+| ---- | ------ |
+| `Sources/…/SealedBox.swift` + `Tests/…/SealedBoxTests.swift` | `swift-package.yml`, `macos.yml`, `ios.yml`, `native-web-pairing.yml` |
+| `Tests/…/InboxManifestTests.swift` + `Tests/Fixtures/device-inbox-manifest-v3-vectors.json` | `swift-package.yml`, `go.yml`, `web.yml` |
+| `apps/mac/…/AccountView.swift` + `Tests/…/AeadTests.swift` | `macos.yml`, `swift-package.yml` |
+
+### Why the pairing acceptance excludes the fixtures too
+
+`native-web-pairing.yml`'s exclusion is `!apps/RelayiumKit/Tests/**`, and it does
+**not** re-include `Tests/Fixtures/` below it.
+
+The acceptance is the **live** half of the cross-client contract: it starts a
+real server, mints a real pairing code through `/api/pair`, and drives a Swift
+peer and a real headless Chrome against each other in both role assignments. It
+reads no vector file, so a fixture edit cannot change its outcome — it would only
+buy a 45-minute macOS runner for evidence the run cannot produce.
+
+The **frozen-bytes** half of that same contract has its own owners, none of them
+a macOS runner: `compat.yml` regenerates the vectors from the Web implementation
+and requires zero diff, unfiltered, on every commit; and the Swift, Go and
+TypeScript suites read the tracked bytes in their own lanes. Live agreement and
+frozen agreement are separate evidence with separate owners, and collapsing them
+into one filter is what put a seconds-long check behind a macOS runner before.
+
+Re-inclusion is rejected explicitly rather than left to taste:
+`apps/RelayiumKit/Tests/**`, `…/Tests/Fixtures/**`, `…/Tests/Fixtures/*` and
+`…/Tests/Fixtures/*.json` are each named as forbidden entries in every filtered
+workflow but the package's own.
+
+### Why `go.yml` and `web.yml` name exact fixture paths
+
+The fixtures live inside the subtree three heavy workflows exclude — and they are
+genuine inputs to tests in **other languages**, which run in workflows that are
+not macOS lanes. Those workflows name the individual files:
+
+| Fixture | Read by | Named in |
+| ------- | ------- | -------- |
+| `device-inbox-manifest-v3-vectors.json` | `server/internal/inboxmanifest/vectors_test.go` | `go.yml` |
+| `device-inbox-manifest-v3-vectors.json` | `web/src/lib/inbox-manifest.test.ts` | `web.yml` |
+| `crypto-vectors.json` | `web/src/lib/caps-vectors.test.ts`, `web/src/lib/text-vectors.test.ts` | `web.yml` |
+| `realtime-wire-vectors.json` | the same two Web suites | `web.yml` |
+
+Each of those tests opens the file from disk and asserts its own implementation
+still agrees with the frozen bytes, so the fixture is an input to that suite
+exactly like a source file. Without the entry, a regenerated vector lands having
+never run the Go or TypeScript half of the contract, and the failure surfaces
+later against an innocent commit that happened to touch `server/**` or `web/**`.
+
+**One path at a time, never the directory.** `store-wire-vectors.json` sits in
+that same directory and is deliberately absent from both filters: its only
+non-Swift consumer is `web/scripts/check-wire-vectors.mjs`, which runs in the
+**unfiltered** `compat.yml` — and a workflow with no path filter cannot be made
+to miss a file. Naming the directory would start the eight-shard Go race lane, or
+the full web suite plus the accessibility scan and three headless-Chrome
+journeys, on every Swift test edit.
+
+The claim that these files are inputs is not taken on trust either. The policy
+**reads the consuming source** and requires it to still name the fixture, so a
+test that quietly stops reading its vector shows up as a filter charging a full
+suite for a file nobody opens — the direction that decays without anyone editing
+a workflow.
+
+### When `contracts/**` appears
+
+There is **no `contracts/` directory in this repository today**, and nothing here
+is evidence about one. This is the rule that applies on the day one is created,
+recorded because a cross-language contract tree is exactly the shape that gets
+added to one platform's filter and then quietly owned by nobody.
+
+A `contracts/**` tree — schemas, wire definitions, generated-code inputs, or
+anything else two independent implementations must agree on — is **truly
+cross-platform**, not Apple-shared. On the commit that creates it:
+
+* every workflow whose suite **reads or generates from** a file under it names
+  that file, or that subtree, in its own path filter — the same input test as
+  rule 3 above, and the same one-path-at-a-time discipline the fixtures get;
+* the always-on `compat.yml` gate is extended to judge the contract itself if the
+  agreement is checkable in seconds on `ubuntu-latest`, so no platform can bypass
+  it by existing;
+* an ownership row in `scripts/test/swift-ci-boundary-test.mjs` (for a Swift
+  consumer) or `PATH_MATRIX` in `scripts/test/ci-event-policy-test.mjs` states
+  the exact set of workflows the tree starts, and a mutation proves that row can
+  fail. A contract tree that starts nothing is a contract nobody re-checks;
+* it does **not** go into a heavy Apple filter merely because Swift consumes it.
+  If a Swift target reads it, `swift-package.yml` is the lane that proves the
+  Swift side still compiles and passes — the same separation that put the
+  package's own tests there.
+
+
 ## Fast compatibility gates vs heavy builds
 
 Two kinds of CI work, two sets of rules:
 
 |                | Fast compatibility gate        | Heavy platform build                 |
 | -------------- | ------------------------------ | ------------------------------------ |
-| Example        | `compat.yml`                   | `macos.yml`, `ios.yml`, `native-web-pairing.yml` |
+| Example        | `compat.yml`                   | `macos.yml`, `ios.yml`, `native-web-pairing.yml`, `swift-package.yml` |
 | Runner         | `ubuntu-latest`                | `macos-15` (and any future platform runner) |
 | Path filter    | **none** — always runs         | narrow, and names its real inputs    |
 | Dependencies   | production closure only, from the lockfile | whatever the platform build needs |
@@ -220,11 +395,14 @@ headless Chrome on the real built bundle in another, in both role assignments.
 
 It therefore watches several trees it does not own, and every one of them is a
 real input — something the run reads, compiles or serves:
-`apps/RelayiumKit/**` (the Swift half it compiles: `swift build --product
-LocalTransferPeer`), `web/**` (the bundle it `vite build`s and serves),
+`apps/RelayiumKit/**` **minus `!apps/RelayiumKit/Tests/**`** (the Swift half it
+compiles: `swift build --product LocalTransferPeer` builds *products* and never
+the package's test target), `web/**` (the bundle it `vite build`s and serves),
 `server/**` (the real hub it starts), and the two scripts it actually sources —
 `scripts/native-web-pairing-acceptance.sh` and `scripts/lib/local-acceptance.sh`,
-named one file at a time.
+named one file at a time. The exclusion, its ordering and the fact that the
+fixtures are *not* re-included below it are covered
+[above](#why-the-pairing-acceptance-excludes-the-fixtures-too).
 
 It does **not** watch `apps/ios/**`. Nothing under that root is an input to the
 run, so an iOS-only change would start a 45-minute macOS runner that builds
@@ -352,12 +530,27 @@ is happy with all of it:
 * `continue-on-error: true` on the compatibility gate;
 * a placeholder platform workflow whose only step is `echo`;
 * the wire-vector command deleted, or duplicated into a second workflow;
-* the concurrency group moved back to `github.ref`.
+* the concurrency group moved back to `github.ref`;
+* `!apps/RelayiumKit/Tests/**` deleted, narrowed, widened until the package's own
+  source stops triggering, or **moved one line up**, where it is overridden by
+  the pattern it qualifies and does nothing;
+* a positive glob added *below* that exclusion, re-including the fixtures into a
+  45-minute macOS runner that never opens one;
+* a filter left with nothing but `!` entries, so its workflow never runs at all —
+  which reports as no check rather than as a red one;
+* the unfiltered `swift test` deleted, filtered, or duplicated back into
+  `macos.yml`;
+* one of the four named fixture entries dropped from `go.yml` or `web.yml`, or
+  the four replaced by the directory they live in;
+* a new `macos-15` job landing in a governed workflow that `RUNNER_BUDGETS`
+  covers nowhere.
 
 The next signal after any of those is a cross-client regression reaching a user,
 or a bill. So the boundary is asserted in code, on every pull request and every
-`main` push, by `scripts/test/ci-event-policy-test.mjs` (run from
-`repo-hygiene.yml`, which has no path filter of its own):
+`main` push, by two policies — `scripts/test/ci-event-policy-test.mjs` for the
+repository-wide rules (triggers, concurrency, platform roots, runner budgets) and
+`scripts/test/swift-ci-boundary-test.mjs` for who owns `apps/RelayiumKit/` — both
+run from `repo-hygiene.yml`, which has no path filter of its own:
 
 * platform roots discovered by **reading `apps/` from disk**, so a new root
   cannot be added without the policy noticing;
@@ -369,25 +562,43 @@ or a bill. So the boundary is asserted in code, on every pull request and every
   policy check that cannot fail is the most expensive kind of green — including
   cases that assert an **absence**, so a marker appearing only in a `run:`
   block's shell comment cannot make a workflow look like a platform's owner;
-* a **self-host check**: the policy asserts that `repo-hygiene.yml` still has an
-  unfiltered, non-skippable, non-advisory job actually running
-  `node scripts/test/ci-event-policy-test.mjs`, and mutations prove that
-  deleting, softening or skipping it is reported. Everything above is worth
-  exactly what its execution is worth, and deleting one step is the cheapest way
-  to silence all of it while the board stays green.
+* a **self-host check** in each policy: it asserts that `repo-hygiene.yml` still
+  has an unfiltered, non-skippable, non-advisory job with a declared finite bound
+  actually running its own command, and mutations prove that deleting, softening
+  or skipping it is reported. Everything above is worth exactly what its
+  execution is worth, and deleting one step is the cheapest way to silence all of
+  it while the board stays green.
 
-  One gap is stated rather than asserted: `repo-hygiene.yml`'s jobs declare no
-  `timeout-minutes` and inherit GitHub's six-hour default, so the self-host check
-  does not require a declared bound. Adding `timeout-minutes: 10` to the
-  `ci-event-policy` job and the matching assertion is a one-line follow-up.
+  Not every job in `repo-hygiene.yml` declares `timeout-minutes` yet; the ones
+  hosting these two policies do, and only those are asserted.
 
 Change the boundary and you change that file in the same commit. If this document
 and the test disagree, the test is the boundary and this document is stale — fix
 the document.
 
+### What has been observed, and what has not
+
+The `swift-package.yml` split, the three ordered exclusions and the four fixture
+entries are asserted **locally**: `actionlint` accepts every workflow, the guard
+tests pass, every new rule is broken in memory by its own mutation on every run,
+eleven of them were additionally broken on disk in the real workflow files and
+each produced its own diagnostic, and `swift test` was run once from
+`apps/RelayiumKit` — 4320 tests, one skipped, no failures.
+
+**No hosted run of `swift-package.yml` has been observed**, and no GitHub Actions
+run of any kind has yet exercised the new filters. The claims above about which
+workflows start for which change are derived from GitHub's documented
+last-match-wins `paths:` semantics, compiled and evaluated by the guard tests —
+not from a run log. Nothing here should be read as evidence that the hosted
+behaviour has been confirmed; that is confirmed by the first pull request that
+touches only `apps/RelayiumKit/Tests/`, and the checks it starts.
+
 ## See also
 
 * `.github/workflows/compat.yml` — the always-on gate
+* `.github/workflows/swift-package.yml` — the shared package's own suite, and the
+  sole owner of an unfiltered `swift test`
+* `scripts/test/swift-ci-boundary-test.mjs` — who owns `apps/RelayiumKit/`, in code
 * `.github/workflows/macos.yml`, `.github/workflows/ios.yml` — the heavy owners
 * `.github/workflows/native-web-pairing.yml` — the cross-client acceptance
 * `.github/workflows/repo-hygiene.yml` — the unfiltered host that runs the two

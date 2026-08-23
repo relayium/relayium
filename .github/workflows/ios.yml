@@ -16,6 +16,29 @@ name: ios
 #   apps/RelayiumKit/**  the SHARED package both native apps compile against;
 #                        it is deliberately in this filter AND in macos.yml's,
 #                        because a change there can break either app alone
+#                        …minus `!apps/RelayiumKit/Tests/**`, which follows it.
+#                        GitHub applies a `paths:` list per file in order with
+#                        the LAST match winning, so the package's SOURCE still
+#                        starts this workflow and its XCTest target and
+#                        fixtures no longer do. `xcodebuild` compiles the
+#                        package's library products, never its test target, so
+#                        a test-only edit started two full xcodebuild graphs, a
+#                        simulator UI smoke and three acceptance runs that
+#                        could not observe it.
+#
+#                        That is not a coverage loss, including for the five
+#                        iOS guard selectors below, which ARE files under
+#                        `apps/RelayiumKit/Tests/`: editing one of them starts
+#                        `swift-package.yml`, whose unfiltered `swift test`
+#                        runs those very classes along with the rest of the
+#                        suite. This workflow runs them for the other
+#                        direction — an `apps/ios/**` change, which
+#                        `swift-package.yml` does not watch.
+#
+#                        A MIXED diff — package source plus package tests in
+#                        one commit — still starts this workflow, because the
+#                        source file remains a positive match and one match is
+#                        enough.
 #   scripts/...          the three acceptance runs below and the isolation
 #                        library they are built from, named one file at a time
 #                        rather than as `scripts/**` so a Go-shard or
@@ -39,9 +62,15 @@ on:
     # `native-web-pairing.yml` already do it. Two hand-maintained copies drift,
     # and a filter that is narrower on `pull_request` than on `push` is a gate
     # that passes on the branch and is simply not run after the merge.
+    #
+    # ORDER IS LOAD-BEARING: the last pattern that matches a given file wins,
+    # so the negation must FOLLOW `apps/RelayiumKit/**`. Swapping the two
+    # leaves the YAML valid, leaves actionlint happy, and silently restores the
+    # runs it exists to remove.
     paths: &paths
       - 'apps/ios/**'
       - 'apps/RelayiumKit/**'
+      - '!apps/RelayiumKit/Tests/**'
       - 'scripts/ios-ui-session-acceptance.sh'
       - 'scripts/local-transfer-acceptance.sh'
       - 'scripts/local-transfer-cleanup-test.sh'

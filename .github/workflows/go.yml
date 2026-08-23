@@ -17,6 +17,20 @@ on:
       - 'server/**'
       - 'scripts/go-race-shard.go'
       - 'scripts/test/db-rollback-harness.sh'
+      # One frozen-bytes fixture, named one file at a time.
+      # `server/internal/inboxmanifest/vectors_test.go` reads it directly at
+      # `../../../apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json`
+      # and asserts the Go manifest implementation still agrees with it, so the
+      # file is an input to this suite exactly like a `.go` file is. Without
+      # this line an edit to those vectors lands having never run the Go half of
+      # the cross-language contract, and the failure surfaces later against an
+      # innocent commit that happened to touch `server/**`.
+      #
+      # Deliberately NOT `apps/RelayiumKit/**` or the whole `Tests/Fixtures/`
+      # tree: no other file in that package is an input to any Go test, and
+      # either glob would start the entire eight-shard race lane on every Swift
+      # edit. `swift-package.yml` owns the package; this is one file it shares.
+      - 'apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json'
       # The fuzz campaign's own two files. Neither runs here — the campaign is
       # scheduled, never gating (see .github/workflows/go-fuzz-nightly.yml) —
       # but an edit to either must still start THIS workflow, because that is
@@ -32,6 +46,20 @@ on:
       - 'server/**'
       - 'scripts/go-race-shard.go'
       - 'scripts/test/db-rollback-harness.sh'
+      # One frozen-bytes fixture, named one file at a time.
+      # `server/internal/inboxmanifest/vectors_test.go` reads it directly at
+      # `../../../apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json`
+      # and asserts the Go manifest implementation still agrees with it, so the
+      # file is an input to this suite exactly like a `.go` file is. Without
+      # this line an edit to those vectors lands having never run the Go half of
+      # the cross-language contract, and the failure surfaces later against an
+      # innocent commit that happened to touch `server/**`.
+      #
+      # Deliberately NOT `apps/RelayiumKit/**` or the whole `Tests/Fixtures/`
+      # tree: no other file in that package is an input to any Go test, and
+      # either glob would start the entire eight-shard race lane on every Swift
+      # edit. `swift-package.yml` owns the package; this is one file it shares.
+      - 'apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json'
       # The fuzz campaign's own two files. Neither runs here — the campaign is
       # scheduled, never gating (see .github/workflows/go-fuzz-nightly.yml) —
       # but an edit to either must still start THIS workflow, because that is
