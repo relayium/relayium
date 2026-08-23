@@ -17,12 +17,16 @@ the product side moves:
   has already decided the release is going out;
 * a changed readiness body or status turns a healthy release into a rollback.
 
-Phase A published and proved the contract on the product side. Phase B1 added
-the `relayium-ops` reader that compares the deploy script's own literals to this
-document, and phase B2 activates its row on the consumer roll below. A
-serialized phase B3 is still outstanding: it must vendor this exact product
-commit into `relayium-ops` and tighten enforcement there, so the
-cross-repository item is **not** complete yet. Nothing on this side changed
+Phase A published and proved the contract on the product side — merged as
+`761a7646`, with the ops consumer's row activated on `main` by the later merge
+`a98368f7`. The `relayium-ops` rollout behind it is **complete**: B1 added the
+reader that compares the deploy script's own literals to this document, B2
+activated its row on the consumer roll below, B3 vendored this repository's exact
+contract object into `relayium-ops` and turned that reader's transitional
+self-consistency into unconditional enforcement (ops PR #5, merged `d4737c84`),
+and B4 put the vendored copy in front of promotion (ops PR #6, merged
+`f323ae41`). Each phase landed on its own serialized lease, so neither side ever
+published enforcement the other did not yet have. Nothing on this side changed
 behaviour to create the contract.
 
 ## What is frozen, and only what is frozen
@@ -116,7 +120,29 @@ real `http.ServeMux`, with the real route patterns. It deliberately declares no
 handler of its own: a copy compared to a copy keeps passing after the server it
 describes has changed, which is the failure this contract exists to remove. For
 the method surface it goes further and drives them through a real
-`httptest.Server` and `http.Client`, for the reason in the next section.
+`httptest.Server` and `http.Client`, for the reason under
+[`successBody` is the non-HEAD wire body](#successbody-is-the-non-head-wire-body).
+
+### What the ops half does with the bytes
+
+It does not read this document over the network, or out of whichever checkout
+happens to be current. It **vendors the exact Git object** for this file at a
+named product commit, records that commit in its own `SOURCE`, and proves the
+vendored bytes against it before using them. Enforcement there is unconditional
+rather than transitional: the `ops` row must be active, must belong to
+`relayium-ops`, and must name the reader that actually runs.
+
+That same vendored copy is now also read **before a promotion**. The target
+product commit's `contracts/ops-deploy-v1.json` is compared against it ahead of
+any hosted-check call and any pin write: an exact match is promotable, a present
+but different contract is refused as drift, and a commit from before this
+document existed stays promotable only where strict canonical committed-pin
+history proves it was pinned — unknowable tree evidence is a refusal, never an
+absence. The ordering is the point; a comparison made after the pin moves can
+only report the damage. None of that freezes promotion policy here, which stays
+[deliberately absent](#deliberately-absent) — what the gate compares is this
+document, not a rule this document states about promoting. The mechanism, its
+tests and its evidence live in `relayium-ops`.
 
 ## How drift is detected rather than restated
 

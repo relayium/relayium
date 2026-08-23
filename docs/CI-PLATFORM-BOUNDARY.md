@@ -221,12 +221,16 @@ a workflow.
 
 Both are root-level, versioned, runtime-neutral documents that their consumers
 parse independently and compare to what they already ship. The second one's
-consumer set is a **status** list — enforcement that is planned is recorded as
-such rather than published as current — and `ops-deploy-contract-test.mjs` holds
-that list to the readers that actually run. This page deliberately keeps no copy
-of it, not even a count: a restatement here is a page nobody edits when a phase
-lands, and no test reads English, so it would simply be wrong and stay wrong.
-That is how these two came to contradict each other once already.
+consumer set is a **status** list — enforcement is recorded at the state it has
+actually reached rather than at the state it is heading for — and
+`ops-deploy-contract-test.mjs` holds that list to the readers that actually run.
+Every declared consumer is `active` today, and the transitional term the roll
+once carried was retired together with the row that used it, so recording future
+enforcement means adding a status back in the same reviewed contract change. This
+page deliberately keeps no copy of it, not even a count: a restatement here is a
+page nobody edits when a phase lands, and no test reads English, so it would
+simply be wrong and stay wrong. That is how these two came to contradict each
+other once already.
 
 A contract tree is **truly cross-platform**, not Apple-shared, and it does not go
 into a heavy Apple filter merely because Swift consumes it.
@@ -505,6 +509,20 @@ has been observed blocked while the check is red**. That observation is tracked
 as an open item (`docs/ARCHITECTURE-RESILIENCE.md` §9, P1) and should be closed
 on the next real pull request rather than assumed from the settings.
 
+**And one required context is all there is.** `wire-vectors` is the only context
+`main` protection requires. Every path-filtered lane on this page —
+`swift-package`, `ops-deploy-contract`, `contracts`, `go`, `web`, the heavy Apple
+owners — is fail-closed **as a workflow** and reports red when it runs, but none
+of them is required at merge time, and `repo-hygiene` is unfiltered without being
+required either. A lane that never starts and a lane that was skipped are the
+same absence to branch protection, so there is **no always-present, fail-closed
+aggregate status** that can say "every lane this diff selected finished green" —
+which is exactly why making a path-filtered check directly required would block
+every diff that legitimately does not select it. Designing that aggregate gate is
+its own scoped task, deliberately not attempted here; until it exists **and** a
+red required check has been observed actually blocking a merge, the required-gate
+half of this boundary is incomplete, and this page does not claim otherwise.
+
 **What belongs in the fast lane:** a check that is seconds long, needs no
 platform runner, and asserts that two independent implementations of one wire
 still agree. **What does not:** anything that builds or signs a platform
@@ -710,13 +728,20 @@ eleven of them were additionally broken on disk in the real workflow files and
 each produced its own diagnostic, and `swift test` was run once from
 `apps/RelayiumKit` — 4320 tests, one skipped, no failures.
 
-**No hosted run of `swift-package.yml` has been observed**, and no GitHub Actions
-run of any kind has yet exercised the new filters. The claims above about which
-workflows start for which change are derived from GitHub's documented
-last-match-wins `paths:` semantics, compiled and evaluated by the guard tests —
-not from a run log. Nothing here should be read as evidence that the hosted
-behaviour has been confirmed; that is confirmed by the first pull request that
-touches only `apps/RelayiumKit/Tests/`, and the checks it starts.
+**The test-only row has since been observed hosted, and is no longer a
+derivation.** The split merged as `d0ae53cb` (PR #23), and a throwaway PR #24 —
+changing exactly one file under `apps/RelayiumKit/Tests/`, never merged — started
+`compat`, `repo-hygiene` and `swift-package`, and **nothing else**: no macOS, no
+iOS, no native pairing, no Go and no Web lane. That is the observation this
+section previously said was missing, so any statement that no hosted run of
+`swift-package.yml` exists is **stale and superseded**.
+
+**The other rows are still derived rather than run.** Fixture-only changes, the
+three mixed diffs and the heavy lanes' own re-inclusion behaviour come from
+GitHub's documented last-match-wins `paths:` semantics, compiled and evaluated by
+the guard tests — not from a run log. One hosted probe of one row is evidence
+about that row; it is not evidence that every filter in the matrix behaves as
+written.
 
 ## See also
 
