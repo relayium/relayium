@@ -1016,27 +1016,43 @@ final class AppShellUITests: XCTestCase {
     /// recoverable — starting over would spend the user's time and bandwidth
     /// twice for nothing. Nothing before this drove an upload failure at all;
     /// the cell was covered only by the signed-out account remedy.
+    ///
+    /// **Why this one does not open the system document browser.** Reaching the
+    /// behavior it is actually about would otherwise mean surviving a five-step
+    /// traversal of a separate process — `DOC.browsingModeTabBar`, Browse, On
+    /// My iPhone, Relayium, the fixture, Open — and hosted CI lost it on exactly
+    /// that traversal rather than on anything to do with uploading. Other setup
+    /// paths in this file still drive that traversal; the point is not that this
+    /// test is the only one exposed to it, but that picker behavior is not what
+    /// this test covers, so this test should not depend on the picker at all.
+    /// The picker itself is not uncovered by dropping it here:
+    /// `testPendingSendNamesTheFileAndItsSizeBeforeTransfer` and
+    /// `testASignedInStoredSendNamesTheFileItWouldUpload` are ABOUT the picker,
+    /// still drive it for real, and are deliberately left alone.
+    /// `--relayium-ui-testing-preselect-fixture` calls the same
+    /// `SendSelectionModel.chooseFiles` callback the real `fileImporter` calls,
+    /// once the account is ready and the upload model is idle, so everything
+    /// this test asserts about is still production code. The `pendingFile.0`
+    /// wait below is that seam's precondition: it fails by name if the
+    /// selection never arrived, instead of letting Send be tapped with nothing
+    /// staged and reporting a missing Resume upload.
     func testAFailedUploadKeepsTheWorkAndOffersToCarryOn() {
         app.terminate()
         app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pending-fixture",
+            + ["--relayium-ui-testing-signed-in",
+               "--relayium-ui-testing-preselect-fixture",
                "--relayium-ui-testing-fail-upload"]
         app.launch()
 
         openTask("Send", title: "Send files")
-        let chooser = app.buttons["Choose Files or Folders…"]
-        XCTAssertTrue(chooser.waitForExistence(timeout: 15))
-        scrollUntilHittable(chooser)
-        chooser.tap()
-        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
-        XCTAssertTrue(browsingTabs.waitForExistence(timeout: 20))
-        browsingTabs.buttons["Browse"].tap()
-        tapInBrowser("On My iPhone")
-        tapInBrowser("Relayium")
-        tapStagedFixture(named: "Relayium product brief")
-        let open = app.buttons["Open"]
-        XCTAssertTrue(open.waitForExistence(timeout: 10))
-        open.tap()
+
+        // The precondition, asserted rather than assumed: Send below is only
+        // meaningful against a file this launch actually staged and selected.
+        let identity = app.descendants(matching: .any)["pendingFile.0"].firstMatch
+        XCTAssertTrue(identity.waitForExistence(timeout: 30),
+                      "the preselected fixture never became a pending send")
+        XCTAssertTrue(identity.label.contains("Relayium product brief.txt"),
+                      "the preselected pending send names something else")
 
         let send = app.scrollViews.buttons["Send"].firstMatch
         XCTAssertTrue(send.waitForExistence(timeout: 15))

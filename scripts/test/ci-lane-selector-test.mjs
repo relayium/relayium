@@ -70,8 +70,26 @@ const workflowsDir = resolve(repoRoot, ".github/workflows");
 const GATE = "merge-gate.yml";
 const SELECT_JOB = "select";
 const GATE_JOB = "merge-gate";
-/** Called with no condition, and therefore not selectable. */
-const UNCONDITIONAL = ["repo-hygiene"];
+/**
+ * Called with no condition, and therefore not selectable.
+ *
+ * ORDER IS LOAD-BEARING: the gate's `UNCONDITIONAL_LANES` shell literal is
+ * compared against this array WITHOUT sorting, so the two are the same sequence
+ * or the check below fails by name.
+ *
+ * `compat` is here rather than among the selector's lanes because `compat.yml`
+ * carries no `paths:` filter at all — a wire-compatibility contract a new
+ * platform can route around by existing is not a contract — so there is nothing
+ * for the selector to select and the gate requires it to SUCCEED on every pull
+ * request. It is also the one called lane that KEEPS its own `pull_request:`
+ * trigger, which is why section 1's ban on that trigger iterates the selector's
+ * lanes rather than every lane the gate calls: `compat.yml` still reports the
+ * bare `wire-vectors` context `main` requires, and removing the direct trigger
+ * before protection stops requiring it would leave that context reported by
+ * nothing. `scripts/test/ci-event-policy-test.mjs` §6o owns the concurrency
+ * discriminator that keeps the two runs from cancelling each other.
+ */
+const UNCONDITIONAL = ["compat", "repo-hygiene"];
 
 const failures = [];
 function check(ok, message) {
@@ -311,7 +329,8 @@ const gateText = (() => {
     return readFileSync(resolve(workflowsDir, GATE), "utf8");
   } catch {
     check(false, `${GATE} is missing. It is the workflow that calls every lane and reports the `
-      + `only context \`main\` can require; without it nothing below is checked and every lane is `
+      + `one always-present context \`main\` can require; without it nothing below is checked and `
+      + `every lane is `
       + `once again unreachable from a pull request.`);
     return null;
   }
@@ -357,7 +376,12 @@ if (gateText !== null) {
     + `from reporting a context nothing requires.`,
   );
 
-  // The conditional callers: exactly the selector's lanes, one `uses:` each.
+  // The callers: exactly the selector's lanes plus the unconditional ones, one
+  // `uses:` each. This list is every job in the gate that declares `uses:`, so
+  // the per-caller rules below — local path, callee on disk, no
+  // `timeout-minutes:`, no `secrets: inherit` — bind the unconditional lanes as
+  // well, and always have. `ci-event-policy-test.mjs` §6n carries the stricter
+  // per-lane rule that only `macos` may be forwarded any secret at all.
   const callerIds = jobIds.filter((id) => /^\s{4}uses:/m.test(jobs.get(id) ?? ""));
   check(
     deepEqual(callerIds.slice().sort(), [...laneIds, ...UNCONDITIONAL].sort()),

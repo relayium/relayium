@@ -130,11 +130,15 @@ const GUARD_TEST = "scripts/test/native-web-pairing-gate-test.mjs";
  * request, CALLS each lane, and reports the one always-present context that can
  * be required.
  *
- * `compat.yml` is deliberately NOT in this list. It still owns its own
- * `pull_request:` trigger and the gate does not call it, because folding it in
- * would rename the `wire-vectors` check that `main`'s protection — and
- * `relayium-ops`' `deploy/promote.sh` — currently require. Section 3c below is
- * unchanged for exactly that reason.
+ * `compat.yml` is deliberately NOT in this list, and the reason narrowed rather
+ * than went away. The gate now DOES call it, as an unconditional lane — but it
+ * also still owns its own `pull_request:` trigger, because the called run
+ * reports as `compat / wire-vectors` while `main`'s protection — and
+ * `relayium-ops`' `deploy/promote.sh` — read the bare `wire-vectors`. Dropping
+ * the direct trigger is the LAST step of that migration, not this one. So this
+ * list stays what it is: the lanes whose only pull-request entry point is the
+ * gate. Section 3c below is unchanged for exactly that reason, and still reads
+ * `compat.yml` on both events.
  */
 const AGGREGATE = "merge-gate.yml";
 const ACCEPTANCE_GATE_JOB = "native-web-pairing";
@@ -777,10 +781,15 @@ function handoffFailures(sources) {
   //     "Always-required" is a property of the workflow FILE and that is all
   //     this section can assert: compat.yml runs on every triggering event and
   //     reports red when the contract breaks. Whether a red result BLOCKS a
-  //     merge is GitHub branch-protection configuration on `main` — the status
-  //     context `compat / wire-vectors` — which lives in repository settings,
-  //     not in this repository's source, and is not asserted anywhere here.
-  //     Nothing below should be read as evidence that it is configured.
+  //     merge is GitHub branch-protection configuration on `main`, which lives
+  //     in repository settings, not in this repository's source, and is not
+  //     asserted anywhere here. That protection currently requires the bare
+  //     `wire-vectors` — reported by compat.yml's OWN `pull_request:` trigger —
+  //     and the top-level `merge-gate`. The CALLED run's context,
+  //     `compat / wire-vectors`, is not itself a required context: it reaches
+  //     the merge button only through the aggregate, which judges the `compat`
+  //     lane's result.
+  //     Nothing below should be read as evidence that any of it is configured.
   const compatWorkflow = sources.get(COMPAT_WORKFLOW);
   if (compatWorkflow === undefined) {
     need(
@@ -1605,8 +1614,10 @@ process.stdout.write(
   + `only in `
   + `${COMPAT_WORKFLOW} — unfiltered on `
   + `push/main and pull_request, on ubuntu-latest, finite, fail-closed in workflow code (whether `
-  + `it BLOCKS a merge is branch protection on the \`compat / wire-vectors\` context, which is `
-  + `not asserted here) and in the verifying form — neither gate may skip or be advisory, `
+  + `it BLOCKS a merge is branch protection on \`main\`, which requires the bare \`wire-vectors\` `
+  + `and \`merge-gate\` contexts — the called \`compat / wire-vectors\` is consumed by the `
+  + `aggregate and is not itself a required context — none of which is asserted here) and in `
+  + `the verifying form — neither gate may skip or be advisory, `
   + `${MUTATIONS.length} mutations prove each of those can fail (and one that a legitimate `
   + `\`--write\` step is not reported), and the acceptance still proves both role assignments, `
   + `the SAS agreement, a real browser against a real server, and a phase barrier that waits for `

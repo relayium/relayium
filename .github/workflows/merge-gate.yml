@@ -30,12 +30,17 @@ name: merge-gate
 #
 # ## Migration state
 #
-# `main` still requires `wire-vectors` and nothing else. This workflow reports
-# but is required by nothing until the protection edit that adds it, and
-# `compat.yml` — which owns `wire-vectors` — is deliberately NOT called here
-# yet, because folding it in renames its check and would leave the current
-# requirement satisfiable by no run at all. docs/CI-PLATFORM-BOUNDARY.md
-# carries the staged order.
+# `main` now requires TWO contexts: `wire-vectors` and `merge-gate`. This
+# workflow is required, and `compat.yml` is called here as an unconditional
+# lane — while ALSO keeping its own `pull_request:` trigger.
+#
+# Both halves of that sentence are the migration. Called, `compat.yml`'s job
+# reports as `compat / wire-vectors`; directly it reports as the bare
+# `wire-vectors`, which is still required. Taking the direct trigger away in the
+# same change would leave `wire-vectors` reported by no run at all, and an
+# absent required context blocks every pull request. So compat runs twice for a
+# few seconds until protection requires `merge-gate` alone.
+# docs/CI-PLATFORM-BOUNDARY.md carries the staged order and where it stands.
 on:
   # Unfiltered, and with no `push:`. `main` is verified by each lane's own
   # `push: branches: [main]` trigger, which every lane keeps: `relayium-ops`'
@@ -198,6 +203,25 @@ jobs:
     if: needs.select.outputs['ops-contract'] == 'true'
     uses: ./.github/workflows/ops-deploy-contract.yml
 
+  # No `if:`, and no path filter in the callee either. This is the
+  # wire-compatibility contract every platform — present and future — has to
+  # pass, so it is judged like `repo-hygiene`: required to SUCCEED on every pull
+  # request, never merely required to be skipped.
+  #
+  # The one lane whose callee ALSO keeps its own `pull_request:` trigger, so on
+  # one pull request `compat.yml` runs twice: here as `compat / wire-vectors`,
+  # and directly as the bare `wire-vectors` that `main` still requires. Removing
+  # the direct trigger before protection stops requiring that context would
+  # leave it reported by nothing. The callee's `concurrency.group` carries a
+  # call-vs-direct discriminator so the two runs cannot cancel each other; see
+  # its own header.
+  #
+  # No `with:` block, so the callee's `concurrency_scope` input takes its
+  # default — which is what names this caller.
+  compat:
+    needs: select
+    uses: ./.github/workflows/compat.yml
+
   # No `if:`. This lane hosts the cross-cutting guards — the trigger policy, the
   # platform boundary, the dependency pins — which every change must pass, so it
   # carries no path filter and gets no condition here either.
@@ -229,6 +253,7 @@ jobs:
       - native-web-pairing
       - contracts
       - ops-contract
+      - compat
       - repo-hygiene
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -265,7 +290,7 @@ jobs:
           # records EXPLICITLY, so nothing here leans on unquoted expansion to
           # do the splitting for it.
           CONDITIONAL_LANES='web go macos ios swift-package native-web-pairing contracts ops-contract'
-          UNCONDITIONAL_LANES='repo-hygiene'
+          UNCONDITIONAL_LANES='compat repo-hygiene'
           SELECT_JOB='select'
 
           conditional_lanes=$(printf '%s' "$CONDITIONAL_LANES" | tr ' ' '\n')

@@ -292,6 +292,14 @@ struct RelayiumApp: App {
         // an authenticated upload would keep running under an account that is
         // gone.
         sending.observe(account.$state)
+        // AFTER `observe`, and the order is the correctness. Both subscribe to
+        // `account.$state`, `@Published` delivers in subscription order, and the
+        // preselection's whole job is to inject only once the model this line
+        // installs has already accepted the ready account. Subscribing first
+        // would mean asking the send model about an account it has not been told
+        // about yet. A no-op without the acceptance argument, and absent from
+        // Release: see `UITestMode.preselectPendingFixture`.
+        UITestMode.preselectPendingFixture(into: sending, upload: uploads, session: account)
         _send = StateObject(wrappedValue: sending)
 
         // The device-delivery half, built from the SAME pending support and
