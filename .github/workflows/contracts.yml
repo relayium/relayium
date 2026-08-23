@@ -1,0 +1,158 @@
+name: contracts
+# The root contract tree's own lane: the smallest command that judges each
+# implementation's agreement with `contracts/**`, and nothing else.
+#
+# ## Why this workflow exists rather than four filter entries
+#
+# `docs/CI-PLATFORM-BOUNDARY.md` recorded, before this tree existed, that every
+# workflow whose suite READS a file under a contract tree should name that file
+# in its own path filter — the discipline `go.yml` and `web.yml` already apply to
+# `device-inbox-manifest-v3-vectors.json`. Applied here that rule would have cost
+# far more than it bought, and the cost is the whole reason this file exists:
+#
+#   * `go.yml` names the manifest fixture and therefore starts the EIGHT-SHARD
+#     race lane on a fixture edit. That is proportionate for bytes the Go
+#     manifest implementation is reproduced against; it is not proportionate for
+#     a JSON document that two `go test` functions read in 60 milliseconds.
+#   * `web.yml` would start the full Vite suite, the accessibility scan and
+#     three headless-Chrome journeys.
+#   * `swift-package.yml` is filtered to exactly `apps/RelayiumKit/**` with no
+#     exclusions, because it is the one workflow that must see EVERY file in the
+#     package. Widening it to reach a tree it does not compile would spend the
+#     whole package suite — a PAID macOS runner — on a contract edit.
+#
+# So the contract tree gets a lane of its own that runs one Go test binary
+# selector, one Vitest file and one `swift test --filter`. A contract-only edit
+# starts THIS, plus the two always-on gates (`compat.yml`, `repo-hygiene.yml`)
+# that carry no path filter and therefore cannot be routed around — and starts no
+# macOS/iOS product build, no signing, no UI test, no native pairing acceptance,
+# no Go race lane and no browser acceptance.
+#
+# The other direction is unchanged and deliberate: the three consumer tests live
+# inside `server/**`, `web/**` and `apps/RelayiumKit/**`, so an ordinary source
+# change in any of those still runs its own owning suite, and that suite still
+# contains the consumer test. Neither lane is a substitute for the other, and
+# `scripts/test/contract-ci-policy-test.mjs` asserts both halves by mutation.
+#
+# ## Why the Swift half is here at all
+#
+# It is a third `swift test` host and a third PAID macOS runner, which
+# `scripts/test/swift-ci-boundary-test.mjs` would otherwise refuse — see the
+# ownership rules it gained for this file. It is costed deliberately: without it
+# a contract edit lands with two of the three implementations compared and the
+# third not, and the Swift disagreement then surfaces later against an innocent
+# commit that happened to touch the package. That is the exact failure the
+# fixture path entries in `go.yml` and `web.yml` exist to prevent, and a contract
+# whose third consumer is checked late is not a contract.
+#
+# Its `swift test` is always FILTERED, to this one test class. The repository's
+# sole UNFILTERED `swift test` remains `swift-package.yml`'s, and the boundary
+# policy still asserts there is exactly one of those.
+on:
+  push:
+    # Only `main`. A branch push would otherwise start this workflow AND its
+    # pull request start a second, identical run of the same commit. The
+    # pull_request trigger below is what gates branch work; this one exists so
+    # `main` itself is never unverified.
+    branches:
+      - main
+    # Two entries, and no exclusion, for the same reason `swift-package.yml`
+    # has two: this lane owns one tree, it must see every file in it, and an
+    # exclusion here would create a contract file with no owner at all.
+    #
+    # The three consumer TESTS are deliberately absent. Each already lives in a
+    # tree its own suite watches, so naming them here would start a second lane —
+    # including a second PAID macOS runner for a Swift test that
+    # `swift-package.yml` was about to run anyway — for one answer.
+    paths: &paths
+      - 'contracts/**'
+      - '.github/workflows/contracts.yml'
+  pull_request:
+    paths: *paths
+
+# Supersede a pull request's own earlier runs, and nothing else.
+#
+# The group key is the PR NUMBER, so pushing three times to a branch leaves one
+# live run instead of three. Every non-PR event falls back to `github.run_id`,
+# which is unique per run, so no two such runs ever share a group and nothing
+# outside a pull request can cancel anything.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Read-only, and no job below reads a secret. This lane judges a document
+# against three implementations; it publishes nothing, signs nothing and has no
+# identity to borrow.
+permissions:
+  contents: read
+
+jobs:
+  # ── the Go consumer ───────────────────────────────────────────────────────
+  go-contract:
+    runs-on: ubuntu-latest
+    # Seconds of real work behind a toolchain setup and a package build. Finite
+    # and chosen, so a wedged run turns the board red in minutes instead of
+    # holding a slot for GitHub's 6-hour default.
+    timeout-minutes: 10
+    steps:
+      # Third-party actions are pinned to a full commit SHA (with the
+      # human-readable version in a trailing comment) so a compromised or
+      # retagged upstream release can't silently change what runs here.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+      # One package, two named test functions, no `-race`. The race lane is
+      # `go.yml`'s eight shards and is not what a document edit needs; `-count=1`
+      # is what stops a cached PASS from answering for bytes that changed.
+      - name: The Go half of the root contracts
+        working-directory: server
+        run: go test ./account/ -run '^TestDeviceInboxAdmissionContract' -count=1
+
+  # ── the Web consumer ──────────────────────────────────────────────────────
+  web-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      # The full tree, not `--omit=dev`: the runner IS a devDependency here.
+      # `npm ci` rather than `npm install` — the tree comes from
+      # `package-lock.json` exactly and the lockfile is never rewritten in CI.
+      # `--ignore-scripts` because nothing in that closure needs a lifecycle
+      # script to run one Vitest file.
+      - name: Install the dependency closure the test runner needs
+        working-directory: web
+        run: npm ci --ignore-scripts
+      # One file. Not `npm test`, which is the whole suite plus jsdom journeys.
+      - name: The Web half of the root contracts
+        working-directory: web
+        run: npx vitest run src/lib/device-inbox-admission-contract.test.ts
+
+  # ── the Swift consumer ────────────────────────────────────────────────────
+  swift-contract:
+    runs-on: macos-15
+    # A PAID runner, so the bound is chosen rather than inherited. The package's
+    # own unfiltered suite is budgeted at 25 minutes in `swift-package.yml` for
+    # a cold SwiftPM resolve plus every test in the target; this job pays the
+    # same build and then runs FIVE test cases, measured at 0.7s locally. 25 is
+    # that same cold-build bound, not a fresh measurement of the test itself.
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # Recorded so a future failure can be compared against the toolchain that
+      # produced the last green run.
+      - name: Toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+      # ALWAYS filtered, and to this one class. `swift-package.yml` owns the
+      # repository's sole unfiltered `swift test`; a second one here would run
+      # the whole package suite on a document edit and charge a PAID macOS
+      # runner twice for one answer. `scripts/test/swift-ci-boundary-test.mjs`
+      # asserts both halves of that.
+      - name: The Swift half of the root contracts
+        working-directory: apps/RelayiumKit
+        run: swift test --filter 'RelayiumKitTests.DeviceInboxAdmissionContractTests'

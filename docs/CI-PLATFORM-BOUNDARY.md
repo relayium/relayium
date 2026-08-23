@@ -210,31 +210,98 @@ test that quietly stops reading its vector shows up as a filter charging a full
 suite for a file nobody opens — the direction that decays without anyone editing
 a workflow.
 
-### When `contracts/**` appears
+### The `contracts/` tree
 
-There is **no `contracts/` directory in this repository today**, and nothing here
-is evidence about one. This is the rule that applies on the day one is created,
-recorded because a cross-language contract tree is exactly the shape that gets
-added to one platform's filter and then quietly owned by nobody.
+`contracts/` now exists. Its first member is
+`contracts/device-inbox-admission-v1.json` — a root-level, versioned,
+runtime-neutral document that three implementations parse independently and
+compare to the constants they already ship. See
+[the admission contract](DEVICE-INBOX-ADMISSION-CONTRACT.md) for what it freezes
+and why.
 
-A `contracts/**` tree — schemas, wire definitions, generated-code inputs, or
-anything else two independent implementations must agree on — is **truly
-cross-platform**, not Apple-shared. On the commit that creates it:
+A contract tree is **truly cross-platform**, not Apple-shared, and it does not go
+into a heavy Apple filter merely because Swift consumes it.
 
-* every workflow whose suite **reads or generates from** a file under it names
-  that file, or that subtree, in its own path filter — the same input test as
-  rule 3 above, and the same one-path-at-a-time discipline the fixtures get;
-* the always-on `compat.yml` gate is extended to judge the contract itself if the
-  agreement is checkable in seconds on `ubuntu-latest`, so no platform can bypass
-  it by existing;
-* an ownership row in `scripts/test/swift-ci-boundary-test.mjs` (for a Swift
-  consumer) or `PATH_MATRIX` in `scripts/test/ci-event-policy-test.mjs` states
-  the exact set of workflows the tree starts, and a mutation proves that row can
-  fail. A contract tree that starts nothing is a contract nobody re-checks;
-* it does **not** go into a heavy Apple filter merely because Swift consumes it.
-  If a Swift target reads it, `swift-package.yml` is the lane that proves the
-  Swift side still compiles and passes — the same separation that put the
-  package's own tests there.
+#### Why the consumer suites do *not* name it
+
+The rule recorded here before the tree existed was the fixture rule above: every
+workflow whose suite reads a file under it names that file in its own path
+filter. Applied literally, that would have meant `go.yml`, `web.yml` and
+`swift-package.yml` each naming the document. It was **not** adopted, and the
+cost is the whole reason:
+
+| Filter entry | What a JSON edit would then start |
+| ------------ | --------------------------------- |
+| `go.yml` | the **eight-shard** `-race` account lane, plus build, vet, suite and govulncheck |
+| `web.yml` | the full Vite suite, `npm run build`, an accessibility scan and three headless-Chrome journeys |
+| `swift-package.yml` | the whole package suite on a **paid** macOS runner — and a third filter entry, where the file's own rules require exactly two and no exclusion |
+
+The fixture rule is right for the frozen vectors: those bytes are what the Go and
+TypeScript manifest implementations are *reproduced against*, so a regenerated
+vector genuinely needs the implementation's own suite. This document is read by
+two `go test` functions, one Vitest file and one XCTest class — seconds of work —
+and the same protection is available for a fraction of the cost.
+
+#### What it starts instead
+
+`contracts.yml`, whose filter is exactly `contracts/**` and its own file, running
+the three smallest commands that judge the three implementations:
+
+| Job | Runner | Command |
+| --- | ------ | ------- |
+| `go-contract` | `ubuntu-latest` | `go test ./account/ -run '^TestDeviceInboxAdmissionContract' -count=1` |
+| `web-contract` | `ubuntu-latest` | `npx vitest run src/lib/device-inbox-admission-contract.test.ts` |
+| `swift-contract` | `macos-15` | `swift test --filter 'RelayiumKitTests.DeviceInboxAdmissionContractTests'` |
+
+plus the two workflows that carry **no** path filter and therefore cannot be
+routed around: `compat.yml` and `repo-hygiene.yml`. A contract-only edit starts
+no macOS or iOS product build, no signing, no UI test, no native pairing
+acceptance, no Go race lane and no browser acceptance.
+
+**The other direction is unchanged.** The three consumer tests live inside
+`server/**`, `web/**` and `apps/RelayiumKit/**`, so an ordinary source change
+still starts its own owning suite — and that suite still executes the consumer
+test, because `go test ./...`, `npm test` and the unfiltered `swift test` all
+contain it. Neither lane substitutes for the other: the contract lane catches a
+document that stopped matching the code, the owning suites catch code that
+stopped matching the document.
+
+#### The third `swift test`, costed deliberately
+
+`swift-contract` is a third host for `swift test` and a third paid macOS runner,
+which `scripts/test/swift-ci-boundary-test.mjs` refused by name until this
+commit. It is here because the alternatives were worse in both directions:
+widening `swift-package.yml` spends the whole package suite on a document edit,
+and omitting Swift lets a contract change land with two implementations compared
+and the third not — the same "fails later against an innocent commit" shape the
+fixture entries exist to prevent.
+
+The cost is bounded where the boundary policy can see it. That file now requires
+this host's `swift test` to carry a `--filter`, to select exactly the contract
+test class, to run from the package directory, and to keep its filter out of
+`apps/RelayiumKit/**`. The repository's **sole unfiltered** `swift test` is still
+`swift-package.yml`'s, and that rule is untouched.
+
+#### Where the rules live
+
+`scripts/test/contract-ci-policy-test.mjs` owns this tree's admission decision:
+which workflows a contract-only edit starts, which it must not, that the owning
+suites still execute the consumer tests, that each consumer still opens the
+document, and what the lane may cost — commands, working directories, finite
+timeouts, read-only permissions and the absence of secrets. It compiles each
+`paths:` list and evaluates it the way GitHub does, ordered and last-match-wins,
+and 21 mutations prove every rule can fail. `swift-ci-boundary-test.mjs` owns the
+Swift half; `ci-event-policy-test.mjs` continues to own repository-wide trigger,
+concurrency and runner-budget properties.
+
+#### The next contract
+
+`contracts.yml` watches `contracts/**`, so a second document joins the lane with
+no workflow edit at all — deliberately, and it is why the filter is the tree
+rather than the file. What a new contract still owes: its own consumer tests
+inside the trees their suites already watch, a row in `CONSUMERS` in the policy
+test, and a mutation proving that row can fail. A contract tree that starts
+nothing is a contract nobody re-checks.
 
 
 ## Fast compatibility gates vs heavy builds
@@ -599,10 +666,14 @@ touches only `apps/RelayiumKit/Tests/`, and the checks it starts.
 * `.github/workflows/swift-package.yml` — the shared package's own suite, and the
   sole owner of an unfiltered `swift test`
 * `scripts/test/swift-ci-boundary-test.mjs` — who owns `apps/RelayiumKit/`, in code
+* `.github/workflows/contracts.yml` — the root contract tree's own lane
+* `scripts/test/contract-ci-policy-test.mjs` — who owns `contracts/`, what a
+  document edit may start, and what that lane may cost, in code
+* `docs/DEVICE-INBOX-ADMISSION-CONTRACT.md` — the first root contract itself
 * `.github/workflows/macos.yml`, `.github/workflows/ios.yml` — the heavy owners
 * `.github/workflows/native-web-pairing.yml` — the cross-client acceptance
-* `.github/workflows/repo-hygiene.yml` — the unfiltered host that runs the two
-  guards below on every pull request and every `main` push
+* `.github/workflows/repo-hygiene.yml` — the unfiltered host that runs the
+  policy guards listed here on every pull request and every `main` push
 * `scripts/test/ci-event-policy-test.mjs` — trigger, concurrency, race-lane and
   platform-boundary policy, and the self-host check on its own execution
 * `scripts/test/native-web-pairing-gate-test.mjs` — that the acceptance and the

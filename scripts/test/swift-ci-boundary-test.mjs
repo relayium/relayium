@@ -113,6 +113,28 @@ const GO = "go.yml";
 const WEB = "web.yml";
 const AUTO_RELEASE = "auto-release.yml";
 
+/**
+ * The root contract lane, and the ONE `swift test` it is allowed to run.
+ *
+ * `contracts.yml` is a third host for `swift test` and therefore a third PAID
+ * macOS runner. It is here rather than refused because the alternative was
+ * worse in both available shapes: widening `swift-package.yml`'s filter to a
+ * tree it does not compile would spend the WHOLE package suite on a document
+ * edit, and leaving the Swift consumer out entirely would let a contract change
+ * land with two implementations compared and the third not — which is the same
+ * "fails later against an innocent commit" shape the fixture entries in `go.yml`
+ * and `web.yml` exist to prevent.
+ *
+ * What that costs is bounded HERE, and the bound is the point of the rules in
+ * section 1f: this host's `swift test` must always carry a `--filter`, and the
+ * filter must select exactly the contract test class. An unfiltered one would
+ * run the whole package suite on a document edit; a broader selector would grow
+ * this lane into a second package suite one `--filter` argument at a time.
+ */
+const CONTRACTS = "contracts.yml";
+const CONTRACTS_SWIFT_JOB = "swift-contract";
+const CONTRACTS_SWIFT_FILTER = `${SWIFT_TEST_TARGET}.DeviceInboxAdmissionContractTests`;
+
 /** This file, and the unfiltered workflow that has to execute it. */
 const SELF_TEST = "scripts/test/swift-ci-boundary-test.mjs";
 const SELF_HOST = "repo-hygiene.yml";
@@ -130,7 +152,7 @@ const SELF_TIMEOUT_MAX = 5;
  * repository, not only the ones with a Swift opinion, and section 1 asserts that
  * the list still matches what is on disk.
  */
-const PARSED = [SWIFT_PACKAGE, MACOS, IOS, NWP, GO, WEB, "compat.yml", SELF_HOST];
+const PARSED = [SWIFT_PACKAGE, MACOS, IOS, NWP, GO, WEB, CONTRACTS, "compat.yml", SELF_HOST];
 
 /**
  * The workflows that must NOT start for a change confined to the package's test
@@ -998,14 +1020,67 @@ function laneFailures(w) {
     .filter(([, text]) => /\bswift\s+test\b/.test(text))
     .map(([file]) => file)
     .sort();
+  const wantHosts = [CONTRACTS, IOS, SWIFT_PACKAGE].sort();
   need(
-    deepEqual(hosts, [IOS, SWIFT_PACKAGE].sort()),
+    deepEqual(hosts, wantHosts),
     `\`swift test\` appears in [${hosts.join(", ")}]; want exactly `
-    + `[${[IOS, SWIFT_PACKAGE].sort().join(", ")}]. Read from every workflow file on disk rather `
+    + `[${wantHosts.join(", ")}]. Read from every workflow file on disk rather `
     + `than from the parsed subset, because a workflow this policy does not parse can run `
-    + `\`swift test\` just as well as one it does — and a third host is another PAID macOS runner `
+    + `\`swift test\` just as well as one it does — and a FOURTH host is another PAID macOS runner `
     + `nobody costed. ${IOS} is expected: it runs named \`--filter\` selectors over `
-    + `\`apps/ios\` guards for the other direction, an \`apps/ios/**\` change.`,
+    + `\`apps/ios\` guards for the other direction, an \`apps/ios/**\` change. ${CONTRACTS} is `
+    + `expected: it runs the Swift half of the root contract tree, always filtered — see 1f.`,
+  );
+
+  // 1f. The contract lane's `swift test` is FILTERED, and to exactly one class.
+  //
+  //     1d already refuses a second UNFILTERED `swift test` wherever it appears,
+  //     so this is the other half: a filtered one whose selector grows. The
+  //     lane is justified by being the smallest command that judges the Swift
+  //     half of a document; a selector naming the target, a suffix, or a second
+  //     class is a second package suite arriving one argument at a time, on a
+  //     PAID runner, started by every contract edit.
+  const contractSteps = swiftTestSteps(w).filter((entry) => entry.file === CONTRACTS);
+  need(
+    contractSteps.length === 1,
+    `${CONTRACTS} runs ${contractSteps.length} \`swift test\` step(s); want exactly one. This lane `
+    + `exists to run the smallest command that judges one document against one test class.`,
+  );
+  for (const entry of contractSteps) {
+    need(
+      entry.jobName === CONTRACTS_SWIFT_JOB,
+      `${CONTRACTS}'s \`swift test\` runs in job ${entry.jobName}; want `
+      + `${CONTRACTS_SWIFT_JOB}, which is the job this policy and `
+      + `\`scripts/test/contract-ci-policy-test.mjs\` both name.`,
+    );
+    need(
+      deepEqual(entry.filters, [CONTRACTS_SWIFT_FILTER]),
+      `${CONTRACTS}'s \`swift test\` selects ${JSON.stringify(entry.filters)}; want exactly `
+      + `["${CONTRACTS_SWIFT_FILTER}"]. Zero filters would run the WHOLE package suite on a `
+      + `document edit and duplicate ${SWIFT_PACKAGE} on a PAID runner; a wider or additional `
+      + `selector is that same suite arriving one argument at a time.`,
+    );
+    need(
+      entry.step["working-directory"] === SWIFT_PACKAGE_DIR,
+      `${CONTRACTS}'s \`swift test\` declares working-directory `
+      + `${JSON.stringify(entry.step["working-directory"])}, want `
+      + `${JSON.stringify(SWIFT_PACKAGE_DIR)}. \`swift test\` resolves its package from the `
+      + `working directory; anywhere else it either fails or tests a different package.`,
+    );
+  }
+
+  // 1g. The contract lane must not reach into the package's own tree.
+  //
+  //     It watches `contracts/**`. The moment its filter also names a package
+  //     path, an ordinary Swift edit starts BOTH macOS lanes for one answer —
+  //     the exact duplication this file was created to remove.
+  const contractPaths = wPaths(w, CONTRACTS);
+  need(
+    contractPaths === null || !contractPaths.some((p) => String(p).includes(SWIFT_PACKAGE_DIR)),
+    `${CONTRACTS}'s path filter names \`${SWIFT_PACKAGE_DIR}\` `
+    + `(${JSON.stringify(contractPaths)}). An ordinary package edit would then start this PAID `
+    + `macOS lane as well as ${SWIFT_PACKAGE}'s, and ${SWIFT_PACKAGE} already runs this test `
+    + `class as part of its unfiltered suite.`,
   );
 
   return out;
@@ -1658,7 +1733,43 @@ const MUTATIONS = [
       w.texts.set(AUTO_RELEASE, `${w.texts.get(AUTO_RELEASE)}\n        run: swift test\n`);
       return w;
     },
-    expect: /`swift test` appears in \[auto-release\.yml, ios\.yml, swift-package\.yml\]/,
+    expect: /`swift test` appears in \[auto-release\.yml, contracts\.yml, ios\.yml, swift-package\.yml\]/,
+  },
+
+  // ── the contract lane's third `swift test` (1f, 1g) ───────────────────────
+  {
+    // The cheap lane quietly becomes the package suite: same runner, same
+    // trigger, forty times the work, and nothing about the YAML looks different.
+    name: "contracts.yml's swift test loses its --filter",
+    mutate: (w) => withCommandJob(w, CONTRACTS, "swift test", (job, step) => {
+      step.run = "swift test\n";
+    }),
+    expect: /contracts\.yml's `swift test` selects \[\]; want exactly/,
+  },
+  {
+    // The selector widens to the whole target — one argument, and the lane is a
+    // second package suite started by every contract edit.
+    name: "contracts.yml's swift test selector widens to the whole test target",
+    mutate: (w) => withCommandJob(w, CONTRACTS, "swift test", (job, step) => {
+      step.run = `swift test --filter '${SWIFT_TEST_TARGET}'\n`;
+    }),
+    expect: /contracts\.yml's `swift test` selects \["RelayiumKitTests"\]/,
+  },
+  {
+    // Run from the repository root, where SwiftPM resolves a different package
+    // or none at all.
+    name: "contracts.yml's swift test loses its working directory",
+    mutate: (w) => withCommandJob(w, CONTRACTS, "swift test", (job, step) => {
+      delete step["working-directory"];
+    }),
+    expect: /contracts\.yml's `swift test` declares working-directory undefined/,
+  },
+  {
+    // The contract lane reaches into the package it does not compile. Every
+    // ordinary Swift edit then starts TWO paid macOS lanes for one answer.
+    name: "contracts.yml's filter grows into the shared Swift package",
+    mutate: (w) => withPaths(w, CONTRACTS, [...wPaths(w, CONTRACTS), PACKAGE_SOURCE_GLOB]),
+    expect: /contracts\.yml's path filter names `apps\/RelayiumKit`/,
   },
 
   // ── the fixtures ──────────────────────────────────────────────────────────
