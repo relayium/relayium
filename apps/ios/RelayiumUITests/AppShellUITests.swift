@@ -378,6 +378,28 @@ final class AppShellUITests: XCTestCase {
         element.tap()
     }
 
+    /// Select the staged document without assuming which directory the system
+    /// browser remembered from an earlier import. Files may reopen inside the
+    /// app folder, at the app folder's parent, or at the Locations root; all
+    /// three are valid system states and expose the same production importer.
+    private func selectStagedFixture(named stem: String) {
+        let fixture = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", stem)).firstMatch
+        if fixture.waitForExistence(timeout: 2) {
+            return fixture.tap()
+        }
+
+        let appFolder = app.descendants(matching: .any)["Relayium"].firstMatch
+        if appFolder.waitForExistence(timeout: 2) {
+            appFolder.tap()
+            return tapStagedFixture(named: stem)
+        }
+
+        tapInBrowser("On My iPhone")
+        tapInBrowser("Relayium")
+        tapStagedFixture(named: stem)
+    }
+
     /// Runtime evidence that a chosen file is identified before a recipient or
     /// a Send action exists at all.
     ///
@@ -403,9 +425,7 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(browsingTabs.waitForExistence(timeout: 20),
                       "choosing files did not present the system document browser")
         browsingTabs.buttons["Browse"].tap()
-        tapInBrowser("On My iPhone")
-        tapInBrowser("Relayium")
-        tapStagedFixture(named: "Relayium product brief")
+        selectStagedFixture(named: "Relayium product brief")
 
         let open = app.buttons["Open"]
         XCTAssertTrue(open.waitForExistence(timeout: 10),
@@ -768,9 +788,7 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(browsingTabs.waitForExistence(timeout: 20),
                       "choosing files did not present the system document browser")
         browsingTabs.buttons["Browse"].tap()
-        tapInBrowser("On My iPhone")
-        tapInBrowser("Relayium")
-        tapStagedFixture(named: "Relayium product brief")
+        selectStagedFixture(named: "Relayium product brief")
         let open = app.buttons["Open"]
         XCTAssertTrue(open.waitForExistence(timeout: 10),
                       "the system browser has no confirmation action")
@@ -844,24 +862,15 @@ final class AppShellUITests: XCTestCase {
     func testACompletedStoredSendHandsOverItsLinkAndOffersAnother() {
         app.terminate()
         app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pending-fixture"]
+            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-preselect-fixture"]
         app.launch()
 
         openTask("Send", title: "Send files")
         let chooser = app.buttons["Choose Files or Folders…"]
         XCTAssertTrue(chooser.waitForExistence(timeout: 15))
-        scrollUntilHittable(chooser)
-        chooser.tap()
-
-        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
-        XCTAssertTrue(browsingTabs.waitForExistence(timeout: 20))
-        browsingTabs.buttons["Browse"].tap()
-        tapInBrowser("On My iPhone")
-        tapInBrowser("Relayium")
-        tapStagedFixture(named: "Relayium product brief")
-        let open = app.buttons["Open"]
-        XCTAssertTrue(open.waitForExistence(timeout: 10))
-        open.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["pendingFile.0"].firstMatch
+            .waitForExistence(timeout: 15),
+            "the deterministic selection did not reach the stored send")
 
         // NOT app.buttons["Send"]: the tab bar carries a Send tab with the same
         // label, and it is the one that matches first.
@@ -899,24 +908,16 @@ final class AppShellUITests: XCTestCase {
     func testCancellingAnUploadInFlightReturnsTheTask() {
         app.terminate()
         app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pending-fixture",
+            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-preselect-fixture",
                "--relayium-ui-testing-stall-upload"]
         app.launch()
 
         openTask("Send", title: "Send files")
         let chooser = app.buttons["Choose Files or Folders…"]
         XCTAssertTrue(chooser.waitForExistence(timeout: 15))
-        scrollUntilHittable(chooser)
-        chooser.tap()
-        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
-        XCTAssertTrue(browsingTabs.waitForExistence(timeout: 20))
-        browsingTabs.buttons["Browse"].tap()
-        tapInBrowser("On My iPhone")
-        tapInBrowser("Relayium")
-        tapStagedFixture(named: "Relayium product brief")
-        let open = app.buttons["Open"]
-        XCTAssertTrue(open.waitForExistence(timeout: 10))
-        open.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["pendingFile.0"].firstMatch
+            .waitForExistence(timeout: 15),
+            "the deterministic selection did not reach the stalled upload")
 
         let send = app.scrollViews.buttons["Send"].firstMatch
         XCTAssertTrue(send.waitForExistence(timeout: 15))
@@ -1080,7 +1081,7 @@ final class AppShellUITests: XCTestCase {
     func testCreatingAFilePairingCodeStaysOnDirectAndShowsEveryHandoff() {
         app.terminate()
         app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pending-fixture",
+            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-preselect-fixture",
                "--relayium-ui-testing-file-code"]
         app.launch()
 
@@ -1088,18 +1089,9 @@ final class AppShellUITests: XCTestCase {
         let chooser = app.buttons["Choose Files or Folders…"]
         XCTAssertTrue(chooser.waitForExistence(timeout: 15),
                       "Direct's file mode stages nothing")
-        scrollUntilHittable(chooser)
-        chooser.tap()
-
-        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
-        XCTAssertTrue(browsingTabs.waitForExistence(timeout: 20))
-        browsingTabs.buttons["Browse"].tap()
-        tapInBrowser("On My iPhone")
-        tapInBrowser("Relayium")
-        tapStagedFixture(named: "Relayium product brief")
-        let open = app.buttons["Open"]
-        XCTAssertTrue(open.waitForExistence(timeout: 10))
-        open.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["pendingFile.0"].firstMatch
+            .waitForExistence(timeout: 15),
+            "the deterministic selection did not reach Direct's file mode")
 
         let create = app.buttons["Create a code"]
         XCTAssertTrue(create.waitForExistence(timeout: 15),
