@@ -198,14 +198,21 @@ async function run() {
 
     // ── the browser sends a message ──────────────────────────────────────
     await tab.waitFor(`!!document.querySelector('${COMPOSER}')`, "the composer", 30_000);
-    await tab.evaluate(`(() => {
+    // Unified mode renders the composer while the text lane is still
+    // connecting. Re-assert the controlled value while waiting so a Svelte
+    // re-render at the connecting -> open boundary cannot discard the one
+    // synthetic input event and leave Send disabled forever.
+    await tab.waitFor(`(() => {
       const ta = document.querySelector('${COMPOSER}');
+      const send = document.querySelector('${SEND}');
+      if (!ta || !send) return false;
       const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
-      setter.call(ta, ${JSON.stringify(MESSAGE)});
-      ta.dispatchEvent(new Event('input', { bubbles: true }));
-      return true;
-    })()`);
-    await tab.waitFor(`!document.querySelector('${SEND}').disabled`, "the send button to enable", 20_000);
+      if (ta.value !== ${JSON.stringify(MESSAGE)} || send.disabled) {
+        setter.call(ta, ${JSON.stringify(MESSAGE)});
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      return !send.disabled;
+    })()`, "the composer to retain its draft and enable Send", 20_000);
     await tab.evaluate(`(() => { document.querySelector('${SEND}').click(); return true; })()`);
     ok("browser sent a message");
 

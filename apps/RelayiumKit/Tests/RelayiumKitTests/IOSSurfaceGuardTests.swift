@@ -249,7 +249,17 @@ final class IOSSurfaceGuardTests: XCTestCase {
 
         // 8. And the picker is still covered FOR REAL. These two are about the
         //    system browser, the security scope and the expansion; the seam must
-        //    never spread into them.
+        //    never spread into them. The shared selector may accommodate every
+        //    directory Files validly remembers, but must still finish through
+        //    the browser fixture helper rather than injecting a selection.
+        let selector = try XCTUnwrap(ui.components(
+            separatedBy: "private func selectStagedFixture(named stem: String)")
+            .dropFirst().first?.components(separatedBy: "\n    /// ").first,
+            "the deterministic browser-state selector is gone")
+        XCTAssertTrue(selector.contains("tapStagedFixture(named:"),
+                      "the browser-state selector no longer chooses the real fixture")
+        XCTAssertTrue(selector.contains("tapInBrowser(\"On My iPhone\")"),
+                      "the browser-state selector cannot enter device storage")
         for picker in ["func testPendingSendNamesTheFileAndItsSizeBeforeTransfer()",
                        "func testASignedInStoredSendNamesTheFileItWouldUpload()"] {
             let body = try XCTUnwrap(ui.components(separatedBy: picker)
@@ -257,7 +267,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
                 "the dedicated real-picker test \(picker) is gone")
             XCTAssertTrue(body.contains("DOC.browsingModeTabBar"),
                           "\(picker) stopped driving the real system document browser")
-            XCTAssertTrue(body.contains("tapStagedFixture(named:"),
+            XCTAssertTrue(body.contains("selectStagedFixture(named:"),
                           "\(picker) no longer selects the fixture through the browser")
             XCTAssertFalse(body.contains("--relayium-ui-testing-preselect-fixture"),
                            "\(picker) was switched to the injection seam, so nothing "

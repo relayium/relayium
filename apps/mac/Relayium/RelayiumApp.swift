@@ -277,6 +277,15 @@ struct RelayiumApp: App {
     /// now holds.
     private let appleSubscription: AppleSubscriptionModel?
 
+    /// The stable account identity that owns subscription reconciliation. This
+    /// becomes non-nil only after session restoration or sign-in has completed,
+    /// and changes across sign-out/account switching, so `.task(id:)` retries
+    /// StoreKit's durable queue at exactly those boundaries.
+    private var subscriptionAccountID: String? {
+        guard case let .ready(user, _) = session.state else { return nil }
+        return user.id
+    }
+
     /// The strings live in a Swift-package resource bundle, while SwiftUI asks
     /// the app bundle which way to lay out the scene. macOS therefore kept an
     /// Arabic package catalog in a left-to-right app even though
@@ -527,6 +536,10 @@ struct RelayiumApp: App {
             refreshAccount: { await account.refresh() })
             ?? AppDistribution.makeSubscriptionModel(
                 bearer: { account.bearerToken },
+                accountID: {
+                    guard case let .ready(user, _) = account.state else { return nil }
+                    return user.id
+                },
                 refreshAccount: { await account.refresh() })
         _notifications = StateObject(wrappedValue: TransferNotificationCenter(
             uploadModel: uploads,
@@ -832,6 +845,10 @@ struct RelayiumApp: App {
                     // looking — and this app keeps running with its window
                     // closed. Idempotent, and a no-op in a build with no model.
                     appleSubscription?.startObservingUpdates()
+                }
+                .task(id: subscriptionAccountID) {
+                    guard subscriptionAccountID != nil else { return }
+                    await appleSubscription?.reconcileUnfinishedTransactions()
                 }
                 // Files the Share extension staged while this app was closed or
                 // in the background.

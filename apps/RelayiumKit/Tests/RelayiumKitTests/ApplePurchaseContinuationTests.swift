@@ -37,14 +37,31 @@ final class ApplePurchaseContinuationTests: XCTestCase {
 
     // MARK: - the initial arm
 
-    /// No capability means no resume authority: the first arm sends the instance
-    /// and a fresh identity, and **no secret** — there is nothing to prove yet.
-    func testTheFirstArmCarriesNoSecret() {
-        let plan = ApplePurchaseContinuation.plan(capability: nil, productID: "pro.monthly",
+    /// The initial capability exists before the request, making both the request
+    /// and its response exactly replayable.
+    func testTheFirstArmIsPreparedBeforeDispatch() {
+        let prepared = ApplePurchaseContinuation.prepared(
+            ownerAccountID: "acct-A", appInstanceID: instance, secret: secret,
+            armRequestID: "arm-1", productID: "pro.monthly")
+        let plan = ApplePurchaseContinuation.plan(capability: prepared, productID: "pro.monthly",
                                                   appInstanceID: instance,
                                                   freshArmRequestID: "arm-1")
-        XCTAssertEqual(plan, .initialArm(appInstanceID: instance, armRequestID: "arm-1",
-                                         productID: "pro.monthly"))
+        XCTAssertEqual(plan, .initialArm(prepared))
+        XCTAssertEqual(prepared.phase, .preparing)
+        XCTAssertEqual(prepared.attemptID, "")
+        XCTAssertEqual(prepared.fields.continuationSecret, secret)
+    }
+
+    func testAConfirmedInitialArmKeepsThePrePersistedSecret() throws {
+        let prepared = ApplePurchaseContinuation.prepared(
+            ownerAccountID: "acct-A", appInstanceID: instance, secret: secret,
+            armRequestID: "arm-1", productID: "pro.monthly")
+        let confirmed = try XCTUnwrap(ApplePurchaseContinuation.confirmedInitialArm(
+            prepared, attemptID: "attempt-1", serverSecret: nil))
+        XCTAssertEqual(confirmed.phase, .armed)
+        XCTAssertEqual(confirmed.attemptID, "attempt-1")
+        XCTAssertEqual(confirmed.secret, secret)
+        XCTAssertEqual(confirmed.ownerAccountID, "acct-A")
     }
 
     /// **A server that issues no secret leaves this client one-shot.**
@@ -468,7 +485,7 @@ final class ApplePurchaseContinuationTests: XCTestCase {
         let repository = ApplePurchaseCapabilityRepository(store: store)
         try repository.save(armed())
         XCTAssertNotNil(repository.load())
-        repository.retire()
+        try repository.retire()
         XCTAssertNil(repository.load())
         XCTAssertNil(try store.loadCapability())
     }
@@ -485,6 +502,55 @@ final class ApplePurchaseContinuationTests: XCTestCase {
         let encoded = try XCTUnwrap(try store.loadCapability())
         XCTAssertTrue(encoded.contains(secret),
                       "the stored blob is the secret-bearing one, so it is Keychain-only")
+    }
+
+    func testAccountScopedRepositoryKeepsIndependentCapabilities() throws {
+        let a = InMemoryApplePurchaseCapabilityStore()
+        let b = InMemoryApplePurchaseCapabilityStore()
+        let repository = ApplePurchaseCapabilityRepository(
+            storeForOwner: { $0 == "acct-A" ? a : b })
+        let capabilityA = ApplePurchaseCapability(
+            attemptID: "attempt-A", ownerAccountID: "acct-A",
+            appInstanceID: instance, secret: secret, armRequestID: "arm-A",
+            productID: "pro.monthly", phase: .armed)
+        let capabilityB = ApplePurchaseCapability(
+            attemptID: "attempt-B", ownerAccountID: "acct-B",
+            appInstanceID: instance, secret: secret, armRequestID: "arm-B",
+            productID: "pro.monthly", phase: .armed)
+
+        try repository.save(capabilityA)
+        try repository.save(capabilityB)
+
+        XCTAssertEqual(repository.load(ownerAccountID: "acct-A")?.attemptID,
+                       capabilityA.attemptID)
+        XCTAssertEqual(repository.load(ownerAccountID: "acct-B")?.attemptID,
+                       "attempt-B")
+        try repository.retire(ownerAccountID: "acct-A")
+        XCTAssertNil(repository.load(ownerAccountID: "acct-A"))
+        XCTAssertNotNil(repository.load(ownerAccountID: "acct-B"))
+    }
+
+    func testFileOutcomeJournalSurvivesReconstructionAndClearsExactlyOneOwner() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("outcomes.json")
+        let first = FileApplePurchaseOutcomeJournal(url: url)
+        let a = ApplePurchaseOutcomeJournalEntry(
+            ownerAccountID: "acct-A", attemptID: "attempt-A",
+            armRequestID: "arm-A", outcome: .userCancelled)
+        let b = ApplePurchaseOutcomeJournalEntry(
+            ownerAccountID: "acct-B", attemptID: "attempt-B",
+            armRequestID: "arm-B", outcome: .pending)
+        try first.save(a)
+        try first.save(b)
+
+        let afterRestart = FileApplePurchaseOutcomeJournal(url: url)
+        XCTAssertEqual(afterRestart.load(ownerAccountID: "acct-A"), a)
+        XCTAssertEqual(afterRestart.load(ownerAccountID: "acct-B"), b)
+        try afterRestart.clear(ownerAccountID: "acct-A")
+        XCTAssertNil(first.load(ownerAccountID: "acct-A"))
+        XCTAssertEqual(first.load(ownerAccountID: "acct-B"), b)
     }
 
     /// **The secret never reaches a description**, which is what carries a value
