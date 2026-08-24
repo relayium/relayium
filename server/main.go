@@ -275,6 +275,11 @@ func main() {
 	billingDuplicateReason := flag.String("billing-duplicate-reason", "", "operator-only: audited reason for a duplicate refund")
 	billingDuplicateExpectedLiabilityRevision := flag.Int64("billing-duplicate-expected-liability-revision", -1, "operator-only: exact liability revision printed by -billing-duplicate-list")
 	billingDuplicateExpectedDigest := flag.String("billing-duplicate-expected-digest", "", "operator-only: exact liability digest printed by -billing-duplicate-list")
+	billingAppleLegacyList := flag.String("billing-apple-legacy-list", "", "operator-only: list sanitized recovery evidence for one legacy Apple attempt id or account email, then exit")
+	billingAppleLegacyRelease := flag.String("billing-apple-legacy-release", "", "operator-only: release one evidence-approved legacy Apple attempt id or account email, then exit")
+	billingAppleLegacyActor := flag.String("billing-apple-legacy-actor", "", "operator-only: accountable actor for a legacy Apple purchase release")
+	billingAppleLegacyReason := flag.String("billing-apple-legacy-reason", "", "operator-only: owner-approved reason for a legacy Apple purchase release")
+	billingAppleLegacyExpectedDigest := flag.String("billing-apple-legacy-expected-digest", "", "operator-only: exact digest printed by -billing-apple-legacy-list")
 	// Deprecated and ignored: relay bandwidth is now bounded by each account's
 	// per-plan monthly traffic quota (billing plans phase-1), not this global
 	// allowance. Kept as an accepted-but-unused flag/env so a deployment whose
@@ -551,6 +556,28 @@ func main() {
 	go downloadLimiter.Run(context.Background(), time.Minute)
 
 	store, dbErr := account.OpenSQLite(*dbPath)
+	if *billingAppleLegacyList != "" {
+		if dbErr != nil || store == nil {
+			log.Fatal("Apple legacy purchase evidence: database unavailable")
+		}
+		evidence, err := account.ListAppleLegacyPurchaseRecoveryEvidence(context.Background(), store, *billingAppleLegacyList)
+		if err != nil {
+			log.Fatalf("Apple legacy purchase evidence: %v", err)
+		}
+		log.Printf("Apple legacy purchase evidence: attempt=%s bundle=%s product=%s state=%s continuation=%q authority_environment=%q authority_epoch=%d subjects=%d sources=%d renewals=%d external_subjects=%d incidents=%d eligible=%t blockers=%v digest=%s", evidence.AttemptID, evidence.BundleID, evidence.ProductID, evidence.AttemptState, evidence.ContinuationState, evidence.AuthorityEnvironment, evidence.AuthorityEpoch, evidence.SubjectCount, evidence.SourceCount, evidence.RenewalCount, evidence.ExternalSubjectCount, evidence.IncidentCount, evidence.Eligible, evidence.Blockers, evidence.Digest)
+		return
+	}
+	if *billingAppleLegacyRelease != "" {
+		if dbErr != nil || store == nil {
+			log.Fatal("Apple legacy purchase release: database unavailable")
+		}
+		result, err := account.ReleaseAppleLegacyPurchase(context.Background(), store, *billingAppleLegacyRelease, *billingAppleLegacyActor, *billingAppleLegacyReason, *billingAppleLegacyExpectedDigest)
+		if err != nil {
+			log.Fatalf("Apple legacy purchase release: %v", err)
+		}
+		log.Printf("Apple legacy purchase release: attempt=%s next_authority_epoch=%d status=succeeded", result.AttemptID, result.Epoch)
+		return
+	}
 	if *billingDuplicateList != "" {
 		if dbErr != nil || store == nil {
 			log.Fatal("billing duplicate list: database unavailable")

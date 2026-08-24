@@ -51,6 +51,11 @@ const (
 	// because the changes field carries the old and new value, the same shape
 	// plan.upsert uses for a tier's retirement.
 	AuditApplePurchases = "apple.purchases"
+	// AuditAppleLegacyRelease records the exceptional operator release of one
+	// pre-continuation App Store purchase attempt. It is distinct from opening
+	// the global purchase gate: this action advances one account's durable money
+	// authority after an evidence-bound owner decision.
+	AuditAppleLegacyRelease = "apple.purchase.legacy-release"
 	// 节点版本发布。四个常规动作各自独立记账，紧急发布单列一个 action ——
 	// 事后翻审计日志时，"这次是谁跳过了分批" 必须一眼可查，不能混在
 	// rollout.target 里靠 changes 字段去猜。
@@ -120,7 +125,7 @@ var auditActions = []string{
 	AuditPlanUpsert, AuditUserPlan, AuditNodeDelete, AuditNodeLimits,
 	AuditNodeLabel, AuditNodeDraining, AuditNodeRestore, AuditNodeRemove, AuditNodeDeregister,
 	AuditTokenMint, AuditTokenRevoke, AuditPasskeyDelete, AuditAppleProduct,
-	AuditApplePurchases,
+	AuditApplePurchases, AuditAppleLegacyRelease,
 	AuditRolloutTarget, AuditRolloutPause, AuditRolloutResume,
 	AuditRolloutRollback, AuditRolloutEmergency, AuditRolloutRetry,
 	AuditRolloutFast, AuditRolloutFastCanary,
