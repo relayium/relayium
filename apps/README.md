@@ -87,8 +87,8 @@ review, and release complete. See
 does and does not include.
 
 That covers macOS only. The iOS app and its share extension are engineering
-builds and are published nowhere. Internal TestFlight builds are used for
-development acceptance, but there is no public App Store release.
+builds distributed through internal TestFlight and are not publicly released.
+There is no public App Store release.
 
 ### Two macOS products, one source
 
@@ -929,11 +929,9 @@ Developer ID identity.
 
 `apps/ios/Relayium.xcodeproj` (bundle id `com.relayium.app`,
 `IPHONEOS_DEPLOYMENT_TARGET = 16.0`, iPhone + iPad) is a SwiftUI app over the
-same local `RelayiumKit` package. **In development and not public** — a
-distribution signing identity, provisioning profiles and an App Store Connect
-record all exist, but nothing has been shipped through them: no TestFlight build
-has been uploaded, there is no public App Store listing, and the website lists no
-iOS download.
+same local `RelayiumKit` package. **In development and not public** — internal
+TestFlight builds are used for development acceptance, but there is no public
+App Store listing and the website offers no iOS download.
 
 R3-A, the first slice, does exactly one thing: receive an anonymous encrypted
 stored link. Paste the link, inspect the decrypted manifest, its safe file

@@ -2481,8 +2481,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
     func testTheReadmeIOSEntrySeparatesNoBackgroundFromReopenAndResume() throws {
         let ios = try deliveryStatusEntry("iOS")
 
-        XCTAssertTrue(ios.contains("in development"))
-        XCTAssertTrue(ios.contains("not available on the app store or testflight"))
+        XCTAssertTrue(ios.contains("internal development and testflight"))
+        XCTAssertTrue(ios.contains("not publicly available on the app store"))
         XCTAssertTrue(ios.contains("foreground"))
         XCTAssertTrue(ios.contains("background transfer"))
         XCTAssertTrue(ios.contains("push notifications"))
@@ -2520,7 +2520,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let ios = try deliveryStatusEntry("iOS")
 
         XCTAssertFalse(ios.contains("]("), "the unpublished iOS row contains a download link")
-        XCTAssertTrue(ios.contains("not available"), "the unpublished state is only implied")
+        XCTAssertTrue(ios.contains("not publicly available"), "the unpublished state is only implied")
     }
 
     /// The management model is app-scoped and injected once.

@@ -5981,7 +5981,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// published, said in the same breath as the word.
     func testTheDocsStateTheIOSEngineeringBuildStatusOutright() throws {
         let apps = flattened(try claimSurfaceText("apps/README.md"))
-        XCTAssertTrue(apps.contains("The iOS app and its share extension are engineering builds and are published nowhere."),
+        XCTAssertTrue(apps.contains("The iOS app and its share extension are engineering builds distributed through internal TestFlight and are not publicly released."),
                       "apps/README.md must say outright that iOS is unpublished")
         XCTAssertTrue(apps.contains("**In development and not public**"),
                       "the iOS section must keep its own status line")
@@ -6109,7 +6109,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         let version = try publishedMacVersion()
         XCTAssertTrue(apps.contains("**Status: released as \(version).**"),
                       "apps/README.md must state the macOS status precisely")
-        XCTAssertTrue(apps.contains("The iOS app and its share extension are engineering builds and are published nowhere."),
+        XCTAssertTrue(apps.contains("The iOS app and its share extension are engineering builds distributed through internal TestFlight and are not publicly released."),
                       "apps/README.md must scope that status to macOS and say what iOS is")
 
         let readiness = flattened(try claimSurfaceText("apps/mac/release-readiness.json"))
