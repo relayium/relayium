@@ -60,6 +60,10 @@ export const RELEASE_HISTORY_DOC = "web/scripts/pages/content/releases.mjs";
  * signed build's own upload, never by this file and never by hand.
  */
 export const RELEASE_ARTIFACT_FILES = [
+  // The server embeds this allow-list at build time. Omitting it leaves the
+  // runtime admin policy unable to select the release even though the public
+  // manifest and appcast already advertise it.
+  "server/account/macos_release_catalog.json",
   "web/native-releases.json",
   "web/public/apps/macos/appcast.xml",
   // The native client policy, both copies. `stage-macos-release.mjs` moves its

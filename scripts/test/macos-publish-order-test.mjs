@@ -139,8 +139,30 @@ function steps(lines) {
 
 const workflow = await readFile(workflowPath, "utf8");
 const publish = steps(jobLines(workflow, "publish"));
+const workflowCode = workflow.split("\n").filter((line) => !/^\s*#/.test(line)).join("\n");
 
 check(publish.length > 0, "the publish job has no steps");
+
+// The verified server catalog is generated beside the isolated release-Web
+// tree, travels in the notarized artifact, and is copied into the same frozen
+// candidate as the appcast. Leaving out any one leg reproduces the production
+// defect where the public release exists but the runtime admin cannot select it.
+const seedCatalog = workflowCode.indexOf(
+  'cp server/account/macos_release_catalog.json "$server_catalog"',
+);
+const stageRelease = workflowCode.indexOf("node web/scripts/stage-macos-release.mjs");
+check(seedCatalog >= 0, "the notarization stage does not seed the server release catalog");
+check(stageRelease >= 0 && seedCatalog < stageRelease,
+  "the server release catalog must be seeded before release staging");
+check(
+  workflowCode.includes("${{ runner.temp }}/server/account/macos_release_catalog.json"),
+  "the notarized release artifact omits the staged server release catalog",
+);
+check(
+  workflowCode.includes(
+    'cp "$RUNNER_TEMP/release/server/account/macos_release_catalog.json"'),
+  "the publish candidate does not restore the artifact-derived server release catalog",
+);
 
 /**
  * Every executable line of the job in order, each tagged with its step.
