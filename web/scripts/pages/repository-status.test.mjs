@@ -25,9 +25,10 @@ describe("public repository status", () => {
     const iosRow = statusRows.iOS ?? "";
     expect(macosRow).toContain(`${macos.version} direct download`);
     expect(macosRow).toContain(`/releases/tag/macos-v${macos.version}`);
-    expect(macosRow).toMatch(/no public Mac App Store listing/i);
-    expect(iosRow).toMatch(/In development/i);
-    expect(iosRow).toMatch(/Not available on the App Store or TestFlight/i);
+    expect(macosRow).toContain("1.3.1 on the Mac App Store");
+    expect(macosRow).toContain("apps.apple.com/app/id6801142976");
+    expect(iosRow).toMatch(/Internal development and TestFlight/i);
+    expect(iosRow).toMatch(/Not publicly available on the App Store/i);
     expect(iosRow).not.toMatch(/\[[^\]]+\]\([^)]+\)/);
     expect(iosRow).toMatch(/remain in the foreground/i);
     expect(iosRow).toMatch(/push notifications are not supported/i);
@@ -38,8 +39,8 @@ describe("public repository status", () => {
     // used to require `Public release[^.]*still pending`, one sentence standing
     // for both of them, and that sentence went false the day the first one
     // shipped. Now each is asserted for what it actually is: macOS names the
-    // immutable tag a reader can fetch and denies the App Store channel it does
-    // not use, and iOS keeps saying it is offered nowhere.
+    // immutable tag a reader can fetch and names the independently versioned
+    // App Store channel, while iOS stays explicitly non-public.
     // Markdown wraps these sentences, so match across the line breaks.
     //
     // The tag has to be the CURRENT one. A bare `toContain("macos-v1.0")` passed

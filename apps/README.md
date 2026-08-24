@@ -78,31 +78,17 @@ build as GitHub Release
 [`macos-v1.3.2`](https://github.com/relayium/relayium/releases/tag/macos-v1.3.2):
 a universal, Developer ID-signed, Apple-notarized and stapled `Relayium.dmg`
 with its SHA-256 alongside. Distribution is that direct download and Sparkle
-updates from it: there is no Mac App Store listing today. The App Store build of
-the same source has been taken further than that sentence suggests. A retained
-`RelayiumAppStore` archive of 1.2.5 (12) was created from this release's exact
-source graph under team `7PVYUG4YQS`, and inspected locally before it was sent:
-bundle id `com.relayium.mac`, universal `x86_64 arm64`, both privacy manifests
-present, no Sparkle. `xcodebuild` export and upload returned *Upload succeeded*
-and package processing at 2026-08-16 11:22 Asia/Dubai; a third-party binary
-dSYM warning was accepted and did not block the upload. Its predecessor
-1.2.4 (11) was uploaded the same way on 2026-08-15.
-
-**Upload acceptance is not TestFlight availability, and only the first is
-observed.** A fresh Xcode Organizer readback at 12:55 the same day shows
-1.2.5 (12) with a green check, status *Uploaded to Apple*, uploaded today at
-11:22, build number 12. That is the whole of it: an `altool` status readback
-needs separate JWT or app-specific credentials that this run did not use, so
-Apple finishing processing, the build becoming TestFlight-ready, any group
-assignment, and its export-compliance answer are all **unobserved** and must
-not be assumed. Nothing has been
-submitted for App Review, and
-there is still no public Mac App Store listing. See
+updates from it. The separately versioned Mac App Store channel is also public,
+currently at [1.3.1](https://apps.apple.com/app/id6801142976) under App Apple ID
+`6801142976`. Its StoreKit build excludes Sparkle. Source version 1.3.3 (21) is
+being prepared and must not be described as published until Apple delivery,
+review, and release complete. See
 "Delivery status" in the root [`README.md`](../README.md) for what this release
 does and does not include.
 
 That covers macOS only. The iOS app and its share extension are engineering
-builds and are published nowhere.
+builds and are published nowhere. Internal TestFlight builds are used for
+development acceptance, but there is no public App Store release.
 
 ### Two macOS products, one source
 

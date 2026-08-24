@@ -51,10 +51,11 @@ in **pre-1.0 versioning** (`v0.x`). The macOS app is on its own track and is at
 **1.3.2**: a universal, Developer ID-signed, Apple-notarized and stapled
 build, published as a direct download from its own GitHub Release,
 [`macos-v1.3.2`](https://github.com/relayium/relayium/releases/tag/macos-v1.3.2).
-There is no Mac App Store listing; a Developer ID download is the channel.
+A separately versioned Mac App Store release is also public, currently
+[1.3.1](https://apps.apple.com/app/id6801142976).
 The iOS app runs its transfer, nearby and account workflows in the
-foreground and is **not public**: there is no App Store listing and nothing to
-download.
+foreground and is **not public**: internal TestFlight builds exist, but there
+is no public App Store listing.
 
 > 👉 **Try it now: [relayium.com](https://relayium.com/)** — use two devices on
 > the same LAN without an account, or sign in to create a cross-network pairing
@@ -240,8 +241,8 @@ pairing code requires sign-in; joining with that code does not.
 | --- | --- | --- |
 | **Web** | [Live at relayium.com](https://relayium.com/) | LAN and cross-network file/text transfer, encrypted stored links, accounts, and usage controls. |
 | **CLI and nodes** | [Published on GitHub](https://github.com/relayium/relayium/releases) | Pairing-code transfer, encrypted links, direct transfer, folder sync, self-hosting, and relay/storage nodes. |
-| **macOS** | [1.3.2 direct download](https://github.com/relayium/relayium/releases/tag/macos-v1.3.2) | Universal, signed and notarized. The public channel is the Developer ID download with signed in-app updates; there is no public Mac App Store listing. |
-| **iOS** | In development | Not available on the App Store or TestFlight. Realtime work requires the app to remain in the foreground; background transfer and push notifications are not supported. |
+| **macOS** | [1.3.2 direct download](https://github.com/relayium/relayium/releases/tag/macos-v1.3.2) and [1.3.1 on the Mac App Store](https://apps.apple.com/app/id6801142976) | The independently versioned channels share product behavior but use Developer ID/Sparkle and Mac App Store/StoreKit delivery respectively. |
+| **iOS** | Internal development and TestFlight | Not publicly available on the App Store. Realtime work requires the app to remain in the foreground; background transfer and push notifications are not supported. |
 
 Relayium currently maintains English and Simplified Chinese. Detailed native
 implementation notes, release evidence, acceptance procedures, and future work

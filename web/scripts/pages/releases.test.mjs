@@ -309,7 +309,7 @@ describe("the generated pages", () => {
 // they were written for, but their macOS version is not moved release by
 // release, so pinning them to the manifest would fail every native release
 // rather than catch drift. Only the CURRENT-release claim narrows, though: the
-// App Store denial and the iOS-unreleased sentence are facts no macOS release
+// separate App Store version and the iOS-unreleased sentence are facts no direct release
 // moves, so they stay asserted in all nine — for en and zh alongside the pin,
 // for the frozen seven in their own test below.
 //
@@ -317,17 +317,17 @@ describe("the generated pages", () => {
 // a union would be satisfied by any locale's sentence, so nine pages carrying
 // the English wording — or eight carrying nothing — would pass.
 describe("what /releases says about the native apps", () => {
-  /** "…and not a Mac App Store listing." Relayium ships no App Store build. */
-  const NOT_APP_STORE = {
-    en: /not a Mac App Store listing/,
-    zh: /不是 Mac App Store 上架版本/,
-    ja: /Mac App Store 版ではありません/,
-    ko: /Mac App Store 등록이 아닙니다/,
-    de: /kein Mac-App-Store-Eintrag/,
-    fr: /non une fiche sur le Mac App Store/,
-    ar: /وليس إدراجًا في Mac App Store/,
-    es: /no una ficha en la Mac App Store/,
-    pt: /não uma listagem na Mac App Store/,
+  /** The independently versioned public Mac App Store channel is at 1.3.1. */
+  const APP_STORE_CURRENT = {
+    en: /Mac App Store release is currently 1\.3\.1/,
+    zh: /Mac App Store 版本当前为 1\.3\.1/,
+    ja: /Mac App Store 版は現在 1\.3\.1/,
+    ko: /Mac App Store 릴리스는 현재 1\.3\.1/,
+    de: /Mac-App-Store-Version ist derzeit 1\.3\.1/,
+    fr: /version Mac App Store.+actuellement la 1\.3\.1/,
+    ar: /إصدار Mac App Store.+حاليًا 1\.3\.1/,
+    es: /versión de la Mac App Store.+actualmente la 1\.3\.1/,
+    pt: /versão da Mac App Store.+atualmente a 1\.3\.1/,
   };
 
   /** iOS is still an engineering build, and the page has to keep saying so. */
@@ -351,7 +351,7 @@ describe("what /releases says about the native apps", () => {
       expect(bullet, `${lang} does not name the macOS release tag`).toContain(CURRENT_TAG);
       expect(macTags(bullet), `${lang} names a superseded macOS release tag`)
         .toEqual(new Set([CURRENT_TAG]));
-      expect(bullet, `${lang} does not rule out the Mac App Store`).toMatch(NOT_APP_STORE[lang]);
+      expect(bullet, `${lang} does not name the current Mac App Store release`).toMatch(APP_STORE_CURRENT[lang]);
       expect(bullet, `${lang} stops saying the iOS app is unreleased`).toMatch(IOS_UNRELEASED[lang]);
     }
   });
@@ -360,7 +360,7 @@ describe("what /releases says about the native apps", () => {
   // archived translation, and after the narrowing above nothing else in this
   // suite would notice either one disappearing:
   //
-  //   * The version-independent claims. "Not a Mac App Store listing" and "iOS
+  //   * The independently versioned App Store claim and "iOS
   //     is unreleased" are not facts about 1.2.5 — no macOS release moves them,
   //     so an archive that stopped saying either would be wrong TODAY, not
   //     merely old. These are the seven entries in the tables above that the
@@ -373,7 +373,7 @@ describe("what /releases says about the native apps", () => {
   it("keeps the frozen locales archived rather than half-refreshed", () => {
     for (const lang of FROZEN_LANGS) {
       const bullet = releases.langs[lang].sections[0].bullets[1];
-      expect(bullet, `${lang} does not rule out the Mac App Store`).toMatch(NOT_APP_STORE[lang]);
+      expect(bullet, `${lang} does not name the current Mac App Store release`).toMatch(APP_STORE_CURRENT[lang]);
       expect(bullet, `${lang} stops saying the iOS app is unreleased`).toMatch(IOS_UNRELEASED[lang]);
 
       const tags = macTags(bullet);

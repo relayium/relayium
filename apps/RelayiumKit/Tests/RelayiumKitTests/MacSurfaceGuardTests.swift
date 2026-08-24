@@ -5871,11 +5871,10 @@ final class MacSurfaceGuardTests: XCTestCase {
     ///     a ban on saying it would make these documents lie in the other
     ///     direction.
     ///
-    /// What survives every state is the set of claims that were never true and
-    /// are not true now. Relayium has no Mac App Store listing — the macOS app
-    /// is a Developer ID download — and the iOS app is published nowhere at all.
-    /// Those are the two ways this repository could still overstate itself, so
-    /// those are what stays banned.
+    /// Relayium now has two independently versioned public macOS channels: the
+    /// Developer ID download and the Mac App Store release. The remaining
+    /// overstatement to ban here is a public iOS release; internal TestFlight
+    /// distribution is not a public App Store launch.
     ///
     /// Phrases, not bare words. `apps/README.md` legitimately explains why
     /// `apps/` is Apache-2.0 ("so these clients can ship through the App Store")
@@ -5883,19 +5882,8 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// track". Banning "app store" would fail on both, and a guard that has to
     /// be disabled to write the truth protects nothing.
     ///
-    /// And a substring cannot tell a claim from its DENIAL. The first version of
-    /// this list banned "through the mac app store" and immediately failed on
-    /// *"It is not distributed through the Mac App Store"* — the truest sentence
-    /// in the file. Only unambiguously affirmative spellings are banned here;
-    /// the real protection against the opposite mistake is
-    /// `testTheDocsDenyAMacAppStoreListing` below, which REQUIRES the denial to
-    /// be present. A document cannot start claiming an App Store listing without
-    /// deleting a sentence that is asserted somewhere else.
-    func testNoClaimSurfaceClaimsAnAppStoreOrAPublicIOSRelease() throws {
-        let claims = ["available on the mac app store", "listed on the mac app store",
-                      "get it on the mac app store", "download it from the mac app store",
-                      "ships through the mac app store", "published to the mac app store",
-                      "the ios app is publicly available", "download the ios app",
+    func testNoClaimSurfaceClaimsAPublicIOSRelease() throws {
+        let claims = ["the ios app is publicly available", "download the ios app",
                       "the ios app has launched", "the ios app is now live",
                       "ios app is available for download"]
         for path in claimSurfaces {
@@ -5906,19 +5894,16 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// The denial, required rather than merely permitted — see above for why the
-    /// ban list alone cannot carry this.
-    ///
-    /// Relayium distributes macOS as a Developer ID download. Saying so is not
-    /// pedantry: Gatekeeper, the update mechanism, the entitlements the app may
-    /// hold and what a reader should be suspicious of all differ between the two
-    /// channels, and a reader who assumes App Store review stood behind this
-    /// download has been misled by omission.
-    func testTheDocsDenyAMacAppStoreListing() throws {
+    /// Require the public App Store identity and its independent current
+    /// version. This prevents a future direct-download bump from either erasing
+    /// the App Store channel or falsely assigning the same version to it.
+    func testTheDocsNameTheMacAppStoreRelease() throws {
         for path in ["README.md", "apps/README.md"] {
-            XCTAssertTrue(flattened(try claimSurfaceText(path)).lowercased()
-                .contains("no mac app store listing"),
-                          "\(path) must say plainly that there is no Mac App Store listing")
+            let text = flattened(try claimSurfaceText(path))
+            XCTAssertTrue(text.contains("apps.apple.com/app/id6801142976"),
+                          "\(path) must link the public Mac App Store product")
+            XCTAssertTrue(text.contains("1.3.1"),
+                          "\(path) must name the independently versioned App Store release")
         }
     }
 

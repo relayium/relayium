@@ -342,7 +342,7 @@ describe("English keeps the availability boundaries it is the master of", () => 
 
     // Still true, and still worth pinning: this page proves neither of these,
     // and the release surfaces that DO prove them are the ones allowed to say
-    // so. There is also no Mac App Store listing to claim.
+    // so. This setup surface intentionally claims neither distribution channel.
     const mac = [d.platforms.macos.setup, d.macNoDownload].join("\n");
     expect(mac).not.toMatch(/app\s*store/i);
     expect(mac).not.toMatch(/notariz/i);
