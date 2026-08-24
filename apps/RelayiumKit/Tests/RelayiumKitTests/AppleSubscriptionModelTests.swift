@@ -31,6 +31,7 @@ private final class FakeStore: SubscriptionStore, @unchecked Sendable {
     private var _offers: Result<[SubscriptionOffer], Error> = .success([])
     private var _purchase: Result<StorePurchaseOutcome, Error> = .success(.userCancelled)
     private var _entitlements: [SignedStoreTransaction] = []
+    private var _unfinished: [SignedStoreTransaction] = []
     private var _synchronize: Result<Void, Error> = .success(())
     private var _finished: [StoreTransactionID] = []
     private var _requestedIDs: [[String]] = []
@@ -46,6 +47,7 @@ private final class FakeStore: SubscriptionStore, @unchecked Sendable {
     func setOffers(_ value: Result<[SubscriptionOffer], Error>) { sync { _offers = value } }
     func setPurchase(_ value: Result<StorePurchaseOutcome, Error>) { sync { _purchase = value } }
     func setEntitlements(_ value: [SignedStoreTransaction]) { sync { _entitlements = value } }
+    func setUnfinished(_ value: [SignedStoreTransaction]) { sync { _unfinished = value } }
     func setSynchronize(_ value: Result<Void, Error>) { sync { _synchronize = value } }
     /// Run something at the moment the store would be charging the user — the
     /// only place from which "the session ended while the sheet was open" can be
@@ -85,6 +87,11 @@ private final class FakeStore: SubscriptionStore, @unchecked Sendable {
     func currentEntitlements() async -> [SignedStoreTransaction] {
         journal.record("currentEntitlements")
         return sync { _entitlements }
+    }
+
+    func unfinishedTransactions() async -> [SignedStoreTransaction] {
+        journal.record("unfinished")
+        return sync { _unfinished }
     }
 
     func updates() -> AsyncStream<SignedStoreTransaction> {
@@ -400,7 +407,10 @@ final class AppleSubscriptionModelTests: XCTestCase {
         func set(_ new: String?) { lock.lock(); value = new; lock.unlock() }
     }
 
-    private func makeRig(bearer: String? = "rlm_app_T") -> Rig {
+    private func makeRig(
+        bearer: String? = "rlm_app_T",
+        purchaseDispatchPolicy: ApplePurchaseDispatchPolicy = .legacyOneShot
+    ) -> Rig {
         let journal = PurchaseJournal()
         let store = FakeStore(journal: journal)
         let billing = FakeBilling(journal: journal, accountToken: Fixture.accountToken)
@@ -408,7 +418,8 @@ final class AppleSubscriptionModelTests: XCTestCase {
         let model = AppleSubscriptionModel(
             store: store, billing: billing, bundleID: Fixture.bundleID,
             bearer: { box.current },
-            refreshAccount: { journal.record("refresh") })
+            refreshAccount: { journal.record("refresh") },
+            purchaseDispatchPolicy: purchaseDispatchPolicy)
         return Rig(model: model, store: store, billing: billing, journal: journal, bearer: box)
     }
 
@@ -671,6 +682,21 @@ final class AppleSubscriptionModelTests: XCTestCase {
                            .failed(.purchaseNotAllowed(blockedBy: "apple")))
             XCTAssertTrue(rig.store.finished.isEmpty)
         }
+    }
+
+    func testDurableContinuationPolicyRefusesBeforeDispatchWhenCapabilityIsUnavailable() async {
+        let rig = makeRig(purchaseDispatchPolicy: .durableContinuationRequired)
+        rig.billing.setCatalog(.success(Fixture.serverCatalog()))
+        rig.store.setOffers(.success(Fixture.offers(Fixture.catalog)))
+        await rig.model.loadOffers()
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.model.state, .failed(.billing(.continuationRejected)))
+        XCTAssertTrue(rig.billing.dispatchContinuations.isEmpty)
+        XCTAssertEqual(rig.journal.count("accountToken"), 0)
+        XCTAssertEqual(rig.journal.count("purchase"), 0)
+        XCTAssertTrue(rig.store.appAccountTokens.isEmpty)
     }
 
     // MARK: - signed out
@@ -1264,6 +1290,38 @@ final class AppleSubscriptionModelTests: XCTestCase {
 
         XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
         XCTAssertEqual(rig.model.state, stateBefore, "a background renewal repainted the screen")
+    }
+
+    func testStartupSweepSettlesAnUnfinishedTransaction() async {
+        let rig = await makeReadyRig()
+        rig.store.setUnfinished([Fixture.delivery])
+        let stateBefore = rig.model.state
+
+        rig.model.startObservingUpdates()
+        await waitFor(rig) { $0.journal.count("refresh") == 1 }
+
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
+        XCTAssertEqual(rig.billing.submittedJWS, [Fixture.jws])
+        XCTAssertEqual(rig.model.state, stateBefore)
+        XCTAssertEqual(rig.journal.count("unfinished"), 1)
+    }
+
+    func testUnfinishedTransactionIsRetriedAfterLaunchSessionRestoration() async {
+        let rig = makeRig(bearer: nil)
+        rig.store.setUnfinished([Fixture.delivery])
+        rig.billing.setSubmissions([.success(Fixture.entitlement)])
+
+        rig.model.startObservingUpdates()
+        await waitFor(rig) { $0.journal.count("updates") == 1 }
+        XCTAssertTrue(rig.billing.submittedJWS.isEmpty)
+        XCTAssertTrue(rig.store.finished.isEmpty)
+
+        rig.bearer.set("rlm_app_restored")
+        await rig.model.reconcileUnfinishedTransactions()
+
+        XCTAssertEqual(rig.billing.submittedJWS, [Fixture.jws])
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
+        XCTAssertEqual(rig.journal.count("refresh"), 1)
     }
 
     /// A refused background submission finishes nothing and says nothing. The

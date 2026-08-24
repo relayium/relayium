@@ -209,6 +209,16 @@ public enum AppleSubscriptionState: Equatable {
     case failed(AppleSubscriptionFailure)
 }
 
+/// Whether a host may use the pre-continuation one-shot purchase protocol.
+///
+/// Released App Store builds require durable continuation. The legacy mode is
+/// retained only for explicit compatibility fixtures and older hosts; it must
+/// never be selected because a production keychain happened to be unavailable.
+public enum ApplePurchaseDispatchPolicy: Equatable, Sendable {
+    case legacyOneShot
+    case durableContinuationRequired
+}
+
 /// The whole in-app purchase flow: offers, buying, restoring, and the ongoing
 /// deliveries the store makes on its own.
 ///
@@ -273,6 +283,7 @@ public final class AppleSubscriptionModel: ObservableObject {
     /// `AccountSession.refresh()`, injected rather than reimplemented. It is
     /// what makes the server's answer — not this model's — what the app renders.
     private let refreshAccount: @MainActor () async -> Void
+    private let purchaseDispatchPolicy: ApplePurchaseDispatchPolicy
 
     /// Where this device's purchase-continuation capability is kept, and `nil`
     /// when this build has none.
@@ -294,6 +305,12 @@ public final class AppleSubscriptionModel: ObservableObject {
     private let appInstanceID: String?
 
     private var updateTask: Task<Void, Never>?
+    /// Serializes launch/sign-in recovery sweeps. SwiftUI restores the Relayium
+    /// session and starts StoreKit observation in independent tasks, so both may
+    /// request the same durable queue as an account becomes ready. One sweep is
+    /// sufficient; a transaction refused by the server remains unfinished and
+    /// is eligible for the next explicit sweep or StoreKit update.
+    private var unfinishedSweepInProgress = false
     private var generation = 0
 
     public init(store: SubscriptionStore,
@@ -302,12 +319,14 @@ public final class AppleSubscriptionModel: ObservableObject {
                 bearer: @escaping @MainActor () -> String?,
                 refreshAccount: @escaping @MainActor () async -> Void,
                 continuation: ApplePurchaseCapabilityRepository? = nil,
-                appInstanceID: String? = nil) {
+                appInstanceID: String? = nil,
+                purchaseDispatchPolicy: ApplePurchaseDispatchPolicy = .legacyOneShot) {
         self.store = store
         self.billing = billing
         self.bundleID = bundleID
         self.bearer = bearer
         self.refreshAccount = refreshAccount
+        self.purchaseDispatchPolicy = purchaseDispatchPolicy
         // Both halves or neither. An instance id with nowhere to keep the secret
         // would send new-protocol requests it could never report the outcome of,
         // which is strictly worse than being a legacy client: it arms a sheet and
@@ -464,6 +483,17 @@ public final class AppleSubscriptionModel: ObservableObject {
             state = .failed(.purchaseNotAllowed(blockedBy: eligibility?.blockedBy ?? ""))
             return
         }
+        // A production App Store build must be able to persist the capability
+        // before it is allowed to arm a purchase. Silently falling back to the
+        // legacy one-shot protocol on a locked or unavailable keychain recreates
+        // the permanent cancellation deadlock this protocol was added to fix.
+        // This guard precedes bearer, catalog, dispatch and StoreKit work: no
+        // network authority is consumed and no purchase sheet can open.
+        guard purchaseDispatchPolicy == .legacyOneShot ||
+                (continuation != nil && appInstanceID != nil) else {
+            state = .failed(.billing(.continuationRejected))
+            return
+        }
         guard let token = currentBearer() else {
             // Nothing was asked of the store. A signed-out purchase has no
             // account to attribute to, and StoreKit would happily complete it.
@@ -613,6 +643,10 @@ public final class AppleSubscriptionModel: ObservableObject {
     /// permanent deadlock rather than a lost retry.
     private func arm(productID: String, token: String, generation g: Int) async -> ArmedSheet? {
         guard let continuation, let appInstanceID else {
+            guard purchaseDispatchPolicy == .legacyOneShot else {
+                state = .failed(.billing(.continuationRejected))
+                return nil
+            }
             // LEGACY: no capability fields, one dispatch, strict one-shot.
             do {
                 let dispatch = try await billing.dispatchApplePurchase(
@@ -1006,11 +1040,35 @@ public final class AppleSubscriptionModel: ObservableObject {
         guard updateTask == nil else { return }
         let stream = store.updates()
         updateTask = Task { [weak self] in
+            guard let self else { return }
+            // Subscribe to live updates first, then sweep StoreKit's durable
+            // unfinished queue. A transaction completing across this launch
+            // boundary is therefore present in at least one source. Duplicate
+            // delivery is safe: server intake is idempotent by transaction id,
+            // and `finish` addresses only the exact retained StoreKit object.
+            await self.reconcileUnfinishedTransactions()
             for await delivery in stream {
                 if Task.isCancelled { return }
-                guard let self else { return }
                 await self.handle(update: delivery)
             }
+        }
+    }
+
+    /// Retry StoreKit's durable unfinished queue whenever a Relayium account
+    /// becomes ready.
+    ///
+    /// The launch observer may run before keychain session restoration. Its
+    /// signed-out sweep correctly submits nothing, but StoreKit does not promise
+    /// another live update merely because Relayium later acquired a bearer. The
+    /// app therefore calls this again on each ready account identity. Concurrent
+    /// launch and sign-in calls collapse into one sweep.
+    public func reconcileUnfinishedTransactions() async {
+        guard currentBearer() != nil, !unfinishedSweepInProgress else { return }
+        unfinishedSweepInProgress = true
+        defer { unfinishedSweepInProgress = false }
+        for delivery in await store.unfinishedTransactions() {
+            if Task.isCancelled { return }
+            await handle(update: delivery)
         }
     }
 

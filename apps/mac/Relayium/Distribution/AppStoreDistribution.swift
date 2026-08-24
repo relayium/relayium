@@ -64,11 +64,10 @@ enum AppDistribution {
         // armed one dispatch for the authority generation and nothing resolves
         // it.
         //
-        // `nil` is a legitimate answer and is NOT patched around — a locked or
-        // unavailable keychain gives no capability, and this build then behaves
-        // exactly like every released one: strict one-shot, reconciling through
-        // `Transaction.updates`/restore. Arming a sheet whose outcome could
-        // never be reported would deadlock the account instead.
+        // A locked or unavailable keychain leaves this nil. The model remains
+        // present so Restore Purchases and Manage Subscription still work, but
+        // its production policy refuses to arm a new sheet rather than silently
+        // falling back to the cancellation-deadlocking one-shot protocol.
         let continuation = AppEnvironment.makeApplePurchaseContinuation()
         return AppleSubscriptionModel(
             store: StoreKitSubscriptionStore(),
@@ -77,7 +76,8 @@ enum AppDistribution {
             bearer: bearer,
             refreshAccount: refreshAccount,
             continuation: continuation?.repository,
-            appInstanceID: continuation?.appInstanceID)
+            appInstanceID: continuation?.appInstanceID,
+            purchaseDispatchPolicy: .durableContinuationRequired)
     }
 }
 

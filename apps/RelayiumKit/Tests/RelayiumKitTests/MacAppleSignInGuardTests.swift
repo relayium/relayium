@@ -269,6 +269,8 @@ final class MacAppleSignInGuardTests: XCTestCase {
                       "the purchase model is built without its capability store")
         XCTAssertTrue(mas.contains("appInstanceID: continuation?.appInstanceID"),
                       "the purchase model is built without its app-instance identity")
+        XCTAssertTrue(mas.contains("purchaseDispatchPolicy: .durableContinuationRequired"),
+                      "the App Store build can silently fall back to legacy purchase dispatch")
         // The direct build has no purchase model at all, so it must not acquire
         // a capability either — there is nothing for it to arm.
         let direct = try code("mac/Relayium/Distribution/DirectDistribution.swift")
@@ -278,12 +280,12 @@ final class MacAppleSignInGuardTests: XCTestCase {
 
     // MARK: - version
 
-    /// This release is 1.3.1, and the App Store review fixes it carries forward
+    /// This release is 1.3.2, and the App Store review fixes it carries forward
     /// are still in place.
-    func testTheReleaseIsVersionOnePointThreePointOne() throws {
+    func testTheReleaseIsVersionOnePointThreePointTwo() throws {
         let project = projectText
-        XCTAssertTrue(project.contains("MARKETING_VERSION = 1.3.1;"))
-        XCTAssertFalse(project.contains("MARKETING_VERSION = 1.3.0;"),
+        XCTAssertTrue(project.contains("MARKETING_VERSION = 1.3.2;"))
+        XCTAssertFalse(project.contains("MARKETING_VERSION = 1.3.1;"),
                        "a target was left on the previous version")
         // **The App Store review fixes must not come back.** The app is named
         // `Relayium`, never "… for Mac", and the login item is never registered
