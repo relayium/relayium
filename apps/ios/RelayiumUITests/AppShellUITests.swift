@@ -470,8 +470,14 @@ final class AppShellUITests: XCTestCase {
         scrollUntilHittable(create)
         create.tap()
 
-        XCTAssertTrue(app.staticTexts["Use at least 8 characters for your password."]
-            .waitForExistence(timeout: 10),
+        // The refusal is inserted above the submit button. On the smallest
+        // simulator the button had to be scrolled down to become hittable, so
+        // inserting the message can leave it just above the visible viewport.
+        // `XCUIElement.exists` only describes the current accessibility tree;
+        // bring the form's feedback region back into view before judging it.
+        let problem = app.staticTexts["Use at least 8 characters for your password."]
+        for _ in 0..<6 where !problem.exists { app.swipeDown() }
+        XCTAssertTrue(problem.waitForExistence(timeout: 10),
                       "a short password is not explained beside the form")
         XCTAssertEqual(password.value as? String, submittedPassword,
                        "a local validation error erased the password")

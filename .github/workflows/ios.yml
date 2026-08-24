@@ -195,7 +195,16 @@ jobs:
           xcodebuild -project apps/ios/Relayium.xcodeproj -scheme Relayium \
             -destination "platform=iOS Simulator,id=$device_id" \
             -derivedDataPath "$RUNNER_TEMP/dd-ios" \
+            -resultBundlePath "$RUNNER_TEMP/ios-ui-smoke.xcresult" \
             -only-testing:RelayiumUITests test
+      - name: Retain UI smoke diagnosis
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-ui-smoke-diagnosis
+          path: ${{ runner.temp }}/ios-ui-smoke.xcresult
+          retention-days: 7
+          if-no-files-found: error
 
   ios-transfer-acceptance:
     runs-on: macos-15
