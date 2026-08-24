@@ -25,13 +25,6 @@ final class AppShellUITests: XCTestCase {
         app?.terminate()
     }
 
-    private func waitForSelection(_ tab: XCUIElement, named name: String) {
-        let selected = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "selected == true"), object: tab)
-        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 10), .completed,
-                       "\(name) did not become the selected task")
-    }
-
     private func scrollUntilHittable(_ element: XCUIElement, maxSwipes: Int = 6) {
         for _ in 0..<maxSwipes where !element.isHittable {
             app.swipeUp()
@@ -68,7 +61,11 @@ final class AppShellUITests: XCTestCase {
         let tab = tabs.buttons[tabName]
         XCTAssertTrue(tab.waitForExistence(timeout: 10), "the tab bar has no \(tabName) task")
         tab.tap()
-        waitForSelection(tab, named: tabName)
+        // SwiftUI may replace the labelled tab accessibility element with its
+        // selected icon after the tap. Holding the old element and waiting on
+        // `selected == true` then observes a stale object even though the real
+        // destination rendered. The navigation bar is the user-visible task
+        // state, so it is the synchronization point and the assertion.
         XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 10),
                       "\(tabName) selected but its screen did not render")
         return tab
@@ -94,14 +91,11 @@ final class AppShellUITests: XCTestCase {
     }
 
     func testAccountRemediesRouteToTheAccountTask() {
-        let accountTab = app.tabBars.firstMatch.buttons["Account"]
-
         openTask("Send", title: "Send files")
         let sendRemedy = app.buttons["Go to Account"]
         XCTAssertTrue(sendRemedy.waitForExistence(timeout: 10),
                       "the signed-out Send task offers no account remedy")
         sendRemedy.tap()
-        waitForSelection(accountTab, named: "Account")
         XCTAssertTrue(app.navigationBars["Account"].waitForExistence(timeout: 10))
 
         openTask("Direct", title: "Direct")
@@ -109,18 +103,16 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(directRemedy.waitForExistence(timeout: 10),
                       "the signed-out Direct task offers no account remedy")
         directRemedy.tap()
-        waitForSelection(accountTab, named: "Account")
         XCTAssertTrue(app.navigationBars["Account"].waitForExistence(timeout: 10))
     }
 
     func testDirectModeChoiceStaysInDirect() {
-        let directTab = openTask("Direct", title: "Direct")
+        openTask("Direct", title: "Direct")
         let textMode = app.segmentedControls.firstMatch.buttons["Text"]
         XCTAssertTrue(textMode.waitForExistence(timeout: 10),
                       "Direct offers no text mode")
         textMode.tap()
 
-        XCTAssertTrue(directTab.isSelected, "choosing Text navigated away from Direct")
         XCTAssertTrue(app.navigationBars["Direct"].exists)
         XCTAssertTrue(app.staticTexts["Start a text session"].waitForExistence(timeout: 10),
                       "Direct selected Text but did not render the text task")
@@ -143,20 +135,17 @@ final class AppShellUITests: XCTestCase {
         scrollUntilHittable(route)
         route.tap()
 
-        let sendTab = app.tabBars.firstMatch.buttons["Send"]
-        waitForSelection(sendTab, named: "Send")
         XCTAssertTrue(app.navigationBars["Send files"].waitForExistence(timeout: 10),
                       "the large-file route selected Send without rendering it")
     }
 
     func testAccountSwitchesToACompleteInAppRegistrationForm() {
-        let accountTab = openTask("Account", title: "Account")
+        openTask("Account", title: "Account")
         let create = app.buttons["New to Relayium? Create an account"]
         XCTAssertTrue(create.waitForExistence(timeout: 10),
                       "the sign-in form offers no registration path")
         create.tap()
 
-        XCTAssertTrue(accountTab.isSelected, "registration navigated away from Account")
         XCTAssertTrue(app.staticTexts["Create your Relayium account"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.textFields["Name (optional)"].exists)
         XCTAssertTrue(app.textFields["Email"].exists)
@@ -169,7 +158,6 @@ final class AppShellUITests: XCTestCase {
         let back = app.buttons["Back to sign in"]
         XCTAssertTrue(back.exists, "registration offers no way back to sign in")
         back.tap()
-        XCTAssertTrue(accountTab.isSelected, "returning to sign in left Account")
         XCTAssertTrue(app.staticTexts["Welcome back"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.secureTextFields["Confirm password"].exists,
                        "returning to sign in left the registration fields behind")
@@ -640,7 +628,7 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-text-code"]
         app.launch()
 
-        let directTab = openTask("Direct", title: "Direct")
+        openTask("Direct", title: "Direct")
         let textMode = app.segmentedControls.firstMatch.buttons["Text"]
         XCTAssertTrue(textMode.waitForExistence(timeout: 10), "Direct offers no text mode")
         textMode.tap()
@@ -655,8 +643,6 @@ final class AppShellUITests: XCTestCase {
         // large number the listener has to re-segment.
         XCTAssertTrue(app.staticTexts["4 8 3 9 2 0"].waitForExistence(timeout: 15),
                       "the generated pairing code is not visible")
-        XCTAssertTrue(directTab.isSelected,
-                      "creating a text code navigated away from Direct")
         XCTAssertTrue(app.navigationBars["Direct"].exists)
 
         XCTAssertTrue(app.staticTexts["Join link"].exists,
@@ -1091,7 +1077,7 @@ final class AppShellUITests: XCTestCase {
                "--relayium-ui-testing-file-code"]
         app.launch()
 
-        let directTab = openTask("Direct", title: "Direct")
+        openTask("Direct", title: "Direct")
         let chooser = app.buttons["Choose Files or Folders…"]
         XCTAssertTrue(chooser.waitForExistence(timeout: 15),
                       "Direct's file mode stages nothing")
@@ -1114,8 +1100,6 @@ final class AppShellUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["4 8 3 9 2 0"].waitForExistence(timeout: 20),
                       "the generated pairing code is not visible")
-        XCTAssertTrue(directTab.isSelected,
-                      "creating a file code navigated away from Direct")
         XCTAssertTrue(app.staticTexts["Join link"].exists,
                       "the generated code has no visible browser handoff")
         XCTAssertTrue(app.staticTexts[
