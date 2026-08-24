@@ -51,6 +51,25 @@ on:
   # on `main`. A future cleanup that routed `main` through the gate would wedge
   # every production promotion with `required check absent`.
   pull_request:
+  # Release metadata is generated after the signed/notarized artifact exists,
+  # so the frozen candidate commit cannot arrive through an ordinary PR event.
+  # The release workflow creates a PR, then dispatches this same gate on the
+  # candidate SHA. Identity checks below bind the dispatch to that exact PR,
+  # base and one-commit head before any lane may run.
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Frozen release-candidate pull request number
+        required: true
+        type: string
+      base_sha:
+        description: Exact protected-main SHA the candidate must extend
+        required: true
+        type: string
+      head_sha:
+        description: Exact frozen candidate SHA this run must check
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -101,6 +120,12 @@ jobs:
       # human-readable version in a trailing comment) so a compromised or
       # retagged upstream release can't silently change what runs here.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # A dispatched release candidate must prove that it is exactly one
+          # commit on top of the declared base. The default depth of one does
+          # not contain that parent and would make the identity check fail even
+          # for a valid candidate.
+          fetch-depth: 2
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 24
@@ -114,20 +139,50 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          DISPATCHED: ${{ github.event_name == 'workflow_dispatch' }}
+          EXPECTED_BASE: ${{ inputs.base_sha }}
+          EXPECTED_HEAD: ${{ inputs.head_sha }}
+          CHECKED_SHA: ${{ github.sha }}
         run: |
           set -uo pipefail
           payload="$RUNNER_TEMP/pr-files.json"
-          if gh api "repos/$REPOSITORY/pulls/$PR_NUMBER/files" --paginate --slurp > "$payload"; then
-            status=ok
+          status=ok
+          changed_files='${{ github.event.pull_request.changed_files }}'
+
+          if [ "$DISPATCHED" = true ]; then
+            pr="$RUNNER_TEMP/pr.json"
+            if ! gh api "repos/$REPOSITORY/pulls/$PR_NUMBER" > "$pr"; then
+              status="identity-api-error-$?"
+            elif ! [[ "$EXPECTED_BASE" =~ ^[0-9a-f]{40}$ && "$EXPECTED_HEAD" =~ ^[0-9a-f]{40}$ ]]; then
+              status=identity-input-error
+            else
+              actual_base=$(jq -r '.base.sha' "$pr")
+              actual_head=$(jq -r '.head.sha' "$pr")
+              changed_files=$(jq -r '.changed_files' "$pr")
+              commit_count=$(git rev-list --count "$EXPECTED_BASE..$EXPECTED_HEAD" 2>/dev/null || printf invalid)
+              parent=$(git rev-parse "$EXPECTED_HEAD^" 2>/dev/null || printf invalid)
+              if [ "$actual_base" != "$EXPECTED_BASE" ] || [ "$actual_head" != "$EXPECTED_HEAD" ] \
+                || [ "$CHECKED_SHA" != "$EXPECTED_HEAD" ] || [ "$commit_count" != 1 ] \
+                || [ "$parent" != "$EXPECTED_BASE" ]; then
+                status=identity-mismatch
+              fi
+            fi
+          fi
+
+          if [ "$status" = ok ]; then
+            if ! gh api "repos/$REPOSITORY/pulls/$PR_NUMBER/files" --paginate --slurp > "$payload"; then
+              status="files-api-error-$?"
+              : > "$payload"
+            fi
           else
-            status="api-error-$?"
             : > "$payload"
           fi
           echo "status is $status"
           {
             echo "payload=$payload"
             echo "status=$status"
+            echo "changed_files=$changed_files"
           } >> "$GITHUB_OUTPUT"
       # `changed_files` is read from the event rather than counted from the
       # response on purpose: the two disagreeing is how a truncated or
@@ -138,7 +193,7 @@ jobs:
         env:
           LANE_SELECTOR_STATUS: ${{ steps.files.outputs.status }}
           LANE_SELECTOR_FILES: ${{ steps.files.outputs.payload }}
-          LANE_SELECTOR_CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+          LANE_SELECTOR_CHANGED_FILES: ${{ steps.files.outputs.changed_files }}
         run: node scripts/ci/select-lanes.mjs >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------

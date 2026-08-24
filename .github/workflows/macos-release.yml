@@ -410,7 +410,9 @@ jobs:
     # nor visibly failed.
     timeout-minutes: 15
     permissions:
+      actions: write
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -607,6 +609,76 @@ jobs:
           [ "$(git rev-parse 'HEAD^{tree}')" = "$CANDIDATE_TREE" ] || {
             echo "::error::the release commit does not carry the validated tree"; exit 1; }
           echo "candidate=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      # Delivery starts from a commit that already
+      # passed `npm run check`, the full web suite, the build and the candidate
+      # scope check, so there is no test here that could newly fail against
+      # unstaged sources — which is precisely how run 31931451292 ended up with a
+      # permanent release and no metadata behind it.
+      #
+      # Idempotent in both directions. A rerun after a successful delivery
+      # assembles the same candidate against a main that already carries it,
+      # finds nothing staged, and freezes no commit — so this step has nothing to
+      # push and says so. Nothing is rebuilt, retagged, re-uploaded or replaced.
+      #
+      # Not forced. If main moved between validation and here the push is
+      # rejected, and the correct response is another run against the new main —
+      # not overwriting whatever landed in between.
+      - name: Deliver the frozen candidate to main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE: ${{ steps.freeze.outputs.candidate }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CANDIDATE" ]; then
+            echo "Release metadata is already present on main; nothing to deliver."
+            exit 0
+          fi
+
+          base=$(git rev-parse "$CANDIDATE^")
+          tag="macos-v${RELEASE_VERSION}"
+          candidate_branch="release-candidate/$tag-$GITHUB_RUN_ID"
+          git push origin "$CANDIDATE:refs/heads/$candidate_branch"
+          pr_url=$(gh pr create \
+            --base main \
+            --head "$candidate_branch" \
+            --title "chore(release): publish $tag metadata" \
+            --body "Automated frozen metadata candidate for $tag. Do not amend or add commits.")
+          pr_number=${pr_url##*/}
+
+          gh workflow run merge-gate.yml \
+            --ref "$candidate_branch" \
+            -f "pr_number=$pr_number" \
+            -f "base_sha=$base" \
+            -f "head_sha=$CANDIDATE"
+
+          gate_run=''
+          for _ in $(seq 1 120); do
+            gate_run=$(gh run list \
+              --workflow merge-gate.yml \
+              --branch "$candidate_branch" \
+              --event workflow_dispatch \
+              --json databaseId,headSha \
+              --jq ".[] | select(.headSha == \"$CANDIDATE\") | .databaseId" \
+              --limit 20 | head -n 1)
+            [ -n "$gate_run" ] && break
+            sleep 5
+          done
+          if [ -z "$gate_run" ]; then
+            echo "::error::merge-gate was not created for frozen candidate $CANDIDATE"
+            exit 1
+          fi
+          if ! gh run watch "$gate_run" --exit-status; then
+            echo "::error::frozen candidate $CANDIDATE failed merge-gate run $gate_run"
+            exit 1
+          fi
+
+          # This is deliberately a fast-forward push. Branch protection sees
+          # its required check on CANDIDATE itself; a moved main is rejected.
+          git push origin "$CANDIDATE:main"
+
+      # The public release is last. No immutable public object is created until
+      # the checked metadata commit is reachable from protected main.
       - name: Publish immutable GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -634,7 +706,7 @@ jobs:
             cmp "$release/Relayium.dmg" "$existing/Relayium.dmg"
             cmp "$release/Relayium.dmg.sha256" "$existing/Relayium.dmg.sha256"
             cmp "$release/release-web/public/apps/macos/appcast.xml" "$existing/appcast.xml"
-            echo "Existing $tag contains the identical release; continuing metadata recovery."
+            echo "Existing $tag contains the identical release."
           else
             gh release create "$tag" \
               "$release/Relayium.dmg" \
@@ -645,27 +717,3 @@ jobs:
               --title "Relayium for macOS ${RELEASE_VERSION}" \
               --notes "Signed, notarized universal macOS release. The disk image passed Apple notarization, stapling, and Gatekeeper assessment in workflow run ${GITHUB_RUN_ID}."
           fi
-      # Delivery is a push and nothing else. Its input is a commit that already
-      # passed `npm run check`, the full web suite, the build and the candidate
-      # scope check, so there is no test here that could newly fail against
-      # unstaged sources — which is precisely how run 31931451292 ended up with a
-      # permanent release and no metadata behind it.
-      #
-      # Idempotent in both directions. A rerun after a successful delivery
-      # assembles the same candidate against a main that already carries it,
-      # finds nothing staged, and freezes no commit — so this step has nothing to
-      # push and says so. Nothing is rebuilt, retagged, re-uploaded or replaced.
-      #
-      # Not forced. If main moved between validation and here the push is
-      # rejected, and the correct response is another run against the new main —
-      # not overwriting whatever landed in between.
-      - name: Deliver the frozen candidate to main
-        env:
-          CANDIDATE: ${{ steps.freeze.outputs.candidate }}
-        run: |
-          set -euo pipefail
-          if [ -z "$CANDIDATE" ]; then
-            echo "Release metadata is already present on main; nothing to deliver."
-            exit 0
-          fi
-          git push origin "$CANDIDATE:main"

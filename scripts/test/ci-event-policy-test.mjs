@@ -4316,11 +4316,15 @@ function releaseBoundaryFailures(world) {
       + `immutable release around whatever the build alone left behind.`,
     );
     need(
-      deepEqual(publish.permissions, { contents: "write" }),
+      deepEqual(publish.permissions, {
+        actions: "write",
+        contents: "write",
+        "pull-requests": "write",
+      }),
       `${MACOS_RELEASE}/publish declares permissions ${JSON.stringify(publish.permissions)}, want `
-      + `{"contents":"write"} — declared on the job, not on the workflow. It is the only job in `
-      + `either macOS workflow that may write to this repository, and the narrowest place to say `
-      + `so is the job itself.`,
+      + `the exact release-delivery permission set. It needs contents to push the frozen branch, `
+      + `pull requests to bind that branch to protected main, and actions only to dispatch the `
+      + `required gate on the candidate SHA. These stay on the publish job, not the workflow.`,
     );
   }
   const writers = Object.entries(release.jobs ?? {})
@@ -4467,15 +4471,33 @@ function aggregateGateFailures(world) {
   const roster = [SELECT_JOB, ...lanes, ...GATE_ALWAYS];
   const jobs = gate.jobs ?? {};
 
-  // -- the trigger: unfiltered, pull_request, and nothing else --------------
+  // -- the trigger: ordinary PRs plus the identity-bound release candidate --
   need(
-    deepEqual(Object.keys(gate.on ?? {}), ["pull_request"]),
+    deepEqual(Object.keys(gate.on ?? {}), ["pull_request", "workflow_dispatch"]),
     `${AGGREGATE} triggers on [${Object.keys(gate.on ?? {}).join(", ")}]; want exactly `
-    + `[pull_request]. A \`push:\` here would not help — \`main\` is verified by each lane's own `
-    + `\`push: branches: [main]\`, which is what puts a check run on the \`main\` commit for `
-    + `\`relayium-ops\`' \`deploy/promote.sh\` to read — and a \`schedule:\` would start every `
-    + `expensive lane on a tree nobody changed.`,
+    + `[pull_request, workflow_dispatch]. The dispatch exists only for a frozen release `
+    + `candidate whose exact PR/base/head identity is checked by the selector job. A \`push:\` `
+    + `would duplicate main CI, and a \`schedule:\` would run lanes on a tree nobody changed.`,
   );
+  const gateDispatch = gate.on?.workflow_dispatch;
+  const gateDispatchInputs = gateDispatch && typeof gateDispatch === "object"
+    ? gateDispatch.inputs ?? {}
+    : {};
+  need(
+    deepEqual(Object.keys(gateDispatchInputs), ["pr_number", "base_sha", "head_sha"]),
+    `${AGGREGATE}'s workflow_dispatch inputs are [${Object.keys(gateDispatchInputs).join(", ")}]; `
+    + `want exactly [pr_number, base_sha, head_sha]. Those three values bind a manually started `
+    + `check to one frozen candidate rather than providing a general-purpose green status.`,
+  );
+  for (const name of ["pr_number", "base_sha", "head_sha"]) {
+    const input = gateDispatchInputs[name];
+    need(
+      input?.required === "true" && input?.type === "string",
+      `${AGGREGATE}'s workflow_dispatch input ${name} must be a required string; got `
+      + `${JSON.stringify(input)}. An optional identity component lets a dispatch guess what it `
+      + `is checking.`,
+    );
+  }
   const prPaths = gate.on?.pull_request && typeof gate.on.pull_request === "object"
     ? gate.on.pull_request.paths
     : undefined;
