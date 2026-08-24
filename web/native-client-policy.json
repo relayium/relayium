@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "macos": {
-    "policyRevision": 6,
+    "policyRevision": 7,
     "minimumSupportedVersion": "1.2.11",
     "minimumSupportedBuild": 17,
     "recommendedVersion": "1.3.0",
-    "latestVersion": "1.3.2"
+    "latestVersion": "1.3.3"
   }
 }
