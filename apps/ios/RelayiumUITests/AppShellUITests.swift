@@ -1081,7 +1081,7 @@ final class AppShellUITests: XCTestCase {
     func testCreatingAFilePairingCodeStaysOnDirectAndShowsEveryHandoff() {
         app.terminate()
         app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-preselect-fixture",
+            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pending-fixture",
                "--relayium-ui-testing-file-code"]
         app.launch()
 
@@ -1089,9 +1089,16 @@ final class AppShellUITests: XCTestCase {
         let chooser = app.buttons["Choose Files or Folders…"]
         XCTAssertTrue(chooser.waitForExistence(timeout: 15),
                       "Direct's file mode stages nothing")
-        XCTAssertTrue(app.descendants(matching: .any)["pendingFile.0"].firstMatch
-            .waitForExistence(timeout: 15),
-            "the deterministic selection did not reach Direct's file mode")
+        scrollUntilHittable(chooser)
+        chooser.tap()
+
+        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
+        XCTAssertTrue(browsingTabs.waitForExistence(timeout: 20))
+        browsingTabs.buttons["Browse"].tap()
+        selectStagedFixture(named: "Relayium product brief")
+        let open = app.buttons["Open"]
+        XCTAssertTrue(open.waitForExistence(timeout: 10))
+        open.tap()
 
         let create = app.buttons["Create a code"]
         XCTAssertTrue(create.waitForExistence(timeout: 15),
