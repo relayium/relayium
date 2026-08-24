@@ -81,7 +81,7 @@ final class MacSurfaceGuardTests: XCTestCase {
             #"storedFile.keyAbsent.\(row.file.id)"#),
             "the key-absent explanation has no stable per-row identity")
 
-        let uiURL = macRoot.deletingLastPathComponent()
+        let uiURL = try macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
         XCTAssertTrue(ui.contains("testStoppedNearbyDiscoveryAsksForActionWithoutPretendingToWork"))
@@ -189,26 +189,22 @@ final class MacSurfaceGuardTests: XCTestCase {
                                    "Workspace/WorkspaceLinkPane.swift",
                                    "Settings/DeviceInboxSettingsView.swift"]
 
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → …/apps
+    /// `apps/`, discovered rather than counted, and checked for existing.
     private var appsRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // RelayiumKitTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // RelayiumKit
-            .deletingLastPathComponent()   // apps
+        get throws { try RepoRoot.apps() }
     }
 
-    private var macRoot: URL { appsRoot.appendingPathComponent("mac/Relayium") }
+    private var macRoot: URL { get throws { try RepoRoot.directory("apps/mac/Relayium") } }
 
     /// The shared app layer. macOS's two transfer modules are composed from
     /// types that live here, so a guard about the module boundary has to be able
     /// to read them.
     private var appKitRoot: URL {
-        appsRoot.appendingPathComponent("RelayiumKit/Sources/RelayiumAppKit")
+        get throws { try RepoRoot.directory("apps/RelayiumKit/Sources/RelayiumAppKit") }
     }
 
     private func appKitSource(named name: String) throws -> String {
-        try String(contentsOf: appKitRoot.appendingPathComponent(name), encoding: .utf8)
+        try String(contentsOf: try appKitRoot.appendingPathComponent(name), encoding: .utf8)
     }
 
     /// One declaration, bounded by the start of the next one.
@@ -231,7 +227,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     }
 
     /// The repository's own root, one level above `apps`.
-    private var repoRoot: URL { appsRoot.deletingLastPathComponent() }
+    private var repoRoot: URL { get throws { try RepoRoot.url() } }
 
     /// The three documents this round is allowed to make claims in. Each is a
     /// surface a reader takes as a statement about what the product IS, so each
@@ -240,7 +236,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                                  "apps/mac/release-readiness.json"]
 
     private func claimSurfaceText(_ path: String) throws -> String {
-        try String(contentsOf: repoRoot.appendingPathComponent(path), encoding: .utf8)
+        try String(contentsOf: try repoRoot.appendingPathComponent(path), encoding: .utf8)
     }
 
     /// The shape `web/native-releases.json` is required to have. Decoded with
@@ -289,7 +285,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// broken link in the README with every assertion below still green. The
     /// type-level half of that validation lives in `ReleaseManifest`.
     private func publishedMacVersion() throws -> String {
-        let manifest = try Data(contentsOf: repoRoot.appendingPathComponent("web/native-releases.json"))
+        let manifest = try Data(contentsOf: try repoRoot.appendingPathComponent("web/native-releases.json"))
         let root = try JSONDecoder().decode(ReleaseManifest.self, from: manifest)
         let macos = try XCTUnwrap(root.macos,
                                   "web/native-releases.json names no macOS release")
@@ -319,7 +315,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     }
 
     func testEveryMacProgressIndicatorNamesItsWork() throws {
-        let all = try sources(under: macRoot, atLeast: 30)
+        let all = try sources(under: try macRoot, atLeast: 30)
         let bare = all.filter { $0.text.contains("ProgressView()") }.map(\.name)
         XCTAssertTrue(bare.isEmpty, "unlabelled progress indicators in \(bare)")
 
@@ -341,7 +337,7 @@ final class MacSurfaceGuardTests: XCTestCase {
             ".accessibilityIdentifier(\"sidebar-\\(surface.rawValue)\")"),
             "sidebar task identity depends on the OS-specific List container")
 
-        let uiURL = macRoot.deletingLastPathComponent()
+        let uiURL = try macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
         XCTAssertTrue(ui.contains("app.windows.allElementsBoundByIndex.max") &&
@@ -413,7 +409,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         // bar, which is the surface a user reads with the window closed and the
         // one route back to the pane. A third — or a second inside the window —
         // is the duplication this batch removed.
-        let renderers = try sources(under: macRoot, atLeast: 30)
+        let renderers = try sources(under: try macRoot, atLeast: 30)
             .filter { $0.text.contains("NearbyStatusPresentation.text(for: receive.state)") }
             .map(\.name)
         XCTAssertEqual(renderers, ["MenuBarView.swift", lanConnect],
@@ -427,7 +423,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         // And a runtime check observes both halves. An absence alone would pass
         // for a residency that vanished from the product entirely, so the same
         // test has to find the sentence on the LAN pane.
-        let uiURL = macRoot.deletingLastPathComponent()
+        let uiURL = try macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
         let runtime = try XCTUnwrap(ui.components(
@@ -445,73 +441,193 @@ final class MacSurfaceGuardTests: XCTestCase {
     }
 
     func testMacRuntimeSuiteIsAHostedProductGate() throws {
-        let workflowURL = repoRoot.appendingPathComponent(".github/workflows/macos.yml")
-        let workflow = try String(contentsOf: workflowURL, encoding: .utf8)
-        XCTAssertTrue(workflow.contains("Run macOS product-flow UI smoke"),
+        // The hosted macOS gate is TWO files, and that boundary is now part of
+        // what this test has to hold. `macos.yml` is the reusable, read-only CI
+        // half: it launches the product flows, then signs and packages, and it
+        // holds no notary key, no Sparkle key and no write access to this
+        // repository. `macos-release.yml` CALLS it and owns everything that
+        // leaves the machine — notarization first, publication after.
+        //
+        // Reading one file could not tell those two architectures apart. A gate
+        // that only read `macos.yml` would pass for a release lane that never
+        // called it, and a gate that only read `macos-release.yml` would pass
+        // for a lane that published a package no product flow had ever launched.
+        // So both halves are asserted, and so is the call between them.
+        let ciURL = try repoRoot.appendingPathComponent(".github/workflows/macos.yml")
+        let releaseURL = try repoRoot.appendingPathComponent(".github/workflows/macos-release.yml")
+        let ci = try String(contentsOf: ciURL, encoding: .utf8)
+        let release = try String(contentsOf: releaseURL, encoding: .utf8)
+
+        // --- The CI half still launches the product, and still does it first.
+        XCTAssertTrue(ci.contains("Run macOS product-flow UI smoke"),
                       "CI compiles macOS but never launches its product flows")
-        let uiJob = try XCTUnwrap(workflow.range(of: "  ui-smoke:"))
-        let signedJob = try XCTUnwrap(workflow.range(of: "  signed-build:"))
-        let notarizeJob = try XCTUnwrap(workflow.range(of: "  notarize-stage:"))
-        let publishJob = try XCTUnwrap(workflow.range(of: "  publish:"))
-        let runtimeStep = try XCTUnwrap(workflow.range(of:
+        let uiJob = try XCTUnwrap(ci.range(of: "\n  ui-smoke:\n"))
+        let signedJob = try XCTUnwrap(ci.range(of: "\n  signed-build:\n"))
+        let runtimeStep = try XCTUnwrap(ci.range(of:
             "      - name: Run macOS product-flow UI smoke (${{ matrix.shard }})"))
         XCTAssertGreaterThan(runtimeStep.lowerBound, uiJob.lowerBound)
         XCTAssertLessThan(runtimeStep.lowerBound, signedJob.lowerBound)
-        XCTAssertTrue(workflow.contains("Install UI provisioning profiles"),
+        XCTAssertTrue(ci.contains("Install UI provisioning profiles"),
                       "the UI app needs its certificate and profiles")
-        XCTAssertTrue(workflow.contains("needs: [test, contract]"),
-                      "signed packaging must wait for cheap contract gates")
-        XCTAssertTrue(workflow.contains("needs: [ui-smoke, signed-build]"),
-                      "notarization must wait for every mandatory UI shard and package")
-        XCTAssertTrue(workflow.contains("needs: notarize-stage"),
-                      "publication bypasses the notarized candidate")
-        XCTAssertLessThan(signedJob.lowerBound, notarizeJob.lowerBound)
+        // Each dependency invariant is asserted INSIDE the job that must carry
+        // it. One `contains` over the whole file was satisfied by a single
+        // surviving copy, and after the split these two jobs are everything
+        // this file still gates.
+        XCTAssertNotNil(ci.range(of: "needs: [test, contract]",
+                                 range: uiJob.lowerBound..<signedJob.lowerBound),
+                        "the UI shards no longer wait for the cheap contract gates")
+        XCTAssertNotNil(ci.range(of: "needs: [test, contract]",
+                                 range: signedJob.lowerBound..<ci.endIndex),
+                        "signed packaging must wait for cheap contract gates")
+
+        // The CI half is callable, and the ONE value it hands across the file
+        // boundary is the artifact name its signing job actually used. Bracket
+        // form, not `jobs.signed-build`: a hyphen in a property path parses as
+        // subtraction, so the dotted spelling evaluates to the empty string and
+        // reaches the caller as "no signed build" rather than as an error.
+        XCTAssertTrue(ci.contains("  workflow_call:"),
+                      "the CI half is not callable, so the release lane cannot depend on it")
+        XCTAssertTrue(ci.contains("value: ${{ jobs['signed-build'].outputs.signed_artifact }}"),
+                      "the CI half does not report the artifact name its caller must download")
+        XCTAssertFalse(ci.contains("jobs.signed-build.outputs"),
+                       "the dotted property path silently evaluates to an empty artifact name")
+
+        // Nothing that leaves this repository may live in the read-only half.
+        // These absences have teeth: each names a capability whose reappearance
+        // here would mean the CI lane had regained release authority — and the
+        // whole point of the split is that a pull request runs this file.
+        XCTAssertNil(ci.range(of: "\n  notarize-stage:\n"),
+                     "notarization moved back into the reusable CI workflow")
+        XCTAssertNil(ci.range(of: "\n  publish:\n"),
+                     "publication moved back into the reusable CI workflow")
+        XCTAssertFalse(ci.contains("apps/mac/scripts/notarize-dmg.sh"),
+                       "the reusable CI workflow submits to Apple's notary")
+        XCTAssertFalse(ci.contains("MACOS_SPARKLE_PRIVATE_KEY") || ci.contains("MACOS_NOTARY"),
+                       "the reusable CI workflow can read release material it has no job for")
+        XCTAssertFalse(ci.contains("permissions:\n  contents: write")
+                        || ci.contains("    permissions:\n      contents: write"),
+                       "the reusable CI workflow can write to this repository")
+
+        // --- The release half calls that gate rather than reproducing it.
+        let buildJob = try XCTUnwrap(release.range(of: "\n  build:\n"))
+        let notarizeJob = try XCTUnwrap(release.range(of: "\n  notarize-stage:\n"))
+        let publishJob = try XCTUnwrap(release.range(of: "\n  publish:\n"))
+        XCTAssertNotNil(release.range(of: "uses: ./.github/workflows/macos.yml",
+                                      range: buildJob.lowerBound..<notarizeJob.lowerBound),
+                        "the release lane does not run the macOS product gate at all")
+        // The YAML key, not the words: this file discusses `secrets: inherit`
+        // in prose precisely because it is the thing it must not do.
+        XCTAssertNil(release.range(of: "\n    secrets: inherit"),
+                     "the release lane hands the CI half every secret this repository holds")
+        XCTAssertLessThan(buildJob.lowerBound, notarizeJob.lowerBound)
         XCTAssertLessThan(notarizeJob.lowerBound, publishJob.lowerBound)
-        let downloadedTool = try XCTUnwrap(workflow.range(
+        // Depending on the whole call is STRICTLY stronger than the
+        // `[ui-smoke, signed-build]` this used to read: a caller job succeeds
+        // only when every job it called succeeded, so `contract` and `test`
+        // now gate notarization too — and two job names from another file
+        // cannot be depended on from here at all.
+        XCTAssertNotNil(release.range(of: "needs: build",
+                                      range: notarizeJob.lowerBound..<publishJob.lowerBound),
+                        "notarization does not wait for the whole called CI workflow")
+        XCTAssertFalse(release.contains("needs: [ui-smoke, signed-build]"),
+                       "notarization names jobs of another workflow instead of the call itself")
+        XCTAssertNotNil(release.range(of: "needs: notarize-stage",
+                                      range: publishJob.lowerBound..<release.endIndex),
+                        "publication bypasses the notarized candidate")
+
+        // The artifact name crosses the file boundary as a VALUE, and the empty
+        // case is rejected before anything is downloaded: a skipped
+        // `signed-build` satisfies `needs:` and contributes an EMPTY output, so
+        // an empty name has to fail as "nothing was built" rather than as a
+        // missing file on a runner that has already been paid for.
+        let notarizeRange = notarizeJob.lowerBound..<publishJob.lowerBound
+        XCTAssertNotNil(release.range(of: "SIGNED_ARTIFACT: ${{ needs.build.outputs.signed_artifact }}",
+                                      range: notarizeRange),
+                        "the notarization job never reads the artifact name the build reported")
+        XCTAssertNotNil(release.range(of: "there is nothing to notarize", range: notarizeRange),
+                        "an empty artifact name is no longer rejected before the download")
+        XCTAssertNotNil(release.range(of: "name: ${{ needs.build.outputs.signed_artifact }}",
+                                      range: notarizeRange),
+                        "the download does not use the name the build actually uploaded")
+        XCTAssertFalse(release.contains("relayium-macos-signed-"),
+                       "the release lane re-derives the signed artifact name instead of consuming it")
+
+        // The artifact-pin, checksum and tool-restoration order, unchanged in
+        // strength and re-anchored to the file that now owns those steps.
+        let downloadedTool = try XCTUnwrap(release.range(
             of: "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
-            range: notarizeJob.lowerBound..<publishJob.lowerBound))
-        let checksumAtArtifactRoot = try XCTUnwrap(workflow.range(
+            range: notarizeRange))
+        let checksumAtArtifactRoot = try XCTUnwrap(release.range(
             of: "(cd \"$RUNNER_TEMP\" && shasum -a 256 -c Relayium.dmg.sha256)",
-            range: notarizeJob.lowerBound..<publishJob.lowerBound))
-        let mountedArtifact = try XCTUnwrap(workflow.range(
+            range: notarizeRange))
+        let mountedArtifact = try XCTUnwrap(release.range(
             of: "hdiutil attach \"$RUNNER_TEMP/Relayium.dmg\"",
-            range: notarizeJob.lowerBound..<publishJob.lowerBound))
-        let restoredTool = try XCTUnwrap(workflow.range(
+            range: notarizeRange))
+        let restoredTool = try XCTUnwrap(release.range(
             of: "chmod 0755 \"$RUNNER_TEMP/release-tools/generate_appcast\"",
-            range: notarizeJob.lowerBound..<publishJob.lowerBound))
-        let executableGuard = try XCTUnwrap(workflow.range(
+            range: notarizeRange))
+        let executableGuard = try XCTUnwrap(release.range(
             of: "test -x \"$RUNNER_TEMP/release-tools/generate_appcast\"",
-            range: notarizeJob.lowerBound..<publishJob.lowerBound))
-        let firstToolInvocation = try XCTUnwrap(workflow.range(
+            range: notarizeRange))
+        let firstToolInvocation = try XCTUnwrap(release.range(
             of: "| \"$tools/generate_appcast\"",
-                range: notarizeJob.lowerBound..<publishJob.lowerBound))
+            range: notarizeRange))
         XCTAssertLessThan(downloadedTool.lowerBound, checksumAtArtifactRoot.lowerBound)
         XCTAssertLessThan(checksumAtArtifactRoot.lowerBound, mountedArtifact.lowerBound)
         XCTAssertLessThan(downloadedTool.lowerBound, restoredTool.lowerBound)
         XCTAssertLessThan(restoredTool.lowerBound, executableGuard.lowerBound)
         XCTAssertLessThan(executableGuard.lowerBound, firstToolInvocation.lowerBound)
-        XCTAssertTrue(workflow.contains("permissions:\n  contents: read"))
-        XCTAssertTrue(workflow.contains("signedDmgSha256")
-            && workflow.contains("Finalize notarized package provenance"))
-        XCTAssertTrue(workflow.contains(
-            "(cd \"$RUNNER_TEMP\" && shasum -a 256 Relayium.dmg > Relayium.dmg.sha256)"),
+        XCTAssertNotNil(release.range(
+            of: "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+            range: publishJob.lowerBound..<release.endIndex),
+            "the publishing runner downloads its candidate from an unpinned action")
+
+        // Both halves are read-only at the top, and exactly one job in either
+        // file widens it — the one that publishes.
+        XCTAssertTrue(ci.contains("permissions:\n  contents: read"),
+                      "the reusable CI workflow is no longer read-only by default")
+        XCTAssertTrue(release.contains("permissions:\n  contents: read"),
+                      "the release workflow is no longer read-only by default")
+        XCTAssertEqual(
+            release.components(separatedBy: "      contents: write").count - 1, 1,
+            "contents write access is no longer scoped to exactly one job")
+        XCTAssertNotNil(release.range(of: "      contents: write",
+                                      range: publishJob.lowerBound..<release.endIndex),
+                        "the job holding write access is not `publish`")
+
+        // Provenance is recorded where the package is BUILT and rewritten where
+        // its bytes CHANGE: stapling rewrites the DMG, so the checksum the
+        // publisher verifies has to be taken after notarization, in the file
+        // that notarizes.
+        XCTAssertTrue(ci.contains("signedDmgSha256") && ci.contains("Record signed package provenance"),
+                      "the signed package no longer records its own provenance")
+        XCTAssertNotNil(release.range(of: "Finalize notarized package provenance", range: notarizeRange),
+                        "the stapled bytes would be published under a pre-notarization checksum")
+        XCTAssertNotNil(release.range(
+            of: "(cd \"$RUNNER_TEMP\" && shasum -a 256 Relayium.dmg > Relayium.dmg.sha256)",
+            range: notarizeRange),
             "the notarized artifact checksum must name a portable basename")
-        XCTAssertFalse(workflow.contains(
-            "shasum -a 256 \"$RUNNER_TEMP/Relayium.dmg\" > \"$RUNNER_TEMP/Relayium.dmg.sha256\""),
-            "a runner-absolute checksum cannot be verified by the publish runner")
-        XCTAssertTrue(workflow.contains(
-            "release=\"$RUNNER_TEMP/release\"\n          cd \"$release\"\n          shasum -a 256 -c Relayium.dmg.sha256"),
+        for (workflow, name) in [(ci, "macos.yml"), (release, "macos-release.yml")] {
+            XCTAssertFalse(workflow.contains(
+                "shasum -a 256 \"$RUNNER_TEMP/Relayium.dmg\" > \"$RUNNER_TEMP/Relayium.dmg.sha256\""),
+                "\(name): a runner-absolute checksum cannot be verified by the publish runner")
+        }
+        XCTAssertNotNil(release.range(
+            of: "release=\"$RUNNER_TEMP/release\"\n          cd \"$release\"\n          shasum -a 256 -c Relayium.dmg.sha256",
+            range: publishJob.lowerBound..<release.endIndex),
             "publication must verify the portable checksum from its artifact root")
+
+        // The shards themselves, in the file that runs them.
         for testClass in ["AppShellUITests", "DeviceInboxUITests",
                           "SubscriptionUITests", "LocalSessionUITests"] {
-            XCTAssertTrue(workflow.contains("RelayiumUITests/\(testClass)"),
+            XCTAssertTrue(ci.contains("RelayiumUITests/\(testClass)"),
                           "the hosted shards omit \(testClass)")
         }
-        XCTAssertTrue(workflow.contains(
+        XCTAssertTrue(ci.contains(
             "xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium"))
-        XCTAssertTrue(workflow.contains("-destination 'platform=macOS'"))
-        XCTAssertTrue(workflow.contains("only+=(\"-only-testing:$class\")"))
-        XCTAssertTrue(workflow.contains("timeout: 30") && workflow.contains("timeout: 35"),
+        XCTAssertTrue(ci.contains("-destination 'platform=macOS'"))
+        XCTAssertTrue(ci.contains("only+=(\"-only-testing:$class\")"))
+        XCTAssertTrue(ci.contains("timeout: 30") && ci.contains("timeout: 35"),
                       "a hosted desktop failure can occupy the runner indefinitely")
     }
 
@@ -567,15 +683,16 @@ final class MacSurfaceGuardTests: XCTestCase {
 
     /// One named source, by its path relative to `apps/mac/Relayium`.
     private func source(named name: String) throws -> String {
-        let all = try sources(under: macRoot, atLeast: 20)
+        let all = try sources(under: try macRoot, atLeast: 20)
+        let macRootPath = try macRoot.path
         return try XCTUnwrap(all.first { $0.name == name }?.text,
-                             "\(name) does not exist under \(macRoot.path)")
+                             "\(name) does not exist under \(macRootPath)")
     }
 
     /// The same file with its comments intact — the only way to assert that a
     /// comment which has stopped being true is gone.
     private func rawSource(named name: String) throws -> String {
-        try String(contentsOf: macRoot.appendingPathComponent(name), encoding: .utf8)
+        try String(contentsOf: try macRoot.appendingPathComponent(name), encoding: .utf8)
     }
 
     /// A count-only staging surface is not an acceptable description of the
@@ -901,7 +1018,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// reintroduced on one card is exactly the regression a screenshot review
     /// would call a nice touch.
     func testNoSegmentedModePickerSurvivesAnywhereOnMacOS() throws {
-        for (name, text) in try sources(under: macRoot, atLeast: 20) {
+        for (name, text) in try sources(under: try macRoot, atLeast: 20) {
             XCTAssertFalse(text.contains("pickerStyle(.segmented)"),
                            "\(name) reintroduced a segmented mode picker")
             for retired in ["hubTransferType", "hubFiles", "hubText", "hubTransferTypeHint",
@@ -924,7 +1041,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         // the next `beginSession` sets the mode itself — so it is kept as the
         // shared seam rather than special-cased per platform. Naming the file
         // here is what stops that argument from being quietly extended to a view.
-        let modeWriters = try sources(under: macRoot, atLeast: 20)
+        let modeWriters = try sources(under: try macRoot, atLeast: 20)
             .filter { $0.text.contains("selectMode(") }.map(\.name).sorted()
         XCTAssertEqual(modeWriters, ["RelayiumApp.swift"],
                        "a macOS surface writes the transfer mode outside a session claim")
@@ -1141,7 +1258,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                       && app.contains("|| transferModules.isBusy")
                       && app.contains("quitGuard.hasLocalText = { transferModules.hasLocalText }"),
                       "the quit guard asks or ends only one of the two modules")
-        for (name, text) in try sources(under: macRoot, atLeast: 20)
+        for (name, text) in try sources(under: try macRoot, atLeast: 20)
         where name != "RelayiumApp.swift" {
             XCTAssertFalse(text.contains("cancelEverything()"),
                            "\(name) can end both modules at once")
@@ -1335,7 +1452,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         // No macOS surface emits one at all — the parser keeps its `mode`
         // parameter for inbound links, and this is what stops a second caller
         // quietly using it to send one.
-        for (name, text) in try sources(under: macRoot, atLeast: 20) {
+        for (name, text) in try sources(under: try macRoot, atLeast: 20) {
             XCTAssertFalse(text.contains("PairingJoinURL(code:") && text.contains("mode:")
                            && text.contains("PairingJoinURL(code: code, mode:"),
                            "\(name) emits a lane hint in a join link")
@@ -1410,7 +1527,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(source.contains(".accessibilityIdentifier(\"receive.link\")"),
                       "runtime acceptance has no stable receive-link control")
 
-        let uiURL = macRoot.deletingLastPathComponent()
+        let uiURL = try macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
         XCTAssertTrue(ui.contains("testMalformedStoredLinkExplainsHowToRecover"))
@@ -1715,11 +1832,11 @@ final class MacSurfaceGuardTests: XCTestCase {
         // Every browseable destination reaches help through one of exactly two
         // containers, and both wrap the same block. Nothing else in the app may
         // build a help view of its own.
-        let builders = try sources(under: macRoot, atLeast: 20)
+        let builders = try sources(under: try macRoot, atLeast: 20)
             .filter { $0.text.contains("HelpBlock(") }.map(\.name)
         XCTAssertEqual(builders, ["Components/HelpSection.swift"],
                        "a destination builds its own help block")
-        let hosts = try sources(under: macRoot, atLeast: 20)
+        let hosts = try sources(under: try macRoot, atLeast: 20)
             .filter { $0.text.contains("HelpCard(surface:") || $0.text.contains("HelpFormSection(surface:") }
             .map(\.name).sorted()
         XCTAssertEqual(hosts, ["Destinations/AccountDestination.swift",
@@ -1803,13 +1920,13 @@ final class MacSurfaceGuardTests: XCTestCase {
         // Exactly four surfaces draw one, each through the seam. Keeping LAN in
         // this set makes the path signature visible on every transfer surface;
         // its presentation is a route with nil progress, not a fabricated task.
-        let railUsers = try sources(under: macRoot, atLeast: 30)
+        let railUsers = try sources(under: try macRoot, atLeast: 30)
             .filter { $0.text.contains("PathRail(stops:") }.map(\.name).sorted()
         XCTAssertEqual(railUsers, ["DeviceInbox/DeviceInboxSurface.swift",
                                    "Transfer/CrossNetworkConnectPane.swift",
                                    "Transfer/LanConnectPane.swift",
                                    "UploadPane.swift"])
-        for (name, text) in try sources(under: macRoot, atLeast: 30)
+        for (name, text) in try sources(under: try macRoot, atLeast: 30)
             where name != "Components/PathRail.swift" {
             XCTAssertFalse(text.contains("PathStop("),
                            "\(name) builds a path stop outside the tested seam")
@@ -1847,7 +1964,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "the second stored-send card is back")
         // Nobody nests the chrome. `SectionCard` may appear many times per file;
         // what must not appear is one inside another's content.
-        for (name, text) in try sources(under: macRoot, atLeast: 30) {
+        for (name, text) in try sources(under: try macRoot, atLeast: 30) {
             XCTAssertFalse(text.contains("SectionCard(title: L10n.t(.uploadHeading)) {\n            SectionCard"),
                            "\(name) nests a card inside a card")
         }
@@ -1946,7 +2063,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "a Mac with no socket must make no claim about being reachable")
 
         // Nowhere else in the app touches the inventory at all.
-        let readers = try sources(under: macRoot, atLeast: 30)
+        let readers = try sources(under: try macRoot, atLeast: 30)
             .filter { $0.text.contains("LocalAddressInventory") }.map(\.name)
         XCTAssertEqual(readers, [lanConnect],
                        "a second surface reads this Mac's addresses")
@@ -1961,7 +2078,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         // documents the sinks it deliberately never reaches, and scanning its
         // raw text would fail this guard on the sentence promising the absence.
         let inventory = codeOnly(try String(
-            contentsOf: appsRoot.appendingPathComponent(
+            contentsOf: try appsRoot.appendingPathComponent(
                 "RelayiumKit/Sources/RelayiumAppKit/LocalNetworkAddresses.swift"),
             encoding: .utf8))
         for sink in ["UserDefaults", "NSLog", "os_log", "Logger(", "print(", "URLSession"] {
@@ -1997,7 +2114,7 @@ final class MacSurfaceGuardTests: XCTestCase {
 
         XCTAssertTrue(terminal.contains("StoredLinkCommandPresentation.downCommand(link: link)"),
                       "the command is composed in the view instead of the tested seam")
-        for (name, text) in try sources(under: macRoot, atLeast: 30) {
+        for (name, text) in try sources(under: try macRoot, atLeast: 30) {
             XCTAssertFalse(text.contains("relayium down"),
                            "\(name) writes the command as a literal")
         }
@@ -2099,7 +2216,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the subscription must be made in init, before any scene is built")
         XCTAssertEqual(occurrences(of: "AccountSignOutCoordinator(", in: app), 1,
                        "a second coordinator would be a second logout path")
-        for (name, text) in try sources(under: macRoot, atLeast: 20)
+        for (name, text) in try sources(under: try macRoot, atLeast: 20)
         where name != "RelayiumApp.swift" {
             XCTAssertFalse(text.contains("$needsSignOut"), "\(name) starts a second observer")
         }
@@ -2140,7 +2257,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the button must hand the SCOPED sign-out to the coordinator")
         XCTAssertEqual(occurrences(of: "signOut.signOut(", in: account), 1,
                        "a second call site would be one that skipped the serialization")
-        let direct = try sources(under: macRoot, atLeast: 20)
+        let direct = try sources(under: try macRoot, atLeast: 20)
             .filter { $0.text.contains("session.logOut()") }.map(\.name).sorted()
         XCTAssertEqual(direct, ["Destinations/AccountDestination.swift"],
                        "a signed-in surface signs out around the coordinator")
@@ -2174,7 +2291,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     func testNoMacOS14APIAndOnlyHelpMayCollapse() throws {
         let banned = ["ContentUnavailableView", "onChange(of:initial:)",
                       "@Observable", ".symbolEffect", ".containerRelativeFrame", ".inspector"]
-        for (name, text) in try sources(under: macRoot, atLeast: 20) {
+        for (name, text) in try sources(under: try macRoot, atLeast: 20) {
             for s in banned { XCTAssertFalse(text.contains(s), "\(name) contains \(s)") }
         }
         // **`DisclosureGroup` is banned outright again, including in help.**
@@ -2186,14 +2303,14 @@ final class MacSurfaceGuardTests: XCTestCase {
         // and left the app's quietest reader aiming at its smallest target. A
         // `Button` collapses the same paragraph with an affordance the control
         // never had, so the exception has nothing left to buy.
-        let collapsers = try sources(under: macRoot, atLeast: 20)
+        let collapsers = try sources(under: try macRoot, atLeast: 20)
             .filter { $0.text.contains("DisclosureGroup") }.map(\.name).sorted()
         XCTAssertEqual(collapsers, [],
                        "a macOS surface hides something behind a bare disclosure triangle")
     }
 
     func testExactlyOneFileCarriesAFixedFontSize() throws {
-        XCTAssertEqual(try sources(under: macRoot, atLeast: 20)
+        XCTAssertEqual(try sources(under: try macRoot, atLeast: 20)
             .filter { $0.text.contains(".system(size:") }.map(\.name),
                        ["Components/SecurityCodeText.swift"])
     }
@@ -2335,12 +2452,12 @@ final class MacSurfaceGuardTests: XCTestCase {
         for surface in MacSurface.allCases {
             let name = surface.rawValue.prefix(1).uppercased() + surface.rawValue.dropFirst()
             XCTAssertTrue(FileManager.default.fileExists(
-                atPath: macRoot.appendingPathComponent("Destinations/\(name)Destination.swift").path),
+                atPath: try macRoot.appendingPathComponent("Destinations/\(name)Destination.swift").path),
                           "no destination file for \(surface.rawValue)")
         }
         for retired in retiredSurfaces {
             XCTAssertFalse(FileManager.default.fileExists(
-                atPath: macRoot.appendingPathComponent(retired).path),
+                atPath: try macRoot.appendingPathComponent(retired).path),
                            "\(retired) survived the Workspace merge")
         }
     }
@@ -2435,7 +2552,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     ///    the audit is the one test in that suite nobody can smoke-test on this
     ///    workstation, so the timeout would land on the owner's single run.
     func testTheMacAccessibilityAuditDropsNoCheckToGoGreen() throws {
-        let uiURL = macRoot.deletingLastPathComponent()
+        let uiURL = try macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
 
@@ -2746,7 +2863,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// Constraint 5. `WindowGroup` anywhere means a second window is reachable,
     /// and a second window renders the same live session twice.
     func testNoFileCanCreateASecondWindow() throws {
-        for (name, text) in try sources(under: macRoot, atLeast: 20) {
+        for (name, text) in try sources(under: try macRoot, atLeast: 20) {
             XCTAssertFalse(text.contains("WindowGroup"), "\(name) can open a second window")
         }
     }
@@ -2888,7 +3005,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(occurrences(of: ".environment(\\.layoutDirection, appLayoutDirection)",
                                    in: app), 3,
                        "the window, settings and menu-bar roots must share one derived direction")
-        for (name, text) in try sources(under: macRoot, atLeast: 20)
+        for (name, text) in try sources(under: try macRoot, atLeast: 20)
             where name != "RelayiumApp.swift" {
             XCTAssertFalse(text.contains("\\.layoutDirection"),
                            "\(name) must use semantic layout, not force its own direction")
@@ -2929,7 +3046,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         // screen that does not look like the thing that was clicked.
         XCTAssertTrue(sidebar.contains("Label(title, systemImage: surface.symbol)"),
                       "the sidebar names its own symbols again, so a row can drift from its screen")
-        for (name, text) in try sources(under: macRoot, atLeast: 30) {
+        for (name, text) in try sources(under: try macRoot, atLeast: 30) {
             XCTAssertFalse(text.contains("systemImage: \"dot.radiowaves.left.and.right\""),
                            "\(name) hard-codes a destination symbol MacSurface already names")
         }
@@ -3113,7 +3230,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         // And nothing anywhere in the app sets a display-sized font of its own.
         // Comments are stripped by the loader, so the sentences explaining this
         // rule do not satisfy it.
-        for (name, text) in try sources(under: macRoot, atLeast: 30) {
+        for (name, text) in try sources(under: try macRoot, atLeast: 30) {
             XCTAssertFalse(text.contains("font(.largeTitle"),
                            "\(name) draws a page heading of its own")
         }
@@ -3166,7 +3283,7 @@ final class MacSurfaceGuardTests: XCTestCase {
 
         // The destination and the menu-bar route are both still there.
         XCTAssertTrue(FileManager.default.fileExists(
-            atPath: macRoot.appendingPathComponent(
+            atPath: try macRoot.appendingPathComponent(
                 "Destinations/DeviceInboxDestination.swift").path),
             "the Device Inbox destination went with its settings tab")
         let menu = try source(named: "MenuBarView.swift")
@@ -3177,7 +3294,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the menu bar lost the resident status line")
 
         // Exactly one host renders the shared surface now.
-        let hosts = try sources(under: macRoot, atLeast: 30)
+        let hosts = try sources(under: try macRoot, atLeast: 30)
             .filter { $0.text.contains("DeviceInboxSurface {") }.map(\.name)
         XCTAssertEqual(hosts, ["Destinations/DeviceInboxDestination.swift"],
                        "the shared Device Inbox surface has more than one host again")
@@ -3293,7 +3410,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// (billing stays on the web) and `reactivateWebURL` (a frozen account
     /// cannot sign in, so the token in that link is the only way back).
     func testNoMacSurfaceOpensTheWebsiteForAccountWork() throws {
-        for (name, text) in try sources(under: macRoot, atLeast: 20) {
+        for (name, text) in try sources(under: try macRoot, atLeast: 20) {
             XCTAssertFalse(text.contains("accountWebURL"),
                            "\(name) sends the user to the website for account work")
         }
@@ -3317,7 +3434,7 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertTrue(login.contains(".accessibilityLabel(L10n.t(\(label)))"))
             XCTAssertTrue(login.contains(".accessibilityIdentifier(\"\(id)\")"))
         }
-        let uiURL = macRoot.deletingLastPathComponent()
+        let uiURL = try macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
         XCTAssertTrue(ui.contains("testRegistrationProblemKeepsTheDraftCorrectable"))
@@ -3373,7 +3490,7 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertTrue(seam.contains("let mode: AuthMode"),
                           "\(name) no longer takes the mode as an input")
         }
-        for (name, text) in try sources(under: macRoot, atLeast: 20)
+        for (name, text) in try sources(under: try macRoot, atLeast: 20)
         where name != "LoginView.swift" && name != "Components/CapabilityGateView.swift"
             && name != "DeviceInbox/DeviceInboxSurface.swift" && !seams.contains(name) {
             XCTAssertFalse(text.contains("AuthMode"),
@@ -3406,7 +3523,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                 .contains("onAccount: { navigation.selectAccount(intent: $0) }"),
                           "\(caller) must pass the gate's requested half through to navigation")
         }
-        let uiURL = macRoot.deletingLastPathComponent()
+        let uiURL = try macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
         XCTAssertTrue(ui.contains("testStoredSendAccountRemediesOpenThePromisedForm"),
@@ -3463,7 +3580,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         // BROWSER control is labelled for the browser. It must not be renamed to
         // Apple, and it must not be replaced by the native control — including in
         // the build that now has one, where the two sit side by side.
-        for (name, text) in try sources(under: macRoot, atLeast: 20)
+        for (name, text) in try sources(under: try macRoot, atLeast: 20)
         where name != "Distribution/AppStoreDistribution.swift" {
             for appleism in ["SignInWithAppleButton", "ASAuthorizationAppleID",
                              "ASAuthorizationController", "signInWithApple"] {
@@ -3481,7 +3598,7 @@ final class MacSurfaceGuardTests: XCTestCase {
             .contains("ASWebAuthenticationSession"),
                       "the sheet is a web session, which is what the label now says")
         let entitlements = try String(
-            contentsOf: macRoot.appendingPathComponent("Relayium.entitlements"), encoding: .utf8)
+            contentsOf: try macRoot.appendingPathComponent("Relayium.entitlements"), encoding: .utf8)
         XCTAssertFalse(entitlements.contains("applesignin"),
                        "the Developer ID build must never carry the Apple entitlement")
     }
@@ -3514,7 +3631,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         // Every macOS source EXCEPT the App Store seam — which is a member of
         // `RelayiumAppStore` and of nothing else, so nothing here is compiled
         // into the Developer ID product.
-        for (name, text) in try sources(under: macRoot, atLeast: 20)
+        for (name, text) in try sources(under: try macRoot, atLeast: 20)
         where name != "Distribution/AppStoreDistribution.swift" {
             for symbol in ["SignInWithAppleButton", "ASAuthorizationAppleID",
                            "logInWithApple", "AppleSignInAttempt"] {
@@ -3530,13 +3647,13 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(try source(named: "Distribution/DirectDistribution.swift")
             .contains("SignInWithAppleButton"))
         let entitlements = try String(
-            contentsOf: macRoot.appendingPathComponent("Relayium.entitlements"), encoding: .utf8)
+            contentsOf: try macRoot.appendingPathComponent("Relayium.entitlements"), encoding: .utf8)
         XCTAssertFalse(entitlements.contains("applesignin"),
                        "the Developer ID macOS build cannot carry this entitlement")
         // The Mac App Store build's entitlements do — otherwise the control
         // above is one that cannot work.
         let appStore = try String(
-            contentsOf: macRoot.appendingPathComponent("../RelayiumAppStore/Relayium.entitlements"),
+            contentsOf: try macRoot.appendingPathComponent("../RelayiumAppStore/Relayium.entitlements"),
             encoding: .utf8)
         XCTAssertTrue(appStore.contains("com.apple.developer.applesignin"),
                       "the Mac App Store build presents a control it is not entitled to")
@@ -3556,7 +3673,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// SwiftUI, where no test can reach it — `AppDeepLinkCoordinatorTests` owns
     /// that decision against real models.
     func testTheUniversalLinkHandOffIsWiredOnceAndDecidesNothingInTheViewLayer() throws {
-        let all = try sources(under: macRoot, atLeast: 20)
+        let all = try sources(under: try macRoot, atLeast: 20)
         let app = try source(named: "RelayiumApp.swift")
         let shell = try source(named: "Shell/AppShellView.swift")
 
@@ -3673,7 +3790,7 @@ final class MacSurfaceGuardTests: XCTestCase {
             .contains("The ONE selection write"),
                        "the shell no longer makes the selection write; the comment must go")
         let coordinator = try String(
-            contentsOf: appsRoot.appendingPathComponent(
+            contentsOf: try appsRoot.appendingPathComponent(
                 "RelayiumKit/Sources/RelayiumAppKit/AppDeepLinkCoordinator.swift"),
             encoding: .utf8)
         XCTAssertFalse(coordinator.contains("macOS still applies a link inline"),
@@ -3689,7 +3806,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// delegate, and every decision about it lives outside the view layer —
     /// exactly the shape the link hand-off above is held to.
     func testTheOpenedFileHandOffIsWiredOnceAndDecidesNothingInTheViewLayer() throws {
-        let all = try sources(under: macRoot, atLeast: 20)
+        let all = try sources(under: try macRoot, atLeast: 20)
         let app = try source(named: "RelayiumApp.swift")
         let shell = try source(named: "Shell/AppShellView.swift")
 
@@ -3854,7 +3971,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                            "\(pane) re-arms opened-file adoption")
         }
         // And the widened ask is gone with them, everywhere.
-        for (name, text) in try sources(under: macRoot, atLeast: 20) {
+        for (name, text) in try sources(under: try macRoot, atLeast: 20) {
             XCTAssertFalse(text.contains("forAnyOf:"),
                            "\(name) asks for a shared staging context that no longer exists")
             XCTAssertFalse(text.contains("macTransferRoutes"),
@@ -3866,7 +3983,7 @@ final class MacSurfaceGuardTests: XCTestCase {
 
         // Nobody else touches the coordinator's state, and nobody reads `staged`
         // to decide for themselves.
-        let all = try sources(under: macRoot, atLeast: 20)
+        let all = try sources(under: try macRoot, atLeast: 20)
         let adopters = all.filter { $0.text.contains("fileOpenRouting.batch(") }
         XCTAssertEqual(Set(adopters.map(\.name)), Set(panes),
                        "exactly one send pane may adopt opened files")
@@ -3953,7 +4070,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(try rawSource(named: transferStaging)
             .contains("## Dormant: nothing on macOS constructs this"),
             "the dormant staging section no longer says that it is dormant")
-        XCTAssertTrue(try sources(under: macRoot, atLeast: 20)
+        XCTAssertTrue(try sources(under: try macRoot, atLeast: 20)
             .filter { $0.text.contains("TransferStagingSection(") }
             .allSatisfy { $0.name == transferStaging },
             "a macOS screen constructs the dormant pre-connect staging section")
@@ -4086,7 +4203,7 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertFalse(source.contains(stale),
                            "the join field can overwrite fast input with an older partial value")
         }
-        let uiURL = macRoot.deletingLastPathComponent()
+        let uiURL = try macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
         XCTAssertTrue(ui.contains("testCrossNetworkJoinKeepsACompleteCodeActionable"))
@@ -4195,7 +4312,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// documents instead of their editor is a support incident. Nothing at
     /// runtime would reveal either regression; it is a plist string.
     func testTheAppIsOfferedForEveryFileWithoutClaimingToOwnAnyType() throws {
-        let plist = try String(contentsOf: macRoot.appendingPathComponent("Info.plist"),
+        let plist = try String(contentsOf: try macRoot.appendingPathComponent("Info.plist"),
                                encoding: .utf8)
         let flat = flattened(plist)
         XCTAssertTrue(plist.contains("<key>CFBundleDocumentTypes</key>"),
@@ -4218,7 +4335,9 @@ final class MacSurfaceGuardTests: XCTestCase {
 
     // MARK: - the Share extension is a second TARGET, and a second process
 
-    private var macShareRoot: URL { appsRoot.appendingPathComponent("mac/RelayiumShare") }
+    private var macShareRoot: URL {
+        get throws { try RepoRoot.directory("apps/mac/RelayiumShare") }
+    }
 
     /// The extension stages files and stops. Every symbol below is an absence,
     /// and an absence has no runtime to observe — so it is asserted here.
@@ -4227,7 +4346,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// network entitlement at all a request added here would be refused by the
     /// sandbox. Both halves exist because either alone can be edited away.
     func testTheMacShareExtensionCarriesNoAccountNetworkOrCrypto() throws {
-        let sources = try sources(under: macShareRoot, atLeast: 2)
+        let sources = try sources(under: try macShareRoot, atLeast: 2)
         for forbidden in ["URLSession", "URLRequest", "AccountSession", "bearerToken",
                           "TokenStore", "Keychain", "CloudUploader", "SecItem",
                           "RealtimeSessionModel", "AppEnvironment"] {
@@ -4241,7 +4360,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// A Share extension may not open its containing app, and there is no
     /// half-measure that counts as not doing it.
     func testTheMacShareExtensionNeverTriesToOpenTheApp() throws {
-        for file in try sources(under: macShareRoot, atLeast: 2) {
+        for file in try sources(under: try macShareRoot, atLeast: 2) {
             for attempt in ["extensionContext?.open", "NSWorkspace", "NSApplication.shared",
                             "NSApp", "openURL", "NSPasteboard", "relayium://"] {
                 XCTAssertFalse(file.text.contains(attempt),
@@ -4257,7 +4376,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// is the failure that looks like everything working: the sheet stages a
     /// draft into one container and the app lists an empty one.
     func testTheMacShareEntitlementsAreExactlyTheSandboxAndOneGroup() throws {
-        let data = try Data(contentsOf: macShareRoot
+        let data = try Data(contentsOf: try macShareRoot
             .appendingPathComponent("RelayiumShare.entitlements"))
         let plist = try XCTUnwrap(
             try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
@@ -4278,7 +4397,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// into a container the app cannot read — a runtime failure with no
     /// build-time symptom.
     func testTheAppJoinsTheSameGroupAsItsExtension() throws {
-        let data = try Data(contentsOf: macRoot.appendingPathComponent("Relayium.entitlements"))
+        let data = try Data(contentsOf: try macRoot.appendingPathComponent("Relayium.entitlements"))
         let plist = try XCTUnwrap(
             try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
                 as? [String: Any])
@@ -4290,7 +4409,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// offer Relayium for a selected sentence, a URL and a contact — none of
     /// which it can stage.
     func testTheMacShareExtensionOffersItselfOnlyWhereItWorks() throws {
-        let data = try Data(contentsOf: macShareRoot.appendingPathComponent("Info.plist"))
+        let data = try Data(contentsOf: try macShareRoot.appendingPathComponent("Info.plist"))
         let plist = try XCTUnwrap(
             try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
                 as? [String: Any])
@@ -4342,7 +4461,7 @@ final class MacSurfaceGuardTests: XCTestCase {
 
     /// ⌘, exists, is a real `Settings` scene, and owns nothing it should not.
     func testSettingsIsASceneAndTheSystemTouchIsOneFile() throws {
-        let all = try sources(under: macRoot, atLeast: 20)
+        let all = try sources(under: try macRoot, atLeast: 20)
         let app = try source(named: "RelayiumApp.swift")
 
         // A `Settings` scene, not a window opened from a hand-rolled menu item:
@@ -4535,7 +4654,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// the settings pane had already learned to explain, kept alive by being
     /// written twice. Whatever the component shows for a state, both now show.
     func testTheResidencyControlIsOneComponentOnBothSurfaces() throws {
-        let hosts = try sources(under: macRoot, atLeast: 30)
+        let hosts = try sources(under: try macRoot, atLeast: 30)
             .filter { $0.text.contains("LoginItemSetting()") }.map(\.name).sorted()
         XCTAssertEqual(hosts, ["DeviceInbox/DeviceInboxSurface.swift",
                                "Settings/SettingsView.swift"],
@@ -4552,7 +4671,7 @@ final class MacSurfaceGuardTests: XCTestCase {
             }
         }
         // And the component is the only place that decides any of it.
-        let owners = try sources(under: macRoot, atLeast: 30)
+        let owners = try sources(under: try macRoot, atLeast: 30)
             .filter { $0.text.contains("loginItem.set(") }.map(\.name)
         XCTAssertEqual(owners, ["Components/LoginItemSetting.swift"],
                        "a second surface writes the login-item registration")
@@ -4641,7 +4760,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "the sidebar is reading same-network residency again")
 
         let presence = try String(
-            contentsOf: appsRoot.appendingPathComponent(
+            contentsOf: try appsRoot.appendingPathComponent(
                 "RelayiumKit/Sources/RelayiumAppKit/TransferPresence.swift"), encoding: .utf8)
         for duplicated in ["isTransferring", "setTransferring", "var isBusy"] {
             XCTAssertFalse(presence.contains(duplicated),
@@ -4829,7 +4948,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         // No retired copy anywhere in the app, not merely on this screen: these
         // keys are gone from `L10nKey`, so a reference would not compile — what
         // this catches is a NEW string reintroducing the same product idea.
-        for (name, text) in try sources(under: macRoot, atLeast: 20) {
+        for (name, text) in try sources(under: try macRoot, atLeast: 20) {
             for retired in ["createMessageCode", "createFileCode", "joinMessages",
                             "joinFiles", "joinKindHint"] {
                 XCTAssertFalse(text.contains(retired),
@@ -4944,7 +5063,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         // this file, because the way one comes back is a new screen that renders
         // it, not this file growing a line. `transferStaging` is exempt: it is
         // dormant, constructed by nobody, and kept for a future re-enable.
-        for (name, text) in try sources(under: macRoot, atLeast: 20) where name != transferStaging {
+        for (name, text) in try sources(under: try macRoot, atLeast: 20) where name != transferStaging {
             for laneShaped in ["workspaceStagingHeading", "workspaceStagingOptional",
                                "workspaceDropHint", "workspaceSendMessage",
                                "workspaceSendFiles", "workspaceAddFilesHint"] {
@@ -5595,7 +5714,7 @@ final class MacSurfaceGuardTests: XCTestCase {
 
         // And nowhere in the app is the host written as a string. This is the
         // guard that keeps 2. true for every future surface, not only this one.
-        for (name, text) in try sources(under: macRoot, atLeast: 30) {
+        for (name, text) in try sources(under: try macRoot, atLeast: 30) {
             XCTAssertFalse(text.contains("\"relayium.com\""),
                            "\(name) hard-codes the product host beside a URL that owns it")
         }
@@ -5716,7 +5835,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// to a reader who cannot distinguish it. Counting the files is what keeps
     /// that a rule rather than an intention, exactly as for `.system(size:`.
     func testExactlyOneFileNamesTheFailureColour() throws {
-        XCTAssertEqual(try sources(under: macRoot, atLeast: 20)
+        XCTAssertEqual(try sources(under: try macRoot, atLeast: 20)
             .filter { namesTheFailureColour($0.text) }.map(\.name),
                        ["Components/InlineMessage.swift", "DeviceInbox/DeviceInboxSurface.swift"])
     }
@@ -6084,7 +6203,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// list that looked like a real empty account.
     func testTheSignedInAcceptanceAccountMatchesTheOtherPlatform() throws {
         let mac = try source(named: "UITestMode.swift")
-        let iosURL = appsRoot.appendingPathComponent("ios/Relayium/UITestMode.swift")
+        let iosURL = try appsRoot.appendingPathComponent("ios/Relayium/UITestMode.swift")
         let ios = try String(contentsOf: iosURL, encoding: .utf8)
 
         for endpoint in ["/api/me", "/api/me/usage", "/api/devices", "/api/files"] {
@@ -6100,7 +6219,7 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertTrue(ios.contains(required), "iOS lost \(required)")
         }
         for app in [try source(named: "RelayiumApp.swift"),
-                    try String(contentsOf: appsRoot.appendingPathComponent(
+                    try String(contentsOf: try appsRoot.appendingPathComponent(
                         "ios/Relayium/RelayiumApp.swift"), encoding: .utf8)] {
             XCTAssertTrue(app.contains("UITestMode.makeStoredLinkKeyStore()"),
                           "an acceptance launch still reaches the product's stored-link keys")
@@ -6123,7 +6242,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         // that looked complete and rendered an empty list instead.
         let macApp = try source(named: "RelayiumApp.swift")
         let iosApp = try String(
-            contentsOf: appsRoot.appendingPathComponent("ios/Relayium/RelayiumApp.swift"),
+            contentsOf: try appsRoot.appendingPathComponent("ios/Relayium/RelayiumApp.swift"),
             encoding: .utf8)
         // Named rather than counted: every factory that BUILDS a client which
         // talks to the account API must receive the acceptance transport, and a
@@ -6142,7 +6261,7 @@ final class MacSurfaceGuardTests: XCTestCase {
             }
         }
 
-        let uiURL = macRoot.deletingLastPathComponent()
+        let uiURL = try macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
         XCTAssertTrue(ui.contains("testASignedInLaunchRendersItsAccountAndUngatesStoredSend"),
@@ -6249,7 +6368,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                       && link.contains("NSPasteboard.general.setString(text, forType: .string)"),
                       "the unified Copy does not actually write the clipboard")
         for module in ["RelayiumAppKit", "RelayiumKit"] {
-            let root = appsRoot.appendingPathComponent("RelayiumKit/Sources/\(module)")
+            let root = try appsRoot.appendingPathComponent("RelayiumKit/Sources/\(module)")
             for file in try sources(under: root, atLeast: 5) {
                 XCTAssertFalse(file.text.contains("NSPasteboard"),
                                "\(module)/\(file.name) reaches the pasteboard")

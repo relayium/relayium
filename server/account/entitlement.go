@@ -172,8 +172,9 @@ type SubscriptionApply struct {
 	// event can be durable while the exact StoreKit purchase dispatch that
 	// delivered it is still unresolved. Such a response must not let the client
 	// finish the transaction.
-	PurchaseAttemptPending  bool
-	PurchaseAttemptResolved bool
+	PurchaseAttemptPending    bool
+	PurchaseAttemptResolved   bool
+	PurchaseAttemptResolvedID string
 	// Effective is the projection now in force (the CURRENT one when the event
 	// was dropped, not a hypothetical).
 	Effective EffectiveEntitlement

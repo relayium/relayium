@@ -46,7 +46,7 @@ This is the step most often done wrong, and the one whose failure is least
 visible afterwards.
 
 A local `main` can be **behind** the remote (so the hotfix silently omits fixes
-that are already merged — and, in Mode A, already live — and merging it can
+that are already merged, and possibly already promoted — and merging it can
 reintroduce a bug that was already fixed), or **ahead** of it (so the hotfix is
 built on commits nobody reviewed and that no gate has judged). Both produce a
 plausible-looking branch and a green board.
@@ -180,73 +180,51 @@ hotfix into an incident.** Read this before you decide the fix is finished.
 
 | Channel | What ships it | Does merging to `main` deploy it? |
 | --- | --- | --- |
-| **Central server + web** | `relayium-ops/deploy/auto-deploy.sh`, run by a **5-minute cron** | **CHECK BEFORE YOU MERGE — the answer changes at the promotion-pin cutover.** Pre-cutover: **YES**, within about five minutes, with no further action. Post-cutover: **NO** — the cron deploys the commit `relayium-ops/deploy/production-pin` names, and merging moves nothing. See §3.1. |
+| **Central server + web** | `relayium-ops/deploy/auto-deploy.sh`, run by a **5-minute cron** | **No — and this is the part people still get wrong.** Since the 2026-08-21 cutover the cron deploys the commit `relayium-ops/deploy/production-pin` names. Merging moves production not at all; an operator promotion does. See §3.1. |
 | **CLI / node release tags** | `.github/workflows/auto-release.yml` cuts a **weekly, green-gated tag**; `release.yml` builds and signs what that tag names | **No.** Merging cuts no tag. An urgent CLI/node fix reaches users only when a tag is cut for it. |
 | **Node fleet** | **Operator promotion**, which already exists — a node moves version on an operator decision | **No.** A merge changes nothing on the fleet until an operator promotes. |
 | **Native macOS / iOS** | Their own signing, notarization, packaging and store/update-feed pipelines | **No.** No merge publishes a native artifact. **Server and web fixes do not justify shipping a native client.** |
 
-### 3.1 Which mode is central production in? Check — do not assume
-
-The central server/web channel is moving from **merge-is-deploy** to a
-**committed promotion pin**. The mechanism lives entirely in `relayium-ops`
-(design: `docs/superpowers/specs/2026-08-21-product-promotion-pin-design.md` in
-that repository), so **this repository cannot tell you which mode is live**, and
-neither can this document. The two modes need different actions from you at
-exactly the moment an incident makes that expensive to get wrong.
-
-> **As of the last update to this runbook, the pin is implemented in
-> `relayium-ops` but NOT yet delivered and NOT yet cut over. Central production
-> is still `origin/main`-tracking, so Mode A below is the live behaviour.** That
-> sentence is a snapshot of another repository and can go stale between the
-> cutover and the next edit here — which is exactly why you check rather than
-> trust it.
-
-**Check, in whichever way you have access for:**
-
-- **Ask the operator who owns production.** Fastest, most reliable, and the only
-  option if you have no ops access. One question: *"is central production
-  pin-tracking yet?"*
-- **Read access to `relayium-ops`:** if `deploy/production-pin` exists on its
-  `main` and `deploy/auto-deploy.sh` reads it, the mechanism has landed.
-- **Read access to the deploy log** (operator only): a pin-aware tick logs
-  `up to date (pinned <sha>)` or
-  `promoting <old> -> <new> (promotion instance <ops-sha>)`. The pre-cutover
-  script logs `up to date (<sha>)` and `deploying <old> -> <new>` — no
-  parenthesised `pinned`, and no promotion instance.
-
-**If you cannot establish which mode is live, treat it as Mode A** (assume the
-merge deploys) and be present to verify. That assumption is safe in one
-direction only: expecting a deploy that does not come costs you a delay and a
-confusing §9, while not expecting one that does come means an unwatched
-production change during an incident.
-
-#### Mode A — pre-cutover: merge is deploy
-
-> For the central server and web there is **no promotion step**. **Merge is
-> deploy.** The moment the hotfix branch merges to `main`, the next cron tick
-> serves it to real users. There is no window in which the code is "on `main` but
-> not live", and no separate decision to make between *reviewed* and *serving*.
-
-Two consequences, both of which change how you work:
-
-1. **Merge is the production change.** Do not merge until §8 is complete and you
-   are ready for it to be live. "Merge now, decide later" does not exist on this
-   channel.
-2. **Time the merge.** You are choosing the deploy moment when you choose the
-   merge moment. Be present and able to verify (§9) for the following minutes.
-
-#### Mode B — post-cutover: merge lands code, a promotion deploys it
+### 3.1 Central production serves a committed pin, not `main`
 
 > Merging to `main` deploys **nothing**. Central production serves exactly the
 > commit named by `relayium-ops/deploy/production-pin`, and that file changes
 > only when someone commits a promotion to `relayium-ops`.
 
+That is the delivered behaviour, cut over on **2026-08-21**: the mechanism was
+observed deciding on a live cron tick, and production has tracked the pin rather
+than product `origin/main` since. The mechanism lives entirely in `relayium-ops`
+(design: `docs/superpowers/specs/2026-08-21-product-promotion-pin-design.md` in
+that repository), so nothing in this repository changes it — and nothing in this
+repository can read the pin's current **value** for you, which is what an
+incident actually needs.
+
+**Confirm that value, in whichever way you have access for:**
+
+- **Ask the operator who owns production.** Fastest, most reliable, and the only
+  option if you have no ops access.
+- **Read access to `relayium-ops`:** `deploy/production-pin` on its `main` names
+  the commit production serves.
+- **Read access to the deploy log** (operator only): a pin-aware tick logs
+  `up to date (pinned <sha>)` or
+  `promoting <old> -> <new> (promotion instance <ops-sha>)`.
+
+**If you cannot confirm it, assume your fix is not live.** That is the safe
+direction: expecting a deploy that has not happened costs you a check, while
+believing a merged fix is serving users when the pin still names the broken
+commit is how an incident gets declared over while it is still running.
+
+> **Reading records from before the cutover.** Until 2026-08-21 this channel had
+> no promotion step and merge *was* deploy, so an older checkpoint, incident note
+> or review comment may describe a merge as the production change. That was true
+> then and is not true now; it is not an alternative mode to check for.
+
 Three consequences:
 
 1. **Your hotfix is not live when it merges.** The most dangerous failure mode
-   in this mode is not a bad deploy — it is merging a fix during an S1, watching
-   the board go green, and believing the incident is over while production is
-   still running the broken commit. **The merge is half the job.**
+   here is not a bad deploy — it is merging a fix during an S1, watching the
+   board go green, and believing the incident is over while production is still
+   running the broken commit. **The merge is half the job.**
 2. **There is a second, explicit step, and it belongs to the operator.**
    Promotion runs from an operator workstation, not from this repository and not
    from the production host:
@@ -259,23 +237,36 @@ Three consequences:
 
    It refuses anything that is not a full immutable SHA, is not an ancestor of
    `origin/main`, or does not have a completed/successful hosted wire-vector
-   run — the run the merge box shows as `compat / wire-vectors` (§5). Use
-   `--dry-run` first if you want to see the decision without writing anything.
+   run — the `wire-vectors` run that `compat.yml`'s permanent `push: main`
+   trigger puts on that `main` commit (§5). Use `--dry-run` first if you want to
+   see the decision without writing anything.
    The host converges on its next 5-minute tick; `promote.sh` performs no
    production access itself.
 
    If it refuses with `required check 'compat / wire-vectors' is absent`, the
    run is probably fine and `PROMOTE_REQUIRED_CHECK` is wrong. `promote.sh`
    matches the **check-runs API** name, which is the bare job id
-   `wire-vectors`; the slash-joined form is a UI label the API never returns.
+   `wire-vectors`; the slash-joined form is how the **called** lane renders on a
+   pull request, prefixed by the caller's job id, and is not what the API returns
+   for the direct `push: main` run promotion reads.
    Do not reach for `--allow-unverified-checks` to get past that message —
    overriding a green gate because it was asked the wrong question puts an
    unproven commit into production during an incident.
+
+   It also refuses on **deploy-contract drift**, before it calls any hosted
+   check and before it writes the pin: the target commit's
+   `contracts/ops-deploy-v1.json` must match the copy `relayium-ops` has
+   vendored, and evidence it cannot read is treated as a refusal rather than as
+   an absence. Commits from before that contract existed remain promotable only
+   where the committed pin history proves they were once pinned — so ordinary
+   rollback still works, and `--allow-unverified-checks` does **not** waive this
+   gate. If it fires during an incident, the answer is a promotable commit, not
+   an override.
 3. **Record the promotion, not just the merge.** The merge SHA and the promotion
    commit are two different records of two different decisions. A checkpoint
    that names only the merge does not say when users actually got the fix.
 
-**If you are not the operator, you cannot complete a Mode B hotfix alone.** Hand
+**If you are not the operator, you cannot complete a central hotfix alone.** Hand
 the merged SHA over explicitly and get confirmation that it was promoted — do
 not treat the merge as the handoff and walk away.
 
@@ -284,39 +275,90 @@ not treat the merge as the handoff and walk away.
 ## 4. Fix narrowly, with a reproducer
 
 - **A failing test first.** It must fail on the base SHA from §1 and pass after
-  the change. A hotfix without a reproducer is a guess with a deploy attached,
-  and under §3 the deploy is automatic.
+  the change. A hotfix without a reproducer is a guess, and under §3 a promotion
+  is what puts that guess in front of users.
 - **The reproducer is committed with the fix**, in the lane that owns the code.
   It is what stops the same defect from returning in three months.
 - **Narrow the diff.** Fix the defect. Do not reformat, rename, tidy adjacent
   code, or bundle the improvement you noticed on the way past. Everything that is
-  not the fix widens the blast radius of an automatic deploy and lengthens the
-  review that is standing between you and it.
+  not the fix widens the blast radius of the promotion and lengthens the review
+  that is standing between you and it.
 - If the fix cannot be narrow, it is not a hotfix — it is a change that needs the
   normal lane.
 
 ---
 
-## 5. Run the owning lane, plus the always-required contract gate
+## 5. Wait for every lane the change selects, through `merge-gate`
 
-Run the lane that **owns the code you changed**, and the compatibility gate that
-**everything** must pass. Not the full cross-platform suite: a paused lane must
-not be woken to ship a server fix, and a 45-minute macOS job is not evidence
-about a Go change.
+You do not choose which lanes run, and you may not merge on a subset of them.
+The selector reads each lane's own `push.paths` against the whole pull request's
+three-dot diff, `merge-gate` requires every selected lane to succeed, and
+`merge-gate` is the sole required context on `main`. So the rule during an
+incident is: **read the gate's lane/selected/result table and wait for the whole
+of it.** The table below is what to expect, not a menu.
 
-| You changed | Run |
+Not the full cross-platform suite either — the point of path selection is that a
+paused lane is not woken to ship a server fix. But "fewer lanes than everything"
+is the selector's decision, not yours.
+
+| You changed | What that selects |
 | --- | --- |
-| `server/**` | the Go lane (`go.yml`) — build, vet, unit and race checks — plus your reproducer |
-| `web/**` | the web lane (`web.yml`) |
+| `server/**` | the Go lane (`go.yml`) — build, vet, unit and race checks — **and `native-web-pairing.yml`, which is a `macos-15` runner**, because the acceptance starts the real hub from `server/`. Plus your reproducer |
+| `web/**` | the web lane (`web.yml`) — **and `native-web-pairing.yml`**, which `vite build`s and serves the bundle |
 | Wire formats or stored formats | **every** implementation, plus the wire-vector fixtures regenerated to a zero diff |
-| `apps/RelayiumKit/**` | **both** Apple workflows — it is shared, and it fans out on purpose |
+| `apps/RelayiumKit/**` (outside `Tests/`) | **both** Apple workflows, `swift-package.yml` and `native-web-pairing.yml` — it is shared, and it fans out on purpose |
 | A platform root under `apps/` | that root's single heavy owner workflow, and only that one |
+| Anything at all | `repo-hygiene` and `compat`, unconditionally — see below |
 
-**`compat / wire-vectors` is required regardless of what you changed.** It is
-unfiltered by design — it runs on every pull request and every `main` push — and
-it is a **required status check on `main`**, bound to GitHub Actions
-`app_id` 15368. It is the one check no change and no future platform can route
-around. See `docs/CI-PLATFORM-BOUNDARY.md`.
+**A server hotfix is not a `go.yml`-only event, and treating it as one is how a
+responder merges early.** `native-web-pairing.yml` names `server/**` in its
+filter because the run starts the real hub, so an urgent server fix legitimately
+selects a paid macOS lane that can take tens of minutes. That is the honest
+price of the change set. If it is genuinely intolerable for a given incident,
+the answer is a narrower diff or an owner decision recorded at the time — never
+merging while a selected lane is still running, and never reading a subset of
+green checks as the gate. The full ownership matrix is in
+`docs/CI-PLATFORM-BOUNDARY.md`.
+
+**The compat lane is required regardless of what you changed.** It is unfiltered
+by design — no `paths:` filter on any event — and it reaches every pull request
+through `merge-gate`, which calls it **unconditionally** and cannot report green
+unless it succeeds; it has no direct `pull_request:` trigger of its own any more.
+On `main` it still runs directly on `push: branches: [main]`, and that run is the
+bare `wire-vectors` check `promote.sh` reads (§3.1) — a promotion check, not a
+pull-request context. The required status check on `main` is now `merge-gate`
+alone, bound to GitHub Actions `app_id` 15368. Compat is still the one gate no
+change and no future platform can route around. See
+`docs/CI-PLATFORM-BOUNDARY.md`.
+
+**Where to look for the lanes above: `merge-gate`, not the lane's own name.**
+Every lane in the table is now a **reusable workflow** called by
+`.github/workflows/merge-gate.yml` — `compat.yml` included — and none of them has
+a `pull_request:` trigger of its own any more. On a pull request you will not
+find a top-level `go`, `web` or `compat` run; you will find one `merge-gate` run
+whose check names are prefixed by the caller job id — `go / test`,
+`macos / signed-build`, `ops-contract / go-contract`,
+`compat / wire-vectors`. The aggregate's own job, `merge-gate`, prints a
+lane/selected/result table and is red if any selected lane failed **or** if any
+unselected lane ran. On `main` the lanes still run directly under their own
+names, because every lane keeps its `push: branches: [main]` trigger — which is
+also what `promote.sh` reads, and why that trigger must never be removed.
+
+**`merge-gate` is the required context, and a red lane really does block.**
+Protection edit B narrowed `main` to exactly `merge-gate`, written and then read
+back as `strict: true`. That a red lane inside `merge-gate` stops a merge is an
+observation twice over: the never-merged red probe PR #38 under edit A's
+two-context set, and — under the configuration that actually ships — the
+never-merged red probe PR #41, head `cedec269`, aggregate run `32670589874`,
+read at `mergeStateStatus: BLOCKED` while protection reported the sole context
+`merge-gate`. Both were closed unmerged.
+
+**Read the gate's lane table anyway.** Not because the button is untrustworthy,
+but because the table is the only place that tells you *which* lanes your change
+set selected and whether every one of them is terminal. Under time pressure the
+failure mode is merging while a selected lane is still in progress, and a merge
+box cannot warn you about that the way the table can. `docs/CI-PLATFORM-BOUNDARY.md`
+carries the completed protection migration.
 
 Evidence must come from a **hosted run on the real trigger**. A local pass is a
 useful signal, not acceptance evidence.
@@ -329,7 +371,19 @@ Under time pressure the cheapest-looking move is to make the gate agree with you
 None of the following is permitted in a hotfix, and each is asserted
 mechanically by `scripts/test/ci-event-policy-test.mjs`:
 
-- adding a `paths:` filter to `compat.yml`, on either event;
+- adding a `paths:` filter to `compat.yml`, on any event;
+- adding a `paths:` filter to `merge-gate.yml`, or a `push:` trigger — a required
+  context that sometimes does not report blocks every pull request that does not
+  select it, and routing `main` through the gate would stop the lanes from
+  reporting the check runs `promote.sh` reads on the `main` commit;
+- **removing a lane's `push: branches: [main]` trigger.** It looks like tidy-up
+  once the gate owns pull requests. It wedges every production promotion with
+  `required check absent`, mid-incident;
+- widening a lane's caller condition in `merge-gate.yml` to a constant, or adding
+  `failure`, `cancelled` or `true:skipped` to the aggregate's accepted results —
+  the last one passes a lane that was selected and then skipped by a broken
+  condition, which is exactly the fail-open shape the gate exists to close;
+- adding `secrets: inherit` to any caller job;
 - adding a job-level `if:`, a `continue-on-error:`, a retry, or a `|| true` to a
   gate;
 - **reintroducing a commit-message escape** such as the former `[macos-only]`
@@ -394,9 +448,9 @@ A money-moving change that cannot obtain all three gates **is not shipped**,
 however urgent. Mitigate another way — disable the affected path, take the
 feature down — rather than shipping an ungated financial change.
 
-> **In Mode B, "shipped" means promoted, not merged.** All three gates must pass
-> before the **promotion**, which is the step that actually exposes the change to
-> customers. Merging a money-moving fix and promoting it later does not split the
+> **"Shipped" means promoted, not merged.** All three gates must pass before the
+> **promotion**, which is the step that actually exposes the change to customers.
+> Merging a money-moving fix and promoting it later does not split the
 > requirement across the two steps: the gates attach to the customer-visible
 > change. `deploy/promote.sh`'s `--allow-unverified-checks` override waives the
 > hosted check-evidence gate **only**, says so in the commit it writes, and
@@ -406,22 +460,19 @@ feature down — rather than shipping an ungated financial change.
 
 ## 9. Verify in production, and know your way back before you merge
 
-**A merge is not completion. A green board is not completion.** In **Mode A**
-(§3.1) the merge deploys automatically, so verification starts within minutes of
-it. In **Mode B** the merge deploys nothing, and verification starts within
-minutes of the **promotion** — which is a separate step you must not skip or
-assume happened.
+**A merge is not completion. A green board is not completion.** The merge
+deploys nothing (§3.1); verification starts within minutes of the **promotion**,
+which is a separate step you must not skip or assume happened.
 
 Write the rollback **before** merging. If you cannot state it, do not merge.
 
-**In Mode B, before anything below:** confirm the promotion was actually made,
-by reading the `deploy/production-pin` value on `relayium-ops`'s `main` and
-checking it equals the SHA you merged. A promotion that was intended, requested
-or promised is not a promotion. If the pin still names the old commit, the fix
-is not live no matter how green this repository looks.
+**Before anything below:** confirm the promotion was actually made, by reading
+the `deploy/production-pin` value on `relayium-ops`'s `main` and checking it
+equals the SHA you merged. A promotion that was intended, requested or promised
+is not a promotion. If the pin still names the old commit, the fix is not live no
+matter how green this repository looks.
 
-**After the merge (Mode A) or after the promotion (Mode B), on the central
-server/web channel:**
+**After the promotion, on the central server/web channel:**
 
 1. **Confirm the deployed version is the SHA you merged.** Not "a newer one" —
    that exact one. Until the running version matches, the deploy has not happened
@@ -437,9 +488,9 @@ server/web channel:**
    traffic. A deploy that succeeded and a deploy that is *working* are different
    claims.
 
-**Mode B, if the deployed version never becomes the pinned SHA:** the host may
-have tried the promotion, failed verification, and rolled itself back — in which
-case it quarantines that attempt and will **not** retry it on its own. That is
+**If the deployed version never becomes the pinned SHA:** the host may have tried
+the promotion, failed verification, and rolled itself back — in which case it
+quarantines that attempt and will **not** retry it on its own. That is
 deliberate, not a stuck deploy: retrying a known-broken commit every five
 minutes would restart the service every five minutes. Escalate to the operator,
 who can see the failure marker and the deploy log and decide between promoting a
@@ -448,14 +499,9 @@ on the host.**
 
 **Rollback**, chosen in advance:
 
-- **Mode A — revert the commit on `main`.** The next cron tick deploys the
-  reverted state. This is the default in that mode. It is only a rollback if
-  reverting is genuinely safe for the data the change touched: a schema or data
-  migration is **not** reversible by reverting code, which is why §11 requires
-  expand-contract.
-- **Mode B — move the pin back to a known-good older SHA.** This is the default
-  in that mode, it is a first-class supported operation, and it does **not**
-  require a revert commit on `main`:
+- **Move the pin back to a known-good older SHA.** This is the default, it is a
+  first-class supported operation, and it does **not** require a revert commit on
+  `main`:
 
   ```bash
   # In a relayium-ops clone, on main:
@@ -467,14 +513,14 @@ on the host.**
   Two things to expect. **It is usually slower than it sounds:** the host
   rebuilds the older commit from scratch, because the selective-build fast path
   keys on which paths differ, not on which direction. And **reverting on `main`
-  does nothing here** — in Mode B a revert is code that is merged but not
-  promoted, so it changes production only when someone promotes it.
-- **Take the affected path down** — in either mode, where reverting or
-  re-pinning is unsafe but the feature can be disabled.
+  does nothing on its own** — a revert is code that is merged but not promoted,
+  so it changes production only when someone promotes it.
+- **Take the affected path down**, where re-pinning is unsafe but the feature can
+  be disabled.
 
-> **The same data caveat applies in both modes.** Moving the pin backwards
-> restores *code*, not *data*. A schema or data migration is no more reversible
-> by re-pinning than it is by reverting, so expand-contract is still the rule.
+> **Moving the pin backwards restores *code*, not *data*.** A schema or data
+> migration is no more reversible by re-pinning than it is by reverting, which is
+> why §11 requires expand-contract.
 
 **Production operations, deploys and credentialed actions belong to the operator
 who owns them.** If verification shows the deploy did not happen, is stuck, or
@@ -521,25 +567,26 @@ Copy this into the work claim and close each item with evidence.
 - [ ] No existing worktree reset, cleaned, stashed or switched — §1
 - [ ] Bounded claim written: exact paths, base SHA, executor — §2
 - [ ] No path overlap with any other active claim — §2
-- [ ] **Central-production mode established (A: merge-is-deploy, or B:
-      promotion pin) — checked, not assumed** — §3.1
-- [ ] **Mode A only:** understood that merging deploys central server/web in
-      ~5 minutes, and the merge is timed for it — §3.1
+- [ ] **Understood that merging deploys nothing centrally** — production serves
+      the pinned commit until someone promotes — §3.1
 - [ ] Reproducer fails on the base SHA and passes after the fix — §4
 - [ ] Diff is narrow: the fix, its test, nothing else — §4
-- [ ] Owning lane green on a **hosted** run — §5
+- [ ] **Every** lane the change set selected green and **terminal** on a hosted
+      run — for a `server/**` or `web/**` fix that includes the `macos-15`
+      `native-web-pairing` lane, not the Go or web lane alone — §5
 - [ ] `compat / wire-vectors` green — §5
+- [ ] `merge-gate` green, and its lane table read: every lane the change set
+      selected succeeded, every unselected lane skipped — §5
 - [ ] No gate weakened, skipped, filtered or escaped — §6
 - [ ] Every frozen and paused tree byte-for-byte untouched — §7
 - [ ] Independent review of the **diff and evidence**; findings disposed — §8
 - [ ] **If money-moving: all three gates, plus an adversarial loss-path test** — §8
-- [ ] Rollback written down **before** the merge, in the form that matches the
-      mode (revert on `main`, or move the pin back) — §9
-- [ ] **Mode B only:** the merged SHA promoted via `relayium-ops`
-      `deploy/promote.sh`, and the promotion commit recorded alongside the merge
-      SHA — §3.1
-- [ ] **Mode B only:** `deploy/production-pin` on `relayium-ops` `main` read back
-      and confirmed equal to the merged SHA — §9
+- [ ] Rollback written down **before** the merge — moving the pin back to a
+      named known-good SHA — §9
+- [ ] The merged SHA promoted via `relayium-ops` `deploy/promote.sh`, and the
+      promotion commit recorded alongside the merge SHA — §3.1
+- [ ] `deploy/production-pin` on `relayium-ops` `main` read back and confirmed
+      equal to the merged SHA — §9
 - [ ] Deployed version confirmed equal to the merged SHA — §9
 - [ ] Defect confirmed gone on the deployed surface; nothing adjacent regressed — §9
 - [ ] Paused-lane rebase need recorded for the lane's own claim — §10
@@ -548,7 +595,8 @@ Copy this into the work claim and close each item with evidence.
 ## See also
 
 * `docs/ARCHITECTURE-RESILIENCE.md` — §5 coordination matrix, §6 sequence, §7
-  channels and the promotion pin (including "Which mode is production in?")
+  channels and the promotion pin (including "What production serves, and how to
+  confirm it")
 * `relayium-ops` `docs/superpowers/specs/2026-08-21-product-promotion-pin-design.md`
   — the promotion-pin design, cutover sequence and rollback semantics. Private
   repository; ask the operator if you cannot read it.

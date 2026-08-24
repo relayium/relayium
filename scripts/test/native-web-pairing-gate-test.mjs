@@ -118,10 +118,48 @@ const VECTOR_CHECKER = "web/scripts/check-wire-vectors.mjs";
 const GUARD_TEST = "scripts/test/native-web-pairing-gate-test.mjs";
 
 /**
+ * The aggregate merge gate, and the caller job id each governed workflow is
+ * called under.
+ *
+ * The pairing workflow and this guard's host both used to carry their own
+ * `pull_request:` trigger. They no longer do, and the reason is not tidiness: a
+ * path-filtered workflow that does not trigger emits NO check run at all — not
+ * a skipped one, not a neutral one — so branch protection could never tell "the
+ * acceptance passed" from "the acceptance was legitimately not selected" from
+ * "the acceptance never ran". `merge-gate.yml` runs unfiltered on every pull
+ * request, CALLS each lane, and reports the one always-present context that can
+ * be required.
+ *
+ * `compat.yml` is deliberately NOT in this list, and what keeps it out narrowed
+ * again rather than went away. The gate calls it as an unconditional lane and
+ * that call is now its ONLY pull-request entry point — its own `pull_request:`
+ * trigger went with protection edit B, which made `merge-gate` the sole
+ * required context, so the bare `wire-vectors` it used to report directly is no
+ * longer what a pull request is judged against. What this list is FOR is the
+ * caller-job-id assertions in section 2b, and compat's own caller shape is
+ * owned by `scripts/test/ci-event-policy-test.mjs` — its GOVERNED trigger table
+ * and its aggregate roster, in both directions. Restating it here would add a
+ * second place to update and no coverage. Section 3c below reads `compat.yml`'s
+ * `push` filter, which is the only filtered event it has left, and its `push:
+ * main` trigger, which is permanent: `relayium-ops`' `deploy/promote.sh` reads
+ * the bare `wire-vectors` check run off a `main` commit before it promotes, and
+ * nothing else puts one there.
+ */
+const AGGREGATE = "merge-gate.yml";
+const ACCEPTANCE_GATE_JOB = "native-web-pairing";
+const GUARD_HOST_GATE_JOB = "repo-hygiene";
+
+/** Escape a workflow file name for use inside a regular expression. */
+const reEscape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
  * Every tree that is an INPUT to the live acceptance run, and must therefore
  * trigger it. Dropping any one of these from the path filter is the cheapest
  * possible way to disable this gate without deleting anything, so each is
- * asserted by name for both `push` and `pull_request`.
+ * asserted by name against `push`, which is the only filtered event this
+ * workflow has left. There used to be a second, aliased copy of the list under
+ * `pull_request:` and this rule ran against both; the trigger moved into
+ * `merge-gate.yml`, and 2b asserts that call instead.
  *
  * The list is deliberately narrow. `apps/**` and `scripts/**` — the shape this
  * filter had — are rejected below: see BARE_GLOBS.
@@ -190,6 +228,36 @@ const BARE_GLOBS = ["apps/**", "scripts/**"];
  */
 const NON_INPUT_PATHS = ["apps/mac/**"];
 
+/**
+ * The subtree of a listed input that is NOT an input, and the exclusion that
+ * says so.
+ *
+ * `apps/RelayiumKit/**` above is real — the acceptance runs `swift build
+ * --product LocalTransferPeer` against this package. Its TEST TARGET is not:
+ * `swift build` builds PRODUCTS and never compiles `Tests/`, and this run loads
+ * no fixture from `Tests/Fixtures/` — it mints a live pairing code against a
+ * real server and drives two live peers, so frozen bytes cannot change its
+ * outcome. A test-only edit used to start a 45-minute Swift + Go + Chrome macOS
+ * runner that could not observe it: the same non-input cost `apps/mac/**` is
+ * excluded for, one directory in. `swift-package.yml` runs those files.
+ *
+ * ORDER IS LOAD-BEARING, which is why the two are named separately and their
+ * positions compared. GitHub evaluates a `paths:` list against each changed file
+ * in order and the LAST match wins, so the exclusion has to FOLLOW the positive
+ * it qualifies; swapped, it is overridden by that positive and does nothing,
+ * while the YAML stays valid and the diff reads as a reordering.
+ *
+ * This is the LITERAL form, in the file that explains why this particular filter
+ * is the list it is — the same division of labour `BARE_GLOBS` and
+ * `NON_INPUT_PATHS` already have. The compiled-glob behaviour of this exclusion,
+ * in this filter and in `macos.yml`'s and `ios.yml`'s, belongs to
+ * `scripts/test/swift-ci-boundary-test.mjs`: a narrowed negation, a re-included
+ * fixture directory and the package source that must still trigger are all
+ * judged there, against real paths, for all three heavy consumers at once.
+ */
+const PACKAGE_SOURCE_GLOB = "apps/RelayiumKit/**";
+const PACKAGE_TESTS_NEGATION = "!apps/RelayiumKit/Tests/**";
+
 const failures = [];
 function check(ok, message) {
   if (ok) return;
@@ -228,10 +296,17 @@ function onBlock(workflow) {
  * `{ event -> string[] | null }` for every event in `on:`, where `null` means
  * the event declares no path filter and therefore fires on every change.
  *
- * `web.yml` and the pairing workflow both define the list once under `push` with
- * a YAML anchor and reference it from `pull_request`, so the anchors have to be
- * resolved rather than read twice — a test that only looked at the literal list
- * would report `pull_request` as unfiltered and pass for the wrong reason.
+ * Anchors are resolved rather than read twice. The governed workflows used to
+ * define the list once under `push` with `&paths` and alias it from
+ * `pull_request:`, and a reader that only saw the literal list would have
+ * reported `pull_request` as unfiltered and passed for the wrong reason. The
+ * live files carry the anchor with nothing aliasing it now — but section 4
+ * writes an aliased `pull_request:` back onto the pairing workflow to prove the
+ * duplicate-trigger rule fires, and that mutated text is read through this
+ * function, so alias resolution stays load-bearing rather than vestigial. It
+ * used also to be exercised by reading `compat.yml` on both events; that file
+ * has one filtered event left, and the mutation is now what keeps this code
+ * path honest.
  */
 function triggers(workflow) {
   const lines = onBlock(workflow);
@@ -370,6 +445,21 @@ function jobRunning(workflow, marker) {
   };
 }
 
+/**
+ * The top-level jobs of `gateSource` whose `uses:` calls `workflow`.
+ *
+ * By the `uses:` line rather than by the job key, for the same reason
+ * `jobRunning` finds a job by its command: renaming a caller is allowed, and
+ * losing the call is not. The name is still checked separately, because the
+ * caller job id is the check-run prefix.
+ */
+function gateCallersOf(gateSource, workflow) {
+  if (gateSource === undefined) return [];
+  const uses = new RegExp(`^ {4}uses:\\s*\\./\\.github/workflows/${reEscape(workflow)}\\s*$`, "m");
+  return jobNames(gateSource)
+    .filter((job) => uses.test(stripComments((jobLines(gateSource, job) ?? []).join("\n"))));
+}
+
 const workflowFiles = (await readdir(workflowsDir)).filter((name) => /\.ya?ml$/.test(name));
 const workflows = new Map(
   await Promise.all(
@@ -494,7 +584,18 @@ function handoffFailures(sources) {
     `${ACCEPTANCE_WORKFLOW} declares no "on:" block`,
   );
   if (pairingTriggers !== null) {
-    for (const event of ["push", "pull_request"]) {
+    // `push` only. This workflow's own `pull_request:` trigger moved into
+    // `merge-gate.yml`, which calls it — so `push` is the only filtered event
+    // left to judge, and pull-request reachability is a different claim,
+    // asserted against the gate in 2b below rather than by looking for a
+    // trigger that is correctly absent.
+    //
+    // Everything inside this loop is unchanged: the same required inputs, the
+    // same rejected bare globs, the same non-inputs, the same ordered negation.
+    // `push` is restricted to `main`, so this filter is also what re-verifies
+    // the merge commit, and `relayium-ops`' `deploy/promote.sh` reads check runs
+    // there before it promotes.
+    for (const event of ["push"]) {
       if (!pairingTriggers.has(event)) {
         need(false, `${ACCEPTANCE_WORKFLOW} does not run on ${event}`);
         continue;
@@ -529,6 +630,109 @@ function handoffFailures(sources) {
           + ` The macOS app's logic lives in \`apps/RelayiumKit/**\`, which this filter does name.`,
         );
       }
+
+      // The exclusion that carves the package's test target back out of the
+      // input above it: present, and BELOW the positive it qualifies.
+      const sourceAt = paths.indexOf(PACKAGE_SOURCE_GLOB);
+      const negationAt = paths.indexOf(PACKAGE_TESTS_NEGATION);
+      need(
+        negationAt !== -1,
+        `${ACCEPTANCE_WORKFLOW}'s ${event} filter does not list "${PACKAGE_TESTS_NEGATION}"; it`
+        + ` lists [${paths.join(", ")}]. \`swift build --product LocalTransferPeer\` builds`
+        + ` PRODUCTS and never compiles the package's test target, and this run loads no fixture`
+        + ` from it — so without that entry a test-only edit starts a 45-minute Swift + Go +`
+        + ` Chrome macOS runner that cannot observe the change. \`swift-package.yml\` is what runs`
+        + ` those files.`,
+      );
+      need(
+        sourceAt === -1 || negationAt === -1 || negationAt > sourceAt,
+        `${ACCEPTANCE_WORKFLOW}'s ${event} filter lists "${PACKAGE_TESTS_NEGATION}" at position`
+        + ` ${negationAt + 1}, BEFORE "${PACKAGE_SOURCE_GLOB}" at position ${sourceAt + 1}. GitHub`
+        + ` applies a \`paths:\` list per changed file in order and the LAST match wins, so in that`
+        + ` order the exclusion is overridden by the very pattern it qualifies and does nothing at`
+        + ` all. The YAML stays valid, actionlint stays happy, the diff reads as a reordering, and`
+        + ` every run the entry removes comes back.`,
+      );
+    }
+
+    // ── 2b. the acceptance is still reachable from a pull request ───────────
+    //
+    // `push` above is restricted to `main`, so on a branch this workflow is
+    // reached exclusively by `merge-gate.yml` calling it. That is a better
+    // arrangement than the aliased `pull_request:` filter it replaced — one
+    // always-present required context instead of eight sometimes-present ones —
+    // and it is also a new way to lose the only cross-client acceptance in this
+    // repository, in three shapes that each leave every file valid and
+    // actionlint happy:
+    //
+    //   * this workflow drops `workflow_call:`, so the gate's `uses:` cannot
+    //     resolve. That does not skip one lane; it fails the WHOLE gate run to
+    //     LOAD, so the required context reports nothing and the merge box shows
+    //     a MISSING check rather than a red one;
+    //   * the gate stops calling it. Both files are fine, and a change to
+    //     `web/`, `server/` or the package can reach `main` with the two
+    //     implementations never once made to talk to each other;
+    //   * the gate itself grows a `pull_request` path filter, which re-creates
+    //     the absent-check failure one level up and for every lane at once.
+    //
+    // None is visible to section 2's filter rules, so the gate is read from
+    // disk. "The gate covers it" is exactly the assumption this section exists
+    // to stop being an assumption.
+    const declares = (key) => pairingTriggers.has(key);
+    need(
+      declares("workflow_call"),
+      `${ACCEPTANCE_WORKFLOW} declares no "workflow_call:", so ${AGGREGATE} cannot call it and no`
+      + ` pull request runs the acceptance at all — its own \`pull_request\` trigger is gone. It is`
+      + ` worse than one missing lane: an unresolvable \`uses:\` fails the entire gate run to load,`
+      + ` so the one required context reports nothing rather than red.`,
+    );
+    need(
+      !declares("pull_request"),
+      `${ACCEPTANCE_WORKFLOW} declares its own "pull_request:" trigger again. ${AGGREGATE} already`
+      + ` calls it, so every commit on a branch with an open pull request runs the acceptance`
+      + ` TWICE — once directly, once through the gate — which is two 45-minute macOS runners for`
+      + ` one answer.`,
+    );
+
+    const gateSource = sources.get(AGGREGATE);
+    need(
+      gateSource !== undefined,
+      `.github/workflows/${AGGREGATE} does not exist, and it is the ONLY way a pull request now`
+      + ` reaches ${ACCEPTANCE_WORKFLOW}. Without it the one gate that can see two DIFFERENT`
+      + ` implementations disagree runs on \`main\` and nowhere else — after the merge that`
+      + ` introduced the disagreement.`,
+    );
+    if (gateSource !== undefined) {
+      const gateTriggers = triggers(gateSource);
+      need(
+        gateTriggers !== null && gateTriggers.has("pull_request"),
+        `${AGGREGATE} declares no "pull_request:" trigger; it is the pull-request entry point`
+        + ` every lane here gave up its own trigger for.`,
+      );
+      const gatePaths = gateTriggers?.get("pull_request") ?? null;
+      need(
+        gatePaths === null,
+        `${AGGREGATE} gained a pull_request path filter ([${(gatePaths ?? []).join(", ")}]). The`
+        + ` gate is the one workflow that must start on EVERY pull request: a filtered gate emits`
+        + ` no check run for the changes it skips, which is the absent-required-context failure`
+        + ` these lanes were converted to avoid, restored one level up and for all of them at once.`,
+      );
+
+      const callers = gateCallersOf(gateSource, ACCEPTANCE_WORKFLOW);
+      need(
+        callers.length === 1,
+        `${AGGREGATE} declares ${callers.length} job(s) [${callers.join(", ")}] calling`
+        + ` "./.github/workflows/${ACCEPTANCE_WORKFLOW}"; want exactly one. Zero is the live`
+        + ` acceptance unreachable from any pull request while its filter still names every tree it`
+        + ` consumes — the 1.2.5 defect lands, and the first signal is a user. Two is a second`
+        + ` 45-minute macOS runner and no new evidence.`,
+      );
+      need(
+        callers.length !== 1 || callers[0] === ACCEPTANCE_GATE_JOB,
+        `${AGGREGATE} calls ${ACCEPTANCE_WORKFLOW} from job "${callers[0]}"; want`
+        + ` "${ACCEPTANCE_GATE_JOB}". The caller job id is the check-run prefix, and it is the key`
+        + ` the gate's own selector output and \`needs:\` roster are matched against by name.`,
+      );
     }
   }
 
@@ -585,10 +789,17 @@ function handoffFailures(sources) {
   //     "Always-required" is a property of the workflow FILE and that is all
   //     this section can assert: compat.yml runs on every triggering event and
   //     reports red when the contract breaks. Whether a red result BLOCKS a
-  //     merge is GitHub branch-protection configuration on `main` — the status
-  //     context `compat / wire-vectors` — which lives in repository settings,
-  //     not in this repository's source, and is not asserted anywhere here.
-  //     Nothing below should be read as evidence that it is configured.
+  //     merge is GitHub branch-protection configuration on `main`, which lives
+  //     in repository settings, not in this repository's source, and is not
+  //     asserted anywhere here. That protection now requires the top-level
+  //     `merge-gate` and nothing else, after protection edit B removed the bare
+  //     `wire-vectors`. The CALLED run's context, `compat / wire-vectors`, is
+  //     not itself a required context either: it reaches the merge button only
+  //     through the aggregate, which judges the `compat` lane's result. The
+  //     bare `wire-vectors` still matters off the merge button — it is the
+  //     check run `relayium-ops`' `deploy/promote.sh` reads on a `main` commit,
+  //     which is why `push: main` is asserted below and is permanent.
+  //     Nothing below should be read as evidence that any of it is configured.
   const compatWorkflow = sources.get(COMPAT_WORKFLOW);
   if (compatWorkflow === undefined) {
     need(
@@ -600,12 +811,20 @@ function handoffFailures(sources) {
     const compatTriggers = triggers(compatWorkflow);
     need(compatTriggers !== null, `${COMPAT_WORKFLOW} declares no "on:" block`);
     if (compatTriggers !== null) {
-      for (const event of ["push", "pull_request"]) {
+      // `push` only, and that is the permanent shape rather than a narrowing of
+      // this check. This file's own `pull_request:` trigger is gone: a pull
+      // request reaches the contract through `${AGGREGATE}`'s unconditional
+      // `compat` lane, and the gate carries no path filter of its own — section
+      // 2b already reads that off disk. `push` is the one filtered event left
+      // here, and the filter it must not have is asserted on it.
+      for (const event of ["push"]) {
         if (!compatTriggers.has(event)) {
           need(
             false,
-            `${COMPAT_WORKFLOW} does not run on ${event}; branch work would reach \`main\` with`
-            + ` the compatibility contract unverified`,
+            `${COMPAT_WORKFLOW} does not run on ${event}; a \`main\` commit would carry no`
+            + ` \`wire-vectors\` check run, and \`relayium-ops\`' \`deploy/promote.sh\` refuses to`
+            + ` promote without one — production promotion wedges rather than a pull request`
+            + ` failing`,
           );
           continue;
         }
@@ -746,15 +965,12 @@ const MUTATIONS = [
     ),
     expect: /compat\.yml gained a push path filter/,
   },
-  {
-    name: "compat.yml gains a pull_request path filter",
-    mutate: (s) => withText(
-      s, COMPAT_WORKFLOW,
-      "  pull_request:\n  workflow_dispatch:",
-      "  pull_request:\n    paths:\n      - 'web/**'\n  workflow_dispatch:",
-    ),
-    expect: /compat\.yml gained a pull_request path filter/,
-  },
+  // The `pull_request` counterpart of the case above is gone with the trigger
+  // it filtered. `compat.yml` has one filtered event left, so there is no second
+  // filter here to narrow — and whether the direct trigger may return at all is
+  // `scripts/test/ci-event-policy-test.mjs`'s rule, mutated there rather than
+  // restated here. Leaving the case in place would have meant a mutation whose
+  // anchor no longer exists, which `withText` correctly throws on.
   {
     name: "the pairing filter is widened back to the bare `apps/**`",
     mutate: (s) => withText(
@@ -868,6 +1084,100 @@ const MUTATIONS = [
     ),
     refute: /run the WRITING form of the vector generator/,
   },
+
+  // ── reachability from a pull request, now the gate's job (2b) ────────────
+  //
+  // This workflow's `push:` trigger is restricted to `main`, so on a branch the
+  // acceptance is reached only by `merge-gate.yml` calling it. Each case below
+  // breaks one link in that chain and leaves every file valid.
+  {
+    // The direct trigger, restored beside the call: two 45-minute macOS runners
+    // for every commit on a branch with an open pull request, one answer.
+    name: "the pairing workflow takes its own pull_request trigger back",
+    mutate: (s) => withText(
+      s, ACCEPTANCE_WORKFLOW,
+      "  workflow_call:\n  workflow_dispatch:",
+      "  pull_request:\n    paths: *paths\n  workflow_call:\n  workflow_dispatch:",
+    ),
+    expect: /native-web-pairing\.yml declares its own "pull_request:" trigger again/,
+  },
+  {
+    // The opposite edit, and the one that takes the whole board with it: the
+    // gate's `uses:` stops resolving, the entire run fails to LOAD, and the one
+    // required context reports nothing rather than red.
+    name: "the pairing workflow drops workflow_call, so the gate's uses: cannot resolve",
+    mutate: (s) => withText(
+      s, ACCEPTANCE_WORKFLOW, "  workflow_call:\n  workflow_dispatch:", "  workflow_dispatch:",
+    ),
+    expect: /native-web-pairing\.yml declares no "workflow_call:"/,
+  },
+  {
+    // Both files stay valid and the acceptance simply stops being reachable from
+    // a pull request. The quiet one: the filter still names every tree the run
+    // consumes, and the 1.2.5 defect lands with a user as the first signal.
+    name: "merge-gate stops calling the pairing lane",
+    mutate: (s) => withText(
+      s, AGGREGATE,
+      "\n  native-web-pairing:\n    needs: select\n"
+      + "    if: needs.select.outputs['native-web-pairing'] == 'true'\n"
+      + "    uses: ./.github/workflows/native-web-pairing.yml\n",
+      "\n",
+    ),
+    expect: /merge-gate\.yml declares 0 job\(s\) \[\] calling "\.\/\.github\/workflows\/native-web-pairing\.yml"/,
+  },
+  {
+    // Still called, from a job id the gate's own selector output and `needs:`
+    // roster do not name. The caller id is the check-run prefix.
+    name: "merge-gate calls the pairing lane under a different job id",
+    mutate: (s) => withText(
+      s, AGGREGATE, "\n  native-web-pairing:\n    needs: select\n", "\n  pairing:\n    needs: select\n",
+    ),
+    expect: /merge-gate\.yml calls native-web-pairing\.yml from job "pairing"; want "native-web-pairing"/,
+  },
+  {
+    // The gate itself filtered: it emits no check run for the pull requests it
+    // skips, which is the absent-required-context failure these lanes were
+    // converted to avoid — reintroduced one level up, for every lane at once.
+    name: "the merge gate's pull_request trigger grows a path filter",
+    mutate: (s) => withText(
+      s, AGGREGATE,
+      "  pull_request:\n",
+      "  pull_request:\n    paths:\n      - 'web/**'\n",
+    ),
+    expect: /merge-gate\.yml gained a pull_request path filter/,
+  },
+
+  // ── the package's test target, carved back out of a real input ────────────
+  //
+  // Only the two LITERAL shapes, because only the literal form is this file's
+  // half: a narrowed negation, a re-included fixture directory and the package
+  // source that must still trigger are compiled-glob behaviour, and
+  // `scripts/test/swift-ci-boundary-test.mjs` mutates all of those against all
+  // three heavy consumers at once.
+  {
+    // The exclusion deleted. Cheap, invisible in a merge box, and it puts a
+    // 45-minute macOS runner back on every XCTest case added to a package this
+    // run compiles the products of.
+    name: "the !apps/RelayiumKit/Tests/** exclusion is deleted from the filter",
+    mutate: (s) => withText(
+      s, ACCEPTANCE_WORKFLOW,
+      "      - 'apps/RelayiumKit/**'\n      - '!apps/RelayiumKit/Tests/**'\n",
+      "      - 'apps/RelayiumKit/**'\n",
+    ),
+    expect: /filter does not list "!apps\/RelayiumKit\/Tests\/\*\*"/,
+  },
+  {
+    // The same two lines, swapped: under last-match-wins the exclusion is
+    // overridden by the pattern it qualifies and does nothing, while every
+    // membership check still passes.
+    name: "the exclusion is moved ABOVE the positive it qualifies",
+    mutate: (s) => withText(
+      s, ACCEPTANCE_WORKFLOW,
+      "      - 'apps/RelayiumKit/**'\n      - '!apps/RelayiumKit/Tests/**'\n",
+      "      - '!apps/RelayiumKit/Tests/**'\n      - 'apps/RelayiumKit/**'\n",
+    ),
+    expect: /lists "!apps\/RelayiumKit\/Tests\/\*\*" at position 1, BEFORE/,
+  },
 ];
 
 for (const { name, mutate, expect, refute } of MUTATIONS) {
@@ -910,16 +1220,78 @@ check(
 for (const name of guardHosts) {
   const events = triggers(workflows.get(name));
   if (events === null) continue;
-  for (const event of ["push", "pull_request"]) {
-    if (!events.has(event)) {
-      check(false, `${name} runs ${GUARD_TEST} but not on ${event}`);
-      continue;
-    }
+
+  // `push` is the only filtered event this host has left, and it is now the ONLY
+  // thing that puts a check run on the `main` commit — `merge-gate.yml` runs on
+  // `pull_request` only, and `relayium-ops`' `deploy/promote.sh` reads check runs
+  // on `main` before it promotes. A host that lost this does not fail visibly
+  // here; it wedges production promotion with `required check absent`.
+  if (!events.has("push")) {
+    check(false, `${name} runs ${GUARD_TEST} but not on push`);
+  } else {
     check(
-      events.get(event) === null,
-      `${name} runs ${GUARD_TEST} behind a ${event} path filter; it guards`
+      events.get("push") === null,
+      `${name} runs ${GUARD_TEST} behind a push path filter; it guards`
       + ` .github/workflows/, web/package.json and the acceptance script, so it must run on`
-      + ` every ${event}, exactly as macos-publish-order-test.mjs does`,
+      + ` every push, exactly as macos-publish-order-test.mjs does`,
+    );
+    const branches = branchesOf(workflows.get(name), "push");
+    check(
+      branches.length === 1 && branches[0] === "main",
+      `${name}'s push trigger runs on [${branches.join(", ")}]; want exactly [main]. Branch work`
+      + ` reaches this host through ${AGGREGATE} now, so a branch push here is a second identical`
+      + ` run of the same tree — and dropping \`main\` leaves nothing re-verifying the merge commit`
+      + ` these guards are read from.`,
+    );
+  }
+
+  // And pull requests, which this host no longer triggers on itself. The old
+  // form of this check asked whether a `pull_request:` trigger had grown a path
+  // filter; with the trigger gone that question answers "no" for the wrong
+  // reason, and would have reported green with the host unreachable from a pull
+  // request entirely. "No path filter" and "called with no condition" are the
+  // same property stated at the two levels that now exist, so both are checked.
+  check(
+    events.has("workflow_call"),
+    `${name} runs ${GUARD_TEST} but declares no "workflow_call:", so ${AGGREGATE} cannot call it`
+    + ` and branch work reaches \`main\` without these assertions ever being executed. An`
+    + ` unresolvable \`uses:\` also fails the whole gate run to load, so the required context`
+    + ` reports nothing at all.`,
+  );
+  check(
+    !events.has("pull_request"),
+    `${name} runs ${GUARD_TEST} and declares its own "pull_request:" trigger again. ${AGGREGATE}`
+    + ` already calls it unconditionally, so every commit on a branch with an open pull request`
+    + ` runs all of this host's jobs twice for one answer.`,
+  );
+
+  const gateSource = workflows.get(AGGREGATE);
+  check(
+    gateSource !== undefined,
+    `.github/workflows/${AGGREGATE} does not exist, and it is what runs ${GUARD_TEST} on a pull`
+    + ` request now that ${name} has no \`pull_request\` trigger of its own`,
+  );
+  if (gateSource === undefined) continue;
+  const callers = gateCallersOf(gateSource, name);
+  check(
+    callers.length === 1,
+    `${AGGREGATE} declares ${callers.length} job(s) [${callers.join(", ")}] calling`
+    + ` "./.github/workflows/${name}"; want exactly one. Zero is ${GUARD_TEST} — and every other`
+    + ` cross-cutting guard hosted there — not running on any pull request, while the filtered`
+    + ` lanes keep reporting green.`,
+  );
+  check(
+    callers.length !== 1 || callers[0] === GUARD_HOST_GATE_JOB,
+    `${AGGREGATE} calls ${name} from job "${callers[0]}"; want "${GUARD_HOST_GATE_JOB}"`,
+  );
+  for (const caller of callers) {
+    const callerText = stripComments((jobLines(gateSource, caller) ?? []).join("\n"));
+    check(
+      !/^ {4}if:/m.test(callerText),
+      `${AGGREGATE}/${caller} has a job-level "if:". This is the lane the gate must call with NO`
+      + ` condition: it hosts the checks every change has to pass, and a condition here is the same`
+      + ` hole a path filter on ${name} would be — reached by whichever pull requests the`
+      + ` expression happens to select, and by no others.`,
     );
   }
 }
@@ -1248,10 +1620,21 @@ process.stdout.write(
   `ok: ${ACCEPTANCE} runs in exactly one hosted macOS job, every input tree `
   + `(${REQUIRED_PATHS.join(", ")}) triggers it, no bare ${BARE_GLOBS.join(" / ")} does and `
   + `neither does ${NON_INPUT_PATHS.join(" / ")} — which the run never reads, compiles or `
-  + `serves — "${VECTOR_CHECK}" runs exactly once and only in ${COMPAT_WORKFLOW} — unfiltered on `
-  + `push/main and pull_request, on ubuntu-latest, finite, fail-closed in workflow code (whether `
-  + `it BLOCKS a merge is branch protection on the \`compat / wire-vectors\` context, which is `
-  + `not asserted here) and in the verifying form — neither gate may skip or be advisory, `
+  + `serves — \`${PACKAGE_TESTS_NEGATION}\` follows \`${PACKAGE_SOURCE_GLOB}\` so the package's `
+  + `test target does not either (its compiled-glob behaviour is `
+  + `scripts/test/swift-ci-boundary-test.mjs's), a pull request reaches that job only through `
+  + `${AGGREGATE} — whose unfiltered \`pull_request\` trigger and single `
+  + `${ACCEPTANCE_GATE_JOB} caller job are read from disk, as is its unconditional `
+  + `${GUARD_HOST_GATE_JOB} call that runs this guard — "${VECTOR_CHECK}" runs exactly once and `
+  + `only in `
+  + `${COMPAT_WORKFLOW} — unfiltered on `
+  + `push/main, its only filtered event now that ${AGGREGATE} is its sole pull-request entry `
+  + `point, on ubuntu-latest, finite, fail-closed in workflow code (whether it BLOCKS a merge is `
+  + `branch protection on \`main\`, which requires \`merge-gate\` alone — the called `
+  + `\`compat / wire-vectors\` is consumed by the aggregate and is not itself a required `
+  + `context, while the bare \`wire-vectors\` remains the check run production promotion reads `
+  + `off a \`main\` commit — none of which is asserted here) and in `
+  + `the verifying form — neither gate may skip or be advisory, `
   + `${MUTATIONS.length} mutations prove each of those can fail (and one that a legitimate `
   + `\`--write\` step is not reported), and the acceptance still proves both role assignments, `
   + `the SAS agreement, a real browser against a real server, and a phase barrier that waits for `

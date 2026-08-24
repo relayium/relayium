@@ -16,12 +16,8 @@ import XCTest
 ///    safe, and it is why the extension's manifest is shorter than the app's
 ///    rather than a copy of it.
 final class IOSPrivacyManifestTests: XCTestCase {
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → repo root.
-    private var repoRoot: URL {
-        (0..<5).reduce(URL(fileURLWithPath: #filePath)) { u, _ in u.deletingLastPathComponent() }
-    }
     private func manifest(_ path: String) throws -> [String: Any] {
-        let data = try Data(contentsOf: repoRoot.appendingPathComponent(path))
+        let data = try RepoRoot.data(path)
         return try XCTUnwrap(
             try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
                 as? [String: Any])
@@ -35,13 +31,12 @@ final class IOSPrivacyManifestTests: XCTestCase {
         })
     }
     private func swiftSources(under relative: String) throws -> String {
-        let root = repoRoot.appendingPathComponent(relative)
-        let names = try FileManager.default.subpathsOfDirectory(atPath: root.path)
-            .filter { $0.hasSuffix(".swift") }
-        XCTAssertFalse(names.isEmpty, "no sources under \(relative)")
-        return try names.map {
-            try String(contentsOf: root.appendingPathComponent($0), encoding: .utf8)
-        }.joined(separator: "\n")
+        // `RepoRoot.swiftFiles(under:)` throws on a missing root AND on a root
+        // that contains no Swift at all: both would make every "the app does not
+        // call X" assertion below pass over nothing.
+        return try RepoRoot.swiftFiles(under: relative)
+            .map { try RepoRoot.text(of: $0) }
+            .joined(separator: "\n")
     }
 
     private let appManifest = "apps/ios/Relayium/PrivacyInfo.xcprivacy"
@@ -139,22 +134,16 @@ final class IOSPrivacyManifestTests: XCTestCase {
         }
 
         // The app really does send it — the declaration is not defensive.
-        let client = try String(
-            contentsOf: repoRoot.appendingPathComponent(
-                "apps/RelayiumKit/Sources/RelayiumKit/Account/AccountClient.swift"),
-            encoding: .utf8)
+        let client = try RepoRoot.text(
+            "apps/RelayiumKit/Sources/RelayiumKit/Account/AccountClient.swift")
         XCTAssertTrue(client.contains("\"email\": email"),
                       "if the app stopped sending an email, this declaration would be wrong")
-        let billing = try String(
-            contentsOf: repoRoot.appendingPathComponent(
-                "apps/RelayiumKit/Sources/RelayiumKit/Account/AppleBillingClient.swift"),
-            encoding: .utf8)
+        let billing = try RepoRoot.text(
+            "apps/RelayiumKit/Sources/RelayiumKit/Account/AppleBillingClient.swift")
         XCTAssertTrue(billing.contains("submitAppleTransaction"),
                       "the app no longer sends a transaction whose history it declares")
-        let store = try String(
-            contentsOf: repoRoot.appendingPathComponent(
-                "apps/RelayiumKit/Sources/RelayiumStoreKit/StoreKitSubscriptionStore.swift"),
-            encoding: .utf8)
+        let store = try RepoRoot.text(
+            "apps/RelayiumKit/Sources/RelayiumStoreKit/StoreKitSubscriptionStore.swift")
         XCTAssertTrue(store.contains(".appAccountToken(appAccountToken)"),
                       "the app no longer sends the declared per-account identifier to Apple")
     }

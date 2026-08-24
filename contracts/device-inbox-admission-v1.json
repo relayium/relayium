@@ -1,0 +1,103 @@
+{
+  "contract": "relayium.device-inbox.admission",
+  "contractVersion": 1,
+  "documentation": "docs/DEVICE-INBOX-ADMISSION-CONTRACT.md",
+  "consumers": ["go", "swift", "web"],
+  "protocolVersion": 3,
+  "keyAlgorithm": "x25519-sealedbox-v1",
+  "requiredReceiveCapability": "inbox.receive.v3",
+  "capabilityTokenSyntax": {
+    "pattern": "^[a-z0-9]+(\\.[a-z0-9]+)*\\.v[1-9][0-9]*$",
+    "maxLength": 64
+  },
+  "capabilityTokens": [
+    { "token": "inbox.autoaccept.v1", "definedBy": ["go", "swift"] },
+    { "token": "inbox.receive.v1", "definedBy": ["go", "swift"] },
+    { "token": "inbox.receive.v2", "definedBy": ["go"] },
+    { "token": "inbox.receive.v3", "definedBy": ["go", "swift", "web"] },
+    { "token": "inbox.resume.v1", "definedBy": ["go", "swift"] },
+    { "token": "inbox.text.v1", "definedBy": ["go", "swift", "web"] }
+  ],
+  "taskStates": [
+    "queued",
+    "notified",
+    "downloading",
+    "verifying",
+    "saved",
+    "attention_required",
+    "expired",
+    "revoked",
+    "failed_retryable",
+    "failed_terminal"
+  ],
+  "terminalStates": ["saved", "expired", "revoked", "failed_terminal"],
+  "deviceReportableStates": [
+    "downloading",
+    "verifying",
+    "saved",
+    "attention_required",
+    "failed_retryable",
+    "failed_terminal"
+  ],
+  "stateTransitions": {
+    "queued": [
+      "notified",
+      "downloading",
+      "attention_required",
+      "expired",
+      "revoked",
+      "failed_terminal"
+    ],
+    "notified": [
+      "queued",
+      "downloading",
+      "attention_required",
+      "expired",
+      "revoked",
+      "failed_terminal"
+    ],
+    "downloading": [
+      "queued",
+      "verifying",
+      "attention_required",
+      "expired",
+      "revoked",
+      "failed_retryable",
+      "failed_terminal"
+    ],
+    "verifying": [
+      "queued",
+      "saved",
+      "attention_required",
+      "expired",
+      "revoked",
+      "failed_retryable",
+      "failed_terminal"
+    ],
+    "saved": [],
+    "attention_required": ["queued", "expired", "revoked", "failed_terminal"],
+    "expired": [],
+    "revoked": [],
+    "failed_retryable": ["queued", "expired", "revoked", "failed_terminal"],
+    "failed_terminal": []
+  },
+  "noErrorValue": "",
+  "deviceReportableErrors": [
+    "decrypt_failed",
+    "directory_unavailable",
+    "disk_full",
+    "download_failed",
+    "internal",
+    "name_conflict",
+    "permission_denied",
+    "unsupported",
+    "user_declined",
+    "verify_failed"
+  ],
+  "centralOnlyErrors": [
+    "attempts_exhausted",
+    "key_revoked",
+    "lease_expired",
+    "stored_object_unavailable"
+  ]
+}

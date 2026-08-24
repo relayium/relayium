@@ -199,15 +199,10 @@ final class DeviceAddressCopyTests: XCTestCase {
 
     // MARK: - helpers
 
-    private var repoRoot: URL {
-        (0..<5).reduce(URL(fileURLWithPath: #filePath)) { u, _ in u.deletingLastPathComponent() }
-    }
     private func macSource(_ name: String) throws -> String {
-        try String(contentsOf: repoRoot.appendingPathComponent("apps/mac/Relayium/\(name)"),
-                   encoding: .utf8)
+        try RepoRoot.text("apps/mac/Relayium/\(name)")
     }
     private func kitSource(_ path: String) throws -> String {
-        try String(contentsOf: repoRoot.appendingPathComponent("apps/RelayiumKit/Sources/\(path)"),
-                   encoding: .utf8)
+        try RepoRoot.text("apps/RelayiumKit/Sources/\(path)")
     }
 }

@@ -19,16 +19,8 @@ import XCTest
 /// carry `$(MARKETING_VERSION)` and `$(CURRENT_PROJECT_VERSION)`, so that is
 /// where they are read from.
 final class BundleVersionTests: XCTestCase {
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → repo root.
-    private var repoRoot: URL {
-        (0..<5).reduce(URL(fileURLWithPath: #filePath)) { u, _ in u.deletingLastPathComponent() }
-    }
-
     private func settings(_ platform: String, _ key: String) throws -> [String] {
-        let project = try String(
-            contentsOf: repoRoot.appendingPathComponent(
-                "apps/\(platform)/Relayium.xcodeproj/project.pbxproj"),
-            encoding: .utf8)
+        let project = try RepoRoot.text("apps/\(platform)/Relayium.xcodeproj/project.pbxproj")
         return project
             .components(separatedBy: "\n")
             .compactMap { line in
@@ -67,8 +59,8 @@ final class BundleVersionTests: XCTestCase {
         // the two products must not drift apart either: they are the same
         // release of the same app through two channels, and a user who installs
         // one after the other must not see the version go backwards.
-        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.3.1", occurrences: 10)
-        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "19", occurrences: 10)
+        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.3.2", occurrences: 10)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "20", occurrences: 10)
     }
 
     /// iOS: the app and its Share extension, both Debug and Release.

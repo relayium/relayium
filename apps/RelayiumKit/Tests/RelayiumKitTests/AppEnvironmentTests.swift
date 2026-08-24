@@ -67,14 +67,10 @@ final class AppEnvironmentTests: XCTestCase {
     /// SDK, and the realtime factories here call `deviceName()` from connection
     /// closures that are not.
     func testNothingInTheEnvironmentResolvesAHostName() throws {
-        let source = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // RelayiumKitTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // RelayiumKit
-            .appendingPathComponent("Sources/RelayiumAppKit/AppEnvironment.swift")
         // Whole-line comments dropped: the file explains the absence and names
         // the call in doing so.
-        let code = try String(contentsOf: source, encoding: .utf8)
+        let code = try RepoRoot
+            .text("apps/RelayiumKit/Sources/RelayiumAppKit/AppEnvironment.swift")
             .split(separator: "\n", omittingEmptySubsequences: false)
             .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
             .joined(separator: "\n")

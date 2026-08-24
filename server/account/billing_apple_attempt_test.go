@@ -322,7 +322,7 @@ func TestSecondInstanceNeverReceivesChargeAuthorityAndASecondPaidSubscriptionIsR
 		}, http.StatusForbidden, appleRefusalCapabilityCode},
 		{"impersonating instance A with a guessed secret", map[string]string{
 			"bundleId": testBundleIOS, "productId": testAppleProduct,
-			"appInstanceId": testContinuationInstanceA, "continuationSecret": "not-the-secret",
+			"appInstanceId": testContinuationInstanceA, "continuationSecret": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 			"armRequestId": "resume-B2",
 		}, http.StatusForbidden, appleRefusalCapabilityCode},
 	} {
@@ -831,13 +831,16 @@ func TestAlreadyAccountedDuplicateSubmissionStillResolvesTheDispatch(t *testing.
 	if !first.Applied {
 		t.Fatalf("first submission did not apply: %+v", first)
 	}
+	if !first.DispatchResolved || first.DispatchResolvedAttemptID != attemptID {
+		t.Fatalf("first submission omitted resolved attempt identity: %+v", first)
+	}
 	if state, _, _ := f.attemptState(t, attemptID); state != "resolved" {
 		t.Fatalf("first submission left the dispatch pending: %q", state)
 	}
 	// The duplicate is idempotent and must not resurrect or double-grant.
 	second, _ := f.mustAccept(t, jws)
-	if second.DispatchPending {
-		t.Fatalf("duplicate submission reported a pending dispatch: %+v", second)
+	if second.DispatchPending || !second.DispatchResolved || second.DispatchResolvedAttemptID != attemptID {
+		t.Fatalf("duplicate submission lost sticky resolution: %+v", second)
 	}
 	if n := f.countAttempts(t); n != 1 {
 		t.Fatalf("duplicate submission created attempts: %d", n)
@@ -1326,13 +1329,21 @@ func TestOutcomeRefusesEveryNonCurrentArmIdentityUniformly(t *testing.T) {
 	})
 }
 
-// Repeating the INITIAL arm with the same identity reads the lost response back
-// instead of arming again. It deliberately does NOT re-issue the secret, so a
-// client that lost the very first response cannot recover -- see the fail-closed
-// residual in the design record.
+// A current client persists its secret before the INITIAL request. Repeating
+// that request after either the request or response was lost reads the same
+// attempt/token back and never authorizes a second sheet.
 func TestRepeatingTheInitialArmIdentityIsIdempotent(t *testing.T) {
 	f := newAppleContinuationFixture(t)
-	attemptID, secret := f.armWith(t, testContinuationInstanceA, "arm-first")
+	const secret = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	status, first := f.dispatch(t, map[string]string{
+		"bundleId": testBundleIOS, "productId": testAppleProduct,
+		"appInstanceId": testContinuationInstanceA, "continuationSecret": secret,
+		"armRequestId": "arm-first",
+	})
+	if status != http.StatusOK || first.AttemptID == "" || first.ContinuationSecret != "" {
+		t.Fatalf("client-secret initial arm: status=%d body=%+v", status, first)
+	}
+	attemptID := first.AttemptID
 	status, replay := f.dispatch(t, map[string]string{
 		"bundleId": testBundleIOS, "productId": testAppleProduct,
 		"appInstanceId": testContinuationInstanceA, "continuationSecret": secret,
@@ -1354,13 +1365,25 @@ func TestRepeatingTheInitialArmIdentityIsIdempotent(t *testing.T) {
 	if resumeCount != 0 {
 		t.Fatalf("initial-arm replay armed again: resume_count=%d", resumeCount)
 	}
-	// A client that lost the first response holds no secret, and fails closed.
+	// Omitting the prepared secret cannot read the response back.
 	status, noSecret := f.dispatch(t, map[string]string{
 		"bundleId": testBundleIOS, "productId": testAppleProduct,
 		"appInstanceId": testContinuationInstanceA, "armRequestId": "arm-first",
 	})
 	if status != http.StatusForbidden || noSecret.Error != appleRefusalCapabilityCode {
 		t.Fatalf("a lost initial response was recovered without the secret: status=%d body=%+v", status, noSecret)
+	}
+	// A gate changing after the first 200 must not hide that 200 from an exact
+	// replay. Otherwise the client cannot distinguish "never armed" from "armed,
+	// response lost" and cannot safely recover its prepared identity.
+	removeApplePurchaseGate(t, f.store)
+	status, gatedReplay := f.dispatch(t, map[string]string{
+		"bundleId": testBundleIOS, "productId": testAppleProduct,
+		"appInstanceId": testContinuationInstanceA, "continuationSecret": secret,
+		"armRequestId": "arm-first",
+	})
+	if status != http.StatusOK || gatedReplay.AttemptID != attemptID {
+		t.Fatalf("gate hid exact initial replay: status=%d body=%+v", status, gatedReplay)
 	}
 }
 

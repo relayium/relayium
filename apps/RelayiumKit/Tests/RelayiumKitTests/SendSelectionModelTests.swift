@@ -953,13 +953,8 @@ final class SendSelectionModelTests: XCTestCase {
     /// state below stays internal — in particular the `SharedDraftStore` itself,
     /// which a view must never reach past this model to read.
     func testTheSendModelPublishesOnlyItsFourRenderProperties() throws {
-        let source = try String(
-            contentsOf: URL(fileURLWithPath: #filePath)
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .appendingPathComponent("Sources/RelayiumAppKit/SendSelectionModel.swift"),
-            encoding: .utf8)
+        let source = try RepoRoot.text(
+            "apps/RelayiumKit/Sources/RelayiumAppKit/SendSelectionModel.swift")
         // Declarations, not mentions: this file explains at length which state
         // is deliberately NOT `@Published`, and a raw substring count would fail
         // on exactly the comments documenting that decision.

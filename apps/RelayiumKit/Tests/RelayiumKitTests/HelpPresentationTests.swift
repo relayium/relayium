@@ -28,13 +28,6 @@ final class HelpPresentationTests: XCTestCase {
         "what-is-peer-to-peer-file-transfer",
     ]
 
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → repo root.
-    private var repoRoot: URL {
-        (0..<5).reduce(URL(fileURLWithPath: #filePath)) { url, _ in
-            url.deletingLastPathComponent()
-        }
-    }
-
     // MARK: - coverage
 
     func testEveryBrowseableDestinationOffersHelp() {
@@ -207,10 +200,10 @@ final class HelpPresentationTests: XCTestCase {
                 let url = HelpPresentation.url(for: .localizedGuide(slug: slug),
                                                language: language)
                 let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-                let page = repoRoot.appendingPathComponent("web/public/" + path + "/index.html")
-                XCTAssertTrue(FileManager.default.fileExists(atPath: page.path),
-                              "\(slug) link for \(language.rawValue) points at nothing: "
-                              + page.path)
+                let page = "web/public/" + path + "/index.html"
+                XCTAssertNoThrow(try RepoRoot.url(page),
+                                 "\(slug) link for \(language.rawValue) points at nothing: "
+                                 + page)
             }
         }
     }
@@ -296,9 +289,7 @@ final class HelpPresentationTests: XCTestCase {
     /// site keeps English-only beside `/pricing`.
     func testTheCLIPageIsTheSiteRoute() throws {
         XCTAssertEqual(AppEnvironment.cliWebURL.absoluteString, "https://relayium.com/cli")
-        let router = try String(
-            contentsOf: repoRoot.appendingPathComponent("web/src/lib/router.svelte.ts"),
-            encoding: .utf8)
+        let router = try RepoRoot.text("web/src/lib/router.svelte.ts")
         XCTAssertTrue(router.contains("CLI_PATH = \"/cli\""),
                       "the app links to a path the web router no longer serves")
     }

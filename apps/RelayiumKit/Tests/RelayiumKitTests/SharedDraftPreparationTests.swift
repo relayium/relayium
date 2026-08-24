@@ -272,16 +272,12 @@ final class SharedDraftPreparationTests: XCTestCase {
     /// the requirement — `NSExtensionContext.open` is documented for the Today
     /// and iMessage extension points, and a Share Extension is neither.
     func testTheModelHasNoWayToAskForTheAppToBeOpened() throws {
-        let source = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()          // RelayiumKitTests
-            .deletingLastPathComponent()          // Tests
-            .deletingLastPathComponent()          // RelayiumKit
-            .appendingPathComponent("Sources/RelayiumShareKit/SharedDraftPreparation.swift")
         // Whole-line comments dropped, because this file EXPLAINS the absence —
         // it names `NSExtensionContext.open` to say why it does not call it, and
         // scanning raw text would fail on the very sentence that documents the
         // rule.
-        let code = try String(contentsOf: source, encoding: .utf8)
+        let code = try RepoRoot.text(
+            "apps/RelayiumKit/Sources/RelayiumShareKit/SharedDraftPreparation.swift")
             .split(separator: "\n", omittingEmptySubsequences: false)
             .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
             .joined(separator: "\n")

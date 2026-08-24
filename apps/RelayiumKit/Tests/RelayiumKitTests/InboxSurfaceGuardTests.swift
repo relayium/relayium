@@ -22,18 +22,14 @@ import XCTest
 ///     would be a promise to a stranger that their file will land here.
 final class InboxSurfaceGuardTests: XCTestCase {
 
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → …/apps
+    /// `apps/`, discovered rather than counted, and checked for existing.
     private var appsRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // RelayiumKitTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // RelayiumKit
-            .deletingLastPathComponent()   // apps
+        get throws { try RepoRoot.apps() }
     }
 
-    private var macRoot: URL { appsRoot.appendingPathComponent("mac/Relayium") }
+    private var macRoot: URL { get throws { try RepoRoot.directory("apps/mac/Relayium") } }
     private var packageRoot: URL {
-        appsRoot.appendingPathComponent("RelayiumKit/Sources/RelayiumAppKit")
+        get throws { try RepoRoot.directory("apps/RelayiumKit/Sources/RelayiumAppKit") }
     }
 
     /// A source with whole-line comments dropped — the same loader the other
@@ -52,19 +48,20 @@ final class InboxSurfaceGuardTests: XCTestCase {
     }
 
     private func macSource(_ name: String) throws -> String {
-        try code(macRoot.appendingPathComponent(name))
+        try code(try macRoot.appendingPathComponent(name))
     }
 
     private func packageSource(_ name: String) throws -> String {
-        try code(packageRoot.appendingPathComponent(name))
+        try code(try packageRoot.appendingPathComponent(name))
     }
 
     private func macSources() throws -> [(name: String, text: String)] {
-        let names = try FileManager.default.subpathsOfDirectory(atPath: macRoot.path)
+        let names = try FileManager.default.subpathsOfDirectory(atPath: try macRoot.path)
             .filter { $0.hasSuffix(".swift") }.sorted()
+        let macRootPath = try macRoot.path
         XCTAssertGreaterThanOrEqual(names.count, 30,
-                                    "found \(names.count) sources at \(macRoot.path)")
-        return try names.map { ($0, try code(macRoot.appendingPathComponent($0))) }
+                                    "found \(names.count) sources at \(macRootPath)")
+        return try names.map { ($0, try code(try macRoot.appendingPathComponent($0))) }
     }
 
     private func occurrences(of needle: String, in text: String) -> Int {
@@ -828,7 +825,7 @@ final class InboxSurfaceGuardTests: XCTestCase {
         }
         // And the send screen it replaced is gone, along with the jump to it.
         XCTAssertFalse(FileManager.default.fileExists(
-            atPath: macRoot.appendingPathComponent("DeviceInbox/DeviceSendDetail.swift").path),
+            atPath: try macRoot.appendingPathComponent("DeviceInbox/DeviceSendDetail.swift").path),
                        "the separate send screen is still shippable")
         for gone in ["DeviceSendDetail(", "inboxSendContent", "inbox-conversation-send"] {
             XCTAssertFalse(surface.contains(gone),
@@ -1035,13 +1032,13 @@ final class InboxSurfaceGuardTests: XCTestCase {
         // real server with no UI of any kind. It is the sharpest case for why a
         // platform test would be wrong here: it is macOS, and it presents
         // nothing.
-        let hosts = try code(appsRoot.appendingPathComponent(
+        let hosts = try code(try appsRoot.appendingPathComponent(
             "RelayiumKit/Sources/RelayiumPeerKit/AppInboxHosts.swift"))
         XCTAssertFalse(hosts.contains("presentingText: true"),
                        "the headless receiver host claims a message surface it does not have")
 
         // And iOS, which is the build the shared claim was actually false for.
-        let iosRoot = appsRoot.appendingPathComponent("ios")
+        let iosRoot = try appsRoot.appendingPathComponent("ios")
         let iosNames = try FileManager.default.subpathsOfDirectory(atPath: iosRoot.path)
             .filter { $0.hasSuffix(".swift") }
         XCTAssertGreaterThanOrEqual(iosNames.count, 10,
@@ -1114,7 +1111,7 @@ final class InboxSurfaceGuardTests: XCTestCase {
     /// PRD §9: receiving ends at a quarantined file on disk. It never hands that
     /// file to an application, a process launcher or an archive extractor.
     func testTheInboxNeverOpensExecutesOrExtractsReceivedContent() throws {
-        let inboxRoot = packageRoot.appendingPathComponent("DeviceInbox")
+        let inboxRoot = try packageRoot.appendingPathComponent("DeviceInbox")
         let names = try FileManager.default.subpathsOfDirectory(atPath: inboxRoot.path)
             .filter { $0.hasSuffix(".swift") }
         let sources = try names.map { try code(inboxRoot.appendingPathComponent($0)) }
@@ -1187,7 +1184,7 @@ final class InboxSurfaceGuardTests: XCTestCase {
     /// would notice.
     func testTheShippedBundleIdentifierProducesARowSelectingRoute() throws {
         let project = try String(
-            contentsOf: appsRoot.appendingPathComponent("mac/Relayium.xcodeproj/project.pbxproj"),
+            contentsOf: try appsRoot.appendingPathComponent("mac/Relayium.xcodeproj/project.pbxproj"),
             encoding: .utf8)
         let configured = Set(project.components(separatedBy: "\n").compactMap { line -> String? in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -1259,12 +1256,12 @@ final class InboxSurfaceGuardTests: XCTestCase {
     /// and drops it; nothing else may keep a copy.
     func testTheBearerIsNeverPublishedOrPersisted() throws {
         let names = try FileManager.default.subpathsOfDirectory(
-            atPath: packageRoot.appendingPathComponent("DeviceInbox").path)
+            atPath: try packageRoot.appendingPathComponent("DeviceInbox").path)
             .filter { $0.hasSuffix(".swift") }.sorted()
         XCTAssertGreaterThanOrEqual(names.count, 12,
                                     "found \(names.count) Device Inbox sources")
         for name in names {
-            let source = try code(packageRoot.appendingPathComponent("DeviceInbox")
+            let source = try code(try packageRoot.appendingPathComponent("DeviceInbox")
                 .appendingPathComponent(name))
             XCTAssertFalse(source.contains("@Published public private(set) var identity"),
                            "\(name) publishes the credential")
@@ -1283,7 +1280,7 @@ final class InboxSurfaceGuardTests: XCTestCase {
     /// names, plus the residency path. A UI suite that lost a mode is a mode with
     /// no runtime evidence at all.
     func testTheRuntimeSuiteCoversEveryRequiredMode() throws {
-        let ui = try String(contentsOf: macRoot.deletingLastPathComponent()
+        let ui = try String(contentsOf: try macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/DeviceInboxUITests.swift"), encoding: .utf8)
         for name in ["testSignedOutSetupExplainsWhatDeviceInboxNeeds",
                      "testAReadyAutomaticInboxNamesItsFolderAndItsPolicy",
@@ -1340,7 +1337,7 @@ final class InboxSurfaceGuardTests: XCTestCase {
     /// thing that decides what gets written to a user's disk, so a shipped binary
     /// must not contain the flags at all.
     func testTheAcceptanceFixtureIsAbsentFromRelease() throws {
-        let raw = try String(contentsOf: macRoot.appendingPathComponent("UITestInbox.swift"),
+        let raw = try String(contentsOf: try macRoot.appendingPathComponent("UITestInbox.swift"),
                              encoding: .utf8)
         XCTAssertTrue(raw.hasPrefix("#if DEBUG"),
                       "the inbox acceptance fixture is not compiled out of Release")

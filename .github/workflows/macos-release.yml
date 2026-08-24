@@ -1,0 +1,719 @@
+name: macos-release
+# The macOS RELEASE half. `.github/workflows/macos.yml` is the CI half, and this
+# file is the only way to reach a notarization, a public-metadata staging or a
+# publication.
+#
+# The two used to be one file. `macos.yml` carried a `workflow_dispatch` with
+# five inputs, and the notarization and publication jobs sat beside the ordinary
+# push/pull_request verification lanes — so the workflow that runs on every
+# commit was also the workflow holding `contents: write`, a `gh release create`
+# and a `git push origin …:main`, gated on nothing but a job-level `if:`. Those
+# conditions were correct, and they were the only thing standing between an
+# ordinary CI event and an immutable public release. A single edit to one `if:`
+# — or one new job that forgot one — would have removed that, left the YAML
+# valid, and reported green.
+#
+# The split makes it structural instead. `macos.yml` now has no release
+# operation in it AT ALL: no notary key, no Sparkle private key, no
+# `GITHUB_TOKEN`, no `gh release`, no `git push`, no `contents: write`, and no
+# `workflow_dispatch`. It cannot publish because it contains nothing that
+# publishes, which is a property no condition can be edited out of.
+#
+# What this file does NOT do is rebuild. It CALLS `macos.yml` as a reusable
+# workflow, so the bytes it notarizes come out of the same `signed-build` lane
+# that every push to `main` and every pull request already exercises — one build
+# definition, one signing path, one provenance record. A release is therefore
+# the ordinary macOS gate plus two jobs, not a second pipeline that resembles
+# it.
+#
+# There is deliberately no `push:` and no `pull_request:` here. Every job below
+# is manual by construction, and the five inputs are the five decisions the
+# operator makes. With all of them at their defaults this workflow builds and
+# stops: `notarize-stage` and `publish` both require a dispatch AND a
+# non-default input, so an accidental run with nothing filled in is a signed
+# build and nothing else.
+on:
+  workflow_dispatch:
+    inputs:
+      notarize:
+        description: 'Submit the signed DMG to Apple, staple it, and run Gatekeeper verification'
+        required: true
+        default: false
+        type: boolean
+      validate_notary_credentials:
+        description: 'Authenticate to Apple without submitting software'
+        required: true
+        default: false
+        type: boolean
+      validate_sparkle_key:
+        description: 'Sign a disposable appcast entry and prove the update key matches the app'
+        required: true
+        default: false
+        type: boolean
+      release_version:
+        description: 'Stage immutable public-release metadata for this app version (for example 1.0)'
+        required: false
+        default: ''
+        type: string
+      publish_release:
+        description: 'Publish the versioned GitHub Release and deliver its appcast/download metadata to main'
+        required: true
+        default: false
+        type: boolean
+
+# Read-only at the top, exactly as in the CI half. The ONE job that needs more
+# declares it for itself: `publish` carries `contents: write` and is the only
+# job in this repository's macOS lanes that does. A top-level `contents: write`
+# here would hand it to the reusable call and to the notarization job as well,
+# neither of which writes anything to this repository.
+permissions:
+  contents: read
+
+# The literal `macos-release` prefix, for the reason `macos.yml` carries the
+# literal `macos-ci`: inside a called workflow `${{ github.workflow }}` is the
+# CALLER's name, so the shared expression would put this workflow's jobs and its
+# callee's jobs in one group under one `github.run_id` — and the call would
+# queue behind the job waiting for it. Two literals that no other workflow uses
+# keep the two groups disjoint whatever either file is later renamed to.
+#
+# The suffix is the repository-wide one. This workflow has no pull_request
+# trigger, so `github.event.pull_request.number` is always empty and every run
+# lands in its own `github.run_id` group: nothing here can cancel anything, which
+# is the only correct default for a workflow that submits to Apple's notary and
+# publishes an immutable GitHub Release.
+concurrency:
+  group: macos-release-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # The CI half, called rather than copied.
+  #
+  # Three inputs, because three is what the callee declares and what its
+  # remaining jobs read: `release_version` reaches the release contract and the
+  # provenance check, and the two booleans reach the contract alone. The other
+  # two dispatch inputs — `validate_notary_credentials` and
+  # `validate_sparkle_key` — are notarization-stage decisions and are not passed:
+  # no job in the callee reads them, and an input a callee ignores is a lever
+  # that appears to do something.
+  #
+  # The four secrets are forwarded EXPLICITLY, one line each, and this job does
+  # not use `secrets: inherit`. `inherit` hands the callee every secret this
+  # repository holds — including the notary key and the Sparkle private key —
+  # and it does so invisibly, in a form that grows silently the day a new secret
+  # is added. The callee declares exactly these four, uses exactly these four,
+  # and receives exactly these four; the notarization material stays in
+  # `notarize-stage` below, where the thing that needs it is.
+  #
+  # No `timeout-minutes:` — a job that calls a reusable workflow may not declare
+  # one, and GitHub rejects the workflow outright if it does. That is not an
+  # unbounded job: every job the call starts carries its own bound inside
+  # `macos.yml`, and `scripts/test/ci-event-policy-test.mjs` budgets each of them
+  # there. No `permissions:` either: the callee's own `contents: read` applies,
+  # and a permission block here could only widen it.
+  build:
+    uses: ./.github/workflows/macos.yml
+    with:
+      release_version: ${{ inputs.release_version }}
+      notarize: ${{ inputs.notarize }}
+      publish_release: ${{ inputs.publish_release }}
+    secrets:
+      MACOS_SIGNING_CERT_P12_BASE64: ${{ secrets.MACOS_SIGNING_CERT_P12_BASE64 }}
+      MACOS_SIGNING_CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
+      MACOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.MACOS_PROVISIONING_PROFILE_BASE64 }}
+      MACOS_SHARE_PROVISIONING_PROFILE_BASE64: ${{ secrets.MACOS_SHARE_PROVISIONING_PROFILE_BASE64 }}
+
+  notarize-stage:
+    # `build` is the reusable call above, so this depends on the WHOLE CI
+    # workflow — `contract`, `test`, `ui-smoke` and `signed-build` — rather than
+    # on two of its jobs by name. That is strictly stronger than the
+    # `[ui-smoke, signed-build]` this line used to read: a reusable caller job
+    # succeeds only when every job it called succeeded, so nothing here can
+    # start while any part of the macOS gate is red.
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && (inputs.notarize || inputs.validate_notary_credentials || inputs.validate_sparkle_key || inputs.release_version != '')
+    runs-on: macos-15
+    # Finite, and derived from Apple's wait rather than from this job's observed
+    # runtime. Every real notarization in recent history finished in 63-84
+    # seconds end to end, with Apple's own queue answering in 35-50, so an
+    # observation-scaled bound would be about two minutes. That number would be
+    # WRONG here: `apps/mac/scripts/notarize-dmg.sh` submits with
+    # `--wait --timeout 45m`, so a slow notary day is a legitimate 45-minute
+    # wait, and a bound below it would kill the job mid-wait and burn a
+    # notarization submission for a run that was going to succeed. The bound is
+    # therefore Apple's 45-minute wait plus room for the provenance check,
+    # stapling, Gatekeeper assessment, release staging and artifact upload that
+    # follow it — and it is still a bound, so a submission that never returns at
+    # all gives the runner back instead of holding it for 6 hours with the
+    # notarization API key on disk.
+    timeout-minutes: 55
+    steps:
+      # FIRST, before the checkout and before anything is downloaded.
+      #
+      # A skipped job satisfies `needs:` and still contributes its outputs, and
+      # the outputs of a skipped job are EMPTY. `signed-build` is skipped on a
+      # fork pull request, and a reusable call whose every job skipped is not a
+      # failure — so without this guard the download below would ask for an
+      # artifact named "" and this job would fail on a missing artifact rather
+      # than on the reason there is no artifact. Empty here means no signed
+      # build was produced by this run, and there is nothing to notarize.
+      #
+      # It is also the guard against the other half of the same shape: an
+      # expression typo in the callee's `outputs:` — `jobs.signed-build` in
+      # dotted form, which evaluates to the empty string — reaches this job as
+      # an empty name, and would otherwise be indistinguishable from a build
+      # that ran.
+      - name: Require a signed package from the build
+        env:
+          SIGNED_ARTIFACT: ${{ needs.build.outputs.signed_artifact }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SIGNED_ARTIFACT" ]; then
+            echo "::error::the macos build produced no signed package artifact; there is nothing to notarize"
+            exit 1
+          fi
+          echo "notarizing the signed package uploaded as $SIGNED_ARTIFACT"
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # The artifact NAME the build actually used, carried across the file
+      # boundary as a value. Re-deriving it here from `github.sha` and
+      # `inputs.release_version` would be a second copy of the callee's naming
+      # expression in a second file, and the first rename would make this
+      # download look for something this run never uploaded.
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.build.outputs.signed_artifact }}
+          path: ${{ runner.temp }}
+      - name: Verify signed package provenance
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          [ "$(jq -r .repository "$RUNNER_TEMP/provenance.json")" = "$GITHUB_REPOSITORY" ]
+          [ "$(jq -r .sha "$RUNNER_TEMP/provenance.json")" = "$GITHUB_SHA" ]
+          [ "$(jq -r .runAttempt "$RUNNER_TEMP/provenance.json")" -ge 1 ]
+          [ -z "$RELEASE_VERSION" ] || [ "$(jq -r .version "$RUNNER_TEMP/provenance.json")" = "$RELEASE_VERSION" ]
+          (cd "$RUNNER_TEMP" && shasum -a 256 -c Relayium.dmg.sha256)
+          [ "$(jq -r .dmgSha256 "$RUNNER_TEMP/provenance.json")" = "$(shasum -a 256 "$RUNNER_TEMP/Relayium.dmg" | awk '{print $1}')" ]
+          mount="$RUNNER_TEMP/verify-mount"; mkdir "$mount"
+          hdiutil attach "$RUNNER_TEMP/Relayium.dmg" -mountpoint "$mount" -nobrowse -readonly
+          codesign --verify --deep --strict --verbose=2 "$mount/Relayium.app"
+          [ "$(defaults read "$mount/Relayium.app/Contents/Info" CFBundleVersion)" = "$(jq -r .build "$RUNNER_TEMP/provenance.json")" ]
+          hdiutil detach "$mount"
+          chmod 0755 "$RUNNER_TEMP/release-tools/generate_appcast"
+          test -x "$RUNNER_TEMP/release-tools/generate_appcast" || {
+            echo "::error::restored generate_appcast is not executable"
+            exit 1
+          }
+      - name: Validate Sparkle update-signing key
+        if: github.event_name == 'workflow_dispatch' && inputs.validate_sparkle_key
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.MACOS_SPARKLE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "::error::MACOS_SPARKLE_PRIVATE_KEY is not set"
+            exit 1
+          fi
+          tools="$RUNNER_TEMP/release-tools"
+          validation_dir="$RUNNER_TEMP/sparkle-key-validation"
+          log="$RUNNER_TEMP/sparkle-key-validation.log"
+          mkdir "$validation_dir"
+          cp "$RUNNER_TEMP/Relayium.dmg" "$validation_dir/Relayium.dmg"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" \
+            | "$tools/generate_appcast" \
+                --ed-key-file - \
+                --download-url-prefix "https://relayium.com/apps/macos/" \
+                "$validation_dir" > "$log" 2>&1
+          appcast="$validation_dir/appcast.xml"
+          [ -s "$appcast" ] || {
+            echo "::error::Sparkle did not generate a validation appcast"; exit 1; }
+          grep -q '<enclosure ' "$appcast" || {
+            echo "::error::Validation appcast has no release enclosure"; exit 1; }
+          grep -q 'sparkle:edSignature=' "$appcast" || {
+            echo "::error::The secret does not match the app's embedded Sparkle public key"; exit 1; }
+          if grep -q 'does not match key EdDSA' "$log"; then
+            echo "::error::The secret does not match the app's embedded Sparkle public key"
+            exit 1
+          fi
+          echo "Sparkle update-signing key matches the app and signed a disposable enclosure"
+      # Notarization is deliberately opt-in rather than part of every push:
+      # Apple limits daily submissions, and an accepted build is a release
+      # candidate rather than ordinary compile evidence.
+      - name: Materialize notarization API key
+        if: github.event_name == 'workflow_dispatch' && (inputs.notarize || inputs.validate_notary_credentials)
+        env:
+          NOTARY_KEY_P8_BASE64: ${{ secrets.MACOS_NOTARY_KEY_P8_BASE64 }}
+          NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "$NOTARY_KEY_P8_BASE64" ] || [ -z "$NOTARY_KEY_ID" ] || [ -z "$NOTARY_ISSUER_ID" ]; then
+            echo "::error::MACOS_NOTARY_KEY_P8_BASE64 / MACOS_NOTARY_KEY_ID / MACOS_NOTARY_ISSUER_ID are not set — see the macos-signing runbook in relayium-ops"
+            exit 1
+          fi
+          ( umask 077; printf '%s' "$NOTARY_KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/notary-key.p8" )
+          mkdir -p "$RUNNER_TEMP/notarization"
+      # `history` exercises the same key/key-ID/issuer authentication as a
+      # submission but performs no upload and consumes no notarization quota.
+      - name: Validate notarization credentials without submitting
+        if: github.event_name == 'workflow_dispatch' && inputs.validate_notary_credentials
+        env:
+          MACOS_NOTARY_KEY_PATH: ${{ runner.temp }}/notary-key.p8
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: |
+          xcrun notarytool history \
+            --key "$MACOS_NOTARY_KEY_PATH" \
+            --key-id "$MACOS_NOTARY_KEY_ID" \
+            --issuer "$MACOS_NOTARY_ISSUER_ID" \
+            --output-format json > /dev/null
+      - name: Notarize, staple, and assess DMG
+        if: github.event_name == 'workflow_dispatch' && inputs.notarize
+        env:
+          MACOS_NOTARY_KEY_PATH: ${{ runner.temp }}/notary-key.p8
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: |
+          apps/mac/scripts/notarize-dmg.sh \
+            "$RUNNER_TEMP/Relayium.dmg" \
+            "$RUNNER_TEMP/notarization"
+      - name: Finalize notarized package provenance
+        if: github.event_name == 'workflow_dispatch' && inputs.notarize
+        run: |
+          set -euo pipefail
+          hash="$(shasum -a 256 "$RUNNER_TEMP/Relayium.dmg" | awk '{print $1}')"
+          jq --arg hash "$hash" '.dmgSha256=$hash | .notarized=true' \
+            "$RUNNER_TEMP/provenance.json" > "$RUNNER_TEMP/provenance.final.json"
+          mv "$RUNNER_TEMP/provenance.final.json" "$RUNNER_TEMP/provenance.json"
+          (cd "$RUNNER_TEMP" && shasum -a 256 Relayium.dmg > Relayium.dmg.sha256)
+      # A public feed must sign the final stapled bytes, not the pre-notarized
+      # package. The staging script also pins the enclosure to the immutable
+      # macos-v<VERSION> release URL and emits the single web manifest that
+      # flips the /apps card.
+      - name: Stage public release metadata
+        if: github.event_name == 'workflow_dispatch' && inputs.release_version != ''
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.MACOS_SPARKLE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "::error::MACOS_SPARKLE_PRIVATE_KEY is not set"
+            exit 1
+          fi
+          built_version="$(jq -r .version "$RUNNER_TEMP/provenance.json")"
+          if [ "$built_version" != "$RELEASE_VERSION" ]; then
+            echo "::error::release_version $RELEASE_VERSION does not match the built app version $built_version"
+            exit 1
+          fi
+          tools="$RUNNER_TEMP/release-tools"
+          generated="$RUNNER_TEMP/generated-appcast"
+          staged="$RUNNER_TEMP/release-web"
+          mkdir -p "$generated" "$staged/public/apps/macos"
+          cp "$RUNNER_TEMP/Relayium.dmg" "$generated/Relayium.dmg"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" \
+            | "$tools/generate_appcast" \
+                --ed-key-file - \
+                --download-url-prefix \
+                  "https://github.com/${GITHUB_REPOSITORY}/releases/download/macos-v${RELEASE_VERSION}/" \
+                "$generated"
+          cp web/native-releases.json "$staged/native-releases.json"
+          cp web/public/apps/macos/appcast.xml "$staged/public/apps/macos/appcast.xml"
+          # The native client policy, which the stager READS to derive the
+          # Sparkle critical-update threshold and then rewrites with this
+          # release as the latest version. Without it the staging step refuses
+          # to run at all, which is deliberate: a feed whose critical threshold
+          # was guessed is worse than a release that stops here.
+          cp web/native-client-policy.json "$staged/native-client-policy.json"
+          cp web/public/apps/macos/client-policy.json \
+            "$staged/public/apps/macos/client-policy.json"
+          node web/scripts/stage-macos-release.mjs \
+            --version "$RELEASE_VERSION" \
+            --appcast "$generated/appcast.xml" \
+            --web-root "$staged" \
+            --repository "$GITHUB_REPOSITORY"
+          grep -Fq "url=\"https://github.com/${GITHUB_REPOSITORY}/releases/download/macos-v${RELEASE_VERSION}/Relayium.dmg\"" \
+            "$staged/public/apps/macos/appcast.xml"
+          grep -q 'sparkle:edSignature="[^"]' "$staged/public/apps/macos/appcast.xml"
+          # The critical-update threshold survived generation, and it is the one
+          # the policy names. `generate_appcast` writes a fresh feed and knows
+          # nothing about the policy, so this is the assertion that the
+          # derivation ran rather than a hand edit having been preserved.
+          critical="$(jq -r '.macos.minimumSupportedBuild' "$staged/native-client-policy.json")"
+          grep -Fq "<sparkle:criticalUpdate sparkle:version=\"$critical\">" \
+            "$staged/public/apps/macos/appcast.xml" || {
+            echo "::error::the staged appcast carries no critical-update threshold"; exit 1; }
+          [ "$(jq -r '.macos.latestVersion' "$staged/native-client-policy.json")" \
+            = "$RELEASE_VERSION" ] || {
+            echo "::error::the staged client policy does not name this release"; exit 1; }
+          # The replay barrier moved exactly as much as the document did. Every
+          # client remembers the highest revision it has accepted and refuses a
+          # different document under a revision it already holds, so a release
+          # that changed `latestVersion` without advancing the revision would
+          # publish a policy the installed fleet declines — and a release that
+          # advanced it without changing anything would make each rerun of the
+          # recovery path a fresh diff against main.
+          previous_revision="$(jq -r '.macos.policyRevision' web/native-client-policy.json)"
+          previous_latest="$(jq -r '.macos.latestVersion' web/native-client-policy.json)"
+          staged_revision="$(jq -r '.macos.policyRevision' "$staged/native-client-policy.json")"
+          if [ "$previous_latest" = "$RELEASE_VERSION" ]; then
+            expected_revision="$previous_revision"
+          else
+            expected_revision="$((previous_revision + 1))"
+          fi
+          [ "$staged_revision" = "$expected_revision" ] || {
+            echo "::error::staged policyRevision is $staged_revision, expected $expected_revision"
+            exit 1; }
+          cmp "$staged/native-client-policy.json" "$staged/public/apps/macos/client-policy.json"
+      # Without the manual notarize input this remains a CI acceptance artifact,
+      # not a public release. Public publication and the /apps page flip are
+      # separate, explicitly controlled G5 steps.
+      - name: Upload notarization evidence
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.notarize
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-macos-notarization-${{ github.sha }}
+          path: ${{ runner.temp }}/notarization
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Remove notarization API key
+        if: always()
+        run: rm -P "$RUNNER_TEMP/notary-key.p8" 2>/dev/null || true
+      - name: Upload notarized release candidate
+        if: github.event_name == 'workflow_dispatch' && inputs.release_version != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-macos-${{ github.sha }}-${{ inputs.release_version || 'ci' }}
+          path: |
+            ${{ runner.temp }}/Relayium.dmg
+            ${{ runner.temp }}/Relayium.dmg.sha256
+            ${{ runner.temp }}/provenance.json
+            ${{ runner.temp }}/release-web/native-releases.json
+            ${{ runner.temp }}/release-web/public/apps/macos/appcast.xml
+            ${{ runner.temp }}/release-web/native-client-policy.json
+            ${{ runner.temp }}/release-web/public/apps/macos/client-policy.json
+          if-no-files-found: error
+          retention-days: 14
+
+  # This job is the only holder of repository write permission. Ordinary
+  # signed builds, credential checks, and notarization candidates cannot
+  # publish anything.
+  publish:
+    needs: notarize-stage
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+    runs-on: ubuntu-latest
+    # Finite, and chosen rather than inherited. The cheapest job here — it runs
+    # on a free Linux runner and the 5 successful runs in recent history took
+    # 3.8 minutes at worst — but the one with the least recoverable failure: it
+    # publishes an immutable GitHub Release and writes the appcast to `main`. A
+    # bound is what stops a wedged publication from sitting half-done for six
+    # hours while the release it was supposed to announce is neither published
+    # nor visibly failed.
+    timeout-minutes: 15
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: relayium-macos-${{ github.sha }}-${{ inputs.release_version || 'ci' }}
+          path: ${{ runner.temp }}/release
+      - name: Verify publication artifacts
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          release="$RUNNER_TEMP/release"
+          cd "$release"
+          shasum -a 256 -c Relayium.dmg.sha256
+          [ "$(jq -r .repository provenance.json)" = "$GITHUB_REPOSITORY" ]
+          [ "$(jq -r .sha provenance.json)" = "$GITHUB_SHA" ]
+          [ "$(jq -r .version provenance.json)" = "$RELEASE_VERSION" ]
+          [ "$(jq -r .notarized provenance.json)" = true ]
+          [ "$(jq -r .dmgSha256 provenance.json)" = \
+            "$(shasum -a 256 Relayium.dmg | awk '{print $1}')" ]
+          [ "$(jq -r .build provenance.json)" -gt 0 ]
+          expected="https://github.com/${GITHUB_REPOSITORY}/releases/download/macos-v${RELEASE_VERSION}/Relayium.dmg"
+          [ "$(jq -r '.macos.available' release-web/native-releases.json)" = true ]
+          [ "$(jq -r '.macos.version' release-web/native-releases.json)" = "$RELEASE_VERSION" ]
+          [ "$(jq -r '.macos.build' release-web/native-releases.json)" -gt 0 ]
+          [ "$(jq -r '.macos.downloadUrl' release-web/native-releases.json)" = "$expected" ]
+          grep -Fq "url=\"$expected\"" release-web/public/apps/macos/appcast.xml
+          grep -q 'sparkle:edSignature="[^"]' release-web/public/apps/macos/appcast.xml
+          # The client policy travelled with the artifact, names this release,
+          # and its threshold is the one written into the feed.
+          [ "$(jq -r '.macos.latestVersion' release-web/native-client-policy.json)" \
+            = "$RELEASE_VERSION" ]
+          critical="$(jq -r '.macos.minimumSupportedBuild' release-web/native-client-policy.json)"
+          grep -Fq "<sparkle:criticalUpdate sparkle:version=\"$critical\">" \
+            release-web/public/apps/macos/appcast.xml
+          # The revision the fleet will remember. Outside this range no client
+          # acts on the document at all, and a revision that is not below main's
+          # is what keeps the published policy ahead of the one already served.
+          revision="$(jq -r '.macos.policyRevision' release-web/native-client-policy.json)"
+          [ "$revision" -ge 1 ]
+          [ "$revision" -le 1000000000 ]
+          [ "$revision" -ge "$(jq -r '.macos.policyRevision' \
+            "$GITHUB_WORKSPACE/web/native-client-policy.json")" ]
+          cmp release-web/native-client-policy.json \
+            release-web/public/apps/macos/client-policy.json
+      # Everything from here to the release creation builds the COMPLETE
+      # metadata commit and hands it to the suites that own it. A GitHub Release
+      # is immutable, so this is the last place a "no" costs nothing.
+      #
+      # Both macOS publications so far were assembled in the opposite order. Run
+      # 31931451292 created macos-v1.2.5 and only then discovered that the
+      # manifest had moved while README.md, apps/README.md, the release-page
+      # source and the generated English and Simplified Chinese pages had not:
+      # the release was public and permanent, relayium.com still offered 1.2.4,
+      # and recovery took a separate hand-assembled commit. The 1.2.4 release
+      # failed the same way. `scripts/test/macos-publish-order-test.mjs` is what
+      # keeps this order from being undone by a later edit.
+      #
+      # The job is split into two phases with one hard boundary. This step is the
+      # WRITE phase: every command that can rewrite a tracked file — the document
+      # bump, `gen:pages`, `npm run check`, `npm run build` and the archived-locale
+      # restore — runs here and only here. The step after it is the JUDGE phase:
+      # it stages the result and then does nothing but read. That boundary is the
+      # point. Tests that ran before a later generation step judged a tree that no
+      # longer exists, and "generation is deterministic" is an assumption, not a
+      # check — so the suite is made to run last, against the exact staged bytes,
+      # and an index/worktree guard proves those bytes reached the commit.
+      - name: Assemble the complete metadata candidate
+        id: assemble
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "::error::workflow commit is no longer an ancestor of main"; exit 1; }
+          git checkout --detach origin/main
+          # Read before overwriting: this is the version main currently
+          # documents, and therefore the one the prose has to be moved FROM.
+          previous="$(jq -r '.macos.version' web/native-releases.json)"
+          cp "$RUNNER_TEMP/release/release-web/native-releases.json" web/native-releases.json
+          cp "$RUNNER_TEMP/release/release-web/public/apps/macos/appcast.xml" \
+            web/public/apps/macos/appcast.xml
+          # The canonical client policy, from the same artifact. Its published
+          # twin under `public/` is regenerated by `gen:pages` below from
+          # exactly this file, so copying the canonical one is what makes the
+          # two agree in the commit.
+          cp "$RUNNER_TEMP/release/release-web/native-client-policy.json" \
+            web/native-client-policy.json
+          staged="$(jq -r '.macos.version' web/native-releases.json)"
+          [ "$staged" = "$RELEASE_VERSION" ] || {
+            echo "::error::the staged manifest names $staged, not $RELEASE_VERSION"; exit 1; }
+          if [ "$previous" = "$staged" ]; then
+            # A rerun after the metadata already landed — the ordinary way to
+            # recover a delivery that failed after the release was created.
+            # There is nothing to bump, and the candidate below must come out
+            # EMPTY: everything is already correct on main, so re-deriving it has
+            # to reproduce main byte for byte. The suites still run, because a
+            # rerun is also the moment to prove the delivered tree is green.
+            echo "main already documents $staged; re-deriving it must change nothing."
+            echo "already-delivered=true" >> "$GITHUB_OUTPUT"
+          else
+            node web/scripts/macos-release-candidate.mjs bump \
+              --from "$previous" --to "$staged"
+            node web/scripts/macos-release-candidate.mjs sync-cli-release-history
+            echo "already-delivered=false" >> "$GITHUB_OUTPUT"
+          fi
+          cd web
+          npm ci
+          npm run gen:pages
+          # `npm run check` is svelte-check plus two `noEmit` tsc projects whose
+          # build info lives under node_modules, so today it writes nothing
+          # tracked. It still runs inside the write phase rather than beside the
+          # suite: if a tsconfig ever starts emitting, the emission lands here,
+          # before the candidate is staged, instead of silently editing a tree
+          # the suite had already judged.
+          npm run check
+          npm run build
+          cd ..
+          # gen-pages rewrites all nine /apps pages from the manifest, including
+          # the seven archived locales, which are byte-for-byte frozen. Restoring
+          # them from the index is what keeps a release commit from quietly
+          # refreshing a translation the product no longer maintains; the scope
+          # check below is what proves the restore happened.
+          #
+          # `npm run build` runs gen-pages again on its way to vite, so this is
+          # placed after the build rather than after gen:pages — and it is the
+          # last tracked-file write in the whole job.
+          git checkout -- \
+            web/public/ar web/public/de web/public/es web/public/fr \
+            web/public/ja web/public/ko web/public/pt
+      # The JUDGE phase. Nothing below rewrites a tracked file: the candidate is
+      # staged first, and every verdict — the scope check and the owning web
+      # suite — is rendered against exactly those staged bytes. This is the
+      # ordering invariant that the previous revision of this job broke by
+      # running `npm run build` and the locale restore after `npm test`: the
+      # bytes the suite approved were then regenerated before being committed,
+      # so what shipped was only *expected* to equal what passed.
+      - name: Validate the staged candidate
+        id: validate
+        env:
+          ALREADY_DELIVERED: ${{ steps.assemble.outputs.already-delivered }}
+        run: |
+          set -euo pipefail
+          git add -A
+          git diff --cached --check
+          candidate_tree="$(git write-tree)"
+          git diff --cached --name-only \
+            | node web/scripts/macos-release-candidate.mjs check-scope \
+                --already-delivered "$ALREADY_DELIVERED"
+          cd web
+          npm test -- --run
+          cd ..
+          # The suite is the last word on this release, so it has to have been
+          # the last word on these exact bytes. An unstaged tracked change or a
+          # different index tree means something moved between generation and
+          # judgment, and the tree that passed is not the tree about to be
+          # committed. That is a hard stop, not a warning: the next step creates
+          # something permanent.
+          git diff --quiet || {
+            echo "::error::tracked files changed during validation; the tested bytes are not the candidate"
+            exit 1
+          }
+          [ "$(git write-tree)" = "$candidate_tree" ] || {
+            echo "::error::the staged candidate tree changed during validation"; exit 1; }
+          echo "tree=$candidate_tree" >> "$GITHUB_OUTPUT"
+      # The candidate becomes one commit BEFORE the release exists, so what is
+      # pushed afterwards is exactly the tree the suites above judged — no
+      # regeneration, no second test run, nothing that can newly fail. The tree
+      # hash is carried across the step boundary and rechecked here, so a step
+      # inserted between validation and this commit cannot smuggle a byte in.
+      - name: Freeze the validated candidate
+        id: freeze
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          CANDIDATE_TREE: ${{ steps.validate.outputs.tree }}
+        run: |
+          set -euo pipefail
+          git diff --quiet || {
+            echo "::error::tracked files changed after validation"; exit 1; }
+          [ "$(git write-tree)" = "$CANDIDATE_TREE" ] || {
+            echo "::error::the index no longer holds the validated candidate"; exit 1; }
+          if git diff --cached --quiet; then
+            echo "Release metadata is already present on main."
+            echo "candidate=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "relayium-release[bot]"
+          git config user.email "github@relayium.com"
+          git commit -m "release(mac): publish ${RELEASE_VERSION}"
+          [ "$(git rev-parse 'HEAD^{tree}')" = "$CANDIDATE_TREE" ] || {
+            echo "::error::the release commit does not carry the validated tree"; exit 1; }
+          echo "candidate=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      # Delivery starts from a commit that already
+      # passed `npm run check`, the full web suite, the build and the candidate
+      # scope check, so there is no test here that could newly fail against
+      # unstaged sources — which is precisely how run 31931451292 ended up with a
+      # permanent release and no metadata behind it.
+      #
+      # Idempotent in both directions. A rerun after a successful delivery
+      # assembles the same candidate against a main that already carries it,
+      # finds nothing staged, and freezes no commit — so this step has nothing to
+      # push and says so. Nothing is rebuilt, retagged, re-uploaded or replaced.
+      #
+      # Not forced. If main moved between validation and here the push is
+      # rejected, and the correct response is another run against the new main —
+      # not overwriting whatever landed in between.
+      - name: Deliver the frozen candidate to main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE: ${{ steps.freeze.outputs.candidate }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CANDIDATE" ]; then
+            echo "Release metadata is already present on main; nothing to deliver."
+            exit 0
+          fi
+
+          base=$(git rev-parse "$CANDIDATE^")
+          tag="macos-v${RELEASE_VERSION}"
+          candidate_branch="release-candidate/$tag-$GITHUB_RUN_ID"
+          git push origin "$CANDIDATE:refs/heads/$candidate_branch"
+          pr_url=$(gh pr create \
+            --base main \
+            --head "$candidate_branch" \
+            --title "chore(release): publish $tag metadata" \
+            --body "Automated frozen metadata candidate for $tag. Do not amend or add commits.")
+          pr_number=${pr_url##*/}
+
+          gh workflow run merge-gate.yml \
+            --ref "$candidate_branch" \
+            -f "pr_number=$pr_number" \
+            -f "base_sha=$base" \
+            -f "head_sha=$CANDIDATE"
+
+          gate_run=''
+          for _ in $(seq 1 120); do
+            gate_run=$(gh run list \
+              --workflow merge-gate.yml \
+              --branch "$candidate_branch" \
+              --event workflow_dispatch \
+              --json databaseId,headSha \
+              --jq ".[] | select(.headSha == \"$CANDIDATE\") | .databaseId" \
+              --limit 20 | head -n 1)
+            [ -n "$gate_run" ] && break
+            sleep 5
+          done
+          if [ -z "$gate_run" ]; then
+            echo "::error::merge-gate was not created for frozen candidate $CANDIDATE"
+            exit 1
+          fi
+          if ! gh run watch "$gate_run" --exit-status; then
+            echo "::error::frozen candidate $CANDIDATE failed merge-gate run $gate_run"
+            exit 1
+          fi
+
+          # This is deliberately a fast-forward push. Branch protection sees
+          # its required check on CANDIDATE itself; a moved main is rejected.
+          git push origin "$CANDIDATE:main"
+
+      # The public release is last. No immutable public object is created until
+      # the checked metadata commit is reachable from protected main.
+      - name: Publish immutable GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          tag="macos-v${RELEASE_VERSION}"
+          release="$RUNNER_TEMP/release"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            release_state="$(
+              gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+                --json isDraft,isPrerelease \
+                --jq '[.isDraft, .isPrerelease] | @tsv'
+            )"
+            [ "$release_state" = $'false\tfalse' ] || {
+              echo "::error::$tag exists but is not a public, stable release"; exit 1; }
+            git fetch --quiet origin "refs/tags/$tag:refs/tags/$tag"
+            [ "$(git rev-list -n 1 "$tag")" = "$GITHUB_SHA" ] || {
+              echo "::error::$tag already targets a different commit"; exit 1; }
+            existing="$RUNNER_TEMP/existing-release"
+            mkdir "$existing"
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" \
+              --pattern Relayium.dmg --pattern Relayium.dmg.sha256 \
+              --pattern appcast.xml --dir "$existing"
+            cmp "$release/Relayium.dmg" "$existing/Relayium.dmg"
+            cmp "$release/Relayium.dmg.sha256" "$existing/Relayium.dmg.sha256"
+            cmp "$release/release-web/public/apps/macos/appcast.xml" "$existing/appcast.xml"
+            echo "Existing $tag contains the identical release."
+          else
+            gh release create "$tag" \
+              "$release/Relayium.dmg" \
+              "$release/Relayium.dmg.sha256" \
+              "$release/release-web/public/apps/macos/appcast.xml#appcast.xml" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Relayium for macOS ${RELEASE_VERSION}" \
+              --notes "Signed, notarized universal macOS release. The disk image passed Apple notarization, stapling, and Gatekeeper assessment in workflow run ${GITHUB_RUN_ID}."
+          fi

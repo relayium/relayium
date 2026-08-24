@@ -28,16 +28,10 @@ struct MacProjectFile {
 
     let text: String
 
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → repo root.
-    private static var repoRoot: URL {
-        (0..<5).reduce(URL(fileURLWithPath: #filePath)) { url, _ in url.deletingLastPathComponent() }
-    }
-
     static let path = "apps/mac/Relayium.xcodeproj/project.pbxproj"
 
     init() throws {
-        text = try String(contentsOf: Self.repoRoot.appendingPathComponent(Self.path),
-                          encoding: .utf8)
+        text = try RepoRoot.text(Self.path)
     }
 
     /// A parsed `XCBuildConfiguration`: its name, and its settings.

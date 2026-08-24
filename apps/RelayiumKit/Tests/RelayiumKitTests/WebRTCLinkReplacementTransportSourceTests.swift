@@ -17,14 +17,9 @@ import XCTest
 /// has to be deliberate. It is NOT evidence that the wire works.
 final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
 
-    private var source: String {
-        let packageRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // RelayiumKitTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // RelayiumKit
-        let file = packageRoot.appendingPathComponent(
-            "Sources/RelayiumKit/Realtime/WebRTCLinkReplacementTransport.swift")
-        return (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+    private func source() throws -> String {
+        try RepoRoot.text(
+            "apps/RelayiumKit/Sources/RelayiumKit/Realtime/WebRTCLinkReplacementTransport.swift")
     }
 
     /// The source with every comment removed. The guards below are about what
@@ -32,8 +27,8 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// including, necessarily, the names of the things it deliberately does not
     /// do. Counting those explanations as code would make the guard fire on its
     /// own rationale.
-    private var code: String {
-        source
+    private func code() throws -> String {
+        try source()
             .components(separatedBy: "\n")
             .map { line -> String in
                 guard let marker = line.range(of: "//") else { return line }
@@ -57,8 +52,8 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// lane's AES-GCM — and a `HandshakeState` would be this transport
     /// negotiating trust it was given. Absence is not observable at runtime, so
     /// it is pinned here.
-    func testTheDriverConstructsNoKeysCodecsOrHandshake() {
-        let source = self.code
+    func testTheDriverConstructsNoKeysCodecsOrHandshake() throws {
+        let source = try self.code()
         XCTAssertFalse(source.isEmpty, "the driver source must be readable")
         for forbidden in ["HandshakeState", "LinkCodecs(", "generateKeyPair(", "deriveSession(",
                           "deriveResumeAuth(", "deriveTextKey(", "randomNonce(", "commitKey("] {
@@ -72,8 +67,8 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// does not send, and each one describes a trust step this transport did not
     /// perform. The SAS in particular: announcing it again would tell a user to
     /// re-verify an authentication that never changed.
-    func testTheDriverEmitsNoCommitRevealSASOrCapability() {
-        let source = self.code
+    func testTheDriverEmitsNoCommitRevealSASOrCapability() throws {
+        let source = try self.code()
         for forbidden in ["revealField(", "commitField(", "peerReveal(", "peerCommit(",
                           "recordPeerCommit(", "selfCommitBase64", "onSAS", ".sas",
                           "LINK_CAPABILITY", "caps:"] {
@@ -97,8 +92,8 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// An establishment built without it would look identical from outside and
     /// would simply never publish, because a rebuild verifies no reveal and so
     /// nothing would ever supply the identity the barrier waits for.
-    func testTheEstablishmentIsBuiltUnderTheInheritedIdentity() {
-        let source = self.code
+    func testTheEstablishmentIsBuiltUnderTheInheritedIdentity() throws {
+        let source = try self.code()
         XCTAssertEqual(occurrences(of: "LinkEstablishment(", in: source), 1,
                        "one construction site, so there is no second way in")
         XCTAssertTrue(source.contains("LinkEstablishment(resuming: identity"),
@@ -108,8 +103,8 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// The clock is told the identity already exists, which is what retires the
     /// key-reveal window. Unobservable from outside for the same reason: the
     /// window only arms once both lanes are open.
-    func testTheClockIsToldTheIdentityAlreadyExists() {
-        let source = self.code
+    func testTheClockIsToldTheIdentityAlreadyExists() throws {
+        let source = try self.code()
         XCTAssertEqual(occurrences(of: "LinkDeadlineClock(", in: source), 1)
         XCTAssertTrue(source.contains("identityPresent: true"),
                       "a rebuild waits for a transport, never for a reveal")
@@ -125,7 +120,7 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// a silent no-op. A second occurrence would mean this driver had grown a
     /// way to act on one.
     func testTheHandshakeActionsAppearOnlyAsARefusal() throws {
-        let source = self.code
+        let source = try self.code()
         XCTAssertEqual(occurrences(of: ".recordPeerCommit", in: source), 1)
         XCTAssertEqual(occurrences(of: ".verifyPeerReveal", in: source), 1)
         XCTAssertTrue(source.contains("case .recordPeerCommit, .verifyPeerReveal, .fail:"),
@@ -135,8 +130,8 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// The signing key is the one the inherited identity already carries. A
     /// second derivation site could be pointed at a key that does not belong to
     /// the codecs this rebuild is reusing.
-    func testTheSigningKeyComesFromTheInheritedIdentity() {
-        let source = self.code
+    func testTheSigningKeyComesFromTheInheritedIdentity() throws {
+        let source = try self.code()
         XCTAssertTrue(source.contains("identity.codecs.resumeAuthKey"))
         XCTAssertEqual(occurrences(of: "codecs.resumeAuthKey", in: source), 1,
                        "one place reads the key, and it is the identity's")
@@ -152,7 +147,7 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// offer would ask the peer to expect a second round of DCEP it has no
     /// reason to wait for, and the publication barrier would never lift.
     func testBothLanesAreCreatedFromTheExactLabelListBeforeTheOfferIsMade() throws {
-        let source = self.code
+        let source = try self.code()
         XCTAssertTrue(source.contains("for label in LINK_CHANNEL_LABELS"),
                       "the lane list is the one constant, never a local literal")
         XCTAssertEqual(occurrences(of: "dataChannel(forLabel:", in: source), 1,
@@ -167,8 +162,8 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// Reliable and ordered. A reused AEAD sequence cannot tolerate a hole, and
     /// leaving `maxRetransmits`/`maxPacketLifeTime` unset is what makes the
     /// channel reliable — setting either turns it partial.
-    func testLanesAreOrderedAndReliable() {
-        let source = self.code
+    func testLanesAreOrderedAndReliable() throws {
+        let source = try self.code()
         XCTAssertTrue(source.contains("config.isOrdered = true"))
         XCTAssertFalse(source.contains("maxRetransmits"))
         XCTAssertFalse(source.contains("maxPacketLifeTime"))
@@ -180,8 +175,8 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// signs the complete tagged signal. A second path would be one that could
     /// put an untagged or unsigned signal on the wire — which the peer drops,
     /// silently, exactly as this side drops theirs.
-    func testEveryOutboundSignalGoesThroughASigningBuilder() {
-        let source = self.code
+    func testEveryOutboundSignalGoesThroughASigningBuilder() throws {
+        let source = try self.code()
         XCTAssertEqual(occurrences(of: "resumeSDPSignal(kind: \"offer\"", in: source), 1)
         XCTAssertEqual(occurrences(of: "resumeSDPSignal(kind: \"answer\"", in: source), 1)
         XCTAssertEqual(occurrences(of: "resumeICESignal(", in: source), 1,
@@ -214,8 +209,8 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// Pinned here because absence is not observable at runtime: a driver that
     /// grew a restart would still pass every behavioural test in this batch,
     /// and would simply be unsafe on the second negotiation.
-    func testTheDriverNegotiatesExactlyOnceAndNeverRestartsICE() {
-        let source = self.code
+    func testTheDriverNegotiatesExactlyOnceAndNeverRestartsICE() throws {
+        let source = try self.code()
         for forbidden in ["iceRestart", "restartIce", "RTCOfferAnswerOptions", ".disconnected"] {
             XCTAssertFalse(source.contains(forbidden),
                            "\(forbidden) needs a per-negotiation SDP/candidate gate first")
@@ -237,8 +232,8 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// Two connections overlap on one socket routinely — most obviously the
     /// dying transport this one replaces. A closing older one must not be able
     /// to erase a NEWER one's handler.
-    func testTheSignallingSlotIsClaimedAndReleasedByToken() {
-        let source = self.code
+    func testTheSignallingSlotIsClaimedAndReleasedByToken() throws {
+        let source = try self.code()
         XCTAssertTrue(source.contains("signaling.installSignalHandler"))
         XCTAssertTrue(source.contains("signaling.removeSignalHandler(signalToken)"))
         XCTAssertFalse(source.contains("signaling.onSignal ="),
@@ -249,8 +244,8 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
 
     /// Every candidate in either direction goes through its gate. A second path
     /// around either one would restore exactly the race the gates exist for.
-    func testEveryCandidateGoesThroughItsGate() {
-        let source = self.code
+    func testEveryCandidateGoesThroughItsGate() throws {
+        let source = try self.code()
         XCTAssertEqual(occurrences(of: "sendCandidateLocked(", in: source), 3,
                        "one sender, called from the gate's two outcomes and the flush")
         XCTAssertEqual(occurrences(of: "localCandidates.admit(", in: source), 1)
@@ -262,7 +257,7 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// Both roles, and only after the description they belong to is actually on
     /// the wire.
     func testBothRolesOpenTheLocalGateOnlyAfterSendingTheirDescription() throws {
-        let source = self.code
+        let source = try self.code()
         XCTAssertEqual(occurrences(of: "localDescriptionSentLocked()", in: source), 3,
                        "the offer path, the answer path, and the definition")
         for kind in ["offer", "answer"] {
@@ -278,7 +273,7 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// gate is opened only by an applied remote description — which the policy
     /// only ever produces for a VERIFIED signal.
     func testRemoteCandidatesAreReleasedOnlyByAnAppliedDescription() throws {
-        let source = self.code
+        let source = try self.code()
         XCTAssertEqual(occurrences(of: "remoteCandidates.open()", in: source), 1)
         let applied = try XCTUnwrap(source.range(of: "pc.setRemoteDescription("))
         let released = try XCTUnwrap(source.range(of: "remoteCandidates.open()",
@@ -298,7 +293,7 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// and holding `callbackLock` across a callback that is allowed to re-enter
     /// this transport would be a self-deadlock.
     func testThereIsOneTerminalPathAndItClosesBeforeItCallsBack() throws {
-        let source = self.code
+        let source = try self.code()
         XCTAssertEqual(occurrences(of: "closed = true", in: source), 1)
         XCTAssertEqual(occurrences(of: "let failed = onError", in: source), 1)
         XCTAssertEqual(occurrences(of: "let ended = onClose", in: source), 1)
@@ -325,8 +320,8 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// Sanitizer reports; a lock held across the invocation would deadlock the
     /// consumer that closes from inside its own callback. Pinned as source
     /// because both halves are invisible to any assertion.
-    func testEveryClientCallbackSlotIsGuardedAndNoneIsInvokedUnderThatGuard() {
-        let source = self.code
+    func testEveryClientCallbackSlotIsGuardedAndNoneIsInvokedUnderThatGuard() throws {
+        let source = try self.code()
         for slot in ["_onReady", "_onFrame", "_onError", "_onClose"] {
             XCTAssertTrue(source.contains("private var \(slot):"),
                           "\(slot) must be private storage behind a guarded accessor")
@@ -355,8 +350,8 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// session-derived key material. The consumer owns its own reference from
     /// publication; a closed transport holding a second one keeps key material
     /// alive for an object with nothing left to do.
-    func testTeardownClearsWhatAClosedTransportMustNotHold() {
-        let source = self.code
+    func testTeardownClearsWhatAClosedTransportMustNotHold() throws {
+        let source = try self.code()
         XCTAssertTrue(source.contains("pc = nil"))
         XCTAssertTrue(source.contains("self.signalToken = nil"))
         XCTAssertTrue(source.contains("establishment.close()"))
@@ -371,7 +366,7 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// own code and may take as long as they like, while the deadline they race
     /// is a clock.
     func testTheClockIsDisarmedAtTheBarrierNotAfterTheClientCallbacks() throws {
-        let source = self.code
+        let source = try self.code()
         let applied = try XCTUnwrap(source.range(of: "private func apply(_ step:"))
         let tail = String(source[applied.upperBound...])
         let end = try XCTUnwrap(tail.range(of: "\n    }"))
@@ -392,7 +387,7 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// local description, the second before that description leaves and its
     /// candidate gate opens.
     func testEveryDescriptionCompletionChecksTheDeadlineBeforeContinuingSetup() throws {
-        let source = self.code
+        let source = try self.code()
         for (produce, kind) in [("pc.offer(for:", "offer"), ("pc.answer(for:", "answer")] {
             let produced = try XCTUnwrap(source.range(of: produce), "the \(kind) path must exist")
             let tail = String(source[produced.upperBound...])
@@ -417,7 +412,7 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// signalling relay put every replacement in the room on a deadline it
     /// started, and then kill them with it.
     func testTheDeadlineIsArmedOnlyAfterThePolicyHasVerifiedTheSignal() throws {
-        let source = self.code
+        let source = try self.code()
         let handled = try XCTUnwrap(source.range(of: "private func handleLocked"))
         let tail = String(source[handled.upperBound...])
         let end = try XCTUnwrap(tail.range(of: "\n    }"))
@@ -433,8 +428,8 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
 
     // MARK: - queue discipline
 
-    func testTheDriverOwnsNoRawQueue() {
-        let source = self.code
+    func testTheDriverOwnsNoRawQueue() throws {
+        let source = try self.code()
         XCTAssertFalse(source.contains("DispatchQueue("),
                        "the queue is LinkTransportQueue's, guards included")
         XCTAssertFalse(source.contains("queue.sync("),
@@ -447,7 +442,7 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// on an `NSObject` subclass mid-deallocation; `queue.sync` deadlocks if the
     /// last release happened on the queue itself.
     func testDeinitNeverTouchesTheQueue() throws {
-        let source = self.code
+        let source = try self.code()
         let opened = try XCTUnwrap(source.range(of: "    deinit {"))
         let tail = String(source[opened.upperBound...])
         let closed = try XCTUnwrap(tail.range(of: "\n    }"))

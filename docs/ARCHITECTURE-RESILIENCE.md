@@ -35,7 +35,7 @@ survives a split unchanged or gets worse:
 | Real problem | Evidence | Does splitting fix it? |
 | --- | --- | --- |
 | Mixed-scope, long-lived dirty worktrees | At the 2026-08-21 audit point: **16 registered checkouts in total, 10 of them dirty**. `ios-device-inbox` 144 dirty paths, `ios-0.2.0-alignment` 108, primary checkout 23. | **No.** The same uncommitted work would be spread across more checkouts, in more repos, with no home rule and no archive policy. |
-| Merge to `main` *is* deploy for the central server and web | The central deploy is `relayium-ops/deploy/auto-deploy.sh`, run by a **5-minute cron that tracks the product repository's `origin/main`**. A merged `main` commit therefore reaches the central production host without any separate promotion decision. | **No.** Each repo would still be tracked by a cron on its own `main`. This is a release-pipeline property, not a repository-layout property. |
+| Merge to `main` *was* deploy for the central server and web — **closed 2026-08-21** | At the audit point the central deploy, `relayium-ops/deploy/auto-deploy.sh`, ran on a **5-minute cron tracking the product repository's `origin/main`**, so a merged commit reached the production host with no separate promotion decision. It now deploys the commit `relayium-ops/deploy/production-pin` names, and a merge moves nothing (§7). | **No** — and the way it was actually closed is the proof. The fix landed entirely inside `relayium-ops`, with no repository boundary moved. Each repo would still be tracked by a cron on its own `main`: this is a release-pipeline property, not a repository-layout property. |
 | Incomplete language-neutral contract coverage | `compat / wire-vectors` regenerates four fixtures — `realtime-wire-vectors.json`, `store-wire-vectors.json` and, since 2026-08-22, `crypto-vectors.json` and `device-inbox-manifest-v3-vectors.json`. `crypto-vectors.json` was excluded for as long as it had **two authors** (`gen-crypto-vectors.mjs` plus a `textKeys` block pasted from `text-vectors.test.ts`); folding the text-key derivation into the generator gave it a single author, and `check-wire-vectors.mjs` now holds it to the same zero-diff gate. `device-inbox-manifest-v3-vectors.json` joined the same day under a **hybrid** rule, where `gen-device-inbox-manifest-vectors.mjs` owns `accept[].canonical`, `accept[].kind` and `accept[].total` and the refusals, bounds and item lists stay hand-authored. **Now open instead:** capability and error contracts, which have no fixture and no gate at all. | **Made worse.** Today a contract change and both implementations land in one commit that one gate judges. Across repos the same change becomes N commits, N reviews and a version-skew window. |
 | Large shared Apple `RelayiumKit` fan-out | 8 source modules; `RelayiumStoreKit → RelayiumAppKit → {RelayiumKit, RelayiumShareKit}`, and any `apps/RelayiumKit/**` change fans out to **both** Apple workflows | **No.** A separate `RelayiumKit` repo converts a compile error into a published-version bump plus a dependency-update PR in two consumers — more steps for the same coupling. |
 
@@ -82,36 +82,71 @@ Read against those triggers honestly, it does not: it has neither independent
 ownership in practice (the same person merges both sides), nor a stable
 versioned contract boundary, nor cross-version compatibility automation.
 
-**Recorded gap — the implicit product contract.** `relayium-ops` depends on the
-product repository through an **undeclared, unversioned interface**: product
-repository paths and layout, build/readiness signalling, and product API health
-endpoints. Nothing generates, versions or gates that interface, so a product-side
-rename or a readiness/health-shape change can break deployment with a green
-product board on both sides. This is an **accepted current exception**, not a
-solved problem: the isolation benefit is judged to outweigh it today, the
-coupling is small and operator-observed, and closing it is P1 work (§9), not a
-reason to merge the repositories. It must not be described as "already satisfies
-the split triggers", because a future reader would then treat the boundary as
-safer than it is.
+**Recorded gap — the implicit product contract, now declared.** `relayium-ops`
+depended on the product repository through an **undeclared, unversioned
+interface**: product repository paths and layout, build/readiness signalling, and
+product API health endpoints. Nothing generated, versioned or gated it, so a
+product-side rename or a readiness/health-shape change could break deployment
+with a green product board on both sides.
+
+That interface is now explicit on both sides — `contracts/ops-deploy-v1.json`
+with its product readers here, and an immutable vendored copy, unconditional
+enforcement and a promotion-time drift refusal in `relayium-ops` (§9, item 7).
+**It still must not be described as "already satisfies the split triggers."** The
+same person merges both sides, the contract covers the deploy interface rather
+than the whole coupling, and there is no cross-version compatibility automation.
+What changed is that the coupling is written down and checked; the reason the
+boundary exists is still isolation, not a versioned package relationship.
+
+**One asymmetry belongs in the record.** The ops repository's current
+private-repository plan does not expose branch-protection setup or read-back
+through the API, so `relayium-ops` cannot show the settings evidence §2 records
+for product `main`. Its merges rely instead on serialized single-writer process
+and terminal exact-head and exact-main run evidence. That is a real mechanism and
+it is what its deliveries are evidenced against — it is not an enforced required
+check, and it is not presented as one.
 
 ---
 
 ## 2. Correction: `main` protection is present, not absent
 
-Several audit statements say `main` is unprotected. **They are stale.** As of
-2026-08-21, after PR #6 merged as `24a29ec6`:
+Several audit statements say `main` is unprotected. **They are stale.**
+Protection was enabled on 2026-08-21, after PR #6 merged as `24a29ec6`, and the
+required set has since been edited twice:
 
-- `main` protection is **enabled**, verified by re-reading the settings after the
-  write: **strict** required status checks, **exactly one context**, bound to
-  **GitHub Actions `app_id` 15368**; `enforce_admins` false; force pushes false;
-  deletions false; no required reviews; no push restrictions.
-- The API context reads `wire-vectors` while the merge box renders
-  `compat / wire-vectors`. **This is a rendering difference, not a substituted
-  check.** The `app_id` binding is what prevents a differently-owned check of the
-  same job name from satisfying the rule.
+- `main` protection is **enabled**, verified by re-reading the settings after
+  every write: **strict** required status checks, **exactly one context**, bound
+  to **GitHub Actions `app_id` 15368**; `enforce_admins` false; force pushes
+  false; deletions false; no required reviews; no push restrictions.
+- **That one context is now `merge-gate`, not `wire-vectors`.** The original
+  single context was the bare `wire-vectors`; protection edit A added
+  `merge-gate` beside it, and **protection edit B narrowed the set to
+  `merge-gate` alone**, read back after the write as `strict: true` with exactly
+  that one context. The two-step order is why no required context was ever left
+  reported by nothing. `docs/CI-PLATFORM-BOUNDARY.md` carries the staged
+  migration and its current position.
+- **The wire-vector contract still reaches the merge button, through the
+  aggregate.** `merge-gate.yml` calls `compat.yml` **unconditionally** — no
+  `if:`, no `with:`, and no `paths:` on the lane itself — and cannot go green
+  unless that lane succeeds. `compat.yml` no longer has a direct `pull_request:`
+  entry point of its own. What moved is which name protection names, not whether
+  the contract blocks a merge.
+- **The bare `wire-vectors` check run did not stop mattering; its consumer
+  changed.** `compat.yml` keeps its permanent `push: branches: [main]` trigger,
+  so every `main` commit still carries a directly-triggered `wire-vectors` check
+  run, and `relayium-ops` `deploy/promote.sh` refuses to promote a commit that
+  lacks one (§7). It is a deployment/promotion check consumed across the
+  repository boundary — it is **not** a PR-required branch-protection context any
+  more.
+- The two names are different runs rather than one rendering. `wire-vectors` is
+  what the check-runs API returns for the direct `push: main` run, and it is the
+  name `promote.sh` matches; `compat / wire-vectors` is how the **called** lane
+  renders on a pull request, prefixed by the caller's job id. Neither is a
+  required context; `merge-gate` is. The `app_id` binding is what prevents a
+  differently-owned check of the same job name from satisfying the rule.
 - **`app_id` covers one substitution; job-name uniqueness covers the other.**
   The binding refuses a **differently owned** check — another App, or an external
-  service posting a status — that reports the context `wire-vectors` for a gate
+  service posting a status — that reports the required context for a gate
   that never ran. It cannot refuse a **second job of the same name in this
   repository**: that is the same app, `app_id` 15368, reporting the same
   context, so an unrelated green lane could satisfy the single requirement.
@@ -120,10 +155,13 @@ Several audit statements say `main` is unprotected. **They are stale.** As of
   `scripts/test/ci-event-policy-test.mjs` §6j asserts that `compat.yml` declares
   the `wire-vectors` job **and** that no other workflow file on disk declares
   one, scanning every workflow rather than only the parsed set, with mutation
-  evidence for both directions. The assertion pins the **name**; it is not, and
-  must not be read as, evidence that the context is required.
+  evidence for both directions. Since protection edit B that assertion guards the
+  name `promote.sh` matches on a `main` commit (§7) rather than the name branch
+  protection requires. The assertion pins the **name**; it is not, and must not
+  be read as, evidence that the context is required.
 - The wire-vector contract is therefore **required at merge time by repository
-  configuration**, not merely fail-closed by workflow design. `OA-021` is
+  configuration** — through `merge-gate`, which cannot report green without its
+  `compat` lane — not merely fail-closed by workflow design. `OA-021` is
   complete.
 
 **Any statement to the contrary is superseded, wherever it appears.** The two
@@ -133,11 +171,22 @@ requirement" paragraph in `docs/CI-PLATFORM-BOUNDARY.md` and the matching
 delivered item 3). They previously instructed readers to describe a
 now-required check as not required.
 
-**Still not observed, and deliberately not claimed: a real pull request showing
-the check as required in its merge box, and a merge actually blocked while that
-check is red.** Protection is verified by **settings read-back only**. This is
-tracked as an open evidence item, and both corrected texts say so in place:
-confirm it on the next real pull request rather than asserting it now.
+**Both halves of that evidence have since been observed.** A real merge box
+showed the required check reporting `isRequired: true` (PR #25), and a
+never-merged red probe — PR #38, exact head `33e4e3b5`, run `32660811500` — was
+read at `mergeStateStatus: BLOCKED` while `merge-gate` was red, then closed
+unmerged. That probe ran under the two-context set protection edit A left.
+
+**Both of those have since been delivered and observed, so nothing here is
+pending any more.** Removing compat's direct pull-request entry landed as PR #40,
+head `6c4b8e3d`, whose sole `merge-gate` run `32668325620` was green 45/45 with
+**no separate direct compat run** — the absence is the positive result, because
+there is now exactly one compat run per pull request and the aggregate judges it.
+PR #40 merged as `91768dc0`. The second red probe then ran against the shipped
+sole-context protection: PR #41, head `cedec269`, aggregate run `32670589874`
+red, `mergeStateStatus: BLOCKED`, protection read back `strict: true` with the
+sole context `merge-gate`, closed unmerged with its refs deleted. §9 item 9
+carries the lane detail.
 
 ---
 
@@ -301,9 +350,11 @@ operative document.
 5. **Independent review before merge.** Under collaboration mode this is Codex's
    acceptance pass on the actual diff and executable evidence. Money-moving work
    takes all three financial gates regardless of urgency (§5).
-6. **Understand what merging actually does.** Today, merging to `main` is what
-   deploys the central server and web — see §7. There is no promotion step to
-   perform yet, and that is precisely the gap this review asks to close.
+6. **Understand what merging actually does.** Merging to `main` no longer
+   deploys the central server and web — production serves the commit
+   `relayium-ops/deploy/production-pin` names, so there is an explicit promotion
+   step and it belongs to the operator (§7). A merged fix nobody promoted is not
+   live, and during an incident that is the failure to plan for.
 7. **Production verification and a stated rollback.** Confirm the deployed
    version, service/log state and observable behavior. A push is not completion.
 8. **Paused work is preserved and reconciled later.** Frozen worktrees are not
@@ -318,7 +369,7 @@ paused work.
 
 ---
 
-## 7. Release architecture: what "merge is deploy" actually means
+## 7. Release architecture: what merging actually does, per channel
 
 The single most misread area of this architecture, so it is stated per channel
 rather than as one sentence.
@@ -327,7 +378,7 @@ rather than as one sentence.
 
 | Channel | What ships it today | Is merge deploy? |
 | --- | --- | --- |
-| **Central server + web** | `relayium-ops/deploy/auto-deploy.sh`, run by a **5-minute cron** | **Depends on which mode the ops repository is in — check, do not assume.** Before the promotion-pin cutover the cron tracks this repository's `origin/main` and **merge is deploy**. After it, the cron deploys the commit `relayium-ops/deploy/production-pin` names and **merge deploys nothing**. See "Which mode is production in?" below. |
+| **Central server + web** | `relayium-ops/deploy/auto-deploy.sh`, run by a **5-minute cron** | **No, since the 2026-08-21 promotion-pin cutover.** The cron deploys the commit `relayium-ops/deploy/production-pin` names; a merge changes nothing until an operator promotes. See "What production serves, and how to confirm it" below. |
 | **CLI / node tags** | `.github/workflows/auto-release.yml` cuts a **weekly, green-gated tag**; `release.yml` builds and signs what that tag names | **No.** Merging does not cut a tag, and a tag is a deliberate, scheduled, gate-checked act. |
 | **Node fleet** | **Operator promotion, which already exists.** A fleet node moves to a new version on an operator decision, not on a merge. | **No — already solved.** This channel is the model, not the problem. |
 | **Native releases** (macOS/iOS) | Their own signing, notarization, packaging and store/update-feed pipelines | **No.** No merge publishes a native artifact. |
@@ -337,61 +388,63 @@ tag cutter for the CLI/node release line. Attributing the central production
 deploy to it — as earlier drafts of this review did — points every promotion
 conversation at the wrong repository.
 
-### Which mode is production in?
+### What production serves, and how to confirm it
 
-This repository cannot answer that from its own contents, because the mechanism
-lives entirely in `relayium-ops`. **Do not infer it from this document.** Check:
+Production serves the pinned commit. What this repository cannot answer from its
+own contents is the pin's **current value**, because the mechanism and the pin
+both live in `relayium-ops`. **Do not infer that from this document.** Confirm
+it:
 
 - **Ask the operator who owns production.** This is the fastest and most
   reliable answer, and the only one available to someone without ops access.
-- **If you have read access to `relayium-ops`:** the file
-  `deploy/production-pin` exists on its `main`, and `deploy/auto-deploy.sh`
-  reads it. Both present ⇒ pin-aware.
-- **If you have read access to the deploy log** (`operator only`): a pin-aware
-  tick logs `up to date (pinned <sha>)` or
-  `promoting <old> -> <new> (promotion instance <ops-sha>)`. The pre-cutover
-  script logs `up to date (<sha>)` and `deploying <old> -> <new>` — no
-  parenthesised `pinned`, and no promotion instance.
+- **If you have read access to `relayium-ops`:** `deploy/production-pin` on its
+  `main` names the commit the cron deploys.
+- **If you have read access to the deploy log** (`operator only`): a tick logs
+  `up to date (pinned <sha>)` or
+  `promoting <old> -> <new> (promotion instance <ops-sha>)`.
 
-**Both modes are described below.** Neither is presented as the current truth,
-because which one is live is an ops-repository fact with its own delivery
-schedule.
+### The gap, and how it was closed
 
-### The gap, and how it is closed
-
-Only the **first row** has the problem: for the central server and web there is
+Only the **first row** had the problem: for the central server and web there was
 no separate decision between *"this code is correct"* and *"this code is now
-serving users."* Every merge is therefore implicitly a production change, which
-makes ordinary review carry production risk it was never scoped for.
+serving users."* Every merge was therefore implicitly a production change, which
+made ordinary review carry production risk it was never scoped for.
 
-**Before the cutover — merge is deploy.** The moment a branch merges to `main`,
-the next cron tick serves it to real users. There is no window in which code is
-on `main` but not live.
-
-**After the cutover — merge lands code; a promotion deploys it.**
+**Merge now lands code; a promotion deploys it.**
 `relayium-ops/deploy/production-pin` is a committed file naming exactly one
 already-merged, already-green product commit; the cron deploys that and nothing
 else. Promotion is a commit to `relayium-ops` made with its `deploy/promote.sh`
 from an operator workstation, which verifies the target is a full immutable SHA,
-is an ancestor of `origin/main`, and has a completed/successful hosted GitHub
-Actions wire-vector run before it will write anything. Two decisions, two
-records.
+is an ancestor of `origin/main`, has a completed/successful hosted GitHub Actions
+wire-vector run, and carries a deploy contract matching the copy `relayium-ops`
+has vendored — all before it writes anything. Two decisions, two records.
+
+**The cutover is delivered, and was measured rather than assumed.** It ran on
+2026-08-21 under a product merge freeze, seeded with the commit production was
+already serving so that the switch itself promoted nothing; the pin path was then
+observed deciding on a live cron tick, with the service's process and start
+timestamp unchanged across it — no build, no release swap, no restart.
 
 The promotion gate reads that run from the **check-runs API**, so it matches the
-API name `wire-vectors` — the same name, and for the same reason, that branch
-protection's required context uses above. `compat / wire-vectors` is the merge
-box's rendering of it, not a second check; §3 covers why that distinction is
-load-bearing and what enforces the job-name uniqueness both rely on.
+API name `wire-vectors` — the name `compat.yml`'s permanent `push: branches:
+[main]` trigger reports on a `main` commit, which is why that trigger is
+permanent. Branch protection no longer requires that name: since protection edit
+B the sole required context is `merge-gate`, which reaches the same contract
+through its unconditional `compat` lane (§2). So the bare check run is a
+promotion signal consumed here, not a pull-request gate, and
+`compat / wire-vectors` is how that lane renders when the aggregate calls it, not
+a second check; §3 covers why that distinction is load-bearing and what enforces
+the job-name uniqueness both rely on.
 
 > **Hard boundary, unchanged.** The promotion pointer is **ops-first**: the
 > authoritative change is to `relayium-ops/deploy/auto-deploy.sh`, not to
-> anything in this repository. It is designed, implemented and reviewed under a
-> **separate `relayium-ops` lease**
+> anything in this repository. It was designed, implemented, reviewed and
+> delivered under **separate `relayium-ops` leases**
 > (`docs/superpowers/specs/2026-08-21-product-promotion-pin-design.md` in that
 > repository). Nothing in this document authorises a `relayium-ops`, fleet,
-> deploy or production change, and no product code changes for it.
+> deploy or production change, and no product code changed for it.
 
-Constraints the ops-side design satisfies:
+Constraints the delivered ops-side mechanism satisfies:
 
 - **Fail-closed.** If the pointer is missing, unreadable, malformed, or names a
   commit the host cannot verify, auto-deploy **must not deploy anything** and
@@ -475,16 +528,36 @@ All five items below are **complete**; the count and the enumeration match.
 
 ### P1 — close the structural gaps
 
-6. **Merge/deploy separation for the central server and web** (§7):
-   **designed and implemented in `relayium-ops` under its own lease**
+6. **Merge/deploy separation for the central server and web — COMPLETE
+   (2026-08-21).** Delivered in `relayium-ops` under its own leases
    (`deploy/production-pin`, `deploy/promote.sh`, the pin gate in
-   `deploy/auto-deploy.sh`), ops-first and fail-closed. **Awaiting independent
-   acceptance review and delivery in that repository; not yet cut over.** No
-   product code is involved, and nothing in this repository changed for it
-   beyond this document and `docs/HOTFIX-RUNBOOK.md`.
-7. **Declare the `relayium-ops` ↔ product contract** (§1): make the product
-   paths, readiness signalling and health endpoints that ops depends on an
-   explicit, checked interface rather than an implicit one.
+   `deploy/auto-deploy.sh`), ops-first and fail-closed, and **cut over**:
+   production tracks the committed pin, and merging to product `main` deploys
+   nothing (§7). No product code was involved, and nothing in this repository
+   changed for it beyond this document and `docs/HOTFIX-RUNBOOK.md`. What the
+   cutover moved is where the risk sits: a stale or unpushed pin now means
+   production stays where it is, which is the intended failure direction and
+   makes the promotion step part of the incident path.
+7. **Declare the `relayium-ops` ↔ product contract — COMPLETE (2026-08-23).**
+   The product paths, build inputs, readiness signalling and health endpoints
+   that ops depends on are now an explicit, checked interface (§1). Phase A
+   published `contracts/ops-deploy-v1.json` and its product readers — PR #27
+   merged as `761a7646`, with the ops consumer's row activated on `main` by the
+   later merge `a98368f7`. The `relayium-ops` half then landed in serialized
+   phases: the reader and roster activation, then immutable vendored provenance
+   with unconditional enforcement (ops PR #5, source
+   `3d3ff9c23b99134eeb0f458a33e690be6c201b44`, merged
+   `d4737c8417aeea45f2b61b695b40a176988f30a1`, exact-head and exact-main hosted
+   shell and contract-provenance green), then a promotion-time compatibility
+   gate (ops PR #6, source `5d67842e935c5f2b77dddc061ceee381cd033001`, merged
+   `f323ae41f7f21a76bce5ea99aba099a1c29d39c1`, exact-head run `32639687517` and
+   exact-main run `32639778863` each passing exactly `shell` and
+   `contract-provenance`). Promotion now fails closed on contract drift or
+   unknowable evidence **before** any hosted-check call or pin write, and
+   pre-contract commits stay promotable only within strict canonical pin
+   history, which is what bounds rollback compatibility across the boundary.
+   That gate work changed the operator-side preflight only: **no promotion and
+   no deployment were performed as part of it.**
 8. **Finish crypto and device-inbox conformance fixtures — COMPLETE
    (2026-08-22).** The crypto half: text-key derivation now happens in
    `gen-crypto-vectors.mjs`, giving `crypto-vectors.json` a single author, and the
@@ -497,9 +570,92 @@ All five items below are **complete**; the count and the enumeration match.
    dropped from the table silently. **Nothing about the device-inbox conformance
    fixtures remains open.** What this does NOT cover is item 12: capability and
    error contracts still have no fixture and no gate.
-9. **Observe required-check enforcement on a real pull request** (§2): a merge
-   box showing the check as required, and a merge actually blocked while it is
-   red. Until then, protection is settings read-back only.
+9. **Observe required-check enforcement on a real pull request** (§2).
+   **CLOSED — every half is now closed by observation rather than derivation.**
+
+   **The "shown as required" half is closed.** `ACTIVE-WORK.md` records PR #25
+   merging with the then-required bare `wire-vectors` check reporting
+   `isRequired: true` — a real merge box, not a settings read-back. Recorded here
+   because nothing else did.
+
+   **The "red actually blocks" half is closed too, and by observation rather
+   than by derivation from the settings.** A never-merged red probe — PR #38,
+   exact head `33e4e3b5`, run `32660811500` — was observed at
+   `mergeStateStatus: BLOCKED` with `merge-gate` red, and was then closed
+   unmerged. It ran under the two-context set protection edit A left, which
+   cannot separate the aggregate's authority from the bare `wire-vectors`
+   requirement — so a **second** probe was run against the shipped
+   sole-`merge-gate` protection and it is what actually closes this half. PR #41,
+   exact head `cedec269c3d6d3d34f69e058bf89815a553fe405`, aggregate run
+   `32670589874`, conclusion `failure`: one deterministic invalid health
+   `successBody` selected the `ops-contract` lane, and `ops-contract /
+   go-contract`, `repo-hygiene / ops-deploy-contract-policy` and the top-level
+   `merge-gate` all went red while `compat / wire-vectors` and every other
+   applicable `repo-hygiene` job stayed green and the `web`, `go`, `macos`,
+   `ios`, `swift-package`, `native-web-pairing` and `contracts` lanes skipped.
+   GitHub reported `mergeStateStatus: BLOCKED` while protection read back
+   `strict: true` with the sole context `merge-gate`; the probe was closed
+   unmerged (`mergedAt: null`) and its refs and worktree deleted. The second red,
+   from the always-on declarative consumer, is the designed behaviour of a
+   contract with two independent readers, not an unrelated failure. Either
+   observation means an intentionally red pull
+   request observed at `mergeStateStatus: BLOCKED`, with the head commit's
+   check-runs enumerated directly — never `statusCheckRollup`, which is
+   presentation state and was once misread as "all checks successful" on a pull
+   request that had a failed job, and never `gh pr checks` alone, which labels an
+   in-progress job `pending 0`. It must be proved at the API level and **not** by
+   attempting a merge: with `enforce_admins: false` the owner still has an
+   explicit bypass, which is a separate and deliberate property of the current
+   settings.
+
+   **The aggregate-gate half is delivered, and both protection edits are
+   made.** `.github/workflows/merge-gate.yml` now runs unfiltered on
+   every pull request, calls each lane as a reusable workflow, and reports one
+   always-present job — `merge-gate` — that enforces a two-way rule: `select`
+   must have succeeded, the `needs` key set must equal a hardcoded roster
+   compared in both directions, every unconditional lane must be `success`, and
+   every conditional lane must be `success` when selected and `skipped` when not.
+   Which lanes a change selects is read from the lanes' own `push.paths` by
+   `scripts/ci/select-lanes.mjs`, cross-validated against
+   `scripts/test/ci-event-policy-test.mjs` through the shared 28-row fixture
+   `scripts/test/fixtures/ci-path-selection.mjs`, and fails closed to "every
+   lane" on every error path.
+
+   **What is now true: `merge-gate` is the only context `main` requires.**
+   Protection edit A made the required set `{wire-vectors, merge-gate}` and
+   protection edit B narrowed it to `{merge-gate}`, each written and then read
+   back as `strict: true` with exactly those contexts. `compat.yml` was folded in
+   as an unconditional called lane first — PR #39, head `9d6ba08c`, aggregate run
+   `32665499037` — so the rename of its check never left a required context
+   reported by nothing. Its direct `pull_request:` entry was then removed in
+   PR #40, head `6c4b8e3d`, merged as `91768dc0`, while `push: branches: [main]`,
+   `workflow_dispatch:` and `workflow_call:` stay permanently: that `push: main`
+   run is the bare `wire-vectors` check `promote.sh` reads (§7), a promotion
+   signal rather than a pull-request context. The staged migration is complete
+   and recorded in `docs/CI-PLATFORM-BOUNDARY.md`.
+
+   **This item is closed.** Both outstanding pieces of evidence were produced.
+   PR #40's sole `merge-gate` run `32668325620` was green 45/45 with **no
+   separate direct compat run** — compat now reports exactly once per pull
+   request and the aggregate judges that single called lane. PR #41 then supplied
+   the second red probe against the sole-`merge-gate` protection, described
+   above. Nothing about required-check enforcement remains derived from a
+   settings read-back.
+
+   **One cost this creates, and it is the owner's to price rather than inherit:**
+   `strict: true` plus a required aggregate means every merge to `main`
+   invalidates every open pull request and forces a full re-selection, up to a
+   60-minute `signed-build` and a 75-minute `ios-build`. Because GitHub evaluates
+   path filters against the cumulative three-dot diff, that invalidation is
+   sticky per pull request rather than per commit. It plausibly fires the merge
+   queue's already-recorded revisit trigger. See `docs/CI-PLATFORM-BOUNDARY.md`.
+
+   **Deliberately deferred, with reasons:** a `pull_request_target` gate-integrity
+   workflow (required before external contributions, not before foundation
+   completion — a pull request is judged by its own head copy of the gate, and
+   the in-repo control-file rule stops only the accidental version of that);
+   `enforce_admins: true` (it is the migration's rollback path); CODEOWNERS and
+   required reviews (they deadlock a single-owner repository); and a merge queue.
 10. **A one-dirty-home rule plus archive classification** for the checkouts
     counted in §1. One home per line of work; everything else is classified
     **active**, **frozen-historical** or **archivable**, and archived

@@ -1,6 +1,93 @@
+import Combine
 import Foundation
 import RelayiumAppKit
 import RelayiumKit
+
+#if DEBUG
+/// One injected file selection, made once, by an object that owns its own
+/// subscription and releases everything the moment it fires.
+///
+/// **Why it is not simply "call `chooseFiles` at launch".** `chooseFiles`
+/// carries two refusals, and a signed-in acceptance launch is on the wrong side
+/// of BOTH of them for a while. It refuses a selection with no ready account,
+/// and the session restores asynchronously. It then refuses one while the
+/// upload model is busy, and the ready account is exactly what starts the
+/// recovery scan that holds `.checkingRecovery`. A selection injected into
+/// either window is dropped silently — the same class of loss as the one this
+/// replaces, not a new one — so the two publishers that own those refusals are
+/// the trigger.
+///
+/// It never polls, sleeps, retries or times out. Every call below is a state
+/// change the models themselves published, and the first one that satisfies
+/// both refusals is the last one this object handles.
+@MainActor
+final class UITestPreselection {
+    /// Held as optionals rather than `let`, because "one shot" has to be
+    /// visible in the object graph and not only in a flag: after the selection
+    /// is made this holds nothing it could make a second one from.
+    private var send: SendSelectionModel?
+    private var upload: CloudUploadModel?
+    private var session: AccountSession?
+    private var observation: AnyCancellable?
+
+    init(send: SendSelectionModel, upload: CloudUploadModel, session: AccountSession) {
+        self.send = send
+        self.upload = upload
+        self.session = session
+    }
+
+    /// Explicit cancellation, idempotent, and the only way this object stops.
+    /// Safe before, during and after the one selection it makes.
+    func cancel() {
+        observation?.cancel()
+        observation = nil
+        send = nil
+        upload = nil
+        session = nil
+    }
+
+    func start() {
+        guard let upload, let session else { return }
+        // `.receive(on:)` is load-bearing rather than defensive. `@Published`
+        // publishes in `willSet`, so a subscriber reached from that emission
+        // reads the OLD value off the very model it is being told changed —
+        // and `chooseFiles` would then consult a stale `upload.isBusy` and drop
+        // the selection. One main-queue turn later the write has landed, which
+        // is why the condition below is read from the models rather than from
+        // an emitted value that has not been stored yet.
+        //
+        // This does NOT weaken `SendSelectionModel.observe`, which must stay
+        // synchronous and does: that subscription is installed separately, at
+        // app construction, and nothing here touches it.
+        observation = Publishers.CombineLatest(session.$state, upload.$state)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.chooseOnceTheModelsWillAcceptIt() }
+    }
+
+    private func chooseOnceTheModelsWillAcceptIt() {
+        guard let send, let upload, let session else { return }
+        guard case .ready = session.state else { return }      // the account refusal
+        guard case .idle = upload.state else { return }        // the busy refusal
+        // Staged HERE rather than trusted to have been staged. The scene
+        // `.task` that stages for the picker paths is not ordered against the
+        // account becoming ready, and a URL whose bytes nobody wrote would
+        // reach `store.replace` and leave the send screen showing a preparation
+        // error instead of a pending row — an acceptance defect that reads as a
+        // product defect.
+        UITestMode.stagePendingFixture()
+        guard let url = UITestMode.pendingFixtureURL(),
+              FileManager.default.fileExists(atPath: url.path) else { return }
+        // Cancelled BEFORE the callback, so the `.picked` state the selection
+        // publishes cannot re-enter this.
+        cancel()
+        // The EXACT callback `SendView`'s `fileImporter` invokes, with the exact
+        // shape it passes. Everything downstream of this line — the scope, the
+        // expansion, the limits, the pending row, the send, the failure and the
+        // recovery — is production code. Only the presentation is skipped.
+        send.chooseFiles(.success([url]))
+    }
+}
+#endif
 
 /// Keeps simulator UI acceptance from joining the public Nearby rendezvous.
 ///
@@ -36,8 +123,26 @@ enum UITestMode {
     /// paths never write into the container at all.
     // nonlocalized: a test-only launch argument, absent from Release
     static let pendingFixtureArgument = "--relayium-ui-testing-pending-fixture"
+
+    /// Hands a launch the selection the document browser would have produced,
+    /// without presenting it.
+    ///
+    /// **This does not replace the picker tests, and must not.**
+    /// `testPendingSendNamesTheFileAndItsSizeBeforeTransfer` and
+    /// `testASignedInStoredSendNamesTheFileItWouldUpload` exist to drive the
+    /// real `fileImporter`, the real security scope and the real expansion, and
+    /// they still do. The upload FAILURE path is not about any of that: it needs
+    /// a pending file to exist so it can be sent and fail, and paying for a
+    /// one-shot system-picker presentation to get one is what made that test
+    /// lose hosted CI to a presentation race it was never testing.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let preselectFixtureArgument = "--relayium-ui-testing-preselect-fixture"
+    static let preselectsPendingFixture = ProcessInfo.processInfo.arguments.contains(
+        preselectFixtureArgument)
+    /// EITHER argument stages. A preselecting launch must not depend on a second
+    /// argument being passed beside it to have something to select.
     static let stagesPendingFixture = ProcessInfo.processInfo.arguments.contains(
-        pendingFixtureArgument)
+        pendingFixtureArgument) || preselectsPendingFixture
 
 
     /// Whether this launch already holds an account.
@@ -279,15 +384,46 @@ enum UITestMode {
         return store
     }
 
-    /// Rewritten on every launch that asks for it, so a container surviving
-    /// from an earlier run cannot leave a stale name or length behind.
-    static func stagePendingFixture() {
+    /// Where the fixture goes, and the ONE place either half of this seam names
+    /// the container. Nil for every launch that did not ask for a fixture,
+    /// which is every launch that passes neither argument.
+    static func pendingFixtureURL() -> URL? {
         guard stagesPendingFixture,
               let documents = try? FileManager.default.url(
                 for: .documentDirectory, in: .userDomainMask,
-                appropriateFor: nil, create: true) else { return }
+                appropriateFor: nil, create: true) else { return nil }
+        return documents.appendingPathComponent(pendingFixtureName)
+    }
+
+    /// Rewritten on every launch that asks for it, so a container surviving
+    /// from an earlier run cannot leave a stale name or length behind.
+    /// Idempotent, because the preselection seam re-stages rather than assuming
+    /// the scene `.task` ran first.
+    static func stagePendingFixture() {
+        guard let url = pendingFixtureURL() else { return }
         try? Data(repeating: 0x52, count: pendingFixtureByteCount).write(
-            to: documents.appendingPathComponent(pendingFixtureName), options: .atomic)
+            to: url, options: .atomic)
+    }
+
+    /// The one-shot preselection this process owns, or nil when no launch asked
+    /// for one. Retained deliberately: the object releases its own captures the
+    /// instant it fires, so what survives here holds nothing and can select
+    /// nothing.
+    @MainActor private static var preselection: UITestPreselection?
+
+    /// Installs it. A no-op without the argument, and a no-op in Release by
+    /// construction rather than by a flag.
+    @MainActor
+    static func preselectPendingFixture(into send: SendSelectionModel,
+                                        upload: CloudUploadModel,
+                                        session: AccountSession) {
+        guard preselectsPendingFixture else { return }
+        // Explicit, and before the replacement exists: two live preselections
+        // would be two selections racing into one model.
+        preselection?.cancel()
+        let one = UITestPreselection(send: send, upload: upload, session: session)
+        preselection = one
+        one.start()
     }
 
     /// Whether this launch should start with an empty `Received` folder.
@@ -330,6 +466,15 @@ enum UITestMode {
     /// In Release the whole idea is absent: the optimiser folds this to an
     /// empty call, and no argument can reach the container.
     static func stagePendingFixture() {}
+
+    /// Likewise absent, and absent in the strongest sense this file has: the
+    /// shipped half does not merely fold the seam to false, it contains no call
+    /// into the send model's selection callback at all — so no shipped code
+    /// path can put a selection in front of somebody who did not make one.
+    @MainActor
+    static func preselectPendingFixture(into send: SendSelectionModel,
+                                        upload: CloudUploadModel,
+                                        session: AccountSession) {}
 
     /// Likewise absent. A shipped launch has no argument that deletes anything
     /// a user has received, and this folds to an empty call.

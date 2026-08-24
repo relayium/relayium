@@ -21,9 +21,63 @@ commit. The version describes what users receive, not how many development
 iterations produced it.
 
 Beginning with the release after 1.1, use the same three-part value for
-`CFBundleShortVersionString`, the workflow's `release_version`, Sparkle metadata,
-public download metadata, and the immutable GitHub tag
-`macos-v<MAJOR.MINOR.PATCH>`.
+`CFBundleShortVersionString`, the `release_version` input of
+`.github/workflows/macos-release.yml`, Sparkle metadata, public download
+metadata, and the immutable GitHub tag `macos-v<MAJOR.MINOR.PATCH>`.
+
+## How a release is started
+
+Dispatch **`.github/workflows/macos-release.yml`**. It is the only entry point
+for macOS notarization, public-metadata staging and publication, and it is
+manual-only: it has no `push` and no `pull_request` trigger.
+
+`.github/workflows/macos.yml` is the CI half. It runs on every push to `main` and
+every pull request, and it is **not** dispatchable — it has no manual trigger at
+all. Do not look for the release inputs there; they moved.
+
+The release workflow's five inputs are the ones that used to live on `macos.yml`,
+unchanged in name, type, default and description:
+
+| Input | Type | Default | What it does |
+| --- | --- | --- | --- |
+| `notarize` | boolean | `false` | submit the signed DMG to Apple, staple it, assess it |
+| `validate_notary_credentials` | boolean | `false` | authenticate to Apple without submitting |
+| `validate_sparkle_key` | boolean | `false` | prove the update key matches the app |
+| `release_version` | string | `''` | stage immutable public-release metadata for this version |
+| `publish_release` | boolean | `false` | publish the GitHub Release and deliver metadata to `main` |
+
+**With every input left at its default the workflow builds and stops.** Both
+release stages require a dispatch *and* a non-default input, so a run started to
+get a signed build cannot notarize or publish. That is asserted in
+`scripts/test/ci-event-policy-test.mjs`, not merely intended.
+
+### The CI / release boundary
+
+The two workflows are one pipeline: `macos-release.yml`'s `build` job **calls**
+`macos.yml` as a reusable workflow, so what gets notarized is built by the same
+`signed-build` lane every pull request already runs. There is no second build
+definition to keep in step.
+
+The split is a permission and capability boundary, and it is enforced:
+
+* `macos.yml` holds `contents: read` and no job-level permission block. It
+  contains no notary key, no Sparkle private key, no `GITHUB_TOKEN`, no
+  `gh release`, no `git push` and no `contents: write`. It cannot publish because
+  it contains nothing that publishes.
+* `macos-release.yml` holds `contents: read` at the top; its `publish` job is the
+  only job in either workflow that declares `contents: write`.
+* The call forwards exactly four secrets — the signing certificate, its password
+  and the two provisioning profiles — one line each. It never uses
+  `secrets: inherit`. The notary key and the Sparkle private key are referenced
+  only inside `notarize-stage`.
+* `notarize-stage` downloads the artifact **by the name the build reported**, and
+  its first step fails if that name is empty. A skipped build contributes an empty
+  output, so the guard is what turns "nothing was built" into a clear failure
+  instead of a confusing missing-artifact error.
+
+An operator does not need to interact with `macos.yml` for a release. If a
+release needs something that only `macos.yml` can do, the change belongs in the
+call's inputs — not in a manual trigger restored to the CI half.
 
 ## Build numbers
 
@@ -93,8 +147,14 @@ Mac App Store build must not contain the direct channel's Sparkle updater.
 
 macOS, iOS, CLI, and server versions are independent release trains. A macOS
 release does not change the iOS version and does not compile, package, tag, or
-publish iOS unless the owner explicitly authorizes a separate iOS task. Manual
-macOS publication keeps the iOS job skipped.
+publish iOS unless the owner explicitly authorizes a separate iOS task. A macOS
+release dispatch starts `macos-release.yml` and the `macos.yml` lane it calls,
+and nothing else: `ios.yml` is a separate file with its own path filter, so no
+arrangement of jobs here can start it.
+
+`docs/CI-PLATFORM-BOUNDARY.md` holds the repository-wide version of this rule,
+including why the macOS CI and release halves are two files and what
+`scripts/test/ci-event-policy-test.mjs` asserts about the seam.
 
 ## Recovery
 

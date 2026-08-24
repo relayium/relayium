@@ -11,13 +11,14 @@ enforcement, and where the two disagree the test is right — see
 
 A **platform root** is one directory under `apps/` holding one platform's app
 source. Every root has exactly **one heavy owner**: the single workflow that
-builds, tests, signs and releases it.
+builds, tests and signs it. For macOS, *releasing* it is a second workflow — see
+[the macOS CI/release seam](#the-macos-cirelease-seam).
 
 | Root                | Heavy owner            | Runner     |
 | ------------------- | ---------------------- | ---------- |
 | `apps/mac/`         | `.github/workflows/macos.yml` | `macos-15` |
 | `apps/ios/`         | `.github/workflows/ios.yml`   | `macos-15` |
-| `apps/RelayiumKit/` | *shared — see below*   | —          |
+| `apps/RelayiumKit/` | *shared — see [below](#the-shared-swift-package-source-tests-and-fixtures)* | `macos-15` for its own suite |
 
 Path filters in GitHub Actions are per-**workflow**, never per-job. No
 arrangement of jobs, `if:` conditions or matrices inside one file can make two
@@ -39,6 +40,67 @@ below is stated as a property of filters rather than of jobs.
    "The workflow is about that platform" is not the test; `apps/mac/` fails it
    for the pairing acceptance, which speaks for the macOS app without reading a
    file from it. See [native-web-pairing](#the-one-cross-client-exception).
+4. Heavy ownership is about *building*, not about *releasing*. A root may have a
+   separate release workflow, and macOS does; the heavy owner stays the workflow
+   the path filter starts.
+
+### The macOS CI/release seam
+
+`apps/mac/`'s heavy owner is `macos.yml`, and its **release** entry point is
+`macos-release.yml`. The two are one pipeline joined by `workflow_call`, not two
+pipelines that resemble each other:
+
+| | `macos.yml` | `macos-release.yml` |
+| --- | --- | --- |
+| Triggers | `push` (main), `workflow_call` | `workflow_dispatch` only |
+| Started by | a `main` push under its filter, `merge-gate.yml`, or `macos-release.yml` | a person |
+| Jobs | `contract`, `test`, `ui-smoke`, `signed-build` | `build` (the call), `notarize-stage`, `publish` |
+| Permissions | `contents: read`, no job-level block | `contents: read`; `publish` alone declares `contents: write` |
+| Secrets | signing certificate and two provisioning profiles | those four are *forwarded* to the call; the notary key and Sparkle private key stay in `notarize-stage` |
+| Concurrency prefix | literal `macos-ci` | literal `macos-release` |
+
+**Why it is a file split, again.** It used to be one file. `macos.yml` ran on
+every push and pull request *and* held `contents: write`, a `gh release create`,
+a `git push origin …:main`, an Apple notary API key and the Sparkle private
+signing key. What stood between an ordinary pull request and an immutable public
+release was a job-level `if:` — correct, and one edit away from not being there.
+The split replaces that condition with a structure: `macos.yml` cannot publish
+because it contains nothing that publishes.
+
+**The release builds through CI, not beside it.** `macos-release.yml`'s `build`
+job is `uses: ./.github/workflows/macos.yml`. The bytes that get notarized come
+out of the same `signed-build` lane every pull request already runs — one build
+definition, one signing path, one provenance record.
+
+**Three details that are load-bearing rather than stylistic:**
+
+* The call forwards its four secrets **one line each**, never `secrets:
+  inherit`. `inherit` would hand the CI half every secret this repository holds —
+  the notary key and the Sparkle private key included — invisibly, and would keep
+  doing so as secrets are added.
+* `signed-build` emits the artifact name it used as a job output, and the
+  release workflow **downloads by that value**. Re-deriving the name in the
+  second file is a second copy of one expression, and the first rename makes the
+  download look for something the run never uploaded. The workflow output uses
+  bracket syntax — `jobs['signed-build']` — because a hyphen in a property path
+  parses as subtraction and the dotted spelling evaluates to the empty string.
+* `notarize-stage`'s first step **fails when that output is empty**. A skipped
+  job satisfies `needs:` and contributes empty outputs, so a skipped
+  `signed-build` (a fork pull request) or a dotted output expression would
+  otherwise reach the download as an artifact named `""`.
+
+**The caller job carries no `timeout-minutes`.** GitHub rejects a workflow whose
+`uses:` job declares one. That is not an unbounded job: every job the call starts
+is budgeted inside `macos.yml`, and `ci-event-policy-test.mjs` exempts caller jobs
+explicitly rather than by silence — a job declared a caller must have a `uses:`,
+and a `uses:` job must be declared a caller.
+
+Section 6m of `ci-event-policy-test.mjs` asserts all of it — exact input, secret,
+output, job, permission and `needs` sets on both files; the guard and its
+position; that no release operation is reachable with every input at its default;
+and that the two release jobs' runner budgets moved *with* them rather than being
+dropped. `scripts/test/macos-publish-order-test.mjs` reads the publish job in its
+new home and separately asserts that neither release job is *also* in `macos.yml`.
 
 ## Apple-shared vs truly cross-platform
 
@@ -62,13 +124,317 @@ as cross-platform — adding it to every platform's filter — and the expensive
 is to treat a cross-platform contract as one platform's business, which is how a
 new client ships against a wire nobody re-checked.
 
+## The shared Swift package: source, tests and fixtures
+
+`apps/RelayiumKit/` is one directory and **three different kinds of input**, and
+treating it as one tree cost three macOS runners on every test-only commit.
+
+| Part | Who compiles or reads it |
+| ---- | ------------------------ |
+| `Sources/**`, `Package.swift`, `Package.resolved` | both app targets, the pairing acceptance's `LocalTransferPeer`, and the package's own suite |
+| `Tests/RelayiumKitTests/**` | the package's own suite, and nothing else |
+| `Tests/Fixtures/**` | the package's own suite, plus **named** Go and Web tests |
+
+`xcodebuild` compiles the package's **library products**, never its test target.
+No release script under `apps/mac/scripts/` opens a file in it. `swift build
+--product LocalTransferPeer` — all the pairing acceptance builds of the package —
+does not build it either. So a file under `Tests/` is an input to exactly one
+thing: `swift test`.
+
+Until `swift-package.yml` existed, the repository's only unfiltered `swift test`
+lived in `macos.yml`'s `test` job. That made the package's suite reachable *only*
+by starting the macOS workflow, which made the package's tests something the
+macOS filter had to name — and `ios.yml` and `native-web-pairing.yml` carried the
+same tree for the same reason. Adding one XCTest case started two full
+`xcodebuild` graphs, a simulator UI smoke, three acceptance runs and a 45-minute
+Swift + Go + Chrome pairing runner, and **not one of them could observe the
+change.**
+
+### Ownership matrix
+
+| Change | Starts (path-filtered workflows) |
+| ------ | -------------------------------- |
+| `Sources/**`, `Package.swift`, `Package.resolved` | `swift-package.yml`, `macos.yml`, `ios.yml`, `native-web-pairing.yml` |
+| `Tests/RelayiumKitTests/**` (any test, guards included) | `swift-package.yml` |
+| `Tests/Fixtures/device-inbox-manifest-v3-vectors.json` | `swift-package.yml`, `go.yml`, `web.yml` |
+| `Tests/Fixtures/crypto-vectors.json` | `swift-package.yml`, `web.yml` |
+| `Tests/Fixtures/realtime-wire-vectors.json` | `swift-package.yml`, `web.yml` |
+| `Tests/Fixtures/store-wire-vectors.json`, `Tests/Fixtures/account/**` | `swift-package.yml` |
+
+`compat.yml` and `repo-hygiene.yml` are unfiltered and run on **every** row
+above, and on everything else. They are omitted for that reason, not because
+they are optional.
+
+`swift-package.yml` watches `apps/RelayiumKit/**` with **no exclusion** and runs
+one job: the repository's **sole unfiltered `swift test`**. `ios.yml` still runs
+five named `--filter` selectors over `apps/ios` guards — that is the *other*
+direction, an `apps/ios/**` change, which `swift-package.yml` does not watch —
+and `macos.yml` runs no `swift test` at all any more. The uniqueness is asserted
+both structurally over the parsed workflows and as a text scan over every
+workflow file on disk, because a workflow the policy does not parse can run
+`swift test` just as well as one it does.
+
+### The ordered negation, and why order is load-bearing
+
+`macos.yml`, `ios.yml` and `native-web-pairing.yml` each keep
+`apps/RelayiumKit/**` and follow it with:
+
+```yaml
+      - 'apps/RelayiumKit/**'
+      - '!apps/RelayiumKit/Tests/**'
+```
+
+GitHub evaluates a `paths:` list **against each changed file, in order, and the
+last pattern that matches decides**. A `!` entry excludes; a later positive entry
+re-includes what an earlier `!` excluded; a file no pattern matches does not
+match at all. Three consequences, each enforced rather than remembered:
+
+* **Swapping the two lines silently undoes the exclusion** — the negation matches
+  first and the positive immediately overrides it. Valid YAML, happy
+  `actionlint`, and a diff that reads as a reordering.
+* **A filter of nothing but `!` entries matches no file at all**, so its workflow
+  never runs — which reports as *no check*, not as a red one. Every filtered
+  workflow must carry at least one positive pattern.
+* **A negation that is present, correctly ordered and simply wrong** — narrowed
+  to `!…/Tests/Fixtures/**`, or pointing at a renamed directory — passes every
+  literal list check. So the filters are compiled to regular expressions and
+  evaluated against real file paths, in both directions: an ordinary test must
+  reach no heavy lane, and the package's *source* must still reach all of them.
+
+### Mixed diffs still start everything
+
+A commit touching package **source and** package tests starts every heavy lane,
+because the source file is still a positive match and **one matching file is
+enough to start a workflow**. The isolation is about test-**only** and
+fixture-**only** changes; it never makes a real source change cheaper to merge.
+Three mixed diffs are asserted explicitly so a future "further optimisation"
+cannot quietly turn it into a source-change skip:
+
+| Diff | Starts |
+| ---- | ------ |
+| `Sources/…/SealedBox.swift` + `Tests/…/SealedBoxTests.swift` | `swift-package.yml`, `macos.yml`, `ios.yml`, `native-web-pairing.yml` |
+| `Tests/…/InboxManifestTests.swift` + `Tests/Fixtures/device-inbox-manifest-v3-vectors.json` | `swift-package.yml`, `go.yml`, `web.yml` |
+| `apps/mac/…/AccountView.swift` + `Tests/…/AeadTests.swift` | `macos.yml`, `swift-package.yml` |
+
+### Why the pairing acceptance excludes the fixtures too
+
+`native-web-pairing.yml`'s exclusion is `!apps/RelayiumKit/Tests/**`, and it does
+**not** re-include `Tests/Fixtures/` below it.
+
+The acceptance is the **live** half of the cross-client contract: it starts a
+real server, mints a real pairing code through `/api/pair`, and drives a Swift
+peer and a real headless Chrome against each other in both role assignments. It
+reads no vector file, so a fixture edit cannot change its outcome — it would only
+buy a 45-minute macOS runner for evidence the run cannot produce.
+
+The **frozen-bytes** half of that same contract has its own owners, none of them
+a macOS runner: `compat.yml` regenerates the vectors from the Web implementation
+and requires zero diff, unfiltered, on every commit; and the Swift, Go and
+TypeScript suites read the tracked bytes in their own lanes. Live agreement and
+frozen agreement are separate evidence with separate owners, and collapsing them
+into one filter is what put a seconds-long check behind a macOS runner before.
+
+Re-inclusion is rejected explicitly rather than left to taste:
+`apps/RelayiumKit/Tests/**`, `…/Tests/Fixtures/**`, `…/Tests/Fixtures/*` and
+`…/Tests/Fixtures/*.json` are each named as forbidden entries in every filtered
+workflow but the package's own.
+
+### Why `go.yml` and `web.yml` name exact fixture paths
+
+The fixtures live inside the subtree three heavy workflows exclude — and they are
+genuine inputs to tests in **other languages**, which run in workflows that are
+not macOS lanes. Those workflows name the individual files:
+
+| Fixture | Read by | Named in |
+| ------- | ------- | -------- |
+| `device-inbox-manifest-v3-vectors.json` | `server/internal/inboxmanifest/vectors_test.go` | `go.yml` |
+| `device-inbox-manifest-v3-vectors.json` | `web/src/lib/inbox-manifest.test.ts` | `web.yml` |
+| `crypto-vectors.json` | `web/src/lib/caps-vectors.test.ts`, `web/src/lib/text-vectors.test.ts` | `web.yml` |
+| `realtime-wire-vectors.json` | the same two Web suites | `web.yml` |
+
+Each of those tests opens the file from disk and asserts its own implementation
+still agrees with the frozen bytes, so the fixture is an input to that suite
+exactly like a source file. Without the entry, a regenerated vector lands having
+never run the Go or TypeScript half of the contract, and the failure surfaces
+later against an innocent commit that happened to touch `server/**` or `web/**`.
+
+**One path at a time, never the directory.** `store-wire-vectors.json` sits in
+that same directory and is deliberately absent from both filters: its only
+non-Swift consumer is `web/scripts/check-wire-vectors.mjs`, which runs in the
+**unfiltered** `compat.yml` — and a workflow with no path filter cannot be made
+to miss a file. Naming the directory would start the eight-shard Go race lane, or
+the full web suite plus the accessibility scan and three headless-Chrome
+journeys, on every Swift test edit.
+
+The claim that these files are inputs is not taken on trust either. The policy
+**reads the consuming source** and requires it to still name the fixture, so a
+test that quietly stops reading its vector shows up as a filter charging a full
+suite for a file nobody opens — the direction that decays without anyone editing
+a workflow.
+
+### The `contracts/` tree
+
+`contracts/` now holds two documents:
+
+| Contract | What it freezes | Consumers |
+| -------- | --------------- | --------- |
+| [`device-inbox-admission-v1.json`](DEVICE-INBOX-ADMISSION-CONTRACT.md) | the Device Inbox admission vocabulary three implementations must agree on | Go, Web, Swift |
+| [`ops-deploy-v1.json`](OPS-DEPLOY-CONTRACT.md) | the product facts `relayium-ops`' auto-deploy path already assumes: build inputs, working directories, argv, artifacts, listener port, health surface | see [its own consumer table](OPS-DEPLOY-CONTRACT.md#consumers) — the document carries each reader's status, and this page deliberately does not restate it |
+
+Both are root-level, versioned, runtime-neutral documents that their consumers
+parse independently and compare to what they already ship. The second one's
+consumer set is a **status** list — enforcement is recorded at the state it has
+actually reached rather than at the state it is heading for — and
+`ops-deploy-contract-test.mjs` holds that list to the readers that actually run.
+Every declared consumer is `active` today, and the transitional term the roll
+once carried was retired together with the row that used it, so recording future
+enforcement means adding a status back in the same reviewed contract change. This
+page deliberately keeps no copy of it, not even a count: a restatement here is a
+page nobody edits when a phase lands, and no test reads English, so it would
+simply be wrong and stay wrong. That is how these two came to contradict each
+other once already.
+
+A contract tree is **truly cross-platform**, not Apple-shared, and it does not go
+into a heavy Apple filter merely because Swift consumes it.
+
+#### Why the consumer suites do *not* name it
+
+The rule recorded here before the tree existed was the fixture rule above: every
+workflow whose suite reads a file under it names that file in its own path
+filter. Applied literally, that would have meant `go.yml`, `web.yml` and
+`swift-package.yml` each naming the document. It was **not** adopted, and the
+cost is the whole reason:
+
+| Filter entry | What a JSON edit would then start |
+| ------------ | --------------------------------- |
+| `go.yml` | the **eight-shard** `-race` account lane, plus build, vet, suite and govulncheck |
+| `web.yml` | the full Vite suite, `npm run build`, an accessibility scan and three headless-Chrome journeys |
+| `swift-package.yml` | the whole package suite on a **paid** macOS runner — and a third filter entry, where the file's own rules require exactly two and no exclusion |
+
+The fixture rule is right for the frozen vectors: those bytes are what the Go and
+TypeScript manifest implementations are *reproduced against*, so a regenerated
+vector genuinely needs the implementation's own suite. This document is read by
+two `go test` functions, one Vitest file and one XCTest class — seconds of work —
+and the same protection is available for a fraction of the cost.
+
+#### What it starts instead
+
+A cheap lane per **document** — not per tree. Each names exactly its own contract
+and its own file, and runs the smallest commands that judge that document's
+implementations:
+
+`contracts.yml`, filtered to `contracts/device-inbox-admission-v1.json`:
+
+| Job | Runner | Command |
+| --- | ------ | ------- |
+| `go-contract` | `ubuntu-latest` | `go test ./account/ -run '^TestDeviceInboxAdmissionContract' -count=1` |
+| `web-contract` | `ubuntu-latest` | `npx vitest run src/lib/device-inbox-admission-contract.test.ts` |
+| `swift-contract` | `macos-15` | `swift test --filter 'RelayiumKitTests.DeviceInboxAdmissionContractTests'` |
+
+`ops-deploy-contract.yml`, filtered to `contracts/ops-deploy-v1.json`:
+
+| Job | Runner | Command |
+| --- | ------ | ------- |
+| `go-contract` | `ubuntu-latest` | `go test ./ -run '^TestOpsDeployContract' -count=1` |
+
+plus the two workflows that carry **no** path filter and therefore cannot be
+routed around: `compat.yml` and `repo-hygiene.yml`. A contract-only edit starts
+no macOS or iOS product build, no signing, no UI test, no native pairing
+acceptance, no Go race lane and no browser acceptance — and, since the split, no
+lane belonging to a document it did not change.
+
+**The other direction is unchanged.** The three consumer tests live inside
+`server/**`, `web/**` and `apps/RelayiumKit/**`, so an ordinary source change
+still starts its own owning suite — and that suite still executes the consumer
+test, because `go test ./...`, `npm test` and the unfiltered `swift test` all
+contain it. Neither lane substitutes for the other: the contract lane catches a
+document that stopped matching the code, the owning suites catch code that
+stopped matching the document.
+
+#### The third `swift test`, costed deliberately
+
+`swift-contract` is a third host for `swift test` and a third paid macOS runner,
+which `scripts/test/swift-ci-boundary-test.mjs` refused by name until this
+commit. It is here because the alternatives were worse in both directions:
+widening `swift-package.yml` spends the whole package suite on a document edit,
+and omitting Swift lets a contract change land with two implementations compared
+and the third not — the same "fails later against an innocent commit" shape the
+fixture entries exist to prevent.
+
+The cost is bounded where the boundary policy can see it. That file now requires
+this host's `swift test` to carry a `--filter`, to select exactly the contract
+test class, to run from the package directory, and to keep its filter out of
+`apps/RelayiumKit/**`. The repository's **sole unfiltered** `swift test` is still
+`swift-package.yml`'s, and that rule is untouched.
+
+#### Why ownership moved from the tree to the document
+
+The rule recorded here when the tree held one document was that a second would
+join `contracts.yml` with no workflow edit at all — deliberately, and it was why
+the filter was `contracts/**` rather than the file.
+
+`contracts/ops-deploy-v1.json` refuted it. That document has **no** Swift and no
+TypeScript consumer, so under the tree-wide filter every edit to it would have
+started `web-contract` (an `npm ci` for a test that does not exist for it) and
+`swift-contract` (a **paid** macOS runner and a cold SwiftPM resolve for a
+document Swift never opens) to re-run two checks that cannot see it. That is the
+same "charge a lane for a file nobody reads" shape the contract lane was created
+to avoid, pointed the other way.
+
+So each document names its own lane. What the tree-wide filter used to guarantee
+for free — that a contract file cannot exist with no owner — is now asserted
+directly: `contract-ci-policy-test.mjs` lists `contracts/` **on disk** and
+requires every file in it to be started by exactly one lane. A third contract
+added with no lane fails that rule on the commit that adds it.
+
+#### Where the rules live
+
+`scripts/test/contract-ci-policy-test.mjs` owns this tree's admission decision:
+which lane a contract-only edit starts, which lanes it must not (including the
+*other* contract's), that every file in the tree has exactly one owner, that the
+owning suites still execute the consumer tests, that each consumer still opens
+its document, and what each lane may cost — commands, working directories,
+finite timeouts, read-only permissions, the absence of secrets, and which jobs
+may hold a paid runner. It compiles each `paths:` list and evaluates it the way
+GitHub does, ordered and last-match-wins, and 31 mutations prove every rule can
+fail. `swift-ci-boundary-test.mjs` owns the Swift half;
+`ci-event-policy-test.mjs` continues to own repository-wide trigger, concurrency
+and runner-budget properties, and both contract lanes are in its governed
+inventory and its runner-budget list.
+
+#### The deploy contract's always-on half
+
+`contracts/ops-deploy-v1.json` is the first contract whose consumers are not all
+in filtered lanes, and deliberately so. Its declarative consumer,
+`scripts/test/ops-deploy-contract-test.mjs`, needs no toolchain — no Go, no
+`npm install`, no browser — so it runs in `repo-hygiene.yml`, which carries no
+path filter.
+
+That placement is the point rather than a convenience. The failure this contract
+exists to catch is a **product** change: a build input renamed, a working
+directory moved, an npm script gone, a new top-level tree the deploy would
+silently record as shipped without rebuilding anything. Filtered to the contract,
+the check would only ever run on commits that edit the contract — never on the
+commit that invalidates it.
+
+#### The next contract
+
+What a new contract owes: its own consumer tests inside the trees their suites
+already watch; a lane naming exactly that document, or an existing lane widened
+to it with the cost argued; an entry in `OWNERSHIP` in
+`contract-ci-policy-test.mjs`; registration in `ci-event-policy-test.mjs`'s
+governed inventory, routing table and runner budgets; and a mutation proving each
+of those can fail. Until the lane exists, the orphan rule fails — a contract that
+starts nothing is a contract nobody re-checks.
+
+
 ## Fast compatibility gates vs heavy builds
 
 Two kinds of CI work, two sets of rules:
 
 |                | Fast compatibility gate        | Heavy platform build                 |
 | -------------- | ------------------------------ | ------------------------------------ |
-| Example        | `compat.yml`                   | `macos.yml`, `ios.yml`, `native-web-pairing.yml` |
+| Example        | `compat.yml`                   | `macos.yml`, `ios.yml`, `native-web-pairing.yml`, `swift-package.yml` |
 | Runner         | `ubuntu-latest`                | `macos-15` (and any future platform runner) |
 | Path filter    | **none** — always runs         | narrow, and names its real inputs    |
 | Dependencies   | production closure only, from the lockfile | whatever the platform build needs |
@@ -140,8 +506,9 @@ no `if:`, no `continue-on-error`, no retry, no placeholder job, and the pinned
 dependency install that lets it run at all — is a property of the workflow
 **file**, and it is enforced there and asserted by
 `scripts/test/ci-event-policy-test.mjs`. It means the gate *starts* on every pull
-request and every `main` push and *reports red* when the cross-language contract
-breaks.
+request — through `merge-gate.yml`, which calls it with no condition and is now
+its only pull-request entry point — and on every `main` push, and *reports red*
+when the cross-language contract breaks.
 
 By itself that does not make a red result **block** a merge. That is a GitHub
 **branch protection** rule on `main`; it lives in repository settings rather than
@@ -155,15 +522,25 @@ compat / wire-vectors
 
 — the workflow's `name:` and the job key, joined the way GitHub renders a check.
 
-**That context is now required on `main`.** As of **2026-08-21**, after PR #6
-merged as `24a29ec6`, `main` protection is enabled and was verified by re-reading
-the settings after the write: **strict** required status checks, **exactly one
-required context**, bound to GitHub Actions **`app_id` 15368**; `enforce_admins`
-false; force pushes and deletions disabled; no required reviews; no push
-restrictions. The API reports the context as `wire-vectors` while the merge box
-renders `compat / wire-vectors` — a **rendering difference, not a substituted
-check**. The `app_id` binding is what stops a differently-owned check with the
-same job name from satisfying the rule.
+**That context is no longer what `main` requires, and that is the end state
+rather than a gap.** It was: as of **2026-08-21**, after PR #6 merged as
+`24a29ec6`, `main` protection was enabled and verified by re-reading the settings
+after the write — **strict** required status checks, **exactly one required
+context**, bound to GitHub Actions **`app_id` 15368**; `enforce_admins` false;
+force pushes and deletions disabled; no required reviews; no push restrictions.
+The API reported the context as `wire-vectors` while the merge box rendered
+`compat / wire-vectors` — a **rendering difference, not a substituted check**.
+
+Protection edit A then added `merge-gate` beside it, and **protection edit B
+narrowed the set to `merge-gate` alone**, read back after the write as
+`strict: true` with that one context. So `compat / wire-vectors` reaches the
+merge button through the aggregate's verdict on its `compat` lane rather than on
+its own, and the bare `wire-vectors` is no longer branch-required at all. It has
+**not** stopped mattering: it is the check run `compat.yml`'s permanent
+`push: main` trigger puts on a `main` commit, and `relayium-ops`'
+`deploy/promote.sh` refuses to promote without one. The `app_id` binding still
+stops a differently-owned check with the same job name from satisfying a
+requirement.
 
 **What `app_id` covers, and what covers the rest.** The binding answers exactly
 one substitution: a **differently owned** check — another GitHub App, or an
@@ -194,16 +571,375 @@ about the other, and the assertion is about the **name** — it is not evidence
 that the context is required, which remains a settings property recorded in the
 paragraph above.
 
-So `compat.yml` **may** now be described as merge-required, because it is. Any
-statement in this repository or its history that calls it an outstanding
-operational requirement is **stale and superseded**.
+So `compat.yml` **may** now be described as merge-required, because it is —
+through `merge-gate`, which is the sole required context and judges the `compat`
+lane's result. Any statement in this repository or its history that calls it an
+outstanding operational requirement is **stale and superseded**.
 
-**One piece of evidence is still missing, and is deliberately not claimed:** the
-enforcement is verified by **settings read-back only**. No real pull request has
-yet been observed showing the check as required in its merge box, and **no merge
-has been observed blocked while the check is red**. That observation is tracked
-as an open item (`docs/ARCHITECTURE-RESILIENCE.md` §9, P1) and should be closed
-on the next real pull request rather than assumed from the settings.
+**That gap is now closed, and by an observation rather than a derivation.** It
+used to say enforcement was verified by settings read-back only, with no merge
+ever seen blocked while a required check was red. A never-merged red probe —
+PR #38, exact head `33e4e3b5969ef2c630d8170ee0e84248e8faa6fb`, run
+`32660811500` — introduced one deterministic invalid value in
+`contracts/ops-deploy-v1.json`, which selected the `ops-contract` lane and took
+`ops-contract / go-contract` and the required `merge-gate` **red** while the
+other seven conditional lanes skipped and every `repo-hygiene` job and the
+required `wire-vectors` stayed green. GitHub reported
+`mergeStateStatus: BLOCKED`. The probe was then closed unmerged
+(`mergedAt: null`) and its branch and worktree deleted. Any statement that no
+merge has been observed blocked is **stale and superseded**.
+
+**And it has since been observed a second time, under the protection that
+actually ships.** PR #38 ran while protection edit A still required *two*
+contexts, so it could not separate the aggregate's authority from the bare
+`wire-vectors` requirement. A second never-merged red probe — PR #41, exact head
+`cedec269c3d6d3d34f69e058bf89815a553fe405`, aggregate run `32670589874`,
+conclusion `failure` — repeated it with `merge-gate` as the **sole** required
+context. One deterministic invalid health `successBody` value selected the
+`ops-contract` lane; `ops-contract / go-contract`, `repo-hygiene /
+ops-deploy-contract-policy` and the top-level `merge-gate` went red, while
+`compat / wire-vectors` and every other applicable `repo-hygiene` job stayed
+green and the `web`, `go`, `macos`, `ios`, `swift-package`,
+`native-web-pairing` and `contracts` lanes skipped. GitHub reported
+`mergeStateStatus: BLOCKED` while protection read back `strict: true` with the
+sole context `merge-gate`. The probe was closed unmerged (`mergedAt: null`) and
+its refs and worktree deleted.
+
+The second red is not noise: `repo-hygiene / ops-deploy-contract-policy` is the
+always-on **declarative** consumer of the same contract, and it rejected the same
+value the filtered Go lane rejected. Two independent readers failing on one
+injected defect is the designed behaviour of the [always-on
+half](#the-deploy-contracts-always-on-half), not an unrelated failure.
+
+**And `merge-gate` is now the only required context.** Protection edit A was
+made and read back as `strict: true` with **exactly `wire-vectors` and
+`merge-gate`**; protection edit B was then made and read back as `strict: true`
+with **exactly `merge-gate`**. That two-step order is what made the compat
+migration below safe: at no point was a required context reported by nothing.
+Any statement that `merge-gate` is required by nothing is stale; so is
+`wire-vectors` being the sole requirement, and so is the two-context set.
+
+### The aggregate merge gate
+
+`.github/workflows/merge-gate.yml` is the answer to the problem this page used
+to record as open. A path-filtered lane that does not trigger emits **no check
+run at all** — not a skipped one, not a neutral one — so branch protection cannot
+tell "this lane passed" from "this lane was legitimately not selected" from "this
+lane never ran". Requiring a filtered context directly would wedge every pull
+request that legitimately does not select it; requiring none of them is the state
+that let PR #22 merge over a failed Device Inbox job and an in-progress iOS job.
+
+The gate is unfiltered, runs on `pull_request` only, calls each lane as a
+**reusable workflow**, and reports one top-level job — `merge-gate` — that is
+always present and judges what the lanes actually did.
+
+| | |
+|---|---|
+| Conditional lanes | `web`, `go`, `macos`, `ios`, `swift-package`, `native-web-pairing`, `contracts`, `ops-contract` |
+| Unconditional lanes | `repo-hygiene` (no `if:`; it hosts the guards every change must pass) and `compat` (no `if:` and no `paths:` filter either; it hosts the wire-compatibility contract every platform must pass) |
+| Called *and* still directly triggered | none. `compat` was the only one, for one migration step, and its direct `pull_request:` came out once protection stopped requiring the bare `wire-vectors`. See the staged migration below |
+| Never called | `release.yml`, `auto-release.yml`, `account-race-nightly.yml`, `go-fuzz-nightly.yml`, `macos-release.yml` |
+
+**Which lanes a change selects is read from the lanes' own `push.paths`, and
+from nothing else.** `scripts/ci/select-lanes.mjs` compiles those filters the way
+GitHub does — ordered, last match wins — against the pull request's cumulative
+file list. There is deliberately **no** second declaration of the lane paths: a
+`.github/ci-lanes.json` would be a drift surface whose equivalence test is harder
+to get right than the selector.
+
+The change set comes from the **pull request files API**, not from local git, and
+that is canonical rather than convenient. GitHub evaluates `pull_request` path
+filters against the whole pull request's three-dot diff, not the newest commit,
+and `pulls/{n}/files` returns exactly that set. It also reports
+`previous_filename`: a rename out of `web/` must still run `web`, and
+`git diff --name-only` with default rename detection reports only the new path.
+**Under-selection is the single failure mode that produces a green gate over
+untested code**, so every uncertainty resolves the other way — the selector
+selects **every** conditional lane when the API fails, when `changed_files` is at
+or above GitHub's 3000-file cap, when the response is malformed or short, when a
+lane workflow is missing or its filter unreadable, when a filter entry is not one
+of the four permitted pattern shapes, or when the change touches a **control
+file** (`merge-gate.yml`, `select-lanes.mjs`, or the shared path-selection
+fixture). A pull request that edits the gate therefore buys a full macOS run.
+That is the honest price and it is deliberate.
+
+**The rule the aggregate enforces is two-way, not a whitelist.** A plain
+`success|skipped` whitelist passes a lane that *was* selected and then got
+skipped by a broken `if:` — the exact fail-open shape this gate exists to close.
+So: `select` must have succeeded; the key set of `needs` must equal a hardcoded
+roster **compared in both directions**; every unconditional lane must be
+`success`; and for every conditional lane, `selected` implies `success` **and**
+not-selected implies `skipped`. Anything else, including a lane that ran without
+being selected, is red. The step prints a lane/selected/result table before
+failing, so a red gate names the lane without opening the run.
+
+**Two implementations, one oracle.** `scripts/test/ci-event-policy-test.mjs`
+reads the same filters with a general YAML parser and a character-walking glob
+compiler; the selector carries a narrow `on.push.paths` extractor and a
+split-on-stars compiler. Both are judged against the 28 rows in
+`scripts/test/fixtures/ci-path-selection.mjs`, so emptying a lane's `push.paths`
+fails in both files from one edit. `scripts/test/ci-lane-selector-test.mjs` also
+asserts the three-way closure that stops a new lane from being added and silently
+left ungated: every lane the selector names is `uses:`d by the gate **and** listed
+in the aggregate's `needs:`.
+
+**Every lane keeps its `push: branches: [main]` trigger, permanently.** Only
+`pull_request:` moved. This is load-bearing beyond tidiness and the reasoning
+lives in a **different repository**: `relayium-ops`' `deploy/promote.sh` refuses
+to promote a `main` commit that has no green check run named `wire-vectors` **on
+that commit**, and `merge-gate.yml` runs on `pull_request` only. A future "finish
+the job, route everything through the gate" cleanup that dropped a lane's
+`push: main` would leave `main` commits with no check run and wedge every
+production promotion with `required check absent`, mid-incident — a
+false-negative gate, which this workspace's ledger ranks as an outage because it
+manufactures pressure to bypass the control. `ci-event-policy-test.mjs` §1
+asserts the rule so the next reader does not have to know the other repository.
+
+**Concurrency: literal prefixes, never `${{ github.workflow }}`.** Inside a
+called workflow that expression is the **caller's** name, so every lane the gate
+calls would land in one group under one `github.run_id` — and with
+`cancel-in-progress` true on a pull request they would actively cancel each
+other, leaving the aggregate to judge cancelled runs. Each converted lane
+therefore carries a literal prefix nothing else uses (`web-lane`, `go-lane`,
+`macos-ci`, `ios-lane`, `swift-package-lane`, `native-web-pairing-lane`,
+`contracts-lane`, `ops-deploy-contract-lane`, `repo-hygiene-lane`,
+`merge-gate`), and §2 asserts both the literals and that no two files resolve to
+the same one.
+
+**`compat.yml` carries an ordinary literal, `compat-lane`, and briefly needed
+more than one.** For one migration step it was the only workflow here a single
+pull request started through **two** entry points — directly, and as the gate's
+`compat` lane — and both runs saw the *same*
+`github.event.pull_request.number`, because inside a called workflow the event
+context is the caller's. A bare `compat-` prefix put them in **one** group, and
+with `cancel-in-progress` true the second to start would **cancel** the first. A
+cancelled run reports `cancelled`, not red, so it failed silently in both
+directions: either the direct run died and the then-required bare `wire-vectors`
+context stopped reporting at all — an *absent* required check, which blocks every
+pull request and names no cause — or the called run died and the aggregate
+reported red over a `cancelled` lane that had nothing to do with the change set.
+The fix was a `compat-${{ inputs.concurrency_scope || 'direct' }}` stem: an
+optional `workflow_call` string input defaulting to `merge-gate`, read by
+`concurrency.group` and by nothing else.
+
+**Both are gone with the second entry point.** The group is now
+`compat-lane-<suffix>` — a literal like every other called lane's, distinct from
+`merge-gate` and from each of them, and `compat.yml` declares **no
+`workflow_call` inputs at all**. The collision cannot recur while the trigger
+shape holds: the only run keyed by a pull request number is the **called** one,
+and `push` and `workflow_dispatch` key on `github.run_id`, which is unique per
+run. A discriminator with one entry point left to discriminate would be an input
+on the always-on compatibility gate and nothing else — the widest behaviour
+switch it is possible to add here, because no change in this repository can route
+around this file.
+
+`ci-event-policy-test.mjs` §6o asserts what that leaves: that `workflow_call`
+declares **no** inputs under any name, that no job reads `inputs.` anything, that
+the group starts with the literal `compat-lane-` prefix, that it reads no
+`inputs.` term, and that its prefix differs from `merge-gate.yml`'s — with a
+mutation for each, alongside §1's mutations for the direct `pull_request:`
+returning and for `workflow_call`, `push: main` or `workflow_dispatch`
+disappearing.
+
+**Secrets are forwarded one line at a time, never `inherit`.** `macos` is the
+only caller given any, and only the four signing and provisioning secrets its own
+jobs already use — and `macos` is a *conditional* lane. Every other caller,
+**including both unconditional ones**, must declare no `secrets:` key at all;
+that half of the rule now has its own assertion and its own mutations, because
+`compat` and `repo-hygiene` run on every pull request including a fork's and
+were previously the only callers a secret could have been added to without a
+check complaining. `inherit` would hand the certificate and the profiles — and
+everything added later — to lanes that read no secret today.
+
+#### The staged protection migration, and where it currently stands
+
+The invariant held at every step is that **every required context is one that
+always appears**.
+
+| # | Action | Required contexts after | Status |
+|---|---|---|---|
+| 1 | Merge the gate. It reports; nothing requires it. | `{wire-vectors}` | **done — PR #36 merged 2026-08-23 as `55e38d3f`** |
+| 2 | Observe `merge-gate` green on an ordinary pull request. | `{wire-vectors}` | **done — PR #37, head `c1aae73f`, aggregate run `32660352957` green with all eight conditional lanes skipped** |
+| 3 | Protection edit A: `contexts: ["wire-vectors","merge-gate"]`. | `{wire-vectors, merge-gate}` | **done — written and read back as `strict: true` with exactly those two contexts** |
+| 4 | Observe a red gate actually blocking (`mergeStateStatus: BLOCKED`). | unchanged | **done — never-merged red probe PR #38, head `33e4e3b5`, run `32660811500`; closed unmerged** |
+| 5 | Fold `compat.yml` in as an unconditional lane, **keeping** its own `pull_request:` and its `push: main`. | unchanged | **done — PR #39, head `9d6ba08c`, aggregate run `32665499037` green 45/45 with no cancellation; direct compat run `32665498867` and the called `compat / wire-vectors` both passed. Merged as `2f072638`** |
+| 6 | Protection edit B: `contexts: ["merge-gate"]`. | `{merge-gate}` | **done — written and read back as `strict: true` with exactly `merge-gate`** |
+| 7 | Remove `pull_request:` from `compat.yml`. `push: main` stays, permanently. | `{merge-gate}` | **done — PR #40, head `6c4b8e3d`, sole `merge-gate` run `32668325620` green 45/45 with no failure and no cancellation, and **no** separate direct compat run. Merged as `91768dc0`** |
+| 8 | Observe a red gate blocking under the **sole** required context. | `{merge-gate}` | **done — never-merged red probe PR #41, head `cedec269`, run `32670589874` red; `mergeStateStatus: BLOCKED`; closed unmerged** |
+
+**The migration is finished. Steps 1–8 are all done, and this table is now a
+record rather than a plan.** The delivered permanent shape is: protection
+`strict: true` with the sole required context `merge-gate`; `compat` with **no**
+direct pull-request entry, called unconditionally by the gate; every lane
+keeping its `push: branches: [main]` trigger forever, which is what leaves the
+bare `wire-vectors` check run on `main` intact for `relayium-ops`' promotion.
+
+**Step 1 is done, and exactly what its run does and does not prove.** The gate
+described above is merged behaviour, not a proposal: PR #36 landed as
+`55e38d3f`, and its exact head `963a9348` produced aggregate run
+`32658307007` with **44 of 44 jobs successful**, the top-level `merge-gate` job
+among them. The separate `compat` run `32658306913` on the same head also
+passed, which was the then-still-required bare `wire-vectors` context reporting
+independently of the gate. All eight conditional lanes ran alongside
+`repo-hygiene` — not because the diff happened to touch all of them, but because
+a pull request editing `merge-gate.yml`, `select-lanes.mjs` and the shared
+fixture is a **control-file** change and the selector fails closed to every
+lane. That is the designed behaviour, and it bounds what PR #36 is evidence of:
+it proves the `selected ⇒ success` half of the two-way rule and **nothing about**
+the `not-selected ⇒ skipped` half, which PR #37 observed separately and is
+recorded next.
+
+**Step 2 is done, and this is exactly what its run observed.** This pull request
+is documentation-only: it edits a single file under `docs/`, which selects no
+conditional lane. Its first hosted run, on the exact head
+`c1aae73fa55f3668ff41ba89a174937b41bc3313`, is `merge-gate` workflow run
+`32660352957`, **completed with conclusion `success`**. On that run all eight
+conditional jobs — `web`, `go`, `macos`, `ios`, `swift-package`,
+`native-web-pairing`, `contracts` and `ops-contract` — **completed with
+conclusion `skipped`**, all **15 `repo-hygiene` jobs completed `success`**, and
+the top-level `merge-gate` job **completed `success`**. The separate `compat`
+run `32660352805` on the same head also completed `success`, which was the
+then-still-required bare `wire-vectors` context reporting independently of the
+gate. **No product lane ran.**
+
+That is the first hosted observation of the `not-selected ⇒ skipped` half, and
+it shows the aggregate accepting that shape: a green gate whose green comes from
+skips rather than from work, on an ordinary pull request rather than the
+fail-closed control-file case. Together with PR #36's `selected ⇒ success`
+half, both directions of the two-way rule now rest on a recorded hosted run
+rather than on a derivation.
+
+**Steps 3 and 4 are done, and this is exactly what they establish.** Protection
+edit A was written and then **read back**: `main` is `strict: true` with required
+contexts exactly `wire-vectors` and `merge-gate`. Step 4 then stopped being a
+derivation from an exit status: the never-merged red probe PR #38, exact head
+`33e4e3b5969ef2c630d8170ee0e84248e8faa6fb`, changed one value in
+`contracts/ops-deploy-v1.json` — which the selector reads as selecting
+`ops-contract` and nothing else — and run `32660811500` took
+`ops-contract / go-contract` and the required `merge-gate` red while the other
+seven conditional lanes skipped and `repo-hygiene` and `wire-vectors` stayed
+green. GitHub reported `mergeStateStatus: BLOCKED`. The probe was closed
+unmerged and its refs deleted. A red gate blocking a merge is now an
+**observation**.
+
+**Step 5 is done, and this is exactly what its run observed.** `merge-gate.yml`
+calls `compat.yml` unconditionally — no `if:`, no `with:`, no `secrets:` —
+`compat` joined `repo-hygiene` in the aggregate's `needs:` and in its hardcoded
+`UNCONDITIONAL_LANES` roster, and `compat.yml` gained `workflow_call:` while
+**keeping** its `pull_request:`, its `push: branches: [main]` and its
+`workflow_dispatch:`. PR #39, exact head
+`9d6ba08c5245c9b71d031dc1870c2c87101cc94e`, produced aggregate run
+`32665499037` with **45 of 45 jobs successful and no cancellation**; the
+separate direct compat run `32665498867` and the called `compat / wire-vectors`
+lane both passed. That is the observation this section previously recorded as
+missing: the two contexts reporting side by side on one pull request, and the two
+concurrency groups staying disjoint on real infrastructure. PR #39 merged as
+`2f072638`.
+
+**Step 6 is done.** Protection edit B was written and then **read back**: `main`
+is `strict: true` with the required context **exactly `merge-gate`**. The bare
+`wire-vectors` is no longer required on a branch, which is what made step 7
+possible without ever leaving a required context reported by nothing.
+
+**Step 7 is done, and this is exactly what its run observed.** `compat.yml`'s
+direct `pull_request:` trigger is removed; `push: branches: [main]`,
+`workflow_dispatch:` and `workflow_call:` all stay, permanently. The transitional
+`concurrency_scope` input and the call-vs-direct discriminator are gone with the
+second entry point, leaving the literal `compat-lane` prefix and the
+repository-wide suffix. `merge-gate.yml` still calls the lane unconditionally and
+still requires it to succeed; only its migration comments changed. All of that is
+asserted locally by `ci-event-policy-test.mjs` (§1 for the permanent trigger
+shape, §2 for the exact group, §6n for the caller and the roster, §6o for the
+input and concurrency surface that must not come back), each with its own
+mutation, and by `ci-lane-selector-test.mjs`'s closure.
+
+PR #40, exact head `6c4b8e3d380aa9027f9834a44bb39fc3e8190aeb`, produced its sole
+`merge-gate` run `32668325620` with **45 of 45 jobs successful**, no failure and
+no cancellation. **No separate direct `compat` workflow run occurred at all**,
+and that absence is the positive result rather than a missing observation: with
+the direct `pull_request:` entry gone there is exactly one compat run per pull
+request, the called one the aggregate judges. PR #40 merged normally as
+`91768dc09af0377e2bd77d5767f30e9951cf28a4`. Any statement that compat has not
+been observed reporting exactly once per pull request is **stale and
+superseded**.
+
+**Step 8 is done, and it is the evidence the sole-context edit owed.** The red
+probe PR #38 blocked under protection edit A's *two*-context set, which cannot
+distinguish the aggregate's authority from the bare `wire-vectors`
+requirement. PR #41 repeated the probe against the shipped configuration: exact
+head `cedec269c3d6d3d34f69e058bf89815a553fe405`, aggregate run `32670589874`,
+conclusion `failure`, `mergeStateStatus: BLOCKED`, protection read back
+`strict: true` with the sole context `merge-gate`, closed unmerged with its refs
+deleted. The full lane-by-lane result is recorded
+[above](#always-run-and-fail-closed-is-one-half-the-required-status-is-the-other).
+Any statement that no second red probe has been run against the sole-`merge-gate`
+protection is **stale and superseded**.
+
+Steps 5-7 were three moves and not one for a specific reason: converting
+`compat.yml` in one shot renames its check to `compat / wire-vectors`, so the
+then-required `wire-vectors` context would have stopped appearing and every pull
+request would have sat unsatisfiable until protection was edited. Running compat
+twice for a few seconds across two merges was the price of never opening that
+window. Steps 3 and 6 are one API call each and reverse instantly; because every
+lane keeps its `push: main` trigger throughout — `compat.yml` included, which is
+why the bare `wire-vectors` check run production promotion reads is unaffected by
+any of this — `main` verification never depends on the gate and is unaffected by
+a rollback. Any protection edit must use the bare API string `merge-gate` — the
+merge box's rendering is not the context.
+
+#### What the gate cannot do, and what is deliberately deferred
+
+GitHub runs `pull_request` workflows from the **PR head**, so a pull request that
+edits `merge-gate.yml`, `select-lanes.mjs` or the shared fixture is judged by its
+own modified gate. Three one-line attacks — whitelist `failure`, set every lane
+`if: false`, make the selector return all-false — are undetectable by anything
+that also runs from the head. This is inherent to GitHub Actions and cannot be
+closed by any in-repo test.
+
+The control-file rule above stops the **accidental** version: an innocent gate
+edit runs every lane rather than none. It does nothing against a deliberate one.
+The mitigation is a small `pull_request_target` integrity workflow that runs from
+the **base** branch and fails when a pull request touches those three files
+without a maintainer-applied label. It is **deliberately deferred**: it is
+required before this repository accepts external contributions, and not required
+now, when the repository has exactly one writer. It would need its own review,
+because never checking out or executing head code is the standard
+`pull_request_target` foot-gun.
+
+Also deliberately deferred, and for stated reasons rather than by omission:
+
+- **`enforce_admins: true`** — it removes the owner's bypass, which is precisely
+  why it stays false during the migration: with no second approver it is the only
+  escape hatch if the gate wedges. Revisit once the gate has a merge-history
+  track record.
+- **CODEOWNERS and required reviews** — `require_code_owner_reviews` needs
+  `required_pull_request_reviews`, and GitHub does not let an author approve
+  their own pull request. On a single-owner repository that deadlocks every pull
+  request and the only way out is a bypass on every merge, which converts a real
+  gate into theatre. A `CODEOWNERS` file with no required-review setting is
+  inert. Revisit only when a second maintainer exists.
+- **A merge queue (`merge_group`)** — not configured, zero occurrences here. It
+  is the proper answer to the cost `strict` acquires below, and its own task.
+
+#### One cost the owner should price rather than inherit
+
+`strict: true` ("require branches up to date") used to cost 8 seconds of re-run,
+because `wire-vectors` was the only required context. **Protection edits A and B
+have been made, so that is no longer the state**: `merge-gate` is now the sole
+required context, and **every merge to `main` invalidates every open pull
+request** and forces a full re-selection — including, for any pull request touching `apps/`, a
+60-minute `signed-build` and a 75-minute `ios-build`. It compounds: because
+GitHub evaluates path filters against the cumulative three-dot diff, a pull
+request that *ever* touched `apps/ios` keeps selecting the iOS lane on every later
+push, so the invalidation is sticky per pull request rather than per commit.
+
+This is a real, now-live regression introduced by the objective rather than by
+the design, and the options are to keep `strict` and accept the cost, drop it and
+accept semantic drift between pull-request-time and post-merge state, or adopt a
+merge queue. The
+merge queue was deferred on 2026-08-20 with the revisit trigger "a sustained >=3
+concurrent merges/day"; making an expensive aggregate required under `strict` is
+arguably a second, independent trigger for that same revisit.
 
 **What belongs in the fast lane:** a check that is seconds long, needs no
 platform runner, and asserts that two independent implementations of one wire
@@ -220,11 +956,14 @@ headless Chrome on the real built bundle in another, in both role assignments.
 
 It therefore watches several trees it does not own, and every one of them is a
 real input — something the run reads, compiles or serves:
-`apps/RelayiumKit/**` (the Swift half it compiles: `swift build --product
-LocalTransferPeer`), `web/**` (the bundle it `vite build`s and serves),
+`apps/RelayiumKit/**` **minus `!apps/RelayiumKit/Tests/**`** (the Swift half it
+compiles: `swift build --product LocalTransferPeer` builds *products* and never
+the package's test target), `web/**` (the bundle it `vite build`s and serves),
 `server/**` (the real hub it starts), and the two scripts it actually sources —
 `scripts/native-web-pairing-acceptance.sh` and `scripts/lib/local-acceptance.sh`,
-named one file at a time.
+named one file at a time. The exclusion, its ordering and the fact that the
+fixtures are *not* re-included below it are covered
+[above](#why-the-pairing-acceptance-excludes-the-fixtures-too).
 
 It does **not** watch `apps/ios/**`. Nothing under that root is an input to the
 run, so an iOS-only change would start a 45-minute macOS runner that builds
@@ -249,6 +988,23 @@ somebody created it.
 ## Adding a platform: Android, Windows, anything next
 
 A platform root and the workflow that owns it are created **in the same commit**.
+
+The workflow is also split by **independent evidence class** once measured
+runtime shows a meaningful critical path. The iOS lane is the reference shape:
+unsigned compile evidence, offline UI smoke, and transfer acceptance are
+separate jobs with no `needs:` edges. Any one can fail the reusable workflow,
+but none waits for another merely to reuse a checkout or DerivedData directory.
+That deliberately spends a little duplicate setup/build work to reduce paid
+runner wall-clock latency and eliminate one 37-minute serial failure point.
+
+Future Android and Windows workflows follow the principle, not a fixed count of
+three jobs. Build, UI/device tests, end-to-end acceptance, and signing or store
+delivery should be separated when they are independently runnable and materially
+slow. Tiny steps stay together because runner startup and dependency restoration
+can cost more than the work itself. Shared protocol and wire compatibility tests
+remain in the cross-platform contract lanes rather than being copied into every
+platform workflow. Release/signing stays independent from pull-request CI and
+from every other platform's release cadence.
 
 * A root with no workflow is source nothing compiles, tests or signs. The board
   is green only because nobody asked.
@@ -316,11 +1072,11 @@ Every governed workflow uses the same rule, and
 ```yaml
 on:
   push:
-    branches: [main]          # main only
-  pull_request:
+    branches: [main]          # main only, and permanently — see below
+  workflow_call:              # the merge gate is the pull-request entry point
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  group: <literal-prefix>-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 ```
 
@@ -337,10 +1093,56 @@ concurrency:
   `cancel-in-progress: false`. Two quick merges would drop the first commit's
   verification, and `main` would show a *cancelled* check — which reads as
   "someone stopped it" rather than "this is untested".
-* **`github.workflow` is part of the key**, so `macos.yml` and `ios.yml` never
-  share a group, and a future platform's runs cannot cancel another platform's.
+* **The prefix is a literal per file**, so `ios.yml` and `web.yml` never share a
+  group and a future platform's runs cannot cancel another platform's. It used to
+  be `${{ github.workflow }}`, and that stopped being safe the day these lanes
+  became reusable callees — see below.
 
-A new platform workflow copies this block unchanged.
+A new platform workflow copies this block and gives itself a prefix nothing else
+uses.
+
+### The prefix, and why it may not be `${{ github.workflow }}`
+
+The **suffix** is repository-wide and has no exceptions. The **prefix** is a
+literal in every file the merge gate calls, plus the gate and the release
+workflow: `web-lane`, `go-lane`, `macos-ci`, `ios-lane`, `swift-package-lane`,
+`native-web-pairing-lane`, `contracts-lane`, `ops-deploy-contract-lane`,
+`repo-hygiene-lane`, `merge-gate`, `macos-release`, `compat-lane`. `compat.yml`
+briefly carried a literal **stem** plus an entry-point discriminator, because it
+was then the one file reachable through two entry points on one pull request;
+that is gone with the second entry point and it now carries a plain literal like
+every other called lane — see [above](#the-aggregate-merge-gate). Only the two
+scheduled nightlies — the workflows nothing calls — still use
+`${{ github.workflow }}`.
+
+```yaml
+# .github/workflows/macos.yml — a reusable callee
+concurrency:
+  group: macos-ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+```
+
+`macos-release.yml` calls `macos.yml` as a reusable workflow, and
+`merge-gate.yml` calls ten lanes the same way — and **inside a called workflow
+`${{ github.workflow }}` is the *caller's* name**, not the callee's. Under the
+shared expression a caller's jobs and its callee's would land in one group, keyed
+on one `github.run_id`: the callee queues behind the caller, and the caller waits
+for the callee. That is a deadlock, it is invisible to YAML validity and to
+`actionlint`, and no run that never exercised the call would show it.
+
+Worse under the gate: all ten lanes would share that one group, and with
+`cancel-in-progress` true on a pull request they would actively **cancel each
+other** — leaving the aggregate to judge cancelled runs rather than red ones.
+
+Literals nothing else uses make the groups disjoint by construction, whatever any
+file is renamed to later. `ci-event-policy-test.mjs` asserts three things
+about this and mutates each: the exact group per file; that a workflow declaring
+`on: workflow_call` does not key on `github.workflow` at all; and that no two
+governed files resolve to the same prefix — where a file using the shared
+expression resolves to its own `name:`.
+
+**Do not read `github.workflow` as safe in a reusable callee.** It is safe only
+in a workflow nobody calls, which is now just the two scheduled nightlies.
 
 ## CI architecture is executable policy, not prose
 
@@ -352,12 +1154,39 @@ is happy with all of it:
 * `continue-on-error: true` on the compatibility gate;
 * a placeholder platform workflow whose only step is `echo`;
 * the wire-vector command deleted, or duplicated into a second workflow;
-* the concurrency group moved back to `github.ref`.
+* the concurrency group moved back to `github.ref`;
+* `!apps/RelayiumKit/Tests/**` deleted, narrowed, widened until the package's own
+  source stops triggering, or **moved one line up**, where it is overridden by
+  the pattern it qualifies and does nothing;
+* a positive glob added *below* that exclusion, re-including the fixtures into a
+  45-minute macOS runner that never opens one;
+* a filter left with nothing but `!` entries, so its workflow never runs at all —
+  which reports as no check rather than as a red one;
+* the unfiltered `swift test` deleted, filtered, or duplicated back into
+  `macos.yml`;
+* one of the four named fixture entries dropped from `go.yml` or `web.yml`, or
+  the four replaced by the directory they live in;
+* a new `macos-15` job landing in a governed *or budget-only* workflow that
+  `RUNNER_BUDGETS` covers nowhere;
+* `macos.yml` regaining a `workflow_dispatch`, a `publish` job, a job-level
+  `permissions:`, a notary or Sparkle secret, or a `gh release create`;
+* the reusable call switching to `secrets: inherit`, which reads as *shorter*;
+* the `signed_artifact` output written as `jobs.signed-build.…`, which is valid
+  expression syntax that silently evaluates to the empty string;
+* the empty-artifact guard deleted, made conditional, or moved after the download
+  it guards;
+* `notarize-stage` or `publish` losing the input clause from its `if:`, so a
+  dispatch started for a signed build notarizes or publishes;
+* either macOS workflow's concurrency prefix changed to the other's, or the
+  reusable callee's group moved back to `${{ github.workflow }}` — a deadlock
+  between the caller and the callee that no run without the call would show.
 
 The next signal after any of those is a cross-client regression reaching a user,
 or a bill. So the boundary is asserted in code, on every pull request and every
-`main` push, by `scripts/test/ci-event-policy-test.mjs` (run from
-`repo-hygiene.yml`, which has no path filter of its own):
+`main` push, by two policies — `scripts/test/ci-event-policy-test.mjs` for the
+repository-wide rules (triggers, concurrency, platform roots, runner budgets) and
+`scripts/test/swift-ci-boundary-test.mjs` for who owns `apps/RelayiumKit/` — both
+run from `repo-hygiene.yml`, which has no path filter of its own:
 
 * platform roots discovered by **reading `apps/` from disk**, so a new root
   cannot be added without the policy noticing;
@@ -369,29 +1198,69 @@ or a bill. So the boundary is asserted in code, on every pull request and every
   policy check that cannot fail is the most expensive kind of green — including
   cases that assert an **absence**, so a marker appearing only in a `run:`
   block's shell comment cannot make a workflow look like a platform's owner;
-* a **self-host check**: the policy asserts that `repo-hygiene.yml` still has an
-  unfiltered, non-skippable, non-advisory job actually running
-  `node scripts/test/ci-event-policy-test.mjs`, and mutations prove that
-  deleting, softening or skipping it is reported. Everything above is worth
-  exactly what its execution is worth, and deleting one step is the cheapest way
-  to silence all of it while the board stays green.
+* a **self-host check** in each policy: it asserts that `repo-hygiene.yml` still
+  has an unfiltered, non-skippable, non-advisory job with a declared finite bound
+  actually running its own command, and mutations prove that deleting, softening
+  or skipping it is reported. Everything above is worth exactly what its
+  execution is worth, and deleting one step is the cheapest way to silence all of
+  it while the board stays green.
 
-  One gap is stated rather than asserted: `repo-hygiene.yml`'s jobs declare no
-  `timeout-minutes` and inherit GitHub's six-hour default, so the self-host check
-  does not require a declared bound. Adding `timeout-minutes: 10` to the
-  `ci-event-policy` job and the matching assertion is a one-line follow-up.
+  Not every job in `repo-hygiene.yml` declares `timeout-minutes` yet; the ones
+  hosting these two policies do, and only those are asserted.
 
 Change the boundary and you change that file in the same commit. If this document
 and the test disagree, the test is the boundary and this document is stale — fix
 the document.
 
+### What has been observed, and what has not
+
+The `swift-package.yml` split, the three ordered exclusions and the four fixture
+entries are asserted **locally**: `actionlint` accepts every workflow, the guard
+tests pass, every new rule is broken in memory by its own mutation on every run,
+eleven of them were additionally broken on disk in the real workflow files and
+each produced its own diagnostic, and `swift test` was run once from
+`apps/RelayiumKit` — 4320 tests, one skipped, no failures.
+
+**The test-only row has since been observed hosted, and is no longer a
+derivation.** The split merged as `d0ae53cb` (PR #23), and a throwaway PR #24 —
+changing exactly one file under `apps/RelayiumKit/Tests/`, never merged — started
+`compat`, `repo-hygiene` and `swift-package`, and **nothing else**: no macOS, no
+iOS, no native pairing, no Go and no Web lane. That is the observation this
+section previously said was missing, so any statement that no hosted run of
+`swift-package.yml` exists is **stale and superseded**.
+
+**The other rows are still derived rather than run.** Fixture-only changes, the
+three mixed diffs and the heavy lanes' own re-inclusion behaviour come from
+GitHub's documented last-match-wins `paths:` semantics, compiled and evaluated by
+the guard tests — not from a run log. One hosted probe of one row is evidence
+about that row; it is not evidence that every filter in the matrix behaves as
+written.
+
 ## See also
 
 * `.github/workflows/compat.yml` — the always-on gate
+* `.github/workflows/swift-package.yml` — the shared package's own suite, and the
+  sole owner of an unfiltered `swift test`
+* `scripts/test/swift-ci-boundary-test.mjs` — who owns `apps/RelayiumKit/`, in code
+* `.github/workflows/contracts.yml` — the Device Inbox admission contract's lane
+* `.github/workflows/ops-deploy-contract.yml` — the product↔ops deploy
+  contract's lane
+* `scripts/test/contract-ci-policy-test.mjs` — who owns each document in
+  `contracts/`, what an edit to it may start, and what that lane may cost, in
+  code
+* `scripts/test/ops-deploy-contract-test.mjs` — the deploy contract's closed
+  schema and its on-disk build boundary, run unfiltered on every commit
+* `docs/DEVICE-INBOX-ADMISSION-CONTRACT.md` — the first root contract itself
+* `docs/OPS-DEPLOY-CONTRACT.md` — the second, and the product half of the
+  deployment interface
 * `.github/workflows/macos.yml`, `.github/workflows/ios.yml` — the heavy owners
+* `.github/workflows/macos-release.yml` — the macOS release entry point, and the
+  only workflow here that may write to this repository
+* `scripts/test/macos-publish-order-test.mjs` — the publication order inside that
+  workflow, and the absence of its jobs from the CI half
 * `.github/workflows/native-web-pairing.yml` — the cross-client acceptance
-* `.github/workflows/repo-hygiene.yml` — the unfiltered host that runs the two
-  guards below on every pull request and every `main` push
+* `.github/workflows/repo-hygiene.yml` — the unfiltered host that runs the
+  policy guards listed here on every pull request and every `main` push
 * `scripts/test/ci-event-policy-test.mjs` — trigger, concurrency, race-lane and
   platform-boundary policy, and the self-host check on its own execution
 * `scripts/test/native-web-pairing-gate-test.mjs` — that the acceptance and the

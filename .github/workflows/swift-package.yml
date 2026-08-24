@@ -1,0 +1,158 @@
+name: swift-package
+# The shared Swift package's own test lane, and the repository's ONE unfiltered
+# `swift test`.
+#
+# ## Why this is its own workflow
+#
+# `apps/RelayiumKit/**` is Apple-shared source: `macos.yml` and `ios.yml` both
+# compile it, and `native-web-pairing.yml` builds `LocalTransferPeer` out of it.
+# Until this file existed, the unfiltered `swift test` lived in `macos.yml`'s
+# `test` job, so the ONLY way to run the shared package's own suite was to start
+# the macOS workflow — and the only way to start the macOS workflow on a package
+# change was to put `apps/RelayiumKit/**` in its filter, which also arms the
+# signing lane's `needs:` chain and the release dispatch that hangs off it.
+#
+# The consequence was paid on every test-only edit. Adding an XCTest case under
+# `apps/RelayiumKit/Tests/` — a file no product target compiles, that no
+# `xcodebuild` graph reads, and that the pairing acceptance never loads — started
+# three macOS runners: this suite inside `macos.yml`, two full `xcodebuild`
+# graphs plus a simulator UI smoke and three acceptance runs inside `ios.yml`,
+# and a 45-minute Swift+Go+Chrome pairing acceptance. None of the three could
+# observe the change, and none of them could be started independently, because
+# path filters in GitHub Actions are per-WORKFLOW and never per-job.
+#
+# So the suite moved into a file of its own. That is what lets the three heavy
+# workflows narrow their filters to the package's SOURCE — `apps/RelayiumKit/**`
+# followed by `!apps/RelayiumKit/Tests/**` — while the package's tests keep
+# running on every change to the package, here, on one runner.
+#
+# ## What this file is the sole owner of
+#
+# The unfiltered `swift test`. `ios.yml` runs five named `--filter` selectors
+# over `apps/ios` guards and nothing else; `macos.yml` runs none at all any more.
+# `scripts/test/swift-ci-boundary-test.mjs` asserts that exactly one unfiltered
+# `swift test` exists in this repository and that it is this job — zero would
+# leave every Swift assertion in the package unexecuted behind a green board, and
+# two would charge a paid macOS runner twice for one answer. That policy also
+# owns this file's path filter, its exclusion-free shape and the ordered
+# `!apps/RelayiumKit/Tests/**` entries the three heavy Apple/pairing filters
+# carry; `scripts/test/ci-event-policy-test.mjs` governs the repository-wide
+# properties every workflow has — triggers, concurrency, runner budgets.
+#
+# ## Why the filter is exactly two entries
+#
+#   apps/RelayiumKit/**             the package this job tests: Sources, Tests,
+#                                   Fixtures, `Package.swift` and
+#                                   `Package.resolved`. Deliberately NOT narrowed
+#                                   to Sources — a fixture or a test file is an
+#                                   input to `swift test` exactly like a source
+#                                   file, and this is the workflow that has to
+#                                   notice.
+#   .github/workflows/…             this file, so an edit to its own triggers
+#                                   runs under them rather than landing
+#                                   unverified.
+#
+# Nothing else. This job builds no app, signs nothing, reads no secret, uploads
+# no artifact and publishes nothing, so it has no reason to watch `apps/mac`,
+# `apps/ios`, `web/`, `server/` or `scripts/`.
+on:
+  push:
+    # Only `main`, and this trigger is LOAD-BEARING. Branch work is gated by
+    # `merge-gate.yml`, which CALLS this file; this event is the only thing
+    # that verifies `main` itself, because the gate runs on `pull_request`
+    # only. No lane may lose it — `relayium-ops`' `deploy/promote.sh` reads
+    # check runs on the `main` commit, and a lane that stopped reporting there
+    # would wedge production promotion rather than fail visibly here.
+    branches:
+      - main
+    # This list is the merge gate's only statement of what this lane watches:
+    # `scripts/ci/select-lanes.mjs` reads it off disk and selects this lane from
+    # it and from nothing else, so an entry changed here changes what the gate
+    # requires. The `&paths` ANCHOR this list used to declare is gone with the
+    # `pull_request:` block that aliased it — an anchor nothing references is a
+    # dangling one, and the gate is the pull-request entry point now.
+    paths:
+      - 'apps/RelayiumKit/**'
+      - '.github/workflows/swift-package.yml'
+  # Called by `.github/workflows/merge-gate.yml`, and by nothing else.
+  #
+  # This REPLACES this file's own `pull_request:` trigger, and the replacement
+  # is the whole point. A path-filtered workflow that does not trigger emits no
+  # check run AT ALL, so branch protection could never tell "this lane passed"
+  # from "this lane was legitimately not selected" from "this lane never ran" —
+  # which is why every filtered lane here reported red over a merge button that
+  # still worked. `merge-gate.yml` calls each lane, judges the results, and
+  # reports one always-present context that CAN be required.
+  #
+  # Restoring `pull_request:` here would run this lane twice for every commit
+  # on a branch with an open pull request: once directly, once through the gate.
+  # `scripts/test/ci-event-policy-test.mjs` asserts its absence for that reason.
+  #
+  # No `inputs:` and no `secrets:`. Nothing in this file reads either, and a
+  # callee that declares one it never uses is a callee a future caller can be
+  # asked to supply.
+  workflow_call:
+  # The manual escape hatch for testing the workflow itself, matching every
+  # other governed workflow. It carries no inputs: nothing here signs,
+  # notarizes, publishes or consumes a build number, so there is no release
+  # contract to gate.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Supersede a pull request's own earlier runs, and nothing else. Identical to
+# the rule in every other governed workflow, and asserted verbatim by
+# `scripts/test/ci-event-policy-test.mjs`: group by PR NUMBER when there is one
+# and by `github.run_id` — unique per run — otherwise, so a PR supersedes only
+# itself and nothing can ever cancel a `main` or dispatch run.
+#
+# The prefix is a LITERAL, not `${{ github.workflow }}`, and that is a property
+# of being a reusable CALLEE rather than a style choice. Inside a called
+# workflow that expression is the CALLER's name, so every lane `merge-gate.yml`
+# calls would land in ONE group under one `github.run_id` — with
+# `cancel-in-progress` true on a pull request, the lanes would actively cancel
+# each other, and the gate would then be judging cancelled runs while every
+# lane reported `cancelled` rather than red. A literal prefix nothing else uses
+# makes the groups disjoint by construction, and
+# `scripts/test/ci-event-policy-test.mjs` asserts both the literal and that no
+# two files resolve to the same one.
+concurrency:
+  group: swift-package-lane-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # No secrets, so this runs on pull requests from forks like any other check.
+  # Deliberately no job-level `if:`, no `continue-on-error:` and no retry: a
+  # suite that may skip itself reports NOTHING rather than red, and a suite that
+  # is re-rolled until it passes reports the run that agreed rather than the
+  # code.
+  swift-test:
+    runs-on: macos-15
+    # Finite, and chosen rather than inherited.
+    #
+    # The evidence is `macos.yml`'s `test` job, which carried this exact command
+    # until it moved here: 59 successful runs took 5.5 minutes at worst and 3.5
+    # on average for this `swift test` PLUS four release-script tests, so this
+    # command alone is bounded above by that 5.5-minute worst case. 25 is far
+    # enough above it to absorb a cold SwiftPM resolve, a fresh WebRTC/Sodium
+    # binary fetch and real growth in the package, and still turns a `swift
+    # test` that never exits red in minutes rather than holding a PAID macOS
+    # runner for GitHub's 6-hour default.
+    timeout-minutes: 25
+    steps:
+      # Third-party actions are pinned to a full commit SHA (with the
+      # human-readable version in a trailing comment) so a compromised or
+      # retagged upstream release can't silently change what runs here.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # Recorded in the log so a future failure can be compared against the
+      # toolchain that produced the last green run.
+      - name: Toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+      # The whole package suite, with no `--filter`. This is the repository's
+      # only unfiltered `swift test`; see the header.
+      - name: swift test
+        working-directory: apps/RelayiumKit
+        run: swift test

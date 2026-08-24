@@ -1,0 +1,185 @@
+{
+  "contract": "relayium.ops.deploy",
+  "contractVersion": 1,
+  "documentation": "docs/OPS-DEPLOY-CONTRACT.md",
+  "consumers": [
+    { "id": "go", "repository": "relayium", "status": "active", "reader": "server/ops_deploy_contract_test.go" },
+    { "id": "ops", "repository": "relayium-ops", "status": "active", "reader": "deploy/test/ops-deploy-contract-test.sh" },
+    { "id": "product-policy", "repository": "relayium", "status": "active", "reader": "scripts/test/ops-deploy-contract-test.mjs" }
+  ],
+  "vocabularies": {
+    "artifactKinds": ["directory", "executable", "symlink"],
+    "bodyTerminators": ["newline", "none"],
+    "consumerRepositories": ["relayium", "relayium-ops"],
+    "consumerStatuses": ["active"],
+    "inputClasses": ["directoryPrefix", "file"],
+    "methodPolicies": ["any"],
+    "pathKinds": ["childOf", "exact"],
+    "presenceStates": ["absent", "present"],
+    "programs": ["go", "npm"],
+    "rootEffects": ["noRebuild", "rebuild"]
+  },
+  "buildUnits": [
+    {
+      "unit": "server",
+      "workingDirectory": "server",
+      "manifest": "server/go.mod",
+      "inputs": [
+        { "path": "go.mod", "class": "file", "presence": "absent" },
+        { "path": "go.sum", "class": "file", "presence": "absent" },
+        { "path": "server/", "class": "directoryPrefix", "presence": "present" }
+      ],
+      "command": {
+        "program": "go",
+        "argv": ["build", "-o", "{{serverCandidateBinary}}", "."],
+        "outputFlag": "-o"
+      },
+      "produces": ["serverCandidateBinary"],
+      "rebuildWhenMissing": "serverBinary"
+    },
+    {
+      "unit": "web",
+      "workingDirectory": "web",
+      "manifest": "web/package.json",
+      "inputs": [
+        { "path": "web/", "class": "directoryPrefix", "presence": "present" }
+      ],
+      "command": {
+        "program": "npm",
+        "argv": ["run", "build", "--", "--outDir", "{{webReleaseStage}}", "--emptyOutDir"],
+        "outputFlag": "--outDir"
+      },
+      "produces": ["webReleaseStage"],
+      "rebuildWhenMissing": "webServedRoot"
+    },
+    {
+      "unit": "webDependencies",
+      "workingDirectory": "web",
+      "manifest": "web/package.json",
+      "inputs": [
+        { "path": "web/package-lock.json", "class": "file", "presence": "present" },
+        { "path": "web/package.json", "class": "file", "presence": "present" }
+      ],
+      "command": { "program": "npm", "argv": ["ci"], "outputFlag": null },
+      "produces": ["webNodeModules"],
+      "rebuildWhenMissing": "webNodeModules"
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "serverBinary",
+      "path": "server/relayium-server",
+      "kind": "executable",
+      "pathKind": "exact",
+      "producedBy": null,
+      "gitTracked": false
+    },
+    {
+      "id": "serverCandidateBinary",
+      "path": "server/relayium-server.new",
+      "kind": "executable",
+      "pathKind": "exact",
+      "producedBy": "server",
+      "gitTracked": false
+    },
+    {
+      "id": "webNodeModules",
+      "path": "web/node_modules",
+      "kind": "directory",
+      "pathKind": "exact",
+      "producedBy": "webDependencies",
+      "gitTracked": false
+    },
+    {
+      "id": "webReleaseStage",
+      "path": "web/releases",
+      "kind": "directory",
+      "pathKind": "childOf",
+      "producedBy": "web",
+      "gitTracked": false
+    },
+    {
+      "id": "webServedRoot",
+      "path": "web/dist",
+      "kind": "symlink",
+      "pathKind": "exact",
+      "producedBy": null,
+      "gitTracked": false
+    }
+  ],
+  "repositoryRootEntries": [
+    { "entry": ".dockerignore", "effect": "noRebuild" },
+    { "entry": ".github", "effect": "noRebuild" },
+    { "entry": ".gitignore", "effect": "noRebuild" },
+    { "entry": ".goreleaser.yaml", "effect": "noRebuild" },
+    { "entry": "CONTRIBUTING.md", "effect": "noRebuild" },
+    { "entry": "DCO", "effect": "noRebuild" },
+    { "entry": "Dockerfile", "effect": "noRebuild" },
+    { "entry": "LICENSE", "effect": "noRebuild" },
+    { "entry": "README.md", "effect": "noRebuild" },
+    { "entry": "SECURITY.md", "effect": "noRebuild" },
+    { "entry": "apps", "effect": "noRebuild" },
+    { "entry": "contracts", "effect": "noRebuild" },
+    { "entry": "docker-compose.yml", "effect": "noRebuild" },
+    { "entry": "docs", "effect": "noRebuild" },
+    { "entry": "scripts", "effect": "noRebuild" },
+    { "entry": "server", "effect": "rebuild" },
+    { "entry": "web", "effect": "rebuild" }
+  ],
+  "listener": {
+    "defaultAddress": ":8080",
+    "defaultPort": 8080,
+    "addressFlag": "addr",
+    "addressEnvironment": "RELAYIUM_ADDR"
+  },
+  "healthEndpoints": [
+    {
+      "id": "liveness",
+      "path": "/healthz",
+      "methodPolicy": "any",
+      "successStatus": 200,
+      "successBody": "ok",
+      "successBodyTerminator": "none",
+      "failureStatus": null,
+      "failureModes": [],
+      "databaseTimeoutMilliseconds": null
+    },
+    {
+      "id": "readiness",
+      "path": "/readyz",
+      "methodPolicy": "any",
+      "successStatus": 200,
+      "successBody": "ready",
+      "successBodyTerminator": "none",
+      "failureStatus": 503,
+      "failureModes": [
+        {
+          "reason": "blobStoreNotReady",
+          "body": "blob storage unavailable",
+          "bodyTerminator": "newline"
+        },
+        {
+          "reason": "blobStoreUnavailable",
+          "body": "blob storage unavailable",
+          "bodyTerminator": "newline"
+        },
+        {
+          "reason": "databasePingFailed",
+          "body": "database unavailable",
+          "bodyTerminator": "newline"
+        },
+        {
+          "reason": "databaseUnavailable",
+          "body": "database unavailable",
+          "bodyTerminator": "newline"
+        }
+      ],
+      "databaseTimeoutMilliseconds": 2000
+    }
+  ],
+  "probe": {
+    "methods": ["DELETE", "GET", "HEAD", "POST", "PUT"],
+    "bodylessMethods": ["HEAD"],
+    "nonMatchingPaths": ["/", "/healthz/", "/healthzz", "/ready", "/readyz/"]
+  }
+}

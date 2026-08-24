@@ -24,14 +24,13 @@ import XCTest
 ///     check, a bundle-path sniff or any other runtime heuristic.
 final class MacAppleSignInGuardTests: XCTestCase {
 
-    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → …/apps
-    private var appsRoot: URL {
-        (0..<4).reduce(URL(fileURLWithPath: #filePath)) { u, _ in u.deletingLastPathComponent() }
+    private var macRoot: URL {
+        get throws { try RepoRoot.directory("apps/mac") }
     }
-    private var macRoot: URL { appsRoot.appendingPathComponent("mac") }
 
+    /// A source under `apps/`, which must exist.
     private func read(_ relativePath: String) throws -> String {
-        try String(contentsOf: appsRoot.appendingPathComponent(relativePath), encoding: .utf8)
+        try RepoRoot.text("apps/" + relativePath)
     }
 
     /// Source with whole-line comments removed.
@@ -168,7 +167,7 @@ final class MacAppleSignInGuardTests: XCTestCase {
     /// build to satisfy a guard — removing the very capability claim 1 exists to
     /// protect — so what is banned is the Apple-ID surface itself.
     func testTheDirectBuildHasNoAppleAuthorizationCallPath() throws {
-        let names = try FileManager.default.subpathsOfDirectory(atPath: macRoot.path)
+        let names = try FileManager.default.subpathsOfDirectory(atPath: try macRoot.path)
             .filter { $0.hasSuffix(".swift") }
             .sorted()
         XCTAssertGreaterThan(names.count, 30, "the scan found almost nothing")
@@ -218,7 +217,7 @@ final class MacAppleSignInGuardTests: XCTestCase {
                           "\(target) does not exclude \(excluded)")
         }
         // Exactly one declaration of the seam type per target.
-        let names = try FileManager.default.subpathsOfDirectory(atPath: macRoot.path)
+        let names = try FileManager.default.subpathsOfDirectory(atPath: try macRoot.path)
             .filter { $0.hasSuffix(".swift") }.sorted()
         let declaring = try names.filter {
             try code("mac/\($0)").contains("struct AppleSignInSection: View")
@@ -270,6 +269,8 @@ final class MacAppleSignInGuardTests: XCTestCase {
                       "the purchase model is built without its capability store")
         XCTAssertTrue(mas.contains("appInstanceID: continuation?.appInstanceID"),
                       "the purchase model is built without its app-instance identity")
+        XCTAssertTrue(mas.contains("purchaseDispatchPolicy: .durableContinuationRequired"),
+                      "the App Store build can silently fall back to legacy purchase dispatch")
         // The direct build has no purchase model at all, so it must not acquire
         // a capability either — there is nothing for it to arm.
         let direct = try code("mac/Relayium/Distribution/DirectDistribution.swift")
@@ -279,12 +280,12 @@ final class MacAppleSignInGuardTests: XCTestCase {
 
     // MARK: - version
 
-    /// This release is 1.3.1, and the App Store review fixes it carries forward
+    /// This release is 1.3.2, and the App Store review fixes it carries forward
     /// are still in place.
-    func testTheReleaseIsVersionOnePointThreePointOne() throws {
+    func testTheReleaseIsVersionOnePointThreePointTwo() throws {
         let project = projectText
-        XCTAssertTrue(project.contains("MARKETING_VERSION = 1.3.1;"))
-        XCTAssertFalse(project.contains("MARKETING_VERSION = 1.3.0;"),
+        XCTAssertTrue(project.contains("MARKETING_VERSION = 1.3.2;"))
+        XCTAssertFalse(project.contains("MARKETING_VERSION = 1.3.1;"),
                        "a target was left on the previous version")
         // **The App Store review fixes must not come back.** The app is named
         // `Relayium`, never "… for Mac", and the login item is never registered

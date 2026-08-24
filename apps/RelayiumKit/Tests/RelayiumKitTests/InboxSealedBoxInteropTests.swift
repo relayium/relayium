@@ -36,13 +36,7 @@ final class InboxSealedBoxInteropTests: XCTestCase {
     private static let disabled = ProcessInfo.processInfo.environment["RELAYIUM_SWIFT_INTEROP"] == "0"
 
     private var serverDirectory: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // RelayiumKitTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // RelayiumKit
-            .deletingLastPathComponent()   // apps
-            .deletingLastPathComponent()   // the repository root
-            .appendingPathComponent("server")
+        get throws { try RepoRoot.directory("server") }
     }
 
     private func shouldRun() throws -> Bool {
@@ -90,7 +84,7 @@ final class InboxSealedBoxInteropTests: XCTestCase {
         process.executableURL = go
         process.arguments = ["test", "-tags", "swiftinterop", "-count=1",
                              "-run", "^\(test)$", "./internal/inboxclient/"]
-        process.currentDirectoryURL = serverDirectory
+        process.currentDirectoryURL = try serverDirectory
         var environment = ProcessInfo.processInfo.environment
         environment["RELAYIUM_INTEROP_DIR"] = directory.path
         // A test host's HOME may not be writable, and the module cache has to go

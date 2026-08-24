@@ -472,19 +472,14 @@ final class LinkEstablishmentSignalBufferTests: XCTestCase {
         // and source both.
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
 
-        let appsRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent()
-        let roots = [appsRoot.appendingPathComponent("RelayiumKit/Sources"),
-                     appsRoot.appendingPathComponent("ios"),
-                     appsRoot.appendingPathComponent("mac")]
+        // Each root must exist. `RepoRoot.directory` throws with the path it
+        // wanted, where a missing root used to be skipped one line below and the
+        // scan then reported clean over nothing.
+        let roots = try ["apps/RelayiumKit/Sources", "apps/ios", "apps/mac"]
+            .map { try RepoRoot.directory($0) }
         var scanned = 0
         for root in roots {
-            guard FileManager.default.fileExists(atPath: root.path) else { continue }
-            let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)?
-                .compactMap { $0 as? URL }
-                .filter { $0.pathExtension == "swift" }
-            for file in try XCTUnwrap(files) {
+            for file in try RepoRoot.swiftFiles(in: root) {
                 scanned += 1
                 // The buffer's own file, and the one object accepted as its
                 // owner. `LinkRoomRouter` installs a buffer in the same critical
@@ -496,7 +491,7 @@ final class LinkEstablishmentSignalBufferTests: XCTestCase {
                 // asserts, so no app composition still reaches a buffer.
                 let owners = ["LinkEstablishmentSignalBuffer.swift", "LinkRoomRouter.swift"]
                 guard !owners.contains(file.lastPathComponent) else { continue }
-                let source = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+                let source = try RepoRoot.text(of: file)
                 XCTAssertFalse(source.contains("LinkEstablishmentSignalBuffer("),
                                "\(file.lastPathComponent) constructs a pre-assembly buffer")
             }
