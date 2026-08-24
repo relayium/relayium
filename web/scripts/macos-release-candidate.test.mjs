@@ -33,6 +33,8 @@ import {
   RELEASE_DOCS,
   bumpReleaseDocs,
   checkCandidateScope,
+  cliReleasesFromTagTable,
+  syncCliReleaseHistory,
 } from "./macos-release-candidate.mjs";
 
 const repoRoot = resolve(process.cwd(), "..");
@@ -159,6 +161,36 @@ describe("bumping the documents that name the published macOS release", () => {
     await bumpReleaseDocs({ repoRoot: root, from: PUBLISHED, to: NEXT, docs: ["README.md"] });
     expect(await readFile(resolve(root, "README.md"), "utf8"))
       .toBe(`macos-v${NEXT} and ${PUBLISHED}1 and ${PUBLISHED}.7 and 11${PUBLISHED}\n`);
+  });
+});
+
+describe("synchronizing immutable CLI tags into the public release ledger", () => {
+  const tags = [
+    "macos-v1.3.2\t2026-08-24",
+    "v0.22.2\t2026-08-24",
+    "v0.22.10\t2026-08-24",
+    "v0.21.0\t2026-08-17",
+    "vmacos-v1.2.0\t2026-08-12",
+  ].join("\n");
+
+  it("keeps only CLI tags and sorts same-day versions numerically", () => {
+    expect(cliReleasesFromTagTable(tags)).toEqual([
+      { version: "v0.22.10", date: "2026-08-24" },
+      { version: "v0.22.2", date: "2026-08-24" },
+      { version: "v0.21.0", date: "2026-08-17" },
+    ]);
+  });
+
+  it("rewrites exactly the canonical release block and is idempotent", async () => {
+    const root = await stagedDocs();
+    const first = await syncCliReleaseHistory({ repoRoot: root, tagTable: tags });
+    expect(first.changed).toBe(true);
+    const once = await readFile(resolve(root, "web/scripts/pages/content/releases.mjs"), "utf8");
+    expect(once).toContain('{ version: "v0.22.10", date: "2026-08-24" }');
+    expect(once).not.toContain('{ version: "macos-v1.3.2"');
+    const second = await syncCliReleaseHistory({ repoRoot: root, tagTable: tags });
+    expect(second.changed).toBe(false);
+    expect(await readFile(resolve(root, "web/scripts/pages/content/releases.mjs"), "utf8")).toBe(once);
   });
 });
 

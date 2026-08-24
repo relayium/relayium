@@ -165,6 +165,10 @@ function lineRunning(marker, label) {
 }
 
 const bump = lineRunning("macos-release-candidate.mjs bump", "the document bump");
+const syncHistory = lineRunning(
+  "macos-release-candidate.mjs sync-cli-release-history",
+  "the CLI release-history synchronization",
+);
 const install = lineRunning("npm ci", "the dependency install");
 const genPages = lineRunning("npm run gen:pages", "page generation");
 const typecheck = lineRunning("npm run check", "the typecheck");
@@ -200,9 +204,12 @@ const before = (a, b, why) => {
 // 1. The write phase. Everything that can rewrite a tracked file runs before the
 //    candidate is staged, so the staged tree is the finished tree.
 before(bump, genPages, "pages are generated before the documents are bumped");
+before(bump, syncHistory, "CLI release history is synchronized before the documents are bumped");
+before(syncHistory, genPages, "pages are generated before CLI release history is synchronized");
 before(genPages, build, "the build runs before the first page generation");
 before(install, genPages, "pages are generated before dependencies are installed");
 before(bump, stage, "the candidate is staged before the documents are bumped");
+before(syncHistory, stage, "the candidate is staged before CLI release history is synchronized");
 before(genPages, stage, "the candidate is staged before the pages are generated");
 before(build, stage, "the candidate is staged before the web build regenerates the pages");
 before(typecheck, stage, "the candidate is staged before the typecheck, which may emit");
@@ -245,6 +252,7 @@ before(suite, commit, "the candidate is committed before the web suite has judge
 const MUTATORS = [
   "npm ci", "npm test", "npm run", "npx ", "vite build", "gen-pages",
   "macos-release-candidate.mjs bump",
+  "macos-release-candidate.mjs sync-cli-release-history",
   "git checkout", "git restore", "git reset", "git apply", "git stash",
   "git merge", "git rebase", "git clean", "git mv", "git rm",
   // Re-staging is how a write inside the window would reach the commit; the one
@@ -298,6 +306,7 @@ if (stage >= 0 && suite >= 0 && commit >= 0) {
 
 // 4. The whole candidate is judged and frozen before anything immutable exists.
 before(bump, create, "the release is created before the documents are bumped");
+before(syncHistory, create, "the release is created before CLI release history is synchronized");
 before(suite, create, "the release is created before the web suite runs");
 before(build, create, "the release is created before the web build runs");
 before(scope, create, "the release is created before the candidate scope is checked");
@@ -327,6 +336,7 @@ if (push >= 0) {
     "gh release edit",
     "git tag",
     "macos-release-candidate.mjs bump",
+    "macos-release-candidate.mjs sync-cli-release-history",
   ]) {
     check(
       !code.includes(forbidden),

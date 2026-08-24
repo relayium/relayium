@@ -34,6 +34,7 @@
 // `macos-release-surface.test.mjs` and `MacSurfaceGuardTests`. This file only
 // makes the candidate; the suites judge it, and they run before publication.
 
+import { execFileSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import process from "node:process";
@@ -51,6 +52,8 @@ export const RELEASE_DOCS = [
   "apps/README.md",
   "web/scripts/pages/content/releases.mjs",
 ];
+
+export const RELEASE_HISTORY_DOC = "web/scripts/pages/content/releases.mjs";
 
 /**
  * The artifact-derived half of the candidate: written by the workflow from the
@@ -114,6 +117,62 @@ function assertVersion(version, label) {
   if (typeof version !== "string" || !VERSION.test(version)) {
     throw new Error(`${label} is not a supported app version: ${version}`);
   }
+}
+
+const CLI_TAG = /^v(\d+)\.(\d+)\.(\d+)$/;
+const TAG_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const RELEASES_BLOCK = /export const RELEASES = \[\n(?:  \{ version: "v\d+\.\d+\.\d+", date: "\d{4}-\d{2}-\d{2}" \},\n)+\];/;
+
+/** Parse the full repository tag table into the CLI releases the public page owns. */
+export function cliReleasesFromTagTable(tagTable) {
+  const releases = [];
+  const seen = new Set();
+  for (const line of tagTable.split("\n")) {
+    if (!line.trim()) continue;
+    const [version, date, ...extra] = line.split("\t");
+    const match = CLI_TAG.exec(version);
+    if (!match) continue;
+    if (!TAG_DATE.test(date ?? "") || extra.length > 0) {
+      throw new Error(`git returned an invalid release tag row: ${JSON.stringify(line)}`);
+    }
+    if (seen.has(version)) throw new Error(`git returned duplicate release tag ${version}`);
+    seen.add(version);
+    releases.push({ version, date, numeric: match.slice(1).map(Number) });
+  }
+  if (releases.length === 0) throw new Error("git returned no CLI release tags");
+  releases.sort((left, right) => {
+    const date = right.date.localeCompare(left.date);
+    if (date !== 0) return date;
+    for (let index = 0; index < 3; index += 1) {
+      const component = right.numeric[index] - left.numeric[index];
+      if (component !== 0) return component;
+    }
+    return 0;
+  });
+  return releases.map(({ version, date }) => ({ version, date }));
+}
+
+/** Make the committed release ledger agree with the immutable CLI tag namespace. */
+export async function syncCliReleaseHistory({ repoRoot, tagTable } = {}) {
+  const root = resolve(repoRoot ?? process.cwd());
+  const tags = tagTable ?? execFileSync(
+    "git",
+    ["for-each-ref", "--format=%(refname:short)%09%(creatordate:short)", "refs/tags"],
+    { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
+  );
+  const releases = cliReleasesFromTagTable(tags);
+  const path = resolve(root, RELEASE_HISTORY_DOC);
+  const before = await readFile(path, "utf8");
+  const matches = before.match(new RegExp(RELEASES_BLOCK.source, "g")) ?? [];
+  if (matches.length !== 1) {
+    throw new Error(`${RELEASE_HISTORY_DOC} has ${matches.length} canonical RELEASES blocks`);
+  }
+  const block = `export const RELEASES = [\n${releases
+    .map(({ version, date }) => `  { version: "${version}", date: "${date}" },`)
+    .join("\n")}\n];`;
+  const after = before.replace(RELEASES_BLOCK, block);
+  if (after !== before) await writeFile(path, after, "utf8");
+  return { changed: after !== before, releases };
 }
 
 /**
@@ -270,6 +329,7 @@ function usage() {
   return [
     "Usage:",
     "  macos-release-candidate.mjs bump --from <version> --to <version> [--repo-root <dir>]",
+    "  macos-release-candidate.mjs sync-cli-release-history [--repo-root <dir>]",
     "  git diff --cached --name-only | macos-release-candidate.mjs check-scope"
       + " [--already-delivered true|false]",
   ].join("\n");
@@ -291,6 +351,14 @@ async function main() {
     const { changed } = await bumpReleaseDocs({ repoRoot, from: args.from, to: args.to });
     process.stdout.write(
       `Rewrote the published macOS release ${args.from} -> ${args.to} in ${changed.join(", ")}\n`,
+    );
+    return;
+  }
+
+  if (command === "sync-cli-release-history") {
+    const { changed, releases } = await syncCliReleaseHistory({ repoRoot });
+    process.stdout.write(
+      `${changed ? "Synchronized" : "Verified"} ${releases.length} CLI release tags in ${RELEASE_HISTORY_DOC}\n`,
     );
     return;
   }
