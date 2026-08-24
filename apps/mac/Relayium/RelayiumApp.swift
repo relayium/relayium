@@ -536,6 +536,10 @@ struct RelayiumApp: App {
             refreshAccount: { await account.refresh() })
             ?? AppDistribution.makeSubscriptionModel(
                 bearer: { account.bearerToken },
+                accountID: {
+                    guard case let .ready(user, _) = account.state else { return nil }
+                    return user.id
+                },
                 refreshAccount: { await account.refresh() })
         _notifications = StateObject(wrappedValue: TransferNotificationCenter(
             uploadModel: uploads,

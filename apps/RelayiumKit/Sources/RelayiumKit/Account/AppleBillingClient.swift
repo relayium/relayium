@@ -309,11 +309,13 @@ public struct AppleTransactionResult: Codable, Equatable {
     public var renewalAt: Int64
     public var dispatchPending: Bool
     public var dispatchResolved: Bool
+    public var dispatchResolvedAttemptId: String
 
     public init(applied: Bool, planId: String, status: String,
                 expiresAt: Int64, provider: String,
                 currentProductId: String = "", autoRenewProductId: String = "", renewalAt: Int64 = 0,
-                dispatchPending: Bool = false, dispatchResolved: Bool = false) {
+                dispatchPending: Bool = false, dispatchResolved: Bool = false,
+                dispatchResolvedAttemptId: String = "") {
         self.applied = applied
         self.planId = planId
         self.status = status
@@ -324,9 +326,10 @@ public struct AppleTransactionResult: Codable, Equatable {
         self.renewalAt = renewalAt
         self.dispatchPending = dispatchPending
         self.dispatchResolved = dispatchResolved
+        self.dispatchResolvedAttemptId = dispatchResolvedAttemptId
     }
 
-    private enum CodingKeys: String, CodingKey { case applied, planId, status, expiresAt, provider, currentProductId, autoRenewProductId, renewalAt, dispatchPending, dispatchResolved }
+    private enum CodingKeys: String, CodingKey { case applied, planId, status, expiresAt, provider, currentProductId, autoRenewProductId, renewalAt, dispatchPending, dispatchResolved, dispatchResolvedAttemptId }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         applied = try c.decode(Bool.self, forKey: .applied)
@@ -339,6 +342,8 @@ public struct AppleTransactionResult: Codable, Equatable {
         renewalAt = try c.decodeIfPresent(Int64.self, forKey: .renewalAt) ?? 0
         dispatchPending = try c.decodeIfPresent(Bool.self, forKey: .dispatchPending) ?? false
         dispatchResolved = try c.decodeIfPresent(Bool.self, forKey: .dispatchResolved) ?? false
+        dispatchResolvedAttemptId = try c.decodeIfPresent(
+            String.self, forKey: .dispatchResolvedAttemptId) ?? ""
     }
 }
 
@@ -405,6 +410,10 @@ public enum AppleBillingError: Error, Equatable {
     /// client gets while another one holds the sheet, which is the property that
     /// keeps two sheets from being authorized at once.
     case purchaseOutcomeRequired
+    /// A structured Relayium dispatch refusal emitted only after the server's
+    /// exact initial-arm replay check found nothing. Unlike a bare proxy status,
+    /// this is proof that a `.preparing` identity created no attempt.
+    case initialArmRejected(code: String, provider: String?)
     /// 503 `verifier_unavailable` — this deployment holds no Apple trust roots
     /// and can verify nothing. The shipping default today.
     case verifierUnavailable
@@ -458,6 +467,13 @@ extension AccountClient: AppleBillingService {
 			return ApplePurchaseDispatch(appAccountToken: uuid, attemptId: body.attemptId,
 			                             continuationSecret: body.continuationSecret)
 		case 401: throw AppleBillingError.notSignedIn
+		case 400:
+			let body = try? JSONDecoder().decode(AppleErrorBody.self, from: data)
+			if body?.error == "product_unavailable" {
+				throw AppleBillingError.initialArmRejected(
+					code: body?.error ?? "product_unavailable", provider: body?.provider)
+			}
+			throw AppleBillingError.server(status: 400)
 		case 403:
 			// New-protocol only: the uniform capability refusal. It is
 			// deliberately NOT `purchaseAuthorityManaged` — nothing about the
@@ -468,11 +484,16 @@ extension AccountClient: AppleBillingService {
 			throw AppleBillingError.server(status: 403)
 		case 409:
 			let body = try? JSONDecoder().decode(AppleErrorBody.self, from: data)
+			if body?.error == "purchases_paused" || body?.error == "manage_with_apple" ||
+				body?.error == "billing_authority_conflict" {
+				throw AppleBillingError.initialArmRejected(
+					code: body?.error ?? "", provider: body?.provider)
+			}
 			// A sheet this account armed has not reported its outcome yet. It is
 			// NOT an authority conflict and NOT a charge: reconciling means
 			// reporting what StoreKit did, or letting updates/restore converge.
 			if body?.error == "purchase_outcome_required" { throw AppleBillingError.purchaseOutcomeRequired }
-			if body?.error == "billing_authority_conflict" || body?.error == "purchase_reconciliation_required" || body?.error == "manage_with_apple" {
+			if body?.error == "purchase_reconciliation_required" {
 				throw AppleBillingError.purchaseAuthorityManaged(provider: body?.provider ?? "apple")
 			}
 			throw AppleBillingError.server(status: 409)

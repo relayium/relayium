@@ -68,13 +68,15 @@ func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Req
 	// `appInstanceId` alone selects the protocol. A new-protocol request must also
 	// name the arm it is asking for -- on the INITIAL arm as much as on a resume,
 	// because that name is what a later outcome report has to present to prove it
-	// belongs to the sheet that is open now. `continuationSecret` is the only
-	// resume-specific half: there is nothing to prove on a first arm.
+	// belongs to the sheet that is open now. Current clients also send a
+	// pre-persisted `continuationSecret` on the initial arm, which makes a lost
+	// first response replayable; compatible older clients may omit it once.
 	//
 	// A malformed shape is a 400 rather than a capability refusal: the client
 	// should be told it built the request wrong, not that its capability failed.
 	if in.AppInstanceID != "" {
-		if !validAppleContinuationID(in.AppInstanceID) || !validAppleContinuationID(in.ArmRequestID) {
+		if !validAppleContinuationID(in.AppInstanceID) || !validAppleContinuationID(in.ArmRequestID) ||
+			(in.ContinuationSecret != "" && !validAppleContinuationSecret(in.ContinuationSecret)) {
 			writeAppleTransactionError(w, http.StatusBadRequest, "invalid_request")
 			return
 		}
@@ -83,6 +85,43 @@ func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Req
 		// malformed, and must not be silently downgraded to a one-shot dispatch.
 		writeAppleTransactionError(w, http.StatusBadRequest, "invalid_request")
 		return
+	}
+	// An exact initial-arm replay outranks every gate that can have changed
+	// since the original request. Otherwise a lost 200 followed by a catalog
+	// pause, product retirement or manage-with-Apple transition would answer a
+	// deterministic refusal for an arm the server had in fact created, leaving
+	// the client unable either to open the sheet or safely retire its prepared
+	// identity.
+	if in.AppInstanceID != "" && in.ContinuationSecret != "" {
+		authority, exists, err := s.Store().BillingAuthority(r.Context(), u.ID)
+		if err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if exists && authority.Provider == ProviderApple && authority.ExternalScope == in.BundleID {
+			replayer, ok := s.Store().(interface {
+				ReplayAppleBillingPurchase(context.Context, BillingAuthority, AppleDispatchRequest) (AppleDispatchOutcome, bool, error)
+			})
+			if !ok {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+			outcome, replayed, err := replayer.ReplayAppleBillingPurchase(r.Context(), authority, AppleDispatchRequest{
+				ProductID: in.ProductID, AppInstanceID: in.AppInstanceID,
+				ContinuationSecret: in.ContinuationSecret, ArmRequestID: in.ArmRequestID,
+			})
+			if err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+			if replayed {
+				httpx.WriteJSON(w, http.StatusOK, map[string]string{
+					"appAccountToken": outcome.Attempt.AppleAccountToken,
+					"attemptId":       outcome.Attempt.ID,
+				})
+				return
+			}
+		}
 	}
 	if enabled, err := s.applePurchasesEnabled(r.Context()); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -160,9 +199,9 @@ func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Req
 		return
 	}
 	body := map[string]string{"appAccountToken": outcome.Attempt.AppleAccountToken, "attemptId": outcome.Attempt.ID}
-	// The raw continuation secret exists in exactly one response, ever. A resume
-	// deliberately does not re-issue it -- the client already holds it, and that
-	// is what makes a lost resume response replayable without arming twice.
+	// Only a compatible older initial request receives a server-minted raw
+	// continuation secret. Current clients sent and persisted theirs before this
+	// request, and neither an initial replay nor a resume echoes it.
 	if outcome.Secret != "" {
 		body["continuationSecret"] = outcome.Secret
 	}

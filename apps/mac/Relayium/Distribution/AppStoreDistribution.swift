@@ -49,6 +49,7 @@ enum AppDistribution {
     @MainActor
     static func makeSubscriptionModel(
         bearer: @escaping @MainActor () -> String?,
+        accountID: @escaping @MainActor () -> String?,
         refreshAccount: @escaping @MainActor () async -> Void
     ) -> AppleSubscriptionModel? {
         // The bundle identity is read from the running bundle rather than
@@ -69,13 +70,16 @@ enum AppDistribution {
         // its production policy refuses to arm a new sheet rather than silently
         // falling back to the cancellation-deadlocking one-shot protocol.
         let continuation = AppEnvironment.makeApplePurchaseContinuation()
+        let outcomeJournal = FileApplePurchaseOutcomeJournal()
         return AppleSubscriptionModel(
             store: StoreKitSubscriptionStore(),
             billing: AppEnvironment.makeAppleBillingService(),
             bundleID: bundleID,
             bearer: bearer,
+            accountID: accountID,
             refreshAccount: refreshAccount,
             continuation: continuation?.repository,
+            outcomeJournal: outcomeJournal,
             appInstanceID: continuation?.appInstanceID,
             purchaseDispatchPolicy: .durableContinuationRequired)
     }

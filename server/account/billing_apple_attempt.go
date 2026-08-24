@@ -121,6 +121,12 @@ func appleContinuationVerifier(secret string) []byte {
 	return sum[:]
 }
 
+func validAppleContinuationSecret(secret string) bool {
+	decoded, err := base64.RawURLEncoding.DecodeString(secret)
+	return err == nil && len(decoded) == appleContinuationSecretBytes &&
+		base64.RawURLEncoding.EncodeToString(decoded) == secret
+}
+
 // validAppleContinuationID accepts a bounded, printable, opaque client
 // identifier. It imposes no format: the server never interprets these, and a
 // format rule that is wrong would refuse a legitimate client.
@@ -154,15 +160,12 @@ type AppleDispatchRequest struct {
 	// same id, with the same product, reads that response back without a second
 	// logical arm.
 	//
-	// It is NOT a recovery for a lost INITIAL response, and describing it as one
-	// would be false. Reading any response back requires ContinuationSecret, and
-	// the initial response is the only place that secret ever appears; a client
-	// that lost it holds nothing to present and fails closed. Repeating an
-	// initial arm id succeeds only for a caller that already received the secret,
-	// which means the initial response was not lost.
+	// Current clients generate and persist the capability secret before the first
+	// request, making the initial arm replayable too. Older clients omit it and
+	// receive a server-minted secret in the response, preserving compatibility.
 	ArmRequestID string
-	// ContinuationSecret is presented on a resume only. On an initial arm there is
-	// nothing yet to prove.
+	// ContinuationSecret is presented on every current-protocol request. It may be
+	// empty only for a compatible older client's initial arm.
 	ContinuationSecret string
 	Now                int64
 }
@@ -178,9 +181,9 @@ type AppleDispatchOutcome struct {
 	// attempt id, same attribution token, no new row.
 	Resumed bool
 	// Replayed means this exact ArmRequestID is already the attempt's current arm
-	// FOR THE SAME PRODUCT, and the caller is reading that response back. In
-	// practice only a lost RESUME response is recoverable this way: the caller
-	// must present the secret, and only the initial response ever carries it.
+	// FOR THE SAME PRODUCT, and the caller is reading that response back. Current
+	// clients hold the secret before the initial request, so both initial and
+	// resume responses are recoverable this way.
 	Replayed bool
 	// Refusal is one of the appleRefusal* codes, or "" on success.
 	Refusal string
@@ -316,7 +319,8 @@ func (s *SQLiteStore) ArmAppleBillingPurchase(ctx context.Context, authority Bil
 		// every arm must be nameable, or the first sheet's outcome would have no
 		// identity to be bound to and the very first cancellation report could
 		// still be replayed across a later resume.
-		if !validAppleContinuationID(in.AppInstanceID) || !validAppleContinuationID(in.ArmRequestID) {
+		if !validAppleContinuationID(in.AppInstanceID) || !validAppleContinuationID(in.ArmRequestID) ||
+			(in.ContinuationSecret != "" && !validAppleContinuationSecret(in.ContinuationSecret)) {
 			return AppleDispatchOutcome{}, ErrBillingAuthorityConflict
 		}
 	} else if in.ArmRequestID != "" || in.ContinuationSecret != "" {
@@ -377,11 +381,17 @@ func (s *SQLiteStore) ArmAppleBillingPurchase(ctx context.Context, authority Bil
 	// than as the empty blob a legacy attempt must carry.
 	verifier := []byte{}
 	if newProtocol {
-		secret, err := newAppleContinuationSecret()
-		if err != nil {
-			return AppleDispatchOutcome{}, err
+		secret := in.ContinuationSecret
+		if secret == "" {
+			var err error
+			secret, err = newAppleContinuationSecret()
+			if err != nil {
+				return AppleDispatchOutcome{}, err
+			}
+			// Compatibility only: current clients already hold their secret and
+			// the response never needs to carry it.
+			out.Secret = secret
 		}
-		out.Secret = secret
 		verifier = appleContinuationVerifier(secret)
 		continuationState = appleContinuationArmed
 	}
@@ -416,6 +426,39 @@ func (s *SQLiteStore) ArmAppleBillingPurchase(ctx context.Context, authority Bil
 		return AppleDispatchOutcome{}, err
 	}
 	return out, tx.Commit()
+}
+
+// ReplayAppleBillingPurchase returns only an exact read-back of an already
+// armed request. It creates and mutates nothing. The HTTP handler calls this
+// before catalog and manage-with-Apple gates so a client that lost the initial
+// 200 can always recover that 200 even if eligibility changed meanwhile.
+func (s *SQLiteStore) ReplayAppleBillingPurchase(ctx context.Context, authority BillingAuthority, in AppleDispatchRequest) (AppleDispatchOutcome, bool, error) {
+	if authority.Provider != ProviderApple || in.AppInstanceID == "" ||
+		!validAppleContinuationID(in.AppInstanceID) ||
+		!validAppleContinuationID(in.ArmRequestID) ||
+		!validAppleContinuationSecret(in.ContinuationSecret) {
+		return AppleDispatchOutcome{}, false, nil
+	}
+	current, exists, err := s.BillingAuthority(ctx, authority.UserID)
+	if err != nil || !exists || current != authority {
+		return AppleDispatchOutcome{}, false, err
+	}
+	row, err := scanAppleAttempt(s.reader().QueryRowContext(ctx, `SELECT `+appleAttemptCols+
+		` FROM billing_purchase_attempts WHERE user_id=? AND epoch=? AND state='dispatched'`,
+		authority.UserID, authority.Epoch))
+	if errors.Is(err, sql.ErrNoRows) {
+		return AppleDispatchOutcome{}, false, nil
+	}
+	if err != nil {
+		return AppleDispatchOutcome{}, false, err
+	}
+	if row.ExternalScope != authority.ExternalScope ||
+		row.ContinuationState != appleContinuationArmed ||
+		row.ProductID != in.ProductID || !row.armMatches(in.ArmRequestID) ||
+		!row.capabilityMatches(in.AppInstanceID, in.ContinuationSecret) {
+		return AppleDispatchOutcome{}, false, nil
+	}
+	return AppleDispatchOutcome{Attempt: row.BillingPurchaseAttempt, Replayed: true}, true, nil
 }
 
 // resumeAppleAttemptTx decides what an EXISTING unresolved attempt may give this

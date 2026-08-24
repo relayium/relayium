@@ -208,6 +208,24 @@ func (s *SQLiteStore) applyAuthorizedAppleLifecycle(ctx context.Context, ev Sour
 	// transaction can never release a real dispatch.
 	resolveAttempt := hasAttempt && hasSubject && subject.AttemptID == attemptID &&
 		ev.BillingProductID != "" && attemptProduct == ev.BillingProductID
+	// Resolution is sticky for an exact redelivery after the authority epoch has
+	// advanced. This is what lets a client retry local capability retirement
+	// after a transient Keychain failure. It is considered only when there is no
+	// current attempt, so an old transaction can never claim to resolve a newer
+	// sheet.
+	stickyResolvedAttemptID := ""
+	if !hasAttempt && hasSubject && ev.BillingProductID != "" {
+		var resolvedProduct string
+		err := tx.QueryRowContext(ctx, `SELECT product_id FROM billing_purchase_attempts
+ WHERE id=? AND user_id=? AND provider=? AND external_scope=? AND state='resolved'`,
+			subject.AttemptID, ev.UserID, ProviderApple, ev.ExternalScope).Scan(&resolvedProduct)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return SubscriptionApply{}, err
+		}
+		if err == nil && resolvedProduct == ev.BillingProductID {
+			stickyResolvedAttemptID = subject.AttemptID
+		}
+	}
 
 	result, err := applySourceTx(ctx, tx, ev)
 	if err != nil {
@@ -222,6 +240,10 @@ func (s *SQLiteStore) applyAuthorizedAppleLifecycle(ctx context.Context, ev Sour
 		return SubscriptionApply{}, err
 	}
 	result.PurchaseAttemptPending = hasAttempt
+	if stickyResolvedAttemptID != "" {
+		result.PurchaseAttemptResolved = true
+		result.PurchaseAttemptResolvedID = stickyResolvedAttemptID
+	}
 	if result.Applied {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO apple_billing_external_subjects(environment,external_id,user_id,bundle_id)
  VALUES(?,?,?,?) ON CONFLICT(environment,external_id) DO UPDATE SET
@@ -257,6 +279,7 @@ func (s *SQLiteStore) applyAuthorizedAppleLifecycle(ctx context.Context, ev Sour
 		}
 		result.PurchaseAttemptPending = false
 		result.PurchaseAttemptResolved = true
+		result.PurchaseAttemptResolvedID = attemptID
 	}
 	return result, tx.Commit()
 }
