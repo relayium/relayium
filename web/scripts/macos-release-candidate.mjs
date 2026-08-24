@@ -81,7 +81,9 @@ export const RELEASE_ARTIFACT_FILES = [
  * crawler, or an answer engine — actually fetches, so a candidate that moved the
  * source and not these ships a truthful repository and a lying website.
  *
- * Three files, not four: English `/apps` has no static twin. It is an SPA route
+ * Four files: the three maintained release/app pages plus the sitemap whose
+ * release-page `lastmod` changes when a newly synchronized CLI tag advances the
+ * document date. English `/apps` has no static twin. It is an SPA route
  * rendered from `src/lib/AppsPage.svelte` and the i18n tables, which read the
  * manifest at build time — `buildModePages` generates the localized twins only.
  * `macos-release-surface.test.mjs` is what holds that half to the manifest.
@@ -90,6 +92,7 @@ export const MAINTAINED_GENERATED_PAGES = [
   "web/public/releases/index.html",
   "web/public/zh/apps/index.html",
   "web/public/zh/releases/index.html",
+  "web/public/sitemap.xml",
 ];
 
 /** The seven archived locales, as `web/public/` path prefixes. */
