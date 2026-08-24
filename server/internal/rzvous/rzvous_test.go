@@ -41,6 +41,47 @@ func startHub(t *testing.T) string {
 	return "ws" + strings.TrimPrefix(srv.URL, "http")
 }
 
+// Welcome and roster are separate frames. A client must not use an empty
+// selfID to interpret an early roster, or it can select its own entry and loop
+// every subsequent signal back to itself.
+func TestJoinWaitsForWelcomeBeforeSelectingTheRosterPeer(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer c.Close(websocket.StatusNormalClosure, "")
+		if _, _, err := c.Read(r.Context()); err != nil {
+			return
+		}
+		for _, env := range []signal.Envelope{
+			{Type: signal.TypePeers, Peers: []signal.Peer{{ID: "self"}, {ID: "peer"}}},
+			{Type: signal.TypeWelcome, Name: "self"},
+		} {
+			data, err := signal.EncodeEnvelope(env)
+			if err != nil {
+				return
+			}
+			if err := c.Write(r.Context(), websocket.MessageText, data); err != nil {
+				return
+			}
+		}
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	s, err := Join(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), "", "client")
+	if err != nil {
+		t.Fatalf("join: %v", err)
+	}
+	if s.SelfID() != "self" || s.PeerID() != "peer" {
+		t.Fatalf("joined as self=%q peer=%q, want self/peer", s.SelfID(), s.PeerID())
+	}
+}
+
 // A code that can't be a pairing code must fail before the dial, and say why.
 // The user-visible bug this pins: `relayium send f.zip K7M4XR` (a made-up code,
 // and since the format change an impossible one — codes are digits) spent a
