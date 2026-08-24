@@ -54,6 +54,24 @@ func Join(ctx context.Context, serverURL, code, name string) (*Session, error) {
 		return nil, dialError(err, resp)
 	}
 	s := &Session{conn: conn}
+	var roster []signal.Peer
+	selectPeer := func() bool {
+		// Welcome and roster are separate frames. Do not interpret a roster
+		// until Welcome has identified this connection: under an unlucky write
+		// schedule an empty selfID would make our own roster entry look like the
+		// peer, causing signaling (including the handshake commit) to loop back.
+		if s.selfID == "" || len(roster) == 0 {
+			return false
+		}
+		s.peerID = ""
+		for _, p := range roster {
+			if p.ID != s.selfID {
+				s.peerID = p.ID
+				break
+			}
+		}
+		return s.peerID != ""
+	}
 
 	if err := s.write(ctx, signal.Envelope{Type: signal.TypeJoin, Name: name}); err != nil {
 		conn.Close(websocket.StatusInternalError, "join")
@@ -68,13 +86,12 @@ func Join(ctx context.Context, serverURL, code, name string) (*Session, error) {
 		switch env.Type {
 		case signal.TypeWelcome:
 			s.selfID = env.Name
-		case signal.TypePeers:
-			for _, p := range env.Peers {
-				if p.ID != s.selfID {
-					s.peerID = p.ID
-				}
+			if selectPeer() {
+				return s, nil
 			}
-			if s.peerID != "" {
+		case signal.TypePeers:
+			roster = env.Peers
+			if selectPeer() {
 				return s, nil
 			}
 		}

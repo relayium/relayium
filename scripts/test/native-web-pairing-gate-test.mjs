@@ -1141,8 +1141,8 @@ const MUTATIONS = [
     name: "the merge gate's pull_request trigger grows a path filter",
     mutate: (s) => withText(
       s, AGGREGATE,
-      "  pull_request:\n\npermissions:",
-      "  pull_request:\n    paths:\n      - 'web/**'\n\npermissions:",
+      "  pull_request:\n",
+      "  pull_request:\n    paths:\n      - 'web/**'\n",
     ),
     expect: /merge-gate\.yml gained a pull_request path filter/,
   },

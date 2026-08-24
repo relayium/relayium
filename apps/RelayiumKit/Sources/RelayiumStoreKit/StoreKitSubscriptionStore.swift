@@ -14,10 +14,9 @@ import StoreKit
 /// Linking StoreKit into an app is not free of consequence: it is the framework
 /// the App Store's own review tooling and the system's purchase machinery watch
 /// for, and an app that links it is an app that claims to sell something. This
-/// batch builds the purchase path without making that claim — no macOS or iOS
-/// target links this product, there is no `.storekit` configuration file, and
-/// there are no product identifiers anywhere. What exists is a compiled,
-/// type-checked adapter waiting for the batch that turns it on.
+/// the App Store targets link this product while direct-distribution targets do
+/// not. Product identifiers still arrive from Relayium's authenticated server
+/// catalog; the adapter compiles none into a shipping binary.
 ///
 /// ## What it deliberately does not decide
 ///
@@ -113,6 +112,14 @@ public actor StoreKitSubscriptionStore: SubscriptionStore {
     public func currentEntitlements() async -> [SignedStoreTransaction] {
         var out: [SignedStoreTransaction] = []
         for await verification in Transaction.currentEntitlements {
+            out.append(await record(verification))
+        }
+        return out
+    }
+
+    public func unfinishedTransactions() async -> [SignedStoreTransaction] {
+        var out: [SignedStoreTransaction] = []
+        for await verification in Transaction.unfinished {
             out.append(await record(verification))
         }
         return out

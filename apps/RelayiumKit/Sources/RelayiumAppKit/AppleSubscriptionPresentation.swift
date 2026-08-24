@@ -376,7 +376,8 @@ public enum AppleSubscriptionPresentation {
                 return blockedNotice(blockedBy: provider, language: language)
             case .verifierUnavailable:
                 return L10n.t(.subscriptionErrorNotReady, language: language)
-            case .reconciliationUnavailable, .purchaseOutcomeRequired, .continuationRejected:
+            case .reconciliationUnavailable, .purchaseOutcomeRequired,
+                 .continuationRejected, .initialArmRejected:
                 // All three together, and for the same reason `.invalidTransaction`
                 // and `.decoding` are grouped above: the user-facing FACT and the
                 // REPAIR are identical. A sheet whose outcome was never reported,

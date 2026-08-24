@@ -37,6 +37,14 @@ public protocol SubscriptionStore: Sendable {
     /// transactions. The restore path's input.
     func currentEntitlements() async -> [SignedStoreTransaction]
 
+    /// Transactions StoreKit still considers unfinished.
+    ///
+    /// This is a launch-recovery surface, not another entitlement oracle. The
+    /// model submits every delivery to Relayium's server and finishes only a
+    /// server-accepted transaction, exactly as it does for purchases, restores,
+    /// and live updates.
+    func unfinishedTransactions() async -> [SignedStoreTransaction]
+
     /// Renewals, refunds, upgrades, Ask-to-Buy approvals and anything the store
     /// could not deliver at the time it happened.
     ///
@@ -58,6 +66,12 @@ public protocol SubscriptionStore: Sendable {
     /// that what is finished is exactly what was delivered — the adapter looks
     /// the id up in its own table and finishes that transaction, or nothing.
     func finish(_ id: StoreTransactionID) async
+}
+
+public extension SubscriptionStore {
+    /// Existing non-StoreKit adapters have no persistent transaction queue.
+    /// The real adapter overrides this with `Transaction.unfinished`.
+    func unfinishedTransactions() async -> [SignedStoreTransaction] { [] }
 }
 
 /// One purchasable product, already localized by the store.

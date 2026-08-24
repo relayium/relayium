@@ -989,6 +989,23 @@ somebody created it.
 
 A platform root and the workflow that owns it are created **in the same commit**.
 
+The workflow is also split by **independent evidence class** once measured
+runtime shows a meaningful critical path. The iOS lane is the reference shape:
+unsigned compile evidence, offline UI smoke, and transfer acceptance are
+separate jobs with no `needs:` edges. Any one can fail the reusable workflow,
+but none waits for another merely to reuse a checkout or DerivedData directory.
+That deliberately spends a little duplicate setup/build work to reduce paid
+runner wall-clock latency and eliminate one 37-minute serial failure point.
+
+Future Android and Windows workflows follow the principle, not a fixed count of
+three jobs. Build, UI/device tests, end-to-end acceptance, and signing or store
+delivery should be separated when they are independently runnable and materially
+slow. Tiny steps stay together because runner startup and dependency restoration
+can cost more than the work itself. Shared protocol and wire compatibility tests
+remain in the cross-platform contract lanes rather than being copied into every
+platform workflow. Release/signing stays independent from pull-request CI and
+from every other platform's release cadence.
+
 * A root with no workflow is source nothing compiles, tests or signs. The board
   is green only because nobody asked.
 * A workflow with no root is a placeholder that reports a green check for a

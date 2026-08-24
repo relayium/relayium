@@ -31,6 +31,7 @@ private final class FakeStore: SubscriptionStore, @unchecked Sendable {
     private var _offers: Result<[SubscriptionOffer], Error> = .success([])
     private var _purchase: Result<StorePurchaseOutcome, Error> = .success(.userCancelled)
     private var _entitlements: [SignedStoreTransaction] = []
+    private var _unfinished: [SignedStoreTransaction] = []
     private var _synchronize: Result<Void, Error> = .success(())
     private var _finished: [StoreTransactionID] = []
     private var _requestedIDs: [[String]] = []
@@ -38,6 +39,7 @@ private final class FakeStore: SubscriptionStore, @unchecked Sendable {
     private var _continuation: AsyncStream<SignedStoreTransaction>.Continuation?
     private var _updateStreamsTerminated = 0
     private var _onPurchase: (@Sendable () -> Void)?
+    private var _holdPurchase = false
     private var _holdSynchronize = false
 
     init(journal: PurchaseJournal) { self.journal = journal }
@@ -46,11 +48,13 @@ private final class FakeStore: SubscriptionStore, @unchecked Sendable {
     func setOffers(_ value: Result<[SubscriptionOffer], Error>) { sync { _offers = value } }
     func setPurchase(_ value: Result<StorePurchaseOutcome, Error>) { sync { _purchase = value } }
     func setEntitlements(_ value: [SignedStoreTransaction]) { sync { _entitlements = value } }
+    func setUnfinished(_ value: [SignedStoreTransaction]) { sync { _unfinished = value } }
     func setSynchronize(_ value: Result<Void, Error>) { sync { _synchronize = value } }
     /// Run something at the moment the store would be charging the user — the
     /// only place from which "the session ended while the sheet was open" can be
     /// staged truthfully.
     func setOnPurchase(_ body: (@Sendable () -> Void)?) { sync { _onPurchase = body } }
+    func setHoldPurchase(_ value: Bool) { sync { _holdPurchase = value } }
     /// Park `synchronize()` until released, so an operation can be caught
     /// genuinely in flight rather than assumed to be.
     func setHoldSynchronize(_ value: Bool) { sync { _holdSynchronize = value } }
@@ -79,12 +83,18 @@ private final class FakeStore: SubscriptionStore, @unchecked Sendable {
         journal.record("purchase")
         sync { _appAccountTokens.append(appAccountToken) }
         sync { _onPurchase }?()
+        while sync({ _holdPurchase }) { await Task.yield() }
         return try sync { _purchase }.get()
     }
 
     func currentEntitlements() async -> [SignedStoreTransaction] {
         journal.record("currentEntitlements")
         return sync { _entitlements }
+    }
+
+    func unfinishedTransactions() async -> [SignedStoreTransaction] {
+        journal.record("unfinished")
+        return sync { _unfinished }
     }
 
     func updates() -> AsyncStream<SignedStoreTransaction> {
@@ -113,6 +123,77 @@ private final class FakeStore: SubscriptionStore, @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         return body()
     }
+}
+
+private enum CapabilityStoreFailure: Error { case unavailable }
+
+/// A Keychain-shaped store whose first clear fails. This models the only
+/// retirement failure that matters: the server has converged, but the local
+/// credential cannot yet be removed.
+private final class FailOnceClearCapabilityStore: ApplePurchaseCapabilityStoring {
+    private let lock = NSLock()
+    private var encoded: String?
+    private var shouldFailClear = true
+
+    func saveCapability(_ encoded: String) throws {
+        lock.lock(); defer { lock.unlock() }
+        self.encoded = encoded
+    }
+
+    func loadCapability() throws -> String? {
+        lock.lock(); defer { lock.unlock() }
+        return encoded
+    }
+
+    func clearCapability() throws {
+        lock.lock(); defer { lock.unlock() }
+        if shouldFailClear {
+            shouldFailClear = false
+            throw CapabilityStoreFailure.unavailable
+        }
+        encoded = nil
+    }
+}
+
+private final class LockableCapabilityStore: ApplePurchaseCapabilityStoring, @unchecked Sendable {
+    private let lock = NSLock()
+    private var encoded: String?
+    private var writesFail = false
+
+    func setWritesFail(_ value: Bool) {
+        lock.lock(); writesFail = value; lock.unlock()
+    }
+    func saveCapability(_ encoded: String) throws {
+        lock.lock(); defer { lock.unlock() }
+        if writesFail { throw CapabilityStoreFailure.unavailable }
+        self.encoded = encoded
+    }
+    func loadCapability() throws -> String? {
+        lock.lock(); defer { lock.unlock() }
+        return encoded
+    }
+    func clearCapability() throws {
+        lock.lock(); defer { lock.unlock() }
+        if writesFail { throw CapabilityStoreFailure.unavailable }
+        encoded = nil
+    }
+}
+
+private final class FailingOutcomeJournal: ApplePurchaseOutcomeJournal {
+    func load(ownerAccountID: String) -> ApplePurchaseOutcomeJournalEntry? { nil }
+    func save(_ entry: ApplePurchaseOutcomeJournalEntry) throws {
+        throw CapabilityStoreFailure.unavailable
+    }
+    func clear(ownerAccountID: String) throws {
+        throw CapabilityStoreFailure.unavailable
+    }
+}
+
+private final class ReadFailWriteSucceedCapabilityStore: ApplePurchaseCapabilityStoring {
+    private(set) var saves = 0
+    func saveCapability(_ encoded: String) throws { saves += 1 }
+    func loadCapability() throws -> String? { throw CapabilityStoreFailure.unavailable }
+    func clearCapability() throws {}
 }
 
 /// Relayium's billing endpoints, scripted.
@@ -400,7 +481,10 @@ final class AppleSubscriptionModelTests: XCTestCase {
         func set(_ new: String?) { lock.lock(); value = new; lock.unlock() }
     }
 
-    private func makeRig(bearer: String? = "rlm_app_T") -> Rig {
+    private func makeRig(
+        bearer: String? = "rlm_app_T",
+        purchaseDispatchPolicy: ApplePurchaseDispatchPolicy = .legacyOneShot
+    ) -> Rig {
         let journal = PurchaseJournal()
         let store = FakeStore(journal: journal)
         let billing = FakeBilling(journal: journal, accountToken: Fixture.accountToken)
@@ -408,7 +492,9 @@ final class AppleSubscriptionModelTests: XCTestCase {
         let model = AppleSubscriptionModel(
             store: store, billing: billing, bundleID: Fixture.bundleID,
             bearer: { box.current },
-            refreshAccount: { journal.record("refresh") })
+            accountID: { "acct-A" },
+            refreshAccount: { journal.record("refresh") },
+            purchaseDispatchPolicy: purchaseDispatchPolicy)
         return Rig(model: model, store: store, billing: billing, journal: journal, bearer: box)
     }
 
@@ -419,20 +505,22 @@ final class AppleSubscriptionModelTests: XCTestCase {
     /// capability, no instance — which is why every other test in this file goes
     /// on proving the shipped one-shot behaviour unchanged.
     private func makeContinuationRig(
-        store capabilityStore: InMemoryApplePurchaseCapabilityStore,
+        store capabilityStore: ApplePurchaseCapabilityStoring,
         bearer: String? = "rlm_app_T",
-        appInstanceID: String = "instance-A"
+        appInstanceID: String = "instance-A",
+        outcomeJournal: ApplePurchaseOutcomeJournal = InMemoryApplePurchaseOutcomeJournal()
     ) -> Rig {
         let journal = PurchaseJournal()
         let store = FakeStore(journal: journal)
         let billing = FakeBilling(journal: journal, accountToken: Fixture.accountToken)
-        billing.setMintedSecret("TEST-SECRET-NOT-REAL")
         let box = BearerBox(bearer)
         let model = AppleSubscriptionModel(
             store: store, billing: billing, bundleID: Fixture.bundleID,
             bearer: { box.current },
+            accountID: { "acct-A" },
             refreshAccount: { journal.record("refresh") },
             continuation: ApplePurchaseCapabilityRepository(store: capabilityStore),
+            outcomeJournal: outcomeJournal,
             appInstanceID: appInstanceID)
         return Rig(model: model, store: store, billing: billing, journal: journal, bearer: box)
     }
@@ -671,6 +759,35 @@ final class AppleSubscriptionModelTests: XCTestCase {
                            .failed(.purchaseNotAllowed(blockedBy: "apple")))
             XCTAssertTrue(rig.store.finished.isEmpty)
         }
+    }
+
+    func testDurableContinuationPolicyRefusesBeforeDispatchWhenCapabilityIsUnavailable() async {
+        let rig = makeRig(purchaseDispatchPolicy: .durableContinuationRequired)
+        rig.billing.setCatalog(.success(Fixture.serverCatalog()))
+        rig.store.setOffers(.success(Fixture.offers(Fixture.catalog)))
+        await rig.model.loadOffers()
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.model.state, .failed(.billing(.continuationRejected)))
+        XCTAssertTrue(rig.billing.dispatchContinuations.isEmpty)
+        XCTAssertEqual(rig.journal.count("accountToken"), 0)
+        XCTAssertEqual(rig.journal.count("purchase"), 0)
+        XCTAssertTrue(rig.store.appAccountTokens.isEmpty)
+    }
+
+    func testCapabilityReadFailureNeverOverwritesAnUnknownExistingSecret() async {
+        let capabilityStore = ReadFailWriteSucceedCapabilityStore()
+        let rig = makeContinuationRig(store: capabilityStore)
+        rig.store.setOffers(.success(Fixture.offers(Fixture.catalog)))
+        await rig.model.loadOffers()
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.model.state, .failed(.billing(.continuationRejected)))
+        XCTAssertEqual(capabilityStore.saves, 0)
+        XCTAssertTrue(rig.billing.dispatchContinuations.isEmpty)
+        XCTAssertEqual(rig.journal.count("purchase"), 0)
     }
 
     // MARK: - signed out
@@ -1266,6 +1383,75 @@ final class AppleSubscriptionModelTests: XCTestCase {
         XCTAssertEqual(rig.model.state, stateBefore, "a background renewal repainted the screen")
     }
 
+    func testStartupSweepSettlesAnUnfinishedTransaction() async {
+        let rig = await makeReadyRig()
+        rig.store.setUnfinished([Fixture.delivery])
+        let stateBefore = rig.model.state
+
+        rig.model.startObservingUpdates()
+        await waitFor(rig) { $0.journal.count("refresh") == 1 }
+
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
+        XCTAssertEqual(rig.billing.submittedJWS, [Fixture.jws])
+        XCTAssertEqual(rig.model.state, stateBefore)
+        XCTAssertEqual(rig.journal.count("unfinished"), 1)
+    }
+
+    /// A converged server response is not enough to finish while the local
+    /// capability remains stuck in Keychain. StoreKit redelivery supplies the
+    /// deterministic retry; the second sweep clears first and only then
+    /// finishes the transaction.
+    func testRetirementFailureLeavesTransactionForDeterministicRedelivery() async throws {
+        let capabilityStore = FailOnceClearCapabilityStore()
+        let repository = ApplePurchaseCapabilityRepository(store: capabilityStore)
+        try repository.save(ApplePurchaseCapability(
+            attemptID: "attempt-A",
+            ownerAccountID: "acct-A",
+            appInstanceID: "instance-A",
+            secret: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            armRequestID: "arm-A",
+            productID: Fixture.catalog[0],
+            phase: .locked))
+        let rig = makeContinuationRig(store: capabilityStore)
+        let resolved = AppleTransactionResult(
+            applied: true, planId: "plus", status: "active",
+            expiresAt: 1_786_000_000, provider: "apple",
+            dispatchPending: false, dispatchResolved: true,
+            dispatchResolvedAttemptId: "attempt-A")
+        rig.billing.setSubmissions([.success(resolved)])
+        rig.store.setUnfinished([Fixture.delivery])
+
+        await rig.model.reconcileUnfinishedTransactions()
+
+        XCTAssertTrue(rig.store.finished.isEmpty,
+                      "a failed local retirement discarded StoreKit redelivery")
+        XCTAssertNotNil(repository.load())
+
+        await rig.model.reconcileUnfinishedTransactions()
+
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
+        XCTAssertNil(repository.load())
+        XCTAssertEqual(rig.billing.submittedJWS, [Fixture.jws, Fixture.jws])
+    }
+
+    func testUnfinishedTransactionIsRetriedAfterLaunchSessionRestoration() async {
+        let rig = makeRig(bearer: nil)
+        rig.store.setUnfinished([Fixture.delivery])
+        rig.billing.setSubmissions([.success(Fixture.entitlement)])
+
+        rig.model.startObservingUpdates()
+        await waitFor(rig) { $0.journal.count("updates") == 1 }
+        XCTAssertTrue(rig.billing.submittedJWS.isEmpty)
+        XCTAssertTrue(rig.store.finished.isEmpty)
+
+        rig.bearer.set("rlm_app_restored")
+        await rig.model.reconcileUnfinishedTransactions()
+
+        XCTAssertEqual(rig.billing.submittedJWS, [Fixture.jws])
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
+        XCTAssertEqual(rig.journal.count("refresh"), 1)
+    }
+
     /// A refused background submission finishes nothing and says nothing. The
     /// transaction stays with the store, which is the whole redelivery
     /// mechanism this policy exists to protect.
@@ -1605,8 +1791,8 @@ extension AppleSubscriptionModelTests {
                       "a legacy client reported an outcome it has no capability for")
     }
 
-    /// The initial arm carries the instance and a fresh identity and no secret,
-    /// and the secret the server returns is **persisted before the sheet opens**.
+    /// The initial arm's identity and secret are persisted before the request,
+    /// so losing the request or its response is exactly replayable.
     func testTheInitialArmPersistsTheCapabilityBeforeTheSheet() async throws {
         let capabilityStore = InMemoryApplePurchaseCapabilityStore()
         let rig = await makeReadyContinuationRig(store: capabilityStore)
@@ -1614,14 +1800,217 @@ extension AppleSubscriptionModelTests {
 
         let sent = try XCTUnwrap(rig.billing.dispatchContinuations.first ?? nil)
         XCTAssertEqual(sent.appInstanceID, "instance-A")
-        XCTAssertNil(sent.continuationSecret, "a first arm has nothing to prove")
+        let sentSecret = try XCTUnwrap(sent.continuationSecret)
         XCTAssertTrue(ApplePurchaseIdentity.isValid(sent.armRequestID))
 
         let stored = try XCTUnwrap(ApplePurchaseCapabilityRepository(store: capabilityStore).load())
         XCTAssertEqual(stored.appInstanceID, "instance-A")
         XCTAssertEqual(stored.armRequestID, sent.armRequestID,
                        "the stored arm is not the one the sheet was opened under")
-        XCTAssertEqual(stored.secret, "TEST-SECRET-NOT-REAL")
+        XCTAssertEqual(stored.secret, sentSecret)
+    }
+
+    func testALostInitialResponseReplaysTheExactPreparedArm() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+        rig.billing.setDispatches([
+            .failure(AppleBillingError.network),
+            .success(ApplePurchaseDispatch(appAccountToken: Fixture.accountToken,
+                                           attemptId: "attempt-replayed"))
+        ])
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+        let prepared = try XCTUnwrap(
+            ApplePurchaseCapabilityRepository(store: capabilityStore).load())
+        XCTAssertEqual(prepared.phase, .preparing)
+        XCTAssertEqual(prepared.attemptID, "")
+        XCTAssertEqual(rig.journal.count("purchase"), 0,
+                       "a lost dispatch response opened StoreKit")
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.billing.dispatchContinuations.count, 2)
+        XCTAssertEqual(rig.billing.dispatchContinuations[0],
+                       rig.billing.dispatchContinuations[1],
+                       "the retry did not replay the exact prepared capability")
+        XCTAssertEqual(rig.billing.dispatchProductIDs,
+                       [Fixture.catalog[0], Fixture.catalog[0]])
+        XCTAssertEqual(rig.journal.count("purchase"), 1,
+                       "the replay opened anything other than one sheet")
+    }
+
+    func testADeterministicInitialRejectionRetiresThePreparedIdentity() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+        rig.billing.setDispatches([
+            .failure(AppleBillingError.initialArmRejected(
+                code: "manage_with_apple", provider: "apple")),
+            .success(ApplePurchaseDispatch(appAccountToken: Fixture.accountToken,
+                                           attemptId: "attempt-two"))
+        ])
+        rig.store.setPurchase(.success(.userCancelled))
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertNil(ApplePurchaseCapabilityRepository(store: capabilityStore).load())
+
+        await rig.model.purchase(productID: Fixture.catalog[1])
+
+        XCTAssertEqual(rig.billing.dispatchProductIDs,
+                       [Fixture.catalog[0], Fixture.catalog[1]])
+        XCTAssertEqual(rig.journal.count("purchase"), 1)
+    }
+
+    func testCancellationSurvivesKeychainWriteFailureThroughOutcomeJournal() async throws {
+        let capabilityStore = LockableCapabilityStore()
+        let outcomeJournal = InMemoryApplePurchaseOutcomeJournal()
+        let journal = PurchaseJournal()
+        let store = FakeStore(journal: journal)
+        let billing = FakeBilling(journal: journal, accountToken: Fixture.accountToken)
+        let bearer = BearerBox("rlm_app_A")
+        let repository = ApplePurchaseCapabilityRepository(store: capabilityStore)
+        let model = AppleSubscriptionModel(
+            store: store, billing: billing, bundleID: Fixture.bundleID,
+            bearer: { bearer.current }, accountID: { "acct-A" },
+            refreshAccount: {}, continuation: repository,
+            outcomeJournal: outcomeJournal, appInstanceID: "instance-A",
+            purchaseDispatchPolicy: .durableContinuationRequired)
+        store.setOffers(.success(Fixture.offers(Fixture.catalog)))
+        await model.loadOffers()
+        store.setPurchase(.success(.userCancelled))
+        store.setOnPurchase { capabilityStore.setWritesFail(true) }
+
+        await model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(repository.load()?.phase, .armed)
+        XCTAssertNotNil(outcomeJournal.load(ownerAccountID: "acct-A"))
+
+        capabilityStore.setWritesFail(false)
+        store.setOnPurchase(nil)
+        await model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(billing.dispatchContinuations.count, 2)
+        XCTAssertEqual(journal.count("purchase"), 2)
+        XCTAssertEqual(repository.load()?.phase, .cancelled)
+        XCTAssertNil(outcomeJournal.load(ownerAccountID: "acct-A"))
+    }
+
+    func testCancellationSurvivesJournalFailureThroughKeychainIntent() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = makeContinuationRig(
+            store: capabilityStore, outcomeJournal: FailingOutcomeJournal())
+        rig.store.setOffers(.success(Fixture.offers(Fixture.catalog)))
+        await rig.model.loadOffers()
+        rig.store.setPurchase(.success(.userCancelled))
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.billing.reports.map(\.outcome), [.userCancelled])
+        XCTAssertEqual(ApplePurchaseCapabilityRepository(
+            store: capabilityStore).load()?.phase, .cancelled)
+    }
+
+    func testResolvedSubmissionRetiresTheAccountSnapshotNotTheNewSession() async throws {
+        let capabilityStoreA = InMemoryApplePurchaseCapabilityStore()
+        let capabilityStoreB = InMemoryApplePurchaseCapabilityStore()
+        let repository = ApplePurchaseCapabilityRepository(
+            storeForOwner: { $0 == "acct-A" ? capabilityStoreA : capabilityStoreB })
+        try repository.save(ApplePurchaseCapability(
+            attemptID: "attempt-B", ownerAccountID: "acct-B",
+            appInstanceID: "instance-A",
+            secret: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            armRequestID: "arm-B", productID: Fixture.catalog[0],
+            phase: .cancelled))
+        let journal = PurchaseJournal()
+        let store = FakeStore(journal: journal)
+        let billing = FakeBilling(journal: journal, accountToken: Fixture.accountToken)
+        let bearer = BearerBox("rlm_app_A")
+        let account = BearerBox("acct-A")
+        let model = AppleSubscriptionModel(
+            store: store, billing: billing, bundleID: Fixture.bundleID,
+            bearer: { bearer.current }, accountID: { account.current },
+            refreshAccount: {}, continuation: repository,
+            outcomeJournal: InMemoryApplePurchaseOutcomeJournal(),
+            appInstanceID: "instance-A",
+            purchaseDispatchPolicy: .durableContinuationRequired)
+        store.setOffers(.success(Fixture.offers(Fixture.catalog)))
+        await model.loadOffers()
+        store.setPurchase(.success(.delivered(Fixture.delivery)))
+        billing.setSubmissions([.success(AppleTransactionResult(
+            applied: true, planId: "plus", status: "active",
+            expiresAt: 1_786_000_000, provider: "apple",
+            dispatchPending: false, dispatchResolved: true,
+            dispatchResolvedAttemptId: "attempt-one"))])
+        billing.holdSubmit(after: 1)
+
+        let purchase = Task { await model.purchase(productID: Fixture.catalog[0]) }
+        for _ in 0..<200 where billing.submittedJWS.isEmpty { await Task.yield() }
+        bearer.set("rlm_app_B")
+        account.set("acct-B")
+        billing.releaseSubmit()
+        await purchase.value
+
+        XCTAssertNil(repository.load(ownerAccountID: "acct-A"))
+        XCTAssertNotNil(repository.load(ownerAccountID: "acct-B"),
+                        "A's response retired B's independent capability")
+        XCTAssertEqual(store.finished, [Fixture.delivery.id])
+    }
+
+    func testAContinuationCapabilityCannotCrossRelayiumAccounts() async throws {
+        let capabilityStoreA = InMemoryApplePurchaseCapabilityStore()
+        let capabilityStoreB = InMemoryApplePurchaseCapabilityStore()
+        let capabilityRepository = ApplePurchaseCapabilityRepository(
+            storeForOwner: { $0 == "acct-A" ? capabilityStoreA : capabilityStoreB })
+        let journal = PurchaseJournal()
+        let store = FakeStore(journal: journal)
+        let billing = FakeBilling(journal: journal, accountToken: Fixture.accountToken)
+        let bearer = BearerBox("rlm_app_A")
+        let account = BearerBox("acct-A")
+        let model = AppleSubscriptionModel(
+            store: store, billing: billing, bundleID: Fixture.bundleID,
+            bearer: { bearer.current }, accountID: { account.current },
+            refreshAccount: {},
+            continuation: capabilityRepository,
+            outcomeJournal: InMemoryApplePurchaseOutcomeJournal(),
+            appInstanceID: "instance-A",
+            purchaseDispatchPolicy: .durableContinuationRequired)
+        store.setOffers(.success(Fixture.offers(Fixture.catalog)))
+        await model.loadOffers()
+        store.setPurchase(.success(.userCancelled))
+        await model.purchase(productID: Fixture.catalog[0])
+        XCTAssertEqual(billing.dispatchContinuations.count, 1)
+
+        bearer.set("rlm_app_B")
+        account.set("acct-B")
+        await model.loadOffers()
+        await model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(model.state, .idle)
+        XCTAssertEqual(billing.dispatchContinuations.count, 2)
+        XCTAssertEqual(journal.count("purchase"), 2)
+        XCTAssertNotNil(capabilityRepository.load(ownerAccountID: "acct-A"))
+        XCTAssertNotNil(capabilityRepository.load(ownerAccountID: "acct-B"))
+    }
+
+    func testConcurrentPurchaseCallsShareNeitherArmNorStoreKitSheet() async {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+        rig.store.setPurchase(.success(.userCancelled))
+        rig.store.setHoldPurchase(true)
+
+        let first = Task { await rig.model.purchase(productID: Fixture.catalog[0]) }
+        await waitFor(rig) { $0.journal.count("purchase") == 1 }
+        let second = Task { await rig.model.purchase(productID: Fixture.catalog[1]) }
+        await Task.yield()
+
+        XCTAssertEqual(rig.journal.count("purchase"), 1)
+        XCTAssertEqual(rig.billing.dispatchContinuations.count, 1)
+
+        rig.store.setHoldPurchase(false)
+        await first.value
+        await second.value
+        XCTAssertEqual(rig.journal.count("purchase"), 1)
+        XCTAssertEqual(rig.billing.dispatchContinuations.count, 1)
     }
 
     /// **Cancel, then buy again — the defect this whole protocol exists for.**
@@ -1640,7 +2029,9 @@ extension AppleSubscriptionModelTests {
         let cancellation = try XCTUnwrap(rig.billing.reports.first)
         XCTAssertEqual(cancellation.outcome, .userCancelled)
         XCTAssertEqual(cancellation.attemptID, "attempt-one")
-        XCTAssertEqual(cancellation.secret, "TEST-SECRET-NOT-REAL")
+        let initial = try XCTUnwrap(rig.billing.dispatchContinuations.first ?? nil)
+        let initialSecret = try XCTUnwrap(initial.continuationSecret)
+        XCTAssertEqual(cancellation.secret, initialSecret)
         let firstArm = cancellation.armRequestID
         XCTAssertEqual(ApplePurchaseCapabilityRepository(store: capabilityStore).load()?.phase,
                        .cancelled)
@@ -1649,7 +2040,7 @@ extension AppleSubscriptionModelTests {
         await rig.model.purchase(productID: Fixture.catalog[0])
 
         let resume = try XCTUnwrap(rig.billing.dispatchContinuations.last ?? nil)
-        XCTAssertEqual(resume.continuationSecret, "TEST-SECRET-NOT-REAL",
+        XCTAssertEqual(resume.continuationSecret, initialSecret,
                        "a resume must present the capability")
         XCTAssertNotEqual(resume.armRequestID, firstArm,
                           "a spent arm identity was re-presented")
@@ -2069,7 +2460,8 @@ extension AppleSubscriptionModelTests {
         let resolved = await makeReadyContinuationRig(store: capabilityStore)
         resolved.billing.setSubmissions([.success(AppleTransactionResult(
             applied: false, planId: "pro", status: "active", expiresAt: 1_786_000_000,
-            provider: "apple", dispatchPending: false, dispatchResolved: true))])
+            provider: "apple", dispatchPending: false, dispatchResolved: true,
+            dispatchResolvedAttemptId: "attempt-one"))])
         resolved.model.startObservingUpdates()
         resolved.store.deliverUpdate(Fixture.delivery)
         await waitFor(resolved) { $0.journal.count("submit") >= 1 }

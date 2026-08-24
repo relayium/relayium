@@ -125,8 +125,9 @@ type appleTxResult struct {
 	// The dispatch-convergence half of the body. A client may not finish a
 	// transaction while a dispatch is still pending, so these are part of the
 	// contract rather than diagnostics.
-	DispatchPending  bool `json:"dispatchPending"`
-	DispatchResolved bool `json:"dispatchResolved"`
+	DispatchPending           bool   `json:"dispatchPending"`
+	DispatchResolved          bool   `json:"dispatchResolved"`
+	DispatchResolvedAttemptID string `json:"dispatchResolvedAttemptId"`
 }
 
 func (f *appleTxFixture) mustAccept(t *testing.T, jws string) (appleTxResult, string) {

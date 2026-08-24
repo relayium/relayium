@@ -243,14 +243,32 @@ final class AppleBillingClientTests: XCTestCase {
     }
 
     func testAnExistingAuthorityOrDispatchIsNotASecondPurchasePermission() async {
-        for code in ["billing_authority_conflict", "purchase_reconciliation_required"] {
+        let cases: [(String, AppleBillingError)] = [
+            ("billing_authority_conflict",
+             .initialArmRejected(code: "billing_authority_conflict", provider: "apple")),
+            ("purchase_reconciliation_required",
+             .purchaseAuthorityManaged(provider: "apple")),
+        ]
+        for (code, expected) in cases {
             StubURLProtocol.stub = .init(
                 status: 409,
                 body: Data("{\"error\":\"\(code)\",\"provider\":\"apple\"}".utf8))
             await XCTAssertThrowsErrorAsync(try await self.client().dispatchApplePurchase(
                 bundleID: "com.relayium.mac", productID: "p", continuation: nil, token: "t")) {
-                XCTAssertEqual($0 as? AppleBillingError,
-                               .purchaseAuthorityManaged(provider: "apple"))
+                XCTAssertEqual($0 as? AppleBillingError, expected)
+            }
+        }
+    }
+
+    func testBareProxyStatusesAreNeverProofThatAnArmWasNotCreated() async {
+        for status in [400, 409] {
+            StubURLProtocol.stub = .init(status: status, body: Data("proxy refusal".utf8))
+            await XCTAssertThrowsErrorAsync(try await self.client().dispatchApplePurchase(
+                bundleID: "com.relayium.mac", productID: "p",
+                continuation: ApplePurchaseContinuationFields(
+                    appInstanceID: "i", armRequestID: "a", continuationSecret: "S"),
+                token: "t")) {
+                XCTAssertEqual($0 as? AppleBillingError, .server(status: status))
             }
         }
     }

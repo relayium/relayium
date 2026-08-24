@@ -9,9 +9,11 @@ import RelayiumKit
 /// attempt got `409 purchase_reconciliation_required` for ever. A zero-charge
 /// permanent deadlock.
 ///
-/// The fix is a **capability**: the server mints a 32-byte secret on the initial
-/// arm and returns it exactly once; the client stores it device-locally and
-/// presents it to say "the sheet *I* armed was cancelled — let me open another".
+/// The fix is a **capability**: the client mints and durably stores a 32-byte
+/// secret before the initial arm; the server stores only its digest, and the
+/// client presents the secret to say "the sheet *I* armed was cancelled — let
+/// me open another". Older clients that do not pre-mint one remain compatible
+/// with the server-generated, first-response-only form.
 ///
 /// ## What this file is, and what it deliberately is not
 ///
@@ -77,6 +79,10 @@ import RelayiumKit
 public struct ApplePurchaseCapability: Equatable, Codable, Sendable {
     /// Where the *server* believes this attempt is, as far as this client knows.
     public enum Phase: String, Codable, Sendable, CaseIterable {
+        /// The client has durably prepared the initial capability, but has not
+        /// yet received the server's attempt id. Replaying this value sends the
+        /// same product, arm and secret; it never creates a second logical arm.
+        case preparing
         /// A sheet is authorized for ``armRequestID``/``productID``. Not
         /// resumable: either it is open right now, or this process died while it
         /// was and nobody knows what StoreKit did.
@@ -92,11 +98,15 @@ public struct ApplePurchaseCapability: Equatable, Codable, Sendable {
     /// The server's attempt id. Stable across every resume; a resume emits no
     /// new attempt and no new attribution token.
     public let attemptID: String
+    /// Relayium account that prepared this capability. Optional only so a
+    /// pre-field compatibility fixture still decodes; strict production policy
+    /// refuses an absent or different owner rather than guessing.
+    public let ownerAccountID: String?
     /// Stable for the life of this installation.
     public let appInstanceID: String
-    /// **The raw 32-byte capability secret.** Returned exactly once, by the
-    /// initial arm, and never re-issued — which is what makes a lost *resume*
-    /// response replayable and a lost *initial* response unrecoverable.
+    /// **The raw 32-byte capability secret.** Current clients persist it before
+    /// the initial request, so initial and resume responses are both replayable.
+    /// It is never stored by the server in raw form.
     public let secret: String
     /// The arm identity currently believed open (or last opened).
     public var armRequestID: String
@@ -126,11 +136,13 @@ public struct ApplePurchaseCapability: Equatable, Codable, Sendable {
     /// converges instead of deadlocking.
     public var unconfirmedOutcome: ApplePurchaseOutcomeIntent?
 
-    public init(attemptID: String, appInstanceID: String, secret: String,
+    public init(attemptID: String, ownerAccountID: String? = nil,
+                appInstanceID: String, secret: String,
                 armRequestID: String, productID: String,
                 phase: Phase, unconfirmedResume: ApplePurchaseResumeIntent? = nil,
                 unconfirmedOutcome: ApplePurchaseOutcomeIntent? = nil) {
         self.attemptID = attemptID
+        self.ownerAccountID = ownerAccountID
         self.appInstanceID = appInstanceID
         self.secret = secret
         self.armRequestID = armRequestID
@@ -164,7 +176,7 @@ extension ApplePurchaseCapability: CustomStringConvertible, CustomDebugStringCon
     /// whatever printed it.
     public var description: String {
         // nonlocalized: a build diagnostic, never rendered to a user
-        "ApplePurchaseCapability(attemptID: \(attemptID), appInstanceID: \(appInstanceID), "
+        "ApplePurchaseCapability(attemptID: \(attemptID), ownerAccountID: <bound>, appInstanceID: \(appInstanceID), "
             // nonlocalized: a build diagnostic, never rendered to a user
             + "armRequestID: \(armRequestID), productID: \(productID), phase: \(phase.rawValue), "
             + "unconfirmedResume: \(unconfirmedResume.map(String.init(describing:)) ?? "nil"), "
@@ -261,21 +273,41 @@ public final class InMemoryApplePurchaseCapabilityStore: ApplePurchaseCapability
 /// *save* is thrown, because the caller must not open a sheet it will be unable
 /// to report the outcome of.
 public struct ApplePurchaseCapabilityRepository {
-    private let store: ApplePurchaseCapabilityStoring
+    private let storeForOwner: (String?) -> ApplePurchaseCapabilityStoring?
 
-    public init(store: ApplePurchaseCapabilityStoring) { self.store = store }
+    public init(store: ApplePurchaseCapabilityStoring) {
+        self.storeForOwner = { _ in store }
+    }
 
-    public func load() -> ApplePurchaseCapability? {
-        guard let encoded = try? store.loadCapability(), let data = encoded.data(using: .utf8) else {
-            return nil
+    /// Build an account-scoped repository. A capability for account A must not
+    /// occupy account B's slot, and must not be overwritten merely because B
+    /// signs in on the same Mac.
+    public init(storeForOwner: @escaping (String) -> ApplePurchaseCapabilityStoring) {
+        self.storeForOwner = { owner in owner.map(storeForOwner) }
+    }
+
+    public func read(ownerAccountID: String? = nil) -> ApplePurchaseCapabilityRead {
+        guard let store = storeForOwner(ownerAccountID) else { return .unavailable }
+        do {
+            guard let encoded = try store.loadCapability() else { return .missing }
+            guard let data = encoded.data(using: .utf8),
+                  let value = try? JSONDecoder().decode(
+                    ApplePurchaseCapability.self, from: data) else { return .unavailable }
+            return .value(value)
+        } catch {
+            return .unavailable
         }
-        // A value this build cannot decode is treated as absent, not as a
-        // reason to crash a purchase surface. It fails closed the same way a
-        // missing one does.
-        return try? JSONDecoder().decode(ApplePurchaseCapability.self, from: data)
+    }
+
+    public func load(ownerAccountID: String? = nil) -> ApplePurchaseCapability? {
+        guard case let .value(value) = read(ownerAccountID: ownerAccountID) else { return nil }
+        return value
     }
 
     public func save(_ capability: ApplePurchaseCapability) throws {
+        guard let store = storeForOwner(capability.ownerAccountID) else {
+            throw ApplePurchaseCapabilityError.missingOwner
+        }
         let data = try JSONEncoder().encode(capability)
         guard let encoded = String(data: data, encoding: .utf8) else {
             throw ApplePurchaseCapabilityError.encoding
@@ -287,10 +319,120 @@ public struct ApplePurchaseCapabilityRepository {
     ///
     /// Called on **authoritative convergence only** — the server reporting the
     /// attempt resolved — and never on a timer, a launch count or a clock.
-    public func retire() { try? store.clearCapability() }
+    public func retire(ownerAccountID: String? = nil) throws {
+        guard let store = storeForOwner(ownerAccountID) else {
+            throw ApplePurchaseCapabilityError.missingOwner
+        }
+        try store.clearCapability()
+    }
 }
 
-public enum ApplePurchaseCapabilityError: Error, Equatable { case encoding }
+public enum ApplePurchaseCapabilityError: Error, Equatable { case encoding, missingOwner }
+
+public enum ApplePurchaseCapabilityRead: Equatable {
+    case missing
+    case value(ApplePurchaseCapability)
+    case unavailable
+}
+
+/// The non-secret write-ahead record for a StoreKit outcome.
+///
+/// It deliberately contains no continuation secret. Its sole purpose is to
+/// survive the interval in which Keychain is temporarily locked after a sheet
+/// has already returned. Once Keychain is readable again, the capability
+/// supplies the secret and this intent tells the client exactly which outcome
+/// it still owes the server.
+public struct ApplePurchaseOutcomeJournalEntry: Codable, Equatable, Sendable {
+    public let ownerAccountID: String
+    public let attemptID: String
+    public let armRequestID: String
+    public let outcome: ApplePurchaseOutcome
+
+    public init(ownerAccountID: String, attemptID: String,
+                armRequestID: String, outcome: ApplePurchaseOutcome) {
+        self.ownerAccountID = ownerAccountID
+        self.attemptID = attemptID
+        self.armRequestID = armRequestID
+        self.outcome = outcome
+    }
+}
+
+public protocol ApplePurchaseOutcomeJournal {
+    func load(ownerAccountID: String) -> ApplePurchaseOutcomeJournalEntry?
+    func save(_ entry: ApplePurchaseOutcomeJournalEntry) throws
+    func clear(ownerAccountID: String) throws
+}
+
+public final class FileApplePurchaseOutcomeJournal: ApplePurchaseOutcomeJournal {
+    private let url: URL
+    private let fileManager: FileManager
+    private let lock = NSLock()
+
+    public convenience init?() {
+        guard let root = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
+        self.init(url: root.appendingPathComponent("Relayium", isDirectory: true)
+            .appendingPathComponent("apple-purchase-outcomes-v1.json"))
+    }
+
+    public init(url: URL, fileManager: FileManager = .default) {
+        self.url = url
+        self.fileManager = fileManager
+    }
+
+    public func load(ownerAccountID: String) -> ApplePurchaseOutcomeJournalEntry? {
+        lock.lock(); defer { lock.unlock() }
+        return entries()[ownerAccountID]
+    }
+
+    public func save(_ entry: ApplePurchaseOutcomeJournalEntry) throws {
+        lock.lock(); defer { lock.unlock() }
+        var current = entries()
+        current[entry.ownerAccountID] = entry
+        try persist(current)
+    }
+
+    public func clear(ownerAccountID: String) throws {
+        lock.lock(); defer { lock.unlock() }
+        var current = entries()
+        current.removeValue(forKey: ownerAccountID)
+        try persist(current)
+    }
+
+    private func entries() -> [String: ApplePurchaseOutcomeJournalEntry] {
+        guard let data = try? Data(contentsOf: url) else { return [:] }
+        return (try? JSONDecoder().decode(
+            [String: ApplePurchaseOutcomeJournalEntry].self, from: data)) ?? [:]
+    }
+
+    private func persist(_ entries: [String: ApplePurchaseOutcomeJournalEntry]) throws {
+        try fileManager.createDirectory(at: url.deletingLastPathComponent(),
+                                        withIntermediateDirectories: true)
+        let data = try JSONEncoder().encode(entries)
+        try data.write(to: url, options: .atomic)
+        let handle = try FileHandle(forWritingTo: url)
+        defer { try? handle.close() }
+        try handle.synchronize()
+    }
+}
+
+public final class InMemoryApplePurchaseOutcomeJournal: ApplePurchaseOutcomeJournal {
+    private let lock = NSLock()
+    private var values: [String: ApplePurchaseOutcomeJournalEntry] = [:]
+    public init() {}
+    public func load(ownerAccountID: String) -> ApplePurchaseOutcomeJournalEntry? {
+        lock.lock(); defer { lock.unlock() }
+        return values[ownerAccountID]
+    }
+    public func save(_ entry: ApplePurchaseOutcomeJournalEntry) throws {
+        lock.lock(); defer { lock.unlock() }
+        values[entry.ownerAccountID] = entry
+    }
+    public func clear(ownerAccountID: String) throws {
+        lock.lock(); defer { lock.unlock() }
+        values.removeValue(forKey: ownerAccountID)
+    }
+}
 
 // MARK: - identities
 
@@ -318,6 +460,14 @@ public enum ApplePurchaseIdentity {
         return isValid(minted) ? minted : nil
     }
 
+    /// A client-authored 32-byte capability secret. It is generated by the same
+    /// audited CSPRNG path as arm identities and persisted before the initial
+    /// request, so losing either that request or its response is replayable.
+    public static func freshContinuationSecret() -> String? {
+        let minted = InstallationIdentity.generate()
+        return isValid(minted) ? minted : nil
+    }
+
     /// The server's own predicate, restated so a value is rejected here rather
     /// than one round trip later — and so a `400` can never spend an arm id.
     public static func isValid(_ candidate: String) -> Bool {
@@ -330,9 +480,9 @@ public enum ApplePurchaseIdentity {
 
 /// What this client may do next about a purchase, given what it remembers.
 public enum ApplePurchasePlan: Equatable {
-    /// No capability. Arm for the first time: send the instance and a fresh arm
-    /// identity, and NO secret — there is nothing to prove on a first arm.
-    case initialArm(appInstanceID: String, armRequestID: String, productID: String)
+    /// A durably prepared initial arm. The secret is sent on the first request
+    /// and every exact replay, but the server stores only its digest.
+    case initialArm(ApplePurchaseCapability)
     /// A cancelled attempt this client armed. Resume it with a fresh identity and
     /// the product the user actually chose, which need not be the cancelled one.
     case resume(ApplePurchaseCapability, armRequestID: String, productID: String)
@@ -416,11 +566,7 @@ public enum ApplePurchaseContinuation {
                             productID: String,
                             appInstanceID: String,
                             freshArmRequestID: String) -> ApplePurchasePlan {
-        guard let capability else {
-            return .initialArm(appInstanceID: appInstanceID,
-                               armRequestID: freshArmRequestID,
-                               productID: productID)
-        }
+        guard let capability else { return .blocked(.locked) }
         if let intent = capability.unconfirmedResume {
             return .replayResume(capability,
                                  armRequestID: intent.armRequestID,
@@ -433,6 +579,7 @@ public enum ApplePurchaseContinuation {
                                   outcome: pending.outcome)
         }
         switch capability.phase {
+        case .preparing: return .initialArm(capability)
         case .armed: return .blocked(.sheetOutstanding)
         case .locked: return .blocked(.locked)
         case .cancelled:
@@ -443,6 +590,34 @@ public enum ApplePurchaseContinuation {
     }
 
     // MARK: transitions
+
+    /// Prepare the initial capability before any request can arm the server.
+    public static func prepared(ownerAccountID: String, appInstanceID: String, secret: String,
+                                armRequestID: String,
+                                productID: String) -> ApplePurchaseCapability {
+        ApplePurchaseCapability(attemptID: "", ownerAccountID: ownerAccountID,
+                                appInstanceID: appInstanceID,
+                                secret: secret, armRequestID: armRequestID,
+                                productID: productID, phase: .preparing)
+    }
+
+    /// Bind a prepared capability to the attempt id returned by the server.
+    /// An older compatible server may return its own secret; a current server
+    /// returns none because the client already persisted the one it presented.
+    public static func confirmedInitialArm(_ prepared: ApplePurchaseCapability,
+                                           attemptID: String,
+                                           serverSecret: String?) -> ApplePurchaseCapability? {
+        guard prepared.phase == .preparing, !attemptID.isEmpty else { return nil }
+        let secret = serverSecret.flatMap { $0.isEmpty ? nil : $0 } ?? prepared.secret
+        guard !secret.isEmpty else { return nil }
+        return ApplePurchaseCapability(attemptID: attemptID,
+                                       ownerAccountID: prepared.ownerAccountID,
+                                       appInstanceID: prepared.appInstanceID,
+                                       secret: secret,
+                                       armRequestID: prepared.armRequestID,
+                                       productID: prepared.productID,
+                                       phase: .armed)
+    }
 
     /// The capability an initial arm's 200 creates.
     ///
@@ -456,6 +631,7 @@ public enum ApplePurchaseContinuation {
                              productID: String) -> ApplePurchaseCapability? {
         guard let secret, !secret.isEmpty else { return nil }
         return ApplePurchaseCapability(attemptID: attemptID,
+                                       ownerAccountID: nil,
                                        appInstanceID: appInstanceID,
                                        secret: secret,
                                        armRequestID: armRequestID,

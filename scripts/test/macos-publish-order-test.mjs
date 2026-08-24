@@ -27,7 +27,8 @@
 //   ---- git add -A ----
 //   judge phase   scope check and web suite, reading the staged bytes only
 //   ---- git commit ----
-//   publish       gh release create, then a bare push
+//   deliver       candidate branch, merge-gate on that SHA, protected-main push
+//   publish       gh release create, last
 //
 // Nothing else in this repository can see any of that. The YAML is valid in
 // either order, actionlint is happy in either order, and the only other signal
@@ -165,6 +166,10 @@ function lineRunning(marker, label) {
 }
 
 const bump = lineRunning("macos-release-candidate.mjs bump", "the document bump");
+const syncHistory = lineRunning(
+  "macos-release-candidate.mjs sync-cli-release-history",
+  "the CLI release-history synchronization",
+);
 const install = lineRunning("npm ci", "the dependency install");
 const genPages = lineRunning("npm run gen:pages", "page generation");
 const typecheck = lineRunning("npm run check", "the typecheck");
@@ -174,7 +179,10 @@ const scope = lineRunning("macos-release-candidate.mjs check-scope", "the candid
 const suite = lineRunning("npm test -- --run", "the web test suite");
 const commit = lineRunning("git commit -m", "the candidate commit");
 const create = lineRunning("gh release create", "the immutable release creation");
-const push = lineRunning("git push origin", "the delivery push");
+const candidatePush = lineRunning("refs/heads/$candidate_branch", "the candidate-branch push");
+const gateDispatch = lineRunning("gh workflow run merge-gate.yml", "the candidate gate dispatch");
+const gateWatch = lineRunning("gh run watch", "the candidate gate result");
+const push = lineRunning("$CANDIDATE:main", "the protected-main delivery push");
 
 /**
  * The archived-locale restore, as a line index.
@@ -200,9 +208,12 @@ const before = (a, b, why) => {
 // 1. The write phase. Everything that can rewrite a tracked file runs before the
 //    candidate is staged, so the staged tree is the finished tree.
 before(bump, genPages, "pages are generated before the documents are bumped");
+before(bump, syncHistory, "CLI release history is synchronized before the documents are bumped");
+before(syncHistory, genPages, "pages are generated before CLI release history is synchronized");
 before(genPages, build, "the build runs before the first page generation");
 before(install, genPages, "pages are generated before dependencies are installed");
 before(bump, stage, "the candidate is staged before the documents are bumped");
+before(syncHistory, stage, "the candidate is staged before CLI release history is synchronized");
 before(genPages, stage, "the candidate is staged before the pages are generated");
 before(build, stage, "the candidate is staged before the web build regenerates the pages");
 before(typecheck, stage, "the candidate is staged before the typecheck, which may emit");
@@ -245,6 +256,7 @@ before(suite, commit, "the candidate is committed before the web suite has judge
 const MUTATORS = [
   "npm ci", "npm test", "npm run", "npx ", "vite build", "gen-pages",
   "macos-release-candidate.mjs bump",
+  "macos-release-candidate.mjs sync-cli-release-history",
   "git checkout", "git restore", "git reset", "git apply", "git stash",
   "git merge", "git rebase", "git clean", "git mv", "git rm",
   // Re-staging is how a write inside the window would reach the commit; the one
@@ -298,6 +310,7 @@ if (stage >= 0 && suite >= 0 && commit >= 0) {
 
 // 4. The whole candidate is judged and frozen before anything immutable exists.
 before(bump, create, "the release is created before the documents are bumped");
+before(syncHistory, create, "the release is created before CLI release history is synchronized");
 before(suite, create, "the release is created before the web suite runs");
 before(build, create, "the release is created before the web build runs");
 before(scope, create, "the release is created before the candidate scope is checked");
@@ -306,8 +319,13 @@ for (const restore of restores) {
   before(restore, create, "archived locales are restored only after the release is created");
 }
 
-// 5. Delivery comes last, and is only a push.
-before(create, push, "metadata is delivered before the release exists");
+// 5. The frozen candidate is checked on its own SHA before protected main
+//    moves, and the immutable public release is created only after delivery.
+before(commit, candidatePush, "the candidate branch is pushed before the candidate is frozen");
+before(candidatePush, gateDispatch, "merge-gate is dispatched before its candidate branch exists");
+before(gateDispatch, gateWatch, "the candidate gate is watched before it is dispatched");
+before(gateWatch, push, "protected main moves before the candidate gate reports success");
+before(push, create, "the immutable release exists before its metadata reaches protected main");
 
 // 6. Nothing that can newly fail, and nothing that can create or replace an
 //    immutable artifact, may live in the delivery step. Its inputs are a commit
@@ -327,6 +345,7 @@ if (push >= 0) {
     "gh release edit",
     "git tag",
     "macos-release-candidate.mjs bump",
+    "macos-release-candidate.mjs sync-cli-release-history",
   ]) {
     check(
       !code.includes(forbidden),

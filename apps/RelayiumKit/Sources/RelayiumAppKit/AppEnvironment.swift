@@ -171,11 +171,14 @@ public enum AppEnvironment {
     /// non-synchronizable, so neither an iCloud Keychain sync nor a backup
     /// restore puts this device's purchase capability on another Mac.
     public static func makeApplePurchaseCapabilityStore(
-        _ configuration: KeychainConfiguration = keychainConfiguration
+        _ configuration: KeychainConfiguration = keychainConfiguration,
+        ownerAccountID: String? = nil
     ) -> KeychainTokenStore {
-        KeychainTokenStore(service: configuration.service,
-                           account: applePurchaseCapabilityAccount,
-                           accessGroup: nil)
+        let account = ownerAccountID.map { "\(applePurchaseCapabilityAccount).\($0)" }
+            ?? applePurchaseCapabilityAccount
+        return KeychainTokenStore(service: configuration.service,
+                                  account: account,
+                                  accessGroup: nil)
     }
 
     /// The store for the Apple app-instance identity. Same isolation rules and
@@ -212,7 +215,10 @@ public enum AppEnvironment {
         guard let appInstanceID = identity.current(),
               ApplePurchaseIdentity.isValid(appInstanceID) else { return nil }
         return (ApplePurchaseCapabilityRepository(
-                    store: makeApplePurchaseCapabilityStore(configuration)),
+                    storeForOwner: { owner in
+                        makeApplePurchaseCapabilityStore(configuration,
+                                                         ownerAccountID: owner)
+                    }),
                 appInstanceID)
     }
 

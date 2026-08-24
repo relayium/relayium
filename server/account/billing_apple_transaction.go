@@ -44,16 +44,17 @@ type appleTransactionResult struct {
 	// already recorded (a redelivery of a previous period). The state reported
 	// alongside it is then the CURRENT one, not what the stale event would have
 	// produced.
-	Applied            bool   `json:"applied"`
-	PlanID             string `json:"planId"`
-	Status             string `json:"status"`
-	ExpiresAt          int64  `json:"expiresAt"`
-	Provider           string `json:"provider"`
-	CurrentProductID   string `json:"currentProductId"`
-	AutoRenewProductID string `json:"autoRenewProductId"`
-	RenewalAt          int64  `json:"renewalAt"`
-	DispatchPending    bool   `json:"dispatchPending"`
-	DispatchResolved   bool   `json:"dispatchResolved"`
+	Applied                   bool   `json:"applied"`
+	PlanID                    string `json:"planId"`
+	Status                    string `json:"status"`
+	ExpiresAt                 int64  `json:"expiresAt"`
+	Provider                  string `json:"provider"`
+	CurrentProductID          string `json:"currentProductId"`
+	AutoRenewProductID        string `json:"autoRenewProductId"`
+	RenewalAt                 int64  `json:"renewalAt"`
+	DispatchPending           bool   `json:"dispatchPending"`
+	DispatchResolved          bool   `json:"dispatchResolved"`
+	DispatchResolvedAttemptID string `json:"dispatchResolvedAttemptId"`
 }
 
 func writeAppleTransactionError(w http.ResponseWriter, status int, code string) {
@@ -254,16 +255,17 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 	s.reconcileApplePendingNotifications(r.Context(), u.ID, appleSubscriptionKeyOf(tx), now)
 
 	httpx.WriteJSON(w, http.StatusOK, appleTransactionResult{
-		Applied:            res.Applied,
-		PlanID:             res.Effective.PlanID,
-		Status:             res.Effective.Status,
-		ExpiresAt:          res.Effective.PeriodEnd,
-		Provider:           res.Effective.Source,
-		CurrentProductID:   tx.ProductID,
-		AutoRenewProductID: canonical.Renewal.AutoRenewProductID,
-		RenewalAt:          appleSeconds(canonical.Renewal.RenewalDateMS),
-		DispatchPending:    res.PurchaseAttemptPending,
-		DispatchResolved:   res.PurchaseAttemptResolved,
+		Applied:                   res.Applied,
+		PlanID:                    res.Effective.PlanID,
+		Status:                    res.Effective.Status,
+		ExpiresAt:                 res.Effective.PeriodEnd,
+		Provider:                  res.Effective.Source,
+		CurrentProductID:          tx.ProductID,
+		AutoRenewProductID:        canonical.Renewal.AutoRenewProductID,
+		RenewalAt:                 appleSeconds(canonical.Renewal.RenewalDateMS),
+		DispatchPending:           res.PurchaseAttemptPending,
+		DispatchResolved:          res.PurchaseAttemptResolved,
+		DispatchResolvedAttemptID: res.PurchaseAttemptResolvedID,
 	})
 }
 

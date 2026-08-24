@@ -43,9 +43,11 @@ enum AppDistribution {
     @MainActor
     static func makeSubscriptionModel(
         bearer: @escaping @MainActor () -> String?,
+        accountID: @escaping @MainActor () -> String?,
         refreshAccount: @escaping @MainActor () async -> Void
     ) -> AppleSubscriptionModel? {
-        nil
+        _ = accountID
+        return nil
     }
 }
 
