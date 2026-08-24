@@ -81,9 +81,8 @@ export const RELEASE_ARTIFACT_FILES = [
  * crawler, or an answer engine — actually fetches, so a candidate that moved the
  * source and not these ships a truthful repository and a lying website.
  *
- * Four files: the three maintained release/app pages plus the sitemap whose
- * release-page `lastmod` changes when a newly synchronized CLI tag advances the
- * document date. English `/apps` has no static twin. It is an SPA route
+ * Three maintained release/app pages are required. English `/apps` has no
+ * static twin. It is an SPA route
  * rendered from `src/lib/AppsPage.svelte` and the i18n tables, which read the
  * manifest at build time — `buildModePages` generates the localized twins only.
  * `macos-release-surface.test.mjs` is what holds that half to the manifest.
@@ -92,8 +91,11 @@ export const MAINTAINED_GENERATED_PAGES = [
   "web/public/releases/index.html",
   "web/public/zh/apps/index.html",
   "web/public/zh/releases/index.html",
-  "web/public/sitemap.xml",
 ];
+
+/** The sitemap changes only when synchronized CLI history advances a document
+ * date. A macOS-only release may legitimately reproduce it byte for byte. */
+export const OPTIONAL_GENERATED_PAGES = ["web/public/sitemap.xml"];
 
 /** The seven archived locales, as `web/public/` path prefixes. */
 export const FROZEN_PAGE_PREFIXES = [
@@ -291,7 +293,7 @@ export function checkCandidateScope(paths, { alreadyDelivered = false } = {}) {
   // A rerun requires the empty candidate, so it requires nothing and allows
   // nothing; both directions fall out of the same two lists.
   const required = alreadyDelivered ? [] : CANDIDATE_PATHS;
-  const allowed = new Set(required);
+  const allowed = new Set([...required, ...(alreadyDelivered ? [] : OPTIONAL_GENERATED_PAGES)]);
   const frozenSet = new Set(frozen);
   const unexpected = [...seen]
     .filter((path) => !allowed.has(path) && !frozenSet.has(path))

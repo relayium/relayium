@@ -30,6 +30,7 @@ import {
   CANDIDATE_PATHS,
   FROZEN_PAGE_PREFIXES,
   MAINTAINED_GENERATED_PAGES,
+  OPTIONAL_GENERATED_PAGES,
   RELEASE_DOCS,
   bumpReleaseDocs,
   checkCandidateScope,
@@ -234,6 +235,12 @@ describe("judging an assembled release candidate by what it changes", () => {
       expect(result.ok, `${page} may be omitted`).toBe(false);
       expect(result.missing).toEqual([page]);
     }
+  });
+
+  it("allows but does not require the conditionally regenerated sitemap", () => {
+    expect(checkCandidateScope(complete()).ok).toBe(true);
+    expect(checkCandidateScope([...complete(), ...OPTIONAL_GENERATED_PAGES]).ok).toBe(true);
+    expect(CANDIDATE_PATHS).not.toContain("web/public/sitemap.xml");
   });
 
   it("rejects a candidate that moved an archived locale", () => {
