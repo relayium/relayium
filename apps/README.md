@@ -10,7 +10,7 @@
   (`SharedLocalizationExport.swift`), so `import RelayiumAppKit` still sees
   `L10n` and nothing at any call site changed.
 - `mac/` — macOS SwiftUI app (`com.relayium.mac`), depends on the local RelayiumKit
-  package. Released publicly as **1.3.0** (GitHub Release `macos-v1.3.0`).
+  package. Released publicly as **1.3.2** (GitHub Release `macos-v1.3.2`).
 - `mac/RelayiumShare/` — the macOS Share Extension (`com.relayium.mac.Share`),
   embedded in the app at `Contents/PlugIns/RelayiumShare.appex`. Links
   `RelayiumShareKit` only, exactly as the iOS one does, and shares its model —
@@ -18,7 +18,7 @@
   authorize `group.com.relayium.shared` and the team-prefixed wildcard and never
   `group.com.relayium.app`, and Apple documents the macOS form of an App Group
   as `<team>.<group>`, so `AppGroup.identifier` resolves per platform. It ships
-  inside the released 1.3.0 app. The system Share menu is verified to list it; a
+  inside the released 1.3.2 app. The system Share menu is verified to list it; a
   real Finder share has not yet been driven by hand.
 - `ios/` — iOS SwiftUI app (`com.relayium.app`), same local package. In development, not public.
 - `ios/RelayiumShare/` — the iOS Share Extension (`com.relayium.app.share`),
@@ -71,11 +71,11 @@ operational requirement in `docs/CI-PLATFORM-BOUNDARY.md`.
 package. Views live in the app target; all logic worth testing lives in the
 `RelayiumAppKit` target inside that package and is covered by `swift test`.
 
-**Status: released as 1.3.0.** The owner requested this 1.3.0 release, the
+**Status: released as 1.3.2.** The owner requested this 1.3.2 release, the
 recorded decision in `apps/mac/release-readiness.json` remains approved
 (`"approved": true`), and the GitHub release workflow published the notarized
 build as GitHub Release
-[`macos-v1.3.0`](https://github.com/relayium/relayium/releases/tag/macos-v1.3.0):
+[`macos-v1.3.2`](https://github.com/relayium/relayium/releases/tag/macos-v1.3.2):
 a universal, Developer ID-signed, Apple-notarized and stapled `Relayium.dmg`
 with its SHA-256 alongside. Distribution is that direct download and Sparkle
 updates from it: there is no Mac App Store listing today. The App Store build of
