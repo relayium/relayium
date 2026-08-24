@@ -1737,9 +1737,22 @@ const RUNNER_BUDGETS = [
   },
   {
     file: IOS,
-    max: 90,
-    why: "a PAID macOS runner is held by a build that will never finish — a simulator that never "
-      + "boots, an acceptance child that never exits",
+    jobs: {
+      "ios-build": {
+        max: 40,
+        why: "a PAID macOS runner is held by either of the two unsigned compile graphs or the "
+          + "narrow Swift guard build",
+      },
+      "ios-ui-smoke": {
+        max: 55,
+        why: "a PAID macOS runner is held by an iPhone simulator or UI test that never exits",
+      },
+      "ios-transfer-acceptance": {
+        max: 45,
+        why: "a PAID macOS runner is held by a transfer peer, local server or built-App session "
+          + "that never exits",
+      },
+    },
   },
   {
     file: RELEASE,
@@ -3403,6 +3416,81 @@ function governedCeiling(file, jobName) {
 }
 
 /**
+ * Keep the iOS lane parallel without letting the split become a coverage split.
+ * Each job owns one evidence class and has no dependency edge to another job.
+ */
+function iosParallelLaneFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+  const doc = world.docs.get(IOS);
+  if (!doc) return out;
+
+  const wanted = ["ios-build", "ios-ui-smoke", "ios-transfer-acceptance"];
+  const names = Object.keys(doc.jobs ?? {});
+  need(
+    names.length === wanted.length && wanted.every((name) => names.includes(name)),
+    `${IOS} jobs are [${names.join(", ")}], want exactly [${wanted.join(", ")}]. The lane is `
+    + `split by evidence class so build, UI and transfer acceptance run concurrently; adding, `
+    + `removing or renaming a class is a CI architecture decision.`,
+  );
+
+  for (const name of wanted) {
+    const job = doc.jobs?.[name];
+    if (!job) continue;
+    need(
+      job.needs === undefined,
+      `${IOS}/${name} declares \`needs: ${JSON.stringify(job.needs)}\`. The three iOS evidence `
+      + `classes are deliberately independent; this edge serializes paid macOS runners and `
+      + `restores the previous 37-minute critical path.`,
+    );
+    need(
+      job.if === undefined,
+      `${IOS}/${name}: a job-level "if:" is back. Each evidence class must fail closed whenever `
+      + `the iOS lane is selected.`,
+    );
+  }
+
+  const body = (name) => JSON.stringify(doc.jobs?.[name] ?? {});
+  const build = body("ios-build");
+  need(
+    build.includes("swift test")
+      && build.includes("generic/platform=iOS Simulator")
+      && build.includes("generic/platform=iOS")
+      && !build.includes("RelayiumUITests test")
+      && !build.includes("local-transfer-acceptance.sh")
+      && !build.includes("actions/setup-go"),
+    `${IOS}/ios-build must own only the narrow Swift guards and the unsigned Simulator and `
+    + `Device compile graphs; UI, transfer acceptance and Go setup belong to their parallel jobs.`,
+  );
+
+  const ui = body("ios-ui-smoke");
+  need(
+    ui.includes("-only-testing:RelayiumUITests test")
+      && !ui.includes("local-transfer-acceptance.sh")
+      && !ui.includes("actions/setup-go"),
+    `${IOS}/ios-ui-smoke must independently own the offline primary-task UI test and no transfer `
+    + `or Go setup work.`,
+  );
+
+  const transfer = body("ios-transfer-acceptance");
+  for (const marker of [
+    "actions/setup-go",
+    "generic/platform=iOS Simulator",
+    "local-transfer-acceptance.sh",
+    "local-transfer-cleanup-test.sh",
+    "ios-ui-session-acceptance.sh",
+  ]) {
+    need(
+      transfer.includes(marker),
+      `${IOS}/ios-transfer-acceptance does not contain ${JSON.stringify(marker)}. The split may `
+      + `shorten the critical path, but it may not drop a transfer prerequisite or acceptance case.`,
+    );
+  }
+
+  return out;
+}
+
+/**
  * `ios.yml`'s iOS guard step: the exact selectors, where the bound lives, and
  * the shapes that would turn the step into nothing.
  */
@@ -4934,6 +5022,7 @@ for (const message of triggerFailures(realWorld())) failures.push(message);
 for (const message of platformBoundaryFailures(realWorld())) failures.push(message);
 for (const message of pathMatrixFailures(realWorld())) failures.push(message);
 for (const message of fuzzCampaignFailures(realWorld())) failures.push(message);
+for (const message of iosParallelLaneFailures(realWorld())) failures.push(message);
 for (const message of iosGuardStepFailures(realWorld())) failures.push(message);
 for (const message of macosBudgetFailures(realWorld())) failures.push(message);
 for (const message of concurrencyFailures(realWorld())) failures.push(message);
@@ -5777,6 +5866,22 @@ const MUTATIONS = [
     mutate: (world) => withJob(world, IOS, (job) => { job["timeout-minutes"] = "soon"; }),
     expect: /ios\.yml\/ios-build: timeout-minutes is "soon", want a finite positive number/,
   },
+  {
+    name: "the iOS UI smoke is serialized behind the build job",
+    mutate: (world) => withNamedJob(world, IOS, "ios-ui-smoke", (job) => {
+      job.needs = "ios-build";
+    }),
+    expect: /ios\.yml\/ios-ui-smoke declares `needs: "ios-build"`/,
+  },
+  {
+    name: "the parallel iOS transfer job drops cleanup acceptance",
+    mutate: (world) => withNamedJob(world, IOS, "ios-transfer-acceptance", (job) => {
+      const step = job.steps.find((candidate) => String(candidate.run ?? "")
+        .includes("local-transfer-cleanup-test.sh"));
+      step.run = step.run.replace("scripts/local-transfer-cleanup-test.sh", "true");
+    }),
+    expect: /ios\.yml\/ios-transfer-acceptance does not contain "local-transfer-cleanup-test\.sh"/,
+  },
   // The macOS lane, budgeted per job. Each case below names ONE job, and each
   // uses `withNamedJob` so a reorder of `macos.yml`'s six jobs is a thrown
   // error rather than a case that quietly moves to a different job.
@@ -6020,10 +6125,10 @@ const MUTATIONS = [
     // failed cannot skip a build, and `ios.yml` carries exactly one. A budget
     // check that fired on it would be widened until it fired on nothing.
     name: "a failure-only diagnosis step keeps its `if:`",
-    mutate: (world) => withJob(world, IOS, (job) => {
+    mutate: (world) => withNamedJob(world, IOS, "ios-transfer-acceptance", (job) => {
       job.steps[job.steps.length - 1].if = "failure()";
     }),
-    refute: /ios\.yml\/ios-build: a condition reads the commit message/,
+    refute: /ios\.yml\/ios-transfer-acceptance: a condition reads the commit message/,
   },
   {
     // 6i again, in the direction the check itself can fail SILENTLY. The marker
@@ -6434,7 +6539,7 @@ const MUTATIONS = [
   {
     name: "the guard step's carrier job is bounded outside its governed ceiling",
     mutate: (world) => withGuardStep(world, (step, job) => { job["timeout-minutes"] = 300; }),
-    expect: /the guard step's carrier job is bounded at 300 minutes, outside the 90-minute ceiling/,
+    expect: /the guard step's carrier job is bounded at 300 minutes, outside the 40-minute ceiling/,
   },
   {
     name: "the iOS guard step is deleted outright",
@@ -7198,6 +7303,7 @@ for (const { name, mutate, expect, refute } of MUTATIONS) {
       ...platformBoundaryFailures(world),
       ...pathMatrixFailures(world),
       ...fuzzCampaignFailures(world),
+      ...iosParallelLaneFailures(world),
       ...iosGuardStepFailures(world),
       ...macosBudgetFailures(world),
       ...concurrencyFailures(world),
