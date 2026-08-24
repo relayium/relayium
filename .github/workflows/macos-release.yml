@@ -518,6 +518,7 @@ jobs:
           else
             node web/scripts/macos-release-candidate.mjs bump \
               --from "$previous" --to "$staged"
+            node web/scripts/macos-release-candidate.mjs sync-cli-release-history
             echo "already-delivered=false" >> "$GITHUB_OUTPUT"
           fi
           cd web

@@ -38,6 +38,24 @@ function compare(left, right) {
   return 0;
 }
 
+// Requirement changes are rarer than releases. Each tuple is introduced at one
+// revision; later releases may advance the document revision without changing
+// the tuple, but a new tuple must append a strictly newer epoch here.
+const REQUIREMENT_EPOCHS = [
+  {
+    revision: 4,
+    minimumSupportedVersion: "1.2.11",
+    minimumSupportedBuild: 17,
+    recommendedVersion: "1.2.11",
+  },
+  {
+    revision: 5,
+    minimumSupportedVersion: "1.2.11",
+    minimumSupportedBuild: 17,
+    recommendedVersion: "1.3.0",
+  },
+];
+
 describe("the macOS client version policy", () => {
   it("is served byte-for-byte as it is written", () => {
     // Not "equal as JSON". The client fetches one file and a person edits the
@@ -81,44 +99,20 @@ describe("the macOS client version policy", () => {
     ]);
   });
 
-  it("is exactly the prepared source or the staged 1.3.0 cutover", () => {
-    const expected = isPreparedCutover
-      ? {
-          manifest: { available: true, version: "1.2.11", build: 17 },
-          macos: {
-            policyRevision: 4,
-            minimumSupportedVersion: "1.2.11",
-            minimumSupportedBuild: 17,
-            recommendedVersion: "1.2.11",
-            latestVersion: "1.2.11",
-          },
-          nextRelease: {
-            version: "1.3.0",
-            minimumSupportedVersion: "1.2.11",
-            minimumSupportedBuild: 17,
-            recommendedVersion: "1.3.0",
-          },
-        }
-      : {
-          manifest: { available: true, version: "1.3.0", build: 18 },
-          macos: {
-            policyRevision: 5,
-            minimumSupportedVersion: "1.2.11",
-            minimumSupportedBuild: 17,
-            recommendedVersion: "1.3.0",
-            latestVersion: "1.3.0",
-          },
-          nextRelease: undefined,
-        };
-    expect({
-      manifest: {
-        available: manifest.macos.available,
-        version: manifest.macos.version,
-        build: manifest.macos.build,
-      },
-      macos: policy.macos,
-      nextRelease: policy.nextRelease,
-    }).toEqual(expected);
+  it("keeps the published manifest and any prepared release coherent", () => {
+    expect(manifest.macos.available).toBe(true);
+    expect(manifest.macos.version).toBe(policy.macos.latestVersion);
+    expect(Number.isInteger(manifest.macos.build)).toBe(true);
+    expect(manifest.macos.build).toBeGreaterThan(0);
+    if (!isPreparedCutover) return;
+    expect(compare(policy.macos.latestVersion, policy.nextRelease.version)).toBeLessThan(0);
+    expect(compare(
+      policy.nextRelease.minimumSupportedVersion,
+      policy.nextRelease.recommendedVersion,
+    )).toBeLessThanOrEqual(0);
+    expect(compare(policy.nextRelease.recommendedVersion, policy.nextRelease.version))
+      .toBeLessThanOrEqual(0);
+    expect(policy.nextRelease.minimumSupportedBuild).toBeLessThanOrEqual(manifest.macos.build);
   });
 
   /// **The requirement and the revision that names it, pinned together.**
@@ -136,24 +130,20 @@ describe("the macOS client version policy", () => {
   /// when a release moves it. `SupportedVersionModelTests` proves the client
   /// behaviour this rule follows from.
   it("declares its requirement and its revision in one edit", () => {
-    expect({
-      policyRevision: policy.macos.policyRevision,
+    const requirement = {
       minimumSupportedVersion: policy.macos.minimumSupportedVersion,
       minimumSupportedBuild: policy.macos.minimumSupportedBuild,
       recommendedVersion: policy.macos.recommendedVersion,
-    }).toEqual(isPreparedCutover
-      ? {
-          policyRevision: 4,
-          minimumSupportedVersion: "1.2.11",
-          minimumSupportedBuild: 17,
-          recommendedVersion: "1.2.11",
-        }
-      : {
-          policyRevision: 5,
-          minimumSupportedVersion: "1.2.11",
-          minimumSupportedBuild: 17,
-          recommendedVersion: "1.3.0",
-        });
+    };
+    const epoch = REQUIREMENT_EPOCHS.find(({ revision: _revision, ...tuple }) =>
+      JSON.stringify(tuple) === JSON.stringify(requirement));
+    expect(epoch, `unregistered client requirement ${JSON.stringify(requirement)}`)
+      .toBeDefined();
+    expect(policy.macos.policyRevision).toBeGreaterThanOrEqual(epoch.revision);
+    for (let index = 1; index < REQUIREMENT_EPOCHS.length; index += 1) {
+      expect(REQUIREMENT_EPOCHS[index].revision)
+        .toBeGreaterThan(REQUIREMENT_EPOCHS[index - 1].revision);
+    }
   });
 
   it("carries a revision inside the range every client will read", () => {
