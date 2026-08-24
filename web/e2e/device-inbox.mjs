@@ -35,9 +35,8 @@
  * The browser half runs on the Device Inbox page, not /me. That is the page the
  * product tells people to send from, so it is the page this proves can do it:
  * the drop, the queue, the worker's commit and the browser observing `saved`
- * all happen without ever visiting My Devices. /me renders the same components
- * with credential management switched on, and keeps its own coverage in the
- * component suites and the accessibility scan.
+ * all happen without ever visiting My Devices. Rename and revoke are available
+ * on this canonical surface as well as /me, using the same components.
  *
  * Isolated and self-cleaning: every path is under one temporary directory, the
  * account is created by this script, and the whole tree is removed at the end.
@@ -262,8 +261,8 @@ async function openDeviceInbox(browser, cookie) {
   if (await tab.evaluate(`!!document.querySelector('${BLOCK} li .sendzone')`)) {
     throw new Error("the device directory mounted send controls before a device was opened");
   }
-  if (await tab.evaluate(`!!document.querySelector('${BLOCK} li button.del')`)) {
-    throw new Error("a destructive revoke control is sitting in the device directory");
+  if (!(await tab.evaluate(`!!document.querySelector('${BLOCK} li button.chk') && !!document.querySelector('${BLOCK} li button.del')`))) {
+    throw new Error("the device directory lost its rename or revoke control");
   }
 
   await tab.evaluate(`document.querySelector('${BLOCK} li button.open').focus(); true`);
@@ -280,6 +279,9 @@ async function openDeviceInbox(browser, cookie) {
     `!!document.querySelector('[data-di="device-workspace-heading"]') && !!document.querySelector('${BLOCK} li .sendzone')`,
     "keyboard activation to open the target device workspace and its send controls",
   );
+  if (!(await tab.evaluate(`!!document.querySelector('${BLOCK} li button.chk') && !!document.querySelector('${BLOCK} li button.del')`))) {
+    throw new Error("the device workspace lost its rename or revoke control");
+  }
   return tab;
 }
 
@@ -317,11 +319,10 @@ async function main() {
 
     // ── 0. the journey needs no second page ──────────────────────────────
     // Asserted before anything else, because everything after it is only
-    // meaningful if this page is where the work happens. The page must also
-    // carry no revoke here: it is one mis-aimed click from a drop target, and
-    // it belongs to My Devices.
-    if (await tab.evaluate(`!!document.querySelector('${BLOCK} li button.del')`)) {
-      throw new Error("a destructive revoke control is sitting on the send surface");
+    // meaningful if this page is where the work happens. Credential management
+    // remains available beside the device space without moving to /me.
+    if (!(await tab.evaluate(`!!document.querySelector('${BLOCK} li button.chk') && !!document.querySelector('${BLOCK} li button.del')`))) {
+      throw new Error("the send surface lost its rename or revoke control");
     }
     if (await tab.evaluate(`location.pathname !== "/device-inbox"`)) {
       throw new Error("the send target was only reachable after leaving /device-inbox");
@@ -408,17 +409,20 @@ async function main() {
     ok("a repeated worker pass delivered nothing twice");
 
     // The device space is navigation inside this page, not a trap. Returning
-    // removes the send controls from the directory again and never exposes a
-    // credential-management action there.
+    // removes the send controls from the directory again while retaining the
+    // directory's credential-management actions.
     await tab.evaluate(`document.querySelector('[data-di="device-back"]').click()`);
     await tab.waitFor(
       `!document.querySelector('[data-di="device-workspace-heading"]') && !!document.querySelector('${BLOCK} li button.open')`,
       "Back to return to the device directory",
     );
-    if (await tab.evaluate(`!!document.querySelector('${BLOCK} .sendzone, ${BLOCK} button.del')`)) {
-      throw new Error("returning to the device directory left send or revoke controls mounted");
+    if (await tab.evaluate(`!!document.querySelector('${BLOCK} .sendzone')`)) {
+      throw new Error("returning to the device directory left send controls mounted");
     }
-    ok("Back returns to the device directory without exposing send or revoke controls there");
+    if (!(await tab.evaluate(`!!document.querySelector('${BLOCK} li button.chk') && !!document.querySelector('${BLOCK} li button.del')`))) {
+      throw new Error("returning to the device directory dropped rename or revoke controls");
+    }
+    ok("Back returns to the managed device directory without leaving send controls mounted");
 
     // ── product entry: an ordinary link upload explains BOTH CLI paths ─────
     // This is the sender's page, not the recipient /d/ page. The owner found
