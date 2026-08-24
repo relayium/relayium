@@ -308,7 +308,8 @@ jobs:
           tools="$RUNNER_TEMP/release-tools"
           generated="$RUNNER_TEMP/generated-appcast"
           staged="$RUNNER_TEMP/release-web"
-          mkdir -p "$generated" "$staged/public/apps/macos"
+          server_catalog="$RUNNER_TEMP/server/account/macos_release_catalog.json"
+          mkdir -p "$generated" "$staged/public/apps/macos" "$(dirname "$server_catalog")"
           cp "$RUNNER_TEMP/Relayium.dmg" "$generated/Relayium.dmg"
           printf '%s' "$SPARKLE_PRIVATE_KEY" \
             | "$tools/generate_appcast" \
@@ -326,6 +327,11 @@ jobs:
           cp web/native-client-policy.json "$staged/native-client-policy.json"
           cp web/public/apps/macos/client-policy.json \
             "$staged/public/apps/macos/client-policy.json"
+          # The stager updates the server's embedded allow-list only when it is
+          # seeded beside the isolated release-web tree. Carrying this file in
+          # the same artifact keeps the admin policy from offering an unsigned
+          # or otherwise unverified version/build pair.
+          cp server/account/macos_release_catalog.json "$server_catalog"
           node web/scripts/stage-macos-release.mjs \
             --version "$RELEASE_VERSION" \
             --appcast "$generated/appcast.xml" \
@@ -364,6 +370,10 @@ jobs:
             echo "::error::staged policyRevision is $staged_revision, expected $expected_revision"
             exit 1; }
           cmp "$staged/native-client-policy.json" "$staged/public/apps/macos/client-policy.json"
+          [ "$(jq --arg version "$RELEASE_VERSION" \
+              '[.releases[] | select(.version == $version and .tag == ("macos-v" + $version))] | length' \
+              "$server_catalog")" = 1 ] || {
+            echo "::error::the staged server catalog does not contain exactly one release entry"; exit 1; }
       # Without the manual notarize input this remains a CI acceptance artifact,
       # not a public release. Public publication and the /apps page flip are
       # separate, explicitly controlled G5 steps.
@@ -391,6 +401,7 @@ jobs:
             ${{ runner.temp }}/release-web/public/apps/macos/appcast.xml
             ${{ runner.temp }}/release-web/native-client-policy.json
             ${{ runner.temp }}/release-web/public/apps/macos/client-policy.json
+            ${{ runner.temp }}/server/account/macos_release_catalog.json
           if-no-files-found: error
           retention-days: 14
 
@@ -461,6 +472,11 @@ jobs:
             "$GITHUB_WORKSPACE/web/native-client-policy.json")" ]
           cmp release-web/native-client-policy.json \
             release-web/public/apps/macos/client-policy.json
+          build="$(jq -r '.macos.build' release-web/native-releases.json)"
+          [ "$(jq --arg version "$RELEASE_VERSION" --argjson build "$build" \
+              '[.releases[] | select(.version == $version and .build == $build and .tag == ("macos-v" + $version))] | length' \
+              server/account/macos_release_catalog.json)" = 1 ] || {
+            echo "::error::server catalog does not carry the verified release version/build pair"; exit 1; }
       # Everything from here to the release creation builds the COMPLETE
       # metadata commit and hands it to the suites that own it. A GitHub Release
       # is immutable, so this is the last place a "no" costs nothing.
@@ -505,6 +521,8 @@ jobs:
           # two agree in the commit.
           cp "$RUNNER_TEMP/release/release-web/native-client-policy.json" \
             web/native-client-policy.json
+          cp "$RUNNER_TEMP/release/server/account/macos_release_catalog.json" \
+            server/account/macos_release_catalog.json
           staged="$(jq -r '.macos.version' web/native-releases.json)"
           [ "$staged" = "$RELEASE_VERSION" ] || {
             echo "::error::the staged manifest names $staged, not $RELEASE_VERSION"; exit 1; }

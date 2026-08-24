@@ -227,6 +227,13 @@ describe("judging an assembled release candidate by what it changes", () => {
     }
   });
 
+  it("rejects a candidate that left the server verified-release catalog behind", () => {
+    const catalog = "server/account/macos_release_catalog.json";
+    const result = checkCandidateScope(complete().filter((path) => path !== catalog));
+    expect(result.ok).toBe(false);
+    expect(result.missing).toEqual([catalog]);
+  });
+
   it("rejects a candidate whose maintained pages were never regenerated", () => {
     // `content/releases.mjs` corrected and `npm run gen:pages` forgotten leaves
     // the source truthful and the bytes a reader fetches still lying.
