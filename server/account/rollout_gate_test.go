@@ -30,12 +30,12 @@ func TestHaltedByoTrackDoesNotBlockFleetTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := svc.SetTargetVersion(ctx, "fleet", "v0.9.0"); err != nil {
+	if err := svc.SetTargetVersion(ctx, "fleet", "v0.22.0"); err != nil {
 		t.Fatalf("setting a fleet target while BYO is halted: %v — BYO must never block the fleet", err)
 	}
 	got, _, _ := store.GetRolloutTrack(ctx, "fleet")
-	if got.TargetVersion != "v0.9.0" || got.Status != "rolling" {
-		t.Errorf("fleet track = %+v, want v0.9.0 rolling", got)
+	if got.TargetVersion != "v0.22.0" || got.Status != "rolling" {
+		t.Errorf("fleet track = %+v, want v0.22.0 rolling", got)
 	}
 }
 
@@ -185,8 +185,8 @@ func TestSetTargetVersionResetsAllPositionalState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := svc.SetTargetVersion(ctx, "fleet", "v0.9.0"); err != nil {
-		t.Fatalf("SetTargetVersion(fleet, v0.9.0): %v", err)
+	if err := svc.SetTargetVersion(ctx, "fleet", "v0.22.0"); err != nil {
+		t.Fatalf("SetTargetVersion(fleet, v0.22.0): %v", err)
 	}
 
 	got, ok, err := store.GetRolloutTrack(ctx, "fleet")
@@ -198,7 +198,7 @@ func TestSetTargetVersionResetsAllPositionalState(t *testing.T) {
 	}
 	want := RolloutTrack{
 		Track:          "fleet",
-		TargetVersion:  "v0.9.0",
+		TargetVersion:  "v0.22.0",
 		Status:         "rolling",
 		HaltedReason:   "",
 		ByoBatch:       0,

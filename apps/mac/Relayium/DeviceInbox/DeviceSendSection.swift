@@ -62,6 +62,8 @@ struct DeviceSendSection: View {
     let onAccount: () -> Void
 
     @EnvironmentObject private var session: AccountSession
+    @State private var editingDeviceID: String?
+    @State private var renameDraft = ""
 
     var body: some View {
         devicesSection
@@ -97,6 +99,10 @@ struct DeviceSendSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            if let current = deliveries.devices.first(where: \.isCurrent) {
+                managementRow(id: current.id, name: current.name,
+                              detail: L10n.t(.accountThisMac))
             }
             ForEach(deliveries.candidates.filter(\.isSendable)) { candidate in
                 deviceRow(candidate)
@@ -152,14 +158,15 @@ struct DeviceSendSection: View {
     private func deviceRow(_ candidate: InboxSendCandidate) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Metrics.inner) {
             VStack(alignment: .leading, spacing: Metrics.hairline) {
-                Text(InboxSendPresentation.name(of: candidate))
-                    .fixedSize(horizontal: false, vertical: true)
+                editableName(id: candidate.id,
+                             name: InboxSendPresentation.name(of: candidate))
                 Text(InboxSendPresentation.detail(for: candidate))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: Metrics.inner)
+            renameButton(id: candidate.id, name: candidate.name)
             // On the LEAF. Every identifier in this file is on a leaf or on a
             // deliberately combined element, never on a container holding
             // controls — the propagation defect the receive pane has already
@@ -177,16 +184,83 @@ struct DeviceSendSection: View {
         // Not a Button, and it opens nothing: a row whose screen could only
         // refuse every send is a dead end the user has to discover by pressing
         // it. The detail line names the one thing that would have to change.
-        VStack(alignment: .leading, spacing: Metrics.hairline) {
-            Text(InboxSendPresentation.name(of: candidate))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(InboxSendPresentation.detail(for: candidate))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        HStack(alignment: .firstTextBaseline, spacing: Metrics.inner) {
+            VStack(alignment: .leading, spacing: Metrics.hairline) {
+                editableName(id: candidate.id,
+                             name: InboxSendPresentation.name(of: candidate))
+                    .foregroundStyle(.secondary)
+                Text(InboxSendPresentation.detail(for: candidate))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: Metrics.inner)
+            renameButton(id: candidate.id, name: candidate.name)
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func managementRow(id: String, name: String, detail: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Metrics.inner) {
+            VStack(alignment: .leading, spacing: Metrics.hairline) {
+                editableName(id: id, name: name)
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: Metrics.inner)
+            renameButton(id: id, name: name)
+        }
+        .accessibilityIdentifier("inbox-device-current")
+    }
+
+    @ViewBuilder
+    private func editableName(id: String, name: String) -> some View {
+        if editingDeviceID == id {
+            TextField(name, text: $renameDraft)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { saveRename(id: id) }
+                .accessibilityIdentifier("inbox-device-rename-field.\(id)")
+            if deliveries.renameFailureDeviceID == id {
+                InlineMessage(.failure, L10n.t(.sendDeviceRenameFailed))
+            }
+        } else {
+            Text(name).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func renameButton(id: String, name: String) -> some View {
+        Group {
+            if editingDeviceID == id {
+                HStack(spacing: Metrics.hairline) {
+                    Button(L10n.t(.commonCancel)) { editingDeviceID = nil }
+                    Button(L10n.t(.commonDone)) { saveRename(id: id) }
+                        .disabled(renameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                  || deliveries.renamingDeviceIDs.contains(id))
+                }
+            } else {
+                Button {
+                    renameDraft = name
+                    editingDeviceID = id
+                } label: {
+                    Image(systemName: "pencil")
+                }
+                .accessibilityLabel(L10n.t(.sendDeviceRename))
+                .accessibilityIdentifier("inbox-device-rename.\(id)")
+            }
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private func saveRename(id: String) {
+        guard let task = deliveries.renameDevice(id: id, name: renameDraft,
+                                                  token: accountToken) else {
+            return
+        }
+        Task {
+            await task.value
+            if editingDeviceID == id, deliveries.renameFailureDeviceID != id {
+                editingDeviceID = nil
+            }
+        }
     }
 
     /// Enter the device's own screen.
@@ -281,6 +355,9 @@ struct DeviceSendSection: View {
         // An empty or unusable credential is reported as an unauthorized list
         // rather than as a network failure, which is what the model does with
         // the empty string. The remedy sentence then names the account.
-        deliveries.refreshTargets(token: session.bearerToken ?? "")
+        deliveries.refreshTargets(token: accountToken)
     }
+
+    /// Read on demand and never persisted by the send surface.
+    private var accountToken: String { session.bearerToken ?? "" }
 }

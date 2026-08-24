@@ -55,6 +55,9 @@ func (s *Service) StartManualFastFleetRollout(ctx context.Context, expectStatus,
 	if !selfupdate.IsPlainVersion(version) {
 		return fmt.Errorf("invalid target version %q: must be a plain vMAJOR.MINOR.PATCH release tag", version)
 	}
+	if err := s.enforceFleetMinimum(ctx, version); err != nil {
+		return err
+	}
 	ok, err := s.store.StartManualFastRollout(ctx, "fleet", expectStatus, expectTargetVersion, version, s.now().Unix())
 	if err != nil {
 		return err
@@ -92,6 +95,9 @@ func (s *Service) StartManualFastFleetRollout(ctx context.Context, expectStatus,
 func (s *Service) StartCanaryFastFleetRollout(ctx context.Context, expectStatus, expectTargetVersion, version string) error {
 	if !selfupdate.IsPlainVersion(version) {
 		return fmt.Errorf("invalid target version %q: must be a plain vMAJOR.MINOR.PATCH release tag", version)
+	}
+	if err := s.enforceFleetMinimum(ctx, version); err != nil {
+		return err
 	}
 	ok, err := s.store.StartCanaryFastRollout(ctx, "fleet", expectStatus, expectTargetVersion, version, s.now().Unix())
 	if err != nil {

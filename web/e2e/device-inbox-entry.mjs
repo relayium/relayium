@@ -29,9 +29,8 @@
  *      →  signed out: the account dialog actually opens, on the half the button
  *         promised
  *      →  signed in: THIS account's real devices, open one device workspace,
- *         then exercise its send controls by keyboard. My Devices is checked as
- *         what it now is: a secondary route
- *         for renaming and revoking.
+ *         then exercise its send controls by keyboard. Rename and revoke stay
+ *         on this canonical surface; no trip through My Devices is required.
  *
  * It used to end by clicking through to /me, because that was where the send
  * controls lived. That is no longer the primary path and is no longer asserted
@@ -523,8 +522,8 @@ async function checkSignedOut(tab, view) {
  *
  * The whole point of the change this guards: a signed-in owner reaches a working
  * send target without a second navigation. So every assertion below happens on
- * /device-inbox, and the only thing done to /me is confirming that the secondary
- * management route still resolves.
+ * /device-inbox, including the credential-management actions that previously
+ * required a detour through /me.
  */
 async function checkSignedIn(browser, base, view) {
   const tab = await openTab(browser, base, view, "/device-inbox", SIGNED_IN_ROUTES, PAGE_HOOKS);
@@ -552,6 +551,7 @@ async function checkSignedIn(browser, base, view) {
       button: !!li.querySelector("button.sendbtn"),
       blocked: (li.querySelector(".inboxblocked")?.textContent ?? "").trim(),
       open: !!li.querySelector("button.open"),
+      rename: !!li.querySelector("button.chk"),
       revoke: !!li.querySelector("button.del"),
       ref: (li.querySelector(".deviceref")?.textContent ?? "").trim(),
     }))
@@ -574,10 +574,11 @@ async function checkSignedIn(browser, base, view) {
   if (!rows.every((r) => r.ref)) {
     throw new Error(`${view.id}: a row lost its id fragment: ${JSON.stringify(rows.map((r) => r.ref))}`);
   }
-  // Credential management does NOT: revoke is irreversible and would sit beside
-  // a drop target.
-  if (rows.some((r) => r.revoke)) {
-    throw new Error(`${view.id}: a destructive revoke control reached the send surface`);
+  if (!rows.every((r) => r.rename && r.revoke)) {
+    throw new Error(`${view.id}: a device row lost its rename or revoke control`);
+  }
+  if (await tab.evaluate(`!!document.querySelector('[data-di="my-devices"]')`)) {
+    throw new Error(`${view.id}: device management still requires a /me detour`);
   }
 
   // Enter the first device space by keyboard. Send controls belong there, not
@@ -590,6 +591,9 @@ async function checkSignedIn(browser, base, view) {
     });
   }
   await tab.waitFor(`!!document.querySelector('[data-di="device-workspace-heading"]')`, `${view.id}: device workspace opens`);
+  if (!(await tab.evaluate(`!!document.querySelector('[data-di="devices"] button.chk') && !!document.querySelector('[data-di="devices"] button.del')`))) {
+    throw new Error(`${view.id}: the device workspace dropped its management controls`);
+  }
 
   // Every send control is actually on screen at this width — at 390px and in
   // Chinese as much as at 1440px.
@@ -616,16 +620,6 @@ async function checkSignedIn(browser, base, view) {
 
   await tab.evaluate(`document.querySelector('[data-di="device-back"]').click()`);
   await tab.waitFor(`!document.querySelector('[data-di="device-workspace-heading"]')`, `${view.id}: Back returns to device list`);
-
-  // ── the secondary route, still a route ─────────────────────────────────
-  const badManage = await tab.evaluate(VISIBLE('[data-di="my-devices"]'));
-  if (badManage) throw new Error(`${view.id}: the manage-devices link is ${badManage}`);
-  await tab.evaluate(`document.querySelector('[data-di="my-devices"]').click()`);
-  await tab.waitFor(`location.pathname === "/me"`, `${view.id}: My Devices is still reachable for management`);
-  await tab.waitFor(`document.querySelectorAll(".devicelist li").length > 0`, `${view.id}: the device list renders`);
-  if (!(await tab.evaluate(`!!document.querySelector(".devicelist li button.del")`))) {
-    throw new Error(`${view.id}: /me no longer offers revoke — management has nowhere left to happen`);
-  }
 
   if (tab.errors.length) throw new Error(`${view.id}: page errors — ${tab.errors.join(" / ")}`);
   ok(`${view.id}: signed in → device space, keyboard-reachable send control and Back, all without leaving the page`);

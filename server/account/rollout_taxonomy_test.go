@@ -226,7 +226,7 @@ func TestSetTargetVersionClearsPassedOverResults(t *testing.T) {
 		}
 	}
 
-	if err := svc.SetTargetVersion(ctx, "fleet", "v0.9.0"); err != nil {
+	if err := svc.SetTargetVersion(ctx, "fleet", "v0.22.0"); err != nil {
 		t.Fatal(err)
 	}
 

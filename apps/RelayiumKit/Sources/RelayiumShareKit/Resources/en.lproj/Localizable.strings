@@ -927,6 +927,8 @@
 "send.targetOnline" = "Online";
 "send.targetOffline" = "Offline";
 "send.myDevicesHeading" = "My Devices";
+"send.deviceRename" = "Rename device";
+"send.deviceRenameFailed" = "Couldn't rename this device. The previous name is unchanged.";
 "send.myDevicesExplain" = "Devices signed in to this account. Open one to send it a message, files or a folder — encrypted here and readable only there.";
 "send.contentAction" = "Send Content";
 "send.backToDevices" = "All Devices";

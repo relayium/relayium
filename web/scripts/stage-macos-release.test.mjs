@@ -362,6 +362,33 @@ describe("the policy revision a release advances", () => {
   });
 });
 
+describe("the server's verified macOS release catalog", () => {
+  it("adds the version/build pair only after reading the signed appcast", async () => {
+    const { webRoot, appcastPath } = await fixture();
+    const serverDir = join(webRoot, "../server/account");
+    await mkdir(serverDir, { recursive: true });
+    const catalogPath = join(serverDir, "macos_release_catalog.json");
+    await writeFile(catalogPath, '{"releases":[]}\n');
+
+    await stageMacOSRelease({ version: "1.0", appcastPath, webRoot });
+    expect(JSON.parse(await readFile(catalogPath, "utf8"))).toEqual({
+      releases: [{ version: "1.0", build: 1, tag: "macos-v1.0" }],
+    });
+  });
+
+  it("refuses a version or build that conflicts with verified history", async () => {
+    const { webRoot, appcastPath } = await fixture();
+    const serverDir = join(webRoot, "../server/account");
+    await mkdir(serverDir, { recursive: true });
+    const catalogPath = join(serverDir, "macos_release_catalog.json");
+    await writeFile(catalogPath,
+      '{"releases":[{"version":"1.0","build":99,"tag":"macos-v1.0"}]}\n');
+
+    await expect(stageMacOSRelease({ version: "1.0", appcastPath, webRoot }))
+      .rejects.toThrow(/catalog conflicts/);
+  });
+});
+
 describe("an atomic minimum-version cutover", () => {
   it("raises the requirement only while staging its matching release", async () => {
     const { webRoot, appcastPath } = await fixture({ "sparkle:version": "15" }, {

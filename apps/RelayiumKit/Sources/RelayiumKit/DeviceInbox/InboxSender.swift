@@ -146,6 +146,9 @@ public protocol InboxSenderTransport: AnyObject, Sendable {
     /// the caller's job: which devices are eligible targets is a product
     /// decision about presence, capability and key state, not a transport one.
     func devices() async throws -> [InboxDeviceRow]
+    /// Rename one account-owned device. The server scopes the identifier to the
+    /// bearer account; callers still validate it before it enters the URL.
+    func renameDevice(deviceID: String, name: String) async throws
     func createTask(targetDeviceID: String,
                     _ request: InboxSendRequest) async throws -> InboxTaskCreation
     func task(targetDeviceID: String, taskID: String) async throws -> InboxTask
@@ -175,6 +178,18 @@ public final class InboxSenderClient: InboxSenderTransport, @unchecked Sendable 
         let body: Body = try await send(request(.get,
                                                 url: baseURL.appendingPathComponent("api/devices")))
         return body.devices
+    }
+
+    public func renameDevice(deviceID: String, name: String) async throws {
+        guard let checked = try? StoredObjectID.checked(deviceID) else {
+            throw InboxError.invalidIdentifier
+        }
+        var req = request(.patch,
+                          url: baseURL.appendingPathComponent("api/devices")
+                            .appendingPathComponent(checked))
+        req.httpBody = try encode(["name": name])
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        try await sendDiscardingBody(req)
     }
 
     // MARK: - tasks
@@ -237,7 +252,9 @@ public final class InboxSenderClient: InboxSenderTransport, @unchecked Sendable 
 
     // MARK: - request plumbing
 
-    private enum Method: String { case get = "GET", post = "POST", delete = "DELETE" }
+    private enum Method: String {
+        case get = "GET", post = "POST", patch = "PATCH", delete = "DELETE"
+    }
 
     /// A target device id becomes a URL path component, so it goes through the
     /// same refusal `InboxClient` applies to its own — and here it matters more,

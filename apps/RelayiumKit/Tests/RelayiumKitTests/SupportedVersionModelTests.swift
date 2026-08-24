@@ -505,7 +505,7 @@ final class SupportedVersionModelTests: XCTestCase {
     /// path this test does not name is a path nobody reviewed.
     func testThePolicyIsFetchedFromOneCompiledInAddress() {
         XCTAssertEqual(HTTPSupportedVersionPolicySource.productionURL.absoluteString,
-                       "https://relayium.com/apps/macos/client-policy.json")
+                       "https://relayium.com/api/client-policy/macos")
     }
 
     func testTheHTTPSourceRefusesANonSuccessStatusAndAnOversizedBody() async throws {

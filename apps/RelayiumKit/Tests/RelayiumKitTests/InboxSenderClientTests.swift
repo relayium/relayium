@@ -77,6 +77,33 @@ final class InboxSenderClientTests: XCTestCase {
                        "Bearer bearer-token-value")
     }
 
+    func testRenameUsesAnAccountScopedPatchWithOnlyTheNewName() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.stub = .init(status: 200, body: Data(#"{"ok":true}"#.utf8))
+        try await client().renameDevice(deviceID: device, name: "Studio Mac")
+
+        let request = try XCTUnwrap(StubURLProtocol.observed.last)
+        XCTAssertEqual(request.httpMethod, "PATCH")
+        XCTAssertEqual(request.url?.path, "/api/devices/\(device)")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"),
+                       "Bearer bearer-token-value")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        let body = try XCTUnwrap(StubURLProtocol.bodyJSON(request))
+        XCTAssertEqual(body.keys.sorted(), ["name"])
+        XCTAssertEqual(body["name"] as? String, "Studio Mac")
+    }
+
+    func testRenameRefusesAPathShapedIdentifierBeforeNetwork() async throws {
+        StubURLProtocol.reset()
+        do {
+            try await client().renameDevice(deviceID: "../other", name: "No")
+            XCTFail("a path-shaped device id was accepted")
+        } catch {
+            XCTAssertEqual(error as? InboxError, .invalidIdentifier)
+        }
+        XCTAssertTrue(StubURLProtocol.observed.isEmpty)
+    }
+
     func testEachTaskRouteIsTheExactAccountScopedURLAndMethod() async throws {
         let cases: [(String, String, () async throws -> Void)] = [
             ("POST", "https://relayium.test/api/devices/\(device)/inbox/tasks", {

@@ -764,6 +764,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <div class="top"><h1>{{t $.Lang "后台概览"}}</h1>
 <div style="display:flex;gap:12px;align-items:center">
 <form method="post" action="/admin/lang" class="langpick"><button type="submit" name="l" value="zh"{{if ne $.Lang "en"}} class="on" aria-current="true"{{end}}>中文</button><button type="submit" name="l" value="en"{{if eq $.Lang "en"}} class="on" aria-current="true"{{end}}>EN</button></form>
+<a href="/admin/version-policy" style="color:var(--a);text-decoration:none">{{t $.Lang "版本策略"}}</a>
 <a href="/admin/audit" style="color:var(--a);text-decoration:none">{{t $.Lang "审计日志"}}</a>
 <form method="post" action="/admin/logout"><button type="submit">{{t $.Lang "退出"}}</button></form>
 </div></div>

@@ -32,6 +32,10 @@ public final class InboxSendModel: ObservableObject {
 
     /// Whether the account's device list has been read, and what came back.
     @Published public private(set) var directory: InboxSendDirectory = .idle
+    /// Every account device, including this installation. Unlike `candidates`,
+    /// this directory exists for management and therefore never drops the
+    /// current or non-receiving rows.
+    @Published public private(set) var devices: [InboxDeviceRow] = []
     /// Every device that may be OFFERED — sendable and blocked alike, minus this
     /// one. See `InboxSendCandidate.candidates(from:)` for why blocked rows stay.
     @Published public private(set) var candidates: [InboxSendCandidate] = []
@@ -43,6 +47,8 @@ public final class InboxSendModel: ObservableObject {
     @Published public private(set) var refusal: InboxSendRefusal?
     /// An action that left something running after saying it would stop it.
     @Published public private(set) var actionError: InboxSendActionError?
+    @Published public private(set) var renamingDeviceIDs: Set<String> = []
+    @Published public private(set) var renameFailureDeviceID: String?
 
     // MARK: - collaborators
 
@@ -171,6 +177,7 @@ public final class InboxSendModel: ObservableObject {
 
     private var observation: AnyCancellable?
     private var directoryTask: Task<Void, Never>?
+    private var renameTasks: [String: Task<Void, Never>] = [:]
     /// The attempt running for one job, if any.
     private var work: [String: Task<Void, Never>] = [:]
     /// The state poll running for one job, if any.
@@ -240,17 +247,22 @@ public final class InboxSendModel: ObservableObject {
     private func isolateFromPreviousAccount() {
         directoryTask?.cancel()
         directoryTask = nil
+        for task in renameTasks.values { task.cancel() }
+        renameTasks = [:]
         for task in work.values { task.cancel() }
         for task in polls.values { task.cancel() }
         work = [:]
         polls = [:]
         records = [:]
         rows = []
+        devices = []
         candidates = []
         selectedTargetID = nil
         directory = .idle
         refusal = nil
         actionError = nil
+        renamingDeviceIDs = []
+        renameFailureDeviceID = nil
         publish()
     }
 
@@ -282,6 +294,7 @@ public final class InboxSendModel: ObservableObject {
 
     private func adopt(_ rows: [InboxDeviceRow]) {
         self.rows = rows
+        devices = rows
         candidates = InboxSendCandidate.candidates(from: rows)
         directory = .loaded
         // A device that has gone away, been revoked, or had receiving switched
@@ -292,6 +305,36 @@ public final class InboxSendModel: ObservableObject {
             selectedTargetID = nil
         }
         publish()
+    }
+
+    /// Rename by the server-issued row id. Duplicate labels are deliberately
+    /// allowed; identity and every later action remain keyed by `id`.
+    @discardableResult
+    public func renameDevice(id: String, name: String, token: String) -> Task<Void, Never>? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard accountId != nil, !token.isEmpty, !trimmed.isEmpty,
+              rows.contains(where: { $0.id == id }) else { return nil }
+        let g = accountGeneration
+        renameTasks[id]?.cancel()
+        renamingDeviceIDs.insert(id)
+        renameFailureDeviceID = nil
+        let sender = makeSender(token)
+        let task = Task { [weak self] in
+            do {
+                try await sender.renameDevice(deviceID: id, name: trimmed)
+                guard let self, g == self.accountGeneration else { return }
+                self.renameTasks[id] = nil
+                self.renamingDeviceIDs.remove(id)
+                self.refreshTargets(token: token)
+            } catch {
+                guard let self, g == self.accountGeneration else { return }
+                self.renameTasks[id] = nil
+                self.renamingDeviceIDs.remove(id)
+                self.renameFailureDeviceID = id
+            }
+        }
+        renameTasks[id] = task
+        return task
     }
 
     private static func directoryFailure(for error: Error) -> InboxSendDirectoryFailure {

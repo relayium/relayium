@@ -185,6 +185,30 @@ final class InboxSendModelTests: XCTestCase {
                        .receiveOff)
         XCTAssertEqual(model.candidates.first { $0.id == "DEVICEbrowser999" }?.availability.block,
                        .notEnrolled)
+        XCTAssertEqual(model.devices.map(\.id),
+                       [deviceID, currentDeviceID, otherDeviceID, "DEVICEbrowser999"],
+                       "management must retain the current and non-receiving rows")
+    }
+
+    func testRenameUsesTheStableRowIDAndRefreshesTheDirectory() async throws {
+        let (model, _) = await signedIn()
+        model.renameDevice(id: deviceID, name: "  Renamed Studio  ", token: "bearer")
+
+        await waitUntil("the renamed directory") {
+            model.devices.first(where: { $0.id == self.deviceID })?.name == "Renamed Studio"
+        }
+        XCTAssertTrue(sender.calls.contains(.rename(device: deviceID, name: "Renamed Studio")))
+        XCTAssertNil(model.renameFailureDeviceID)
+        XCTAssertFalse(model.renamingDeviceIDs.contains(deviceID))
+    }
+
+    func testRejectedRenameLeavesTheLastTrustworthyNameInPlace() async throws {
+        let (model, _) = await signedIn()
+        sender.renameError = InboxError.api(status: 400, code: "invalid_name")
+        model.renameDevice(id: deviceID, name: "Rejected", token: "bearer")
+
+        await waitUntil("the rename refusal") { model.renameFailureDeviceID == self.deviceID }
+        XCTAssertEqual(model.devices.first(where: { $0.id == deviceID })?.name, "Studio")
     }
 
     /// A rejected credential and an unreachable server are different facts with

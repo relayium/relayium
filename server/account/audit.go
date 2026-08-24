@@ -8,18 +8,19 @@ import (
 // 审计动作名。集中定义而不是散在各 handler 里写字面量，
 // 是为了让审计页的过滤下拉框和写入端不可能拼错到对不上。
 const (
-	AuditLoginOK      = "login.ok"
-	AuditLoginFail    = "login.fail"
-	AuditLogout       = "logout"
-	AuditSettings     = "settings.update"
-	AuditPlanUpsert   = "plan.upsert"
-	AuditUserPlan     = "user.plan"
-	AuditNodeDelete   = "node.delete"
-	AuditNodeLimits   = "node.limits"
-	AuditNodeLabel    = "node.label"
-	AuditNodeDraining = "node.draining"
-	AuditNodeRestore  = "node.restore"
-	AuditNodeRemove   = "node.remove"
+	AuditLoginOK       = "login.ok"
+	AuditLoginFail     = "login.fail"
+	AuditLogout        = "logout"
+	AuditSettings      = "settings.update"
+	AuditVersionPolicy = "version-policy.update"
+	AuditPlanUpsert    = "plan.upsert"
+	AuditUserPlan      = "user.plan"
+	AuditNodeDelete    = "node.delete"
+	AuditNodeLimits    = "node.limits"
+	AuditNodeLabel     = "node.label"
+	AuditNodeDraining  = "node.draining"
+	AuditNodeRestore   = "node.restore"
+	AuditNodeRemove    = "node.remove"
 	// 节点自助下线：卸载脚本调用 /api/nodes/deregister 的那一次。与
 	// node.remove（管理员在后台手工标记）分开记，因为"是机器自己走的"和
 	// "是人把它拔掉的"在事后复盘时是两件事，混在一个 action 里就只能靠
@@ -121,7 +122,7 @@ const (
 // themselves — a new action added above and forgotten here would just be
 // unfilterable, not wrong.
 var auditActions = []string{
-	AuditLoginOK, AuditLoginFail, AuditLogout, AuditSettings,
+	AuditLoginOK, AuditLoginFail, AuditLogout, AuditSettings, AuditVersionPolicy,
 	AuditPlanUpsert, AuditUserPlan, AuditNodeDelete, AuditNodeLimits,
 	AuditNodeLabel, AuditNodeDraining, AuditNodeRestore, AuditNodeRemove, AuditNodeDeregister,
 	AuditTokenMint, AuditTokenRevoke, AuditPasskeyDelete, AuditAppleProduct,

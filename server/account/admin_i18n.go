@@ -80,6 +80,7 @@ var adminEN = map[string]string{
 	"取消":                  "Cancel",
 	"Relayium Admin · 用户": "Relayium Admin · Users",
 	"后台概览":                "Overview",
+	"版本策略":                "Version policy",
 	"审计日志":                "Audit log",
 	"退出":                  "Sign out",
 	"忽略此版本":               "Ignore this version",

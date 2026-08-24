@@ -911,6 +911,8 @@
 "send.targetOnline" = "在线";
 "send.targetOffline" = "离线";
 "send.myDevicesHeading" = "我的设备";
+"send.deviceRename" = "重命名设备";
+"send.deviceRenameFailed" = "无法重命名这台设备，原名称保持不变。";
 "send.myDevicesExplain" = "已登录此账户的设备。打开其中一台，即可向它发送消息、文件或文件夹——在本机加密，只有那台设备能读取。";
 "send.contentAction" = "发送内容";
 "send.backToDevices" = "所有设备";

@@ -13,12 +13,12 @@ public protocol SupportedVersionPolicySource: Sendable {
 /// The one URL this product reads its policy from, built from the app's own
 /// production origin rather than from anything the document says.
 public struct HTTPSupportedVersionPolicySource: SupportedVersionPolicySource {
-    /// `https://relayium.com/apps/macos/client-policy.json`, published from
-    /// `web/native-client-policy.json`.
+    /// `https://relayium.com/api/client-policy/macos`, generated from the
+    /// revisioned operational policy stored by central.
     public static let productionURL = AppEnvironment.productionBaseURL
-        .appendingPathComponent("apps")
+        .appendingPathComponent("api")
+        .appendingPathComponent("client-policy")
         .appendingPathComponent("macos")
-        .appendingPathComponent("client-policy.json")
 
     let url: URL
     let session: URLSession

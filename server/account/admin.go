@@ -495,6 +495,7 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// above) and NOT wrapped in RequireStepUp (that guard is for writes —
 	// this handler never mutates anything).
 	mux.HandleFunc("GET /admin/audit", s.handleAdminAudit)
+	mux.HandleFunc("GET /admin/version-policy", s.handleAdminVersionPolicy)
 	mux.Handle("POST /admin/login", s.CSRFGuard(http.HandlerFunc(s.handleAdminLogin)))
 	mux.Handle("POST /admin/logout", s.CSRFGuard(http.HandlerFunc(s.handleAdminLogout)))
 	// A display preference, but still a state change, so it goes through the same
@@ -527,6 +528,8 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// only happens via POST /admin/confirm (HandleAdminConfirm) below.
 	mux.Handle("POST /admin/settings",
 		s.CSRFGuard(s.RequireStepUp(AuditSettings, s.handleAdminSettings)))
+	mux.Handle("POST /admin/version-policy",
+		s.CSRFGuard(s.RequireStepUp(AuditVersionPolicy, s.handleAdminUpdateVersionPolicy)))
 	mux.Handle("POST /admin/plans",
 		s.CSRFGuard(s.RequireStepUp(AuditPlanUpsert, s.handleAdminUpsertPlan)))
 	mux.Handle("POST /admin/users/plan",

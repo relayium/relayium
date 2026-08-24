@@ -17,6 +17,7 @@ final class FakeInboxSenderTransport: InboxSenderTransport, @unchecked Sendable 
 
     enum Call: Equatable {
         case devices
+        case rename(device: String, name: String)
         case create(device: String, idempotencyKey: String, storedFile: String,
                     wrappedKey: String, keyID: String, keyGeneration: Int64)
         case task(device: String, task: String)
@@ -43,6 +44,7 @@ final class FakeInboxSenderTransport: InboxSenderTransport, @unchecked Sendable 
     /// a key between the seal and the create.
     var deviceRows: [InboxDeviceRow] = []
     var devicesError: Error?
+    var renameError: Error?
 
     /// Consumed front-to-back, one per `createTask`. When it runs dry the last
     /// entry repeats, so "every attempt fails the same way" is one entry.
@@ -67,6 +69,18 @@ final class FakeInboxSenderTransport: InboxSenderTransport, @unchecked Sendable 
         record(.devices)
         if let devicesError { throw devicesError }
         return sync { deviceRows }
+    }
+
+    func renameDevice(deviceID: String, name: String) async throws {
+        record(.rename(device: deviceID, name: name))
+        if let renameError { throw renameError }
+        sync {
+            deviceRows = deviceRows.map { row in
+                guard row.id == deviceID else { return row }
+                return InboxDeviceRow(id: row.id, name: name, kind: row.kind,
+                                      isCurrent: row.isCurrent, inbox: row.inbox)
+            }
+        }
     }
 
     func createTask(targetDeviceID: String,

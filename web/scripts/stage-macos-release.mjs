@@ -330,6 +330,7 @@ export async function stageMacOSRelease({
   }
 
   const manifestPath = resolve(root, "native-releases.json");
+  const serverCatalogPath = resolve(root, "../server/account/macos_release_catalog.json");
   const destination = resolve(root, "public/apps/macos/appcast.xml");
   const current = JSON.parse(await readFile(manifestPath, "utf8"));
   if (current.macos?.available) {
@@ -361,6 +362,23 @@ export async function stageMacOSRelease({
       downloadUrl: expectedUrl,
     },
   };
+  let serverCatalog = null;
+  try {
+    serverCatalog = JSON.parse(await readFile(serverCatalogPath, "utf8"));
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  if (serverCatalog) {
+    const releases = Array.isArray(serverCatalog.releases) ? serverCatalog.releases : [];
+    const existing = releases.find((entry) => entry.version === version || entry.build === Number(build));
+    if (existing && (existing.version !== version || existing.build !== Number(build))) {
+      throw new Error(`server macOS release catalog conflicts with ${version} (${build})`);
+    }
+    if (!existing) {
+      releases.push({ version, build: Number(build), tag: `macos-v${version}` });
+    }
+    serverCatalog = { releases };
+  }
   // The one field of the policy a release owns. The requirement fields are a
   // product decision and are carried through untouched — staging must never
   // raise or lower what users are required to run — but `latestVersion` is a
@@ -400,10 +418,14 @@ export async function stageMacOSRelease({
   const appcastTemp = `${destination}.tmp`;
   const policyTemp = `${policyPath}.tmp`;
   const publishedPolicyTemp = `${publishedPolicyPath}.tmp`;
+  const serverCatalogTemp = `${serverCatalogPath}.tmp`;
   await writeFile(manifestTemp, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   await writeFile(appcastTemp, appcast, "utf8");
   await writeFile(policyTemp, stagedPolicy, "utf8");
   await writeFile(publishedPolicyTemp, stagedPolicy, "utf8");
+  if (serverCatalog) {
+    await writeFile(serverCatalogTemp, `${JSON.stringify(serverCatalog, null, 2)}\n`, "utf8");
+  }
   await rename(manifestTemp, manifestPath);
   await rename(appcastTemp, destination);
   // Both copies, from the same bytes. The canonical file is what a person edits
@@ -412,6 +434,7 @@ export async function stageMacOSRelease({
   // leave the served policy naming a release that is no longer the latest.
   await rename(policyTemp, policyPath);
   await rename(publishedPolicyTemp, publishedPolicyPath);
+  if (serverCatalog) await rename(serverCatalogTemp, serverCatalogPath);
 
   return {
     version,

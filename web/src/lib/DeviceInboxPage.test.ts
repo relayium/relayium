@@ -12,8 +12,8 @@
 //     receive, and a failed /api/devices must not be rendered as either "no
 //     devices" or "ready" (WORKFLOW-LEARNINGS 2026-08-09: a failed background
 //     refresh must not erase — or invent — trustworthy state).
-//  3. **The journey ends here.** No step of sending a file requires navigating
-//     to /me, and the rows on this page carry no revoke or rename.
+//  3. **The journey ends here.** Sending, renaming and revoking devices are
+//     available without navigating to /me.
 //  4. **The two boundaries in prose**: uploaded is not saved, and a share link
 //     is not permission to write to a disk.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -658,38 +658,30 @@ describe("sending, without leaving this page", () => {
       .toEqual([{ file, path: undefined }]);
   });
 
-  it("names the account, and keeps My Devices as a secondary management route only", async () => {
+  it("names the account and keeps device management on this page", async () => {
     const root = await signedIn({ fetchDevices: async () => [READY_DEVICE] });
     expect(root.querySelector(".start .lead")!.textContent).toContain(USER.email);
-    const manage = root.querySelector<HTMLAnchorElement>('[data-di="my-devices"]')!;
-    expect(manage.getAttribute("href")).toBe("/me");
-    expect(manage.textContent!.trim()).toBe(en().manageDevicesCta);
-    // Not a call to action next to the send controls: it must not be styled as
-    // one of the primary buttons.
-    expect(manage.classList.contains("cta")).toBe(false);
+    expect(root.querySelector('[data-di="my-devices"]')).toBeNull();
+    expect(rowFor(root, "build-server").querySelector("button.del")).not.toBeNull();
   });
 
-  it("carries no destructive or credential control on any row", async () => {
-    // Revoke is irreversible and would sit beside a drop target; rename
-    // persists a label. Both belong to /me, which this page links to.
+  it("carries rename and revoke controls on every account device row", async () => {
     const root = await signedIn({
       fetchDevices: async () => [READY_DEVICE, BARE_DEVICE, REVOKED_DEVICE],
     });
     const block = root.querySelector('[data-di="devices"]')!;
-    expect(block.querySelector("button.del")).toBeNull();
+    expect(block.querySelector("button.del")).not.toBeNull();
     expect(block.querySelector("button.open")).not.toBeNull();
     // Asserted against the real labels rather than the words: "This device's
     // inbox was revoked" is an explanation the row SHOULD carry, and a blanket
     // /revoke/i ban would forbid the sentence while permitting the button.
     const labels = [messages.en.me.deviceRename, messages.en.me.deviceRevoke];
     const buttons = [...block.querySelectorAll("button")].map((b) => b.textContent!.trim());
-    for (const label of labels) {
-      expect(buttons, `a credential control (${label}) reached the send surface`).not.toContain(label);
-    }
+    for (const label of labels) expect(buttons).toContain(label);
     // The aria-labels carry the same vocabulary, and are what a screen reader
     // would hear even if the visible text were trimmed away.
     const aria = [...block.querySelectorAll("[aria-label]")].map((e) => e.getAttribute("aria-label")!);
-    expect(aria.some((a) => a.includes(messages.en.me.deviceRevoke))).toBe(false);
+    expect(aria.some((a) => a.includes(messages.en.me.deviceRevoke))).toBe(true);
   });
 
   it("points each platform section back at this page, never at /me", async () => {

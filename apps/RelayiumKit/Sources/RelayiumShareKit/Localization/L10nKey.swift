@@ -1979,6 +1979,8 @@ public enum L10nKey: String, CaseIterable, Sendable {
 
     case sendMyDevicesHeading = "send.myDevicesHeading"
     case sendMyDevicesExplain = "send.myDevicesExplain"
+    case sendDeviceRename = "send.deviceRename"
+    case sendDeviceRenameFailed = "send.deviceRenameFailed"
     case sendContentAction = "send.contentAction"
     /// The way back to the device list, named by where it goes rather than by
     /// the word Back — which on a Mac names a browser control and says nothing

@@ -25,6 +25,26 @@ func (s *Service) beforeImageFor(ctx context.Context, action, pathID string, for
 		cur := s.ResolveSettings(ctx)
 		return settingsImage(cur), parseSettingsForm(form), "-", nil
 
+	case AuditVersionPolicy:
+		cur, err := s.operationalVersionPolicy(ctx)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		next, err := parseOperationalVersionPolicyForm(form, cur)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		before, after := versionPolicyImage(cur), versionPolicyImage(next)
+		before["fleet_nodes_below"], err = s.fleetNodesBelow(ctx, cur.FleetMinimumVersion)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		after["fleet_nodes_below"], err = s.fleetNodesBelow(ctx, next.FleetMinimumVersion)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		return before, after, "version-policy", nil
+
 	case AuditPlanUpsert:
 		id := form.Get("id")
 		before = map[string]any{}

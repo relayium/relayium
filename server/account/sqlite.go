@@ -139,6 +139,20 @@ CREATE TABLE IF NOT EXISTS settings (
   value      INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS operational_version_policy (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  revision INTEGER NOT NULL,
+  fleet_min_version TEXT NOT NULL,
+  mac_min_version TEXT NOT NULL,
+  mac_min_build INTEGER NOT NULL,
+  mac_recommended_version TEXT NOT NULL,
+  mac_latest_version TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+INSERT OR IGNORE INTO operational_version_policy
+  (id, revision, fleet_min_version, mac_min_version, mac_min_build,
+   mac_recommended_version, mac_latest_version, updated_at)
+VALUES (1, 6, 'v0.22.0', '1.2.11', 17, '1.3.0', '1.3.2', 0);
 CREATE TABLE IF NOT EXISTS user_stats (
   user_id         TEXT PRIMARY KEY REFERENCES users(id),
   transfers_total INTEGER NOT NULL DEFAULT 0,

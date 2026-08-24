@@ -103,6 +103,11 @@ func (s *Service) setTargetVersion(ctx context.Context, track, version string, e
 	if !selfupdate.IsPlainVersion(version) {
 		return fmt.Errorf("invalid target version %q: must be a plain vMAJOR.MINOR.PATCH release tag", version)
 	}
+	if track == "fleet" {
+		if err := s.enforceFleetMinimum(ctx, version); err != nil {
+			return err
+		}
+	}
 	if track == "byo" {
 		// Isolation: the fleet path below (track == "fleet") must never read
 		// this row or anything derived from it — a broken/halted BYO track

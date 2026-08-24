@@ -128,6 +128,7 @@ func (s *Service) renderConfirmPage(w http.ResponseWriter, data confirmPageData)
 func (s *Service) confirmHandlerFor(action string) (http.HandlerFunc, bool) {
 	m := map[string]http.HandlerFunc{
 		AuditSettings:      s.handleAdminSettings,
+		AuditVersionPolicy: s.handleAdminUpdateVersionPolicy,
 		AuditPlanUpsert:    s.handleAdminUpsertPlan,
 		AuditUserPlan:      s.handleAdminSetUserPlan,
 		AuditTokenMint:     s.handleAdminMintToken,

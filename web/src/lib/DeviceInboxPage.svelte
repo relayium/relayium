@@ -14,8 +14,8 @@
   //     visibly separate from the permission to write to a disk.
   //  3. Give a signed-out visitor something executable (the real Account modal,
   //     not a paragraph telling them to sign in), and a signed-in one THEIR OWN
-  //     DEVICES with a working send control on each one that has an inbox. The
-  //     journey ends here; /me is for renaming and revoking credentials.
+  //     DEVICES with working send and management controls. This is the
+  //     canonical device surface; /me is no longer a required detour.
   //  4. Name six platforms with an honest status each, and show NO command and
   //     NO button for a native product that does not exist.
   //  5. Never invent a device state. "Checking", "we could not find out",
@@ -25,19 +25,28 @@
   //
   // The rows, the send zone, the crypto, the polling and the cancel are NOT
   // implemented here: they are DeviceSendList → DeviceCard → device-send.ts,
-  // the same components My Devices renders, with credential management switched
-  // off. This file owns the data and the five states, nothing else.
+  // the same components My Devices renders. This file owns the data and the
+  // five states, including account-scoped rename/revoke outcomes.
   //
   // The locale-invariant half — statuses, commands, paths — is in
   // device-inbox-platforms.ts; every sentence around it is in the maintained
   // locale tables. Nothing here composes English at runtime.
   import { onMount } from "svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
-  import { navigate, ME_PATH, CLI_PATH } from "./router.svelte";
+  import { navigate, CLI_PATH } from "./router.svelte";
+  import { confirmDialog, resolveConfirm } from "./confirm-dialog.svelte";
   import { session, refreshSession } from "./auth.svelte";
   import { setLoginOpen } from "./login.svelte";
   import { DEVICE_REFRESH_MS, parseDeviceInbox } from "./device-inbox";
-  import { censusOf, deviceRefText, supportedDevices, type DeviceRow } from "./device-list";
+  import {
+    censusOf,
+    deviceKindLabel,
+    deviceRefText,
+    deviceSignedInText,
+    supportedDevices,
+    type DeviceRow,
+  } from "./device-list";
+  import { type RenameOutcome } from "./DeviceCard.svelte";
   import {
     INBOX_PLATFORMS,
     SERVER_GUIDE_SLUG,
@@ -182,6 +191,46 @@
     void loadDevices(gen);
   }
 
+  async function revokeDevice(device: DeviceRow) {
+    const gen = deviceGen;
+    const described = t.me.deviceConfirmRevoke(
+      device.Name,
+      deviceKindLabel(device.Kind, t),
+      deviceRefText(device, t),
+      deviceSignedInText(device, t, lang()),
+    );
+    if (!(await confirmDialog(described)) || gen !== deviceGen) return;
+    try {
+      const res = await fetch(`/api/devices/${encodeURIComponent(device.ID)}`, {
+        method: "DELETE", credentials: "include",
+      });
+      if (gen !== deviceGen) return;
+      if (!res.ok) { refreshFailed = true; return; }
+      devices = devices.filter((row) => row.ID !== device.ID);
+    } catch {
+      if (gen === deviceGen) refreshFailed = true;
+    }
+  }
+
+  async function renameDevice(device: DeviceRow, name: string): Promise<RenameOutcome> {
+    const gen = deviceGen;
+    try {
+      const res = await fetch(`/api/devices/${encodeURIComponent(device.ID)}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (gen !== deviceGen) return "failed";
+      if (res.status === 400) return "rejected";
+      if (!res.ok) return "failed";
+      devices = devices.map((row) => row.ID === device.ID ? { ...row, Name: name } : row);
+      return "ok";
+    } catch {
+      return "failed";
+    }
+  }
+
   // Presence expires (90s TTL against a 30s heartbeat), so a list fetched once
   // and never refreshed would keep claiming a device is online long after it
   // stopped being. Bounded, and only while the tab is actually visible.
@@ -219,6 +268,7 @@
 
     return () => {
       if (presenceTick !== undefined) clearInterval(presenceTick);
+      resolveConfirm(false);
       if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
       if (typeof window !== "undefined") window.removeEventListener("hashchange", onHashChange);
       deviceGen++;
@@ -292,10 +342,6 @@
    *  localized paths do not exist and would 404 in eight of nine locales. */
   const serverGuideHref = $derived(lang() === "en" ? `/${SERVER_GUIDE_SLUG}` : `/${lang()}/${SERVER_GUIDE_SLUG}`);
 
-  function goMyDevices(e: MouseEvent) {
-    e.preventDefault();
-    navigate("me");
-  }
   function goCli(e: MouseEvent) {
     e.preventDefault();
     navigate("cli");
@@ -355,12 +401,21 @@
             </h3>
             <p class="workspace-ref">{deviceRefText(selectedDevice, t)}</p>
             <p class="workspace-note">{t.deviceInboxPage.deviceWorkspaceNote}</p>
-            <DeviceSendList devices={[selectedDevice]} label={t.deviceInboxPage.deviceWorkspace(selectedDevice.Name)} />
+            <DeviceSendList
+              devices={[selectedDevice]}
+              manage
+              label={t.deviceInboxPage.deviceWorkspace(selectedDevice.Name)}
+              onRevoke={revokeDevice}
+              onRename={renameDevice}
+            />
           {:else}
             <h3 class="devicesh">{t.deviceInboxPage.devicesH3}</h3>
             <DeviceSendList
               {devices}
+              manage
               label={t.deviceInboxPage.devicesH3}
+              onRevoke={revokeDevice}
+              onRename={renameDevice}
               openLabel={(device) => t.deviceInboxPage.deviceOpenLabel(device.Name, deviceRefText(device, t))}
               onOpen={(device) => (selectedDeviceID = device.ID)}
             />
@@ -390,11 +445,6 @@
             data-di="setup-server"
             onclick={(e) => goAnchor(e, "platform-server")}>{t.deviceInboxPage.setUpServerCta}</a>
         {/if}
-        <!-- Secondary, and deliberately not a send path: renaming and revoking
-             are credential management, and this page's rows do not offer them. -->
-        <a class="manage" href={ME_PATH} data-di="my-devices" onclick={goMyDevices}>
-          {t.deviceInboxPage.manageDevicesCta}
-        </a>
       </p>
     {:else}
       <p class="lead">{t.deviceInboxPage.signedOutLead}</p>
@@ -558,7 +608,6 @@
     <ul class="docs">
       <li><a href={serverGuideHref}>{t.deviceInboxPage.docsServerGuide}</a></li>
       <li><a href={CLI_PATH} onclick={goCli}>{t.deviceInboxPage.docsCli}</a></li>
-      <li><a href={ME_PATH} onclick={goMyDevices}>{t.deviceInboxPage.docsMyDevices}</a></li>
     </ul>
   </div>
 </section>
@@ -748,17 +797,9 @@
     background: var(--social-bg);
     border-color: var(--accent-border);
   }
-  .cta:focus-visible,
-  .manage:focus-visible {
+  .cta:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
-  }
-  /* Secondary by construction: a plain link beside the filled actions, so it
-     cannot be mistaken for the way to send something. */
-  .manage {
-    align-self: center;
-    font-size: var(--fs-sm);
-    color: var(--accent-fg);
   }
 
   /* Platform sections */
@@ -978,9 +1019,6 @@
       text-align: center;
       padding: var(--space-3) var(--space-4);
     }
-    .manage {
-      align-self: start;
-    }
   }
 
   a {
@@ -990,15 +1028,13 @@
   /* A standalone action link is not prose: at 17px tall it fails WCAG 2.5.8's
      24px minimum target, and on a phone it is a coin-toss for a thumb. Inside a
      sentence a link keeps the line's rhythm, so only these are enlarged. */
-  .alt a,
-  .manage {
+  .alt a {
     display: inline-flex;
     align-items: center;
     min-height: 24px;
   }
   @media (max-width: 720px) {
-    .alt a,
-    .manage {
+    .alt a {
       min-height: 44px;
     }
   }
