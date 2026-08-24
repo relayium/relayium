@@ -27,7 +27,8 @@
 //   ---- git add -A ----
 //   judge phase   scope check and web suite, reading the staged bytes only
 //   ---- git commit ----
-//   publish       gh release create, then a bare push
+//   deliver       candidate branch, merge-gate on that SHA, protected-main push
+//   publish       gh release create, last
 //
 // Nothing else in this repository can see any of that. The YAML is valid in
 // either order, actionlint is happy in either order, and the only other signal
@@ -178,7 +179,10 @@ const scope = lineRunning("macos-release-candidate.mjs check-scope", "the candid
 const suite = lineRunning("npm test -- --run", "the web test suite");
 const commit = lineRunning("git commit -m", "the candidate commit");
 const create = lineRunning("gh release create", "the immutable release creation");
-const push = lineRunning("git push origin", "the delivery push");
+const candidatePush = lineRunning("refs/heads/$candidate_branch", "the candidate-branch push");
+const gateDispatch = lineRunning("gh workflow run merge-gate.yml", "the candidate gate dispatch");
+const gateWatch = lineRunning("gh run watch", "the candidate gate result");
+const push = lineRunning("$CANDIDATE:main", "the protected-main delivery push");
 
 /**
  * The archived-locale restore, as a line index.
@@ -315,8 +319,13 @@ for (const restore of restores) {
   before(restore, create, "archived locales are restored only after the release is created");
 }
 
-// 5. Delivery comes last, and is only a push.
-before(create, push, "metadata is delivered before the release exists");
+// 5. The frozen candidate is checked on its own SHA before protected main
+//    moves, and the immutable public release is created only after delivery.
+before(commit, candidatePush, "the candidate branch is pushed before the candidate is frozen");
+before(candidatePush, gateDispatch, "merge-gate is dispatched before its candidate branch exists");
+before(gateDispatch, gateWatch, "the candidate gate is watched before it is dispatched");
+before(gateWatch, push, "protected main moves before the candidate gate reports success");
+before(push, create, "the immutable release exists before its metadata reaches protected main");
 
 // 6. Nothing that can newly fail, and nothing that can create or replace an
 //    immutable artifact, may live in the delivery step. Its inputs are a commit
