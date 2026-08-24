@@ -589,9 +589,9 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(release.contains("permissions:\n  contents: read"),
                       "the release workflow is no longer read-only by default")
         XCTAssertEqual(
-            release.components(separatedBy: "    permissions:\n      contents: write").count - 1, 1,
-            "write access is no longer scoped to exactly one job")
-        XCTAssertNotNil(release.range(of: "    permissions:\n      contents: write",
+            release.components(separatedBy: "      contents: write").count - 1, 1,
+            "contents write access is no longer scoped to exactly one job")
+        XCTAssertNotNil(release.range(of: "      contents: write",
                                       range: publishJob.lowerBound..<release.endIndex),
                         "the job holding write access is not `publish`")
 
