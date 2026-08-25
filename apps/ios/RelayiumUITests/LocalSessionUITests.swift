@@ -393,7 +393,7 @@ final class LocalSessionUITests: XCTestCase {
         awaitIdleCounterpart(harness)
         let baseline = counterpartEpoch(harness)
         launch(harness, verifying: true,
-               extraArguments: ["--relayium-ui-testing-preselect-fixture"])
+               extraArguments: ["--relayium-ui-testing-preselect-direct-fixture"])
 
         openTask("Nearby", title: "Nearby")
 

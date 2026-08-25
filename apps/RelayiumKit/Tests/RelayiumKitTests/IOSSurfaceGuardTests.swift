@@ -170,10 +170,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "the preselection no longer injects through the same "
                       + "SendSelectionModel callback SendView's fileImporter calls")
 
-        // 2. It waits on the refusals `chooseFiles` actually carries — an idle
-        //    upload model everywhere, plus a ready account for account-owned
-        //    sends. Loopback Nearby acceptance is deliberately anonymous and
-        //    has no account refusal.
+        // 2. It waits on the two refusals `chooseFiles` actually carries — a
+        //    ready account and an idle upload model — by observing them.
         let seam = try XCTUnwrap(debugHalf.components(
             separatedBy: "final class UITestPreselection").dropFirst().first?
             .components(separatedBy: "enum UITestMode").first,
@@ -185,9 +183,6 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(seam.contains("case .ready = session.state"),
                       "the preselection no longer requires a ready account, so it "
                       + "can be dropped by chooseFiles' account refusal")
-        XCTAssertTrue(seam.contains("if requiresReadyAccount"),
-                      "the account gate is no longer explicit, so loopback Nearby "
-                      + "and account-owned sends cannot choose different refusals")
         XCTAssertTrue(seam.contains("case .idle = upload.state"),
                       "the preselection no longer requires an idle upload model, so "
                       + "it can be dropped by chooseFiles' busy refusal")
@@ -287,12 +282,23 @@ final class IOSSurfaceGuardTests: XCTestCase {
             separatedBy: "func testNearbyLinkTransfersThenDoneReturnsToACleanRoster()")
             .dropFirst().first?.components(separatedBy: "\n    // MARK:").first,
             "the built-App Nearby transfer acceptance is gone")
-        XCTAssertTrue(nearbyTransfer.contains("--relayium-ui-testing-preselect-fixture"),
+        XCTAssertTrue(nearbyTransfer.contains(
+            "--relayium-ui-testing-preselect-direct-fixture"),
                       "the Nearby transfer gate again depends on Files presenting")
         XCTAssertTrue(nearbyTransfer.contains("\"pendingFile.0\""),
                       "the Nearby transfer gate no longer proves a file was staged")
         XCTAssertFalse(nearbyTransfer.contains("DOC.browsingModeTabBar"),
                        "the Nearby transfer gate duplicates the real-picker tests")
+
+        XCTAssertTrue(debugHalf.contains(
+            "static func preselectPendingFixture(into selection: DirectSendSelection)"),
+                      "the direct preselection seam no longer targets Nearby's model")
+        XCTAssertTrue(app.contains("UITestMode.preselectPendingFixture(into: selecting)"),
+                      "the app no longer installs the direct preselection seam")
+        XCTAssertTrue(debugHalf.contains("guard preselectsDirectPendingFixture else"),
+                      "the direct seam can run without its dedicated launch argument")
+        XCTAssertFalse(releaseHalf.contains("selection.chooseFiles(.success([url]))"),
+                       "the shipped iOS build can inject a direct file selection")
     }
 
     /// Nearby, pairing-code and stored sending are three destinations for the

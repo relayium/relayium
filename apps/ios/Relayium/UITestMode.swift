@@ -28,15 +28,12 @@ final class UITestPreselection {
     private var send: SendSelectionModel?
     private var upload: CloudUploadModel?
     private var session: AccountSession?
-    private let requiresReadyAccount: Bool
     private var observation: AnyCancellable?
 
-    init(send: SendSelectionModel, upload: CloudUploadModel, session: AccountSession,
-         requiresReadyAccount: Bool = true) {
+    init(send: SendSelectionModel, upload: CloudUploadModel, session: AccountSession) {
         self.send = send
         self.upload = upload
         self.session = session
-        self.requiresReadyAccount = requiresReadyAccount
     }
 
     /// Explicit cancellation, idempotent, and the only way this object stops.
@@ -69,9 +66,7 @@ final class UITestPreselection {
 
     private func chooseOnceTheModelsWillAcceptIt() {
         guard let send, let upload, let session else { return }
-        if requiresReadyAccount {
-            guard case .ready = session.state else { return }  // the account refusal
-        }
+        guard case .ready = session.state else { return }      // the account refusal
         guard case .idle = upload.state else { return }        // the busy refusal
         // Staged HERE rather than trusted to have been staged. The scene
         // `.task` that stages for the picker paths is not ordered against the
@@ -144,10 +139,19 @@ enum UITestMode {
     static let preselectFixtureArgument = "--relayium-ui-testing-preselect-fixture"
     static let preselectsPendingFixture = ProcessInfo.processInfo.arguments.contains(
         preselectFixtureArgument)
-    /// EITHER argument stages. A preselecting launch must not depend on a second
-    /// argument being passed beside it to have something to select.
+    /// Hands the same fixture to the app-scoped direct-transfer selection used
+    /// by Nearby and pairing-code flows. Separate from the account-owned upload
+    /// seam above: those are different production models with different gates,
+    /// and one test argument must never inject into both.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let preselectDirectFixtureArgument =
+        "--relayium-ui-testing-preselect-direct-fixture"
+    static let preselectsDirectPendingFixture = ProcessInfo.processInfo.arguments.contains(
+        preselectDirectFixtureArgument)
+    /// Any fixture argument stages. A preselecting launch must not depend on a
+    /// second argument being passed beside it to have something to select.
     static let stagesPendingFixture = ProcessInfo.processInfo.arguments.contains(
-        pendingFixtureArgument) || preselectsPendingFixture
+        pendingFixtureArgument) || preselectsPendingFixture || preselectsDirectPendingFixture
 
 
     /// Whether this launch already holds an account.
@@ -426,15 +430,21 @@ enum UITestMode {
         // Explicit, and before the replacement exists: two live preselections
         // would be two selections racing into one model.
         preselection?.cancel()
-        // Account-owned uploads still wait for the ready account that
-        // SendSelectionModel requires. A loopback Nearby acceptance launch is
-        // anonymous by design and has no such refusal; making that path open
-        // Files only to stage its transfer tested a system presentation race,
-        // not Relayium's transfer path.
-        let one = UITestPreselection(send: send, upload: upload, session: session,
-                                     requiresReadyAccount: !allowsResidency)
+        let one = UITestPreselection(send: send, upload: upload, session: session)
         preselection = one
         one.start()
+    }
+
+    /// Injects through the exact callback used by Nearby's `fileImporter`.
+    /// Direct selection has no account or upload gate, so this is synchronous
+    /// and deliberately does not share `UITestPreselection` with cloud sends.
+    @MainActor
+    static func preselectPendingFixture(into selection: DirectSendSelection) {
+        guard preselectsDirectPendingFixture else { return }
+        stagePendingFixture()
+        guard let url = pendingFixtureURL(),
+              FileManager.default.fileExists(atPath: url.path) else { return }
+        selection.chooseFiles(.success([url]))
     }
 
     /// Whether this launch should start with an empty `Received` folder.
@@ -486,6 +496,8 @@ enum UITestMode {
     static func preselectPendingFixture(into send: SendSelectionModel,
                                         upload: CloudUploadModel,
                                         session: AccountSession) {}
+    @MainActor
+    static func preselectPendingFixture(into selection: DirectSendSelection) {}
 
     /// Likewise absent. A shipped launch has no argument that deletes anything
     /// a user has received, and this folds to an empty call.

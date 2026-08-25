@@ -359,6 +359,10 @@ struct RelayiumApp: App {
         _discovery = StateObject(wrappedValue: nearby)
         let selecting = DirectSendSelection()
         let modes = DirectModeSelection()
+        // The built-App transfer acceptance starts after selection and is not a
+        // system Files presentation test. Debug-only and a no-op unless its
+        // dedicated direct-selection argument is present.
+        UITestMode.preselectPendingFixture(into: selecting)
         _directSelection = StateObject(wrappedValue: selecting)
         _directModes = StateObject(wrappedValue: modes)
         _linkSelection = StateObject(wrappedValue: DirectSendSelection())
