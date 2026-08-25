@@ -263,7 +263,7 @@ func TestSubmittedPurchaseProofResolvesAttemptWhenCanonicalLatestIsRenewal(t *te
 	f.svc.SetAppleSubscriptionReconciler(appleReconcilerFunc(func(_ context.Context, submitted VerifiedAppleTransaction, now time.Time) (AppleSubscriptionCanonical, error) {
 		canonical := submitted
 		canonical.TransactionReason = "RENEWAL"
-		return AppleSubscriptionCanonical{Transaction: canonical, Renewal: VerifiedAppleRenewalInfo{OriginalTransactionID: canonical.OriginalTransactionID, AutoRenewProductID: canonical.ProductID, AppAccountToken: canonical.AppAccountToken, Environment: canonical.Environment, AutoRenewEnabled: true, RenewalDateMS: canonical.ExpiresDateMS, SignedDateMS: now.UnixMilli()}}, nil
+		return AppleSubscriptionCanonical{Transaction: canonical, Renewal: VerifiedAppleRenewalInfo{OriginalTransactionID: canonical.OriginalTransactionID, AutoRenewProductID: canonical.ProductID, Environment: canonical.Environment, AutoRenewEnabled: true, RenewalDateMS: canonical.ExpiresDateMS, SignedDateMS: now.UnixMilli()}}, nil
 	}))
 	result, _ := f.mustAccept(t, f.chain.sign(t, f.payload(func(p map[string]any) {
 		p["appAccountToken"] = dispatchToken
@@ -275,6 +275,18 @@ func TestSubmittedPurchaseProofResolvesAttemptWhenCanonicalLatestIsRenewal(t *te
 	var state string
 	if err := f.store.db.QueryRowContext(context.Background(), `SELECT state FROM billing_purchase_attempts WHERE id=?`, attempt.ID).Scan(&state); err != nil || state != "resolved" {
 		t.Fatalf("submitted purchase proof did not resolve attempt: state=%q err=%v", state, err)
+	}
+}
+
+func TestApplePurchaseAppliesCanonicalTransactionWithoutRenewalProjection(t *testing.T) {
+	f := newAppleTxFixture(t)
+	f.svc.SetAppleSubscriptionReconciler(appleReconcilerFunc(func(_ context.Context, tx VerifiedAppleTransaction, _ time.Time) (AppleSubscriptionCanonical, error) {
+		return AppleSubscriptionCanonical{Transaction: tx}, nil
+	}))
+
+	result, _ := f.mustAccept(t, f.chain.sign(t, f.payload()))
+	if !result.Applied || result.PlanID != "pro" {
+		t.Fatalf("verified transaction was withheld without renewal projection: %+v", result)
 	}
 }
 
@@ -961,8 +973,11 @@ func TestAppleTransactionAcceptsABearerCredential(t *testing.T) {
 	body := string(mustJSON(t, map[string]string{
 		"signedTransactionInfo": f.chain.sign(t, tx),
 		"signedRenewalInfo": f.chain.sign(t, map[string]any{
-			"originalTransactionId": tx["originalTransactionId"], "autoRenewProductId": tx["productId"],
-			"environment": tx["environment"], "signedDate": time.Now().UnixMilli(),
+			// Deliberately unrelated and malformed. Client-supplied future intent is
+			// wire-compatible input only; the server-fetched canonical value decides.
+			"originalTransactionId": "9999999999999999", "autoRenewProductId": tx["productId"],
+			"appAccountToken": "not-a-uuid",
+			"environment":     tx["environment"], "signedDate": time.Now().UnixMilli(),
 		}),
 	}))
 	req, err := http.NewRequest(http.MethodPost, f.ts.URL+"/api/billing/apple/transaction", strings.NewReader(body))

@@ -59,7 +59,7 @@ func newAppleContinuationFixture(t *testing.T) *appleContinuationFixture {
 	svc.SetAppleSubscriptionReconciler(appleReconcilerFunc(func(_ context.Context, tx VerifiedAppleTransaction, now time.Time) (AppleSubscriptionCanonical, error) {
 		return AppleSubscriptionCanonical{Transaction: tx, Renewal: VerifiedAppleRenewalInfo{
 			OriginalTransactionID: tx.OriginalTransactionID, AutoRenewProductID: tx.ProductID,
-			AppAccountToken: tx.AppAccountToken, Environment: tx.Environment, AutoRenewEnabled: true,
+			Environment: tx.Environment, AutoRenewEnabled: true,
 			RenewalDateMS: tx.ExpiresDateMS, SignedDateMS: now.UnixMilli(),
 		}}, nil
 	}))

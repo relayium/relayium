@@ -56,6 +56,44 @@ func (f *appleTxFixture) envelope(t *testing.T, uuid string, txMut ...func(map[s
 	})
 }
 
+func TestAppleNotificationAcceptsAnUpcomingRenewalTokenWithoutMovingCurrentOwnership(t *testing.T) {
+	for i, tc := range []struct {
+		name, token string
+	}{
+		{"different-valid-token", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"},
+		{"malformed-token", "not-a-uuid"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newAppleTxFixture(t)
+			f.mustAccept(t, f.chain.sign(t, f.payload()))
+
+			uuid := appleNotifyUUID(95 + i)
+			now := time.Now()
+			tx := f.payload(func(p map[string]any) { p["revocationDate"] = now.UnixMilli() })
+			renewal := f.chain.sign(t, map[string]any{
+				"originalTransactionId": tx["originalTransactionId"],
+				"autoRenewProductId":    tx["productId"], "appAccountToken": tc.token,
+				"environment": tx["environment"], "signedDate": now.UnixMilli(),
+			})
+			payload := f.chain.notify(t, f.chain.sign(t, tx), func(p map[string]any) {
+				p["notificationUUID"] = uuid
+				p["data"].(map[string]any)["signedRenewalInfo"] = renewal
+			})
+
+			f.mustNotify(t, payload, http.StatusOK)
+			if got := f.ledger(t, uuid).State; got != appleNotificationApplied {
+				t.Fatalf("refund was not applied: %q", got)
+			}
+			if u := f.user(t); u.PlanID != freePlanID || u.SubscriptionStatus != "canceled" {
+				t.Fatalf("renewal token moved or preserved current ownership: %+v", u)
+			}
+			if _, ok, err := f.svc.appleTokenOwner(context.Background(), tc.token); err != nil || ok {
+				t.Fatalf("upcoming renewal token acquired current ownership: ok=%v err=%v", ok, err)
+			}
+		})
+	}
+}
+
 func (f *appleTxFixture) ledger(t *testing.T, uuid string) AppleNotificationRecord {
 	t.Helper()
 	rec, ok, err := f.store.GetAppleNotification(context.Background(), uuid)

@@ -54,9 +54,16 @@ func TestAppleRenewalInfoIsIndependentlyVerifiedAndBoundToTransaction(t *testing
 	if _, err := v.VerifyRenewalInfo(renewal("9999999999999999"), tx, now); err == nil {
 		t.Fatal("mismatched renewal identity accepted")
 	}
-	badToken := chain.sign(t, map[string]any{"originalTransactionId": tx.OriginalTransactionID, "autoRenewProductId": tx.ProductID, "appAccountToken": "00000000-0000-0000-0000-000000000000", "environment": tx.Environment, "signedDate": now.UnixMilli()})
-	if _, err := v.VerifyRenewalInfo(badToken, tx, now); err == nil {
-		t.Fatal("mismatched renewal account token accepted")
+	// Apple's token here applies to the upcoming renewal, not to this current
+	// transaction. A different valid UUID is not an ownership mismatch.
+	differentToken := chain.sign(t, map[string]any{"originalTransactionId": tx.OriginalTransactionID, "autoRenewProductId": tx.ProductID, "appAccountToken": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "environment": tx.Environment, "signedDate": now.UnixMilli()})
+	if _, err := v.VerifyRenewalInfo(differentToken, tx, now); err != nil {
+		t.Fatalf("valid upcoming renewal token rejected: %v", err)
+	}
+	malformedToken := chain.sign(t, map[string]any{"originalTransactionId": tx.OriginalTransactionID, "autoRenewProductId": tx.ProductID, "appAccountToken": "not-a-uuid", "autoRenewStatus": 1, "isInBillingRetryPeriod": true, "gracePeriodExpiresDate": tx.ExpiresDateMS + 86_400_000, "environment": tx.Environment, "signedDate": now.UnixMilli()})
+	malformedRenewal, err := v.VerifyRenewalInfo(malformedToken, tx, now)
+	if err != nil || !malformedRenewal.AutoRenewEnabled || !malformedRenewal.IsInBillingRetry || malformedRenewal.GracePeriodExpiresMS == 0 {
+		t.Fatalf("irrelevant malformed future token discarded verified renewal facts: renewal=%+v err=%v", malformedRenewal, err)
 	}
 }
 

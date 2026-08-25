@@ -79,3 +79,11 @@ server entitlement for every case.
   reconciliation online even if new purchase dispatch is paused. After build 23
   reaches any tester, do not roll the server back to a version that rejects
   `continuationProtocol`; pause new dispatch or roll forward instead.
+
+## Renewal intent and current transaction authority
+
+Apple's signed renewal information describes the upcoming renewal and may carry an `appAccountToken` different from the current transaction. Relayium therefore uses only the verified current transaction token for current account ownership.
+
+A verified current transaction, refund, expiry, or revocation remains authoritative when optional renewal information is missing or cannot be interpreted. Valid renewal information may extend a bounded Apple-signed billing grace period or update presentation fields, but it cannot independently grant ownership. Missing renewal information never creates a zero or fabricated renewal record; a matching durable verified projection may be retained until a newer readable projection or its bounded grace expires.
+
+Released clients remain compatible because request and response fields are unchanged. The correction is server-side and does not require a new macOS binary.

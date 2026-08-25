@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -127,27 +128,44 @@ func (c *AppleServerAPIClient) CanonicalSubscriptionByIdentity(ctx context.Conte
 			if tx.OriginalTransactionID != identity.OriginalTransactionID || tx.BundleID != identity.BundleID || tx.Environment != identity.Environment {
 				continue
 			}
-			ren, e := c.verifier.VerifyRenewalInfo(last.SignedRenewalInfo, tx, now)
-			if e != nil {
-				continue
+			// A transaction is the paid fact. Renewal info is independently signed
+			// future intent; failure to understand it must not erase the transaction.
+			// The zero value contributes no grace or renewal projection.
+			ren, renewalErr := c.verifier.VerifyRenewalInfo(last.SignedRenewalInfo, tx, now)
+			if renewalErr != nil {
+				log.Printf("app store status api: renewal info ignored in %s (%s)", tx.Environment, appleRejectionCode(renewalErr))
+				ren = VerifiedAppleRenewalInfo{}
 			}
 			candidate := AppleSubscriptionCanonical{tx, ren}
-			switch {
-			case best.Transaction.SignedDateMS == 0 || tx.SignedDateMS > best.Transaction.SignedDateMS:
-				best = candidate
-			case tx.SignedDateMS < best.Transaction.SignedDateMS:
-				continue
-			case tx != best.Transaction:
-				return AppleSubscriptionCanonical{}, errors.New("app store status api: ambiguous canonical transaction")
-			case ren.SignedDateMS > best.Renewal.SignedDateMS:
-				best.Renewal = ren
-			case ren.SignedDateMS == best.Renewal.SignedDateMS && ren != best.Renewal:
-				return AppleSubscriptionCanonical{}, errors.New("app store status api: ambiguous canonical renewal")
+			best, e = selectAppleCanonical(best, candidate)
+			if e != nil {
+				return AppleSubscriptionCanonical{}, e
 			}
 		}
 	}
 	if best.Transaction.SignedDateMS == 0 {
 		return AppleSubscriptionCanonical{}, errors.New("app store status api: no matching verified subscription")
+	}
+	return best, nil
+}
+
+func selectAppleCanonical(best, candidate AppleSubscriptionCanonical) (AppleSubscriptionCanonical, error) {
+	tx, ren := candidate.Transaction, candidate.Renewal
+	switch {
+	case best.Transaction.SignedDateMS == 0 || tx.SignedDateMS > best.Transaction.SignedDateMS:
+		return candidate, nil
+	case tx.SignedDateMS < best.Transaction.SignedDateMS:
+		return best, nil
+	case tx != best.Transaction:
+		return AppleSubscriptionCanonical{}, errors.New("app store status api: ambiguous canonical transaction")
+	case best.Renewal.OriginalTransactionID == "" && ren.OriginalTransactionID != "":
+		best.Renewal = ren
+	case ren.OriginalTransactionID == "":
+		return best, nil
+	case ren.SignedDateMS > best.Renewal.SignedDateMS:
+		best.Renewal = ren
+	case ren.SignedDateMS == best.Renewal.SignedDateMS && ren != best.Renewal:
+		return AppleSubscriptionCanonical{}, errors.New("app store status api: ambiguous canonical renewal")
 	}
 	return best, nil
 }

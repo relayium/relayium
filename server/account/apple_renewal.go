@@ -14,7 +14,6 @@ import (
 type VerifiedAppleRenewalInfo struct {
 	OriginalTransactionID string
 	AutoRenewProductID    string
-	AppAccountToken       string
 	Environment           string
 	AutoRenewEnabled      bool
 	IsInBillingRetry      bool
@@ -71,10 +70,12 @@ func (v *AppleTransactionVerifier) VerifyRenewalInfo(jws string, tx VerifiedAppl
 	if err != nil || signed < tx.PurchaseDateMS {
 		return VerifiedAppleRenewalInfo{}, rejectApple("signed_date")
 	}
-	normalizedRenewalToken := strings.ToLower(p.AppAccountToken)
-	if p.AppAccountToken != "" && (!validAppAccountToken(normalizedRenewalToken) || normalizedRenewalToken != tx.AppAccountToken) {
-		return VerifiedAppleRenewalInfo{}, rejectApple("renewal_mismatch")
-	}
+	// Apple's renewal token applies to the UPCOMING renewal transaction; the
+	// current transaction's token applies to the CURRENT transaction. A customer
+	// can therefore legitimately change the former without changing the latter.
+	// Deliberately discard it even when its shape is unusable: current ownership
+	// is resolved only from tx.AppAccountToken, and an irrelevant future token
+	// must not discard otherwise verified grace or renewal facts.
 	if p.OriginalTransactionID != tx.OriginalTransactionID || p.Environment != tx.Environment || !v.acceptsEnvironment(p.Environment) {
 		return VerifiedAppleRenewalInfo{}, rejectApple("renewal_mismatch")
 	}
@@ -97,7 +98,7 @@ func (v *AppleTransactionVerifier) VerifyRenewalInfo(jws string, tx VerifiedAppl
 		grace = 0
 	}
 	return VerifiedAppleRenewalInfo{OriginalTransactionID: p.OriginalTransactionID, AutoRenewProductID: p.AutoRenewProductID,
-		AppAccountToken: normalizedRenewalToken, Environment: p.Environment, AutoRenewEnabled: autoRenew,
+		Environment: p.Environment, AutoRenewEnabled: autoRenew,
 		IsInBillingRetry: retry, GracePeriodExpiresMS: grace, RenewalDateMS: renewal, SignedDateMS: signed,
 		ExpirationIntent: expiration, PriceIncreaseStatus: price}, nil
 }

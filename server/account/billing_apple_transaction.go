@@ -120,11 +120,14 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 		writeAppleTransactionError(w, http.StatusBadRequest, "invalid_transaction")
 		return
 	}
+	// signedRenewalInfo is accepted on the wire for released clients, but never
+	// decides this request. It describes FUTURE renewal intent and the client can
+	// select any genuine status JWS it can read. CanonicalSubscription below
+	// obtains and verifies the current renewal projection directly from Apple;
+	// only that server-fetched value may update renewal state or billing grace.
 	if in.SignedRenewalInfo != "" {
-		if _, err := verifier.VerifyRenewalInfo(in.SignedRenewalInfo, tx, now); err != nil {
-			log.Printf("billing: apple renewal info refused for user %s (%s)", u.ID, appleRejectionCode(err))
-			writeAppleTransactionError(w, http.StatusBadRequest, "invalid_transaction")
-			return
+		if _, renewalErr := verifier.VerifyRenewalInfo(in.SignedRenewalInfo, tx, now); renewalErr != nil {
+			log.Printf("billing: apple renewal info ignored for user %s (%s)", u.ID, appleRejectionCode(renewalErr))
 		}
 	}
 	preOwner, ok, err := s.appleTokenOwner(r.Context(), tx.AppAccountToken)
@@ -146,7 +149,7 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 		writeAppleTransactionError(w, http.StatusServiceUnavailable, "reconciliation_unavailable")
 		return
 	}
-	if canonical.Renewal.OriginalTransactionID == "" || canonical.Transaction.OriginalTransactionID != tx.OriginalTransactionID ||
+	if canonical.Transaction.OriginalTransactionID != tx.OriginalTransactionID ||
 		canonical.Transaction.Environment != tx.Environment || canonical.Transaction.BundleID != tx.BundleID || canonical.Transaction.AppAccountToken != tx.AppAccountToken {
 		writeAppleTransactionError(w, http.StatusServiceUnavailable, "reconciliation_unavailable")
 		return
@@ -192,9 +195,15 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 		writeAppleTransactionError(w, http.StatusBadRequest, "invalid_transaction")
 		return
 	}
-	renewalState := appleRenewalState(u.ID, tx, canonical.Renewal, now)
+	renewalState, err := s.appleRenewalProjection(r.Context(), u.ID, tx, canonical.Renewal, now)
+	if err != nil {
+		log.Printf("billing: reading apple renewal state for user %s failed: %v", u.ID, err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
 	atomic, ok := s.Store().(interface {
 		ApplyAuthorizedAppleLifecycle(context.Context, SourceEvent, AppleRenewalState, string, string) (SubscriptionApply, error)
+		ApplyAuthorizedAppleSource(context.Context, SourceEvent, string, string, string) (SubscriptionApply, error)
 	})
 	if !ok {
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -207,8 +216,14 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 	// applyAuthorizedAppleLifecycle. The two fields stay declared in
 	// entitlement.go, which is outside this lease's writable scope, and are
 	// recorded as a follow-up removal.
-	event := appleSourceEventWithRenewal(u.ID, tx, product, renewalState, now)
-	res, err := atomic.ApplyAuthorizedAppleLifecycle(r.Context(), event, renewalState, tx.AppAccountToken, tx.Environment)
+	event := appleSourceEvent(u.ID, tx, product, now)
+	var res SubscriptionApply
+	if renewalState.UserID != "" {
+		event = appleSourceEventWithRenewal(u.ID, tx, product, renewalState, now)
+		res, err = atomic.ApplyAuthorizedAppleLifecycle(r.Context(), event, renewalState, tx.AppAccountToken, tx.Environment)
+	} else {
+		res, err = atomic.ApplyAuthorizedAppleSource(r.Context(), event, tx.AppAccountToken, tx.Environment, tx.ProductID)
+	}
 	switch {
 	case errors.Is(err, ErrBillingAuthorityConflict), errors.Is(err, ErrBillingPurchaseAmbiguous):
 		writeAppleTransactionError(w, http.StatusConflict, "billing_authority_conflict")
@@ -261,8 +276,8 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 		ExpiresAt:                 res.Effective.PeriodEnd,
 		Provider:                  res.Effective.Source,
 		CurrentProductID:          tx.ProductID,
-		AutoRenewProductID:        canonical.Renewal.AutoRenewProductID,
-		RenewalAt:                 appleSeconds(canonical.Renewal.RenewalDateMS),
+		AutoRenewProductID:        renewalState.AutoRenewProductID,
+		RenewalAt:                 renewalState.RenewalAt,
 		DispatchPending:           res.PurchaseAttemptPending,
 		DispatchResolved:          res.PurchaseAttemptResolved,
 		DispatchResolvedAttemptID: res.PurchaseAttemptResolvedID,

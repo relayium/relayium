@@ -151,6 +151,9 @@ func (s *Service) applyAppleNotification(ctx context.Context, n VerifiedAppleNot
 		rec.HasRenewal = true
 		rec.Renewal = n.Renewal
 	}
+	if n.RenewalRejection != "" {
+		log.Printf("apple notifications: renewal info ignored for %s (%s)", n.UUID, n.RenewalRejection)
+	}
 	current, fresh, err := s.Store().ClaimAppleNotification(ctx, rec)
 	if err != nil {
 		log.Printf("apple notifications: claiming %s failed: %v", n.UUID, err)
@@ -324,6 +327,27 @@ func preferDurableAppleRenewal(stored AppleRenewalState, exists bool, incoming A
 		return stored, true
 	}
 	return AppleRenewalState{}, false
+}
+
+// appleRenewalProjection returns only a verified renewal state that may be
+// persisted. Missing optional future intent preserves a matching durable state;
+// it never creates a fabricated zero projection.
+func (s *Service) appleRenewalProjection(ctx context.Context, userID string, tx VerifiedAppleTransaction, renewal VerifiedAppleRenewalInfo, now time.Time) (AppleRenewalState, error) {
+	stored, exists, err := s.Store().GetAppleRenewalState(ctx, userID)
+	if err != nil {
+		return AppleRenewalState{}, err
+	}
+	if renewal.OriginalTransactionID == "" {
+		if exists && appleRenewalMatchesTransaction(stored, tx) {
+			return stored, nil
+		}
+		return AppleRenewalState{}, nil
+	}
+	incoming := appleRenewalState(userID, tx, renewal, now)
+	if preferred, use := preferDurableAppleRenewal(stored, exists, incoming, tx); use {
+		return preferred, nil
+	}
+	return incoming, nil
 }
 
 func (s *Service) appleNotificationProductWithRenewal(ctx context.Context, tx VerifiedAppleTransaction, renewal AppleRenewalState, now time.Time) (AppleProduct, bool, error) {

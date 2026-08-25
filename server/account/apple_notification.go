@@ -105,6 +105,8 @@ type VerifiedAppleNotification struct {
 	Transaction VerifiedAppleTransaction
 	Renewal     VerifiedAppleRenewalInfo
 	HasRenewal  bool
+	// RenewalRejection is a fixed verifier rule code, never payload material.
+	RenewalRejection string
 	// Supported reports whether Transaction is a shape this server grants for —
 	// an auto-renewable subscription the account holder purchased themselves
 	// (appleSubscriptionShape). False is NOT a refusal: the payload is fully
@@ -198,11 +200,18 @@ func (v *AppleTransactionVerifier) VerifyNotification(signedPayload string, serv
 	out.Transaction = tx
 	if env.SignedRenewalInfo != "" {
 		renewal, err := v.VerifyRenewalInfo(env.SignedRenewalInfo, tx, serverNow)
-		if err != nil {
-			return VerifiedAppleNotification{}, err
+		if err == nil {
+			out.Renewal = renewal
+			out.HasRenewal = true
+		} else {
+			out.RenewalRejection = appleRejectionCode(err)
 		}
-		out.Renewal = renewal
-		out.HasRenewal = true
+		// Renewal intent is optional context, never the transaction's authority.
+		// A verified transaction — especially a refund, expiry, or renewal — must
+		// not be discarded because its independently signed future-intent document
+		// is absent or uses semantics this deployment does not yet understand.
+		// Invalid renewal facts are ignored and therefore extend no grace, change
+		// no auto-renew projection, and grant nothing.
 	}
 	// Verified either way; Supported only decides what the handler does with it.
 	out.Supported = appleSubscriptionShape(tx) == nil
