@@ -273,6 +273,32 @@ final class IOSSurfaceGuardTests: XCTestCase {
                            "\(picker) was switched to the injection seam, so nothing "
                            + "exercises the picker any more")
         }
+
+        // 9. The built-App transfer gate uses the deterministic seam too. Its
+        //    subject is the transfer after selection; picker presentation stays
+        //    owned by the two tests above.
+        let local = try RepoRoot.text("apps/ios/RelayiumUITests/LocalSessionUITests.swift")
+        let nearbyTransfer = try XCTUnwrap(local.components(
+            separatedBy: "func testNearbyLinkTransfersThenDoneReturnsToACleanRoster()")
+            .dropFirst().first?.components(separatedBy: "\n    // MARK:").first,
+            "the built-App Nearby transfer acceptance is gone")
+        XCTAssertTrue(nearbyTransfer.contains(
+            "--relayium-ui-testing-preselect-direct-fixture"),
+                      "the Nearby transfer gate again depends on Files presenting")
+        XCTAssertTrue(nearbyTransfer.contains("\"pendingFile.0\""),
+                      "the Nearby transfer gate no longer proves a file was staged")
+        XCTAssertFalse(nearbyTransfer.contains("DOC.browsingModeTabBar"),
+                       "the Nearby transfer gate duplicates the real-picker tests")
+
+        XCTAssertTrue(debugHalf.contains(
+            "static func preselectPendingFixture(into selection: DirectSendSelection)"),
+                      "the direct preselection seam no longer targets Nearby's model")
+        XCTAssertTrue(app.contains("UITestMode.preselectPendingFixture(into: selecting)"),
+                      "the app no longer installs the direct preselection seam")
+        XCTAssertTrue(debugHalf.contains("guard preselectsDirectPendingFixture else"),
+                      "the direct seam can run without its dedicated launch argument")
+        XCTAssertFalse(releaseHalf.contains("selection.chooseFiles(.success([url]))"),
+                       "the shipped iOS build can inject a direct file selection")
     }
 
     /// Nearby, pairing-code and stored sending are three destinations for the
