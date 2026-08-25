@@ -1,8 +1,8 @@
 {
   "macos": {
     "available": true,
-    "version": "1.3.3",
-    "build": 21,
-    "downloadUrl": "https://github.com/relayium/relayium/releases/download/macos-v1.3.3/Relayium.dmg"
+    "version": "1.3.5",
+    "build": 23,
+    "downloadUrl": "https://github.com/relayium/relayium/releases/download/macos-v1.3.5/Relayium.dmg"
   }
 }
