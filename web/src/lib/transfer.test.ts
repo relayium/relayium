@@ -153,6 +153,33 @@ describe("transfer", () => {
     expect(joined[1]).toEqual(b);
   });
 
+  it("reads exactly one logical chunk ahead while preserving serial wire order", async () => {
+    const { ka } = await session();
+    const reads: Array<[number, number]> = [];
+    const size = CHUNK_SIZE * 3;
+    const file = {
+      size,
+      slice(start: number, end: number) {
+        reads.push([start, end]);
+        return new Blob([new Uint8Array(end - start).fill(reads.length)]);
+      },
+    } as File;
+
+    const frames = new Sender().dataFrames([file], ka);
+    const first = await frames.next();
+    expect(first.done).toBe(false);
+    expect(reads).toEqual([[0, CHUNK_SIZE], [CHUNK_SIZE, CHUNK_SIZE * 2]]);
+
+    const second = await frames.next();
+    expect(second.done).toBe(false);
+    expect(reads).toEqual([
+      [0, CHUNK_SIZE],
+      [CHUNK_SIZE, CHUNK_SIZE * 2],
+      [CHUNK_SIZE * 2, CHUNK_SIZE * 3],
+    ]);
+    for await (const _ of frames) { /* drain */ }
+  });
+
   it("handles a zero-byte file in the batch", async () => {
     const { ka, kb } = await session();
     const files = [new File([], "empty.bin"), new File([new Uint8Array(100)], "x.bin")];

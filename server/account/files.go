@@ -470,6 +470,18 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "too many download requests, slow down", http.StatusTooManyRequests)
 		return
 	}
+	// Relayium's resumable clients use exactly one open-ended range. Silently
+	// treating an explicit end, suffix, multi-range, or out-of-bounds request as
+	// a full 200 response is a bandwidth amplifier and can consume a limited
+	// download the caller never asked for. Validate after the request limiter, but
+	// before traffic metering, direct-node authorization, storage I/O, or a
+	// limited-file slot claim.
+	if rangeHeader := r.Header.Get("Range"); rangeHeader != "" &&
+		!validResumeRange(rangeHeader, sf.Size) {
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", sf.Size))
+		http.Error(w, "unsupported range", http.StatusRequestedRangeNotSatisfiable)
+		return
+	}
 	// Resolve whether this download can be served DIRECT from the node holding it
 	// (central leaves the data path). Only for UNLIMITED files (burn/limited stay
 	// proxied so central still deletes the blob after serving); the node must
@@ -675,10 +687,22 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// parseRangeStart extracts N from a "bytes=N-" Range header — the only form the
-// resumable client sends. Anything absent, malformed, a suffix ("-N"), an
-// explicit-end ("N-M"), a multi-range, or an out-of-bounds start yields 0 (serve
-// the whole object). The returned start is guaranteed to be in (0, size).
+// validResumeRange accepts exactly the one open-ended range shape Relayium's
+// resumable clients speak. bytes=0- is valid and intentionally equivalent to a
+// full response; a nonzero start must remain inside the object.
+func validResumeRange(h string, size int64) bool {
+	spec, ok := strings.CutPrefix(h, "bytes=")
+	if !ok || !strings.HasSuffix(spec, "-") || strings.Contains(spec, ",") {
+		return false
+	}
+	n, err := strconv.ParseInt(strings.TrimSuffix(spec, "-"), 10, 64)
+	return err == nil && n >= 0 && n < size
+}
+
+// parseRangeStart extracts N from a previously validated "bytes=N-" Range
+// header. Callers that expose a public HTTP boundary validate with
+// validResumeRange first; internal legacy callers retain the defensive zero
+// fallback. The returned start is guaranteed to be in (0, size).
 func parseRangeStart(h string, size int64) int64 {
 	spec, ok := strings.CutPrefix(h, "bytes=")
 	if !ok || !strings.HasSuffix(spec, "-") || strings.Contains(spec, ",") {

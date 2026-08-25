@@ -133,4 +133,15 @@ func TestDownloadLimiterBlocks429(t *testing.T) {
 	if dl.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("download with a denying limiter must be 429, got %d", dl.StatusCode)
 	}
+
+	invalid, _ := http.NewRequest("GET", ts.URL+"/api/files/"+up.ID+"/blob", nil)
+	invalid.Header.Set("Range", "bytes=1-2")
+	invalidResp, err := ts.Client().Do(invalid)
+	if err != nil {
+		t.Fatalf("invalid range download: %v", err)
+	}
+	defer invalidResp.Body.Close()
+	if invalidResp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("invalid Range must not bypass the request limiter, got %d", invalidResp.StatusCode)
+	}
 }

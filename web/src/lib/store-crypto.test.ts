@@ -138,6 +138,31 @@ describe("store-crypto file stream", () => {
     expect(concat(out)).toEqual(bytes);
   });
 
+  it("reassembles byte-split prefixes without retaining a caller-owned buffer", async () => {
+    const sk = await generateStoreKey();
+    const bytes = new Uint8Array(257);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 17) & 0xff;
+    const frames: Uint8Array[] = [];
+    for await (const frame of encryptFiles([new File([bytes], "split.bin")], sk.key)) {
+      frames.push(frame);
+    }
+    const blob = concat(frames);
+    const dec = new StoreDecryptor(sk.key);
+    const out: Uint8Array[] = [];
+
+    // The first incomplete fragment is mutated after push returns. The
+    // decryptor must have snapshotted it, while still avoiding repeated copies
+    // of the retained remainder on every later network callback.
+    const first = blob.slice(0, 3);
+    for await (const pt of dec.push(first)) out.push(pt);
+    first.fill(0xff);
+    for (let offset = 3; offset < blob.length; offset++) {
+      for await (const pt of dec.push(blob.subarray(offset, offset + 1))) out.push(pt);
+    }
+    for await (const pt of dec.end(bytes.length)) out.push(pt);
+    expect(concat(out)).toEqual(bytes);
+  });
+
   it("throws when the stream is truncated on a frame boundary (length check)", async () => {
     const sk = await generateStoreKey();
     const bytes = new Uint8Array(400 * 1024); // 3 chunks

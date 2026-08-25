@@ -360,10 +360,29 @@ export class Sender {
       const file = files[fi];
       const from = resume && fi === resume.index ? resume.offset : 0;
       let hash = new Uint8Array(32);
+      // One logical chunk of read-ahead: while hashing, sealing and draining the
+      // current chunk, let the browser prepare the next file slice. The promise
+      // is deliberately created only one iteration ahead, so memory remains
+      // bounded by the current chunk plus one 192 KiB prefetched chunk. Wire
+      // order, nonce allocation and the hash chain remain exactly serial.
+      const readPiece = (start: number): Promise<Bytes> => {
+        const pending = file.slice(start, start + CHUNK_SIZE).arrayBuffer()
+          .then((b) => new Uint8Array(b) as Bytes);
+        // Keep a prefetched read's rejection handled if the consumer abandons
+        // this async generator before awaiting it. Awaiting the original promise
+        // still observes and propagates the same error on the normal path.
+        void pending.catch(() => {});
+        return pending;
+      };
+      let piecePromise: Promise<Bytes> | undefined = file.size > 0
+        ? readPiece(0)
+        : undefined;
       for (let offset = 0; offset < file.size; offset += CHUNK_SIZE) {
-        const piece = new Uint8Array(
-          await file.slice(offset, offset + CHUNK_SIZE).arrayBuffer(),
-        ) as Bytes;
+        const piece = await piecePromise!;
+        const nextOffset = offset + CHUNK_SIZE;
+        piecePromise = nextOffset < file.size
+          ? readPiece(nextOffset)
+          : undefined;
         // Hashed whole and from byte 0 even when it is not sent: the chain is
         // defined over CHUNK_SIZE pieces, so it stays identical no matter how the
         // connection fragments them — which is what lets a resumed connection

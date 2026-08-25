@@ -326,7 +326,7 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
     /// Retained so the stalled stream is never finished. `working` is a state a
     /// person has to be able to LOOK at, which means the pass has to still be in
     /// it when the assertion runs.
-    private var heldStream: AsyncThrowingStream<Data, Error>.Continuation?
+    private var heldStream: BoundedDataStream?
 
     init(mode: UITestInbox.Mode) { self.mode = mode }
 
@@ -453,15 +453,13 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
             // Opened, never finished. The pass stays inside the download, which
             // is what makes `working` a state the suite can look at rather than
             // one it has to catch.
-            let stream = AsyncThrowingStream<Data, Error> { continuation in
-                sync { heldStream = continuation }
-            }
+            let stream = BoundedDataStream()
+            sync { heldStream = stream }
             return InboxBlobStream(status: 200, isPartial: false, chunks: stream)
         }
-        let stream = AsyncThrowingStream<Data, Error> { continuation in
-            continuation.yield(body)
-            continuation.finish()
-        }
+        let stream = BoundedDataStream()
+        stream.yield(body)
+        stream.finish()
         return InboxBlobStream(status: 200, isPartial: false, chunks: stream)
     }
 

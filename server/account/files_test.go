@@ -257,6 +257,46 @@ func TestBlobRangeResumeUnlimited(t *testing.T) {
 	}
 }
 
+// An explicit-end or multi-range request is not a resume request. Returning the
+// whole object with 200 would silently amplify bandwidth for a client that
+// believes it fetched only a segment. Refuse it before opening storage or
+// consuming a limited file's download slot.
+func TestBlobUnsupportedRangeIsRejectedBeforeLimitedSlot(t *testing.T) {
+	ts, _, store, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "range-invalid@example.com")
+	resp := postUpload(t, ts, cookie, "?ttl=0&maxDownloads=1",
+		uploadBody([]byte("m"), []byte("0123456789")))
+	var up struct {
+		ID string `json:"id"`
+	}
+	decodeJSON(t, resp, &up)
+
+	for _, value := range []string{
+		"bytes=4-6", "bytes=-4", "bytes=1-,4-", "bytes=10-", "bytes=x-", "items=1-",
+	} {
+		req, _ := http.NewRequest("GET", ts.URL+"/api/files/"+up.ID+"/blob", nil)
+		req.Header.Set("Range", value)
+		got, err := ts.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = io.Copy(io.Discard, got.Body)
+		got.Body.Close()
+		if got.StatusCode != http.StatusRequestedRangeNotSatisfiable {
+			t.Fatalf("Range %q status = %d, want 416", value, got.StatusCode)
+		}
+		if contentRange := got.Header.Get("Content-Range"); contentRange != "bytes */10" {
+			t.Fatalf("Range %q Content-Range = %q, want bytes */10", value, contentRange)
+		}
+	}
+
+	if sf, err := store.GetStoredFile(context.Background(), up.ID); err != nil {
+		t.Fatalf("invalid ranges consumed the limited object: %v", err)
+	} else if sf.DownloadCount != 0 {
+		t.Fatalf("invalid ranges consumed %d download slots, want 0", sf.DownloadCount)
+	}
+}
+
 // TestBlobRangeMetersServedBytes: a Range continuation (start>0) must still meter
 // the bytes it egresses and count the completed delivery — otherwise a client
 // could pull a whole unlimited file via `Range: bytes=N-` with zero metering and
