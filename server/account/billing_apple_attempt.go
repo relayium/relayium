@@ -24,13 +24,16 @@ import (
 // complete pending horizon, so nothing here is released by a clock — only by
 // evidence.
 //
-// WHAT AUTHORIZES A SECOND SHEET. Not the account session, and not the
-// `appAccountToken`: two devices signed into two different Apple IDs can both
-// be charged under one opaque attribution token, so possession of it can never
-// be retry authority. What authorizes a second sheet is a continuation
-// capability bound at arming time to (attempt, authority generation, app
-// instance) and proved by a high-entropy secret this server keeps only the
-// SHA-256 of.
+// WHAT AUTHORIZES A SECOND SHEET. While a sheet is armed or its outcome is
+// ambiguous, only an exact replay may read the existing authority back; neither
+// the account session nor the `appAccountToken` can open another sheet. After
+// the exact current arm has reported `.userCancelled`, however, there is no
+// StoreKit transaction and no sheet left that can charge. At that boundary the
+// authenticated account may bind a fresh, pre-persisted continuation capability
+// from another app instance. The cancelled->armed CAS replaces the old binding
+// and the arm together, so the old instance becomes inert before the new sheet
+// is authorized. The appAccountToken remains attribution only and is never
+// sufficient on its own.
 //
 // WHICH SHEET A REPORT IS ABOUT. The capability identifies a client, and every
 // part of it survives a resume unchanged. That is not enough on its own: a
@@ -94,6 +97,9 @@ const (
 	appleRefusalOutcome = "purchase_outcome_required"
 	// Every capability failure, without distinguishing which fact was wrong.
 	appleRefusalCapabilityCode = "continuation_invalid"
+	// Only clients that adopt every authoritative dispatch attempt id may enter
+	// paths where a stale local capability can receive a replacement attempt.
+	appleContinuationProtocolAttemptIDV2 = "attempt-id-v2"
 )
 
 // appleContinuationSecretBytes is the raw entropy behind one capability.
@@ -146,7 +152,8 @@ func validAppleContinuationID(v string) bool {
 // sheet. An empty AppInstanceID is a LEGACY request: it binds no capability and
 // its retry stays a strict one-shot refusal, byte-for-byte the old behavior.
 type AppleDispatchRequest struct {
-	ProductID string
+	ProductID            string
+	ContinuationProtocol string
 	// CandidateToken is used only when a NEW attempt is created. A resume
 	// deliberately reuses the attempt's existing attribution token and mints
 	// nothing.
@@ -304,26 +311,31 @@ func (s *SQLiteStore) DispatchAppleBillingPurchase(ctx context.Context, authorit
 
 // ArmAppleBillingPurchase is the ONE place a StoreKit sheet is authorized.
 //
-// It creates at most one unresolved attempt per authority generation, and it
-// re-arms an existing one only for a capability holder that has explicitly
-// reported `.userCancelled`. Every other shape — legacy retry, wrong secret,
-// wrong instance, cross-app, stale generation, locked outcome, no outcome at
-// all, or a replayed request id that has already been spent — fails closed.
+// It creates at most one unresolved attempt per authority generation. An
+// existing attempt can be re-armed only after its exact current arm explicitly
+// reported `.userCancelled`: either by the capability that reported it, or by
+// atomically replacing that now-zero-charge binding with a fresh capability
+// already persisted by another authenticated app instance. Every other shape —
+// legacy retry, capability mismatch while armed or locked, cross-app, stale
+// generation, ambiguous outcome, silence, or an arm id that has already been
+// spent — fails closed.
 func (s *SQLiteStore) ArmAppleBillingPurchase(ctx context.Context, authority BillingAuthority, in AppleDispatchRequest) (AppleDispatchOutcome, error) {
 	if authority.Provider != ProviderApple || !validAppAccountToken(in.CandidateToken) {
 		return AppleDispatchOutcome{}, ErrBillingAuthorityConflict
 	}
 	newProtocol := in.AppInstanceID != ""
+	supportsAttemptIDAdoption := in.ContinuationProtocol == appleContinuationProtocolAttemptIDV2
 	if newProtocol {
 		// The arm id is required on the INITIAL arm too, not only on a resume:
 		// every arm must be nameable, or the first sheet's outcome would have no
 		// identity to be bound to and the very first cancellation report could
 		// still be replayed across a later resume.
-		if !validAppleContinuationID(in.AppInstanceID) || !validAppleContinuationID(in.ArmRequestID) ||
+		if (in.ContinuationProtocol != "" && !supportsAttemptIDAdoption) ||
+			!validAppleContinuationID(in.AppInstanceID) || !validAppleContinuationID(in.ArmRequestID) ||
 			(in.ContinuationSecret != "" && !validAppleContinuationSecret(in.ContinuationSecret)) {
 			return AppleDispatchOutcome{}, ErrBillingAuthorityConflict
 		}
-	} else if in.ArmRequestID != "" || in.ContinuationSecret != "" {
+	} else if in.ContinuationProtocol != "" || in.ArmRequestID != "" || in.ContinuationSecret != "" {
 		// A legacy request carries neither. Presenting one without an instance is
 		// malformed, and must not be quietly downgraded to a one-shot dispatch.
 		return AppleDispatchOutcome{}, ErrBillingAuthorityConflict
@@ -368,6 +380,14 @@ func (s *SQLiteStore) ArmAppleBillingPurchase(ctx context.Context, authority Bil
 		return out, tx.Commit()
 	case !errors.Is(err, sql.ErrNoRows):
 		return AppleDispatchOutcome{}, err
+	}
+	// A pre-v2 continuation client does not adopt a replacement attempt id. If
+	// its local capability is stale, creating a fresh row would let it open a
+	// sheet and then report against the resolved old id, parking this new row at
+	// `armed` account-wide. Refuse before creating any identity. Exact replay and
+	// same-capability resume of an existing attempt remain compatible above.
+	if newProtocol && !supportsAttemptIDAdoption {
+		return AppleDispatchOutcome{Refusal: appleRefusalCapabilityCode}, nil
 	}
 
 	// A fresh attempt for this generation.
@@ -434,6 +454,7 @@ func (s *SQLiteStore) ArmAppleBillingPurchase(ctx context.Context, authority Bil
 // 200 can always recover that 200 even if eligibility changed meanwhile.
 func (s *SQLiteStore) ReplayAppleBillingPurchase(ctx context.Context, authority BillingAuthority, in AppleDispatchRequest) (AppleDispatchOutcome, bool, error) {
 	if authority.Provider != ProviderApple || in.AppInstanceID == "" ||
+		(in.ContinuationProtocol != "" && in.ContinuationProtocol != appleContinuationProtocolAttemptIDV2) ||
 		!validAppleContinuationID(in.AppInstanceID) ||
 		!validAppleContinuationID(in.ArmRequestID) ||
 		!validAppleContinuationSecret(in.ContinuationSecret) {
@@ -471,15 +492,20 @@ func resumeAppleAttemptTx(ctx context.Context, tx *sql.Tx, authority BillingAuth
 		out.Refusal = appleRefusalReconcile
 		return out, nil
 	}
-	// Cross-app and stale-generation are refused by binding: the attempt row is
-	// selected on this authority's generation, and its scope must be the bundle
-	// this authority is bound to.
-	if existing.ExternalScope != authority.ExternalScope || !existing.capabilityMatches(in.AppInstanceID, in.ContinuationSecret) {
+	// Cross-app and stale-generation remain absolute refusals. A capability
+	// mismatch is also absolute while a sheet is armed or locked; only the
+	// explicitly-cancelled branch below may replace it.
+	if existing.ExternalScope != authority.ExternalScope {
 		out.Refusal = appleRefusalCapabilityCode
 		return out, nil
 	}
+	capabilityMatches := existing.capabilityMatches(in.AppInstanceID, in.ContinuationSecret)
 	switch existing.ContinuationState {
 	case appleContinuationArmed:
+		if !capabilityMatches {
+			out.Refusal = appleRefusalCapabilityCode
+			return out, nil
+		}
 		// Already authorized. The ONLY thing this may be is the same client
 		// reading back the response for the id that armed it -- for the SAME
 		// product. A different id here would be a second concurrent sheet, and a
@@ -505,6 +531,10 @@ func resumeAppleAttemptTx(ctx context.Context, tx *sql.Tx, authority BillingAuth
 		out.Refusal = appleRefusalOutcome
 		return out, nil
 	case appleContinuationLocked:
+		if !capabilityMatches {
+			out.Refusal = appleRefusalCapabilityCode
+			return out, nil
+		}
 		// pending / error / unknown. The purchase may well be real, so this is a
 		// reconciliation, not a zero-charge cancellation.
 		out.Refusal = appleRefusalReconcile
@@ -513,6 +543,24 @@ func resumeAppleAttemptTx(ctx context.Context, tx *sql.Tx, authority BillingAuth
 	default:
 		out.Refusal = appleRefusalCapabilityCode
 		return out, nil
+	}
+
+	// A different app instance may take over only at the one state that proves no
+	// sheet can still charge: the exact current arm has already reported
+	// `.userCancelled`. Current clients persist their own secret before the first
+	// request, so the replacement binding is recoverable even if this response is
+	// lost. An empty secret is the older server-minted compatibility shape; it is
+	// refused here rather than creating a cross-install arm whose only copy of the
+	// secret would be in a response that can disappear.
+	newInstanceID := existing.AppInstanceID
+	newVerifier := existing.ContinuationVerifier
+	if !capabilityMatches {
+		if in.ContinuationProtocol != appleContinuationProtocolAttemptIDV2 || in.ContinuationSecret == "" {
+			out.Refusal = appleRefusalCapabilityCode
+			return out, nil
+		}
+		newInstanceID = in.AppInstanceID
+		newVerifier = appleContinuationVerifier(in.ContinuationSecret)
 	}
 
 	// Spend the id against EVERY arm this attempt has ever had, not merely the
@@ -551,8 +599,10 @@ func resumeAppleAttemptTx(ctx context.Context, tx *sql.Tx, authority BillingAuth
 
 	// The atomic re-arm. One statement authorizes the new sheet, REPLACES the
 	// current arm identity and REPOINTS THE ATTEMPT AT THE PRODUCT ACTUALLY BEING
-	// BOUGHT, so from the instant this commits every outcome still naming a
-	// previous arm is stale and cannot move the row.
+	// BOUGHT. When another installation takes over, this same statement also
+	// replaces the app-instance binding and verifier. From the instant it commits,
+	// every outcome still naming a previous arm or capability is stale and cannot
+	// move the row.
 	//
 	// WHY THE PRODUCT MOVES. A cancelled sheet is not a promise to buy the same
 	// thing next: the honest path is Pro Monthly -> .userCancelled -> the user
@@ -583,12 +633,14 @@ func resumeAppleAttemptTx(ctx context.Context, tx *sql.Tx, authority BillingAuth
 	// ONLY thing spending an id, which is exactly the defect that made an id from
 	// two arms ago reusable.
 	res, err := tx.ExecContext(ctx, `UPDATE billing_purchase_attempts
- SET continuation_state=?,product_id=?,arm_request_id=?,resume_count=resume_count+1,client_outcome='',outcome_at=0
+ SET continuation_state=?,product_id=?,arm_request_id=?,app_instance_id=?,continuation_verifier=?,resume_count=resume_count+1,client_outcome='',outcome_at=0
  WHERE id=? AND user_id=? AND provider=? AND epoch=? AND state='dispatched'
-   AND external_scope=? AND app_instance_id=? AND continuation_state=? AND arm_request_id<>?`,
-		appleContinuationArmed, in.ProductID, in.ArmRequestID,
+   AND external_scope=? AND app_instance_id=? AND continuation_state=?
+	   AND arm_request_id=? AND arm_request_id<>?`,
+		appleContinuationArmed, in.ProductID, in.ArmRequestID, newInstanceID, newVerifier,
 		existing.ID, existing.UserID, ProviderApple, authority.Epoch,
-		authority.ExternalScope, in.AppInstanceID, appleContinuationCancelled, in.ArmRequestID)
+		authority.ExternalScope, existing.AppInstanceID, appleContinuationCancelled,
+		existing.ArmRequestID, in.ArmRequestID)
 	if err != nil {
 		return AppleDispatchOutcome{}, err
 	}
@@ -615,7 +667,9 @@ func resumeAppleAttemptTx(ctx context.Context, tx *sql.Tx, authority BillingAuth
 		}
 		return AppleDispatchOutcome{}, err
 	}
-	if after.ContinuationState == appleContinuationArmed && after.armMatches(in.ArmRequestID) {
+	if after.ContinuationState == appleContinuationArmed &&
+		after.capabilityMatches(in.AppInstanceID, in.ContinuationSecret) &&
+		after.armMatches(in.ArmRequestID) {
 		if after.ProductID == in.ProductID {
 			out.Attempt = after.BillingPurchaseAttempt
 			out.Replayed = true

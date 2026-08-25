@@ -114,7 +114,10 @@ func TestAppleLegacyPurchaseRecoveryRefusesContinuationAttempt(t *testing.T) {
 	authority, _ := store.AcquireBillingAuthority(context.Background(), BillingAuthorityRequest{UserID: u.ID, Provider: ProviderApple, ExternalScope: testBundleMac, AppleAccountToken: legacyRecoveryToken, Now: 100})
 	out, err := store.ArmAppleBillingPurchase(context.Background(), authority, AppleDispatchRequest{
 		ProductID: "com.relayium.mac.plus.monthly", CandidateToken: legacyRecoveryToken,
-		AppInstanceID: "11111111-1111-4111-8111-111111111111", ArmRequestID: "22222222-2222-4222-8222-222222222222", Now: 101,
+		ContinuationProtocol: appleContinuationProtocolAttemptIDV2,
+		AppInstanceID:        "11111111-1111-4111-8111-111111111111",
+		ContinuationSecret:   testContinuationSecret(0x52),
+		ArmRequestID:         "22222222-2222-4222-8222-222222222222", Now: 101,
 	})
 	if err != nil || !out.Armed {
 		t.Fatalf("arm=%+v err=%v", out, err)

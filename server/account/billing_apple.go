@@ -30,11 +30,12 @@ func (s *Service) handleAppleAccountToken(w http.ResponseWriter, _ *http.Request
 // clients, which is the whole point of delivering this server-first.
 //
 // A NEW-PROTOCOL request additionally binds a continuation capability (see
-// billing_apple_attempt.go) and, if this account already holds an unresolved
-// attempt that the SAME capability holder explicitly reported as
-// `.userCancelled` FOR THE ARM THAT IS CURRENTLY OPEN, resumes it: same attempt,
-// same attribution token, no new row, no new secret. Nothing about account
-// identity or possession of the `appAccountToken` is retry authority.
+// billing_apple_attempt.go). If the current arm explicitly reported
+// `.userCancelled`, the same capability may resume it, or another authenticated
+// app instance may atomically replace the now-zero-charge binding with its own
+// pre-persisted capability. Both paths keep the same attempt and attribution
+// token and create no row. Account identity never re-arms an armed, locked or
+// ambiguous sheet, and possession of the `appAccountToken` is never authority.
 //
 // Every new-protocol dispatch names its arm with `armRequestId`, the initial one
 // included. That name is both the idempotency key for a lost response and the
@@ -46,8 +47,9 @@ func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var in struct {
-		BundleID  string `json:"bundleId"`
-		ProductID string `json:"productId"`
+		BundleID             string `json:"bundleId"`
+		ProductID            string `json:"productId"`
+		ContinuationProtocol string `json:"continuationProtocol"`
 		// Additive. Absent on every released client, which is exactly what makes
 		// them strict one-shot.
 		AppInstanceID      string `json:"appInstanceId"`
@@ -75,15 +77,30 @@ func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Req
 	// A malformed shape is a 400 rather than a capability refusal: the client
 	// should be told it built the request wrong, not that its capability failed.
 	if in.AppInstanceID != "" {
-		if !validAppleContinuationID(in.AppInstanceID) || !validAppleContinuationID(in.ArmRequestID) ||
+		if (in.ContinuationProtocol != "" && in.ContinuationProtocol != appleContinuationProtocolAttemptIDV2) ||
+			!validAppleContinuationID(in.AppInstanceID) || !validAppleContinuationID(in.ArmRequestID) ||
 			(in.ContinuationSecret != "" && !validAppleContinuationSecret(in.ContinuationSecret)) {
 			writeAppleTransactionError(w, http.StatusBadRequest, "invalid_request")
 			return
 		}
-	} else if in.ArmRequestID != "" || in.ContinuationSecret != "" {
+	} else if in.ContinuationProtocol != "" || in.ArmRequestID != "" || in.ContinuationSecret != "" {
 		// A legacy client sends neither. Half a capability with no instance is
 		// malformed, and must not be silently downgraded to a one-shot dispatch.
 		writeAppleTransactionError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	existingAuthority, authorityExists, err := s.Store().BillingAuthority(r.Context(), u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	// Refuse an installed continuation client that cannot adopt an authoritative
+	// replacement attempt id before creating any durable billing identity. The
+	// store repeats this check as defence in depth, but it is deliberately too
+	// late to prevent AcquireBillingAuthority from committing an otherwise empty
+	// Apple authority and blocking a later Stripe checkout.
+	if in.AppInstanceID != "" && in.ContinuationProtocol != appleContinuationProtocolAttemptIDV2 && !authorityExists {
+		writeAppleTransactionError(w, http.StatusForbidden, appleRefusalCapabilityCode)
 		return
 	}
 	// An exact initial-arm replay outranks every gate that can have changed
@@ -93,12 +110,7 @@ func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Req
 	// the client unable either to open the sheet or safely retire its prepared
 	// identity.
 	if in.AppInstanceID != "" && in.ContinuationSecret != "" {
-		authority, exists, err := s.Store().BillingAuthority(r.Context(), u.ID)
-		if err != nil {
-			http.Error(w, "server error", http.StatusInternalServerError)
-			return
-		}
-		if exists && authority.Provider == ProviderApple && authority.ExternalScope == in.BundleID {
+		if authorityExists && existingAuthority.Provider == ProviderApple && existingAuthority.ExternalScope == in.BundleID {
 			replayer, ok := s.Store().(interface {
 				ReplayAppleBillingPurchase(context.Context, BillingAuthority, AppleDispatchRequest) (AppleDispatchOutcome, bool, error)
 			})
@@ -106,8 +118,9 @@ func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Req
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
-			outcome, replayed, err := replayer.ReplayAppleBillingPurchase(r.Context(), authority, AppleDispatchRequest{
-				ProductID: in.ProductID, AppInstanceID: in.AppInstanceID,
+			outcome, replayed, err := replayer.ReplayAppleBillingPurchase(r.Context(), existingAuthority, AppleDispatchRequest{
+				ProductID: in.ProductID, ContinuationProtocol: in.ContinuationProtocol,
+				AppInstanceID:      in.AppInstanceID,
 				ContinuationSecret: in.ContinuationSecret, ArmRequestID: in.ArmRequestID,
 			})
 			if err != nil {
@@ -180,7 +193,8 @@ func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Req
 	}
 	outcome, err := authorities.ArmAppleBillingPurchase(r.Context(), authority, AppleDispatchRequest{
 		ProductID: in.ProductID, CandidateToken: candidate,
-		AppInstanceID: in.AppInstanceID, ContinuationSecret: in.ContinuationSecret,
+		ContinuationProtocol: in.ContinuationProtocol,
+		AppInstanceID:        in.AppInstanceID, ContinuationSecret: in.ContinuationSecret,
 		ArmRequestID: in.ArmRequestID, Now: s.now().Unix(),
 	})
 	if err != nil {

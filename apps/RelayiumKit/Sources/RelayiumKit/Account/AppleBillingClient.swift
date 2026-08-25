@@ -55,14 +55,13 @@ public protocol AppleBillingService {
 public struct ApplePurchaseDispatch: Codable, Equatable, Sendable {
     public let appAccountToken: UUID
     public let attemptId: String
-    /// **The raw continuation secret, and it appears in exactly one response,
-    /// ever** — the INITIAL arm's. A resume deliberately does not re-issue it,
-    /// because the client already holds it, and that is precisely what makes a
-    /// lost resume response replayable without arming a second sheet.
+    /// **The raw continuation secret.** Current clients generate and persist it
+    /// before the initial dispatch; the server may echo it on that response but
+    /// deliberately does not re-issue it on resume. That is what makes a lost
+    /// resume response replayable without arming a second sheet.
     ///
-    /// `nil` therefore means one of two things and the caller must not confuse
-    /// them: this was a resume (the secret is already stored), or the server is
-    /// running the legacy protocol and no capability exists at all.
+    /// `nil` therefore means the client must retain its already-persisted secret,
+    /// or that the server is running the legacy protocol and no capability exists.
     ///
     /// It is excluded from `CustomStringConvertible` below rather than trusted
     /// to never be printed.
@@ -100,8 +99,8 @@ public struct ApplePurchaseContinuationFields: Equatable, Sendable {
     /// Names the one logical sheet this request is about. Fresh per arm, and
     /// spent once ever; repeating one is a replay read, never a second arm.
     public let armRequestID: String
-    /// `nil` on the initial arm — there is nothing to prove on a first arm —
-    /// and required on every resume and every outcome report.
+    /// Generated and persisted before the initial arm by current clients, then
+    /// required on every resume and every outcome report.
     public let continuationSecret: String?
 
     public init(appInstanceID: String, armRequestID: String, continuationSecret: String?) {
@@ -447,13 +446,14 @@ extension AccountClient: AppleBillingService {
 		req.httpMethod = "POST"
 		req.setValue("application/json", forHTTPHeaderField: "Content-Type")
 		req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-		// The three additive fields are OMITTED entirely when there is no
+		// The continuation fields and their protocol marker are OMITTED entirely when there is no
 		// capability, rather than sent empty. The server selects the protocol on
 		// `appInstanceId`'s presence and refuses `""` as malformed, and it
 		// decodes with `DisallowUnknownFields`, so an encoder that emitted
 		// `null`s would turn every legacy dispatch into a 400.
 		req.httpBody = try JSONEncoder().encode(ApplePurchaseDispatchRequest(
 			bundleId: bundleID, productId: productID,
+			continuationProtocol: continuation == nil ? nil : applePurchaseContinuationProtocol,
 			appInstanceId: continuation?.appInstanceID,
 			armRequestId: continuation?.armRequestID,
 			continuationSecret: continuation?.continuationSecret))
@@ -537,7 +537,11 @@ extension AccountClient: AppleBillingService {
 			}
 			return body.resumable
 		case 401: throw AppleBillingError.notSignedIn
-		case 403: throw AppleBillingError.continuationRejected
+		case 403:
+			guard appleErrorCode(in: data) == "continuation_invalid" else {
+				throw AppleBillingError.server(status: 403)
+			}
+			throw AppleBillingError.continuationRejected
 		case 429: throw AppleBillingError.rateLimited
 		default: throw AppleBillingError.server(status: resp.statusCode)
 		}
@@ -708,17 +712,22 @@ extension AccountClient: AppleBillingService {
 
 /// The dispatch request body.
 ///
-/// The three capability fields are `String?` and `JSONEncoder` omits a `nil`
-/// optional key entirely — which is the required legacy shape, not a
-/// convenience. The server decodes with `DisallowUnknownFields` and selects the
-/// protocol on whether `appInstanceId` is present at all.
+/// The capability and protocol fields are `String?` and `JSONEncoder` omits a
+/// `nil` optional key entirely, preserving the required legacy shape. The server
+/// decodes with `DisallowUnknownFields`; `continuationProtocol` explicitly opts
+/// into authoritative attempt-ID adoption semantics.
 private struct ApplePurchaseDispatchRequest: Encodable {
     let bundleId: String
     let productId: String
+    /// Marks clients that persist every authoritative response `attemptId`
+    /// before StoreKit opens. The server refuses unsafe takeover/new-attempt
+    /// paths for earlier clients rather than arming a sheet they cannot report.
+    let continuationProtocol: String?
     let appInstanceId: String?
     let armRequestId: String?
     let continuationSecret: String?
 }
+private let applePurchaseContinuationProtocol = "attempt-id-v2"
 private struct ApplePurchaseDispatchBody: Decodable {
     let appAccountToken: String
     let attemptId: String

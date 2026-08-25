@@ -825,6 +825,12 @@ public final class AppleSubscriptionModel: ObservableObject {
                     // replays this same report again.
                     state = .failed(.billing(.purchaseOutcomeRequired))
                     return nil
+                case .superseded:
+                    guard !superseded(g) else { return nil }
+                    // Another installation owns the attempt now. The rejected
+                    // arm is inert and has been retired locally, so the second
+                    // bounded planning pass may prepare a fresh capability.
+                    continue
                 case .delivered:
                     guard !superseded(g) else { return nil }
                     // The stored phase now reflects the SERVER's answer. The
@@ -898,8 +904,12 @@ public final class AppleSubscriptionModel: ObservableObject {
                     state = .failed(Self.failure(for: error))
                     return nil
                 }
-                let confirmed = ApplePurchaseContinuation.confirmedArm(
-                    intent, armRequestID: armID, productID: product)
+                guard let confirmed = ApplePurchaseContinuation.confirmedArm(
+                    intent, attemptID: dispatch.attemptId,
+                    armRequestID: armID, productID: product) else {
+                    state = .failed(.billing(.continuationRejected))
+                    return nil
+                }
                 do { try continuation.save(confirmed) } catch {
                     state = .failed(.billing(.continuationRejected))
                     return nil
@@ -1015,6 +1025,9 @@ public final class AppleSubscriptionModel: ObservableObject {
         /// The request never completed. The recorded intent stands and is owed
         /// again; **nothing local moved**, because silence is not a cancellation.
         case undelivered
+        /// The server definitively rejected this exact arm capability. It has
+        /// been superseded and was retired locally, so a fresh plan may begin.
+        case superseded
         /// The server answered, and this is what it said about re-arming.
         case delivered(resumable: Bool)
     }
@@ -1037,6 +1050,15 @@ public final class AppleSubscriptionModel: ObservableObject {
                 continuation: capability.fields(forArm: armRequestID),
                 outcome: outcome,
                 token: token)
+        } catch AppleBillingError.continuationRejected {
+            // A uniform 403 is authoritative proof that this exact arm can no
+            // longer move server state. Retire only if the persisted value is
+            // still byte-for-byte the one whose report was rejected; a network
+            // failure or any changed local value remains owed and fails closed.
+            if retireCapabilityIfSuperseded(capability, arm: armRequestID) {
+                return .superseded
+            }
+            return .undelivered
         } catch {
             // **Not delivered, so nothing local may move.** The server — which
             // also heard nothing — stays armed for the same reason. The recorded
@@ -1067,6 +1089,43 @@ public final class AppleSubscriptionModel: ObservableObject {
             // owed report when Keychain becomes writable again.
         }
         return .delivered(resumable: resumable)
+    }
+
+    private func retireCapabilityIfSuperseded(_ capability: ApplePurchaseCapability,
+                                              arm armRequestID: String) -> Bool {
+        guard let continuation,
+              case let .value(current) = continuation.read(ownerAccountID: capability.ownerAccountID),
+              current.armRequestID == armRequestID,
+              capability.unconfirmedOutcome?.armRequestID == armRequestID else {
+            return false
+        }
+        // The outcome may exist only in the independent journal when Keychain
+        // rejected the recording write. In that case planning reconstructs the
+        // exact intent in memory while the stored capability is otherwise
+        // byte-identical and still has a nil outcome. Accept only that one-field
+        // absence; a different stored outcome or any other changed byte remains
+        // owed and cannot be retired by this response.
+        guard current.unconfirmedOutcome == nil ||
+                current.unconfirmedOutcome == capability.unconfirmedOutcome else {
+            return false
+        }
+        var expectedStored = capability
+        expectedStored.unconfirmedOutcome = current.unconfirmedOutcome
+        guard current == expectedStored else { return false }
+        do {
+            try continuation.retire(ownerAccountID: capability.ownerAccountID)
+            // Retire first: in the journal-only recovery shape the journal is
+            // the sole retry trigger, so clearing it before a failed Keychain
+            // delete would recreate the permanent wedge. A journal left after
+            // successful retirement is inert because reconstruction requires
+            // the next capability's independently fresh attempt and arm ids.
+            if let owner = capability.ownerAccountID {
+                try? outcomeJournal?.clear(ownerAccountID: owner)
+            }
+            return true
+        } catch {
+            return false
+        }
     }
 
     /// Retire the capability, on authoritative convergence and nothing else.

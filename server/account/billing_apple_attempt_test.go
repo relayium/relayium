@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,6 +34,10 @@ import (
 
 const testContinuationInstanceA = "instance-A-6f1c9d2e"
 const testContinuationInstanceB = "instance-B-0a7b4e15"
+
+func testContinuationSecret(fill byte) string {
+	return base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{fill}, appleContinuationSecretBytes))
+}
 
 type appleContinuationFixture struct {
 	*appleTxFixture
@@ -74,7 +79,7 @@ type dispatchBody struct {
 	Error              string `json:"error"`
 }
 
-func (f *appleContinuationFixture) dispatchAs(t *testing.T, cookie *http.Cookie, in map[string]string) (int, dispatchBody) {
+func (f *appleContinuationFixture) dispatchRawAs(t *testing.T, cookie *http.Cookie, in map[string]string) (int, dispatchBody) {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodPost, f.ts.URL+"/api/billing/apple/purchase-dispatch", bytes.NewReader(mustJSON(t, in)))
 	if err != nil {
@@ -94,6 +99,23 @@ func (f *appleContinuationFixture) dispatchAs(t *testing.T, cookie *http.Cookie,
 		t.Fatalf("decode dispatch body %q: %v", raw, err)
 	}
 	return resp.StatusCode, out
+}
+
+func (f *appleContinuationFixture) dispatchAs(t *testing.T, cookie *http.Cookie, in map[string]string) (int, dispatchBody) {
+	t.Helper()
+	current := make(map[string]string, len(in)+1)
+	for key, value := range in {
+		current[key] = value
+	}
+	if current["appInstanceId"] != "" && current["continuationProtocol"] == "" {
+		current["continuationProtocol"] = appleContinuationProtocolAttemptIDV2
+	}
+	return f.dispatchRawAs(t, cookie, current)
+}
+
+func (f *appleContinuationFixture) dispatchWithoutProtocol(t *testing.T, in map[string]string) (int, dispatchBody) {
+	t.Helper()
+	return f.dispatchRawAs(t, f.cookie, in)
 }
 
 func (f *appleContinuationFixture) dispatch(t *testing.T, in map[string]string) (int, dispatchBody) {
@@ -202,13 +224,22 @@ func (f *appleContinuationFixture) countSubjects(t *testing.T) int {
 	return n
 }
 
+func (f *appleContinuationFixture) countAuthorities(t *testing.T) int {
+	t.Helper()
+	var n int
+	if err := f.store.db.QueryRow(`SELECT COUNT(*) FROM billing_authorities WHERE user_id=?`, f.userID).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
 // ---------------------------------------------------------------------------
 // The deadlock itself
 // ---------------------------------------------------------------------------
 
-// The whole point of the batch: a cancelled sheet must be recoverable by the
-// instance that opened it, and must leave no charge behind.
-func TestUserCancelledSheetIsResumableByTheArmingInstanceOnly(t *testing.T) {
+// A cancelled sheet must be recoverable without creating a second financial
+// identity, and must leave no charge behind.
+func TestUserCancelledSheetResumesWithoutCreatingANewFinancialIdentity(t *testing.T) {
 	f := newAppleContinuationFixture(t)
 	attemptID, secret := f.arm(t, testContinuationInstanceA)
 	if state, continuation, _ := f.attemptState(t, attemptID); state != "dispatched" || continuation != appleContinuationArmed {
@@ -255,6 +286,164 @@ func TestUserCancelledSheetIsResumableByTheArmingInstanceOnly(t *testing.T) {
 	}
 }
 
+// Production regression: one installation cancelled, then the same Relayium
+// account tried to buy from another installation. A cancellation has no
+// transaction and no remaining sheet, so pinning that zero-charge state to the
+// first device forever is a lockout, not a financial safeguard.
+//
+// The takeover is still a money boundary: it must replace the capability and
+// arm atomically, preserve the attempt and attribution token, make every delayed
+// report from the old device inert, and permit the old client to take over again
+// only after the new arm is itself explicitly cancelled.
+func TestCancelledAttemptCanMoveBetweenInstallationsWithoutOpeningTwoSheets(t *testing.T) {
+	f := newAppleContinuationFixture(t)
+	// Match the continuation client shipped in 1.3.3 and the internal 1.3.4
+	// candidate: it persists and presents its own secret
+	// before the initial request rather than relying on the compatibility shape
+	// that asks the server to mint one in the response.
+	secretA := testContinuationSecret(0x41)
+	status, initial := f.dispatch(t, map[string]string{
+		"bundleId": testBundleIOS, "productId": testAppleProduct,
+		"appInstanceId": testContinuationInstanceA, "continuationSecret": secretA,
+		"armRequestId": initialArmID(testContinuationInstanceA),
+	})
+	if status != http.StatusOK || initial.AttemptID == "" || initial.ContinuationSecret != "" {
+		t.Fatalf("client-secret initial arm: status=%d body=%+v", status, initial)
+	}
+	attemptID := initial.AttemptID
+	oldArm := initialArmID(testContinuationInstanceA)
+	if status, body := f.reportArm(t, attemptID, testContinuationInstanceA, secretA, oldArm, appleOutcomeUserCancelled); status != http.StatusOK || body["resumable"] != true {
+		t.Fatalf("instance A cancel: status=%d body=%v", status, body)
+	}
+
+	var originalToken string
+	if err := f.store.db.QueryRow(`SELECT apple_account_token FROM billing_purchase_attempts WHERE id=?`, attemptID).Scan(&originalToken); err != nil {
+		t.Fatal(err)
+	}
+	secretB := testContinuationSecret(0x42)
+	const armB = "arm-installation-B"
+	status, moved := f.dispatch(t, map[string]string{
+		"bundleId": testBundleIOS, "productId": testAppleProduct,
+		"appInstanceId": testContinuationInstanceB, "continuationSecret": secretB,
+		"armRequestId": armB,
+	})
+	if status != http.StatusOK || moved.AttemptID != attemptID || moved.AppAccountToken != originalToken {
+		t.Fatalf("cross-install takeover: status=%d body=%+v", status, moved)
+	}
+	if moved.ContinuationSecret != "" {
+		t.Fatal("takeover echoed a client-persisted continuation secret")
+	}
+	// Losing the takeover's 200 cannot create another logical arm. The existing
+	// continuation client persisted this exact intent before sending it, so replaying the
+	// same fields must read the same authorization back.
+	replayStatus, replayed := f.dispatch(t, map[string]string{
+		"bundleId": testBundleIOS, "productId": testAppleProduct,
+		"appInstanceId": testContinuationInstanceB, "continuationSecret": secretB,
+		"armRequestId": armB,
+	})
+	if replayStatus != http.StatusOK || replayed.AttemptID != attemptID || replayed.AppAccountToken != originalToken {
+		t.Fatalf("lost takeover response was not replayed: status=%d body=%+v", replayStatus, replayed)
+	}
+	if f.countAttempts(t) != 1 || f.countSubjects(t) != 1 {
+		t.Fatalf("takeover created financial identity: attempts=%d subjects=%d", f.countAttempts(t), f.countSubjects(t))
+	}
+	var instance, arm string
+	var verifier []byte
+	if err := f.store.db.QueryRow(`SELECT app_instance_id,continuation_verifier,arm_request_id FROM billing_purchase_attempts WHERE id=?`, attemptID).
+		Scan(&instance, &verifier, &arm); err != nil {
+		t.Fatal(err)
+	}
+	if instance != testContinuationInstanceB || arm != armB || !bytes.Equal(verifier, appleContinuationVerifier(secretB)) {
+		t.Fatalf("takeover binding instance=%q arm=%q verifierMatches=%v", instance, arm, bytes.Equal(verifier, appleContinuationVerifier(secretB)))
+	}
+
+	// Delayed output from A names both the old capability and the old arm. It may
+	// not cancel B's live sheet or authorize a third one.
+	if status, _ := f.reportArm(t, attemptID, testContinuationInstanceA, secretA, oldArm, appleOutcomeUserCancelled); status != http.StatusForbidden {
+		t.Fatalf("stale A cancellation status=%d, want 403", status)
+	}
+	if _, continuation, _ := f.attemptState(t, attemptID); continuation != appleContinuationArmed {
+		t.Fatalf("stale A cancellation released B's sheet: %q", continuation)
+	}
+	if status, body := f.dispatch(t, map[string]string{
+		"bundleId": testBundleIOS, "productId": testAppleProduct,
+		"appInstanceId": testContinuationInstanceA, "continuationSecret": secretA,
+		"armRequestId": "arm-A-too-early",
+	}); status != http.StatusForbidden || body.Error != appleRefusalCapabilityCode {
+		t.Fatalf("A opened alongside B: status=%d body=%+v", status, body)
+	}
+
+	if status, body := f.reportArm(t, attemptID, testContinuationInstanceB, secretB, armB, appleOutcomeUserCancelled); status != http.StatusOK || body["resumable"] != true {
+		t.Fatalf("instance B cancel: status=%d body=%v", status, body)
+	}
+	status, returned := f.dispatch(t, map[string]string{
+		"bundleId": testBundleIOS, "productId": testAppleProduct,
+		"appInstanceId": testContinuationInstanceA, "continuationSecret": secretA,
+		"armRequestId": "arm-installation-A-return",
+	})
+	if status != http.StatusOK || returned.AttemptID != attemptID || returned.AppAccountToken != originalToken {
+		t.Fatalf("return takeover: status=%d body=%+v", status, returned)
+	}
+}
+
+// A client that does not promise to adopt an authoritative replacement attempt
+// id may replay or resume its own existing attempt, but it may neither take over
+// another installation nor create a fresh continuation attempt. Both refusals
+// happen before any new financial identity or live arm exists.
+func TestPreAttemptIDV2ClientCannotEnterAReplacementAttemptPath(t *testing.T) {
+	f := newAppleContinuationFixture(t)
+	oldSecret := testContinuationSecret(0x51)
+	status, denied := f.dispatchWithoutProtocol(t, map[string]string{
+		"bundleId": testBundleIOS, "productId": testAppleProduct,
+		"appInstanceId": testContinuationInstanceA, "continuationSecret": oldSecret,
+		"armRequestId": "old-client-initial",
+	})
+	if status != http.StatusForbidden || denied.Error != appleRefusalCapabilityCode || f.countAttempts(t) != 0 || f.countAuthorities(t) != 0 {
+		t.Fatalf("old client created durable billing identity: status=%d body=%+v attempts=%d authorities=%d", status, denied, f.countAttempts(t), f.countAuthorities(t))
+	}
+
+	attemptID, secretA := f.arm(t, testContinuationInstanceA)
+	if status, body := f.report(t, attemptID, testContinuationInstanceA, secretA, appleOutcomeUserCancelled); status != http.StatusOK || body["resumable"] != true {
+		t.Fatalf("cancel current attempt: status=%d body=%v", status, body)
+	}
+	status, denied = f.dispatchWithoutProtocol(t, map[string]string{
+		"bundleId": testBundleIOS, "productId": testAppleProduct,
+		"appInstanceId":      testContinuationInstanceB,
+		"continuationSecret": testContinuationSecret(0x52),
+		"armRequestId":       "old-client-takeover",
+	})
+	if status != http.StatusForbidden || denied.Error != appleRefusalCapabilityCode {
+		t.Fatalf("old client took over: status=%d body=%+v", status, denied)
+	}
+	if _, continuation, _ := f.attemptState(t, attemptID); continuation != appleContinuationCancelled {
+		t.Fatalf("old client moved the cancelled attempt: %q", continuation)
+	}
+	if f.countAttempts(t) != 1 || f.countSubjects(t) != 1 || f.countAuthorities(t) != 1 {
+		t.Fatalf("old-client refusals created identities: attempts=%d subjects=%d authorities=%d", f.countAttempts(t), f.countSubjects(t), f.countAuthorities(t))
+	}
+}
+
+func TestStoreReplayRejectsAnUnknownContinuationProtocol(t *testing.T) {
+	store, authority, ctx := newArmFixture(t)
+	secret := testContinuationSecret(0x53)
+	armed, err := store.ArmAppleBillingPurchase(ctx, authority, AppleDispatchRequest{
+		ProductID: "plus.monthly", CandidateToken: testArmToken,
+		ContinuationProtocol: appleContinuationProtocolAttemptIDV2,
+		AppInstanceID:        testContinuationInstanceA, ContinuationSecret: secret,
+		ArmRequestID: "arm-replay-protocol", Now: 101,
+	})
+	if err != nil || !armed.Armed {
+		t.Fatalf("arm=%+v err=%v", armed, err)
+	}
+	if out, replayed, err := store.ReplayAppleBillingPurchase(ctx, authority, AppleDispatchRequest{
+		ProductID: "plus.monthly", ContinuationProtocol: "attempt-id-v999",
+		AppInstanceID: testContinuationInstanceA, ContinuationSecret: secret,
+		ArmRequestID: "arm-replay-protocol",
+	}); err != nil || replayed {
+		t.Fatalf("unknown protocol replayed: out=%+v replayed=%v err=%v", out, replayed, err)
+	}
+}
+
 // Old released clients are strict one-shot clients and this batch does not
 // change them. This is the server-first compatibility the design depends on.
 func TestLegacyAppleDispatchRetryStaysStrictOneShot(t *testing.T) {
@@ -288,20 +477,17 @@ func TestLegacyAppleDispatchRetryStaysStrictOneShot(t *testing.T) {
 // The mandatory adversarial schedule: two instances, two Apple IDs equivalent
 // ---------------------------------------------------------------------------
 
-// Instance A arms. Instance B — a second app instance on the account, which is
-// the server-visible equivalent of a second device signed into a DIFFERENT
-// Apple ID — must never receive charge authority, by any route. Then two
-// distinct valid paid subscriptions reach the account and exactly one
-// entitlement may exist.
-func TestSecondInstanceNeverReceivesChargeAuthorityAndASecondPaidSubscriptionIsRefused(t *testing.T) {
+// Instance A arms. Before it reports cancellation, instance B — the
+// server-visible equivalent of a second device signed into a DIFFERENT Apple ID
+// — must not receive concurrent charge authority by any route. After A's exact
+// current arm is cancelled, B may atomically take over. Two distinct valid paid
+// subscriptions can still produce exactly one entitlement.
+func TestSecondInstanceWaitsForCancellationAndASecondPaidSubscriptionIsRefused(t *testing.T) {
 	f := newAppleContinuationFixture(t)
 	attemptID, secretA := f.arm(t, testContinuationInstanceA)
-	status, body := f.report(t, attemptID, testContinuationInstanceA, secretA, appleOutcomeUserCancelled)
-	if status != http.StatusOK || body["resumable"] != true {
-		t.Fatalf("instance A cancel report: status=%d body=%v", status, body)
-	}
+	secretB := testContinuationSecret(0x43)
 
-	// Every way instance B can ask, none of which is the capability it lacks.
+	// Every way instance B can ask while A's sheet is still open is refused.
 	for _, tc := range []struct {
 		name       string
 		body       map[string]string
@@ -315,10 +501,15 @@ func TestSecondInstanceNeverReceivesChargeAuthorityAndASecondPaidSubscriptionIsR
 			"bundleId": testBundleIOS, "productId": testAppleProduct,
 			"appInstanceId": testContinuationInstanceB, "armRequestId": "resume-B0",
 		}, http.StatusForbidden, appleRefusalCapabilityCode},
+		{"own persisted capability", map[string]string{
+			"bundleId": testBundleIOS, "productId": testAppleProduct,
+			"appInstanceId": testContinuationInstanceB, "continuationSecret": secretB,
+			"armRequestId": "resume-B",
+		}, http.StatusForbidden, appleRefusalCapabilityCode},
 		{"stolen secret, own instance", map[string]string{
 			"bundleId": testBundleIOS, "productId": testAppleProduct,
 			"appInstanceId": testContinuationInstanceB, "continuationSecret": secretA,
-			"armRequestId": "resume-B",
+			"armRequestId": "resume-stolen-secret",
 		}, http.StatusForbidden, appleRefusalCapabilityCode},
 		{"impersonating instance A with a guessed secret", map[string]string{
 			"bundleId": testBundleIOS, "productId": testAppleProduct,
@@ -336,12 +527,27 @@ func TestSecondInstanceNeverReceivesChargeAuthorityAndASecondPaidSubscriptionIsR
 			}
 		})
 	}
-	// The attempt is untouched by any of it.
-	if _, continuation, outcome := f.attemptState(t, attemptID); continuation != appleContinuationCancelled || outcome != appleOutcomeUserCancelled {
+	// The attempt is untouched by any of it and remains armed under A.
+	if _, continuation, outcome := f.attemptState(t, attemptID); continuation != appleContinuationArmed || outcome != "" {
 		t.Fatalf("instance B moved the attempt: continuation=%q outcome=%q", continuation, outcome)
 	}
 	if n := f.countAttempts(t); n != 1 {
 		t.Fatalf("instance B created attempts: %d", n)
+	}
+
+	if status, body := f.report(t, attemptID, testContinuationInstanceA, secretA, appleOutcomeUserCancelled); status != http.StatusOK || body["resumable"] != true {
+		t.Fatalf("instance A cancel report: status=%d body=%v", status, body)
+	}
+	const armB = "resume-B-after-cancel"
+	if status, body := f.dispatch(t, map[string]string{
+		"bundleId": testBundleIOS, "productId": testAppleProduct,
+		"appInstanceId": testContinuationInstanceB, "continuationSecret": secretB,
+		"armRequestId": armB,
+	}); status != http.StatusOK || body.AttemptID != attemptID {
+		t.Fatalf("instance B takeover: status=%d body=%+v", status, body)
+	}
+	if status, body := f.reportArm(t, attemptID, testContinuationInstanceB, secretB, armB, appleOutcomeSuccess); status != http.StatusOK || body["resumable"] != false {
+		t.Fatalf("instance B success report: status=%d body=%v", status, body)
 	}
 
 	// Now inject two DISTINCT valid paid subscriptions for this one account.
@@ -399,7 +605,7 @@ func TestSecondInstanceNeverReceivesChargeAuthorityAndASecondPaidSubscriptionIsR
 		inc.IncomingExternalID == inc.ExistingExternalID {
 		t.Fatalf("incident does not identify two distinct subscriptions: %+v", inc)
 	}
-	if strings.Contains(fmt.Sprint(inc), secretA) || strings.Contains(fmt.Sprint(inc), dispatchToken) {
+	if strings.Contains(fmt.Sprint(inc), secretA) || strings.Contains(fmt.Sprint(inc), secretB) || strings.Contains(fmt.Sprint(inc), dispatchToken) {
 		t.Fatalf("incident evidence carries a secret or a raw attribution token: %+v", inc)
 	}
 	// A redelivery is counted, not duplicated.
@@ -441,6 +647,15 @@ func TestOnlyExplicitCancellationIsResumableEvenWithAValidCapability(t *testing.
 			})
 			if status != http.StatusConflict || refused.Error != appleRefusalReconcile {
 				t.Fatalf("locked attempt was resumable: status=%d body=%+v", status, refused)
+			}
+			status, crossInstall := f.dispatch(t, map[string]string{
+				"bundleId": testBundleIOS, "productId": testAppleProduct,
+				"appInstanceId":      testContinuationInstanceB,
+				"continuationSecret": testContinuationSecret(0x44),
+				"armRequestId":       "cross-install-locked",
+			})
+			if status != http.StatusForbidden || crossInstall.Error != appleRefusalCapabilityCode {
+				t.Fatalf("another installation took over a locked attempt: status=%d body=%+v", status, crossInstall)
 			}
 			// Locked is TERMINAL: a later cancellation report cannot unlock it.
 			status, relock := f.report(t, attemptID, testContinuationInstanceA, secret, appleOutcomeUserCancelled)
@@ -590,6 +805,89 @@ func TestConcurrentResumeAuthorizesExactlyOneSheet(t *testing.T) {
 	}
 	if resumeCount != 1 {
 		t.Fatalf("concurrent resume armed %d times", resumeCount)
+	}
+}
+
+// Different installations racing to take over the same explicit cancellation
+// are a stronger schedule than two arm ids under one capability: the winner
+// replaces both the arm and the capability binding. Exactly one complete tuple
+// may commit, every loser must receive no purchase identity, and the old
+// installation's delayed report must remain inert afterward.
+func TestConcurrentCrossInstallationTakeoverAuthorizesExactlyOneSheet(t *testing.T) {
+	f := newAppleContinuationFixture(t)
+	attemptID, oldSecret := f.arm(t, testContinuationInstanceA)
+	if status, _ := f.report(t, attemptID, testContinuationInstanceA, oldSecret, appleOutcomeUserCancelled); status != http.StatusOK {
+		t.Fatalf("cancel report: status=%d", status)
+	}
+
+	type takeover struct {
+		instance, secret, arm string
+		status                int
+		body                  dispatchBody
+	}
+	results := make(chan takeover, 4)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			candidate := takeover{
+				instance: fmt.Sprintf("takeover-instance-%d", i),
+				secret:   testContinuationSecret(byte(0x50 + i)),
+				arm:      fmt.Sprintf("takeover-arm-%d", i),
+			}
+			<-start
+			candidate.status, candidate.body = f.dispatch(t, map[string]string{
+				"bundleId": testBundleIOS, "productId": testAppleProduct,
+				"appInstanceId": candidate.instance, "continuationSecret": candidate.secret,
+				"armRequestId": candidate.arm,
+			})
+			results <- candidate
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+
+	var winner takeover
+	wins := 0
+	for candidate := range results {
+		if candidate.status == http.StatusOK {
+			wins++
+			winner = candidate
+			if candidate.body.AttemptID != attemptID || candidate.body.AppAccountToken == "" {
+				t.Fatalf("winner received wrong identity: %+v", candidate)
+			}
+			continue
+		}
+		if candidate.status != http.StatusForbidden || candidate.body.Error != appleRefusalCapabilityCode {
+			t.Fatalf("loser was not uniformly refused: %+v", candidate)
+		}
+		if candidate.body.AttemptID != "" || candidate.body.AppAccountToken != "" || candidate.body.ContinuationSecret != "" {
+			t.Fatalf("loser received purchase identity: %+v", candidate)
+		}
+	}
+	if wins != 1 {
+		t.Fatalf("cross-install takeover authorized %d sheets, want 1", wins)
+	}
+	var instance, arm string
+	var verifier []byte
+	if err := f.store.db.QueryRow(`SELECT app_instance_id,continuation_verifier,arm_request_id FROM billing_purchase_attempts WHERE id=?`, attemptID).
+		Scan(&instance, &verifier, &arm); err != nil {
+		t.Fatal(err)
+	}
+	if instance != winner.instance || arm != winner.arm || !bytes.Equal(verifier, appleContinuationVerifier(winner.secret)) {
+		t.Fatalf("persisted tuple is not the winner: instance=%q arm=%q verifierMatches=%v winnerInstance=%q winnerArm=%q", instance, arm, bytes.Equal(verifier, appleContinuationVerifier(winner.secret)), winner.instance, winner.arm)
+	}
+	if got := f.resumeCount(t, attemptID); got != 1 {
+		t.Fatalf("cross-install race armed %d times", got)
+	}
+	if got := f.armHistory(t, attemptID); len(got) != 2 {
+		t.Fatalf("cross-install losers burned arm identities: %v", got)
+	}
+	if status, _ := f.report(t, attemptID, testContinuationInstanceA, oldSecret, appleOutcomeUserCancelled); status != http.StatusForbidden {
+		t.Fatalf("old installation moved the winner's sheet: status=%d", status)
 	}
 }
 
@@ -771,9 +1069,16 @@ func TestContinuationVerifierIsComparedInConstantTimeAndNeverQueried(t *testing.
 	if !strings.Contains(body, "subtle.ConstantTimeCompare(appleContinuationVerifier(secret), a.ContinuationVerifier)") {
 		t.Fatal("the continuation verifier is no longer compared with crypto/subtle")
 	}
-	for _, forbidden := range []string{"continuation_verifier=?", "continuation_verifier =?", "continuation_verifier = ?"} {
-		if strings.Contains(body, forbidden) {
-			t.Fatalf("the verifier is used as a SQL predicate (%q), which is neither constant-time nor free of an enumeration oracle", forbidden)
+	// The verifier is legitimately written in INSERT/UPDATE SET clauses. Inspect
+	// only the predicate half of every raw SQL literal so adding a required
+	// rotation cannot weaken this guard or force formatting tricks to satisfy it.
+	for _, sqlText := range strings.Split(body, "`") {
+		whereAt := strings.Index(sqlText, "WHERE")
+		if whereAt < 0 {
+			continue
+		}
+		if strings.Contains(sqlText[whereAt:], "continuation_verifier") {
+			t.Fatalf("the verifier is used as a SQL predicate, which is neither constant-time nor free of an enumeration oracle: %s", sqlText[whereAt:])
 		}
 	}
 }
@@ -1843,16 +2148,19 @@ func TestStoreArmRejectsAMalformedCapabilityShape(t *testing.T) {
 // stale-report-after-resume schedule, with no HTTP layer involved.
 func TestStoreOutcomeRequiresTheCurrentArmIdentity(t *testing.T) {
 	store, authority, ctx := newArmFixture(t)
+	secret := testContinuationSecret(0x51)
 	armed, err := store.ArmAppleBillingPurchase(ctx, authority, AppleDispatchRequest{
 		ProductID: "plus.monthly", CandidateToken: testArmToken,
-		AppInstanceID: testContinuationInstanceA, ArmRequestID: "arm-A", Now: 101,
+		ContinuationProtocol: appleContinuationProtocolAttemptIDV2,
+		AppInstanceID:        testContinuationInstanceA, ContinuationSecret: secret,
+		ArmRequestID: "arm-A", Now: 101,
 	})
-	if err != nil || !armed.Armed || armed.Secret == "" {
+	if err != nil || !armed.Armed || armed.Secret != "" {
 		t.Fatalf("initial arm: %+v err=%v", armed, err)
 	}
 	report := AppleOutcomeRequest{
 		UserID: authority.UserID, AttemptID: armed.Attempt.ID, BundleID: testBundleIOS,
-		AppInstanceID: testContinuationInstanceA, ContinuationSecret: armed.Secret,
+		AppInstanceID: testContinuationInstanceA, ContinuationSecret: secret,
 		ArmRequestID: "arm-A", Outcome: appleOutcomeUserCancelled, Now: 102,
 	}
 	// A syntactically absent identity is refused before anything else happens.
@@ -1868,7 +2176,8 @@ func TestStoreOutcomeRequiresTheCurrentArmIdentity(t *testing.T) {
 	// Resume takes the identity over atomically.
 	resumed, err := store.ArmAppleBillingPurchase(ctx, authority, AppleDispatchRequest{
 		ProductID: "plus.monthly", CandidateToken: testArmToken,
-		AppInstanceID: testContinuationInstanceA, ContinuationSecret: armed.Secret,
+		ContinuationProtocol: appleContinuationProtocolAttemptIDV2,
+		AppInstanceID:        testContinuationInstanceA, ContinuationSecret: secret,
 		ArmRequestID: "arm-R1", Now: 103,
 	})
 	if err != nil || !resumed.Resumed || resumed.Secret != "" {
@@ -1896,7 +2205,8 @@ func TestStoreOutcomeRequiresTheCurrentArmIdentity(t *testing.T) {
 	// And no second sheet can follow.
 	second, err := store.ArmAppleBillingPurchase(ctx, authority, AppleDispatchRequest{
 		ProductID: "plus.monthly", CandidateToken: testArmToken,
-		AppInstanceID: testContinuationInstanceA, ContinuationSecret: armed.Secret,
+		ContinuationProtocol: appleContinuationProtocolAttemptIDV2,
+		AppInstanceID:        testContinuationInstanceA, ContinuationSecret: secret,
 		ArmRequestID: "arm-R2", Now: 105,
 	})
 	if err != nil {
