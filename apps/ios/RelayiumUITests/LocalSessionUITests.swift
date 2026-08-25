@@ -393,7 +393,7 @@ final class LocalSessionUITests: XCTestCase {
         awaitIdleCounterpart(harness)
         let baseline = counterpartEpoch(harness)
         launch(harness, verifying: true,
-               extraArguments: ["--relayium-ui-testing-pending-fixture"])
+               extraArguments: ["--relayium-ui-testing-preselect-fixture"])
 
         openTask("Nearby", title: "Nearby")
 
@@ -411,28 +411,15 @@ final class LocalSessionUITests: XCTestCase {
 
         // Stage the batch BEFORE connecting, which is the shape the copy under
         // Connect promises: the files travel with the connection and are
-        // released once the digits are compared.
-        let chooser = app.buttons["Choose Files or Folders…"]
-        XCTAssertTrue(chooser.waitForExistence(timeout: 10),
-                      "Nearby has no file-selection surface")
-        scrollUntilHittable(chooser)
-        chooser.tap()
-
-        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
-        XCTAssertTrue(browsingTabs.waitForExistence(timeout: 30),
-                      "choosing files did not present the system document browser")
-        browsingTabs.buttons["Browse"].tap()
-        tapInBrowser("On My iPhone")
-        tapInBrowser("Relayium")
-        tapStagedFixture(named: "Relayium product brief")
-        let open = app.buttons["Open"]
-        XCTAssertTrue(open.waitForExistence(timeout: 10),
-                      "the system browser has no confirmation action")
-        open.tap()
-
+        // released once the digits are compared. This transfer acceptance uses
+        // the Debug-only preselection seam and waits for its production-model
+        // result. The two AppShellUITests dedicated to the picker still drive
+        // the real system browser, security scope and expansion. Repeating that
+        // external presentation here made a transport gate fail when Files did
+        // not present, before any transport behavior ran.
         XCTAssertTrue(app.descendants(matching: .any)["pendingFile.0"]
             .waitForExistence(timeout: 20),
-                      "the staged batch was not identified before Connect")
+                      "the preselected fixture never became a pending Nearby send")
 
         let row = awaitRoster(harness)
         scrollUntilHittable(row)
@@ -698,34 +685,5 @@ final class LocalSessionUITests: XCTestCase {
         // start controls, not something this cell turns on, and changing shared
         // model behaviour to satisfy an assertion nobody asked for would be the
         // wrong way to find that out. Recorded for disposition instead.
-    }
-
-    // MARK: - the system document browser
-
-    /// Presented as a remote view inside the app's own element tree, not as a
-    /// separate `DocumentManagerUICore` process, so every step addresses `app`.
-    private func tapInBrowser(_ label: String, timeout: TimeInterval = 20) {
-        let element = app.descendants(matching: .any)[label].firstMatch
-        guard element.waitForExistence(timeout: timeout) else {
-            return XCTFail("""
-                the system document browser has no "\(label)".
-                \(app.debugDescription)
-                """)
-        }
-        element.tap()
-    }
-
-    /// Files hides a known extension, so match the fixture by the stem it is
-    /// guaranteed to render rather than by a display name the OS may shorten.
-    private func tapStagedFixture(named stem: String, timeout: TimeInterval = 20) {
-        let element = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label BEGINSWITH %@", stem)).firstMatch
-        guard element.waitForExistence(timeout: timeout) else {
-            return XCTFail("""
-                the staged fixture "\(stem)" is not in the browser.
-                \(app.debugDescription)
-                """)
-        }
-        element.tap()
     }
 }

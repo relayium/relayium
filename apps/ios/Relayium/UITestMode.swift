@@ -28,12 +28,15 @@ final class UITestPreselection {
     private var send: SendSelectionModel?
     private var upload: CloudUploadModel?
     private var session: AccountSession?
+    private let requiresReadyAccount: Bool
     private var observation: AnyCancellable?
 
-    init(send: SendSelectionModel, upload: CloudUploadModel, session: AccountSession) {
+    init(send: SendSelectionModel, upload: CloudUploadModel, session: AccountSession,
+         requiresReadyAccount: Bool = true) {
         self.send = send
         self.upload = upload
         self.session = session
+        self.requiresReadyAccount = requiresReadyAccount
     }
 
     /// Explicit cancellation, idempotent, and the only way this object stops.
@@ -66,7 +69,9 @@ final class UITestPreselection {
 
     private func chooseOnceTheModelsWillAcceptIt() {
         guard let send, let upload, let session else { return }
-        guard case .ready = session.state else { return }      // the account refusal
+        if requiresReadyAccount {
+            guard case .ready = session.state else { return }  // the account refusal
+        }
         guard case .idle = upload.state else { return }        // the busy refusal
         // Staged HERE rather than trusted to have been staged. The scene
         // `.task` that stages for the picker paths is not ordered against the
@@ -421,7 +426,13 @@ enum UITestMode {
         // Explicit, and before the replacement exists: two live preselections
         // would be two selections racing into one model.
         preselection?.cancel()
-        let one = UITestPreselection(send: send, upload: upload, session: session)
+        // Account-owned uploads still wait for the ready account that
+        // SendSelectionModel requires. A loopback Nearby acceptance launch is
+        // anonymous by design and has no such refusal; making that path open
+        // Files only to stage its transfer tested a system presentation race,
+        // not Relayium's transfer path.
+        let one = UITestPreselection(send: send, upload: upload, session: session,
+                                     requiresReadyAccount: !allowsResidency)
         preselection = one
         one.start()
     }
