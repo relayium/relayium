@@ -169,8 +169,8 @@ func TestAdminHomeShowsPasskeyReadFailureInsteadOfEmptyList(t *testing.T) {
 		t.Fatalf("failed read rendered the empty state — indistinguishable from zero credentials")
 	}
 	// 页面其余部分必须完好，否则就退回成了变相的 500。
-	if !strings.Contains(html, "seen@example.com") {
-		t.Fatalf("user list lost — passkey read failure should degrade only its own section")
+	if !strings.Contains(html, "总用户数") {
+		t.Fatalf("overview metrics lost — passkey read failure should degrade only its own section")
 	}
 }
 

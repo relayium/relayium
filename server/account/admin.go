@@ -16,9 +16,12 @@ import (
 )
 
 const (
-	adminCookie       = "relayium_admin"
-	adminSessionTTL   = 12 * time.Hour
-	adminUsersPerPage = 50
+	adminCookie          = "relayium_admin"
+	adminSessionTTL      = 12 * time.Hour
+	adminUsersPerPage    = 50
+	adminSectionOverview = "overview"
+	adminSectionUsers    = "users"
+	adminSectionFleet    = "fleet"
 	// auditPageSize is the audit page's page size (rows per /admin/audit page).
 	auditPageSize = 100
 
@@ -306,7 +309,7 @@ func planViews(plans []Plan) []planView {
 	return out
 }
 
-// adminListHref builds a /admin list link, keeping only non-default params, URL-encoded.
+// adminListHref builds a /admin/users list link, keeping only non-default params, URL-encoded.
 func adminListHref(search, sort, dir, period string, page int) string {
 	v := url.Values{}
 	if search != "" {
@@ -325,9 +328,9 @@ func adminListHref(search, sort, dir, period string, page int) string {
 		v.Set("page", strconv.Itoa(page))
 	}
 	if len(v) == 0 {
-		return "/admin"
+		return "/admin/users"
 	}
-	return "/admin?" + v.Encode()
+	return "/admin/users?" + v.Encode()
 }
 
 // adminPageLink is one numbered page link in a pager.
@@ -353,13 +356,13 @@ const (
 	byoRemPageParam = "brp" // removed BYO section page
 )
 
-// adminByoHref builds a /admin link that sets the BYO search (bq) and ONE of
-// the two BYO pagers (pageKey), carrying every other query param — including
-// the OTHER BYO pager and the whole user list's state — through untouched.
+// adminByoHref builds a /admin/fleet link that sets the BYO search (bq) and one
+// BYO pager while preserving only the other BYO pager. User-list state belongs
+// to /admin/users and must not leak into fleet URLs.
 func adminByoHref(base url.Values, search, pageKey string, page int) string {
 	v := url.Values{}
 	for k, vals := range base {
-		if k == byoSearchParam || k == pageKey {
+		if k == byoSearchParam || k == pageKey || (k != byoPageParam && k != byoRemPageParam) {
 			continue
 		}
 		v[k] = vals
@@ -371,27 +374,15 @@ func adminByoHref(base url.Values, search, pageKey string, page int) string {
 		v.Set(pageKey, strconv.Itoa(page))
 	}
 	if len(v) == 0 {
-		return "/admin"
+		return "/admin/fleet"
 	}
-	return "/admin?" + v.Encode()
+	return "/admin/fleet?" + v.Encode()
 }
 
-// adminByoClearHref drops the BYO search AND both BYO page numbers (a page
-// number from a filtered result set means nothing once the filter is gone),
-// while keeping the user list's own params — "clear" must not double as
-// "reset the rest of the page".
-func adminByoClearHref(base url.Values) string {
-	v := url.Values{}
-	for k, vals := range base {
-		if k == byoSearchParam || k == byoPageParam || k == byoRemPageParam {
-			continue
-		}
-		v[k] = vals
-	}
-	if len(v) == 0 {
-		return "/admin"
-	}
-	return "/admin?" + v.Encode()
+// adminByoClearHref drops the BYO search and both page numbers. Fleet and user
+// state live on different routes, so there is nothing else to preserve.
+func adminByoClearHref(_ url.Values) string {
+	return "/admin/fleet"
 }
 
 // adminByoPageParam reads a 1-based page number out of the query string,
@@ -491,6 +482,8 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// legitimate submissions carry a matching Origin; a cross-site forgery does
 	// not. GET /admin (the login/dashboard page) is a safe method, left alone.
 	mux.HandleFunc("GET /admin", s.handleAdminHome)
+	mux.HandleFunc("GET /admin/users", s.handleAdminUsers)
+	mux.HandleFunc("GET /admin/fleet", s.handleAdminFleet)
 	// Read-only: no CSRFGuard (GET is a safe method, same as GET /admin
 	// above) and NOT wrapped in RequireStepUp (that guard is for writes —
 	// this handler never mutates anything).
@@ -790,9 +783,67 @@ func (s *Service) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 
-// buildAdminHomeData assembles the dashboard view model (metrics, users, nodes,
-// settings, fleet tokens). Shared by handleAdminHome and handleAdminMintToken.
-func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
+// buildAdminHomeData loads only the data owned by the requested route. The old
+// console loaded users, fleet, billing catalog, settings and security state for
+// every page view; route ownership keeps those query costs independent.
+func (s *Service) buildAdminHomeData(r *http.Request, section string) (adminHomeData, error) {
+	data := adminHomeData{Section: section, Lang: adminLangFrom(r), Nonce: CSPNonce(r)}
+	switch section {
+	case adminSectionOverview:
+		return s.buildAdminOverviewData(r, data)
+	case adminSectionUsers:
+		return s.buildAdminUsersData(r, data)
+	case adminSectionFleet:
+		return s.buildAdminFleetData(r, data)
+	default:
+		return s.buildAdminOverviewData(r, data)
+	}
+}
+
+func adminSettingsFor(st Settings) adminSettingsView {
+	return adminSettingsView{
+		MaxFileSizeMB: st.MaxFileSize >> 20, DailyQuotaMB: st.DailyQuota >> 20,
+		DefaultTTLHrs: st.DefaultTTL / 3600, MaxTTLHrs: st.MaxTTL / 3600,
+		DefaultRetention: st.DefaultRetention, DefaultMaxDownloads: st.DefaultMaxDownloads,
+		MaxMaxDownloads: st.MaxMaxDownloads, StorageDiskCapMB: st.StorageDiskCap >> 20,
+		DisableCentralFallback: st.DisableCentralFallback,
+		NodeTrafficDefaultGB:   st.NodeTrafficDefault >> 30,
+	}
+}
+
+func adminSelectedPeriod(r *http.Request, now int64) (string, []string) {
+	months := recentMonths(now, 12)
+	period := r.URL.Query().Get("period")
+	if !contains(months, period) {
+		period = months[0]
+	}
+	return period, months
+}
+
+func (s *Service) buildAdminOverviewData(r *http.Request, data adminHomeData) (adminHomeData, error) {
+	now := s.Now().Unix()
+	period, months := adminSelectedPeriod(r, now)
+	metrics, err := s.Store().AdminMetrics(r.Context(), period, now)
+	if err != nil {
+		return adminHomeData{}, err
+	}
+	centralStored, err := s.Store().CentralStoredBytes(r.Context())
+	if err != nil {
+		log.Printf("admin: CentralStoredBytes failed: %v", err)
+	}
+	passkeys, err := s.Store().ListAdminCredentials(r.Context())
+	data.PasskeysErr = err != nil
+	if err != nil {
+		log.Printf("passkey: ListAdminCredentials failed: %v", err)
+		passkeys = nil
+	}
+	data.Metrics, data.Period, data.Months = metrics, period, months
+	data.CentralStoredBytes, data.Passkeys = centralStored, passkeys
+	data.Settings = adminSettingsFor(s.ResolveSettings(r.Context()))
+	return data, nil
+}
+
+func (s *Service) buildAdminUsersData(r *http.Request, data adminHomeData) (adminHomeData, error) {
 	q := r.URL.Query()
 	search := strings.TrimSpace(q.Get("q"))
 	sortBy := q.Get("sort")
@@ -805,21 +856,12 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 	if strings.EqualFold(q.Get("dir"), "asc") {
 		dir = "asc"
 	}
-	page, perr := strconv.Atoi(q.Get("page"))
-	if perr != nil || page < 1 {
+	page, err := strconv.Atoi(q.Get("page"))
+	if err != nil || page < 1 {
 		page = 1
 	}
-
 	now := s.Now().Unix()
-	months := recentMonths(now, 12)
-	period := q.Get("period")
-	if !contains(months, period) {
-		period = months[0]
-	}
-	metrics, err := s.Store().AdminMetrics(r.Context(), period, now)
-	if err != nil {
-		return adminHomeData{}, err
-	}
+	period, months := adminSelectedPeriod(r, now)
 	query := AdminUserQuery{Search: search, SortBy: sortBy, SortDir: dir, Period: period, Now: now,
 		Limit: adminUsersPerPage, Offset: (page - 1) * adminUsersPerPage}
 	rows, total, err := s.Store().AdminListUsers(r.Context(), query)
@@ -838,269 +880,152 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 			return adminHomeData{}, err
 		}
 	}
-
 	sortHref := map[string]string{}
 	for _, col := range []string{"created", "email", "relayed", "upload", "download", "storage"} {
-		nd := "desc"
+		nextDir := "desc"
 		if sortBy == col && dir == "desc" {
-			nd = "asc"
+			nextDir = "asc"
 		}
-		sortHref[col] = adminListHref(search, col, nd, period, 1)
+		sortHref[col] = adminListHref(search, col, nextDir, period, 1)
 	}
-	prev, next := "", ""
 	if page > 1 {
-		prev = adminListHref(search, sortBy, dir, period, page-1)
+		data.PrevHref = adminListHref(search, sortBy, dir, period, page-1)
 	}
 	if page < totalPages {
-		next = adminListHref(search, sortBy, dir, period, page+1)
+		data.NextHref = adminListHref(search, sortBy, dir, period, page+1)
 	}
-
-	// st is resolved here (rather than down by CentralStoredBytes below) because
-	// nodeViews needs it to derive each node's EffectiveTrafficLimitBytes.
-	st := s.ResolveSettings(r.Context())
-
-	// Per-node monthly relayed bytes (current month) for the fleet traffic column.
-	monthStart, _ := monthRange(periodOf(now))
-	monthly, mErr := s.Store().NodeRelayedSince(r.Context(), monthStart)
-	if mErr != nil {
-		log.Printf("admin: NodeRelayedSince failed: %v", mErr)
-	}
-	// One grouped query for every node's live file count / safe-to-uninstall
-	// time, same reasoning as monthly above: the nodes table renders every row
-	// from a single read, never one query per node.
-	//
-	// THIS is where the measured per-render win of the BYO work actually
-	// landed — stored_files.node_id was unindexed, so grouping by it meant a
-	// row lookup per live file plus a sort. Measured with EXPLAIN QUERY PLAN:
-	//
-	//	before: SEARCH stored_files USING INDEX idx_stored_files_expires (expires_at>?)
-	//	        USE TEMP B-TREE FOR GROUP BY
-	//	after:  SEARCH stored_files USING COVERING INDEX idx_stored_files_node (node_id>?)
-	//
-	// i.e. it no longer touches a single stored_files ROW (everything it needs
-	// is in the index) and no longer sorts the result set to group it. It is
-	// still a whole-relation read — it is a GROUP BY over every node, and it
-	// feeds the FLEET table too, so scoping it to the BYO page would just mean
-	// a second query for the same data. One grouped read, never an N+1.
-	fileCounts, fcErr := s.Store().NodeFileCounts(r.Context(), now)
-	if fcErr != nil {
-		log.Printf("admin: NodeFileCounts failed: %v", fcErr)
-	}
-	var nodeVs []adminNodeView
-	// allNodes is loaded ONCE and fed to both the fleet nodes section and the
-	// two rollout panels; the panels used to re-query the same rows per track.
-	//
-	// BE HONEST ABOUT WHAT THIS STILL COSTS: this read is every node row,
-	// including every BYO one. The BYO *table* no longer depends on it (it
-	// pages in SQL, below), but the BYO rollout panel does — byoOpenBatchMembers
-	// derives batch membership from the full ordered node set, and the panel
-	// must not disagree with what /api/nodes/update-check will actually allow.
-	// Bounding that means changing the rollout decision semantics, which is a
-	// separate change with its own risk. So: one full node read per admin home
-	// render remains, and it is the rollout panels that require it.
-	var allNodes []Node
-	nodesErr := false
-	if ns, nerr := s.Store().ListNodes(r.Context()); nerr != nil {
-		log.Printf("admin: ListNodes failed: %v", nerr)
-		nodesErr = true
+	var plans, activePlans []planView
+	if rows, err := s.Store().ListPlans(r.Context()); err != nil {
+		log.Printf("admin: ListPlans failed: %v", err)
 	} else {
-		allNodes = ns
-		nodeVs = nodeViews(ns, monthly, fileCounts, s.Now(), st)
-	}
-	fleetNodeCount := 0
-	for _, nv := range nodeVs {
-		if nv.OwnerType == "fleet" {
-			fleetNodeCount++
+		plans = planViews(rows)
+		for _, plan := range plans {
+			if plan.Active {
+				activePlans = append(activePlans, plan)
+			}
 		}
 	}
-	// The BYO tables are SEARCHED and PAGED IN SQL (ListByoNodes), not carved
-	// out of nodeVs in Go, so an operator can reach a specific node instead of
-	// only the top of a ranked list, and the unsearched live page stops reading
-	// at the LIMIT (see ListByoNodes for the query plan and for the case —
-	// search — where the whole matching index range is still walked to count).
-	//
-	// Four bounded queries per render: two counts + two page reads (live and
-	// removed), plus one batched email lookup per table. Still O(1) queries per
-	// page load, never O(rows) — a per-row query here would be the worst
-	// possible place for an N+1.
-	//
-	// Search is CLAMPED (clampByoSearch) before it reaches SQL: past SQLite's
-	// LIKE pattern limit the query errors, and an error rendered as "0 matches"
-	// is a confident wrong answer in the one table where believing "there is no
-	// such node" is expensive. When the query fails anyway, byoErr/remErr are
-	// surfaced in the UI instead of an empty table.
-	byoSearch := clampByoSearch(strings.TrimSpace(q.Get(byoSearchParam)))
-	byoPage := adminByoPageParam(q, byoPageParam)
-	byoRemPage := adminByoPageParam(q, byoRemPageParam)
-	byoRows, byoNodeCount, byoPage, byoTotalPages, byoErr :=
-		s.listByoPage(r, AdminByoNodeQuery{Search: byoSearch}, byoPage, adminByoNodesShown)
+	products, err := s.Store().ListAppleProducts(r.Context())
+	data.AppleProductsErr = err != nil
+	if err != nil {
+		log.Printf("admin: ListAppleProducts failed: %v", err)
+		products = nil
+	}
+	data.Users, data.Total, data.Page, data.TotalPages = rows, total, page, totalPages
+	data.Search, data.Sort, data.Dir, data.Period, data.Months = search, sortBy, dir, period, months
+	data.SortHref, data.Plans, data.ActivePlans = sortHref, plans, activePlans
+	data.AppleProducts = appleProductViews(products)
+	data.AppleProductCycles, data.AppleProductKeyMaxLen = appleProductCycles, appleProductKeyMaxLen
+	data.ApplePurchaseGate = s.applePurchaseGatePanel(r.Context())
+	return data, nil
+}
+
+func (s *Service) buildAdminFleetData(r *http.Request, data adminHomeData) (adminHomeData, error) {
+	q := r.URL.Query()
+	now := s.Now().Unix()
+	st := s.ResolveSettings(r.Context())
+	monthStart, _ := monthRange(periodOf(now))
+	monthly, err := s.Store().NodeRelayedSince(r.Context(), monthStart)
+	if err != nil {
+		log.Printf("admin: NodeRelayedSince failed: %v", err)
+	}
+	fileCounts, err := s.Store().NodeFileCounts(r.Context(), now)
+	if err != nil {
+		log.Printf("admin: NodeFileCounts failed: %v", err)
+	}
+	var allNodes []Node
+	nodesErr := false
+	if rows, err := s.Store().ListNodes(r.Context()); err != nil {
+		log.Printf("admin: ListNodes failed: %v", err)
+		nodesErr = true
+	} else {
+		allNodes = rows
+		data.Nodes = nodeViews(rows, monthly, fileCounts, s.Now(), st)
+	}
+	for _, node := range data.Nodes {
+		if node.OwnerType == "fleet" {
+			data.FleetNodeCount++
+		}
+	}
+	search := clampByoSearch(strings.TrimSpace(q.Get(byoSearchParam)))
+	page := adminByoPageParam(q, byoPageParam)
+	removedPage := adminByoPageParam(q, byoRemPageParam)
+	rows, count, page, totalPages, byoErr := s.listByoPage(r, AdminByoNodeQuery{Search: search}, page, adminByoNodesShown)
+	removed, removedCount, removedPage, removedTotalPages, removedErr := s.listByoPage(r,
+		AdminByoNodeQuery{Search: search, Removed: true}, removedPage, adminByoRemovedShown)
 	if byoErr != nil {
 		log.Printf("admin: ListByoNodes failed: %v", byoErr)
 	}
-	// The removed section is a SEPARATE, much shorter page: it is the entry
-	// point to /restore for a recent mistake, not an archive of every uninstall
-	// ever (that is the audit log's job). It IS searched and it IS paged — a
-	// search matching six removed nodes must not leave the sixth unreachable,
-	// or "findable however old the uninstall is" would only hold for searches
-	// narrow enough to match five.
-	byoRemovedRows, byoRemovedCount, byoRemPage, byoRemTotalPages, remErr :=
-		s.listByoPage(r, AdminByoNodeQuery{Search: byoSearch, Removed: true}, byoRemPage, adminByoRemovedShown)
-	if remErr != nil {
-		log.Printf("admin: ListByoNodes(removed) failed: %v", remErr)
+	if removedErr != nil {
+		log.Printf("admin: ListByoNodes(removed) failed: %v", removedErr)
 	}
-	byoNodeVs := fillByoOwnerEmails(r.Context(),
-		nodeViews(byoRows, monthly, fileCounts, s.Now(), st), s.Store().AdminUserEmailsByIDs)
-	byoRemovedVs := fillByoOwnerEmails(r.Context(),
-		nodeViews(byoRemovedRows, monthly, fileCounts, s.Now(), st), s.Store().AdminUserEmailsByIDs)
-	byoPrev, byoNext := "", ""
-	if byoPage > 1 {
-		byoPrev = adminByoHref(q, byoSearch, byoPageParam, byoPage-1)
+	data.ByoNodes = fillByoOwnerEmails(r.Context(), nodeViews(rows, monthly, fileCounts, s.Now(), st), s.Store().AdminUserEmailsByIDs)
+	data.ByoRemovedNodes = fillByoOwnerEmails(r.Context(), nodeViews(removed, monthly, fileCounts, s.Now(), st), s.Store().AdminUserEmailsByIDs)
+	data.ByoNodeCount, data.ByoRemovedNodeCount, data.ByoSearch = count, removedCount, search
+	data.ByoPage, data.ByoTotalPages = page, totalPages
+	data.ByoRemovedPage, data.ByoRemovedTotalPages = removedPage, removedTotalPages
+	if page > 1 {
+		data.ByoPrevHref = adminByoHref(q, search, byoPageParam, page-1)
 	}
-	if byoPage < byoTotalPages {
-		byoNext = adminByoHref(q, byoSearch, byoPageParam, byoPage+1)
+	if page < totalPages {
+		data.ByoNextHref = adminByoHref(q, search, byoPageParam, page+1)
 	}
-	byoRemPrev, byoRemNext := "", ""
-	if byoRemPage > 1 {
-		byoRemPrev = adminByoHref(q, byoSearch, byoRemPageParam, byoRemPage-1)
+	if removedPage > 1 {
+		data.ByoRemovedPrevHref = adminByoHref(q, search, byoRemPageParam, removedPage-1)
 	}
-	if byoRemPage < byoRemTotalPages {
-		byoRemNext = adminByoHref(q, byoSearch, byoRemPageParam, byoRemPage+1)
+	if removedPage < removedTotalPages {
+		data.ByoRemovedNextHref = adminByoHref(q, search, byoRemPageParam, removedPage+1)
 	}
-	var tokenVs []adminFleetTokenView
-	if fts, ferr := s.Store().ListActiveFleetTokens(r.Context()); ferr != nil {
-		log.Printf("admin: ListActiveFleetTokens failed: %v", ferr)
+	data.ByoPages = byoPageLinks(q, search, byoPageParam, page, totalPages)
+	data.ByoRemovedPages = byoPageLinks(q, search, byoRemPageParam, removedPage, removedTotalPages)
+	data.ByoClearHref, data.ByoErr, data.ByoRemovedErr = adminByoClearHref(q), byoErr != nil, removedErr != nil
+	if tokens, err := s.Store().ListActiveFleetTokens(r.Context()); err != nil {
+		log.Printf("admin: ListActiveFleetTokens failed: %v", err)
 	} else {
-		for _, ft := range fts {
-			tokenVs = append(tokenVs, adminFleetTokenView{ID: ft.ID, Name: ft.Name, NodeID: ft.NodeID, CreatedAt: ft.CreatedAt, LastUsedAt: ft.LastUsedAt})
+		for _, token := range tokens {
+			data.FleetTokens = append(data.FleetTokens, adminFleetTokenView{ID: token.ID, Name: token.Name,
+				NodeID: token.NodeID, CreatedAt: token.CreatedAt, LastUsedAt: token.LastUsedAt})
 		}
 	}
-
-	centralStored, cerr := s.Store().CentralStoredBytes(r.Context())
-	if cerr != nil {
-		log.Printf("admin: CentralStoredBytes failed: %v", cerr)
-	}
-	var planVs, activePlanVs []planView
-	if plans, plerr := s.Store().ListPlans(r.Context()); plerr != nil {
-		log.Printf("admin: ListPlans failed: %v", plerr)
-	} else {
-		planVs = planViews(plans)
-		for _, pv := range planVs {
-			if pv.Active {
-				activePlanVs = append(activePlanVs, pv)
-			}
-		}
-	}
-	// The App Store product catalog. Same degradation contract as the passkey
-	// list below and the BYO tables above, and for the sharpest version of the
-	// same reason: an empty catalog table is a TRUE and ordinary state (nothing
-	// seeds it), so a failed read rendered as an empty table is indistinguishable
-	// from "no mappings exist yet" — and the operator's next move on that reading
-	// is to create a mapping that may already be there. Flag it and let the
-	// template say the read failed.
-	appleProducts, apErr := s.Store().ListAppleProducts(r.Context())
-	appleProductsErr := apErr != nil
-	if apErr != nil {
-		log.Printf("admin: ListAppleProducts failed: %v", apErr)
-		appleProducts = nil
-	}
-	// A passkey that was never used is how a planted credential shows itself,
-	// so the list is part of the security surface, not just a convenience. A
-	// failed read must therefore never render as an empty table. It must not
-	// 500 the page either — that would take down the user list, nodes, plans
-	// and settings just as the operator starts diagnosing the database. So
-	// carry on like the fetches above and flag it, and the template swaps the
-	// table for an explicit error.
-	passkeys, pkerr := s.Store().ListAdminCredentials(r.Context())
-	passkeysErr := pkerr != nil
-	if pkerr != nil {
-		log.Printf("passkey: ListAdminCredentials failed: %v", pkerr)
-		passkeys = nil
-	}
-	// Two independent builds, one per track. Neither reads the other's row or
-	// nodes, and a failure in one sets Err on that panel only — the other
-	// panel, and its controls, are unaffected. That independence is the point
-	// of the two-track design, so keep these two calls separate.
-	rolloutFleet := s.rolloutPanel(r.Context(), "fleet", "机队轨", s.Now(), allNodes, nodesErr)
-	rolloutByo := s.rolloutPanel(r.Context(), "byo", "自带节点轨", s.Now(), allNodes, nodesErr)
-	// The panel is rendered through {{template "rolloutPanel" .}}, which rebinds
-	// $ to the panel itself, so it needs its own copy of the language.
-	rolloutFleet.Lang, rolloutByo.Lang = adminLangFrom(r), adminLangFrom(r)
-
-	// The release notice reads the fleet track DIRECTLY rather than off
-	// rolloutFleet above: rolloutPanel is the rollout PANEL's own read, and a
-	// future change to that panel (what it selects, how it degrades on error)
-	// must not be able to silently change what the notice decides. Two
-	// independent reads of the same row, same reasoning as the fleet/byo
-	// panels never sharing one read.
-	var notice releaseNoticeView
+	data.RolloutFleet = s.rolloutPanel(r.Context(), "fleet", "机队轨", s.Now(), allNodes, nodesErr)
+	data.RolloutByo = s.rolloutPanel(r.Context(), "byo", "自带节点轨", s.Now(), allNodes, nodesErr)
+	data.RolloutFleet.Lang, data.RolloutByo.Lang = data.Lang, data.Lang
+	data.HaltedTracks = haltedRolloutTracks(data.RolloutFleet, data.RolloutByo)
 	if s.cfg.ReleaseCheck {
-		rc, rcErr := s.Store().GetReleaseCheck(r.Context())
-		if rcErr != nil {
-			log.Printf("admin: GetReleaseCheck failed: %v", rcErr)
+		if check, err := s.Store().GetReleaseCheck(r.Context()); err != nil {
+			log.Printf("admin: GetReleaseCheck failed: %v", err)
+		} else if track, found, err := s.Store().GetRolloutTrack(r.Context(), "fleet"); err != nil {
+			log.Printf("admin: GetRolloutTrack(fleet) for the release notice failed: %v", err)
 		} else {
-			fleetTrack, found, ftErr := s.Store().GetRolloutTrack(r.Context(), "fleet")
-			if ftErr != nil {
-				log.Printf("admin: GetRolloutTrack(fleet) for the release notice failed: %v", ftErr)
-			} else {
-				notice = releaseNotice(rc, fleetTrack, found)
-			}
+			data.ReleaseNotice = releaseNotice(check, track, found)
 		}
 	}
-
-	return adminHomeData{
-		RolloutFleet: rolloutFleet, RolloutByo: rolloutByo,
-		HaltedTracks:  haltedRolloutTracks(rolloutFleet, rolloutByo),
-		ReleaseNotice: notice,
-		Lang:          adminLangFrom(r),
-		Metrics:       metrics, Users: rows, Total: total, Page: page, TotalPages: totalPages,
-		Search: search, Sort: sortBy, Dir: dir, Period: period, Months: months,
-		PrevHref: prev, NextHref: next, SortHref: sortHref,
-		Nodes: nodeVs, FleetNodeCount: fleetNodeCount, FleetTokens: tokenVs,
-		ByoNodes: byoNodeVs, ByoNodeCount: byoNodeCount,
-		ByoRemovedNodes: byoRemovedVs, ByoRemovedNodeCount: byoRemovedCount,
-		ByoSearch: byoSearch, ByoPage: byoPage, ByoTotalPages: byoTotalPages,
-		ByoPrevHref: byoPrev, ByoNextHref: byoNext,
-		ByoPages:       byoPageLinks(q, byoSearch, byoPageParam, byoPage, byoTotalPages),
-		ByoClearHref:   adminByoClearHref(q),
-		ByoErr:         byoErr != nil,
-		ByoRemovedPage: byoRemPage, ByoRemovedTotalPages: byoRemTotalPages,
-		ByoRemovedPrevHref: byoRemPrev, ByoRemovedNextHref: byoRemNext,
-		ByoRemovedPages: byoPageLinks(q, byoSearch, byoRemPageParam, byoRemPage, byoRemTotalPages),
-		ByoRemovedErr:   remErr != nil,
-		Plans:           planVs, ActivePlans: activePlanVs,
-		AppleProducts:         appleProductViews(appleProducts),
-		AppleProductsErr:      appleProductsErr,
-		AppleProductCycles:    appleProductCycles,
-		AppleProductKeyMaxLen: appleProductKeyMaxLen,
-		// Read independently of the mapping table above: the gate is what an
-		// operator reaches for when the catalog is the thing that is wrong, so a
-		// failed catalog read must not take the brake down with it.
-		ApplePurchaseGate:  s.applePurchaseGatePanel(r.Context()),
-		CentralStoredBytes: centralStored,
-		Passkeys:           passkeys,
-		PasskeysErr:        passkeysErr,
-		Nonce:              CSPNonce(r),
-		Settings: adminSettingsView{
-			MaxFileSizeMB:          st.MaxFileSize / (1024 * 1024),
-			DailyQuotaMB:           st.DailyQuota / (1024 * 1024),
-			DefaultTTLHrs:          st.DefaultTTL / 3600,
-			MaxTTLHrs:              st.MaxTTL / 3600,
-			DefaultRetention:       st.DefaultRetention,
-			DefaultMaxDownloads:    st.DefaultMaxDownloads,
-			MaxMaxDownloads:        st.MaxMaxDownloads,
-			StorageDiskCapMB:       st.StorageDiskCap / (1024 * 1024),
-			DisableCentralFallback: st.DisableCentralFallback,
-			NodeTrafficDefaultGB:   st.NodeTrafficDefault / (1024 * 1024 * 1024),
-		},
-	}, nil
+	data.Settings = adminSettingsFor(st)
+	return data, nil
 }
 
 func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
+	s.renderAdminSection(w, r, adminSectionOverview)
+}
+
+func (s *Service) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
+	s.renderAdminSection(w, r, adminSectionUsers)
+}
+
+func (s *Service) handleAdminFleet(w http.ResponseWriter, r *http.Request) {
+	s.renderAdminSection(w, r, adminSectionFleet)
+}
+
+func (s *Service) renderAdminSection(w http.ResponseWriter, r *http.Request, section string) {
 	if !s.isAdminReq(r) {
+		if section != adminSectionOverview {
+			http.Redirect(w, r, "/admin", http.StatusFound)
+			return
+		}
 		s.renderAdminLogin(w, r, http.StatusOK, "", s.AdminPasskeyCount(r.Context()) > 0)
 		return
 	}
-	data, err := s.buildAdminHomeData(r)
+	data, err := s.buildAdminHomeData(r, section)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -1246,7 +1171,7 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
 }
 
 // handleAdminUpsertPlan validates a plan-edit form and upserts the plan,
@@ -1294,7 +1219,7 @@ func (s *Service) handleAdminUpsertPlan(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/users", http.StatusFound)
 }
 
 // handleAdminSetUserPlan assigns a user to a billing plan. Only ACTIVE plans
@@ -1330,7 +1255,7 @@ func (s *Service) handleAdminSetUserPlan(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/users", http.StatusFound)
 }
 
 // handleAdminMintToken mints an admin fleet-node token, stores its hash, and
@@ -1352,7 +1277,7 @@ func (s *Service) handleAdminMintToken(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	data, err := s.buildAdminHomeData(r)
+	data, err := s.buildAdminHomeData(r, adminSectionFleet)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -1398,7 +1323,7 @@ func (s *Service) handleAdminNodeLimits(w http.ResponseWriter, r *http.Request) 
 		{Field: "traffic_limit_bytes", Old: before.TrafficLimitBytes, New: trafficBytes},
 		{Field: "disk_limit_bytes", Old: before.DiskLimitBytes, New: diskBytes},
 	}, StepUpNone)
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
 }
 
 // handleAdminNodeLabel renames an official (fleet) node.
@@ -1423,7 +1348,7 @@ func (s *Service) handleAdminNodeLabel(w http.ResponseWriter, r *http.Request) {
 	}
 	s.WriteAudit(r, AuditNodeLabel, "node:"+id,
 		[]ChangeField{{Field: "label", Old: before.Label, New: label}}, StepUpNone)
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
 }
 
 // handleAdminNodeDraining is the operator toggle for the first half of a safe
@@ -1449,7 +1374,7 @@ func (s *Service) handleAdminNodeDraining(w http.ResponseWriter, r *http.Request
 	}
 	s.WriteAudit(r, AuditNodeDraining, "node:"+id,
 		[]ChangeField{{Field: "draining", Old: before.Draining, New: on}}, StepUpNone)
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
 }
 
 // handleAdminRestoreNode undoes a deregistration: it clears removed_at and puts
@@ -1489,7 +1414,7 @@ func (s *Service) handleAdminRestoreNode(w http.ResponseWriter, r *http.Request)
 	}
 	s.WriteAudit(r, AuditNodeRestore, "node:"+id,
 		[]ChangeField{{Field: "removed_at", Old: before.RemovedAt, New: int64(0)}}, StepUpNone)
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
 }
 
 // handleAdminMarkNodeRemoved is the manual recovery for a lost deregistration:
@@ -1529,7 +1454,7 @@ func (s *Service) handleAdminMarkNodeRemoved(w http.ResponseWriter, r *http.Requ
 	}
 	s.WriteAudit(r, AuditNodeRemove, "node:"+id,
 		[]ChangeField{{Field: "removed_at", Old: before.RemovedAt, New: at}}, StepUpNone)
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
 }
 
 // handleAdminDeleteNode deletes an official (fleet) node.
@@ -1542,7 +1467,7 @@ func (s *Service) handleAdminDeleteNode(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
 }
 
 // handleAdminRevokeToken revokes an admin-minted fleet token so it can no longer
@@ -1561,7 +1486,7 @@ func (s *Service) handleAdminRevokeToken(w http.ResponseWriter, r *http.Request)
 	// 只记 token id，绝不记明文 —— 明文只在铸造时内联显示一次，库里存的是哈希。
 	s.WriteAudit(r, AuditTokenRevoke, "token:"+id,
 		[]ChangeField{{Field: "revoked_at", Old: int64(0), New: revokedAt}}, StepUpNone)
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
 }
 
 // renderAdminLogin draws the login page. passkey controls only the extra

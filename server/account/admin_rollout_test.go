@@ -137,7 +137,7 @@ func TestAdminDashboardShowsBothRolloutPanels(t *testing.T) {
 	seedRolloutNode(t, store, "byo-a", "user", "u1", "v1.0.0", "", "")
 	seedRolloutNode(t, store, "byo-b", "user", "u2", "v0.9.0", "v0.9.0", "rolled_back")
 
-	req, _ := http.NewRequest("GET", ts.URL+"/admin", nil)
+	req, _ := http.NewRequest("GET", ts.URL+"/admin/fleet", nil)
 	req.AddCookie(cookie)
 	resp, err := ts.Client().Do(req)
 	if err != nil {

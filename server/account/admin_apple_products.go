@@ -291,5 +291,5 @@ func (s *Service) handleAdminUpsertAppleProduct(w http.ResponseWriter, r *http.R
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/users", http.StatusFound)
 }

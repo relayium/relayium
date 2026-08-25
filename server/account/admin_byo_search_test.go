@@ -282,7 +282,7 @@ func TestAdminDashboardByoSearchFindsRemovedNode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	html := getAdminPathHTML(t, ts, ts.URL, "/admin?bq=needle", cookie)
+	html := getAdminPathHTML(t, ts, ts.URL, "/admin/fleet?bq=needle", cookie)
 	if !strings.Contains(html, "/admin/nodes/oops-removed/restore") {
 		t.Fatalf("searching for a removed node's label does not surface its restore control")
 	}
@@ -307,14 +307,14 @@ func TestAdminDashboardByoPagination(t *testing.T) {
 		seedByoNode(t, store, fmt.Sprintf("byo-%02d", i), "u1", "", "", int64(1000+i))
 	}
 
-	page1 := byoTableHTML(t, getAdminPathHTML(t, ts, ts.URL, "/admin", cookie))
+	page1 := byoTableHTML(t, getAdminPathHTML(t, ts, ts.URL, "/admin/fleet", cookie))
 	if rows := strings.Count(page1, "/draining"); rows != adminByoNodesShown {
 		t.Fatalf("page 1 rendered %d rows, want %d", rows, adminByoNodesShown)
 	}
 	if !strings.Contains(page1, "bp=2") {
 		t.Fatalf("no link to page 2 on a %d-row population (page size %d)", total, adminByoNodesShown)
 	}
-	page2 := byoTableHTML(t, getAdminPathHTML(t, ts, ts.URL, "/admin?bp=2", cookie))
+	page2 := byoTableHTML(t, getAdminPathHTML(t, ts, ts.URL, "/admin/fleet?bp=2", cookie))
 	if rows := strings.Count(page2, "/draining"); rows != 3 {
 		t.Fatalf("page 2 rendered %d rows, want 3", rows)
 	}
@@ -336,6 +336,7 @@ func TestAdminDashboardByoPagination(t *testing.T) {
 func TestAdminHomeRendersByoQueryFailureAsFailure(t *testing.T) {
 	var buf strings.Builder
 	data := adminHomeData{
+		Section:   adminSectionFleet,
 		ByoSearch: "needle", ByoErr: true, ByoRemovedErr: true,
 		ByoPage: 1, ByoTotalPages: 1, ByoRemovedPage: 1, ByoRemovedTotalPages: 1,
 		Page: 1, Settings: adminSettingsView{},
@@ -358,27 +359,27 @@ func TestAdminHomeRendersByoQueryFailureAsFailure(t *testing.T) {
 	}
 }
 
-// The BYO search form is a GET form, so whatever it does not carry is LOST.
-// The user table is paged independently; submitting a node search must not
-// bounce the operator back to page 1 of the user list.
-func TestAdminByoSearchFormCarriesUserTablePage(t *testing.T) {
+// The BYO search form belongs only to the fleet route. User-list parameters
+// must not leak into it now that the two domains have independent URLs.
+func TestAdminByoSearchFormDoesNotCarryUserState(t *testing.T) {
 	var buf strings.Builder
 	if err := adminUsersTmpl.Execute(&buf, adminHomeData{
-		Page: 3, Search: "alice", Sort: "email", Dir: "asc",
+		Section: adminSectionFleet,
+		Page:    3, Search: "alice", Sort: "email", Dir: "asc",
 		TotalPages: 5, ByoPage: 1, ByoTotalPages: 1,
 		ByoRemovedPage: 1, ByoRemovedTotalPages: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	html := buf.String()
+	if !strings.Contains(html, `action="/admin/fleet" class="byo-search"`) {
+		t.Fatalf("BYO search does not target the fleet route:\n%s", html)
+	}
 	form := html[strings.Index(html, `class="byo-search"`):]
 	form = form[:strings.Index(form, "</form>")]
-	for _, want := range []string{
-		`name="page" value="3"`, `name="q" value="alice"`,
-		`name="sort" value="email"`, `name="dir" value="asc"`,
-	} {
-		if !strings.Contains(form, want) {
-			t.Fatalf("BYO search form drops %s — submitting it resets the user table:\n%s", want, form)
+	for _, gone := range []string{`name="page"`, `name="q"`, `name="sort"`, `name="dir"`, `name="period"`} {
+		if strings.Contains(form, gone) {
+			t.Fatalf("BYO search form carries user state %s:\n%s", gone, form)
 		}
 	}
 	// It must NOT carry the BYO page numbers: a new search invalidates them.
@@ -403,7 +404,7 @@ func TestAdminDashboardByoRemovedSectionIsPaged(t *testing.T) {
 		}
 	}
 
-	page1 := getAdminPathHTML(t, ts, ts.URL, "/admin?bq=needle", cookie)
+	page1 := getAdminPathHTML(t, ts, ts.URL, "/admin/fleet?bq=needle", cookie)
 	// The heading must say a filter is active and how many matched — not a
 	// bare count that reads as "this is all of them". The wording moved when the
 	// heading was restructured for translation (the branches now hold whole
@@ -420,7 +421,7 @@ func TestAdminDashboardByoRemovedSectionIsPaged(t *testing.T) {
 		t.Fatalf("removed section has %d matches (page %d) but no page-2 link", n, adminByoRemovedShown)
 	}
 	// The stalest two removals live on page 2 and must be reachable there.
-	page2 := getAdminPathHTML(t, ts, ts.URL, "/admin?bq=needle&brp=2", cookie)
+	page2 := getAdminPathHTML(t, ts, ts.URL, "/admin/fleet?bq=needle&brp=2", cookie)
 	if !strings.Contains(page2, "/admin/nodes/gone-00/restore") {
 		t.Fatalf("page 2 of the removed section does not reach the oldest match")
 	}

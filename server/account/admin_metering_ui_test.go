@@ -25,7 +25,7 @@ func TestAdminDashboardShowsPerUserColumns(t *testing.T) {
 		t.Fatal("login did not set admin cookie")
 	}
 
-	req, _ := http.NewRequest("GET", ts.URL+"/admin", nil)
+	req, _ := http.NewRequest("GET", ts.URL+"/admin/users", nil)
 	req.AddCookie(cookie)
 	resp, err := client.Do(req)
 	if err != nil {

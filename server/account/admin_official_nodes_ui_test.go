@@ -41,7 +41,7 @@ func TestAdminDashboardShowsOfficialNodesSection(t *testing.T) {
 	store.UpsertNode(context.Background(), Node{OwnerType: "user", OwnerUserID: "u1", URLs: []string{"turn:8.8.8.8:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1})
 
 	client := ts.Client()
-	req, _ := http.NewRequest("GET", ts.URL+"/admin", nil)
+	req, _ := http.NewRequest("GET", ts.URL+"/admin/fleet", nil)
 	req.AddCookie(cookie)
 	resp, _ := client.Do(req)
 	body, _ := io.ReadAll(resp.Body)
@@ -124,7 +124,7 @@ func TestAdminDashboardShowsEffectiveNodeTrafficLimit(t *testing.T) {
 	store.UpsertNode(ctx, Node{OwnerType: "fleet", Region: "cn-sh", URLs: []string{"turn:1.1.1.1:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1, TrafficLimitBytes: override})
 
 	client := ts.Client()
-	req, _ := http.NewRequest("GET", ts.URL+"/admin", nil)
+	req, _ := http.NewRequest("GET", ts.URL+"/admin/fleet", nil)
 	req.AddCookie(cookie)
 	resp, _ := client.Do(req)
 	body, _ := io.ReadAll(resp.Body)

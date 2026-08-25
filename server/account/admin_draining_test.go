@@ -124,10 +124,10 @@ func TestAdminHomeShowsNodeFileCountAndSafeFromTime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := httptest.NewRequest("GET", "/admin", nil)
+	r := httptest.NewRequest("GET", "/admin/fleet", nil)
 	r.AddCookie(&http.Cookie{Name: adminCookie, Value: tok})
 	w := httptest.NewRecorder()
-	s.handleAdminHome(w, r)
+	s.handleAdminFleet(w, r)
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
 	}
@@ -164,10 +164,10 @@ func TestAdminHomeNodeWithNoFilesShowsZeroWait(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := httptest.NewRequest("GET", "/admin", nil)
+	r := httptest.NewRequest("GET", "/admin/fleet", nil)
 	r.AddCookie(&http.Cookie{Name: adminCookie, Value: tok})
 	w := httptest.NewRecorder()
-	s.handleAdminHome(w, r)
+	s.handleAdminFleet(w, r)
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", w.Code)
 	}

@@ -581,7 +581,7 @@ func TestApplePurchaseGatePanelOffersTheOppositeOfTheLiveState(t *testing.T) {
 	pauseApplePurchases(t, store, true)
 	cookie := adminLoginCookie(t, ts)
 
-	open := getAdminHome(t, ts, cookie)
+	open := getAdminPathHTML(t, ts, ts.URL, "/admin/users", cookie)
 	if !strings.Contains(open, `action="/admin/apple-purchases"`) {
 		t.Fatal("the dashboard offers no gate control at all")
 	}
@@ -593,7 +593,7 @@ func TestApplePurchaseGatePanelOffersTheOppositeOfTheLiveState(t *testing.T) {
 	}
 
 	pauseApplePurchases(t, store, false)
-	paused := getAdminHome(t, ts, cookie)
+	paused := getAdminPathHTML(t, ts, ts.URL, "/admin/users", cookie)
 	if !strings.Contains(paused, `name="enabled" value="1"`) {
 		t.Error("a paused deployment does not offer the resume button")
 	}

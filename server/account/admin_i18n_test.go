@@ -143,7 +143,7 @@ func TestConfirmTextIsTranslatedAndJSEscaped(t *testing.T) {
 	// hardest to notice, and it is attached to rollback and removal buttons — so
 	// it gets its own test rather than riding on the generic render check.
 	var sb strings.Builder
-	data := adminHomeData{Lang: "en", RolloutFleet: rolloutPanelView{Lang: "en", Track: "fleet", Configured: true, Status: "rolling"}}
+	data := adminHomeData{Section: adminSectionFleet, Lang: "en", RolloutFleet: rolloutPanelView{Lang: "en", Track: "fleet", Configured: true, Status: "rolling"}}
 	if err := adminUsersTmpl.Execute(&sb, data); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestATranslationCannotBreakOutOfTheConfirmString(t *testing.T) {
 	}()
 
 	var sb strings.Builder
-	data := adminHomeData{Lang: "en", RolloutFleet: rolloutPanelView{Lang: "en", Track: "fleet", Configured: true, Status: "rolling"}}
+	data := adminHomeData{Section: adminSectionFleet, Lang: "en", RolloutFleet: rolloutPanelView{Lang: "en", Track: "fleet", Configured: true, Status: "rolling"}}
 	if err := adminUsersTmpl.Execute(&sb, data); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
@@ -243,7 +243,7 @@ func TestLanguagePickerIsOnEveryConsolePage(t *testing.T) {
 		},
 		"home": func() (string, error) {
 			var sb strings.Builder
-			err := adminUsersTmpl.Execute(&sb, adminHomeData{Lang: "en"})
+			err := adminUsersTmpl.Execute(&sb, adminHomeData{Section: adminSectionOverview, Lang: "en"})
 			return sb.String(), err
 		},
 		"audit": func() (string, error) {

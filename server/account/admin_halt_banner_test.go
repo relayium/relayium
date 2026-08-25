@@ -12,7 +12,7 @@ import (
 // rendered HTML.
 func getAdminHome(t *testing.T, ts *httptest.Server, cookie *http.Cookie) string {
 	t.Helper()
-	req, _ := http.NewRequest("GET", ts.URL+"/admin", nil)
+	req, _ := http.NewRequest("GET", ts.URL+"/admin/fleet", nil)
 	req.AddCookie(cookie)
 	resp, err := ts.Client().Do(req)
 	if err != nil {
@@ -43,10 +43,11 @@ func TestHaltedTrackBannerAtTopOfAdminHome(t *testing.T) {
 		t.Fatalf("no halt banner rendered:\n%s", body)
 	}
 	// Above the users/nodes sections, not merely somewhere on the page.
-	if nodesIdx := strings.Index(body, `<section class="nodes">`); nodesIdx < 0 || bannerIdx > nodesIdx {
+	nodesIdx := strings.Index(body, `<section class="nodes">`)
+	if nodesIdx < 0 || bannerIdx > nodesIdx {
 		t.Fatalf("halt banner at %d is not above the nodes section at %d", bannerIdx, nodesIdx)
 	}
-	banner := body[bannerIdx:strings.Index(body, `<section class="cards">`)]
+	banner := body[bannerIdx:nodesIdx]
 	for _, want := range []string{
 		"自带节点轨", "v1.0.0",
 		"byo rollout: 3/5 nodes in the 50% batch failed",
@@ -102,11 +103,11 @@ func TestBothHaltedTracksAppearInBanner(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := getAdminHome(t, ts, cookie)
-	cards := strings.Index(body, `<section class="cards">`)
-	if cards < 0 {
+	nodes := strings.Index(body, `<section class="nodes">`)
+	if nodes < 0 {
 		t.Fatal("dashboard did not render")
 	}
-	banner := body[:cards]
+	banner := body[:nodes]
 	for _, want := range []string{
 		"机队轨", "v1.2.0", "fleet rollout: node fleet-a went silent", `href="#rollout-fleet"`,
 		"自带节点轨", "v1.0.0", "byo rollout: 3/5 nodes in the 50% batch failed", `href="#rollout-byo"`,
