@@ -163,7 +163,7 @@ func TestAdminUserListCarriesSubscriptionAndSource(t *testing.T) {
 		t.Fatalf("row subscription fields = %+v, want status=active source=stripe", row)
 	}
 
-	req, _ := http.NewRequest("GET", ts.URL+"/admin", nil)
+	req, _ := http.NewRequest("GET", ts.URL+"/admin/users", nil)
 	req.AddCookie(admin)
 	resp, err := ts.Client().Do(req)
 	if err != nil {

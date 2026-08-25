@@ -256,8 +256,8 @@ func TestAdminLoginGate(t *testing.T) {
 		t.Fatalf("good login set no admin cookie")
 	}
 
-	// 带 cookie GET /admin => 用户列表含 seeded 邮箱。
-	req, _ := http.NewRequest("GET", ts.URL+"/admin", nil)
+	// 带 cookie GET /admin/users => 用户列表含 seeded 邮箱。
+	req, _ := http.NewRequest("GET", ts.URL+"/admin/users", nil)
 	req.AddCookie(cookie)
 	resp, _ = client.Do(req)
 	if !bodyContains(resp, "seen@example.com") {
@@ -331,7 +331,7 @@ func TestAdminLoginTOTPNotBurnedByWrongCreds(t *testing.T) {
 	}
 }
 
-func TestAdminHomeDashboardAndPaging(t *testing.T) {
+func TestAdminUsersPaging(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 	for i := 0; i < 3; i++ {
@@ -345,20 +345,20 @@ func TestAdminHomeDashboardAndPaging(t *testing.T) {
 
 	get := func(query string) *httptest.ResponseRecorder {
 		tok, _ := s.newAdminSession(context.Background(), "password")
-		r := httptest.NewRequest("GET", "/admin"+query, nil)
+		r := httptest.NewRequest("GET", "/admin/users"+query, nil)
 		r.AddCookie(&http.Cookie{Name: adminCookie, Value: tok})
 		w := httptest.NewRecorder()
-		s.handleAdminHome(w, r)
+		s.handleAdminUsers(w, r)
 		return w
 	}
 
-	// dashboard: metric card labels + a user present
+	// User page: usage controls and a user present.
 	w := get("")
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", w.Code)
 	}
 	body := w.Body.String()
-	for _, want := range []string{"总用户数", "未过期暂存文件", "占用存储", "用量月份", "上传", "user0@example.com"} {
+	for _, want := range []string{"用量月份", "上传", "user0@example.com"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("home body missing %q", want)
 		}

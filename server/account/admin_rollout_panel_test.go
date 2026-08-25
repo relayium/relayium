@@ -13,7 +13,7 @@ import (
 // rollout panels are part of that page, which is where these assertions look.
 func adminDashboardHTML(t *testing.T, ts *httptest.Server, cookie *http.Cookie) string {
 	t.Helper()
-	req, err := http.NewRequest("GET", ts.URL+"/admin", nil)
+	req, err := http.NewRequest("GET", ts.URL+"/admin/fleet", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

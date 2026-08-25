@@ -498,7 +498,7 @@ func rolloutNodeRows(rows []rolloutNodeView) ([]rolloutNodeView, int) {
 // text on the page they were just looking at — instead of a bare 500 or, worse,
 // a redirect that looks exactly like success.
 func (s *Service) renderAdminRolloutError(w http.ResponseWriter, r *http.Request, status int, msg string) {
-	data, err := s.buildAdminHomeData(r)
+	data, err := s.buildAdminHomeData(r, adminSectionFleet)
 	if err != nil {
 		// The dashboard itself is unbuildable; the operator still has to be
 		// told why their action was refused.
@@ -552,7 +552,7 @@ func (s *Service) rolloutSetVersion(w http.ResponseWriter, r *http.Request, acti
 		{Field: "target_version", Old: before.TargetVersion, New: version},
 		{Field: "status", Old: before.Status, New: "rolling"},
 	}, StepUpNone)
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
 }
 
 // handleAdminReleaseRollout points the fleet track at the release the
@@ -649,7 +649,7 @@ func (s *Service) handleAdminReleaseRollout(w http.ResponseWriter, r *http.Reque
 		{Field: "target_version", Old: before.TargetVersion, New: version},
 		{Field: "status", Old: before.Status, New: "rolling"},
 	}, StepUpNone)
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
 }
 
 // handleAdminReleaseDismiss records (or, with an empty version, clears) the
@@ -673,7 +673,7 @@ func (s *Service) handleAdminReleaseDismiss(w http.ResponseWriter, r *http.Reque
 	s.WriteAudit(r, AuditReleaseDismiss, "release:notice", []ChangeField{
 		{Field: "dismissed_tag", Old: before.DismissedTag, New: version},
 	}, StepUpNone)
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
 }
 
 // handleAdminRolloutByoRollbackPrevious rolls the BYO track back onto the
@@ -723,7 +723,7 @@ func (s *Service) handleAdminRolloutByoRollbackPrevious(w http.ResponseWriter, r
 		{Field: "target_version", Old: before.TargetVersion, New: version},
 		{Field: "status", Old: before.Status, New: "rolling"},
 	}, StepUpNone)
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
 }
 
 // handleAdminRolloutPause stops a track where it is. It is the kill switch for
@@ -757,7 +757,7 @@ func (s *Service) handleAdminRolloutPause(w http.ResponseWriter, r *http.Request
 	log.Printf("%s track=%s target=? reason=%q", rolloutHaltLogPrefix, track, "管理员手动暂停")
 	s.WriteAudit(r, AuditRolloutPause, "rollout:"+track,
 		[]ChangeField{{Field: "status", Old: "rolling", New: "halted"}}, StepUpNone)
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
 }
 
 // handleAdminRolloutResume restarts a halted track on the version it already
@@ -812,7 +812,7 @@ func (s *Service) handleAdminRolloutResume(w http.ResponseWriter, r *http.Reques
 	}
 	s.WriteAudit(r, AuditRolloutResume, "rollout:"+track,
 		[]ChangeField{{Field: "status", Old: "halted", New: "rolling"}}, StepUpNone)
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
 }
 
 // handleAdminRolloutRetry re-offers a finished rollout's target to ONE machine
@@ -924,7 +924,7 @@ func (s *Service) handleAdminRolloutRetry(w http.ResponseWriter, r *http.Request
 			{Field: "node", Old: nodeID + " " + n.UpdateResult, New: nodeID + " 重试"},
 			{Field: "status", Old: "complete", New: "rolling"},
 		}, StepUpNone)
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
 }
 
 // handleAdminRolloutFast starts a MANUAL FAST fleet rollout: the ordinary
@@ -1079,7 +1079,7 @@ func (s *Service) rolloutStartFast(w http.ResponseWriter, r *http.Request, lbl f
 		s.renderAdminRolloutError(w, r, http.StatusBadRequest, lbl.name+"失败："+err.Error())
 		return
 	}
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
 }
 
 // staleFastRolloutMessage is shared by the handler's own staleness check and by
@@ -1135,5 +1135,5 @@ func (s *Service) handleAdminRolloutEmergency(w http.ResponseWriter, r *http.Req
 		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "紧急发布失败："+err.Error())
 		return
 	}
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
 }

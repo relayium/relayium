@@ -12,7 +12,7 @@ import (
 // getAdminHTML fetches the dashboard as a logged-in admin.
 func getAdminHTML(t *testing.T, ts interface{ Client() *http.Client }, url string, cookie *http.Cookie) string {
 	t.Helper()
-	req, _ := http.NewRequest("GET", url+"/admin", nil)
+	req, _ := http.NewRequest("GET", url+"/admin/fleet", nil)
 	req.AddCookie(cookie)
 	resp, err := ts.Client().Do(req)
 	if err != nil {

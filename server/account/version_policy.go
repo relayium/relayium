@@ -327,8 +327,8 @@ func (s *Service) handleAdminUpdateVersionPolicy(w http.ResponseWriter, r *http.
 
 var adminVersionPolicyTmpl = template.Must(template.New("version-policy").Parse(`<!doctype html>
 <html lang="{{.Lang}}"><head><meta charset="utf-8"><title>Relayium Version Policy</title>
-<style>body{font:15px system-ui;max-width:760px;margin:40px auto;padding:0 20px}label{display:block;margin:16px 0}select,input,button{font:inherit;padding:8px}small{display:block;color:#666;margin-top:5px}.warn{color:#a33}</style></head><body>
-<p><a href="/admin">← {{if eq .Lang "en"}}Admin{{else}}后台{{end}}</a></p><h1>{{if eq .Lang "en"}}Operational version policy{{else}}运行版本策略{{end}}</h1>
+<style>body{font:15px system-ui;max-width:760px;margin:40px auto;padding:0 20px}label{display:block;margin:16px 0}select,input,button{font:inherit;padding:8px}small{display:block;color:#666;margin-top:5px}.warn{color:#a33}.tabs{display:flex;gap:12px;flex-wrap:wrap;margin:0 0 24px}.tabs a{color:#6b6375;text-decoration:none;font-weight:600}.tabs a[aria-current=page]{color:#7c3aad}</style></head><body>
+<nav class="tabs" aria-label="Relayium Admin"><a href="/admin">{{if eq .Lang "en"}}Overview{{else}}后台概览{{end}}</a><a href="/admin/users">{{if eq .Lang "en"}}Users{{else}}用户{{end}}</a><a href="/admin/fleet">{{if eq .Lang "en"}}Fleet{{else}}机队{{end}}</a><a href="/admin/version-policy" aria-current="page">{{if eq .Lang "en"}}Version policy{{else}}版本策略{{end}}</a><a href="/admin/audit">{{if eq .Lang "en"}}Audit log{{else}}审计日志{{end}}</a></nav><h1>{{if eq .Lang "en"}}Operational version policy{{else}}运行版本策略{{end}}</h1>
 <p>{{if eq .Lang "en"}}Revision {{.Policy.Revision}}. Changes require step-up confirmation and are audited.{{else}}修订号 {{.Policy.Revision}}。变更需要二次确认并写入审计日志。{{end}}</p>
 <form method="post" action="/admin/version-policy">
 <input type="hidden" name="revision" value="{{.Policy.Revision}}">

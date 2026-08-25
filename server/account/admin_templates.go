@@ -24,6 +24,8 @@ type adminSettingsView struct {
 }
 
 type adminHomeData struct {
+	// Section is the route-owned page rendered by the shared template.
+	Section string
 	// Lang selects the console language for this request (admin_i18n.go).
 	Lang        string
 	Metrics     AdminMetrics
@@ -678,7 +680,7 @@ var adminUsersTmpl = template.Must(withRolloutPanel(withPasskeyJS(template.New("
 		return p
 	},
 }))).Parse(`<!doctype html>
-<html><head><meta charset="utf-8"><title>{{t $.Lang "Relayium Admin · 用户"}}</title>
+<html><head><meta charset="utf-8"><title>Relayium Admin · {{if eq .Section "users"}}{{t $.Lang "用户"}}{{else if eq .Section "fleet"}}{{t $.Lang "机队"}}{{else}}{{t $.Lang "后台概览"}}{{end}}</title>
 <style>:root{--a:#7c3aad;--bg:#faf9fb;--fg:#1a1420;--muted:#6b6375;--bd:#e5e4e7;--card:#fff;--soft:#f4f3ec}
 @media(prefers-color-scheme:dark){:root{--a:#c084fc;--bg:#16171d;--fg:#f3f4f6;--muted:#9ca3af;--bd:#2e303a;--card:#1c1d25;--soft:#1f2028}}
 *{box-sizing:border-box}
@@ -758,17 +760,26 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 .halt a{color:var(--a);text-decoration:none;font-size:13px}.halt a:hover{text-decoration:underline}
 .ro-ctl{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px}
 .ro-tag{margin-left:6px;font-size:11px;padding:1px 6px;border-radius:6px;background:var(--soft);color:var(--muted)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:-8px 0 24px;padding:5px;border:1px solid var(--bd);border-radius:12px;background:var(--card)}
+.tabs a{padding:7px 11px;border-radius:8px;color:var(--muted);text-decoration:none;font-weight:600;font-size:13px}
+.tabs a:hover{color:var(--fg);background:var(--soft)}.tabs a[aria-current=page]{color:#fff;background:var(--a)}
 /* [hidden] alone loses to .mint's display:flex, so state it outright. */
 [hidden]{display:none!important}.langpick{display:inline-flex;gap:0;border:1px solid var(--bd);border-radius:7px;overflow:hidden}.langpick button{font:inherit;font-size:12px;padding:3px 8px;border:0;background:transparent;color:var(--muted);cursor:pointer;width:auto;margin:0}.langpick button.on{background:var(--a);color:#fff}</style></head>
 <body>
-<div class="top"><h1>{{t $.Lang "后台概览"}}</h1>
+<div class="top"><h1>{{if eq .Section "users"}}{{t $.Lang "用户"}}{{else if eq .Section "fleet"}}{{t $.Lang "机队"}}{{else}}{{t $.Lang "后台概览"}}{{end}}</h1>
 <div style="display:flex;gap:12px;align-items:center">
 <form method="post" action="/admin/lang" class="langpick"><button type="submit" name="l" value="zh"{{if ne $.Lang "en"}} class="on" aria-current="true"{{end}}>中文</button><button type="submit" name="l" value="en"{{if eq $.Lang "en"}} class="on" aria-current="true"{{end}}>EN</button></form>
-<a href="/admin/version-policy" style="color:var(--a);text-decoration:none">{{t $.Lang "版本策略"}}</a>
-<a href="/admin/audit" style="color:var(--a);text-decoration:none">{{t $.Lang "审计日志"}}</a>
 <form method="post" action="/admin/logout"><button type="submit">{{t $.Lang "退出"}}</button></form>
 </div></div>
+<nav class="tabs" aria-label="Relayium Admin">
+<a href="/admin"{{if eq .Section "overview"}} aria-current="page"{{end}}>{{t $.Lang "后台概览"}}</a>
+<a href="/admin/users"{{if eq .Section "users"}} aria-current="page"{{end}}>{{t $.Lang "用户"}}</a>
+<a href="/admin/fleet"{{if eq .Section "fleet"}} aria-current="page"{{end}}>{{t $.Lang "机队"}}</a>
+<a href="/admin/version-policy">{{t $.Lang "版本策略"}}</a>
+<a href="/admin/audit">{{t $.Lang "审计日志"}}</a>
+</nav>
 
+{{if eq .Section "fleet"}}
 {{with .ReleaseNotice}}
 {{if .Enabled}}
 {{if .Show}}
@@ -810,7 +821,9 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 {{end}}
 </section>
 {{end}}
+{{end}}
 
+{{if eq .Section "overview"}}
 <section class="cards">
 <div class="card"><div class="n">{{.Metrics.TotalUsers}}</div><div class="l">{{t $.Lang "总用户数"}}</div></div>
 <div class="card"><div class="n">{{.Metrics.ActiveStoredFiles}}</div><div class="l">{{t $.Lang "未过期暂存文件"}}</div></div>
@@ -820,9 +833,11 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <div class="card"><div class="n">{{bytes .Metrics.RelayBytes}}</div><div class="l">{{t $.Lang "中继 ·"}} {{period .Period}}</div></div>
 <div class="card"><div class="n">{{bytes .CentralStoredBytes}}</div><div class="l">{{t $.Lang "中央本地存储"}}{{if .Settings.DisableCentralFallback}}{{t $.Lang "（已关闭兜底）"}}{{end}}</div></div>
 </section>
+{{end}}
 
+{{if eq .Section "fleet"}}
 <section class="nodes">
-<h2>{{t $.Lang "官方节点（"}}{{.FleetNodeCount}}）</h2>
+<h2>{{t $.Lang "官方节点（"}}{{.FleetNodeCount}}{{if eq $.Lang "en"}}){{else}}）{{end}}</h2>
 
 {{if .MintedToken}}
 <div class="minted">
@@ -899,16 +914,9 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <h2>{{t $.Lang "自带节点（用户机器）"}}</h2>
 <p class="sub">{{if .ByoErr}}{{t $.Lang "查询失败"}}{{else}}{{if .ByoSearch}}{{t $.Lang "匹配："}}"{{.ByoSearch}}" · {{end}}{{t $.Lang "共"}} {{.ByoNodeCount}} · {{t $.Lang "第"}} {{.ByoPage}}/{{.ByoTotalPages}}{{end}}</p>
 <p class="byo-warn">{{t $.Lang "这些不是我们的机器，是用户贡献的。排空/标记已移除只影响"}}<b>{{t $.Lang "该用户自己的"}}</b>{{t $.Lang "放置池与直连下载，机器本身仍在用户手里运行；先看清"}}"{{t $.Lang "剩余文件"}}"{{t $.Lang "再动手，节点上的文件没有副本。"}}</p>
-{{/* 搜索是 GET（安全方法，不带 CSRF token，和用户列表的搜索一致）。隐藏字段把
-     用户列表自己的 q/sort/dir/period **和页码 page** 原样带过去：两张表各自分
-     页，提交节点表的搜索绝不能把用户列表的搜索、排序和页码清掉。这里刻意不带
-     bp/brp——换了搜索词，旧的页码没有意义，两个自带节点小节都回到第 1 页。 */}}
-<form method="get" action="/admin" class="byo-search">
-<input type="hidden" name="q" value="{{.Search}}">
-<input type="hidden" name="sort" value="{{.Sort}}">
-<input type="hidden" name="dir" value="{{.Dir}}">
-<input type="hidden" name="period" value="{{.Period}}">
-<input type="hidden" name="page" value="{{.Page}}">
+{{/* 搜索是 GET（安全方法，不带 CSRF token）。用户列表已经属于独立路由，机队
+     表单不携带它的 q/sort/dir/period/page；换搜索词时两个 BYO 页码也都归 1。 */}}
+<form method="get" action="/admin/fleet" class="byo-search">
 <input type="search" name="bq" value="{{.ByoSearch}}" placeholder="{{t $.Lang "搜索：节点 ID / 用户邮箱 / 备注名 / 区域"}}" maxlength="200" style="width:300px">
 <button type="submit">{{t $.Lang "搜索"}}</button>
 {{if .ByoSearch}}<a href="{{.ByoClearHref}}">{{t $.Lang "清除"}}</a>{{end}}
@@ -1004,7 +1012,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 
 <section class="nodes">
 {{if .FleetTokens}}
-<h2>{{t $.Lang "活跃节点 Token（"}}{{len .FleetTokens}}）</h2>
+<h2>{{t $.Lang "活跃节点 Token（"}}{{len .FleetTokens}}{{if eq $.Lang "en"}}){{else}}）{{end}}</h2>
 <table>
 <thead><tr><th>{{t $.Lang "备注名"}}</th><th>{{t $.Lang "创建时间(UTC)"}}</th><th>{{t $.Lang "最后使用"}}</th><th>{{t $.Lang "绑定节点"}}</th><th></th></tr></thead>
 <tbody>
@@ -1026,9 +1034,11 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 {{template "rolloutPanel" .RolloutFleet}}
 {{template "rolloutPanel" .RolloutByo}}
 </section>
+{{end}}
 
+{{if eq .Section "users"}}
 <section class="plans">
-<h2>{{t $.Lang "套餐（"}}{{len .Plans}}）</h2>
+<h2>{{t $.Lang "套餐（"}}{{len .Plans}}{{if eq $.Lang "en"}}){{else}}）{{end}}</h2>
 <table>
 <thead><tr><th>ID</th><th>{{t $.Lang "名称"}}</th><th>{{t $.Lang "存储(MB)"}}</th><th>{{t $.Lang "流量(GB/月)"}}</th><th>{{t $.Lang "暂存天数"}}</th><th>{{t $.Lang "每日额度(MiB)"}}</th><th>{{t $.Lang "月付(分)"}}</th><th>{{t $.Lang "年付(分)"}}</th><th>{{t $.Lang "排序"}}</th><th>{{t $.Lang "启用"}}</th><th>{{t $.Lang "Stripe 月付价格ID"}}</th><th>{{t $.Lang "Stripe 年付价格ID"}}</th><th></th></tr></thead>
 <tbody>
@@ -1083,7 +1093,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 </section>
 
 <section class="apple-products">
-<h2>{{t $.Lang "App Store 商品目录"}}{{if not .AppleProductsErr}}（{{len .AppleProducts}}）{{end}}</h2>
+<h2>{{t $.Lang "App Store 商品目录"}}{{if not .AppleProductsErr}}{{if eq $.Lang "en"}} ({{len .AppleProducts}}){{else}}（{{len .AppleProducts}}）{{end}}{{end}}</h2>
 <p class="apple-note">{{t $.Lang "决定「哪个 App Store 商品对应哪个套餐」。这张表不会打开购买校验：校验器由服务器启动时的配置文件决定，没有配置时购买接口一律返回 503，这里写什么都一样。「生效中」只表示映射本身和套餐都在售。"}}</p>
 {{/* 读取失败时，这一节除了那句错误提示什么都不渲染 —— 表格和"新增映射"表单
      都在 else 里。少渲染一张表是显而易见的；少渲染新增表单才是这里的重点：
@@ -1147,7 +1157,9 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 </form>
 {{end}}
 </section>
+{{end}}
 
+{{if eq .Section "fleet"}}
 <section class="settings">
 <h2>{{t $.Lang "暂存传输设置"}}</h2>
 <form method="post" action="/admin/settings" class="grid">
@@ -1168,9 +1180,11 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <button type="submit">{{t $.Lang "保存设置"}}</button>
 </form>
 </section>
+{{end}}
 
+{{if eq .Section "overview"}}
 <section class="passkeys">
-<h2>{{t $.Lang "Passkey 登录"}}{{if not .PasskeysErr}}（{{len .Passkeys}}）{{end}}</h2>
+<h2>{{t $.Lang "Passkey 登录"}}{{if not .PasskeysErr}}{{if eq $.Lang "en"}} ({{len .Passkeys}}){{else}}（{{len .Passkeys}}）{{end}}{{end}}</h2>
 {{if .PasskeysErr}}
 <p class="err">{{t $.Lang "凭据列表读取失败，请查看服务端日志"}}</p>
 {{else}}
@@ -1257,9 +1271,11 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 })();
 </script>
 </section>
+{{end}}
 
+{{if eq .Section "users"}}
 <div class="top"><h2>{{t $.Lang "用量月份"}}</h2>
-<form method="get" action="/admin" class="search">
+<form method="get" action="/admin/users" class="search">
 <input type="hidden" name="q" value="{{.Search}}"><input type="hidden" name="sort" value="{{.Sort}}"><input type="hidden" name="dir" value="{{.Dir}}">
 <select name="period" onchange="this.form.submit()">
 {{$sel := .Period}}{{range .Months}}<option value="{{.}}"{{if eq . $sel}} selected{{end}}>{{period .}}</option>{{end}}
@@ -1267,8 +1283,8 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <noscript><button type="submit">{{t $.Lang "切换"}}</button></noscript>
 </form></div>
 
-<div class="top"><h2>{{t $.Lang "注册用户（"}}{{.Total}}）</h2>
-<form method="get" action="/admin" class="search">
+<div class="top"><h2>{{t $.Lang "注册用户（"}}{{.Total}}{{if eq $.Lang "en"}}){{else}}）{{end}}</h2>
+<form method="get" action="/admin/users" class="search">
 <input type="text" name="q" value="{{.Search}}" placeholder="{{t $.Lang "搜索邮箱或显示名"}}">
 <input type="hidden" name="sort" value="{{.Sort}}"><input type="hidden" name="dir" value="{{.Dir}}"><input type="hidden" name="period" value="{{.Period}}">
 <button type="submit">{{t $.Lang "搜索"}}</button>
@@ -1311,6 +1327,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <span>{{t $.Lang "第"}} {{.Page}} / {{.TotalPages}} {{t $.Lang "页"}}</span>
 {{if .NextHref}}<a href="{{.NextHref}}">{{t $.Lang "下一页 →"}}</a>{{else}}<span class="off">{{t $.Lang "下一页 →"}}</span>{{end}}
 </div>
+{{end}}
 </body></html>`))
 
 // adminAuditRow is one audit_audit row, pre-formatted for display. Formatting
@@ -1360,9 +1377,10 @@ tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:var(--soft)}
 .pager{display:flex;gap:16px;align-items:center;margin:18px 0}
 .pager a{color:var(--a);text-decoration:none}.pager a:hover{text-decoration:underline}
 .pager .off{color:var(--muted);opacity:.55}
-:focus-visible{outline:2px solid var(--a);outline-offset:2px}.langpick{display:inline-flex;gap:0;border:1px solid var(--bd);border-radius:7px;overflow:hidden}.langpick button{font:inherit;font-size:12px;padding:3px 8px;border:0;background:transparent;color:var(--muted);cursor:pointer;width:auto;margin:0}.langpick button.on{background:var(--a);color:#fff}</style></head>
+:focus-visible{outline:2px solid var(--a);outline-offset:2px}.langpick{display:inline-flex;gap:0;border:1px solid var(--bd);border-radius:7px;overflow:hidden}.langpick button{font:inherit;font-size:12px;padding:3px 8px;border:0;background:transparent;color:var(--muted);cursor:pointer;width:auto;margin:0}.langpick button.on{background:var(--a);color:#fff}.tabs{display:flex;gap:12px;flex-wrap:wrap;margin:0 0 22px}.tabs a{color:var(--muted);text-decoration:none;font-weight:600}.tabs a[aria-current=page]{color:var(--a)}</style></head>
 <body>
-<div class="top"><h1>{{t $.Lang "审计日志"}}</h1><div style="display:flex;gap:12px;align-items:center"><form method="post" action="/admin/lang" class="langpick"><button type="submit" name="l" value="zh"{{if ne $.Lang "en"}} class="on" aria-current="true"{{end}}>中文</button><button type="submit" name="l" value="en"{{if eq $.Lang "en"}} class="on" aria-current="true"{{end}}>EN</button></form><a href="/admin">{{t $.Lang "← 返回后台"}}</a></div></div>
+<div class="top"><h1>{{t $.Lang "审计日志"}}</h1><form method="post" action="/admin/lang" class="langpick"><button type="submit" name="l" value="zh"{{if ne $.Lang "en"}} class="on" aria-current="true"{{end}}>中文</button><button type="submit" name="l" value="en"{{if eq $.Lang "en"}} class="on" aria-current="true"{{end}}>EN</button></form></div>
+<nav class="tabs" aria-label="Relayium Admin"><a href="/admin">{{t $.Lang "后台概览"}}</a><a href="/admin/users">{{t $.Lang "用户"}}</a><a href="/admin/fleet">{{t $.Lang "机队"}}</a><a href="/admin/version-policy">{{t $.Lang "版本策略"}}</a><a href="/admin/audit" aria-current="page">{{t $.Lang "审计日志"}}</a></nav>
 
 <form method="get" action="/admin/audit" class="filter">
 <select name="action" onchange="this.form.submit()">

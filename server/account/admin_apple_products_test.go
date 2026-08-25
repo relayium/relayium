@@ -690,7 +690,7 @@ func TestAppleCatalogDashboardRendersBrokenRows(t *testing.T) {
 	mustPlan(t, store, Plan{ID: "max", Name: "Max", Active: false, UpdatedAt: 2})
 	seedOrphanAppleProduct(t, store, "com.relayium.ios", "gone.monthly", "vanished")
 
-	body := getAdminHome(t, ts, cookie)
+	body := getAdminPathHTML(t, ts, ts.URL, "/admin/users", cookie)
 	for _, want := range []string{
 		"legacy.yearly", "max.monthly", "gone.monthly", // every row is reachable
 		"已停用",          // retired
@@ -717,7 +717,7 @@ func TestAppleCatalogBrokenRowKeepsItsOwnTierSelected(t *testing.T) {
 	cookie := adminLoginCookie(t, ts)
 	seedOrphanAppleProduct(t, store, "com.relayium.ios", "gone.monthly", "vanished")
 
-	body := getAdminHome(t, ts, cookie)
+	body := getAdminPathHTML(t, ts, ts.URL, "/admin/users", cookie)
 	if !strings.Contains(body, `<option value="vanished" selected>vanished`) {
 		t.Errorf("the broken row's own tier is not the selected option; a save would repoint it:\n%s",
 			appleSection(body))
@@ -751,7 +751,7 @@ func TestAppleCatalogReadFailureIsNotRenderedAsEmpty(t *testing.T) {
 		t.Fatalf("drop table: %v", err)
 	}
 
-	body := getAdminHome(t, ts, cookie)
+	body := getAdminPathHTML(t, ts, ts.URL, "/admin/users", cookie)
 	if !strings.Contains(body, "商品目录读取失败") {
 		t.Error("a failed catalog read does not surface as an error on the dashboard")
 	}
@@ -760,7 +760,7 @@ func TestAppleCatalogReadFailureIsNotRenderedAsEmpty(t *testing.T) {
 	}
 	// The rest of the dashboard still renders: one broken read must not take
 	// down the console an operator is using to diagnose it.
-	if !strings.Contains(body, "暂存传输设置") {
+	if !strings.Contains(body, "注册用户（") {
 		t.Error("a failed catalog read took the rest of the dashboard with it")
 	}
 }
@@ -806,7 +806,7 @@ func TestAppleCatalogReadFailureOffersNoWriteForm(t *testing.T) {
 		t.Fatalf("drop table: %v", err)
 	}
 
-	body := getAdminHome(t, ts, cookie)
+	body := getAdminPathHTML(t, ts, ts.URL, "/admin/users", cookie)
 	sec := appleSection(body)
 	if !strings.Contains(sec, "商品目录读取失败") {
 		t.Fatalf("precondition: the section should be in its read-failure state:\n%s", sec)
