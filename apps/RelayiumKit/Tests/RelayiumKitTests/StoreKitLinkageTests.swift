@@ -139,15 +139,47 @@ final class StoreKitLinkageTests: XCTestCase {
                                "\(path) names the adapter module outside an App Store app seam")
             }
         }
-        // And both exempt files really assemble the real adapter.
+        // And both exempt files really assemble the real adapter. AppKit must
+        // provide a confirmation window; iOS keeps the platform-default path.
         let shippable = try everyShippableSource()
         for moduleImporter in moduleImporters {
             let seam = try XCTUnwrap(shippable.first { $0.path == moduleImporter },
                                      "the App Store app seam is gone: \(moduleImporter)")
             XCTAssertTrue(seam.code.contains("import RelayiumStoreKit"))
-            XCTAssertTrue(seam.code.contains("StoreKitSubscriptionStore()"),
-                          "\(moduleImporter) no longer builds the real store")
         }
+        let mac = try XCTUnwrap(shippable.first {
+            $0.path == "mac/Relayium/Distribution/AppStoreDistribution.swift"
+        })
+        XCTAssertTrue(mac.code.contains("StoreKitSubscriptionStore(purchaseWindow:"),
+                      "the AppKit store is not given a confirmation window")
+        let ios = try XCTUnwrap(shippable.first {
+            $0.path == "ios/Relayium/AppleSubscriptions.swift"
+        })
+        XCTAssertTrue(ios.code.contains("StoreKitSubscriptionStore()"),
+                      "the iOS app no longer builds the platform-default store")
+    }
+
+    func testMacOSPurchasesUseTheWindowBoundStoreKitAPI() throws {
+        let adapter = try String(contentsOf: try adapterRoot.appendingPathComponent(
+            "StoreKitSubscriptionStore.swift"), encoding: .utf8)
+        XCTAssertTrue(adapter.contains("#available(macOS 15.2, *)"),
+                      "the window-bound API lacks its deployment-target fallback")
+        XCTAssertTrue(adapter.contains("product.purchase(confirmIn: window, options: options)"),
+                      "the AppKit purchase is no longer confirmed in its window")
+        XCTAssertTrue(adapter.contains("product.purchase(options: options)"),
+                      "macOS 13–15.1 or another supported platform has no fallback")
+
+        let mac = try String(contentsOf: try macRoot.appendingPathComponent(
+            "Relayium/Distribution/AppStoreDistribution.swift"), encoding: .utf8)
+        for anchor in ["NSApp.keyWindow", "NSApp.mainWindow", "NSApp.orderedWindows"] {
+            XCTAssertTrue(mac.contains(anchor), "the AppKit window provider lost \(anchor)")
+        }
+        let ios = try String(contentsOf: try iosRoot.appendingPathComponent(
+            "Relayium/AppleSubscriptions.swift"), encoding: .utf8)
+        XCTAssertFalse(ios.contains("purchaseWindow"),
+                       "the AppKit presentation contract leaked into iOS")
+        XCTAssertFalse(ios.contains("NSWindow"),
+                       "the iOS purchase path names an AppKit window")
     }
 
     /// The seam the rest of the app talks to names no store type at all — which

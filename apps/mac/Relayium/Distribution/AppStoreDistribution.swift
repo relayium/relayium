@@ -1,4 +1,5 @@
 import AuthenticationServices
+import AppKit
 import RelayiumAppKit
 import RelayiumKit
 import RelayiumStoreKit
@@ -72,7 +73,10 @@ enum AppDistribution {
         let continuation = AppEnvironment.makeApplePurchaseContinuation()
         let outcomeJournal = FileApplePurchaseOutcomeJournal()
         return AppleSubscriptionModel(
-            store: StoreKitSubscriptionStore(),
+            store: StoreKitSubscriptionStore(purchaseWindow: {
+                NSApp.keyWindow ?? NSApp.mainWindow ??
+                    NSApp.orderedWindows.first(where: { $0.isVisible && $0.canBecomeKey })
+            }),
             billing: AppEnvironment.makeAppleBillingService(),
             bundleID: bundleID,
             bearer: bearer,

@@ -1,5 +1,8 @@
 import Foundation
 import RelayiumAppKit
+#if os(macOS)
+import AppKit
+#endif
 // **The only `import StoreKit` in this repository, and the only one there may
 // be.** `StoreKitBoundaryTests` reads every Swift source under `apps/` and fails
 // if the framework is named anywhere outside this target, and it reads both
@@ -61,7 +64,16 @@ public actor StoreKitSubscriptionStore: SubscriptionStore {
     /// the id was minted from.
     private var delivered: [UInt64: Transaction] = [:]
 
+#if os(macOS)
+    public typealias PurchaseWindowProvider = @MainActor @Sendable () -> NSWindow?
+    nonisolated private let purchaseWindow: PurchaseWindowProvider
+
+    public init(purchaseWindow: @escaping PurchaseWindowProvider = { nil }) {
+        self.purchaseWindow = purchaseWindow
+    }
+#else
     public init() {}
+#endif
 
     // MARK: - catalog
 
@@ -94,7 +106,12 @@ public actor StoreKitSubscriptionStore: SubscriptionStore {
         // Relayium's server minted for the authenticated account, and it is what
         // the server later reads out of Apple's signed payload to decide whose
         // purchase this is.
-        let result = try await product.purchase(options: [.appAccountToken(appAccountToken)])
+        let options: Set<Product.PurchaseOption> = [.appAccountToken(appAccountToken)]
+#if os(macOS)
+        let result = try await purchase(product: product, options: options)
+#else
+        let result = try await product.purchase(options: options)
+#endif
         switch result {
         case .success(let verification):
             return .delivered(await record(verification))
@@ -106,6 +123,23 @@ public actor StoreKitSubscriptionStore: SubscriptionStore {
             throw StoreKitStoreError.unknownPurchaseResult
         }
     }
+
+#if os(macOS)
+    /// Keep the non-Sendable AppKit window entirely on MainActor. StoreKit's
+    /// window-bound overload arrived in macOS 15.2; Relayium's macOS 13–15.1
+    /// users retain the API their systems provide. A missing window falls back
+    /// rather than throwing after the server has already armed the purchase.
+    @MainActor
+    private func purchase(
+        product: Product,
+        options: Set<Product.PurchaseOption>
+    ) async throws -> Product.PurchaseResult {
+        if #available(macOS 15.2, *), let window = purchaseWindow() {
+            return try await product.purchase(confirmIn: window, options: options)
+        }
+        return try await product.purchase(options: options)
+    }
+#endif
 
     // MARK: - restoring and ongoing deliveries
 
