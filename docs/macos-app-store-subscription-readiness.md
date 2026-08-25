@@ -26,8 +26,11 @@ for the other.
 
 - A production App Store model with no durable continuation capability refuses
   before catalog dispatch or StoreKit purchase.
-- Cancellation reports `userCancelled`, releases only the matching arm, and a
-  second purchase can obtain a fresh arm.
+- Cancellation reports `userCancelled` whether StoreKit returns
+  `PurchaseResult.userCancelled` or the macOS purchase API throws the exact
+  typed `StoreKitError.userCancelled`. Only those explicit Apple cancellation
+  signals release the matching arm; every other thrown or unknown result stays
+  locked, and a second purchase can obtain a fresh arm only after cancellation.
 - Pending, thrown, successful, lost-response, crash, restore, live-update, and
   unfinished-transaction paths finish only a server-accepted transaction.
 - Duplicate and out-of-order transaction/notification delivery is idempotent.
@@ -73,12 +76,44 @@ server entitlement for every case.
 - Alerts cover notification verification failure, pending/unattributed
   notifications, catalog mismatch, reconciliation failure, billing incidents,
   and legacy recovery actions.
-- The evidence-bound legacy recovery command is deployed before enabling the
-  new version, but is never used as an automatic retry mechanism.
+- The evidence-bound Apple attempt recovery command is deployed before enabling
+  the new version, but is never used as an automatic retry mechanism. A
+  `locked_failed_continuation` recovery is restricted to owner-controlled
+  pre-1.3.6 internal test accounts with directly observed cancellation and uses
+  the separately reviewed operator runbook.
 - Rollback keeps transaction intake, notifications, restoration, and
   reconciliation online even if new purchase dispatch is paused. After build 23
   reaches any tester, do not roll the server back to a version that rejects
   `continuationProtocol`; pause new dispatch or roll forward instead.
+
+## macOS 1.3.6 internal-only gate
+
+Build 24 corrects the macOS thrown-cancellation shape and may be distributed to
+internal TestFlight testers after the server and client gates pass. Before that
+candidate is considered accepted, run a fixed-binary Sandbox test on a clean
+Relayium account: cancel one purchase, verify the UI returns to an idle state,
+then select the same product again and verify a second StoreKit sheet opens.
+
+This acceptance passed on 2026-08-25 with the development-signed App Store build
+24: Plus Monthly opened, explicit Cancel returned all subscription controls to
+idle, the same Plus Monthly selection opened a second Sandbox sheet, and the
+second Cancel again returned to idle. Each server outcome response was
+`resumable: true`; no transaction was completed and the account remained Free.
+
+Do not submit 1.3.6 for public Mac App Store review until both remaining
+fail-closed lockout designs have been implemented and independently reviewed:
+
+- an already-locked local Keychain continuation must be able to reconcile an
+  operator-resolved server attempt without broad or automatic capability
+  deletion;
+- a product lookup or other provably pre-sheet failure must not be recorded as
+  an ambiguous post-sheet failure that permanently locks the attempt.
+
+These are availability risks, not duplicate-charge relaxations. Until their
+protocol is designed, ambiguous outcomes remain locked and internal affected
+accounts use only the evidence-gated operator procedure. Cancellation of the
+App Store credential dialog during Restore Purchases is a separate UI-only
+truthfulness issue: it arms no purchase and changes no billing state.
 
 ## Renewal intent and current transaction authority
 

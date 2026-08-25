@@ -21,6 +21,9 @@ type AppleLegacyPurchaseRecoveryEvidence struct {
 	ProductID            string   `json:"productId"`
 	AttemptState         string   `json:"attemptState"`
 	ContinuationState    string   `json:"continuationState"`
+	RecoveryShape        string   `json:"recoveryShape"`
+	AppInstanceBound     bool     `json:"appInstanceBound"`
+	ArmBound             bool     `json:"armBound"`
 	AuthorityEnvironment string   `json:"authorityEnvironment"`
 	AuthorityEpoch       int64    `json:"authorityEpoch"`
 	SubjectCount         int      `json:"subjectCount"`
@@ -48,9 +51,10 @@ func loadAppleLegacyPurchaseRecoveryEvidence(ctx context.Context, q appleLegacyR
 	}
 
 	var out AppleLegacyPurchaseRecoveryEvidence
-	var provider, authorityScope, authorityToken, planID, planSource, appInstanceID, clientOutcome string
+	var provider, authorityScope, authorityToken, planID, planSource, appInstanceID, clientOutcome, armRequestID string
+	var verifierBytes int
 	err := q.QueryRowContext(ctx, `SELECT a.id,a.user_id,a.external_scope,a.product_id,a.state,
- a.continuation_state,a.app_instance_id,a.client_outcome,a.apple_account_token,a.epoch,
+ a.continuation_state,a.app_instance_id,a.client_outcome,a.arm_request_id,length(a.continuation_verifier),a.apple_account_token,a.epoch,
  ba.provider,ba.external_scope,ba.apple_environment,ba.apple_account_token,ba.intent_id,
  ba.created_at,ba.updated_at,u.plan_id,u.plan_source
  FROM billing_purchase_attempts a
@@ -61,7 +65,7 @@ func loadAppleLegacyPurchaseRecoveryEvidence(ctx context.Context, q appleLegacyR
  ORDER BY CASE WHEN a.id=? THEN 0 ELSE 1 END,a.created_at DESC
  LIMIT 1`, ProviderApple, selector, selector, selector).Scan(
 		&out.AttemptID, &out.userID, &out.BundleID, &out.ProductID, &out.AttemptState,
-		&out.ContinuationState, &appInstanceID, &clientOutcome, &out.attemptToken, &out.AuthorityEpoch,
+		&out.ContinuationState, &appInstanceID, &clientOutcome, &armRequestID, &verifierBytes, &out.attemptToken, &out.AuthorityEpoch,
 		&provider, &authorityScope, &out.AuthorityEnvironment, &authorityToken, &out.authority.IntentID,
 		&out.authority.CreatedAt, &out.authority.UpdatedAt, &planID, &planSource)
 	if err != nil {
@@ -73,6 +77,21 @@ func loadAppleLegacyPurchaseRecoveryEvidence(ctx context.Context, q appleLegacyR
 	out.authority.AppleEnvironment = out.AuthorityEnvironment
 	out.authority.AppleAccountToken = authorityToken
 	out.authority.Epoch = out.AuthorityEpoch
+	out.AppInstanceBound = appInstanceID != ""
+	out.ArmBound = armRequestID != ""
+	legacyOneShot := out.ContinuationState == appleContinuationLegacy &&
+		appInstanceID == "" && clientOutcome == "" && armRequestID == "" && verifierBytes == 0
+	lockedFailedContinuation := out.ContinuationState == appleContinuationLocked &&
+		appInstanceID != "" && clientOutcome == appleOutcomeFailed &&
+		armRequestID != "" && verifierBytes == sha256.Size
+	switch {
+	case legacyOneShot:
+		out.RecoveryShape = "legacy_one_shot"
+	case lockedFailedContinuation:
+		out.RecoveryShape = "locked_failed_continuation"
+	default:
+		out.RecoveryShape = "unsupported"
+	}
 
 	var exactSubjects, subjectWithEnvironment, deletedSubjects int
 	if err := q.QueryRowContext(ctx, `SELECT count(*),
@@ -102,7 +121,7 @@ func loadAppleLegacyPurchaseRecoveryEvidence(ctx context.Context, q appleLegacyR
 		}
 	}
 	addBlocker(out.AttemptState != "dispatched", "attempt_not_dispatched")
-	addBlocker(out.ContinuationState != "" || appInstanceID != "" || clientOutcome != "", "not_legacy_one_shot")
+	addBlocker(!legacyOneShot && !lockedFailedContinuation, "unsupported_recovery_shape")
 	addBlocker(provider != ProviderApple || authorityScope != out.BundleID, "authority_mismatch")
 	addBlocker(out.AuthorityEnvironment != "", "verified_environment_present")
 	addBlocker(out.attemptToken == "" || out.SubjectCount != 1 || exactSubjects != 1 || subjectWithEnvironment != 0 || deletedSubjects != 0, "attribution_subject_not_pristine")
@@ -145,13 +164,16 @@ func ListAppleLegacyPurchaseRecoveryEvidence(ctx context.Context, store *SQLiteS
 type AppleLegacyPurchaseRecoveryResult struct {
 	AttemptID string
 	Epoch     int64
+	Shape     string
 }
 
-// ReleaseAppleLegacyPurchase is an owner-audited escape hatch for attempts made
-// by pre-continuation clients. Apple exposes no lookup by appAccountToken, so the
-// absence of a transaction can never be inferred from time. This operation is
-// intentionally manual, evidence-bound, and preserves both the attempt ledger
-// and its attribution subject for any transaction that arrives later.
+// ReleaseAppleLegacyPurchase is an owner-audited escape hatch for either a
+// pre-continuation attempt or a continuation attempt that an affected client
+// explicitly misreported as failed after StoreKit threw userCancelled. Apple
+// exposes no lookup by appAccountToken, so the absence of a transaction can
+// never be inferred from time. This operation is intentionally manual,
+// evidence-bound, and preserves both the attempt ledger and its attribution
+// subject for any transaction that arrives later.
 func ReleaseAppleLegacyPurchase(ctx context.Context, store *SQLiteStore, selector, actor, reason, expectedDigest string) (AppleLegacyPurchaseRecoveryResult, error) {
 	if store == nil {
 		return AppleLegacyPurchaseRecoveryResult{}, errors.New("account: Apple legacy purchase recovery store is unavailable")
@@ -194,8 +216,12 @@ func ReleaseAppleLegacyPurchase(ctx context.Context, store *SQLiteStore, selecto
 
 	res, err := tx.ExecContext(ctx, `UPDATE billing_purchase_attempts SET state='resolved'
  WHERE id=? AND user_id=? AND provider=? AND epoch=? AND state='dispatched'
-   AND continuation_state='' AND app_instance_id='' AND client_outcome=''`,
-		evidence.AttemptID, evidence.userID, ProviderApple, evidence.AuthorityEpoch)
+   AND ((continuation_state='' AND app_instance_id='' AND client_outcome=''
+         AND arm_request_id='' AND length(continuation_verifier)=0)
+		OR (continuation_state='locked' AND app_instance_id<>'' AND client_outcome='failed'
+		    AND arm_request_id<>'' AND length(continuation_verifier)=?))`,
+		evidence.AttemptID, evidence.userID, ProviderApple, evidence.AuthorityEpoch,
+		sha256.Size)
 	if err != nil {
 		return AppleLegacyPurchaseRecoveryResult{}, err
 	}
@@ -211,6 +237,7 @@ func ReleaseAppleLegacyPurchase(ctx context.Context, store *SQLiteStore, selecto
 	}
 	changes := encodeChanges([]ChangeField{
 		{Field: "attempt_state", Old: "dispatched", New: "resolved"},
+		{Field: "recovery_shape", Old: "", New: evidence.RecoveryShape},
 		{Field: "authority_epoch", Old: evidence.AuthorityEpoch, New: evidence.AuthorityEpoch + 1},
 		{Field: "evidence_digest", Old: "", New: evidence.Digest},
 		{Field: "reason", Old: "", New: reason},
@@ -223,5 +250,5 @@ func ReleaseAppleLegacyPurchase(ctx context.Context, store *SQLiteStore, selecto
 	if err := tx.Commit(); err != nil {
 		return AppleLegacyPurchaseRecoveryResult{}, err
 	}
-	return AppleLegacyPurchaseRecoveryResult{AttemptID: evidence.AttemptID, Epoch: evidence.AuthorityEpoch + 1}, nil
+	return AppleLegacyPurchaseRecoveryResult{AttemptID: evidence.AttemptID, Epoch: evidence.AuthorityEpoch + 1, Shape: evidence.RecoveryShape}, nil
 }

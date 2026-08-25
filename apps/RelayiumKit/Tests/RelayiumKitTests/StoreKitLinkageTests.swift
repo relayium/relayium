@@ -168,6 +168,8 @@ final class StoreKitLinkageTests: XCTestCase {
                       "the AppKit purchase is no longer confirmed in its window")
         XCTAssertTrue(adapter.contains("product.purchase(options: options)"),
                       "macOS 13–15.1 or another supported platform has no fallback")
+        XCTAssertTrue(adapter.contains("Self.normalizedPurchaseResult"),
+                      "the production purchase path bypasses typed StoreKit cancellation normalization")
 
         let mac = try String(contentsOf: try macRoot.appendingPathComponent(
             "Relayium/Distribution/AppStoreDistribution.swift"), encoding: .utf8)

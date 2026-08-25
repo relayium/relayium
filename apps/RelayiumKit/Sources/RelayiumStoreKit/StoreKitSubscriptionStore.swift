@@ -107,11 +107,13 @@ public actor StoreKitSubscriptionStore: SubscriptionStore {
         // the server later reads out of Apple's signed payload to decide whose
         // purchase this is.
         let options: Set<Product.PurchaseOption> = [.appAccountToken(appAccountToken)]
+        let result = try await Self.normalizedPurchaseResult {
 #if os(macOS)
-        let result = try await purchase(product: product, options: options)
+            try await purchase(product: product, options: options)
 #else
-        let result = try await product.purchase(options: options)
+            try await product.purchase(options: options)
 #endif
+        }
         switch result {
         case .success(let verification):
             return .delivered(await record(verification))
@@ -121,6 +123,22 @@ public actor StoreKitSubscriptionStore: SubscriptionStore {
             return .pending
         @unknown default:
             throw StoreKitStoreError.unknownPurchaseResult
+        }
+    }
+
+    /// StoreKit has two explicit ways to report the same user action. Most
+    /// cancellations arrive as `PurchaseResult.userCancelled`, but the
+    /// window-bound macOS purchase API may instead throw
+    /// `StoreKitError.userCancelled`. Normalize only that typed Apple error.
+    /// Every other thrown error remains ambiguous and must keep propagating so
+    /// the purchase attempt stays locked against a possible later charge.
+    static func normalizedPurchaseResult(
+        _ operation: () async throws -> Product.PurchaseResult
+    ) async throws -> Product.PurchaseResult {
+        do {
+            return try await operation()
+        } catch StoreKitError.userCancelled {
+            return .userCancelled
         }
     }
 
