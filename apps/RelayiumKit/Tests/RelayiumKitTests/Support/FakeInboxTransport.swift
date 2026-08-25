@@ -158,25 +158,24 @@ class FakeInboxTransport: InboxTransport, @unchecked Sendable {
 
         let failAfter = (attempt == blobFailAttempt) ? blobFailAfter : nil
         let chunkSize = blobChunkSize
-        let stream = AsyncThrowingStream<Data, Error> { continuation in
-            var sent = 0
-            var index = tail.startIndex
-            while index < tail.endIndex {
-                if let failAfter, sent >= failAfter {
-                    continuation.finish(throwing: URLError(.networkConnectionLost))
-                    return
-                }
-                let end = tail.index(index, offsetBy: chunkSize, limitedBy: tail.endIndex)
-                    ?? tail.endIndex
-                continuation.yield(Data(tail[index..<end]))
-                sent += tail.distance(from: index, to: end)
-                index = end
+        let stream = BoundedDataStream(highWaterBytes: max(tail.count + 1, 1), lowWaterBytes: 0)
+        var sent = 0
+        var index = tail.startIndex
+        while index < tail.endIndex {
+            if let failAfter, sent >= failAfter {
+                stream.finish(throwing: URLError(.networkConnectionLost))
+                break
             }
-            if let failAfter, sent >= failAfter, failAfter < tail.count {
-                continuation.finish(throwing: URLError(.networkConnectionLost))
-                return
-            }
-            continuation.finish()
+            let end = tail.index(index, offsetBy: chunkSize, limitedBy: tail.endIndex)
+                ?? tail.endIndex
+            stream.yield(Data(tail[index..<end]))
+            sent += tail.distance(from: index, to: end)
+            index = end
+        }
+        if let failAfter, sent >= failAfter, failAfter < tail.count {
+            stream.finish(throwing: URLError(.networkConnectionLost))
+        } else {
+            stream.finish()
         }
         return InboxBlobStream(status: offset > 0 && honoursRange ? 206 : 200,
                                isPartial: offset > 0 && honoursRange,

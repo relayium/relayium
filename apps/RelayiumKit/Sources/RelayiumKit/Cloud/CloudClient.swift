@@ -97,26 +97,40 @@ extension CloudClient {
 
         // 2) stream the blob in Data chunks (follow 302; retry once on a first-attempt 403).
         let blobURL = baseURL.appendingPathComponent("api/files/\(id)/blob")
-        var chunkStream: AsyncThrowingStream<Data, Error>
+        var chunkStream: BoundedDataStream
         var attempt = 0
         while true {
             var request = URLRequest(url: blobURL)
             request.setValue("1", forHTTPHeaderField: "X-Relayium-Direct-Download")
             let (http, stream) = try await streamedChunks(request)
             let code = http.statusCode
-            if code == 403 && attempt == 0 { attempt += 1; continue }
-            if code == 404 { throw CloudError.notFound }
+            if code == 403 && attempt == 0 {
+                stream.cancel()
+                attempt += 1
+                continue
+            }
+            if code == 404 {
+                stream.cancel()
+                throw CloudError.notFound
+            }
             // Only an initial 403 gets the bounded redirect-target retry above.
             // A 429 is surfaced after exactly one blob request.
-            if code == 429 { throw CloudError.downloadLimited }
+            if code == 429 {
+                stream.cancel()
+                throw CloudError.downloadLimited
+            }
             // Every remaining non-200 is the storage or the server in front of
             // it, answered after exactly the requests already made: the replay
             // above is the ONLY one, so a 5xx is surfaced on its first response
             // rather than doubled against a service that is already failing,
             // and a second 403 lands here with its own status.
-            guard code == 200 else { throw CloudError.downloadUnavailable(status: code) }
+            guard code == 200 else {
+                stream.cancel()
+                throw CloudError.downloadUnavailable(status: code)
+            }
             chunkStream = stream; break
         }
+        defer { chunkStream.cancel() }
 
         // 3) decrypt chunk-by-chunk (StoreDecryptor is boundary-independent); end() enforces the expected total.
         let dec = StoreDecryptor(key: key)
@@ -135,13 +149,14 @@ extension CloudClient {
 
     /// Bridges a `URLSessionDataTask` to an async stream of `Data` chunks, resolving with the
     /// `HTTPURLResponse` as soon as headers arrive (before any body is streamed).
-    private func streamedChunks(_ req: URLRequest) async throws -> (HTTPURLResponse, AsyncThrowingStream<Data, Error>) {
+    private func streamedChunks(_ req: URLRequest) async throws -> (HTTPURLResponse, BoundedDataStream) {
         do {
             var delegate: BlobStreamDelegate!
             let http: HTTPURLResponse = try await withCheckedThrowingContinuation { cont in
                 delegate = BlobStreamDelegate(responseCont: cont)
                 let task = session.dataTask(with: req)
                 task.delegate = delegate
+                delegate.stream.attach(task)
                 task.resume()
             }
             return (http, delegate.stream)
@@ -154,15 +169,11 @@ extension CloudClient {
 private final class BlobStreamDelegate: NSObject, URLSessionDataDelegate {
     private let responseCont: CheckedContinuation<HTTPURLResponse, Error>
     private var resumed = false
-    let stream: AsyncThrowingStream<Data, Error>
-    private var streamCont: AsyncThrowingStream<Data, Error>.Continuation!
+    let stream = BoundedDataStream()
 
     init(responseCont: CheckedContinuation<HTTPURLResponse, Error>) {
         self.responseCont = responseCont
-        var c: AsyncThrowingStream<Data, Error>.Continuation!
-        self.stream = AsyncThrowingStream { c = $0 }
         super.init()
-        self.streamCont = c
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
@@ -175,7 +186,7 @@ private final class BlobStreamDelegate: NSObject, URLSessionDataDelegate {
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        streamCont.yield(data)
+        stream.yield(data)
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
@@ -184,9 +195,9 @@ private final class BlobStreamDelegate: NSObject, URLSessionDataDelegate {
             responseCont.resume(throwing: error ?? URLError(.badServerResponse))
         }
         if let error {
-            streamCont.finish(throwing: error)
+            stream.finish(throwing: error)
         } else {
-            streamCont.finish()
+            stream.finish()
         }
     }
 }

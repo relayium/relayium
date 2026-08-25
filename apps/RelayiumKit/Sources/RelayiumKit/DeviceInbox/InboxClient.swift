@@ -30,9 +30,9 @@ public struct InboxBlobStream: Sendable {
     /// A resume answered with a full `200` is NOT a tail, and treating it as one
     /// would splice the start of the object into the middle of the stream.
     public let isPartial: Bool
-    public let chunks: AsyncThrowingStream<Data, Error>
+    public let chunks: BoundedDataStream
 
-    public init(status: Int, isPartial: Bool, chunks: AsyncThrowingStream<Data, Error>) {
+    public init(status: Int, isPartial: Bool, chunks: BoundedDataStream) {
         self.status = status
         self.isPartial = isPartial
         self.chunks = chunks
@@ -378,7 +378,7 @@ public final class InboxClient: InboxTransport, @unchecked Sendable {
         return body.error ?? ""
     }
 
-    private static func errorToken(from stream: AsyncThrowingStream<Data, Error>) async -> String {
+    private static func errorToken(from stream: BoundedDataStream) async -> String {
         var collected = Data()
         do {
             for try await chunk in stream {
@@ -403,7 +403,7 @@ public final class InboxClient: InboxTransport, @unchecked Sendable {
     /// resident process. Deliberately not a blanket `URLSession.timeoutInterval`
     /// either — it would bound the whole request including the streaming body,
     /// killing any transfer slower than the cap mid-stream.
-    private func streamedChunks(_ req: URLRequest) async throws -> (HTTPURLResponse, AsyncThrowingStream<Data, Error>) {
+    private func streamedChunks(_ req: URLRequest) async throws -> (HTTPURLResponse, BoundedDataStream) {
         do {
             var delegate: InboxBlobDelegate!
             let http: HTTPURLResponse = try await withCheckedThrowingContinuation { cont in
@@ -415,7 +415,7 @@ public final class InboxClient: InboxTransport, @unchecked Sendable {
                 // lease, a local write failure or a tampered frame — leaves a
                 // delivery-sized download running to completion in the background,
                 // spending the user's bandwidth on bytes nothing will consume.
-                delegate.cancelOnTermination(task)
+                delegate.stream.attach(task)
                 task.resume()
             }
             return (http, delegate.stream)
@@ -431,23 +431,11 @@ public final class InboxClient: InboxTransport, @unchecked Sendable {
 private final class InboxBlobDelegate: NSObject, URLSessionDataDelegate {
     private let responseCont: CheckedContinuation<HTTPURLResponse, Error>
     private var resumed = false
-    let stream: AsyncThrowingStream<Data, Error>
-    private var streamCont: AsyncThrowingStream<Data, Error>.Continuation!
+    let stream = BoundedDataStream()
 
     init(responseCont: CheckedContinuation<HTTPURLResponse, Error>) {
         self.responseCont = responseCont
-        var c: AsyncThrowingStream<Data, Error>.Continuation!
-        self.stream = AsyncThrowingStream { c = $0 }
         super.init()
-        self.streamCont = c
-    }
-
-    /// Cancel `task` when the stream terminates, however it terminates —
-    /// finished, thrown, or dropped by a caller that stopped reading. Cancelling
-    /// an already-finished task is a no-op, so this costs nothing on the happy
-    /// path.
-    func cancelOnTermination(_ task: URLSessionDataTask) {
-        streamCont.onTermination = { _ in task.cancel() }
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
@@ -460,7 +448,7 @@ private final class InboxBlobDelegate: NSObject, URLSessionDataDelegate {
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        streamCont.yield(data)
+        stream.yield(data)
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
@@ -469,9 +457,9 @@ private final class InboxBlobDelegate: NSObject, URLSessionDataDelegate {
             responseCont.resume(throwing: error ?? URLError(.badServerResponse))
         }
         if let error {
-            streamCont.finish(throwing: error)
+            stream.finish(throwing: error)
         } else {
-            streamCont.finish()
+            stream.finish()
         }
     }
 }

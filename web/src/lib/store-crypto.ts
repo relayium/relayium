@@ -191,11 +191,81 @@ export async function* encryptFiles(files: File[], key: CryptoKey): AsyncGenerat
 // length and make us buffer unbounded memory waiting to "complete" the frame.
 export const MAX_FRAME_CT = STORE_CHUNK_SIZE + 16 + 256;
 
+// A segmented ciphertext queue. Network callbacks commonly split one stored
+// frame across many chunks; rebuilding `old remainder + new data` on every push
+// makes the same remainder move again and again. This queue snapshots each
+// incoming chunk once, then copies only the complete ciphertext frame required
+// by WebCrypto. An incomplete frame remains bounded by MAX_FRAME_CT plus its
+// length prefix; one unusually large network callback may temporarily carry
+// several complete frames until the async generator's consumer drains them.
+class CipherByteQueue {
+  private chunks: Uint8Array[] = [];
+  private headIndex = 0;
+  private headOffset = 0;
+  private total = 0;
+
+  get length(): number { return this.total; }
+
+  push(data: Uint8Array): void {
+    if (data.length === 0) return;
+    // Preserve StoreDecryptor's value semantics: a caller may reuse or mutate
+    // its receive buffer as soon as push() yields.
+    this.chunks.push(data.slice());
+    this.total += data.length;
+  }
+
+  uint32BE(): number {
+    if (this.total < 4) throw new Error("store-crypto: incomplete length prefix");
+    const head = this.chunks[this.headIndex];
+    if (head.length - this.headOffset >= 4) {
+      return new DataView(head.buffer, head.byteOffset + this.headOffset, 4).getUint32(0);
+    }
+    let value = 0;
+    let needed = 4;
+    let chunkIndex = this.headIndex;
+    let offset = this.headOffset;
+    while (needed > 0) {
+      const chunk = this.chunks[chunkIndex++];
+      const take = Math.min(needed, chunk.length - offset);
+      for (let i = 0; i < take; i++) value = value * 256 + chunk[offset + i];
+      needed -= take;
+      offset = 0;
+    }
+    return value;
+  }
+
+  read(length: number): Uint8Array {
+    if (length < 0 || length > this.total) throw new Error("store-crypto: queue underflow");
+    const out = new Uint8Array(length);
+    let written = 0;
+    while (written < length) {
+      const head = this.chunks[this.headIndex];
+      const available = head.length - this.headOffset;
+      const take = Math.min(length - written, available);
+      out.set(head.subarray(this.headOffset, this.headOffset + take), written);
+      written += take;
+      this.headOffset += take;
+      this.total -= take;
+      if (this.headOffset === head.length) {
+        this.headIndex += 1;
+        this.headOffset = 0;
+        // Avoid O(n) Array.shift() on adversarial one-byte fragmentation, but
+        // periodically release consumed segment references.
+        if (this.headIndex >= 32 && this.headIndex * 2 >= this.chunks.length) {
+          this.chunks = this.chunks.slice(this.headIndex);
+          this.headIndex = 0;
+        }
+      }
+    }
+    return out;
+  }
+}
+
 // StoreDecryptor reassembles length-prefixed frames across arbitrary network
 // chunk boundaries and yields decrypted plaintext in order. Throws on tamper.
 export class StoreDecryptor {
   private seq = 1;
-  private buf = new Uint8Array(0);
+  private buf = new CipherByteQueue();
   private plaintextBytes = 0;
   constructor(private key: CryptoKey) {}
 
@@ -205,25 +275,21 @@ export class StoreDecryptor {
   }
 
   async *push(data: Uint8Array): AsyncGenerator<Bytes> {
-    const merged = new Uint8Array(this.buf.length + data.length);
-    merged.set(this.buf, 0);
-    merged.set(data, this.buf.length);
-    let off = 0;
-    while (off + 4 <= merged.length) {
-      const len = new DataView(merged.buffer, merged.byteOffset + off, 4).getUint32(0);
+    this.buf.push(data);
+    while (this.buf.length >= 4) {
+      const len = this.buf.uint32BE();
       // Reject an oversized/garbage length before allocating for it.
       if (len > MAX_FRAME_CT) {
         throw new Error(`store-crypto: frame length ${len} exceeds ${MAX_FRAME_CT}`);
       }
-      if (off + 4 + len > merged.length) break; // frame incomplete; wait for more
-      const ct = merged.slice(off + 4, off + 4 + len) as Bytes;
+      if (this.buf.length < 4 + len) break; // frame incomplete; wait for more
+      this.buf.read(4);
+      const ct = this.buf.read(len) as Bytes;
       const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce(this.seq) }, this.key, ct);
       this.seq++;
-      off += 4 + len;
       this.plaintextBytes += pt.byteLength;
       yield new Uint8Array(pt);
     }
-    this.buf = off < merged.length ? merged.slice(off) : new Uint8Array(0);
   }
 
   // Finalize the stream. Besides rejecting a dangling partial frame, assert the

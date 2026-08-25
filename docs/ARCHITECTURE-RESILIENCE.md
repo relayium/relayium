@@ -36,7 +36,7 @@ survives a split unchanged or gets worse:
 | --- | --- | --- |
 | Mixed-scope, long-lived dirty worktrees | At the 2026-08-21 audit point: **16 registered checkouts in total, 10 of them dirty**. `ios-device-inbox` 144 dirty paths, `ios-0.2.0-alignment` 108, primary checkout 23. | **No.** The same uncommitted work would be spread across more checkouts, in more repos, with no home rule and no archive policy. |
 | Merge to `main` *was* deploy for the central server and web — **closed 2026-08-21** | At the audit point the central deploy, `relayium-ops/deploy/auto-deploy.sh`, ran on a **5-minute cron tracking the product repository's `origin/main`**, so a merged commit reached the production host with no separate promotion decision. It now deploys the commit `relayium-ops/deploy/production-pin` names, and a merge moves nothing (§7). | **No** — and the way it was actually closed is the proof. The fix landed entirely inside `relayium-ops`, with no repository boundary moved. Each repo would still be tracked by a cron on its own `main`: this is a release-pipeline property, not a repository-layout property. |
-| Incomplete language-neutral contract coverage | `compat / wire-vectors` regenerates four fixtures — `realtime-wire-vectors.json`, `store-wire-vectors.json` and, since 2026-08-22, `crypto-vectors.json` and `device-inbox-manifest-v3-vectors.json`. `crypto-vectors.json` was excluded for as long as it had **two authors** (`gen-crypto-vectors.mjs` plus a `textKeys` block pasted from `text-vectors.test.ts`); folding the text-key derivation into the generator gave it a single author, and `check-wire-vectors.mjs` now holds it to the same zero-diff gate. `device-inbox-manifest-v3-vectors.json` joined the same day under a **hybrid** rule, where `gen-device-inbox-manifest-vectors.mjs` owns `accept[].canonical`, `accept[].kind` and `accept[].total` and the refusals, bounds and item lists stay hand-authored. **Now open instead:** capability and error contracts, which have no fixture and no gate at all. | **Made worse.** Today a contract change and both implementations land in one commit that one gate judges. Across repos the same change becomes N commits, N reviews and a version-skew window. |
+| Incomplete language-neutral contract coverage | `compat / wire-vectors` regenerates four fixtures — `realtime-wire-vectors.json`, `store-wire-vectors.json` and, since 2026-08-22, `crypto-vectors.json` and `device-inbox-manifest-v3-vectors.json`. The realtime fixture now also owns the capability handshake: exact Web/native announcements, retry/settle timing, promotion, legacy lane, revocation, downgrade, role and proven-link behavior are independently asserted by TypeScript and Swift. **Now open instead:** error contracts, which still have no fixture and no gate. | **Made worse.** Today a contract change and both implementations land in one commit that one gate judges. Across repos the same change becomes N commits, N reviews and a version-skew window. |
 | Large shared Apple `RelayiumKit` fan-out | 8 source modules; `RelayiumStoreKit → RelayiumAppKit → {RelayiumKit, RelayiumShareKit}`, and any `apps/RelayiumKit/**` change fans out to **both** Apple workflows | **No.** A separate `RelayiumKit` repo converts a compile error into a published-version bump plus a dependency-update PR in two consumers — more steps for the same coupling. |
 
 For a small, effectively single-owner team the monorepo's central property is
@@ -255,10 +255,11 @@ must never blur.
   admission also widened the table's own rule from "the generator is the fixture's
   only author" to "the only author of the fields it owns", which is what the gate
   actually needs;
-- **capability and error contracts — TARGET STATE, not current state.** No
-  generated fixture and no zero-diff gate exists for these today. They are listed
-  here because this is where they belong once built, and a reader must not take
-  their presence in this list as coverage that exists.
+- **capability contract — COMPLETE; error contract — TARGET STATE.** Capability
+  negotiation is generated as the `capability` block of
+  `realtime-wire-vectors.json`, held to the zero-diff gate, and independently
+  asserted by Web and Swift. Error contracts still have no generated fixture or
+  zero-diff coverage.
 
 The gated members of this category are **generated fixtures with a zero-diff
 gate**, expressed once and asserted by every implementation independently. The
@@ -568,8 +569,8 @@ All five items below are **complete**; the count and the enumeration match.
    of its derived fields, and `scripts/test/native-web-pairing-gate-test.mjs` now
    pins that registration by name — in code, not in prose — so it cannot be
    dropped from the table silently. **Nothing about the device-inbox conformance
-   fixtures remains open.** What this does NOT cover is item 12: capability and
-   error contracts still have no fixture and no gate.
+   fixtures remains open.** Capability negotiation subsequently joined the
+   realtime fixture; error contracts remain the open half of item 12.
 9. **Observe required-check enforcement on a real pull request** (§2).
    **CLOSED — every half is now closed by observation rather than derivation.**
 
@@ -665,13 +666,14 @@ All five items below are **complete**; the count and the enumeration match.
 ### P2 — scale-readiness, before Android/Windows arrive
 
 11. **Narrow the Swift dependency graph** along real seams only (§4).
-12. **Build the capability and error contract fixtures** that §4 lists as target
-    state, and put them under the same zero-diff gate. **Still open, and now the
-    only open member of that category** — the wire, crypto and device-inbox
-    fixtures are all gated as of 2026-08-22, so a reader who remembers this
-    category as "mostly ungated" is reading a superseded state.
-13. **A per-platform client minimum-version policy**, so server-side contract
-    evolution has a stated floor per platform instead of an implicit one.
+12. **Build the remaining error contract fixture.** The capability half is
+    complete in `realtime-wire-vectors.json`; errors are now the only open member
+    of this category.
+13. **Per-platform client minimum-version policy — macOS COMPLETE, other future
+    platforms pending.** macOS uses a revisioned, audited server policy bounded
+    to verified release metadata plus client anti-replay, cache and embedded-floor
+    enforcement. A future platform must add its own explicit floor before a
+    server contract can retire its fallback.
 14. **Versioned web artifact and iOS release automation**, so promotion in §7 has
     something immutable to point at.
 
