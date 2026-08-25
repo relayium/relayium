@@ -1,13 +1,12 @@
-# Apple purchase cancellation recovery — server-first design
+# Apple purchase cancellation recovery — versioned client/server design
 
-Status: implemented in this batch (server only). Author: Claude Opus, sole
-source writer under the ACTIVE-WORK "Apple purchase cancellation recovery —
-server-first financial lease". **Not delivered.** Money-moving, so the
-three-party gate applies: gate 1 (author) run; **gate 2 — Codex's independent
-acceptance of the final source bytes — PASSED 2026-08-22**; **gate 3 — the
-mandatory Fable 5 review — has NOT run**, and because the review records were
-subsequently corrected, it must inspect the final **records** as well as the
-final source. Review dispositions are in §10.
+Status: active correction, not delivered. Codex is the sole source author under
+the current ACTIVE-WORK money-moving lease. The historical server batch below
+had earlier reviews, but the present cross-install and macOS 1.3.5 bytes require
+fresh gates: Codex author review is complete; independent Opus and mandatory
+Fable 5 acceptance are pending. No commit, deployment or TestFlight upload is
+claimed by this record. Historical dispositions remain in §10 and do not accept
+the current diff.
 
 ## 1. The defect
 
@@ -45,17 +44,21 @@ Restated, because every rule below follows from it:
 - `appAccountToken` is **attribution only**, never retry authority. Two devices
   signed into two different Apple IDs can both be charged under one opaque
   token, so possession of it can never re-arm a sheet.
-- **Account authentication alone never re-arms.** Being the logged-in owner of
-  the account is necessary and not sufficient.
+- **Account authentication alone never re-arms an armed or ambiguous sheet.**
+  After the exact current arm has durably reported `userCancelled`, the sheet no
+  longer exists and no transaction can emerge from it. At that boundary only,
+  an authenticated app instance may bind its own already-persisted capability
+  in the same atomic transition that opens the next arm.
 - The client's cancellation report is a **capability-authored assertion**, not
   signed provider proof. It is trusted only to release a dispatch the same
   capability holder armed, and never to grant, finish, or price anything.
-- **Residual risk, recorded honestly:** a same-device Apple-ID switch between
-  arming and resuming is not detectable by this design. The capability proves
-  *the same app instance on the same device*, not *the same App Store account*.
-  StoreKit does not expose the signed-in Apple ID, and no server-side artifact
-  distinguishes it. The exposure is bounded to one instance re-opening one sheet
-  it already held authority for; it cannot create a second concurrent authority.
+- **Residual risk, recorded honestly:** the Apple ID behind a new arm is not
+  detectable by this design. StoreKit does not expose the signed-in Apple ID,
+  and no server-side artifact distinguishes it. After an explicit cancellation,
+  the same Relayium account may therefore continue on another installation and
+  another Apple ID. The exposure remains bounded to one arm: the takeover
+  atomically invalidates the previous capability before authorizing the new
+  sheet, and an armed or ambiguous sheet cannot be taken over.
 
 ## 3. The continuation capability
 
@@ -93,8 +96,12 @@ in §3.
 A request that carries no `appInstanceId` is a **legacy request** and is a strict
 one-shot client: it binds no capability and its retry still receives
 `409 purchase_reconciliation_required`, byte-for-byte the old behavior. This is
-the asymmetric server-first compatibility the lease requires — the new server
-accepts old clients without changing their one-shot safety.
+the asymmetric compatibility retained for pre-continuation clients: the new
+server accepts their strict one-shot requests without changing their safety.
+Continuation clients from macOS 1.3.1 through the internal 1.3.4 candidate do
+not send `attempt-id-v2`; after this server deploys they cannot start a fresh
+purchase until upgraded to 1.3.5. That deterministic refusal occurs before a
+billing authority, attempt, subject, or arm identity is created.
 
 ### Reporting the outcome
 
@@ -126,18 +133,35 @@ endpoint is not an oracle for which specific fact was wrong.
 Resume is **not** a second endpoint. It is the same `purchase-dispatch` call
 carrying the capability plus a **fresh** client-generated `armRequestId`. It:
 
-- requires same user / bundle / attempt / generation / instance / secret;
+- requires the same user / bundle / attempt / generation. The existing
+  instance/secret may resume directly; after explicit cancellation only, another
+  instance may present a fresh secret it persisted before the request, and the
+  CAS replaces the instance and verifier together with the arm;
 - is a single atomic CAS from `cancelled` back to `armed` that **also replaces
   `arm_request_id` in the same statement**. From the instant it commits, every
   outcome still naming a previous arm is stale and cannot move the row. This
   atomic takeover is the correction's load-bearing step;
-- **emits no fresh attempt and no fresh attribution token** — it returns the
-  same `attemptId` and the same `appAccountToken`;
+- **emits no fresh attempt and no fresh attribution token while the account's
+  unresolved cancelled attempt still exists** — that takeover returns the same
+  `attemptId` and `appAccountToken`. A device can also hold a stale local
+  cancelled capability after another installation has completed and resolved
+  that attempt. In that later session there is no unresolved row to resume, so
+  dispatch correctly creates a replacement attempt. The response `attemptId`
+  and `appAccountToken` are authoritative; the client must persist the returned
+  attempt id before StoreKit opens and report the outcome against it;
 - **also repoints `product_id` at the product actually being authorized**, in
   that same statement. See *Cross-product resume* below;
-- **never re-returns the raw secret**; the client already holds it, which is
-  exactly what makes a lost **resume** response replayable without a second
-  logical arm;
+- **never re-returns the raw secret**; both a same-install resume and a
+  cross-install takeover use a secret the client already holds, which is exactly
+  what makes a lost response replayable without a second logical arm;
+- **requires `continuationProtocol=attempt-id-v2` for cross-install takeover and
+  for creating any fresh continuation attempt**. Earlier clients may still read
+  an exact replay and resume the same unresolved attempt with the same
+  capability, but they are refused before a path that can return a replacement
+  attempt id they would ignore. This makes rollout order fail-safe rather than
+  relying on adoption of 1.3.5. In particular, a first purchase from those
+  continuation clients is refused before `AcquireBillingAuthority`, so it
+  cannot leave an empty Apple authority that later blocks Stripe;
 - is **idempotent for a lost resume response**: repeating the same
   `armRequestId` **with the same `productId`** reads the same success back. A
   **different** `armRequestId` against an already-armed attempt is refused with
@@ -147,13 +171,13 @@ carrying the capability plus a **fresh** client-generated `armRequestId`. It:
   spent**, in the same transaction and before the CAS. An id may be armed
   exactly once, ever. See *Global arm-identity non-reuse* below.
 
-Repeating the **initial** arm's identity behaves the same way *mechanically*,
-but it is **not a recovery for a lost initial response** and must not be
-described as one. Reading any response back requires the `continuationSecret`,
-and the initial response is the only place that secret ever appears. A client
-that lost it holds nothing to present and fails closed; a client that can repeat
-the initial id necessarily received the response. This corrects wording that
-previously implied the initial response was replayable.
+Current clients persist a fresh `continuationSecret` **before** the initial
+request. Repeating the same initial arm, product, instance and secret after a
+lost response is therefore an exact replay rather than a second logical arm.
+The older compatibility shape that omits the secret asks the server to mint it
+in the response; losing that response remains unrecoverable, and such a client
+cannot perform a cross-install takeover because it has no client-held secret to
+present.
 
 Wrong secret, wrong instance, wrong or prior arm identity, cross-app, cross-user,
 stale generation, resolved attempt, replayed-with-a-spent-id and a locked attempt
@@ -323,10 +347,11 @@ can never resume, re-creating the permanent deadlock. The same code is returned
 whether the state is observed at read time or after losing the CAS, so which
 path ran is not observable either.
 
-**Concurrency.** Concurrent resumes naming different fresh ids and different
-products authorize **at most one** sheet; the persisted product is the winner's
-own request; and the losers commit nothing, so their ids stay unspent and remain
-usable after the winner's sheet is itself cancelled.
+**Concurrency.** Concurrent resumes or cross-install takeovers naming different
+fresh ids, products and capabilities authorize **at most one** sheet; the
+persisted product, app instance and verifier are the winner's request; and the
+losers commit nothing, so their ids stay unspent and remain usable after the
+winner's sheet is itself cancelled.
 
 ## 4. Resolution by ownership convergence
 
@@ -501,11 +526,12 @@ lease's "safer simpler representation" clause anticipates.
 Recorded honestly rather than designed away, each with what would make it
 actionable.
 
-1. **Same-device Apple-ID switch.** The capability proves *the same app instance
-   on the same device*, not *the same App Store account*. StoreKit does not
-   expose the signed-in Apple ID and no server-side artifact distinguishes it.
-   Bounded to one instance re-opening one sheet it already held authority for;
-   it cannot create a second concurrent authority. Revisit if Apple ever exposes
+1. **Apple-ID switch across arms.** StoreKit does not expose the signed-in Apple
+   ID and no server-side artifact distinguishes it. After an exact cancellation,
+   the next arm may be opened on the same or another installation under another
+   Apple ID. It is bounded to one sheet because takeover is permitted only from
+   `cancelled` and atomically invalidates the previous capability; it cannot
+   create a second concurrent authority. Revisit if Apple ever exposes
    a signed account-identity fact.
 
 2. **A Sandbox transaction can resolve a dispatch on an environment-unbound
@@ -534,17 +560,14 @@ actionable.
    repaired by this change** — that remains a separate, owner-audited operation
    requiring provider evidence.
 
-6. **A lost INITIAL dispatch response is unrecoverable, by design.** The raw
-   continuation secret exists in exactly one response, ever. A client that never
-   receives it holds no capability, so its repeat of the same `armRequestId` is
-   refused `403 continuation_invalid` and its account keeps one unresolved
-   attempt until an Apple fact resolves it or an operator does. This is the
-   deliberate direction: the alternatives — re-issuing the secret to whoever
-   presents the arm identity, or accepting account identity as retry authority —
-   are exactly the authorization weakenings that let two devices under two Apple
-   IDs both obtain charge authority, which Codex already rejected once. Nothing
-   about this is released by a clock; there is **no TTL and no automatic
-   expiry** anywhere in this design. Revisit only with an artifact that proves
+6. **A lost INITIAL dispatch response is unrecoverable only for the older
+   server-minted-secret compatibility shape.** Current clients persist their own
+   secret before dispatch and replay the initial request exactly. A client that
+   omitted the secret and never received the response holds no capability, so
+   its account keeps one unresolved attempt until an Apple fact resolves it or
+   an operator does. The server never re-issues that secret and nothing is
+   released by a clock; there is **no TTL and no automatic expiry** anywhere in
+   this design. Revisit only with an artifact that proves
    device identity independently of the secret, never by widening who may resume.
 
 7. **The read-time and write-time arm checks absorb each other.** The outcome
@@ -749,23 +772,105 @@ actionable.
     belongs in a lease that can prove it in isolation. Revisit if an account is
     ever allowed two concurrent provider authorities.
 
+15. **A stolen Relayium bearer can park a cancelled attempt at `armed`.** The
+    attacker must already control the authenticated account session; after an
+    explicit cancellation it can take over with a valid fresh secret and then
+    remain silent. This moves no money and grants no entitlement, but prevents
+    later purchase dispatches until an authoritative StoreKit fact or outcome
+    resolves the arm. Revisit with a session-bound reauthentication requirement
+    if production abuse evidence appears; never release it by timeout.
+
+16. **Cancellation takeover deliberately stops proving continuity with the old
+    device capability.** In `cancelled`, the safety fact is the exact current-arm
+    `.userCancelled` report: no transaction and no sheet remain. A new
+    installation may therefore replace the old instance/verifier with any fresh,
+    valid client-held secret. `armed`, silence, pending, failed, success, locked,
+    legacy and stale-arm states retain the strict old capability check.
+
+17. **A dishonest or buggy cancellation report widens the affected Apple-ID
+    set.** The protocol trusts the native StoreKit `.userCancelled` outcome. A
+    forged cancellation already allowed the same installation to obtain another
+    sheet; cross-install takeover could let a second Apple ID obtain it. The
+    server still authorizes at most one sheet at a time and refuses a second
+    Relayium entitlement, but cannot reverse a second Apple charge. Revisit only
+    if provider evidence exposes an Apple-signed cancellation fact.
+
+18. **A stale local capability can receive a replacement attempt.** After
+    another installation resolves the original, a later dispatch has no
+    unresolved row to resume and creates a new financial identity. macOS 1.3.3
+    and the internal 1.3.4 candidate ignored the response `attemptId`, reported
+    the new sheet against the resolved old attempt, and left the replacement
+    permanently armed. macOS 1.3.5 adopts and persists every authoritative
+    dispatch id before opening StoreKit. The server also requires its
+    `attempt-id-v2` marker before takeover or fresh continuation creation, so an
+    older installed client is refused before it can create that terminal state.
+    The regression test reports a cancellation against a deliberately changed
+    id; reverting the adoption recreates the account-wide lockout.
+
+19. **An honest second installation can be dispossessed after takeover.** If B
+    takes over A's cancelled attempt and then disappears without reporting an
+    outcome, the server correctly stays `armed`; neither A nor another device
+    may infer that B's sheet cannot charge. This has the same zero-charge
+    availability shape as residual 15 without requiring a stolen bearer. It is
+    intentionally not released by time. Revisit only with an authoritative
+    StoreKit outcome or provider fact, not another client assertion.
+
+20. **A lost cancellation response can be followed by another installation's
+    takeover.** A then owes a replay for an arm that B has atomically replaced.
+    The server's uniform `403 continuation_invalid` is definitive proof that
+    A's exact arm is no longer authoritative. macOS 1.3.5 retires that local
+    capability only when its persisted bytes still match the rejected report,
+    clears the matching non-secret outcome journal, and permits a fresh bounded
+    planning pass. Network failures and changed local capabilities remain owed
+    and fail closed; no timeout or inferred cancellation is introduced. If the
+    outcome existed only in the journal because its Keychain write failed, the
+    stored capability may differ solely by the absent outcome field; that exact
+    shape is also retired after the 403, while any different stored outcome or
+    any other changed byte remains owed.
+
+21. **An old-client dispatch can race deletion of its existing authority.** The
+    handler's preflight refusal is intentionally fail-closed when no authority
+    exists. If it observes an authority and an operator or account-deletion path
+    removes that row before acquisition, the old request can recreate an empty
+    Apple authority before the store-level protocol fence refuses its arm. This
+    requires a 1.3.1-through-internal-1.3.4 client racing an administrative
+    mutation on the same account, moves no money, and is recoverable through the
+    existing evidence-bound operator tooling. Do not weaken the store fence to
+    avoid it; revisit with an atomic acquire-and-arm API if the race is observed.
+
+22. **Local capability validation and a server 403 share the public
+    `continuationRejected` error.** A persisted compatibility capability with no
+    raw secret can fail locally before an outcome request reaches the server.
+    The retirement guard still requires the exact persisted arm and recorded
+    outcome, so this cannot widen purchase authority or erase a changed value;
+    such a capability cannot authenticate an outcome in any case. A future
+    client may split local-unavailable from server-rejected errors for sharper
+    diagnostics without changing the protocol.
+
 ## 9. Out of scope for this batch
 
-macOS `1.3.1`, native Sign in with Apple, and every Swift/client change are a
-later, separate lease — which now carries a **mandatory** item rather than only
-optional work: residual 9's `permitsFinish` fix gates exposing this protocol at
-all. No phase-2 Apple-to-Stripe authority release. No direct
-or manual mutation of the currently stuck production account — that is an
-owner-audited operation requiring provider evidence, not a migration that
-quietly relaxes a global guard.
+No phase-2 Apple-to-Stripe authority release. No direct or manual mutation of a
+stuck production account, no clearing of purchase ledgers, and no provider-side
+subscription mutation. This correction includes the narrowly required macOS
+1.3.5 client adoption of an authoritative replacement `attemptId`; unrelated
+macOS and Sign in with Apple work remains outside the batch. The client fix is
+in shared RelayiumKit and will therefore be present in the next iOS candidate,
+but iOS development and versioning remain paused; no iOS release is produced by
+this batch.
+
+Deployment may precede client adoption without creating a double-charge path or
+durable billing identity. The explicit availability tradeoff is that macOS
+1.3.1 through the internal 1.3.4 candidate cannot initiate a new Apple purchase
+after the server deploys; they receive a deterministic capability refusal and
+must upgrade to 1.3.5. Exact replay and same-capability resume of an already
+existing attempt remain supported.
 
 ## 10. Review dispositions
 
-Fable's findings on this batch, with the disposition each received. Numbered §10
-rather than inserted before *Out of scope* so the existing §9 references in the
-workspace records stay valid. **Every finding below is closed with NO SOURCE
-CHANGE except where marked FIXED**; the accepted source bytes are unaffected by
-the additions in this section.
+Historical Fable findings on the earlier server batch, with their dispositions.
+Numbered §10 rather than inserted before *Out of scope* so existing §9
+references remain valid. These dispositions do not accept the current
+cross-install/client diff.
 
 - **F-1 — FIXED.** Closed by two halves that are jointly, not individually,
   sufficient: the **atomic product update** (the `cancelled -> armed` CAS
@@ -776,13 +881,11 @@ the additions in this section.
   removing the product update fails the convergence test; removing the replay
   product match fails the mismatch test.
 
-- **L-1 — FIXED.** The comments claiming an *initial* lost-response replay were
-  wrong and are corrected in `AppleDispatchRequest.ArmRequestID`,
-  `AppleDispatchOutcome.Replayed`, the `armed` branch and the *Resuming* section
-  above. Replay is limited to a **resume**: reading any response back requires
-  the `continuationSecret`, and the **initial** response is the unique place it
-  ever appears, so a client that lost the initial response holds nothing to
-  present and fails closed. See also residual 6.
+- **L-1 — SUPERSEDED BY CLIENT-PERSISTED SECRETS.** The earlier server-minted
+  shape made only resume responses replayable. Current clients persist a secret
+  before the initial request, so both initial and resume responses are exact
+  replays. The compatibility shape that omits the secret remains unrecoverable
+  if its first response is lost. See residual 6.
 
 - **L-2 — LOW, ACCEPTED as intentional fail-closed behaviour. No source change.**
   *Finding:* the legacy `/transaction` response contract changed from

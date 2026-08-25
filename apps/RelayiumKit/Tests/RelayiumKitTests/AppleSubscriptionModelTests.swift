@@ -526,7 +526,7 @@ final class AppleSubscriptionModelTests: XCTestCase {
     }
 
     private func makeReadyContinuationRig(
-        store capabilityStore: InMemoryApplePurchaseCapabilityStore,
+        store capabilityStore: ApplePurchaseCapabilityStoring,
         appInstanceID: String = "instance-A"
     ) async -> Rig {
         let rig = makeContinuationRig(store: capabilityStore, appInstanceID: appInstanceID)
@@ -2048,6 +2048,34 @@ extension AppleSubscriptionModelTests {
         XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement))
     }
 
+    /// Another installation may have completed the attempt named by this
+    /// device's cancelled capability. The next dispatch then creates a new
+    /// attempt. Its id is authoritative and must be persisted before StoreKit
+    /// opens, otherwise the outcome is reported to the resolved old attempt and
+    /// the new one remains armed account-wide.
+    func testAResumeAdoptsAReplacementAttemptBeforeReportingItsOutcome() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+
+        rig.store.setPurchase(.success(.userCancelled))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        rig.billing.setDispatches([.success(ApplePurchaseDispatch(
+            appAccountToken: Fixture.accountToken,
+            attemptId: "attempt-replacement"))])
+        rig.store.setPurchase(.success(.userCancelled))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        let reports = try reports(rig.billing, count: 2)
+        XCTAssertEqual(reports[0].attemptID, "attempt-one")
+        XCTAssertEqual(reports[1].attemptID, "attempt-replacement",
+                       "the replacement attempt was left armed by a report to the stale id")
+        let stored = try XCTUnwrap(
+            ApplePurchaseCapabilityRepository(store: capabilityStore).load())
+        XCTAssertEqual(stored.attemptID, "attempt-replacement")
+        XCTAssertEqual(stored.phase, .cancelled)
+    }
+
     /// **A cancelled sheet is not a promise to buy the same thing next.**
     ///
     /// The resume names the product the user actually chose, and the stored
@@ -2333,6 +2361,83 @@ extension AppleSubscriptionModelTests {
         XCTAssertEqual(sent[1], sent[0], "the replay was not the identical report")
         XCTAssertEqual(ApplePurchaseCapabilityRepository(store: capabilityStore).load()?.unconfirmedOutcome,
                        recorded, "the still-owed report was forgotten")
+    }
+
+    /// A 403 for the exact recorded arm is not a transport failure: the server
+    /// proves another installation superseded it. Retiring that inert local
+    /// capability must allow one fresh arm rather than replaying forever.
+    func testARejectedOutcomeReplayRetiresTheSupersededArmAndStartsFresh() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+
+        rig.billing.setOutcomeFailures([AppleBillingError.network])
+        rig.store.setPurchase(.success(.userCancelled))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+        let stale = try XCTUnwrap(rig.billing.reports.last)
+
+        rig.billing.setDispatches([.success(ApplePurchaseDispatch(
+            appAccountToken: Fixture.accountToken,
+            attemptId: "attempt-after-takeover"))])
+        rig.billing.setOutcomeFailures([
+            AppleBillingError.continuationRejected,
+            AppleBillingError.network,
+        ])
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.billing.dispatchContinuations.count, 2,
+                       "the superseded local arm remained a permanent lock")
+        let sent = try reports(rig.billing, count: 3)
+        XCTAssertEqual(sent[1], stale, "the owed report was not replayed exactly")
+        XCTAssertEqual(sent[2].attemptID, "attempt-after-takeover")
+        let current = try XCTUnwrap(ApplePurchaseCapabilityRepository(store: capabilityStore).load())
+        XCTAssertEqual(current.attemptID, "attempt-after-takeover")
+        XCTAssertNotEqual(current.armRequestID, stale.armRequestID)
+    }
+
+    /// The non-secret journal is an intentional second persistence path. If the
+    /// Keychain write failed while recording the outcome, a later 403 must still
+    /// retire the otherwise-identical inert capability rather than wedge forever.
+    func testARejectedJournalOnlyOutcomeReplayRetiresTheSupersededArm() async throws {
+        let capabilityStore = LockableCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+
+        rig.billing.setOutcomeFailures([AppleBillingError.network])
+        rig.store.setOnPurchase { capabilityStore.setWritesFail(true) }
+        rig.store.setPurchase(.success(.userCancelled))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+        capabilityStore.setWritesFail(false)
+        rig.store.setOnPurchase(nil)
+
+        let persistedWithoutOutcome = try XCTUnwrap(
+            ApplePurchaseCapabilityRepository(store: capabilityStore).load())
+        XCTAssertNil(persistedWithoutOutcome.unconfirmedOutcome)
+        XCTAssertEqual(rig.journal.count("outcome"), 1)
+
+        // The first genuine supersession response arrives while Keychain is
+        // unwritable. Retirement fails, so the journal must remain able to
+        // reconstruct and replay the exact owed outcome on the next attempt.
+        capabilityStore.setWritesFail(true)
+        rig.billing.setOutcomeFailures([AppleBillingError.continuationRejected])
+        await rig.model.purchase(productID: Fixture.catalog[0])
+        XCTAssertEqual(rig.billing.dispatchContinuations.count, 1)
+        XCTAssertEqual(
+            ApplePurchaseCapabilityRepository(store: capabilityStore).load()?.attemptID,
+            persistedWithoutOutcome.attemptID)
+
+        capabilityStore.setWritesFail(false)
+        rig.billing.setDispatches([.success(ApplePurchaseDispatch(
+            appAccountToken: Fixture.accountToken,
+            attemptId: "attempt-after-journal-takeover"))])
+        rig.billing.setOutcomeFailures([
+            AppleBillingError.continuationRejected,
+            AppleBillingError.network,
+        ])
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.billing.dispatchContinuations.count, 2)
+        let current = try XCTUnwrap(ApplePurchaseCapabilityRepository(store: capabilityStore).load())
+        XCTAssertEqual(current.attemptID, "attempt-after-journal-takeover")
+        XCTAssertNotEqual(current.armRequestID, persistedWithoutOutcome.armRequestID)
     }
 
     /// **The server's `resumable: false` is authoritative, even for a

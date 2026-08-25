@@ -172,14 +172,18 @@ final class ApplePurchaseContinuationTests: XCTestCase {
         XCTAssertEqual(armRequestID, "arm-2")
         XCTAssertEqual(productID, "plus.monthly")
 
-        let confirmed = ApplePurchaseContinuation.confirmedArm(
-            cancelled(product: "pro.monthly"), armRequestID: "arm-2", productID: "plus.monthly")
+        guard let confirmed = ApplePurchaseContinuation.confirmedArm(
+            cancelled(product: "pro.monthly"), attemptID: "attempt-2",
+            armRequestID: "arm-2", productID: "plus.monthly") else {
+            return XCTFail("a valid authoritative attempt id was refused")
+        }
         XCTAssertEqual(confirmed.productID, "plus.monthly")
         XCTAssertEqual(confirmed.armRequestID, "arm-2")
         XCTAssertEqual(confirmed.phase, .armed)
-        // Same attempt, same secret: a resume emits no new attempt and never
-        // re-issues the secret.
-        XCTAssertEqual(confirmed.attemptID, "attempt-1")
+        // The server's attempt id is authoritative. It normally remains the
+        // same, but another installation may already have resolved the stale
+        // local attempt and caused this dispatch to create a replacement.
+        XCTAssertEqual(confirmed.attemptID, "attempt-2")
         XCTAssertEqual(confirmed.secret, secret)
     }
 
@@ -224,8 +228,11 @@ final class ApplePurchaseContinuationTests: XCTestCase {
     func testConfirmingAResumeDischargesTheIntent() {
         let intent = ApplePurchaseContinuation.recordingResumeIntent(
             cancelled(), armRequestID: "arm-2", productID: "plus.monthly")
-        let confirmed = ApplePurchaseContinuation.confirmedArm(
-            intent, armRequestID: "arm-2", productID: "plus.monthly")
+        guard let confirmed = ApplePurchaseContinuation.confirmedArm(
+            intent, attemptID: "attempt-1",
+            armRequestID: "arm-2", productID: "plus.monthly") else {
+            return XCTFail("a valid authoritative attempt id was refused")
+        }
         XCTAssertNil(confirmed.unconfirmedResume)
         XCTAssertEqual(ApplePurchaseContinuation.plan(capability: confirmed,
                                                       productID: "plus.monthly",
@@ -361,8 +368,11 @@ final class ApplePurchaseContinuationTests: XCTestCase {
         var value = recorded()
         value.unconfirmedResume = ApplePurchaseResumeIntent(armRequestID: "arm-2",
                                                             productID: "plus.monthly")
-        let confirmed = ApplePurchaseContinuation.confirmedArm(value, armRequestID: "arm-2",
-                                                               productID: "plus.monthly")
+        guard let confirmed = ApplePurchaseContinuation.confirmedArm(
+            value, attemptID: "attempt-1", armRequestID: "arm-2",
+            productID: "plus.monthly") else {
+            return XCTFail("a valid authoritative attempt id was refused")
+        }
         XCTAssertNil(confirmed.unconfirmedOutcome)
         XCTAssertNil(confirmed.unconfirmedResume)
     }

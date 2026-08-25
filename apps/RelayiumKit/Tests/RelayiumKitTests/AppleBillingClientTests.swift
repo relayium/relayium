@@ -74,9 +74,10 @@ final class AppleBillingClientTests: XCTestCase {
             with: Data(StubURLProtocol.lastBodyBytes)) as? [String: String])
         XCTAssertEqual(body, ["bundleId": "com.relayium.mac",
                               "productId": "pro.monthly",
+                              "continuationProtocol": "attempt-id-v2",
                               "appInstanceId": "instance-A",
                               "armRequestId": "arm-1"])
-        XCTAssertNil(body["continuationSecret"], "a first arm has nothing to prove")
+        XCTAssertNil(body["continuationSecret"], "the compatibility fixture intentionally omits its initial secret")
     }
 
     /// A resume carries the secret, and the server does not re-issue one — which
@@ -97,6 +98,7 @@ final class AppleBillingClientTests: XCTestCase {
             with: Data(StubURLProtocol.lastBodyBytes)) as? [String: String])
         XCTAssertEqual(body, ["bundleId": "com.relayium.mac",
                               "productId": "plus.monthly",
+                              "continuationProtocol": "attempt-id-v2",
                               "appInstanceId": "instance-A",
                               "armRequestId": "arm-2",
                               "continuationSecret": "S3CR3T"])
@@ -191,14 +193,26 @@ final class AppleBillingClientTests: XCTestCase {
             token: "t")) {
             XCTAssertEqual($0 as? AppleBillingError, .continuationRejected)
         }
-        // The outcome endpoint answers every capability failure with a bare 403.
-        StubURLProtocol.stub = .init(status: 403, body: Data())
+        StubURLProtocol.stub = .init(
+            status: 403, body: Data(#"{"error":"continuation_invalid","provider":"apple"}"#.utf8))
         await XCTAssertThrowsErrorAsync(try await self.client().reportApplePurchaseOutcome(
             bundleID: "com.relayium.mac", attemptID: "attempt-1",
             continuation: ApplePurchaseContinuationFields(
                 appInstanceID: "i", armRequestID: "a", continuationSecret: "S"),
             outcome: .userCancelled, token: "t")) {
             XCTAssertEqual($0 as? AppleBillingError, .continuationRejected)
+        }
+
+        // A proxy, WAF or captive portal may emit its own bare/HTML 403. It is
+        // not server proof that this arm was superseded and must never retire
+        // the only capability that can report a cancellation.
+        StubURLProtocol.stub = .init(status: 403, body: Data("forbidden".utf8))
+        await XCTAssertThrowsErrorAsync(try await self.client().reportApplePurchaseOutcome(
+            bundleID: "com.relayium.mac", attemptID: "attempt-1",
+            continuation: ApplePurchaseContinuationFields(
+                appInstanceID: "i", armRequestID: "a", continuationSecret: "S"),
+            outcome: .userCancelled, token: "t")) {
+            XCTAssertEqual($0 as? AppleBillingError, .server(status: 403))
         }
     }
 

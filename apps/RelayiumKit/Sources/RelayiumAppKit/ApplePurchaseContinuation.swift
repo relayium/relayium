@@ -95,8 +95,11 @@ public struct ApplePurchaseCapability: Equatable, Codable, Sendable {
         case locked
     }
 
-    /// The server's attempt id. Stable across every resume; a resume emits no
-    /// new attempt and no new attribution token.
+    /// The server's authoritative attempt id. It is stable while the server is
+    /// resuming the same unresolved attempt. If this installation holds a stale
+    /// cancelled capability whose attempt another installation already resolved,
+    /// the next dispatch may create a replacement attempt; the returned id must
+    /// then replace this value before StoreKit opens.
     public let attemptID: String
     /// Relayium account that prepared this capability. Optional only so a
     /// pre-field compatibility fixture still decodes; strict production policy
@@ -662,13 +665,18 @@ public enum ApplePurchaseContinuation {
     /// a Plus purchase against a Pro-labelled attempt charges correctly and then
     /// never resolves.
     public static func confirmedArm(_ capability: ApplePurchaseCapability,
+                                    attemptID: String,
                                     armRequestID: String,
-                                    productID: String) -> ApplePurchaseCapability {
-        var next = capability
-        next.armRequestID = armRequestID
-        next.productID = productID
-        next.phase = .armed
-        next.unconfirmedResume = nil
+                                    productID: String) -> ApplePurchaseCapability? {
+        guard !attemptID.isEmpty else { return nil }
+        var next = ApplePurchaseCapability(
+            attemptID: attemptID,
+            ownerAccountID: capability.ownerAccountID,
+            appInstanceID: capability.appInstanceID,
+            secret: capability.secret,
+            armRequestID: armRequestID,
+            productID: productID,
+            phase: .armed)
         // Any recorded outcome belongs to the arm being left behind, and the
         // server has just superseded that arm itself. Dropping it here is what
         // keeps a stale intent from accumulating in a value that outlives every

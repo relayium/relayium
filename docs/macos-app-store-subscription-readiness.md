@@ -63,6 +63,12 @@ server entitlement for every case.
 
 ## Production readiness
 
+- For a client/server purchase-protocol change, deploy and verify the compatible
+  server before distributing the new TestFlight build. For macOS 1.3.5, confirm
+  production accepts `continuationProtocol=attempt-id-v2` before enabling build
+  23 for testers. An older server rejects that unknown field before arming a
+  sheet, so the failure is financially safe but leaves purchase unavailable
+  until the server upgrade completes.
 - The global Apple purchase pause is tested and reachable by the operator.
 - Alerts cover notification verification failure, pending/unattributed
   notifications, catalog mismatch, reconciliation failure, billing incidents,
@@ -70,4 +76,6 @@ server entitlement for every case.
 - The evidence-bound legacy recovery command is deployed before enabling the
   new version, but is never used as an automatic retry mechanism.
 - Rollback keeps transaction intake, notifications, restoration, and
-  reconciliation online even if new purchase dispatch is paused.
+  reconciliation online even if new purchase dispatch is paused. After build 23
+  reaches any tester, do not roll the server back to a version that rejects
+  `continuationProtocol`; pause new dispatch or roll forward instead.
