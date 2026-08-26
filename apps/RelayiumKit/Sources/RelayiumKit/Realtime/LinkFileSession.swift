@@ -12,9 +12,25 @@ public let LINK_FILE_MAX_QUEUED_BATCHES = 32
 /// makes an expired prompt and an expired wait the same deadline.
 public let LINK_FILE_CONSENT_TIMEOUT: TimeInterval = 600
 
-/// How long a finished sender waits for the receiver's COMPLETE.
-/// `mixed-file-session.svelte.ts`'s `COMPLETE_TIMEOUT_MS`, in seconds.
-public let LINK_FILE_COMPLETE_TIMEOUT: TimeInterval = 60
+/// How long a finished sender waits for the receiver's COMPLETE **without any
+/// durable progress**. An ACK that advances the send window re-arms this wait
+/// (see `ackArrived`): a producer that finished only handed its frames to the
+/// transport, and on a slow link a full flow window can still be draining long
+/// past any fixed deadline — so this is a stall window, not a duration cap.
+///
+/// The value is derived, not chosen: a conforming receiver acks durable
+/// progress only every `FLOW_ACK_INTERVAL` (512 KiB) bytes, so a link moving at
+/// rate r produces silent-but-progressing gaps of 512 KiB / r. The window must
+/// out-wait the longest gap a link worth finishing can produce; 150 s tolerates
+/// ~3.5 KB/s, twice the margin over the slowest real transfer measured on the
+/// production relay (~7 KB/s, whose ~64 s first-ack gap is exactly what made
+/// the previous fixed 60 s declare a succeeding transfer Failed).
+///
+/// The web's `COMPLETE_TIMEOUT_MS` (`mixed-file-session.svelte.ts`) is still
+/// the one-shot 60 s form; making it stall-based there is recorded follow-up
+/// work, and until then a web SENDER can still mis-report a slow receiver —
+/// the two sides stay wire-compatible either way.
+public let LINK_FILE_COMPLETE_TIMEOUT: TimeInterval = 150
 
 /// How long a refused batch may keep draining in-flight content.
 /// `MIXED_FILE_DRAIN_TIMEOUT_MS`, in seconds.
@@ -621,8 +637,8 @@ public final class LinkFileSession {
         switch lane.admitInboundFrame(frame) {
         case let .control(control):
             return inboundControl(control)
-        case let .ack(total):
-            return ackArrived(total)
+        case let .ack(total, advanced):
+            return ackArrived(total, advanced: advanced)
         case let .resumeRequest(point):
             return resumeRequested(point)
         case let .resumeMarker(point, seq):
@@ -711,12 +727,26 @@ public final class LinkFileSession {
         return effects
     }
 
-    private func ackArrived(_ total: Int?) -> [LinkFileSessionEffect] {
+    private func ackArrived(_ total: Int?, advanced: Bool) -> [LinkFileSessionEffect] {
         // Validation and clamping happened in the lane, and a value no conforming
         // peer could produce was ignored there rather than being fatal: a
         // plaintext ACK is forgeable, and one injected frame must not end a lane.
-        guard total != nil, var current = outbound, current.paused,
-              current.phase == .sending, lane.maySendProtected else { return [] }
+        guard total != nil, var current = outbound else { return [] }
+        if current.phase == .finishing, advanced {
+            // The completion wait measures STALL, not total duration. An ACK that
+            // moved the durable cursor is proof the peer is still draining this
+            // batch — a producer that finished only handed its frames to the
+            // transport, and on a slow link a full flow window of them can still
+            // be in flight long past any fixed deadline (a real 890 KB transfer
+            // was declared Failed here at 60 s and then completed at ~142 s).
+            // Re-arming replaces the pending timer, exactly as the receive stall
+            // does per chunk, so the batch fails only after a full quiet window.
+            // Only `advanced` re-arms: the clamp in `SendWindow` is what decides,
+            // so a duplicate or forged total extends nothing (see the lane's
+            // `.ack` doc), and the extension is bounded by bytes actually sent.
+            return [.armCompleteTimeout(batch: current.id)]
+        }
+        guard current.paused, current.phase == .sending, lane.maySendProtected else { return [] }
         current.paused = false
         outbound = current
         return [.resumeProducer(batch: current.id, attempt: current.attempt)]
