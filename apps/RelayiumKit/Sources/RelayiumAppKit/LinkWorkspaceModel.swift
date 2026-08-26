@@ -1593,6 +1593,22 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// Whether the link will take work right now.
     public var acceptsWork: Bool { connection.isOpen && !isVerificationPending }
 
+    /// **Which attempt this object is currently running**, as an opaque value
+    /// that changes exactly when the attempt does and never returns to an
+    /// earlier one.
+    ///
+    /// Read-only and compared, never rendered: it names nothing about the peer
+    /// and carries no meaning outside one process. It exists because
+    /// `acceptsWork` cannot distinguish "still the link you were looking at"
+    /// from "a different link, in the same place, that is also open" — the two
+    /// have the same state and different peers. A view that survives an attempt
+    /// ending, which `TransferLinkPane` does, has to ask this as well before it
+    /// acts on something the user started under the previous one.
+    ///
+    /// `beginAttempt` is the sole writer and it is on every path into a new
+    /// attempt, solicited or not, so no substitution can leave this unchanged.
+    public var attemptGeneration: Int { generation }
+
     /// Everything held behind the boundary, released once and in one order: the
     /// armed batch first, because it is what the user asked for before they were
     /// asked anything, then a message they typed while waiting.

@@ -163,6 +163,94 @@
 
 ### M-1 跨网络传输与设备收件箱支持文件拖拽
 
+> **状态：in progress（实现完成，待 Codex 独立评审与验收）。2026-08-26。**
+> 分支 `work/macos-1.3.8-drag-drop`，随 macOS 1.3.8 / build 26 交付。
+> **实现**：新增可复用投放适配器 `RelayiumAppKit/FileDropAdmission.swift`
+> （`admitFileDrop` 决定接受/整批拒绝/忙碌拒绝）与 SwiftUI 修饰符
+> `FileDropReceiver` / `View.acceptsFileDrop`（`apps/mac/Relayium/FileDropZone.swift`）。
+> 两个目标界面复用同一 `SelectionStore.add`，与文件选择器完全同一条校验链
+> （`expandSelection`、`MAX_FILES`、单路径字节上限、符号链接拒绝、根去重、
+> 沙盒扩展语义），不新增任何并行校验或发送逻辑。
+> - **跨网络传输**：投放落在**已配对**的 `TransferLinkPane`（`link/1` 工作区），
+>   而非配对前的 `CrossNetworkConnectPane`——后者按既有产品决策不得暂存任何内容，
+>   已加 `testTheDragDidNotReachEitherPreConnectScreen` 守护。投放只暂存，
+>   由新增的 `link-drop-send` 显式发送；`link-drop-clear` 为取消。
+>   闸门为 `link.acceptsWork`（连接已开启且 SAS 已比对），与两个选择器按钮一致。
+> - **设备收件箱**：投放落在 `DeviceConversationPage` 的文件分组，闸门为
+>   `target == nil`（失效目标即无投放目标），发送仍为既有 `inbox-send-start`。
+> - **一致性**：拖拽不自动发送、不选择对端/设备、不绕过任何闸门；两个界面的
+>   键盘可达文件选择器均保留未改动。
+> - **整批语义**：任一项目无法解码即整批拒绝并提示（`drop.refusedUnreadable`），
+>   不再静默丢弃个别项目——这是本轮相对旧投放实现的行为收紧。
+> - **新增文案**：仅 en 与 zh-Hans 两种维护语言（`drop.sendHint`、
+>   `drop.refusedUnreadable`）。
+> - **失效目标（Codex 评审发现的竞态，已修复）**：`isBusy` 只能回答“此界面此刻
+>   是否可写”，无法回答“它是否仍是被投放的那个界面”。`TransferLinkPane` 在
+>   `.ended` 下仍会渲染（`hasSession` 为真），且 `connect` 可从 `.ended` 直接开启
+>   下一次尝试而无需 `dismiss`，因此该界面连同其 `@StateObject SelectionStore`
+>   会跨越一次尝试存活：在尝试 N 上被接受的拖拽，若其 `NSItemProvider` 解析期间
+>   N 结束且 N+1 已开启，`!link.acceptsWork` 会再次为假，旧投放便会暂存到新的
+>   对端上。修复落在可复用适配器边界：`FileDropContext` 为界面身份的不透明取值，
+>   `FileDropReceiver` 在 `onDrop` 接受的同一同步时刻捕获它（早于 `Task` 跃迁），
+>   在项目解析完成后与当前取值再次比对，不一致即 `refusedStaleContext`，与忙碌
+>   同样静默拒绝且不落入 `store.add`。顺序上失效先于忙碌判定：目标一旦被替换，
+>   `isBusy` 描述的是替换者，用它命名拒绝理由会指向用户从未投放过的界面。
+>   `LinkWorkspaceModel` 新增只读 `attemptGeneration`（`beginAttempt` 是其唯一
+>   写入点，覆盖主动与被动全部新尝试路径），跨网络传输以尝试号为取值。
+> - **设备收件箱是否需要该取值**：需要，取 `peerID`。其 `target` 语义（`target == nil`
+>   即无合法目标）只回答能否发送，不回答“这是哪台设备”。`peerID` 虽是 `let`，
+>   但视图身份归宿主所有：宿主若不给该页自己的身份，从一台已打开设备直接切到
+>   另一台就会复用该视图及其 `@StateObject selection`。传入 `peerID` 只多一次比较，
+>   即可让该页遵守与链接界面同一条规则，而不是依赖当前导航路径恰好会经过 `nil`。
+>   **后续更新（M-3，2026-08-26）**：`DeviceInboxSurface` 此后已显式加上
+>   `.id(peer.id)`，结构身份成为该页的**主机制**；此处传入的 `peerID` 保留为
+>   纵深防御，覆盖"宿主漏加身份"这一情形，两者各有守护断言。
+> - **拖拽区（`FileDropZone` 虚线框）保持不变**：其唯一使用者的目标是本账号自身的
+>   存储，不随任何连接改变，因此显式传入 `FileDropContext.fixed` 并由守护测试
+>   断言全仓仅此一处使用该取值——`fixed` 不得成为任何持有对端/链接/设备的界面
+>   绕开该检查的方式。
+> - **已暂存批次跨目标存活（Codex 二轮评审接受的第二个阻断项，同族，已修复）**：
+>   上一条只关闭了**一次拖拽之内**的窗口——目标在 `NSItemProvider` 解析期间被替换。
+>   它之后还有更宽的一段：在尝试 N 上干净落地、或为设备 A 选好的批次，就留在界面
+>   自己的 `@StateObject SelectionStore` 里，而两个宿主都会复用该视图。
+>   `TransferLinkPane` 跨 `.ended` 一直渲染到下一次尝试；`DeviceInboxSurface`
+>   当时在 `if let peer = openPeer` 内渲染 `DeviceConversationPage` 且未显式 `.id`
+>   （该页的显式身份由后续 M-3 补上，见下）。两种情况下都没有任何东西清空该 store，
+>   于是下一次按下发送，就把用户为别人暂存的文件发给了此刻在场的对象。`admitFileDrop` 帮不上忙：它只覆盖拖拽期间，
+>   而这批文件是在替换发生**之前**干净落地的。
+>   修复：`RelayiumAppKit` 新增 `StagedSelectionLifetime`——界面在每次渲染时报告
+>   自己正在服务的目标，该取值回答 store 无法回答的那个问题：这是否仍是该批次
+>   当初被暂存时的那个目标。首次报告永不算替换（刚建好的界面尚未暂存任何东西，
+>   把“此前没有答案”当成变化会丢掉 `adoptOpenedFiles` 在首帧之前采纳的批次）。
+>   - `TransferLinkPane`：`.onChange(of: link.attemptGeneration)` 上判定替换，
+>     并清空 `dropped`、`dropRefusal` 与本界面的 `actionError`。
+>     `link.actionError` 不动——它归模型所有，`beginAttempt` 在推进代数的同一
+>     路径上已清除它。
+>   - `DeviceConversationPage`：`.onChange(of: peerID)` 上判定替换，并清空
+>     `selection` 与 `dropRefusal`；已交给 `InboxSendModel` 的发送不受影响
+>     （字节已按持久计划复制进本应用自有存储，且已定址到发起时的那台设备）。
+>     **后续更新（M-3）**：宿主已加 `.id(peer.id)`，换设备即换视图，因此在当前
+>     宿主下这条接线不会触发；它保留为宿主漏加身份时的兜底，且 `.id` 覆盖范围更广
+>     （草稿、Copy 确认、两个删除确认等全部重置）。
+>   - **链接结束不清空**，这是刻意的：链接结束仍是同一条链接，数字消失了，但该
+>     批次暂存给的对端就是重连后要发给的对端，为一次掉线丢弃用户的工作是错的。
+>     判定只挂在尝试代数上，不挂在 `connection`、`verification`、`acceptsWork`
+>     或模型的 `selectedCandidate` 上，`MacSurfaceGuardTests` 对此有反向断言。
+>   - 两个界面在同一目标内的选择器与拖拽行为完全不变：`serving` 只在取值真正
+>     改变时返回真，重复渲染（消息到达、字节计数跳动、传输推进）不清空任何东西。
+>   - 覆盖：`FileDropAdmissionTests` 以真实 `SelectionStore` 驱动该规则（首次报告、
+>     同目标重复渲染 64 次、设备替换、尝试推进、A→B→A 回摆、`.fixed` 永不替换）；
+>     `MacSurfaceGuardTests.testAStagedBatchIsDiscardedWhenItsTargetIsSubstituted`
+>     断言两个界面确实接线、清空清单完整、且不因其他原因清空。四处变异均已验证
+>     会导致测试失败：关闭替换判定、无条件判定为替换、拆掉链接界面接线、拆掉
+>     设备页接线。
+> - **已知未覆盖**：旧版对端回退界面 `TransferSessionPane` 仍仅支持选择器；
+>   拖拽手势本身无自动化覆盖（XCUITest 无法发起 Finder 拖拽），其全部决策由
+>   `FileDropAdmissionTests` 覆盖，界面接线由 `MacSurfaceGuardTests` /
+>   `InboxSurfaceGuardTests` 覆盖。失效目标另由 `LinkWorkspaceModelTests` 以真实
+>   状态机驱动（尝试 N 结束 → 开启 N+1 → 断言 `acceptsWork` 确已恢复为真 →
+>   旧投放被拒、同一批次在自身尝试上被接受）。详见 `DEVELOPMENT-LOG.md` 同日检查点。
+
 - **现状**：局域网传输和 Send a Link 已支持直接拖入文件；跨网络传输与设备收件箱仍要求通过文件选择器寻找文件，交互不一致。
 - **需求**：跨网络传输和设备收件箱都支持从 Finder 拖入单个或多个文件，并复用现有文件校验、数量/大小限制、配对后发送顺序、错误提示和取消机制。
 - **一致性要求**：拖拽只是文件选择入口，不能绕过“先配对/选设备，再发送”的既有产品流程，也不能绕过套餐、大小、安全或沙箱权限限制。
@@ -177,3 +265,84 @@
 - **覆盖模块**：局域网传输、跨网络传输、设备收件箱；分别覆盖小文本、小文件、多文件和大文件，以及局域网直连、跨网络中继等实际路径。
 - **优化方向**：检查串行等待、重复读写/加密、分块与并发、进度刷新、后台轮询/推送、首字节延迟和失败重试；不得以降低完整性校验、端到端加密、接收确认或稳定性为代价。
 - **体验验收**：除吞吐量外，同时验证选择后即时反馈、阶段化进度、速度/剩余时间准确性、接收方及时出现、取消响应和失败恢复。形成优化前后同设备同网络的可复现实测对比。
+
+### M-3 设备收件箱「发送内容」在切换目的地后失效（1.3.8 阻断项）
+
+> **状态：in progress（实现完成并本地验证，待 Codex 独立评审与验收）。2026-08-26。**
+> 分支 `work/macos-1.3.8-drag-drop`，随 macOS 1.3.8 / build 26 交付。
+> 未改动发布标识（1.3.8 / build 26）与最低系统版本（macOS 13.0）。
+
+- **现象（用户报告）**：跨网络传输完成配对后切到设备收件箱，按对方设备的
+  **发送内容**，点击无反应、设备页面打不开；取消该次跨网络配对后重试仍然无效；
+  只有强制退出并重新启动才恢复。
+- **根因（已在源码与运行时验证，与配对无关）**：「哪台设备的页面是打开的」曾有
+  **两个权威答案**，而两者生命周期不同。
+  - `InboxSendModel.selectedTargetID` 是 App 作用域的，除进程退出外不会消失。
+  - `DeviceInboxSurface.selectedConversationID` 是该视图的 `@State`。
+    `AppShellView` 的 detail 列以 `switch navigation.selection.macSurface` 分支渲染，
+    切换侧边栏目的地会**销毁并重建**该视图，其 `@State` 归零；从菜单栏关闭再打开
+    唯一窗口是同一类重建。
+  - 打开页面的唯一入口是 `.onChange(of: deliveries.selectedTargetID)`，而
+    `DeviceSendSection` 的**发送内容**只调用 `deliveries.selectTarget(candidate.id)`。
+    重建之后本地镜像为 `nil`、模型仍指向该设备，于是这次写入**写进了同一个值**；
+    等值写入不是变化，`onChange` 不触发，镜像保持 `nil`，按钮在本次启动的余下时间
+    里恒为无效。强制退出清空了模型，这正是只有重启才恢复的原因。
+  - 跨网络只是「离开又回到设备收件箱」这一动作的载体：它既不拥有也不参与设备
+    收件箱的导航，取消配对自然无从修复。
+- **修复（根因修复，非时序规避）**：
+  - **唯一持久权威**：模型改为只存 `focusedPeerID`（`@Published`），
+    `selectedTargetID` 与 `selectedCandidate` 由它**派生**
+    （`candidates.first { $0.id == focusedPeerID && $0.isSendable }`）。
+    界面每次渲染直接读模型，不再保留任何本地镜像，也不再依赖任何变化沿；
+    打开一台**已经是焦点**的设备因此是幂等的，且照样渲染其页面。
+  - **两道门、一个答案**：`focusPeer(_:)` 接受任意对端（含不可发送的已移除设备与
+    早于鉴权归属的只读会话桶），`selectTarget(_:)` 保留「被封锁行不得成为选择」
+    的既有拒绝规则；两者写同一个存储值。只读会话因此不再需要第二个答案。
+  - **失效即失去构图能力，而非关闭页面**：设备被吊销、关闭接收或移出账号时，
+    派生结果立即为 `nil`（撤除构图区），但 `focusedPeerID` 保留——用户仍在看那台
+    设备，其本地历史仍真实可读；页面上是否还有内容可渲染由 `openPeer` 自行判断。
+    `adopt(_:)` 因此不再需要「记得去清除」的那段代码，也就没有清除前的窗口。
+  - **账号变更**是模型唯一主动关闭页面的地方：`isolateFromPreviousAccount` 与取消
+    该账号工作在同一次同步事件里清空 `focusedPeerID`（放在视图里的版本在视图不在
+    屏幕上时根本不会执行）。
+  - **同族的视图复用生命周期问题一并解决**：宿主对 `DeviceConversationPage` 施加
+    `.id(peer.id)`，以**结构身份**取代逐项清除清单。换设备即换视图，暂存批次、
+    消息草稿、Copy 的「已复制」确认、两个删除确认以及未来新增的任何 `@State` 全部
+    重置；同一设备的重绘（消息到达、设备列表刷新、传输推进）身份不变，用户正在写的
+    内容不会被抹掉。页面自身的 `stagedFor` 替换守卫（M-1 第二个 Codex 发现的修复）
+    **原样保留**，作为宿主忘记加身份时的兜底，两者各有守护断言，均不可被静默删除。
+  - 保持 macOS 13 兼容（仅用 `onChange(of:perform:)`，无 macOS 14 API），
+    无障碍标识符与既有可达性行为未改动。
+- **证据**：
+  - `swift test` 4401 通过 / 0 失败 / 1 项既有跳过（基线 4391，新增 10）。
+  - 新增 `InboxNavigationAuthorityTests`（8 项）覆盖：重复打开同一设备、只读对端
+    可打开且永不成为目标、被封锁行的两道门、吊销后撤除构图但保留页面、设备移出
+    账号、重新可发送后重新可定址、账号切换关闭页面、返回清空唯一答案。
+  - 新增 `InboxSurfaceGuardTests` 两项：无本地镜像/无变化沿/模型侧单一存储值，
+    以及 `.id(peer.id)` 身份隔离与页面兜底守卫同时在位；并断言三个设备收件箱源文件
+    **不出现** `TransferPresence` / `LinkWorkspaceModel` / `TransferModules` /
+    `crossNetworkTransfer`——跨网络永远不得成为设备收件箱导航的闸门。
+  - 新增 macOS UI 回归 `DeviceInboxUITests`（2 项，在真实 App 中运行并通过）：
+    `testSendContentOpensTheDeviceSpaceAfterTheDestinationIsRebuilt` 打开设备页 →
+    切到**带真实待配对会话**的跨网络目的地 → 切回 → 断言页面仍在 → 返回列表 →
+    再次打开；`testTheOpenDeviceSpaceSurvivesClosingAndReopeningTheWindow` 走关闭
+    窗口并从菜单栏重开这条同类生命周期路径。
+  - 为此新增 UI 夹具 `--relayium-ui-testing-inbox-devices`（默认关闭，不影响任何既有
+    验收路径）：`/api/devices` 增加 `Inbox` 子树，使 `dev_other` 成为真正可发送的候选，
+    因此**发送内容**按钮首次进入自动化覆盖。其公钥是真实 X25519 公钥（固定标量乘基点），
+    因为 `InboxTargetEligibility` 会跑中央同款 `ValidatePublicKey`（含低阶点拒绝）。
+  - 变异验证（每一处均已证明会导致测试失败）：①还原镜像 + `onChange` 旧设计 →
+    UI 回归在「切回设备收件箱」处失败，即用户报告的现象；②删除 `.id(peer.id)` →
+    身份隔离守护失败；③`selectedCandidate` 不再重问 `isSendable` → 4 项行为测试失败；
+    ④`focusPeer` 改为拒绝非候选对端 → 只读对端测试失败；⑤重新引入
+    `.onChange(of: deliveries.selectedTargetID)` → 单一权威守护失败。
+  - 既有设备页 UI 测试全部通过（历史+构图同页、删除确认、完成投递、完整登录态界面），
+    证明 `.id` 未破坏 `Form` 的分节渲染。
+  - 两个 Release 分发（`-scheme Relayium`、`-scheme RelayiumAppStore`）与
+    `build-for-testing` 均构建成功。
+- **证据边界（明确声明）**：UI 回归中的跨网络会话来自离线夹具（已铸码、等待对端），
+  **不是**一次真实的端到端配对；本轮未在签名 Release 构建中做人工 QA。
+  「真实配对完成后」这一条仍属人工验收项。
+- **剩余人工 QA**：真实双机跨网络配对完成后切换到设备收件箱并发送；设备页打开状态下
+  在对端关闭接收/吊销设备；切换账号；从菜单栏关闭并重开窗口；连续在多台设备页之间
+  切换并确认草稿与已选文件不串台。

@@ -97,6 +97,38 @@ struct DeviceConversationPage: View {
     @State private var deletingEntry: InboxTimelineEntry?
     @State private var deletingConversation: Set<String>?
 
+    /// A Finder drag is over the file controls. Held only so the drop target can
+    /// be asked about; this surface draws no highlight of its own, because a
+    /// form row that grew a border under the cursor would read as a control
+    /// changing rather than as a target accepting.
+    @State private var isDropTargeted = false
+    /// A drag refused whole — see `FileDropAdmission`. Separate from
+    /// `selection.error`, which is the expansion's refusal of a batch that WAS
+    /// staged: the two have different remedies and naming one as the other would
+    /// send the user to look for a file that never arrived.
+    @State private var dropRefusal: String?
+
+    /// **Which device the staged batch above belongs to.**
+    ///
+    /// `peerID` is a `let`, but view identity is the host's to break rather than
+    /// this page's to rely on: a host that renders this page inside an
+    /// `if let peer = …` with no explicit `id` reuses this view across a device
+    /// swap — new `peerID`, same `@StateObject selection`. A batch picked or
+    /// dropped for device A would then be listed under device B's name with Send
+    /// beneath it, and the model's own `selectedCandidate` has moved to B, so
+    /// nothing else refuses it. The page reports the device it is serving and
+    /// discards on a substitution. See `StagedSelectionLifetime`.
+    ///
+    /// **`DeviceInboxSurface` now DOES break identity — `.id(peer.id)` — and
+    /// this stays anyway.** Not redundancy: the two answer different questions.
+    /// Identity at the host covers every piece of state on this page, including
+    /// the ones nobody has written yet, and is the mechanism this file relies on
+    /// for `draft`, `copiedEntryID` and the two delete confirmations. This
+    /// covers the case identity cannot: a host that forgets. Both are checked by
+    /// name in `InboxSurfaceGuardTests`, so neither can be dropped quietly, and
+    /// under a host that keys correctly this simply never fires.
+    @State private var stagedFor = StagedSelectionLifetime()
+
     /// The device this page may send to — nil unless the model's own selection
     /// agrees with the page's peer.
     private var target: InboxSendCandidate? {
@@ -116,6 +148,17 @@ struct DeviceConversationPage: View {
             // the selection on that answer, which takes the composer away before
             // anything is composed for a device that would refuse it.
             .task { deliveries.refreshTargets(token: session.bearerToken ?? "") }
+            // The first device this page renders for is not a substitution:
+            // seeded here so the NEXT one is compared against something.
+            .onAppear { _ = stagedFor.serving(FileDropContext(peerID)) }
+            // **A batch belongs to the device it was staged for.** The parameter
+            // rather than `peerID`, because the closure that runs may be the one
+            // captured by the body that is being replaced — and reading the old
+            // device here would compare a device to itself and discard nothing.
+            .onChange(of: peerID) { device in
+                guard stagedFor.serving(FileDropContext(device)) else { return }
+                discardStagedDevice()
+            }
         activeSection
         composeSection
         timelineSection
@@ -377,24 +420,72 @@ struct DeviceConversationPage: View {
     /// inside it a `relativePath`, and that path is what the sealed manifest
     /// carries to the other device.
     ///
-    /// No drop zone: this page is a grouped `Form`, and a drop target inside a
-    /// form row reads as a control the row does not have.
+    /// **A third way in, and it is the same batch: a Finder drag.** No dashed
+    /// box — this page is a grouped `Form`, and a drop rectangle inside a form
+    /// row reads as a control the row does not have. The two buttons and the
+    /// hint beneath them ARE the target, so the affordance is a sentence rather
+    /// than a shape, and `FileDropReceiver` puts what is dropped through
+    /// `SelectionStore.add` exactly as both pickers do.
+    ///
+    /// **It cannot send and it cannot choose a device.** Send is the button at
+    /// the bottom of this group, unchanged, and the device is `target` — which
+    /// this page only has because the model's own selection still names the peer
+    /// it was opened for. A drag onto a page whose device was revoked, switched
+    /// off or removed lands on `inbox-compose-unavailable` instead, because the
+    /// composer is gone by then; a revocation that arrives DURING the drag is
+    /// caught by the same `isBusy` re-read on the far side of the item load.
     @ViewBuilder
     private var fileControls: some View {
-        HStack {
-            Button(L10n.t(.commonChooseFilesOrFolders)) {
-                chooseFilesOrFolders(into: selection)
-            }
-            .buttonStyle(.bordered)
-            .accessibilityIdentifier("inbox-send-choose-files")
-            Button(L10n.t(.sendChooseFolders)) { chooseFolders(into: selection) }
+        VStack(alignment: .leading, spacing: Metrics.tight) {
+            HStack {
+                Button(L10n.t(.commonChooseFilesOrFolders)) {
+                    chooseFilesOrFolders(into: selection)
+                }
                 .buttonStyle(.bordered)
-                .accessibilityIdentifier("inbox-send-choose-folder")
-            if !selection.isEmpty {
-                Button(L10n.t(.commonClear)) { selection.clear() }
+                .accessibilityIdentifier("inbox-send-choose-files")
+                Button(L10n.t(.sendChooseFolders)) { chooseFolders(into: selection) }
                     .buttonStyle(.bordered)
-                    .accessibilityIdentifier("inbox-send-clear")
+                    .accessibilityIdentifier("inbox-send-choose-folder")
+                if !selection.isEmpty {
+                    Button(L10n.t(.commonClear)) { selection.clear(); dropRefusal = nil }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("inbox-send-clear")
+                }
             }
+            // Both halves: a drag stages, and Send is still pressed by hand.
+            Text(L10n.t(.dropSendHint))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("inbox-send-drop-hint")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        // **The device, named rather than assumed.** `target == nil` answers
+        // whether this page may send at all; it does not answer WHICH device the
+        // page is about, and the two are different questions the moment SwiftUI
+        // reuses this view. `peerID` is a `let`, but view identity is the host's
+        // to apply rather than this page's to assume: `DeviceInboxSurface` does
+        // key this page with `.id(peer.id)`, so under that host a device swap is
+        // a new view and this comparison never fires — and it is passed anyway,
+        // because the dependency being removed is on the host continuing to do
+        // that. A second host, or a refactor that drops the key, would otherwise
+        // reuse this view and with it the `@StateObject selection` a drag is
+        // resolving into. One comparison buys the same rule the link pane obeys,
+        // held independently of how this page happens to be navigated.
+        .acceptsFileDrop(into: selection,
+                         isBusy: { target == nil },
+                         context: { FileDropContext(peerID) },
+                         isTargeted: $isDropTargeted,
+                         onRefusal: { dropRefusal = $0 })
+        // **No `accessibilityElement` wrapper.** This block holds the two picker
+        // buttons and Clear, and grouping a container that holds controls is the
+        // propagation defect this surface has already lost two controls to. The
+        // hint is its own `Text` on a leaf, which is where every identifier in
+        // this file lives.
+        if let dropRefusal {
+            InlineMessage(.failure, dropRefusal)
+                .accessibilityIdentifier("inbox-send-drop-error")
         }
         if let message = selection.error {
             InlineMessage(.failure, message)
@@ -617,6 +708,19 @@ struct DeviceConversationPage: View {
 
     // MARK: - actions
 
+    /// Everything on this page that belonged to the device it has just been
+    /// reused away from: the batch nobody sent, and the refusal describing a drag
+    /// onto it. Both name a device that is no longer on screen, and the batch in
+    /// particular is one Send would seal to the new one.
+    ///
+    /// A send already handed to `InboxSendModel` is untouched and must be: it
+    /// copied the bytes into this app's own storage under a durable plan and is
+    /// addressed to the device it was started for.
+    private func discardStagedDevice() {
+        selection.clear()
+        dropRefusal = nil
+    }
+
     /// The one place this page spends the bearer on a file send.
     private func sendFiles() {
         guard let token = liveToken() else { return }
@@ -626,8 +730,10 @@ struct DeviceConversationPage: View {
         deliveries.send(files: selection.files, sourceDraftId: nil, token: token)
         // Cleared only once the model has taken the batch without refusing it.
         // A staging refusal leaves the files staged, so the user can read what
-        // went wrong and press Send again rather than re-picking a folder.
-        if deliveries.refusal == nil { selection.clear() }
+        // went wrong and press Send again rather than re-picking a folder. The
+        // drag refusal goes with the batch: it was about items that are no
+        // longer what this group is showing.
+        if deliveries.refusal == nil { selection.clear(); dropRefusal = nil }
     }
 
     /// The one place this page spends the bearer on a message.

@@ -762,6 +762,99 @@ final class LinkWorkspaceModelTests: XCTestCase {
 
     // MARK: - 6. stale state
 
+    /// **A Finder drag accepted on one link may not stage onto the next one.**
+    ///
+    /// The pane is the thing that outlives the attempt: `hasSession` is true for
+    /// `.ended`, so `TransferLinkPane` stays on screen with its `@StateObject`
+    /// selection store intact, and `connect` is admitted from `.ended` without a
+    /// `dismiss` — which is the whole substitution, performed here rather than
+    /// described. AppKit accepts a drop before its payload exists; by the time
+    /// the item providers resolve, the model is serving somebody else.
+    ///
+    /// What makes this worth a model-level test rather than only a value-level
+    /// one is the middle assertion: `acceptsWork` really is true again on the
+    /// replacement, from the real state machine. Every gate the drop target had
+    /// before `attemptGeneration` says yes here.
+    func testADropAcceptedOnOneLinkIsRefusedByTheLinkThatReplacedIt() async throws {
+        let rig = rig()
+        _ = await openLink(rig, peerId: "zzz")
+        XCTAssertTrue(rig.model.acceptsWork)
+
+        // AppKit takes the drag HERE, and the pane records which attempt for.
+        let droppedInto = FileDropContext("attempt \(rig.model.attemptGeneration)")
+
+        // …and while the providers resolve, this link ends and the user opens a
+        // different one. No `dismiss`: the pane is still up, which is why its
+        // store is still there for a stale batch to land in.
+        rig.model.leave()
+        await settle()
+        XCTAssertTrue(rig.model.hasSession, "the pane was torn down, so nothing survives to race")
+        announceLink(rig, "yyy")
+        XCTAssertTrue(rig.model.connect(peerId: "yyy", peerLabel: "Other Mac"))
+        await settle()
+        rig.transports[1].publish(identity(peerId: "yyy"))
+        await settle()
+
+        // The state the old gate read, on the NEW peer: open, digits answered,
+        // not busy, and willing to take a batch.
+        XCTAssertTrue(rig.model.acceptsWork,
+                      "the replacement link is not open, so this test proves nothing")
+        XCTAssertEqual(rig.model.peerLabel, "Other Mac")
+        let nowServing = FileDropContext("attempt \(rig.model.attemptGeneration)")
+        XCTAssertNotEqual(droppedInto, nowServing,
+                          "a new attempt reused the previous attempt's identity")
+
+        let url = dir.appendingPathComponent("dragged.bin")
+        try Data([1, 2, 3]).write(to: url)
+        let paneStore = SelectionStore()
+
+        XCTAssertEqual(admitFileDrop([url], isBusy: !rig.model.acceptsWork,
+                                     droppedInto: droppedInto, nowServing: nowServing),
+                       .refusedStaleContext,
+                       "a drag begun on the link to zzz was staged for the link to yyy")
+        XCTAssertTrue(paneStore.isEmpty)
+
+        // Non-vacuous: the same batch, the same live model, the same non-busy
+        // read — and the only change is that the attempt is the one dropped on.
+        guard case let .accepted(urls) = admitFileDrop([url],
+                                                       isBusy: !rig.model.acceptsWork,
+                                                       droppedInto: nowServing,
+                                                       nowServing: nowServing) else {
+            return XCTFail("the token refused a drag that never left its own attempt")
+        }
+        paneStore.add(urls)
+        XCTAssertEqual(paneStore.files.map(\.name), ["dragged.bin"])
+    }
+
+    /// The generation is only worth comparing if it actually moves, and moves
+    /// exactly once per attempt. An `attemptGeneration` that were constant would
+    /// make every stale-drop assertion above pass for the wrong reason.
+    func testTheAttemptGenerationChangesOncePerAttemptAndNeverGoesBack() async {
+        let rig = rig()
+        var seen: [Int] = [rig.model.attemptGeneration]
+
+        _ = await openLink(rig, peerId: "zzz")
+        seen.append(rig.model.attemptGeneration)
+        // Neither the digits being answered nor the link merely running is a new
+        // attempt: a drag staged on this link must still be staged on this link.
+        rig.model.send(message: "hello")
+        await settle()
+        XCTAssertEqual(rig.model.attemptGeneration, seen.last)
+
+        rig.model.leave()
+        await settle()
+        XCTAssertEqual(rig.model.attemptGeneration, seen.last,
+                       "an ending is not a new attempt; the pane is still about the old peer")
+
+        announceLink(rig, "yyy")
+        XCTAssertTrue(rig.model.connect(peerId: "yyy", peerLabel: "Other Mac"))
+        await settle()
+        seen.append(rig.model.attemptGeneration)
+
+        XCTAssertEqual(seen, seen.sorted(), "an attempt reused an earlier identity")
+        XCTAssertEqual(Set(seen).count, seen.count, "two different attempts share one identity")
+    }
+
     /// A projection belonging to an attempt that has been replaced may not
     /// repaint the current one. The generation guard is what makes that true
     /// rather than merely unlikely.

@@ -25,14 +25,42 @@ or releasing a version. Relayium uses manual App Store release.
 | Support URL | `https://relayium.com/support/` |
 | Marketing URL | `https://relayium.com/` |
 
-### Current release state and 1.3.7 submission
+### Current release state and 1.3.8 submission
 
 Apple's public lookup reports macOS `1.3.6 (24)` live from
 2026-08-26 01:15:37 UTC with minimum macOS 13.0. Build 24 is therefore consumed
-and must never be rebuilt or re-uploaded. The next release is `1.3.7 (25)` from
-product source `a6fafea6e84aedc790f4a299c2987c12528703b4` or its version-only
-descendant. It keeps minimum macOS 13.0 and does not remove compatibility with
-older Relayium clients.
+and must never be rebuilt or re-uploaded. Build 25 (`1.3.7`) was delivered to
+App Store Connect/TestFlight and is likewise consumed. The next release is
+`1.3.8 (26)` from product source on `work/macos-1.3.8-drag-drop`, based on
+`a41df11c0b7f7eb83a76fce90160dbd1427759bd`, or its version-only descendant. It
+keeps minimum macOS 13.0 and does not remove compatibility with older Relayium
+clients.
+
+`1.3.8` is a Finder drag-and-drop parity release (requirement M-1). It changes
+no subscription product, price, entitlement, purchase transition or provider
+configuration, and adds no capability that reaches user files beyond the
+selection pipeline the file pickers already used.
+
+What's New for 1.3.8:
+
+> You can now drag files and folders straight from Finder into Cross-network
+> Transfer and the Device Inbox, the same way you already could when sending a
+> link. Dragged items are staged so you can check them first — sending is still
+> a separate step, and choosing the files with the buttons works exactly as
+> before.
+
+What to Test for 1.3.8:
+
+> Connect a cross-network transfer with a pairing code, then drag one file and
+> then several files and a folder from Finder onto the send controls. Confirm
+> the items are listed and that nothing is sent until Send is pressed, then send
+> and confirm they arrive in the same order. Repeat on a device in My Devices.
+> On both screens, confirm Clear discards a dragged batch, dragging the same
+> item twice does not duplicate it, and the Choose Files or Folders buttons
+> still work.
+
+Prior release copy (`1.3.7`, build 25, transfer performance) is retained below
+for the record; it has already been delivered and must not be re-submitted.
 
 What's New for 1.3.7:
 

@@ -1106,6 +1106,14 @@ public enum L10nKey: String, CaseIterable, Sendable {
 
     case dropA11yLabel = "drop.a11yLabel"
     case dropA11yHint = "drop.a11yHint"
+    /// The invitation on a surface whose file affordance is a BUTTON, so the
+    /// drop target has no dashed box of its own to announce it. It names the
+    /// second half too — a drop stages, and Send is still pressed by hand.
+    case dropSendHint = "drop.sendHint"
+    /// A drag whose items could not all be decoded. Says that NOTHING was
+    /// staged, because the failure mode this replaces staged the ones that
+    /// worked and left the user to discover the gap after pressing Send.
+    case dropRefusedUnreadable = "drop.refusedUnreadable"
     case pickerPrompt = "picker.prompt"
     case fileUnnamed = "file.unnamed"
     case receivedRevealInFinder = "received.revealInFinder"

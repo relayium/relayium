@@ -4046,14 +4046,40 @@ final class MacSurfaceGuardTests: XCTestCase {
     func testDelayedDropsRecheckLiveOwnershipBeforeChangingSelection() throws {
         let zone = try source(named: "FileDropZone.swift")
         XCTAssertTrue(zone.contains("let isBusy: () -> Bool"))
-        guard let resolve = zone.range(of: "let urls = await droppedFileURLs(providers)"),
-              let recheck = zone.range(of: "guard !isBusy() else { return }",
+        // Two admission points, in this order: AppKit is declined outright while
+        // the surface is busy, and the payload — which arrives later, after a
+        // suspension a transfer can start inside — is judged again on a LIVE
+        // read rather than on the answer that accepted the drag.
+        guard let decline = zone.range(of: "guard !isBusy() else { return false }"),
+              let resolve = zone.range(of: "let items = await droppedItems(providers)",
+                                       range: decline.lowerBound..<zone.endIndex),
+              let recheck = zone.range(of: "switch admitFileDrop(items, isBusy: isBusy(),",
                                        range: resolve.lowerBound..<zone.endIndex),
+              let identity = zone.range(of: "nowServing: context())",
+                                        range: recheck.lowerBound..<zone.endIndex),
               let add = zone.range(of: "store.add(urls)",
                                    range: recheck.lowerBound..<zone.endIndex) else {
             return XCTFail("the drop target lost its post-suspension admission check")
         }
         XCTAssertTrue(resolve.lowerBound < recheck.lowerBound && recheck.lowerBound < add.lowerBound)
+        XCTAssertTrue(identity.lowerBound < add.lowerBound)
+        // The staging call is the LAST thing in the accepted arm and is reached
+        // through no other branch: a `refusedBusy` or `refusedUnreadable` batch
+        // that could still fall through to `add` would be the partial admission
+        // the whole type exists to prevent.
+        XCTAssertEqual(occurrences(of: "store.add(urls)", in: zone), 1,
+                       "the drop stages the batch from more than one branch")
+        // Nothing in the drop path sends. The adapter's whole contract is that a
+        // drag is another spelling of the picker.
+        for sending in ["link.send(", "deliveries.send(", "sendNow(", "model.send("] {
+            XCTAssertFalse(zone.contains(sending),
+                           "a drop can start a transfer by itself: \(sending)")
+        }
+        // The drag source is another application, and a completion handler it
+        // calls twice would resume a bridged continuation twice — a runtime trap
+        // rather than a recoverable error.
+        XCTAssertTrue(zone.contains("OneShotClaim()") && zone.contains("guard once.claim() else"),
+                      "a drag source that calls back twice can terminate Relayium")
 
         // `TransferStagingSection` is DORMANT — no macOS screen constructs it —
         // and it is kept whole so a re-enable of pre-staging restores these rules
@@ -4076,6 +4102,271 @@ final class MacSurfaceGuardTests: XCTestCase {
             "a macOS screen constructs the dormant pre-connect staging section")
         XCTAssertTrue(try source(named: "UploadPane.swift").contains(
             "FileDropZone(store: selection, isBusy: { model.isBusy })"))
+    }
+
+    /// **A delayed drop is re-judged about the same TARGET, not merely about the
+    /// same state.**
+    ///
+    /// `isBusy` answers "may this surface be written to". It cannot answer "is
+    /// this still the surface I dropped on", and the two differ exactly when a
+    /// view outlives what it was drawn for: `TransferLinkPane` renders for
+    /// `.ended` as well as `.open` and keeps its `@StateObject` selection across
+    /// the next `connect`, so a drag whose providers resolve after the swap
+    /// meets a link that is open, verified and NOT busy — a different peer with
+    /// an identical state read.
+    ///
+    /// Three things have to hold, and each is a way the guard was actually lost
+    /// while it was being written:
+    ///
+    ///  1. the token is captured **synchronously**, before the `Task` — read
+    ///     after the hop it records the replacement as the thing dropped onto;
+    ///  2. it is compared **again** after the payload, and the comparison sits
+    ///     before `store.add`; and
+    ///  3. every surface that holds a peer, a link or a device supplies a real
+    ///     identity, so `fixed` cannot become the way a target opts out.
+    func testADelayedDropIsRefusedByASurfaceThatWasReplacedNotMerelyOccupied() throws {
+        let zone = try source(named: "FileDropZone.swift")
+        XCTAssertTrue(zone.contains("let context: () -> FileDropContext"),
+                      "the drop adapter has no notion of which target it is serving")
+
+        // 1. Captured while AppKit is still asking, and BEFORE the Task that
+        // waits for the payload. Order asserted rather than presence: both reads
+        // are spelled `context()`, and the defect is which side of the hop the
+        // first one is on.
+        guard let capture = zone.range(of: "let droppedInto = context()"),
+              let hop = zone.range(of: "Task { @MainActor in",
+                                   range: capture.upperBound..<zone.endIndex),
+              let resolve = zone.range(of: "await droppedItems(providers)",
+                                       range: hop.upperBound..<zone.endIndex) else {
+            return XCTFail("the drop target does not capture its context before the suspension")
+        }
+        XCTAssertTrue(capture.lowerBound < hop.lowerBound && hop.lowerBound < resolve.lowerBound)
+        XCTAssertEqual(occurrences(of: "let droppedInto = context()", in: zone), 1)
+
+        // 2. Both halves reach admission, and a stale batch is refused in the
+        // same silent arm a busy one is — the surface now in front of the user
+        // has nothing to do with the drag, so an error on it would describe
+        // somebody else's mistake.
+        XCTAssertTrue(zone.contains("droppedInto: droppedInto, nowServing: context())"),
+                      "the post-suspension check does not compare the target")
+        XCTAssertTrue(zone.contains("case .refusedBusy, .refusedStaleContext, .empty:"),
+                      "a stale batch is not refused, or is refused loudly")
+
+        // 3. `fixed` is the opt-out, so it belongs to exactly one presentation:
+        // the dashed box, whose destination is this account's own storage.
+        XCTAssertEqual(occurrences(of: "context: { .fixed }", in: zone), 1,
+                       "a second surface opted out of the target check")
+        for name in ["Transfer/TransferLinkPane.swift",
+                     "DeviceInbox/DeviceConversationPage.swift"] {
+            let pane = try source(named: name)
+            XCTAssertFalse(pane.contains("context: { .fixed }"),
+                           "\(name) holds a peer and still opted out of the target check")
+        }
+        // The link pane keys on the ATTEMPT, which is the only value that
+        // changes when the peer behind an equally-open link does.
+        let pane = try source(named: "Transfer/TransferLinkPane.swift")
+        XCTAssertTrue(pane.contains("context: { FileDropContext(\"attempt \\(link.attemptGeneration)\") }"),
+                      "the link pane's drop cannot tell one open link from the next")
+        XCTAssertFalse(pane.contains("FileDropContext(link.peerLabel"),
+                       "the link pane keyed its drop on a peer-supplied label")
+        // The device page keys on the device, so a reused view cannot carry a
+        // batch from one conversation into another.
+        let detail = try source(named: "DeviceInbox/DeviceConversationPage.swift")
+        XCTAssertTrue(detail.contains("context: { FileDropContext(peerID) }"),
+                      "the device page's drop cannot tell one device from the next")
+    }
+
+    /// **A staged batch cannot outlive the target it was staged for.**
+    ///
+    /// `admitFileDrop` closes the window INSIDE one drag: the target is captured
+    /// while AppKit is still asking and compared again when the payload lands.
+    /// That leaves the window after it, and it is the wider one — a batch that
+    /// landed cleanly on attempt N, or was picked for device A, sits in a
+    /// `@StateObject SelectionStore` owned by a view its host may reuse.
+    /// `TransferLinkPane` renders through `.ended` and into the next attempt;
+    /// `DeviceInboxSurface` rendered `DeviceConversationPage` inside
+    /// `if let peer = openPeer` with no identity of its own until the M-3
+    /// navigation fix gave it `.id(peer.id)`. Nothing in either case empties the
+    /// store, and the next press of Send is the whole defect: files the user
+    /// staged for somebody else, sealed to whoever is there now.
+    ///
+    /// **The device page's structural identity is now the primary mechanism and
+    /// this wiring is depth behind it** — `.id(peer.id)` resets everything on
+    /// that page, including state nobody has written yet, and
+    /// `InboxSurfaceGuardTests` asserts the key by name. What is asserted here
+    /// survives a host that drops it, and is the ONLY mechanism the link pane
+    /// has: its attempt changes underneath one continuously rendered view.
+    ///
+    /// The rule itself is `StagedSelectionLifetime` and is proved by
+    /// `FileDropAdmissionTests`. What is proved here is that both panes actually
+    /// wear it, discard everything that belonged to the old target, and — the
+    /// clause that is as important as the discard — do NOT discard for any of the
+    /// other reasons a body re-runs.
+    func testAStagedBatchIsDiscardedWhenItsTargetIsSubstituted() throws {
+        let pane = try source(named: "Transfer/TransferLinkPane.swift")
+        let detail = try source(named: "DeviceInbox/DeviceConversationPage.swift")
+
+        // 1. Both panes hold the lifetime, and both seed it on appear — an
+        // unseeded lifetime treats the first substitution as a first sighting
+        // and lets exactly the batch this exists to catch through.
+        for (name, text) in [("link pane", pane), ("device page", detail)] {
+            XCTAssertTrue(text.contains("@State private var stagedFor = StagedSelectionLifetime()"),
+                          "the \(name) has no lifetime for its staged batch")
+            XCTAssertTrue(text.contains(".onAppear { _ = stagedFor.serving("),
+                          "the \(name) never seeds its lifetime, so the first swap is missed")
+        }
+
+        // 2. **The link pane keys the discard on the ATTEMPT**, which is the same
+        // fact its drop context keys on, so the two cannot come to disagree about
+        // what a substitution is.
+        XCTAssertTrue(pane.contains(".onChange(of: link.attemptGeneration) { generation in"),
+                      "the link pane does not react to a new attempt")
+        XCTAssertTrue(pane.contains("stagedFor.serving(FileDropContext(\"attempt \\(generation)\"))"),
+                      "the link pane's discard is not keyed on the attempt its drop is")
+        XCTAssertTrue(pane.contains("discardStagedAttempt()"),
+                      "the link pane detects the substitution and does nothing about it")
+
+        // 3. Everything that belonged to the replaced attempt goes: the batch,
+        // the drag refusal describing it, and the error its last action left.
+        let discard = try XCTUnwrap(pane.range(of: "private func discardStagedAttempt() {"))
+        let body = String(pane[discard.upperBound...].prefix(while: { $0 != "}" }))
+        for cleared in ["dropped.clear()", "dropRefusal = nil", "actionError = nil"] {
+            XCTAssertTrue(body.contains(cleared),
+                          "a replaced attempt left \(cleared) behind")
+        }
+
+        // 4. **The device page keys on the device**, and takes the substituted
+        // id from the closure parameter rather than re-reading `peerID` — the
+        // closure that runs may be the one captured by the body being replaced,
+        // and reading the old device there would compare a device to itself.
+        XCTAssertTrue(detail.contains(".onChange(of: peerID) { device in"),
+                      "the device page does not react to being reused for another device")
+        XCTAssertTrue(detail.contains("stagedFor.serving(FileDropContext(device))"),
+                      "the device page's discard is not keyed on the device its drop is")
+        let deviceDiscard = try XCTUnwrap(detail.range(of: "private func discardStagedDevice() {"))
+        let deviceBody = String(detail[deviceDiscard.upperBound...].prefix(while: { $0 != "}" }))
+        for cleared in ["selection.clear()", "dropRefusal = nil"] {
+            XCTAssertTrue(deviceBody.contains(cleared),
+                          "a substituted device left \(cleared) behind")
+        }
+
+        // 5. **Nothing else discards.** A link that ends is still the same link:
+        // the digits are gone, but the peer the batch was staged for is the peer
+        // it would be sent to on reconnect, and emptying the pane there would
+        // throw away work over a dropped connection. So the discard hangs off the
+        // attempt and off nothing else — not the connection, not the verification,
+        // not `acceptsWork`, and not the model's selected candidate.
+        for keyedOnState in [".onChange(of: link.connection)",
+                             ".onChange(of: link.verification)",
+                             ".onChange(of: link.acceptsWork)"] {
+            XCTAssertFalse(pane.contains(keyedOnState),
+                           "the link pane discards a staged batch on \(keyedOnState), not on a new peer")
+        }
+        XCTAssertFalse(detail.contains(".onChange(of: deliveries.selectedCandidate)"),
+                       "the device page discards a staged batch on the model's selection")
+
+        // 6. The discard is the lifetime's answer, never an unconditional clear:
+        // a `guard` that was deleted would empty the batch on every re-render,
+        // and every re-render is a message arriving or a byte counter ticking.
+        XCTAssertTrue(pane.contains("guard stagedFor.serving(FileDropContext(\"attempt \\(generation)\")) else { return }"),
+                      "the link pane clears on every render rather than on a substitution")
+        XCTAssertTrue(detail.contains("guard stagedFor.serving(FileDropContext(device)) else { return }"),
+                      "the device page clears on every render rather than on a substitution")
+    }
+
+    /// **M-1: Cross-network Transfer accepts a Finder drag, and the drag stages
+    /// rather than sends.**
+    ///
+    /// The drop belongs on the CONNECTED pane and nowhere else. `crossConnect`
+    /// stages nothing before a peer exists — that is a separate owner decision
+    /// with its own test — so the surface a drag may land on is the one that
+    /// already holds a verified `link/1`, where the peer has been chosen and the
+    /// digits have been compared. That is what makes "a drop cannot bypass
+    /// pairing" structural rather than a sentence in a comment: there is no
+    /// render of this pane in which a peer is unchosen.
+    ///
+    /// Four clauses, each of which the requirement names:
+    ///
+    ///  1. the drag reaches the same `SelectionStore` the pickers write to;
+    ///  2. it stages — Send is a separate press, on its own control;
+    ///  3. it is refused on exactly the gate the buttons disable on; and
+    ///  4. the keyboard-reachable pickers are still there, unchanged.
+    func testTheCrossNetworkLinkPaneAcceptsADraggedBatchAndStillRequiresSend() throws {
+        let pane = try source(named: "Transfer/TransferLinkPane.swift")
+
+        // 1. One adapter, one store, and it is the app's shared staging type
+        // rather than a second list this pane keeps for dragged files.
+        XCTAssertTrue(pane.contains("@StateObject private var dropped = SelectionStore()"),
+                      "the link pane has nowhere to stage a dragged batch")
+        XCTAssertTrue(pane.contains(".acceptsFileDrop(into: dropped,"),
+                      "the link pane does not accept a Finder drag")
+        XCTAssertEqual(occurrences(of: ".acceptsFileDrop(", in: pane), 1,
+                       "two drop targets on one pane is two selections")
+        XCTAssertFalse(pane.contains(".onDrop("),
+                       "the link pane grew its own drop handling beside the adapter")
+
+        // 2. **The drop stages; a button sends.** `store.add` is the adapter's,
+        // and the only send on this pane is behind an explicit control.
+        XCTAssertTrue(pane.contains("Button(L10n.t(.commonSend)) { sendDropped() }"),
+                      "a dragged batch has no explicit Send")
+        XCTAssertTrue(pane.contains("\"link-drop-send\"") && pane.contains("\"link-drop-clear\""),
+                      "the dragged batch has no addressable Send/Clear pair")
+        // The pane's two send paths both go through ONE staging call, so the
+        // MAX_FILES bound, the symlink refusal and the held descriptors cannot
+        // come to differ between a picked batch and a dragged one.
+        XCTAssertEqual(occurrences(of: "stageRealtimeFiles(", in: pane), 1,
+                       "the drag and the picker stage through separate code")
+        XCTAssertEqual(occurrences(of: "link.send(files:", in: pane), 1,
+                       "the pane sends from more than one place")
+
+        // 3. The SAME gate the buttons carry, re-read at the moment of use
+        // rather than trusted from `disabled` — a render that drew Send and the
+        // click that arrives are different turns.
+        XCTAssertTrue(pane.contains("isBusy: { !link.acceptsWork }"),
+                      "the drop target uses a gate of its own")
+        XCTAssertTrue(pane.contains("guard link.acceptsWork else { return }"),
+                      "Send trusts the render that disabled it")
+        // A batch the model refused stays staged. Clearing on a refusal is how a
+        // user loses a folder and is told it was sent.
+        guard let took = pane.range(of: "guard deliver(files) else { return }"),
+              let cleared = pane.range(of: "clearDropped()", range: took.upperBound..<pane.endIndex)
+        else { return XCTFail("the dragged batch is discarded before the link took it") }
+        XCTAssertTrue(took.lowerBound < cleared.lowerBound)
+        XCTAssertTrue(pane.contains("return link.actionError == nil"),
+                      "the pane decides a send succeeded without asking the model")
+
+        // 4. The picker survives. A drag is an addition, never a replacement:
+        // it is not keyboard-reachable and removing the buttons would take the
+        // capability away from anybody who cannot drag.
+        for picker in ["Button(L10n.t(.linkSendFile)) { pick(directories: false) }",
+                       "Button(L10n.t(.linkSendFolder)) { pick(directories: true) }"] {
+            XCTAssertTrue(pane.contains(picker), "the link pane lost \(picker)")
+        }
+        // And the affordance is stated, because a drop target with no visible
+        // edge that nothing names is a feature only its author can find. It
+        // states BOTH halves — drag, then press Send — so letting go over the
+        // window is never read as a promise to transmit.
+        XCTAssertTrue(pane.contains("Text(L10n.t(.dropSendHint))"),
+                      "nothing on the pane says a drag is accepted")
+        XCTAssertTrue(pane.contains("\"link-drop-hint\""),
+                      "the drag hint carries no accessibility identifier")
+    }
+
+    /// **The pre-connect pairing screen still cannot take a drag.**
+    ///
+    /// M-1 added drag-and-drop to Cross-network Transfer, and the one place it
+    /// must NOT appear is the screen where no peer has been chosen — a drop
+    /// there would be exactly the pre-connect staging the owner removed, and the
+    /// batch it staged would be waiting for whichever code was minted next.
+    func testTheDragDidNotReachEitherPreConnectScreen() throws {
+        for name in [lanConnect, crossConnect, "Transfer/PairingCodeStart.swift"] {
+            let pane = try source(named: name)
+            for forbidden in [".acceptsFileDrop(", ".onDrop(", "FileDropReceiver",
+                              "droppedItems(", "admitFileDrop("] {
+                XCTAssertFalse(pane.contains(forbidden),
+                               "\(name) can stage a dragged batch before connecting: \(forbidden)")
+            }
+        }
     }
 
     /// Claim refusal is a real concurrency result, not an impossible branch:

@@ -79,7 +79,6 @@ struct DeviceInboxSurface: View {
     /// the confirmation onto somebody else's row. It is never rendered — it is
     /// compared, and the row's visible text is the message and its time.
     @State private var copiedMessageID: String?
-    @State private var selectedConversationID: String?
 
     private var entry: DeviceInboxEntry {
         DeviceInboxEntry.entry(
@@ -120,6 +119,30 @@ struct DeviceInboxSurface: View {
                                            deliveries: deliveries,
                                            onAccount: { onAccount(.signIn) },
                                            onBack: { closePeer() })
+                        // **The page's identity IS the device it is about.**
+                        //
+                        // Without this the branch is one view that swaps its
+                        // `peerID`, so going straight from one open device to
+                        // another reuses every piece of state on it: the staged
+                        // batch, the half-typed message, the row a Copy said
+                        // "Copied" for, and a delete confirmation raised against
+                        // a row in the timeline that is no longer on screen. The
+                        // first of those is how files go to the wrong machine and
+                        // the rest are how a person's work turns up under
+                        // somebody else's name.
+                        //
+                        // A clear-list inside the page could only ever cover the
+                        // properties somebody remembered to add to it, and the
+                        // next `@State` added there would be carried across
+                        // silently. Identity covers all of them, including the
+                        // ones that do not exist yet, and it is checked by name
+                        // in `InboxSurfaceGuardTests`.
+                        //
+                        // For the SAME device it is stable, which is the other
+                        // half of the contract: a redraw — a delivery landing, a
+                        // rename, a refreshed device list — must not erase what
+                        // the user is in the middle of writing.
+                        .id(peer.id)
                 } else {
                     statusSection(offersControls: true)
                     notificationSection
@@ -170,20 +193,14 @@ struct DeviceInboxSurface: View {
             for: NSApplication.didBecomeActiveNotification)) { _ in
             inbox.refreshNotificationPermission()
         }
+        // The open PAGE is not cleared here, and does not need to be:
+        // `InboxSendModel.isolateFromPreviousAccount` drops the focus itself,
+        // synchronously, on the same account event — which is the whole reason
+        // this surface no longer keeps an answer of its own. What is left here
+        // is this view's own scrap of presentation state, which belongs to
+        // nothing else.
         .onChange(of: inbox.activeAccountID) { _ in
-            selectedConversationID = nil
             copiedMessageID = nil
-        }
-        // **The model's selection is the authority, and this is the one place
-        // the open page follows it.** The device list opens a device by calling
-        // `selectTarget`, and the model itself clears that selection when a
-        // device is revoked, switched off or removed. Mirroring it here rather
-        // than keeping a second answer is what stops the page's peer and the
-        // send target ever naming two different machines — and the page renders
-        // a composer only while the two agree, so even a transient disagreement
-        // cannot aim one at the wrong device.
-        .onChange(of: deliveries.selectedTargetID) { id in
-            if let id { selectedConversationID = id }
         }
     }
 
@@ -246,7 +263,7 @@ struct DeviceInboxSurface: View {
     /// timeline to read and no composer that could work, so the list is what is
     /// shown instead of a header over two empty sections.
     private var openPeer: (id: String, name: String)? {
-        guard let id = selectedConversationID else { return nil }
+        guard let id = deliveries.focusedPeerID else { return nil }
         if let conversation = inbox.conversations.first(where: { $0.peerDeviceID == id }) {
             return (id, conversationName(conversation))
         }
@@ -258,22 +275,26 @@ struct DeviceInboxSurface: View {
 
     /// Open one device's page.
     ///
-    /// The model's selection is set FIRST and from its own candidate list, so a
-    /// peer that cannot be sent to — a removed device, or the read-only bucket
-    /// that predates authenticated attribution — opens with the previous
-    /// selection cleared rather than with a composer left aimed at whatever was
-    /// selected before.
+    /// **One write, to the one place the answer lives.** This surface keeps no
+    /// copy: `openPeer` above reads the model back on every render, so a peer
+    /// that is already the focused one still renders its page — the previous
+    /// version set a `@State` mirror from a change handler, and a mirror that
+    /// had been rebuilt as `nil` never learned about a write that changed
+    /// nothing. That is the whole of the defect where *Send content* stopped
+    /// opening anything until the app was force-quit.
+    ///
+    /// It takes ANY peer, including one that cannot be sent to — a removed
+    /// device, or the read-only bucket that predates authenticated attribution.
+    /// The composer is not gated here and must not be: `selectedCandidate` is
+    /// the model's own answer to whether this page may send, and it is nil for
+    /// exactly those peers without anything being cleared.
     private func open(_ peerID: String) {
-        deliveries.selectTarget(deliveries.candidates.first {
-            $0.id == peerID && $0.isSendable
-        }?.id)
-        selectedConversationID = peerID
+        deliveries.focusPeer(peerID)
     }
 
-    /// Back to the list, clearing both halves of the answer at once.
+    /// Back to the list. There is one answer to clear.
     private func closePeer() {
-        deliveries.selectTarget(nil)
-        selectedConversationID = nil
+        deliveries.focusPeer(nil)
         copiedMessageID = nil
     }
 
