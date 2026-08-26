@@ -113,6 +113,125 @@ export interface RoomIceGate {
    * always answers, an unreachable `/api/ice` included.
    */
   whenReady: () => Promise<boolean>;
+  /**
+   * Take this room's single legacy setup slot for `lane`, atomically.
+   *
+   * `true` if it is now held, `false` if the other lane already has it — and
+   * the loser answers `busy` without building. Synchronous ON PURPOSE: the two
+   * woken continuations run in the same turn, so the only thing that can
+   * arbitrate between them is a check and a take with no await in between.
+   */
+  claimLane: (lane: LegacyLane) => boolean;
+  /** Hand the slot back. Only the holder can, and a second call is a no-op. */
+  releaseLane: (lane: LegacyLane) => void;
+  /** Is the OTHER lane mid-setup right now? Its own session state cannot say so
+   *  yet, which is the entire reason this exists. */
+  laneClaimedByOther: (lane: LegacyLane) => boolean;
+}
+
+/**
+ * The two legacy lanes, as the thing that has to keep them apart sees them.
+ *
+ * Two, and deliberately not open-ended: phase 1 keeps a file transfer and a
+ * message session mutually exclusive because each runs its own commit-reveal
+ * with its own SAS, and two different six-digit codes on screen at once teaches
+ * the user that the number is decoration. Phase 2 merges both onto one link and
+ * this goes with it.
+ */
+export type LegacyLane = "file" | "text";
+
+/**
+ * The room's one legacy setup slot.
+ *
+ * The mutex the two lanes already share is expressed in SESSION STATE — the
+ * file lane's `recv`/`incoming`, the message lane's session status — and each
+ * lane asks the other for it (`textActive`, `canAccept`) at the moment it is
+ * about to build. That question is only honest when the answer is already
+ * published, and the message lane's is not: `link()` runs a whole async
+ * commit-reveal before `onOffer` hands the connection to the session, so for
+ * the length of a handshake the lane is committed and reads idle.
+ *
+ * That gap was always there and used to be one instantaneous precheck wide.
+ * Parking widened it to an entire HTTP round trip AND made it reachable by
+ * construction: one parked file offer and one parked text offer wake in the
+ * SAME turn, so whichever continuation runs second re-asks a mutex that the
+ * first has not published into yet, sees `false`, and builds a second
+ * `RTCPeerConnection` — two transports, two SAS codes, one room.
+ *
+ * So the slot is claimed BEFORE either woken lane constructs anything, and
+ * released once the winner's own state owns the peer. Room-scoped like
+ * everything else in this window: the room boundary clears it outright, because
+ * a slot held on behalf of a peer in the room being left would answer the next
+ * room's first offer `busy`.
+ */
+export function createLaneClaim() {
+  let holder: LegacyLane | null = null;
+  return {
+    claim(lane: LegacyLane): boolean {
+      // Strictly one at a time, its own lane included. A lane parks at most one
+      // offer, so it cannot legitimately be here twice — and if it ever were,
+      // one release would free a slot two builds are standing on.
+      if (holder !== null) return false;
+      holder = lane;
+      return true;
+    },
+    /** Idempotent, and scoped: a lane that lost the race cannot release the
+     *  winner's claim by running its own cleanup. */
+    release(lane: LegacyLane) { if (holder === lane) holder = null; },
+    heldByOther: (lane: LegacyLane) => holder !== null && holder !== lane,
+    /** The room boundary. Whatever was mid-setup belonged to the room being
+     *  left, and every lane has already been told to retire its work. */
+    clear() { holder = null; },
+  };
+}
+
+/** A lane that holds work on a named peer's behalf, as the roster sees it. */
+export interface LegacyLanePeers {
+  peerGone: (peerId: string) => void;
+}
+
+/**
+ * Roster membership, diffed into lane departures.
+ *
+ * The hub sends an explicit `left` for a physical disconnect and this page acts
+ * on it — but `left` is not the only way a peer goes away, and during the ICE
+ * window it is not even the likeliest. A roster frame that REPLACES a peer, or
+ * simply stops naming one, is the only evidence of that departure this page is
+ * guaranteed to get: its own socket can drop and the roster it is handed on
+ * reconnect is then the first and last word on who left while it was away.
+ *
+ * Without this diff a parked offer survives its own peer and BUILDS when the
+ * answer lands — a transport, a TURN allocation and a receive card for an id
+ * the hub no longer routes, holding the room's single lane against the peer
+ * that replaced it.
+ *
+ * `relaySelection.noteRoster` runs the same diff and cannot be reused: it is
+ * scoped to a room that already has a relay pool, so during the window — which
+ * is exactly when offers are parked — it reports nothing at all.
+ */
+export function createRosterDepartures(lanes: LegacyLanePeers[]) {
+  let known = new Set<string>();
+  return {
+    /**
+     * Take a roster frame. Every peer it no longer names is retired through
+     * every lane BEFORE the frame is recorded, so a frame that swaps one peer
+     * for another cannot leave the newcomer standing behind the departed peer's
+     * parked offer. Returns the departed ids for the caller to log or extend.
+     */
+    note(ids: string[]): string[] {
+      const present = new Set(ids);
+      const gone: string[] = [];
+      for (const id of known) if (!present.has(id)) gone.push(id);
+      // Retired first, recorded second: reversing these two lines makes every
+      // departure invisible, because the diff would be against the frame that
+      // reports it.
+      for (const id of gone) for (const lane of lanes) lane.peerGone(id);
+      known = present;
+      return gone;
+    },
+    /** A new room's ids mean nothing to the old room's membership. */
+    reset() { known = new Set(); },
+  };
 }
 
 // 掉线之后每一侧还愿意等多久重连并续传，超时就判这次传输失败。
@@ -174,18 +293,23 @@ export function wouldExceedDeclared(declared: number | undefined, offset: number
  * Ordering is the rest of the rule. A real conflict is still `busy` whatever
  * the configuration is doing (a transfer in flight is a transfer in flight),
  * and a resume still outranks both — see above.
+ *
+ * `laneClaimed` is the same conflict seen one step earlier: the message lane is
+ * mid-handshake, so it owns the room's single legacy lane while its own session
+ * state still reads idle and `busy` cannot see it. See `createLaneClaim`.
  */
 export function routeOffer(
   msg: Pick<InboundSignal, "sdp" | "resume" | "text">,
-  ctx: { from: string; pausedFrom: string | null; busy: boolean; roomIcePending?: boolean },
+  ctx: { from: string; pausedFrom: string | null; busy: boolean; roomIcePending?: boolean; laneClaimed?: boolean },
 ): "resume" | "receive" | "busy" | "park" | "ignore" {
   if (msg.sdp?.type !== "offer") return "ignore";
   const gen = signalGeneration(msg);
   // resume 排在 busy 之前：暂停中的接收让 busy() 为真，而那条 offer 正是它在等的。
+  // 它同样排在 laneClaimed 之前：续传等的就是这条 offer，而认领槽讲的是另一条道。
   if (gen === "resume") return ctx.pausedFrom === ctx.from ? "resume" : "ignore";
   // text 世代归消息监听器；别的世代（以后新增的）一律不碰。
   if (gen !== "file") return "ignore";
-  if (ctx.busy) return "busy";
+  if (ctx.busy || ctx.laneClaimed) return "busy";
   return ctx.roomIcePending ? "park" : "receive";
 }
 
@@ -235,9 +359,38 @@ export function createTransferSession(deps: SessionDeps) {
    */
   let parkedOffer: { from: string; offer: InboundSignal } | null = null;
   const roomIcePending = () => deps.roomIce?.pending() === true;
+  /**
+   * The peer this lane holds the room's legacy claim for, if it holds it.
+   *
+   * Tracked by peer rather than as a flag so the departure paths can release a
+   * claim that belongs to somebody who has gone — see `releaseClaim`.
+   */
+  let claimedFor: string | null = null;
+  /** Take the room's single legacy lane for this peer. See `createLaneClaim`:
+   *  the check and the take are one statement because both lanes wake in the
+   *  same turn, and anything with an await inside it arbitrates nothing. */
+  function claimLane(from: string): boolean {
+    const gate = deps.roomIce;
+    if (!gate) return true; // no window, no cross-lane wake-up to arbitrate
+    if (!gate.claimLane("file")) return false;
+    claimedFor = from;
+    return true;
+  }
+  /** Give the slot back. Idempotent, and safe to call from a path that never
+   *  took one. */
+  function releaseClaim() {
+    if (claimedFor === null) return;
+    claimedFor = null;
+    deps.roomIce?.releaseLane("file");
+  }
   /** Retire parked inbound work: the socket, room or peer it waited on is gone.
-   *  Idempotent, and the only thing that ever clears the record from outside. */
-  function retireParkedInbound() { parkedOffer = null; }
+   *  Idempotent, and the only thing that ever clears the record from outside.
+   *
+   *  It releases the claim as well, and that is what bounds a claim whose
+   *  handshake never finishes: every room boundary, dead socket, reset and
+   *  cancellation already comes through here, so the slot cannot outlive the
+   *  room even when the setup it was taken for is still spinning. */
+  function retireParkedInbound() { parkedOffer = null; releaseClaim(); }
 
   function listenForIncoming() {
     signaling().onSignal(async (from, data) => {
@@ -247,6 +400,11 @@ export function createTransferSession(deps: SessionDeps) {
         pausedFrom: pausedRecv?.from ?? null,
         busy: busy(),
         roomIcePending: roomIcePending(),
+        // The message lane's own state does not report a handshake in flight, so
+        // without this an offer arriving during one is answered by a mutex that
+        // is about to be wrong. `busy` is the honest answer, and the sender
+        // would have got it a moment later anyway.
+        laneClaimed: deps.roomIce?.laneClaimedByOther("file") === true,
       })) {
         case "ignore":
           return;
@@ -319,7 +477,26 @@ export function createTransferSession(deps: SessionDeps) {
     // lane re-checks its own precheck at this same boundary, for this same
     // reason, and this is where a real conflict finally does answer `busy`.
     if (busy()) { signaling().sendSignal(from, { busy: true }); return; }
-    await receiveNow(from, offer);
+    // …and the mutex cannot answer for the lane that woke a statement earlier in
+    // this same turn, because its handshake has not published anything for the
+    // mutex to read. The claim is the part of the answer `busy()` cannot see.
+    // Genuine and generation-correct: an untagged `busy` is what a file-
+    // generation sender is listening for, and it is what it would have been told
+    // a moment later anyway.
+    if (!claimLane(from)) { signaling().sendSignal(from, { busy: true }); return; }
+    // `beginReceive` publishes `recv` before its first await, so by the time
+    // this call expression returns the ordinary mutex owns this peer and the
+    // slot is no longer what is holding it — and a setup that failed on the way
+    // in published a finished card instead, which owns nothing and must not hold
+    // the slot either. The `finally` is the backstop for both: whatever
+    // `receiveNow` does, this lane does not leave the room's slot taken.
+    try {
+      const receiving = receiveNow(from, offer);
+      releaseClaim();
+      await receiving;
+    } finally {
+      releaseClaim();
+    }
   }
 
   /** Signal authentication for a resume connection, keyed by the session the
@@ -1044,8 +1221,16 @@ export function createTransferSession(deps: SessionDeps) {
 
     /** 这个对端走了。停在这里等本房间 ICE 答复的那条 offer 跟着它一起作废：
      *  answer 发给一个已经离开的对端谁也收不到，而那条记录不该活到下一次唤醒去建连。
-     *  别的对端停的那条不受影响。 */
-    peerGone: (peerId: string) => { if (parkedOffer?.from === peerId) parkedOffer = null; },
+     *  别的对端停的那条不受影响。
+     *
+     *  Its claim goes too, and only its own: a setup started for a peer that has
+     *  left cannot finish, so holding the room's single lane on its behalf would
+     *  answer the peer that REPLACED it `busy` for as long as the dead handshake
+     *  takes to notice. Scoped by peer, so the other lane's claim is untouched. */
+    peerGone: (peerId: string) => {
+      if (parkedOffer?.from === peerId) parkedOffer = null;
+      if (claimedFor === peerId) releaseClaim();
+    },
     /** Retire parked inbound work outright — the socket it was parked on is
      *  gone, so the room it belongs to cannot be answered. Idempotent. */
     retireParkedInbound,

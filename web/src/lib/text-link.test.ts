@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { isTextOffer, createTextLink } from "./text-link";
+import { createLaneClaim } from "./transfer-session.svelte";
+import type { RoomIceGate } from "./transfer-session.svelte";
 import type { InboundSignal, RtcConfig } from "./webrtc";
 import { ready } from "./crypto";
 
@@ -123,16 +125,22 @@ class CountingPC {
 function fakeRoomIce() {
   let pending = true;
   let waiters: ((live: boolean) => void)[] = [];
+  // App 的那一格本身，不是它的仿制品：跨道的裁决见 transfer-session.routing.test.ts。
+  const claim = createLaneClaim();
   const wake = (live: boolean) => {
     const parked = waiters;
     waiters = [];
     for (const cb of parked) cb(live);
   };
   return {
+    claim,
     gate: {
       pending: () => pending,
       whenReady: () => (pending ? new Promise<boolean>((r) => waiters.push(r)) : Promise.resolve(true)),
-    },
+      claimLane: (lane) => claim.claim(lane),
+      releaseLane: (lane) => claim.release(lane),
+      laneClaimedByOther: (lane) => claim.heldByOther(lane),
+    } satisfies RoomIceGate,
     /** 本房间的答复装好了（App 里是 applyRoomIce）。 */
     install() { pending = false; wake(true); },
     /** 换房间：停在旧房间上的活全部作废，而新房间又开着自己的窗口

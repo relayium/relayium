@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createTransferSession, routeOffer } from "./transfer-session.svelte";
-import type { SessionDeps } from "./transfer-session.svelte";
+import { createTransferSession, createLaneClaim, createRosterDepartures, routeOffer } from "./transfer-session.svelte";
+import type { RoomIceGate, SessionDeps } from "./transfer-session.svelte";
+// 本文件末尾的跨道测试是唯一同时拿着两条道的地方（App 里也是它把同一个 gate 交给
+// 两边），所以跨道的事实只能在这里执行——单条道各自的测试看不见对方。
+import { createTextLink } from "./text-link";
 import type { InboundSignal, RtcConfig } from "./webrtc";
 import { loadLang, messages } from "./i18n.svelte";
 import { ready } from "./crypto";
@@ -32,6 +35,9 @@ function fakeSignaling() {
 const EMPTY_CONFIG: RtcConfig = { iceServers: [] };
 const ROOM_CONFIG: RtcConfig = { iceServers: [{ urls: "turn:relay.example:3478" }] };
 const built: RtcConfig[] = [];
+/** 连构造都失败的那一次也要记账：赢家建连失败之后不能把认领槽带走。 */
+const attempted: RtcConfig[] = [];
+let pcFails = false;
 
 // A minimal RTCPeerConnection so the positive control lands on "connecting"
 // rather than on the error path — otherwise the control would pass for the wrong
@@ -42,7 +48,11 @@ class FakePC {
   ondatachannel: unknown = null;
   onconnectionstatechange: unknown = null;
   connectionState = "new";
-  constructor(config: RtcConfig) { built.push(config); }
+  constructor(config: RtcConfig) {
+    attempted.push(config);
+    if (pcFails) throw new Error("relayium test: transport unavailable");
+    built.push(config);
+  }
   createDataChannel() { return { binaryType: "", bufferedAmountLowThreshold: 0, readyState: "connecting", onopen: null, onmessage: null, onclose: null, send() {}, close() {} }; }
   async createOffer() { return { type: "offer", sdp: "offer" }; }
   async createAnswer() { return { type: "answer", sdp: "answer" }; }
@@ -56,16 +66,23 @@ class FakePC {
 function fakeRoomIce() {
   let pending = true;
   let waiters: ((live: boolean) => void)[] = [];
+  // App 的那一格本身，不是它的仿制品：认领是"哪条道先醒"这件事唯一的裁判，
+  // 而一个只会说 true 的假货会让下面每条断言都因为错误的原因通过。
+  const claim = createLaneClaim();
   const wake = (live: boolean) => {
     const parked = waiters;
     waiters = [];
     for (const cb of parked) cb(live);
   };
   return {
+    claim,
     gate: {
       pending: () => pending,
       whenReady: () => (pending ? new Promise<boolean>((r) => waiters.push(r)) : Promise.resolve(true)),
-    },
+      claimLane: (lane) => claim.claim(lane),
+      releaseLane: (lane) => claim.release(lane),
+      laneClaimedByOther: (lane) => claim.heldByOther(lane),
+    } satisfies RoomIceGate,
     /** 本房间的答复装好了（App 里是 applyRoomIce）。 */
     install() { pending = false; wake(true); },
     /** 换房间：停在旧房间上的活全部作废，而新房间又开着自己的窗口
@@ -102,12 +119,14 @@ beforeEach(async () => {
   await ready();
   await loadLang("en");
   built.length = 0;
+  attempted.length = 0;
+  pcFails = false;
   vi.stubGlobal("RTCPeerConnection", FakePC);
 });
 
 // listenForIncoming's handler is async and beginReceive awaits, so state lands a
 // microtask later than the injection.
-const settle = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0)); };
+const settle = async () => { for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 0)); };
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("listenForIncoming generation routing", () => {
@@ -283,6 +302,23 @@ describe("routeOffer", () => {
     expect(routeOffer(offer, { ...idle, roomIcePending: false })).toBe("receive");
     expect(routeOffer(offer, idle)).toBe("receive");
   });
+
+  // ── 认领槽：同一个冲突提前一步的样子 ─────────────────────────────────────────
+  // 消息道在握手中时占有房间唯一的旧版道，而它自己的会话状态还读作空闲，busy 看不见
+  // 它——laneClaimed 是 busy 看不见的那一半答案。见 createLaneClaim。
+  it("answers busy to a claimed lane, whatever the room's configuration is doing", () => {
+    expect(routeOffer(offer, { ...idle, laneClaimed: true })).toBe("busy");
+    // 认领排在 park 之前：窗口里被认领同样是冲突，不是停等。
+    expect(routeOffer(offer, { ...pending, laneClaimed: true })).toBe("busy");
+  });
+
+  // 续传的优先级在认领槽之前，和它在 busy 之前是同一条规则：暂停中的接收等的就是
+  // 这条 offer，而认领槽讲的是另一条道的事。
+  it("still lets a resume outrank the claim", () => {
+    expect(routeOffer({ ...offer, resume: true }, { ...paused, laneClaimed: true })).toBe("resume");
+    // 没人认领的时候，这个字段一个判定都不改。
+    expect(routeOffer(offer, idle)).toBe("receive");
+  });
 });
 
 // ── 停等，而不是拒绝 ─────────────────────────────────────────────────────────
@@ -447,5 +483,339 @@ describe("an inbound file offer while the room has no ICE configuration", () => 
     await settle();
     expect(built).toEqual([ROOM_CONFIG]);
     expect(session.recv!.peer).toBe("p1");
+  });
+});
+
+// ── 两条旧版道**同时**醒过来的那一瞬间 ─────────────────────────────────────────
+//
+// 停等把入站 offer 挂在本房间的 `/api/ice` 答复上，而一间房里可以同时挂着一条文件
+// offer 和一条消息 offer。答复落地时两条都在同一个 turn 里被唤醒——于是第二个跑起来
+// 的那条，去问一个"第一条还没来得及写进去"的互斥量。
+//
+// 消息道尤其如此：`link()` 要跑完整套 commit-reveal 才会把连接交给会话状态机，在那
+// 之前 `canAccept` 读到的会话是**空闲**的。文件道于是看到 busy 为假，拿同一个房间又
+// new 了一条 RTCPeerConnection：两条传输、两串 SAS、一间房。
+//
+// 这个缝隙一直都在，原来只有一次预检那么宽；提前加入房间把它拉成了整整一个 HTTP 往返，
+// 并且让它**由构造保证可达**。所以下面这些断言全部落在两个可观测量上：
+// RTCPeerConnection 被 new 了几次，以及输家收到的是不是一条它那个世代认得的 busy。
+
+/**
+ * 一间房的两条旧版道，按 App 里的接法接起来。
+ *
+ * 两处依赖是**照抄 App 的**，因为这个 bug 就住在它们里面：
+ *  - 文件道的 `textActive` 读的是 `textSession.active()`——而会话是在 `onOffer` 把
+ *    连接交过去之后才变成 active 的；
+ *  - 消息道的 `canAccept` 读的是 `canAcceptFrom`，其中一项就是 `session.transferActive`。
+ * 所以这里的 `textOwned` 只在 onOffer 里置真，正是"握手落地之前谁也看不见"。
+ */
+function makeRoom(ice: ReturnType<typeof fakeRoomIce>) {
+  const sig = fakeSignaling();
+  const rtcConfig = () => (ice.gate.pending() ? EMPTY_CONFIG : ROOM_CONFIG);
+  let textOwned = false;
+  const session = createTransferSession({
+    signaling: () => sig.client as never,
+    rtcConfig,
+    t: () => messages.en,
+    flash: () => {},
+    textActive: () => textOwned,
+    roomIce: ice.gate,
+  });
+  const textLink = createTextLink({
+    signaling: () => sig.client as never,
+    rtcConfig,
+    canAccept: () => !textOwned && !session.transferActive,
+    roomIce: ice.gate,
+  });
+  session.listenForIncoming();
+  textLink.listen(() => { textOwned = true; });
+  const laneRoster = createRosterDepartures([session, textLink]);
+  return { sig, session, textLink, laneRoster };
+}
+
+// 赢家的握手会经由信令发出自己的 answer（commit/caps 随行）——那是它该做的事。
+// 这里要审的是 busy 纪律：谁收到了 busy、带没带对世代标记。所以建连之后的断言
+// 一律按 busy 过滤；"窗口里一个字都不回"的断言不在此列，那时没人建连。
+const busyTo = (sig: ReturnType<typeof fakeSignaling>) =>
+  sig.sent.filter((s) => s.data.busy === true);
+
+describe("one parked file offer and one parked text offer wake in the same turn", () => {
+  // 输家收到的 busy 必须是**它那个世代认得的**：文件世代不带标记，消息世代必须带
+  // text——否则发起方按世代把这条信令丢掉，白等一个 ICE 超时才失败。
+  it("builds exactly one transport when the message lane parks first", async () => {
+    const ice = fakeRoomIce();
+    const { sig, session } = makeRoom(ice);
+    sig.inject("p2", TEXT_OFFER); // 先停的是消息道
+    sig.inject("p1", FILE_OFFER);
+    await settle();
+    expect(sig.sent).toEqual([]); // 窗口里一个字都不回：busy 对发起方是终局
+    ice.install();
+    await settle();
+    // 这就是那个缺口本身：消息道已经在跑握手，但它的会话状态机还没被交过连接，
+    // 所以文件道重问互斥量得到的是"空闲"。认领槽是这里唯一还说得出真话的东西。
+    expect(built).toEqual([ROOM_CONFIG]);
+    expect(session.recv).toBe(null); // 文件道一条都没建，也没留下卡片
+    expect(busyTo(sig)).toEqual([{ to: "p1", data: { busy: true } }]);
+  });
+
+  it("builds exactly one transport when the file lane parks first", async () => {
+    const ice = fakeRoomIce();
+    const { sig, session } = makeRoom(ice);
+    sig.inject("p1", FILE_OFFER); // 反过来的插入顺序
+    sig.inject("p2", TEXT_OFFER);
+    await settle();
+    expect(sig.sent).toEqual([]);
+    ice.install();
+    await settle();
+    // 停等顺序不决定唤醒后的执行顺序：两条 continuation 在同一个 turn 里醒来，谁先
+    // 跑到认领那一句是调度细节——当前工具链下 .svelte.ts（经 Svelte 编译）的 await
+    // 比普通 .ts 的多一跳微任务，文件道固定后到。认领槽存在的意义正是让两种顺序都
+    // 安全，所以这里钉死的是不变量本身：恰好一条连接、恰好一个输家、输家收到的是
+    // 它那个世代认得的 busy——而不是钉死哪条道赢。
+    expect(built).toEqual([ROOM_CONFIG]);
+    const busies = busyTo(sig);
+    expect(busies.length).toBe(1);
+    if (busies[0].to === "p1") {
+      // 消息道赢了：文件道的 busy 不带标记，也没留下卡片。
+      expect(busies[0].data).toEqual({ busy: true });
+      expect(session.recv).toBe(null);
+    } else {
+      // 文件道赢了：消息道的 busy 必须带 text 标记。
+      expect(busies[0]).toEqual({ to: "p2", data: { busy: true, text: true } });
+      expect(session.recv!.peer).toBe("p1");
+    }
+  });
+
+  // 同一个对端两条道一起来，也是同一件事：一间房只有一条旧版道。
+  it("keeps one transport when both offers come from the same peer", async () => {
+    const ice = fakeRoomIce();
+    const { sig } = makeRoom(ice);
+    sig.inject("p2", TEXT_OFFER);
+    sig.inject("p2", FILE_OFFER);
+    await settle();
+    ice.install();
+    await settle();
+    expect(built).toEqual([ROOM_CONFIG]);
+    // 输家也是发给同一个人的一条 busy。世代对不对，上面两条各自钉死了。
+    const busies = busyTo(sig);
+    expect(busies.map((b) => b.to)).toEqual(["p2"]);
+  });
+
+  // 认领槽不是只管唤醒那一个 turn 的：赢家的握手要跑完一整套 commit-reveal，这期间
+  // 到达的**新** offer 面对的是同一个还没发布出去的会话。
+  it("answers an offer that arrives while the winner is still shaking hands", async () => {
+    const ice = fakeRoomIce();
+    const { sig, session } = makeRoom(ice);
+    sig.inject("p2", TEXT_OFFER);
+    await settle();
+    ice.install();
+    await settle();
+    expect(built).toEqual([ROOM_CONFIG]); // 消息道的那一条，握手还没落地
+    sig.inject("p1", FILE_OFFER); // 窗口已经关了，走的是普通那条路
+    await settle();
+    expect(built).toEqual([ROOM_CONFIG]); // 仍然是一条
+    expect(session.recv).toBe(null);
+    expect(busyTo(sig)).toEqual([{ to: "p1", data: { busy: true } }]);
+  });
+
+  // 单条道的行为一个字都不该变：没有对手，认领槽就是一次必然成功的取用。
+  it("leaves a room with only one parked lane exactly as it was", async () => {
+    const ice = fakeRoomIce();
+    const { sig, session } = makeRoom(ice);
+    sig.inject("p1", FILE_OFFER);
+    await settle();
+    expect(built).toEqual([]);
+    ice.install();
+    await settle();
+    expect(built).toEqual([ROOM_CONFIG]);
+    expect(session.recv!.peer).toBe("p1");
+    expect(busyTo(sig)).toEqual([]);
+  });
+});
+
+describe("the winner cannot take the room's legacy lane away with it", () => {
+  // 建连失败：`link()` 的两条出口（reject 和 onOffer）都要把槽还回去，否则这间房
+  // 的另一条道从此对每一条 offer 都回 busy——而那对发起方同样是终局。
+  it("releases the claim when the winning handshake fails to build at all", async () => {
+    const ice = fakeRoomIce();
+    const { sig, session } = makeRoom(ice);
+    pcFails = true;
+    sig.inject("p2", TEXT_OFFER);
+    await settle();
+    ice.install();
+    await settle();
+    expect(attempted).toEqual([ROOM_CONFIG]); // 试过了
+    expect(built).toEqual([]);                // 没建成
+    expect(ice.claim.heldByOther("file")).toBe(false);
+    // 槽真的回来了：下一条 offer 照常建连，而不是挨一个不该有的 busy。
+    pcFails = false;
+    sig.inject("p1", FILE_OFFER);
+    await settle();
+    expect(built).toEqual([ROOM_CONFIG]);
+    expect(session.recv!.peer).toBe("p1");
+    expect(busyTo(sig)).toEqual([]);
+  });
+
+  // 握手可能一直不落地（对端的 reveal 永远不来）。那条路自己是有界的——webrtc 的
+  // SETUP_DEADLINE_MS/KEY_REVEAL_TIMEOUT_MS——但房间边界不必等它：每一条作废路径都
+  // 顺手把槽还回去，所以槽不会活得比房间长。
+  it("releases the claim at every boundary that ends the room", async () => {
+    for (const retire of [
+      (r: ReturnType<typeof makeRoom>, i: ReturnType<typeof fakeRoomIce>) => { void i; r.textLink.retireParkedInbound(); },
+      (r: ReturnType<typeof makeRoom>, i: ReturnType<typeof fakeRoomIce>) => { void i; r.textLink.peerGone("p2"); },
+      // App 的换房间：`resetRelaySelection` 无条件清空。
+      (r: ReturnType<typeof makeRoom>, i: ReturnType<typeof fakeRoomIce>) => { void r; i.claim.clear(); },
+    ]) {
+      built.length = 0;
+      const ice = fakeRoomIce();
+      const room = makeRoom(ice);
+      room.sig.inject("p2", TEXT_OFFER);
+      await settle();
+      ice.install();
+      await settle();
+      expect(built).toEqual([ROOM_CONFIG]); // 握手在跑，槽被它拿着
+      expect(ice.claim.heldByOther("file")).toBe(true);
+      retire(room, ice);
+      retire(room, ice); // 每一条都必须幂等
+      expect(ice.claim.heldByOther("file")).toBe(false);
+      // 而且是真的能用，不只是标志位变了。
+      room.sig.inject("p1", FILE_OFFER);
+      await settle();
+      expect(built).toEqual([ROOM_CONFIG, ROOM_CONFIG]);
+      expect(room.session.recv!.peer).toBe("p1");
+    }
+  });
+
+  // 走的是**别人**，不是槽的主人：赢家的握手还在跑，槽不能被别人的离开顺手还掉。
+  it("keeps the claim when a different peer leaves", async () => {
+    const ice = fakeRoomIce();
+    const { sig, textLink } = makeRoom(ice);
+    sig.inject("p2", TEXT_OFFER);
+    await settle();
+    ice.install();
+    await settle();
+    textLink.peerGone("p9");
+    expect(ice.claim.heldByOther("file")).toBe(true);
+    sig.inject("p1", FILE_OFFER);
+    await settle();
+    expect(built).toEqual([ROOM_CONFIG]);
+    expect(busyTo(sig)).toEqual([{ to: "p1", data: { busy: true } }]);
+  });
+});
+
+// ── 名册是"这个人走了"唯一保证会到的证据 ────────────────────────────────────────
+//
+// hub 会为物理断开发一条 `left`，但这个页面**可能收不到**：它自己的 socket 一断，
+// 重连时拿到的那份名册就是"我不在的时候谁走了"的第一手也是最后一手消息。而窗口期
+// 里，一条 offer 正停在某个对端名下等答复——名册换人或不再提名，就是它该作废的信号。
+//
+// 没有这条 diff，那条 offer 会活过它的对端，并在答复落地时**真的建起来**：一条打给
+// hub 已经不再路由的 id 的传输、一次白占的 TURN 分配、一张点不动的接收卡片，同时把
+// 这间房唯一的旧版道占住，挡着刚刚顶替它的那个对端。
+describe("a peer that only the roster reports as gone", () => {
+  it("retires both lanes' parked work, and lets the replacement park and build", async () => {
+    const ice = fakeRoomIce();
+    const { sig, session, laneRoster } = makeRoom(ice);
+    expect(laneRoster.note(["p1", "p2"])).toEqual([]); // 先有名册，才谈得上不再提名
+    sig.inject("p1", FILE_OFFER);
+    sig.inject("p2", TEXT_OFFER);
+    await settle();
+    expect(built).toEqual([]);
+    // 一条名册帧同时带走两个人、带来一个新人。没有 `left`，一条都没有。
+    expect(laneRoster.note(["p3"])).toEqual(["p1", "p2"]);
+    // 顶替者照常停等——两条道的位子都必须是真的腾出来了，否则它挨的是一个不该有的
+    // busy，而那对发起方是终局。
+    sig.inject("p3", FILE_OFFER);
+    await settle();
+    expect(sig.sent).toEqual([]);
+    ice.install();
+    await settle();
+    expect(built).toEqual([ROOM_CONFIG]); // 一条，而且是顶替者那条
+    expect(session.recv!.peer).toBe("p3");
+  });
+
+  it("builds nothing at all when the replacement never offers", async () => {
+    const ice = fakeRoomIce();
+    const { sig, session, laneRoster } = makeRoom(ice);
+    laneRoster.note(["p1", "p2"]);
+    sig.inject("p1", FILE_OFFER);
+    sig.inject("p2", TEXT_OFFER);
+    await settle();
+    laneRoster.note(["p3"]);
+    ice.install();
+    await settle();
+    expect(built).toEqual([]);
+    expect(session.recv).toBe(null);
+    expect(sig.sent).toEqual([]);
+  });
+
+  // 名册的规则不因为答复已经装好而停用：赢家的握手还在跑，它的对端已经走了，那条槽
+  // 必须跟着它走——否则顶替者对上的是一条永远不会落地的握手。
+  it("releases a claim held on behalf of a peer the roster no longer names", async () => {
+    const ice = fakeRoomIce();
+    const { sig, session, laneRoster } = makeRoom(ice);
+    laneRoster.note(["p2"]);
+    sig.inject("p2", TEXT_OFFER);
+    await settle();
+    ice.install();
+    await settle();
+    expect(built).toEqual([ROOM_CONFIG]);
+    expect(ice.claim.heldByOther("file")).toBe(true);
+    expect(laneRoster.note(["p3"])).toEqual(["p2"]);
+    expect(ice.claim.heldByOther("file")).toBe(false);
+    sig.inject("p3", FILE_OFFER);
+    await settle();
+    expect(built).toEqual([ROOM_CONFIG, ROOM_CONFIG]);
+    expect(session.recv!.peer).toBe("p3");
+  });
+
+  // 显式 `left` 和名册讲的是同一件事，而且两条都会到。作废按身份进行，所以第二次
+  // 是彻底的空操作——一条都不能因此漏掉，也一条都不能因此多做。
+  it("is idempotent with an explicit left, in either order", async () => {
+    const ice = fakeRoomIce();
+    const { sig, session, textLink, laneRoster } = makeRoom(ice);
+    laneRoster.note(["p1"]);
+    sig.inject("p1", FILE_OFFER);
+    await settle();
+    session.peerGone("p1"); // App 的 onPeerLeft
+    textLink.peerGone("p1");
+    expect(laneRoster.note([])).toEqual(["p1"]); // …紧跟着的名册帧
+    expect(laneRoster.note([])).toEqual([]);     // 再来一次什么也不该发生
+    // 反过来的顺序同样是空操作。
+    session.peerGone("p1");
+    laneRoster.note(["p2"]);
+    sig.inject("p2", FILE_OFFER);
+    await settle();
+    ice.install();
+    await settle();
+    expect(built).toEqual([ROOM_CONFIG]);
+    expect(session.recv!.peer).toBe("p2");
+    expect(busyTo(sig)).toEqual([]);
+  });
+
+  it("forgets the previous room's membership rather than reporting it as departed", () => {
+    const gone: string[] = [];
+    const roster = createRosterDepartures([{ peerGone: (id) => gone.push(id) }]);
+    roster.note(["p1", "p2"]);
+    roster.reset(); // 换房间：新房间的 id 与上一间房的成员没有关系
+    expect(roster.note(["p9"])).toEqual([]);
+    expect(gone).toEqual([]);
+    // 而新房间自己的 diff 照常工作。
+    expect(roster.note([])).toEqual(["p9"]);
+    expect(gone).toEqual(["p9"]);
+  });
+
+  it("routes a departure through every lane it was given", () => {
+    const a: string[] = [], b: string[] = [];
+    const roster = createRosterDepartures([
+      { peerGone: (id) => a.push(id) },
+      { peerGone: (id) => b.push(id) },
+    ]);
+    roster.note(["p1", "p2", "p3"]);
+    expect(roster.note(["p2"])).toEqual(["p1", "p3"]);
+    expect(a).toEqual(["p1", "p3"]);
+    expect(b).toEqual(["p1", "p3"]);
+    // 还在名册上的那个一次都没被作废过。
+    expect(a).not.toContain("p2");
   });
 });

@@ -23,7 +23,10 @@
   import { registerServiceWorker, drainSharedFiles } from "./lib/share-target";
   import { requestNotifyPermission, notifyTransfer } from "./lib/notify";
   import { MAX_FILES } from "./lib/transfer";
-  import { createTransferSession, type RoomIceGate, type Xfer } from "./lib/transfer-session.svelte";
+  import {
+    createTransferSession, createLaneClaim, createRosterDepartures,
+    type RoomIceGate, type Xfer,
+  } from "./lib/transfer-session.svelte";
   import { createPeerWorkspace, type PeerWorkspace } from "./lib/peer-workspace.svelte";
   import { createUnifiedTextOpener } from "./lib/unified-text-open";
   import { createActivityAnnouncer, type ActivityEdge } from "./lib/activity-announcement";
@@ -127,9 +130,22 @@
    * for a peer that was already waiting. So the lanes park the offer instead,
    * and this is what they park on.
    */
+  /**
+   * The room's single legacy setup slot, shared by both lanes through the gate.
+   *
+   * Plain state rather than `$state`: nothing renders it, and it is written and
+   * read inside one synchronous turn by the two continuations the gate wakes.
+   * Reactivity there would be a liability, not a feature — a `$derived` reading
+   * it would be recomputed in the middle of the arbitration it is meant to
+   * settle. See `createLaneClaim` for what it is for.
+   */
+  const laneClaim = createLaneClaim();
   const roomIce: RoomIceGate = {
     pending: () => roomIcePending,
     whenReady: () => whenRoomIce(),
+    claimLane: (lane) => laneClaim.claim(lane),
+    releaseLane: (lane) => laneClaim.release(lane),
+    laneClaimedByOther: (lane) => laneClaim.heldByOther(lane),
   };
   // 收发管道 + 它们的状态（send/recv/incoming/SAS/每向路径）都住在这里。
   // 依赖用 getter 传进去：signaling 会随房间切换整个换掉，rtcConfig 依赖中继选优
@@ -688,6 +704,16 @@
     roomIcePending = true;
     heldRelayRtt = [];
     heldRelayRoster = new Set();
+    // The next room's ids mean nothing to this one's membership, so the diff
+    // starts empty rather than reporting the whole previous roster as departed.
+    laneRoster.reset();
+    // …and the slot goes back unconditionally. Every lane has already been told
+    // to retire its work (`workspace.resetRoom()` and the two explicit retire
+    // calls in `switchRoom` run before this), and a slot still held on behalf of
+    // a peer in the room being left would answer the NEXT room's first offer
+    // `busy` — terminal, for a peer that did nothing wrong. It is also what
+    // bounds a claim whose handshake never completes at all.
+    laneClaim.clear();
     // Deliberately no deadline of this window's own. `fetchIceConfig` bounds
     // itself and always answers, so the only thing a timer here could do is
     // permit the empty configuration it exists to forbid — see `whenRoomIce`.
@@ -738,8 +764,28 @@
   // never has — so the representative handoff `SignalingClient.onPeerLeft`
   // describes, where a roster id changes while the socket and DataChannel live
   // on, cannot reach any of this. See `noteRoster`.
+  //
+  /** The legacy lanes' own membership diff, which is NOT scoped to a pool.
+   *
+   *  Same rule, same idempotence and the same "departures first" ordering as the
+   *  relay selection's — but it has to run during the ICE window too, because
+   *  that is precisely when the two lanes are holding a parked offer on a peer's
+   *  behalf. Both lanes go through the one diff so a roster frame can never
+   *  retire one lane's work and leave the other's standing. */
+  const laneRoster = createRosterDepartures([session, textLink]);
   function noteRelayPeers(ids: string[]) {
     const others = ids.filter((id) => id !== selfId);
+    // FIRST, and before anything below notes an arrival. `left` is not the only
+    // way a peer goes away, and during the ICE window it is not even the
+    // likeliest: a roster that replaces a peer, or simply stops naming one, can
+    // be the whole of the evidence. The lanes' own diff, because
+    // `relaySelection.noteRoster` below is scoped to a room that already has a
+    // pool — so during the window, which is exactly when offers are parked, it
+    // reports nothing at all. Without this a parked offer outlives its peer and
+    // BUILDS when the answer lands: a transport and a receive card for an id the
+    // hub no longer routes, holding the room's single lane against the peer that
+    // replaced it. See `createRosterDepartures`.
+    laneRoster.note(others);
     for (const gone of relaySelection.noteRoster(others)) workspace.rosterPeerGone(gone);
     // The same rule one round trip earlier. `noteRoster` is scoped to a room
     // with a pool, so during the pre-answer window it reports nothing at all —

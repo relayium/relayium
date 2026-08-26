@@ -112,17 +112,49 @@ export function createTextLink(deps: TextLinkDeps) {
    * on top of, and that always arrives.
    */
   let parked: { from: string; offer: InboundSignal } | null = null;
+  /**
+   * The peer this lane holds the room's legacy claim for, if it holds it.
+   *
+   * This lane is the reason the claim exists. `link()` runs an entire async
+   * commit-reveal before `onOffer` hands the connection to the session, so
+   * between the two the lane is committed and `canAccept` — which reads the
+   * session — still reports idle. Held across that whole handshake and released
+   * the instant the session owns the connection instead.
+   */
+  let claimedFor: string | null = null;
   /** 明确告诉对端"忙"。**必须带 text 标记**，否则发起方的 text 世代连接会把这条信令
    *  按世代丢掉，白等 30 秒；带上之后 establish 会把它变成 PeerBusyError。 */
   const replyBusy = (from: string) =>
     deps.signaling().sendSignal(from, { busy: true, text: true });
-  const accepts = (from: string) => !deps.canAccept || deps.canAccept(from);
+  /** Take the room's single legacy lane for this peer. Check and take in one
+   *  statement: both woken lanes run in the same turn, so anything with an await
+   *  between the two arbitrates nothing. */
+  const claimLane = (from: string): boolean => {
+    const gate = deps.roomIce;
+    if (!gate) return true; // no window, no cross-lane wake-up to arbitrate
+    if (!gate.claimLane("text")) return false;
+    claimedFor = from;
+    return true;
+  };
+  /** Give the slot back. Idempotent, and safe on a path that never took one. */
+  const releaseClaim = () => {
+    if (claimedFor === null) return;
+    claimedFor = null;
+    deps.roomIce?.releaseLane("text");
+  };
+  const accepts = (from: string) =>
+    // The file lane mid-setup owns the room's single legacy lane while its own
+    // state may not say so yet — the same fact this lane asks the claim for.
+    deps.roomIce?.laneClaimedByOther("text") !== true && (!deps.canAccept || deps.canAccept(from));
   const start = (from: string, offer: InboundSignal, onOffer: (peerId: string, conn: TextConn) => void) => {
     void link(deps, from, "responder", offer)
-      .then((conn) => onOffer(from, conn))
+      // The session owns the connection from inside `onOffer`, so the claim is
+      // released only after it has been handed over — never before, or the file
+      // lane could take the slot back in the gap and build alongside it.
+      .then((conn) => { onOffer(from, conn); releaseClaim(); })
       // 建不起来就是没这回事：会话状态机连"有人来过"都不该看到，用户也就不会
       // 看到一张点不动的请求卡。
-      .catch((err) => console.error("relayium message offer error", err));
+      .catch((err) => { releaseClaim(); console.error("relayium message offer error", err); });
   };
 
   async function park(from: string, offer: InboundSignal, onOffer: (peerId: string, conn: TextConn) => void) {
@@ -145,6 +177,13 @@ export function createTextLink(deps: TextLinkDeps) {
     // 预检重问一遍，不是沿用停下来时的那次：这中间隔了一整个 HTTP 往返，而文件传输
     // 完全可能在这期间开始（text-session 在握手落地时也是同样地再查一遍）。
     if (!accepts(from)) { replyBusy(from); return; }
+    // …and the precheck cannot answer for the file lane that woke a statement
+    // earlier in this same turn: `beginReceive` has published its state, but if
+    // the order had been the other way round it would not have. The claim is the
+    // one answer that does not depend on which continuation ran first. A
+    // text-tagged `busy`, because an untagged one is dropped by generation and
+    // the sender waits out its whole ICE timeout for nothing.
+    if (!claimLane(from)) { replyBusy(from); return; }
     start(from, offer, onOffer);
   }
 
@@ -160,9 +199,22 @@ export function createTextLink(deps: TextLinkDeps) {
         start(from, data, onOffer);
       });
     },
-    /** 这个对端走了：它停在这里的那条 offer 跟着作废。别的对端的不受影响。 */
-    peerGone: (peerId: string) => { if (parked?.from === peerId) parked = null; },
-    /** 停着的入站 offer 直接作废——它等的那个房间/socket 已经不在了。可重复调用。 */
-    retireParkedInbound: () => { parked = null; },
+    /** 这个对端走了：它停在这里的那条 offer 跟着作废。别的对端的不受影响。
+     *
+     *  Its claim goes with it. A handshake with a peer that has left cannot
+     *  complete, and this lane's `link()` waits for a key exchange rather than a
+     *  clock — so without this the room's single legacy lane would stay held on
+     *  a departed peer's behalf and answer the peer that replaced it `busy`. */
+    peerGone: (peerId: string) => {
+      if (parked?.from === peerId) parked = null;
+      if (claimedFor === peerId) releaseClaim();
+    },
+    /** 停着的入站 offer 直接作废——它等的那个房间/socket 已经不在了。可重复调用。
+     *
+     *  The claim is released here too, and that is what bounds one whose
+     *  handshake never finishes: the room switch, the dead socket and the
+     *  cancellation all come through this call, so the slot cannot outlive the
+     *  room that scoped it. */
+    retireParkedInbound: () => { parked = null; releaseClaim(); },
   };
 }
