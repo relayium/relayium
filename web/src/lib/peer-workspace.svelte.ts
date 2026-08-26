@@ -9,6 +9,7 @@ import type { PeerLinkStatus } from "./peer-link.svelte";
 import type { PickedFile } from "./drag";
 import type { TextSession } from "./text-session.svelte";
 import type { Incoming, TransferSession, Xfer } from "./transfer-session.svelte";
+import type { RelayGate } from "./relay-selection";
 import type { Conn, ConnPath } from "./webrtc";
 
 export const EXPLICIT_DISCONNECT_SUPPRESS_MS = 60_000;
@@ -34,6 +35,16 @@ export interface PeerWorkspaceDeps extends Omit<MixedSessionDeps,
   legacyText: LegacyText;
   supportsLink?(peerId: string): boolean;
   now?: () => number;
+  /**
+   * The room's relay agreement, read by the link manager before it puts the
+   * first legal `link/1` request or offer on the wire.
+   *
+   * A getter rather than a value: the gate belongs to a room, and the page swaps
+   * rooms without rebuilding this object. Omitted — or answering null — means no
+   * pool to choose from and therefore nothing to wait for, which is every LAN
+   * room and every STUN-only code.
+   */
+  relayGate?(): RelayGate | null;
 }
 
 export interface PeerWorkspace {
@@ -228,6 +239,18 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
     setTimer: deps.setTimer,
     clearTimer: deps.clearTimer,
   });
+
+  // Installed once, on the manager the session just built. It reads through the
+  // `deps` getter on every use, so a room switch that replaces the gate needs no
+  // second call here.
+  mixed.manager.setRelayGate(deps.relayGate ? {
+    ready: () => deps.relayGate?.()?.ready() ?? true,
+    whenReady: (cb) => {
+      const gate = deps.relayGate?.();
+      if (!gate) { cb(); return; }
+      gate.whenReady(cb);
+    },
+  } : null);
 
   function usingMixed(): boolean {
     return !!mixed.link || mixed.status === "requesting" || mixed.status === "connecting"

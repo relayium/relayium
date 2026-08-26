@@ -160,6 +160,9 @@ final class LinkPairingRoomTests: XCTestCase {
         var joinedCodes: [String] = []
         var transports: [PairingTransport] = []
         var relayOnly: [Bool] = []
+        /// The ICE URLs each assembly was actually built with — the one
+        /// observable that says which relay this room converged on.
+        var serverUrls: [[String]] = []
         var adopted: [(peerId: String, role: Role, mode: TransferMode)] = []
         var handedBackBatches: [[FileMeta]] = []
         var pairingLinkActivations = 0
@@ -194,6 +197,24 @@ final class LinkPairingRoomTests: XCTestCase {
                                       data: linkRequestSignal()))
         }
 
+        /// Every `link/1` request or offer this side actually put on the wire.
+        ///
+        /// The relay gate's outbound half is a statement about the SOCKET, not
+        /// about internal state: nothing that commits this client to a relay —
+        /// and nothing that starts the peer's or this side's request timeout —
+        /// may leave before the choice is made.
+        var linkFramesSent: [String] {
+            channels[0].sent.compactMap { text in
+                guard let envelope = try? JSONDecoder().decode(Envelope.self, from: Data(text.utf8)),
+                      envelope.type == SignalType.signal, let data = envelope.data else { return nil }
+                if isLinkRequest(data) { return "request" }
+                if case let .object(root) = data, root["link"] == .bool(true), root["sdp"] != nil {
+                    return "offer"
+                }
+                return nil
+            }
+        }
+
         /// A `link`-generation SDP offer, exactly as `webrtc.ts` frames one:
         /// the SDP, the generation tag, the handshake commit and the
         /// per-connection capability confirmation in a single frame.
@@ -208,6 +229,8 @@ final class LinkPairingRoomTests: XCTestCase {
     private func rig(config: ICEConfig,
                      requiresVerification: Bool = false,
                      selfId: String = "aaa-mac",
+                     relayMeasure: @escaping RelayNegotiator.Measure = { _, _ in },
+                     relayChoiceDeadline: TimeInterval = 30,
                      now: Date = Date(timeIntervalSince1970: 1_000_000)) -> Rig {
         let scheduler = ManualScheduler()
         let ice = StubICEClient(config: config)
@@ -231,11 +254,14 @@ final class LinkPairingRoomTests: XCTestCase {
             pairingRoomHandle: handle,
             scheduler: scheduler,
             now: { now },
+            relayMeasure: relayMeasure,
+            relayChoiceDeadline: relayChoiceDeadline,
             assemble: { signaling, peerId, role, servers, relayOnly, generation,
                         directory, admission, signal in
                 let transport = PairingTransport()
                 box?.transports.append(transport)
                 box?.relayOnly.append(relayOnly)
+                box?.serverUrls.append(servers.flatMap(\.urlStrings))
                 return LinkSessionFactory.make(
                     signaling: signaling, peerId: peerId, role: role, iceServers: servers,
                     iceTransportPolicy: relayOnly ? .relay : .all,
@@ -1225,5 +1251,262 @@ final class LinkPairingRoomTests: XCTestCase {
         XCTAssertTrue(rig.channels[0].closed)
         XCTAssertNil(rig.handle.signaling,
                      "a room nobody was handed must not be left in the handle")
+    }
+    // MARK: - N. the room's relay choice
+
+    /// Two pool relays plus the legacy top-level TURN, which is the shape a
+    /// production `/api/ice` answer has today.
+    private func pooledConfig(expiresIn: TimeInterval = 3600,
+                              now: Date = Date(timeIntervalSince1970: 1_000_000)) -> ICEConfig {
+        let expiry = Int(now.addingTimeInterval(expiresIn).timeIntervalSince1970)
+        return ICEConfig(
+            iceServers: [
+                ICEServerConfig(urls: ["stun:stun.relayium.test:3478"]),
+                ICEServerConfig(urls: ["turn:legacy.relayium.test:3478"],
+                                username: "\(expiry):tok", credential: "secret"),
+            ],
+            relays: [
+                RelayEntry(id: "near", iceServers: [
+                    ICEServerConfig(urls: ["turn:near.relayium.test:3478"],
+                                    username: "\(expiry):tok", credential: "secret"),
+                ]),
+                RelayEntry(id: "far", iceServers: [
+                    ICEServerConfig(urls: ["turn:far.relayium.test:3478"],
+                                    username: "\(expiry):tok", credential: "secret"),
+                ]),
+            ])
+    }
+
+    /// A pool-only answer: the "only my nodes" account, whose top-level list
+    /// carries no TURN at all.
+    private func poolOnlyConfig(now: Date = Date(timeIntervalSince1970: 1_000_000)) -> ICEConfig {
+        let expiry = Int(now.addingTimeInterval(3600).timeIntervalSince1970)
+        return ICEConfig(
+            iceServers: [ICEServerConfig(urls: ["stun:stun.relayium.test:3478"])],
+            relays: [
+                RelayEntry(id: "mine", iceServers: [
+                    ICEServerConfig(urls: ["turn:mine.relayium.test:3478"],
+                                    username: "\(expiry):tok", credential: "secret"),
+                ]),
+            ])
+    }
+
+    /// The peer's map, exactly as `App.svelte`'s `broadcastRelayRtt` frames one.
+    private func relayRtt(_ rig: Rig, from peerId: String, _ map: [String: Int]) {
+        rig.channels[0].fire(Envelope(type: SignalType.signal, from: peerId,
+                                      data: RelayRttMessage.encode(map)))
+    }
+
+    /// **The defect this batch exists for.**
+    ///
+    /// The unified `link/1` path stored only `ICEConfig.iceServers` and dropped
+    /// the pool, so every relayed Workspace link was built on whichever legacy
+    /// relay the top-level entry named — while the browser measured the pool and
+    /// nominated something else. Two peers, two relays, two hops.
+    func testAPoolRoomConvergesOnTheRelayBothPeersMeasured() async {
+        let rig = rig(config: pooledConfig(),
+                      relayMeasure: { pool, publish in
+                          for entry in pool { publish(entry.id, entry.id == "far" ? 20 : 300) }
+                      })
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+        rig.announce("zzz-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        rig.roster(["zzz-web"])
+        await settle()
+
+        // Our own probes have landed, but the peer has said nothing: the choice
+        // cannot be made, so nothing may be built on a guess at it.
+        XCTAssertTrue(rig.serverUrls.isEmpty, "no link may be assembled before the maps meet")
+
+        relayRtt(rig, from: "zzz-web", ["near": 30, "far": 25])
+        await settle()
+
+        XCTAssertEqual(rig.serverUrls, [["turn:far.relayium.test:3478"]],
+                       "both sides minimise the WORSE of the two RTTs, which is `far`")
+        XCTAssertEqual(rig.relayOnly, [true])
+    }
+
+    /// The map the peer sends is untrusted signalling input. A hostile or broken
+    /// one must not select anything, and must not stop the room either.
+    func testARubbishPeerMapSelectsNothingAndStillOpensTheGate() async {
+        let rig = rig(config: pooledConfig(),
+                      relayMeasure: { pool, publish in
+                          for entry in pool { publish(entry.id, 40) }
+                      },
+                      relayChoiceDeadline: 0.05)
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+        rig.announce("zzz-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        rig.roster(["zzz-web"])
+        // Infinite, negative and absurd values, plus a non-number: every one of
+        // them is rejected by `RelayRttMessage.decode` rather than trapping on
+        // `Int(_: Double)` or selecting a relay this side cannot reach.
+        rig.channels[0].fire(Envelope(
+            type: SignalType.signal, from: "zzz-web",
+            data: .object(["relayRtt": .object(["near": .number(.infinity),
+                                                "far": .number(-1),
+                                                "ghost": .string("5")])])))
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        await settle()
+
+        XCTAssertEqual(rig.serverUrls.count, 1)
+        XCTAssertEqual(rig.serverUrls.first?.first, "stun:stun.relayium.test:3478",
+                       "no relay was agreed, so the whole capped set is folded in")
+        XCTAssertEqual(rig.relayOnly, [true], "a fallback that contains TURN still relays")
+    }
+
+    /// **A peer on a build with no relay exchange must not stall the room.**
+    ///
+    /// It sends no map at all, so no choice can ever settle. The bounded
+    /// deadline is the only thing that ends that wait, and what it lands on is
+    /// the capped, pool-folded, relay-only fallback rather than nothing.
+    func testAMapLessPeerFallsBackAfterTheBoundedDeadline() async {
+        let rig = rig(config: poolOnlyConfig(),
+                      relayMeasure: { pool, publish in
+                          for entry in pool { publish(entry.id, 12) }
+                      },
+                      relayChoiceDeadline: 0.05)
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+        rig.announce("zzz-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        rig.roster(["zzz-web"])
+        await settle()
+        XCTAssertTrue(rig.serverUrls.isEmpty, "still inside the deadline")
+
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        await settle()
+
+        XCTAssertEqual(rig.serverUrls,
+                       [["stun:stun.relayium.test:3478", "turn:mine.relayium.test:3478"]],
+                       "an own-node account has its only TURN in the pool")
+        XCTAssertEqual(rig.relayOnly, [true],
+                       "a pool-only account must still be relay-only, or ICE spends 20s on nothing")
+    }
+
+    /// **The outbound half, stated on the wire.**
+    ///
+    /// This side is the LARGER id, so the link it asks for is a `linkRequest` —
+    /// the frame whose thirty-second timeout starts the moment it is sent, on
+    /// both clients. Sending it before the relay choice would either start that
+    /// timeout against a wait the peer knows nothing about or commit the answer
+    /// to a configuration this room has not decided.
+    func testNoLinkRequestReachesTheWireBeforeTheChoiceIsMade() async {
+        let rig = rig(config: pooledConfig(),
+                      relayMeasure: { pool, publish in
+                          for entry in pool { publish(entry.id, entry.id == "near" ? 10 : 90) }
+                      })
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("zzz-mac")
+        rig.announce("aaa-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        rig.roster(["aaa-web"])
+        await settle()
+
+        XCTAssertEqual(rig.linkFramesSent, [], "nothing that commits to a relay may go out yet")
+        XCTAssertEqual(rig.model.connection, .requesting,
+                       "the wait is not hidden: this side has decided to ask, and says so")
+
+        relayRtt(rig, from: "aaa-web", ["near": 12, "far": 80])
+        await settle()
+
+        XCTAssertEqual(rig.linkFramesSent, ["request"])
+    }
+
+    /// A room with no pool has nothing to wait for, and waiting would be a
+    /// regression the user can feel: this is every same-network link and every
+    /// STUN-only code.
+    func testARoomWithNoPoolIsImmediate() async {
+        let rig = rig(config: stunOnlyConfig(),
+                      relayMeasure: { _, _ in XCTFail("an empty pool must not be measured") })
+        let transport = await openPairedLink(rig)
+        XCTAssertNotNil(transport, "the link is built on the same turn, with no relay wait")
+        XCTAssertEqual(rig.relayOnly, [false])
+    }
+
+    /// **An inbound offer is held by the same gate, and loses nothing.**
+    ///
+    /// The peer with the smaller id offers without asking, so this frame can
+    /// arrive before this side has decided anything. Assembling on it would
+    /// snapshot the fallback for the life of the link.
+    func testAnEarlyInboundOfferIsHeldRatherThanAssembledOnTheFallback() async {
+        let rig = rig(config: pooledConfig(),
+                      relayMeasure: { pool, publish in
+                          for entry in pool { publish(entry.id, entry.id == "near" ? 10 : 200) }
+                      })
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        // A LARGER self id, so this side is the responder and the peer offers.
+        rig.welcome("zzz-mac")
+        rig.announce("aaa-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        rig.roster(["aaa-web"])
+        rig.offer(from: "aaa-web")
+        await settle()
+
+        XCTAssertTrue(rig.serverUrls.isEmpty, "the offer waits for the choice, it does not bypass it")
+
+        relayRtt(rig, from: "aaa-web", ["near": 15, "far": 400])
+        await settle()
+
+        XCTAssertEqual(rig.serverUrls, [["turn:near.relayium.test:3478"]])
+        XCTAssertEqual(rig.relayOnly, [true])
+    }
+
+    /// **A second code must not inherit the first code's relay.**
+    ///
+    /// Every credential in a pool answer is minted for one code. A choice that
+    /// survived a room switch would select a `RelayEntry` id in a pool whose
+    /// credentials were issued for a room this client has left — and the
+    /// probe/gate completion of the abandoned room must not reopen anything in
+    /// the new one.
+    func testANewCodeCarriesNoRelayChoiceOrCredentialFromTheOldOne() async {
+        let first = pooledConfig()
+        let rig = rig(config: first,
+                      relayMeasure: { pool, publish in
+                          for entry in pool { publish(entry.id, entry.id == "near" ? 5 : 500) }
+                      })
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+        rig.roster(["zzz-web"])
+        // The first room really does COMMIT a choice — `near` — so what the
+        // second room must not inherit is a decision this object actually made,
+        // not merely one it was still thinking about.
+        relayRtt(rig, from: "zzz-web", ["near": 7, "far": 900])
+        await settle()
+
+        rig.model.leave()
+        await settle()
+        XCTAssertTrue(rig.serverUrls.isEmpty, "no peer announced link/1, so nothing was built")
+
+        // A second code, whose answer names a DIFFERENT pool. The old room's
+        // `near` does not exist in it, so a leaked id could only resolve to the
+        // fallback — and a leaked credential would show up as the old URL.
+        XCTAssertTrue(rig.model.watchPairingCode("EF34GH", legacyRole: .responder))
+        await settle()
+        // The SECOND socket. The rig's helpers address the first, which is the
+        // one this room must not be reachable on any more.
+        XCTAssertEqual(rig.channels.count, 2)
+        let second = rig.channels[1]
+        second.fire(Envelope(type: SignalType.welcome, name: "aaa-mac"))
+        second.fire(Envelope(type: SignalType.signal, from: "zzz-web",
+                             data: .object(["caps": .array([.string(TEXT_CAPABILITY),
+                                                            .string(LINK_CAPABILITY)])])))
+        second.fire(Envelope(type: SignalType.peers, peers: [Peer(id: "zzz-web", name: "peer")]))
+        second.fire(Envelope(type: SignalType.signal, from: "zzz-web",
+                             data: RelayRttMessage.encode(["far": 40])))
+        await settle()
+
+        XCTAssertEqual(rig.serverUrls, [["turn:far.relayium.test:3478"]],
+                       "the second room chose from its own pool, on its own maps")
+
+        // And the abandoned socket is inert: a late frame on it — the shape a
+        // room that was left mid-exchange really produces — changes nothing.
+        relayRtt(rig, from: "zzz-web", ["near": 1])
+        rig.offer(from: "zzz-web")
+        await settle()
+        XCTAssertEqual(rig.serverUrls, [["turn:far.relayium.test:3478"]])
     }
 }

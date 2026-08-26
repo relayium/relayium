@@ -2,7 +2,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { CHROME_MAX_MESSAGE_BYTES } from "./wire-limit";
 import { deriveSession, generateKeyPair, ready, signResume, verifyResume } from "./crypto";
 import {
-  LINK_AUTH_TIMEOUT_MS, LINK_LEAVE_AUTH_LENGTH, LINK_LEAVE_MAX_ATTEMPTS, LINK_RECOVERY_RETRY_MS,
+  LINK_AUTH_TIMEOUT_MS, LINK_HELD_SIGNAL_MAX,
+  LINK_LEAVE_AUTH_LENGTH, LINK_LEAVE_MAX_ATTEMPTS, LINK_RECOVERY_RETRY_MS,
   LINK_RECOVERY_WINDOW_MS,
   LINK_REQUEST_RETRY_MS, LINK_REQUEST_TIMEOUT_MS,
   LinkAuthenticationTimeoutError, LinkBusyError, LinkRecoveryTimeoutError,
@@ -2150,5 +2151,276 @@ describe("mixed link explicit leave", () => {
       expect(manager.current).not.toBeNull();
       manager.stop();
     });
+  });
+});
+
+describe("the relay gate", () => {
+  /** A gate a test opens by hand. Mirrors what `createRelaySelection` exposes. */
+  function manualGate() {
+    let open = false;
+    let waiters: Array<() => void> = [];
+    return {
+      gate: {
+        ready: () => open,
+        whenReady(cb: () => void) { if (open) cb(); else waiters.push(cb); },
+      },
+      release() {
+        open = true;
+        const parked = waiters;
+        waiters = [];
+        for (const cb of parked) cb();
+      },
+    };
+  }
+
+  /**
+   * A transport seam that behaves like the real one in the ONE way this feature
+   * depends on: it registers its inbound handler on the signaling client it was
+   * handed, synchronously, and then chains its initial signal behind it.
+   */
+  function recordingTransport() {
+    const seen: { from: string; data: unknown }[] = [];
+    const configs: unknown[] = [];
+    const conns: Conn[] = [];
+    const connect = vi.fn(async (opts: Parameters<typeof connectLink>[0]): Promise<Conn> => {
+      configs.push(opts.config);
+      opts.signaling.onSignal((from, data) => { seen.push({ from, data }); });
+      if (opts.initialSignal) seen.push({ from: opts.peerId, data: opts.initialSignal });
+      const peer = generateKeyPair();
+      opts.onPeerKey(peer.publicKey);
+      const file = { label: "relayium", readyState: "open" } as RTCDataChannel;
+      const text = { label: "relayium-text", readyState: "open" } as RTCDataChannel;
+      const conn: Conn = {
+        channel: file,
+        getChannel: (l) => l === "relayium" ? file : l === "relayium-text" ? text : undefined,
+        close: vi.fn(), maxFrameBytes: () => CHROME_MAX_MESSAGE_BYTES, path: async () => "relay",
+        stats: async () => new Map() as unknown as RTCStatsReport,
+      };
+      conns.push(conn);
+      return conn;
+    });
+    return { connect, seen, configs, conns };
+  }
+
+  const offer: InboundSignal = { link: true, sdp: { type: "offer", sdp: "v=0" } } as InboundSignal;
+  const candidate = (n: number): InboundSignal =>
+    ({ link: true, ice: { candidate: `candidate:${n}` } }) as unknown as InboundSignal;
+
+  /**
+   * **The outbound half.** A request or an offer is the first thing that
+   * commits this page to a relay, and its own thirty-second timeout starts with
+   * it. Neither may go out before the room has agreed which relay to use.
+   */
+  it("holds the outbound request behind the gate, and sends it on release", async () => {
+    vi.useFakeTimers();
+    const sig = signalingHarness();
+    const transport = transportHarness();
+    const g = manualGate();
+    const manager = createPeerLinkManager({
+      selfId: () => "z", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      connect: transport.connect,
+    });
+    manager.setRelayGate(g.gate);
+
+    const pending = manager.ensure("a"); // "z" > "a" → this side requests
+    void pending.catch(() => {});
+    await tick();
+    expect(sig.sent).toEqual([]);
+    expect(manager.status).toBe("requesting");
+    expect(manager.boundPeerId).toBe("a");
+
+    // The request timeout must not have been running while the gate was shut.
+    await vi.advanceTimersByTimeAsync(LINK_REQUEST_TIMEOUT_MS + 1_000);
+    expect(sig.sent).toEqual([]);
+
+    g.release();
+    await tick();
+    expect(sig.sent).toEqual([{ to: "a", data: { linkRequest: true, link: true } }]);
+    manager.stop();
+    vi.useRealTimers();
+  });
+
+  it("joins a second intent for the same peer and refuses a different one while gated", async () => {
+    const sig = signalingHarness();
+    const transport = transportHarness();
+    const g = manualGate();
+    const manager = createPeerLinkManager({
+      selfId: () => "z", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      connect: transport.connect,
+    });
+    manager.setRelayGate(g.gate);
+
+    const first = manager.ensure("a");
+    const same = manager.ensure("a");
+    expect(same).toBe(first);
+    await expect(manager.ensure("b")).rejects.toBeInstanceOf(LinkBusyError);
+    void first.catch(() => {});
+    manager.stop();
+    await expect(first).rejects.toThrow();
+  });
+
+  /**
+   * **The inbound half, and the one that could lose something.**
+   *
+   * `connectLink` installs this peer's signal handler synchronously; an `await`
+   * in front of it would put a window exactly where the peer is trickling the
+   * relay candidates a cross-network link cannot connect without. So the offer
+   * and everything chasing it are HELD, and replayed into the transport's own
+   * handler in arrival order once the gate opens.
+   */
+  it("holds an inbound offer and replays the frames that chased it, in order", async () => {
+    const sig = signalingHarness();
+    const transport = recordingTransport();
+    const g = manualGate();
+    const manager = createPeerLinkManager({
+      selfId: () => "z", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [{ urls: ["turn:chosen.example:3478"] }] }),
+      supportsLink: () => true,
+      connect: transport.connect,
+    });
+    manager.setRelayGate(g.gate);
+    manager.listen();
+
+    sig.inject("a", offer);
+    for (let i = 0; i < 3; i++) sig.inject("a", candidate(i));
+    await tick();
+    expect(transport.connect).not.toHaveBeenCalled();
+
+    g.release();
+    await tick();
+    await tick();
+
+    expect(transport.connect).toHaveBeenCalledTimes(1);
+    // The configuration was snapshotted AFTER the gate opened — the whole point.
+    expect(transport.configs).toEqual([{ iceServers: [{ urls: ["turn:chosen.example:3478"] }] }]);
+    expect(transport.seen.map((f) => f.data)).toEqual([
+      offer, candidate(0), candidate(1), candidate(2),
+    ]);
+    manager.stop();
+  });
+
+  /** Fail closed, never truncate: a link built from a prefix of its own
+   *  candidates is not the establishment the peer is making, and a silent
+   *  truncation is indistinguishable from a connection that simply hangs. */
+  it("abandons a held offer that is flooded, and says so", async () => {
+    const sig = signalingHarness();
+    const transport = recordingTransport();
+    const g = manualGate();
+    const manager = createPeerLinkManager({
+      selfId: () => "z", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      connect: transport.connect,
+    });
+    manager.setRelayGate(g.gate);
+    manager.listen();
+
+    sig.inject("a", offer);
+    for (let i = 0; i <= LINK_HELD_SIGNAL_MAX; i++) sig.inject("a", candidate(i));
+    await tick();
+    expect(sig.sent).toEqual([{ to: "a", data: { busy: true, link: true } }]);
+
+    g.release();
+    await tick();
+    expect(transport.connect).not.toHaveBeenCalled();
+    manager.stop();
+  });
+
+  /** A held offer binds this manager as firmly as an in-flight establishment,
+   *  and the checks that answer `busy` cannot see it. Silence here would leave
+   *  the second peer waiting out its own request timeout. */
+  it("tells a second peer the room is taken while an offer is held", async () => {
+    const sig = signalingHarness();
+    const transport = recordingTransport();
+    const g = manualGate();
+    const manager = createPeerLinkManager({
+      selfId: () => "z", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      connect: transport.connect,
+    });
+    manager.setRelayGate(g.gate);
+    manager.listen();
+
+    sig.inject("a", offer);
+    expect(manager.boundPeerId).toBe("a");
+    expect(manager.status).toBe("connecting");
+
+    sig.inject("b", offer);
+    expect(sig.sent).toEqual([{ to: "b", data: { busy: true, link: true } }]);
+    // The SAME peer sending twice is a duplicate, not a second claim: the
+    // establishment is built from the first offer.
+    sig.inject("a", offer);
+    expect(sig.sent).toHaveLength(1);
+
+    g.release();
+    await tick();
+    expect(transport.connect).toHaveBeenCalledTimes(1);
+    manager.stop();
+  });
+
+  /** A departure while the offer waits must cancel it, or the gate would open
+   *  onto an establishment with somebody who has left the room. */
+  it("lets a departure cancel a held offer through boundPeerId", async () => {
+    const sig = signalingHarness();
+    const transport = recordingTransport();
+    const g = manualGate();
+    const manager = createPeerLinkManager({
+      selfId: () => "z", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      connect: transport.connect,
+    });
+    manager.setRelayGate(g.gate);
+    manager.listen();
+
+    sig.inject("a", offer);
+    expect(manager.boundPeerId).toBe("a");
+    // What the workspace does when the server confirms this peer left.
+    manager.close();
+    expect(manager.boundPeerId).toBe("");
+    expect(manager.status).toBe("idle");
+
+    g.release();
+    await tick();
+    expect(transport.connect).not.toHaveBeenCalled();
+    manager.stop();
+  });
+
+  it("changes nothing at all when no gate is installed", async () => {
+    const sig = signalingHarness();
+    const transport = recordingTransport();
+    const manager = createPeerLinkManager({
+      selfId: () => "z", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      connect: transport.connect,
+    });
+    manager.listen();
+
+    sig.inject("a", offer);
+    await tick();
+    expect(transport.connect).toHaveBeenCalledTimes(1);
+    expect(transport.seen.map((f) => f.data)).toEqual([offer]);
+    manager.stop();
+  });
+
+  it("drops a held offer when the manager is closed under it", async () => {
+    const sig = signalingHarness();
+    const transport = recordingTransport();
+    const g = manualGate();
+    const manager = createPeerLinkManager({
+      selfId: () => "z", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      connect: transport.connect,
+    });
+    manager.setRelayGate(g.gate);
+    manager.listen();
+
+    sig.inject("a", offer);
+    await tick();
+    manager.close();
+    g.release();
+    await tick();
+    expect(transport.connect).not.toHaveBeenCalled();
+    manager.stop();
   });
 });

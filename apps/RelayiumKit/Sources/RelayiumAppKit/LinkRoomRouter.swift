@@ -186,6 +186,34 @@ final class LinkRoomRouter: @unchecked Sendable {
     /// Whether a drain owner is running. Cleared only in the critical section
     /// that observed the queue empty, so a wakeup cannot be lost.
     private var draining = false
+    /// **No link is BUILT on the main actor while this is set.**
+    ///
+    /// The room owning this router may have a precondition that has to be
+    /// settled before a link is BUILT rather than before it is routed: today
+    /// that is the relay choice, which decides which TURN server the assembly
+    /// is configured with and is worthless once the assembly exists. See
+    /// `LinkWorkspaceModel`'s relay gate.
+    ///
+    /// It holds the drain rather than the claim, and the difference is the
+    /// whole design. The claim, the buffer installation and the busy/duplicate
+    /// answers all still happen in the same instant on the delivery queue, so a
+    /// second peer is still told the room is taken and a candidate chasing a
+    /// consumed offer is still captured — by
+    /// `LinkEstablishmentSignalBuffer`, in order, bounded, and failing closed on
+    /// overflow exactly as before. What waits is only the handoff, which is the
+    /// step that reads the ICE configuration.
+    ///
+    /// It parks the QUEUE HEAD, so nothing behind a held handoff can overtake
+    /// it: the queue is a total order and letting a later item reach the session
+    /// before the establishment it belongs to is precisely what that order
+    /// exists to prevent. The two teardowns are the exception, and `waitsForGate`
+    /// says why each is safe.
+    ///
+    /// Bounded by construction: the only holder arms its deadline in the same
+    /// turn that sets this, and a new socket epoch clears it (see
+    /// `replaceEpoch`), so a room that goes away while held cannot leave a
+    /// router that never drains.
+    private var handoffHeld = false
 
     /// - Parameters:
     ///   - admission: the room's one-link state, the SAME object the session and
@@ -207,8 +235,13 @@ final class LinkRoomRouter: @unchecked Sendable {
     // MARK: - the socket epoch
 
     /// Listen to this socket, and stop listening to whatever came before it.
-    func attach(to client: SignalingClient) {
-        let mine = replaceEpoch(with: client)
+    ///
+    /// `holdingHandoff` is taken here rather than set by a second call because
+    /// the interceptor is installed inside this method: a peer's offer can be
+    /// routed before a caller that attached first and held second got its second
+    /// line in, and that offer is exactly the one the hold exists for.
+    func attach(to client: SignalingClient, holdingHandoff: Bool = false) {
+        let mine = replaceEpoch(with: client, holdingHandoff: holdingHandoff)
         // Installed LAST, after the previous epoch's claim has been released, so
         // a frame on the new socket cannot be routed into a room the old epoch
         // still holds.
@@ -227,14 +260,39 @@ final class LinkRoomRouter: @unchecked Sendable {
     /// The socket is gone. Everything the epoch owned is given up, and nothing
     /// is routed until the next `attach`.
     func detach() {
-        _ = replaceEpoch(with: nil)
+        _ = replaceEpoch(with: nil, holdingHandoff: false)
+    }
+
+    /// The room's precondition is settled: let the parked handoff through.
+    ///
+    /// Idempotent, and safe to call for an epoch that has already been replaced
+    /// — `replaceEpoch` clears the hold itself, so this then finds nothing held
+    /// and does nothing.
+    func releaseHandoff() {
+        lock.lock()
+        guard handoffHeld else { lock.unlock(); return }
+        handoffHeld = false
+        // Same wakeup bookkeeping as `enqueueLocked`: claim the drain here, in
+        // the critical section that cleared the hold, so two releases cannot
+        // start two drains and a release racing an enqueue cannot start none.
+        let wake = !pending.isEmpty && !draining
+        if wake { draining = true }
+        lock.unlock()
+        if wake { wakeDrain() }
     }
 
     /// End the current epoch and begin the next one. Answers the new epoch.
-    private func replaceEpoch(with client: SignalingClient?) -> Int {
+    ///
+    /// The hold is epoch state, so it is REPLACED here rather than preserved: a
+    /// new socket is a new room whose own precondition has not been decided yet,
+    /// and carrying the old room's hold into it would either strand the new room
+    /// behind a gate nothing will open or let it through on a decision that was
+    /// made about different credentials.
+    private func replaceEpoch(with client: SignalingClient?, holdingHandoff: Bool) -> Int {
         lock.lock()
         epoch += 1
         let mine = epoch
+        handoffHeld = holdingHandoff
         let retired = subscription
         subscription = nil
         signaling = client
@@ -828,6 +886,28 @@ final class LinkRoomRouter: @unchecked Sendable {
 
     // MARK: - the one main-actor consumer
 
+    /// Whether the room's gate must open before this item may run.
+    ///
+    /// Everything that could BUILD or feed a link waits. The two teardowns do
+    /// not, and that exemption is load bearing rather than an optimisation:
+    /// `replaceEpoch` queues `.endSession` for the room it is retiring in the
+    /// same critical section that installs the next room's hold, so parking it
+    /// would hold a departing link open for the whole of the NEW room's relay
+    /// wait — a link the epoch change has already ended.
+    ///
+    /// Neither exemption can overtake an establishment it belongs to.
+    /// `.endSession` is only ever queued for one that reached `beginAdmitted`,
+    /// which a parked handoff by definition has not; and `peerLeft` drops a
+    /// non-assembling establishment outright instead of queueing
+    /// `.peerDeparted` for it, which is what makes the parked handoff for that
+    /// peer resolve to a dropped token rather than a link to somebody who left.
+    private func waitsForGate(_ work: Work) -> Bool {
+        switch work {
+        case .handoff, .receive, .resumeOffer, .leave: return true
+        case .peerDeparted, .endSession: return false
+        }
+    }
+
     /// Append, and answer whether this caller owes a wakeup. Callers hold `lock`.
     private func enqueueLocked(_ work: Work) -> Bool {
         pending.append(work)
@@ -850,6 +930,13 @@ final class LinkRoomRouter: @unchecked Sendable {
         while true {
             lock.lock()
             guard !pending.isEmpty else {
+                draining = false
+                lock.unlock()
+                return
+            }
+            // Parked at the HEAD, and nothing is taken off the queue: see
+            // `handoffHeld`. `releaseHandoff` is what starts the next drain.
+            if handoffHeld, waitsForGate(pending[0]) {
                 draining = false
                 lock.unlock()
                 return

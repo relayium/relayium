@@ -291,7 +291,14 @@ final class RealtimeConnectionFactoryTests: XCTestCase {
     /// not converge. It must still be relay-only, matching the browser path;
     /// otherwise native ICE can spend about 20 seconds on impossible direct
     /// checks and fail before using the valid fallback relay.
-    func testTurnFallbackIsRelayOnlyWhenPoolDoesNotConverge() async throws {
+    ///
+    /// It now also FOLDS THE POOL IN rather than discarding it. Before, a pool
+    /// that had not converged left the connection on whichever single legacy
+    /// relay the top-level entry happened to name — the pool the server had just
+    /// issued credentials for was thrown away for the life of the session. The
+    /// browser's `chooseRtcConfig` has never done that, and the two clients must
+    /// resolve the same config the same way.
+    func testTurnFallbackFoldsInThePoolAndStaysRelayOnly() async throws {
         let (_, record) = try await runMake(
             pool: [Self.near],
             advertised: [Self.legacyTURN],
@@ -299,8 +306,50 @@ final class RealtimeConnectionFactoryTests: XCTestCase {
             measure: { _, _ in },
             drive: { ch in self.joinPeer(ch) })
 
-        XCTAssertEqual(record.servers?.map(\.urls), [["turn:legacy.example:3478"]])
+        XCTAssertEqual(record.servers?.map(\.urls),
+                       [["turn:legacy.example:3478"], ["turn:near.example:3478"]])
         XCTAssertEqual(record.relayOnly, true)
+    }
+
+    /// **The strict own-node deployment, which had no relay at all.**
+    ///
+    /// An account with "only my nodes" set is issued its relays in the pool and
+    /// NO top-level TURN. The old fallback read only the top-level list, saw
+    /// STUN, and built a cross-network connection on host and server-reflexive
+    /// candidates that cannot cross CGNAT — silently, and looking like a network
+    /// fault rather than a configuration one.
+    func testPoolOnlyConfigStillRelaysWhenNothingWasChosen() async throws {
+        let (_, record) = try await runMake(
+            pool: [Self.near],
+            advertised: [Self.legacy],
+            choiceDeadline: 0,
+            measure: { _, _ in },
+            drive: { ch in self.joinPeer(ch) })
+
+        XCTAssertEqual(record.servers?.map(\.urls),
+                       [["stun:legacy.example:3478"], ["turn:near.example:3478"]])
+        XCTAssertEqual(record.relayOnly, true, "a pool-only account must still relay")
+    }
+
+    /// The cap on the fallback is a real ceiling, and it keeps the earliest
+    /// entries rather than an arbitrary slice: each folded relay costs one TURN
+    /// allocation during ICE, so an oversized or hostile `/api/ice` answer must
+    /// not be able to make this client allocate without bound.
+    func testTheFoldedFallbackIsCapped() async throws {
+        let big = (0..<(RelaySelection.maxFallbackRelays + 4)).map { i in
+            RelayEntry(id: "r\(i)",
+                       iceServers: [ICEServerConfig(urls: ["turn:r\(i).example:3478"])])
+        }
+        let (_, record) = try await runMake(
+            pool: big,
+            advertised: [Self.legacy],
+            choiceDeadline: 0,
+            measure: { _, _ in },
+            drive: { ch in self.joinPeer(ch) })
+
+        XCTAssertEqual(record.servers?.count, 1 + RelaySelection.maxFallbackRelays)
+        XCTAssertEqual(record.servers?.last?.urls,
+                       ["turn:r\(RelaySelection.maxFallbackRelays - 1).example:3478"])
     }
 
     /// The buffer-and-replay path, end to end. A signal that lands while the
