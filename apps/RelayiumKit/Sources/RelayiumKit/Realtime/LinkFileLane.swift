@@ -89,7 +89,14 @@ public enum LinkFileInboundDecision: Equatable, Sendable {
     /// plaintext ACK is forgeable and one injected frame must not be able to end
     /// a working lane. A usable value has already been applied to the send
     /// window, clamped to bytes THIS attempt emitted.
-    case ack(total: Int?)
+    ///
+    /// `advanced` is whether that application MOVED the window — the clamp's own
+    /// verdict, not the raw value's. A duplicate, stale or backward total is
+    /// `advanced: false` however plausible it looks, so an owner extending a
+    /// deadline on it extends nothing a forger can mint: the only totals that
+    /// count as progress are ones ahead of the durable cursor and within what
+    /// this attempt really sent.
+    case ack(total: Int?, advanced: Bool)
     /// The lane is now terminal. See `terminalEffects`.
     case failClosed(LinkFileLaneError)
 }
@@ -356,12 +363,12 @@ public final class LinkFileLane {
         case let .lifecycle(control):
             return .control(control)
         case .ack:
-            guard let total = linkFileAckTotal(frame) else { return .ack(total: nil) }
+            guard let total = linkFileAckTotal(frame) else { return .ack(total: nil, advanced: false) }
             // Exact: the value has already been proven to be a non-negative
             // integer at or below `Number.MAX_SAFE_INTEGER`, which every `Double`
             // represents without loss.
-            sendWindow.recordAck(Double(total))
-            return .ack(total: total)
+            let advanced = sendWindow.recordAck(Double(total))
+            return .ack(total: total, advanced: advanced)
         case .resumeRequest:
             guard let point = parseResumeReq(frame) else { return routeTerminal(.malformedControl) }
             return .resumeRequest(point)

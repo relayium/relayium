@@ -999,7 +999,7 @@ final class LinkFileLaneTests: XCTestCase {
         try lane.didProduceFrame(chunkFrame(C))
         _ = lane.transportGap()
         XCTAssertEqual(lane.admitInboundFrame([LINK_FILE_BATCH_ABORT]), .control(.batchAbort))
-        XCTAssertEqual(lane.admitInboundFrame(ackFrame(64)), .ack(total: 64))
+        XCTAssertEqual(lane.admitInboundFrame(ackFrame(64)), .ack(total: 64, advanced: true))
         XCTAssertEqual(lane.admitInboundFrame(resumeReqFrame(index: 0, offset: C)),
                        .resumeRequest(ResumePoint(index: 0, offset: C)))
         XCTAssertFalse(lane.codecsPoisoned)
@@ -1024,8 +1024,8 @@ final class LinkFileLaneTests: XCTestCase {
     func testAnUnusableAckValueIsIgnoredRatherThanFatal() throws {
         let lane = LinkFileLane()
         try lane.beginOutboundBatch(sizes: [C])
-        XCTAssertEqual(lane.admitInboundFrame(ackFrame(.nan)), .ack(total: nil))
-        XCTAssertEqual(lane.admitInboundFrame(ackFrame(-1)), .ack(total: nil))
+        XCTAssertEqual(lane.admitInboundFrame(ackFrame(.nan)), .ack(total: nil, advanced: false))
+        XCTAssertEqual(lane.admitInboundFrame(ackFrame(-1)), .ack(total: nil, advanced: false))
         XCTAssertFalse(lane.codecsPoisoned)
     }
 
@@ -1212,10 +1212,12 @@ final class LinkFileLaneTests: XCTestCase {
 
         // The ACK is cumulative and batch-local, so the pre-rebase totals a
         // delayed frame would replay buy nothing.
-        XCTAssertEqual(lane.admitInboundFrame(ackFrame(Double(C - 1))), .ack(total: C - 1))
+        XCTAssertEqual(lane.admitInboundFrame(ackFrame(Double(C - 1))),
+                       .ack(total: C - 1, advanced: false))
         try lane.didProduceFrame(chunkFrame(101))
         XCTAssertFalse(lane.maySendProtected, "a stale ACK below the base granted no credit")
-        XCTAssertEqual(lane.admitInboundFrame(ackFrame(Double(C + 101))), .ack(total: C + 101))
+        XCTAssertEqual(lane.admitInboundFrame(ackFrame(Double(C + 101))),
+                       .ack(total: C + 101, advanced: true))
         XCTAssertTrue(lane.maySendProtected)
     }
 

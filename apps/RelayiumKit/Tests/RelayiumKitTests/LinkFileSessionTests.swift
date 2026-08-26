@@ -483,6 +483,70 @@ final class LinkFileSessionTests: XCTestCase {
                        "and a repeated ACK grants no second resume")
     }
 
+    /// The completion wait measures STALL, not total duration. A finished
+    /// producer has only handed its frames to the transport; on a slow link a
+    /// full flow window of them is still draining long past any fixed deadline,
+    /// and the receiver's advancing durable ACKs are live proof it is draining.
+    /// (A real 890 KB transfer was declared Failed at the fixed 60 s and then
+    /// completed on the receiver at ~142 s.)
+    func testAnAdvancingAckWhileFinishingReArmsTheCompletionWait() throws {
+        let (session, codecs, _) = pair()
+        let body = [UInt8](repeating: 7, count: 50)
+        let id = try session.enqueue(files: [meta("a.bin", body.count)])
+        _ = session.pump()
+        let attempt = try XCTUnwrap(session.outboundAttempt)
+        _ = session.admitFrame([RealtimeControl.accept.rawValue])
+        _ = session.produced(batch: id, attempt: attempt,
+                             frame: try codecs.fileSender.nextChunkFrame(body))
+        _ = session.produced(batch: id, attempt: attempt,
+                             frame: try codecs.fileSender.nextDoneFrame(
+                                hash: chainHash([UInt8](repeating: 0, count: 32), body)))
+        XCTAssertTrue(session.producerFinished(batch: id, attempt: attempt)
+                        .contains(.armCompleteTimeout(batch: id)))
+        XCTAssertEqual(session.outboundPhase, .finishing)
+
+        XCTAssertEqual(session.admitFrame(ackFrame(25)),
+                       [.armCompleteTimeout(batch: id)],
+                       "durable progress rolls the deadline instead of letting it fire")
+        XCTAssertEqual(session.admitFrame(ackFrame(50)),
+                       [.armCompleteTimeout(batch: id)],
+                       "each further advance rolls it again")
+        XCTAssertEqual(session.outboundPhase, .finishing,
+                       "an ACK is progress evidence, never the COMPLETE answer itself")
+    }
+
+    /// Adversarial: an ACK is a plaintext frame a signalling relay can mint, so
+    /// only a total the send-window clamp accepts as NEW progress may hold the
+    /// batch open — a duplicate, a backward walk and a total past what was
+    /// actually sent all extend nothing, and once the trickle stops the stall
+    /// still retires the batch as failed.
+    func testANonAdvancingAckWhileFinishingExtendsNothingAndTheStallStillRetires() throws {
+        let (session, codecs, _) = pair()
+        let body = [UInt8](repeating: 7, count: 50)
+        let id = try session.enqueue(files: [meta("a.bin", body.count)])
+        _ = session.pump()
+        let attempt = try XCTUnwrap(session.outboundAttempt)
+        _ = session.admitFrame([RealtimeControl.accept.rawValue])
+        _ = session.produced(batch: id, attempt: attempt,
+                             frame: try codecs.fileSender.nextChunkFrame(body))
+        _ = session.produced(batch: id, attempt: attempt,
+                             frame: try codecs.fileSender.nextDoneFrame(
+                                hash: chainHash([UInt8](repeating: 0, count: 32), body)))
+        _ = session.producerFinished(batch: id, attempt: attempt)
+
+        XCTAssertEqual(session.admitFrame(ackFrame(25)), [.armCompleteTimeout(batch: id)])
+        XCTAssertEqual(session.admitFrame(ackFrame(25)), [], "a duplicate is not progress")
+        XCTAssertEqual(session.admitFrame(ackFrame(10)), [], "a backward total is not progress")
+        XCTAssertEqual(session.admitFrame(ackFrame(51)), [],
+                       "a total past what was sent is a forgery, not progress")
+
+        let timedOut = session.completeTimedOut(batch: id)
+        XCTAssertTrue(timedOut.contains(.cancelCompleteTimeout(batch: id)),
+                      "a genuinely quiet window still fails the batch")
+        XCTAssertNil(session.outboundBatch)
+        XCTAssertFalse(session.laneFailed, "the batch failed; the lane carries on")
+    }
+
     // ── inbound: ACCEPT opens receive before the first chunk can race it ─────
 
     func testAnInboundManifestPromptsAndArmsTheConsentWindow() throws {
