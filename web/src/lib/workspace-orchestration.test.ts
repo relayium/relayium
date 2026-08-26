@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+// The one section of this file that EXECUTES rather than reads: the relay
+// commit rule is behaviour, and the two lanes' reads of it are three lines App
+// declares and hands out. See the last describe block.
+import { chooseRtcConfig, type RelayEntry } from "./ice";
+import { createRelaySelection } from "./relay-selection";
 
 // Source contract, like activity-visibility.test.ts and
 // workspace-presentation.test.ts: these rules are about which nodes exist in
@@ -42,6 +47,15 @@ const fn = (name: string): string => {
  *  rule names the very calls it is a rule about. */
 const code = (text: string) =>
   text.split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+/** The statements between two anchors — a declaration block rather than a
+ *  function body, which is what a dependency object is. */
+const block = (from: string, to: string): string => {
+  const at = app.indexOf(from);
+  expect(at, `${from} is missing from App.svelte`).toBeGreaterThan(-1);
+  const end = app.indexOf(to, at);
+  expect(end, `${to} no longer follows ${from} in App.svelte`).toBeGreaterThan(at);
+  return code(app.slice(at, end));
+};
 
 /** The room-binding effect's statements, up to the switch it ends with. */
 const roomEffect = (): string => {
@@ -1060,13 +1074,6 @@ describe("no transport is built while the room has no configuration", () => {
     app.indexOf("let roomIceWaiters"),
     app.indexOf("function applyRoomIce("),
   ));
-  const block = (from: string, to: string): string => {
-    const at = app.indexOf(from);
-    expect(at, `${from} is missing from App.svelte`).toBeGreaterThan(-1);
-    const end = app.indexOf(to, at);
-    expect(end, `${to} no longer follows ${from} in App.svelte`).toBeGreaterThan(at);
-    return code(app.slice(at, end));
-  };
 
   it("becomes ready only where the room's own answer is installed", () => {
     // ONE settler, and `applyRoomIce` is it. A second `settleRoomIce(true)`
@@ -1259,5 +1266,167 @@ describe("no transport is built while the room has no configuration", () => {
     // And nothing in the readiness block waits on the relay agreement itself,
     // which is what would have made a POOLED room slower than it was.
     expect(code(fn("settleRoomIce"))).not.toContain("relaySelection");
+  });
+});
+
+// ── which config read COMMITS the room to a relay ────────────────────────────
+//
+// `relaySelection.takeChoice()` is not a read, it is a record: it marks this
+// room as having built a transport on the agreed relay, and that record does
+// exactly one thing — it FORBIDS `relock`, the departure re-lock that takes the
+// gate back when the peer it opened for leaves before anything was built.
+//
+// Composing all three lanes onto one `rtcConfig()` therefore let a LEGACY
+// construction spend the record. The legacy file and text lanes never go
+// through the relay gate at all, so nothing `link/1` was ever built — and the
+// room was nevertheless unable to re-lock, which is the very state `relock`
+// exists to prevent: the replacement peer's first legal `link/1` frame goes out
+// on the departed peer's relay, or on the fallback, before its own map can
+// arrive.
+//
+// The split is the correction, and this section is its evidence in two halves:
+// the first EXECUTES the two reads against the real `createRelaySelection` and
+// the real `chooseRtcConfig`, and the second pins that model to the component
+// by asserting the exact expressions App.svelte builds them from.
+describe("the relay choice is committed by the link path and only by it", () => {
+  const pool: RelayEntry[] = [
+    { id: "tok", iceServers: [{ urls: ["turn:tok.example:3478"], username: "u", credential: "c" }] },
+    { id: "fra", iceServers: [{ urls: ["turn:fra.example:3478"], username: "u", credential: "c" }] },
+  ];
+
+  /**
+   * App's two readers over one selection, settled on `tok` for peer "first".
+   *
+   * The bodies are the ones App.svelte declares — asserted literally in the
+   * source contract below, so this model cannot drift away from the component
+   * without a test failing. `iceServers` is empty and the pool is real, which
+   * is the pooled cross-network room these rules are about.
+   */
+  function room() {
+    const selection = createRelaySelection({ publish: () => {} });
+    selection.reset(pool);
+    const relayRtcConfig = (relayId: string | null) =>
+      chooseRtcConfig({ iceServers: [], relays: pool }, relayId);
+    const linkRtcConfig = () => relayRtcConfig(selection.takeChoice());
+    const legacyRtcConfig = () => relayRtcConfig(selection.selectedRelayId);
+
+    selection.noteRoster(["first"]);
+    selection.notePeer("first");
+    selection.record("tok", 10);
+    selection.record("fra", 90);
+    selection.receive("first", { relayRtt: { tok: 15, fra: 400 } });
+    selection.finishMeasurement();
+    expect(selection.gate.ready()).toBe(true);
+    expect(selection.selectedRelayId).toBe("tok");
+    return { selection, linkRtcConfig, legacyRtcConfig };
+  }
+
+  it("gives both lanes the same configuration, so nothing else changes", () => {
+    // The whole difference is the record. The pool, the credentials, the chosen
+    // relay and the relay-only transport policy are identical, because both
+    // readers end in the same `chooseRtcConfig` call over the same room state.
+    const a = room();
+    expect(a.legacyRtcConfig()).toEqual({
+      iceServers: pool[0].iceServers, iceTransportPolicy: "relay",
+    });
+    expect(a.legacyRtcConfig()).toEqual(a.linkRtcConfig());
+
+    // …and the fallback is shared too: with no choice settled, both fold the
+    // whole advertised set together exactly as before.
+    const fresh = createRelaySelection({ publish: () => {} });
+    fresh.reset(pool);
+    expect(fresh.selectedRelayId).toBeNull();
+    expect(chooseRtcConfig({ iceServers: [], relays: pool }, fresh.selectedRelayId))
+      .toEqual(chooseRtcConfig({ iceServers: [], relays: pool }, fresh.takeChoice()));
+  });
+
+  /** **The defect.** A legacy read must leave the departure re-lock available. */
+  it("does not let a legacy construction spend the room's one commit", () => {
+    const { selection, legacyRtcConfig } = room();
+    // Both legacy lanes build, twice over — a file transfer and a message
+    // session with the same peer, which is the ordinary sequence.
+    legacyRtcConfig();
+    legacyRtcConfig();
+
+    // The peer they were built with leaves, and nothing `link/1` exists. The
+    // gate goes back to waiting, and its choice with it.
+    selection.peerGone("first");
+    expect(selection.gate.ready()).toBe(false);
+    expect(selection.selectedRelayId).toBeNull();
+
+    // The replacement is held until its OWN map lands, which is the whole point:
+    // its link is then built on the relay the two of them agree on.
+    const run = vi.fn();
+    selection.gate.whenReady(run);
+    selection.notePeer("second");
+    expect(run).not.toHaveBeenCalled();
+    selection.receive("second", { relayRtt: { fra: 4 } });
+    expect(selection.selectedRelayId).toBe("fra");
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  /** …and the invariant the commit exists for is untouched: a gate must never
+   *  reach a `link/1` transport that already exists. Stated here as the exact
+   *  counterpart of the case above, so the two can only ever be changed
+   *  together; `relay-selection.test.ts` owns the rule itself. */
+  it("still forbids the re-lock once the link path has read the choice", () => {
+    const { selection, linkRtcConfig } = room();
+    expect(linkRtcConfig()).toEqual({
+      iceServers: pool[0].iceServers, iceTransportPolicy: "relay",
+    });
+
+    selection.peerGone("first");
+    expect(selection.gate.ready()).toBe(true);
+    const run = vi.fn();
+    selection.gate.whenReady(run);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  /** A legacy read before the link's does not consume the commit either: the
+   *  link path's own read still records it, so the ordering of the two lanes
+   *  inside one room cannot decide whether the invariant holds. */
+  it("records the commit on the link read whichever lane read first", () => {
+    const { selection, linkRtcConfig, legacyRtcConfig } = room();
+    legacyRtcConfig();
+    linkRtcConfig();
+
+    selection.peerGone("first");
+    expect(selection.gate.ready()).toBe(true);
+  });
+
+  // ── the composition itself ─────────────────────────────────────────────────
+  it("wires the committing read to the link path and the plain read to the lanes", () => {
+    const all = code(app);
+    // The two readers, exactly as the model above builds them.
+    expect(all).toContain(
+      "const relayRtcConfig = (relayId: string | null): RtcConfig =>\n"
+      + "    chooseRtcConfig({ iceServers, relays: relayPool }, relayId);",
+    );
+    expect(all).toContain(
+      "const linkRtcConfig = (): RtcConfig => relayRtcConfig(relaySelection.takeChoice());",
+    );
+    expect(all).toContain(
+      "const legacyRtcConfig = (): RtcConfig => relayRtcConfig(relaySelection.selectedRelayId);",
+    );
+    // ONE commit in the whole component, and it is the link reader's. A second
+    // `takeChoice()` anywhere is another lane able to spend the record.
+    expect(all.match(/takeChoice\(\)/g)).toHaveLength(1);
+    // The dependency that reaches a `link/1` transport constructor
+    // (peer-workspace → mixed-session → peer-link) takes the committing read…
+    const workspaceDeps = block(
+      "const workspace: PeerWorkspace = createPeerWorkspace({", "const storedReceiver =",
+    );
+    expect(workspaceDeps).toContain("rtcConfig: () => linkRtcConfig(),");
+    expect(workspaceDeps).not.toContain("takeChoice");
+    // …and both legacy lanes take the plain one. They are the two the router
+    // forks to for every peer that does not route `link/1`.
+    const textLinkDeps = block("const textLink = createTextLink({", "const textSession = createTextSession({");
+    const fileDeps = block("const session = createTransferSession({", "const legacyFiles = {");
+    expect(textLinkDeps).toContain("rtcConfig: () => legacyRtcConfig(),");
+    expect(fileDeps).toContain("rtcConfig: () => legacyRtcConfig(),");
+    // The composed reader they all used is gone, so a fourth consumer cannot
+    // reappear on it and silently pick up the commit.
+    expect(all).not.toContain("rtcConfig: () => rtcConfig(),");
+    expect(all).not.toContain("const rtcConfig = (): RtcConfig");
   });
 });

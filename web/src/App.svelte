@@ -123,7 +123,7 @@
    *
    * The SAME gate the outbound wrappers use (`whenRoomIce`), given to the lanes
    * because the INBOUND half of each lane is inside the lane: both snapshot
-   * `rtcConfig()` in their own offer handler, which this component never
+   * `legacyRtcConfig()` in their own offer handler, which this component never
    * reaches. The only lever it has from here is a refusal, and a refusal is
    * answered `busy` — terminal to every legacy sender, which does not retry. A
    * room joined a round trip early would then deterministically fail a transfer
@@ -155,7 +155,7 @@
   // 用 thunk 接：真正调用都发生在两者构造完之后。session 同理，它声明在下面。
   const textLink = createTextLink({
     signaling: () => signaling,
-    rtcConfig: () => rtcConfig(),
+    rtcConfig: () => legacyRtcConfig(),
     // 握手之前就问：能拒就别白跑一次 commit-reveal，也别白占一次 TURN 分配。
     // 只问冲突。"这间房还没拿到 ICE 答复"不是冲突，由 roomIce 那条路等，不是从这里拒。
     canAccept: (from) => textSession.canAcceptFrom(from),
@@ -173,7 +173,7 @@
   let textCompose = $state(""); // 粘贴进来的草稿，交给面板预填
   const session = createTransferSession({
     signaling: () => signaling,
-    rtcConfig: () => rtcConfig(),
+    rtcConfig: () => legacyRtcConfig(),
     t: () => messages[lang()],
     flash,
     // 互斥那一半，只算真正的冲突。房间的 ICE 答复没到不属于这里：它走 roomIce，
@@ -249,7 +249,10 @@
     peerIds: () => peers.map((peer) => peer.id),
     unsupported: () => unsupported,
     signaling: () => signaling,
-    rtcConfig: () => rtcConfig(),
+    // The one dependency that reaches a `link/1` transport constructor
+    // (peer-workspace → mixed-session → peer-link), and so the one read that
+    // records the room's commitment. See `linkRtcConfig`.
+    rtcConfig: () => linkRtcConfig(),
     // The gate the link manager holds its first legal `link/1` frame behind —
     // this room's whole readiness, not only its relay agreement. See `roomGate`.
     relayGate: () => roomGate,
@@ -470,14 +473,45 @@
   // all, and the case it got wrong (no relay selected yet on a pool-only
   // deployment) is exactly the one that stranded cross-network peers.
   //
-  // `takeChoice` rather than `selectedRelayId`, and that is not a rename: every
-  // caller of this function passes the answer straight to a transport
-  // constructor, so a read here IS a connection committing to that relay for its
-  // whole life. The gate records it, which is what stops a peer leaving later
-  // from taking the choice back underneath a transport that already exists —
-  // see `relock` in relay-selection.ts.
-  const rtcConfig = (): RtcConfig =>
-    chooseRtcConfig({ iceServers, relays: relayPool }, relaySelection.takeChoice());
+  // The pool, the credentials and the transport policy are the same question for
+  // every lane, so they are answered in one place. What differs is only WHICH
+  // read of the relay choice reaches it, and that difference is the next two.
+  const relayRtcConfig = (relayId: string | null): RtcConfig =>
+    chooseRtcConfig({ iceServers, relays: relayPool }, relayId);
+  /**
+   * The read on the unified `link/1` path, and the only one that COMMITS.
+   *
+   * `takeChoice` rather than `selectedRelayId`, and that is not a rename: this
+   * answer goes straight to the `link/1` transport constructor, so a read here
+   * IS a connection committing to that relay for its whole life. The gate
+   * records it, which is what stops a peer leaving later from taking the choice
+   * back underneath a transport that already exists — see `relock` in
+   * relay-selection.ts.
+   */
+  const linkRtcConfig = (): RtcConfig => relayRtcConfig(relaySelection.takeChoice());
+  /**
+   * The read on the two LEGACY lanes, which does not commit — a plain read, the
+   * one `main` always made here.
+   *
+   * The commit record above is about the gate the `link/1` path waits behind,
+   * and only a `link/1` transport is ever built from it. The legacy file and
+   * text lanes never go through that gate at all (see the block below): they
+   * build on whatever the choice is at that instant, so marking the room
+   * "committed" from here would be recording a consumer that does not exist.
+   *
+   * And the record is load-bearing in one direction only — it FORBIDS the
+   * departure re-lock. So a legacy construction that set it would leave a room
+   * that has built nothing on the gate unable to take the gate back when the
+   * peer it opened for leaves, and the replacement's first legal `link/1` frame
+   * would go out on the departed peer's relay, or on the fallback, before its
+   * own map could arrive. That is exactly the defect `relock` exists to close,
+   * reached from a lane that has no `link/1` connection to protect.
+   *
+   * Nothing else changes for these two: same pool, same credentials, same
+   * transport policy, same fallback when no choice has settled, and the same
+   * value `takeChoice` would have returned.
+   */
+  const legacyRtcConfig = (): RtcConfig => relayRtcConfig(relaySelection.selectedRelayId);
 
   // ── nearest-relay selection ──────────────────────────────────────────────────────
   // Each peer measures its RTT to every pool relay; the maps are swapped over signaling
@@ -488,8 +522,9 @@
   //
   // A unified link/1 connection WAITS for that agreement — see relay-selection.ts — and
   // by the time one is wanted the wait is usually already over. The legacy file and text
-  // paths do not wait: they read whatever rtcConfig() answers, which without a choice is
-  // the whole advertised set folded together. No effect on LAN either way (empty pool).
+  // paths do not wait: they read whatever `legacyRtcConfig()` answers, which without a
+  // choice is the whole advertised set folded together — and, because they do not wait,
+  // they do not commit either. No effect on LAN either way (empty pool).
   let relayMeasureEpoch = 0;
   // The room's exchange, gate and choice. Plain (non-reactive) state on purpose:
   // rtcConfig() must read the value that is true at the instant a connection is
@@ -682,7 +717,7 @@
     // Departures cannot fire here: `reset` emptied the roster in the same turn.
     noteRelayPeers(peers.map((p) => p.id));
     // …and only now release what was parked, AFTER both: `reset` is what puts
-    // THIS room's pool behind `takeChoice()`, and a build woken ahead of it
+    // THIS room's pool behind both config reads, and a build woken ahead of it
     // would read the previous room's — the whole thing the wait exists to stop.
     // `startRelayMeasurement` runs synchronously as far as `reset` and the
     // replay before it ever awaits a probe.
