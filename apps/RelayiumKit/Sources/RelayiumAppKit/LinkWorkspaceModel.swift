@@ -825,10 +825,26 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         /// the other person is still typing the code, and the late peer's first
         /// legal frame then lands on an already-open gate with no map behind it.
         var relayGracePeer: String?
+        /// Which grace is current. Bumped every time one is armed, retargeted or
+        /// abandoned, and carried by the parked wait so a superseded one can
+        /// recognise itself.
+        ///
+        /// Identity alone cannot: a peer that leaves the roster and comes back
+        /// under the SAME id arms a second grace while the first is still parked,
+        /// and the first would then find its own id in `relayGracePeer` and
+        /// release the gate on a deadline that started before the departure. That
+        /// is the stale-deadline release this whole peer scoping exists to
+        /// prevent, reached by the one route the id check cannot see.
+        var relayGraceToken = 0
         /// Peers this room has already told about its map. `peerJoined`
         /// broadcasts, so asking twice would put the same map on the wire twice
         /// for every roster frame the room sees.
         var greetedForRelay: Set<String> = []
+        /// The peers the room's LAST roster frame named. The room's own record of
+        /// who is here, kept because a departure is otherwise invisible: the hub
+        /// sends `left` only for a physical disconnect, and a peer can leave the
+        /// roster without one — see `pairingRosterChanged`.
+        var roster: Set<String> = []
         var announcer: LinkCapabilityAnnouncer?
         var capsSubscription: SignalSubscription?
         /// The per-peer capability windows. Cancelled the moment a peer is
@@ -1108,16 +1124,20 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
               let negotiator = room.negotiator,
               room.relayGracePeer != peerId else { return }
         room.relayGracePeer = peerId
+        room.relayGraceToken &+= 1
+        let token = room.relayGraceToken
         let deadline = relayChoiceDeadline
         Task { [weak self, weak room] in
             let chosen = await negotiator.waitForChoice(deadline: deadline)
             await MainActor.run {
                 guard let self, let room, self.generation == mine,
                       self.pairing === room,
-                      // Superseded or departed while this was parked. Its answer
-                      // is not this room's, and whoever replaced it is running
-                      // its own full grace.
-                      room.relayGracePeer == peerId else { return }
+                      // Superseded, abandoned, or armed again after a departure
+                      // while this was parked. Its answer is not this room's, and
+                      // whoever replaced it is running its own full grace. The
+                      // TOKEN and not the peer id, because the last of those three
+                      // wears the same id — see `relayGraceToken`.
+                      room.relayGraceToken == token else { return }
                 self.applyRelayChoice(chosen, room: room, generation: mine)
             }
         }
@@ -1137,16 +1157,56 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// behalf of somebody who is gone, or handing the next peer a settled choice
     /// made from a departed one's measurements, is the same defect as opening it
     /// before anybody arrived.
+    ///
+    /// **The one departure path**, reached by a hub `left` frame and by a roster
+    /// that no longer names the peer alike. It was reached by the `left` frame
+    /// alone once, and a roster removal — which `pairingRosterChanged` documents
+    /// as a departure the hub may send no `left` for — then cleared only the
+    /// grace: the departed peer's map stayed merged in the negotiator, so the
+    /// next peer's supposedly fresh grace returned instantly on a choice made
+    /// from measurements taken by somebody who was gone, and its link was built
+    /// on that relay.
+    ///
+    /// Idempotent, and has to be: both signals arrive for an ordinary
+    /// disconnect, in either order.
     private func relayPeerLeft(_ peerId: String, generation mine: Int) {
         guard generation == self.generation, let room = pairing else { return }
         room.negotiator?.peerLeft(peerId)
         room.greetedForRelay.remove(peerId)
-        if room.relayGracePeer == peerId { room.relayGracePeer = nil }
+        room.roster.remove(peerId)
+        if room.relayGracePeer == peerId {
+            room.relayGracePeer = nil
+            // Not merely untargeted — INVALIDATED. Clearing the peer alone lets
+            // the parked wait match again if the same id comes back before its
+            // old deadline elapses; see `relayGraceToken`.
+            room.relayGraceToken &+= 1
+        }
         // An intent still behind the gate for the peer that just left must not
         // be handed to whoever opens it next. `router.peerLeft` has already
         // withdrawn the ask that reached the wire; this is the half that never
         // did.
         if gatedLinkAttempt?.peerId == peerId { gatedLinkAttempt = nil }
+    }
+
+    /// Who this room had evidence of that the roster frame just published does
+    /// not name.
+    ///
+    /// The last roster is not the whole answer. A peer proves it is here by
+    /// announcing, by putting a `link`-generation frame on the socket, or by
+    /// being named in this side's own link intent, and any of those can precede
+    /// the roster frame that lists it — or be the only evidence there ever is.
+    /// So a peer being waited on, or holding the parked intent, counts as known
+    /// even if no roster frame has carried it yet; otherwise the one roster that
+    /// says it is gone would look like a roster that never mentioned it.
+    ///
+    /// Sorted so the cleanup order is the same on every run.
+    private func departedFromRoster(_ present: Set<String>,
+                                    room: PairingRoom,
+                                    generation mine: Int) -> [String] {
+        var known = room.roster
+        if let waiting = room.relayGracePeer { known.insert(waiting) }
+        if let held = gatedLinkAttempt, held.generation == mine { known.insert(held.peerId) }
+        return known.subtracting(present).sorted()
     }
 
     /// Commit the room's relay decision and let everything it was holding run.
@@ -1229,10 +1289,39 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
 
     /// The room's roster. Every peer in it is greeted, and the FIRST one this
     /// room has not decided about starts the capability window.
+    ///
+    /// ## A roster removal is a departure, and it is handled BEFORE `resolved`
+    ///
+    /// The hub emits `left` only for a physical disconnect, so a peer can leave
+    /// this roster with no `left` frame behind it — and the departure half below
+    /// is the only signal the room gets when that happens. It therefore runs
+    /// ahead of the `resolved` return: `resolved` means this room has decided
+    /// which peer speaks `link/1`, which is exactly the state a gated link intent
+    /// is parked in, and returning first left that intent, that peer's grace and
+    /// its merged RTT map standing after the peer had gone. The room would then
+    /// open its gate on a departed peer's deadline and ask a departed peer for a
+    /// link, on a relay chosen from measurements nobody in the room had taken.
+    ///
+    /// What stays behind the return is everything that only makes sense for a
+    /// room still choosing a peer: greeting, the capability windows, the hello
+    /// retries and arming a grace. A latched room does not un-latch, and this
+    /// does not change that.
     private func pairingRosterChanged(_ peers: [Peer], generation mine: Int) {
-        guard generation == mine, let room = pairing, !room.resolved else { return }
+        guard generation == mine, let room = pairing else { return }
         let selfId = room.signaling.selfId ?? ""
         let others = peers.map(\.id).filter { !$0.isEmpty && $0 != selfId }
+        let present = Set(others)
+        for peerId in departedFromRoster(present, room: room, generation: mine) {
+            relayPeerLeft(peerId, generation: mine)
+        }
+        room.roster = present
+        // Representative presence, so it may withdraw an ask to a peer that
+        // vanished and never tears a live link down — `LinkRoomRouter`'s own
+        // rule. The parked half of the same ask is retired above; this is the
+        // half that reached the wire.
+        router?.rosterChanged(peerIds: present)
+
+        guard !room.resolved else { return }
         room.capabilities.retain(others)
         room.announcer?.rosterChanged(peerIds: others)
         // Tell each newly seen peer what this side has measured so far. Once per
@@ -1245,17 +1334,12 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
                 room.greetedForRelay.insert(peerId)
                 negotiator.peerJoined(peerId)
             }
-            // A roster this peer is no longer in is a departure the server may
-            // not send a `left` frame for; its grace must not outlive it.
-            if let waiting = room.relayGracePeer, !others.contains(waiting) {
-                room.relayGracePeer = nil
-            }
-            // And a peer that IS here starts one. This is the ordinary path: the
-            // roster names the peer before any of its frames are interpreted, on
-            // both the creating and the joining side.
+            // A peer that IS here starts a grace — the departed ones gave theirs
+            // up above. This is the ordinary path: the roster names the peer
+            // before any of its frames are interpreted, on both the creating and
+            // the joining side.
             if let peerId = others.first { noteRelayPeerPresent(peerId, generation: mine) }
         }
-        router?.rosterChanged(peerIds: Set(others))
         let arriving = others.filter { !room.decided.contains($0) }
         for peerId in arriving {
             room.decided.insert(peerId)
