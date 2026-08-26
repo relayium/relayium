@@ -245,6 +245,7 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
   // second call here.
   mixed.manager.setRelayGate(deps.relayGate ? {
     ready: () => deps.relayGate?.()?.ready() ?? true,
+    notePeer: (peerId) => { deps.relayGate?.()?.notePeer(peerId); },
     whenReady: (cb) => {
       const gate = deps.relayGate?.();
       if (!gate) { cb(); return; }

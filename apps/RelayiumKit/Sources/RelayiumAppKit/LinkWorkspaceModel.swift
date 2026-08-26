@@ -446,8 +446,10 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// single unreachable relay would otherwise hold the whole map, and this
     /// room's, for the full probe timeout.
     private let relayMeasure: RelayNegotiator.Measure
-    /// How long the room waits for the two relay maps to meet. Counted from the
-    /// moment the room starts measuring — see `RelaySelection.choiceDeadline`.
+    /// How long the room waits for a PEER's relay map before falling back.
+    /// Counted from the moment that peer exists, not from the moment the room
+    /// starts measuring — see `RelaySelection.choiceDeadline` and
+    /// `armRelayGrace`.
     private let relayChoiceDeadline: TimeInterval
     /// The link attempt that is waiting for the relay gate, if any.
     ///
@@ -814,6 +816,15 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         /// Whether the relay choice has settled (or timed out) for THIS room.
         /// Starts true when there is nothing to settle.
         var relayGateOpen: Bool
+        /// The peer whose bounded relay grace is running, or nil when nobody is
+        /// here to wait for.
+        ///
+        /// A room with no peer waits INDEFINITELY, on purpose: there is no link
+        /// to build, so nothing the fallback would unblock. Arming the grace at
+        /// room open instead — which is what this replaced — expires it while
+        /// the other person is still typing the code, and the late peer's first
+        /// legal frame then lands on an already-open gate with no map behind it.
+        var relayGracePeer: String?
         /// Peers this room has already told about its map. `peerJoined`
         /// broadcasts, so asking twice would put the same map on the wire twice
         /// for every roster frame the room sees.
@@ -1024,6 +1035,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
             Task { @MainActor in
                 guard let self, self.generation == mine else { return }
                 self.router?.peerLeft(peerId)
+                self.relayPeerLeft(peerId, generation: mine)
             }
         }
 
@@ -1038,14 +1050,15 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         attach(socket, ice: config, capabilities: capabilities,
                holdingRelayGate: negotiator != nil)
         armRelayDeadline(config)
-        if let negotiator { startRelayChoice(negotiator, room: room, generation: mine) }
+        // Probing starts eagerly, at room open. Only the WAIT is peer-scoped —
+        // see `armRelayGrace` — so by the time a peer finally arrives this
+        // side's map is usually already complete and the grace is spent on the
+        // peer alone.
+        negotiator?.start()
     }
 
     // MARK: - the room's relay choice
 
-    /// Measure the pool, swap maps with the peer, and open the room's gate on
-    /// the answer.
-    ///
     /// ## Why a gate and not a best-effort read
     ///
     /// `RelayChoice.pick` is symmetric, so two peers holding the same pair of
@@ -1058,32 +1071,82 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// answers, the buffering of candidates that chase a consumed offer — runs
     /// exactly as before.
     ///
+    /// ## The grace belongs to a PEER, and that is the correction
+    ///
+    /// The first version of this armed `relayChoiceDeadline` when the room
+    /// started measuring. A code room measures at open and then routinely sits
+    /// alone for minutes while the other person types the code, so that deadline
+    /// expired with no peer in the room at all: the gate was already open when
+    /// the late peer announced, and its capability hello and its relay map could
+    /// race the first legal `link/1` frame — which is the fallback-on-the-wrong-
+    /// relay defect this whole batch exists to close, reintroduced from the
+    /// other end.
+    ///
+    /// So the wait starts here, at the first evidence of a peer: a roster frame,
+    /// an announcement, an inbound `link` frame, or this side's own link intent.
+    /// Deliberately not keyed on capabilities — a native peer sends its hello
+    /// BEFORE its relay greet while a browser sends the greet first, so anything
+    /// waiting for caps would arm late for one of the two.
+    ///
     /// ## Why it cannot stall the room
     ///
     /// `waitForChoice` returns either when the choice can no longer change from
-    /// this side or when `relayChoiceDeadline` elapses, whichever comes first,
-    /// and both outcomes open the gate. A peer that never sends a map — an older
-    /// build, or a browser on a version without the exchange — is the deadline
-    /// case, and it lands on the capped, relay-only, pool-folded fallback rather
-    /// than on nothing.
+    /// this side or when `relayChoiceDeadline` elapses from THIS call, whichever
+    /// comes first, and both outcomes open the gate. A peer that never sends a
+    /// map — an older build, or a browser on a version without the exchange — is
+    /// the deadline case, and it lands on the capped, relay-only, pool-folded
+    /// fallback rather than on nothing. A room with no peer waits indefinitely,
+    /// which costs nothing: there is no link to build.
     ///
-    /// The wait starts HERE, at room open, rather than when a link is wanted. A
-    /// code room typically waits seconds for its peer to type the code and
-    /// announce, so by the time anything asks for a link the gate is usually
-    /// already open and costs nothing at all.
-    private func startRelayChoice(_ negotiator: RelayNegotiator,
-                                  room: PairingRoom,
-                                  generation mine: Int) {
-        negotiator.start()
+    /// Idempotent per peer, so the roster frames and announcements a peer
+    /// generates while it waits cannot each restart its own grace. A DIFFERENT
+    /// peer supersedes it with a full fresh grace, because the peer the old wait
+    /// was for is not the peer a link would now be built with.
+    private func armRelayGrace(for peerId: String, generation mine: Int) {
+        guard generation == self.generation, !peerId.isEmpty,
+              let room = pairing, !room.relayGateOpen,
+              let negotiator = room.negotiator,
+              room.relayGracePeer != peerId else { return }
+        room.relayGracePeer = peerId
         let deadline = relayChoiceDeadline
         Task { [weak self, weak room] in
             let chosen = await negotiator.waitForChoice(deadline: deadline)
             await MainActor.run {
                 guard let self, let room, self.generation == mine,
-                      self.pairing === room else { return }
+                      self.pairing === room,
+                      // Superseded or departed while this was parked. Its answer
+                      // is not this room's, and whoever replaced it is running
+                      // its own full grace.
+                      room.relayGracePeer == peerId else { return }
                 self.applyRelayChoice(chosen, room: room, generation: mine)
             }
         }
+    }
+
+    /// A peer is here, however that was learned. Starts its grace unless one is
+    /// already running for somebody — the first peer to appear is the one a link
+    /// is going to be built with, and a second peer in the room does not get to
+    /// restart the first one's wait.
+    private func noteRelayPeerPresent(_ peerId: String, generation mine: Int) {
+        guard let room = pairing, room.relayGracePeer == nil else { return }
+        armRelayGrace(for: peerId, generation: mine)
+    }
+
+    /// A peer left. Its grace is abandoned rather than allowed to expire, and
+    /// its map goes with it (`RelayNegotiator.peerLeft`): opening the gate on
+    /// behalf of somebody who is gone, or handing the next peer a settled choice
+    /// made from a departed one's measurements, is the same defect as opening it
+    /// before anybody arrived.
+    private func relayPeerLeft(_ peerId: String, generation mine: Int) {
+        guard generation == self.generation, let room = pairing else { return }
+        room.negotiator?.peerLeft(peerId)
+        room.greetedForRelay.remove(peerId)
+        if room.relayGracePeer == peerId { room.relayGracePeer = nil }
+        // An intent still behind the gate for the peer that just left must not
+        // be handed to whoever opens it next. `router.peerLeft` has already
+        // withdrawn the ask that reached the wire; this is the half that never
+        // did.
+        if gatedLinkAttempt?.peerId == peerId { gatedLinkAttempt = nil }
     }
 
     /// Commit the room's relay decision and let everything it was holding run.
@@ -1099,6 +1162,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
                                   generation mine: Int) {
         guard !room.relayGateOpen else { return }
         room.relayGateOpen = true
+        room.relayGracePeer = nil
         let resolved = RelaySelection.resolve(room.config, chosen: chosen?.id)
         roomICE = RoomICE(config: room.config,
                           servers: resolved.servers, relayOnly: resolved.relayOnly)
@@ -1181,6 +1245,15 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
                 room.greetedForRelay.insert(peerId)
                 negotiator.peerJoined(peerId)
             }
+            // A roster this peer is no longer in is a departure the server may
+            // not send a `left` frame for; its grace must not outlive it.
+            if let waiting = room.relayGracePeer, !others.contains(waiting) {
+                room.relayGracePeer = nil
+            }
+            // And a peer that IS here starts one. This is the ordinary path: the
+            // roster names the peer before any of its frames are interpreted, on
+            // both the creating and the joining side.
+            if let peerId = others.first { noteRelayPeerPresent(peerId, generation: mine) }
         }
         router?.rosterChanged(peerIds: Set(others))
         let arriving = others.filter { !room.decided.contains($0) }
@@ -1249,6 +1322,11 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
 
     private func pairingPeerAnnounced(_ peerId: String, generation mine: Int) {
         guard generation == mine, let room = pairing, !room.resolved else { return }
+        // Evidence of a peer that does not depend on a roster frame having
+        // arrived first: this runs for a capability hello AND for any `link`
+        // generation frame the peer sends (`recordProvenLink`), so an inbound
+        // offer on the room's very first frame arms the grace that holds it.
+        noteRelayPeerPresent(peerId, generation: mine)
         guard room.capabilities.supports(peerId, LINK_CAPABILITY) else {
             // Announced, and NOT this protocol. The answer is already known, so
             // the window is not worth waiting out.
@@ -1580,6 +1658,12 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // truth — this side has decided to ask.
         guard relayGateOpen else {
             gatedLinkAttempt = (peerId: peerId, peerLabel: peerLabel, generation: mine)
+            // Naming a peer in a link intent is the strongest evidence this room
+            // has that the peer is there, and on the initiating side it can
+            // precede every frame the peer sends. It also RETARGETS the grace
+            // rather than merely starting one: whatever the room was waiting for
+            // before, this is the peer the link is now going to be built with.
+            armRelayGrace(for: peerId, generation: mine)
             return
         }
         startLinkRequest(peerId: peerId, peerLabel: peerLabel, generation: mine)

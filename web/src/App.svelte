@@ -427,6 +427,20 @@
   function broadcastRelayRtt() {
     relaySelection.greet();
   }
+  // A peer on the roster is what starts the gate's bounded grace. Called from
+  // the same handler as the greet above, because the two are the same fact seen
+  // from both ends: we have somebody to send our map to, and somebody to wait a
+  // bounded time for a map from.
+  //
+  // Deliberately roster-driven rather than capability-driven. A native peer
+  // sends its capability hello BEFORE its relay greet and a browser peer sends
+  // the greet first, so anything keyed on caps would arm the grace late for one
+  // of the two — and late is exactly the failure this replaced. `peer-link`
+  // notes the peer again from a request, an offer and an outbound intent, so a
+  // roster frame that never arrives is not the only path.
+  function noteRelayPeers(ids: string[]) {
+    for (const id of ids) if (id !== selfId) relaySelection.notePeer(id);
+  }
   // Tell each peer what this build can do, so we know before ever offering a
   // connection. Same envelope as the relay-RTT broadcast above; peers that do not
   // understand it ignore it, and a peer that never announces is treated as not
@@ -444,10 +458,12 @@
     if (!signaling) return;
     capsAnnouncer.rosterChanged(peers.filter((p) => p.id !== selfId).map((p) => p.id));
   }
-  // Begin this room's measurement. The pool must already be assigned: `reset` is
-  // what arms the gate's deadline, and it counts from here rather than from the
-  // moment a link is wanted — a code room usually waits seconds for its peer to
-  // type the code, so by then the gate is open and costs nothing.
+  // Begin this room's measurement. The pool must already be assigned: `reset`
+  // closes the gate against it. Measuring starts HERE, at room join, and it is
+  // the only half that does — the gate's bounded grace belongs to a peer and is
+  // armed by `noteRelayPeers` below, because a code room routinely sits alone
+  // for minutes and a deadline started at this line would expire before the
+  // other person had typed the code.
   async function startRelayMeasurement() {
     const epoch = relayMeasureEpoch;
     relaySelection.reset(relayPool);
@@ -488,7 +504,7 @@
     // map is peer-authored input on an untrusted socket, and the id it names is
     // only ever compared against THIS room's pool — a relay this client was
     // never issued selects nothing.
-    if (from !== selfId && relaySelection.receive(data)) syncRelayMirrors();
+    if (from !== selfId && relaySelection.receive(from, data)) syncRelayMirrors();
     // Deliberately NOT an early return: the two fields share one envelope, and a
     // frame carrying both must not lose the rename because the map was consumed.
     const d = data as { rename?: string };
@@ -1239,10 +1255,18 @@
       // that peer's pre-uploaded entries belong to neither lane.
       noteRosterPeers(p.map((x) => x.id));
       workspace.syncPeers();
+      noteRelayPeers(p.map((x) => x.id));
       broadcastRelayRtt();
       broadcastCaps();
     });
-    signaling.onPeerLeft((peerId) => workspace.peerLeft(peerId));
+    signaling.onPeerLeft((peerId) => {
+      workspace.peerLeft(peerId);
+      // The gate stops waiting for a peer the server says has gone, and drops
+      // the map it measured with: the next peer gets its own full grace rather
+      // than an instant release on somebody else's numbers.
+      relaySelection.peerGone(peerId);
+      syncRelayMirrors();
+    });
     signaling.onSignal(onPeerRelayRtt); // capture peers' relay-RTT maps (ignored by the WebRTC handlers)
     startRelayMeasurement(); // background; the choice is usually ready before a transfer
     signaling.onClose(() => {

@@ -17,14 +17,21 @@
 import { pickRelay, type RelayEntry } from "./ice";
 
 /**
- * How long a room waits for the two maps to meet before building on the
- * fallback instead.
+ * How long a room waits for a PEER's map before building on the fallback
+ * instead.
  *
- * Counted from the moment the room STARTS measuring, not from the moment a link
- * is wanted: probing begins at room join and a peer typically arrives and
- * announces seconds later, so in the ordinary case the gate is already open and
- * costs nothing at all. Only a link asked for unusually early waits, and only
- * for the remainder.
+ * Counted from the moment a peer exists — `notePeer` — and deliberately not from
+ * the moment the room starts measuring. Measuring starts at room join, but the
+ * other person may take a minute to type the code, and a deadline armed at join
+ * would have expired long before they arrived: the gate would then be open, with
+ * no peer map in it, exactly when the late peer finally announces. Every legal
+ * `link/1` frame after that is built on the fallback, which is the defect this
+ * whole file exists to close, reintroduced from the other end.
+ *
+ * Our own probes still run eagerly at join, so in the ordinary case this grace
+ * is spent waiting for one already-measured peer to speak rather than for
+ * anything local — and when both maps are already in hand the gate opens without
+ * consulting it at all (see `settled`).
  *
  * Five seconds, matching `RelaySelection.choiceDeadline` in RelayiumKit. A
  * browser probe may take up to nine (see `measureRelay`), so a relay slower than
@@ -89,6 +96,17 @@ export interface RelayGate {
   /** True when the RTC configuration may be snapshotted for a new connection. */
   ready(): boolean;
   /**
+   * A peer exists: it is on the roster, it has announced, or a link with it is
+   * being asked for right now. Starts that peer's bounded grace, which is the
+   * ONLY thing that ever opens this gate without a peer map in hand.
+   *
+   * Never opens the gate synchronously, so a caller may note a peer and then
+   * test `ready()` in the same turn without the answer changing under it.
+   * Idempotent per peer: the retries a peer sends while it waits must not each
+   * extend its own grace.
+   */
+  notePeer(peerId: string): void;
+  /**
    * Run `cb` once, as soon as the gate is open — synchronously and immediately
    * when it already is, so a caller on a path that must not lose a frame can
    * check `ready()` first and stay in the same turn.
@@ -120,12 +138,19 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
   let pool: RelayEntry[] = [];
   let mine: Record<string, number> = {};
   let theirs: Record<string, number> = {};
+  /** Who `theirs` was learned from, so a room that loses every contributor stops
+   *  offering a departed peer's map to the next one. */
+  let contributors = new Set<string>();
   let selected: string | null = null;
   /** True once every probe has answered or timed out: `mine` can no longer grow. */
   let measured = false;
   let open = true;
   let waiters: Array<() => void> = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
+  /** The peer whose grace is currently running, or null when nobody is here to
+   *  wait for. A room with no peer waits indefinitely on purpose: there is no
+   *  link to build and therefore nothing the fallback would unblock. */
+  let gracePeer: string | null = null;
 
   function clearDeadline() {
     if (timer !== undefined) clearTimer(timer);
@@ -138,6 +163,7 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
     open = true;
     const parked = waiters;
     waiters = [];
+    gracePeer = null;
     clearDeadline();
     for (const cb of parked) cb();
   }
@@ -162,7 +188,10 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
     if (settled()) release();
   }
 
-  return {
+  // Named rather than returned inline so `gate.notePeer` can delegate to the
+  // one implementation above it instead of being a second copy of the same
+  // arming rules.
+  const selection = {
     /** This side's map so far — cumulative, and only ever growing within a room. */
     get mine() { return mine; },
     get theirs() { return theirs; },
@@ -186,12 +215,69 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
       pool = next;
       mine = {};
       theirs = {};
+      contributors = new Set();
       selected = null;
       measured = false;
+      gracePeer = null;
       // No pool is nothing to wait for, which is every LAN room and every
       // STUN-only code. Those must stay immediate.
+      //
+      // No deadline is armed here, and that is the correction this file carries:
+      // the wait belongs to a peer, so `notePeer` arms it. A code room routinely
+      // sits alone for minutes, and a deadline started at this line expires
+      // while nobody is here to have answered it.
       open = next.length === 0;
-      if (!open) timer = setTimer(() => { timer = undefined; release(); }, deadlineMs);
+    },
+
+    /**
+     * A peer is here — on the roster, announced, or named by a link intent.
+     *
+     * Arms that peer's bounded grace, once. A second call for the same peer is
+     * inert (its request retries every three seconds, and each one must not push
+     * its own deadline further out), and a call for a DIFFERENT peer supersedes
+     * the old grace with a full fresh one, because the peer the old one was
+     * waiting for is not the peer a link would now be built with.
+     *
+     * Deliberately never opens the gate in this call, even when the maps are
+     * already in hand — they cannot be: a settled pair releases through
+     * `reselect` the moment it settles, which requires a peer map, which
+     * requires a peer. So `ready()` cannot change under a caller that notes a
+     * peer and then tests it.
+     */
+    notePeer(peerId: string) {
+      if (open || pool.length === 0 || !peerId) return;
+      if (gracePeer === peerId) return;
+      clearDeadline();
+      gracePeer = peerId;
+      timer = setTimer(() => {
+        timer = undefined;
+        // Superseded or departed while this was armed: its expiry is not this
+        // room's answer, and whoever replaced it has its own grace running.
+        if (gracePeer !== peerId) return;
+        release();
+      }, deadlineMs);
+    },
+
+    /**
+     * A peer left the room.
+     *
+     * Its grace is abandoned rather than allowed to expire: opening the gate on
+     * behalf of somebody who is gone would let the NEXT peer's first link frame
+     * be built before that peer had any chance to send a map. The gate simply
+     * goes back to waiting, and the next `notePeer` starts a full grace.
+     *
+     * Its map goes with it once nothing else is contributing one, for the same
+     * reason: a fresh grace that is instantly satisfied by a departed peer's
+     * measurements is not a grace at all.
+     */
+    peerGone(peerId: string) {
+      if (contributors.delete(peerId) && contributors.size === 0) {
+        theirs = {};
+        reselect();
+      }
+      if (gracePeer !== peerId) return;
+      gracePeer = null;
+      clearDeadline();
     },
 
     /**
@@ -210,9 +296,16 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
       pool = [];
       mine = {};
       theirs = {};
+      contributors = new Set();
       selected = null;
       measured = false;
       open = false;
+      // The one deadline that is NOT peer-scoped, and it is a different thing:
+      // it bounds a configuration that may never arrive, not a peer that may
+      // never speak. `notePeer` cannot touch it — an empty pool is not a room
+      // whose peer is worth waiting for — and `reset` clears it as soon as the
+      // next `/api/ice` answer lands.
+      gracePeer = null;
       timer = setTimer(() => { timer = undefined; release(); }, deadlineMs);
     },
 
@@ -248,9 +341,10 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
      * Answers whether the payload was a map at all, so the caller can tell a
      * consumed frame from one that still belongs to somebody else.
      */
-    receive(data: unknown): boolean {
+    receive(from: string, data: unknown): boolean {
       const map = parseRelayRtt(data);
       if (!map) return false;
+      contributors.add(from);
       theirs = { ...theirs, ...map };
       reselect();
       return true;
@@ -262,15 +356,21 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
       opts.publish(mine);
     },
 
+    /** The peer whose bounded grace is running, or null. Exposed for tests and
+     *  for the debug panel; nothing on the connection path reads it. */
+    get gracePeerId() { return gracePeer; },
+
     /** The gate `peer-link` holds its first legal frame behind. */
     gate: {
       ready: () => open,
+      notePeer: (peerId: string) => { selection.notePeer(peerId); },
       whenReady(cb: () => void) {
         if (open) { cb(); return; }
         waiters.push(cb);
       },
     } satisfies RelayGate,
   };
+  return selection;
 }
 
 export type RelaySelection = ReturnType<typeof createRelaySelection>;

@@ -1509,4 +1509,201 @@ final class LinkPairingRoomTests: XCTestCase {
         await settle()
         XCTAssertEqual(rig.serverUrls, [["turn:far.relayium.test:3478"]])
     }
+
+    // MARK: - O. the grace belongs to a PEER, not to the room's clock
+
+    /// Long enough that a `settle()` between two assertions cannot be mistaken
+    /// for it, short enough that a test can actually spend one.
+    private static let graceForTests: TimeInterval = 0.3
+
+    /// Sleep past `graceForTests`, with margin.
+    private func sleepPastGrace() async {
+        try? await Task.sleep(nanoseconds: UInt64(Self.graceForTests * 2 * 1_000_000_000))
+    }
+
+    /// **The code creator sits alone, and that is the ordinary case.**
+    ///
+    /// One side creates a code and waits — often for a minute — while the other
+    /// person types it in. The first version of this gate armed its five-second
+    /// deadline when the room started measuring, so it had expired long before
+    /// the peer existed: the gate was already open when that peer finally
+    /// announced, and its capability hello could beat its RTT map to the first
+    /// legal `link/1` frame. The link was then built on the fallback for its
+    /// whole life, which is the defect the gate exists to prevent.
+    ///
+    /// This side is the LARGER id, so the frame at stake is the `linkRequest`
+    /// whose thirty-second timeout starts on both clients the moment it is sent.
+    func testAPeerlessRoomOpensNoGateHoweverLongItSitsThere() async {
+        let rig = rig(config: pooledConfig(),
+                      relayMeasure: { pool, publish in
+                          for entry in pool { publish(entry.id, entry.id == "near" ? 10 : 90) }
+                      },
+                      relayChoiceDeadline: Self.graceForTests)
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("zzz-mac")
+
+        // Our own probes finish immediately; nobody is here to compare them
+        // with. Well past the old deadline, and nothing has been decided.
+        await sleepPastGrace()
+        await settle()
+        XCTAssertEqual(rig.linkFramesSent, [],
+                       "an empty room has nobody to send a link frame to, and nothing to decide")
+        XCTAssertTrue(rig.serverUrls.isEmpty)
+
+        // The late peer arrives. Its CAPABILITY hello lands first — which is the
+        // native ordering; a browser sends its RTT greet first — so a gate keyed
+        // on either one alone would be wrong for one of the two clients.
+        rig.announce("aaa-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        rig.roster(["aaa-web"])
+        await settle()
+        XCTAssertEqual(rig.linkFramesSent, [],
+                       "this peer's grace has only just started; nothing may commit to a relay yet")
+        XCTAssertTrue(rig.serverUrls.isEmpty, "and no configuration may be snapshotted")
+        XCTAssertEqual(rig.model.connection, .requesting,
+                       "the wait is not hidden: this side has decided to ask, and says so")
+
+        relayRtt(rig, from: "aaa-web", ["near": 12, "far": 80])
+        await settle()
+        XCTAssertEqual(rig.linkFramesSent, ["request"],
+                       "exactly one request, and only once the maps had met")
+    }
+
+    /// The same peerless room in the OTHER link role: this side is the smaller
+    /// id, so it offers rather than asks, and the frame held back is the offer
+    /// that carries this client's committed ICE configuration.
+    func testAPeerlessRoomHoldsTheOfferingRoleToo() async {
+        let rig = rig(config: pooledConfig(),
+                      relayMeasure: { pool, publish in
+                          for entry in pool { publish(entry.id, entry.id == "near" ? 10 : 90) }
+                      },
+                      relayChoiceDeadline: Self.graceForTests)
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+
+        await sleepPastGrace()
+        await settle()
+        XCTAssertTrue(rig.serverUrls.isEmpty)
+
+        rig.announce("zzz-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        rig.roster(["zzz-web"])
+        await settle()
+        XCTAssertTrue(rig.serverUrls.isEmpty,
+                      "the offering side may not snapshot a configuration either")
+
+        relayRtt(rig, from: "zzz-web", ["near": 12, "far": 80])
+        await settle()
+        XCTAssertEqual(rig.serverUrls, [["turn:near.relayium.test:3478"]])
+        XCTAssertEqual(rig.relayOnly, [true])
+    }
+
+    /// **The only evidence is the offer itself.**
+    ///
+    /// A peer whose roster frame and capability hello have not arrived — or
+    /// never do — still proves it exists the moment it puts a `link`-generation
+    /// frame on the socket. That has to arm the grace, because the frame it
+    /// arms it for is the one the router is holding: nothing else would ever
+    /// open the gate, and the offer would wait forever.
+    func testAnOfferIsItselfEnoughToStartTheGrace() async {
+        let rig = rig(config: pooledConfig(),
+                      relayMeasure: { pool, publish in
+                          for entry in pool { publish(entry.id, entry.id == "near" ? 10 : 200) }
+                      },
+                      relayChoiceDeadline: Self.graceForTests)
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("zzz-mac")
+        await sleepPastGrace()
+        await settle()
+
+        // No roster, no hello: the offer is the first thing this room hears.
+        rig.offer(from: "aaa-web")
+        await settle()
+        XCTAssertTrue(rig.serverUrls.isEmpty, "held, not assembled on an undecided configuration")
+
+        relayRtt(rig, from: "aaa-web", ["near": 15, "far": 400])
+        await settle()
+        XCTAssertEqual(rig.serverUrls, [["turn:near.relayium.test:3478"]])
+
+        // And the same room, had the map never come, would still have got out:
+        // the grace this offer armed is bounded.
+        XCTAssertEqual(rig.relayOnly, [true])
+    }
+
+    /// A late peer on a build with no relay exchange gets a FULL fresh grace,
+    /// not the remainder of one that expired while the room was empty — and then
+    /// the capped, pool-folded, relay-only fallback rather than nothing.
+    func testAMapLessLatePeerGetsAFullFreshGraceThenFallsBack() async {
+        let rig = rig(config: poolOnlyConfig(),
+                      relayMeasure: { pool, publish in
+                          for entry in pool { publish(entry.id, 12) }
+                      },
+                      relayChoiceDeadline: Self.graceForTests)
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+
+        await sleepPastGrace()
+        await settle()
+        XCTAssertTrue(rig.serverUrls.isEmpty)
+
+        rig.announce("zzz-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        rig.roster(["zzz-web"])
+        await settle()
+        XCTAssertTrue(rig.serverUrls.isEmpty,
+                      "a fresh grace, not the remains of one that expired in an empty room")
+
+        await sleepPastGrace()
+        await settle()
+        XCTAssertEqual(rig.serverUrls,
+                       [["stun:stun.relayium.test:3478", "turn:mine.relayium.test:3478"]],
+                       "an own-node account has its only TURN in the pool")
+        XCTAssertEqual(rig.relayOnly, [true])
+    }
+
+    /// **A departure cancels its own wait, and the next peer starts over.**
+    ///
+    /// Letting the departed peer's grace expire would open the gate on behalf of
+    /// somebody who is gone — so the peer that arrives next would have its first
+    /// link frame built before it had any chance to send a map, which is exactly
+    /// the failure the peer scoping exists to remove.
+    func testADepartedPeersGraceCannotReleaseTheGateAndTheNextPeerGetsAFullOne() async {
+        let rig = rig(config: pooledConfig(),
+                      relayMeasure: { pool, publish in
+                          for entry in pool { publish(entry.id, entry.id == "near" ? 10 : 90) }
+                      },
+                      relayChoiceDeadline: Self.graceForTests)
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+        // A peer that is present but has not said what it speaks, so the room
+        // stays unresolved and a second peer can still take it.
+        rig.roster(["zzz-web"])
+        // …and whose map names nothing this side measured, so no choice settles.
+        relayRtt(rig, from: "zzz-web", ["ghost": 5])
+        await settle()
+        XCTAssertTrue(rig.serverUrls.isEmpty)
+
+        rig.channels[0].fireText(#"{"type":"left","peer":"zzz-web"}"#)
+        await settle()
+        await sleepPastGrace()
+        await settle()
+        XCTAssertTrue(rig.serverUrls.isEmpty,
+                      "the departed peer's deadline must not have opened anything")
+
+        // A different peer takes the room. If the gate had been released on the
+        // first one's behalf, this link would be assembled on the fallback right
+        // here, before its map could arrive.
+        rig.announce("yyy-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        rig.roster(["yyy-web"])
+        await settle()
+        XCTAssertTrue(rig.serverUrls.isEmpty, "a full fresh grace, not an already-open gate")
+
+        relayRtt(rig, from: "yyy-web", ["near": 15, "far": 400])
+        await settle()
+        XCTAssertEqual(rig.serverUrls, [["turn:near.relayium.test:3478"]],
+                       "and it is the ARRIVING peer's map that decides")
+        XCTAssertEqual(rig.relayOnly, [true])
+    }
 }

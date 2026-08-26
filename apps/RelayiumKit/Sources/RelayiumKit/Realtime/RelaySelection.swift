@@ -37,15 +37,25 @@ public enum RelaySelection {
     /// `web/src/lib/ice.ts`.
     public static let maxFallbackRelays = 8
 
-    /// How long a `link/1` room waits for the two peers' relay maps to meet
-    /// before building on the fallback instead.
+    /// How long a room waits for a PEER's relay map before building on the
+    /// fallback instead.
     ///
-    /// Counted from the moment the room STARTS measuring, not from the moment a
-    /// link is wanted: probing begins at room join and a peer typically arrives
-    /// and announces seconds later, so in the ordinary case the gate is already
-    /// open and costs nothing. Five seconds is what
-    /// `RealtimeConnectionFactory.relayChoiceDeadline` already used, kept here so
-    /// the unified path and the legacy path cannot drift apart.
+    /// Counted from the moment a peer exists, not from the moment the room
+    /// starts measuring. The distinction is the whole of it on the `link/1`
+    /// path: a code room measures at join and then routinely sits alone for
+    /// minutes while the other person types the code, so a deadline armed at
+    /// join has long expired by the time that peer announces — and the gate is
+    /// then open, with no peer map behind it, for exactly the first legal frame
+    /// it existed to hold. `LinkWorkspaceModel` arms it per peer and cancels it
+    /// on departure; a later peer gets a full fresh one.
+    ///
+    /// On the legacy `RealtimeConnectionFactory` path the two readings coincide:
+    /// that path is only entered with a peer already in hand.
+    ///
+    /// Five seconds is what `RealtimeConnectionFactory.relayChoiceDeadline`
+    /// already used, kept here so the unified path and the legacy path cannot
+    /// drift apart. Same value, and same reasoning, as `RELAY_GATE_MS` in
+    /// `web/src/lib/relay-selection.ts`.
     public static let choiceDeadline: TimeInterval = 5
 
     /// What one connection is actually built with.
