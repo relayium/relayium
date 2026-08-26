@@ -280,10 +280,34 @@ export async function measureRelay(entry: RelayEntry, timeoutMs = 9000): Promise
   }
 }
 
-/** Measure every relay in the pool in parallel; drop the ones that didn't answer. */
-export async function measureRelays(pool: RelayEntry[]): Promise<Record<string, number>> {
-  const pairs = await Promise.all(pool.map(async (e) => [e.id, await measureRelay(e)] as const));
+/**
+ * Measure every relay in the pool in parallel, reporting each ONE AS IT ANSWERS.
+ *
+ * `onResult` is what makes this usable rather than merely correct. Awaiting the
+ * whole pool means the caller sees nothing until the SLOWEST relay finishes, so
+ * a single unreachable node pinned every result at the full `measureRelay`
+ * timeout — nine seconds during which this page had nothing to publish, nothing
+ * to select from and nothing to tell its peer. One dead relay cost every
+ * transfer the entire relay-choice budget and produced nothing for it.
+ *
+ * Reporting per probe means a slow relay costs only its own absence: the fast
+ * ones are on the wire, and in the peer's hands, immediately. Relays that never
+ * answer are simply never reported, which is what makes them ineligible.
+ *
+ * The resolved map is still the complete one, for a caller that wants to know
+ * when measurement has FINISHED — which is a different question from what has
+ * been measured so far, and the one a relay gate waits on.
+ */
+export async function measureRelays(
+  pool: RelayEntry[],
+  onResult?: (id: string, rttMs: number) => void,
+): Promise<Record<string, number>> {
   const out: Record<string, number> = {};
-  for (const [id, rtt] of pairs) if (rtt !== null) out[id] = rtt;
+  await Promise.all(pool.map(async (e) => {
+    const rtt = await measureRelay(e);
+    if (rtt === null) return;
+    out[e.id] = rtt;
+    onResult?.(e.id, rtt);
+  }));
   return out;
 }

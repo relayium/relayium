@@ -95,11 +95,20 @@ public enum RealtimeConnectionFactory {
     /// How long a connection waits for the two peers' relay measurements to
     /// meet before giving up and using the advertised servers.
     ///
-    /// Live macOS↔browser measurements take about 4.1–4.3 seconds when part of
-    /// the six-relay pool times out. The browser publishes only after that
-    /// whole measurement completes, so five seconds covers the observed cycle
-    /// without falling back to a random, potentially unreachable legacy TURN.
-    public static let relayChoiceDeadline: TimeInterval = 5
+    /// Five seconds covers the observed macOS↔browser cycle — about 4.1–4.3
+    /// seconds when part of the six-relay pool times out — without falling back
+    /// to a random, potentially unreachable legacy TURN.
+    ///
+    /// That figure was measured when the browser published its map only once its
+    /// WHOLE measurement had completed, which is no longer true: `measureRelays`
+    /// now reports each relay as it answers, so a peer's fast relays arrive well
+    /// inside this budget and only a straggler is still outstanding at the end
+    /// of it. The number is therefore headroom rather than a fitted value, and
+    /// the per-session log line below is what would justify changing it.
+    ///
+    /// Shared with the unified `link/1` room, which waits on the same evidence
+    /// for the same reason — see `RelaySelection.choiceDeadline`.
+    public static let relayChoiceDeadline: TimeInterval = RelaySelection.choiceDeadline
 
     /// The relay choice is the only thing this package logs, and it is here
     /// because the design's acceptance list asks for it by name: "the chosen
@@ -133,13 +142,13 @@ public enum RealtimeConnectionFactory {
     /// Cross-network code rooms must not spend the ICE timeout trying direct
     /// candidates before using the TURN credentials they were issued. This is
     /// the native equivalent of the web client's `hasTurnServer` check.
+    ///
+    /// Forwarded to `RelaySelection` rather than re-implemented: the unified
+    /// `link/1` path resolves the same question about the same config, and two
+    /// copies of "does this relay" are two things that can disagree about
+    /// whether a room may spend an ICE timeout on direct candidates.
     private static func hasTURN(_ servers: [ICEServerConfig]) -> Bool {
-        servers.contains { server in
-            server.urls.contains { url in
-                let scheme = url.lowercased()
-                return scheme.hasPrefix("turn:") || scheme.hasPrefix("turns:")
-            }
-        }
+        RelaySelection.hasTURN(servers)
     }
 
     /// The last step of `make`: turn a settled relay choice into a live
@@ -343,10 +352,16 @@ public enum RealtimeConnectionFactory {
         // which is why `build` is a seam, and why
         // RealtimeConnectionFactoryTests pins this ordering by asserting on
         // which servers arrive here.
-        let selectedServers = chosen?.iceServers ?? config.iceServers
+        //
+        // `RelaySelection.resolve` rather than `chosen?.iceServers ??
+        // config.iceServers`: without a choice the pool is FOLDED IN rather than
+        // discarded. An account with "only my nodes" set is issued no top-level
+        // TURN at all, so the old fallback handed a cross-network peer a
+        // STUN-only list and the failure read as a network problem.
+        let resolved = RelaySelection.resolve(config, chosen: chosen?.id)
         let connection = build(signaling, peerId, role,
-                               selectedServers,
-                               chosen != nil || hasTURN(selectedServers),
+                               resolved.servers,
+                               resolved.relayOnly,
                                mode.generation,
                                mode.localCapabilities)
         // `signaling.onSignal` is now RealtimeConnection's own handler (wired
@@ -573,9 +588,14 @@ public enum RealtimeConnectionFactory {
             signaling.sendSignal(to: peerId, data: capsField(mode.localCapabilities))
         }
 
+        // Same fold-in as `make`, and it matters more here: this is the path a
+        // `link/1` room hands over to when the peer turns out to be legacy, and
+        // it runs no measurement at all. Without the pool, a pool-only account
+        // reaches a legacy cross-network session with nothing that can relay.
+        let resolved = RelaySelection.resolve(config, chosen: nil)
         let connection = build(signaling, peerId, role,
-                               config.iceServers,
-                               hasTURN(config.iceServers),
+                               resolved.servers,
+                               resolved.relayOnly,
                                mode.generation,
                                mode.localCapabilities)
         connectionTookOver = true

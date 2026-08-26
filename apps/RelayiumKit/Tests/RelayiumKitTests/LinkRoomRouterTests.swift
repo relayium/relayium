@@ -411,6 +411,7 @@ final class LinkRoomRouterTests: XCTestCase {
                      realControl: Bool = false,
                      admissionTrustsEveryPeer: Bool = false,
                      peers: [String] = ["peer-1", "peer-2"],
+                     holdingHandoff: Bool = false,
                      scheduler: LinkRecoveryScheduler = LinkDispatchRecoveryScheduler()) -> Rig {
         let capabilities = PeerCapabilityRegistry(linkRoomActive: { true })
         for peer in peers {
@@ -459,7 +460,7 @@ final class LinkRoomRouterTests: XCTestCase {
                                     scheduler: scheduler)
         built = Rig(router: router, session: session, admission: admission,
                     capabilities: capabilities, socket: socket)
-        router.attach(to: socket.client)
+        router.attach(to: socket.client, holdingHandoff: holdingHandoff)
         return built
     }
 
@@ -1585,5 +1586,206 @@ final class LinkRoomRouterTests: XCTestCase {
         }
         XCTAssertTrue(source.contains("beginAdmitted("),
                       "the claim is handed over, never re-announced")
+    }
+    // MARK: - the relay gate: a handoff the room asked to hold
+
+    /// **Nothing is built while the gate is held.**
+    ///
+    /// The gate exists because the ICE configuration is read exactly once, when
+    /// the assembly is created, and the room's relay choice may not have settled
+    /// yet. So the claim, the busy answers and the buffering all still happen on
+    /// the delivery queue — only the step that reads the configuration waits.
+    func testAHeldGateAssemblesNothingUntilItIsReleased() async {
+        let rig = rig(holdingHandoff: true)
+        rig.socket.deliver(from: "peer-1", offer())
+        await settle()
+
+        XCTAssertTrue(rig.transports.isEmpty, "the assembly reads the ICE config; it must wait")
+        XCTAssertEqual(rig.socket.slot.count, 0, "the offer was still CONSUMED, not passed on")
+
+        rig.router.releaseHandoff()
+        await settle()
+
+        XCTAssertEqual(rig.peers, ["peer-1"])
+        XCTAssertEqual(rig.initialSignals.count, 1)
+        XCTAssertEqual(rig.initialSignals.first ?? nil, offer(),
+                       "the offer that opened the establishment must survive the hold")
+    }
+
+    /// The candidates that chase a held offer are exactly what the hold could
+    /// lose, and they are the ones a relayed link cannot connect without.
+    /// `LinkEstablishmentSignalBuffer` already holds them for the one-turn
+    /// handoff; holding that handoff for longer must not change what it holds,
+    /// how many, or in what order.
+    func testCandidatesChasingAHeldOfferAreReplayedInArrivalOrder() async {
+        let rig = rig(holdingHandoff: true)
+        rig.socket.deliver(from: "peer-1", offer())
+        for i in 0..<5 { rig.socket.deliver(from: "peer-1", candidate("c\(i)")) }
+        await settle()
+
+        XCTAssertTrue(rig.transports.isEmpty)
+        XCTAssertEqual(rig.socket.slot.count, 0, "held frames are consumed, not left to the slot")
+
+        rig.router.releaseHandoff()
+        await settle()
+
+        XCTAssertEqual(rig.controls.first?.received.map(\.signal),
+                       (0..<5).map { candidate("c\($0)") },
+                       "arrival order is the contract, and the hold does not change it")
+    }
+
+    /// The bound is the bound, and it fails CLOSED rather than truncating.
+    /// A longer hold is a longer window for a peer to flood, so this is the one
+    /// property the change could weaken.
+    func testAFloodDuringTheHoldFailsTheEstablishmentClosedAndFreesTheRoom() async {
+        let rig = rig(holdingHandoff: true)
+        rig.socket.deliver(from: "peer-1", offer())
+        for i in 0...LINK_PENDING_CANDIDATE_MAX {
+            rig.socket.deliver(from: "peer-1", candidate("c\(i)"))
+        }
+        await settle()
+
+        XCTAssertTrue(rig.transports.isEmpty, "still nothing assembled")
+        XCTAssertEqual(rig.admission.boundPeerId, "",
+                       "the room a doomed establishment took must be given back")
+
+        // And the room really is free: a second peer is admitted once the gate
+        // opens, rather than answered busy on behalf of a link that never was.
+        rig.router.releaseHandoff()
+        rig.socket.deliver(from: "peer-2", offer())
+        await settle()
+
+        XCTAssertEqual(rig.peers, ["peer-2"])
+    }
+
+    /// An outbound ask is the room's own, not this object's, so the gate does
+    /// not hold `ensure` — but a request whose offer crosses the gate must not
+    /// assemble early either. The request itself still goes out immediately when
+    /// the caller asks for it; `LinkWorkspaceModel` is what holds that decision.
+    func testTheGateHoldsTheInboundOfferOfAnOutboundRequest() async {
+        let rig = rig(peers: ["peer-1"], holdingHandoff: true)
+        _ = rig.router.ensure(peerId: "aaa-smaller")
+        await settle()
+
+        let hello: JSONValue = .object(["caps": .array([.string(LINK_CAPABILITY)])])
+        _ = rig.capabilities.record(peerId: "aaa-smaller", signal: hello)
+        rig.socket.deliver(from: "aaa-smaller", offer())
+        await settle()
+        XCTAssertTrue(rig.transports.isEmpty)
+
+        rig.router.releaseHandoff()
+        await settle()
+        XCTAssertEqual(rig.peers, ["aaa-smaller"])
+    }
+
+    /// **A new socket is a new room, and its gate is its own.**
+    ///
+    /// Carrying a hold across the epoch would strand the new room behind a gate
+    /// only the old room's relay wait could open; carrying an OPEN gate across
+    /// would let the new room build on a decision made about different
+    /// credentials. Both are the same bug in opposite directions.
+    func testANewEpochReplacesTheHoldRatherThanInheritingIt() async {
+        let rig = rig(holdingHandoff: true)
+        rig.socket.deliver(from: "peer-1", offer())
+        await settle()
+        XCTAssertTrue(rig.transports.isEmpty)
+
+        let next = Socket(selfId: selfId)
+        rig.socket = next
+        rig.router.attach(to: next.client)
+        next.deliver(from: "peer-2", offer())
+        await settle()
+
+        XCTAssertEqual(rig.peers, ["peer-2"],
+                       "the new room is not held, and the old room's offer is not assembled")
+    }
+
+    /// Releasing a gate nobody held, twice, changes nothing. `applyRelayChoice`
+    /// can reach a room whose socket has already been replaced, and the epoch
+    /// has cleared the hold by then.
+    func testReleasingAnUnheldGateIsInert() async {
+        let rig = rig()
+        rig.router.releaseHandoff()
+        rig.router.releaseHandoff()
+        rig.socket.deliver(from: "peer-1", offer())
+        await settle()
+
+        XCTAssertEqual(rig.peers, ["peer-1"])
+    }
+
+    /// **A hold on the NEXT room must not keep the last room's link alive.**
+    ///
+    /// `attach` retires the previous epoch and installs the new room's hold in
+    /// the same breath, so the `.endSession` queued for the departing link sits
+    /// behind the new gate. Parked, the old link would stay published for the
+    /// whole of the new room's relay wait — which is why teardown is exempt.
+    func testTheHoldDoesNotDelayTheDepartingRoomsTeardown() async {
+        let rig = rig(realControl: true)
+        rig.socket.deliver(from: "peer-1", offer())
+        await settle()
+        rig.transports.first?.publish(identity(peerId: "peer-1"))
+        await settle()
+        XCTAssertEqual(rig.admission.boundPeerId, "peer-1")
+
+        let next = Socket(selfId: selfId)
+        rig.socket = next
+        rig.router.attach(to: next.client, holdingHandoff: true)
+        await settle()
+
+        XCTAssertEqual(rig.admission.boundPeerId, "",
+                       "the departing link ends with its epoch, not with the next room's gate")
+    }
+
+    /// **A room whose precondition became undecided again holds the gate again.**
+    ///
+    /// The peer whose relay map opened the gate can leave before anything was
+    /// built with it, and the next peer must not inherit that permission. The
+    /// re-armed hold has to park a handoff exactly as the hold `attach` installs
+    /// does — and release exactly as it does.
+    func testAReleasedGateCanBeHeldAgainAndHoldsTheNextOffer() async {
+        let rig = rig()
+        XCTAssertTrue(rig.router.holdHandoff(), "an idle router has nothing to protect")
+
+        rig.socket.deliver(from: "peer-1", offer())
+        await settle()
+        XCTAssertTrue(rig.transports.isEmpty, "the re-armed hold parks the handoff too")
+
+        rig.router.releaseHandoff()
+        await settle()
+        XCTAssertEqual(rig.peers, ["peer-1"])
+        XCTAssertEqual(rig.initialSignals.first ?? nil, offer(),
+                       "and the offer survived the second hold as it survives the first")
+    }
+
+    /// **The gate may not be re-armed over an establishment this router holds.**
+    ///
+    /// A claimed or assembling link owns the queue: its own inbound frames are
+    /// ordered behind the handoff, so parking the head again would stall the
+    /// signals the connection is being built from — a gate reaching a transport
+    /// that already exists, which is the one thing it must never do. The refusal
+    /// is answered rather than silent, because the room reads it to decide
+    /// whether to shut its outbound half as well.
+    func testTheGateCannotBeHeldAgainOverAnEstablishmentTheRouterHolds() async {
+        let rig = rig()
+        rig.socket.deliver(from: "peer-1", offer())
+        await settle()
+        XCTAssertEqual(rig.peers, ["peer-1"])
+
+        XCTAssertFalse(rig.router.holdHandoff(),
+                       "a claimed establishment is not something a gate may park")
+
+        rig.socket.deliver(from: "peer-1", candidate("c0"))
+        await settle()
+        XCTAssertEqual(rig.controls[0].received.map(\.signal), [candidate("c0")],
+                       "the live establishment's own frames must keep reaching it")
+    }
+
+    /// A router with no socket has no epoch to hold. The next `attach` takes its
+    /// own hold, and answering true here would claim a room this object does not
+    /// have.
+    func testADetachedRouterCannotBeHeld() async {
+        let rig = rig()
+        rig.router.detach()
+        XCTAssertFalse(rig.router.holdHandoff())
     }
 }

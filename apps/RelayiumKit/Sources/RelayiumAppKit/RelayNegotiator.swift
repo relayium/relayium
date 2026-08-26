@@ -58,6 +58,10 @@ public final class RelayNegotiator: @unchecked Sendable {
     private var mine: [String: Int] = [:]
     private var theirs: [String: Int] = [:]
     private var peers: Set<String> = []
+    /// Who `theirs` was actually learned from, so a room that loses every
+    /// contributor stops offering a departed peer's measurements to the next
+    /// one. See `peerLeft`.
+    private var contributors: Set<String> = []
     /// True once `measure` has returned — every probe has answered or timed
     /// out, so `mine` can no longer grow. This is what `waitForChoice` waits
     /// for rather than the first common relay; see `wake`.
@@ -170,6 +174,41 @@ public final class RelayNegotiator: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// A peer left the room.
+    ///
+    /// Its map goes with it, once nothing else is contributing one. Keeping it
+    /// would make the NEXT peer's bounded grace meaningless: the room would
+    /// already hold a "settled" choice, made against measurements taken by
+    /// somebody who is no longer there, and the arriving peer — which is
+    /// measuring its own — would never get to influence the relay its link is
+    /// built on. A room that still has another contributor keeps the merged map,
+    /// which is the same answer merging has always given.
+    ///
+    /// Deliberately does not wake anyone: removing entries can only take a
+    /// choice away, never make one.
+    public func peerLeft(_ peerId: String) {
+        lock.lock()
+        peers.remove(peerId)
+        if contributors.remove(peerId) != nil, contributors.isEmpty {
+            theirs = [:]
+        }
+        lock.unlock()
+    }
+
+    /// Whether any peer is still contributing a map to this session's choice.
+    ///
+    /// The room's own question after a departure, and the one that decides
+    /// whether a settled choice still belongs to somebody who is here.
+    /// `peerLeft` drops the last contributor's map, so a false answer means the
+    /// choice — and the gate that opened on it — was made from measurements
+    /// nobody left in the room ever took. A room that still has another
+    /// contributor keeps both, which is the same answer merging has always
+    /// given.
+    public func hasPeerMaps() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return !contributors.isEmpty
+    }
+
     /// A peer's map, MERGED rather than assigned.
     ///
     /// A native peer sends this several times as its own probes land, each send
@@ -187,6 +226,7 @@ public final class RelayNegotiator: @unchecked Sendable {
     public func handleSignal(from: String, data: JSONValue) {
         guard let map = RelayRttMessage.decode(data) else { return }
         lock.lock()
+        contributors.insert(from)
         theirs.merge(map) { _, new in new }
         lock.unlock()
         // Deliberately no reply. Broadcasts happen on measure-done and on

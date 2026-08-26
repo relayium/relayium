@@ -21,10 +21,23 @@ import {
   type SignalAuth,
 } from "./webrtc";
 import type { SignalingClient } from "./signaling";
+import type { RelayGate } from "./relay-selection";
 
 export const LINK_REQUEST_TIMEOUT_MS = 30_000;
 export const LINK_REQUEST_RETRY_MS = 3_000;
 export const LINK_AUTH_TIMEOUT_MS = 30_000;
+/**
+ * How many frames may be held for a peer whose offer is waiting on the relay
+ * gate.
+ *
+ * The same 64 as `LINK_PENDING_CANDIDATE_MAX` in RelayiumKit, for the same
+ * reason: a real exchange for one data m-line is single digit to low double
+ * digit, so this is several times the worst realistic case and still a fixed
+ * ceiling on bytes a peer chose to send. Past it the held offer is ABANDONED
+ * rather than truncated — a transport that missed some of the candidates
+ * chasing its offer is not the establishment the peer thinks it is.
+ */
+export const LINK_HELD_SIGNAL_MAX = 64;
 /** How long a link may stay `interrupted` with no transport under it. Matches the
  *  legacy one-shot resume window: the peer that dropped is the same peer, and a
  *  user who walked away should not leave an authenticated link half-alive. */
@@ -349,6 +362,106 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
   let leaveAttempts = 0;
   let unlisten: (() => void) | null = null;
 
+  // ── the relay gate ─────────────────────────────────────────────────────────
+  //
+  // The room's relay agreement decides which TURN server a connection is built
+  // with, and the configuration is snapshotted exactly once — inside
+  // `openTransport`. So the two moments that read it wait for the agreement:
+  // asking for a link, and answering somebody else's ask.
+  //
+  // Set by the workspace after construction rather than taken as a dep, because
+  // the gate belongs to the ROOM and this manager outlives none of them.
+  let relayGate: RelayGate | null = null;
+  const gateOpen = () => relayGate === null || relayGate.ready();
+
+  /** An `ensure` that was asked for before the gate opened. */
+  let gatedEnsure: {
+    peerId: string;
+    promise: Promise<MixedPeerLink>;
+    resolve: (link: MixedPeerLink) => void;
+    reject: (err: unknown) => void;
+  } | null = null;
+
+  /**
+   * An inbound `link` request parked on the gate — ONE per peer, whatever the
+   * peer sends.
+   *
+   * The peer re-sends its request every `LINK_REQUEST_RETRY_MS` until it gets an
+   * offer, so a gate held for a few seconds sees the same request two or three
+   * times. Registering a gate waiter per arrival was wrong in a way that only
+   * shows up under exactly that retry: on release the first waiter starts
+   * `establish`, and every later one then observes `opening` and answers `busy`
+   * — to the peer it had just begun building a link with. That `busy` reaches
+   * the peer before the offer does and fails its request outright.
+   *
+   * So a retry from the peer already parked here is idempotent and silent, and
+   * exactly one establishment comes out of the release. A genuinely different
+   * peer is still told the room is taken.
+   */
+  let gatedRequest: { peerId: string } | null = null;
+
+  /**
+   * An inbound offer waiting on the gate, and everything that has chased it.
+   *
+   * Held rather than answered late, and held rather than dropped. Awaiting the
+   * gate inside `establish` would be the worst of both: `openTransport` installs
+   * this peer's signal handler synchronously, and an `await` in front of it puts
+   * a window in exactly the place the peer is trickling the relay candidates a
+   * cross-network link cannot connect without.
+   */
+  let heldOffer: {
+    peerId: string;
+    offer: InboundSignal;
+    frames: Array<{ from: string; data: unknown }>;
+  } | null = null;
+
+  /** Give up a held offer and stop claiming to be connecting on its behalf. */
+  function dropHeldOffer() {
+    if (heldOffer && status === "connecting" && !current && !opening && !requested) {
+      status = "idle";
+    }
+    heldOffer = null;
+  }
+
+  /** The peer this manager is already holding a gated phase for, if any. The
+   *  three are mutually exclusive claims on the single link this manager owns,
+   *  so a fourth arrival is either that same peer — idempotent — or busy. */
+  const gatedPeerId = (): string | undefined =>
+    gatedRequest?.peerId ?? gatedEnsure?.peerId ?? heldOffer?.peerId;
+
+  /**
+   * A `SignalingClient` that replays `frames` into the next handler registered
+   * on it, then behaves exactly like the real one.
+   *
+   * This is how a held offer loses nothing. `openTransport` registers its
+   * handler and then, synchronously, chains the initial signal onto its own
+   * serial receive queue; replaying in a microtask lands the held frames on that
+   * same queue BEHIND the offer, which is the order they arrived in and the only
+   * order in which they mean anything — a candidate applied before the remote
+   * description is discarded by the browser.
+   *
+   * Prototype-delegating rather than a hand-written stand-in: everything except
+   * `onSignal` must stay whatever the real client does, including anything a
+   * future transport reaches for.
+   */
+  function replaySignaling(
+    client: SignalingClient,
+    frames: Array<{ from: string; data: unknown }>,
+  ): SignalingClient {
+    if (frames.length === 0) return client;
+    const proxy: SignalingClient = Object.create(client);
+    let replayed = false;
+    proxy.onSignal = (cb) => {
+      const off = client.onSignal(cb);
+      if (!replayed) {
+        replayed = true;
+        queueMicrotask(() => { for (const f of frames) cb(f.from, f.data); });
+      }
+      return off;
+    };
+    return proxy;
+  }
+
   function publish(
     next: MixedPeerLink | null,
     nextStatus: PeerLinkStatus,
@@ -605,6 +718,9 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
     peerId: string,
     role: "initiator" | "responder",
     initialSignal?: InboundSignal,
+    /** Frames that chased `initialSignal` while it waited on the relay gate.
+     *  Replayed into this transport's own handler, in arrival order. */
+    heldFrames: Array<{ from: string; data: unknown }> = [],
   ): Promise<MixedPeerLink> {
     if (current) {
       if (current.peerId === peerId) return current;
@@ -637,7 +753,10 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
       void peerKey.catch(() => {});
       let transportTerminal = false;
       conn = await openTransport({
-        signaling: deps.signaling(), peerId, selfKey: self.publicKey, role,
+        signaling: replaySignaling(deps.signaling(), heldFrames),
+        peerId, selfKey: self.publicKey, role,
+        // Snapshotted HERE, and only here. Everything the gate does is to make
+        // sure this line runs after the two peers agree.
         config: deps.rtcConfig(), initialSignal,
         signal: controller.signal,
         onPeerKey: resolvePeer,
@@ -911,6 +1030,20 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
     opening = null;
     replacing = null;
     if (requested) finishRequest(requested.peerId, undefined, new Error("relayium: link closed"));
+    // An intent still behind the relay gate is a caller waiting on a promise
+    // nothing will ever settle otherwise, and a held offer belongs to a room
+    // this manager is done with.
+    if (gatedEnsure) {
+      const held = gatedEnsure;
+      gatedEnsure = null;
+      held.reject(new Error("relayium: link closed"));
+    }
+    // A parked inbound request settles nothing here — its peer is holding its
+    // own retry loop and its own timeout — but it must be retired, or the
+    // release it is waiting on would establish into a room this manager is done
+    // with.
+    gatedRequest = null;
+    dropHeldOffer();
     timedOutPeers.clear();
     publish(null, "idle");
     pending?.controller.abort();
@@ -948,6 +1081,30 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
           void handleResumeOffer(from, msg);
           return;
         }
+        // A frame chasing an offer this side is holding for the relay gate.
+        // Everything on the `link` generation from that peer belongs to the
+        // establishment about to be built from it — the commit, the answer, and
+        // above all the trickled candidates — and the transport that will read
+        // them does not exist yet. Held in arrival order; the offer itself and a
+        // duplicate of it are not, because the establishment is built FROM the
+        // first one and applying a second is an error the transport would reject.
+        if (heldOffer && from === heldOffer.peerId
+            && signalGeneration(msg) === "link"
+            && !isLinkOffer(data) && !isLinkRequest(data)) {
+          if (heldOffer.frames.length >= LINK_HELD_SIGNAL_MAX) {
+            // Fail closed rather than truncate: a link built from a prefix of
+            // its own candidates is not the one the peer is establishing, and a
+            // silent truncation is indistinguishable from a healthy connection
+            // that simply never finishes. Told, so the peer can retry rather
+            // than wait out its own request timeout.
+            const peerId = heldOffer.peerId;
+            dropHeldOffer();
+            deps.signaling().sendSignal(peerId, { busy: true, link: true });
+            return;
+          }
+          heldOffer.frames.push({ from, data });
+          return;
+        }
         if (isLinkRequest(data)) {
           if (!supports(from) || linkRole(deps.selfId(), from) !== "initiator") return;
           if (deps.canAcceptLink && !deps.canAcceptLink(from)) {
@@ -960,6 +1117,46 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
           }
           if ((opening && opening.peerId !== from) || (requested && requested.peerId !== from)) {
             deps.signaling().sendSignal(from, { busy: true, link: true });
+            return;
+          }
+          // We are the one who offers. Held rather than sent: the offer carries
+          // the ICE configuration this side is committing to, and the request
+          // retries every LINK_REQUEST_RETRY_MS on the peer's side anyway, so a
+          // wait here costs nothing that is not already bounded.
+          //
+          // The request itself is also this room's proof that a peer exists, so
+          // it starts that peer's grace even when the roster has not been seen.
+          relayGate?.notePeer(from);
+          if (!gateOpen()) {
+            const bound = gatedPeerId();
+            if (bound !== undefined) {
+              // A retry of the request already parked here — see `gatedRequest`
+              // — or an ask this side has already made of the same peer. Either
+              // way one establishment is coming, so this is idempotent and
+              // silent. Only a genuinely different peer is told the room is
+              // taken.
+              if (bound !== from) deps.signaling().sendSignal(from, { busy: true, link: true });
+              return;
+            }
+            gatedRequest = { peerId: from };
+            relayGate?.whenReady(() => {
+              // Retired under us — a departure, a room reset — so this release
+              // belongs to nothing.
+              if (gatedRequest?.peerId !== from) return;
+              gatedRequest = null;
+              // A peer pruned from the roster while this was parked fails
+              // `supports`, which is the same answer a departure gives anywhere
+              // else here: this peer is not part of the feature any more.
+              if (!supports(from) || !(deps.canAcceptLink?.(from) ?? true)) return;
+              if (current || opening || requested || gatedEnsure || heldOffer) {
+                // Answered rather than dropped. Silence here would leave the
+                // peer waiting out its own thirty-second request timeout for an
+                // answer this side already knows.
+                deps.signaling().sendSignal(from, { busy: true, link: true });
+                return;
+              }
+              void establish(from, "initiator").catch(() => {});
+            });
             return;
           }
           void establish(from, "initiator").catch(() => {});
@@ -987,8 +1184,113 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
           deps.signaling().sendSignal(from, { busy: true, link: true });
           return;
         }
+        // An offer is proof of a peer too, and on the responder side it may well
+        // be the first frame this room sees from it.
+        relayGate?.notePeer(from);
+        if (!gateOpen()) {
+          // One at a time, and the two ways of being second are different
+          // answers. ANOTHER peer is told the room is taken — a held offer binds
+          // this manager exactly as an in-flight establishment does, and the
+          // checks above cannot see it. The SAME peer sending twice is a
+          // duplicate: the establishment will be built from the first offer, so
+          // the second is dropped rather than held, which is also what
+          // `LinkAdmission.alreadyInFlight` does natively.
+          if (heldOffer) {
+            if (from !== heldOffer.peerId) {
+              deps.signaling().sendSignal(from, { busy: true, link: true });
+            }
+            return;
+          }
+          if (gatedRequest) {
+            // A parked inbound request binds this manager just as firmly. The
+            // link roles make `from === gatedRequest.peerId` unreachable — the
+            // peer that asks us to offer does not also offer — so this is always
+            // the second peer.
+            deps.signaling().sendSignal(from, { busy: true, link: true });
+            return;
+          }
+          heldOffer = { peerId: from, offer: msg, frames: [] };
+          // Truthful while it waits: this side IS connecting, and the workspace
+          // reads this to put the link on screen. Without it an inbound link
+          // would show nothing at all for the length of the wait while the peer
+          // showed "connecting".
+          status = "connecting";
+          relayGate?.whenReady(() => {
+            const held = heldOffer;
+            if (!held || held.peerId !== from) return;
+            heldOffer = null;
+            // A request to THIS peer is not a competing claim, it is the other
+            // half of this very exchange: a gated `ensure` released just ahead
+            // of this callback sends one, and `establish` consumes it. Only a
+            // claim on somebody else is busy.
+            if (current || opening || (requested && requested.peerId !== from)) {
+              status = "idle";
+              deps.signaling().sendSignal(from, { busy: true, link: true });
+              return;
+            }
+            if (!supports(from) || !(deps.canAcceptLink?.(from) ?? true)) {
+              status = "idle";
+              return;
+            }
+            void establish(from, "responder", held.offer, held.frames).catch(() => {});
+          });
+          return;
+        }
         void establish(from, "responder", msg).catch(() => {});
       });
+    },
+
+    /** The room's relay agreement, installed by the workspace that owns it.
+     *  Null — the default — means no gate at all, which is every consumer that
+     *  has no pool to choose from. */
+    setRelayGate(gate: RelayGate | null) { relayGate = gate; },
+
+    /**
+     * A peer left the room, and the only evidence is a roster that no longer
+     * names it.
+     *
+     * Retires the THREE RELAY-GATE PHASES bound to that peer, and nothing else.
+     * Each of them is an intent with no transport under it, parked on a gate the
+     * departed peer is the reason for: releasing one later would put this side's
+     * first legal `link/1` frame on the wire addressed to somebody who has gone,
+     * on a relay chosen from measurements nobody left in the room ever took.
+     *
+     * **Deliberately not `close()`.** A confirmed physical departure is
+     * `PeerWorkspace.peerLeft`, and its contract is a statement about a peer's
+     * SIGNALLING socket and about nothing else: an established link's DataChannel
+     * is a separate transport and survives it, an in-flight establishment and an
+     * outstanding request are cancelled there, and `departed` is recorded there
+     * so recovery stops being offered. A roster is weaker evidence than that
+     * frame, so it may not reach any of it. What it may reach is exactly what a
+     * gate is holding — and the parked waiters need no cancelling of their own,
+     * because each re-reads the phase it belongs to and finds it retired.
+     *
+     * Idempotent, and has to be: a `left` frame and the roster that drops the
+     * same peer both arrive for an ordinary disconnect, in either order.
+     */
+    rosterPeerGone(peerId: string) {
+      if (!peerId) return;
+      // Settled, not dropped: a caller is awaiting this promise, and the gate
+      // release that would have settled it is being taken away here. The same
+      // rejection `close` gives, because from the caller's side it is the same
+      // fact — the link it asked for is not going to be built.
+      if (gatedEnsure?.peerId === peerId) {
+        const held = gatedEnsure;
+        gatedEnsure = null;
+        held.reject(new Error("relayium: link closed"));
+      }
+      // Settles nothing — its peer owned its own retry loop and timeout, and is
+      // gone — but it must not survive to claim the release.
+      if (gatedRequest?.peerId === peerId) gatedRequest = null;
+      if (heldOffer?.peerId === peerId) dropHeldOffer();
+      // `requesting` and `connecting` were published on behalf of the phases
+      // just retired. With nothing left underneath them they are a status the
+      // user can neither act on nor get out of.
+      if (!current && !opening && !requested && !recovering && !replacing
+        && gatedPeerId() === undefined
+        && (status === "requesting" || status === "connecting")) {
+        status = "idle";
+      }
     },
 
     ensure(peerId: string): Promise<MixedPeerLink> {
@@ -1024,6 +1326,49 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
       if (requested) return requested.peerId === peerId
         ? requested.promise
         : Promise.reject(new LinkBusyError());
+      // **The relay gate, on the way out.**
+      //
+      // Both branches below put the first legal `link/1` frame on the wire — an
+      // offer carrying this side's committed ICE configuration, or a request
+      // whose thirty-second timeout starts the moment it is sent. Neither may
+      // happen before the room has agreed which relay this link is built on.
+      //
+      // Held rather than refused, and joined rather than duplicated: a second
+      // intent for the same peer gets the same promise, and one for a different
+      // peer is busy — the same answers this method gives once the gate is open.
+      // Asking for a link with a peer is this room's strongest evidence that the
+      // peer is there, and on the initiating side it can precede every frame the
+      // peer sends. It is therefore also what starts that peer's grace.
+      relayGate?.notePeer(peerId);
+      if (!gateOpen()) {
+        if (gatedEnsure) {
+          return gatedEnsure.peerId === peerId
+            ? gatedEnsure.promise
+            : Promise.reject(new LinkBusyError());
+        }
+        // A parked inbound request or a held offer for somebody ELSE owns the
+        // one link this manager has, exactly as `opening` and `requested` do
+        // above. For the same peer it is the other half of this exchange, and
+        // the release order settles both from one establishment.
+        const bound = gatedPeerId();
+        if (bound !== undefined && bound !== peerId) return Promise.reject(new LinkBusyError());
+        // A held offer has already published `connecting`, which is the truer
+        // statement: this peer's offer is in hand, not merely wanted.
+        if (!heldOffer) status = "requesting";
+        let resolve!: (link: MixedPeerLink) => void;
+        let reject!: (err: unknown) => void;
+        const promise = new Promise<MixedPeerLink>((res, rej) => { resolve = res; reject = rej; });
+        gatedEnsure = { peerId, promise, resolve, reject };
+        relayGate?.whenReady(() => {
+          const held = gatedEnsure;
+          if (!held || held.peerId !== peerId) return;
+          gatedEnsure = null;
+          (linkRole(deps.selfId(), peerId) === "initiator"
+            ? establish(peerId, "initiator")
+            : request(peerId)).then(held.resolve, held.reject);
+        });
+        return promise;
+      }
       return linkRole(deps.selfId(), peerId) === "initiator"
         ? establish(peerId, "initiator")
         : request(peerId);
@@ -1042,7 +1387,12 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
      *  an in-flight establishment as well as a requested or established link. */
     get boundPeerId() {
       return current?.peerId ?? opening?.peerId ?? requested?.peerId
-        ?? recovering?.peerId ?? replacing?.peerId ?? "";
+        ?? recovering?.peerId ?? replacing?.peerId
+        // All three relay-gate phases bind this manager to a peer just as firmly
+        // as the phases above, and a server-confirmed departure has to be able
+        // to cancel them: a held offer would otherwise be established, once the
+        // gate opened, to somebody who has left the room.
+        ?? gatedPeerId() ?? "";
     },
 
     /** True while a transport rebuild for the current link is in flight. */
@@ -1065,6 +1415,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
     clearFailed() {
       if (status !== "failed") return false;
       if (current || opening || replacing || requested || recovering) return false;
+      if (gatedPeerId() !== undefined) return false;
       status = "idle";
       return true;
     },

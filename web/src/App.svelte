@@ -28,7 +28,8 @@
   import { createUnifiedTextOpener } from "./lib/unified-text-open";
   import { createActivityAnnouncer, type ActivityEdge } from "./lib/activity-announcement";
   import { recordTransfer, loadHistory, clearHistory, historyEnabled, setHistoryEnabled, type HistEntry } from "./lib/history";
-  import { chooseRtcConfig, fetchIceConfig, measureRelays, pickRelay, type RelayAvailability, type RelayEntry } from "./lib/ice";
+  import { chooseRtcConfig, fetchIceConfig, measureRelays, type RelayAvailability, type RelayEntry } from "./lib/ice";
+  import { createRelaySelection } from "./lib/relay-selection";
   import { relayFailNote } from "./lib/relay-status";
   import { relayDeadline, type RelayDeadline } from "./lib/relay-deadline";
   import type { Peer } from "./lib/protocol";
@@ -156,6 +157,8 @@
     unsupported: () => unsupported,
     signaling: () => signaling,
     rtcConfig: () => rtcConfig(),
+    // The gate the link manager holds its first legal `link/1` frame behind.
+    relayGate: () => relaySelection.gate,
     legacyFiles: session,
     legacyText: textSession,
     requestNotify: requestNotifyPermission,
@@ -372,24 +375,99 @@
   // It lives in ice.ts so it is unit-testable. In here it had no coverage at
   // all, and the case it got wrong (no relay selected yet on a pool-only
   // deployment) is exactly the one that stranded cross-network peers.
-  const rtcConfig = (): RtcConfig => chooseRtcConfig({ iceServers, relays: relayPool }, selectedRelayId);
+  //
+  // `takeChoice` rather than `selectedRelayId`, and that is not a rename: every
+  // caller of this function passes the answer straight to a transport
+  // constructor, so a read here IS a connection committing to that relay for its
+  // whole life. The gate records it, which is what stops a peer leaving later
+  // from taking the choice back underneath a transport that already exists —
+  // see `relock` in relay-selection.ts.
+  const rtcConfig = (): RtcConfig =>
+    chooseRtcConfig({ iceServers, relays: relayPool }, relaySelection.takeChoice());
 
   // ── nearest-relay selection ──────────────────────────────────────────────────────
   // Each peer measures its RTT to every pool relay; the maps are swapped over signaling
   // and both run pickRelay(mine, theirs) to converge on the fastest COMMON relay id
-  // (symmetric → same result on both sides, no negotiation). Runs in the background at
-  // room join so the choice is usually ready before a transfer starts; until then
-  // rtcConfig() falls back to the whole advertised set. No effect on LAN (empty pool).
+  // (symmetric → same result on both sides, no negotiation). Measurement starts at room
+  // join, and each relay is published the moment it answers, so a dead node costs only
+  // its own absence rather than the whole map.
+  //
+  // A unified link/1 connection WAITS for that agreement — see relay-selection.ts — and
+  // by the time one is wanted the wait is usually already over. The legacy file and text
+  // paths do not wait: they read whatever rtcConfig() answers, which without a choice is
+  // the whole advertised set folded together. No effect on LAN either way (empty pool).
   let relayMeasureEpoch = 0;
+  // The room's exchange, gate and choice. Plain (non-reactive) state on purpose:
+  // rtcConfig() must read the value that is true at the instant a connection is
+  // built, not the one a render happened to observe. The three $state fields
+  // above are MIRRORS of it, kept for the debug panel.
+  const relaySelection = createRelaySelection({
+    // Sending only. The $state mirrors are written by syncRelayMirrors() after
+    // the call that triggered this one, because `record` publishes BEFORE it
+    // re-derives the choice — reading `selectedRelayId` from in here would
+    // mirror the previous one.
+    publish: (map) => {
+      if (!signaling) return;
+      for (const p of peers) if (p.id !== selfId) signaling.sendSignal(p.id, { relayRtt: map });
+    },
+  });
+  function syncRelayMirrors() {
+    myRelayRtt = relaySelection.mine;
+    peerRelayRtt = relaySelection.theirs;
+    selectedRelayId = relaySelection.selectedRelayId;
+  }
   function resetRelaySelection() {
     relayMeasureEpoch++; // supersede any in-flight measurement from the previous room
-    myRelayRtt = {};
-    peerRelayRtt = {};
-    selectedRelayId = null;
+    // Suspended rather than emptied: the next room's pool is not known yet, and
+    // saying "no relays" would open the gate for a window in which a link could
+    // commit to a configuration belonging to neither room.
+    //
+    // **Called AFTER workspace.resetRoom(), and the order is load bearing.**
+    // Suspending drops every waiter parked on the gate, because they belong to a
+    // socket that no longer exists — so whatever parked them has to have been
+    // told first. `resetRoom` closes the link manager, which rejects a held
+    // `ensure` and drops a held offer; doing it the other way round would leave
+    // a caller awaiting a promise nothing settles.
+    relaySelection.suspend();
+    syncRelayMirrors();
   }
   function broadcastRelayRtt() {
-    if (!signaling || Object.keys(myRelayRtt).length === 0) return;
-    for (const p of peers) if (p.id !== selfId) signaling.sendSignal(p.id, { relayRtt: myRelayRtt });
+    relaySelection.greet();
+  }
+  // A peer on the roster is what starts the gate's bounded grace. Called from
+  // the same handler as the greet above, because the two are the same fact seen
+  // from both ends: we have somebody to send our map to, and somebody to wait a
+  // bounded time for a map from.
+  //
+  // Deliberately roster-driven rather than capability-driven. A native peer
+  // sends its capability hello BEFORE its relay greet and a browser peer sends
+  // the greet first, so anything keyed on caps would arm the grace late for one
+  // of the two — and late is exactly the failure this replaced. `peer-link`
+  // notes the peer again from a request, an offer and an outbound intent, so a
+  // roster frame that never arrives is not the only path.
+  //
+  // A roster is also the only thing that ever reports the OPPOSITE fact. The hub
+  // sends `left` for a physical disconnect, but this page can miss one — its own
+  // socket drops, and the roster it is handed on reconnect is the first and last
+  // word on who left while it was away. So the frame is diffed, and the peers it
+  // no longer names are retired through the same idempotent path an explicit
+  // `left` takes: `relaySelection.peerGone` drops the departed peer's grace and,
+  // with it, the RTT map a replacement peer's supposedly fresh grace would
+  // otherwise settle on instantly, and `workspace.rosterPeerGone` retires what
+  // the gate is holding on that peer's behalf.
+  //
+  // **Departures first, arrivals second.** A roster frame that swaps one peer
+  // for another carries both, and arming the replacement's grace before the old
+  // peer's map has gone is exactly the release this is closing.
+  //
+  // Scoped inside `relaySelection` to a room with a relay POOL, which a LAN room
+  // never has — so the representative handoff `SignalingClient.onPeerLeft`
+  // describes, where a roster id changes while the socket and DataChannel live
+  // on, cannot reach any of this. See `noteRoster`.
+  function noteRelayPeers(ids: string[]) {
+    const others = ids.filter((id) => id !== selfId);
+    for (const gone of relaySelection.noteRoster(others)) workspace.rosterPeerGone(gone);
+    for (const id of others) relaySelection.notePeer(id);
   }
   // Tell each peer what this build can do, so we know before ever offering a
   // connection. Same envelope as the relay-RTT broadcast above; peers that do not
@@ -408,14 +486,29 @@
     if (!signaling) return;
     capsAnnouncer.rosterChanged(peers.filter((p) => p.id !== selfId).map((p) => p.id));
   }
+  // Begin this room's measurement. The pool must already be assigned: `reset`
+  // closes the gate against it. Measuring starts HERE, at room join, and it is
+  // the only half that does — the gate's bounded grace belongs to a peer and is
+  // armed by `noteRelayPeers` below, because a code room routinely sits alone
+  // for minutes and a deadline started at this line would expire before the
+  // other person had typed the code.
   async function startRelayMeasurement() {
-    if (relayPool.length === 0) return;
     const epoch = relayMeasureEpoch;
-    const rtt = await measureRelays(relayPool);
-    if (epoch !== relayMeasureEpoch) return; // room switched while measuring — discard
-    myRelayRtt = rtt;
-    selectedRelayId = pickRelay(myRelayRtt, peerRelayRtt);
-    broadcastRelayRtt();
+    relaySelection.reset(relayPool);
+    syncRelayMirrors();
+    if (relayPool.length === 0) return;
+    // Each relay is published — and broadcast — the moment it answers, not once
+    // the whole pool has settled. Awaiting the pool meant one unreachable node
+    // pinned every result at the 9 s probe timeout: nothing on the wire, nothing
+    // to select from, on every transfer.
+    await measureRelays(relayPool, (id, ms) => {
+      if (epoch !== relayMeasureEpoch) return; // room switched mid-probe — discard
+      relaySelection.record(id, ms);
+      syncRelayMirrors();
+    });
+    if (epoch !== relayMeasureEpoch) return;
+    relaySelection.finishMeasurement();
+    syncRelayMirrors();
   }
   // Peer's measurement arrived: record it and re-derive the choice. We never reply
   // here (broadcasts fire on measure-done and on peer-join instead), so there is no
@@ -435,12 +528,14 @@
       capsAnnouncer.didHearFrom(from);
       return;
     }
-    const d = data as { relayRtt?: Record<string, number>; rename?: string };
-    const m = d.relayRtt;
-    if (m && from !== selfId) {
-      peerRelayRtt = m;
-      selectedRelayId = pickRelay(myRelayRtt, peerRelayRtt);
-    }
+    // Validated inside `receive`: shape, entry count, finiteness and range. The
+    // map is peer-authored input on an untrusted socket, and the id it names is
+    // only ever compared against THIS room's pool — a relay this client was
+    // never issued selects nothing.
+    if (from !== selfId && relaySelection.receive(from, data)) syncRelayMirrors();
+    // Deliberately NOT an early return: the two fields share one envelope, and a
+    // frame carrying both must not lose the rename because the map was consumed.
+    const d = data as { rename?: string };
     if (typeof d.rename === "string") {
       peers = applyRename(peers, from, d.rename);
     }
@@ -1188,10 +1283,23 @@
       // that peer's pre-uploaded entries belong to neither lane.
       noteRosterPeers(p.map((x) => x.id));
       workspace.syncPeers();
+      // Departures as well as arrivals — a roster that no longer names a peer is
+      // the only report of one this page is guaranteed to get. See
+      // `noteRelayPeers`; the mirrors follow because retiring a departed peer's
+      // map can unmake the choice the debug panel is showing.
+      noteRelayPeers(p.map((x) => x.id));
+      syncRelayMirrors();
       broadcastRelayRtt();
       broadcastCaps();
     });
-    signaling.onPeerLeft((peerId) => workspace.peerLeft(peerId));
+    signaling.onPeerLeft((peerId) => {
+      workspace.peerLeft(peerId);
+      // The gate stops waiting for a peer the server says has gone, and drops
+      // the map it measured with: the next peer gets its own full grace rather
+      // than an instant release on somebody else's numbers.
+      relaySelection.peerGone(peerId);
+      syncRelayMirrors();
+    });
     signaling.onSignal(onPeerRelayRtt); // capture peers' relay-RTT maps (ignored by the WebRTC handlers)
     startRelayMeasurement(); // background; the choice is usually ready before a transfer
     signaling.onClose(() => {

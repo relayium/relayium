@@ -421,4 +421,44 @@ final class RelayNegotiatorTests: XCTestCase {
         XCTAssertEqual(chosen?.id, "y",
                        "a short, late map must not drop a relay the peer already told us about")
     }
+
+    /// **A peer's measurements leave with it.**
+    ///
+    /// The room's grace is per peer, and a fresh one is worth nothing if the
+    /// arriving peer walks into a choice already settled from the numbers of
+    /// somebody who is gone: it would never get to influence the relay its own
+    /// link is built on.
+    func testAPeersMapLeavesWithIt() async {
+        let (n, _) = negotiator(["x", "y"], mine: ["x": 10, "y": 20])
+        n.start()
+        n.peerJoined("first")
+        n.handleSignal(from: "first", data: RelayRttMessage.encode(["x": 5]))
+        let withFirst = await n.waitForChoice(deadline: 1.0)
+        XCTAssertEqual(withFirst?.id, "x")
+
+        n.peerLeft("first")
+        XCTAssertEqual(n.maps().theirs, [:],
+                       "nothing is contributing a map any more, so the room holds none")
+        let afterDeparture = await n.waitForChoice(deadline: 0.1)
+        XCTAssertNil(afterDeparture,
+                     "and no choice, so the next peer's grace is a real one")
+
+        n.handleSignal(from: "second", data: RelayRttMessage.encode(["y": 4]))
+        let withSecond = await n.waitForChoice(deadline: 1.0)
+        XCTAssertEqual(withSecond?.id, "y",
+                       "the arriving peer's own measurements decide")
+    }
+
+    /// A room that still has another contributor keeps the merged map, which is
+    /// the same answer merging has always given. Only the last one out clears it.
+    func testAnotherContributorKeepsTheMap() async {
+        let (n, _) = negotiator(["x"], mine: ["x": 10])
+        n.start()
+        n.handleSignal(from: "first", data: RelayRttMessage.encode(["x": 5]))
+        n.handleSignal(from: "second", data: RelayRttMessage.encode(["x": 6]))
+        n.peerLeft("first")
+        XCTAssertEqual(n.maps().theirs, ["x": 6])
+        let chosen = await n.waitForChoice(deadline: 1.0)
+        XCTAssertEqual(chosen?.id, "x")
+    }
 }
