@@ -42,6 +42,21 @@ export const MIXED_FILE_CONSENT_TIMEOUT_MS = 10 * 60_000;
 export const MIXED_FILE_DRAIN_TIMEOUT_MS = 30_000;
 export const MIXED_FILE_REPLAY_DELAY_MS = 250;
 export const MIXED_FILE_RECEIVE_STALL_MS = 60_000;
+/**
+ * How long the sender waits for the receiver's COMPLETE **with no durable
+ * progress at all**.
+ *
+ * This is a stall bound, not a cap on how long finishing may take: every ACK
+ * that actually advances the send window re-arms it, so a slow-but-progressing
+ * batch is never failed for being slow. The 60 s one-shot cap it replaces did
+ * exactly that — the receiver acks at most once per FLOW_ACK_INTERVAL
+ * (512 KiB), which on the ~7 KB/s cross-continent relay path measured in
+ * production 2026-08-26 is one ACK roughly every 75 s, so the very first paced
+ * ACK arrived after the deadline and a transfer that later completed was
+ * reported Failed. 150 s out-waits that interval at half the measured rate,
+ * i.e. with 2x margin, and matches the bound the native lane already ships.
+ */
+export const MIXED_FILE_COMPLETE_STALL_MS = 150_000;
 /** How long this lane will sit in a transport gap with no replacement channel.
  *  Deliberately longer than the link-level recovery window so link teardown wins
  *  that race and a lane-only channel close still has a bounded, fail-closed end. */
@@ -60,7 +75,6 @@ class TransportGapError extends Error {
 
 const UI_TICK_MS = 150;
 const SEND_STALL_MS = 60_000;
-const COMPLETE_TIMEOUT_MS = 60_000;
 
 export type FileLaneErrorKey = "" | "failed" | "unsupported";
 
@@ -94,6 +108,10 @@ interface Outbound {
   complete: () => void;
   completed: Promise<void>;
   gotComplete: boolean;
+  /** Re-arms the completion stall window. Non-null only while a completion wait
+   *  is armed for this batch, and retired exactly once when that wait unwinds,
+   *  so nothing outside `finishing` can hold the batch open. */
+  completeRearm: (() => void) | null;
   terminal: boolean;
   resumeRequest: ResumePoint | null;
   resumeStarted: boolean;
@@ -785,6 +803,11 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       if ((current.phase === "sending" || current.phase === "finishing")
           && nextAck !== current.acked) {
         current.acked = nextAck;
+        // Reaching this branch IS the proof of durable progress: advanceAck has
+        // already clamped a duplicate, a rewind and a forged value beyond what
+        // this batch emitted back to `acked`. Only that progress buys the
+        // receiver more time to answer with COMPLETE.
+        if (current.phase === "finishing") current.completeRearm?.();
         const wake = current.creditWake;
         current.creditWake = null;
         wake?.();
@@ -1461,17 +1484,40 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     }
   }
 
-  async function completeWithin(promise: Promise<void>, timeoutMs: number): Promise<void> {
+  /**
+   * Wait out the receiver's COMPLETE on a **stall** deadline.
+   *
+   * The window measures silence, not total duration: `handleControl` re-arms it
+   * for every ACK that actually moved `acked` forward, so the only thing that
+   * fails a batch here is a receiver that has stopped making durable progress.
+   * The re-arm hook is installed for the life of this one wait and cleared when
+   * it unwinds, which is what keeps the retirement single: a duplicate,
+   * backwards or forged-oversized ACK cannot re-arm because it never advances,
+   * and an ACK for a retired generation, a stale link or a batch that already
+   * reached its terminal state never reaches this hook at all.
+   */
+  async function completeWithinStall(current: Outbound, stallMs: number): Promise<void> {
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let arm!: () => void;
     try {
       await Promise.race([
-        promise,
+        current.completed,
         new Promise<void>((_, reject) => {
-          timer = setTimeout(() => reject(new Error("relayium: receiver did not complete file batch")), timeoutMs);
+          arm = () => {
+            clearTimeout(timer);
+            timer = setTimeout(
+              () => reject(new Error("relayium: receiver did not complete file batch")),
+              stallMs,
+            );
+          };
+          current.completeRearm = arm;
+          arm();
         }),
       ]);
     } finally {
       clearTimeout(timer);
+      // Only ever retire this wait's own hook. A resumed send installs its own.
+      if (current.completeRearm === arm) current.completeRearm = null;
     }
   }
 
@@ -1586,7 +1632,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         status: "finishing",
         speed: 0,
       };
-      await completeWithin(current.completed, COMPLETE_TIMEOUT_MS);
+      await completeWithinStall(current, MIXED_FILE_COMPLETE_STALL_MS);
       if (candidate !== link || expectedGeneration !== generation) {
         throw new TransportGapError();
       }
@@ -1694,7 +1740,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         status: "finishing",
         speed: 0,
       };
-      await completeWithin(current.completed, COMPLETE_TIMEOUT_MS);
+      await completeWithinStall(current, MIXED_FILE_COMPLETE_STALL_MS);
       if (candidate !== link || expectedGeneration !== generation) {
         throw new TransportGapError();
       }
@@ -1751,6 +1797,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       complete,
       completed,
       gotComplete: false,
+      completeRearm: null,
       terminal: false,
       resumeRequest: null,
       resumeStarted: false,
