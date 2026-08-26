@@ -29,13 +29,13 @@
   import { createActivityAnnouncer, type ActivityEdge } from "./lib/activity-announcement";
   import { recordTransfer, loadHistory, clearHistory, historyEnabled, setHistoryEnabled, type HistEntry } from "./lib/history";
   import { chooseRtcConfig, fetchIceConfig, measureRelays, type IceConfig, type RelayAvailability, type RelayEntry } from "./lib/ice";
-  import { createRelaySelection, parseRelayRtt } from "./lib/relay-selection";
+  import { createRelaySelection, parseRelayRtt, type RelayGate } from "./lib/relay-selection";
   import { relayFailNote } from "./lib/relay-status";
   import { relayDeadline, type RelayDeadline } from "./lib/relay-deadline";
   import type { Peer } from "./lib/protocol";
   import { lang, dir, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import { applyHeadMeta, pageMeta } from "./lib/page-meta";
-  import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer } from "./lib/drag";
+  import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
   import { outbox, setOutbox, clearOutbox, uploadedRefs, uploadedFingerprint } from "./lib/outbox.svelte";
   import { resetPreupload } from "./lib/preupload.svelte";
   import { createStoredReceiver } from "./lib/preupload-receive.svelte";
@@ -125,7 +125,14 @@
     signaling: () => signaling,
     rtcConfig: () => rtcConfig(),
     // 握手之前就问：能拒就别白跑一次 commit-reveal，也别白占一次 TURN 分配。
-    canAccept: (from) => textSession.canAcceptFrom(from),
+    //
+    // `roomIcePending` is the same answer one step earlier: a room whose
+    // `/api/ice` reply has not landed has no servers, no pool and no
+    // credentials, so accepting here would run the whole handshake on top of a
+    // transport built from nothing. Asked at the gate rather than inside the
+    // handshake because that is the last point before a `RTCPeerConnection`
+    // exists — see `whenRoomIce`.
+    canAccept: (from) => !roomIcePending && textSession.canAcceptFrom(from),
   });
   const textSession = createTextSession({
     connect: textLink.connect,
@@ -142,8 +149,78 @@
     rtcConfig: () => rtcConfig(),
     t: () => messages[lang()],
     flash,
-    textActive: () => textSession.active() || workspace?.blocksLegacyInbound === true,
+    // Three reasons this lane may not take an inbound offer right now, and the
+    // third is the room's own configuration. `routeOffer` reads exactly this
+    // through `busy()`, so a room that has not been given its servers, pool and
+    // credentials yet answers the offer instead of building a transport out of
+    // the empty ones. It is the only lever this component has on that path —
+    // the file lane snapshots `rtcConfig()` inside its own inbound handler —
+    // and it fails CLOSED, which is the direction that cannot lose data.
+    textActive: () => textSession.active() || workspace?.blocksLegacyInbound === true
+      || roomIcePending,
   });
+  /**
+   * The legacy lanes as the workspace router sees them.
+   *
+   * Two overrides and one mask, and nothing else: every other member forwards,
+   * so the router, the surface and the navigation guard read the sessions
+   * themselves exactly as before.
+   *
+   *  - `sendFiles`/`openWith` are the two ways this page STARTS a legacy
+   *    transport, and the router reaches them for every peer that does not route
+   *    `link/1`. They park on the room's answer instead of snapshotting an empty
+   *    configuration into a connection that then carries the whole transfer.
+   *    Parked, not refused: a superseded wait abandons (the room the intent was
+   *    for is gone), and a satisfied one goes on to build exactly once.
+   *  - `busy` subtracts the pending state that `textActive` above injects into
+   *    the session's own `busy()`. That injection is aimed at ONE reader —
+   *    `routeOffer`, inside the lane — and this is the boundary it must not
+   *    cross: `warnsOnLeave` is built from it, and a page that claims a transfer
+   *    is in progress while it waits for an HTTP response would prompt the user
+   *    on every reload and refuse the update banner. Exact rather than
+   *    approximate: a room in this window has just been reset, so there is no
+   *    transfer for the flag to be hiding.
+   */
+  const legacyFiles = {
+    get incoming() { return session.incoming; },
+    get recv() { return session.recv; },
+    get send() { return session.send; },
+    get sasCode() { return session.sasCode; },
+    get sendPath() { return session.sendPath; },
+    get recvPath() { return session.recvPath; },
+    get busy() { return session.busy && !roomIcePending; },
+    get transferActive() { return session.transferActive; },
+    async sendFiles(peerId: string, files: PickedFile[]) {
+      if (!(await whenRoomIce())) return;
+      await session.sendFiles(peerId, files);
+    },
+    accept: () => session.accept(),
+    reject: () => session.reject(),
+    abort: (dir: "send" | "recv") => session.abort(dir),
+    abortAll: () => session.abortAll(),
+    dismissSend: (x: Xfer) => session.dismissSend(x),
+    dismissRecv: (x: Xfer) => session.dismissRecv(x),
+    reset: () => session.reset(),
+    conn: () => session.conn(),
+  };
+  const legacyText = {
+    get status() { return textSession.status; },
+    get peerId() { return textSession.peerId; },
+    get sasCode() { return textSession.sasCode; },
+    get path() { return textSession.path; },
+    get history() { return textSession.history; },
+    get errorKey() { return textSession.errorKey; },
+    async openWith(peerId: string) {
+      if (!(await whenRoomIce())) return;
+      await textSession.openWith(peerId);
+    },
+    accept: () => textSession.accept(),
+    reject: () => textSession.reject(),
+    send: (body: string) => textSession.send(body),
+    end: () => textSession.end(),
+    clearHistory: () => textSession.clearHistory(),
+    active: () => textSession.active(),
+  };
   const workspace: PeerWorkspace = createPeerWorkspace({
     selfId: () => selfId,
     joined: () => joinedRoom,
@@ -157,10 +234,11 @@
     unsupported: () => unsupported,
     signaling: () => signaling,
     rtcConfig: () => rtcConfig(),
-    // The gate the link manager holds its first legal `link/1` frame behind.
-    relayGate: () => relaySelection.gate,
-    legacyFiles: session,
-    legacyText: textSession,
+    // The gate the link manager holds its first legal `link/1` frame behind —
+    // this room's whole readiness, not only its relay agreement. See `roomGate`.
+    relayGate: () => roomGate,
+    legacyFiles,
+    legacyText,
     requestNotify: requestNotifyPermission,
     // Pre-upload key handoff (frame kind 12). A PULL of the CURRENT set, asked
     // again on every (re)established transport — which is exactly the protocol's
@@ -465,6 +543,101 @@
     if (heldRelayRtt.length) heldRelayRtt = heldRelayRtt.filter((h) => h.from !== peerId);
   }
   /**
+   * Work parked on this room's own `/api/ice` answer.
+   *
+   * `relaySelection.suspend()` closes the gate for the `link/1` path, and on its
+   * own it is not enough for either half of this window:
+   *
+   *  - it releases on its OWN five-second deadline, which is a deadline about a
+   *    peer that may never speak rather than about a configuration that has not
+   *    arrived. A page that is merely slow to be answered would therefore build
+   *    the very transport the join no longer waits in order to avoid: empty
+   *    `iceServers`, empty pool, no credential, "all" transport policy — the
+   *    default RTC configuration, committed to for the life of the connection.
+   *  - and the legacy file and text lanes never went through it at all.
+   *
+   * So readiness is ONE fact with ONE settler: `applyRoomIce`, running on this
+   * room's real answer. There is deliberately no timeout of its own here.
+   * `fetchIceConfig` already owns the retry, the `Retry-After` cap and the
+   * decision about which failures are worth repeating, and it always resolves —
+   * an unreadable `/api/ice` comes back as an `unavailable` STUN-only
+   * configuration rather than as silence. That answer IS the fallback boundary,
+   * and it is installed by the same call that opens this, so the degraded path
+   * is reached by being told, never by giving up on being told.
+   */
+  let roomIceWaiters: Array<(live: boolean) => void> = [];
+  /**
+   * Wake everything parked, exactly once.
+   *
+   * `live: false` is a supersede — the room the work was parked for is gone —
+   * and every caller abandons rather than building. The list is taken BEFORE
+   * anything runs, so a callback that parks again (a link waiter handing itself
+   * on to the relay gate) joins the next window rather than the one being
+   * closed, and no waiter can be resolved twice.
+   */
+  function settleRoomIce(live: boolean) {
+    if (roomIceWaiters.length === 0) return;
+    const parked = roomIceWaiters;
+    roomIceWaiters = [];
+    for (const cb of parked) cb(live);
+  }
+  /**
+   * **May this page build a transport for this room yet?**
+   *
+   * `true` once this room's own answer is installed, `false` when the wait was
+   * superseded. The one readiness decision the legacy lanes go through, so there
+   * is a single answer rather than one per call site.
+   *
+   * It waits for the ANSWER, not for the relay agreement. `peer-link` waits for
+   * both, because a `link/1` connection is long-lived and a mis-chosen relay
+   * costs it twice the metered bandwidth for its whole life; the legacy lanes
+   * have never waited for the agreement, and making them start would delay every
+   * transfer in a pooled room by up to a peer's whole grace — a behaviour change,
+   * and not this correction. So the wait ends in the turn `applyRoomIce` runs,
+   * which is also why a LAN room, a codeless page and a STUN-only code are
+   * exactly as immediate as they were: their answer settles this in the same
+   * turn it lands, and once settled this resolves without yielding to a timer.
+   */
+  function whenRoomIce(): Promise<boolean> {
+    if (!roomIcePending) return Promise.resolve(true);
+    return new Promise<boolean>((resolve) => roomIceWaiters.push(resolve));
+  }
+  /**
+   * The room's relay agreement, widened to the whole readiness question.
+   *
+   * `peer-link` asks this before it puts its first legal `link/1` frame on the
+   * wire, and `relaySelection` can only answer the half it owns: "has this room
+   * agreed on a relay yet?". During the window that question is being asked of a
+   * selection that has no pool to agree about, and its own bounded deadline
+   * answers "yes" five seconds in — for a room that still has no configuration
+   * at all.
+   *
+   * Composed rather than corrected inside `relaySelection`, because the two
+   * bounds are about different things and both are right. The configuration is
+   * not bounded here at all (see `whenRoomIce`); the relay CHOICE stays bounded
+   * exactly as it was, and that bound now starts from `reset` — that is, from
+   * the moment a real pool exists to choose from.
+   *
+   * Ordering, which is what makes the second line safe: `applyRoomIce` runs
+   * `startRelayMeasurement` — and so `reset`, synchronously — before it settles
+   * this, so a waiter handed on below meets a gate already re-armed against THIS
+   * room's pool. A pool-less answer leaves that gate open, so a LAN room and a
+   * STUN-only code run the callback in the same turn, with no relay-map delay.
+   */
+  const roomGate: RelayGate = {
+    ready: () => !roomIcePending && relaySelection.gate.ready(),
+    notePeer: (peerId) => relaySelection.gate.notePeer(peerId),
+    whenReady(cb) {
+      if (!roomIcePending) { relaySelection.gate.whenReady(cb); return; }
+      // Dropped on a supersede, exactly as `relaySelection.reset`/`suspend` drop
+      // their own waiters and for the same reason: the socket, the peer and the
+      // credentials it was parked for all belong to the room being left. Whoever
+      // parked it has already been told — `workspace.resetRoom()` runs before
+      // `resetRelaySelection`.
+      roomIceWaiters.push((live) => { if (live) relaySelection.gate.whenReady(cb); });
+    },
+  };
+  /**
    * Install the answer this room joined without.
    *
    * Everything here used to run before the socket existed. Nothing has moved
@@ -484,15 +657,41 @@
     // pool-less answer opens the gate in the same call, which is what keeps a
     // LAN room and a STUN-only code as immediate as they were.
     void startRelayMeasurement();
+    // The peers that arrived during the window, re-noted against a pool that
+    // now exists. `notePeer` is scoped to a room WITH one, so every roster frame
+    // delivered before this line armed nothing at all — and `reset` has just
+    // shut the gate again for a pooled room. Without this, a link parked below
+    // would hand itself to a gate whose bounded grace nobody ever started, and
+    // wait for a frame that in a two-peer code room has already been sent.
+    // Departures cannot fire here: `reset` emptied the roster in the same turn.
+    noteRelayPeers(peers.map((p) => p.id));
+    // …and only now release what was parked, AFTER both: `reset` is what puts
+    // THIS room's pool behind `takeChoice()`, and a build woken ahead of it
+    // would read the previous room's — the whole thing the wait exists to stop.
+    // `startRelayMeasurement` runs synchronously as far as `reset` and the
+    // replay before it ever awaits a probe.
+    settleRoomIce(true);
   }
   function resetRelaySelection() {
     relayMeasureEpoch++; // supersede any in-flight measurement from the previous room
+    // Every build parked on the room being LEFT is superseded, never carried:
+    // its peer, its socket and its credentials all belong to that room. Settled
+    // FIRST, and with `live: false`, so nothing is still parked when the next
+    // room's window opens below and nothing wakes up holding the wrong pool.
+    // The same discipline `relaySelection.suspend()` applies to the gate's own
+    // waiters, for the same reason — and exactly once, because `settleRoomIce`
+    // empties the list before it runs a single callback.
+    settleRoomIce(false);
     // The window opens here and closes in `applyRoomIce`. Held frames are
     // room-scoped like everything else: one rendezvous's measurements must
     // never be replayed into the next one's choice.
     roomIcePending = true;
     heldRelayRtt = [];
     heldRelayRoster = new Set();
+    // Deliberately no deadline of this window's own. `fetchIceConfig` bounds
+    // itself and always answers, so the only thing a timer here could do is
+    // permit the empty configuration it exists to forbid — see `whenRoomIce`.
+    //
     // Suspended rather than emptied: the next room's pool is not known yet, and
     // saying "no relays" would open the gate for a window in which a link could
     // commit to a configuration belonging to neither room.

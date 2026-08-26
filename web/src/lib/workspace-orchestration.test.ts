@@ -1025,3 +1025,207 @@ describe("the room is joined while /api/ice is still in flight", () => {
     expect(all.match(/^\s+roomIcePending = false;$/gm)).toHaveLength(1);
   });
 });
+
+// ── nothing may be built before this room's own answer ───────────────────────
+//
+// The invariant the whole concurrency change rests on. Joining a round trip
+// early is safe only while NOTHING can be built from the configuration the join
+// did not wait for — and "nothing" has to mean the `link/1` path, the legacy
+// file lane and the legacy text lane, because all three end at the same
+// `rtcConfig()` and all three would snapshot the same empty answer into an
+// `RTCPeerConnection` for the life of the connection.
+//
+// The rule these replace was a five-second timer that set a `roomIceWaitOver`
+// flag and then returned `rtcConfig()` anyway. That is the defect stated as a
+// design: the fallback it reached was the DEFAULT RTC configuration — no
+// servers, no pool, no credential, `iceTransportPolicy` unset — for a room that
+// had simply been answered slowly. There is no such timeout now, and the reason
+// there does not need to be one is `fetchIceConfig`: it owns the retry, the
+// `Retry-After` cap and the "which failures are worth repeating" decision, and
+// it ALWAYS resolves — an unreadable `/api/ice` comes back as an `unavailable`
+// STUN-only configuration. That answer is the fallback boundary, and it is
+// installed by the same call that opens the gate.
+//
+// A source contract for the same reason the rest of this file is one: these are
+// rules about which statements exist, in which order, inside one component that
+// owns the socket, the ICE fetch and the service-worker registration. What the
+// pieces DO is executed elsewhere:
+//   - `suspend()`, its own bounded release, and `reset()` → relay-selection.test.ts
+//   - holding the first legal `link/1` frame behind a gate → peer-link's tests
+//   - the router's legacy/mixed fork these two lanes sit on → peer-workspace.test.ts
+describe("no transport is built while the room has no configuration", () => {
+  const all = code(app);
+  /** The readiness block itself: its state, its settler, its wait, its gate. */
+  const readiness = code(app.slice(
+    app.indexOf("let roomIceWaiters"),
+    app.indexOf("function applyRoomIce("),
+  ));
+  const block = (from: string, to: string): string => {
+    const at = app.indexOf(from);
+    expect(at, `${from} is missing from App.svelte`).toBeGreaterThan(-1);
+    const end = app.indexOf(to, at);
+    expect(end, `${to} no longer follows ${from} in App.svelte`).toBeGreaterThan(at);
+    return code(app.slice(at, end));
+  };
+
+  it("becomes ready only where the room's own answer is installed", () => {
+    // ONE settler, and `applyRoomIce` is it. A second `settleRoomIce(true)`
+    // anywhere would be a second way to become ready — which is precisely what
+    // the deleted timer was, and it was a way that had no answer behind it.
+    expect(all.match(/settleRoomIce\(true\)/g)).toHaveLength(1);
+    const apply = code(fn("applyRoomIce"));
+    expect(apply).toContain("settleRoomIce(true);");
+    // Ordering, and every step of it is load bearing. The flag clears, then
+    // `reset` puts THIS room's pool behind `takeChoice()`, then the peers that
+    // arrived during the window are re-noted against a pool that now exists —
+    // and only then is anything woken. A build released ahead of `reset` reads
+    // the previous room's pool; one released ahead of the re-note hands itself
+    // to a gate whose bounded grace nobody ever started.
+    expect(apply.indexOf("roomIcePending = false;"))
+      .toBeLessThan(apply.indexOf("startRelayMeasurement()"));
+    expect(apply.indexOf("startRelayMeasurement()"))
+      .toBeLessThan(apply.indexOf("noteRelayPeers("));
+    expect(apply.indexOf("noteRelayPeers("))
+      .toBeLessThan(apply.indexOf("settleRoomIce(true);"));
+  });
+
+  it("has no deadline of its own, so no elapsed time can permit a build", () => {
+    // The mutation this exists to catch: any timer in here is a path to `ready`
+    // that no `/api/ice` answer stands behind.
+    expect(readiness).not.toMatch(/setTimeout|clearTimeout|setInterval|Date\.now/);
+    const reset = code(fn("resetRelaySelection"));
+    expect(reset).not.toMatch(/setTimeout|clearTimeout/);
+    // …and the flag that timer wrote is gone with it, everywhere. While it
+    // existed, `roomIcePending` was true and a build was still permitted.
+    expect(all).not.toContain("roomIceWaitOver");
+    expect(all).not.toContain("roomIceTimer");
+    // The old caller, too: a helper that answers `rtcConfig()` while the room is
+    // pending is the empty configuration by another name.
+    expect(all).not.toContain("rtcConfigWhenReady");
+  });
+
+  it("waits on the answer and on nothing else, and does not wait once it is in", () => {
+    const wait = code(fn("whenRoomIce"));
+    // One condition. Not the relay agreement (the legacy lanes have never waited
+    // for it, and starting would delay every transfer in a pooled room by up to
+    // a peer's whole grace), and not a clock.
+    expect(wait).toContain("if (!roomIcePending) return Promise.resolve(true);");
+    expect(wait).toContain("new Promise<boolean>((resolve) => roomIceWaiters.push(resolve))");
+    expect(wait).not.toMatch(/setTimeout|relaySelection|rtcConfig/);
+  });
+
+  it("wakes each parked build exactly once, and abandons it on a room switch", () => {
+    const settle = code(fn("settleRoomIce"));
+    // Taken before anything runs. A callback that parks again — a link waiter
+    // handing itself on to the relay gate — must join the NEXT window rather
+    // than the one being closed, and no waiter may be resolved twice.
+    expect(settle).toContain("const parked = roomIceWaiters;");
+    expect(settle).toContain("roomIceWaiters = [];");
+    expect(settle.indexOf("roomIceWaiters = [];"))
+      .toBeLessThan(settle.indexOf("for (const cb of parked)"));
+    // The room boundary supersedes rather than carries: the peer, the socket and
+    // the credentials a parked build was for all belong to the room being left.
+    // First, so nothing is still parked when the next window opens below.
+    const reset = code(fn("resetRelaySelection"));
+    expect(reset).toContain("settleRoomIce(false);");
+    expect(reset.indexOf("settleRoomIce(false);"))
+      .toBeLessThan(reset.indexOf("roomIcePending = true;"));
+    expect(reset.indexOf("roomIcePending = true;"))
+      .toBeLessThan(reset.indexOf("relaySelection.suspend();"));
+    // Exactly one supersede per boundary — `resetRelaySelection` is the only
+    // caller, and it is the one function both entries go through.
+    expect(all.match(/settleRoomIce\(false\)/g)).toHaveLength(1);
+  });
+
+  // ── link/1 ──────────────────────────────────────────────────────────────────
+  it("gives the link manager the room's readiness, not only its relay agreement", () => {
+    // `relaySelection` can only answer the half it owns, and during this window
+    // it is being asked about a selection with no pool to agree on. Its own
+    // deadline — a bound on a PEER that may never speak — then answers "ready"
+    // five seconds in, for a room that has no configuration at all. That release
+    // is still correct in relay-selection.test.ts and must not be corrected
+    // there; what changes is that it is no longer the whole answer.
+    expect(all).toContain("relayGate: () => roomGate,");
+    expect(all).not.toContain("relayGate: () => relaySelection.gate");
+    expect(readiness).toContain("const roomGate: RelayGate = {");
+    expect(readiness).toContain("ready: () => !roomIcePending && relaySelection.gate.ready(),");
+    // Parked on the answer first and handed on to the relay gate second, so the
+    // relay CHOICE stays bounded exactly as it was — and that bound now starts
+    // from `reset`, which is to say from the moment a real pool exists.
+    expect(readiness).toContain("if (!roomIcePending) { relaySelection.gate.whenReady(cb); return; }");
+    expect(readiness).toContain(
+      "roomIceWaiters.push((live) => { if (live) relaySelection.gate.whenReady(cb); });",
+    );
+    // A superseded waiter is dropped rather than run, exactly as
+    // `relaySelection.reset`/`suspend` drop their own: whoever parked it has
+    // already been told, because `workspace.resetRoom()` runs first.
+    expect(readiness).toContain("if (live)");
+  });
+
+  // ── the legacy file and text lanes ──────────────────────────────────────────
+  it("parks the two ways this page STARTS a legacy transport", () => {
+    // The router forks to these for every peer that does not route `link/1`, and
+    // neither has ever gone through the relay gate. Parked rather than refused:
+    // a satisfied wait goes on to build exactly once, and a superseded one
+    // abandons, because the room the intent was for is gone.
+    const files = block("const legacyFiles = {", "const legacyText = {");
+    expect(files).toContain("async sendFiles(peerId: string, files: PickedFile[]) {");
+    expect(files).toContain("if (!(await whenRoomIce())) return;");
+    expect(files).toContain("await session.sendFiles(peerId, files);");
+    expect(files.indexOf("await whenRoomIce()"))
+      .toBeLessThan(files.indexOf("await session.sendFiles"));
+
+    const text = block("const legacyText = {", "const workspace: PeerWorkspace = createPeerWorkspace({");
+    expect(text).toContain("async openWith(peerId: string) {");
+    expect(text).toContain("if (!(await whenRoomIce())) return;");
+    expect(text).toContain("await textSession.openWith(peerId);");
+    expect(text.indexOf("await whenRoomIce()"))
+      .toBeLessThan(text.indexOf("await textSession.openWith"));
+
+    // The router is handed the parked lanes, not the raw sessions — the fork
+    // lives inside it, so this is the one place that reaches both branches.
+    expect(all).toContain("legacyFiles,");
+    expect(all).toContain("legacyText,");
+    expect(all).not.toContain("legacyFiles: session,");
+    expect(all).not.toContain("legacyText: textSession,");
+  });
+
+  it("refuses an inbound legacy offer rather than answering it from nothing", () => {
+    // The other direction, and it cannot be parked from here: both lanes
+    // snapshot `rtcConfig()` inside their own inbound handlers, which this
+    // component does not reach. So it fails CLOSED at the only two levers it
+    // does have — the one that decides whether the file lane is free to take an
+    // offer, and the one text-link asks before it spends a commit-reveal.
+    const fileDeps = block("const session = createTransferSession({", "const legacyFiles = {");
+    expect(fileDeps).toContain("textActive: () => textSession.active() || workspace?.blocksLegacyInbound === true");
+    expect(fileDeps).toContain("|| roomIcePending,");
+    const textLinkDeps = block("const textLink = createTextLink({", "const textSession = createTextSession({");
+    expect(textLinkDeps).toContain("canAccept: (from) => !roomIcePending && textSession.canAcceptFrom(from),");
+  });
+
+  it("keeps that refusal inside the lane, out of the navigation guard", () => {
+    // `textActive` above injects the pending room into the session's own
+    // `busy()`, which is aimed at exactly one reader: `routeOffer`. This is the
+    // boundary it must not cross — `warnsOnLeave` is built from `busy`, and a
+    // page that claims a transfer is in progress while it waits for an HTTP
+    // response prompts the user on every reload and disables the update banner.
+    const files = block("const legacyFiles = {", "const legacyText = {");
+    expect(files).toContain("get busy() { return session.busy && !roomIcePending; },");
+    // Exact rather than approximate: a room in this window has just been reset,
+    // so `transferActive` is the untouched question and stays forwarded.
+    expect(files).toContain("get transferActive() { return session.transferActive; },");
+  });
+
+  it("leaves a LAN room, a codeless page and a STUN-only code exactly as immediate", () => {
+    // Every one of those is answered with a pool-less configuration, and
+    // `reset([])` opens the relay gate in the same call. So `applyRoomIce`
+    // settles a wait that hands its callback to an already-open gate, in the
+    // turn the answer lands: no relay-map delay anywhere on those paths.
+    const wait = code(fn("whenRoomIce"));
+    expect(wait).toContain("Promise.resolve(true)");
+    expect(readiness).toContain("if (!roomIcePending) { relaySelection.gate.whenReady(cb); return; }");
+    // And nothing in the readiness block waits on the relay agreement itself,
+    // which is what would have made a POOLED room slower than it was.
+    expect(code(fn("settleRoomIce"))).not.toContain("relaySelection");
+  });
+});

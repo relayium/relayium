@@ -362,20 +362,36 @@ final class TransferModuleTests: XCTestCase {
     /// do it for the state the surface is really in when a peer asks — which is
     /// the ordering the shipped defect got wrong.
     ///
-    /// `watchPairingCode` publishes `.watching` SYNCHRONOUSLY and only then
-    /// fetches ICE, so a client whose ICE never resolves parks the model in
-    /// exactly the state under test and never reaches the socket factory.
+    /// `watchPairingCode` publishes `.watching` SYNCHRONOUSLY and opens the room
+    /// in the same turn, so a client whose ICE never resolves parks the model in
+    /// exactly the state under test — now with a live socket, because the join
+    /// no longer waits for the configuration.
+    ///
+    /// The socket is therefore REAL here rather than a `preconditionFailure`.
+    /// That is the changed contract, and asserting it is the point: the room is
+    /// joined a round trip early, and the safety it used to get from the
+    /// ordering of two statements now comes from the room's own relay gate. So
+    /// this also pins the other half — for the whole of that window nothing is
+    /// assembled and nothing this device authored reaches the wire beyond the
+    /// join itself.
     func testTheAdvisoryGateFollowsTheModuleThroughAPairingWatch() throws {
         let directory = try temporaryDirectory()
+        let channel = FakeWebSocketChannel()
         let link = LinkWorkspaceModel(
             capabilities: PeerCapabilityRegistry(linkRoomActive: { true }),
             receiveDirectory: { directory },
             requiresVerification: { false },
             iceClient: HangingICE(),
             connectPairingSocket: { _ in
-                preconditionFailure("ICE never resolves, so no socket is ever opened")
+                let socket = SignalingClient(channel: channel, name: "Mac")
+                channel.fireOpen()
+                return socket
             },
-            pairingRoomHandle: LinkRoomHandle())
+            pairingRoomHandle: LinkRoomHandle(),
+            assemble: { _, _, _, _, _, _, _, _, _ in
+                XCTFail("nothing may be assembled while the room has no configuration")
+                fatalError()
+            })
         let module = TransferModule(
             route: .pairingCode,
             files: RealtimeSessionModel(pairClient: StubPair(), iceClient: StubICE(),
@@ -409,19 +425,45 @@ final class TransferModuleTests: XCTestCase {
                       + "code names — the request is answered busy and the pairing "
                       + "fails with no error on either screen")
 
+        // **The room is joined in the same turn, with the fetch still hanging.**
+        //
+        // This is the concurrency change stated as behaviour, and it is what
+        // this test now costs a fake socket to say: the hub has been told this
+        // side is in the code before `/api/ice` has answered anything, so the
+        // roster, the capability hellos and the peer's own announcement all
+        // start a round trip sooner. Under the previous order the socket did not
+        // exist yet and this assertion could not be written at all.
+        XCTAssertTrue(channel.isOpen, "the room was not joined until ICE answered")
+        XCTAssertEqual(channel.sent.count, 1,
+                       "the only frame a room with no configuration may author is its join")
+
+        // …and the other half, which is what makes the first half safe. For the
+        // whole of that window the relay gate is shut and the router's handoff
+        // is held, so nothing is assembled — `assemble` above fails the test if
+        // anything is — and this side authors nothing further on the wire.
+        for _ in 0..<14 { RunLoop.current.run(until: Date()) }
+        XCTAssertEqual(link.connection, .watching(code: "483920"),
+                       "a room still waiting for its configuration left `watching` on its own")
+        XCTAssertEqual(channel.sent.count, 1,
+                       "a room with no configuration put a frame of its own on the wire")
+
         // Leaving the room closes it again: there is no code any more, and the
-        // surface is still claimed until the pane releases it.
+        // surface is still claimed until the pane releases it. The socket the
+        // watch opened goes with it — under the previous order there was none to
+        // leak, and now there is.
         link.leave()
         XCTAssertFalse(link.acceptsInboundLinkNow,
                        "a module that left its room still admits an inbound link")
+        XCTAssertTrue(channel.closed,
+                      "leaving a watched code left this device in its pairing room")
     }
 }
 
 /// An ICE client whose answer never arrives.
 ///
-/// `watchPairingCode` awaits it before opening the room, so this parks a model
-/// in `.watching` — the state the gate assertions above are about — without any
-/// socket, any network, or any timing.
+/// `watchPairingCode` now opens the room without waiting for it, so this parks a
+/// model in `.watching` WITH a live socket and no configuration — the window the
+/// relay gate exists to hold — without any network or any timing.
 private struct HangingICE: ICEConfigClient {
     func fetch(code: String) async throws -> ICEConfig {
         try await Task.sleep(nanoseconds: 60_000_000_000)
