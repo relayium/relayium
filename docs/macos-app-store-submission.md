@@ -25,6 +25,30 @@ or releasing a version. Relayium uses manual App Store release.
 | Support URL | `https://relayium.com/support/` |
 | Marketing URL | `https://relayium.com/` |
 
+### Current release state and 1.3.7 submission
+
+Apple's public lookup reports macOS `1.3.6 (24)` live from
+2026-08-26 01:15:37 UTC with minimum macOS 13.0. Build 24 is therefore consumed
+and must never be rebuilt or re-uploaded. The next release is `1.3.7 (25)` from
+product source `a6fafea6e84aedc790f4a299c2987c12528703b4` or its version-only
+descendant. It keeps minimum macOS 13.0 and does not remove compatibility with
+older Relayium clients.
+
+What's New for 1.3.7:
+
+> Large encrypted transfers now use memory more efficiently and keep processing
+> smoothly for longer downloads. This update also improves transfer reliability
+> and resumable-download handling while remaining compatible with earlier
+> Relayium versions.
+
+What to Test for 1.3.7:
+
+> Send and receive a multi-gigabyte file, keep the transfer running for several
+> minutes, and confirm progress remains responsive. Cancel one download and
+> resume it, then compare the final file with the sender's original. Repeat with
+> an earlier released Relayium client on the other side to confirm mixed-version
+> transfers still complete.
+
 Version `1.2.0`, build `6` was uploaded and export-compliance cleared
 (2026-08-14), so build `6` is consumed and must not be rebuilt or re-uploaded.
 Public commit `cab50d9e88378318228b8467be3aaafef83cdda9` carries public version

@@ -59,8 +59,8 @@ final class BundleVersionTests: XCTestCase {
         // the two products must not drift apart either: they are the same
         // release of the same app through two channels, and a user who installs
         // one after the other must not see the version go backwards.
-        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.3.6", occurrences: 10)
-        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "24", occurrences: 10)
+        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.3.7", occurrences: 10)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "25", occurrences: 10)
     }
 
     /// iOS: the app and its Share extension, both Debug and Release.

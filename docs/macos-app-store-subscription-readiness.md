@@ -86,7 +86,7 @@ server entitlement for every case.
   reaches any tester, do not roll the server back to a version that rejects
   `continuationProtocol`; pause new dispatch or roll forward instead.
 
-## macOS 1.3.6 internal-only gate
+## macOS 1.3.6 historical gate and public outcome
 
 Build 24 corrects the macOS thrown-cancellation shape and may be distributed to
 internal TestFlight testers after the server and client gates pass. Before that
@@ -100,8 +100,9 @@ idle, the same Plus Monthly selection opened a second Sandbox sheet, and the
 second Cancel again returned to idle. Each server outcome response was
 `resumable: true`; no transaction was completed and the account remained Free.
 
-Do not submit 1.3.6 for public Mac App Store review until both remaining
-fail-closed lockout designs have been implemented and independently reviewed:
+The owner subsequently released 1.3.6 publicly on 2026-08-26. Apple's public
+lookup reports it live from 2026-08-26 01:15:37 UTC. The two availability risks
+below were not removed by that publication and remain explicit follow-up work:
 
 - an already-locked local Keychain continuation must be able to reconcile an
   operator-resolved server attempt without broad or automatic capability
@@ -110,10 +111,22 @@ fail-closed lockout designs have been implemented and independently reviewed:
   an ambiguous post-sheet failure that permanently locks the attempt.
 
 These are availability risks, not duplicate-charge relaxations. Until their
-protocol is designed, ambiguous outcomes remain locked and internal affected
-accounts use only the evidence-gated operator procedure. Cancellation of the
+protocol is designed, ambiguous outcomes remain locked and affected accounts use
+only the evidence-gated operator procedure. The 1.3.7 transfer-performance
+release carries this already-public purchase behavior forward unchanged; it does
+not treat publication as evidence that either risk was fixed. Cancellation of the
 App Store credential dialog during Restore Purchases is a separate UI-only
 truthfulness issue: it arms no purchase and changes no billing state.
+
+## macOS 1.3.7 transfer-performance release
+
+Build 25 contains wire-neutral transfer changes only. It keeps macOS 13 as the
+deployment target, preserves the encrypted transfer format, nonce and chained
+hash ordering, and remains compatible with earlier released clients. Acceptance
+requires a long-running large-file send and resumable stored download plus one
+mixed-version transfer before public release. No subscription product, price,
+entitlement, purchase transition or provider configuration changes in this
+release.
 
 ## Renewal intent and current transaction authority
 
