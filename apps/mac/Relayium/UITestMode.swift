@@ -56,16 +56,16 @@ enum UITestMode {
     ///
     /// **The exact complement of `allowsResidency`, and it has to be.** The
     /// substitutions below — a pair client that mints `483920`, an ICE client
-    /// that sleeps for five minutes, a pairing socket factory that is a
-    /// `preconditionFailure` — exist so the offline suite can hold a handoff
-    /// screen without contacting production. They were applied on `isActive`
+    /// that sleeps for five minutes, a pairing socket that never opens — exist
+    /// so the offline suite can hold a handoff screen without contacting
+    /// production. They were applied on `isActive`
     /// alone, which quietly made them apply to the LOOPBACK acceptance launch as
     /// well, and that is not a slower version of the product: it is a different
-    /// one. `LinkWorkspaceModel.watchPairingCode` awaits its ICE read BEFORE it
-    /// opens the room, so a fixture ICE client leaves the app in `.watching`
-    /// for the whole run and no pairing socket is ever opened. Measured exactly
-    /// that way: two native ends both waiting, neither asking, and the cause
-    /// written up as a product defect in the pairing wire.
+    /// one. `LinkWorkspaceModel.watchPairingCode` at the time awaited its ICE
+    /// read BEFORE it opened the room, so a fixture ICE client left the app in
+    /// `.watching` for the whole run and no pairing socket was ever opened.
+    /// Measured exactly that way: two native ends both waiting, neither asking,
+    /// and the cause written up as a product defect in the pairing wire.
     ///
     /// So the rule is the one iOS already applies — its fixtures answer `nil`
     /// unless their own flag is passed, and a plain acceptance launch there gets
@@ -397,9 +397,10 @@ enum UITestMode {
     /// Keeps the unified pairing-room watcher deterministic and offline.
     ///
     /// The legacy models already use `UITestWaitingICEClient`, but `link/1`
-    /// owns a separate ICE read before it opens the room. Leaving that client
-    /// live makes an offline acceptance launch replace a valid generated code
-    /// with `roomUnavailable` according to runner network timing.
+    /// owns a separate ICE read of its own, started together with the room it
+    /// opens. Leaving that client live makes an offline acceptance launch
+    /// replace a valid generated code with `roomUnavailable` according to
+    /// runner network timing.
     ///
     /// **Two factories, because the product has two modules.** They mirror
     /// `AppEnvironment.makeNearbyLinkWorkspaceModel` and
@@ -429,9 +430,17 @@ enum UITestMode {
             receiveDirectory: { FileManager.default.temporaryDirectory },
             requiresVerification: { verification.requiresSASConfirmation },
             iceClient: UITestWaitingICEClient(),
+            // Called on EVERY watch now: `watchPairingCode` opens the room's
+            // socket and starts its ICE read together, so the five-minute ICE
+            // sleep no longer stands between a generated code and this factory
+            // and a `preconditionFailure` here would crash the offline suite on
+            // its first minted code. What the offline launch needs from the
+            // socket is exactly nothing — hold `.watching` without a frame
+            // leaving the process — and the silent channel is that nothing.
             connectPairingSocket: { _ in
-                // nonlocalized: test-only invariant failure, never rendered
-                preconditionFailure("the waiting UI-test ICE client cannot open a socket")
+                // nonlocalized: an acceptance fixture name — the silent channel
+                // never opens, so no join frame ever announces it
+                SignalingClient(channel: UITestSilentWebSocketChannel(), name: "uitest")
             },
             pairingRoomHandle: pairingRoom)
     }
@@ -606,6 +615,29 @@ private struct UITestWaitingICEClient: ICEConfigClient {
 
 private struct UITestFailingICEClient: ICEConfigClient {
     func fetch(code: String) async throws -> ICEConfig { throw AccountError.network }
+}
+
+/// A pairing-room socket that never opens, never delivers and never touches
+/// the network.
+///
+/// `SignalingClient` installs its callbacks on construction, so they are
+/// stored here — and then nothing ever fires them: no `onOpen` means the join
+/// frame is never sent, no `onText` means no roster or signal ever arrives,
+/// and no `onClose` means the watcher is never told the room ended. `send` is
+/// the no-op the channel contract already allows for a closed socket, so
+/// anything a surface asks it to say is dropped, and `isOpen` stays false so
+/// nothing mistakes this for a room that was reached. The offline direct
+/// launch therefore joins a code,
+/// publishes `.watching`, and holds there — the same held handoff screen the
+/// waiting ICE client provides, stated at the socket instead of trapped in a
+/// `preconditionFailure` the concurrent join would now always reach.
+private final class UITestSilentWebSocketChannel: WebSocketChannel {
+    var onOpen: (() -> Void)?
+    var onText: ((String) -> Void)?
+    var onClose: (() -> Void)?
+    let isOpen = false
+    func send(_ text: String) {}
+    func close() {}
 }
 #endif
 
