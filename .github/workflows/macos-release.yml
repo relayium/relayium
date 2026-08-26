@@ -726,12 +726,58 @@ jobs:
             cmp "$release/release-web/public/apps/macos/appcast.xml" "$existing/appcast.xml"
             echo "Existing $tag contains the identical release."
           else
+            # `--latest=false` is load-bearing. GitHub's `latest` alias is
+            # REPOSITORY-WIDE, and without this flag GitHub hands it to whichever
+            # full release is newest — so a macOS release takes it from the CLI.
+            # `web/public/install.sh` and `web/public/install-node.sh` both
+            # download from `/releases/latest/download`, and a macOS release owns
+            # no `relayium_<os>_<arch>.tar.gz`, no `checksums.txt` and no
+            # `checksums.txt.sig`. The alias moving is therefore not a cosmetic
+            # detail: it turns `curl -fsSL https://relayium.com/install.sh | sh`
+            # into a 404 for every user, on a URL nothing in this repository
+            # publishes or can revise.
+            #
+            # It has now happened twice from the same cause. `macos-v1.3.8` broke
+            # the CLI installer this way, and on 2026-08-12 the same alias made
+            # the central release check cache `macos-v1.1.3` as the newest server
+            # release. That one was fixed by making the READER stop trusting the
+            # alias (`LatestTag`, server/selfupdate/selfupdate.go). This is the
+            # producer half nobody wrote: a macOS release must never claim it.
+            # `scripts/test/macos-publish-order-test.mjs` asserts the flag, and
+            # the read-back below asserts the outcome.
             gh release create "$tag" \
               "$release/Relayium.dmg" \
               "$release/Relayium.dmg.sha256" \
               "$release/release-web/public/apps/macos/appcast.xml#appcast.xml" \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
+              --latest=false \
               --title "Relayium for macOS ${RELEASE_VERSION}" \
               --notes "Signed, notarized universal macOS release. The disk image passed Apple notarization, stapling, and Gatekeeper assessment in workflow run ${GITHUB_RUN_ID}."
+          fi
+
+          # The flag is a request; this is the answer. It runs on BOTH branches
+          # on purpose. A release that already existed never passed through the
+          # flag at all — it could have been marked latest by hand, or by an
+          # earlier run of this job from before the flag existed, which is
+          # exactly the state `macos-v1.3.8` is in — and a created release leaves
+          # no trace of `--latest=false` that any later reader can inspect. The
+          # only other signal that this went wrong is a stranger's failed
+          # install, so the one read-only API call is worth its cost.
+          #
+          # Only a SUCCESSFUL read that names this tag is treated as the
+          # defect. `/releases/latest` 404s when no release holds the alias,
+          # which is a legitimate repository state, and gh reports that the same
+          # way it reports a rate limit or a network blip — so a failed read
+          # leaves the alias unproven rather than proven good. That is the right
+          # trade here and not an oversight: the flag above is the control, this
+          # is the corroboration, and the release is already immutable and
+          # published by the time this line runs. Failing the job on an API blip
+          # would turn a successful publication red for a reason that is not
+          # about the release.
+          if latest_tag="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null)"; then
+            [ "$latest_tag" != "$tag" ] || {
+              echo "::error::$tag holds the repository-wide latest release alias, which belongs to the CLI releases that web/public/install.sh downloads from /releases/latest/download"
+              exit 1
+            }
           fi
