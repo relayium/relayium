@@ -130,6 +130,19 @@ enum UITestMode {
     static let hasUnusableAccount = ProcessInfo.processInfo.arguments
         .contains(unusableAccountArgument)
 
+    /// A device list whose OTHER row is a real Device Inbox target.
+    ///
+    /// Additive to `--relayium-ui-testing-signed-in`, and off by default, so no
+    /// existing acceptance path gains a device row it was not written against.
+    /// What it unlocks is the one surface the offline suite could not reach:
+    /// `DeviceSendSection` renders *Send content* only for a SENDABLE candidate,
+    /// and the plain fixture's rows carry no enrolment at all — so the button at
+    /// the centre of the navigation defect existed in no acceptance run.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let inboxDevicesArgument = "--relayium-ui-testing-inbox-devices"
+    static let offersInboxDevices = ProcessInfo.processInfo.arguments
+        .contains(inboxDevicesArgument)
+
     // nonlocalized: a test-only launch argument, absent from Release
     static let signedInArgument = "--relayium-ui-testing-signed-in"
     /// Signed OUT, but with the account API answered — so the sign-in form can be
@@ -637,6 +650,19 @@ final class UITestAccountTransport: URLProtocol {
     /// **They exist only inside `#if DEBUG`.** No shipped binary carries a
     /// product identifier: the App Store build learns them from the server, and
     /// `StoreKitLinkageTests` reads every shippable source to keep that true.
+    /// The enrolled row's key identity.
+    ///
+    /// A REAL X25519 public key — the base point times a fixed scalar — rather
+    /// than 32 plausible bytes, because `InboxTargetEligibility` runs central's
+    /// own `ValidatePublicKey` on it, low-order refusal included. A literal that
+    /// merely looked like a key would make the row blocked for a reason no
+    /// assertion names. Its private half exists nowhere: nothing in an
+    /// acceptance run seals to this device.
+    // nonlocalized: an acceptance fixture key, never a real one
+    static let inboxPublicKey = "RcfgFQstarnyXIJXGUsUmMdCIhgTabXh_w2XqYUVmlM"
+    // nonlocalized: an acceptance fixture identifier, absent from Release
+    static let inboxKeyID = "key_uitest_inbox"
+
     // nonlocalized: acceptance fixture identifiers, absent from Release
     static let bundleID = "com.relayium.mac"
     // nonlocalized: acceptance fixture identifiers, absent from Release
@@ -702,6 +728,47 @@ final class UITestAccountTransport: URLProtocol {
             {"ID":"dev_other","Name":"\(otherDeviceName)","CreatedAt":1740000000,
             "LastSeenAt":1754000000,"Kind":"cli","Current":false,"LastIP":""}]}
             """, as: DeviceListResponse.self)
+        // The same endpoint, with the `Inbox` subtree central sends for a device
+        // that is actually enrolled — which is what turns `dev_other` from a
+        // blocked row into a target the send surface offers a way into.
+        //
+        // VALIDATED TWICE, because this one body has two readers with two
+        // different shapes: `AccountDevice` for the account screen's list, and
+        // `InboxDeviceRow` for the send model's targets. Validating only the
+        // first is how it would silently go on rendering a blocked row — the
+        // decode would succeed, `Inbox` would come back nil, and every assertion
+        // about the button would fail somewhere far away from the cause.
+        //
+        // Decoding is still not the whole answer: it proves the shape, not that
+        // `InboxTargetEligibility` says yes. The UI test asserts the button by
+        // identifier, which is the part only a running app can settle.
+        if UITestMode.offersInboxDevices {
+            let enrolled = """
+                {"devices":[
+                {"ID":"dev_this","Name":"\(thisDeviceName)","CreatedAt":1750000000,
+                "LastSeenAt":1754600000,"Kind":"app","Current":true,"LastIP":"203.0.113.9"},
+                {"ID":"dev_other","Name":"\(otherDeviceName)","CreatedAt":1740000000,
+                "LastSeenAt":1754000000,"Kind":"cli","Current":false,"LastIP":"",
+                "Inbox":{"Presence":"online","LastHeartbeatAt":1754000000,
+                "PresenceExpiresAt":4102444800,"HeartbeatIntervalSeconds":30,
+                "ProtocolVersion":3,
+                "Capabilities":["inbox.receive.v3","inbox.auto-accept.v1",
+                "inbox.resume.v1","inbox.text.v1"],
+                "ReceiveCapability":"\(InboxCapability.receiveV3)",
+                "AutoAccept":"auto","ReceiveDirReady":true,"Revoked":false,
+                "CanReceive":true,"RegisteredAt":1740000000,
+                "Key":{"ID":"\(inboxKeyID)","Algorithm":"\(InboxProtocol.keyAlgorithm)",
+                "PublicKey":"\(inboxPublicKey)","Generation":4,
+                "CreatedAt":1740000000,"SupersededAt":0,"RevokedAt":0}}}]}
+                """
+            let data = Data(enrolled.utf8)
+            struct InboxDevices: Decodable { let devices: [InboxDeviceRow] }
+            if (try? JSONDecoder().decode(DeviceListResponse.self, from: data)) != nil,
+               let rows = try? JSONDecoder().decode(InboxDevices.self, from: data),
+               rows.devices.contains(where: { $0.inbox != nil }) {
+                out["/api/devices"] = data
+            }
+        }
         // One row, in the state a fresh launch is genuinely in: the key for an
         // object uploaded from somewhere else was never on this device, so the
         // link cannot be rebuilt here. That is the row's honest arm, and the one

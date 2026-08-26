@@ -509,7 +509,7 @@
 				CODE_SIGN_STYLE = Manual;
 				CODE_SIGN_ENTITLEMENTS = Relayium/Relayium.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 7PVYUG4YQS;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -520,7 +520,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 1.3.7;
+				MARKETING_VERSION = 1.3.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "Relayium Mac";
@@ -540,7 +540,7 @@
 				CODE_SIGN_STYLE = Manual;
 				CODE_SIGN_ENTITLEMENTS = Relayium/Relayium.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 7PVYUG4YQS;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -551,7 +551,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 1.3.7;
+				MARKETING_VERSION = 1.3.8;
 				OTHER_CODE_SIGN_FLAGS = "--timestamp";
 				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -567,10 +567,10 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CODE_SIGN_IDENTITY = "-";
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 1.3.7;
+				MARKETING_VERSION = 1.3.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac.UITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -585,10 +585,10 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CODE_SIGN_IDENTITY = "-";
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 1.3.7;
+				MARKETING_VERSION = 1.3.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac.UITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -604,7 +604,7 @@
 				CODE_SIGN_ENTITLEMENTS = RelayiumShare/RelayiumShare.entitlements;
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 7PVYUG4YQS;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -615,7 +615,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 1.3.7;
+				MARKETING_VERSION = 1.3.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac.Share;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "Relayium Mac Share Extension";
@@ -634,7 +634,7 @@
 				CODE_SIGN_ENTITLEMENTS = RelayiumShare/RelayiumShare.entitlements;
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 7PVYUG4YQS;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -645,7 +645,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 1.3.7;
+				MARKETING_VERSION = 1.3.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac.Share;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "Relayium Mac Share Extension";
@@ -776,7 +776,7 @@
 				CODE_SIGN_ENTITLEMENTS = RelayiumAppStore/Relayium.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 7PVYUG4YQS;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -787,7 +787,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 1.3.7;
+				MARKETING_VERSION = 1.3.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac;
 				PRODUCT_NAME = Relayium;
 				SDKROOT = macosx;
@@ -804,7 +804,7 @@
 				CODE_SIGN_ENTITLEMENTS = RelayiumAppStore/Relayium.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 7PVYUG4YQS;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -815,7 +815,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 1.3.7;
+				MARKETING_VERSION = 1.3.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac;
 				PRODUCT_NAME = Relayium;
 				SDKROOT = macosx;
@@ -829,7 +829,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = RelayiumShare/RelayiumShare.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 7PVYUG4YQS;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -840,7 +840,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 1.3.7;
+				MARKETING_VERSION = 1.3.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac.Share;
 				PRODUCT_NAME = RelayiumShare;
 				SDKROOT = macosx;
@@ -855,7 +855,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = RelayiumShare/RelayiumShare.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 7PVYUG4YQS;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -866,7 +866,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 1.3.7;
+				MARKETING_VERSION = 1.3.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac.Share;
 				PRODUCT_NAME = RelayiumShare;
 				SDKROOT = macosx;

@@ -1335,4 +1335,123 @@ final class DeviceInboxUITests: XCTestCase {
             .waitForExistence(timeout: 20),
                       "the menu item named Open did not route to the Device Inbox")
     }
+
+    // MARK: - one authority for the open device space
+
+    /// The sidebar row for any destination, with the same visible fallback
+    /// `sidebarDeviceInbox` uses and for the same macOS 15 reason.
+    private func sidebarRow(_ surface: String, named label: String,
+                            in window: XCUIElement) -> XCUIElement {
+        let stable = element("sidebar\(surface)", in: window)
+        if stable.exists { return stable }
+        let dividing = window.frame.midX
+        let visible = NSPredicate(format: "label == %@ OR value == %@", label, label)
+        return window.descendants(matching: .any).matching(visible)
+            .allElementsBoundByIndex.first { $0.frame.midX < dividing } ?? stable
+    }
+
+    /// **Send content opens the device space after the destination has been
+    /// rebuilt — the owner's defect, driven end to end.**
+    ///
+    /// Reported as: finish a Cross-network pairing, switch to the Device Inbox,
+    /// press *Send content* on the other device, and nothing happens. Cancelling
+    /// the pairing and retrying does not help. Only force-quitting does.
+    ///
+    /// None of it was about the pairing. Switching destination is what does the
+    /// damage: the detail column rebuilds `DeviceInboxSurface` from nothing, and
+    /// the app-scoped send model does not rebuild. The surface used to keep its
+    /// own `@State` copy of which device was open and set it from
+    /// `.onChange(of: deliveries.selectedTargetID)` — so on the way back the copy
+    /// was `nil` while the model still named that device, and pressing the button
+    /// wrote the value already there. An equal write is not a change, the handler
+    /// never fired, and the button stayed dead until the process was killed.
+    ///
+    /// **This is the assertion that a source scan cannot make.** Nothing about
+    /// the wiring looked wrong; what was wrong was that two objects with
+    /// different lifetimes each held half the answer. So the test does the one
+    /// thing that separates their lifetimes — leave the destination and come
+    /// back — and then asks for the device space.
+    ///
+    /// The pairing is NOT completed here: the offline fixture only mints a code
+    /// on the Cross-network destination and waits for a peer that never arrives,
+    /// so no real two-machine pairing takes place. It is present to prove the
+    /// negative — that a live transfer session neither causes this nor is
+    /// consulted by Device Inbox navigation — and it exists to reproduce the
+    /// destination lifecycle switch, not to depend on the session reaching any
+    /// particular state.
+    func testSendContentOpensTheDeviceSpaceAfterTheDestinationIsRebuilt() {
+        launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-devices",
+                "--relayium-ui-testing-file-code"])
+        let window = openDeviceInboxDestination()
+
+        // The device the fixture enrolled, and the control the owner pressed.
+        // Its presence is also the fixture's own check: the button exists only
+        // for a candidate `InboxTargetEligibility` accepted, key included.
+        let open = revealed("inbox-send-open.dev_other", in: window, timeout: 30)
+        XCTAssertTrue(open.exists,
+                      "the enrolled device offers no Send content action")
+        open.click()
+        XCTAssertTrue(revealed("inbox-send-back", in: window, timeout: 20).exists,
+                      "Send content did not open the device space")
+
+        // Away, into a live pairing, and back. This is the whole reproduction:
+        // the destination on the right is rebuilt, the send model is not.
+        sidebarRow("crossNetworkTransfer", named: "Cross-network Transfer",
+                   in: window).click()
+        XCTAssertTrue(element("destination-crossNetworkTransfer", in: window)
+            .waitForExistence(timeout: 20),
+                      "the sidebar did not reach Cross-network Transfer")
+        sidebarRow("deviceInbox", named: "Device Inbox", in: window).click()
+        XCTAssertTrue(element("destination-deviceInbox", in: window)
+            .waitForExistence(timeout: 20),
+                      "the sidebar did not return to the Device Inbox")
+
+        // **The page the user left is the page they come back to**, because the
+        // one durable answer never stopped naming that device. Under the mirror
+        // this is the device list instead — and the button below is the one that
+        // did nothing.
+        XCTAssertTrue(revealed("inbox-send-back", in: window, timeout: 20).exists,
+                      "returning to the Device Inbox lost the open device space")
+
+        // And the way back out still works, from a page nothing on screen
+        // rebuilt: the list returns, and the same device opens again.
+        revealed("inbox-send-back", in: window, timeout: 20).click()
+        let reopen = revealed("inbox-send-open.dev_other", in: window, timeout: 20)
+        XCTAssertTrue(reopen.exists, "leaving the device space did not return to the list")
+        reopen.click()
+        XCTAssertTrue(revealed("inbox-send-back", in: window, timeout: 20).exists,
+                      "the device space could not be opened a second time")
+    }
+
+    /// **Closing and reopening the window is the same lifetime split**, and the
+    /// menu bar is the route a person actually takes to it.
+    ///
+    /// A separate case rather than a variation of the one above, because it is a
+    /// different mechanism reaching the same defect: the whole scene goes,
+    /// taking every `@State` in it, while the app-scoped model does not. A fix
+    /// that only handled destination switching would leave this one live, and
+    /// the Device Inbox is precisely the feature whose window a person closes
+    /// and comes back to.
+    func testTheOpenDeviceSpaceSurvivesClosingAndReopeningTheWindow() {
+        launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-devices"])
+        let window = openDeviceInboxDestination()
+        revealed("inbox-send-open.dev_other", in: window, timeout: 30).click()
+        XCTAssertTrue(revealed("inbox-send-back", in: window, timeout: 20).exists,
+                      "Send content did not open the device space")
+
+        window.typeKey("w", modifierFlags: .command)
+        let statusItem = app.statusItems.firstMatch
+        XCTAssertTrue(statusItem.waitForExistence(timeout: 10),
+                      "the resident app has no menu-bar recovery surface")
+        statusItem.click()
+        app.typeKey("o", modifierFlags: [])
+        let reopened = mainWindow
+        XCTAssertTrue(reopened.waitForExistence(timeout: 20),
+                      "the window did not reopen")
+        XCTAssertTrue(element("destination-deviceInbox", in: reopened)
+            .waitForExistence(timeout: 20),
+                      "reopening did not return to the Device Inbox")
+        XCTAssertTrue(revealed("inbox-send-back", in: reopened, timeout: 20).exists,
+                      "reopening the window lost the open device space")
+    }
 }

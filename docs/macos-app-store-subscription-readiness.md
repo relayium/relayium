@@ -118,6 +118,22 @@ not treat publication as evidence that either risk was fixed. Cancellation of th
 App Store credential dialog during Restore Purchases is a separate UI-only
 truthfulness issue: it arms no purchase and changes no billing state.
 
+## macOS 1.3.8 Finder drag-and-drop release
+
+Build 26 adds Finder drag-and-drop as an additional file-selection input on
+Cross-network Transfer and the Device Inbox. **No subscription product, price,
+entitlement, purchase transition, StoreKit code path or provider configuration
+changes in this release**, and the subscription source was read-only for the
+whole of it: a drag reaches the same `SelectionStore` the existing file pickers
+write to and cannot send, choose a peer or a device, or bypass any plan,
+account, size, count or sandbox gate. The already-public purchase behavior and
+the ambiguous-outcome lock described above are carried forward unchanged.
+
+The owner-deferred macOS purchase-sheet defect — Apple's sheet showing the
+subscription and its price with no actionable confirmation control — is **not**
+addressed by this release and remains open for a separate money-moving change
+under the three-gate policy.
+
 ## macOS 1.3.7 transfer-performance release
 
 Build 25 contains wire-neutral transfer changes only. It keeps macOS 13 as the

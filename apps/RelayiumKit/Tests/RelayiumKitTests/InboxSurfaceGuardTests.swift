@@ -279,6 +279,51 @@ final class InboxSurfaceGuardTests: XCTestCase {
                       "the folder picker would accept a file and call it a folder")
         XCTAssertTrue(folderPicker.contains("func chooseFolders(into store: SelectionStore)"),
                       "there is no folder-only picker for the send screen to call")
+        // **M-1: and a Finder drag, which is a third way to say the same
+        // thing.** It reaches the SAME `selection` both pickers write to, so it
+        // inherits the expansion, the `MAX_FILES` bound, the symlink refusal and
+        // the de-duplication rather than getting a second answer to any of them.
+        XCTAssertTrue(detail.contains(".acceptsFileDrop(into: selection,"),
+                      "the device page does not accept a Finder drag")
+        XCTAssertEqual(occurrences(of: ".acceptsFileDrop(", in: detail), 1,
+                       "two drop targets on one page is two selections")
+        XCTAssertFalse(detail.contains(".onDrop("),
+                       "the device page grew its own drop handling beside the adapter")
+        // **A drag stages; it never sends and it never picks the device.** The
+        // one send on this page is still behind `inbox-send-start`, and it is
+        // still the only place `deliveries.send` is called.
+        XCTAssertEqual(occurrences(of: "deliveries.send(files:", in: detail), 1,
+                       "the device page sends a file batch from more than one place")
+        XCTAssertTrue(detail.contains("Button(L10n.t(.commonSend)) { sendFiles() }"),
+                      "a dragged batch has no explicit Send")
+        XCTAssertFalse(detail.contains("selectTarget(") ,
+                       "the device page chooses its own target rather than reading the model's")
+        // **The stale target is the busy gate.** `target` is nil the moment the
+        // model's selection stops naming this page's peer — revoked, receiving
+        // switched off, removed from the account — and it is re-read on the far
+        // side of the item load, because a revocation can land while the drag's
+        // providers are still resolving.
+        XCTAssertTrue(detail.contains("isBusy: { target == nil }"),
+                      "a drag can stage for a device that is no longer a legal target")
+        // The affordance is a sentence rather than a dashed box, because this is
+        // a grouped Form and a rectangle inside a row reads as a control. It
+        // states both halves: drag, then press Send.
+        XCTAssertTrue(detail.contains("Text(L10n.t(.dropSendHint))")
+                      && detail.contains("\"inbox-send-drop-hint\""),
+                      "nothing on the device page says a drag is accepted")
+        XCTAssertFalse(detail.contains("FileDropZone("),
+                       "a dashed drop rectangle was put inside a grouped form row")
+        // A refusal is NAMED, and named apart from the expansion's own error:
+        // "nothing was staged" and "what you staged cannot be sent" have
+        // different remedies.
+        XCTAssertTrue(detail.contains("\"inbox-send-drop-error\"")
+                      && detail.contains("\"inbox-send-selection-error\""),
+                      "a refused drag and a refused expansion share one message")
+        // And both pickers survive: a drag is not keyboard-reachable, so
+        // replacing the buttons with it would take the capability away.
+        for picker in ["chooseFilesOrFolders(into: selection)", "chooseFolders(into: selection)"] {
+            XCTAssertTrue(detail.contains(picker), "the device page lost \(picker)")
+        }
         // The message is sent EXACTLY as typed. A trim, a normalization or a
         // re-encode here would send bytes the user did not write and a length
         // the counter beside the field did not report.
@@ -316,7 +361,7 @@ final class InboxSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(detail.contains("onBack()"), "the device page cannot be left")
         XCTAssertTrue(detail.contains("\"inbox-send-back\""),
                       "the way back carries no accessibility identifier")
-        XCTAssertTrue(surfaceSource.contains("deliveries.selectTarget(nil)"),
+        XCTAssertTrue(surfaceSource.contains("deliveries.focusPeer(nil)"),
                       "leaving a device page leaves the model still pointed at it")
         // **The composer is bound to the peer this page is about.** Without this
         // the page could render a history for one device over a composer aimed
@@ -971,7 +1016,6 @@ final class InboxSurfaceGuardTests: XCTestCase {
     func testConversationNavigationIsAccountScopedAndHistoryFailuresStayVisible() throws {
         let surface = try macSource("DeviceInbox/DeviceInboxSurface.swift")
         XCTAssertTrue(surface.contains(".onChange(of: inbox.activeAccountID)"))
-        XCTAssertTrue(surface.contains("selectedConversationID = nil"))
         XCTAssertTrue(surface.contains("copiedMessageID = nil"))
         XCTAssertTrue(surface.contains("conversation.entries.filter { $0.isUnread }"),
                       "the home summary counts all history instead of unread history")
@@ -987,13 +1031,125 @@ final class InboxSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(page.contains("inbox.conversationStoreIssue")
                       && surface.contains("inbox.conversationStoreIssue"),
                       "a conversation store failure is invisible on one of the two screens")
-        // **One authority for the open device.** The page follows the model's
-        // selection rather than keeping a second answer that could name a
-        // different machine.
-        XCTAssertTrue(surface.contains(".onChange(of: deliveries.selectedTargetID)"),
-                      "the open page does not follow the model's own selection")
         XCTAssertTrue(surface.contains("private var openPeer: (id: String, name: String)?"),
                       "the open device is resolved from something other than live state")
+    }
+
+    /// **One durable authority for the open device, read on every render rather
+    /// than mirrored on an edge.**
+    ///
+    /// The defect this pins was reported by the owner as *Send content does
+    /// nothing*, and it needed no transfer, no pairing and no failure of any
+    /// kind to reproduce — only leaving the Device Inbox and coming back.
+    ///
+    /// There were two answers to "which device's page is up".
+    /// `InboxSendModel.selectedTargetID` was app-scoped and survived anything
+    /// short of relaunching; `DeviceInboxSurface.selectedConversationID` was
+    /// `@State` on a view the detail column rebuilds from nothing every time the
+    /// user switches destination or reopens the window from the menu bar. So the
+    /// mirror came back `nil` while the model still named device A — and the
+    /// page opened ONLY from `.onChange(of: deliveries.selectedTargetID)`.
+    /// Pressing *Send content* on A wrote A over A. An equal write is not a
+    /// change, `onChange` never fired, the mirror stayed `nil`, and the button
+    /// was dead for the rest of the launch. Cancelling and retrying the pairing
+    /// the user happened to be doing could not help: nothing about it was ever
+    /// involved.
+    ///
+    /// A test that opened a page could not see this. What it needed was for the
+    /// SECOND answer not to exist, which is what these assertions are: no local
+    /// copy, no edge, and the page derived from the model on every render.
+    func testTheOpenDevicePageHasOneAuthorityAndNoLocalMirror() throws {
+        let surface = try macSource("DeviceInbox/DeviceInboxSurface.swift")
+
+        // Derived. `openPeer` reads the model itself, so opening a peer that is
+        // ALREADY the focused one still renders its page.
+        XCTAssertTrue(surface.contains("guard let id = deliveries.focusedPeerID else"),
+                      "the open device is resolved from something other than the model")
+        XCTAssertTrue(surface.contains("deliveries.focusPeer(peerID)"),
+                      "opening a device does not write the model's one answer")
+
+        // **No second answer, and no edge to synchronize it on.** Both halves
+        // matter: a mirror alone is stale state, an `onChange` alone is a
+        // handler that cannot fire on an equal write, and it took both to
+        // produce a button that did nothing.
+        XCTAssertFalse(surface.contains("selectedConversationID"),
+                       "the surface kept a second answer to which device is open")
+        XCTAssertFalse(surface.contains("onChange(of: deliveries.selectedTargetID)"),
+                       "the open page is synchronized on a transition again")
+        for state in surface.components(separatedBy: "\n")
+            .filter({ $0.contains("@State") }) {
+            XCTAssertFalse(state.contains("Conversation") || state.contains("peer")
+                           || state.contains("Peer") || state.contains("target")
+                           || state.contains("Target"),
+                           "a peer/target answer came back into view state: \(state)")
+        }
+
+        // The model side of the same rule: one STORED value, and the send
+        // target derived from it rather than stored beside it.
+        let model = try packageSource("DeviceInbox/InboxSendModel.swift")
+        XCTAssertTrue(model.contains("@Published public private(set) var focusedPeerID: String?"),
+                      "the one durable answer is not published by the model")
+        XCTAssertFalse(model.contains("@Published public private(set) var selectedTargetID"),
+                       "the send target is stored again beside the focused peer")
+        XCTAssertTrue(model.contains("public var selectedTargetID: String? { selectedCandidate?.id }"),
+                      "the send target is not derived from the one stored answer")
+        // Sendability is re-asked on the read rather than remembered, which is
+        // what makes revocation take the composer away with nothing to clear.
+        XCTAssertTrue(model.contains("candidates.first { $0.id == focusedPeerID && $0.isSendable }"),
+                      "a revoked or switched-off device can still answer as the target")
+        // Opening is idempotent by construction: the only guard on `focusPeer`
+        // is that it clears the previous refusal.
+        XCTAssertFalse(model.contains("guard id != focusedPeerID"),
+                       "opening the device that is already open was made a no-op again")
+
+        // **Cross-network transfer does not appear in Device Inbox navigation
+        // at all.** The owner met this defect straight after a pairing, and the
+        // one thing that must not come out of that is a Device Inbox that
+        // consults a transfer session before it will open a page.
+        for name in ["DeviceInbox/DeviceInboxSurface.swift",
+                     "DeviceInbox/DeviceSendSection.swift",
+                     "DeviceInbox/DeviceConversationPage.swift"] {
+            let text = try macSource(name)
+            for forbidden in ["TransferPresence", "LinkWorkspaceModel", "TransferModules",
+                              "crossNetworkTransfer"] {
+                XCTAssertFalse(text.contains(forbidden),
+                               "\(name) reads \(forbidden); a transfer can gate the inbox")
+            }
+        }
+    }
+
+    /// **A page reused for another device carries nothing across, and a page
+    /// redrawn for the SAME device keeps everything.**
+    ///
+    /// `DeviceConversationPage` holds a staged batch, a half-typed message, the
+    /// row a Copy last confirmed and two delete confirmations. Its host used to
+    /// render it inside `if let peer = openPeer` with no identity of its own, so
+    /// a swap from one device to another was the same view with a new `peerID`
+    /// — every one of those values still on it, now under somebody else's name.
+    ///
+    /// The mechanism is identity rather than a clear-list, because a clear-list
+    /// covers what somebody remembered to add to it and the next `@State` on
+    /// that page would be carried silently. The page's own substitution guard
+    /// stays as the answer to a host that forgets; both are asserted here so
+    /// neither can be removed quietly.
+    func testTheDevicePageIsIsolatedPerDeviceByIdentity() throws {
+        let surface = try macSource("DeviceInbox/DeviceInboxSurface.swift")
+        let page = try macSource("DeviceInbox/DeviceConversationPage.swift")
+
+        XCTAssertTrue(surface.contains(".id(peer.id)"),
+                      "the device page is reused across devices with its state intact")
+        // Keyed on the DEVICE, never on something that also moves for the same
+        // device — a redraw that changed identity would erase a message the user
+        // is in the middle of writing.
+        for unstable in [".id(UUID(", ".id(peer.name)"] {
+            XCTAssertFalse(surface.contains(unstable),
+                           "the device page's identity moves for reasons other than the device")
+        }
+        // The host's fallback, kept: see the property's own documentation.
+        XCTAssertTrue(page.contains("stagedFor.serving(FileDropContext(device))"),
+                      "the page lost its own substitution guard")
+        XCTAssertTrue(page.contains(".onChange(of: peerID)"),
+                      "the page no longer notices a host that reuses it")
     }
 
     /// **`inbox.text.v1` is announced by the target that ships the screen, and

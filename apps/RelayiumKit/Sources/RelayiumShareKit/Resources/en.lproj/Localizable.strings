@@ -363,6 +363,8 @@
 /* MARK: drop zone, picker, received result, QR */
 "drop.a11yLabel" = "Files to send";
 "drop.a11yHint" = "Drop files or folders here, or activate to choose them.";
+"drop.sendHint" = "Or drag files and folders here, then press Send.";
+"drop.refusedUnreadable" = "Some of the dragged items couldn’t be read, so nothing was added. Try dragging them again.";
 "picker.prompt" = "Choose";
 "file.unnamed" = "Unnamed file";
 "received.revealInFinder" = "Reveal in Finder";

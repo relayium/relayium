@@ -359,6 +359,8 @@
 /* MARK: 拖放区、选择器、接收结果、二维码 */
 "drop.a11yLabel" = "待发送的文件";
 "drop.a11yHint" = "把文件或文件夹拖到这里，或激活以选择它们。";
+"drop.sendHint" = "也可以把文件或文件夹拖到这里，再点“发送”。";
+"drop.refusedUnreadable" = "部分拖入的项目无法读取，因此什么都没有添加。请重新拖入。";
 "picker.prompt" = "选择";
 "file.unnamed" = "未命名文件";
 "received.revealInFinder" = "在访达中显示";

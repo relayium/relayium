@@ -48,6 +48,35 @@ struct TransferLinkPane: View {
     @State private var draft = ""
     @State private var actionError: String?
 
+    /// **What a Finder drag has staged, and has not sent.**
+    ///
+    /// Owned by the pane rather than by the model, and deliberately separate
+    /// from the batch `pick` builds: `pick` goes through a modal `NSOpenPanel`,
+    /// which IS a moment of confirmation, so it may put its batch straight on
+    /// the link. A drag has no such moment — the user let go over a window, and
+    /// what they let go of is not shown to them anywhere first. So a drop stages
+    /// here, the manifest is rendered, and **Send** below it is what commits.
+    ///
+    /// That is the same rule the picker/drop split has followed everywhere else
+    /// in this app since `chooseFilesOrFolders` stopped replacing the selection.
+    /// It is also what keeps drag-and-drop from being a second answer to "which
+    /// peer": this store cannot exist before `link` holds a verified session,
+    /// because the pane that owns it is not on screen until then.
+    @StateObject private var dropped = SelectionStore()
+    @State private var isDropTargeted = false
+    @State private var dropRefusal: String?
+
+    /// **Which attempt the staged batch above belongs to.**
+    ///
+    /// `dropped` is a `@StateObject` on a pane that survives its link ending and
+    /// is reused for the next attempt, so a batch staged on attempt N is still
+    /// sitting there — listed, with Send beneath it — when N+1 opens with a
+    /// different peer. `admitFileDrop` cannot help: it closes the window inside
+    /// one drag, and this batch landed cleanly, before the substitution. Only a
+    /// lifetime that outlasts the drag can, so the pane reports the attempt it is
+    /// serving and discards on a substitution. See `StagedSelectionLifetime`.
+    @State private var stagedFor = StagedSelectionLifetime()
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
@@ -80,6 +109,32 @@ struct TransferLinkPane: View {
         // can happen while this pane is being rebuilt by the state change that
         // caused it.
         .task(id: link.returnedDraft) { restoreReturnedDraft() }
+        // The first attempt this pane ever renders for is not a substitution:
+        // seeded here so the NEXT one is compared against something.
+        .onAppear { _ = stagedFor.serving(FileDropContext("attempt \(link.attemptGeneration)")) }
+        // **The attempt, not the connection.** A link that ENDS is still the same
+        // link — the digits are gone but the peer the batch was staged for is
+        // the peer it would be sent to when the user reconnects, so ending
+        // discards nothing. What discards is `beginAttempt`, which is the sole
+        // writer of `attemptGeneration` and is on every path into a new attempt,
+        // solicited or not: past it, the pane is showing somebody else.
+        .onChange(of: link.attemptGeneration) { generation in
+            guard stagedFor.serving(FileDropContext("attempt \(generation)")) else { return }
+            discardStagedAttempt()
+        }
+    }
+
+    /// Everything on this pane that belonged to the attempt that has just been
+    /// replaced: the batch nobody sent, the refusal describing a drag onto it,
+    /// and the error its last action left. All three name a peer who is no longer
+    /// here, and the batch in particular is one Send would put on the new one.
+    ///
+    /// `link.actionError` is not touched: the model owns it and `beginAttempt`
+    /// clears it on the same path that bumped the generation.
+    private func discardStagedAttempt() {
+        dropped.clear()
+        dropRefusal = nil
+        actionError = nil
     }
 
     /// Put a handed-back draft in front of the user again, without overwriting
@@ -134,6 +189,7 @@ struct TransferLinkPane: View {
         } else {
             composer
             fileActions
+            droppedBatch
             transcript
             transfers
         }
@@ -259,17 +315,121 @@ struct TransferLinkPane: View {
         }
     }
 
-    /// The two file verbs, beneath the composer rather than behind a mode.
+    /// The two file verbs, beneath the composer rather than behind a mode — and
+    /// **the Finder drag that reaches the same connection without them.**
+    ///
+    /// The drop target is this block and only this block, named by the hint
+    /// under the buttons. Not the whole pane: the composer's `TextEditor` and the
+    /// transfer list's own drag items are inside it, and a container drop would
+    /// be a target the user cannot see the edges of sitting on top of two
+    /// controls that already answer a drag.
+    ///
+    /// It refuses on exactly what the buttons disable on — `link.acceptsWork`,
+    /// which is the link being open AND the security digits answered. There is
+    /// no second copy of that gate here, and a drag while the SAS is pending is
+    /// declined rather than staged: `liveSurface` does not even render this
+    /// block then.
     private var fileActions: some View {
-        HStack(spacing: 8) {
-            Button(L10n.t(.linkSendFile)) { pick(directories: false) }
-                .buttonStyle(.bordered)
-                .disabled(!link.acceptsWork)
-                .accessibilityIdentifier("link-send-file")
-            Button(L10n.t(.linkSendFolder)) { pick(directories: true) }
-                .buttonStyle(.bordered)
-                .disabled(!link.acceptsWork)
-                .accessibilityIdentifier("link-send-folder")
+        VStack(alignment: .leading, spacing: Metrics.tight) {
+            HStack(spacing: 8) {
+                Button(L10n.t(.linkSendFile)) { pick(directories: false) }
+                    .buttonStyle(.bordered)
+                    .disabled(!link.acceptsWork)
+                    .accessibilityIdentifier("link-send-file")
+                Button(L10n.t(.linkSendFolder)) { pick(directories: true) }
+                    .buttonStyle(.bordered)
+                    .disabled(!link.acceptsWork)
+                    .accessibilityIdentifier("link-send-folder")
+            }
+            // States both halves: a drag stages, and Send is still pressed by
+            // hand. A hint that said only "drag files here" would be a promise
+            // that letting go transmits them.
+            Text(L10n.t(.dropSendHint))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("link-drop-hint")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // VERTICAL only. Padding the sides too would inset the two buttons from
+        // the composer above them, so gaining a drop target would have moved
+        // controls that have nothing to do with dragging.
+        .padding(.vertical, Metrics.tight)
+        .contentShape(Rectangle())
+        // Drawn only while a drag is actually over it, so the resting pane keeps
+        // two buttons and a sentence rather than gaining a box.
+        .overlay(
+            RoundedRectangle(cornerRadius: Metrics.corner)
+                .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6]))
+                .foregroundStyle(isDropTargeted && link.acceptsWork
+                                 ? Color.accentColor : Color.clear)
+        )
+        // **The attempt, not just the state.** `acceptsWork` alone would let a
+        // drag that began on a link which ended mid-load stage onto whatever
+        // link is open in its place: this pane is rendered for `.ended` too, so
+        // it and its `@StateObject dropped` outlive the attempt they were drawn
+        // for, and the next attempt is open, unverified-free and not busy. The
+        // generation is the peer identity the busy read cannot express.
+        .acceptsFileDrop(into: dropped,
+                         isBusy: { !link.acceptsWork },
+                         context: { FileDropContext("attempt \(link.attemptGeneration)") },
+                         isTargeted: $isDropTargeted,
+                         onRefusal: { dropRefusal = $0 })
+        // **No `accessibilityElement` wrapper around this block.** It holds two
+        // Buttons, and grouping a container that holds controls is the exact
+        // propagation defect the receive pane has already lost two controls to.
+        // The hint is its own `Text` with its own identifier, so VoiceOver reads
+        // it in place — an element that swallowed the buttons to carry a hint
+        // would have traded the controls for the sentence describing them.
+    }
+
+    /// **What was dragged in, before anybody pressed Send.**
+    ///
+    /// Present only once something has been staged or refused, so the pane a
+    /// user who never drags anything sees is unchanged. The manifest is the same
+    /// `PendingFileList` every other send surface renders — names and sizes,
+    /// never a container path — because this is the one moment at which the user
+    /// can still read what a drag actually picked up and take it back.
+    ///
+    /// **Clear is the cancellation**, and it is the only destructive control
+    /// here: the drop and the picker both append through `SelectionStore.add`,
+    /// so a second drag adds to this batch rather than replacing it, and nothing
+    /// but Clear can discard what is listed.
+    @ViewBuilder
+    private var droppedBatch: some View {
+        if let dropRefusal {
+            InlineMessage(.failure, dropRefusal)
+                .accessibilityIdentifier("link-drop-refusal")
+        }
+        if let message = dropped.error {
+            // The expansion's own refusal — a symlink, an unreadable item, too
+            // many files — in the words `ErrorCopy` already gives every other
+            // selection surface. The roots stay staged so the user can see what
+            // they dropped and drop the rest again without starting over.
+            InlineMessage(.failure, message)
+                .accessibilityIdentifier("link-drop-selection-error")
+        }
+        if !dropped.isEmpty {
+            VStack(alignment: .leading, spacing: Metrics.tight) {
+                if let summary = dropped.summary {
+                    Text(summary)
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("link-drop-summary")
+                }
+                PendingFileList(files: dropped.files)
+                HStack(spacing: 8) {
+                    Button(L10n.t(.commonSend)) { sendDropped() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!link.acceptsWork)
+                        .accessibilityIdentifier("link-drop-send")
+                    // A task mutation, never navigation: it discards the batch
+                    // the user dragged in.
+                    Button(L10n.t(.commonClear)) { clearDropped() }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("link-drop-clear")
+                }
+            }
         }
     }
 
@@ -375,12 +535,59 @@ struct TransferLinkPane: View {
             actionError = store.error ?? L10n.t(.nearbyAddFilesFirst)
             return
         }
+        deliver(expanded.files)
+    }
+
+    /// **Commit the dragged batch, on the same connection and through the same
+    /// checks the picker's batch goes through.**
+    ///
+    /// The gap this has to survive is the one between the render that drew Send
+    /// and the click that arrived: the link can end, or the peer can raise a new
+    /// verification, while the batch sits staged. `link.acceptsWork` is re-read
+    /// here rather than trusted from `disabled`, and `link.send` refuses again
+    /// underneath — a disabled button is a rendering, not a gate.
+    ///
+    /// The batch is cleared only once `stageRealtimeFiles` and `link.send` have
+    /// taken it. A refusal leaves it staged with the reason above it, so the
+    /// user fixes and presses Send rather than dragging the folder in again.
+    private func sendDropped() {
+        guard link.acceptsWork else { return }
+        // Read at the moment of use. `dropped.files` is the expansion the store
+        // already computed; nothing re-walks the disk here, so the manifest sent
+        // is the manifest that was on screen.
+        let files = dropped.files
+        guard !files.isEmpty else { return }
+        guard deliver(files) else { return }
+        clearDropped()
+    }
+
+    private func clearDropped() {
+        dropped.clear()
+        dropRefusal = nil
+    }
+
+    /// Stage a batch and put it on THIS link. True when the link took it.
+    ///
+    /// One implementation for the picker and for the drag, so the `MAX_FILES`
+    /// bound, the per-path byte limit, the symlink refusal, the held file
+    /// descriptors and the error wording cannot come to differ between the two
+    /// ways a file arrives.
+    @discardableResult
+    private func deliver(_ files: [SelectedFile]) -> Bool {
         do {
-            let staged = try stageRealtimeFiles(expanded.files)
+            let staged = try stageRealtimeFiles(files)
             actionError = nil
             link.send(files: staged.metas, sources: staged.sources)
+            // **The model's own answer, not this pane's optimism.** `send` either
+            // enqueues the batch or ARMS it behind a pending verification, and
+            // both clear `actionError` — so a batch it took is one this returns
+            // true for even though nothing has left the machine yet. What it
+            // does NOT clear is an `enqueueFiles` throw, and that is the case a
+            // staged batch must survive rather than be discarded as sent.
+            return link.actionError == nil
         } catch {
             actionError = ErrorCopy.message(for: error)
+            return false
         }
     }
 

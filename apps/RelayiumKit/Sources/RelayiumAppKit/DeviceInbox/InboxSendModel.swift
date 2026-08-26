@@ -39,8 +39,29 @@ public final class InboxSendModel: ObservableObject {
     /// Every device that may be OFFERED — sendable and blocked alike, minus this
     /// one. See `InboxSendCandidate.candidates(from:)` for why blocked rows stay.
     @Published public private(set) var candidates: [InboxSendCandidate] = []
-    /// The device the user chose. Never set by this model on the user's behalf.
-    @Published public private(set) var selectedTargetID: String?
+    /// **The one durable answer to which peer the user is working with** — the
+    /// device whose page is open on macOS, the row ticked in the iOS picker.
+    ///
+    /// It is stored HERE, in the app-scoped model, and nowhere else. That is not
+    /// tidiness: `DeviceInboxSurface` is rebuilt from nothing every time the
+    /// window's detail column switches destination or the unique window is
+    /// closed and reopened from the menu bar, so a copy held in its `@State`
+    /// comes back `nil` while this one is still naming a device. The two then
+    /// disagree, and the disagreement is silent — the list renders, the model
+    /// still holds the target, and *Send content* on that same device writes the
+    /// value that is already there. An equal write is not a change, so anything
+    /// waiting on a transition never runs and the button does nothing at all,
+    /// for the rest of the launch, until the process is killed.
+    ///
+    /// So no surface keeps a second copy and no surface waits for an edge: the
+    /// open page is DERIVED from this on every render, which makes opening a
+    /// device that is already focused a no-op that still renders its page.
+    ///
+    /// It holds ANY peer the user opened, including one that cannot be sent to —
+    /// a removed device, or the read-only bucket that predates authenticated
+    /// attribution. Whether that peer is a legal SEND target is a separate
+    /// question, answered by `selectedCandidate` below and never by this.
+    @Published public private(set) var focusedPeerID: String?
     /// Every send this account still has outstanding, newest first.
     @Published public private(set) var items: [InboxSendItem] = []
     /// Why the newest attempt to start a send was refused, or nil.
@@ -257,7 +278,7 @@ public final class InboxSendModel: ObservableObject {
         rows = []
         devices = []
         candidates = []
-        selectedTargetID = nil
+        focusedPeerID = nil
         directory = .idle
         refusal = nil
         actionError = nil
@@ -297,13 +318,20 @@ public final class InboxSendModel: ObservableObject {
         devices = rows
         candidates = InboxSendCandidate.candidates(from: rows)
         directory = .loaded
-        // A device that has gone away, been revoked, or had receiving switched
-        // off stops being the chosen one. Leaving it selected would put a Send
-        // button in front of the user whose only outcome is a refusal.
-        if let id = selectedTargetID,
-           candidates.first(where: { $0.id == id && $0.isSendable }) == nil {
-            selectedTargetID = nil
-        }
+        // **Nothing is cleared here, and that is the point of deriving the
+        // target rather than storing it.** A device that has gone away, been
+        // revoked or had receiving switched off stops being a legal target the
+        // instant this list is adopted, because `selectedCandidate` reads the
+        // list it is answering about — there is no stored answer left over to
+        // put a Send button in front of the user whose only outcome is a
+        // refusal, and no window between the row changing and something
+        // remembering to clear it.
+        //
+        // `focusedPeerID` deliberately survives: the user is still LOOKING at
+        // that device, its local history is still real and still readable, and
+        // closing the page under them would be this model deciding a navigation
+        // it does not own. The surface returns to the list on its own when the
+        // peer has neither a history nor a row — see `openPeer` there.
         publish()
     }
 
@@ -347,28 +375,68 @@ public final class InboxSendModel: ObservableObject {
     /// **The single answer to "is a per-device screen still legal".** A macOS
     /// send screen is bound to one device, and the three ways that binding can
     /// stop being true are already handled here rather than anywhere a view
-    /// could reimplement them: `adopt(_ rows:)` drops a selection whose device
-    /// went away, was revoked or had receiving switched off, and
-    /// `isolateFromPreviousAccount` drops it when the account changes. A surface
-    /// that renders only while this is non-nil therefore returns to the list by
-    /// construction instead of sending to whichever row moved into that place.
+    /// could reimplement them: a device that went away, was revoked or had
+    /// receiving switched off is not in `candidates` as a sendable row, so this
+    /// lookup fails on the first read after the list is adopted; and
+    /// `isolateFromPreviousAccount` drops the focus itself when the account
+    /// changes. A surface that renders a COMPOSER only while this is non-nil
+    /// therefore stops offering one by construction instead of sending to
+    /// whichever row moved into that place.
     ///
     /// Computed rather than published: it is a lookup in two values that are
     /// already `@Published`, so a view reading it redraws when either moves and
     /// there is no third copy of the selection to fall out of step.
+    ///
+    /// **`isSendable` is asked HERE, against the current list**, rather than
+    /// trusted from the moment the row was chosen. `selectTarget` refuses a
+    /// blocked row on the way in, but a row that was legal when it was chosen
+    /// can stop being legal a second later, and a stored answer would stay
+    /// right until something remembered to go and clear it. Derived, the three
+    /// ways a binding goes stale — revoked, receiving switched off, removed
+    /// from the account — take the target away on the very read that discovers
+    /// them, and `isolateFromPreviousAccount` covers the fourth.
     public var selectedCandidate: InboxSendCandidate? {
-        guard let selectedTargetID else { return nil }
-        return candidates.first { $0.id == selectedTargetID }
+        guard let focusedPeerID else { return nil }
+        return candidates.first { $0.id == focusedPeerID && $0.isSendable }
     }
 
-    /// Choose a device, or choose none. A blocked row can never become the
-    /// selection: a selection the Send button then refuses is a dead end the
-    /// user has to discover by pressing it.
+    /// The device this model may send to, or nil.
+    ///
+    /// **Derived, not stored**, and every send in this file reads it rather than
+    /// a device id of its own. See `focusedPeerID` for why there is exactly one
+    /// stored answer, and `selectedCandidate` for why sendability is re-asked
+    /// here instead of remembered.
+    public var selectedTargetID: String? { selectedCandidate?.id }
+
+    /// **Open a peer, whatever it turns out to be.** Any id: a live device, a
+    /// device removed from the account that still has a local history, or the
+    /// read-only bucket that predates authenticated attribution.
+    ///
+    /// Deliberately without `selectTarget`'s filter, because the question it
+    /// answers is navigation rather than aim. A peer that cannot receive still
+    /// has a page worth reading, and refusing to open it would leave the user
+    /// pressing a row that does nothing. Whether that page may SEND is
+    /// `selectedCandidate`'s answer and is taken independently.
+    ///
+    /// Idempotent: opening the peer that is already open leaves the same value
+    /// in place and is not an error. Nothing observes a transition, so nothing
+    /// is missed when there is not one.
+    public func focusPeer(_ id: String?) {
+        refusal = nil
+        focusedPeerID = id
+    }
+
+    /// Choose a device to SEND to, or choose none. A blocked row can never
+    /// become the selection: a selection the Send button then refuses is a dead
+    /// end the user has to discover by pressing it.
+    ///
+    /// Writes the same single authority `focusPeer` does — there is one answer,
+    /// with two doors into it and different admission rules on each.
     public func selectTarget(_ id: String?) {
         refusal = nil
-        guard let id else { selectedTargetID = nil; return }
+        guard let id else { focusedPeerID = nil; return }
         guard candidates.first(where: { $0.id == id })?.isSendable == true else { return }
-        selectedTargetID = id
+        focusedPeerID = id
     }
 
     // MARK: - outstanding work, read from disk

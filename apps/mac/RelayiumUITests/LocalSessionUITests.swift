@@ -543,6 +543,39 @@ final class LocalSessionUITests: XCTestCase {
         ])
     }
 
+    /// **M-1: the connected cross-network pane offers a Finder drag, and the
+    /// drag has not sent anything.**
+    ///
+    /// Asserted here rather than as a source scan because the thing in question
+    /// is what a person actually finds on screen once a pairing code has reached
+    /// a peer — and this is the only place in the suite where that pane is drawn
+    /// over a link that genuinely exists rather than over a fixture.
+    ///
+    /// The drag GESTURE is still not exercised: `XCUITest` cannot originate a
+    /// Finder drag into the app, and every decision behind one is covered by
+    /// `FileDropAdmissionTests` instead. What this proves is the half a unit
+    /// test cannot: that the affordance is rendered on the real pane, that the
+    /// keyboard-reachable pickers survived beside it, and that the pane is in
+    /// its pre-send state — no staged batch, so no Send and no Clear, because
+    /// nothing has been dropped yet.
+    private func assertTheCrossNetworkPaneOffersDragAndBothPickersWithoutSending() {
+        XCTAssertTrue(element("link-drop-hint").waitForExistence(timeout: 30),
+                      "the connected cross-network pane never says a drag is accepted")
+        // Both pickers, unchanged. A drag is not keyboard-reachable, so it is an
+        // addition and may never be the only way in.
+        for picker in ["link-send-file", "link-send-folder"] {
+            XCTAssertTrue(element(picker).exists,
+                          "the cross-network pane lost \(picker) when it gained a drop target")
+        }
+        // Nothing dropped, so nothing staged: the batch controls exist only once
+        // a drag has put something in front of the user to confirm.
+        for staged in ["link-drop-send", "link-drop-clear", "link-drop-summary",
+                       "link-drop-refusal", "link-drop-selection-error"] {
+            XCTAssertFalse(element(staged).exists,
+                           "the pane shows \(staged) with nothing dragged in")
+        }
+    }
+
     private func assertDirectScreenReleased() {
         let window = mainWindow
         assertModuleReleasedItsSession("pairing", connectPhase: [
@@ -610,6 +643,9 @@ final class LocalSessionUITests: XCTestCase {
 
         try connectDirect(harness, port: pairPort)
         assertBothCounterpartsHoldALiveLink(harness, pairPort: pairPort)
+
+        // ── M-1: what the cross-network pane offers a file, on a REAL link ───
+        assertTheCrossNetworkPaneOffersDragAndBothPickersWithoutSending()
 
         // ── (1) and (2): both directions, repeatedly ─────────────────────────
         //
