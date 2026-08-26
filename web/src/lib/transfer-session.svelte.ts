@@ -82,6 +82,37 @@ export interface SessionDeps {
   /** 消息会话是否正在进行。可选，不传就是"没有"——所以现有调用方和测试一行都不用改。
    *  见 busy()。 */
   textActive?: () => boolean;
+  /** 这间房自己的 `/api/ice` 答复。可选，不传就是"早就到了"。见 RoomIceGate。 */
+  roomIce?: RoomIceGate;
+}
+
+/**
+ * This room's own `/api/ice` answer, as a lane that must not build without it
+ * sees it.
+ *
+ * The room is joined a round trip BEFORE its configuration arrives, and inside
+ * that window `rtcConfig()` is the default RTC configuration: no ICE servers,
+ * no relay pool, no TURN credential. A transport built from it is committed to
+ * it for the life of the connection, so no lane may build one until the answer
+ * is installed — and "may not build yet" is not the same fact as "busy".
+ *
+ * Passed in rather than read from the component, because the window belongs to
+ * whoever owns the socket and the fetch, and because a lane has to be testable
+ * without either. Both legacy lanes take the same gate — see text-link.ts.
+ */
+export interface RoomIceGate {
+  /** Is this room still waiting for its own answer? */
+  pending: () => boolean;
+  /**
+   * Park until the answer is installed.
+   *
+   * Resolves `true` when this room's configuration is in place, and `false`
+   * when the wait was superseded: the room the parked work was for is gone, and
+   * building for it now would put one rendezvous's credentials on another's
+   * socket. There is deliberately no timeout behind it — the fetch it waits on
+   * always answers, an unreachable `/api/ice` included.
+   */
+  whenReady: () => Promise<boolean>;
 }
 
 // 掉线之后每一侧还愿意等多久重连并续传，超时就判这次传输失败。
@@ -128,18 +159,34 @@ export function wouldExceedDeclared(declared: number | undefined, offset: number
  *
  * 一条**全新的**文件 offer 同样不该劫持续传：它拿到的是 busy 回包（暂停中的接收本身
  * 就让 busy() 为真），这也是它一直该拿到的东西。
+ *
+ * **`busy` and `park` are different answers to different questions.** `busy`
+ * means "somebody else has this lane", and every sender that speaks this
+ * generation treats it as TERMINAL: it surfaces "peer busy" and does not retry.
+ * That is the right answer to a conflict and the wrong answer to a room whose
+ * `/api/ice` reply has not landed yet — nobody has the lane, the offer is
+ * perfectly acceptable, and the only thing missing is the configuration to
+ * build a transport out of. Answering `busy` there would turn a slow HTTP
+ * response into a failed transfer for a peer that did nothing wrong, and for a
+ * peer that has already been waiting the sender's whole ICE timeout it would
+ * turn one into a failure it cannot recover from. So the offer waits: `park`.
+ *
+ * Ordering is the rest of the rule. A real conflict is still `busy` whatever
+ * the configuration is doing (a transfer in flight is a transfer in flight),
+ * and a resume still outranks both — see above.
  */
 export function routeOffer(
   msg: Pick<InboundSignal, "sdp" | "resume" | "text">,
-  ctx: { from: string; pausedFrom: string | null; busy: boolean },
-): "resume" | "receive" | "busy" | "ignore" {
+  ctx: { from: string; pausedFrom: string | null; busy: boolean; roomIcePending?: boolean },
+): "resume" | "receive" | "busy" | "park" | "ignore" {
   if (msg.sdp?.type !== "offer") return "ignore";
   const gen = signalGeneration(msg);
   // resume 排在 busy 之前：暂停中的接收让 busy() 为真，而那条 offer 正是它在等的。
   if (gen === "resume") return ctx.pausedFrom === ctx.from ? "resume" : "ignore";
   // text 世代归消息监听器；别的世代（以后新增的）一律不碰。
   if (gen !== "file") return "ignore";
-  return ctx.busy ? "busy" : "receive";
+  if (ctx.busy) return "busy";
+  return ctx.roomIcePending ? "park" : "receive";
 }
 
 export function createTransferSession(deps: SessionDeps) {
@@ -176,10 +223,31 @@ export function createTransferSession(deps: SessionDeps) {
   const rtcConfig = () => deps.rtcConfig();
 
   // ── RECEIVE ──────────────────────────────────────────────────────────────────
+  /**
+   * The one inbound offer waiting for this room's configuration.
+   *
+   * At most one, and only for as long as `roomIce.pending()`. What retires it is
+   * IDENTITY, not a flag: every retirement point simply drops the record, and
+   * the parked continuation compares the record it parked with the one it finds
+   * when it wakes. So a retirement and a wake-up can never both build, a second
+   * retirement is a no-op, and a peer that re-offers gets a fresh record rather
+   * than a second transport.
+   */
+  let parkedOffer: { from: string; offer: InboundSignal } | null = null;
+  const roomIcePending = () => deps.roomIce?.pending() === true;
+  /** Retire parked inbound work: the socket, room or peer it waited on is gone.
+   *  Idempotent, and the only thing that ever clears the record from outside. */
+  function retireParkedInbound() { parkedOffer = null; }
+
   function listenForIncoming() {
     signaling().onSignal(async (from, data) => {
       const msg = data as InboundSignal;
-      switch (routeOffer(msg, { from, pausedFrom: pausedRecv?.from ?? null, busy: busy() })) {
+      switch (routeOffer(msg, {
+        from,
+        pausedFrom: pausedRecv?.from ?? null,
+        busy: busy(),
+        roomIcePending: roomIcePending(),
+      })) {
         case "ignore":
           return;
         case "resume":
@@ -193,15 +261,65 @@ export function createTransferSession(deps: SessionDeps) {
           // 按世代会把它丢掉，等于白等一个超时。
           signaling().sendSignal(from, { busy: true });
           return;
+        case "park":
+          await parkInbound(from, msg);
+          return;
         case "receive":
-          try {
-            await beginReceive(from, msg);
-          } catch (err) {
-            console.error("relayium receive setup error", err);
-            recv = { peer: from, dir: "recv", files: [], index: 0, sent: 0, total: 0, status: "connectFail", done: true, ok: false, speed: 0 };
-          }
+          await receiveNow(from, msg);
       }
     });
+  }
+
+  /** Build the receive side for an offer this lane has decided to take. */
+  async function receiveNow(from: string, msg: InboundSignal) {
+    try {
+      await beginReceive(from, msg);
+    } catch (err) {
+      console.error("relayium receive setup error", err);
+      recv = { peer: from, dir: "recv", files: [], index: 0, sent: 0, total: 0, status: "connectFail", done: true, ok: false, speed: 0 };
+    }
+  }
+
+  /**
+   * Hold an acceptable offer until this room has a configuration to answer it
+   * with, then take it exactly once.
+   *
+   * The alternative is the one this replaced: answer `busy`. That is safe for
+   * this page and terminal for the peer — it does not retry — so a room joined
+   * a round trip early would deterministically fail a transfer for a peer that
+   * was already waiting when the page arrived. Refusing is not accepting.
+   */
+  async function parkInbound(from: string, offer: InboundSignal) {
+    const gate = deps.roomIce;
+    if (!gate) return; // unreachable: `park` is only routed when the gate is pending
+    if (parkedOffer && parkedOffer.from !== from) {
+      // A SECOND peer while one is already waiting is the ordinary conflict this
+      // lane has always answered, and it gets the answer it would get a moment
+      // later anyway: one transfer at a time.
+      signaling().sendSignal(from, { busy: true });
+      return;
+    }
+    // …and the same peer offering again is that peer's own retry, so the newer
+    // offer supersedes the older one — its SDP is the one it is listening for an
+    // answer to. The old record is retired by being replaced, exactly once.
+    const mine = { from, offer };
+    parkedOffer = mine;
+    const live = await gate.whenReady();
+    // Whoever still owns the record releases it, INCLUDING on a supersede: a
+    // wait abandoned with the slot left occupied would answer the next room's
+    // first offer `busy` on behalf of a peer from the previous one.
+    const owned = parkedOffer === mine;
+    if (owned) parkedOffer = null;
+    // Retired while parked — by the room boundary (`live` is false), by the peer
+    // leaving, by a cancellation, or by this peer's own newer offer. Either way
+    // this record no longer owns the wait, and nothing here may build.
+    if (!live || !owned) return;
+    // Re-asked rather than remembered: the wait spans a whole HTTP round trip,
+    // and the mutex is precisely what can have changed inside it. The message
+    // lane re-checks its own precheck at this same boundary, for this same
+    // reason, and this is where a real conflict finally does answer `busy`.
+    if (busy()) { signaling().sendSignal(from, { busy: true }); return; }
+    await receiveNow(from, offer);
   }
 
   /** Signal authentication for a resume connection, keyed by the session the
@@ -922,13 +1040,21 @@ export function createTransferSession(deps: SessionDeps) {
     /** 用户按下取消。方向由卡片自己知道。 */
     abort: (dir: "send" | "recv") => (dir === "send" ? sendAbort?.() : recvAbort?.()),
     /** 切换房间时把两侧都拆掉。 */
-    abortAll: () => { sendAbort?.(); recvAbort?.(); },
+    abortAll: () => { retireParkedInbound(); sendAbort?.(); recvAbort?.(); },
+
+    /** 这个对端走了。停在这里等本房间 ICE 答复的那条 offer 跟着它一起作废：
+     *  answer 发给一个已经离开的对端谁也收不到，而那条记录不该活到下一次唤醒去建连。
+     *  别的对端停的那条不受影响。 */
+    peerGone: (peerId: string) => { if (parkedOffer?.from === peerId) parkedOffer = null; },
+    /** Retire parked inbound work outright — the socket it was parked on is
+     *  gone, so the room it belongs to cannot be answered. Idempotent. */
+    retireParkedInbound,
 
     /** 收起一张已完成的卡片（自动消失的定时器用）。identity 守卫由调用方做。 */
     dismissSend: (x: Xfer) => { if (send === x) send = null; },
     dismissRecv: (x: Xfer) => { if (recv === x) recv = null; },
     /** 房间切换时的硬复位。 */
-    reset: () => { send = null; recv = null; incoming = null; sasCode = ""; sendPath = undefined; recvPath = undefined; },
+    reset: () => { retireParkedInbound(); send = null; recv = null; incoming = null; sasCode = ""; sendPath = undefined; recvPath = undefined; },
 
     /** ?debug=1 面板轮询的当前连接。 */
     conn: () => activeConn,

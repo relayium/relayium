@@ -1190,30 +1190,62 @@ describe("no transport is built while the room has no configuration", () => {
     expect(all).not.toContain("legacyText: textSession,");
   });
 
-  it("refuses an inbound legacy offer rather than answering it from nothing", () => {
-    // The other direction, and it cannot be parked from here: both lanes
-    // snapshot `rtcConfig()` inside their own inbound handlers, which this
-    // component does not reach. So it fails CLOSED at the only two levers it
-    // does have — the one that decides whether the file lane is free to take an
-    // offer, and the one text-link asks before it spends a commit-reveal.
-    const fileDeps = block("const session = createTransferSession({", "const legacyFiles = {");
-    expect(fileDeps).toContain("textActive: () => textSession.active() || workspace?.blocksLegacyInbound === true");
-    expect(fileDeps).toContain("|| roomIcePending,");
+  // The INBOUND half of each lane cannot be gated from this component at all:
+  // both snapshot `rtcConfig()` inside their own offer handler, which App never
+  // reaches. The only two levers it has from here are the file lane's
+  // `textActive` and the message lane's `canAccept` — and both mean "somebody
+  // else has this lane", which every legacy sender reads as TERMINAL. Refusing
+  // there turned a slow `/api/ice` into a deterministic failed transfer for a
+  // peer that had done nothing wrong and was very likely already waiting.
+  //
+  // So the lanes take the gate itself and park the offer. What they DO with it —
+  // park rather than refuse, at most one, retire exactly once, build exactly one
+  // transport from the installed configuration, and still answer `busy` to a
+  // genuine conflict — is executed, not restated:
+  //   - transfer-session.routing.test.ts (the file lane, and `routeOffer`)
+  //   - text-link.test.ts (the message lane)
+  // What is asserted here is only the composition those tests cannot see: that
+  // this component builds ONE gate and gives it to BOTH lanes.
+  it("hands the room's readiness to both legacy lanes", () => {
+    const gate = block("const roomIce: RoomIceGate = {", "const textLink = createTextLink({");
+    // The same two facts the outbound wrappers use, so a lane and a wrapper can
+    // never disagree about whether this room is ready.
+    expect(gate).toContain("pending: () => roomIcePending,");
+    expect(gate).toContain("whenReady: () => whenRoomIce(),");
     const textLinkDeps = block("const textLink = createTextLink({", "const textSession = createTextSession({");
-    expect(textLinkDeps).toContain("canAccept: (from) => !roomIcePending && textSession.canAcceptFrom(from),");
+    const fileDeps = block("const session = createTransferSession({", "const legacyFiles = {");
+    expect(textLinkDeps).toContain("roomIce,");
+    expect(fileDeps).toContain("roomIce,");
+    // …and the refusal it replaces is gone from both levers. Either one would
+    // put the pending room back where a sender reads it as "peer busy" — and
+    // `textActive` would additionally carry it into `busy`, which is what
+    // `warnsOnLeave` is built from, prompting on every reload.
+    expect(textLinkDeps).toContain("canAccept: (from) => textSession.canAcceptFrom(from),");
+    expect(textLinkDeps).not.toContain("roomIcePending");
+    expect(fileDeps).not.toContain("roomIcePending");
+    const files = block("const legacyFiles = {", "const legacyText = {");
+    expect(files).toContain("get busy() { return session.busy; },");
+    expect(files).toContain("get transferActive() { return session.transferActive; },");
   });
 
-  it("keeps that refusal inside the lane, out of the navigation guard", () => {
-    // `textActive` above injects the pending room into the session's own
-    // `busy()`, which is aimed at exactly one reader: `routeOffer`. This is the
-    // boundary it must not cross — `warnsOnLeave` is built from `busy`, and a
-    // page that claims a transfer is in progress while it waits for an HTTP
-    // response prompts the user on every reload and disables the update banner.
-    const files = block("const legacyFiles = {", "const legacyText = {");
-    expect(files).toContain("get busy() { return session.busy && !roomIcePending; },");
-    // Exact rather than approximate: a room in this window has just been reset,
-    // so `transferActive` is the untouched question and stays forwarded.
-    expect(files).toContain("get transferActive() { return session.transferActive; },");
+  it("retires parked inbound work at every boundary that ends the room", () => {
+    // A parked offer outliving its room is the one way this could build a stale
+    // transport, so every end-of-room event has to reach both lanes. The room
+    // switch is covered twice over — `settleRoomIce(false)` supersedes the wait
+    // itself — and that is deliberate: retirement is idempotent by identity, and
+    // the explicit calls also cover a cancellation that does not switch rooms.
+    const left = block("signaling.onPeerLeft((peerId) => {", "signaling.onSignal(onPeerRelayRtt);");
+    expect(left).toContain("session.peerGone(peerId);");
+    expect(left).toContain("textLink.peerGone(peerId);");
+    // Before the branch: a code room that was never joined closes terminally and
+    // never settles the window, so anything parked there would wait forever.
+    const closed = block("signaling.onClose(() => {", "if (roomCode && !joinedRoom)");
+    expect(closed).toContain("session.retireParkedInbound();");
+    expect(closed).toContain("textLink.retireParkedInbound();");
+    const switching = code(fn("switchRoom"));
+    expect(switching).toContain("session.abortAll();"); // …which retires the file lane's
+    expect(switching).toContain("session.reset();");
+    expect(switching).toContain("textLink.retireParkedInbound();");
   });
 
   it("leaves a LAN room, a codeless page and a STUN-only code exactly as immediate", () => {

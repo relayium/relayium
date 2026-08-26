@@ -23,7 +23,7 @@
   import { registerServiceWorker, drainSharedFiles } from "./lib/share-target";
   import { requestNotifyPermission, notifyTransfer } from "./lib/notify";
   import { MAX_FILES } from "./lib/transfer";
-  import { createTransferSession, type Xfer } from "./lib/transfer-session.svelte";
+  import { createTransferSession, type RoomIceGate, type Xfer } from "./lib/transfer-session.svelte";
   import { createPeerWorkspace, type PeerWorkspace } from "./lib/peer-workspace.svelte";
   import { createUnifiedTextOpener } from "./lib/unified-text-open";
   import { createActivityAnnouncer, type ActivityEdge } from "./lib/activity-announcement";
@@ -115,6 +115,22 @@
   let selfIP = $state("");
   let peers = $state<Peer[]>([]);
 
+  /**
+   * This room's ICE readiness, handed to both legacy lanes below.
+   *
+   * The SAME gate the outbound wrappers use (`whenRoomIce`), given to the lanes
+   * because the INBOUND half of each lane is inside the lane: both snapshot
+   * `rtcConfig()` in their own offer handler, which this component never
+   * reaches. The only lever it has from here is a refusal, and a refusal is
+   * answered `busy` — terminal to every legacy sender, which does not retry. A
+   * room joined a round trip early would then deterministically fail a transfer
+   * for a peer that was already waiting. So the lanes park the offer instead,
+   * and this is what they park on.
+   */
+  const roomIce: RoomIceGate = {
+    pending: () => roomIcePending,
+    whenReady: () => whenRoomIce(),
+  };
   // 收发管道 + 它们的状态（send/recv/incoming/SAS/每向路径）都住在这里。
   // 依赖用 getter 传进去：signaling 会随房间切换整个换掉，rtcConfig 依赖中继选优
   // 的结果，两者都不能在创建时定死。
@@ -125,14 +141,9 @@
     signaling: () => signaling,
     rtcConfig: () => rtcConfig(),
     // 握手之前就问：能拒就别白跑一次 commit-reveal，也别白占一次 TURN 分配。
-    //
-    // `roomIcePending` is the same answer one step earlier: a room whose
-    // `/api/ice` reply has not landed has no servers, no pool and no
-    // credentials, so accepting here would run the whole handshake on top of a
-    // transport built from nothing. Asked at the gate rather than inside the
-    // handshake because that is the last point before a `RTCPeerConnection`
-    // exists — see `whenRoomIce`.
-    canAccept: (from) => !roomIcePending && textSession.canAcceptFrom(from),
+    // 只问冲突。"这间房还没拿到 ICE 答复"不是冲突，由 roomIce 那条路等，不是从这里拒。
+    canAccept: (from) => textSession.canAcceptFrom(from),
+    roomIce,
   });
   const textSession = createTextSession({
     connect: textLink.connect,
@@ -149,37 +160,26 @@
     rtcConfig: () => rtcConfig(),
     t: () => messages[lang()],
     flash,
-    // Three reasons this lane may not take an inbound offer right now, and the
-    // third is the room's own configuration. `routeOffer` reads exactly this
-    // through `busy()`, so a room that has not been given its servers, pool and
-    // credentials yet answers the offer instead of building a transport out of
-    // the empty ones. It is the only lever this component has on that path —
-    // the file lane snapshots `rtcConfig()` inside its own inbound handler —
-    // and it fails CLOSED, which is the direction that cannot lose data.
-    textActive: () => textSession.active() || workspace?.blocksLegacyInbound === true
-      || roomIcePending,
+    // 互斥那一半，只算真正的冲突。房间的 ICE 答复没到不属于这里：它走 roomIce，
+    // 停下来等，而不是混进 busy() 里冒充"有人在传"——busy 对发起方是终局。
+    textActive: () => textSession.active() || workspace?.blocksLegacyInbound === true,
+    roomIce,
   });
   /**
    * The legacy lanes as the workspace router sees them.
    *
-   * Two overrides and one mask, and nothing else: every other member forwards,
-   * so the router, the surface and the navigation guard read the sessions
-   * themselves exactly as before.
+   * Two overrides and nothing else: every other member forwards, so the router,
+   * the surface and the navigation guard read the sessions themselves exactly as
+   * before — `busy` included, which is what keeps `warnsOnLeave` from prompting
+   * on every reload while the page waits for an HTTP response.
    *
-   *  - `sendFiles`/`openWith` are the two ways this page STARTS a legacy
-   *    transport, and the router reaches them for every peer that does not route
-   *    `link/1`. They park on the room's answer instead of snapshotting an empty
-   *    configuration into a connection that then carries the whole transfer.
-   *    Parked, not refused: a superseded wait abandons (the room the intent was
-   *    for is gone), and a satisfied one goes on to build exactly once.
-   *  - `busy` subtracts the pending state that `textActive` above injects into
-   *    the session's own `busy()`. That injection is aimed at ONE reader —
-   *    `routeOffer`, inside the lane — and this is the boundary it must not
-   *    cross: `warnsOnLeave` is built from it, and a page that claims a transfer
-   *    is in progress while it waits for an HTTP response would prompt the user
-   *    on every reload and refuse the update banner. Exact rather than
-   *    approximate: a room in this window has just been reset, so there is no
-   *    transfer for the flag to be hiding.
+   * `sendFiles`/`openWith` are the two ways this page STARTS a legacy transport,
+   * and the router reaches them for every peer that does not route `link/1`.
+   * They park on the room's answer instead of snapshotting an empty
+   * configuration into a connection that then carries the whole transfer.
+   * Parked, not refused: a superseded wait abandons (the room the intent was for
+   * is gone), and a satisfied one goes on to build exactly once. The inbound
+   * halves park on the same gate, but inside the lanes — see `roomIce`.
    */
   const legacyFiles = {
     get incoming() { return session.incoming; },
@@ -188,7 +188,7 @@
     get sasCode() { return session.sasCode; },
     get sendPath() { return session.sendPath; },
     get recvPath() { return session.recvPath; },
-    get busy() { return session.busy && !roomIcePending; },
+    get busy() { return session.busy; },
     get transferActive() { return session.transferActive; },
     async sendFiles(peerId: string, files: PickedFile[]) {
       if (!(await whenRoomIce())) return;
@@ -1604,6 +1604,12 @@
     });
     signaling.onPeerLeft((peerId) => {
       workspace.peerLeft(peerId);
+      // A legacy offer of that peer's, parked on this room's answer, goes with
+      // it: the answer would be addressed to an id the hub no longer routes, and
+      // the record must not survive into a wake-up that builds for nobody.
+      // Scoped to the departing peer — another peer's parked offer is untouched.
+      session.peerGone(peerId);
+      textLink.peerGone(peerId);
       // The gate stops waiting for a peer the server says has gone, and drops
       // the map it measured with: the next peer gets its own full grace rather
       // than an instant release on somebody else's numbers.
@@ -1613,6 +1619,12 @@
     });
     signaling.onSignal(onPeerRelayRtt); // capture peers' relay-RTT maps (ignored by the WebRTC handlers)
     signaling.onClose(() => {
+      // Whatever this close turns out to mean, an inbound offer parked on this
+      // room's answer cannot be answered any more: the socket that would carry
+      // the answer is gone, and peer ids do not survive a reconnect. Retired
+      // before the branch, because the terminal one never settles the window.
+      session.retireParkedInbound();
+      textLink.retireParkedInbound();
       // In a code room, a close before we ever joined means the code/link was
       // invalid/expired or the room was full — surface that, don't retry.
       if (roomCode && !joinedRoom) { linkDead = true; return; }
@@ -1703,6 +1715,10 @@
     resetHandoffLanes(); // …including which of them had settled a pre-upload lane
     revokeHandoff(); // …and any Send confirmed against the room being left
     textSession.end(); // 换房间就是换对端，消息会话跟着结束（历史留在页面上）
+    // …连同停在旧房间答复上的那条入站消息 offer。文件那条道由上面的 abortAll/reset
+    // 一并作废；两条道最终都还会再被 resetRelaySelection 的 settleRoomIce(false)
+    // 唤醒一次并作废——同一条记录只会被处理一次，重复调用是空操作。
+    textLink.retireParkedInbound();
     // **The join and the configuration are started together, not in order.**
     //
     // Joining a room needs a code and a socket; it does not need an ICE server,

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createTransferSession, routeOffer } from "./transfer-session.svelte";
 import type { SessionDeps } from "./transfer-session.svelte";
-import type { InboundSignal } from "./webrtc";
+import type { InboundSignal, RtcConfig } from "./webrtc";
 import { loadLang, messages } from "./i18n.svelte";
 import { ready } from "./crypto";
 
@@ -22,14 +22,27 @@ function fakeSignaling() {
   };
 }
 
+/**
+ * 这间房拿到 `/api/ice` 答复之前的那份配置，和之后的那份。
+ *
+ * 窗口里 `rtcConfig()` 返回的是一份默认配置：没有 ICE 服务器、没有中继池、没有 TURN
+ * 凭据——而拿它建出来的连接会带着这份空配置活完一生。所以"建了几条、用的哪一份"是
+ * 这条闸门唯一说了算的事，下面每条断言都落在 `built` 上。
+ */
+const EMPTY_CONFIG: RtcConfig = { iceServers: [] };
+const ROOM_CONFIG: RtcConfig = { iceServers: [{ urls: "turn:relay.example:3478" }] };
+const built: RtcConfig[] = [];
+
 // A minimal RTCPeerConnection so the positive control lands on "connecting"
 // rather than on the error path — otherwise the control would pass for the wrong
-// reason and stop proving anything.
+// reason and stop proving anything. 构造函数记账，因为"没建"和"建了一条空的"在
+// session.recv 上看不出区别。
 class FakePC {
   onicecandidate: unknown = null;
   ondatachannel: unknown = null;
   onconnectionstatechange: unknown = null;
   connectionState = "new";
+  constructor(config: RtcConfig) { built.push(config); }
   createDataChannel() { return { binaryType: "", bufferedAmountLowThreshold: 0, readyState: "connecting", onopen: null, onmessage: null, onclose: null, send() {}, close() {} }; }
   async createOffer() { return { type: "offer", sdp: "offer" }; }
   async createAnswer() { return { type: "answer", sdp: "answer" }; }
@@ -39,18 +52,43 @@ class FakePC {
   close() { this.connectionState = "closed"; }
 }
 
-function makeSession(textActive = false) {
+/** App 的 roomIcePending / whenRoomIce / settleRoomIce，缩到测试能驱动的三个动作。 */
+function fakeRoomIce() {
+  let pending = true;
+  let waiters: ((live: boolean) => void)[] = [];
+  const wake = (live: boolean) => {
+    const parked = waiters;
+    waiters = [];
+    for (const cb of parked) cb(live);
+  };
+  return {
+    gate: {
+      pending: () => pending,
+      whenReady: () => (pending ? new Promise<boolean>((r) => waiters.push(r)) : Promise.resolve(true)),
+    },
+    /** 本房间的答复装好了（App 里是 applyRoomIce）。 */
+    install() { pending = false; wake(true); },
+    /** 换房间：停在旧房间上的活全部作废，而新房间又开着自己的窗口
+     *  （App 里是 resetRelaySelection：settleRoomIce(false) 之后 roomIcePending 再置真）。 */
+    supersede() { wake(false); },
+  };
+}
+
+function makeSession(textActive = false, roomIce?: SessionDeps["roomIce"]) {
   const sig = fakeSignaling();
+  // 可变的一格：互斥状态要能在"停等"的中途改变，那正是一整个 HTTP 往返里会发生的事。
+  const state = { textActive };
   const deps: SessionDeps = {
     signaling: () => sig.client as never,
-    rtcConfig: () => ({ iceServers: [] }),
+    rtcConfig: () => (roomIce?.pending() ? EMPTY_CONFIG : ROOM_CONFIG),
     t: () => messages.en,
     flash: () => {},
-    textActive: () => textActive,
+    textActive: () => state.textActive,
+    roomIce,
   };
   const session = createTransferSession(deps);
   session.listenForIncoming();
-  return { session, sig };
+  return { session, sig, state };
 }
 
 const FILE_OFFER: InboundSignal = { sdp: { type: "offer", sdp: "v=0" }, commit: btoa("c".repeat(32)) };
@@ -63,13 +101,14 @@ beforeEach(async () => {
   // any state and every assertion below passes for the wrong reason.
   await ready();
   await loadLang("en");
+  built.length = 0;
   vi.stubGlobal("RTCPeerConnection", FakePC);
 });
 
 // listenForIncoming's handler is async and beginReceive awaits, so state lands a
 // microtask later than the injection.
 const settle = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0)); };
-afterEach(() => { vi.unstubAllGlobals(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("listenForIncoming generation routing", () => {
   // 复现的那个 bug：listenForIncoming 只挡掉 resume 世代，没挡 text 世代，所以一次
@@ -213,5 +252,200 @@ describe("routeOffer", () => {
     for (const ctx of [idle, paused, { ...idle, busy: true }]) {
       expect(routeOffer({ ...offer, text: true }, ctx)).toBe("ignore");
     }
+  });
+
+  // ── "还没拿到配置"和"忙"是两个不同的答案 ────────────────────────────────────
+  // busy 对发起方是**终局**：它打出 "peer busy" 就不再重试了。对一间只是还没拿到
+  // /api/ice 答复的房间回 busy，等于把一次慢 HTTP 变成一次确定性的传输失败——而这条
+  // offer 本身完全可以接，缺的只是一份能拿去建连的配置。
+  const pending = { ...idle, roomIcePending: true };
+
+  it("parks a plain file offer while the room has no configuration", () => {
+    expect(routeOffer(offer, pending)).toBe("park");
+  });
+
+  it("still answers busy first: a real conflict is a conflict whatever the room is doing", () => {
+    expect(routeOffer(offer, { ...pending, busy: true })).toBe("busy");
+  });
+
+  it("keeps resume ahead of the pending room, exactly as it is ahead of busy", () => {
+    expect(routeOffer({ ...offer, resume: true }, { ...paused, roomIcePending: true })).toBe("resume");
+  });
+
+  it("changes nothing about the generations it never takes", () => {
+    expect(routeOffer({ ...offer, text: true }, pending)).toBe("ignore");
+    expect(routeOffer({ ...offer, resume: true }, pending)).toBe("ignore");
+    expect(routeOffer({}, pending)).toBe("ignore");
+    expect(routeOffer({ sdp: { type: "answer", sdp: "v=0" } }, pending)).toBe("ignore");
+  });
+
+  it("receives as before once the answer is in, and for a caller that has no gate", () => {
+    expect(routeOffer(offer, { ...idle, roomIcePending: false })).toBe("receive");
+    expect(routeOffer(offer, idle)).toBe("receive");
+  });
+});
+
+// ── 停等，而不是拒绝 ─────────────────────────────────────────────────────────
+//
+// 房间是**先加入、后拿配置**的（见 App 的 applyRoomIce）。窗口里唯一安全的做法是
+// 什么都别建；而"安全地拒绝"不等于"接受"：busy 让发起方直接失败并且不再重试，所以
+// 一间提前一个往返加入的房间，会对一个本来就已经在等的旧版对端造成一次确定性的建连
+// 失败。这一组测的就是"停等"这条路本身：窗口里 0 条连接、答复到了恰好 1 条、用的是
+// 装好的那份配置，而每一个房间边界都把停着的活作废掉且只作废一次。
+describe("an inbound file offer while the room has no ICE configuration", () => {
+  it("parks it instead of answering busy, and stays out of the navigation guard", async () => {
+    const ice = fakeRoomIce();
+    const { session, sig } = makeSession(false, ice.gate);
+    sig.inject("p1", FILE_OFFER);
+    await settle();
+    expect(sig.sent).toEqual([]);      // 一个字都不能回：busy 是终局
+    expect(session.recv).toBe(null);   // beginReceive 没有跑
+    expect(session.incoming).toBe(null);
+    expect(built).toEqual([]);         // 更没有拿空配置 new 出一条连接
+    // 停等不是"在传"。warnsOnLeave 读的就是 busy：一间刚 reset 过的房间里没有任何
+    // 传输可言，却会在每次刷新时弹一次"确定要离开吗"，并且压掉更新提示条。
+    expect(session.busy).toBe(false);
+  });
+
+  it("builds exactly one receive, from the configuration that was installed", async () => {
+    const ice = fakeRoomIce();
+    const { session, sig } = makeSession(false, ice.gate);
+    sig.inject("p1", FILE_OFFER);
+    await settle();
+    ice.install();
+    await settle();
+    expect(built).toEqual([ROOM_CONFIG]); // 一条，且不是窗口里那份空的
+    expect(session.recv).not.toBe(null);
+    expect(session.recv!.peer).toBe("p1");
+    expect(session.recv!.status).toBe("connecting");
+  });
+
+  it("builds nothing however long the answer takes", async () => {
+    vi.useFakeTimers();
+    const ice = fakeRoomIce();
+    const { session, sig } = makeSession(false, ice.gate);
+    sig.inject("p1", FILE_OFFER);
+    // 五秒是中继选优自己那条期限，它管的是"对端会不会说话"，不是"配置到没到"。
+    // 时间在这条道上没有投票权：这里推 30 秒，仍然是 0 条。
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(built).toEqual([]);
+    expect(sig.sent).toEqual([]);
+    expect(session.recv).toBe(null);
+  });
+
+  it("still replies busy to a real conflict while the room is pending", async () => {
+    const ice = fakeRoomIce();
+    const { session, sig } = makeSession(true, ice.gate); // 消息会话在跑
+    sig.inject("p1", FILE_OFFER);
+    await settle();
+    expect(sig.sent).toEqual([{ to: "p1", data: { busy: true } }]);
+    ice.install();
+    await settle();
+    expect(built).toEqual([]);
+    expect(session.recv).toBe(null);
+  });
+
+  it("re-asks the mutex when it wakes: a conflict that started during the wait wins", async () => {
+    const ice = fakeRoomIce();
+    const { session, sig, state } = makeSession(false, ice.gate);
+    sig.inject("p1", FILE_OFFER);
+    await settle();
+    expect(sig.sent).toEqual([]);
+    // 停等横跨一整个 HTTP 往返，消息会话完全可能在这中间开起来。停下来时问过的那次
+    // 不算数，醒来要重新问一遍——这也正是 busy 真正该发出去的地方。
+    state.textActive = true;
+    ice.install();
+    await settle();
+    expect(built).toEqual([]);
+    expect(session.recv).toBe(null);
+    expect(sig.sent).toEqual([{ to: "p1", data: { busy: true } }]);
+  });
+
+  it("parks at most one: a second peer gets the busy the first one did not", async () => {
+    const ice = fakeRoomIce();
+    const { session, sig } = makeSession(false, ice.gate);
+    sig.inject("p1", FILE_OFFER);
+    sig.inject("p2", FILE_OFFER);
+    await settle();
+    expect(sig.sent).toEqual([{ to: "p2", data: { busy: true } }]);
+    ice.install();
+    await settle();
+    expect(built).toEqual([ROOM_CONFIG]); // 一条，不是两条
+    expect(session.recv!.peer).toBe("p1"); // 先到的那条，不是后来的
+  });
+
+  it("lets the same peer's newer offer supersede its own parked one", async () => {
+    const ice = fakeRoomIce();
+    const { session, sig } = makeSession(false, ice.gate);
+    sig.inject("p1", FILE_OFFER);
+    sig.inject("p1", { ...FILE_OFFER, sdp: { type: "offer", sdp: "v=0 retry" } });
+    await settle();
+    expect(sig.sent).toEqual([]); // 同一个对端重试不是冲突
+    ice.install();
+    await settle();
+    expect(built).toEqual([ROOM_CONFIG]); // 顶掉，不是各建一条
+    expect(session.recv!.peer).toBe("p1");
+  });
+
+  it("retires a parked offer when its peer leaves, and only that peer's", async () => {
+    const ice = fakeRoomIce();
+    const { session, sig } = makeSession(false, ice.gate);
+    sig.inject("p1", FILE_OFFER);
+    session.peerGone("p9"); // 别人走了，与它无关
+    session.peerGone("p1");
+    session.peerGone("p1"); // 作废是幂等的
+    ice.install();
+    await settle();
+    expect(built).toEqual([]);
+    expect(session.recv).toBe(null);
+    expect(sig.sent).toEqual([]);
+  });
+
+  it("retires parked work on a cancellation, a hard reset and a dead socket", async () => {
+    for (const retire of [
+      (s: ReturnType<typeof makeSession>["session"]) => s.abortAll(),
+      (s: ReturnType<typeof makeSession>["session"]) => s.reset(),
+      (s: ReturnType<typeof makeSession>["session"]) => s.retireParkedInbound(),
+    ]) {
+      built.length = 0;
+      const ice = fakeRoomIce();
+      const { session, sig } = makeSession(false, ice.gate);
+      sig.inject("p1", FILE_OFFER);
+      await settle();
+      retire(session);
+      retire(session); // 每一条都必须是幂等的
+      ice.install();
+      await settle();
+      expect(built).toEqual([]);
+      expect(session.recv).toBe(null);
+    }
+  });
+
+  it("abandons on a room switch without holding the slot against the next room", async () => {
+    const ice = fakeRoomIce();
+    const { session, sig } = makeSession(false, ice.gate);
+    sig.inject("p1", FILE_OFFER);
+    await settle();
+    ice.supersede(); // 换房间：这条停等作废，新房间自己的窗口开着
+    await settle();
+    expect(built).toEqual([]);
+    // 位子要真的腾出来。否则新房间的第一条 offer 会因为上一间房留下的那条记录挨一个
+    // 不该有的 busy，而那对发起方同样是终局。
+    sig.inject("p2", FILE_OFFER);
+    await settle();
+    expect(sig.sent).toEqual([]);
+    ice.install();
+    await settle();
+    expect(built).toEqual([ROOM_CONFIG]);
+    expect(session.recv!.peer).toBe("p2");
+  });
+
+  it("receives immediately when no gate is passed at all", async () => {
+    // 反面对照，也是这条闸门的变异证明：把 roomIce 拿掉，这一组的第一条必然变红。
+    const { session, sig } = makeSession(false, undefined);
+    sig.inject("p1", FILE_OFFER);
+    await settle();
+    expect(built).toEqual([ROOM_CONFIG]);
+    expect(session.recv!.peer).toBe("p1");
   });
 });
