@@ -14,6 +14,8 @@ import {
   type MixedPeerLink,
   type PeerLinkDeps,
 } from "./peer-link.svelte";
+import { createRelaySelection } from "./relay-selection";
+import { chooseRtcConfig, type RelayEntry } from "./ice";
 import { LINK_CAPTURE_MAX_BYTES, connectLink, connectResumeLink, type Conn, type InboundSignal } from "./webrtc";
 import { authPayload, linkLeavePayload } from "./webrtc-core";
 import type { SignalingClient } from "./signaling";
@@ -2740,6 +2742,107 @@ describe("the relay gate", () => {
       await expect(pending).rejects.toBeInstanceOf(LinkRequestTimeoutError);
       manager.stop();
       vi.useRealTimers();
+    });
+  });
+
+  /**
+   * **The gate had already opened, and then the peer it opened for left.**
+   *
+   * Composed with the room's REAL agreement rather than a hand-driven gate,
+   * because what has to hold here is a property of the two together: the gate
+   * re-locks in `relay-selection`, and what that is worth is measured on this
+   * manager's wire — no request, no offer, and no configuration snapshotted for
+   * the replacement until its own map has arrived.
+   */
+  describe("composed with the room's real relay agreement", () => {
+    const pool: RelayEntry[] = [
+      { id: "near", iceServers: [{ urls: ["turn:near.example:3478"] }] },
+      { id: "far", iceServers: [{ urls: ["turn:far.example:3478"] }] },
+    ];
+
+    /**
+     * A room whose gate has settled and opened on `first`'s map, with nothing
+     * built on it — `App.svelte`'s wiring, minus the page.
+     *
+     * `near` is what those two maps agree on and `far` is what the replacement
+     * below chooses, so which peer decided is never ambiguous. The deadlines are
+     * inert: every test here turns on a map arriving, not on one timing out.
+     */
+    function settledRoom(selfId: string, connect: PeerLinkDeps["connect"]) {
+      const sig = signalingHarness();
+      const selection = createRelaySelection({
+        publish: () => {},
+        setTimer: () => 0 as unknown as ReturnType<typeof setTimeout>,
+        clearTimer: () => {},
+      });
+      selection.reset(pool);
+      const manager = createPeerLinkManager({
+        selfId: () => selfId, signaling: () => sig.signaling,
+        rtcConfig: () => chooseRtcConfig({ iceServers: [], relays: pool }, selection.takeChoice()),
+        supportsLink: () => true,
+        connect,
+      });
+      manager.setRelayGate(selection.gate);
+      manager.listen();
+
+      selection.noteRoster(["first"]);
+      selection.notePeer("first");
+      selection.record("near", 10);
+      selection.record("far", 90);
+      selection.receive("first", { relayRtt: { near: 15, far: 400 } });
+      selection.finishMeasurement();
+      expect(selection.gate.ready()).toBe(true);
+      expect(selection.selectedRelayId).toBe("near");
+      return { sig, selection, manager };
+    }
+
+    it("holds the replacement's request off the wire after an explicit left", async () => {
+      const transport = transportHarness();
+      const { sig, selection, manager } = settledRoom("z", transport.connect);
+      expect(sig.sent).toEqual([]);
+      expect(transport.connect).not.toHaveBeenCalled();
+
+      // The hub confirms the peer's socket is gone; `App` retires it in both
+      // halves, exactly as `signaling.onPeerLeft` does.
+      manager.rosterPeerGone("first");
+      selection.peerGone("first");
+
+      // A replacement arrives and this side wants a link with it. "z" > "a", so
+      // the frame is a request — and its thirty-second timeout starts with it.
+      const pending = manager.ensure("a");
+      void pending.catch(() => {});
+      await tick();
+      expect(sig.sent).toEqual([]);
+      expect(manager.status).toBe("requesting");
+
+      selection.receive("a", { relayRtt: { far: 4 } });
+      await tick();
+      expect(sig.sent).toEqual([{ to: "a", data: { linkRequest: true, link: true } }]);
+      expect(selection.selectedRelayId).toBe("far");
+      manager.stop();
+    });
+
+    it("builds the replacement's transport on the replacement's own relay after a roster-only departure", async () => {
+      const transport = recordingTransport();
+      const { selection, manager } = settledRoom("a", transport.connect);
+
+      // One roster frame carrying both halves, diffed exactly as
+      // `App.noteRelayPeers` does it: departures first, arrivals second.
+      for (const gone of selection.noteRoster(["b"])) manager.rosterPeerGone(gone);
+      selection.notePeer("b");
+
+      const pending = manager.ensure("b"); // "a" < "b" → this side offers
+      void pending.catch(() => {});
+      await tick();
+      expect(transport.connect).not.toHaveBeenCalled();
+
+      selection.receive("b", { relayRtt: { far: 4 } });
+      await tick();
+      expect(transport.configs).toEqual([{
+        iceServers: [{ urls: ["turn:far.example:3478"] }],
+        iceTransportPolicy: "relay",
+      }]);
+      manager.stop();
     });
   });
 });

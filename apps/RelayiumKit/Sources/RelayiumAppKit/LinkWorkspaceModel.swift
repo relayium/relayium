@@ -1186,6 +1186,63 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // withdrawn the ask that reached the wire; this is the half that never
         // did.
         if gatedLinkAttempt?.peerId == peerId { gatedLinkAttempt = nil }
+        recloseRelayGate(room, generation: mine)
+    }
+
+    /// **The hole between a settled choice and the transport that was going to
+    /// use it.**
+    ///
+    /// The gate opens once and, until this, stayed open for the rest of the
+    /// room. That is right for as long as the peer it opened for is here — the
+    /// choice is that peer's, and the link about to be built is with it — and
+    /// wrong the moment that peer leaves before anything has been built. The
+    /// gate is then standing open with nobody's map behind it, so the NEXT
+    /// peer's first legal `link/1` frame is assembled on the departed peer's
+    /// relay, or on the fallback, before its own map can possibly arrive. It is
+    /// the same defect the peer-scoped grace closed at the front of a room,
+    /// reached from the one direction that grace cannot see: after the release.
+    ///
+    /// So the gate goes back to waiting, its old deadline is invalidated, and
+    /// the room's ICE goes back to the unchosen fallback `attach` installed —
+    /// which is what "clear the chosen configuration" means here, since a choice
+    /// this room has not built anything with lives nowhere else. A replacement
+    /// peer then arms a full fresh grace through `noteRelayPeerPresent`, exactly
+    /// as the first one did.
+    ///
+    /// ## The three states it must leave alone
+    ///
+    ///  - **A room with no pool.** No negotiator, no gate, nothing to reopen:
+    ///    every same-network room and every STUN-only code stays immediate.
+    ///  - **A choice a peer that is still here is contributing to.** A room that
+    ///    loses one of two contributors keeps the merged map and the choice made
+    ///    from it, which is the same answer merging has always given.
+    ///  - **A choice a transport has already consumed.** `LinkRoomRouter` answers
+    ///    that rather than this object guessing from a connection state: a router
+    ///    holding a claimed or assembling establishment refuses the hold, because
+    ///    parking its queue head would stall the frames that link is being built
+    ///    from. On a refusal nothing here changes, so the outbound half and the
+    ///    inbound half of the gate cannot disagree about whether it is shut.
+    private func recloseRelayGate(_ room: PairingRoom, generation mine: Int) {
+        guard let negotiator = room.negotiator, room.relayGateOpen,
+              !negotiator.hasPeerMaps(),
+              router?.holdHandoff() == true else { return }
+        room.relayGateOpen = false
+        room.relayGracePeer = nil
+        // Invalidated rather than merely cleared, for the same reason a departure
+        // invalidates one: a deadline parked before this must not be able to
+        // recognise the room it wakes up in — see `relayGraceToken`.
+        room.relayGraceToken &+= 1
+        let resolved = RelaySelection.resolve(room.config, chosen: nil)
+        roomICE = RoomICE(config: room.config,
+                          servers: resolved.servers, relayOnly: resolved.relayOnly)
+        // A peer that is STILL here gets its own bounded grace rather than an
+        // indefinite hold. A gate can be open on one peer's elapsed deadline
+        // while another sits in the room having sent nothing, and after this
+        // nothing else would arm a grace for it until its next frame — which may
+        // never come. Sorted, so the choice of peer is the same on every run.
+        if let next = room.roster.sorted().first {
+            noteRelayPeerPresent(next, generation: mine)
+        }
     }
 
     /// Who this room had evidence of that the roster frame just published does

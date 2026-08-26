@@ -281,6 +281,30 @@ final class LinkRoomRouter: @unchecked Sendable {
         if wake { wakeDrain() }
     }
 
+    /// **The room's precondition became undecided again: hold the handoff once
+    /// more.**
+    ///
+    /// The mirror of `releaseHandoff`, for the one thing that can unmake a
+    /// decision this router has already been told about: the peer whose evidence
+    /// settled it leaving before anything was built. The room owns that judgment
+    /// — see `LinkWorkspaceModel.recloseRelayGate` — and this owns the one part
+    /// of it the room cannot see.
+    ///
+    /// **Answers whether the hold is now in force, and refuses in two states.**
+    /// A router with no socket has no epoch to hold; the next `attach` takes its
+    /// own hold. A router already holding an establishment is the important one:
+    /// claimed or assembling, that link's frames are queued behind this hold, and
+    /// parking the queue head would stall the very establishment the connection
+    /// is being built from — a gate perturbing a transport that already exists,
+    /// which is exactly what it must never do. A refusal leaves both halves of
+    /// the room's gate as they were, which is why the caller must read it.
+    func holdHandoff() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard signaling != nil, live == nil else { return false }
+        handoffHeld = true
+        return true
+    }
+
     /// End the current epoch and begin the next one. Answers the new epoch.
     ///
     /// The hold is epoch state, so it is REPLACED here rather than preserved: a

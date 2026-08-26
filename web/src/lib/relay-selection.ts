@@ -175,6 +175,21 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
    * that fires an abandoned deadline directly can state.
    */
   let waitToken = 0;
+  /**
+   * Whether anything in this room has already been BUILT from what this gate
+   * released.
+   *
+   * Set by `takeChoice`, which is the one read on the connection path: every
+   * caller of `App.svelte`'s `rtcConfig()` passes the answer straight to a
+   * transport constructor, so a read is a transport, and a transport is a
+   * configuration this page is committed to for the life of that connection.
+   *
+   * The gate can therefore tell its two states apart, which is what a departure
+   * turns on: a choice merely settled and standing open is state about links
+   * that do not exist yet and may be taken back, while one a transport has
+   * consumed may not — see `relock`. Room-scoped like everything else here.
+   */
+  let built = false;
 
   /**
    * Stop waiting, and make the wait that was running unrecognisable.
@@ -234,6 +249,58 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
     if (settled()) release();
   }
 
+  /**
+   * **Close a gate that opened for a peer that has since gone, before anything
+   * was built with it.**
+   *
+   * The gate opens once, and until this it stayed open for the rest of the room.
+   * That is right for as long as the peer it opened for is here — the choice is
+   * that peer's, and the link about to be built is with it — and wrong the
+   * moment that peer leaves before any transport exists. The gate is then
+   * standing open with nobody's map behind it, so the NEXT peer's first legal
+   * `link/1` frame is built the instant it is wanted: on the departed peer's
+   * relay, or on the fallback, before its own map can possibly arrive. It is the
+   * same defect the peer-scoped grace closed at the front of a room, reached
+   * from the one direction that grace cannot see — after the release.
+   *
+   * So the gate goes back to waiting and a replacement arms a full fresh grace,
+   * exactly as the first peer did. `RelaySelection`/`LinkWorkspaceModel` carry
+   * the same rule natively, because the two ends of a pairing must agree about
+   * when a link may be built at all.
+   *
+   * ## The three states it leaves alone
+   *
+   *  - **A room with no pool**: nothing to choose, nothing to reopen. Every LAN
+   *    room and every STUN-only code stays immediate.
+   *  - **A choice a peer that is still here is contributing to.** A room that
+   *    loses one of two contributors keeps the merged map and the choice made
+   *    from it, which is the same answer merging has always given.
+   *  - **A choice a transport has consumed** — see `built`. Its configuration is
+   *    snapshotted inside a connection that exists; re-locking would be the gate
+   *    reaching a transport rather than the builds ahead of it, and the page
+   *    would hold frames for a link that is already up.
+   */
+  function relock() {
+    if (!open || pool.length === 0 || built) return;
+    if (contributors.size > 0) return;
+    open = false;
+    // `theirs` is empty whenever nothing is contributing one — `receive` is the
+    // only writer and always records its sender — so the choice is already null
+    // here. What is taken back is the PERMISSION, which is the whole of what an
+    // open gate is.
+    gracePeer = null;
+    // Nothing is armed while the gate is open, so this arms nothing new; it
+    // invalidates. A deadline that fired in the same turn its owner was
+    // superseded must not be able to recognise the room it wakes up in.
+    abandonDeadline();
+    // A peer that is STILL here gets its own bounded grace rather than an
+    // indefinite hold: the gate may have been opened by somebody else's elapsed
+    // deadline, and nothing would arm a grace for this one until its next frame,
+    // which may never come. Sorted, so the choice is the same on every run.
+    const [next] = [...roster].sort();
+    if (next) selection.notePeer(next);
+  }
+
   // Named rather than returned inline so `gate.notePeer` can delegate to the
   // one implementation above it instead of being a second copy of the same
   // arming rules.
@@ -241,8 +308,24 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
     /** This side's map so far — cumulative, and only ever growing within a room. */
     get mine() { return mine; },
     get theirs() { return theirs; },
-    /** The relay both peers agreed on, or null. */
+    /** The relay both peers agreed on, or null. A plain read: the debug panel's
+     *  mirrors and the tests use it, and neither is building anything. */
     get selectedRelayId() { return selected; },
+
+    /**
+     * The relay both peers agreed on, read in order to BUILD with it.
+     *
+     * The one read on the connection path — `App.svelte`'s `rtcConfig()`, whose
+     * every caller hands the answer straight to a transport constructor. It is
+     * the same value `selectedRelayId` gives; what it adds is the record that
+     * this room has now committed a connection to it, which is what stops a
+     * later departure taking the gate back underneath a transport that exists.
+     * See `built` and `relock`.
+     */
+    takeChoice(): string | null {
+      built = true;
+      return selected;
+    },
 
     /**
      * A new room. Everything scoped to the old one goes, including its parked
@@ -266,6 +349,7 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
       selected = null;
       measured = false;
       gracePeer = null;
+      built = false;
       // No pool is nothing to wait for, which is every LAN room and every
       // STUN-only code. Those must stay immediate.
       //
@@ -363,6 +447,11 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
      * reason: a fresh grace that is instantly satisfied by a departed peer's
      * measurements is not a grace at all.
      *
+     * And an ALREADY OPEN gate goes with it too — see `relock`. Clearing the map
+     * without that closed only half of the hole: the choice was unmade, but the
+     * permission it had already been granted stood, so a replacement peer's first
+     * legal frame went out with no wait at all.
+     *
      * **The one departure path**, reached by a hub `left` frame and by a roster
      * that no longer names the peer alike. Idempotent, and has to be: both
      * signals arrive for an ordinary disconnect, in either order.
@@ -373,9 +462,11 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
         theirs = {};
         reselect();
       }
-      if (gracePeer !== peerId) return;
-      gracePeer = null;
-      abandonDeadline();
+      if (gracePeer === peerId) {
+        gracePeer = null;
+        abandonDeadline();
+      }
+      relock();
     },
 
     /**
@@ -397,6 +488,7 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
       roster = new Set();
       selected = null;
       measured = false;
+      built = false;
       open = false;
       // The one deadline that is NOT peer-scoped, and it is a different thing:
       // it bounds a configuration that may never arrive, not a peer that may

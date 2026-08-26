@@ -375,8 +375,15 @@
   // It lives in ice.ts so it is unit-testable. In here it had no coverage at
   // all, and the case it got wrong (no relay selected yet on a pool-only
   // deployment) is exactly the one that stranded cross-network peers.
+  //
+  // `takeChoice` rather than `selectedRelayId`, and that is not a rename: every
+  // caller of this function passes the answer straight to a transport
+  // constructor, so a read here IS a connection committing to that relay for its
+  // whole life. The gate records it, which is what stops a peer leaving later
+  // from taking the choice back underneath a transport that already exists —
+  // see `relock` in relay-selection.ts.
   const rtcConfig = (): RtcConfig =>
-    chooseRtcConfig({ iceServers, relays: relayPool }, relaySelection.selectedRelayId);
+    chooseRtcConfig({ iceServers, relays: relayPool }, relaySelection.takeChoice());
 
   // ── nearest-relay selection ──────────────────────────────────────────────────────
   // Each peer measures its RTT to every pool relay; the maps are swapped over signaling

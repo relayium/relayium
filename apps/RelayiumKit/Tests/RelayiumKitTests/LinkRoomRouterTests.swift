@@ -1735,4 +1735,57 @@ final class LinkRoomRouterTests: XCTestCase {
         XCTAssertEqual(rig.admission.boundPeerId, "",
                        "the departing link ends with its epoch, not with the next room's gate")
     }
+
+    /// **A room whose precondition became undecided again holds the gate again.**
+    ///
+    /// The peer whose relay map opened the gate can leave before anything was
+    /// built with it, and the next peer must not inherit that permission. The
+    /// re-armed hold has to park a handoff exactly as the hold `attach` installs
+    /// does — and release exactly as it does.
+    func testAReleasedGateCanBeHeldAgainAndHoldsTheNextOffer() async {
+        let rig = rig()
+        XCTAssertTrue(rig.router.holdHandoff(), "an idle router has nothing to protect")
+
+        rig.socket.deliver(from: "peer-1", offer())
+        await settle()
+        XCTAssertTrue(rig.transports.isEmpty, "the re-armed hold parks the handoff too")
+
+        rig.router.releaseHandoff()
+        await settle()
+        XCTAssertEqual(rig.peers, ["peer-1"])
+        XCTAssertEqual(rig.initialSignals.first ?? nil, offer(),
+                       "and the offer survived the second hold as it survives the first")
+    }
+
+    /// **The gate may not be re-armed over an establishment this router holds.**
+    ///
+    /// A claimed or assembling link owns the queue: its own inbound frames are
+    /// ordered behind the handoff, so parking the head again would stall the
+    /// signals the connection is being built from — a gate reaching a transport
+    /// that already exists, which is the one thing it must never do. The refusal
+    /// is answered rather than silent, because the room reads it to decide
+    /// whether to shut its outbound half as well.
+    func testTheGateCannotBeHeldAgainOverAnEstablishmentTheRouterHolds() async {
+        let rig = rig()
+        rig.socket.deliver(from: "peer-1", offer())
+        await settle()
+        XCTAssertEqual(rig.peers, ["peer-1"])
+
+        XCTAssertFalse(rig.router.holdHandoff(),
+                       "a claimed establishment is not something a gate may park")
+
+        rig.socket.deliver(from: "peer-1", candidate("c0"))
+        await settle()
+        XCTAssertEqual(rig.controls[0].received.map(\.signal), [candidate("c0")],
+                       "the live establishment's own frames must keep reaching it")
+    }
+
+    /// A router with no socket has no epoch to hold. The next `attach` takes its
+    /// own hold, and answering true here would claim a room this object does not
+    /// have.
+    func testADetachedRouterCannotBeHeld() async {
+        let rig = rig()
+        rig.router.detach()
+        XCTAssertFalse(rig.router.holdHandoff())
+    }
 }

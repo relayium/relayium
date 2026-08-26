@@ -583,3 +583,193 @@ describe("the relay gate, when a roster stops naming a peer", () => {
     expect(h.selection.gracePeerId).toBeNull();
   });
 });
+
+describe("the relay gate, when the peer it had already opened for leaves", () => {
+  /**
+   * A gate that has FULLY SETTLED and opened, with nothing built on it yet.
+   *
+   * Our own probes have finished and the peer's map named a relay both sides
+   * measured, so the choice can no longer change from here and the gate released
+   * on it. Nothing has asked for a link, so no transport exists — which is the
+   * whole window: the decision is made, and the connection it was made for does
+   * not exist.
+   *
+   * `tok` is what these two maps agree on; a replacement below chooses `fra`, so
+   * which peer decided is never ambiguous.
+   */
+  function settledOpenGate() {
+    const h = harness([relay("tok"), relay("fra")]);
+    h.selection.noteRoster(["first"]);
+    h.selection.notePeer("first");
+    h.selection.record("tok", 10);
+    h.selection.record("fra", 90);
+    h.selection.receive("first", { relayRtt: { tok: 15, fra: 400 } });
+    h.selection.finishMeasurement();
+    expect(h.selection.gate.ready()).toBe(true);
+    expect(h.selection.selectedRelayId).toBe("tok");
+    expect(h.armCount).toBe(1);
+    return h;
+  }
+
+  /**
+   * **The hole this section closes.**
+   *
+   * Clearing the departed peer's map unmade the CHOICE, and stopped there. The
+   * PERMISSION it had already been granted stood: the gate was open, so the
+   * replacement's first legal `link/1` frame went out with no wait at all — on
+   * the fallback, or on the relay the departed peer had chosen, before its own
+   * map could arrive.
+   */
+  it("re-locks for an explicit left, and the replacement gets a full fresh grace", () => {
+    const h = settledOpenGate();
+
+    h.selection.peerGone("first");
+    expect(h.selection.gate.ready()).toBe(false);
+    expect(h.selection.selectedRelayId).toBeNull();
+    // An empty room waits indefinitely, exactly as it does before any peer has
+    // ever arrived: there is no link to build.
+    expect(h.selection.gracePeerId).toBeNull();
+    expect(h.deadlineArmed).toBe(false);
+
+    const run = vi.fn();
+    h.selection.gate.whenReady(run);
+    h.selection.notePeer("second");
+    // A SECOND arming, not the remains of the first peer's.
+    expect(h.armCount).toBe(2);
+    expect(h.selection.gracePeerId).toBe("second");
+    expect(run).not.toHaveBeenCalled();
+
+    h.selection.receive("second", { relayRtt: { fra: 4 } });
+    expect(h.selection.gate.ready()).toBe(true);
+    expect(h.selection.selectedRelayId).toBe("fra");
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  /** The same hole through the departure the hub may send no `left` for. */
+  it("re-locks for a roster-only departure, and arms the replacement in the same frame", () => {
+    const h = settledOpenGate();
+
+    // One frame carrying both halves, which is what a replacement looks like.
+    expect(h.selection.noteRoster(["second"])).toEqual(["first"]);
+    expect(h.selection.gate.ready()).toBe(false);
+    expect(h.selection.selectedRelayId).toBeNull();
+    // The peer the same frame DID name is already being waited for: a gate that
+    // re-locks with somebody in the room must not wait for a frame that may
+    // never come.
+    expect(h.selection.gracePeerId).toBe("second");
+    expect(h.armCount).toBe(2);
+
+    // App's own `notePeer` for the arrival is then idempotent, as it is
+    // everywhere else: one grace for this peer, not one per signal.
+    h.selection.notePeer("second");
+    expect(h.armCount).toBe(2);
+
+    const run = vi.fn();
+    h.selection.gate.whenReady(run);
+    expect(run).not.toHaveBeenCalled();
+
+    h.selection.receive("second", { relayRtt: { fra: 4 } });
+    expect(h.selection.selectedRelayId).toBe("fra");
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * **A replacement that never sends a map waits out its own deadline.**
+   *
+   * The re-locked gate is bounded by the same rule as the first one, or closing
+   * it would trade a link on the wrong relay for a link that is never built.
+   */
+  it("bounds the re-locked gate by the replacement's own deadline", () => {
+    const h = settledOpenGate();
+    h.selection.peerGone("first");
+    h.selection.notePeer("second");
+
+    const run = vi.fn();
+    h.selection.gate.whenReady(run);
+    expect(run).not.toHaveBeenCalled();
+
+    h.expire();
+    expect(h.selection.gate.ready()).toBe(true);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(h.selection.selectedRelayId).toBeNull(); // the fallback, not a stale choice
+  });
+
+  /**
+   * **The gate may not reach a transport that already exists.**
+   *
+   * `takeChoice` is the read on the connection path, so this is a page that has
+   * built a connection on the agreed relay. Its configuration is snapshotted
+   * inside that connection for its whole life; re-locking afterwards would hold
+   * frames for a link that is already up, which is the one thing a gate about
+   * future builds must never do.
+   */
+  it("will not re-lock a choice a transport has already been built on", () => {
+    const h = settledOpenGate();
+    expect(h.selection.takeChoice()).toBe("tok");
+
+    expect(h.selection.noteRoster([])).toEqual(["first"]);
+    expect(h.selection.gate.ready()).toBe(true);
+    const run = vi.fn();
+    h.selection.gate.whenReady(run);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * A gate can be open on one peer's ELAPSED deadline while another sits in the
+   * room having sent nothing. Re-locking on the first one's departure must give
+   * that peer a grace rather than an indefinite hold: nothing else would arm one
+   * until its next frame, and a peer with no map has no reason to send another.
+   */
+  it("gives a peer that is still in the room its own grace rather than an indefinite hold", () => {
+    const h = harness([relay("tok")]);
+    h.selection.noteRoster(["first", "second"]);
+    h.selection.notePeer("first");
+    h.selection.record("tok", 10);
+    h.selection.finishMeasurement();
+    expect(h.selection.gate.ready()).toBe(false);
+
+    h.expire(); // a map-less peer's answer: the bounded fallback
+    expect(h.selection.gate.ready()).toBe(true);
+
+    h.selection.peerGone("first");
+    expect(h.selection.gate.ready()).toBe(false);
+    expect(h.selection.gracePeerId).toBe("second");
+    expect(h.armCount).toBe(2);
+
+    h.expire();
+    expect(h.selection.gate.ready()).toBe(true);
+  });
+
+  /** Both departure signals arrive for an ordinary disconnect, in either order.
+   *  The second must find nothing left to do rather than re-lock a second time
+   *  or restart the replacement's grace. */
+  it("is idempotent across an explicit left and the roster that follows it", () => {
+    const h = settledOpenGate();
+
+    h.selection.peerGone("first");
+    expect(h.selection.noteRoster([])).toEqual([]);
+    expect(h.selection.gate.ready()).toBe(false);
+
+    h.selection.notePeer("second");
+    h.selection.notePeer("second");
+    expect(h.armCount).toBe(2);
+
+    h.selection.receive("second", { relayRtt: { fra: 4 } });
+    expect(h.selection.gate.ready()).toBe(true);
+    expect(h.selection.selectedRelayId).toBe("fra");
+  });
+
+  /** No pool is nothing to agree on, so there is nothing to re-lock either: LAN
+   *  and every STUN-only code stay immediate through a departure. */
+  it("does nothing at all in a room with no relay pool", () => {
+    const h = harness([]);
+    h.selection.noteRoster(["first"]);
+    h.selection.notePeer("first");
+    expect(h.selection.gate.ready()).toBe(true);
+
+    h.selection.peerGone("first");
+    h.selection.noteRoster([]);
+    expect(h.selection.gate.ready()).toBe(true);
+    expect(h.armCount).toBe(0);
+  });
+});

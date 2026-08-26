@@ -1976,4 +1976,176 @@ final class LinkPairingRoomTests: XCTestCase {
         XCTAssertEqual(rig.transports.count, 1, "one establishment")
         XCTAssertEqual(rig.pairingLinkActivations, 1, "and one user-visible settlement")
     }
+
+    // MARK: - Q. the gate had already opened, and then that peer left
+
+    /// A room whose gate has FULLY SETTLED and opened, and which has built
+    /// nothing with it.
+    ///
+    /// This side's probes have finished and the peer's map named a relay both
+    /// measured, so the choice can no longer change from here and the gate
+    /// released on it. The peer has announced nothing, so the room has not
+    /// latched onto it and no link intent exists — which leaves exactly the state
+    /// this section is about: the decision is made, and the transport it was made
+    /// for does not exist yet.
+    ///
+    /// The relay both peers minimise the worse RTT on is `near`; a replacement
+    /// peer below chooses `far`, so which map decided is never ambiguous.
+    private func settledGateWithNothingBuilt(deadline: TimeInterval = 30) async -> Rig {
+        let rig = rig(config: pooledConfig(),
+                      relayMeasure: { pool, publish in
+                          for entry in pool { publish(entry.id, entry.id == "near" ? 10 : 90) }
+                      },
+                      relayChoiceDeadline: deadline)
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+        rig.roster(["zzz-web"])
+        relayRtt(rig, from: "zzz-web", ["near": 15, "far": 400])
+        await settle()
+        XCTAssertTrue(rig.serverUrls.isEmpty,
+                      "the choice is made, and nothing has been built with it yet")
+        XCTAssertEqual(rig.linkFramesSent, [])
+        return rig
+    }
+
+    /// **The precondition every test below rests on**: that setup really does
+    /// open the gate.
+    ///
+    /// Without this the departure tests would be vacuous — holding is what a
+    /// room does by default, so "nothing was built" proves nothing unless the
+    /// gate is known to have been open beforehand.
+    func testASettledGateBuildsTheNextLinkWithNoFurtherWait() async {
+        let rig = await settledGateWithNothingBuilt()
+
+        rig.announce("zzz-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        await settle()
+
+        XCTAssertEqual(rig.serverUrls, [["turn:near.relayium.test:3478"]],
+                       "the gate was open, so the link went out on the settled choice at once")
+        XCTAssertEqual(rig.relayOnly, [true])
+    }
+
+    /// **The generation hole this commit closes.**
+    ///
+    /// The gate opened for a peer, that peer left before any transport was
+    /// created, and the gate stayed open. Both departure paths cleared the
+    /// departed peer's map — so no stale choice survived — but the OPEN GATE
+    /// survived, and an open gate is the whole of the permission: the next peer's
+    /// first legal `link/1` frame was assembled the instant the room latched onto
+    /// it, on the configuration the departed peer's map had chosen, before its own
+    /// map could possibly arrive.
+    func testAnExplicitLeftRelocksAGateThatNothingHasBuiltOn() async {
+        let rig = await settledGateWithNothingBuilt()
+
+        rig.channels[0].fireText(#"{"type":"left","peer":"zzz-web"}"#)
+        await settle()
+
+        // The replacement announces `link/1`, so the room latches onto it and
+        // wants a link right now. That ask is the frame the gate exists to hold.
+        rig.announce("yyy-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        rig.roster(["yyy-web"])
+        await settle()
+        XCTAssertTrue(rig.serverUrls.isEmpty,
+                      "a full fresh grace, not the gate the departed peer left open")
+        XCTAssertEqual(rig.linkFramesSent, [],
+                       "and nothing that commits this side to a relay may be on the wire")
+        XCTAssertEqual(rig.model.connection, .requesting,
+                       "the wait is not hidden: this side has decided to ask, and says so")
+
+        relayRtt(rig, from: "yyy-web", ["far": 4])
+        await settle()
+        XCTAssertEqual(rig.serverUrls, [["turn:far.relayium.test:3478"]],
+                       "the ARRIVING peer's map decided this, not the departed peer's")
+        XCTAssertEqual(rig.relayOnly, [true])
+        XCTAssertEqual(rig.transports.count, 1, "one establishment")
+        XCTAssertEqual(rig.pairingLinkActivations, 1, "and one user-visible settlement")
+    }
+
+    /// The same hole through the departure signal the hub may not send at all.
+    ///
+    /// A peer can leave a pairing room's roster with no `left` frame behind it,
+    /// and that removal has to re-lock the gate exactly as an explicit departure
+    /// does — the state left behind is identical, and so is what the next peer
+    /// would otherwise be built on.
+    func testARosterOnlyDepartureRelocksAGateThatNothingHasBuiltOn() async {
+        let rig = await settledGateWithNothingBuilt()
+
+        rig.roster([])
+        await settle()
+
+        rig.announce("yyy-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        rig.roster(["yyy-web"])
+        await settle()
+        XCTAssertTrue(rig.serverUrls.isEmpty,
+                      "a roster removal is a departure, and it re-locks the gate too")
+        XCTAssertEqual(rig.linkFramesSent, [])
+
+        relayRtt(rig, from: "yyy-web", ["far": 4])
+        await settle()
+        XCTAssertEqual(rig.serverUrls, [["turn:far.relayium.test:3478"]])
+        XCTAssertEqual(rig.relayOnly, [true])
+        XCTAssertEqual(rig.transports.count, 1)
+    }
+
+    /// **A replacement that never sends a map waits out its OWN deadline.**
+    ///
+    /// The re-locked gate must be bounded by the same rule as the first one, or
+    /// closing it would trade a link on the wrong relay for a link that is never
+    /// built at all. What ends this wait is the arriving peer's own full grace,
+    /// and what it lands on is the capped, pool-folded, relay-only fallback.
+    func testAMapLessReplacementWaitsOutItsOwnFullDeadline() async {
+        let rig = await settledGateWithNothingBuilt(deadline: Self.graceForTests)
+
+        rig.roster([])
+        await settle()
+
+        rig.announce("yyy-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        rig.roster(["yyy-web"])
+        await settle()
+        XCTAssertTrue(rig.serverUrls.isEmpty, "its own grace is running, and it has not elapsed")
+
+        await sleepPastGrace()
+        await settle()
+        XCTAssertEqual(rig.serverUrls,
+                       [["stun:stun.relayium.test:3478",
+                         "turn:legacy.relayium.test:3478",
+                         "turn:near.relayium.test:3478",
+                         "turn:far.relayium.test:3478"]],
+                       "the departed peer's chosen configuration went with it: what a map-less "
+                           + "peer lands on is the fallback, pool folded in")
+        XCTAssertEqual(rig.relayOnly, [true])
+    }
+
+    /// **The gate may not reach a transport that already exists.**
+    ///
+    /// Once the room has built on its choice, the departure of the peer that
+    /// contributed it is not a reason to re-lock anything: the configuration is
+    /// snapshotted inside the assembly, the router is holding that
+    /// establishment's queue, and parking its head would stall the frames the
+    /// link is being built from. `LinkRoomRouter.holdHandoff` refuses, and a
+    /// refusal leaves the room exactly as it was.
+    func testARosterRemovalCannotRelockTheGateUnderALiveLink() async {
+        let rig = await settledGateWithNothingBuilt()
+        rig.announce("zzz-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        await settle()
+        guard let transport = rig.transports.first else {
+            XCTFail("the settled gate should have let one link be built")
+            return
+        }
+        transport.publish(peerId: "zzz-web", role: .responder)
+        await settle()
+        XCTAssertTrue(rig.model.connection.isOpen)
+
+        // The roster stops naming the peer whose DataChannel is carrying the
+        // session. That is not authority over the transport, and it must not
+        // become authority over it by way of the gate either.
+        rig.roster([])
+        await settle()
+
+        XCTAssertTrue(rig.model.connection.isOpen, "the live link was torn down")
+        XCTAssertFalse(transport.isClosed)
+        XCTAssertEqual(rig.transports.count, 1, "and nothing was rebuilt behind it")
+        XCTAssertEqual(rig.serverUrls, [["turn:near.relayium.test:3478"]])
+    }
 }

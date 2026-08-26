@@ -195,6 +195,20 @@ public final class RelayNegotiator: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// Whether any peer is still contributing a map to this session's choice.
+    ///
+    /// The room's own question after a departure, and the one that decides
+    /// whether a settled choice still belongs to somebody who is here.
+    /// `peerLeft` drops the last contributor's map, so a false answer means the
+    /// choice — and the gate that opened on it — was made from measurements
+    /// nobody left in the room ever took. A room that still has another
+    /// contributor keeps both, which is the same answer merging has always
+    /// given.
+    public func hasPeerMaps() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return !contributors.isEmpty
+    }
+
     /// A peer's map, MERGED rather than assigned.
     ///
     /// A native peer sends this several times as its own probes land, each send
