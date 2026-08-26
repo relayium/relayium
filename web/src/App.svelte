@@ -28,8 +28,8 @@
   import { createUnifiedTextOpener } from "./lib/unified-text-open";
   import { createActivityAnnouncer, type ActivityEdge } from "./lib/activity-announcement";
   import { recordTransfer, loadHistory, clearHistory, historyEnabled, setHistoryEnabled, type HistEntry } from "./lib/history";
-  import { chooseRtcConfig, fetchIceConfig, measureRelays, type RelayAvailability, type RelayEntry } from "./lib/ice";
-  import { createRelaySelection } from "./lib/relay-selection";
+  import { chooseRtcConfig, fetchIceConfig, measureRelays, type IceConfig, type RelayAvailability, type RelayEntry } from "./lib/ice";
+  import { createRelaySelection, parseRelayRtt } from "./lib/relay-selection";
   import { relayFailNote } from "./lib/relay-status";
   import { relayDeadline, type RelayDeadline } from "./lib/relay-deadline";
   import type { Peer } from "./lib/protocol";
@@ -416,8 +416,83 @@
     peerRelayRtt = relaySelection.theirs;
     selectedRelayId = relaySelection.selectedRelayId;
   }
+  /**
+   * This room's own `/api/ice` answer has not arrived yet.
+   *
+   * A real state now, and the point of the join no longer waiting for it: the
+   * socket is opened and joined in the same turn the fetch starts, so for one
+   * round trip this page is in a room whose pool, credentials and relay
+   * deadline are all still coming. `relaySelection.suspend()` is what makes
+   * that safe for the `link/1` path — it closes the gate `peer-link` holds its
+   * first legal frame behind — and this flag is what keeps the room's relay
+   * exchange from being decided against a pool of nothing.
+   */
+  let roomIcePending = false;
+  /**
+   * Relay maps that reached this page before the room had a pool to weigh them
+   * against.
+   *
+   * Not droppable. A peer broadcasts its map when it sees this page join and
+   * then once per probe that answers, so a peer that finished probing before we
+   * arrived sends the greet and nothing after it — a map lost in this window is
+   * lost for the ROOM, and the link is then built on the capped fallback rather
+   * than the relay both peers agree is closest. `relaySelection.reset` empties
+   * `theirs` when the pool lands, so these are replayed after it rather than
+   * recorded now. Only real maps are held: everything else on this socket is a
+   * frame `receive` would reject anyway.
+   */
+  let heldRelayRtt: Array<{ from: string; data: unknown }> = [];
+  /** A peer's whole exchange is one greet plus one frame per relay it measured,
+   *  and a pool is single digits — a backstop against a peer that never stops
+   *  talking, not a working limit. */
+  const HELD_RELAY_RTT_MAX = 32;
+  /**
+   * The peers a roster frame has NAMED during this window.
+   *
+   * A held map may only be departed by a roster that knew the peer. The hub
+   * relays a signal and broadcasts a roster from two different goroutines, so a
+   * roster computed before that peer joined can still reach this socket after
+   * its map — and letting the older frame delete the newer one's evidence is
+   * exactly the loss this buffer exists to prevent. Same discipline as
+   * `relaySelection.noteRoster`, which cannot be reused here because it is
+   * scoped to a room that already has a pool.
+   */
+  let heldRelayRoster = new Set<string>();
+  /** A peer left before the pool arrived. Its map goes with it, exactly as
+   *  `relaySelection.peerGone` drops one that had already been merged: a fresh
+   *  grace a departed peer's measurements satisfy instantly is not a grace. */
+  function dropHeldRelayRtt(peerId: string) {
+    if (heldRelayRtt.length) heldRelayRtt = heldRelayRtt.filter((h) => h.from !== peerId);
+  }
+  /**
+   * Install the answer this room joined without.
+   *
+   * Everything here used to run before the socket existed. Nothing has moved
+   * earlier — the pool, the credentials, the deadline and the transport
+   * configuration all still start from the answer — and nothing that reads them
+   * runs before this: what moved is the join, which reads none of them.
+   */
+  function applyRoomIce(ice: IceConfig) {
+    iceServers = ice.iceServers;
+    relayPool = ice.relays;
+    relayStatus = ice.relayStatus;
+    // The room's own credentials with their own expiry. Recomputed beside them
+    // so the boundary can never outlive the config it came from.
+    relayBound = relayDeadline(ice, Date.now());
+    roomIcePending = false;
+    // Resets the gate onto THIS pool and replays whatever was held for it. A
+    // pool-less answer opens the gate in the same call, which is what keeps a
+    // LAN room and a STUN-only code as immediate as they were.
+    void startRelayMeasurement();
+  }
   function resetRelaySelection() {
     relayMeasureEpoch++; // supersede any in-flight measurement from the previous room
+    // The window opens here and closes in `applyRoomIce`. Held frames are
+    // room-scoped like everything else: one rendezvous's measurements must
+    // never be replayed into the next one's choice.
+    roomIcePending = true;
+    heldRelayRtt = [];
+    heldRelayRoster = new Set();
     // Suspended rather than emptied: the next room's pool is not known yet, and
     // saying "no relays" would open the gate for a window in which a link could
     // commit to a configuration belonging to neither room.
@@ -467,6 +542,18 @@
   function noteRelayPeers(ids: string[]) {
     const others = ids.filter((id) => id !== selfId);
     for (const gone of relaySelection.noteRoster(others)) workspace.rosterPeerGone(gone);
+    // The same rule one round trip earlier. `noteRoster` is scoped to a room
+    // with a pool, so during the pre-answer window it reports nothing at all —
+    // which is exactly when the departed peer's map is in `heldRelayRtt` rather
+    // than in the selection. Only a peer a PREVIOUS roster named may be departed
+    // by this one; see `heldRelayRoster`.
+    if (roomIcePending) {
+      const present = new Set(others);
+      if (heldRelayRtt.length) {
+        heldRelayRtt = heldRelayRtt.filter((h) => present.has(h.from) || !heldRelayRoster.has(h.from));
+      }
+      heldRelayRoster = present;
+    }
     for (const id of others) relaySelection.notePeer(id);
   }
   // Tell each peer what this build can do, so we know before ever offering a
@@ -495,6 +582,11 @@
   async function startRelayMeasurement() {
     const epoch = relayMeasureEpoch;
     relaySelection.reset(relayPool);
+    // After `reset`, which empties `theirs`, and before anything can be built:
+    // the maps that beat this room's answer are part of the first choice it
+    // makes, not evidence for the choice after it.
+    for (const held of heldRelayRtt) relaySelection.receive(held.from, held.data);
+    heldRelayRtt = [];
     syncRelayMirrors();
     if (relayPool.length === 0) return;
     // Each relay is published — and broadcast — the moment it answers, not once
@@ -532,7 +624,20 @@
     // map is peer-authored input on an untrusted socket, and the id it names is
     // only ever compared against THIS room's pool — a relay this client was
     // never issued selects nothing.
-    if (from !== selfId && relaySelection.receive(from, data)) syncRelayMirrors();
+    if (from !== selfId) {
+      if (roomIcePending) {
+        // Held, not recorded: `reset` is about to empty `theirs` against this
+        // room's real pool, so recording now would be recording into a room
+        // that is one call away from forgetting it. Parsed here so only real
+        // maps are held — every SDP, candidate and hello on this socket is a
+        // frame `receive` rejects anyway.
+        if (parseRelayRtt(data) && heldRelayRtt.length < HELD_RELAY_RTT_MAX) {
+          heldRelayRtt.push({ from, data });
+        }
+      } else if (relaySelection.receive(from, data)) {
+        syncRelayMirrors();
+      }
+    }
     // Deliberately NOT an early return: the two fields share one envelope, and a
     // frame carrying both must not lose the rename because the map was consumed.
     const d = data as { rename?: string };
@@ -1252,11 +1357,17 @@
     }
     await ready();
     selfName = deviceName();
-    const ice = await fetchIceConfig(roomCode);
-    iceServers = ice.iceServers;
-    relayPool = ice.relays;
-    relayStatus = ice.relayStatus;
-    relayBound = relayDeadline(ice, Date.now());
+    // Started here and awaited at the bottom — see `switchRoom` for why the two
+    // are concurrent. This is the half that matters most for a pairing code
+    // opened straight from a link: the room is in the URL at first paint, so
+    // under the serial order the very first join of the session waited a whole
+    // round trip on a fetch it does not need.
+    const pending = fetchIceConfig(roomCode);
+    // The gate starts OPEN, which is right for a page that has its
+    // configuration and wrong for one that is still fetching it. Suspending
+    // closes it for exactly this window and arms the bounded deadline that
+    // bounds a configuration which may never arrive at all.
+    resetRelaySelection();
     lanDevice = await lanDeviceId();
     signaling = new SignalingClient(wsURL(location, roomCode), selfName, undefined, {
       // LAN room only. A pairing-code room is a two-participant capability room
@@ -1298,10 +1409,10 @@
       // the map it measured with: the next peer gets its own full grace rather
       // than an instant release on somebody else's numbers.
       relaySelection.peerGone(peerId);
+      dropHeldRelayRtt(peerId); // …including one still waiting for a pool
       syncRelayMirrors();
     });
     signaling.onSignal(onPeerRelayRtt); // capture peers' relay-RTT maps (ignored by the WebRTC handlers)
-    startRelayMeasurement(); // background; the choice is usually ready before a transfer
     signaling.onClose(() => {
       // In a code room, a close before we ever joined means the code/link was
       // invalid/expired or the room was full — surface that, don't retry.
@@ -1320,6 +1431,11 @@
     workspace.start();
     socketRoomKey = roomCode;
     connState = "ready";
+    // The answer the join did not wait for. Everything above is registered
+    // first, so no frame this room delivers during the fetch is dropped — and
+    // nothing above builds a transport, because the gate `resetRelaySelection`
+    // closed is still shut until this line opens it against a real pool.
+    applyRoomIce(await pending);
   });
 
   // Reconnect the signalling socket to the current room after an unexpected drop.
@@ -1370,6 +1486,16 @@
     joinedRoom = false;
     linkDead = false;
     relayStatus = "ok";
+    // The room being left owns these, and the socket is about to be bound to a
+    // different one. Cleared rather than carried, for the reason
+    // `resetRelaySelection` gives about the pool: a TURN credential is minted
+    // for ONE code, so leaving the previous code's servers readable while this
+    // room's answer is in flight would let a connection built in that window
+    // present one rendezvous's credentials in another's. Restored — with this
+    // room's own expiry — by `applyRoomIce`.
+    iceServers = [];
+    relayPool = [];
+    relayBound = null;
     session.reset();
     connState = "connecting";
     resetRelaySelection(); // the new room has its own relay pool + measurements
@@ -1378,19 +1504,29 @@
     resetHandoffLanes(); // …including which of them had settled a pre-upload lane
     revokeHandoff(); // …and any Send confirmed against the room being left
     textSession.end(); // 换房间就是换对端，消息会话跟着结束（历史留在页面上）
-    const ice = await fetchIceConfig(roomCode);
+    // **The join and the configuration are started together, not in order.**
+    //
+    // Joining a room needs a code and a socket; it does not need an ICE server,
+    // a TURN credential or a relay pool. Awaiting the answer first spent a
+    // serial round trip before the hub had even been told this page had entered
+    // the code — so the roster, the capability hellos and the peer's own
+    // announcement all started that much late, on the entering side of every
+    // pairing.
+    //
+    // What the wait was really protecting is the CONFIGURATION a transport is
+    // built from, and `resetRelaySelection` above already protects that: its
+    // `suspend()` closes the gate `peer-link` holds its first legal `link/1`
+    // frame behind, and arms the one bounded deadline that is about a
+    // configuration rather than about a peer. Nothing that reads ICE runs any
+    // earlier than it did; everything that does not, runs a round trip sooner.
+    const pending = fetchIceConfig(roomCode);
+    signaling.reconnect(wsURL(location, roomCode));
+    const ice = await pending;
     // A rapid second switch may have started (and possibly finished) while this
     // fetch was in flight — discard the stale credentials rather than clobbering
     // the newer room's TURN config and socket.
     if (epoch !== roomEpoch) return;
-    iceServers = ice.iceServers;
-    relayPool = ice.relays;
-    relayStatus = ice.relayStatus;
-    // The new room has its own credentials with their own expiry. Recomputed
-    // beside them so the boundary can never outlive the config it came from.
-    relayBound = relayDeadline(ice, Date.now());
-    signaling.reconnect(wsURL(location, roomCode));
-    startRelayMeasurement(); // measure the new room's pool in the background
+    applyRoomIce(ice); // …and measure the new room's pool in the background
   }
 
   $effect(() => {

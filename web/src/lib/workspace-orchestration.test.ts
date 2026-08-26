@@ -871,3 +871,157 @@ describe("pre-upload: no key leaves before the sender confirms", () => {
     expect(fn("disconnectWorkspace")).toContain("revokeHandoff();");
   });
 });
+
+// ── the join and the configuration are started together ──────────────────────
+//
+// A source contract for the same reason everything else in this file is: these
+// are rules about the ORDER of statements inside two async functions, and about
+// which of them sit before an `await`. A rendered snapshot cannot show either,
+// and App is not mountable here.
+//
+// What behaviour is proved elsewhere, so this file does not have to fake it:
+//   - what suspend()/reset() do to the gate    → relay-selection.test.ts
+//   - the first legal link/1 frame waiting on it → peer-link's own tests
+describe("the room is joined while /api/ice is still in flight", () => {
+  const APPLY = "applyRoomIce(await pending);";
+  /**
+   * The async onMount's statements, from its opening to the line that installs
+   * the answer.
+   *
+   * Anchored on `APPLY` rather than brace-matched: the interesting property of
+   * this function is precisely that the await is LAST, so the await is the
+   * honest terminator — and everything this slice contains is by construction
+   * something that runs before it. Brace counting would also have to be right
+   * about braces inside string literals, which this does not have to be.
+   */
+  const mountBeforeApply = (): string => {
+    const at = app.indexOf("onMount(async () => {");
+    expect(at, "the async onMount is missing from App.svelte").toBeGreaterThan(-1);
+    const end = app.indexOf(APPLY, at);
+    expect(end, "onMount no longer installs the answer it did not wait for")
+      .toBeGreaterThan(-1);
+    return code(app.slice(at, end + APPLY.length));
+  };
+
+  it("starts the fetch, then rebinds the socket, then awaits the answer", () => {
+    const body = code(fn("switchRoom"));
+    const started = body.indexOf("const pending = fetchIceConfig(roomCode);");
+    const rebound = body.indexOf("signaling.reconnect(wsURL(location, roomCode));");
+    const awaited = body.indexOf("const ice = await pending;");
+    expect(started, "switchRoom no longer starts the fetch without awaiting it")
+      .toBeGreaterThan(-1);
+    // The whole change, as one ordering: entering a code no longer waits a
+    // serial round trip before the hub is told this page is in the room.
+    expect(started).toBeLessThan(rebound);
+    expect(rebound).toBeLessThan(awaited);
+    expect(body).not.toContain("await fetchIceConfig(roomCode)");
+  });
+
+  it("closes the relay gate before the socket can deliver a frame", () => {
+    const body = code(fn("switchRoom"));
+    // `suspend()` lives in resetRelaySelection, whose own contract is that it
+    // runs AFTER workspace.resetRoom(). Both must precede the rebind: a gate
+    // still open when the new room's first frame arrives is a transport built
+    // on the configuration of neither room.
+    expect(body.indexOf("workspace.resetRoom();"))
+      .toBeLessThan(body.indexOf("resetRelaySelection();"));
+    expect(body.indexOf("resetRelaySelection();"))
+      .toBeLessThan(body.indexOf("signaling.reconnect(wsURL(location, roomCode));"));
+    const reset = code(fn("resetRelaySelection"));
+    expect(reset).toContain("relaySelection.suspend();");
+    expect(reset).toContain("roomIcePending = true;");
+    // And the room being left takes its credentials with it. A TURN credential
+    // is minted for ONE code, so a connection built in the window must not be
+    // able to present the previous rendezvous's.
+    for (const cleared of ["iceServers = [];", "relayPool = [];", "relayBound = null;"]) {
+      const at = body.indexOf(cleared);
+      expect(at, `${cleared} is missing from switchRoom`).toBeGreaterThan(-1);
+      expect(at).toBeLessThan(body.indexOf("signaling.reconnect(wsURL(location, roomCode));"));
+    }
+  });
+
+  it("does the same on the first join, where the gate starts open", () => {
+    const body = mountBeforeApply();
+    const started = body.indexOf("const pending = fetchIceConfig(roomCode);");
+    const suspended = body.indexOf("resetRelaySelection();");
+    const socket = body.indexOf("signaling = new SignalingClient(");
+    expect(started, "onMount no longer starts the fetch without awaiting it")
+      .toBeGreaterThan(-1);
+    expect(started).toBeLessThan(suspended);
+    // The gate is shut BEFORE the socket exists. `relaySelection` is created
+    // open, which is right for a page holding its configuration and wrong for
+    // one still fetching it — and onMount is the one entry with no room switch
+    // ahead of it to have closed it.
+    expect(suspended).toBeLessThan(socket);
+    expect(body).not.toContain("await fetchIceConfig(roomCode)");
+  });
+
+  it("registers every listener before the answer is awaited", () => {
+    // The slice ENDS at the await, so containment is the assertion: the socket
+    // does not buffer, a frame delivered before its handler exists is dropped,
+    // and in a code room the roster naming the peer is delivered once.
+    const body = mountBeforeApply();
+    for (const listener of [
+      "signaling.onSelfId(",
+      "signaling.onPeers(",
+      "signaling.onPeerLeft(",
+      "signaling.onSignal(onPeerRelayRtt);",
+      "signaling.onClose(",
+      "session.listenForIncoming();",
+      "textSession.listenForRequests();",
+      "workspace.start();",
+    ]) {
+      expect(body, `${listener} runs behind the ICE await, so its frames are dropped`)
+        .toContain(listener);
+    }
+  });
+
+  it("holds the peer's relay map instead of recording it into an empty pool", () => {
+    const body = code(fn("onPeerRelayRtt"));
+    // `reset` empties `theirs` against the room's real pool, so recording during
+    // the window would record into a room one call away from forgetting it. And
+    // a dropped map is not self-healing: a peer that finished probing sends its
+    // greet once and nothing after it.
+    expect(body).toContain("if (roomIcePending) {");
+    expect(body).toContain("if (parseRelayRtt(data) && heldRelayRtt.length < HELD_RELAY_RTT_MAX) {");
+    expect(body).toContain("} else if (relaySelection.receive(from, data)) {");
+    // Replayed AFTER reset, which is what puts them into the first choice this
+    // room makes rather than the one after it.
+    const measure = code(fn("startRelayMeasurement"));
+    expect(measure.indexOf("relaySelection.reset(relayPool);")).toBeLessThan(
+      measure.indexOf("for (const held of heldRelayRtt) relaySelection.receive(held.from, held.data);"),
+    );
+    expect(measure).toContain("heldRelayRtt = [];");
+    // And a departed peer's held map goes with it, exactly as `peerGone` drops
+    // one that had already been merged — but only for a peer a PREVIOUS roster
+    // named, because the hub can hand this socket a roster computed before the
+    // peer whose map already arrived.
+    expect(code(fn("noteRelayPeers"))).toContain(
+      "heldRelayRtt = heldRelayRtt.filter((h) => present.has(h.from) || !heldRelayRoster.has(h.from));",
+    );
+    expect(code(fn("noteRelayPeers"))).toContain("heldRelayRoster = present;");
+    expect(mountBeforeApply()).toContain("dropHeldRelayRtt(peerId);");
+  });
+
+  it("applies the whole answer in one place, and only there", () => {
+    const body = code(fn("applyRoomIce"));
+    for (const assignment of [
+      "iceServers = ice.iceServers;",
+      "relayPool = ice.relays;",
+      "relayStatus = ice.relayStatus;",
+      "relayBound = relayDeadline(ice, Date.now());",
+      "roomIcePending = false;",
+    ]) expect(body, `${assignment} is missing from applyRoomIce`).toContain(assignment);
+    // The pool must be assigned before `reset` closes the gate against it.
+    expect(body.indexOf("relayPool = ice.relays;"))
+      .toBeLessThan(body.indexOf("startRelayMeasurement()"));
+    // One writer: a second assignment of the room's pool is a second room
+    // boundary nothing else knows about, and the flag would then be cleared by
+    // a path the gate never heard from.
+    // Anchored to an indented statement so the `let roomIcePending = false;`
+    // declaration is not counted as a second writer of it.
+    const all = code(app);
+    expect(all.match(/relayPool = ice\.relays;/g)).toHaveLength(1);
+    expect(all.match(/^\s+roomIcePending = false;$/gm)).toHaveLength(1);
+  });
+});

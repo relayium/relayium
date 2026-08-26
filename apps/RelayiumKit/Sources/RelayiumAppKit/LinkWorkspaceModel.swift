@@ -672,10 +672,18 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// fetched once per process and filtered to STUN — see `loadICEIfNeeded`.
     /// A pairing room passes its own, credentials included, because a code is
     /// the authorisation that pays for relayed bytes.
+    /// - Parameter awaitingRoomICE: this is a PAIRING room whose own `/api/ice`
+    ///   answer is still in flight. It is not the same nil as the same-network
+    ///   room's, and the difference is which fetch the room is entitled to: a
+    ///   code room must not fall back to the code-less STUN snapshot, so this
+    ///   suppresses `loadICEIfNeeded`. `applyPairingICE` installs `roomICE`
+    ///   directly rather than re-attaching, because a second `attach` would bump
+    ///   the router's epoch and end whatever it had already claimed.
     private func attach(_ signaling: SignalingClient,
                         ice: ICEConfig?,
                         capabilities roomCapabilities: PeerCapabilityRegistry? = nil,
-                        holdingRelayGate: Bool = false) {
+                        holdingRelayGate: Bool = false,
+                        awaitingRoomICE: Bool = false) {
         let registry = roomCapabilities ?? capabilities
         activeCapabilities.registry = registry
         router?.detach()
@@ -700,7 +708,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
             roomICE = nil
         }
         router?.attach(to: signaling, holdingHandoff: holdingRelayGate)
-        if ice == nil { loadICEIfNeeded() }
+        if ice == nil, !awaitingRoomICE { loadICEIfNeeded() }
     }
 
     private func attachPending() {
@@ -807,15 +815,35 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         let legacyRole: Role
         let signaling: SignalingClient
         let capabilities: PeerCapabilityRegistry
-        let config: ICEConfig
-        /// The room's relay-RTT exchange, or nil when the room has no pool to
-        /// choose from — every same-network room, and a code the server issued
-        /// no pool for. Nil is what makes the LAN case immediate rather than
-        /// merely fast: no gate is ever held, so nothing waits.
-        let negotiator: RelayNegotiator?
+        /// This room's `/api/ice` answer, or nil while that answer is still in
+        /// flight.
+        ///
+        /// Nil is a real state now, and it is the point of this room's shape:
+        /// the socket is opened and joined in the same turn the fetch starts, so
+        /// for one round trip the room exists, has a roster, and has no
+        /// configuration to build anything with. `applyPairingICE` is the one
+        /// writer, exactly once per room.
+        var config: ICEConfig?
+        /// The room's relay-RTT exchange, or nil when there is nothing to
+        /// exchange: the answer has not arrived yet, or it named no pool — every
+        /// same-network room, and a code the server issued no pool for. Nil for
+        /// an empty pool is what makes the LAN case immediate rather than merely
+        /// fast: no gate is ever held, so nothing waits.
+        var negotiator: RelayNegotiator?
+        /// Where the peer's relay maps go while `negotiator` does not exist yet.
+        /// See `LinkRelayInbox`: joining before the pool is known is what creates
+        /// the window, and dropping what lands in it would decide the room's
+        /// relay on one side's measurements alone.
+        let relayInbox = LinkRelayInbox()
         /// Whether the relay choice has settled (or timed out) for THIS room.
-        /// Starts true when there is nothing to settle.
-        var relayGateOpen: Bool
+        ///
+        /// Starts false for every room, including one that will turn out to have
+        /// no pool at all: until `/api/ice` answers, "is there anything to
+        /// choose?" is itself unanswered, and an open gate would let a link be
+        /// built on no configuration. `applyPairingICE` opens it immediately for
+        /// a pool-less answer, which is what keeps a STUN-only code as immediate
+        /// as it was.
+        var relayGateOpen = false
         /// The peer whose bounded relay grace is running, or nil when nobody is
         /// here to wait for.
         ///
@@ -869,15 +897,11 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         var resolved = false
 
         init(code: String, legacyRole: Role,
-             signaling: SignalingClient, capabilities: PeerCapabilityRegistry,
-             config: ICEConfig, negotiator: RelayNegotiator?) {
+             signaling: SignalingClient, capabilities: PeerCapabilityRegistry) {
             self.code = code
             self.legacyRole = legacyRole
             self.signaling = signaling
             self.capabilities = capabilities
-            self.config = config
-            self.negotiator = negotiator
-            self.relayGateOpen = negotiator == nil
         }
 
         /// Main-actor isolated because `LinkCapabilityAnnouncer` is, and the
@@ -895,6 +919,10 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
             announcer?.stop()
             announcer = nil
             capabilities.reset()
+            // Nothing will ever merge what is still parked in it, and the frames
+            // are this code's. A room that ends holding them would carry one
+            // rendezvous's measurements into whatever the object does next.
+            relayInbox.retire()
         }
     }
 
@@ -957,17 +985,44 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         connection = .watching(code: code)
 
         let mine = generation
+
+        // **The join and the configuration are started together, not in order.**
+        //
+        // Joining a room needs a code and a socket; it does not need an ICE
+        // server, a TURN credential or a relay pool. Waiting for `/api/ice`
+        // first cost every pairing one serial round trip before the hub had even
+        // been told this side exists — so the roster, the capability hellos and
+        // the peer's own announcement all started a fetch late, on both the
+        // creating and the joining side.
+        //
+        // What the wait was really protecting is the CONFIGURATION a transport
+        // is built from, and that is protected by the room's own relay gate
+        // rather than by the order of these two lines: `openPairingRoom` attaches
+        // the router with its handoff held and leaves `relayGateOpen` false, so
+        // no `link/1` frame reaches the wire and no inbound establishment is
+        // handed off until `applyPairingICE` has installed one. Nothing that
+        // reads ICE runs any earlier than it did; everything that does not,
+        // runs a round trip sooner.
+        openPairingRoom(code: code, legacyRole: legacyRole,
+                        connect: connect, generation: mine)
         pairingTask = Task { [weak self] in
             let config = try? await iceClient.fetch(code: code)
             await MainActor.run {
-                guard let self, self.generation == mine else { return }
+                // `pairing` is the room this answer belongs to. Nil means it has
+                // already ended — a socket that closed before the fetch
+                // returned, or the user leaving — and that room's ending is the
+                // truthful one, so a late answer must not overwrite it.
+                guard let self, self.generation == mine, self.pairing != nil else { return }
                 self.pairingTask = nil
                 guard let config else {
+                    // No configuration is no room: the code could not be
+                    // resolved, so the socket this object opened for it is
+                    // closed by `finish` and the ending is the same one a code
+                    // that never joined produced.
                     self.finish(.roomUnavailable)
                     return
                 }
-                self.openPairingRoom(code: code, legacyRole: legacyRole,
-                                     config: config, connect: connect, generation: mine)
+                self.applyPairingICE(config, generation: mine)
             }
         }
         return true
@@ -975,7 +1030,6 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
 
     private func openPairingRoom(code: String,
                                  legacyRole: Role,
-                                 config: ICEConfig,
                                  connect: (String) -> SignalingClient,
                                  generation mine: Int) {
         let socket = connect(code)
@@ -983,14 +1037,13 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // change takes effect on the next decision rather than the next launch.
         let capabilities = PeerCapabilityRegistry(
             linkRoomActive: { linkRoomActive(isCodelessRoom: false) })
-        // Built here, before anything is listening, so the very first frame the
-        // room delivers can already be routed into it.
-        let negotiator = config.relays.isEmpty
-            ? nil
-            : RelayNegotiator(signaling: socket, pool: config.relays, measure: relayMeasure)
         let room = PairingRoom(code: code, legacyRole: legacyRole,
-                               signaling: socket, capabilities: capabilities,
-                               config: config, negotiator: negotiator)
+                               signaling: socket, capabilities: capabilities)
+        // Built here, before anything is listening, so the very first frame the
+        // room delivers can already be routed into it. The NEGOTIATOR behind it
+        // cannot be — its pool is the answer this room is still waiting for — so
+        // what is installed now is the inbox that holds maps for it.
+        let inbox = room.relayInbox
         room.announcer = LinkCapabilityAnnouncer(
             registry: capabilities,
             linkRoomActive: { linkRoomActive(isCodelessRoom: false) },
@@ -1016,14 +1069,15 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // The registry is lock-guarded and `@unchecked Sendable` precisely so it
         // can be written from this queue and read from the main actor; the room
         // object and every decision made from it stay on the main actor below.
-        room.capsSubscription = socket.addSignalListener { [weak self, weak capabilities, weak negotiator] from, data in
+        room.capsSubscription = socket.addSignalListener { [weak self, weak capabilities, weak inbox] from, data in
             // First, and unconditionally: the relay map rides the same envelope
             // as a capability hello and is neither a hello nor an establishment
-            // frame, so every other branch below would drop it. `handleSignal`
-            // validates the payload itself — schema, finiteness and range — and
-            // ignores everything that is not a map, which is every real WebRTC
-            // signal on this socket.
-            negotiator?.handleSignal(from: from, data: data)
+            // frame, so every other branch below would drop it. The inbox
+            // validates the payload itself — schema, finiteness and range —
+            // and ignores everything that is not a map, which is every real
+            // WebRTC signal on this socket. It routes to the negotiator when
+            // there is one and holds the frame when there is not yet.
+            inbox?.handleSignal(from: from, data: data)
             guard let capabilities else { return }
             let announced = capabilities.record(peerId: from, signal: data)
             // Not a hello, but possibly proof of the same thing — see
@@ -1063,15 +1117,104 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // The gate is installed by `attach`, in the same call that installs the
         // router's interceptor, so a peer whose offer arrives on the room's very
         // first frame is held rather than assembled on an undecided config.
-        attach(socket, ice: config, capabilities: capabilities,
-               holdingRelayGate: negotiator != nil)
-        armRelayDeadline(config)
-        // Probing starts eagerly, at room open. Only the WAIT is peer-scoped —
-        // see `armRelayGrace` — so by the time a peer finally arrives this
-        // side's map is usually already complete and the grace is spent on the
-        // peer alone.
-        negotiator?.start()
+        //
+        // Held UNCONDITIONALLY here, because at this instant the room does not
+        // know whether it has a pool — or a configuration at all. The pool-less
+        // answer releases it in the same turn it arrives (`applyPairingICE`), so
+        // a STUN-only code is held for the fetch and not a moment longer.
+        attach(socket, ice: nil, capabilities: capabilities,
+               holdingRelayGate: true, awaitingRoomICE: true)
     }
+
+    /// **This room's `/api/ice` answer arrived: configure everything that needed
+    /// it, and let go of everything that was waiting for it.**
+    ///
+    /// Exactly once per room — `config == nil` is the guard, not a flag — and
+    /// only for the room the answer was fetched for. The generation stamp says
+    /// "this attempt" and `pairing`'s identity says "this room"; a code that was
+    /// left and re-watched fails both.
+    ///
+    /// Everything below used to run inside `openPairingRoom`, in the turn AFTER
+    /// the fetch. Nothing here has moved earlier: the deadline, the pool, the
+    /// probes and the transport configuration all still start from the answer.
+    /// What moved is the socket, which needed none of them.
+    private func applyPairingICE(_ config: ICEConfig, generation mine: Int) {
+        guard generation == self.generation, let room = pairing, room.config == nil else { return }
+        room.config = config
+
+        // A peer already decided to be legacy while this was in flight. The
+        // hand-over gives the legacy path this room's configuration, so it could
+        // not run without one — see `fallBackToLegacy`. It runs FIRST: a room
+        // being handed away wants no negotiator, no probes and no relay timers.
+        if let deferred = deferredLegacyFallback, deferred.generation == mine {
+            deferredLegacyFallback = nil
+            fallBackToLegacy(peerId: deferred.peerId, generation: mine)
+            // The fallback took the room, cleared `pairing` and left the socket
+            // to the legacy connection. Nothing below has a room to configure.
+            guard pairing === room else { return }
+        }
+
+        // Resolved with NO choice yet, exactly as `attach` did it for a room
+        // whose configuration was already in hand: the pool is folded in,
+        // capped, and stays relay-only whenever anything in it relays.
+        // `applyRelayChoice` replaces this the moment the two peers agree.
+        let resolved = RelaySelection.resolve(config, chosen: nil)
+        roomICE = RoomICE(config: config,
+                          servers: resolved.servers, relayOnly: resolved.relayOnly)
+        armRelayDeadline(config)
+
+        guard !config.relays.isEmpty else {
+            // No pool is nothing to choose. The gate opens now rather than on a
+            // deadline nobody would answer, which is what keeps a STUN-only code
+            // — and the whole LAN shape it mirrors — immediate.
+            applyRelayChoice(nil, room: room, generation: mine)
+            room.relayInbox.retire()
+            return
+        }
+
+        let negotiator = RelayNegotiator(signaling: room.signaling,
+                                         pool: config.relays, measure: relayMeasure)
+        room.negotiator = negotiator
+        // Whatever the peer sent while there was nothing to merge it into. Given
+        // to the negotiator BEFORE it starts, so a map that beat the answer is
+        // already in hand for the first choice this room makes.
+        room.relayInbox.adopt(negotiator)
+        // Probing starts as eagerly as the answer allows. Only the WAIT is
+        // peer-scoped — see `armRelayGrace` — so by the time a peer finally
+        // arrives this side's map is usually already complete and the grace is
+        // spent on the peer alone.
+        negotiator.start()
+
+        // The roster this room already has. Greeting is idempotent per peer, so
+        // this is the one place the peers that arrived during the fetch are told
+        // what this side measures; `pairingRosterChanged` covers everyone after.
+        for peerId in room.roster.sorted() where !room.greetedForRelay.contains(peerId) {
+            room.greetedForRelay.insert(peerId)
+            negotiator.peerJoined(peerId)
+        }
+        // And the grace, for the peer a link would actually be built with. An
+        // intent this side parked while the gate was shut names that peer
+        // exactly; otherwise the first peer on the roster does, which is the
+        // same rule `pairingRosterChanged` applies.
+        if let held = gatedLinkAttempt, held.generation == mine {
+            armRelayGrace(for: held.peerId, generation: mine)
+        } else if let peerId = room.roster.sorted().first {
+            noteRelayPeerPresent(peerId, generation: mine)
+        }
+    }
+
+    /// A peer this room decided was legacy before its `/api/ice` answer arrived.
+    ///
+    /// The hand-over hands the legacy path this room's ICE configuration, and
+    /// there is not one yet — so the decision is HELD rather than dropped or
+    /// performed against nothing. `applyPairingICE` runs it; a fetch that fails
+    /// instead ends the room with `.roomUnavailable`, which is the same answer a
+    /// code that could not be resolved has always produced.
+    ///
+    /// Deliberately does not latch `PairingRoom.resolved` while it waits: a peer
+    /// that follows its text-only hello with a `link/1` one before the answer
+    /// lands is still a link-capable peer, and this room should take it.
+    private var deferredLegacyFallback: (peerId: String, generation: Int)?
 
     // MARK: - the room's relay choice
 
@@ -1172,6 +1315,11 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     private func relayPeerLeft(_ peerId: String, generation mine: Int) {
         guard generation == self.generation, let room = pairing else { return }
         room.negotiator?.peerLeft(peerId)
+        // The same rule one round trip earlier: before the pool arrives the
+        // departed peer's maps are in the inbox rather than in a negotiator, and
+        // adopting them later would hand the NEXT peer a choice made from
+        // measurements nobody in the room ever took.
+        room.relayInbox.peerLeft(peerId)
         room.greetedForRelay.remove(peerId)
         room.roster.remove(peerId)
         if room.relayGracePeer == peerId {
@@ -1223,7 +1371,12 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     ///    from. On a refusal nothing here changes, so the outbound half and the
     ///    inbound half of the gate cannot disagree about whether it is shut.
     private func recloseRelayGate(_ room: PairingRoom, generation mine: Int) {
-        guard let negotiator = room.negotiator, room.relayGateOpen,
+        // `config` is non-nil for every room that has an open gate — nothing
+        // opens one before `applyPairingICE` installs it — so this unwrap is the
+        // same fact the `relayGateOpen` check already states, said in the form
+        // the fallback below needs.
+        guard let negotiator = room.negotiator, let config = room.config,
+              room.relayGateOpen,
               !negotiator.hasPeerMaps(),
               router?.holdHandoff() == true else { return }
         room.relayGateOpen = false
@@ -1232,8 +1385,8 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // invalidates one: a deadline parked before this must not be able to
         // recognise the room it wakes up in — see `relayGraceToken`.
         room.relayGraceToken &+= 1
-        let resolved = RelaySelection.resolve(room.config, chosen: nil)
-        roomICE = RoomICE(config: room.config,
+        let resolved = RelaySelection.resolve(config, chosen: nil)
+        roomICE = RoomICE(config: config,
                           servers: resolved.servers, relayOnly: resolved.relayOnly)
         // A peer that is STILL here gets its own bounded grace rather than an
         // indefinite hold. A gate can be open on one peer's elapsed deadline
@@ -1277,13 +1430,18 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     private func applyRelayChoice(_ chosen: RelayEntry?,
                                   room: PairingRoom,
                                   generation mine: Int) {
-        guard !room.relayGateOpen else { return }
+        // A room with no configuration has nothing to resolve against, and
+        // opening its gate would be the one thing this gate exists to stop: a
+        // transport snapshotting the default because the room joined first. The
+        // only caller that can reach this state is `applyPairingICE`, which sets
+        // `config` in the line before — so this is a floor, not a path.
+        guard !room.relayGateOpen, let config = room.config else { return }
         room.relayGateOpen = true
         room.relayGracePeer = nil
-        let resolved = RelaySelection.resolve(room.config, chosen: chosen?.id)
-        roomICE = RoomICE(config: room.config,
+        let resolved = RelaySelection.resolve(config, chosen: chosen?.id)
+        roomICE = RoomICE(config: config,
                           servers: resolved.servers, relayOnly: resolved.relayOnly)
-        logRelayChoice(chosen, room: room)
+        logRelayChoice(chosen, room: room, config: config)
         // Inbound first: an offer already claimed and buffered by the router is
         // older than anything this side is about to ask for, and the room owes
         // it an answer before it starts a second conversation.
@@ -1321,14 +1479,14 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// the race against the deadline. Relay ids are fleet infrastructure and
     /// RTTs are network timings; the pairing code and the peer id are
     /// deliberately not here.
-    private func logRelayChoice(_ chosen: RelayEntry?, room: PairingRoom) {
+    private func logRelayChoice(_ chosen: RelayEntry?, room: PairingRoom, config: ICEConfig) {
         let maps = room.negotiator?.maps() ?? (mine: [:], theirs: [:])
         let measured = room.negotiator?.measuredMs()
         Self.relayLog.notice("""
             link relay choice chosen=\(chosen?.id ?? "none", privacy: .public) \
             measured=\(measured.map { "\($0)ms" } ?? "unfinished", privacy: .public) \
             deadline=\(Int(self.relayChoiceDeadline * 1000), privacy: .public)ms \
-            pool=\(room.config.relays.count, privacy: .public) \
+            pool=\(config.relays.count, privacy: .public) \
             mine=[\(Self.describeRtt(maps.mine), privacy: .public)] \
             theirs=[\(Self.describeRtt(maps.theirs), privacy: .public)]
             """)
@@ -1547,8 +1705,24 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     }
 
     /// Hand this room to the path that ships today. Exactly once per room.
+    ///
+    /// **The hand-over needs this room's ICE configuration**, which the room now
+    /// joins without — so a decision reached during that window is deferred
+    /// rather than made against nothing. See `deferredLegacyFallback`. It is not
+    /// a longer wait than before: the window this defers inside is the same
+    /// fetch the whole room used to wait on before its capability window was
+    /// even armed, so the decision lands at or before the moment it used to.
     private func fallBackToLegacy(peerId: String, generation mine: Int) {
         guard generation == mine, let room = pairing, !room.resolved else { return }
+        guard let config = room.config else {
+            // First decision wins, exactly as `room.decided` makes the live path
+            // one-per-peer: a second peer in the room does not get to replace
+            // the peer this room already answered for.
+            if deferredLegacyFallback == nil {
+                deferredLegacyFallback = (peerId: peerId, generation: mine)
+            }
+            return
+        }
         room.resolved = true
         // Read BEFORE `armedBatches` is cleared below: the batch the user staged
         // is the first and strongest input to the decision.
@@ -1570,6 +1744,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // that was still waiting to be asked for: the legacy session takes the
         // room from here and resolves its own ICE.
         gatedLinkAttempt = nil
+        deferredLegacyFallback = nil
         // The room object is given up but the SOCKET is not: `pairingRoomHandle`
         // holds it, and the legacy connection is built on it. `pairing` is
         // cleared without `endPairingRoom`, whose job is to close a socket
@@ -1599,7 +1774,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // Handed back to the caller, which staged it: the legacy models have
         // their own staging and this object must not enqueue into one.
         onLegacyFallbackBatch?(armed.flatMap(\.files), armed.flatMap(\.sources))
-        adoptLegacyRoom?(peerId, room.legacyRole, room.config, mode)
+        adoptLegacyRoom?(peerId, room.legacyRole, config, mode)
     }
 
     /// A batch the user armed before the room resolved, handed back when the
@@ -1657,13 +1832,23 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     }
 
     private func pairingRoomClosed(generation mine: Int) {
-        guard generation == mine, pairing != nil else { return }
+        guard generation == mine, let room = pairing else { return }
         guard !holdsLiveLink else {
             signalingLost = true
             return
         }
+        // A socket that closes before this room's `/api/ice` answer arrived is
+        // the code failing to resolve, not a room being lost: a hub that refuses
+        // an unknown, expired or full code closes it exactly here, and the fetch
+        // for the same code is about to fail for the same reason. `.roomLost`
+        // would tell the user a room they never joined went away — and it is the
+        // ending the socket-first order would otherwise have introduced, because
+        // this close can now beat the fetch that used to run ahead of it.
+        // `.roomUnavailable` is already documented as covering both halves: "no
+        // ICE configuration, or a socket that never opened".
+        let ending: LinkWorkspaceEnding = room.config == nil ? .roomUnavailable : .roomLost
         endPairingRoom()
-        if connection.isActive { finish(.roomLost) }
+        if connection.isActive { finish(ending) }
     }
 
     /// Close the code's socket and forget everything scoped to it.
@@ -1679,6 +1864,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         socketBox.client = nil
         roomICE = nil
         gatedLinkAttempt = nil
+        deferredLegacyFallback = nil
         room.signaling.onPeers = nil
         room.signaling.onClose = nil
         room.signaling.onPeerLeft = nil
@@ -1838,10 +2024,12 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     private func beginAttempt(peerLabel: String) {
         generation += 1
         authenticationGeneration += 1
-        // A new attempt supersedes one that was waiting for the relay gate. The
-        // generation stamp already makes the old one inert; clearing it as well
-        // keeps a dead peer id out of this object's state.
+        // A new attempt supersedes one that was waiting for the relay gate, and
+        // one that was waiting for a configuration to hand the legacy path. The
+        // generation stamp already makes both inert; clearing them as well keeps
+        // a dead peer id out of this object's state.
         gatedLinkAttempt = nil
+        deferredLegacyFallback = nil
         projectionObservers.removeAll()
         self.peerLabel = peerLabel
         actionError = nil
@@ -2354,6 +2542,100 @@ final class ClosedWebSocketChannel: WebSocketChannel {
     var isOpen: Bool { false }
     func send(_ text: String) {}
     func close() {}
+}
+
+/// **Where a pairing room's relay-RTT exchange lives before it has a pool.**
+///
+/// A code room now joins in the same turn its `/api/ice` fetch starts, so for
+/// one round trip the socket is delivering frames into a room that has no
+/// `RelayNegotiator` — a negotiator is built FROM the pool that answer carries,
+/// and there is no pool yet.
+///
+/// Dropping what lands in that window is not free, and it is not self-healing.
+/// A peer broadcasts its map when it sees this side join and then once more per
+/// probe that answers; a peer that finished probing before we arrived sends the
+/// greet and nothing after it. So a map lost here is lost for the ROOM, the
+/// choice is made from one side's measurements, and the link is built on the
+/// capped fallback instead of the relay the two peers actually agree is
+/// closest — which is the exact defect the exchange exists to remove.
+///
+/// So the frames are held, in order, and replayed into the negotiator the
+/// instant it exists. Only frames that parse as a map are held: everything else
+/// on this socket — every SDP, candidate, capability hello and rename — is the
+/// negotiator's no-op, and buffering those would let ordinary traffic evict the
+/// two or three frames this is for.
+///
+/// Lock-guarded and `@unchecked Sendable` for the same reason every other box in
+/// this file is: the socket's delivery queue writes it and the main actor
+/// installs the negotiator. The negotiator is READ at call time rather than
+/// captured by the listener, because it does not exist when that listener is
+/// registered.
+final class LinkRelayInbox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var negotiator: RelayNegotiator?
+    private var held: [(from: String, data: JSONValue)] = []
+
+    /// A peer's whole exchange is one greet plus one frame per relay it
+    /// measured, and a pool is single digits — so this is a backstop against a
+    /// peer that never stops talking, not a working limit. Over it the newest
+    /// frames are dropped rather than the oldest: within one room a peer's map
+    /// only grows, so what is already held is a prefix of what is coming, and
+    /// the peer's next cumulative send supersedes anything missed.
+    private static let limit = 32
+
+    /// Route one inbound frame, whether or not the pool has arrived yet.
+    func handleSignal(from: String, data: JSONValue) {
+        lock.lock()
+        if let negotiator {
+            lock.unlock()
+            negotiator.handleSignal(from: from, data: data)
+            return
+        }
+        // Parsed here so only real maps are held. `RelayNegotiator.handleSignal`
+        // applies the same decoder, so a frame this accepts is a frame it will
+        // merge, and one this rejects is one it would have ignored.
+        guard RelayRttMessage.decode(data) != nil, held.count < Self.limit else {
+            lock.unlock()
+            return
+        }
+        held.append((from: from, data: data))
+        lock.unlock()
+    }
+
+    /// This room's pool arrived. Install the negotiator and give it everything
+    /// that got here first, in arrival order.
+    ///
+    /// The negotiator is published BEFORE the replay, so a frame arriving on the
+    /// delivery queue mid-replay goes straight to it rather than into a buffer
+    /// nothing will drain again. That can reorder one frame against the replay,
+    /// which merging makes harmless: `handleSignal` merges rather than assigns,
+    /// and within a room a peer's map only grows.
+    func adopt(_ negotiator: RelayNegotiator) {
+        lock.lock()
+        self.negotiator = negotiator
+        let pending = held
+        held = []
+        lock.unlock()
+        for frame in pending { negotiator.handleSignal(from: frame.from, data: frame.data) }
+    }
+
+    /// A peer left before the pool arrived. Its map goes with it, exactly as
+    /// `RelayNegotiator.peerLeft` drops one that had already been merged: a
+    /// grace that a departed peer's measurements satisfy instantly is not a
+    /// grace at all.
+    func peerLeft(_ peerId: String) {
+        lock.lock()
+        held.removeAll { $0.from == peerId }
+        lock.unlock()
+    }
+
+    /// Nothing will ever merge these: the room ended, or its answer named no
+    /// pool at all.
+    func retire() {
+        lock.lock()
+        held = []
+        lock.unlock()
+    }
 }
 
 /// The active room's capability registry, readable from the socket's delivery

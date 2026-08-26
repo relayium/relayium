@@ -55,17 +55,62 @@ final class LinkPairingRoomTests: XCTestCase {
         }
     }
 
+    /// A latch a test opens by hand, so `/api/ice` can be held for exactly as
+    /// long as an assertion needs rather than for a sleep.
+    ///
+    /// It is what makes "the room joined while the answer was still in flight"
+    /// a statement about ordering instead of about timing: nothing here elapses,
+    /// so a slow machine cannot turn the window this exercises into a pass.
+    private final class ICELatch: @unchecked Sendable {
+        private let lock = NSLock()
+        private var released = false
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+
+        func wait() async {
+            await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+                lock.lock()
+                if released { lock.unlock(); c.resume(); return }
+                waiters.append(c)
+                lock.unlock()
+            }
+        }
+
+        func release() {
+            lock.lock()
+            released = true
+            let parked = waiters
+            waiters = []
+            lock.unlock()
+            for c in parked { c.resume() }
+        }
+    }
+
     private final class StubICEClient: ICEConfigClient, @unchecked Sendable {
         let config: ICEConfig
+        /// Per-code answers, for the one thing a single config cannot say: that
+        /// a room built on THIS code's credentials and not on the previous
+        /// code's. Falls back to `config` for every code not named here.
+        let perCode: [String: ICEConfig]
+        /// Per-code latches. A code that has one parks in `fetch` until the test
+        /// releases it — the window the room now joins inside. Absent is the
+        /// immediate answer every other test wants.
+        let latches: [String: ICELatch]
         private let lock = NSLock()
         private var _codes: [String] = []
         var codes: [String] { lock.lock(); defer { lock.unlock() }; return _codes }
 
-        init(config: ICEConfig) { self.config = config }
+        init(config: ICEConfig,
+             perCode: [String: ICEConfig] = [:],
+             latches: [String: ICELatch] = [:]) {
+            self.config = config
+            self.perCode = perCode
+            self.latches = latches
+        }
 
         func fetch(code: String) async throws -> ICEConfig {
             lock.lock(); _codes.append(code); lock.unlock()
-            return config
+            await latches[code]?.wait()
+            return perCode[code] ?? config
         }
     }
 
@@ -176,18 +221,22 @@ final class LinkPairingRoomTests: XCTestCase {
         }
 
         /// The room's socket as the hub would drive it.
-        func welcome(_ selfId: String) {
-            channels[0].fire(Envelope(type: SignalType.welcome, name: selfId))
+        ///
+        /// `at` is the socket index, for the one test that watches two codes in
+        /// sequence: the second code opens a SECOND socket, and driving the
+        /// first would be driving a room that is closed.
+        func welcome(_ selfId: String, at index: Int = 0) {
+            channels[index].fire(Envelope(type: SignalType.welcome, name: selfId))
         }
 
-        func roster(_ ids: [String]) {
-            channels[0].fire(Envelope(type: SignalType.peers,
-                                      peers: ids.map { Peer(id: $0, name: "peer") }))
+        func roster(_ ids: [String], at index: Int = 0) {
+            channels[index].fire(Envelope(type: SignalType.peers,
+                                          peers: ids.map { Peer(id: $0, name: "peer") }))
         }
 
-        func announce(_ peerId: String, _ caps: [String]) {
-            channels[0].fire(Envelope(type: SignalType.signal, from: peerId,
-                                      data: .object(["caps": .array(caps.map(JSONValue.string))])))
+        func announce(_ peerId: String, _ caps: [String], at index: Int = 0) {
+            channels[index].fire(Envelope(type: SignalType.signal, from: peerId,
+                                          data: .object(["caps": .array(caps.map(JSONValue.string))])))
         }
 
         /// The ask the LARGER id sends. It carries no `caps` field at all, which
@@ -229,11 +278,13 @@ final class LinkPairingRoomTests: XCTestCase {
     private func rig(config: ICEConfig,
                      requiresVerification: Bool = false,
                      selfId: String = "aaa-mac",
+                     iceByCode: [String: ICEConfig] = [:],
+                     iceLatches: [String: ICELatch] = [:],
                      relayMeasure: @escaping RelayNegotiator.Measure = { _, _ in },
                      relayChoiceDeadline: TimeInterval = 30,
                      now: Date = Date(timeIntervalSince1970: 1_000_000)) -> Rig {
         let scheduler = ManualScheduler()
-        let ice = StubICEClient(config: config)
+        let ice = StubICEClient(config: config, perCode: iceByCode, latches: iceLatches)
         let handle = LinkRoomHandle()
         let dir = self.dir!
         var box: Rig?
@@ -337,26 +388,38 @@ final class LinkPairingRoomTests: XCTestCase {
         XCTAssertEqual(rig.joinedCodes, ["AB12CD"])
     }
 
-    func testACodeWithNoICEConfigurationIsRefusedTruthfully() async {
+    /// A code whose configuration never arrives ends the same way it always did
+    /// — and takes the socket it optimistically joined with it.
+    ///
+    /// The socket IS opened now, because the join and the fetch start together
+    /// (see `watchPairingCode`). What must not change is either half of the
+    /// answer: nothing may be assembled without a configuration, and the room
+    /// this object opened must not be left behind holding a hub connection
+    /// nobody is looking at.
+    func testACodeWithNoICEConfigurationIsRefusedTruthfullyAndClosesItsSocket() async {
         final class FailingICE: ICEConfigClient, @unchecked Sendable {
             func fetch(code: String) async throws -> ICEConfig { throw NearbyError.notScanning }
         }
         let dir = self.dir!
+        let channel = FakeWebSocketChannel()
         let model = LinkWorkspaceModel(
             capabilities: PeerCapabilityRegistry(linkRoomActive: { true }),
             receiveDirectory: { dir }, requiresVerification: { false },
             iceClient: FailingICE(),
             connectPairingSocket: { _ in
-                XCTFail("no socket may be opened for a code with no configuration")
-                return SignalingClient(channel: FakeWebSocketChannel(), name: "Mac")
+                let socket = SignalingClient(channel: channel, name: "Mac")
+                channel.fireOpen()
+                return socket
             },
             assemble: { _, _, _, _, _, _, _, _, _ in
-                XCTFail("nothing may be assembled")
+                XCTFail("nothing may be assembled without a configuration")
                 fatalError()
             })
         XCTAssertTrue(model.watchPairingCode("AB12CD", legacyRole: .initiator))
         for _ in 0..<14 { await Task.yield() }
         XCTAssertEqual(model.connection, .ended(.roomUnavailable))
+        XCTAssertTrue(channel.closed,
+                      "a room whose configuration never came is not a room to keep open")
     }
 
     // MARK: - 2. exact capability, in a code room
@@ -1292,9 +1355,10 @@ final class LinkPairingRoomTests: XCTestCase {
     }
 
     /// The peer's map, exactly as `App.svelte`'s `broadcastRelayRtt` frames one.
-    private func relayRtt(_ rig: Rig, from peerId: String, _ map: [String: Int]) {
-        rig.channels[0].fire(Envelope(type: SignalType.signal, from: peerId,
-                                      data: RelayRttMessage.encode(map)))
+    private func relayRtt(_ rig: Rig, from peerId: String, _ map: [String: Int],
+                          at index: Int = 0) {
+        rig.channels[index].fire(Envelope(type: SignalType.signal, from: peerId,
+                                          data: RelayRttMessage.encode(map)))
     }
 
     /// **The defect this batch exists for.**
@@ -2147,5 +2211,198 @@ final class LinkPairingRoomTests: XCTestCase {
         XCTAssertFalse(transport.isClosed)
         XCTAssertEqual(rig.transports.count, 1, "and nothing was rebuilt behind it")
         XCTAssertEqual(rig.serverUrls, [["turn:near.relayium.test:3478"]])
+    }
+
+    // MARK: - R. the join and the configuration are started together
+
+    /// Every capability hello this side actually put on the wire, decoded.
+    ///
+    /// Decoded rather than substring-matched: `JSONEncoder` escapes the slash in
+    /// `link/1`, so a text search for the constant finds nothing while the frame
+    /// is right there.
+    private func announcedCaps(_ rig: Rig, at index: Int = 0) -> [[String]] {
+        rig.channels[index].sent.compactMap { text in
+            guard let envelope = try? JSONDecoder().decode(Envelope.self, from: Data(text.utf8)),
+                  envelope.type == SignalType.signal,
+                  case let .object(root)? = envelope.data,
+                  case let .array(caps)? = root["caps"] else { return nil }
+            return caps.compactMap { entry in
+                guard case let .string(value) = entry else { return nil }
+                return value
+            }
+        }
+    }
+
+    /// **The room is joined while `/api/ice` is still in flight.**
+    ///
+    /// The join needs a code and a socket; it does not need an ICE server, a
+    /// TURN credential or a pool. Awaiting the answer first spent a serial round
+    /// trip before the hub had been told this side exists, which delayed the
+    /// roster, the capability hellos and the peer's own announcement by exactly
+    /// that much on both the creating and the joining side.
+    ///
+    /// Every assertion below is made with the answer still parked in the latch,
+    /// so this is an ordering statement rather than a timing one. Under the
+    /// serialised order it fails on the first line: no socket exists yet.
+    func testTheRoomIsJoinedAndDiscoversItsPeerWhileTheICEAnswerIsStillInFlight() async {
+        let latch = ICELatch()
+        let rig = rig(config: pooledConfig(), iceLatches: ["AB12CD": latch],
+                      relayMeasure: { pool, publish in
+                          for entry in pool { publish(entry.id, 40) }
+                      })
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+
+        XCTAssertEqual(rig.joinedCodes, ["AB12CD"],
+                       "the socket is opened for the code without waiting for its configuration")
+        XCTAssertEqual(rig.ice.codes, ["AB12CD"], "and the fetch is in flight beside it")
+        XCTAssertEqual(rig.model.connection, .watching(code: "AB12CD"))
+
+        // Peer discovery is the whole point of joining early, and none of it
+        // reads ICE: the hub's welcome, the roster, this side's capability
+        // hello, and the peer's own announcement.
+        rig.welcome("aaa-mac")
+        rig.roster(["zzz-web"])
+        await settle()
+        XCTAssertTrue(announcedCaps(rig).contains { $0.contains(LINK_CAPABILITY) },
+                      "the capability hello reaches the wire a round trip sooner")
+
+        rig.announce("zzz-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        await settle()
+        XCTAssertEqual(rig.pairingLinkActivations, 1,
+                       "the peer is decided, and the room claims its link, while the "
+                       + "configuration is still coming")
+        XCTAssertEqual(rig.model.peerLabel, "AB12CD")
+    }
+
+    /// **And nothing is built with it.**
+    ///
+    /// The other half of the same change, and the one that makes it safe: a peer
+    /// that announces and offers inside the window is HELD by the room's relay
+    /// gate — which now starts shut for every code room, because "is there
+    /// anything to choose?" is itself unanswered until the fetch returns. No
+    /// `link/1` frame leaves, no assembly is built, and when the answer lands
+    /// the link is built on THIS room's configuration rather than on a default.
+    func testNoTransportIsBuiltUntilTheICEAnswerArrives() async {
+        let latch = ICELatch()
+        let rig = rig(config: pooledConfig(), iceLatches: ["AB12CD": latch],
+                      relayMeasure: { pool, publish in
+                          for entry in pool { publish(entry.id, entry.id == "far" ? 20 : 300) }
+                      })
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+        rig.roster(["zzz-web"])
+        rig.announce("zzz-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        // The peer's map arrives BEFORE this room has a pool to merge it into.
+        // Held by the inbox rather than dropped: a peer that has finished
+        // probing sends its greet once, so losing it would decide this room's
+        // relay from one side's measurements.
+        relayRtt(rig, from: "zzz-web", ["near": 30, "far": 25])
+        // And the peer offers on the same burst, which is the ordinary case
+        // whenever the browser is the initiator.
+        rig.offer(from: "zzz-web")
+        await settle()
+
+        XCTAssertTrue(rig.serverUrls.isEmpty,
+                      "no transport may snapshot a configuration this room does not have")
+        XCTAssertTrue(rig.linkFramesSent.isEmpty,
+                      "and nothing that commits this side to one may reach the wire")
+        XCTAssertEqual(rig.model.connection, .requesting,
+                       "the screen says what is true: this side has decided to ask")
+
+        latch.release()
+        await settle()
+
+        XCTAssertEqual(rig.serverUrls, [["turn:far.relayium.test:3478"]],
+                       "the held offer is answered on the relay BOTH maps chose")
+        XCTAssertEqual(rig.relayOnly, [true])
+    }
+
+    /// **A room that ended before its answer arrived does not take it, and the
+    /// room that replaced it does not take it either.**
+    ///
+    /// This is the window the concurrent fetch opens: the answer now outlives
+    /// the room it was started for, so a code left and re-watched could have the
+    /// PREVIOUS code's credentials installed underneath it. The generation stamp
+    /// and the room identity are what say no, and the two codes are given
+    /// deliberately different pools so the assertion can tell them apart rather
+    /// than merely observing that nothing happened.
+    func testAStaleICEAnswerCannotConfigureTheRoomThatReplacedIt() async {
+        let first = ICELatch()
+        let rig = rig(config: pooledConfig(),
+                      iceByCode: ["AB12CD": pooledConfig(), "EF34GH": poolOnlyConfig()],
+                      iceLatches: ["AB12CD": first],
+                      relayMeasure: { pool, publish in
+                          for entry in pool { publish(entry.id, 40) }
+                      })
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+        rig.roster(["zzz-web"])
+        await settle()
+
+        // The user gives up on this code and enters another one. The first
+        // room's socket is closed with it; its fetch is still parked.
+        rig.model.leave()
+        rig.model.dismiss()
+        XCTAssertTrue(rig.channels[0].closed, "the abandoned room's socket is not left open")
+        XCTAssertTrue(rig.model.watchPairingCode("EF34GH", legacyRole: .responder))
+        await settle()
+        XCTAssertEqual(rig.joinedCodes, ["AB12CD", "EF34GH"])
+
+        // The FIRST code's answer finally lands, into a room that no longer
+        // exists and beside a room it was never fetched for.
+        first.release()
+        await settle()
+
+        // Now drive the SECOND room to a link and read which credentials it was
+        // built on.
+        rig.welcome("aaa-mac", at: 1)
+        rig.roster(["zzz-web"], at: 1)
+        rig.announce("zzz-web", [TEXT_CAPABILITY, LINK_CAPABILITY], at: 1)
+        relayRtt(rig, from: "zzz-web", ["mine": 15], at: 1)
+        await settle()
+
+        XCTAssertEqual(rig.serverUrls, [["turn:mine.relayium.test:3478"]],
+                       "the link is built on the code it was made for")
+        XCTAssertFalse(rig.serverUrls.flatMap { $0 }.contains { $0.contains("near") || $0.contains("far") },
+                       "and never on the abandoned code's pool")
+    }
+
+    /// A legacy peer decided inside the window still hands the room over with
+    /// THIS room's configuration.
+    ///
+    /// The hand-over gives `adoptLegacyRoom` the room's `ICEConfig`, so the
+    /// decision is held until there is one rather than made against nothing —
+    /// and it is not a longer wait than before, because the window it defers
+    /// inside is the same fetch the whole room used to sit behind before its
+    /// capability window was even armed.
+    func testALegacyPeerDecidedBeforeTheAnswerStillAdoptsWithThisRoomsConfig() async {
+        let latch = ICELatch()
+        let rig = rig(config: pooledConfig(), iceLatches: ["AB12CD": latch],
+                      relayMeasure: { pool, publish in
+                          for entry in pool { publish(entry.id, 40) }
+                      })
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .initiator))
+        await settle()
+        rig.welcome("aaa-mac")
+        rig.roster(["zzz-web"])
+        rig.announce("zzz-web", [TEXT_CAPABILITY])
+        await settle()
+
+        XCTAssertTrue(rig.adopted.isEmpty,
+                      "a hand-over with no configuration to hand over is not a hand-over")
+        XCTAssertEqual(rig.model.connection, .watching(code: "AB12CD"))
+
+        latch.release()
+        await settle()
+
+        XCTAssertEqual(rig.adopted.count, 1)
+        XCTAssertEqual(rig.adopted.first?.peerId, "zzz-web")
+        XCTAssertEqual(rig.adopted.first?.role, .initiator)
+        XCTAssertEqual(rig.adopted.first?.mode, .text)
+        XCTAssertFalse(rig.channels[0].closed,
+                       "the legacy connection is built on this socket, so it stays open")
     }
 }
