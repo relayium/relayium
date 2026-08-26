@@ -114,6 +114,14 @@ export interface MixedSession {
    *  and page teardown are not that. */
   disconnect(options?: { announce?: boolean }): void;
   /**
+   * A peer left the room's roster, with no `left` frame behind it.
+   *
+   * Weaker evidence than `peerDeparted` below and reaches strictly less: only
+   * the relay-gate phases, which hold no transport at all. See
+   * `PeerLinkManager.rosterPeerGone`.
+   */
+  rosterPeerGone(peerId: string): void;
+  /**
    * The server confirmed this peer's signalling socket is gone.
    *
    * Returns true when the CURRENT link absorbed that fact and the caller must
@@ -510,6 +518,7 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
       manager.listen();
     },
     disconnect(options) { close(true, options?.announce === true); },
+    rosterPeerGone(peerId) { manager.rosterPeerGone(peerId); },
     peerDeparted(peerId) {
       const link = manager.current;
       if (!link || link.peerId !== peerId) return false;

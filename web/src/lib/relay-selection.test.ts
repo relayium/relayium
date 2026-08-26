@@ -390,3 +390,196 @@ describe("relay selection gate", () => {
     expect(h.published).toEqual([{ tok: 11 }, { tok: 11 }]);
   });
 });
+
+/**
+ * A roster that no longer names a peer is a departure too.
+ *
+ * The hub sends `left` for a physical disconnect, but this page can miss one —
+ * its own socket drops, and the roster it is handed on reconnect is the first
+ * and last word on who went while it was away. Before this, `onPeers` only ever
+ * ARMED: the departed peer's measurements stayed merged in the room, so the
+ * replacement's supposedly fresh grace found a choice already waiting for it and
+ * built its link on a relay chosen by somebody who was no longer there.
+ */
+describe("the relay gate, when a roster stops naming a peer", () => {
+  /**
+   * The ordinary first seconds of a room: one relay has answered and another is
+   * still being probed, so a choice can EXIST without being settled.
+   *
+   * That window is the only place a peer's measurements sit on record with the
+   * gate still shut — which is exactly the state a departure has to clear, and
+   * the state the replacement peer arrives into.
+   */
+  function midProbe() {
+    const h = harness([relay("tok"), relay("fra")]);
+    h.selection.record("tok", 10); // …and "fra" has not answered yet
+    h.selection.noteRoster(["first"]);
+    h.selection.notePeer("first");
+    h.selection.receive("first", { relayRtt: { tok: 200 } });
+    expect(h.selection.selectedRelayId).toBe("tok"); // a choice, but not a settled one
+    expect(h.selection.gate.ready()).toBe(false);
+    expect(h.armCount).toBe(1);
+    return h;
+  }
+
+  it("takes the departed peer's map with it, not merely its grace", () => {
+    const h = midProbe();
+
+    expect(h.selection.noteRoster([])).toEqual(["first"]);
+    expect(h.selection.theirs).toEqual({});
+    expect(h.selection.selectedRelayId).toBeNull();
+    // Its deadline is abandoned rather than left to fire: an expiry on behalf of
+    // somebody who has left would open the gate before the next peer had any
+    // chance to send a map.
+    expect(h.selection.gracePeerId).toBeNull();
+    expect(h.deadlineArmed).toBe(false);
+
+    // An empty room waits indefinitely on purpose — there is no link to build.
+    const run = vi.fn();
+    h.selection.gate.whenReady(run);
+    h.selection.record("fra", 20);
+    h.selection.finishMeasurement();
+    expect(h.selection.gate.ready()).toBe(false);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("gives a different replacement peer a full grace that only its own map can end", () => {
+    const h = midProbe();
+
+    // One frame carrying both halves, which is what a replacement looks like.
+    expect(h.selection.noteRoster(["second"])).toEqual(["first"]);
+    h.selection.notePeer("second");
+    // A SECOND arming, not the remainder of the first peer's.
+    expect(h.armCount).toBe(2);
+    expect(h.selection.gracePeerId).toBe("second");
+
+    const run = vi.fn();
+    h.selection.gate.whenReady(run);
+
+    // Our own probes finish. This is the pre-fix release: with "first"'s numbers
+    // still merged, `finishMeasurement` settled the room on them and opened the
+    // gate with "second" never having spoken — and "second"'s link was then built
+    // on a relay chosen by a peer who had left.
+    h.selection.record("fra", 20);
+    h.selection.finishMeasurement();
+    expect(h.selection.gate.ready()).toBe(false);
+    expect(run).not.toHaveBeenCalled();
+
+    h.selection.receive("second", { relayRtt: { fra: 9 } });
+    expect(h.selection.gate.ready()).toBe(true);
+    expect(h.selection.selectedRelayId).toBe("fra");
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it("will not let a rejoined same id be released by the wait it abandoned", () => {
+    const h = harness([relay("tok")]);
+    h.selection.record("tok", 10);
+    h.selection.finishMeasurement();
+    h.selection.noteRoster(["a"]);
+    h.selection.notePeer("a");
+    expect(h.armCount).toBe(1);
+
+    // "a" drops out of the roster and comes straight back under the same id.
+    expect(h.selection.noteRoster([])).toEqual(["a"]);
+    expect(h.selection.gracePeerId).toBeNull();
+    expect(h.selection.noteRoster(["a"])).toEqual([]);
+    h.selection.notePeer("a");
+    expect(h.armCount).toBe(2);
+    expect(h.selection.gracePeerId).toBe("a");
+
+    const run = vi.fn();
+    h.selection.gate.whenReady(run);
+
+    // The FIRST wait, arriving late. Its peer id matches the peer being waited
+    // for again — which is the whole trap an id check cannot see — and it must
+    // still be inert, because the deadline it is answering for started before
+    // the departure.
+    h.fireTimer(0);
+    expect(h.selection.gate.ready()).toBe(false);
+    expect(run).not.toHaveBeenCalled();
+
+    // The rejoin's own grace is what ends the wait.
+    h.expire();
+    expect(h.selection.gate.ready()).toBe(true);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it("is idempotent with an explicit left, in either order", () => {
+    const first = midProbe();
+    first.selection.peerGone("first"); // the hub's `left` frame
+    expect(first.selection.theirs).toEqual({});
+    expect(first.selection.gracePeerId).toBeNull();
+    const armed = first.armCount;
+    // …and the roster that follows it. Nothing left to retire, and nothing
+    // reported to the caller a second time — the link manager's half of the
+    // cleanup has already run for this peer.
+    expect(first.selection.noteRoster([])).toEqual([]);
+    expect(first.armCount).toBe(armed);
+
+    // The other order, which is just as ordinary: the roster beats the frame.
+    const second = midProbe();
+    expect(second.selection.noteRoster([])).toEqual(["first"]);
+    const alsoArmed = second.armCount;
+    second.selection.peerGone("first");
+    expect(second.selection.theirs).toEqual({});
+    expect(second.selection.gracePeerId).toBeNull();
+    expect(second.armCount).toBe(alsoArmed);
+    expect(second.selection.gate.ready()).toBe(false);
+  });
+
+  it("will not let a roster retire a peer it never named itself", () => {
+    const h = harness([relay("tok")]);
+    h.selection.record("tok", 10);
+    // A map from a peer this roster has not caught up with. The hub relays a
+    // signal and broadcasts a roster from two different goroutines, so a roster
+    // computed before that peer joined can still reach this socket behind its
+    // map — and the older of the two frames must not delete the newer's
+    // evidence. A departure this misses is still reported by `left`.
+    h.selection.receive("late", { relayRtt: { tok: 30 } });
+    expect(h.selection.noteRoster([])).toEqual([]);
+    expect(h.selection.theirs).toEqual({ tok: 30 });
+  });
+
+  it("does nothing at all in a room with no relay pool", () => {
+    // Every LAN room and every STUN-only deployment. There is no relay to agree
+    // on, so the gate is open from the start and a departure has nothing to
+    // retire — which is what keeps the representative handoff
+    // `SignalingClient.onPeerLeft` describes, where a roster id changes while
+    // the socket and DataChannel live on, out of all of this.
+    const h = harness([]);
+    expect(h.selection.gate.ready()).toBe(true);
+    h.selection.receive("lan-a", { relayRtt: { tok: 5 } });
+    expect(h.selection.noteRoster(["lan-a"])).toEqual([]);
+    expect(h.selection.noteRoster(["lan-b"])).toEqual([]); // the handoff
+    expect(h.selection.noteRoster([])).toEqual([]);
+    expect(h.selection.theirs).toEqual({ tok: 5 });
+    expect(h.selection.gate.ready()).toBe(true);
+    expect(h.armCount).toBe(0);
+  });
+
+  it("carries no roster across a room switch", () => {
+    const h = midProbe();
+
+    // The page moves to another code. The suspended window has no pool, so a
+    // roster arriving in it is not this room's to diff either.
+    h.selection.suspend();
+    expect(h.selection.noteRoster([])).toEqual([]);
+    h.selection.reset([relay("fra")]);
+
+    // The new room starts with no roster of its own, so its first frame is pure
+    // arrival: nobody from the old room can be reported departed in it.
+    expect(h.selection.noteRoster(["second"])).toEqual([]);
+    h.selection.notePeer("second");
+    const run = vi.fn();
+    h.selection.gate.whenReady(run);
+
+    // The old room's grace, arriving late, and now also the old room's roster.
+    h.fireTimer(0);
+    expect(h.selection.gate.ready()).toBe(false);
+    expect(run).not.toHaveBeenCalled();
+
+    // …and the new room's own roster still reports its own departures.
+    expect(h.selection.noteRoster([])).toEqual(["second"]);
+    expect(h.selection.gracePeerId).toBeNull();
+  });
+});

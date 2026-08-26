@@ -129,6 +129,18 @@ export interface PeerWorkspace {
   conn(): Conn | null;
   start(): void;
   syncPeers(): void;
+  /**
+   * Retire what a relay gate is holding for a peer the room's roster no longer
+   * names.
+   *
+   * Deliberately separate from `peerLeft`: a roster that stops naming an id is
+   * not a confirmed physical departure, so this touches no established link, no
+   * in-flight establishment and no outstanding request, and records nothing in
+   * `departed`. It reaches only the gated phases — see
+   * `PeerLinkManager.rosterPeerGone` — which have no transport under them and
+   * exist solely because that peer was expected to answer.
+   */
+  rosterPeerGone(peerId: string): void;
   /** End sessions bound to a signaling peer the server confirmed closed. */
   peerLeft(peerId: string): void;
   disconnect(): void;
@@ -469,6 +481,7 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
         if (!deps.peerIds().includes(suppressed)) suppressedUntil.delete(suppressed);
       }
     },
+    rosterPeerGone(peerId) { mixed.rosterPeerGone(peerId); },
     peerLeft(peerId) {
       // Unlike a roster representative handoff, this event means the peer's
       // physical SIGNALING connection is gone. That is a statement about the

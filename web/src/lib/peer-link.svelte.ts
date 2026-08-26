@@ -1245,6 +1245,54 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
      *  has no pool to choose from. */
     setRelayGate(gate: RelayGate | null) { relayGate = gate; },
 
+    /**
+     * A peer left the room, and the only evidence is a roster that no longer
+     * names it.
+     *
+     * Retires the THREE RELAY-GATE PHASES bound to that peer, and nothing else.
+     * Each of them is an intent with no transport under it, parked on a gate the
+     * departed peer is the reason for: releasing one later would put this side's
+     * first legal `link/1` frame on the wire addressed to somebody who has gone,
+     * on a relay chosen from measurements nobody left in the room ever took.
+     *
+     * **Deliberately not `close()`.** A confirmed physical departure is
+     * `PeerWorkspace.peerLeft`, and its contract is a statement about a peer's
+     * SIGNALLING socket and about nothing else: an established link's DataChannel
+     * is a separate transport and survives it, an in-flight establishment and an
+     * outstanding request are cancelled there, and `departed` is recorded there
+     * so recovery stops being offered. A roster is weaker evidence than that
+     * frame, so it may not reach any of it. What it may reach is exactly what a
+     * gate is holding — and the parked waiters need no cancelling of their own,
+     * because each re-reads the phase it belongs to and finds it retired.
+     *
+     * Idempotent, and has to be: a `left` frame and the roster that drops the
+     * same peer both arrive for an ordinary disconnect, in either order.
+     */
+    rosterPeerGone(peerId: string) {
+      if (!peerId) return;
+      // Settled, not dropped: a caller is awaiting this promise, and the gate
+      // release that would have settled it is being taken away here. The same
+      // rejection `close` gives, because from the caller's side it is the same
+      // fact — the link it asked for is not going to be built.
+      if (gatedEnsure?.peerId === peerId) {
+        const held = gatedEnsure;
+        gatedEnsure = null;
+        held.reject(new Error("relayium: link closed"));
+      }
+      // Settles nothing — its peer owned its own retry loop and timeout, and is
+      // gone — but it must not survive to claim the release.
+      if (gatedRequest?.peerId === peerId) gatedRequest = null;
+      if (heldOffer?.peerId === peerId) dropHeldOffer();
+      // `requesting` and `connecting` were published on behalf of the phases
+      // just retired. With nothing left underneath them they are a status the
+      // user can neither act on nor get out of.
+      if (!current && !opening && !requested && !recovering && !replacing
+        && gatedPeerId() === undefined
+        && (status === "requesting" || status === "connecting")) {
+        status = "idle";
+      }
+    },
+
     ensure(peerId: string): Promise<MixedPeerLink> {
       // An established link with a LIVE transport is its own answer, and it is
       // handed back before the capability gate is consulted at all.

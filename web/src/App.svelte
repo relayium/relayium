@@ -438,8 +438,29 @@
   // of the two — and late is exactly the failure this replaced. `peer-link`
   // notes the peer again from a request, an offer and an outbound intent, so a
   // roster frame that never arrives is not the only path.
+  //
+  // A roster is also the only thing that ever reports the OPPOSITE fact. The hub
+  // sends `left` for a physical disconnect, but this page can miss one — its own
+  // socket drops, and the roster it is handed on reconnect is the first and last
+  // word on who left while it was away. So the frame is diffed, and the peers it
+  // no longer names are retired through the same idempotent path an explicit
+  // `left` takes: `relaySelection.peerGone` drops the departed peer's grace and,
+  // with it, the RTT map a replacement peer's supposedly fresh grace would
+  // otherwise settle on instantly, and `workspace.rosterPeerGone` retires what
+  // the gate is holding on that peer's behalf.
+  //
+  // **Departures first, arrivals second.** A roster frame that swaps one peer
+  // for another carries both, and arming the replacement's grace before the old
+  // peer's map has gone is exactly the release this is closing.
+  //
+  // Scoped inside `relaySelection` to a room with a relay POOL, which a LAN room
+  // never has — so the representative handoff `SignalingClient.onPeerLeft`
+  // describes, where a roster id changes while the socket and DataChannel live
+  // on, cannot reach any of this. See `noteRoster`.
   function noteRelayPeers(ids: string[]) {
-    for (const id of ids) if (id !== selfId) relaySelection.notePeer(id);
+    const others = ids.filter((id) => id !== selfId);
+    for (const gone of relaySelection.noteRoster(others)) workspace.rosterPeerGone(gone);
+    for (const id of others) relaySelection.notePeer(id);
   }
   // Tell each peer what this build can do, so we know before ever offering a
   // connection. Same envelope as the relay-RTT broadcast above; peers that do not
@@ -1255,7 +1276,12 @@
       // that peer's pre-uploaded entries belong to neither lane.
       noteRosterPeers(p.map((x) => x.id));
       workspace.syncPeers();
+      // Departures as well as arrivals — a roster that no longer names a peer is
+      // the only report of one this page is guaranteed to get. See
+      // `noteRelayPeers`; the mirrors follow because retiring a departed peer's
+      // map can unmake the choice the debug panel is showing.
       noteRelayPeers(p.map((x) => x.id));
+      syncRelayMirrors();
       broadcastRelayRtt();
       broadcastCaps();
     });
