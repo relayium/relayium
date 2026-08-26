@@ -59,8 +59,11 @@
 // is found by indentation and split on step boundaries, which is enough to ask
 // "which command ran first" and fails loudly if the file's shape changes.
 
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
@@ -129,6 +132,10 @@ function steps(lines) {
   }
   return found.map((step) => ({
     name: step.name,
+    // The step exactly as written, `run: |` body and all. Section 7 executes
+    // that body against a stubbed `gh`, and it needs the real indentation to
+    // recover it.
+    raw: step.lines,
     // Comment lines dropped, so a marker named in a rationale is not mistaken
     // for a command. Every rationale in this job names the commands it is
     // explaining, so without this the test would agree with the prose rather
@@ -380,7 +387,228 @@ if (push >= 0) {
   );
 }
 
-// 7. And the half none of the above can see: the job is here and NOWHERE ELSE.
+// 7. THE ALIAS. The release must decline the repository-wide `latest` marker,
+//    and the job must prove that it did.
+//
+//    GitHub's `latest` is one pointer per REPOSITORY, not one per tag family,
+//    and unless a release says otherwise GitHub gives it to whichever full
+//    release is newest. This repository publishes two families from one repo:
+//    the CLI as `v0.22.2` and friends, and the macOS app as `macos-v1.3.8`.
+//    `web/public/install.sh` — the script behind
+//    `curl -fsSL https://relayium.com/install.sh | sh` — fetches
+//    `relayium_<os>_<arch>.tar.gz`, `checksums.txt` and `checksums.txt.sig`
+//    from `/releases/latest/download`, and `web/public/install-node.sh` fetches
+//    `relayium-node_<os>_<arch>.tar.gz` from the same place. A macOS release
+//    carries none of them. So the moment a macOS release takes the alias, every
+//    new install 404s — on a URL that is printed on the website, in the README
+//    and in every tutorial, and that cannot be revised after the fact.
+//
+//    That is the observed defect: `macos-v1.3.8` took the alias from CLI
+//    `v0.22.2` and the published installer stopped working. And it is the
+//    SECOND time this alias has done it. On 2026-08-12 the central release
+//    check cached `macos-v1.1.3` as the newest server release for exactly the
+//    same reason. That one was closed by teaching the READER to stop trusting
+//    the alias — `LatestTag`, in server/selfupdate/selfupdate.go, which scans
+//    the release list instead. Nothing was ever done to the PRODUCER, so the
+//    same cause simply surfaced somewhere the reader-side fix could not reach.
+//    These assertions are the producer half.
+//
+//    They live here because nothing else in the repository can see it. The YAML
+//    is valid with the flag and without it, actionlint is happy either way,
+//    gh's default is invisible at the call site, a created release records no
+//    trace of the flag that a later reader can inspect, and the next signal
+//    after a regression is a stranger's failed install.
+
+/** The whole `gh release create` invocation: its line plus every continuation. */
+const createInvocation = (() => {
+  if (create < 0) return "";
+  const out = [exec[create].text];
+  for (let i = create; /\\\s*$/.test(exec[i].text) && i + 1 < exec.length; i += 1) {
+    out.push(exec[i + 1].text);
+  }
+  return out.join("\n");
+})();
+
+check(
+  /--latest=false(\s|\\|$)/.test(createInvocation),
+  "`gh release create` does not pass `--latest=false`, so GitHub hands the repository-wide"
+  + " `latest` alias to this macOS release. web/public/install.sh downloads"
+  + " relayium_<os>_<arch>.tar.gz, checksums.txt and checksums.txt.sig from"
+  + " /releases/latest/download and a macOS release carries none of them, so every"
+  + " `curl -fsSL https://relayium.com/install.sh | sh` 404s until a human moves the alias back.",
+);
+
+// The flag is one way to claim the alias; these are the others. Stated over
+// every executable line of the workflow rather than over the create invocation,
+// because a later `gh release edit --latest` or a raw `gh api -f make_latest=true`
+// would take the alias back while the assertion above still passed.
+const workflowExec = workflow
+  .split("\n")
+  .map((text, index) => ({ text, line: index + 1 }))
+  .filter(({ text }) => !/^\s*#/.test(text));
+for (const { text, line } of workflowExec) {
+  for (const form of text.match(/--latest(=[^\s\\]*)?/g) ?? []) {
+    check(
+      form === "--latest=false",
+      `${WORKFLOW}:${line} passes \`${form}\`. The only form this workflow may use is`
+      + " `--latest=false`: `--latest`, `--latest=true` and `--latest=legacy` all give a macOS"
+      + " release the repository-wide alias that web/public/install.sh downloads from.",
+    );
+  }
+  check(
+    !/make_latest/.test(text) || /make_latest=false/.test(text),
+    `${WORKFLOW}:${line} sets \`make_latest\` directly through the API. A macOS release may`
+    + " only ever send `make_latest=false`; the repository-wide alias belongs to the CLI"
+    + " releases that web/public/install.sh downloads from /releases/latest/download.",
+  );
+}
+
+// And the same property as BEHAVIOUR, because every assertion above is a claim
+// about text. The publish step's shell is extracted and actually run against a
+// stubbed `gh`, so the flag has to survive into the real invocation and the
+// read-back has to reject the real defect. This is what fails if the job keeps
+// the flag but stops checking, or checks but compares the wrong two strings.
+{
+  const step = create >= 0 ? publish[exec[create].stepIndex] : null;
+  const body = (() => {
+    if (step === null) return null;
+    const at = step.raw.findIndex((text) => /^\s*run: \|\s*$/.test(text));
+    if (at < 0) return null;
+    const lines = step.raw.slice(at + 1);
+    const first = lines.find((text) => text.trim() !== "");
+    if (first === undefined) return null;
+    const indent = /^ */.exec(first)[0].length;
+    return lines.map((text) => text.slice(indent)).join("\n");
+  })();
+
+  check(body !== null, "the publish step that creates the release has no `run: |` body to execute");
+
+  if (body !== null) {
+    const scratch = mkdtempSync(join(tmpdir(), "macos-publish-alias-"));
+    try {
+      const script = join(scratch, "publish.sh");
+      writeFileSync(script, body);
+
+      // `gh release view` fails, which is the "release does not exist yet" path
+      // — the one that creates. Everything else is recorded so the assertions
+      // can read what the job actually asked GitHub for.
+      const stub = join(scratch, "bin");
+      mkdirSync(stub);
+      writeFileSync(
+        join(stub, "gh"),
+        [
+          "#!/bin/sh",
+          'if [ "$1" = "release" ] && [ "$2" = "view" ]; then exit 1; fi',
+          'printf "%s\\n" "$*" >> "$GH_LOG"',
+          'if [ "$1" = "release" ] && [ "$2" = "create" ]; then exit 0; fi',
+          // The alias endpoint 404s when no release holds it; the stub says so
+          // by failing, exactly as gh does.
+          'if [ "$1" = "api" ]; then',
+          '  [ -n "${FAKE_LATEST:-}" ] || exit 1',
+          '  printf "%s\\n" "$FAKE_LATEST"',
+          "  exit 0",
+          "fi",
+          'printf "unexpected gh invocation: %s\\n" "$*" >&2',
+          "exit 90",
+        ].join("\n"),
+        { mode: 0o755 },
+      );
+
+      /** The stub's transcript, or "" when the run never reached it. */
+      const readLog = (path) => {
+        try {
+          return readFileSync(path, "utf8");
+        } catch {
+          return "";
+        }
+      };
+
+      /** Run the publish body with `/releases/latest` reporting `latest`. */
+      const run = (latest) => {
+        const log = join(scratch, `gh-${Buffer.from(latest).toString("hex")}.log`);
+        writeFileSync(log, "");
+        const result = spawnSync("bash", [script], {
+          encoding: "utf8",
+          // Run in the scratch directory, never in the repository. Today the
+          // create branch touches nothing but `gh`; a future edit that adds a
+          // `git` command to it would otherwise run that command against this
+          // checkout. The token is a stub for the same reason — the `gh` on
+          // PATH is a stub, and no real credential belongs in a test child.
+          cwd: scratch,
+          env: {
+            ...process.env,
+            PATH: `${stub}:${process.env.PATH ?? ""}`,
+            GH_TOKEN: "stub-token",
+            GH_LOG: log,
+            FAKE_LATEST: latest,
+            GITHUB_REPOSITORY: "relayium/relayium",
+            GITHUB_SHA: "0".repeat(40),
+            GITHUB_RUN_ID: "1",
+            RUNNER_TEMP: scratch,
+            RELEASE_VERSION: "9.9.9",
+          },
+        });
+        return { ...result, log: readLog(log) };
+      };
+
+      const cliLatest = run("v0.22.2");
+      check(
+        cliLatest.error === undefined,
+        `the publish body could not be executed: ${cliLatest.error?.message}`,
+      );
+      check(
+        cliLatest.log.includes("release create"),
+        "executing the publish body never called `gh release create`, so the assertions below"
+        + " would be judging a script that did nothing. The stub, the branch condition or the"
+        + " step's shape has changed.",
+      );
+      check(
+        /release create[^\n]*--latest=false(\s|$)/.test(cliLatest.log),
+        "the executed publish body called `gh release create` WITHOUT `--latest=false`;"
+        + ` gh received: ${cliLatest.log.trim().split("\n")[0]}`,
+      );
+      check(
+        cliLatest.status === 0,
+        "the publish body failed while the repository-wide `latest` alias pointed at the CLI"
+        + ` release, which is the correct state: exit ${cliLatest.status}, ${cliLatest.stderr}`,
+      );
+
+      // The defect itself: the alias pointing at the macOS tag this job just
+      // published. `macos-v1.3.8` sat in exactly this state with a green job.
+      const macosLatest = run("macos-v9.9.9");
+      check(
+        macosLatest.status !== 0,
+        "the publish body SUCCEEDED while the repository-wide `latest` alias pointed at its own"
+        + " macOS release. That is the published defect: install.sh downloads from"
+        + " /releases/latest/download and the macOS release has no CLI assets. The job must read"
+        + " the alias back and fail.",
+      );
+      check(
+        // Workflow annotations go to stdout, which is where every other
+        // `::error::` in this job writes; both streams are read so the
+        // assertion does not depend on which one the job chose.
+        `${macosLatest.stdout}${macosLatest.stderr}`.includes("::error::"),
+        "the publish body rejected the macOS release holding the `latest` alias without a"
+        + ` \`::error::\` annotation, so the run would fail with no visible cause:`
+        + ` ${macosLatest.stdout}${macosLatest.stderr}`,
+      );
+
+      // A repository where no release holds the alias is not a defect, and the
+      // read-back must not invent one out of gh's 404.
+      const noLatest = run("");
+      check(
+        noLatest.status === 0,
+        "the publish body failed when `/releases/latest` reported no release at all. gh exits"
+        + " non-zero there and that is a legitimate repository state, not a broken installer:"
+        + ` exit ${noLatest.status}, ${noLatest.stderr}`,
+      );
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  }
+}
+
+// 8. And the half none of the above can see: the job is here and NOWHERE ELSE.
 //
 // Every rule above is a statement about one file. None of them notices a second
 // copy of the publish job living in the CI workflow — where it would be
@@ -467,5 +695,7 @@ process.stdout.write(
   `ok: ${WORKFLOW}'s publish job writes, then stages, then judges the staged bytes, then `
   + `freezes them, and only then creates the immutable release `
   + `(${publish.length} steps, ${exec.length} commands checked); `
+  + `the release declines the repository-wide \`latest\` alias and reads it back `
+  + `(asserted by executing the publish body against a stubbed gh); `
   + `${CI_WORKFLOW} declares none of [${RELEASE_ONLY_JOBS.join(", ")}]\n`,
 );
