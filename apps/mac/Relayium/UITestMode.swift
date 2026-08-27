@@ -24,8 +24,8 @@ import RelayiumKit
 ///
 /// The six destinations, the settings scene and all nine languages are the real
 /// UI. Residency and notification registration are skipped because they reach
-/// outward; the generated-text-code test additionally injects the deterministic
-/// model below so it can hold a handoff screen without contacting production.
+/// outward; the pairing-code handoff test additionally injects the deterministic
+/// mint below so it can hold a handoff screen without contacting production.
 enum UITestMode {
     #if DEBUG
     /// The argument the UI test target passes. Read once: `ProcessInfo`'s
@@ -74,20 +74,28 @@ enum UITestMode {
     /// evidence about the fixtures.
     ///
     /// The per-fixture flags (`--relayium-ui-testing-file-code`,
-    /// `--relayium-ui-testing-terminal-nearby`, `--relayium-ui-testing-text-code`)
+    /// `--relayium-ui-testing-failing-mint`, `--relayium-ui-testing-expiring-code`)
     /// keep their own guards and are unaffected: they are only ever passed by
     /// the offline suite, which resolves production and is refused residency.
     static let usesOfflineTransfer = isActive && !allowsResidency
-    /// Holds the text pairing model on a deterministic terminal failure so the
-    /// UI suite can verify that cleanup, not a second start path, owns the page.
+
+    /// Fails the pairing mint, so the offline suite can drive the one state a
+    /// working server never produces on demand.
+    ///
+    /// **Renamed, and the rename is the point.** This flag used to hold a legacy
+    /// TEXT pairing model on a terminal failure; that model is gone, and what it
+    /// actually did afterwards was make `UITestPairClient.mint` throw — a
+    /// failure of the code, not of a session. Its old name described a screen
+    /// this app no longer has, which is how a fixture outlives the thing it was
+    /// named for.
+    ///
+    /// Its Nearby counterpart had no such surviving behaviour and is gone with
+    /// the session it faked: it claimed the same-network surface and navigated
+    /// to a session that did not exist, which is the hidden composition the
+    /// legacy removal was for.
     // nonlocalized: a test-only launch argument, absent from Release
-    static let terminalTextArgument = "--relayium-ui-testing-terminal-text"
-    static let showsTerminalText = ProcessInfo.processInfo.arguments.contains(terminalTextArgument)
-    /// Builds a deterministic failed Nearby file task so the UI suite can prove
-    /// its retained terminal surface still exposes the route back to the roster.
-    // nonlocalized: a test-only launch argument, absent from Release
-    static let terminalNearbyArgument = "--relayium-ui-testing-terminal-nearby"
-    static let showsTerminalNearby = ProcessInfo.processInfo.arguments.contains(terminalNearbyArgument)
+    static let failingMintArgument = "--relayium-ui-testing-failing-mint"
+    static let failsPairingMint = ProcessInfo.processInfo.arguments.contains(failingMintArgument)
     /// Whether this launch already holds an account.
     ///
     /// Every signed-in surface — Send a link, the device and stored-file
@@ -513,9 +521,10 @@ enum UITestMode {
     // parked a text model on a handoff state, and produced a terminal nearby
     // file transfer — three screens macOS no longer composes. A fixture is the
     // one caller that could still reach a deleted transport, so removing them is
-    // part of the deletion rather than tidying after it. What replaced their
-    // coverage is `showsTerminalNearby`, which now claims the surface and
-    // navigates without starting anything.
+    // part of the deletion rather than tidying after it. The last of them to go
+    // was the nearby one, which had been left claiming the surface and
+    // navigating without starting anything: a session-shaped screen with no
+    // session behind it, which no test could truthfully assert against.
 }
 
 #if DEBUG
@@ -592,7 +601,7 @@ private final class UITestPairClient: PairCodeClient, @unchecked Sendable {
     static let expiringCodeLifetime: TimeInterval = 12
 
     func mint(token: String) async throws -> MintedCode {
-        if UITestMode.showsTerminalText { throw AccountError.network }
+        if UITestMode.failsPairingMint { throw AccountError.network }
         lock.lock()
         minted += 1
         let attempt = minted

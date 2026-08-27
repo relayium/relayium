@@ -223,11 +223,19 @@ struct CrossNetworkConnectPane: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("pairing-code-expiry-note")
                         if deadline.isUsable {
+                            // **The wait and its escape live in the handoff card,
+                            // and nowhere else on this page.** A second copy sat
+                            // here until the offline suite could not click either:
+                            // `PairingCodeHandoffView` already renders the same
+                            // "waiting for the other device" status and the same
+                            // Cancel, so the page drew both twice. Matched by
+                            // label that is two elements and an ambiguous click;
+                            // read by a person it is the screen saying the same
+                            // thing to itself.
                             if let joinURL = transferPairingJoinURL(code: live) {
                                 PairingCodeHandoffView(url: joinURL,
                                                        cancel: { module.cancelPairingCode() })
                             }
-                            waitingForPeer
                         } else {
                             expiredCode
                         }
@@ -243,19 +251,6 @@ struct CrossNetworkConnectPane: View {
     private var expiresAt: Int64 {
         guard case let .showing(_, expiresAt) = code.state else { return 0 }
         return expiresAt
-    }
-
-    /// The real network wait, with a visible status and an escape rather than a
-    /// card containing only its heading.
-    private var waitingForPeer: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ProgressView(L10n.t(.directWaitingForDevice))
-                .controlSize(.small)
-                .accessibilityIdentifier("transfer-waiting-pairing-peer")
-            Button(L10n.t(.commonCancel)) { module.cancelPairingCode() }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("transfer-cancel-pairing-watch")
-        }
     }
 
     /// **What an expired code offers instead of a link nobody can open.**

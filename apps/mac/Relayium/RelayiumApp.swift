@@ -544,18 +544,6 @@ struct RelayiumApp: App {
             routing.select(.nearby)
             return true
         }
-        #if DEBUG
-        if UITestMode.showsTerminalNearby {
-            // Claims the surface and navigates, and starts NOTHING. The fixture
-            // used to open a legacy same-network file session to render a
-            // terminal state; there is no such session to open now, and a
-            // fixture that reached for one would be the only caller on the
-            // platform still able to.
-            nearbyModule.presence.claim(.nearby, mode: .files,
-                                        peerLabel: "Studio Mac · 19af02") // nonlocalized: deterministic UI-test fixture
-            routing.select(.nearby)
-        }
-        #endif
         // It navigates exactly once per link, and it is the ONE place that
         // decides whether a pairing link may be applied at all.
         //

@@ -328,7 +328,13 @@ final class MacSurfaceGuardTests: XCTestCase {
         // subjects moved: a bare `ProgressView()` is forbidden above across
         // EVERY macOS source, and these are the two named waits a user actually
         // sits in.
-        let code = try source(named: "Transfer/CrossNetworkConnectPane.swift")
+        //
+        // The code's wait is asserted where it is DRAWN. `CrossNetworkConnectPane`
+        // used to render a second copy of it beside the handoff card, so this
+        // guard passed against the duplicate; with that copy gone the one named
+        // wait a person sits in belongs to `PairingCodeHandoffView`, and naming
+        // its real home is what keeps the guard able to fail.
+        let code = try source(named: "QRCode.swift")
         XCTAssertTrue(code.contains("ProgressView(L10n.t(.directWaitingForDevice))"),
                       "the wait for the other device to enter the code is unnamed")
         let link = try source(named: "Transfer/TransferLinkPane.swift")
@@ -1023,15 +1029,15 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(pane.contains("private func cancelPairingWatch()"),
                        "a second, joiner-only spelling of the code cancel came back")
 
-        // Every Cancel that ends a code — minting, the shown code, the expired
-        // code beneath it, and the joiner's wait — names the one operation.
-        // Every Cancel that ends a code — the mint in flight, the live code's
-        // handoff, the wait beneath it, and the expired code — names the one
-        // operation. Four, where the two-lane surface had five.
-        // Five now: the mint in flight, the live code's handoff, the wait
-        // beneath it, the expired code, and the failed mint's own recovery —
-        // which is the exit that did not exist and left the screen locked.
-        XCTAssertEqual(occurrences(of: "module.cancelPairingCode()", in: pane), 5,
+        // Every Cancel that ends a code names the one operation, and there are
+        // exactly four of them: the mint in flight, the live code's handoff, the
+        // expired code, and the failed mint's own recovery — the exit that did
+        // not exist and left the screen locked for the life of the process.
+        //
+        // It was five while the pane drew its own wait beside the handoff card,
+        // which is what made the live-code screen offer two identical Cancels
+        // and left an offline test unable to click either.
+        XCTAssertEqual(occurrences(of: "module.cancelPairingCode()", in: pane), 4,
                        "a pairing-code exit stopped using the shared cancel, or a new "
                        + "one appeared without it")
         let expired = try XCTUnwrap(pane.components(separatedBy: "private var expiredCode: some View")
