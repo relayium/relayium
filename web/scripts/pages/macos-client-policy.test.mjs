@@ -54,6 +54,12 @@ const REQUIREMENT_EPOCHS = [
     minimumSupportedBuild: 17,
     recommendedVersion: "1.3.0",
   },
+  {
+    revision: 12,
+    minimumSupportedVersion: "1.3.7",
+    minimumSupportedBuild: 25,
+    recommendedVersion: "1.3.8",
+  },
 ];
 
 describe("the macOS client version policy", () => {

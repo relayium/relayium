@@ -11,7 +11,7 @@
             <sparkle:version>26</sparkle:version>
             <sparkle:shortVersionString>1.3.8</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:criticalUpdate sparkle:version="17"></sparkle:criticalUpdate>
+            <sparkle:criticalUpdate sparkle:version="25"></sparkle:criticalUpdate>
             <enclosure url="https://github.com/relayium/relayium/releases/download/macos-v1.3.8/Relayium.dmg" length="25607711" type="application/octet-stream" sparkle:edSignature="G5UdILXKjrCebdgb9c/tBk9bnQhpTjRWzeeb7MV4sMTXNvqWCfq4w73KAdDj6QgAQcfe2vO1ZOfA+Q8y2TvqAw=="/>
         </item>
     </channel>
