@@ -841,15 +841,29 @@ final class AppShellUITests: XCTestCase {
 
         // The one genuine keyboard edit, on the real field, after a real
         // refusal: this is the boundary the test exists to cross.
+        //
+        // An ORDINARY VISIBLE CHARACTER, not a control key. Hosted run
+        // 33032681386 reached this line with the fixture in the real field and
+        // the real refusal on screen, tapped it, logged `Type DEL` — and the
+        // field still read `not a link` for the whole ten-second wait. A delete
+        // needs something to its left to consume, and on a field nobody typed
+        // into it delivered no edit at all. An insertion needs nothing: wherever
+        // the tap left the caret, one visible character changes the value.
         scrollUntilHittable(link)
         link.tap()
-        link.typeText(XCUIKeyboardKey.delete.rawValue)
+        link.typeText("x")
 
         // One delivered edit is the product boundary under test. Clearing the
-        // whole field with a burst of synthetic deletes made this acceptance
+        // whole field with a burst of synthetic keystrokes made this acceptance
         // depend on every hosted keyboard event arriving. The model's
         // edit-clears-refusal invariant has deterministic package coverage, and
         // the neighbouring malformed-link UI test owns empty-button disabling.
+        //
+        // The wait is `value != "not a link"` rather than an exact corrected
+        // string, deliberately: the caret lands wherever the tap did, so
+        // `xnot a link`, `not a linkx` and `not xa link` are all the same
+        // delivered edit. What the product owes is that the value CHANGED and
+        // that the refusal went with it — not that it changed in one place.
         let edited = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == true AND value != %@", "not a link"),
             object: link)
