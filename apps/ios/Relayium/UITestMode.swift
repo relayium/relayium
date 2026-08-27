@@ -221,6 +221,36 @@ enum UITestMode {
         model.linkText = "https://relayium.com/d/obj_uitest#k=\(downloadKeyB64url)"
     }
 
+    /// Prefills the one link the receive path must REFUSE, for the same reason
+    /// the valid fixture above exists: in the test that uses it, the refused
+    /// string is setup rather than subject.
+    ///
+    /// `testEditingARefusedLinkClearsTheRefusalWithIt` entered this value with
+    /// `XCUIElement.typeText`, and hosted run 33020899047 read the real field
+    /// back as `not ink` — input events lost between the tap and the
+    /// assertion, on a shared simulator under the full UI suite's load. The
+    /// property that test owns is that EDITING a refused link clears the
+    /// refusal, so the string it starts from arrives deterministically and the
+    /// one synthetic keystroke it still spends goes on the edit itself.
+    ///
+    /// Deliberately NOT extended to the neighbouring malformed-link and
+    /// keyboard-Go tests. Entering a link with the real keyboard and submitting
+    /// it are exactly what those two exist to prove.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let invalidDownloadLinkArgument = "--relayium-ui-testing-invalid-download-link"
+    /// Refused by `parseTransferLink` for the plainest available reason — it is
+    /// not a URL at all — so the refusal it produces is the product's own.
+    // nonlocalized: acceptance input, never rendered as product copy
+    static let invalidDownloadLinkText = "not a link"
+
+    @MainActor
+    static func prefillInvalidDownloadLink(in model: CloudDownloadModel) {
+        guard ProcessInfo.processInfo.arguments.contains(invalidDownloadLinkArgument) else {
+            return
+        }
+        model.linkText = invalidDownloadLinkText
+    }
+
     /// A token store already holding the acceptance bearer, so `restore()` takes
     /// its normal “found a credential” path rather than a special one.
     static func makeSignedInTokenStore() -> TokenStore {
@@ -552,6 +582,11 @@ enum UITestMode {
     /// Folded to a no-op; no launch argument can prefill a shipped receive.
     @MainActor
     static func prefillValidDownloadLink(in model: CloudDownloadModel) {}
+
+    /// Likewise. A shipped launch cannot be told to start a receive already
+    /// holding a link — valid or refusable — that nobody pasted.
+    @MainActor
+    static func prefillInvalidDownloadLink(in model: CloudDownloadModel) {}
 
     #endif
 }

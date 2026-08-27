@@ -803,14 +803,34 @@ final class AppShellUITests: XCTestCase {
     /// leaves the field editable. What it does not prove is that the refusal is
     /// not STICKY: guidance that outlives the input it described sits next to
     /// corrected text telling the user they are still wrong.
+    ///
+    /// **The refused string is setup here, not subject.** Typing it drove a
+    /// run of synthetic keystrokes to establish a precondition, and hosted run
+    /// 33020899047 lost input events along the way: the field read `not ink`,
+    /// and the precondition assertion failed before this test reached the
+    /// property it names. So the value arrives through the Debug-only launch
+    /// fixture, this test verifies the REAL field carries it, produces the
+    /// refusal with a real Open, and spends its one keystroke on the edit that
+    /// is the subject.
+    /// `testMalformedReceiveLinkExplainsHowToRecover` and
+    /// `testTheKeyboardGoKeyResolvesTheLink` keep the real typing and the real
+    /// submission, so nothing here removes that coverage.
     func testEditingARefusedLinkClearsTheRefusalWithIt() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-invalid-download-link"]
+        app.launch()
+
         openTask("Receive", title: "Receive files")
 
         let link = app.textFields["receive.link"]
         XCTAssertTrue(link.waitForExistence(timeout: 10))
+        XCTAssertEqual(link.value as? String, "not a link",
+                       "the deterministic refused-link fixture did not reach the real field")
+
         let open = app.buttons["Open"]
-        link.tap()
-        link.typeText("not a link")
+        XCTAssertTrue(open.isEnabled, "a filled-in link cannot be inspected")
+        scrollUntilHittable(open)
         open.tap()
 
         let guidance = app.staticTexts[
@@ -818,9 +838,10 @@ final class AppShellUITests: XCTestCase {
         ]
         XCTAssertTrue(guidance.waitForExistence(timeout: 10),
                       "an invalid link does not explain the required shape")
-        XCTAssertEqual(link.value as? String, "not a link",
-                       "the refused text did not reach the real field")
 
+        // The one genuine keyboard edit, on the real field, after a real
+        // refusal: this is the boundary the test exists to cross.
+        scrollUntilHittable(link)
         link.tap()
         link.typeText(XCUIKeyboardKey.delete.rawValue)
 
