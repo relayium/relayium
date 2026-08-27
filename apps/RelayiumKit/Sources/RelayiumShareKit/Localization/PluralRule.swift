@@ -16,45 +16,37 @@ public enum PluralCategory: String, CaseIterable, Sendable {
 /// quietly consults the host locale breaks it in exactly the case (Arabic, six
 /// forms) where it matters most.
 ///
-/// Rules are CLDR's integer rules for the nine shipped languages. Only integers
+/// Rules are CLDR's integer rules for the two shipped languages. Only integers
 /// are ever passed here — every plural in the product counts files, folders,
 /// devices, downloads or whole days.
+///
+/// This used to carry rules for nine, and the reasoning above was written when
+/// Arabic's six forms were the hard case. The seven frozen languages took their
+/// rules with them to `apps/localization-archive/frozen-locales/`; restoring one
+/// means restoring its `case` here as well as its catalog, because a language
+/// with no rule would not compile rather than silently rendering `other`. The
+/// deterministic-given-`AppLanguage` contract is unchanged and still the reason
+/// this is Swift rather than a `.stringsdict`.
 public enum PluralRule {
     /// The categories a language can actually produce. Used by the integrity
-    /// tests to require exactly these forms in every catalog: a missing `few` in
-    /// Arabic is a bug the `other` fallback would otherwise hide.
+    /// tests to require exactly these forms in every catalog: an English catalog
+    /// missing `one` is a bug the `other` fallback would otherwise hide.
     public static func categories(for language: AppLanguage) -> [PluralCategory] {
         switch language {
-        case .zh, .ja, .ko:
+        case .zh:
             // No grammatical number. One form, always.
             return [.other]
-        case .en, .de, .es:
+        case .en:
             return [.one, .other]
-        case .fr, .pt:
-            // CLDR: `one` covers 0 and 1 — "0 fichier", "0 ficheiro".
-            return [.one, .other]
-        case .ar:
-            return [.zero, .one, .two, .few, .many, .other]
         }
     }
 
     public static func category(for count: Int, language: AppLanguage) -> PluralCategory {
         switch language {
-        case .zh, .ja, .ko:
+        case .zh:
             return .other
-        case .en, .de, .es:
+        case .en:
             return count == 1 ? .one : .other
-        case .fr, .pt:
-            return (count == 0 || count == 1) ? .one : .other
-        case .ar:
-            let magnitude = abs(count)
-            if magnitude == 0 { return .zero }
-            if magnitude == 1 { return .one }
-            if magnitude == 2 { return .two }
-            let mod100 = magnitude % 100
-            if (3...10).contains(mod100) { return .few }
-            if (11...99).contains(mod100) { return .many }
-            return .other
         }
     }
 }

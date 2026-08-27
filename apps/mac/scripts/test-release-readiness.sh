@@ -70,14 +70,14 @@ for source_path in "${account_sources[@]}"; do
 done
 
 # Localization. Same reasoning again, with one addition: the catalogs are DATA,
-# so a rename or a bad merge can delete eight of them and leave a build that
+# so a rename or a bad merge can delete one of them and leave a build that
 # compiles, runs, and silently renders English to everybody.
 #
 # The catalogs and the lookup moved from `RelayiumAppKit` to `RelayiumShareKit`
-# so the iOS share extension could render the same nine languages without
-# linking the transport stack. `RelayiumAppKit` re-exports the module, so every
-# call site is unchanged — but these paths are not, and a stale list here would
-# pass by checking for files that no longer exist anywhere.
+# so the iOS share extension could render the same languages without linking the
+# transport stack. `RelayiumAppKit` re-exports the module, so every call site is
+# unchanged — but these paths are not, and a stale list here would pass by
+# checking for files that no longer exist anywhere.
 localization_sources=(
   "$repo_root/apps/RelayiumKit/Sources/RelayiumShareKit/Localization/AppLanguage.swift"
   "$repo_root/apps/RelayiumKit/Sources/RelayiumShareKit/Localization/L10n.swift"
@@ -97,9 +97,9 @@ for source_path in "${localization_sources[@]}"; do
   fi
 done
 
-# The nine catalogs themselves, by name. `swift test` asserts far more about
-# them, but this runs in the release path and needs no toolchain.
-supported_lprojs=(en zh-Hans ja ko de fr ar es pt)
+# The two shipped catalogs themselves, by name. `swift test` asserts far more
+# about them, but this runs in the release path and needs no toolchain.
+supported_lprojs=(en zh-Hans)
 catalog_root="$repo_root/apps/RelayiumKit/Sources/RelayiumShareKit/Resources"
 for lproj in "${supported_lprojs[@]}"; do
   if [ ! -f "$catalog_root/$lproj.lproj/Localizable.strings" ]; then
@@ -108,25 +108,83 @@ for lproj in "${supported_lprojs[@]}"; do
   fi
 done
 
-# Exactly nine, so a tenth language cannot be half-added: a catalog the app
-# cannot select is a translation nobody will ever see, and it would pass every
-# existence check above.
+# Exactly two, so a third language cannot be half-added AND a frozen one cannot
+# come back. `Package.swift` declares `.process("Resources")`, which packages
+# every `.lproj` in that directory — so a catalog restored here SHIPS, whatever
+# `AppLanguage` says, and would be a language the app advertises through the
+# bundle but cannot select. This count is the check that catches it.
 shipped_lproj_count="$(find "$catalog_root" -maxdepth 1 -type d -name '*.lproj' | wc -l | tr -d ' ')"
 if [ "$shipped_lproj_count" != "${#supported_lprojs[@]}" ]; then
   echo "error: expected ${#supported_lprojs[@]} .lproj catalogs, found $shipped_lproj_count" >&2
+  find "$catalog_root" -maxdepth 1 -type d -name '*.lproj' -exec basename {} \; >&2
   exit 1
 fi
 
-# And the APP has to declare the same nine. This is the one that decides layout
-# direction: without `ar` in CFBundleLocalizations, macOS treats the app as
-# English-only and lays an otherwise correct Arabic UI out left to right.
-app_localizations="$(
-  /usr/libexec/PlistBuddy -c "Print :CFBundleLocalizations" \
-    "$repo_root/apps/mac/Relayium/Info.plist" 2>/dev/null | tr -d ' ' | sed '1d;$d'
+# The seven frozen catalogs have to still EXIST, outside the package. Freezing a
+# translation and deleting it are different decisions, and only one of them was
+# taken; a `git rm` that removed them would otherwise pass every check above.
+archive_root="$repo_root/apps/localization-archive/frozen-locales"
+frozen_lprojs=(ar de es fr ja ko pt)
+for lproj in "${frozen_lprojs[@]}"; do
+  archived="$archive_root/$lproj.lproj/Localizable.strings"
+  if [ ! -s "$archived" ]; then
+    echo "error: frozen localization archive is missing or empty: $lproj.lproj" >&2
+    exit 1
+  fi
+  if [ -e "$catalog_root/$lproj.lproj" ]; then
+    echo "error: frozen locale $lproj.lproj is back inside the package resource root," \
+         "which ships it" >&2
+    exit 1
+  fi
+done
+
+# And every Mac BUNDLE has to declare exactly the same two.
+#
+# Both directions matter, for different reasons. A missing entry is the one that
+# decides layout and language matching: macOS treats an undeclared language as
+# unsupported. An EXTRA entry is the stale-claim direction this contraction is
+# about — a locale named here with no catalog behind it tells macOS, and App
+# Store Connect, that Relayium speaks a language it will then render in English.
+# The old check only looked for missing entries and would have passed a plist
+# that still listed all nine.
+for plist_rel in \
+  "apps/mac/Relayium/Info.plist" \
+  "apps/mac/RelayiumAppStore/Info.plist" \
+  "apps/mac/RelayiumShare/Info.plist"; do
+  declared="$(
+    /usr/libexec/PlistBuddy -c "Print :CFBundleLocalizations" \
+      "$repo_root/$plist_rel" 2>/dev/null | tr -d ' ' | sed '1d;$d'
+  )"
+  for lproj in "${supported_lprojs[@]}"; do
+    if ! printf '%s\n' "$declared" | grep -Fqx "$lproj"; then
+      echo "error: $plist_rel CFBundleLocalizations is missing $lproj" >&2
+      exit 1
+    fi
+  done
+  declared_count="$(printf '%s\n' "$declared" | grep -c . || true)"
+  if [ "$declared_count" != "${#supported_lprojs[@]}" ]; then
+    echo "error: $plist_rel CFBundleLocalizations must declare exactly" \
+         "${supported_lprojs[*]}; found: $(printf '%s' "$declared" | tr '\n' ' ')" >&2
+    exit 1
+  fi
+done
+
+# The Xcode project's own region list, for the same reason. `knownRegions` is
+# what Xcode offers and what a variant group resolves against; a frozen locale
+# left here invites a build setting or a new .lproj to quietly re-adopt it.
+pbxproj="$repo_root/apps/mac/Relayium.xcodeproj/project.pbxproj"
+known_regions="$(
+  sed -n '/knownRegions = (/,/);/p' "$pbxproj" | sed '1d;$d' | tr -d '\t",' | sed '/^$/d'
 )"
+for lproj in "${frozen_lprojs[@]}"; do
+  if printf '%s\n' "$known_regions" | grep -Fqx "$lproj"; then
+    echo "error: Relayium.xcodeproj knownRegions still lists frozen locale $lproj" >&2
+    exit 1
+  fi
+done
 for lproj in "${supported_lprojs[@]}"; do
-  if ! printf '%s\n' "$app_localizations" | grep -Fqx "$lproj"; then
-    echo "error: Info.plist CFBundleLocalizations is missing $lproj" >&2
+  if ! printf '%s\n' "$known_regions" | grep -Fqx "$lproj"; then
+    echo "error: Relayium.xcodeproj knownRegions is missing $lproj" >&2
     exit 1
   fi
 done

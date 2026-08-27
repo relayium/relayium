@@ -22,8 +22,8 @@ import RelayiumKit
 /// run — a privacy consequence, not a tidiness one, and not something a
 /// `--dry-run` flag on the test would fix.
 ///
-/// The six destinations, the settings scene and all nine languages are the real
-/// UI. Residency and notification registration are skipped because they reach
+/// The six destinations, the settings scene and both shipped languages are the
+/// real UI. Residency and notification registration are skipped because they reach
 /// outward; the pairing-code handoff test additionally injects the deterministic
 /// mint below so it can hold a handoff screen without contacting production.
 enum UITestMode {

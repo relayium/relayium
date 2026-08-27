@@ -1,11 +1,11 @@
 import Foundation
 
-/// Reads the nine shipped `.strings` catalogs out of the package's own resource
+/// Reads the two shipped `.strings` catalogs out of the package's own resource
 /// bundle.
 ///
 /// Two properties are the point of this type existing at all:
 ///
-///  1. **It never touches the main bundle.** The copy belongs to `RelayiumAppKit`,
+///  1. **It never touches the main bundle.** The copy belongs to this module,
 ///     so it is read from `Bundle.module` and from the `.lproj` inside it. A
 ///     `NSLocalizedString(...)` written in a view would resolve against the app
 ///     bundle, find nothing, and render the key — silently, and only in whichever

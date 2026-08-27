@@ -51,9 +51,9 @@ public enum DownloadState: Equatable {
 /// What an explicit "Try Again" would actually do — decided from the typed
 /// failure, never from the sentence the user is reading.
 ///
-/// Two things follow from that. The nine catalogs stay free to reword: a policy
-/// that matched English would be wrong in eight languages the moment a
-/// translator improved one. And the view stays free of the rule: `DownloadPane`
+/// Two things follow from that. The shipped catalogs stay free to reword: a
+/// policy that matched English would be wrong in Simplified Chinese the moment a
+/// translator improved one, and wrong again in any language later restored. And the view stays free of the rule: `DownloadPane`
 /// used to offer the same unconditional button for a burnt link and a dropped
 /// connection, and to answer both by re-parsing the text field — which, after a
 /// failure mid-transfer, walks the user back to a card they already accepted.

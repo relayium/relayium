@@ -3,7 +3,7 @@
 - `RelayiumKit/` — pure-logic Swift package (transport, signaling, crypto, wire). Test: `cd RelayiumKit && swift test`.
   It vends two products. `RelayiumKit` is the transport stack plus the
   `RelayiumAppKit` view-model layer, which both apps link. `RelayiumShareKit` is
-  Foundation-only — the nine localization catalogs, `L10n`, and the App Group
+  Foundation-only — the two shipped localization catalogs, `L10n`, and the App Group
   shared-draft store — and exists so the iOS share extension can render the same
   copy and stage the same files without mapping WebRTC, libsodium, an account
   client and an uploader into an `.appex`. `RelayiumAppKit` re-exports it
@@ -356,7 +356,7 @@ email arriving, the link, and the sign-in afterwards — has not been run agains
 a live server on either platform. What is covered is the layer below the views:
 the request bodies and every documented server answer, the state machine
 including sign-out and restore racing an in-flight registration or resend, and
-the copy in all nine languages.
+the copy in both shipped languages.
 
 ### App icon
 
@@ -558,21 +558,44 @@ acceptance because macOS and Apple's AASA cache participate in that path.
 
 ### Localization
 
-The macOS UI ships nine catalogs — **en, zh-Hans, ja, ko, de, fr, ar, es, pt** —
-of which **en** and **zh-Hans** are the maintained product languages and the
-other seven are frozen: their existing translations stay shipped and stay
-correct, and new or changed copy is not added to them. The web client no longer
-ships the seven at all, so this set is no longer the same as the web's. The copy
-and the catalogs belong to `RelayiumAppKit`, not to the app target:
+The macOS UI ships **exactly two catalogs — `en` and `zh-Hans`**. English is the
+source and the deterministic fallback; Simplified Chinese is maintained beside
+it. This matches the web client's `LANGS` one for one.
 
-    apps/RelayiumKit/Sources/RelayiumAppKit/
-      Localization/AppLanguage.swift          the closed set of nine, + RTL and lproj
+Seven languages Relayium used to ship — **ar, de, es, fr, ja, ko, pt** — are
+**frozen**. Their translations are preserved, with history, under
+`apps/localization-archive/frozen-locales/`, **outside every build target**.
+They are not selectable, not declared, and not packaged. See that directory's
+`README.md` for what restoring one would require.
+
+Two things had to happen together for that to be true, and neither is
+sufficient alone:
+
+- **The files moved.** `Package.swift` declares `.process("Resources")` on
+  `RelayiumShareKit`, which packages *every* `.lproj` in that directory. A
+  catalog left beside `en.lproj` ships whatever the code says.
+- **The enum lost the cases.** `AppLanguage` can no longer name Japanese, so a
+  Japanese Mac resolves to English rather than to a language with no words.
+
+Doing only the first would render raw keys; doing only the second would ship
+seven catalogs nothing can select. `LocalizationIntegrityTests` asserts both.
+
+The copy and the catalogs belong to `RelayiumShareKit`, not to the app target —
+the iOS share extension renders the same strings without linking the transport
+stack, and `RelayiumAppKit` re-exports the module so every `import
+RelayiumAppKit` still sees `L10n`:
+
+    apps/RelayiumKit/Sources/RelayiumShareKit/
+      Localization/AppLanguage.swift          the closed set of two, + RTL and lproj
       Localization/L10n.swift                 the only lookup API
       Localization/L10nKey.swift              L10nKey / PluralKey — the canonical key list
       Localization/LocalizationCatalog.swift  Bundle.module → <lang>.lproj
-      Localization/PluralRule.swift           CLDR integer plural rules for the nine
+      Localization/PluralRule.swift           CLDR integer plural rules for the two
+      Resources/en.lproj/Localizable.strings
+      Resources/zh-Hans.lproj/Localizable.strings
+
+    apps/RelayiumKit/Sources/RelayiumAppKit/
       Localization/AppCopy.swift              copy a SwiftUI view would otherwise inline
-      Resources/<lang>.lproj/Localizable.strings
 
 Views and view models call `L10n.t(.someKey)`; nothing calls `NSLocalizedString`,
 and nothing relies on SwiftUI auto-localizing a string literal. That is not a
@@ -584,7 +607,9 @@ every language with no error anywhere.
 `Locale.preferredLanguages` by `AppLanguage.resolve(preferred:)`, which matches
 on the language subtag in the caller's order — so `zh-Hant-TW` and `zh-Hans-CN`
 both land on the Simplified catalog, and anything unmatched lands on English.
-It is settable (`L10n.current = .ko`, `L10n.resetCurrent()`) for previews and
+That "anything unmatched" now includes all seven archived languages and their
+regional variants: `ja-JP`, `de-AT`, `fr-CA`, `ar-EG` and the rest are English.
+It is settable (`L10n.current = .zh`, `L10n.resetCurrent()`) for previews and
 harnesses.
 
 **Fallback.** Asked language → English → the key itself. The last step is
@@ -594,70 +619,89 @@ label is not. `Package.swift` declares `defaultLocalization: "en"` to match.
 **Explicit locale.** Every entry point takes an optional `language:`
 (`L10n.t(_:language:)`, `ErrorCopy.message(for:language:)`,
 `UsagePresentation.display(_:language:)`, `SelectionStore.summaryText(language:)`,
-…). This is what makes the tests mean something: an assertion about Arabic
-wording must not depend on the language of the machine running it.
+…). This is what makes the tests mean something: an assertion about Simplified
+Chinese wording must not depend on the language of the machine running it.
 
 **Plurals** are decided in Swift (`PluralRule`), not in `.stringsdict`.
 `.stringsdict` expansion runs through `String.localizedStringWithFormat`, which
 reads `Locale.current` — so the form chosen would depend on the host rather than
 on the language being rendered, which is exactly the property this layer exists
-to provide. Catalog keys are `key.one`, `key.other`, and for Arabic also `.zero`
-`.two` `.few` `.many`.
+to provide. Catalog keys are `key.one` and `key.other` for English; Chinese has
+no grammatical number and defines only `key.other`. The archived rules left with
+their catalogs, which is itself asserted: a French preference gets English
+agreement ("0 files ready"), not French ("0 fichier prêt").
 
 **Numbers, bytes, dates.** Counts and byte figures use Latin digits with a
 per-language decimal separator (matching the web client, and keeping a figure
 next to a `KB` symbol readable); the percent sign's position and the
-number/unit order come from the catalog. Dates go through `DateFormatter` in the
-rendered language, so an Arabic date uses Arabic conventions — a deliberate
-split from the digits used for counts.
+number/unit order come from the catalog. Both shipped languages write a decimal
+dot — the comma branch left with the seven European catalogs, and an archived
+preference must not get it back. Dates go through `DateFormatter` in the
+*rendered* language, so a German preference reads an English date.
 
-**RTL.** Arabic participates as a real localization of both bundles. The package
-carries `ar.lproj`, and both `apps/mac/Relayium/Info.plist` and
-`apps/ios/Relayium/Info.plist` list all nine in `CFBundleLocalizations`. On
-macOS, real-app QA showed that package-backed Arabic copy does not by itself
-change the app scene's direction, so both scene roots explicitly derive one
-`layoutDirection` from the same `L10n.current` language resolver as the copy.
-Individual views still use semantic leading/trailing layout and never force a
-direction of their own. iOS continues to use the direction supplied by its app
-localization.
-Technical values interpolated into localized prose (file names, manifest paths,
-pairing codes, the SAS, HTTP statuses, an `OSStatus`, an `errno`, a device name,
-the Files-app path in a collision message and in the iOS done state) go through
-`L10n.token`,
-which wraps them in U+2068/U+2069 isolates **for RTL only**, so the bytes are
-unchanged and English output is byte-identical to what it was before.
+**RTL.** **No shipped language is right-to-left.** Arabic was the only one and it
+is frozen, so `AppLanguage.isRightToLeft` answers `false` throughout.
+
+The plumbing that reads it is deliberately kept rather than deleted. Both scene
+roots still derive one `layoutDirection` from the `L10n.current` resolver, and
+technical values interpolated into localized prose (file names, manifest paths,
+pairing codes, the SAS, HTTP statuses, an `OSStatus`, an `errno`, a device name)
+still go through `L10n.token`, which wraps them in U+2068/U+2069 isolates **for
+RTL only**. Today every one of those paths resolves to a left-to-right shell and
+a verbatim token; restoring an RTL language is a change to `isRightToLeft`
+rather than an audit of every screen that prints a path.
+
+`CFBundleLocalizations` is the load-bearing declaration here, and it is why an
+Arabic launch is a release check rather than only a unit test: macOS reads that
+list to decide whether the app is a candidate for a language and how to lay the
+window out. A stale entry would mirror the window while the copy came back
+English. All three Mac bundles — `apps/mac/Relayium/Info.plist`,
+`apps/mac/RelayiumAppStore/Info.plist` and `apps/mac/RelayiumShare/Info.plist` —
+declare exactly `en` and `zh-Hans`, and `knownRegions` in `Relayium.xcodeproj`
+carries no frozen locale.
+
+**Known pending mismatch: iOS still declares nine.**
+`apps/ios/Relayium/Info.plist` and `apps/ios/RelayiumShare/Info.plist` still
+list all nine localizations, while the shared package ships two. iOS product
+development is paused and those files are read-only, so the contraction has not
+been applied there; that build is unshipped, so nothing reaches a user from it.
+The mismatch is pinned as a literal in `LocalizationIntegrityTests` and
+`IOSSurfaceGuardTests` rather than deleted, so it fails — as a checklist item —
+the moment iOS resumes and the plists are corrected.
 
 #### Localization integrity tests
 
 Run with the rest of `swift test`:
 
-- `LocalizationIntegrityTests` — exactly nine languages and exactly nine bundled
-  `.lproj`; every canonical key present and non-empty in each **maintained**
-  language, with a frozen catalog allowed to lack a key but never to define one
-  emptily; no catalog key the app does not reference; exactly the CLDR plural
-  categories per language per plural key; placeholder signatures matching
-  English key by key;
-  every lookup returning *that* language's own catalog entry; English fallback
-  then the raw key; the platform agreeing Arabic and only Arabic is RTL; and the
-  macOS and iOS `Info.plist`s each declaring the same nine.
+- `LocalizationIntegrityTests` — exactly two languages and exactly two bundled
+  `.lproj`; every canonical key present and non-empty in each; no catalog key
+  the app does not reference; exactly the CLDR plural categories per language
+  per plural key; placeholder signatures matching English key by key; every
+  lookup returning *that* language's own catalog entry; English fallback then
+  the raw key; no shipped language right-to-left, with the platform agreeing;
+  all three Mac `Info.plist`s declaring exactly the two, in **both** directions,
+  and `knownRegions` carrying no frozen locale. Plus the archive half: all seven
+  frozen catalogs still present and non-empty, none of them inside the package
+  resource root, every archived preference and regional variant rendering
+  *complete* English (never a raw key), and never archived plural or number
+  behaviour.
 - `LocalizedCopyTests` — what the copy actually renders, in explicit languages:
-  translated errors that keep their instruction, file names surviving verbatim
-  inside translated sentences, Arabic isolating a hostile path without altering
-  it, Arabic picking four different plural forms, and the claims that must
-  survive translation (the key stays on this Mac and never reaches Relayium's
-  servers; deletion is irreversible; the SAS acronym and the brand are kept).
+  translated errors that keep their instruction, file names and hostile paths
+  surviving verbatim inside translated sentences, English inflecting a noun
+  where Chinese does not, and the claims that must survive translation (the key
+  stays on this Mac and never reaches Relayium's servers; deletion is
+  irreversible; the SAS acronym and the brand are kept).
 - `ReceiveDestinationCopyTests` — the five destination errors iOS may not reuse
-  macOS's wording for, asserted in all nine: the shared copy really does give
-  the picker advice (and really does claim a folder the user chose, for
+  macOS's wording for, asserted in both shipped languages: the shared copy really
+  does give the picker advice (and really does claim a folder the user chose, for
   `unsafeName`), the iOS copy really does replace it — Files-app recovery for
   the two collisions, keeping the shared reason it will not merge; the link
   blamed rather than a folder for an unsafe path; the fixed receive folder plus
   a retry-and-report for the two write failures, with the errno kept for the
-  generic one. Also: no re-worded message leaves a `%@` on screen, Arabic
-  isolates every interpolation (name, folder path, errno) without altering it,
-  and `ENOSPC`, `incomplete` and `exceedsManifest` — plus every non-destination
-  error — come out of `ErrorCopy` byte for byte, with ENOSPC pinned to the
-  shared key itself rather than merely to matching text.
+  generic one. Also: no re-worded message leaves a `%@` on screen, every
+  interpolation (name, folder path, errno) comes out verbatim and unwrapped, and
+  `ENOSPC`, `incomplete` and `exceedsManifest` — plus every non-destination
+  error — come out of `ErrorCopy` byte for byte.
 - `LocalizationSourceGuardTests` — scans `apps/mac/Relayium`, `apps/ios/Relayium`
   and `Sources/RelayiumAppKit` for user-facing English literals and fails on
   them. Each root's file count is asserted separately, so a rename that empties
@@ -667,16 +711,21 @@ Run with the rest of `swift test`:
   guard is tested in both directions so it can neither rot into a no-op nor
   become so strict that the next person disables it.
 
-Adding a string means: add a case to `L10nKey` (or `PluralKey`), add it to all
-nine `.strings` files, and use it. Missing any of those fails a test rather than
-shipping. `apps/mac/scripts/test-release-readiness.sh` repeats the existence and
-`CFBundleLocalizations` checks without needing a Swift toolchain.
+In the macOS UI suite, `testEveryShippedLanguageRendersItsOwnShell` launches the
+real app in each of the two and reads the sidebar, and
+`testAnArchivedLanguagePreferenceRendersACompleteEnglishLeftToRightShell`
+launches it under Arabic and Japanese preferences and asserts English words on a
+left-to-right window — the geometry half that no package test can see.
+
+Adding a string means: add a case to `L10nKey` (or `PluralKey`), add it to both
+`.strings` files, and use it. Missing any of those fails a test rather than
+shipping. `apps/mac/scripts/test-release-readiness.sh` repeats the existence,
+archive-preservation and `CFBundleLocalizations` checks without needing a Swift
+toolchain.
 
 Not covered by any automated test: how the screens actually read. The SwiftUI
 surfaces are exercised automatically only through their models and presentation
-seams. English, Simplified Chinese and Arabic were also inspected by hand in a
-local macOS build, including the 860×560 content floor and mirrored Arabic
-layout; the translations have had no native-speaker review.
+seams. The Simplified Chinese translations have had no native-speaker review.
 macOS supplies its own localization for system menu items and standard alert
 buttons; those are not in this catalog.
 
@@ -1057,7 +1106,7 @@ and `/cross-network`, and
 one `details` entry naming both app IDs, exactly as before. There is nothing for
 a hand-off link to carry and nothing to route it to.
 
-Copy that the sheet renders is `share.*` in all nine catalogs. The summary above
+Copy that the sheet renders is `share.*` in both shipped catalogs. The summary above
 the action counts **items** (`share.itemCount`), not files: the share sheet hands
 over providers, and one shared folder is one provider and may be a thousand
 files. The copying label counts staged files, which is measured and legitimately
@@ -1137,7 +1186,7 @@ defaulting to `ErrorCopy`; `AppEnvironment` supplies the iOS one under
 Success is the same folder, said the same way. `.done` renders
 `ReceiveDestinationCopy.savedLocation()`, which interpolates `Relayium/Received`
 into `download.savedLocation` (`%@`) from the constants above rather than letting
-nine translations spell the route out — spelled out, each was free to stop at
+each translation spell the route out — spelled out, each was free to stop at
 `Relayium`, the folder that holds the receive folder rather than the files, on
 the one sentence the user acts on when the transfer is over.
 

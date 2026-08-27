@@ -112,16 +112,10 @@ final class MacSurfaceGuardTests: XCTestCase {
         // Per language, in the form each one actually uses to promise a
         // straight-through path. Written down by hand: the point is that
         // somebody read every translation.
+        // The seven archived languages' rows left with their catalogs.
         let directClaim: [AppLanguage: [String]] = [
             .en: ["direct", "straight between", "straight to"],
-            .de: ["direkt"],
-            .fr: ["directement", "en direct"],
-            .es: ["directo", "directamente"],
-            .pt: ["direto", "diretamente"],
             .zh: ["直连", "直接"],
-            .ja: ["直接"],
-            .ko: ["직접", "바로"],
-            .ar: ["مباشر"],
         ]
         let promises: [L10nKey] = [.navLanTransferSubtitle, .helpLanBoundary,
                                    .nearbySelectionSendHint, .nearbyAddFilesHint,
@@ -430,8 +424,8 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(renderers, ["MenuBarView.swift", lanConnect],
                        "same-network residency is rendered on more than one window surface")
 
-        // The key the footer rendered is retired rather than left translated in
-        // nine catalogs for nothing.
+        // The key the footer rendered is retired rather than left translated for
+        // nothing — it was carried in all nine catalogs when it was retired.
         XCTAssertFalse(L10nKey.allCases.contains { $0.rawValue == "nav.residency" },
                        "the retired sidebar-footer heading is still a live key")
 
@@ -3428,7 +3422,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// means — is decided from the typed error in `CloudDownloadModel`, where
     /// `CloudDownloadRecoveryTests` can hold it. A view that reads a message or
     /// a status to make that call would put the policy somewhere no test
-    /// reaches and make it wrong in eight languages.
+    /// reaches and make it wrong in every language but English.
     func testTheDownloadPaneOffersRetryOnlyWhereTheModelSaysItHelps() throws {
         let pane = try source(named: "DownloadPane.swift")
         XCTAssertTrue(pane.contains("if model.canRetry"),
@@ -4752,9 +4746,13 @@ final class MacSurfaceGuardTests: XCTestCase {
         // `installd`'s equivalent on macOS is less loud, but the Share menu shows
         // this string and `CFBundleName` is the target name, not the product.
         XCTAssertEqual(plist["CFBundleDisplayName"] as? String, "Relayium")
+        // An appex has its own bundle, so it needs its own localization list —
+        // and it must be the same list the app declares. Derived from
+        // `AppLanguage` rather than written out, so the Share extension cannot
+        // drift from the shell it hands files to.
         XCTAssertEqual(plist["CFBundleLocalizations"] as? [String],
-                       ["en", "zh-Hans", "ja", "ko", "de", "fr", "ar", "es", "pt"],
-                       "an appex has its own bundle, so it needs its own localization list")
+                       AppLanguage.allCases.map(\.lproj),
+                       "the Share extension must declare exactly the shipped languages")
     }
 
     /// The app collects staged drafts through the SAME router an Open With uses.

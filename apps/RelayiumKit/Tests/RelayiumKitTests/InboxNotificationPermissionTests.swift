@@ -109,16 +109,11 @@ final class InboxNotificationPermissionTests: XCTestCase {
     /// two verbs are checked separately because a translation that keeps only one
     /// of them leaves the other claim unmade.
     func testEveryLanguagePromisesThatReceivingAndSavingStillWork() {
-        let receiving: [AppLanguage: [String]] = [
-            .en: ["received"], .de: ["empfängt"], .es: ["recibiendo"],
-            .fr: ["recevoir"], .pt: ["receber"], .ja: ["受信"],
-            .ko: ["수신"], .zh: ["接收"], .ar: ["يستقبل"],
-        ]
-        let saving: [AppLanguage: [String]] = [
-            .en: ["saved"], .de: ["speichert"], .es: ["guardándolos"],
-            .fr: ["enregistrer"], .pt: ["guardá-los"], .ja: ["保存"],
-            .ko: ["저장"], .zh: ["保存"], .ar: ["يحفظها"],
-        ]
+        // The seven archived languages' rows left with their catalogs. Both
+        // shipped languages keep their own word for each verb, which is what
+        // makes this stronger than a non-empty check.
+        let receiving: [AppLanguage: [String]] = [.en: ["received"], .zh: ["接收"]]
+        let saving: [AppLanguage: [String]] = [.en: ["saved"], .zh: ["保存"]]
         for language in AppLanguage.allCases {
             guard let notice = InboxNotificationPermissionPresentation
                 .notice(for: .denied, language: language) else {

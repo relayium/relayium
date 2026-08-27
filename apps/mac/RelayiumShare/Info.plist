@@ -4,10 +4,10 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
-	<!-- The same nine languages the app declares, and for the same reason its
+	<!-- The same two languages the app declares, and for the same reason its
 	     own Info.plist lists them: the catalogs live in the RelayiumShareKit
 	     package bundle rather than in this one, so without this list macOS
-	     treats the extension as English-only. It would render correct Arabic
+	     treats the extension as English-only. It would render correct localized
 	     words — the package bundle answers for them — while laying the sheet out
 	     left to right, because the layout direction is decided from the BUNDLE's
 	     localizations. An appex has its own bundle, so it needs its own copy of
@@ -16,20 +16,13 @@
 	<array>
 		<string>en</string>
 		<string>zh-Hans</string>
-		<string>ja</string>
-		<string>ko</string>
-		<string>de</string>
-		<string>fr</string>
-		<string>ar</string>
-		<string>es</string>
-		<string>pt</string>
 	</array>
 	<!-- What the user sees in the Share menu. "Relayium" and not
 	     "RelayiumShare": the target name is a build artifact, and what belongs
 	     in the menu is the app the files are going to.
 
 	     Not localized, and not a `$(...)` substitution. A brand name is the same
-	     in all nine languages, and the catalogs this extension uses live in the
+	     in every language, and the catalogs this extension uses live in the
 	     RelayiumShareKit package bundle rather than here, so a key looked up in
 	     THIS bundle would find nothing to vary anyway. -->
 	<key>CFBundleDisplayName</key>

@@ -9,16 +9,16 @@ import Foundation
 ///
 /// Every entry point takes an optional explicit `language`. That is not a
 /// convenience: it is what makes the localization testable at all. With it, a
-/// test can assert the Arabic wording of a transfer failure on a machine set to
-/// German. Without it, every assertion would be a statement about the CI
-/// runner's settings.
+/// test can assert the Simplified Chinese wording of a transfer failure on a
+/// machine set to English. Without it, every assertion would be a statement
+/// about the CI runner's settings.
 ///
 /// ## Numbers, percentages, bytes, dates
 ///
 /// Counts and byte figures render with **Latin digits and a locale-appropriate
 /// decimal separator**, which is what the web client already produces and what a
 /// technical transfer UI wants — a size next to a `KB` symbol reads worse in
-/// Arabic-Indic digits than it does in Latin ones. Dates are the exception and
+/// non-Latin digits than it does in Latin ones. Dates are the exception and
 /// go through `DateFormatter` with the language's own `Locale`, because a date
 /// is prose, not a measurement, and Foundation's formats for it are correct in a
 /// way a hand-rolled one would not be.
@@ -77,7 +77,9 @@ public enum L10n {
     ///
     /// Substituted values that are technical (a file name, a path, a pairing
     /// code, an HTTP status) should be wrapped in `token(_:language:)` by the
-    /// caller so they keep their reading order inside Arabic.
+    /// caller so they keep their reading order inside a right-to-left sentence.
+    /// No shipped language is right-to-left today, so that wrapper is currently
+    /// a no-op — keep using it anyway; see `token(_:language:)`.
     public static func t(_ key: L10nKey,
                          _ args: [String],
                          language: AppLanguage? = nil) -> String {
@@ -95,8 +97,10 @@ public enum L10n {
         let category = PluralRule.category(for: count, language: lang)
         let catalog = LocalizationCatalog.shared
         // Asked language's own form, then its `other`, then English's form, then
-        // English's `other`. A translator who omitted `few` gets a grammatically
-        // imperfect Arabic string rather than a raw key on screen.
+        // English's `other`. A translator who omitted a category gets a
+        // grammatically imperfect string rather than a raw key on screen. With
+        // only `en` and `zh` shipped the chain rarely goes past its first step,
+        // but it is what keeps a restored language safe while it is incomplete.
         let template = catalog.rawValue(key.key(category), language: lang)
             ?? catalog.rawValue(key.key(.other), language: lang)
             ?? catalog.rawValue(key.key(PluralRule.category(for: count, language: .fallback)),
@@ -126,6 +130,16 @@ public enum L10n {
     ///
     /// A no-op for left-to-right languages, so English output is byte-identical
     /// to what it was before localization.
+    ///
+    /// **Every shipped language now takes that no-op branch.** Arabic was the
+    /// only right-to-left catalog and it is frozen, so `isRightToLeft` answers
+    /// `false` throughout and this returns the value unchanged for `en` and `zh`
+    /// alike. The wrapping branch is deliberately kept rather than deleted: it is
+    /// the correct behaviour the moment an RTL language returns, and the call
+    /// sites that already route technical values through here — file names,
+    /// paths, statuses, pairing codes, the SAS — are what make that restoration a
+    /// one-line change instead of an audit. Its cost while dormant is one boolean
+    /// check per token, and `LocalizedCopyTests` still pins the verbatim result.
     public static func token(_ value: String, language: AppLanguage? = nil) -> String {
         guard (language ?? current).isRightToLeft else { return value }
         return isolateStart + value + isolateEnd
@@ -137,12 +151,15 @@ public enum L10n {
     ///
     /// An explicit table rather than `Locale.decimalSeparator` on purpose: this
     /// layer's contract is that output depends on the `AppLanguage` argument and
-    /// on nothing else, and ICU data can differ between OS versions. Nine
+    /// on nothing else, and ICU data can differ between OS versions. Two
     /// languages is a table small enough to read.
+    ///
+    /// Both shipped languages use a dot. The comma branch left with the seven
+    /// frozen European catalogs; restoring one means restoring its row here, and
+    /// the switch is exhaustive so the compiler will say so.
     static func decimalSeparator(for language: AppLanguage) -> String {
         switch language {
-        case .en, .zh, .ja, .ko, .ar: return "."
-        case .de, .fr, .es, .pt:      return ","
+        case .en, .zh: return "."
         }
     }
 

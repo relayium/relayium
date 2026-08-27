@@ -67,15 +67,25 @@ let package = Package(
         // for the same reason: the iOS share extension needs both, and needs
         // them without the transport stack.
         //
-        //  - **The nine `.lproj` catalogs and `L10n`.** They used to sit in
-        //    `RelayiumAppKit`. Nothing about turning a key into words depends on
-        //    WebRTC, an uploader or an account, and the extension has to render
-        //    the same nine languages as the app — so the layer moved down rather
-        //    than the extension linking up. `Bundle.module` still resolves them
-        //    with no main-bundle lookup, which is the property that made them
-        //    package resources in the first place; it now resolves in the appex
-        //    bundle too. `RelayiumAppKit` re-exports this module, so every
+        //  - **The two shipped `.lproj` catalogs and `L10n`.** They used to sit
+        //    in `RelayiumAppKit`. Nothing about turning a key into words depends
+        //    on WebRTC, an uploader or an account, and the extension has to
+        //    render the same languages as the app — so the layer moved down
+        //    rather than the extension linking up. `Bundle.module` still resolves
+        //    them with no main-bundle lookup, which is the property that made
+        //    them package resources in the first place; it now resolves in the
+        //    appex bundle too. `RelayiumAppKit` re-exports this module, so every
         //    existing `import RelayiumAppKit` still sees `L10n` unchanged.
+        //
+        //    `Resources` holds `en.lproj` and `zh-Hans.lproj` and nothing else.
+        //    That is load-bearing rather than incidental: `.process` packages
+        //    EVERY `.lproj` it finds there, so this directory — not
+        //    `AppLanguage`, not `CFBundleLocalizations` — is what decides which
+        //    catalogs exist in the built bundle. The seven languages Relayium no
+        //    longer offers are frozen under
+        //    `apps/localization-archive/frozen-locales/`, outside every target,
+        //    for exactly that reason; `LocalizationIntegrityTests` fails if one
+        //    reappears here.
         //  - **The shared draft store.** The App Group hand-off between the
         //    extension and the app. Both sides link it, so there is exactly one
         //    implementation of the on-disk format, and `swift test` drives it

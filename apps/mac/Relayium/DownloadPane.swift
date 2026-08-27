@@ -113,7 +113,7 @@ struct DownloadPane: View {
                 // connection, and after a failure mid-transfer it walked the
                 // user back to a confirmation card they had already accepted.
                 // The rule lives in `CloudDownloadModel`, on the typed error, so
-                // it is testable and does not depend on which of nine languages
+                // it is testable and does not depend on which shipped language
                 // the message above is in. A corrected link still needs no
                 // button at all: the field and its Open action are always there.
                 if model.canRetry {

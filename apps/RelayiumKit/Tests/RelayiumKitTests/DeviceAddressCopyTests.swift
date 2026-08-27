@@ -86,7 +86,7 @@ final class DeviceAddressCopyTests: XCTestCase {
             XCTAssertNotEqual(withAddress, without, "\(language.rawValue)")
             // Built with the same bidi isolation the product applies, so this
             // asserts the rendered sentence rather than a simplified one that
-            // happens to match in the eight left-to-right languages.
+            // happens to match because no shipped language is right-to-left.
             let fragment = L10n.t(.accountDeviceLastAddress,
                                   [L10n.token("203.0.113.9", language: language)],
                                   language: language)
@@ -105,15 +105,30 @@ final class DeviceAddressCopyTests: XCTestCase {
         }
     }
 
-    /// An address is server-issued opaque text, like a file id or a device name.
-    /// Under Arabic it has to be isolated or the digits and dots reorder around
-    /// the surrounding RTL sentence and the user reads a different address.
-    func testTheAddressIsIsolatedUnderArabic() {
-        let detail = AccountPresentation.deviceDetail(kind: "app", lastSeenAt: 1_780_090_000,
-                                                      createdAt: 1_780_000_000,
-                                                      lastIP: "203.0.113.9", language: .ar)
-        XCTAssertTrue(detail.contains(L10n.token("203.0.113.9", language: .ar)),
-                      "the address is not bidi-isolated: \(detail.debugDescription)")
+    /// An address is server-issued opaque text, like a file id or a device name,
+    /// so it is routed through `L10n.token` rather than interpolated raw. Under a
+    /// right-to-left language that isolation is what stops the digits and dots
+    /// reordering around the surrounding sentence and the user reading a
+    /// different address.
+    ///
+    /// Arabic was the only RTL catalog and it is frozen, so the routing is
+    /// currently a no-op. What is asserted is that it is still ROUTED — the
+    /// address appears exactly as `token` renders it for that language — which
+    /// keeps the restoration of an RTL language a change to `isRightToLeft`
+    /// rather than an audit of every screen that prints an address.
+    func testTheAddressIsRoutedThroughTheBidiIsolationSeam() {
+        for language in AppLanguage.allCases {
+            let detail = AccountPresentation.deviceDetail(kind: "app", lastSeenAt: 1_780_090_000,
+                                                          createdAt: 1_780_000_000,
+                                                          lastIP: "203.0.113.9",
+                                                          language: language)
+            XCTAssertTrue(detail.contains(L10n.token("203.0.113.9", language: language)),
+                          "\(language.rawValue) does not route the address through "
+                          + "L10n.token: \(detail.debugDescription)")
+            // And with no RTL language shipped, that means verbatim.
+            XCTAssertTrue(detail.contains("203.0.113.9"),
+                          "\(language.rawValue) altered the address itself")
+        }
     }
 
     /// Every language says it, and none of them says "location".
@@ -125,8 +140,8 @@ final class DeviceAddressCopyTests: XCTestCase {
                               "\(language.rawValue) falls back to the key")
         }
         // The card explains what the address is and is not, once, rather than
-        // repeating a caveat on every row. English is asserted literally; the
-        // other eight are covered by the catalog integrity guards plus the
+        // repeating a caveat on every row. English is asserted literally;
+        // Simplified Chinese is covered by the catalog integrity guards plus the
         // language-specific phrases below.
         let note = L10n.t(.accountDevicesAddressNote, language: .en)
         XCTAssertTrue(note.contains("our server"), note)
@@ -139,13 +154,20 @@ final class DeviceAddressCopyTests: XCTestCase {
         }
     }
 
-    /// Spot-checked in three scripts, so a copy-paste of the English into eight
-    /// files fails rather than passing the "non-empty" bar.
+    /// Spot-checked in the non-source script, so a copy-paste of the English
+    /// into the Chinese catalog fails rather than passing the "non-empty" bar.
+    ///
+    /// This used to sample three scripts. Two of them were frozen with their
+    /// catalogs; the check that remains is the one that still protects a shipped
+    /// language, and it is strengthened to require the Chinese text to differ
+    /// from the English rather than merely to contain a character.
     func testTheAddressCopyIsGenuinelyTranslated() {
         XCTAssertTrue(L10n.t(.accountDeviceLastAddress, ["203.0.113.9"], language: .zh)
             .contains("地址"))
-        XCTAssertTrue(L10n.t(.accountDevicesAddressNote, language: .ja).contains("サーバー"))
-        XCTAssertTrue(L10n.t(.accountDevicesAddressNote, language: .fr).contains("serveur"))
+        XCTAssertTrue(L10n.t(.accountDevicesAddressNote, language: .zh).contains("服务器"))
+        XCTAssertNotEqual(L10n.t(.accountDevicesAddressNote, language: .zh),
+                          L10n.t(.accountDevicesAddressNote, language: .en),
+                          "the Chinese address note is the English string")
     }
 
     // MARK: - the accessible label

@@ -9,7 +9,7 @@
      Store forbids a second update mechanism at all; the other two are the
      signing key and the installer-launcher switch that only serve it.
 
-     Everything else is deliberately IDENTICAL, including the nine declared
+     Everything else is deliberately IDENTICAL, including the two declared
      localizations, the document types that make this app a Dock drop target and
      a Finder "Open With" entry, and the app category. Each is argued at length
      in `Relayium/Info.plist`; the reasoning is not repeated here so there is one
@@ -20,17 +20,14 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<!-- Exactly the two languages the app ships, and the same list as the
+	     direct Mac target's Info.plist. This is also the set App Store Connect
+	     reads to decide which localizations the product page may advertise, so
+	     a stale entry here is a public claim, not just a runtime one. -->
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>en</string>
 		<string>zh-Hans</string>
-		<string>ja</string>
-		<string>ko</string>
-		<string>de</string>
-		<string>fr</string>
-		<string>ar</string>
-		<string>es</string>
-		<string>pt</string>
 	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>

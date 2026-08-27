@@ -29,13 +29,16 @@ public enum StoredLinkKeyOperation {
 /// Every arm resolves an `L10nKey` rather than returning a literal. The
 /// `language` argument is optional and defaults to `L10n.current`, so no call
 /// site changed — but it exists, and it is the reason a test can assert the
-/// Arabic wording of a MITM warning without touching the machine's settings.
+/// Simplified Chinese wording of a MITM warning without touching the machine's
+/// settings.
 ///
 /// Values interpolated into these sentences are the user's or the peer's, or
 /// they are diagnostics: file names, manifest paths, HTTP statuses, an OSStatus,
 /// an errno, a file-count limit. They are never translated, and they go through
-/// `L10n.token` so Arabic lays each one out as one unit instead of letting the
-/// bidi algorithm rearrange a path around the sentence.
+/// `L10n.token` so a right-to-left language would lay each one out as one unit
+/// instead of letting the bidi algorithm rearrange a path around the sentence.
+/// No shipped language is right-to-left since Arabic was frozen, so that call is
+/// currently a no-op that returns the value verbatim.
 public enum ErrorCopy {
     /// Copy for a failure of the store holding each upload's E2E key.
     ///
@@ -111,7 +114,7 @@ public enum ErrorCopy {
                     // Deliberately the shared table's key, not a copy of its
                     // words: that path is the one it was written for, and one
                     // key is what stops the two from drifting apart in any of
-                    // the nine catalogs. Pinned by a test as well.
+                    // the shipped catalogs. Pinned by a test as well.
                     return L10n.t(.errorStoredLinkKeyInvalidKey, language: language)
                 case .remove:
                     return L10n.t(.errorStoredKeyBadKeyRemove, language: language)

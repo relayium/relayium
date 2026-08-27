@@ -2,7 +2,8 @@ import XCTest
 @testable import RelayiumAppKit
 @testable import RelayiumKit
 
-/// One sentence per state, in nine languages, and never an optimistic one.
+/// One sentence per state, in both shipped languages, and never an optimistic
+/// one.
 ///
 /// The state enum is closed and `CaseIterable` where it can be, so these tests
 /// walk the real thing rather than a list somebody remembered to update. What

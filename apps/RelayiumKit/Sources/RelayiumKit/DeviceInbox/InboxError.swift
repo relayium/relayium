@@ -25,7 +25,7 @@ public enum InboxProtocolField: String, Equatable, Sendable {
 ///    token or key material could reach a log line or a crash report;
 ///  * the localized sentence a user eventually reads belongs to the UI layer
 ///    (Phase 2B), which maps these cases through `L10n`. An English string here
-///    would be an untranslated sentence shipped in nine languages.
+///    would be an untranslated sentence shipped in every language.
 public enum InboxError: Error, Equatable, Sendable {
     /// Central rejected the request. `code` is the machine-readable token when
     /// the body carried one — never the body itself.

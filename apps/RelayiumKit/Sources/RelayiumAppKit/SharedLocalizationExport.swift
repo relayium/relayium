@@ -1,6 +1,6 @@
 /// `L10n`, `L10nKey`, `PluralKey`, `AppLanguage` and `LocalizationCatalog` moved
 /// down into `RelayiumShareKit` so the iOS share extension can render the same
-/// nine catalogs without linking the transport stack. Nothing that used them had
+/// shipped catalogs without linking the transport stack. Nothing that used them had
 /// to change: this re-export is what keeps `import RelayiumAppKit` a complete
 /// import for both app targets and for every test in this package.
 ///

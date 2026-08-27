@@ -14,8 +14,8 @@ import XCTest
 /// fixed.
 ///
 /// Every assertion here is on the TYPED recovery, never on the sentence: the
-/// nine catalogs are free to change wording, and a policy that reads English
-/// would be a policy that is wrong in eight languages.
+/// shipped catalogs are free to change wording, and a policy that reads English
+/// would be a policy that is wrong in Simplified Chinese.
 @MainActor
 final class CloudDownloadRecoveryPolicyTests: XCTestCase {
     private let parent = URL(fileURLWithPath: "/tmp/relayium-recovery-policy")

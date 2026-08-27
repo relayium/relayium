@@ -217,7 +217,7 @@ private struct HelpBlock: View {
 
     /// Numbered, with the numeral and its separator positioned by the catalog
     /// rather than composed here — `"\(n). "` is English punctuation, and this
-    /// renders in nine languages including one that reads right to left.
+    /// renders in both shipped languages.
     private func step(_ key: L10nKey, number: Int) -> some View {
         Text(L10n.t(.formatHelpStep, [L10n.number(number), L10n.t(key)]))
             .font(.caption)

@@ -9,8 +9,8 @@ import XCTest
 final class HelpPresentationTests: XCTestCase {
 
     /// The site's own guide slugs, taken from what `web/public` actually
-    /// publishes. A link to a slug that is not here is a 404 shipped in nine
-    /// languages.
+    /// publishes. A link to a slug that is not here is a 404 shipped in every
+    /// language.
     private let publishedGuides: Set<String> = [
         "back-up-a-server-over-ssh",
         "bring-your-own-node",
@@ -109,12 +109,21 @@ final class HelpPresentationTests: XCTestCase {
         }
     }
 
-    /// Every key resolves to real copy in every one of the nine languages, and
-    /// none of it is the raw key falling through.
+    /// Every key resolves to real copy in both shipped languages, and none of it
+    /// is the raw key falling through.
     ///
-    /// The seven frozen locales reach English through the catalog fallback,
-    /// which is the shipped behaviour rather than a gap — what must never happen
-    /// is a raw `help.lan.boundary` on somebody's screen.
+    /// **Scope: the two shipped catalogs, and only those.** The loop below walks
+    /// `AppLanguage.allCases`, which is `en` and `zh` — so what this proves is
+    /// that every help key exists and is translated in both, and that no raw
+    /// `help.lan.boundary` reaches somebody's screen in either.
+    ///
+    /// It says nothing about the seven archived languages, because it cannot:
+    /// they are no longer `AppLanguage` values and this loop never asks for one.
+    /// That an archived preference renders COMPLETE English rather than a raw
+    /// key is a real guarantee, and it is pinned where it can actually be
+    /// exercised — `LocalizationIntegrityTests.testEveryArchivedPreferenceRendersCompleteEnglish`,
+    /// which resolves each archived tag and compares every canonical key against
+    /// the English catalog.
     func testEveryHelpStringExistsInEveryLanguage() {
         for surface in MacSurface.allCases {
             guard let topic = HelpPresentation.topic(for: surface) else { continue }
@@ -187,11 +196,21 @@ final class HelpPresentationTests: XCTestCase {
     /// …and the page each LINK actually resolves to is on disk, checked against
     /// the repository rather than against the list above.
     ///
-    /// It walks all nine app languages but asserts on the URL the app would
-    /// build for each, which is the thing that can 404. A frozen locale resolves
-    /// to the English page, so this passes for it by checking that page — and
-    /// would fail if the maintained-language rule ever generated a prefix the
-    /// site does not publish.
+    /// It walks both shipped app languages and asserts on the URL the app would
+    /// build for each, which is the thing that can 404. So exactly two URL forms
+    /// are checked here: the unprefixed English page, and the `/zh/` one.
+    ///
+    /// **No archived locale reaches this API to be checked.** An archived
+    /// preference has already become `.en` in `AppLanguage.resolve(preferred:)`,
+    /// before any caller gets as far as building a help URL — so there is no
+    /// frozen-locale case for this loop to pass or fail. That resolution is
+    /// pinned in `LocalizationIntegrityTests`
+    /// (`testRegionalVariantsResolveTheSameWayAsTheirLanguage`), and the rule
+    /// that a restored locale must not be sent to an archived translation is
+    /// pinned directly below in
+    /// `testEveryShippedLanguageLinksToItsOwnGuideAndArchivedPreferencesGetEnglish`.
+    /// What this test still catches is the maintained-language rule generating a
+    /// prefix the site does not publish.
     func testEveryGuideLinkResolvesToAPageOnDisk() throws {
         for surface in MacSurface.allCases {
             guard case let .localizedGuide(slug)? = HelpPresentation.topic(for: surface)?.guide
@@ -208,36 +227,69 @@ final class HelpPresentationTests: XCTestCase {
         }
     }
 
-    /// **A frozen locale is sent to the maintained guide, not to its own
-    /// archive.**
+    /// **Every shipped language gets its own guide, and an archived preference
+    /// gets the English one.**
     ///
-    /// The seven frozen translations are still published and still reachable by
-    /// URL — the site keeps them as labelled archives — but nobody is updating
-    /// them, and an app already rendering its new copy in English through the
-    /// catalog fallback must not be the one place that promises current
-    /// documentation in a language it stopped maintaining.
+    /// Two halves, and they are reached by different routes, which is the whole
+    /// point of asserting both here.
     ///
-    /// Asserted as an exhaustive pair rather than as a list of exceptions, so
-    /// restoring a locale is one edit and this test is what says the edit
-    /// happened.
-    func testOnlyMaintainedLanguagesLinkToTheirOwnGuide() {
+    /// The first half is direct: each `AppLanguage` maps to one URL — English at
+    /// the root, every other shipped language under its `rawValue` prefix. There
+    /// is no second language list any more. `HelpPresentation` used to keep a
+    /// `maintainedGuideLanguages` pair and send anything outside it to English;
+    /// once `AppLanguage` contracted to the shipped set those became the same
+    /// set, so the membership test was always true and that branch was
+    /// unreachable. It is gone, and this asserts what replaced it.
+    ///
+    /// The second half is the one that branch was *for*, and it still has to
+    /// hold — it just happens earlier now. A Mac set to Japanese or Arabic
+    /// resolves to `.en` in `AppLanguage.resolve(preferred:)` before any caller
+    /// builds a URL, so those tags are exercised here through the resolver
+    /// rather than through a language value that no longer exists. The claim is
+    /// unchanged: an app already rendering English copy must not be the one
+    /// place that links to a translation nobody is updating.
+    ///
+    /// **Fail-closed.** The switch below is exhaustive with no `default`, so
+    /// adding an `AppLanguage` case without stating its URL here does not
+    /// compile. That is deliberate — a new case silently inheriting a default
+    /// would generate `/<lang>/guides/…` against a prefix the site may not
+    /// publish, which is a 404 shipped to exactly the readers the new language
+    /// was added for.
+    func testEveryShippedLanguageLinksToItsOwnGuideAndArchivedPreferencesGetEnglish() {
         let slug = "send-a-file-to-someone"
+        let english = "https://relayium.com/guides/\(slug)"
+
         for language in AppLanguage.allCases {
             let url = HelpPresentation.url(for: .localizedGuide(slug: slug),
                                            language: language).absoluteString
+            // No `default`: a new case must state its URL here or fail to build.
             switch language {
             case .en:
-                XCTAssertEqual(url, "https://relayium.com/guides/\(slug)")
+                XCTAssertEqual(url, english)
             case .zh:
                 XCTAssertEqual(url, "https://relayium.com/zh/guides/\(slug)")
-            default:
-                XCTAssertEqual(url, "https://relayium.com/guides/\(slug)",
-                               "\(language.rawValue) is frozen and must not be sent to an "
-                               + "archived translation as though it were current")
             }
         }
-        XCTAssertEqual(HelpPresentation.maintainedGuideLanguages, [.en, .zh],
-                       "the maintained set is a product decision, not a convenience")
+
+        // The archived tags, driven through the real resolver. Regional forms
+        // included because that is what `Locale.preferredLanguages` hands back.
+        for tag in ["ja", "ko", "de", "fr", "ar", "es", "pt",
+                    "ja-JP", "ar-EG", "de-AT", "fr-CA", "pt-BR"] {
+            let resolved = AppLanguage.resolve(preferred: [tag])
+            XCTAssertEqual(resolved, .en, "\(tag) no longer resolves to English")
+            XCTAssertEqual(HelpPresentation.url(for: .localizedGuide(slug: slug),
+                                                language: resolved).absoluteString,
+                           english,
+                           "\(tag) was sent to an archived translation as though it were "
+                           + "current")
+        }
+
+        // And a Chinese preference is NOT swept into English by the above: the
+        // archived assertion would still pass if everything resolved to `.en`.
+        XCTAssertEqual(HelpPresentation.url(
+            for: .localizedGuide(slug: slug),
+            language: AppLanguage.resolve(preferred: ["zh-Hant-TW"])).absoluteString,
+                       "https://relayium.com/zh/guides/\(slug)")
     }
 
     /// The English-only pages get no language prefix, because the site does not
@@ -280,8 +332,11 @@ final class HelpPresentationTests: XCTestCase {
         XCTAssertEqual(HelpPresentation.url(for: .localizedGuide(slug: "x"),
                                             language: .zh, baseURL: hosted).absoluteString,
                        "https://files.example.org/zh/guides/x")
+        // An English-only page ignores the language entirely, so it is asserted
+        // with a language that is NOT English — otherwise the test would pass on
+        // a `.localizedGuide` regression that simply happened to produce `/cli`.
         XCTAssertEqual(HelpPresentation.url(for: .englishPage(path: "cli"),
-                                            language: .de, baseURL: hosted).absoluteString,
+                                            language: .zh, baseURL: hosted).absoluteString,
                        "https://files.example.org/cli")
     }
 

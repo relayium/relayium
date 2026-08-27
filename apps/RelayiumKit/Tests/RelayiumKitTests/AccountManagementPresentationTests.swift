@@ -116,8 +116,13 @@ final class AccountManagementPresentationTests: XCTestCase {
     // MARK: - naming a device
 
     func testAnUnnamedDeviceGetsTheLocalizedFallbackRatherThanABlank() {
-        XCTAssertEqual(AccountPresentation.deviceName(device(name: ""), language: .fr),
-                       L10n.t(.accountUnnamedDevice, language: .fr))
+        // Asserted in Chinese rather than English so a regression that returned
+        // a hard-coded English literal instead of the keyed fallback fails here.
+        XCTAssertEqual(AccountPresentation.deviceName(device(name: ""), language: .zh),
+                       L10n.t(.accountUnnamedDevice, language: .zh))
+        XCTAssertNotEqual(L10n.t(.accountUnnamedDevice, language: .zh),
+                          L10n.t(.accountUnnamedDevice, language: .en),
+                          "the Chinese unnamed-device fallback is the English string")
         XCTAssertEqual(AccountPresentation.deviceName(device(name: "Ada's laptop")),
                        "Ada's laptop")
     }
@@ -197,12 +202,24 @@ final class AccountManagementPresentationTests: XCTestCase {
         XCTAssertNotEqual(share, delete)
     }
 
-    /// The id is a server-issued opaque token, so it is isolated rather than
-    /// translated — under Arabic the bidi algorithm would otherwise be free to
-    /// move part of it across the sentence.
-    func testTheFileIdIsBidiIsolatedInArabic() {
-        let label = AccountPresentation.deleteActionLabel(fileId: "abc123", language: .ar)
-        XCTAssertTrue(label.contains("\u{2068}abc123\u{2069}"), label)
+    /// The id is a server-issued opaque token, so it is routed through
+    /// `L10n.token` rather than interpolated — under a right-to-left language the
+    /// bidi algorithm would otherwise be free to move part of it across the
+    /// sentence.
+    ///
+    /// Arabic was that language and is now frozen, so the seam is a no-op and
+    /// what is asserted is both halves of the current contract: the id reaches
+    /// the label through `token`, and it arrives verbatim with no isolation
+    /// marks in either shipped language.
+    func testTheFileIdIsRoutedThroughTheBidiIsolationSeam() {
+        for language in AppLanguage.allCases {
+            let label = AccountPresentation.deleteActionLabel(fileId: "abc123",
+                                                              language: language)
+            XCTAssertTrue(label.contains(L10n.token("abc123", language: language)), label)
+            XCTAssertTrue(label.contains("abc123"), label)
+            XCTAssertFalse(label.contains("\u{2068}"),
+                           "\(language.rawValue) wrapped an id with no RTL language shipped")
+        }
     }
 
     // MARK: - every label is real copy

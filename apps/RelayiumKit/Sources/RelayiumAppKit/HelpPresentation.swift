@@ -29,11 +29,11 @@ import RelayiumShareKit
 
 /// Something a reader can go and read.
 public enum HelpGuide: Equatable, Sendable {
-    /// A guide under `/guides/<slug>`. English lives at the root; a MAINTAINED
-    /// translation lives under `/<language>/`.
+    /// A guide under `/guides/<slug>`. English lives at the root; every other
+    /// shipped language lives under `/<language>/`.
     ///
-    /// The seven frozen locales deliberately do not get their own prefix — see
-    /// `HelpPresentation.url`.
+    /// The seven archived locales never reach this: an archived OS preference
+    /// resolves to `.en` before a URL is built — see `HelpPresentation.url`.
     case localizedGuide(slug: String)
     /// A product page that exists in English only — the site's own decision, and
     /// one this app must not paper over by generating a URL that 404s.
@@ -148,44 +148,61 @@ public enum HelpPresentation {
         }
     }
 
-    /// **The languages this app will send a reader to a guide in.**
-    ///
-    /// English is the source and the fallback; Simplified Chinese is maintained
-    /// beside it. That is the owner's supported-language decision (2026-08-14),
-    /// and `LocalizationIntegrityTests` holds the same pair for the catalogs.
-    ///
-    /// It is repeated here rather than imported because it decides a different
-    /// thing — where a link POINTS, not which words render — and the two could
-    /// legitimately diverge if a locale were restored one half at a time.
-    static let maintainedGuideLanguages: Set<AppLanguage> = [.en, .zh]
-
-    /// The URL a guide link opens, in the language the app can honestly offer.
+    /// The URL a guide link opens.
     ///
     /// Mirrors the site's own rule (`web/src/lib/OfflinePage.svelte`): English
-    /// lives at the root and a translation under its own prefix. The prefix is
-    /// the *Relayium* language id — `zh`, not the `zh-Hans` that names the Apple
-    /// resource directory — which is why it comes from `rawValue` rather than
-    /// from `lproj`.
+    /// lives at the root and every other language under its own prefix. The
+    /// prefix is the *Relayium* language id — `zh`, not the `zh-Hans` that names
+    /// the Apple resource directory — which is why it comes from `rawValue`
+    /// rather than from `lproj`.
     ///
-    /// **A frozen locale gets the English guide, deliberately.** Those seven
-    /// translations are still published and still reachable, but they are
-    /// archives: they describe the product as it was when the locale was frozen,
-    /// and the site labels them as archived translations rather than removing
-    /// them. An app running in one of them is already rendering new copy in
-    /// English through the catalog fallback, so a "read the guide" link that
-    /// silently swapped in a page nobody is updating would be the one place this
-    /// app promised current documentation it does not have. Linking the
-    /// maintained page instead is the same promise the rest of the screen makes.
+    /// **`AppLanguage` is the only language set consulted, and every case gets a
+    /// direct answer.** There used to be a second one here — a
+    /// `maintainedGuideLanguages` pair, plus a branch sending anything outside it
+    /// to English — from when the app shipped nine languages and linked guides in
+    /// two. Once `AppLanguage` contracted to the shipped set those became the
+    /// same set, the membership test was always true, and the fallback was
+    /// unreachable code asserting a distinction that no longer existed. A second
+    /// en/zh list is drift, not policy: it can only ever disagree with
+    /// `AppLanguage` by being stale.
     ///
-    /// Restoring a locale is one edit here and one in the catalogs, in that
-    /// order or either, and neither is a code change anywhere else.
+    /// **An archived locale still gets the English guide** — it just gets there
+    /// earlier, and once. Those seven translations are still published and still
+    /// reachable, but they are archives: they describe the product as it was when
+    /// the locale was frozen, and the site labels them as archived rather than
+    /// removing them. A Mac set to one of them has already resolved to `.en` in
+    /// `AppLanguage.resolve(preferred:)` before any caller reaches this function,
+    /// so it is rendering English copy AND opening the maintained English guide.
+    /// A link that silently swapped in a page nobody is updating would be the one
+    /// place this app promised current documentation it does not have.
+    ///
+    /// What removing the second list buys is narrow, and worth stating exactly:
+    /// **this function needs no language-list edit of its own.** Once a case is
+    /// back in `AppLanguage` it immediately gets `/<rawValue>/` here, with no
+    /// parallel set to remember to update — which was the whole failure mode of
+    /// the pair this replaced.
+    ///
+    /// That is not the same as restoring a locale being cheap. Full restoration
+    /// follows the checklist in `apps/localization-archive/README.md`:
+    /// re-translating the catalog to the current `L10nKey` set, restoring the
+    /// language's CLDR plural rules, declaring it in the Mac bundles and
+    /// `knownRegions`, RTL support where the language needs it, and
+    /// native-speaker review with layout, accessibility and regression passes.
+    ///
+    /// One requirement is this function's alone, and it is not on that list:
+    /// **the site must publish a maintained guide at that prefix.** The URL is
+    /// generated unconditionally, so a locale restored in the app while the site
+    /// still has only an archived translation — or none — turns every guide link
+    /// into a stale page or a 404. `HelpPresentationTests` is what catches it:
+    /// it checks every generated URL against a page that actually exists on
+    /// disk.
     public static func url(for guide: HelpGuide,
                            language: AppLanguage,
                            baseURL: URL = AppEnvironment.productionBaseURL) -> URL {
         switch guide {
         case let .localizedGuide(slug):
-            let maintained = maintainedGuideLanguages.contains(language) ? language : .en
-            let prefix = maintained == .en ? "" : maintained.rawValue + "/"
+            // English at the root, every other shipped language under its id.
+            let prefix = language == .en ? "" : language.rawValue + "/"
             // nonlocalized: a URL path, not user copy
             return baseURL.appendingPathComponent(prefix + "guides/" + slug)
         case let .englishPage(path):

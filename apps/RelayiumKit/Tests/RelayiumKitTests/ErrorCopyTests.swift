@@ -292,8 +292,8 @@ final class ErrorCopyTests: XCTestCase {
         }
     }
 
-    /// It resolves in all nine languages — a recipient who hits a 503 is not
-    /// shown the raw key, and not shown English inside an Arabic screen.
+    /// It resolves in both shipped languages — a recipient who hits a 503 is not
+    /// shown the raw key, and not shown English inside a Chinese screen.
     func testDownloadUnavailableResolvesInEveryLanguage() {
         for language in AppLanguage.allCases {
             let m = ErrorCopy.message(for: CloudError.downloadUnavailable(status: 503),

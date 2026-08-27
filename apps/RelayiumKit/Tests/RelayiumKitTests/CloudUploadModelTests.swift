@@ -264,8 +264,8 @@ final class CloudUploadModelTests: XCTestCase {
     /// really did fail.
     ///
     /// What this pins is WHERE the key lives and that it never left — not the
-    /// word "Mac", which was only ever assertable in nine languages because a
-    /// brand name survives translation verbatim. The same notice is rendered on
+    /// word "Mac", which was only ever assertable across the nine catalogs that
+    /// then shipped because a brand name survives translation verbatim. The same notice is rendered on
     /// iOS from R3-C onwards, so the noun that was platform-true is now
     /// platform-false, and the substance is unchanged.
     func testTheSuccessNoticeSaysTheKeyIsKeptOnThisDeviceAndNeverSent() {
