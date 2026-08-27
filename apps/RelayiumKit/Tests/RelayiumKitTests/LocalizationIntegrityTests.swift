@@ -25,7 +25,7 @@ final class LocalizationIntegrityTests: XCTestCase {
 
     /// Where the frozen catalogs live now: inside the repository, outside every
     /// build target.
-    private static let archiveRoot = "apps/localization-archive/frozen-locales"
+    private static let archiveRoot = "apps/RelayiumKit/LocalizationArchive/frozen-locales"
 
     /// The product contract is these two, matching the web client's `LANGS`.
     ///
@@ -123,7 +123,7 @@ final class LocalizationIntegrityTests: XCTestCase {
     /// against the directory contents rather than against `frozenLprojs`, so
     /// adding an eighth frozen locale without documenting it fails here.
     func testTheArchiveReadmeDocumentsEveryFrozenCatalogItHolds() throws {
-        let readme = try RepoRoot.text("apps/localization-archive/README.md")
+        let readme = try RepoRoot.text("apps/RelayiumKit/LocalizationArchive/README.md")
         let archived = try FileManager.default
             .contentsOfDirectory(at: try RepoRoot.directory(Self.archiveRoot),
                                  includingPropertiesForKeys: nil)
@@ -134,7 +134,7 @@ final class LocalizationIntegrityTests: XCTestCase {
                        "the archive holds a different set than this file expects")
         for locale in archived {
             XCTAssertTrue(readme.contains("\(locale).lproj"),
-                          "apps/localization-archive/README.md does not document \(locale).lproj")
+                          "the archive README does not document \(locale).lproj")
         }
         // And it says what these files are NOT, which is the claim that stops
         // one being picked up and shipped as if it were current.

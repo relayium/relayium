@@ -2100,7 +2100,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // The extension has its own bundle, so it needs its own localization
         // list. This one still names nine, while the shared package now ships
         // exactly `en` and `zh-Hans`: the Mac two-language contraction moved the
-        // other seven catalogs to `apps/localization-archive/` and could not
+        // other seven catalogs to `apps/RelayiumKit/LocalizationArchive/` and could not
         // touch `apps/ios/**`, which is read-only while iOS product development
         // is paused. That build is unshipped, so nothing reaches a user from it.
         //

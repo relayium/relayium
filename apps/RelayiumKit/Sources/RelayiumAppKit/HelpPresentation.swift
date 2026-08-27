@@ -183,7 +183,7 @@ public enum HelpPresentation {
     /// the pair this replaced.
     ///
     /// That is not the same as restoring a locale being cheap. Full restoration
-    /// follows the checklist in `apps/localization-archive/README.md`:
+    /// follows the checklist in `apps/RelayiumKit/LocalizationArchive/README.md`:
     /// re-translating the catalog to the current `L10nKey` set, restoring the
     /// language's CLDR plural rules, declaring it in the Mac bundles and
     /// `knownRegions`, RTL support where the language needs it, and

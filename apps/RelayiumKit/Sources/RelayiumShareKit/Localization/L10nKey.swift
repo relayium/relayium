@@ -9,7 +9,7 @@ import Foundation
 /// forgotten in code, or added in code and forgotten in Simplified Chinese.
 ///
 /// "Both" means `en` and `zh-Hans`. The seven frozen catalogs under
-/// `apps/localization-archive/frozen-locales/` are NOT walked and are not held
+/// `apps/RelayiumKit/LocalizationArchive/frozen-locales/` are NOT walked and are not held
 /// to this enum — they are history, and they will drift as keys are added here.
 ///
 /// It also removes the class of bug that a bare string key invites: a typo in

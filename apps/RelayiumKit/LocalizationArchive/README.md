@@ -19,6 +19,22 @@ next to `en.lproj` ships, whatever the enum says. Moving them out of
 `Sources/RelayiumShareKit/Resources/` is what actually removes them from the
 built bundle — the enum and the plists only stop the app from *asking* for them.
 
+## Why it lives inside `apps/RelayiumKit/` rather than at `apps/`
+
+It was briefly a first-level `apps/localization-archive/`, and CI rejected that
+— correctly. `scripts/test/ci-event-policy-test.mjs` requires every directory
+directly under `apps/` to be either a platform root with exactly one owning
+workflow (`apps/mac`, `apps/ios`) or the Apple-shared package. A root the policy
+has never heard of is source with no declared owner, no declared path filter and
+no declared release pipeline, so the gate fails rather than letting it appear
+unnoticed. Inert historical catalogs do not deserve a workflow, and the
+invariant should not be weakened to admit them.
+
+Living under `apps/RelayiumKit/` — but outside `Sources/` and outside every
+SwiftPM and Xcode target — satisfies both rules at once: the package already has
+an owner, and nothing here is compiled or packaged. Do not move this directory
+back up a level.
+
 ## What is here
 
 | Locale | Directory |

@@ -22,8 +22,8 @@ public enum PluralCategory: String, CaseIterable, Sendable {
 ///
 /// This used to carry rules for nine, and the reasoning above was written when
 /// Arabic's six forms were the hard case. The seven frozen languages took their
-/// rules with them to `apps/localization-archive/frozen-locales/`; restoring one
-/// means restoring its `case` here as well as its catalog, because a language
+/// rules with them to `apps/RelayiumKit/LocalizationArchive/frozen-locales/`;
+/// restoring one means restoring its `case` here as well as its catalog, because a language
 /// with no rule would not compile rather than silently rendering `other`. The
 /// deterministic-given-`AppLanguage` contract is unchanged and still the reason
 /// this is Swift rather than a `.stringsdict`.

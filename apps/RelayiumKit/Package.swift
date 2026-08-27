@@ -83,7 +83,7 @@ let package = Package(
         //    `AppLanguage`, not `CFBundleLocalizations` — is what decides which
         //    catalogs exist in the built bundle. The seven languages Relayium no
         //    longer offers are frozen under
-        //    `apps/localization-archive/frozen-locales/`, outside every target,
+        //    `apps/RelayiumKit/LocalizationArchive/frozen-locales/`, outside every target,
         //    for exactly that reason; `LocalizationIntegrityTests` fails if one
         //    reappears here.
         //  - **The shared draft store.** The App Group hand-off between the

@@ -123,7 +123,7 @@ fi
 # The seven frozen catalogs have to still EXIST, outside the package. Freezing a
 # translation and deleting it are different decisions, and only one of them was
 # taken; a `git rm` that removed them would otherwise pass every check above.
-archive_root="$repo_root/apps/localization-archive/frozen-locales"
+archive_root="$repo_root/apps/RelayiumKit/LocalizationArchive/frozen-locales"
 frozen_lprojs=(ar de es fr ja ko pt)
 for lproj in "${frozen_lprojs[@]}"; do
   archived="$archive_root/$lproj.lproj/Localizable.strings"

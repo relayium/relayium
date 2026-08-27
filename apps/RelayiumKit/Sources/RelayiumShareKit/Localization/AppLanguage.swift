@@ -11,8 +11,8 @@ import Foundation
 ///
 /// The clients used to ship nine. Arabic, German, Spanish, French, Japanese,
 /// Korean and Portuguese are no longer offered: their catalogs are frozen under
-/// `apps/localization-archive/frozen-locales/`, outside every build target. That
-/// move is what removes them from the packaged bundle — `Package.swift` uses
+/// `apps/RelayiumKit/LocalizationArchive/frozen-locales/`, outside every build
+/// target. That move is what removes them from the packaged bundle — `Package.swift` uses
 /// `.process("Resources")`, so a catalog left beside `en.lproj` would ship no
 /// matter what this enum said. Dropping the cases here is the other half: it is
 /// what makes a user who asks for Japanese get English rather than a language

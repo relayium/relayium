@@ -564,7 +564,7 @@ it. This matches the web client's `LANGS` one for one.
 
 Seven languages Relayium used to ship — **ar, de, es, fr, ja, ko, pt** — are
 **frozen**. Their translations are preserved, with history, under
-`apps/localization-archive/frozen-locales/`, **outside every build target**.
+`apps/RelayiumKit/LocalizationArchive/frozen-locales/`, **outside every build target**.
 They are not selectable, not declared, and not packaged. See that directory's
 `README.md` for what restoring one would require.
 
