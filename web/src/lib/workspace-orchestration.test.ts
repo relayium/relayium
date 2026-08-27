@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+// The one section of this file that EXECUTES rather than reads: the relay
+// commit rule is behaviour, and the two lanes' reads of it are three lines App
+// declares and hands out. See the last describe block.
+import { chooseRtcConfig, type RelayEntry } from "./ice";
+import { createRelaySelection } from "./relay-selection";
 
 // Source contract, like activity-visibility.test.ts and
 // workspace-presentation.test.ts: these rules are about which nodes exist in
@@ -42,6 +47,15 @@ const fn = (name: string): string => {
  *  rule names the very calls it is a rule about. */
 const code = (text: string) =>
   text.split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+/** The statements between two anchors — a declaration block rather than a
+ *  function body, which is what a dependency object is. */
+const block = (from: string, to: string): string => {
+  const at = app.indexOf(from);
+  expect(at, `${from} is missing from App.svelte`).toBeGreaterThan(-1);
+  const end = app.indexOf(to, at);
+  expect(end, `${to} no longer follows ${from} in App.svelte`).toBeGreaterThan(at);
+  return code(app.slice(at, end));
+};
 
 /** The room-binding effect's statements, up to the switch it ends with. */
 const roomEffect = (): string => {
@@ -869,5 +883,550 @@ describe("pre-upload: no key leaves before the sender confirms", () => {
     expect(all).toContain("revokeHandoff();");
     expect(all.indexOf("resetHandoffLanes();")).toBeLessThan(all.indexOf("revokeHandoff();"));
     expect(fn("disconnectWorkspace")).toContain("revokeHandoff();");
+  });
+});
+
+// ── the join and the configuration are started together ──────────────────────
+//
+// A source contract for the same reason everything else in this file is: these
+// are rules about the ORDER of statements inside two async functions, and about
+// which of them sit before an `await`. A rendered snapshot cannot show either,
+// and App is not mountable here.
+//
+// What behaviour is proved elsewhere, so this file does not have to fake it:
+//   - what suspend()/reset() do to the gate    → relay-selection.test.ts
+//   - the first legal link/1 frame waiting on it → peer-link's own tests
+describe("the room is joined while /api/ice is still in flight", () => {
+  const APPLY = "applyRoomIce(await pending);";
+  /**
+   * The async onMount's statements, from its opening to the line that installs
+   * the answer.
+   *
+   * Anchored on `APPLY` rather than brace-matched: the interesting property of
+   * this function is precisely that the await is LAST, so the await is the
+   * honest terminator — and everything this slice contains is by construction
+   * something that runs before it. Brace counting would also have to be right
+   * about braces inside string literals, which this does not have to be.
+   */
+  const mountBeforeApply = (): string => {
+    const at = app.indexOf("onMount(async () => {");
+    expect(at, "the async onMount is missing from App.svelte").toBeGreaterThan(-1);
+    const end = app.indexOf(APPLY, at);
+    expect(end, "onMount no longer installs the answer it did not wait for")
+      .toBeGreaterThan(-1);
+    return code(app.slice(at, end + APPLY.length));
+  };
+
+  it("starts the fetch, then rebinds the socket, then awaits the answer", () => {
+    const body = code(fn("switchRoom"));
+    const started = body.indexOf("const pending = fetchIceConfig(roomCode);");
+    const rebound = body.indexOf("signaling.reconnect(wsURL(location, roomCode));");
+    const awaited = body.indexOf("const ice = await pending;");
+    expect(started, "switchRoom no longer starts the fetch without awaiting it")
+      .toBeGreaterThan(-1);
+    // The whole change, as one ordering: entering a code no longer waits a
+    // serial round trip before the hub is told this page is in the room.
+    expect(started).toBeLessThan(rebound);
+    expect(rebound).toBeLessThan(awaited);
+    expect(body).not.toContain("await fetchIceConfig(roomCode)");
+  });
+
+  it("closes the relay gate before the socket can deliver a frame", () => {
+    const body = code(fn("switchRoom"));
+    // `suspend()` lives in resetRelaySelection, whose own contract is that it
+    // runs AFTER workspace.resetRoom(). Both must precede the rebind: a gate
+    // still open when the new room's first frame arrives is a transport built
+    // on the configuration of neither room.
+    expect(body.indexOf("workspace.resetRoom();"))
+      .toBeLessThan(body.indexOf("resetRelaySelection();"));
+    expect(body.indexOf("resetRelaySelection();"))
+      .toBeLessThan(body.indexOf("signaling.reconnect(wsURL(location, roomCode));"));
+    const reset = code(fn("resetRelaySelection"));
+    expect(reset).toContain("relaySelection.suspend();");
+    expect(reset).toContain("roomIcePending = true;");
+    // And the room being left takes its credentials with it. A TURN credential
+    // is minted for ONE code, so a connection built in the window must not be
+    // able to present the previous rendezvous's.
+    for (const cleared of ["iceServers = [];", "relayPool = [];", "relayBound = null;"]) {
+      const at = body.indexOf(cleared);
+      expect(at, `${cleared} is missing from switchRoom`).toBeGreaterThan(-1);
+      expect(at).toBeLessThan(body.indexOf("signaling.reconnect(wsURL(location, roomCode));"));
+    }
+  });
+
+  it("does the same on the first join, where the gate starts open", () => {
+    const body = mountBeforeApply();
+    const started = body.indexOf("const pending = fetchIceConfig(roomCode);");
+    const suspended = body.indexOf("resetRelaySelection();");
+    const socket = body.indexOf("signaling = new SignalingClient(");
+    expect(started, "onMount no longer starts the fetch without awaiting it")
+      .toBeGreaterThan(-1);
+    expect(started).toBeLessThan(suspended);
+    // The gate is shut BEFORE the socket exists. `relaySelection` is created
+    // open, which is right for a page holding its configuration and wrong for
+    // one still fetching it — and onMount is the one entry with no room switch
+    // ahead of it to have closed it.
+    expect(suspended).toBeLessThan(socket);
+    expect(body).not.toContain("await fetchIceConfig(roomCode)");
+  });
+
+  it("registers every listener before the answer is awaited", () => {
+    // The slice ENDS at the await, so containment is the assertion: the socket
+    // does not buffer, a frame delivered before its handler exists is dropped,
+    // and in a code room the roster naming the peer is delivered once.
+    const body = mountBeforeApply();
+    for (const listener of [
+      "signaling.onSelfId(",
+      "signaling.onPeers(",
+      "signaling.onPeerLeft(",
+      "signaling.onSignal(onPeerRelayRtt);",
+      "signaling.onClose(",
+      "session.listenForIncoming();",
+      "textSession.listenForRequests();",
+      "workspace.start();",
+    ]) {
+      expect(body, `${listener} runs behind the ICE await, so its frames are dropped`)
+        .toContain(listener);
+    }
+  });
+
+  it("holds the peer's relay map instead of recording it into an empty pool", () => {
+    const body = code(fn("onPeerRelayRtt"));
+    // `reset` empties `theirs` against the room's real pool, so recording during
+    // the window would record into a room one call away from forgetting it. And
+    // a dropped map is not self-healing: a peer that finished probing sends its
+    // greet once and nothing after it.
+    expect(body).toContain("if (roomIcePending) {");
+    expect(body).toContain("if (parseRelayRtt(data) && heldRelayRtt.length < HELD_RELAY_RTT_MAX) {");
+    expect(body).toContain("} else if (relaySelection.receive(from, data)) {");
+    // Replayed AFTER reset, which is what puts them into the first choice this
+    // room makes rather than the one after it.
+    const measure = code(fn("startRelayMeasurement"));
+    expect(measure.indexOf("relaySelection.reset(relayPool);")).toBeLessThan(
+      measure.indexOf("for (const held of heldRelayRtt) relaySelection.receive(held.from, held.data);"),
+    );
+    expect(measure).toContain("heldRelayRtt = [];");
+    // And a departed peer's held map goes with it, exactly as `peerGone` drops
+    // one that had already been merged — but only for a peer a PREVIOUS roster
+    // named, because the hub can hand this socket a roster computed before the
+    // peer whose map already arrived.
+    expect(code(fn("noteRelayPeers"))).toContain(
+      "heldRelayRtt = heldRelayRtt.filter((h) => present.has(h.from) || !heldRelayRoster.has(h.from));",
+    );
+    expect(code(fn("noteRelayPeers"))).toContain("heldRelayRoster = present;");
+    expect(mountBeforeApply()).toContain("dropHeldRelayRtt(peerId);");
+  });
+
+  it("applies the whole answer in one place, and only there", () => {
+    const body = code(fn("applyRoomIce"));
+    for (const assignment of [
+      "iceServers = ice.iceServers;",
+      "relayPool = ice.relays;",
+      "relayStatus = ice.relayStatus;",
+      "relayBound = relayDeadline(ice, Date.now());",
+      "roomIcePending = false;",
+    ]) expect(body, `${assignment} is missing from applyRoomIce`).toContain(assignment);
+    // The pool must be assigned before `reset` closes the gate against it.
+    expect(body.indexOf("relayPool = ice.relays;"))
+      .toBeLessThan(body.indexOf("startRelayMeasurement()"));
+    // One writer: a second assignment of the room's pool is a second room
+    // boundary nothing else knows about, and the flag would then be cleared by
+    // a path the gate never heard from.
+    // Anchored to an indented statement so the `let roomIcePending = false;`
+    // declaration is not counted as a second writer of it.
+    const all = code(app);
+    expect(all.match(/relayPool = ice\.relays;/g)).toHaveLength(1);
+    expect(all.match(/^\s+roomIcePending = false;$/gm)).toHaveLength(1);
+  });
+});
+
+// ── nothing may be built before this room's own answer ───────────────────────
+//
+// The invariant the whole concurrency change rests on. Joining a round trip
+// early is safe only while NOTHING can be built from the configuration the join
+// did not wait for — and "nothing" has to mean the `link/1` path, the legacy
+// file lane and the legacy text lane, because all three end at the same
+// `rtcConfig()` and all three would snapshot the same empty answer into an
+// `RTCPeerConnection` for the life of the connection.
+//
+// The rule these replace was a five-second timer that set a `roomIceWaitOver`
+// flag and then returned `rtcConfig()` anyway. That is the defect stated as a
+// design: the fallback it reached was the DEFAULT RTC configuration — no
+// servers, no pool, no credential, `iceTransportPolicy` unset — for a room that
+// had simply been answered slowly. There is no such timeout now, and the reason
+// there does not need to be one is `fetchIceConfig`: it owns the retry, the
+// `Retry-After` cap and the "which failures are worth repeating" decision, and
+// it ALWAYS resolves — an unreadable `/api/ice` comes back as an `unavailable`
+// STUN-only configuration. That answer is the fallback boundary, and it is
+// installed by the same call that opens the gate.
+//
+// A source contract for the same reason the rest of this file is one: these are
+// rules about which statements exist, in which order, inside one component that
+// owns the socket, the ICE fetch and the service-worker registration. What the
+// pieces DO is executed elsewhere:
+//   - `suspend()`, its own bounded release, and `reset()` → relay-selection.test.ts
+//   - holding the first legal `link/1` frame behind a gate → peer-link's tests
+//   - the router's legacy/mixed fork these two lanes sit on → peer-workspace.test.ts
+describe("no transport is built while the room has no configuration", () => {
+  const all = code(app);
+  /** The readiness block itself: its state, its settler, its wait, its gate. */
+  const readiness = code(app.slice(
+    app.indexOf("let roomIceWaiters"),
+    app.indexOf("function applyRoomIce("),
+  ));
+
+  it("becomes ready only where the room's own answer is installed", () => {
+    // ONE settler, and `applyRoomIce` is it. A second `settleRoomIce(true)`
+    // anywhere would be a second way to become ready — which is precisely what
+    // the deleted timer was, and it was a way that had no answer behind it.
+    expect(all.match(/settleRoomIce\(true\)/g)).toHaveLength(1);
+    const apply = code(fn("applyRoomIce"));
+    expect(apply).toContain("settleRoomIce(true);");
+    // Ordering, and every step of it is load bearing. The flag clears, then
+    // `reset` puts THIS room's pool behind `takeChoice()`, then the peers that
+    // arrived during the window are re-noted against a pool that now exists —
+    // and only then is anything woken. A build released ahead of `reset` reads
+    // the previous room's pool; one released ahead of the re-note hands itself
+    // to a gate whose bounded grace nobody ever started.
+    expect(apply.indexOf("roomIcePending = false;"))
+      .toBeLessThan(apply.indexOf("startRelayMeasurement()"));
+    expect(apply.indexOf("startRelayMeasurement()"))
+      .toBeLessThan(apply.indexOf("noteRelayPeers("));
+    expect(apply.indexOf("noteRelayPeers("))
+      .toBeLessThan(apply.indexOf("settleRoomIce(true);"));
+  });
+
+  it("has no deadline of its own, so no elapsed time can permit a build", () => {
+    // The mutation this exists to catch: any timer in here is a path to `ready`
+    // that no `/api/ice` answer stands behind.
+    expect(readiness).not.toMatch(/setTimeout|clearTimeout|setInterval|Date\.now/);
+    const reset = code(fn("resetRelaySelection"));
+    expect(reset).not.toMatch(/setTimeout|clearTimeout/);
+    // …and the flag that timer wrote is gone with it, everywhere. While it
+    // existed, `roomIcePending` was true and a build was still permitted.
+    expect(all).not.toContain("roomIceWaitOver");
+    expect(all).not.toContain("roomIceTimer");
+    // The old caller, too: a helper that answers `rtcConfig()` while the room is
+    // pending is the empty configuration by another name.
+    expect(all).not.toContain("rtcConfigWhenReady");
+  });
+
+  it("waits on the answer and on nothing else, and does not wait once it is in", () => {
+    const wait = code(fn("whenRoomIce"));
+    // One condition. Not the relay agreement (the legacy lanes have never waited
+    // for it, and starting would delay every transfer in a pooled room by up to
+    // a peer's whole grace), and not a clock.
+    expect(wait).toContain("if (!roomIcePending) return Promise.resolve(true);");
+    expect(wait).toContain("new Promise<boolean>((resolve) => roomIceWaiters.push(resolve))");
+    expect(wait).not.toMatch(/setTimeout|relaySelection|rtcConfig/);
+  });
+
+  it("wakes each parked build exactly once, and abandons it on a room switch", () => {
+    const settle = code(fn("settleRoomIce"));
+    // Taken before anything runs. A callback that parks again — a link waiter
+    // handing itself on to the relay gate — must join the NEXT window rather
+    // than the one being closed, and no waiter may be resolved twice.
+    expect(settle).toContain("const parked = roomIceWaiters;");
+    expect(settle).toContain("roomIceWaiters = [];");
+    expect(settle.indexOf("roomIceWaiters = [];"))
+      .toBeLessThan(settle.indexOf("for (const cb of parked)"));
+    // The room boundary supersedes rather than carries: the peer, the socket and
+    // the credentials a parked build was for all belong to the room being left.
+    // First, so nothing is still parked when the next window opens below.
+    const reset = code(fn("resetRelaySelection"));
+    expect(reset).toContain("settleRoomIce(false);");
+    expect(reset.indexOf("settleRoomIce(false);"))
+      .toBeLessThan(reset.indexOf("roomIcePending = true;"));
+    expect(reset.indexOf("roomIcePending = true;"))
+      .toBeLessThan(reset.indexOf("relaySelection.suspend();"));
+    // Exactly one supersede per boundary — `resetRelaySelection` is the only
+    // caller, and it is the one function both entries go through.
+    expect(all.match(/settleRoomIce\(false\)/g)).toHaveLength(1);
+  });
+
+  // ── link/1 ──────────────────────────────────────────────────────────────────
+  it("gives the link manager the room's readiness, not only its relay agreement", () => {
+    // `relaySelection` can only answer the half it owns, and during this window
+    // it is being asked about a selection with no pool to agree on. Its own
+    // deadline — a bound on a PEER that may never speak — then answers "ready"
+    // five seconds in, for a room that has no configuration at all. That release
+    // is still correct in relay-selection.test.ts and must not be corrected
+    // there; what changes is that it is no longer the whole answer.
+    expect(all).toContain("relayGate: () => roomGate,");
+    expect(all).not.toContain("relayGate: () => relaySelection.gate");
+    expect(readiness).toContain("const roomGate: RelayGate = {");
+    expect(readiness).toContain("ready: () => !roomIcePending && relaySelection.gate.ready(),");
+    // Parked on the answer first and handed on to the relay gate second, so the
+    // relay CHOICE stays bounded exactly as it was — and that bound now starts
+    // from `reset`, which is to say from the moment a real pool exists.
+    expect(readiness).toContain("if (!roomIcePending) { relaySelection.gate.whenReady(cb); return; }");
+    expect(readiness).toContain(
+      "roomIceWaiters.push((live) => { if (live) relaySelection.gate.whenReady(cb); });",
+    );
+    // A superseded waiter is dropped rather than run, exactly as
+    // `relaySelection.reset`/`suspend` drop their own: whoever parked it has
+    // already been told, because `workspace.resetRoom()` runs first.
+    expect(readiness).toContain("if (live)");
+  });
+
+  // ── the legacy file and text lanes ──────────────────────────────────────────
+  it("parks the two ways this page STARTS a legacy transport", () => {
+    // The router forks to these for every peer that does not route `link/1`, and
+    // neither has ever gone through the relay gate. Parked rather than refused:
+    // a satisfied wait goes on to build exactly once, and a superseded one
+    // abandons, because the room the intent was for is gone.
+    const files = block("const legacyFiles = {", "const legacyText = {");
+    expect(files).toContain("async sendFiles(peerId: string, files: PickedFile[]) {");
+    expect(files).toContain("if (!(await whenRoomIce())) return;");
+    expect(files).toContain("await session.sendFiles(peerId, files);");
+    expect(files.indexOf("await whenRoomIce()"))
+      .toBeLessThan(files.indexOf("await session.sendFiles"));
+
+    const text = block("const legacyText = {", "const workspace: PeerWorkspace = createPeerWorkspace({");
+    expect(text).toContain("async openWith(peerId: string) {");
+    expect(text).toContain("if (!(await whenRoomIce())) return;");
+    expect(text).toContain("await textSession.openWith(peerId);");
+    expect(text.indexOf("await whenRoomIce()"))
+      .toBeLessThan(text.indexOf("await textSession.openWith"));
+
+    // The router is handed the parked lanes, not the raw sessions — the fork
+    // lives inside it, so this is the one place that reaches both branches.
+    expect(all).toContain("legacyFiles,");
+    expect(all).toContain("legacyText,");
+    expect(all).not.toContain("legacyFiles: session,");
+    expect(all).not.toContain("legacyText: textSession,");
+  });
+
+  // The INBOUND half of each lane cannot be gated from this component at all:
+  // both snapshot `rtcConfig()` inside their own offer handler, which App never
+  // reaches. The only two levers it has from here are the file lane's
+  // `textActive` and the message lane's `canAccept` — and both mean "somebody
+  // else has this lane", which every legacy sender reads as TERMINAL. Refusing
+  // there turned a slow `/api/ice` into a deterministic failed transfer for a
+  // peer that had done nothing wrong and was very likely already waiting.
+  //
+  // So the lanes take the gate itself and park the offer. What they DO with it —
+  // park rather than refuse, at most one, retire exactly once, build exactly one
+  // transport from the installed configuration, and still answer `busy` to a
+  // genuine conflict — is executed, not restated:
+  //   - transfer-session.routing.test.ts (the file lane, and `routeOffer`)
+  //   - text-link.test.ts (the message lane)
+  // What is asserted here is only the composition those tests cannot see: that
+  // this component builds ONE gate and gives it to BOTH lanes.
+  it("hands the room's readiness to both legacy lanes", () => {
+    const gate = block("const roomIce: RoomIceGate = {", "const textLink = createTextLink({");
+    // The same two facts the outbound wrappers use, so a lane and a wrapper can
+    // never disagree about whether this room is ready.
+    expect(gate).toContain("pending: () => roomIcePending,");
+    expect(gate).toContain("whenReady: () => whenRoomIce(),");
+    const textLinkDeps = block("const textLink = createTextLink({", "const textSession = createTextSession({");
+    const fileDeps = block("const session = createTransferSession({", "const legacyFiles = {");
+    expect(textLinkDeps).toContain("roomIce,");
+    expect(fileDeps).toContain("roomIce,");
+    // …and the refusal it replaces is gone from both levers. Either one would
+    // put the pending room back where a sender reads it as "peer busy" — and
+    // `textActive` would additionally carry it into `busy`, which is what
+    // `warnsOnLeave` is built from, prompting on every reload.
+    expect(textLinkDeps).toContain("canAccept: (from) => textSession.canAcceptFrom(from),");
+    expect(textLinkDeps).not.toContain("roomIcePending");
+    expect(fileDeps).not.toContain("roomIcePending");
+    const files = block("const legacyFiles = {", "const legacyText = {");
+    expect(files).toContain("get busy() { return session.busy; },");
+    expect(files).toContain("get transferActive() { return session.transferActive; },");
+  });
+
+  it("retires parked inbound work at every boundary that ends the room", () => {
+    // A parked offer outliving its room is the one way this could build a stale
+    // transport, so every end-of-room event has to reach both lanes. The room
+    // switch is covered twice over — `settleRoomIce(false)` supersedes the wait
+    // itself — and that is deliberate: retirement is idempotent by identity, and
+    // the explicit calls also cover a cancellation that does not switch rooms.
+    const left = block("signaling.onPeerLeft((peerId) => {", "signaling.onSignal(onPeerRelayRtt);");
+    expect(left).toContain("session.peerGone(peerId);");
+    expect(left).toContain("textLink.peerGone(peerId);");
+    // Before the branch: a code room that was never joined closes terminally and
+    // never settles the window, so anything parked there would wait forever.
+    const closed = block("signaling.onClose(() => {", "if (roomCode && !joinedRoom)");
+    expect(closed).toContain("session.retireParkedInbound();");
+    expect(closed).toContain("textLink.retireParkedInbound();");
+    const switching = code(fn("switchRoom"));
+    expect(switching).toContain("session.abortAll();"); // …which retires the file lane's
+    expect(switching).toContain("session.reset();");
+    expect(switching).toContain("textLink.retireParkedInbound();");
+  });
+
+  it("leaves a LAN room, a codeless page and a STUN-only code exactly as immediate", () => {
+    // Every one of those is answered with a pool-less configuration, and
+    // `reset([])` opens the relay gate in the same call. So `applyRoomIce`
+    // settles a wait that hands its callback to an already-open gate, in the
+    // turn the answer lands: no relay-map delay anywhere on those paths.
+    const wait = code(fn("whenRoomIce"));
+    expect(wait).toContain("Promise.resolve(true)");
+    expect(readiness).toContain("if (!roomIcePending) { relaySelection.gate.whenReady(cb); return; }");
+    // And nothing in the readiness block waits on the relay agreement itself,
+    // which is what would have made a POOLED room slower than it was.
+    expect(code(fn("settleRoomIce"))).not.toContain("relaySelection");
+  });
+});
+
+// ── which config read COMMITS the room to a relay ────────────────────────────
+//
+// `relaySelection.takeChoice()` is not a read, it is a record: it marks this
+// room as having built a transport on the agreed relay, and that record does
+// exactly one thing — it FORBIDS `relock`, the departure re-lock that takes the
+// gate back when the peer it opened for leaves before anything was built.
+//
+// Composing all three lanes onto one `rtcConfig()` therefore let a LEGACY
+// construction spend the record. The legacy file and text lanes never go
+// through the relay gate at all, so nothing `link/1` was ever built — and the
+// room was nevertheless unable to re-lock, which is the very state `relock`
+// exists to prevent: the replacement peer's first legal `link/1` frame goes out
+// on the departed peer's relay, or on the fallback, before its own map can
+// arrive.
+//
+// The split is the correction, and this section is its evidence in two halves:
+// the first EXECUTES the two reads against the real `createRelaySelection` and
+// the real `chooseRtcConfig`, and the second pins that model to the component
+// by asserting the exact expressions App.svelte builds them from.
+describe("the relay choice is committed by the link path and only by it", () => {
+  const pool: RelayEntry[] = [
+    { id: "tok", iceServers: [{ urls: ["turn:tok.example:3478"], username: "u", credential: "c" }] },
+    { id: "fra", iceServers: [{ urls: ["turn:fra.example:3478"], username: "u", credential: "c" }] },
+  ];
+
+  /**
+   * App's two readers over one selection, settled on `tok` for peer "first".
+   *
+   * The bodies are the ones App.svelte declares — asserted literally in the
+   * source contract below, so this model cannot drift away from the component
+   * without a test failing. `iceServers` is empty and the pool is real, which
+   * is the pooled cross-network room these rules are about.
+   */
+  function room() {
+    const selection = createRelaySelection({ publish: () => {} });
+    selection.reset(pool);
+    const relayRtcConfig = (relayId: string | null) =>
+      chooseRtcConfig({ iceServers: [], relays: pool }, relayId);
+    const linkRtcConfig = () => relayRtcConfig(selection.takeChoice());
+    const legacyRtcConfig = () => relayRtcConfig(selection.selectedRelayId);
+
+    selection.noteRoster(["first"]);
+    selection.notePeer("first");
+    selection.record("tok", 10);
+    selection.record("fra", 90);
+    selection.receive("first", { relayRtt: { tok: 15, fra: 400 } });
+    selection.finishMeasurement();
+    expect(selection.gate.ready()).toBe(true);
+    expect(selection.selectedRelayId).toBe("tok");
+    return { selection, linkRtcConfig, legacyRtcConfig };
+  }
+
+  it("gives both lanes the same configuration, so nothing else changes", () => {
+    // The whole difference is the record. The pool, the credentials, the chosen
+    // relay and the relay-only transport policy are identical, because both
+    // readers end in the same `chooseRtcConfig` call over the same room state.
+    const a = room();
+    expect(a.legacyRtcConfig()).toEqual({
+      iceServers: pool[0].iceServers, iceTransportPolicy: "relay",
+    });
+    expect(a.legacyRtcConfig()).toEqual(a.linkRtcConfig());
+
+    // …and the fallback is shared too: with no choice settled, both fold the
+    // whole advertised set together exactly as before.
+    const fresh = createRelaySelection({ publish: () => {} });
+    fresh.reset(pool);
+    expect(fresh.selectedRelayId).toBeNull();
+    expect(chooseRtcConfig({ iceServers: [], relays: pool }, fresh.selectedRelayId))
+      .toEqual(chooseRtcConfig({ iceServers: [], relays: pool }, fresh.takeChoice()));
+  });
+
+  /** **The defect.** A legacy read must leave the departure re-lock available. */
+  it("does not let a legacy construction spend the room's one commit", () => {
+    const { selection, legacyRtcConfig } = room();
+    // Both legacy lanes build, twice over — a file transfer and a message
+    // session with the same peer, which is the ordinary sequence.
+    legacyRtcConfig();
+    legacyRtcConfig();
+
+    // The peer they were built with leaves, and nothing `link/1` exists. The
+    // gate goes back to waiting, and its choice with it.
+    selection.peerGone("first");
+    expect(selection.gate.ready()).toBe(false);
+    expect(selection.selectedRelayId).toBeNull();
+
+    // The replacement is held until its OWN map lands, which is the whole point:
+    // its link is then built on the relay the two of them agree on.
+    const run = vi.fn();
+    selection.gate.whenReady(run);
+    selection.notePeer("second");
+    expect(run).not.toHaveBeenCalled();
+    selection.receive("second", { relayRtt: { fra: 4 } });
+    expect(selection.selectedRelayId).toBe("fra");
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  /** …and the invariant the commit exists for is untouched: a gate must never
+   *  reach a `link/1` transport that already exists. Stated here as the exact
+   *  counterpart of the case above, so the two can only ever be changed
+   *  together; `relay-selection.test.ts` owns the rule itself. */
+  it("still forbids the re-lock once the link path has read the choice", () => {
+    const { selection, linkRtcConfig } = room();
+    expect(linkRtcConfig()).toEqual({
+      iceServers: pool[0].iceServers, iceTransportPolicy: "relay",
+    });
+
+    selection.peerGone("first");
+    expect(selection.gate.ready()).toBe(true);
+    const run = vi.fn();
+    selection.gate.whenReady(run);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  /** A legacy read before the link's does not consume the commit either: the
+   *  link path's own read still records it, so the ordering of the two lanes
+   *  inside one room cannot decide whether the invariant holds. */
+  it("records the commit on the link read whichever lane read first", () => {
+    const { selection, linkRtcConfig, legacyRtcConfig } = room();
+    legacyRtcConfig();
+    linkRtcConfig();
+
+    selection.peerGone("first");
+    expect(selection.gate.ready()).toBe(true);
+  });
+
+  // ── the composition itself ─────────────────────────────────────────────────
+  it("wires the committing read to the link path and the plain read to the lanes", () => {
+    const all = code(app);
+    // The two readers, exactly as the model above builds them.
+    expect(all).toContain(
+      "const relayRtcConfig = (relayId: string | null): RtcConfig =>\n"
+      + "    chooseRtcConfig({ iceServers, relays: relayPool }, relayId);",
+    );
+    expect(all).toContain(
+      "const linkRtcConfig = (): RtcConfig => relayRtcConfig(relaySelection.takeChoice());",
+    );
+    expect(all).toContain(
+      "const legacyRtcConfig = (): RtcConfig => relayRtcConfig(relaySelection.selectedRelayId);",
+    );
+    // ONE commit in the whole component, and it is the link reader's. A second
+    // `takeChoice()` anywhere is another lane able to spend the record.
+    expect(all.match(/takeChoice\(\)/g)).toHaveLength(1);
+    // The dependency that reaches a `link/1` transport constructor
+    // (peer-workspace → mixed-session → peer-link) takes the committing read…
+    const workspaceDeps = block(
+      "const workspace: PeerWorkspace = createPeerWorkspace({", "const storedReceiver =",
+    );
+    expect(workspaceDeps).toContain("rtcConfig: () => linkRtcConfig(),");
+    expect(workspaceDeps).not.toContain("takeChoice");
+    // …and both legacy lanes take the plain one. They are the two the router
+    // forks to for every peer that does not route `link/1`.
+    const textLinkDeps = block("const textLink = createTextLink({", "const textSession = createTextSession({");
+    const fileDeps = block("const session = createTransferSession({", "const legacyFiles = {");
+    expect(textLinkDeps).toContain("rtcConfig: () => legacyRtcConfig(),");
+    expect(fileDeps).toContain("rtcConfig: () => legacyRtcConfig(),");
+    // The composed reader they all used is gone, so a fourth consumer cannot
+    // reappear on it and silently pick up the commit.
+    expect(all).not.toContain("rtcConfig: () => rtcConfig(),");
+    expect(all).not.toContain("const rtcConfig = (): RtcConfig");
   });
 });

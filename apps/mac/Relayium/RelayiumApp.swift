@@ -368,13 +368,16 @@ struct RelayiumApp: App {
             : AppEnvironment.makeDirectRealtimeTextModel(
                 verification: prefs, pairingRoom: pairingRoom)
         // **The one substitution that made a real Direct session impossible.**
-        // The offline fixture's `connectPairingSocket` is a
-        // `preconditionFailure` and its ICE client sleeps for five minutes, and
-        // `watchPairingCode` reads ICE first — so an acceptance launch given
-        // this model joins a code, publishes `.watching`, and never opens the
-        // room's socket at all. Both native ends then wait for each other
-        // forever, which is precisely the "neither side promotes" measurement
-        // that was written up as a pairing-wire defect.
+        // The offline fixture's ICE client sleeps for five minutes and its
+        // `connectPairingSocket` answers a socket that never opens — so an
+        // acceptance launch given this model joins a code, publishes
+        // `.watching`, and no frame ever reaches the hub. Both native ends
+        // then wait for each other forever, which is precisely the "neither
+        // side promotes" measurement that was written up as a pairing-wire
+        // defect. (`watchPairingCode` now opens the room and starts its ICE
+        // read together, so the socket factory runs on every watch — which is
+        // why the fixture answers a silent socket rather than trapping the
+        // factory in a `preconditionFailure`.)
         let directLink = UITestMode.usesOfflineTransfer
             ? UITestMode.makeDirectLinkWorkspaceModel(
                 verification: prefs, pairingRoom: pairingRoom)

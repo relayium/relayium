@@ -301,6 +301,176 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "the shipped iOS build can inject a direct file selection")
     }
 
+    /// The refused-link seam, and the coverage it must not quietly replace.
+    ///
+    /// `testEditingARefusedLinkClearsTheRefusalWithIt` established its
+    /// precondition by typing the refused string, and hosted run
+    /// 33020899047 read the real field back as `not ink`. The value is setup
+    /// there, not subject, so it now arrives through a Debug-only fixture — and
+    /// every way that repair silently stops being one is an assertion here.
+    ///
+    /// Deleting the seam returns the test to the dropped-keystroke race.
+    /// Letting it reach Release puts a link in front of a person who pasted
+    /// nothing. Pointing it at a model Receive does not render makes the
+    /// precondition pass while the screen stays empty. Spending more than one
+    /// synthetic keystroke re-buys the nondeterminism the seam removed, and
+    /// spending it on a control key spends nothing at all: run 33032681386
+    /// typed DEL into the prefilled field and the value never moved, so the
+    /// edit under test has to stay an ordinary visible insertion.
+    /// Removing the real Open or the two derived-state waits turns a product
+    /// assertion into a fixture assertion. And switching the malformed-link or
+    /// keyboard-Go tests onto the seam would leave the product with NO runtime
+    /// evidence that a link can be typed and submitted at all.
+    func testTheRefusedLinkSeamIsDebugOnlyAndKeepsRealTypingCoverage() throws {
+        let mode = try XCTUnwrap(try sources().first { $0.name == "UITestMode.swift" }?.text)
+        let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" }?.text)
+        let halves = mode.components(separatedBy: "#else")
+        XCTAssertEqual(halves.count, 2, "UITestMode lost its Debug/Release split")
+        let debugHalf = try XCTUnwrap(halves.first)
+        let releaseHalf = try XCTUnwrap(halves.last)
+
+        // 1. Debug-only presence, and it injects the string the product must
+        //    REFUSE rather than pre-setting a failed state the product never
+        //    produced. The refusal has to stay the product's own.
+        XCTAssertTrue(debugHalf.contains("--relayium-ui-testing-invalid-download-link"),
+                      "the deterministic refused-link fixture is not in the Debug half")
+        let seam = try XCTUnwrap(debugHalf.components(
+            separatedBy: "static func prefillInvalidDownloadLink(in model: CloudDownloadModel) {")
+            .dropFirst().first?.components(separatedBy: "\n    }").first,
+            "the refused-link seam is gone, so the correction test is back to "
+            + "typing its own precondition")
+        XCTAssertTrue(seam.contains("model.linkText = invalidDownloadLinkText"),
+                      "the refused-link seam no longer sets the same published "
+                      + "property a paste sets, so the refusal it produces is not "
+                      + "the one a user would meet")
+        XCTAssertTrue(seam.contains("guard ProcessInfo.processInfo.arguments.contains("
+                                    + "invalidDownloadLinkArgument)"),
+                      "the refused-link seam can run without its launch argument, so "
+                      + "every other Debug launch starts Receive pre-filled")
+        // It must not FORGE the refusal. The state under test has to be the one
+        // the product's own parse produced from the injected string.
+        for forged in ["state = ", "DownloadState", "downloadBadLink", "resolve"] {
+            XCTAssertFalse(seam.contains(forged),
+                           "the refused-link seam drives \(forged) instead of letting "
+                           + "the test's real Open produce the refusal")
+        }
+
+        // 2. Absent from Release — the inert entry point only, so the call site
+        //    still compiles and a shipped launch injects nothing.
+        XCTAssertTrue(releaseHalf.contains(
+            "static func prefillInvalidDownloadLink(in model: CloudDownloadModel) {}"),
+                      "the Release half lost the inert refused-link entry point, so a "
+                      + "shipped build no longer compiles the call site")
+        XCTAssertFalse(releaseHalf.contains("invalidDownloadLinkText"),
+                       "a shipped build carries the acceptance link value")
+        XCTAssertFalse(releaseHalf.contains("model.linkText ="),
+                       "a shipped build can start a receive already holding a link "
+                       + "nobody pasted")
+
+        // 3. Wired once, into the REAL model — the same instance the app hands
+        //    to the Receive screen, not a second one built for the fixture.
+        XCTAssertEqual(app.components(separatedBy:
+            "UITestMode.prefillInvalidDownloadLink(in: downloads)").count - 1, 1,
+            "the refused-link seam is not wired exactly once at app construction")
+        XCTAssertTrue(app.contains("_download = StateObject(wrappedValue: downloads)"),
+                      "the prefilled download model is no longer the one the app "
+                      + "renders, so the fixture reaches a model nobody sees")
+
+        // 4. Used by exactly the one test it was built for, in one launch, and
+        //    never combined with the valid-link fixture that would overwrite it.
+        let ui = try RepoRoot.text("apps/ios/RelayiumUITests/AppShellUITests.swift")
+        let local = try RepoRoot.text("apps/ios/RelayiumUITests/LocalSessionUITests.swift")
+        XCTAssertEqual(ui.components(
+            separatedBy: "--relayium-ui-testing-invalid-download-link").count - 1, 1,
+            "the refused-link seam spread beyond the single test that needs it")
+        XCTAssertFalse(local.contains("--relayium-ui-testing-invalid-download-link"),
+                       "the built-App suite adopted the refused-link seam too")
+        let repaired = try XCTUnwrap(ui.components(
+            separatedBy: "func testEditingARefusedLinkClearsTheRefusalWithIt()")
+            .dropFirst().first?.components(separatedBy: "\n    /// ").first,
+            "the repaired refusal-correction test is gone")
+        XCTAssertTrue(repaired.contains("--relayium-ui-testing-invalid-download-link"),
+                      "the correction test no longer uses the deterministic seam")
+        XCTAssertFalse(repaired.contains("--relayium-ui-testing-valid-download-link"),
+                       "the correction launch selects two competing link fixtures, so "
+                       + "which one reaches the field depends on call order")
+
+        // 5. Setup is deterministic; the ONE keystroke is real; and what it
+        //    proves is product state, reached through the product's own Open.
+        XCTAssertTrue(repaired.contains(
+            "the deterministic refused-link fixture did not reach the real field"),
+                      "the correction test no longer proves the fixture reached the "
+                      + "real field, so a silently dropped injection would read as a "
+                      + "passed correction")
+        XCTAssertEqual(repaired.components(separatedBy: ".typeText(").count - 1, 1,
+                       "the correction test spends more than the one synthetic "
+                       + "keystroke that is its subject")
+        // And that one keystroke is an ORDINARY VISIBLE INSERTION. Hosted run
+        // 33032681386 proved the fixture reaches the real field and the real
+        // Open produces the real refusal, then tapped the field, logged
+        // `Type DEL`, and watched the value stay `not a link` for the full
+        // ten-second wait: a delete has nothing to consume on a field nobody
+        // typed into, so it delivered no edit and the test read a working
+        // product as broken. An insertion depends on no prior text and no caret
+        // position, which is the whole reason it is pinned here by value.
+        let typed = try XCTUnwrap(repaired.components(separatedBy: "link.typeText(")
+            .dropFirst().first?.components(separatedBy: ")").first,
+            "the correction test performs no real keyboard edit at all, so nothing "
+            + "in the suite proves that editing a refused link clears the refusal")
+        XCTAssertEqual(typed, "\"x\"",
+                       "the correction test's one edit is no longer an ordinary visible "
+                       + "character. A control key — DEL above all — is consumed "
+                       + "silently by a programmatically prefilled field, which is the "
+                       + "exact failure this pin exists to prevent recurring.")
+        // The correction itself must stay a keystroke. A second launch is the
+        // only way to hand this screen another injected value, so one launch
+        // means the fixture owns setup and the keyboard owns the subject.
+        XCTAssertEqual(repaired.components(separatedBy: "app.launch()").count - 1, 1,
+                       "the correction test relaunches more than once, so the "
+                       + "correction can be driven by another injected fixture instead "
+                       + "of the real keyboard edit it exists to prove")
+        // The change is awaited on the REAL field, and as an INEQUALITY. The tap
+        // decides where the caret lands, so requiring one exact corrected string
+        // would make a delivered edit fail for landing in the wrong place; and
+        // dropping the value comparison would let an undelivered edit pass.
+        XCTAssertTrue(repaired.contains("value != %@"),
+                      "the correction test no longer waits on the real field's value "
+                      + "changing, so an edit that was never delivered would read as a "
+                      + "passed correction")
+        XCTAssertFalse(repaired.contains("value == %@"),
+                       "the correction test demands one exact corrected string, so a "
+                       + "delivered edit fails wherever the tap happened to put the "
+                       + "caret")
+        XCTAssertTrue(repaired.contains("open.tap()"),
+                      "the correction test no longer produces its refusal with the "
+                      + "product's own Open action")
+        for derived in ["the refused link did not accept the correction",
+                        "the refusal outlived the input it described",
+                        "did not restore the idle receive state"] {
+            XCTAssertTrue(repaired.contains(derived),
+                          "the correction test dropped its \(derived) assertion")
+        }
+
+        // 6. And real typing/submission stays owned by the two tests that name
+        //    that contract. This is the coverage the seam must route AROUND.
+        for typing in ["func testMalformedReceiveLinkExplainsHowToRecover()",
+                       "func testTheKeyboardGoKeyResolvesTheLink()"] {
+            let body = try XCTUnwrap(ui.components(separatedBy: typing).dropFirst().first?
+                .components(separatedBy: "\n    /// ").first,
+                "the real-typing test \(typing) is gone")
+            XCTAssertTrue(body.contains("link.typeText(\"not a link\")"),
+                          "\(typing) stopped entering its link with the real keyboard")
+            XCTAssertFalse(body.contains("--relayium-ui-testing-invalid-download-link"),
+                           "\(typing) was switched to the injection seam, so nothing "
+                           + "types a link into the product any more")
+        }
+        let go = try XCTUnwrap(ui.components(
+            separatedBy: "func testTheKeyboardGoKeyResolvesTheLink()").dropFirst().first?
+            .components(separatedBy: "\n    /// ").first)
+        XCTAssertTrue(go.contains("app.keyboards.buttons[\"go\"]"),
+                      "the keyboard-Go test no longer presses the real Go key")
+    }
+
     /// Nearby, pairing-code and stored sending are three destinations for the
     /// same promise: before Send, the user can inspect every file and its size.
     func testEverySendSurfaceShowsThePendingFileNamesAndSizes() throws {

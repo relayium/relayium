@@ -2385,6 +2385,16 @@ final class MacSurfaceGuardTests: XCTestCase {
                 .contains("iceClient: UITestWaitingICEClient()"),
                           "\(fixture) still reaches the production ICE client")
         }
+        // `watchPairingCode` opens the room's socket and starts its ICE read
+        // together, so the direct fixture's socket factory runs on every watch:
+        // the waiting ICE client no longer stands between a minted code and
+        // this closure. A trap here crashes the offline suite on its first
+        // generated code; the fixture must answer a socket that never opens.
+        let direct = try declaration(of: "makeDirectLinkWorkspaceModel", in: mode)
+        XCTAssertFalse(direct.contains("preconditionFailure"),
+                       "the offline direct fixture traps the socket factory every watch now calls")
+        XCTAssertTrue(direct.contains("SignalingClient(channel: UITestSilentWebSocketChannel()"),
+                      "the offline direct fixture stopped answering the silent pairing socket")
         let app = try source(named: "RelayiumApp.swift")
         XCTAssertTrue(app.contains("UITestMode.makeNearbyLinkWorkspaceModel(")
                       && app.contains("UITestMode.makeDirectLinkWorkspaceModel("),
@@ -2396,9 +2406,9 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// This is the guard for a defect that cost a whole acceptance round. The
     /// three transfer substitutions were selected on `UITestMode.isActive`, which
     /// is true for the loopback built-App run as well — so that run was handed a
-    /// pairing socket factory that is a `preconditionFailure` and an ICE client
-    /// that sleeps for five minutes. `LinkWorkspaceModel.watchPairingCode` reads
-    /// ICE before it opens the room, so the app published `.watching` and never
+    /// pairing socket factory that could open no room and an ICE client
+    /// that sleeps for five minutes. `LinkWorkspaceModel.watchPairingCode` at
+    /// the time read ICE before it opened the room, so the app published `.watching` and never
     /// opened a socket at all. Two native ends then waited for each other for the
     /// full budget, and the measurement — "neither side promotes" — was written up
     /// as a defect in the pairing wire rather than in the harness.

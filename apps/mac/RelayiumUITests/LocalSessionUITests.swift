@@ -25,10 +25,11 @@ import XCTest
 /// was in the harness, not the wire: `RelayiumApp` substituted `UITestMode`'s
 /// offline models for every launch with `--relayium-ui-testing`, including this
 /// one, so the Direct module was built with an ICE client that sleeps for five
-/// minutes and a `connectPairingSocket` that is a `preconditionFailure`.
-/// `LinkWorkspaceModel.watchPairingCode` reads ICE *before* it opens the room —
-/// so the app published `.watching` and never opened a socket for the peer to
-/// find. Both ends waited, correctly, for somebody who was not there.
+/// minutes and a pairing socket the fixture never lets open.
+/// `LinkWorkspaceModel.watchPairingCode` at the time read ICE *before* it
+/// opened the room — it now starts both together — so the app published
+/// `.watching` and never opened a socket for the peer to find. Both ends
+/// waited, correctly, for somebody who was not there.
 ///
 /// `UITestMode.usesOfflineTransfer` is the repair: the fixtures now apply to the
 /// offline suite and not to a launch that resolved a loopback origin. Nothing

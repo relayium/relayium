@@ -220,6 +220,7 @@ struct RelayiumApp: App {
         let downloads = AppEnvironment.makeDownloadModel(
             transport: UITestMode.makeAccountTransport())
         UITestMode.prefillValidDownloadLink(in: downloads)
+        UITestMode.prefillInvalidDownloadLink(in: downloads)
         _download = StateObject(wrappedValue: downloads)
         let account = AppEnvironment.makeSession(tokenStore: UITestMode.makeTokenStore(),
                                                  transport: UITestMode.makeAccountTransport())
