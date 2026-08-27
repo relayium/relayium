@@ -262,6 +262,18 @@ enum UITestMode {
     static let showsGeneratedFileCode = ProcessInfo.processInfo.arguments.contains(
         fileCodeArgument)
 
+    /// The pairing-code model an offline acceptance launch drives, or nil for
+    /// every other launch — including the LOOPBACK one, which mints against a
+    /// real server on this machine and must go on doing so.
+    ///
+    /// Guarded per fixture, like every other substitution here: a launch that
+    /// did not ask for a generated code gets the production mint.
+    @MainActor
+    static func makePairingCodeModel() -> PairingCodeModel? {
+        guard usesOfflineTransfer, showsGeneratedFileCode || showsExpiringCode else { return nil }
+        return PairingCodeModel(client: UITestPairClient())
+    }
+
     /// A generated code whose deadline is seconds away, so the countdown, the
     /// expiry and the regeneration path can all be driven in one launch.
     ///
@@ -383,21 +395,9 @@ enum UITestMode {
             refreshAccount: refreshAccount)
     }
 
-    @MainActor
-    static func makeWaitingFileModel(verification: VerificationPreference) -> RealtimeSessionModel? {
-        guard showsGeneratedFileCode else { return nil }
-        return RealtimeSessionModel(
-            pairClient: UITestPairClient(),
-            iceClient: UITestWaitingICEClient(),
-            requiresVerification: { verification.requiresSASConfirmation },
-            makeConnection: { _, _, _ in throw AccountError.network }
-        )
-    }
-
     /// Keeps the unified pairing-room watcher deterministic and offline.
     ///
-    /// The legacy models already use `UITestWaitingICEClient`, but `link/1`
-    /// owns a separate ICE read of its own, started together with the room it
+    /// `link/1` owns an ICE read of its own, started together with the room it
     /// opens. Leaving that client live makes an offline acceptance launch
     /// replace a valid generated code with `roomUnavailable` according to
     /// runner network timing.
@@ -416,7 +416,13 @@ enum UITestMode {
             capabilities: nearby.capabilities,
             receiveDirectory: { FileManager.default.temporaryDirectory },
             requiresVerification: { verification.requiresSASConfirmation },
-            iceClient: UITestWaitingICEClient())
+            iceClient: UITestWaitingICEClient(),
+            // Mirrors `AppEnvironment.makeNearbyLinkWorkspaceModel` exactly. An
+            // acceptance substitution that answered a different rule would make
+            // every built-App run evidence about the fixture instead.
+            legacyFallback: .terminateUnsupported,
+            localHello: linkOnlyCapsHello(linkRoomActive:),
+            pendingMessages: .refuseWhileWaiting)
         nearby.addRoomObserver(model)
         return model
     }
@@ -442,7 +448,14 @@ enum UITestMode {
                 // never opens, so no join frame ever announces it
                 SignalingClient(channel: UITestSilentWebSocketChannel(), name: "uitest")
             },
-            pairingRoomHandle: pairingRoom)
+            pairingRoomHandle: pairingRoom,
+            // The same three answers `AppEnvironment.makeDirectLinkWorkspaceModel`
+            // gives, for the same reason as the nearby fixture above: a
+            // substitution that answered a different rule would make every
+            // built-App run evidence about the fixture instead.
+            legacyFallback: .terminateUnsupported,
+            localHello: linkOnlyCapsHello(linkRoomActive:),
+            pendingMessages: .refuseWhileWaiting)
     }
 
     #else
@@ -495,34 +508,14 @@ enum UITestMode {
     static func makeAccountTransport() -> URLSession? { nil }
     #endif
 
-    #if DEBUG
-    /// A deterministic code-creation path for UI tests. It changes no Release
-    /// behavior and never opens a network connection: mint succeeds locally,
-    /// then ICE lookup waits until the test process ends so the screen remains
-    /// on the handoff state a person needs time to read and share.
-    @MainActor
-    static func makeRealtimeTextModel(verification: VerificationPreference) -> RealtimeTextSessionModel {
-        RealtimeTextSessionModel(
-            pairClient: UITestPairClient(),
-            iceClient: UITestWaitingICEClient(),
-            requiresVerification: { verification.requiresSASConfirmation },
-            makeConnection: { _, _, _ in throw AccountError.network }
-        )
-    }
-
-    @MainActor
-    static func makeTerminalNearbyFileModel(
-        verification: VerificationPreference
-    ) -> RealtimeSessionModel? {
-        guard showsTerminalNearby else { return nil }
-        return RealtimeSessionModel(
-            pairClient: UITestPairClient(),
-            iceClient: UITestFailingICEClient(),
-            requiresVerification: { verification.requiresSASConfirmation },
-            makeConnection: { _, _, _ in throw AccountError.network }
-        )
-    }
-    #endif
+    // **The deterministic legacy-session fixtures are gone with the sessions
+    // they held on screen.** They minted a code into a `RealtimeSessionModel`,
+    // parked a text model on a handoff state, and produced a terminal nearby
+    // file transfer — three screens macOS no longer composes. A fixture is the
+    // one caller that could still reach a deleted transport, so removing them is
+    // part of the deletion rather than tidying after it. What replaced their
+    // coverage is `showsTerminalNearby`, which now claims the surface and
+    // navigates without starting anything.
 }
 
 #if DEBUG
@@ -578,6 +571,14 @@ final class UITestUpdateActionWitness: ObservableObject {
 /// makes "regeneration produced a fresh code and a fresh deadline" an assertion
 /// rather than a hope: a second mint that answered the same six digits would be
 /// indistinguishable from no mint at all.
+/// The deterministic mint an offline acceptance launch uses.
+///
+/// It outlived the model it used to be handed to. Codes were minted through
+/// `RealtimeSessionModel` and the fixture went with that model; the code surface
+/// — the digits, the countdown, the expiry and the regeneration path — is
+/// unchanged and now belongs to `PairingCodeModel`, so the fixture is rewired
+/// rather than deleted. Deleting it would have retired real acceptance coverage
+/// for a surface that still ships.
 private final class UITestPairClient: PairCodeClient, @unchecked Sendable {
     private let lock = NSLock()
     private var minted = 0

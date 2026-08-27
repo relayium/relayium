@@ -55,9 +55,10 @@ cd server && RELAYIUM_ADDR=:8099 go run .
 
 ### 它测的是什么
 
-vitest 那 580 条测试**一行都覆盖不到实时传输管道**：收发两条管道原本长在 App.svelte
-里、现在在 `transfer-session.svelte.ts` 里，两者都需要两个真实的浏览器上下文、一条真
-WebSocket 信令和一个真 RTCPeerConnection 才跑得起来。这个脚本就是它们唯一的回归网：
+vitest 那些测试**一行都覆盖不到实时传输管道**：收发两条管道原本长在 App.svelte 里、
+现在在 `mixed-file-session.svelte.ts` / `mixed-text-session.svelte.ts` 那条统一
+`link/1` 链路里，两者都需要两个真实的浏览器上下文、一条真 WebSocket 信令和一个真
+RTCPeerConnection 才跑得起来。这个脚本就是它们唯一的回归网：
 
 1. **握手到落盘的全链路**：两个标签页进同一个 LAN 房间 → 互相发现 → 塞进一个 3MB 文件
    → commit-reveal → DataChannel → 分块 AES-GCM → 流控 ACK → 逐文件完整性校验 → 落盘。

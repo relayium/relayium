@@ -2,6 +2,28 @@ import Combine
 import Foundation
 import RelayiumKit
 
+/// Which of the two panes a macOS transfer destination draws.
+///
+/// **Two, where `TransferSurfacePane` has three.** That type keeps its
+/// `legacySession` case and still needs it — the paused iOS implementation
+/// renders one — but no macOS composition can reach one now: there is no legacy
+/// transport on this platform to put in it. So macOS answers with this type
+/// rather than promising never to return a case it can still name. A pane enum
+/// whose third value is unreachable is an invitation to reach it again.
+public enum LinkTransferPane: String, Equatable, Sendable {
+    /// The connection method, and — on the Cross-network destination — the code
+    /// this module has minted or joined while it waits for a peer.
+    ///
+    /// A watched pairing room is deliberately HERE rather than in a pane of its
+    /// own. Six digits with no peer yet is not a session: the user is looking at
+    /// the screen they started from with a code added to it, and moving them to
+    /// an empty session pane would replace the one thing the wait depends on.
+    case connect
+    /// A real `link/1`: one authenticated connection carrying messages and files
+    /// at once, behind one verification boundary.
+    case link
+}
+
 /// One direct-transfer **module**: everything a single connection method owns,
 /// and nothing another one shares.
 ///
@@ -63,14 +85,21 @@ public final class TransferModule: ObservableObject {
     /// refusal below is checked against it: a module that read "whoever owns the
     /// presence" could give up a surface that is not its own.
     public let route: AppDestination
-    public let files: RealtimeSessionModel
-    public let text: RealtimeTextSessionModel
     /// This module's unified `link/1` owner — **one room, for the life of the
     /// module.** The nearby module's follows the discovery model's code-less
     /// room socket; the direct module's opens and owns the socket a pairing code
     /// names. Neither can see the other's peer ids, which is the structural half
     /// of failure 2 above.
     public let link: LinkWorkspaceModel
+    /// The six digits this module is showing, if any.
+    ///
+    /// Present on BOTH modules and empty on the Nearby one for the life of the
+    /// process: same-network transfer has no code. It is unconditional rather
+    /// than optional because a module with an optional half is a module every
+    /// caller has to unwrap, and the one thing that could go wrong — a code
+    /// minted on the Nearby screen — is prevented by that screen having no
+    /// control that mints, which `MacSurfaceGuardTests` checks by name.
+    public let code: PairingCodeModel
     /// Which surface inside THIS module presents its session.
     ///
     /// Still a `TransferPresence` rather than a bare flag, and still arbitrating:
@@ -90,21 +119,20 @@ public final class TransferModule: ObservableObject {
     ///     `TransferPresence()` because a default argument is evaluated outside
     ///     this initializer's actor isolation and would not compile.
     public init(route: AppDestination,
-                files: RealtimeSessionModel,
-                text: RealtimeTextSessionModel,
                 link: LinkWorkspaceModel,
+                code: PairingCodeModel,
                 presence: TransferPresence? = nil) {
         let presence = presence ?? TransferPresence()
         self.route = route
-        self.files = files
-        self.text = text
         self.link = link
+        self.code = code
         self.presence = presence
-        // The THREE liveness sources this module has, as one subscription. The
-        // link is not optional here: it uses neither legacy model, so a link
-        // observed by the two-model overload would have its surface released the
-        // instant it started.
-        presence.observeSessions(fileModel: files, textModel: text, link: link)
+        // The TWO liveness sources this module has, as one subscription. The
+        // code is not decoration: a creator holds six digits on screen while the
+        // link is only `.watching`, and for a moment before that while the mint
+        // is in flight and the link is still `.idle`. A link-only observer would
+        // release the surface under both.
+        presence.observeSessions(code: code, link: link)
         // Both derived from this module's OWN ownership. Before modules existed
         // these read one app-wide presence, so an unsolicited link arriving on
         // the same-network room was refused because a pairing code was being
@@ -158,8 +186,7 @@ public final class TransferModule: ObservableObject {
         // object, so forwarding it keeps a module-observing view redrawing on
         // exactly the same edges a four-object-observing one did.
         for child in [presence.objectWillChange.eraseToAnyPublisher(),
-                      files.objectWillChange.eraseToAnyPublisher(),
-                      text.objectWillChange.eraseToAnyPublisher(),
+                      code.objectWillChange.eraseToAnyPublisher(),
                       link.objectWillChange.eraseToAnyPublisher()] {
             child.sink { [weak self] _ in self?.objectWillChange.send() }
                 .store(in: &relays)
@@ -219,7 +246,7 @@ public final class TransferModule: ObservableObject {
     /// the surface may be GIVEN UP is a different question with a different
     /// answer — see `retainsWork`.
     public var sessionIsLiveOrRetained: Bool {
-        files.state != .idle || text.state != .idle || link.hasSession
+        code.state.isActive || link.hasSession
     }
 
     /// **Whether anything in this module still holds work, in ANY lane.**
@@ -275,9 +302,32 @@ public final class TransferModule: ObservableObject {
         files != .idle || text != .idle || link != .idle
     }
 
+    /// **The same rule for a composition whose only transport is `link/1`.**
+    ///
+    /// An overload rather than a replacement: the three-argument form above is
+    /// what `TransferPresence.observeSessions(fileModel:textModel:link:)` reads
+    /// and what the paused iOS implementation subscribes to, and it keeps
+    /// answering exactly what it answers today.
+    ///
+    /// The code is a liveness source in its own right and the link is not enough
+    /// without it. A creator holds six digits on screen while `connection` is
+    /// only `.watching` — work the module holds with no session drawn for it —
+    /// and, before the room is even joined, while a mint is in flight and
+    /// `connection` is still `.idle`. A link-only predicate reports idle through
+    /// both, and the app-scoped observer would release the surface under a code
+    /// the user is reading out loud.
+    ///
+    /// `.failed` counts too, and that is not an oversight: a mint that failed is
+    /// a message the user has not read yet, and releasing the surface would take
+    /// it off screen before they could.
+    public static func retainsWork(code: PairingCodeState,
+                                   link: LinkWorkspaceConnection) -> Bool {
+        code.isActive || link != .idle
+    }
+
     /// This module's own answer to the rule above.
     public var retainsWork: Bool {
-        Self.retainsWork(files: files.state, text: text.state, link: link.connection)
+        Self.retainsWork(code: code.state, link: link.connection)
     }
 
     /// **Give this module's surface up — and only when nothing still holds
@@ -317,30 +367,44 @@ public final class TransferModule: ObservableObject {
     /// never left `.idle` — a legacy fallback, or a joiner whose lane is the
     /// only thing to end.
     public func cancelPairingCode() {
-        switch presence.mode {
-        case .files: files.cancel()
-        case .text:  text.reset()
-        }
+        code.cancel()
         link.leave()
         link.dismiss()
+        // A refusal the user has not read is not a reason to keep the surface,
+        // but it IS the message the connect screen is about to draw — cleared
+        // here because cancelling is the user acting on it.
+        link.dismissUnsupportedPairingPeer()
         releaseSurfaceIfIdle()
     }
 
     /// Whether bytes are moving in this module. Asked by the sidebar marker and
     /// by the quit guard, and deliberately separate from ownership — a finished
     /// transfer still owns its surface while nothing is running.
-    public var isBusy: Bool { files.isBusy || text.isBusy }
+    /// **A watched code is not busy**, and neither is a link that has ended:
+    /// the question is whether quitting now would interrupt something, and the
+    /// link's file lane is the only thing here that can be mid-byte.
+    public var isBusy: Bool {
+        guard link.connection.isOpen, let files = link.fileModel else { return false }
+        return files.batches.contains { !$0.isTerminal }
+    }
 
     /// The only copy of text the user has typed in this module, if any. The quit
     /// guard asks both modules, because quitting discards whichever module holds
     /// one.
-    public var hasLocalText: Bool { text.hasLocalContent }
+    /// **The link's transcript is local-only and unrecoverable** —
+    /// `link.historyIsLocal` says so on the surface — so any message at all,
+    /// sent or received, is content a quit would destroy.
+    public var hasLocalText: Bool { link.holdsLocalText }
 
     /// What this module's screen draws right now.
-    public var pane: TransferSurfacePane {
-        TransferSurfacePresentation.pane(route: route,
-                                         owner: presence.owner,
-                                         linkHasSession: link.hasSession)
+    /// Ownership alone decides whether this module draws anything;
+    /// `link.hasSession` only picks which pane the owner draws. A claim with no
+    /// published state yet still answers `.connect` — ownership is taken
+    /// synchronously before the link can publish — and the connect surface draws
+    /// the code, or nothing, for that window.
+    public var pane: LinkTransferPane {
+        guard presence.owner == route else { return .connect }
+        return link.hasSession ? .link : .connect
     }
 
     /// Whether this module's connect controls may start something.
@@ -376,10 +440,10 @@ public final class TransferModule: ObservableObject {
     /// a Quit the user confirmed against a prompt that names exactly that loss
     /// (`QuitPresentation.risk`).
     public func cancelEverything() {
-        files.cancel()
-        text.reset()
+        code.cancel()
         link.leave()
         link.dismiss()
+        link.dismissUnsupportedPairingPeer()
         presence.releaseAll()
     }
 }

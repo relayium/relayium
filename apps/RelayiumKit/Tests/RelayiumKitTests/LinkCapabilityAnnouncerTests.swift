@@ -173,3 +173,90 @@ final class LinkCapabilityAnnouncerTests: XCTestCase {
         XCTAssertTrue(recorder.sent.isEmpty)
     }
 }
+
+/// **What a client announces, and the seam that lets a composition tell the
+/// truth about itself.**
+///
+/// The announcer used to call `linkCapsHello` directly, so every client that
+/// linked this module made the same promise. macOS deleted the legacy file and
+/// text transports and refuses every legacy session; a hello naming `text/1`
+/// from that build invites a peer onto a lane the app cannot open, which is the
+/// one input that peer is entitled to act on.
+///
+/// So the hello is a parameter. What these pin is that the DEFAULT is unchanged
+/// — iOS, the headless acceptance hosts and every existing consumer announce
+/// exactly what they announced before — and that the override says exactly
+/// `link/1` and nothing else.
+@MainActor
+final class LinkCapabilityAnnouncerHelloTests: XCTestCase {
+
+    private func sent(hello: ((Bool) -> JSONValue)? = nil,
+                      linkRoomActive: Bool = true) -> [JSONValue] {
+        var frames: [JSONValue] = []
+        let announcer: LinkCapabilityAnnouncer
+        if let hello {
+            announcer = LinkCapabilityAnnouncer(
+                registry: PeerCapabilityRegistry(linkRoomActive: { linkRoomActive }),
+                linkRoomActive: { linkRoomActive },
+                send: { _, signal in frames.append(signal) },
+                hello: hello)
+        } else {
+            // The default path — the argument is deliberately not supplied.
+            announcer = LinkCapabilityAnnouncer(
+                registry: PeerCapabilityRegistry(linkRoomActive: { linkRoomActive }),
+                linkRoomActive: { linkRoomActive },
+                send: { _, signal in frames.append(signal) })
+        }
+        announcer.roomChanged()
+        announcer.rosterChanged(peerIds: ["zzz-peer"])
+        return frames
+    }
+
+    /// **The default is the shipped hello, and this proves it by NOT passing
+    /// one.** A default flipped here would change what every current consumer
+    /// puts on the wire.
+    func testTheDefaultAnnouncementIsUnchanged() {
+        XCTAssertEqual(sent().first, linkCapsHello(linkRoomActive: true))
+        XCTAssertEqual(peerCaps(from: try! XCTUnwrap(sent().first)),
+                       [TEXT_CAPABILITY, LINK_CAPABILITY],
+                       "the default hello stopped announcing the legacy lane iOS ships")
+    }
+
+    /// …including where link mode is off, which is the iOS pairing-room scope.
+    func testTheDefaultAnnouncementIsUnchangedWithLinkModeOff() {
+        let frames = sent(linkRoomActive: false)
+        // Nothing is announced at all where link mode cannot run — the
+        // announcer's own rule, untouched by this seam.
+        XCTAssertTrue(frames.isEmpty)
+    }
+
+    /// The override announces exactly `link/1`: not a superset, not a case
+    /// variant, and never the lane the composition deleted.
+    func testTheLinkOnlyOverrideAnnouncesExactlyLinkOne() throws {
+        let frame = try XCTUnwrap(sent(hello: linkOnlyCapsHello(linkRoomActive:)).first)
+        XCTAssertEqual(peerCaps(from: frame), [LINK_CAPABILITY])
+        XCTAssertFalse(peerCaps(from: frame).contains(TEXT_CAPABILITY),
+                       "a build that refuses every legacy session still advertised one")
+    }
+
+    /// An empty hello where link mode is off is still a hello, and still says
+    /// "nothing here for you" rather than saying nothing.
+    func testTheLinkOnlyHelloIsEmptyRatherThanAbsentWhenLinkModeIsOff() {
+        XCTAssertEqual(linkOnlyCapsHello(linkRoomActive: false), capsField([]))
+        XCTAssertEqual(linkOnlyCapsHello(linkRoomActive: true), capsField([LINK_CAPABILITY]))
+    }
+
+    /// **The two hellos are read by the same rule**, so a peer on the other end
+    /// needs no special case for either. The registry is the browser's rule too:
+    /// exact match on `link/1`.
+    func testBothHellosAreReadByTheOneRule() {
+        for (hello, expectsText) in [(linkCapsHello(linkRoomActive: true), true),
+                                     (linkOnlyCapsHello(linkRoomActive: true), false)] {
+            let registry = PeerCapabilityRegistry(linkRoomActive: { true })
+            XCTAssertTrue(registry.record(peerId: "p", signal: hello))
+            XCTAssertTrue(registry.supports("p", LINK_CAPABILITY),
+                          "both hellos must name link/1")
+            XCTAssertEqual(registry.supports("p", TEXT_CAPABILITY), expectsText)
+        }
+    }
+}

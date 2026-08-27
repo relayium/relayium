@@ -5,8 +5,6 @@ import { generateKeyPair, ready } from "./crypto";
 import { CAP_LINK, CAP_TEXT, peerSupportsLink, recordPeerCaps, resetPeerCaps, retainPeers } from "./peer-caps.svelte";
 import { clearRoom, enterRoom } from "./room.svelte";
 import { createPeerWorkspace } from "./peer-workspace.svelte";
-import type { TextSession } from "./text-session.svelte";
-import type { TransferSession } from "./transfer-session.svelte";
 import type { SignalingClient } from "./signaling";
 import type { Conn, InboundSignal } from "./webrtc";
 import type { ConnectOpts } from "./webrtc";
@@ -45,23 +43,6 @@ function setup(opts: { realLinkCaps?: boolean } = {}) {
       stats: async () => new Map() as unknown as RTCStatsReport,
     };
   });
-  const legacyFiles = {
-    incoming: null, recv: null, send: null, sasCode: "legacy-file",
-    sendPath: undefined, recvPath: undefined, busy: false, transferActive: false,
-    sendFiles: vi.fn(), accept: vi.fn(), reject: vi.fn(), abort: vi.fn(),
-    abortAll: vi.fn(), dismissSend: vi.fn(), dismissRecv: vi.fn(), reset: vi.fn(),
-    conn: vi.fn(),
-  } as unknown as TransferSession;
-  let legacyTextStatus = "idle";
-  let legacyTextActive = false;
-  let legacyTextPeer = "";
-  const legacyText = {
-    get status() { return legacyTextStatus; },
-    get peerId() { return legacyTextPeer; },
-    sasCode: "legacy-text", path: undefined,
-    history: [], errorKey: "", openWith: vi.fn(), accept: vi.fn(), reject: vi.fn(),
-    send: vi.fn(), end: vi.fn(), clearHistory: vi.fn(), active: vi.fn(() => legacyTextActive),
-  } as unknown as TextSession;
   let selfId = "a";
   let joined = true;
   let unsupported = false;
@@ -75,14 +56,12 @@ function setup(opts: { realLinkCaps?: boolean } = {}) {
     unsupported: () => unsupported,
     signaling: () => signaling,
     rtcConfig: () => ({ iceServers: [] }),
-    legacyFiles,
-    legacyText,
     supportsLink: opts.realLinkCaps ? undefined : (peerId) => peerId !== "old",
     connect,
     resume,
   });
   return {
-    workspace, legacyFiles, legacyText, sent, connect, resume,
+    workspace, sent, connect, resume,
     inject(from: string, data: InboundSignal) {
       for (const listener of [...listeners]) listener(from, data);
     },
@@ -90,11 +69,6 @@ function setup(opts: { realLinkCaps?: boolean } = {}) {
     setJoined(value: boolean) { joined = value; },
     setUnsupported(value: boolean) { unsupported = value; },
     setPeers(value: string[]) { peers = value; },
-    setLegacyText(status: string, active: boolean, peerId = "") {
-      legacyTextStatus = status;
-      legacyTextActive = active;
-      legacyTextPeer = peerId;
-    },
   };
 }
 
@@ -109,13 +83,16 @@ describe("peer workspace capability routing", () => {
     await h.workspace.openText("z");
     expect(mixedFiles).toHaveBeenCalledWith("z", picked);
     expect(mixedText).toHaveBeenCalledWith("z");
-    expect(h.legacyFiles.sendFiles).not.toHaveBeenCalled();
-    expect(h.legacyText.openWith).not.toHaveBeenCalled();
 
+    // …and a peer that does not route link/1 is TERMINAL, not redirected. There
+    // is no second transport, so the count must not move and nothing
+    // link-shaped may go out to it.
     h.workspace.sendFiles("old", picked);
     await h.workspace.openText("old");
-    expect(h.legacyFiles.sendFiles).toHaveBeenCalledWith("old", picked);
-    expect(h.legacyText.openWith).toHaveBeenCalledWith("old");
+    expect(mixedFiles).toHaveBeenCalledTimes(1);
+    expect(mixedText).toHaveBeenCalledTimes(1);
+    expect(h.sent.filter((x) => (x.data as { link?: boolean }).link === true)).toEqual([]);
+    expect(h.connect).not.toHaveBeenCalled();
   });
 
   // The empty-batch choke point. With pre-upload live, App's auto-send effect
@@ -130,9 +107,8 @@ describe("peer workspace capability routing", () => {
     const mixedFiles = vi.spyOn(h.workspace.mixed.file, "enqueue").mockImplementation(() => {});
 
     h.workspace.sendFiles("z", []); // link-capable peer
-    h.workspace.sendFiles("old", []); // legacy peer
+    h.workspace.sendFiles("old", []); // a peer that does not route link/1
     expect(mixedFiles).not.toHaveBeenCalled();
-    expect(h.legacyFiles.sendFiles).not.toHaveBeenCalled();
 
     // And it is a refusal of the BATCH, not of the peer: a real one still goes.
     const picked = [{ file: new File(["x"], "x.txt") }];
@@ -157,23 +133,18 @@ describe("peer workspace capability routing", () => {
       expect(h.workspace.linkPeerId).toBe("z");
       expect(mixedFiles).not.toHaveBeenCalled();
       expect(mixedText).not.toHaveBeenCalled();
-      expect(h.legacyFiles.sendFiles).not.toHaveBeenCalled();
-      expect(h.legacyText.openWith).not.toHaveBeenCalled();
       h.workspace.stop();
     });
 
     it("refuses a peer that cannot carry the frame at all", async () => {
-      // `old` does not speak link/1, so it has no unified link — and the legacy
-      // transport has no handoff frame. Building anything for it would be a
-      // connection with nothing to say; those entries reach it through the live
-      // lane's own release instead (handoff-lane's `drainFor`).
+      // `old` does not speak link/1, so it has no link — and frame kind 12 has
+      // no other transport. Those entries reach it through the live lane's own
+      // release instead (handoff-lane's `drainFor`).
       const h = setup();
       h.workspace.prepareHandoff("old");
       h.workspace.prepareHandoff("");
       await new Promise((r) => setTimeout(r, 10));
       expect(h.connect).not.toHaveBeenCalled();
-      expect(h.legacyFiles.sendFiles).not.toHaveBeenCalled();
-      expect(h.legacyText.openWith).not.toHaveBeenCalled();
     });
 
     it("does not rebuild a link the user just disconnected", async () => {
@@ -197,18 +168,23 @@ describe("peer workspace capability routing", () => {
     });
 
     it("refuses while the workspace's own exclusion rules say no", async () => {
+      // The exclusion that remains is the link's own: a link already committed
+      // to a DIFFERENT peer blocks new intent for this one.
       const h = setup();
-      Object.defineProperty(h.legacyFiles, "transferActive", { get: () => true });
-      h.workspace.prepareHandoff("z");
+      h.workspace.start();
+      await h.workspace.mixed.ensure("z");
+      expect(h.workspace.blocksNewIntent("other")).toBe(true);
+      h.connect.mockClear();
+      h.workspace.prepareHandoff("other");
       await new Promise((r) => setTimeout(r, 10));
       expect(h.connect).not.toHaveBeenCalled();
+      h.workspace.stop();
     });
   });
 
-  it("blocks both legacy inbound generations while one mixed link exists", async () => {
+  it("holds the peer while one link exists", async () => {
     const h = setup();
     await h.workspace.mixed.ensure("z");
-    expect(h.workspace.blocksLegacyInbound).toBe(true);
     expect(h.workspace.warnsOnLeave).toBe(true);
     expect(h.workspace.blocksNewIntent("z")).toBe(false);
     expect(h.workspace.blocksNewIntent("old")).toBe(true);
@@ -227,28 +203,6 @@ describe("peer workspace capability routing", () => {
     h.workspace.stop();
   });
 
-  it("rejects inbound link allocation when legacy work is active", () => {
-    const h = setup();
-    Object.defineProperty(h.legacyFiles, "transferActive", { get: () => true });
-    h.workspace.start();
-    h.inject("z", { link: true, linkRequest: true });
-    expect(h.sent).toContainEqual({ to: "z", data: { busy: true, link: true } });
-    expect(h.connect).not.toHaveBeenCalled();
-    h.workspace.stop();
-  });
-
-  it("also blocks outbound mixed intent while legacy work is active", async () => {
-    const h = setup();
-    Object.defineProperty(h.legacyFiles, "transferActive", { get: () => true });
-    const mixedFiles = vi.spyOn(h.workspace.mixed.file, "enqueue");
-    const mixedText = vi.spyOn(h.workspace.mixed.text, "openWith");
-    const picked = [{ file: new File(["x"], "x.txt") }];
-    h.workspace.sendFiles("z", picked);
-    await h.workspace.openText("z");
-    expect(mixedFiles).not.toHaveBeenCalled();
-    expect(mixedText).not.toHaveBeenCalled();
-    expect(h.connect).not.toHaveBeenCalled();
-  });
 
   it("rejects unknown-roster and unsupported-environment inbound links", () => {
     const h = setup();
@@ -299,48 +253,6 @@ describe("peer workspace capability routing", () => {
     expect(h.workspace.linkStatus).toBe("idle");
     await expect(pending).rejects.toBeInstanceOf(Error);
     h.workspace.stop();
-  });
-
-  // A peer that does not speak link/1 — an older Web tab, a native client, or
-  // any peer in a pairing-code room — negotiates text over the legacy session,
-  // so this is the path the reported "Waiting for the other device to
-  // accept…" actually came from. Without it, that panel stays on
-  // screen for a page that is no longer in anybody's roster — and the sender
-  // cannot even start a new session, because the dead one still counts as busy.
-  it.each([
-    ["waitingAccept"], ["connecting"],
-  ])("ends an outgoing legacy text session in %s once its target leaves the roster", (status) => {
-    const h = setup();
-    h.setLegacyText(status, true, "gone");
-    h.setPeers(["a", "z", "old"]);
-    h.workspace.syncPeers();
-    expect(h.legacyText.end).toHaveBeenCalledTimes(1);
-  });
-
-  it.each([
-    ["incomingRequest"], ["open"],
-  ])("keeps an established/incoming legacy text session in %s across a representative handoff", (status) => {
-    const h = setup();
-    h.setLegacyText(status, true, "old-representative");
-    h.setPeers(["new-representative"]);
-    h.workspace.syncPeers();
-    expect(h.legacyText.end).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ["connecting"], ["waitingAccept"], ["incomingRequest"], ["open"],
-  ])("ends a legacy text session in %s when its physical peer actually leaves", (status) => {
-    const h = setup();
-    h.setLegacyText(status, true, "old-page");
-    h.workspace.peerLeft("old-page");
-    expect(h.legacyText.end).toHaveBeenCalledOnce();
-  });
-
-  it("does not end a session for an unrelated physical departure", () => {
-    const h = setup();
-    h.setLegacyText("open", true, "still-here");
-    h.workspace.peerLeft("different-page");
-    expect(h.legacyText.end).not.toHaveBeenCalled();
   });
 
   it("keeps an established healthy mixed link when the remote SIGNALLING peer leaves", async () => {
@@ -443,21 +355,6 @@ describe("peer workspace capability routing", () => {
     h.workspace.stop();
   });
 
-  it("leaves a legacy text session alone while its peer is still listed", () => {
-    const h = setup();
-    h.setLegacyText("open", true, "old");
-    h.setPeers(["a", "old"]);
-    h.workspace.syncPeers();
-    expect(h.legacyText.end).not.toHaveBeenCalled();
-  });
-
-  it("does not re-end a legacy session that already finished", () => {
-    const h = setup();
-    h.setLegacyText("ended", false, "gone");
-    h.setPeers(["a"]);
-    h.workspace.syncPeers();
-    expect(h.legacyText.end).not.toHaveBeenCalled();
-  });
 
   it("keeps waiting while the request target is still in the roster", async () => {
     const h = setup();
@@ -495,31 +392,6 @@ describe("peer workspace capability routing", () => {
     expect(leaves()).toHaveLength(1);
   });
 
-  it("does not let a mixed file-only link steal an ended legacy transcript", async () => {
-    const h = setup();
-    h.setLegacyText("ended", false);
-    await h.workspace.mixed.ensure("z");
-    expect(h.workspace.text).toBe(h.legacyText);
-    expect(h.workspace.textPath).toBe(h.legacyText.path);
-    h.workspace.stop();
-  });
-
-  it("returns ownership to a later active legacy request after mixed text ends", async () => {
-    const h = setup();
-    await h.workspace.openText("z");
-    expect(h.workspace.text).toBe(h.workspace.mixed.text);
-    h.workspace.mixed.disconnect();
-
-    h.setLegacyText("incomingRequest", true);
-    expect(h.workspace.text).toBe(h.legacyText);
-    h.workspace.acceptText();
-    expect(h.legacyText.accept).toHaveBeenCalledOnce();
-
-    h.setLegacyText("ended", false);
-    expect(h.workspace.text).toBe(h.legacyText);
-    h.workspace.stop();
-  });
-
   it("keeps mixed text history selected when a file-only link is rebuilt", async () => {
     const h = setup();
     await h.workspace.openText("z");
@@ -543,15 +415,15 @@ describe("peer workspace capability routing", () => {
 // these getters, so the "one link, one SAS, one path, one disconnect" rule and the
 // "legacy is untouched" rule are both testable without a DOM.
 describe("peer workspace unified presentation surface", () => {
-  it("exposes no link header source at all on the legacy path", () => {
+  it("exposes no link header source at all while no workspace is open", () => {
     const h = setup();
     expect(h.workspace.usingMixed).toBe(false);
     expect(h.workspace.linkPeerId).toBe("");
     expect(h.workspace.linkPath).toBeUndefined();
     expect(h.workspace.queuedBatches).toHaveLength(0);
-    // The legacy surfaces keep their own SAS and per-direction paths.
-    expect(h.workspace.sasCode).toBe("legacy-file");
-    expect(h.workspace.text).toBe(h.legacyText);
+    // No link, no code: there is no second surface left to carry one.
+    expect(h.workspace.sasCode).toBe("");
+    expect(h.workspace.text).toBe(h.workspace.mixed.text);
     h.workspace.stop();
   });
 
@@ -680,14 +552,13 @@ describe("peer workspace during a mixed transport gap", () => {
     return h;
   }
 
-  it("keeps blocking every legacy inbound generation while interrupted", async () => {
+  it("keeps holding the workspace while interrupted", async () => {
     const h = await interrupted();
 
     expect(h.workspace.usingMixed).toBe(true);
-    expect(h.workspace.blocksLegacyInbound).toBe(true);
     expect(h.workspace.warnsOnLeave).toBe(true);
     expect(h.workspace.linkPeerId).toBe("z");
-    // The workspace still owns this peer, so no legacy path can start for it.
+    // The workspace still owns this peer, so no new intent can start for another.
     expect(h.workspace.blocksNewIntent("old")).toBe(true);
     h.workspace.stop();
   });
@@ -700,7 +571,7 @@ describe("peer workspace during a mixed transport gap", () => {
 
     expect(h.workspace.mixed.link?.peerId).toBe("z");
     expect(h.workspace.linkStatus).toBe("interrupted");
-    expect(h.workspace.blocksLegacyInbound).toBe(true);
+    expect(h.workspace.blocksNewIntent("old")).toBe(true);
     expect(h.resume.mock.calls[0][0].signal?.aborted).toBe(false);
     h.workspace.stop();
   });
@@ -737,7 +608,6 @@ describe("peer workspace after a link ends terminally", () => {
     const h = await ended();
     // A terminal explanation is not an exclusion: starting again is the way out,
     // so it may not be what blocks starting again.
-    expect(h.workspace.blocksLegacyInbound).toBe(false);
     expect(h.workspace.blocksNewIntent("z")).toBe(false);
     expect(h.workspace.blocksNewIntent("old")).toBe(false);
     h.workspace.stop();
@@ -804,7 +674,6 @@ describe("peer workspace after a plain failed link", () => {
     const h = await failed();
     // Same rule as a named terminal reason: starting again is the way out, so it
     // must not be what blocks starting again.
-    expect(h.workspace.blocksLegacyInbound).toBe(false);
     expect(h.workspace.blocksNewIntent("z")).toBe(false);
     expect(h.workspace.blocksNewIntent("old")).toBe(false);
     expect(h.workspace.warnsOnLeave).toBe(false);
@@ -902,8 +771,6 @@ describe("peer workspace link/1 routing scope", () => {
     await h.workspace.openText("z");
     expect(mixedFiles).toHaveBeenCalledWith("z", picked);
     expect(mixedText).toHaveBeenCalledWith("z");
-    expect(h.legacyFiles.sendFiles).not.toHaveBeenCalled();
-    expect(h.legacyText.openWith).not.toHaveBeenCalled();
     h.workspace.stop();
   });
 
@@ -922,7 +789,7 @@ describe("peer workspace link/1 routing scope", () => {
     ["a peer that announced only text/1", [CAP_TEXT], "123456"],
     ["a peer announcing a different link version", [CAP_TEXT, "link/2"], "123456"],
     ["a peer announcing a near-miss claim", [CAP_TEXT, "link/1x"], "123456"],
-  ])("leaves %s on the legacy path (room %s)", async (_label, caps, code) => {
+  ])("terminates %s as unsupported (room %s)", async (_label, caps, code) => {
     const h = setup({ realLinkCaps: true });
     if (caps) recordPeerCaps("z", { caps });
     if (code) enterRoom({ code });
@@ -931,13 +798,15 @@ describe("peer workspace link/1 routing scope", () => {
     expect(h.workspace.routes("z")).toBe(false);
 
     const mixedFiles = vi.spyOn(h.workspace.mixed.file, "enqueue").mockImplementation(() => {});
+    const mixedText = vi.spyOn(h.workspace.mixed.text, "openWith").mockResolvedValue();
     const picked = [{ file: new File(["x"], "x.txt") }];
     h.workspace.sendFiles("z", picked);
     await h.workspace.openText("z");
 
+    // Terminal: no lane is started at all. There is no second transport to be
+    // redirected onto, which is the whole point of the contraction.
     expect(mixedFiles).not.toHaveBeenCalled();
-    expect(h.legacyFiles.sendFiles).toHaveBeenCalledWith("z", picked);
-    expect(h.legacyText.openWith).toHaveBeenCalledWith("z");
+    expect(mixedText).not.toHaveBeenCalled();
     // Nothing link-shaped went out: no request, no offer, not even a busy reply.
     expect(h.sent.filter((s) => (s.data as { link?: boolean }).link === true)).toEqual([]);
     expect(h.connect).not.toHaveBeenCalled();
@@ -1079,9 +948,8 @@ describe("peer workspace routing across signalling-only loss", () => {
       h.workspace.sendFiles("z", picked);
 
       expect(enqueue).toHaveBeenCalledWith("z", picked);
-      // The two failure modes this closes, named: a silent drop, and a legacy
-      // downgrade that would negotiate a SECOND connection and a second SAS.
-      expect(h.legacyFiles.sendFiles).not.toHaveBeenCalled();
+      // The failure mode this closes: a silent drop of a batch the user asked
+      // for, on a link that is still perfectly able to carry it.
       h.workspace.stop();
     },
   );
@@ -1095,7 +963,6 @@ describe("peer workspace routing across signalling-only loss", () => {
       await h.workspace.openText("z");
 
       expect(openWith).toHaveBeenCalledWith("z");
-      expect(h.legacyText.openWith).not.toHaveBeenCalled();
       h.workspace.stop();
     },
   );
@@ -1159,10 +1026,12 @@ describe("peer workspace routing across signalling-only loss", () => {
 
     expect(h.workspace.hasLink).toBe(false);
     expect(h.workspace.routes("z")).toBe(false);
+    const enqueue = vi.spyOn(h.workspace.mixed.file, "enqueue").mockImplementation(() => {});
     const picked = [{ file: new File(["late"], "late.txt") }];
     h.workspace.sendFiles("z", picked);
-    // Legacy is where a peer with no link belongs — including this one, now.
-    expect(h.legacyFiles.sendFiles).toHaveBeenCalledWith("z", picked);
+    // A peer with no link and no capability is unsupported — including this one,
+    // now. Nothing is started for it and nothing is silently redirected.
+    expect(enqueue).not.toHaveBeenCalled();
     h.workspace.stop();
   });
 
@@ -1183,6 +1052,122 @@ describe("peer workspace routing across signalling-only loss", () => {
     // is that it comes from the capability, which can therefore still say no.
     expect(h.workspace.routes("z")).toBe(true);
     retainPeers(["a", "old"]);
+    expect(h.workspace.routes("z")).toBe(false);
+    h.workspace.stop();
+  });
+});
+
+/**
+ * The four shapes of "not this device", driven end to end through the REAL
+ * capability predicate and the REAL router.
+ *
+ * The lease names these four exactly, and they are four rather than one because
+ * each defeats a different sloppy implementation: absent defeats a truthy check
+ * on the announcement object, `text/1` defeats "announced something", `LINK/1`
+ * defeats a case fold, and `link/2` defeats a prefix or `startsWith` match.
+ * Together they are the whole of the downgrade boundary the browser has left.
+ *
+ * Each is asserted as TERMINAL, and terminal has two halves that are separately
+ * losable: the peer must not be reached (no offer, no connection, no signal at
+ * all — a speculative two-channel offer to such a peer becomes a transfer whose
+ * manifest never arrives and it waits out a stall watchdog), and the page must
+ * not pretend otherwise (`routes` false, so the card renders the statement and
+ * every send-arming gate reads it).
+ *
+ * The link-capable row is carried through the same loop as a positive control:
+ * an assertion battery that only ever says "nothing happened" is satisfied by a
+ * router that does nothing at all, and would stay green if it were.
+ */
+describe("a peer that does not announce exact link/1 is terminal", () => {
+  beforeEach(() => { clearRoom(); resetPeerCaps(); });
+
+  const shapes: [label: string, caps: string[] | null, routes: boolean][] = [
+    ["a peer that never announced", null, false],
+    ["an empty announcement", [], false],
+    ["the legacy conversation lane alone", [CAP_TEXT], false],
+    ["a cased variant", ["LINK/1"], false],
+    ["a later wire version", ["link/2"], false],
+    ["a later version announced beside the old text lane", [CAP_TEXT, "link/2"], false],
+    ["exact link/1 — the positive control", [CAP_LINK], true],
+  ];
+
+  it.each(shapes)("%s: routes = %s", (_label, caps, routes) => {
+    const h = setup({ realLinkCaps: true });
+    if (caps) recordPeerCaps("z", { caps });
+    expect(peerSupportsLink("z")).toBe(routes);
+    expect(h.workspace.routes("z")).toBe(routes);
+    h.workspace.stop();
+  });
+
+  it.each(shapes.filter(([, , routes]) => !routes))(
+    "%s never receives a speculative offer, in either room", async (_label, caps) => {
+    for (const code of [undefined, "123456"] as const) {
+      resetPeerCaps();
+      clearRoom();
+      const h = setup({ realLinkCaps: true });
+      if (caps) recordPeerCaps("z", { caps });
+      if (code) enterRoom({ code });
+      const mixedFiles = vi.spyOn(h.workspace.mixed.file, "enqueue").mockImplementation(() => {});
+      const mixedText = vi.spyOn(h.workspace.mixed.text, "openWith").mockResolvedValue();
+
+      // Every intent the surface can express, including the one that carries no
+      // batch at all — a handoff-only link is still a link, and a peer that
+      // cannot carry frame kind 12 must not have one built for it either.
+      h.workspace.sendFiles("z", [{ file: new File(["x"], "x.txt") }]);
+      await h.workspace.openText("z");
+      h.workspace.prepareHandoff("z");
+      await Promise.resolve();
+
+      expect(mixedFiles, `enqueue in ${code ?? "LAN"}`).not.toHaveBeenCalled();
+      expect(mixedText, `openWith in ${code ?? "LAN"}`).not.toHaveBeenCalled();
+      // No transport, and no SIGNAL of any kind — not merely no `link`-tagged
+      // one. A bare `linkRequest` to a peer that cannot answer it is still this
+      // page telling a stranger it wants a connection.
+      expect(h.connect, `connect in ${code ?? "LAN"}`).not.toHaveBeenCalled();
+      expect(h.sent, `signals in ${code ?? "LAN"}`).toEqual([]);
+      expect(h.workspace.hasLink).toBe(false);
+      expect(h.workspace.linkPeerId).toBe("");
+      // …and the surface has nothing to render for it: no SAS to compare, no
+      // path label, no queue. Every one of those would be a claim about a
+      // connection that does not exist.
+      expect(h.workspace.sasCode).toBe("");
+      expect(h.workspace.usingMixed).toBe(false);
+      expect(h.workspace.queuedBatches).toHaveLength(0);
+      h.workspace.stop();
+    }
+  });
+
+  it("does not answer an inbound link frame from such a peer either", async () => {
+    // The refusal has to hold in the RESPONDER role too. A peer that announced
+    // nothing this page routes can still put a `link`-generation offer on the
+    // wire — a forged caps hello, a relay replaying one, or simply a client that
+    // asks without announcing — and answering it would rebuild the exact
+    // capability-independent path the announcement gate exists to close.
+    for (const caps of [null, [CAP_TEXT], ["LINK/1"], ["link/2"]] as const) {
+      resetPeerCaps();
+      const h = setup({ realLinkCaps: true });
+      if (caps) recordPeerCaps("z", { caps });
+      h.workspace.start();
+      h.inject("z", { link: true, linkRequest: true });
+      h.inject("z", { link: true, sdp: { type: "offer", sdp: "v=0" } });
+      await Promise.resolve();
+      expect(h.connect, `connect for ${caps ?? "silence"}`).not.toHaveBeenCalled();
+      expect(h.workspace.hasLink, `link for ${caps ?? "silence"}`).toBe(false);
+      h.workspace.stop();
+    }
+  });
+
+  it("stops routing a peer whose later announcement withdraws link/1", () => {
+    // A hello is a snapshot, so the terminal answer is reachable from a peer
+    // that WAS routable. This is the ordinary agreed downgrade — a native client
+    // giving up on `link/1` — and the browser's answer to it is the same
+    // terminal one, because the lane the downgrade names is gone here.
+    const h = setup({ realLinkCaps: true });
+    recordPeerCaps("z", { caps: [CAP_TEXT, CAP_LINK] });
+    expect(h.workspace.routes("z")).toBe(true);
+    recordPeerCaps("z", { caps: [CAP_TEXT] });
+    expect(h.workspace.routes("z")).toBe(false);
+    recordPeerCaps("z", { caps: [] });
     expect(h.workspace.routes("z")).toBe(false);
     h.workspace.stop();
   });

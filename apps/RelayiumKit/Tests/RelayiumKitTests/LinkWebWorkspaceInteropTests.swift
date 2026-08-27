@@ -44,25 +44,35 @@ final class LinkWebWorkspaceInteropTests: XCTestCase {
 
     // MARK: - the exact frames a browser sends
 
-    /// `capsSignal()` in `web/src/lib/peer-caps.svelte.ts` — READ from the
+    /// `advertisedCaps()` in `web/src/lib/peer-caps.svelte.ts` — READ from the
     /// generated vector, not transcribed into this file.
     ///
     /// It used to be the literal `{"caps":["text/1","link/1"]}`, described here
     /// as that function "verbatim". It had not been verbatim since
-    /// `preupload/1` shipped: the browser announces THREE capabilities and
-    /// `peer-caps.test.ts` pinned three, while this file pinned two — and both
-    /// suites stayed green, because the workflows are path-filtered
-    /// (`macos.yml` on `apps/**`, `web.yml` on `web/**`) so no commit can run
-    /// both. A hand-copied literal is not a cross-language assertion; it is one
-    /// language asserting its own memory of the other, and this is what that
-    /// costs.
+    /// `preupload/1` shipped, and both suites stayed green anyway, because the
+    /// workflows are path-filtered (`macos.yml` on `apps/**`, `web.yml` on
+    /// `web/**`) so no commit can run both. A hand-copied literal is not a
+    /// cross-language assertion; it is one language asserting its own memory of
+    /// the other, and this is what that costs.
+    ///
+    /// The list has since changed AGAIN — it is `["link/1", "preupload/1"]` now,
+    /// because the browser withdrew `text/1` along with the single-lane
+    /// conversation transport behind it — and this reader needed no edit for
+    /// that, which is the point of reading it.
     private func webLinkHello() throws -> JSONValue {
         capsField(try webCaps("web"))
     }
 
-    /// The same function on an older Web build, and on the CLI and every native
-    /// client still on the shipped wire.
-    private func webLegacyHello() throws -> JSONValue {
+    /// A peer whose hello is exactly `text/1`: a native client or the CLI on the
+    /// shipped wire, and this build itself in a room where link mode is off.
+    ///
+    /// It is **not** "an older browser" and is no longer named as one. Older Web
+    /// builds announced `text/1` *and* `link/1`, so they were link-capable; what
+    /// this vector row describes is a peer with no `link/1` at all, which is the
+    /// case that has to stay rejected. Today's browser, when it cannot open a
+    /// link, announces an empty hello rather than this one — see the row's own
+    /// comment in `gen-realtime-wire-vectors.mjs`.
+    private func textOnlyHello() throws -> JSONValue {
         capsField(try webCaps("linkRoomInactive"))
     }
 
@@ -83,60 +93,118 @@ final class LinkWebWorkspaceInteropTests: XCTestCase {
     /// The `link`-generation SDP envelope `webrtc.ts` puts on the wire: the SDP,
     /// the generation tag, the handshake commit and the per-connection capability
     /// confirmation, in one frame.
+    ///
+    /// The `caps` field is `sdpExtra: () => ({ commit, caps: [...localCaps()] })`
+    /// in `webrtc.ts`, and `localCaps()` returns `advertisedCaps()` unchanged —
+    /// so the per-connection confirmation is the SAME list as the roster hello.
+    /// It is spelled out as a literal here **on purpose**: this is the one thing
+    /// in the file that must break loudly if the browser's SDP confirmation and
+    /// its roster hello ever drift apart, and reading both from one vector row
+    /// would make that drift invisible. `testTheLinkOfferConfirmsTheSameCapsAsTheHello`
+    /// pins the literal against the generated hello so the copy cannot rot in
+    /// silence, which is the failure the reader above documents.
     private func webLinkOffer(sdp: String = "v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\n",
                               commit: String = "Y29tbWl0") -> JSONValue {
         .object([
             "link": .bool(true),
             "sdp": .object(["type": .string("offer"), "sdp": .string(sdp)]),
             "commit": .string(commit),
-            "caps": .array([.string("text/1"), .string("link/1")]),
+            "caps": .array([.string("link/1"), .string("preupload/1")]),
         ])
     }
 
     // MARK: - 1. the announcement, byte for byte
 
-    /// A browser's roster hello activates link mode on this build, and an older
-    /// browser's does not. The exactness is the whole downgrade boundary.
+    /// A browser's roster hello activates link mode on this build, and a hello
+    /// without `link/1` does not. The exactness is the whole downgrade boundary.
+    ///
+    /// The browser's hello is now read for what it does NOT contain as well.
+    /// `text/1` is absent, so this build must not conclude the browser can take a
+    /// legacy conversation: the registry has to report that honestly rather than
+    /// leaving a stale or inferred `text/1` standing, because the legacy lane the
+    /// paused iOS build still ships routes on exactly this answer.
     func testABrowsersCapsHelloIsUnderstoodExactly() throws {
         let registry = PeerCapabilityRegistry(linkRoomActive: { true })
 
         XCTAssertTrue(registry.record(peerId: "web", signal: try webLinkHello()),
                       "the browser's hello must be recognised as a hello")
         XCTAssertTrue(registry.supports("web", LINK_CAPABILITY))
-        XCTAssertTrue(registry.supports("web", TEXT_CAPABILITY))
+        XCTAssertFalse(registry.supports("web", TEXT_CAPABILITY),
+                       "the browser withdrew text/1; reading it as present would route a "
+                       + "legacy conversation at a page with no lane to answer it")
 
-        XCTAssertTrue(registry.record(peerId: "old", signal: try webLegacyHello()))
+        XCTAssertTrue(registry.record(peerId: "old", signal: try textOnlyHello()))
         XCTAssertFalse(registry.supports("old", LINK_CAPABILITY),
-                       "an older Web build is legacy and must never be offered a link")
+                       "a peer with no link/1 must never be offered a link")
         XCTAssertTrue(registry.supports("old", TEXT_CAPABILITY))
+    }
+
+    /// The per-connection confirmation in the browser's link offer is the same
+    /// list as its roster hello, and this is the assertion that keeps the literal
+    /// in `webLinkOffer` honest.
+    ///
+    /// `localCaps()` is `advertisedCaps()` in `webrtc.ts`, with nothing between
+    /// them, so one generated row is the truth for both. If the browser ever
+    /// confirms something narrower or wider than it announced, that asymmetry is
+    /// what strands a peer — it admits on the hello and then routes on the
+    /// confirmation — and it fails here rather than at a stall watchdog.
+    func testTheLinkOfferConfirmsTheSameCapsAsTheHello() throws {
+        let confirmed = peerCaps(from: webLinkOffer())
+        XCTAssertEqual(confirmed, try webCaps("web"),
+                       "webLinkOffer's caps literal drifted from the generated Web hello; "
+                       + "localCaps() returns advertisedCaps() unchanged, so they are one list")
+        XCTAssertTrue(confirmed.contains(LINK_CAPABILITY))
+        XCTAssertFalse(confirmed.contains(TEXT_CAPABILITY))
     }
 
     /// And what THIS build says back is a list the browser reads with the same
     /// rule, in the same shape, so neither side has to special-case the other.
     ///
-    /// **Not byte-equal, and the previous version of this test claimed it was.**
-    /// The browser announces `preupload/1` as well — a Web lane these clients do
-    /// not implement — so equality here is false and asserting it either fails
-    /// on a truthful vector or, as it did, passes against a stale copy. What is
-    /// actually required is weaker and checkable: the same envelope, a subset
-    /// the browser recognises, and the two capabilities that decide routing.
-    func testThisBuildAnswersWithTheSameHelloShape() throws {
+    /// **Neither byte-equal nor a subset, and this test has claimed both in
+    /// turn.** It first asserted equality, which was false once the browser
+    /// shipped `preupload/1`; it then asserted that this build's hello was a
+    /// SUBSET of the browser's, which was true only for as long as the browser
+    /// still announced `text/1`. It does not: it withdrew that capability with
+    /// the transport behind it. This build announces `text/1` for the paused iOS
+    /// legacy lane and the browser announces `preupload/1` for its pre-upload
+    /// handoff, so **neither list contains the other**, and any containment
+    /// assertion here is a fiction that will be re-broken by the next capability
+    /// either side ships alone.
+    ///
+    /// The contract is exactly one string wide: both hellos name `link/1`, that
+    /// spelling and no other, and each side reads the other's hello as naming it.
+    /// A capability only one side implements is a fact to be ignored, not a
+    /// defect — ignoring it is precisely how a client that ships a lane the other
+    /// does not keeps interoperating.
+    func testBothHellosNameTheSameExactLinkAndNothingElseIsRequired() throws {
         let hello = linkCapsHello(linkRoomActive: true)
         let encoded = try JSONEncoder().encode(hello)
         let decoded = try JSONDecoder().decode(JSONValue.self, from: encoded)
         XCTAssertEqual(decoded, capsField(try webCaps("native")),
                        "the native hello drifted from the generated statement of it")
 
-        let web = Set(try webCaps("web"))
-        XCTAssertTrue(Set(peerCaps(from: decoded)).isSubset(of: web),
-                      "this build announces something no browser has heard of")
+        let native = peerCaps(from: decoded)
+        let web = try webCaps("web")
+
+        // The shared contract, from both directions, spelled exactly.
+        XCTAssertEqual(native.filter { $0 == LINK_CAPABILITY }, [LINK_CAPABILITY],
+                       "this build's hello no longer names exactly one link/1: \(native)")
+        XCTAssertEqual(web.filter { $0 == LINK_CAPABILITY }, [LINK_CAPABILITY],
+                       "the browser hello no longer names exactly one link/1: \(web)")
+
+        // The browser's withdrawal is a recorded expectation, not an accident
+        // this suite would tolerate either way: a browser announcing `text/1`
+        // again would mean the deleted transport had come back. Nothing asserts
+        // that the two lists stay non-containable — that IS an accident, and
+        // pinning it would re-create the fiction this test just removed.
+        XCTAssertFalse(web.contains(TEXT_CAPABILITY),
+                       "the browser advertises a legacy lane it no longer implements: \(web)")
 
         // Read back through the browser's own rule, which is exact match on
-        // these two strings and nothing else.
+        // `link/1` and nothing else.
         let asBrowserReadsIt = PeerCapabilityRegistry(linkRoomActive: { true })
         XCTAssertTrue(asBrowserReadsIt.record(peerId: "mac", signal: decoded))
         XCTAssertTrue(asBrowserReadsIt.supports("mac", LINK_CAPABILITY))
-        XCTAssertTrue(asBrowserReadsIt.supports("mac", TEXT_CAPABILITY))
     }
 
     /// A browser's link-generation offer is classified as one, and nothing else
@@ -267,11 +335,11 @@ final class LinkWebWorkspaceInteropTests: XCTestCase {
         XCTAssertTrue(rig.model.connection.isActive)
     }
 
-    /// An older browser is left entirely alone: no link is assembled, and the
-    /// Workspace's legacy text/file paths own that peer.
-    func testAnOlderBrowserIsLeftOnTheLegacyPaths() async throws {
+    /// A peer with no `link/1` is left entirely alone: no link is assembled, and
+    /// the Workspace's legacy text/file paths own that peer.
+    func testATextOnlyPeerIsLeftOnTheLegacyPaths() async throws {
         let rig = interopRig()
-        rig.capabilities.record(peerId: "aaa-web", signal: try webLegacyHello())
+        rig.capabilities.record(peerId: "aaa-web", signal: try textOnlyHello())
         rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa-web",
                                   data: webLinkOffer()))
         await settle()
@@ -280,6 +348,30 @@ final class LinkWebWorkspaceInteropTests: XCTestCase {
                       "a peer that announced only text/1 must not be routed into link mode")
         XCTAssertEqual(rig.model.connection, .idle)
         XCTAssertFalse(rig.model.canLink(peerId: "aaa-web"))
+    }
+
+    /// **Every inbound tag that is not exactly `link/1` stays rejected**, and it
+    /// is rejected even when a well-formed link offer arrives right behind it.
+    ///
+    /// The offer is the adversarial half. A peer that announces `LINK/1` and then
+    /// sends the real `link`-generation envelope is asking this build to infer
+    /// support from the frame instead of the hello. Case folding, a future
+    /// version, an empty hello and the legacy lane are all equally not this
+    /// protocol, and none of them may assemble anything.
+    func testNoNonExactInboundTagCanReachALink() async throws {
+        for caps in [[], ["text/1"], ["LINK/1"], ["link/2"], ["link/1x"],
+                     ["Link/1", "preupload/1"], ["text/1", "link/2"]] {
+            let rig = interopRig()
+            rig.capabilities.record(peerId: "aaa-web", signal: capsField(caps))
+            rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa-web",
+                                      data: webLinkOffer()))
+            await settle()
+
+            XCTAssertTrue(rig.assembledPeers.isEmpty,
+                          "caps \(caps) reached a link; only exact link/1 may")
+            XCTAssertEqual(rig.model.connection, .idle, "caps \(caps)")
+            XCTAssertFalse(rig.model.canLink(peerId: "aaa-web"), "caps \(caps)")
+        }
     }
 
     /// A relay that strips the browser's hello denies the feature rather than

@@ -44,6 +44,7 @@ const zh: Messages = {
   peersTitle: "附近的设备",
   crossPeersTitle: "已连接的对方",
   pickSendTo: (n) => `点击或拖放文件，发送给 ${n}`,
+  peerUnsupported: "对方的 Relayium 版本太旧，连不上。两端都更新之后才能发送文件或消息。",
   generating: "生成中…",
   emptyPeers: "还没有其他设备。请在同一网络下的另一台设备 / 另一个浏览器窗口打开本页面。",
   emptyCrossCta: "设备不在同一网络？改用跨网络传输 →",

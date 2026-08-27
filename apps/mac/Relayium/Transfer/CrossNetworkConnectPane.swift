@@ -43,11 +43,18 @@ import RelayiumKit
 /// person who could not see it, minutes before the peer arrived. On a `link/1`
 /// peer, which is every current client, the answer was discarded entirely.
 ///
-/// So the question is gone and the decision is not: `LinkWorkspaceModel` resolves
-/// the legacy lane through `LegacyLane.mode` from what the peer actually
-/// announced, at the one moment it is known. A peer that announces exact
+/// So the question is gone and the decision is not: a peer that announces exact
 /// `link/1` is promoted to `TransferLinkPane`, where the distinction never
-/// existed.
+/// existed, and a peer that announces anything else is unsupported — stated on
+/// this pane, terminally, with no session started for it.
+///
+/// ## And the code lives here, not on a session pane
+///
+/// Six digits with no peer yet is not a session. It used to be rendered by a
+/// `RealtimeSessionModel` parked in `.showingCode`, which took the screen away
+/// from the surface the user had just acted on and coupled retiring the code to
+/// ending a session. The code is a `PairingCodeModel` now and it is drawn right
+/// here, under the controls that minted it.
 struct CrossNetworkConnectPane: View {
     /// This screen's module, and the only one it can reach.
     @ObservedObject var module: TransferModule
@@ -55,16 +62,22 @@ struct CrossNetworkConnectPane: View {
     /// Re-reads the parent session at activation time; `gate` belongs to the
     /// render that drew the button and can already be stale.
     let accessNow: () -> AccountAccess?
+    /// Mint a REPLACEMENT for a code whose deadline has passed.
+    ///
+    /// Supplied by `CrossNetworkTransferDestination`, which holds the account
+    /// gate: minting reserves relay capacity billed to an account, so the
+    /// decision belongs to the surface that can answer for it.
+    let regenerate: () -> Void
     /// `TransferModule.acceptsNewSession` inverted — true while THIS module owns
     /// or retains a session, and never because LAN Transfer does. A user with a
     /// same-network connection open can mint a code here; that was the whole
     /// point of splitting the modules.
     let sessionLocked: Bool
 
-    private var fileModel: RealtimeSessionModel { module.files }
-    private var textModel: RealtimeTextSessionModel { module.text }
-    /// The unified `link/1`. A pairing room is watched for a peer that speaks it
-    /// before either legacy model starts; see `watch(code:…)`.
+    /// The six digits, and their deadline. Holds no socket and decides nothing.
+    private var code: PairingCodeModel { module.code }
+    /// The unified `link/1`. The pairing room is watched for a peer that speaks
+    /// it from the moment a code exists; see `PairingCodeStart`.
     private var link: LinkWorkspaceModel { module.link }
     private var presence: TransferPresence { module.presence }
 
@@ -91,7 +104,64 @@ struct CrossNetworkConnectPane: View {
             // peer yet either, so no stop is marked reached or current — see
             // `PathRailPresentation.crossNetwork`.
             PathRail(stops: PathRailPresentation.crossNetwork())
-            pairingCode
+            // **The peer turned up and could not speak `link/1`.**
+            //
+            // Above the controls, because it is the answer to the action the
+            // user just took, and the controls below it are how they try again.
+            // It is a statement about the OTHER device, not a failure of this
+            // one, and it names what would actually fix it.
+            if link.unsupportedPairingPeer {
+                VStack(alignment: .leading, spacing: 8) {
+                    InlineMessage(.warning, L10n.t(.errorRealtimeLegacyPeer))
+                        .accessibilityIdentifier("pairing-peer-unsupported")
+                    Button(L10n.t(.commonDismiss)) { link.dismissUnsupportedPairingPeer() }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("pairing-peer-unsupported-dismiss")
+                }
+                .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
+            }
+            switch code.state {
+            case let .showing(live, _):
+                liveCode(live)
+            case .minting:
+                // **A named wait with an escape**, not the create controls
+                // greyed out. The mint is a real round trip; showing the button
+                // that started it, disabled, says "you cannot do this" when the
+                // truth is "it is happening".
+                SectionCard(title: L10n.t(.workspacePairingHeading)) {
+                    VStack(alignment: .leading, spacing: Metrics.inner) {
+                        ProgressView(L10n.t(.directCreatingCode)).controlSize(.small)
+                        Button(L10n.t(.commonCancel)) { module.cancelPairingCode() }
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("pairing-code-minting-cancel")
+                    }
+                }
+            case .idle, .failed:
+                pairingCode
+            }
+            if case let .failed(message) = code.state {
+                // **A failed mint needs a way out of itself.**
+                //
+                // `.failed` is deliberately ACTIVE — the message must survive the
+                // app-scoped liveness observer, or it would be taken off screen
+                // before it could be read — and that is what held the module's
+                // surface. With the surface held, `sessionLocked` disabled BOTH
+                // Create and Join underneath, so a single failed mint left
+                // Cross-network transfer permanently unusable for the life of
+                // the process, with the reason showing and nothing to press.
+                //
+                // Dismissing is the whole recovery: it returns the code to idle,
+                // leaves whatever room was opened, and releases the surface —
+                // after which the controls below are live again.
+                VStack(alignment: .leading, spacing: 8) {
+                    InlineMessage(.failure, message)
+                        .accessibilityIdentifier("pairing-code-failed")
+                    Button(L10n.t(.commonDismiss)) { module.cancelPairingCode() }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("pairing-code-failed-dismiss")
+                }
+                .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
+            }
             if let actionError {
                 InlineMessage(.failure, actionError)
                     .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
@@ -101,6 +171,123 @@ struct CrossNetworkConnectPane: View {
         // `LanConnectPane` records: this pane stages nothing before a connection
         // exists, so a batch the OS opened has nowhere to land on it, and a pane
         // that quietly took one would be a pre-connect staging side door.
+    }
+
+    // MARK: - a live code
+
+    /// **The code, its countdown, and the wait — on the screen that minted it.**
+    ///
+    /// Moved here from the deleted session pane, and
+    /// unchanged in every respect the user can see. It was never a session: it
+    /// is what this screen shows between "Create" and a peer arriving, and
+    /// drawing it here is what stops a minted code from taking the user
+    /// somewhere else and then bringing them back.
+    ///
+    /// `TimelineView(.periodic)` rather than a `Timer` and a `@State`: the view
+    /// is a function of the current second, so there is no stored clock to fall
+    /// out of step with the deadline, nothing to invalidate when this pane is
+    /// torn down, and — the part that matters — the expiry branch is chosen by
+    /// the same `PairingCodeExpiry` answer that hides the handoff, so the
+    /// countdown and the controls cannot disagree about whether the code is
+    /// alive. `PairingCodeExpiryTests` pins that answer on both sides of the
+    /// second it changes.
+    ///
+    /// The digits sit OUTSIDE the timeline deliberately: an expired code stays
+    /// legible, because the person looking at it is trying to work out whether
+    /// the number they just read out was the right one.
+    private func liveCode(_ live: String) -> some View {
+        SectionCard(title: L10n.t(.workspacePairingHeading)) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(L10n.t(.directGiveCode)).font(.subheadline.weight(.semibold))
+                SecurityCodeText(code: live, style: .pairing)
+                TimelineView(.periodic(from: .now, by: 1)) { tick in
+                    let deadline = PairingCodeExpiry.presentation(
+                        expiresAt: expiresAt, now: tick.date)
+                    VStack(alignment: .leading, spacing: 12) {
+                        if let countdown = deadline.countdown {
+                            Text(L10n.t(.pairingCodeExpiresIn, [countdown]))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                // The digits do not reflow as they tick, which
+                                // is the one thing a proportional face gets
+                                // wrong here.
+                                .monospacedDigit()
+                                // LAST, so the identifier lands on the text
+                                // element itself rather than on the wrapper
+                                // `.monospacedDigit()` introduces.
+                                .accessibilityIdentifier("pairing-code-countdown")
+                        }
+                        Text(L10n.t(.pairingCodeExpiryNote))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("pairing-code-expiry-note")
+                        if deadline.isUsable {
+                            if let joinURL = transferPairingJoinURL(code: live) {
+                                PairingCodeHandoffView(url: joinURL,
+                                                       cancel: { module.cancelPairingCode() })
+                            }
+                            waitingForPeer
+                        } else {
+                            expiredCode
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// The deadline the mint returned, or `0` for a code this device only
+    /// typed — which `PairingCodeExpiry` already defines as usable and
+    /// uncounted, because the joiner was never told when it dies.
+    private var expiresAt: Int64 {
+        guard case let .showing(_, expiresAt) = code.state else { return 0 }
+        return expiresAt
+    }
+
+    /// The real network wait, with a visible status and an escape rather than a
+    /// card containing only its heading.
+    private var waitingForPeer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ProgressView(L10n.t(.directWaitingForDevice))
+                .controlSize(.small)
+                .accessibilityIdentifier("transfer-waiting-pairing-peer")
+            Button(L10n.t(.commonCancel)) { module.cancelPairingCode() }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("transfer-cancel-pairing-watch")
+        }
+    }
+
+    /// **What an expired code offers instead of a link nobody can open.**
+    ///
+    /// The join URL, the QR and the wait all go, because every one of them is an
+    /// invitation to use a code the server refuses — the QR especially, since
+    /// scanning it produces an error on a phone with no explanation anywhere
+    /// near this screen.
+    ///
+    /// What replaces them is one press that mints a fresh code, not a route back
+    /// to the screen that mints. Sending the user elsewhere to press Create
+    /// would be two steps to recover from a deadline the product chose.
+    @ViewBuilder
+    private var expiredCode: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            InlineMessage(.warning, L10n.t(.pairingCodeExpired))
+                .accessibilityIdentifier("pairing-code-expired")
+            HStack(spacing: 8) {
+                // Offered only where it can work. Joining is account-free but
+                // MINTING is not, so a signed-out user gets Cancel alone rather
+                // than a button whose only outcome is a trip to the account
+                // screen.
+                if case .allowed = gate {
+                    Button(L10n.t(.pairingNewCode)) { regenerate() }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("pairing-code-regenerate")
+                }
+                Button(L10n.t(.commonCancel)) { module.cancelPairingCode() }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("pairing-code-expired-cancel")
+            }
+        }
     }
 
     // MARK: - pairing code
@@ -162,12 +349,12 @@ struct CrossNetworkConnectPane: View {
         }
     }
 
-    /// One field, one verb, and both models kept in step by the one binding.
+    /// One field, one verb, and one place the typed code lives.
     ///
-    /// Both are still written because either may end up running the connection —
-    /// which of them does is `LinkWorkspaceModel`'s answer, arrived at once the
-    /// peer is known — and a code typed into one of them only would leave the
-    /// other about to join a different room.
+    /// It used to write BOTH legacy models, because either might end up running
+    /// the connection and a code typed into one only would leave the other about
+    /// to join a different room. There is one holder now, so there is nothing
+    /// left to keep in step.
     private var joinControls: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -186,27 +373,20 @@ struct CrossNetworkConnectPane: View {
                 Button(L10n.t(.workspaceConnectWithCode)) { join() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(!fileModel.canJoin || sessionLocked)
+                    .disabled(!code.canJoin || sessionLocked)
                     .accessibilityIdentifier("cross-network-join-code")
             }
             InlineMessage(.info, L10n.t(.directJoinNoAccountNeeded))
         }
     }
 
-    /// Normalize inside the one state transition, and write BOTH models.
+    /// Normalize inside the one state transition.
     ///
-    /// Following a raw write with `onChange` can overwrite a newer paste or fast
-    /// keystroke; writing only one model would leave the two join verbs
-    /// disagreeing about which code this device is about to join, which is
-    /// exactly the drift the shared field exists to remove.
+    /// Following a raw write with `onChange` can overwrite a newer paste or a
+    /// fast keystroke, which is why the filtering happens in the setter rather
+    /// than behind it.
     private var normalizedJoinCode: Binding<String> {
-        Binding(
-            get: { fileModel.joinCode },
-            set: {
-                fileModel.updateJoinCode($0)
-                textModel.updateJoinCode($0)
-            }
-        )
+        Binding(get: { code.joinCode }, set: { code.updateJoinCode($0) })
     }
 
     // MARK: - actions
@@ -226,48 +406,40 @@ struct CrossNetworkConnectPane: View {
             return
         }
         actionError = nil
-        // **`.files` is the surface's provisional lane, not a kind of code.**
-        // One of the two legacy models has to hold the minted code and its
-        // expiry so `TransferSessionPane` can render them, and the file lane is
-        // the one that does. If the peer turns out to be a legacy TEXT peer,
-        // `adoptLegacyRoom` moves the surface to the text lane and retires this
-        // one — see `RelayiumApp`.
-        guard presence.beginSession(route, mode: .files) else { return }
+        link.dismissUnsupportedPairingPeer()
+        // **No `mode:`, because there is no lane to choose.** A pairing code
+        // names a rendezvous; what the connection carries is decided inside the
+        // link it opens, and one link carries both. The claim that used to say
+        // `.files` was picking which legacy model would hold the digits.
+        guard presence.beginSession(route) else { return }
         Task { await mintAndWatch(token: access.token) }
     }
 
     private func join() {
         guard !sessionLocked else { return }
-        // Snapshot before ownership: the field remains editable until the
-        // asynchronous model start publishes state. Reading it inside the Task
-        // could turn one valid click into a different or incomplete code.
-        let code = fileModel.joinCode
-        guard fileModel.canJoin else { return }
+        // Snapshot before ownership: the field remains editable until the watch
+        // publishes state. Reading it inside a later turn could turn one valid
+        // click into a different or incomplete code.
+        let typed = code.joinCode
+        guard code.canJoin else { return }
         actionError = nil
-        guard presence.beginSession(route, mode: .files) else { return }
-        // A joiner ANSWERS on the legacy wire, so `.responder` is what the
-        // fallback must use. Watched first, exactly as a minted code is.
-        PairingCodeStart(module: module).joinAndWatch(code: code)
+        link.dismissUnsupportedPairingPeer()
+        guard presence.beginSession(route) else { return }
+        PairingCodeStart(module: module).joinAndWatch(code: typed)
     }
 
     /// Mint the code, then WATCH the room it names for a peer that speaks
-    /// `link/1` — and let the legacy path take the room if none does.
+    /// `link/1`.
     ///
-    /// Minting stays on the model whose state the code, the QR and the expiry
-    /// are rendered from: `LinkWorkspaceModel` never mints, and while it is only
-    /// watching, `hasSession` is false so that surface stays on screen unchanged.
+    /// Minting stays on `PairingCodeModel`: `LinkWorkspaceModel` never mints,
+    /// and while it is only watching, `hasSession` is false — so this surface
+    /// stays on screen with the code drawn on it, which is exactly where the
+    /// person reading the digits out needs it to be.
     ///
-    /// The three steps themselves live in `PairingCodeStart`, because the
-    /// expired-code surface mints a REPLACEMENT and must not grow a second copy
-    /// of them — the copy is how the two would come to disagree about the legacy
-    /// role or about whether the room is watched at all.
-    ///
-    /// It starts in the FILE lane, and it has to: this runs before any peer
-    /// exists, so there is no announcement for `LegacyLane.mode` to read yet. The
-    /// file lane is the one whose `showingCode` and expiry this surface renders,
-    /// and the one a real peer's announcement can still move off —
-    /// `adoptLegacyRoom` switches the surface to text when the room resolves that
-    /// way. Nothing is foreclosed by starting here.
+    /// The two steps live in `PairingCodeStart` because the expired-code branch
+    /// above mints a REPLACEMENT and must not grow a second copy of them: a copy
+    /// is how the two would come to disagree about whether the room is watched
+    /// at all.
     private func mintAndWatch(token: String) async {
         await PairingCodeStart(module: module).createAndWatch(token: token)
     }

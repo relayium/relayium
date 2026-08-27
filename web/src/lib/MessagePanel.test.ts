@@ -3,7 +3,7 @@ import { mount, unmount, flushSync } from "svelte";
 import MessagePanel from "./MessagePanel.svelte";
 import { loadLang, messages } from "./i18n.svelte";
 import { TEXT_MAX_BYTES } from "./text-wire";
-import type { TextMessage } from "./text-session.svelte";
+import type { TextMessage } from "./text-model";
 
 let target: HTMLDivElement;
 let app: unknown;

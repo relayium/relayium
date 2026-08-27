@@ -9,6 +9,28 @@ import Foundation
 /// never answer, forever, for the life of the room.
 public let LINK_CAPS_ANNOUNCE_ATTEMPTS = 3
 
+/// **The hello of a client whose only transport is `link/1`.**
+///
+/// `link/1` when link mode is on, and an EMPTY list when it is not — which is
+/// still a hello, and still says "nothing here for you" rather than saying
+/// nothing. `text/1` never appears, because a composition that uses this has no
+/// legacy lane to honour: announcing one would invite a peer onto a transport
+/// the app cannot open, and a capability is the one input a peer is entitled to
+/// act on.
+///
+/// Deliberately beside `linkCapsHello` rather than replacing it. Both are real
+/// answers for real compositions — the paused iOS implementation and the
+/// headless acceptance hosts still ship the legacy lane and must go on
+/// announcing it — and which one a client sends is a fact about that client,
+/// chosen where it is composed. See `LinkCapabilityAnnouncer.init(hello:)`.
+///
+/// The per-connection SDP confirmation is unchanged and is already exact
+/// `link/1`; this is the ROSTER-level announcement, which is the one that was
+/// over-promising.
+public func linkOnlyCapsHello(linkRoomActive: Bool) -> JSONValue {
+    capsField(linkRoomActive ? [LINK_CAPABILITY] : [])
+}
+
 /// How long between one peer's announcements.
 ///
 /// One constant for BOTH rooms, and that is the point of hoisting it here. The
@@ -55,6 +77,23 @@ public final class LinkCapabilityAnnouncer {
     private let registry: PeerCapabilityRegistry
     private let linkRoomActive: () -> Bool
     private let send: (String, JSONValue) -> Void
+    /// **What this client announces, as a function of whether link mode is on.**
+    ///
+    /// Injectable, and defaulted to `linkCapsHello` — which is what every
+    /// existing caller gets and is byte-identical to what was hard-coded here.
+    ///
+    /// It exists because a client's hello is a PROMISE, and a composition can
+    /// stop being able to keep part of it. macOS deletes its legacy file and
+    /// text transports: it refuses every legacy session, so announcing `text/1`
+    /// would invite a peer onto a lane the app cannot open — the one input that
+    /// peer is entitled to act on, and acting on it produces a connection that
+    /// can only stall. iOS still implements that lane and still announces it.
+    ///
+    /// A parameter rather than a platform `#if` on purpose: the two macOS room
+    /// types are the things that changed, not the platform, and a global switch
+    /// would silently re-answer for the headless acceptance hosts and every
+    /// future consumer that links this module.
+    private let hello: (Bool) -> JSONValue
 
     /// Peers still owed announcements, and how many each is owed. A peer leaves
     /// this map by being greeted enough times, by answering, or by leaving the
@@ -67,10 +106,12 @@ public final class LinkCapabilityAnnouncer {
 
     public init(registry: PeerCapabilityRegistry,
                 linkRoomActive: @escaping () -> Bool,
-                send: @escaping (String, JSONValue) -> Void) {
+                send: @escaping (String, JSONValue) -> Void,
+                hello: @escaping (Bool) -> JSONValue = linkCapsHello(linkRoomActive:)) {
         self.registry = registry
         self.linkRoomActive = linkRoomActive
         self.send = send
+        self.hello = hello
     }
 
     /// A new socket: new peer ids, and a roster nobody has been greeted in. A
@@ -125,6 +166,6 @@ public final class LinkCapabilityAnnouncer {
             return
         }
         pending[peerId] = remaining > 1 ? remaining - 1 : nil
-        send(peerId, linkCapsHello(linkRoomActive: linkRoomActive()))
+        send(peerId, hello(linkRoomActive()))
     }
 }

@@ -1,8 +1,8 @@
 // Reusable text conversations on a long-lived authenticated peer link.
 //
-// Unlike the legacy text session, ending or rejecting a conversation never
-// closes the DataChannel or peer link. The link owns the codecs so reopening a
-// conversation cannot reset an AEAD nonce sequence.
+// The only conversation lane the browser has. Ending or rejecting one never
+// closes the DataChannel or the peer link: the link owns the codecs, so
+// reopening a conversation cannot reset an AEAD nonce sequence.
 
 import {
   TEXT_BURST,
@@ -15,7 +15,7 @@ import {
   type TextErrorKey,
   type TextMessage,
   type TextStatus,
-} from "./text-session.svelte";
+} from "./text-model";
 import {
   TEXT_END,
   TEXT_REQUEST,

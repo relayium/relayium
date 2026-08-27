@@ -749,3 +749,31 @@ actor Gate2 {
         waiters = []
     }
 }
+
+/// **The code-less room's own hello, and the seam macOS sets it through.**
+///
+/// `LanDiscoveryModel` builds the announcer for the room it joins, so the
+/// override has to be settable on the model rather than passed at each greeting
+/// — and it has to take effect for the announcer that is actually used, which is
+/// what the rebuild-on-set below exists for.
+@MainActor
+final class LanDiscoveryLocalHelloTests: XCTestCase {
+
+    /// The default is what every existing consumer gets, asserted by NOT setting
+    /// one. iOS composes this model too.
+    func testTheDefaultLocalHelloIsTheSharedNativeAnnouncement() {
+        let discovery = LanDiscoveryModel(connect: { fatalError("no socket needed") })
+        XCTAssertEqual(discovery.localHello(true), linkCapsHello(linkRoomActive: true),
+                       "the code-less room's default hello drifted from the shared one")
+        XCTAssertEqual(peerCaps(from: discovery.localHello(true)),
+                       [TEXT_CAPABILITY, LINK_CAPABILITY])
+    }
+
+    /// The macOS override, exactly `link/1`.
+    func testTheLinkOnlyOverrideIsExactlyLinkOne() {
+        let discovery = LanDiscoveryModel(connect: { fatalError("no socket needed") })
+        discovery.localHello = linkOnlyCapsHello(linkRoomActive:)
+        XCTAssertEqual(peerCaps(from: discovery.localHello(true)), [LINK_CAPABILITY])
+        XCTAssertFalse(peerCaps(from: discovery.localHello(true)).contains(TEXT_CAPABILITY))
+    }
+}

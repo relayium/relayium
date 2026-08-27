@@ -173,50 +173,196 @@ describe("dialogs announce what they are", () => {
   });
 });
 
-describe("the peer card is a pointer shortcut, not a second label", () => {
-  // The primary picker used to be claimed by two labels at once: the whole peer
-  // card (`<label class="pcard" for={pick-…}>`) and the visible "Send files"
-  // action that wraps the input. One input, two labels — axe reports
+describe("the peer card is a pointer shortcut, not a control it does not own", () => {
+  // History, because it is what these assertions are still holding down. The
+  // primary picker was once claimed by two labels at once: the whole peer card
+  // (`<label class="pcard" for={pick-…}>`) and the visible "Send files" action
+  // that wrapped the input. One input, two labels — axe reports
   // form-field-multiple-labels and each AT is free to announce a different name.
-  // The card keeps its pointer/touch behavior through a click that forwards to
-  // the same input, so nothing about the visible affordance changes.
+  //
+  // The `link/1`-only contraction removed that picker from this card entirely:
+  // a routing peer has one action (open the workspace, where the pickers live),
+  // and a peer that does not route has none at all. So the multiple-label rule
+  // is now held structurally — there is no per-peer picker here for a second
+  // label to attach to — and what these tests pin is the pair of semantics that
+  // replaced it: the card is still not a label, and the unreachable state is a
+  // statement rather than a control.
   const source = readFileSync(resolve(import.meta.dirname, "..", "App.svelte"), "utf8");
   const card = /<div\b[^>]*class="pcard"[\s\S]*?<\/div>/.exec(source)?.[0] ?? "";
-  const picker = /<input class="file-pick-input" id=\{`pick-\$\{p\.id\}`\}[\s\S]*?\/>/.exec(source)?.[0] ?? "";
+  const snippet = source.slice(source.indexOf("{#snippet peerCard("), source.indexOf("{#snippet transferSurface()"));
+  const actions = snippet.slice(snippet.indexOf('<div class="peer-actions">'));
+  /** Markup only. A comment may legitimately NAME the control it is explaining
+   *  it no longer renders — which is exactly what several of these do. */
+  const markup = (t: string) => t.replace(/<!--[\s\S]*?-->/g, "").replace(/\/\/[^\n]*/g, "");
 
-  it("leaves the picker with exactly one label — the visible action that names it", () => {
+  it("owns no form control at all, so no control here can have two labels", () => {
     expect(card).not.toBe("");
     expect(card).not.toMatch(/\bfor=/);
     expect(source).not.toMatch(/<label[^>]*class="pcard"/);
-    // The single surviving association is the implicit one: the .pa-files label
-    // wraps the input, and its .pa-label span is the accessible name.
-    expect(source).toMatch(/<label class="btn btn-secondary btn-sm pa-files"[\s\S]*?<input class="file-pick-input"/);
+    // The whole snippet, not only the .pcard div: a picker moved a few lines
+    // down would satisfy a card-scoped assertion and reopen the same hole.
+    expect(markup(snippet)).not.toMatch(/<input\b/);
+    expect(markup(snippet)).not.toMatch(/<label\b/);
+    expect(markup(snippet)).not.toContain("file-pick-input");
+    expect(markup(snippet)).not.toContain("pick-${p.id}");
+    // The pickers did not vanish from the product — they moved to the surface
+    // that only exists once a link does. This is the positive control: an
+    // assertion that only says "no input here" is satisfied by deleting the
+    // feature, and would stay green if it had been.
+    const panel = readFileSync(resolve(import.meta.dirname, "MessagePanel.svelte"), "utf8");
+    expect(panel).toContain("file-pick-input attach-file");
+    expect(panel).toMatch(/<input\b[\s\S]*?type="file"/);
+    expect(source).toContain("onPickFiles={(e) => pickFile(e, workspace.linkPeerId)}");
   });
 
-  it("still points the card at that same picker on pointer input", () => {
+  it("still points the card at the peer's one real action on pointer input", () => {
     expect(card).toMatch(/onclick=/);
-    expect(card).toMatch(/getElementById\(`pick-\$\{p\.id\}`\) as HTMLInputElement/);
-    expect(card).toMatch(/input\?\.focus\(\{ preventScroll: true, focusVisible: false \}\)/);
-    expect(card).toMatch(/input\?\.click\(\)/);
-    // A busy peer must not be able to open the chooser or flush the outbox, and a
-    // click that only ended a selection drag is not a tap — both are what the
-    // <label> used to do for free.
+    // Attached only for a peer that HAS that action — see the cascade suite
+    // below for why the unreachable card carries no listener at all.
+    expect(card).toContain("onclick={unifiedPeer ? (e) => {");
+    expect(card).toContain("openWorkspace(p.id);");
+    // A busy peer must not be able to act, and a click that only ended a
+    // selection drag is not a tap — both are what the <label> used to do for
+    // free, and both still guard the one action that is left.
     expect(card).toMatch(/if \(intentBlocked \|\|/);
     expect(card).toMatch(/!picked\.isCollapsed && picked\.containsNode\(/);
+    // …and it reaches nothing for a peer that cannot be reached. The shortcut
+    // used to focus and click a hidden input; a shortcut to a control that is
+    // not on the card is a tap that silently does nothing.
+    expect(card).not.toMatch(/getElementById/);
+    expect(card).not.toMatch(/input\?\.click\(\)/);
   });
 
-  it("gives the card no keyboard path of its own, so the input stays the only tab stop", () => {
+  it("gives the card no keyboard path of its own", () => {
     expect(card).not.toBe("");
     expect(card).not.toMatch(/onkey/i);
     expect(card).not.toMatch(/tabindex/i);
     expect(card).not.toMatch(/role=/);
   });
 
-  it("keeps the visible action as the name and the peer as the description", () => {
-    expect(picker).toMatch(/aria-labelledby=\{`send-file-label-\$\{p\.id\}`\}/);
-    expect(picker).toMatch(/aria-describedby=\{`peer-target-\$\{p\.id\}`\}/);
-    expect(source).toMatch(/<span class="pa-label" id=\{`send-file-label-\$\{p\.id\}`\}>\{t\.sendFile\}</);
+  it("states an unreachable peer rather than rendering a control for it", () => {
+    const terminal = actions.slice(actions.indexOf("{:else}"));
+    // A paragraph, and a localized one. Not a button, not a disabled button, not
+    // an aria-disabled anything: those all say "not now", and the truth is "not
+    // this device". A disabled control is also still an accessible-name carrier
+    // and, in several ATs, still announced — so it would read as an action.
+    expect(terminal).toContain('<p class="pa-unsupported">{t.peerUnsupported}</p>');
+    for (const control of ["<button", "<label", "<input", "tabindex", "aria-disabled", "role="]) {
+      expect(markup(terminal), control).not.toContain(control);
+    }
+    // It is the whole of that branch — nothing else renders beside it.
+    expect(markup(terminal).match(/<p /g)).toHaveLength(1);
+  });
+
+  it("keeps a name on the peer for the surface that still describes by it", () => {
+    // `peer-target-` is the card's stable per-peer name node. Both branches keep
+    // it, so the workspace surface and the announcement can still point at a
+    // peer by id regardless of whether it can be reached.
+    expect(snippet.match(/id=\{`peer-target-\$\{p\.id\}`\}/g)).toHaveLength(2);
     expect(source).toMatch(/<span class="pname" id=\{`peer-target-\$\{p\.id\}`\}>/);
+  });
+});
+
+describe("a peer that cannot be reached does not look pressable", () => {
+  // The finding this pins: the terminal-unsupported card lost its controls but
+  // kept every affordance that had advertised them. `.peer .pcard` set
+  // `cursor: pointer` unconditionally, `.peer:not(.disabled):hover` painted the
+  // card in the accent state, and the list-level drag rule repainted it again
+  // while a file was over the list — so the one card in the product with nothing
+  // to press looked, to a pointer, exactly like the one card that opens a
+  // workspace. Its click then did nothing, which the user reads as a failure
+  // they caused.
+  //
+  // These run the REAL cascade rather than matching source text. jsdom parses
+  // App.svelte's own <style> block and resolves specificity and order, so an
+  // added rule that re-grants the affordance later in the sheet fails here even
+  // though every source-shaped assertion below would still pass. Both states are
+  // built from the same markup, so the routing card is a live positive control:
+  // if the whole style block failed to load, IT would go unstyled and fail too.
+  const source = readFileSync(resolve(import.meta.dirname, "..", "App.svelte"), "utf8");
+  const css = /<style>([\s\S]*)<\/style>/.exec(source)?.[1] ?? "";
+
+  /** Svelte's `:global(x)` is not a selector jsdom can match; the browser sees
+   *  the inner compound, scoped away. Unwrapping it keeps those rules in the
+   *  comparison instead of silently dropping the ones we most want to check. */
+  const plain = (sel: string) => sel.replace(/:global\(([^()]*)\)/g, "$1");
+
+  let sheet: CSSStyleSheet;
+  let routing: HTMLElement;
+  let unreachable: HTMLElement;
+
+  beforeEach(() => {
+    expect(css).not.toBe("");
+    const style = document.createElement("style");
+    style.textContent = css;
+    document.head.append(style);
+    sheet = style.sheet!;
+    // A stylesheet that failed to parse would make every "no affordance" claim
+    // below vacuously true.
+    expect(sheet.cssRules.length).toBeGreaterThan(50);
+
+    // `solo` deliberately: a single connected peer is the case the accent fill
+    // was written for, and therefore the case where an untrue highlight is
+    // permanent rather than hover-only.
+    target.innerHTML = `<div class="peers"><ul class="solo">
+      <li class="peer"><div class="pcard" id="routing-card"></div></li>
+      <li class="peer unreachable"><div class="pcard" id="unreachable-card"></div></li>
+    </ul></div>`;
+    routing = target.querySelector("#routing-card")!;
+    unreachable = target.querySelector("#unreachable-card")!;
+  });
+
+  afterEach(() => {
+    for (const s of [...document.head.querySelectorAll("style")]) s.remove();
+  });
+
+  it("resolves to a plain cursor, where a reachable peer resolves to a pointer", () => {
+    expect(getComputedStyle(routing).cursor).toBe("pointer");
+    expect(getComputedStyle(unreachable).cursor).toBe("default");
+  });
+
+  it("matches no hover rule that a reachable peer matches", () => {
+    // Every rule that only applies on hover, with the hover stripped: "would
+    // this style land if the pointer were over the card?"
+    const hoverRules = [...sheet.cssRules]
+      .filter((r): r is CSSStyleRule => r instanceof CSSStyleRule && r.selectorText.includes(":hover"))
+      .map((r) => plain(r.selectorText).replace(/:hover/g, ""));
+    expect(hoverRules.length).toBeGreaterThan(0);
+
+    const applies = (el: HTMLElement) =>
+      hoverRules.filter((sel) => el.matches(sel) || el.parentElement!.matches(sel));
+    // The positive control: hovering a reachable peer DOES change it, so this
+    // test is measuring an exclusion and not an empty rule set.
+    expect(applies(routing).length).toBeGreaterThan(0);
+    expect(applies(unreachable)).toEqual([]);
+  });
+
+  it("is not repainted as a drop target while a file is over the list", () => {
+    // The per-card handler already withholds `.drag` from a peer that will
+    // refuse the drop; the list-level rule used to re-grant the same accent.
+    target.querySelector("ul")!.classList.add("dragging");
+    const dragRules = [...sheet.cssRules]
+      .filter((r): r is CSSStyleRule => r instanceof CSSStyleRule && /\bdragging\b/.test(r.selectorText))
+      .map((r) => plain(r.selectorText));
+    expect(dragRules.length).toBeGreaterThan(0);
+    expect(dragRules.filter((sel) => routing.parentElement!.matches(sel)).length).toBeGreaterThan(0);
+    expect(dragRules.filter((sel) => unreachable.parentElement!.matches(sel))).toEqual([]);
+  });
+
+  it("carries no click handler at all, rather than one whose body is a guard", () => {
+    const snippet = source.slice(source.indexOf("{#snippet peerCard("),
+                                source.indexOf("{#snippet transferSurface()"));
+    // Conditional ATTACHMENT, not a conditional body: `onclick={unifiedPeer ? …
+    // : undefined}` leaves the unreachable card with no listener, so it is not a
+    // click target to a pointer, to an inspector, or to an event-delegation
+    // walk. A handler that returns early is still all three.
+    expect(snippet).toContain("onclick={unifiedPeer ? (e) => {");
+    expect(snippet).toContain("} : undefined}");
+    expect(snippet).toContain("class:unreachable={!unifiedPeer}");
+    // And the card must not have grown a keyboard or role affordance instead.
+    const card = /<div\n\s+class="pcard"[\s\S]*?\n    >/.exec(snippet)?.[0] ?? "";
+    expect(card).not.toBe("");
+    expect(card).not.toMatch(/onkey|tabindex|role=|aria-disabled/i);
   });
 });
 

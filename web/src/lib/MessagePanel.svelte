@@ -1,7 +1,7 @@
 <script lang="ts">
   // 消息面板。**纯展示 + 纯回调**，和 DeviceRadar 一样的分工：状态机在
-  // text-session.svelte.ts 里，这里一个字节的会话状态都不持有，所以它能在没有
-  // WebRTC 的情况下被完整测。
+  // mixed-text-session.svelte.ts 里，形状在 text-model.ts 里；这里一个字节的会话
+  // 状态都不持有，所以它能在没有 WebRTC 的情况下被完整测。
   //
   // 关于正文渲染，这里做的事情少得刻意：一个转义过的文本节点，pre-wrap，dir="auto"。
   // **不**做链接化、不做 Markdown、不做代码高亮、不做任何预览——每一样都是"把解析器
@@ -19,7 +19,7 @@
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { copyFeedback } from "./clipboard.svelte";
   import { textByteLength, TEXT_MAX_BYTES } from "./text-wire";
-  import type { TextMessage, TextStatus, TextErrorKey } from "./text-session.svelte";
+  import type { TextMessage, TextStatus, TextErrorKey } from "./text-model";
   import type { ConnPath } from "./webrtc";
   import Icon from "./Icon.svelte";
 
@@ -191,8 +191,8 @@
   <h2>{t.text.panelTitle}</h2>
 
   {#if status === "incomingRequest"}
-    <!-- 这里一个字的正文都不渲染，而且也解不开：会话的 onmessage 在 accept() 之前
-         根本没挂上（见 text-session）。SAS 先到屏幕上，消息才可能到。 -->
+    <!-- 这里一个字的正文都不渲染，而且也解不开：会话在 accept() 之前不投递任何正文
+         （见 mixed-text-session）。SAS 先到屏幕上，消息才可能到。 -->
     <p class="req">{t.text.requestHead(peerName)}</p>
     {#if showSas}
       <div class="sas" bind:this={revealTarget}>{t.codeLabel} <code>{sasCode}</code> — {t.text.sasCompare}</div>

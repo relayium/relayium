@@ -61,23 +61,48 @@ final class LinkCapabilityVectorTests: XCTestCase {
                        caps(hello["linkRoomInactive"]))
     }
 
-    /// The browser's hello is a superset, and every capability this build
-    /// announces is one the browser announces too.
+    /// The shared contract is `link/1`, exactly — and it is no longer a subset
+    /// relation in either direction.
     ///
-    /// The check that matters is not equality — it is that neither client can
-    /// announce something the other has never heard of and still be read as
-    /// speaking the same `link/1`.
-    func testTheBrowserHelloIsUnderstoodByThisBuild() throws {
+    /// It used to be: this build's hello had to be a SUBSET of the browser's, and
+    /// the browser's `text/1` was asserted here as a capability this side could
+    /// count on. Both halves have stopped being true. The browser withdrew
+    /// `text/1` when it deleted the single-lane conversation transport behind it,
+    /// so requiring the browser to announce it would be requiring an untruthful
+    /// hello; and this build announces `text/1` while the browser announces
+    /// `preupload/1`, so neither list contains the other.
+    ///
+    /// What actually has to hold — and all that ever had to — is that both name
+    /// the SAME EXACT `link/1`, and that each side reads the other's hello as
+    /// naming it. A capability only one side implements is a fact, not a defect;
+    /// a `link/1` the two sides spell differently is the defect, and that is what
+    /// this asserts. Anything a peer announces beyond it is ignored rather than
+    /// required, which is exactly how a client that ships a lane the other does
+    /// not can keep interoperating.
+    func testBothHellosNameTheSameExactLink() throws {
         let block = try capability(vectors())
         let hello = try XCTUnwrap(block["hello"] as? [String: Any])
         let web = caps(hello["web"])
-        XCTAssertTrue(Set(advertisedLinkCapabilities(linkRoomActive: true)).isSubset(of: Set(web)),
-                      "this build announces something the browser does not: \(web)")
+        let native = advertisedLinkCapabilities(linkRoomActive: true)
+
+        XCTAssertTrue(web.contains(LINK_CAPABILITY),
+                      "the browser hello no longer names link/1: \(web)")
+        XCTAssertTrue(native.contains(LINK_CAPABILITY),
+                      "this build's hello no longer names link/1: \(native)")
+        // Exact, not a prefix and not a case fold: the string is the contract.
+        XCTAssertEqual(web.filter { $0 == LINK_CAPABILITY }, [LINK_CAPABILITY])
+
+        // …and the browser's withdrawal of the legacy conversation lane is a
+        // recorded expectation rather than an accident this suite would tolerate
+        // either way. A browser that started announcing it again would mean the
+        // deleted transport had come back.
+        XCTAssertFalse(web.contains(TEXT_CAPABILITY),
+                       "the browser advertises a legacy lane it no longer implements: \(web)")
 
         let registry = PeerCapabilityRegistry(linkRoomActive: { true })
         XCTAssertTrue(registry.record(peerId: "web", signal: capsField(web)))
         XCTAssertTrue(registry.supports("web", LINK_CAPABILITY))
-        XCTAssertTrue(registry.supports("web", TEXT_CAPABILITY))
+        XCTAssertFalse(registry.supports("web", TEXT_CAPABILITY))
     }
 
     // MARK: - the cadence, and the window it has to fit inside

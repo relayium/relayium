@@ -61,18 +61,12 @@ final class TransferModuleTests: XCTestCase {
         let directory = try temporaryDirectory()
         return TransferModule(
             route: route,
-            files: RealtimeSessionModel(pairClient: StubPair(), iceClient: StubICE(),
-                                        makeConnection: { _, _, _ in
-                                            throw NearbyError.notScanning
-                                        }),
-            text: RealtimeTextSessionModel(pairClient: StubPair(), iceClient: StubICE(),
-                                           makeConnection: { _, _, _ in
-                                               throw NearbyError.notScanning
-                                           }),
             link: LinkWorkspaceModel(capabilities: PeerCapabilityRegistry(linkRoomActive: { true }),
                                      receiveDirectory: { directory },
                                      requiresVerification: { false },
-                                     iceClient: nil))
+                                     iceClient: nil,
+                                     legacyFallback: .terminateUnsupported),
+            code: PairingCodeModel(client: StubPair()))
     }
 
     private func makeModules() throws -> (nearby: TransferModule, direct: TransferModule) {
@@ -112,7 +106,8 @@ final class TransferModuleTests: XCTestCase {
         let (nearby, direct) = try makeModules()
         nearby.presence.beginSession(.nearby, mode: .files)
 
-        XCTAssertEqual(nearby.pane, .legacySession)
+        XCTAssertEqual(nearby.pane, .connect,
+                       "a claim with no link session yet draws the connect surface")
         XCTAssertEqual(direct.pane, .connect,
                        "the pairing screen rendered a session belonging to LAN Transfer")
         XCTAssertTrue(nearby.presence.rendersSession(.nearby))
@@ -246,9 +241,10 @@ final class TransferModuleTests: XCTestCase {
     func testTwoModulesNeverShareOnePresence() throws {
         let (nearby, direct) = try makeModules()
         XCTAssertFalse(nearby.presence === direct.presence)
-        XCTAssertFalse(nearby.files === direct.files)
-        XCTAssertFalse(nearby.text === direct.text)
         XCTAssertFalse(nearby.link === direct.link)
+        XCTAssertFalse(nearby.code === direct.code,
+                       "one code model would let a code minted on the pairing screen "
+                       + "appear on the same-network one")
     }
 
     /// Observing a module redraws for its own objects and not for the other's.
@@ -392,24 +388,15 @@ final class TransferModuleTests: XCTestCase {
                 XCTFail("nothing may be assembled while the room has no configuration")
                 fatalError()
             })
-        let module = TransferModule(
-            route: .pairingCode,
-            files: RealtimeSessionModel(pairClient: StubPair(), iceClient: StubICE(),
-                                        makeConnection: { _, _, _ in
-                                            throw NearbyError.notScanning
-                                        }),
-            text: RealtimeTextSessionModel(pairClient: StubPair(), iceClient: StubICE(),
-                                           makeConnection: { _, _, _ in
-                                               throw NearbyError.notScanning
-                                           }),
-            link: link)
+        let module = TransferModule(route: .pairingCode, link: link,
+                                    code: PairingCodeModel(client: StubPair()))
 
         XCTAssertTrue(link.acceptsInboundLinkNow,
                       "an idle module refuses an unsolicited link")
 
         // Claiming the surface for a code closes the gate — this is the state
         // the shipped build then stayed in for the whole life of the code.
-        module.presence.beginSession(.pairingCode, mode: .files)
+        module.presence.beginSession(.pairingCode)
         XCTAssertFalse(link.acceptsInboundLinkNow,
                        "a claimed surface still admits an unsolicited link")
 

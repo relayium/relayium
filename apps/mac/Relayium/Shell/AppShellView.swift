@@ -147,24 +147,19 @@ struct AppShellView: View {
             fileOpenRouting.deliver(urls)
             Task { @MainActor in fileOpens.consume(urls) }
         }
-        // A session nobody asked for. `task(id:)` rather than `onChange`
-        // because the window may have been closed when it started and rebuilt
-        // while it is still running: `onChange` fires on a transition this view
-        // tree never saw, `task(id:)` fires on the value it comes back to.
-        .task(id: nearbyReceive.activeKind) {
-            guard let kind = nearbyReceive.activeKind else { return }
-            // Claim BEFORE navigating, on the NEARBY module's presence — an
-            // inbound same-network session belongs to that module and to no
-            // other. The claim still comes first, because a mistaken or stale
-            // publication must not move the user away from a same-network
-            // session that module already owns.
-            //
-            // It no longer defers to a pairing code: a Direct session running on
-            // the other screen is a different module now, so reconciling this
-            // one cannot disturb it and is not disturbed by it.
-            AppRouting.reconcileIncoming(kind,
-                                         presence: modules.nearby.presence,
-                                         navigation: navigation)
-        }
+        // **No `activeKind` task.**
+        //
+        // It reconciled an unsolicited LEGACY same-network session onto the
+        // Nearby module's surface — claim first, then navigate — for the case
+        // where the window had been closed when the session started. There is no
+        // such session to reconcile now: `RelayiumApp` refuses every legacy
+        // inbound offer at `receive.shouldAcceptSession`, so `activeKind` cannot
+        // become non-nil, and a task that could only ever no-op would still read
+        // as a live route into a transport this build does not compose.
+        //
+        // An unsolicited `link/1` claims and navigates from
+        // `LinkWorkspaceModel.shouldAcceptLink`, which is app-scoped and
+        // therefore already survives the window being closed — the property this
+        // task existed to provide.
     }
 }

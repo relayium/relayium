@@ -44,6 +44,7 @@ const en: Messages = {
   peersTitle: "Nearby devices",
   crossPeersTitle: "Connected peer",
   pickSendTo: (n) => `Click or drop files to send to ${n}`,
+  peerUnsupported: "That device's Relayium is too old to connect. Update Relayium on both devices to send files or messages.",
   generating: "Creating…",
   emptyPeers: "No other devices yet. Open this page on another device or browser window on the same network.",
   emptyCrossCta: "Not on the same network? Try cross-network transfer →",

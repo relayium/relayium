@@ -21,7 +21,7 @@ import RelayiumKit
 /// ## What it shares with LAN Transfer: nothing
 ///
 /// It used to share every session model. It shares none of them now: this
-/// destination draws its own `TransferModule` — its own legacy pair, its own
+/// destination draws its own `TransferModule` — its own pairing code, its own
 /// `link/1` owner bound to the pairing room and no other, and its own
 /// `TransferPresence`. A same-network session no longer disables a single
 /// control here, and a code minted here no longer disables a single control
@@ -48,13 +48,12 @@ struct CrossNetworkTransferDestination: View {
     private let route = AppDestination.pairingCode
 
     private var presence: TransferPresence { module.presence }
-    private var fileModel: RealtimeSessionModel { module.files }
-    private var textModel: RealtimeTextSessionModel { module.text }
     /// The unified `link/1`. A pairing room makes the same capability decision a
-    /// same-network room does, after its peer appears.
+    /// same-network room does, after its peer appears — and, on this platform,
+    /// reaches the same terminal answer for a peer that fails it.
     private var link: LinkWorkspaceModel { module.link }
 
-    private var pane: TransferSurfacePane { module.pane }
+    private var pane: LinkTransferPane { module.pane }
 
     private var sessionLocked: Bool { !module.acceptsNewSession }
 
@@ -66,15 +65,15 @@ struct CrossNetworkTransferDestination: View {
             switch pane {
             case .link:
                 TransferLinkPane(link: link)
-            case .legacySession:
-                // The one surface that can mint a replacement code, because it
-                // is the one that holds the account gate. See
-                // `TransferSessionPane.regenerate`.
-                TransferSessionPane(module: module, regenerate: regeneratePairingCode)
             case .connect:
+                // One pane for the whole pre-link phase: the create/join
+                // controls, and — once a code exists — the code, its countdown
+                // and the wait. A minted code is not a session, so it does not
+                // take the screen away from the surface it was minted on.
                 CrossNetworkConnectPane(module: module,
                                         gate: gate,
                                         accessNow: { accessNow },
+                                        regenerate: regeneratePairingCode,
                                         sessionLocked: sessionLocked)
                 VerificationSetting(locked: sessionLocked, preference: verification)
             }

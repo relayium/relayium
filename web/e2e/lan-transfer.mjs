@@ -897,8 +897,8 @@ const RACE_BODY = "发于 A 还在采样路径的那一刻 🛰";
  * and A reports the session as FAILED.
  *
  * The window is real and unavoidable: the DataChannel is open long before the
- * initiator's session owns it, because `connectText` still has a key handshake
- * to finish and text-link still has `await conn.path()` to run. B's automatic
+ * initiator's lane owns it, because `connectLink` still has a key handshake to
+ * finish and the link still has `await conn.path()` to run. B's automatic
  * ACCEPT lands in that window, and a DataChannel does not replay what arrived
  * with no handler attached. A therefore never left "waiting", and the protected
  * frame that followed hit a session that was not open yet — a hard failure.

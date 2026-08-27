@@ -459,10 +459,27 @@ const capability = {
   // pre-upload handoff the native clients do not implement, so a test that
   // asserts one client's frame as if it were the other's is asserting a fiction.
   hello: {
-    web: { caps: [CAP_TEXT, CAP_LINK, CAP_PREUPLOAD] },
+    // The browser no longer announces `text/1`: the single-lane conversation
+    // transport behind that capability is gone, so announcing it invited a peer
+    // onto a lane the page could not open. The two hellos therefore no longer
+    // stand in a subset relation in EITHER direction, and the contract they
+    // share is narrower and exact — both must name `link/1`, and that is the one
+    // capability either side may act on. See `advertisedCaps` (peer-caps) and
+    // `testBothHellosNameTheSameExactLink` (LinkCapabilityVectorTests).
+    web: { caps: [CAP_LINK, CAP_PREUPLOAD] },
     native: { caps: [CAP_TEXT, CAP_LINK] },
-    // What either client announces in a room where link mode is not allowed —
+    // What a NATIVE client announces in a room where link mode is not allowed —
     // an iOS pairing room today, and any future narrowed scope.
+    //
+    // The name is now wider than the thing, and is kept anyway. It reads as
+    // "either client's inactive hello", which stopped being true when the
+    // browser withdrew `text/1`: a browser that cannot open a link announces an
+    // EMPTY hello, because withdrawing `text/1` left it nothing else it can
+    // honour. Renaming the key to say so is a one-line improvement that breaks
+    // every Swift reader of it — `LinkWebWorkspaceInteropTests` reads it by this
+    // exact string — for no behavioural gain, so the row stays put and the
+    // narrowing is written down here instead. The Web side's inactive answer is
+    // pinned locally by `peer-caps.test.ts`; no native client reads it.
     linkRoomInactive: { caps: [CAP_TEXT] },
   },
   retry: capsRetry,
@@ -472,9 +489,15 @@ const capability = {
   // be raised alone.
   lastAttemptSeconds: ((capsRetry.attempts - 1) * capsRetry.intervalMs) / 1000,
   // Exact match, deliberately: `link/2` is a different wire and `LINK/1` is not
-  // this one. `resolvesImmediately` is the second half of the rule and is what a
-  // window-length change must not quietly alter — a peer that has SAID something
-  // is decided on the spot, and only silence is worth waiting out.
+  // this one. Both languages assert `link`.
+  //
+  // `resolvesImmediately` and `legacyLane` are NATIVE-ONLY fields and are read
+  // only by the Swift suite. They describe which legacy lane a non-`link/1` peer
+  // falls to and whether that fall is decided on the spot or waits out the
+  // capability window. The browser has no such lane and no such window: a peer
+  // that is not exact `link/1` is unsupported, terminally and immediately, so
+  // there is nothing on the Web side those two fields could still name. They are
+  // kept because iOS still ships the legacy lane they describe.
   promotion: [
     { caps: [CAP_TEXT, CAP_LINK, CAP_PREUPLOAD], link: true, resolvesImmediately: true },
     { caps: [CAP_TEXT, CAP_LINK], link: true, resolvesImmediately: true },
@@ -498,8 +521,14 @@ const capability = {
   // actually carry: an empty array is a hello that revokes, and a frame with no
   // `caps` field would not be a hello at all and would leave the stale `link/1`
   // standing.
+  //
+  // Both rows revoke `link/1`, and that half is asserted in both languages. What
+  // they downgrade TO is native-only now: a browser answers either row the same
+  // way, by no longer routing that peer at all.
   downgrade: { text: { caps: [CAP_TEXT] }, files: { caps: [] } },
-  // A hello is a SNAPSHOT, not an additive grant, in both languages.
+  // A hello is a SNAPSHOT, not an additive grant, in both languages. `link` is
+  // the shared assertion; `text` is native-only, for the same reason the
+  // `legacyLane` rows above are.
   revocation: { first: { caps: [CAP_TEXT, CAP_LINK] }, then: { caps: [] }, link: false, text: false },
   // Not a hello at all: no `caps` field means "a frame we do not understand",
   // which must leave an earlier announcement standing rather than clear it.
