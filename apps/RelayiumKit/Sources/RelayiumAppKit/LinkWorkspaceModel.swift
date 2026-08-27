@@ -134,6 +134,57 @@ public enum LinkWorkspaceEnding: Equatable {
     case roomUnavailable
 }
 
+/// **What happens to a message that is still waiting for a conversation when a
+/// second one is sent.**
+///
+/// A configuration for the same reason `LinkPairingFallbackPolicy` is: two
+/// products read this model and only one of them was changed.
+///
+/// The paused iOS composer gates Send on `canCompose`, ignores what `send`
+/// returns, and clears its own view-local draft either way. Making the model
+/// refuse globally therefore did not protect that composer — it broke it: the
+/// second message was declined by the model AND wiped by the view, which is a
+/// silent loss where there had been a visible replacement. So the shipped
+/// behaviour stays the default, and only the composition that also fixed its
+/// composer opts out of it.
+public enum LinkPendingMessagePolicy: String, Equatable, Sendable {
+    /// Replace the waiting message with the new one, and report acceptance.
+    /// **The default, and what every existing caller gets.**
+    case replaceWaiting
+    /// Refuse while one is already waiting, and say so. Requires a composer that
+    /// reads `canSendMessage` and honours `send`'s answer — see
+    /// `TransferLinkPane`.
+    case refuseWhileWaiting
+}
+
+/// **What a pairing room does with a peer that is not exact `link/1`.**
+///
+/// A configuration rather than a behaviour change, and the default is the
+/// behaviour that ships. Two products read this file: the paused iOS
+/// implementation and the headless acceptance hosts still compose the legacy
+/// file and text lanes and still need a room handed to them, while macOS 1.3.7
+/// is the published minimum and every client at or above it speaks `link/1` —
+/// so macOS has no lane to fall back TO, and handing it a room would hand it to
+/// nothing.
+///
+/// It is a two-case enum rather than a `Bool` because the call sites read as a
+/// claim about the product, not as a flag: `legacyFallback: .terminateUnsupported`
+/// says what the composition can do, where `disableLegacyFallback: true` would
+/// say only what somebody switched off.
+public enum LinkPairingFallbackPolicy: String, Equatable, Sendable {
+    /// Hand the room, its socket, its peer and its configuration to the legacy
+    /// session (`adoptLegacyRoom`) when the peer turns out not to speak
+    /// `link/1`. **The default, and what every current caller gets.**
+    case adoptLegacySession
+    /// Refuse. The room is closed, no legacy callback fires, no batch is handed
+    /// back, no offer is sent and no attempt is claimed — the peer is
+    /// unsupported and `unsupportedPairingPeer` says so. For a composition with
+    /// no legacy transport, this is the only truthful answer: the alternative is
+    /// a room handed to a session that does not exist, which is a socket nobody
+    /// closes and a screen that never changes.
+    case terminateUnsupported
+}
+
 /// The one verification boundary a link has.
 ///
 /// Per LINK, not per batch and not per message — which is the whole point of the
@@ -245,13 +296,75 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// and watched disappear. A draft is held for the conversation's consent
     /// round trip, and if the peer declines there is nothing to deliver and
     /// nothing to retry — so the words go back to the field rather than into a
-    /// log. Consumed exactly once by `takeReturnedDraft()`.
+    /// **The message the user is composing, before Send.**
+    ///
+    /// Model-owned rather than view-local `@State`, and that is a data-loss fix
+    /// rather than tidiness. macOS keeps running with its window closed, so the
+    /// pane is torn down and rebuilt while the link survives — a draft held by
+    /// the view vanished on every close/reopen with the connection still up. It
+    /// was also invisible to the quit guard, so ⌘Q with a draft and no
+    /// transcript warned about nothing and discarded it.
+    ///
+    /// One holder means one answer: Leave and Quit ask the same predicate, and a
+    /// confirmed teardown clears it exactly once.
+    @Published public var draft: String = ""
+
+    /// Whether this link holds text a teardown would destroy — the draft, the
+    /// transcript, or a message still waiting for a conversation to open.
+    ///
+    /// The ONE predicate. `TransferModule.hasLocalText` (the quit guard) and the
+    /// pane's Leave both read it, so ⌘Q and the exit cannot disagree about
+    /// whether there is anything to warn about.
+    public var holdsLocalText: Bool {
+        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || pendingMessage != nil
+            // A message the lane handed back and the composer has not been free
+            // to take yet. It is the user's words, held only here — omitted, it
+            // was invisible to the exit's confirmation AND to the quit guard, so
+            // the one text nobody could see was also the one nobody warned
+            // about.
+            || returnedDraft != nil
+            || !(textModel?.textMessages.isEmpty ?? true)
+    }
+
+    /// log. Restored by `restoreReturnedDraft()`, which never consumes it into a
+    /// composer that already holds something.
     @Published public private(set) var returnedDraft: String?
 
     /// Take the handed-back draft, once. The composer owns it from here.
+    /// **Put a returned message back, but only where it can actually land.**
+    ///
+    /// The order is the whole of it. This used to consume `returnedDraft` and
+    /// THEN check whether the composer was free — so a user who had started
+    /// typing something new lost the returned text entirely: taken out of the
+    /// model, refused by the destination, and held by nobody.
+    ///
+    /// Refusing is not losing. The text stays in `returnedDraft` and lands the
+    /// next time the composer is free, which is what makes both this and a
+    /// second send order-safe rather than racing each other.
+    /// **Consume the returned message unconditionally.**
+    ///
+    /// Kept, unchanged, for the paused iOS implementation: its
+    /// `NearbyLinkWorkspaceView` calls this and holds its own view-local draft,
+    /// and this contraction does not touch iOS source or iOS behaviour.
+    ///
+    /// macOS uses `restoreReturnedDraft()` instead, which checks the destination
+    /// BEFORE consuming. The difference matters only for a composer that already
+    /// holds something, and only macOS moved its draft onto this model — so this
+    /// stays the iOS answer and the ordering fix stays the macOS one, rather
+    /// than one of them being changed on the other's behalf.
     public func takeReturnedDraft() -> String? {
         defer { returnedDraft = nil }
         return returnedDraft
+    }
+
+    @discardableResult
+    public func restoreReturnedDraft() -> Bool {
+        guard let returned = returnedDraft else { return false }
+        guard draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        draft = returned
+        returnedDraft = nil
+        return true
     }
     /// The conversation and the connection, as the attempt projects them.
     @Published public private(set) var textModel: LinkSessionPresentationModel?
@@ -286,6 +399,25 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
                                   _ role: Role,
                                   _ config: ICEConfig,
                                   _ mode: TransferMode) -> Void)?
+
+    /// **A peer turned up in this object's pairing room and could not speak
+    /// `link/1`, under a policy with nothing to fall back to.**
+    ///
+    /// Only ever true for `LinkPairingFallbackPolicy.terminateUnsupported`; the
+    /// default policy hands the room over instead and leaves this false, exactly
+    /// as it did before this flag existed.
+    ///
+    /// Published rather than folded into `LinkWorkspaceEnding` for two reasons,
+    /// and the second is the load-bearing one. It is not the ending of an
+    /// attempt — no attempt was ever claimed for this peer, no offer was sent
+    /// and no SAS was derived. And `LinkWorkspaceEnding` is rendered by an
+    /// exhaustive `switch` in `LinkEndingCopy`, in `TransferLinkPane` and in the
+    /// paused iOS `NearbyLinkWorkspaceView`; a tenth case would be an iOS-source
+    /// edit made to describe a state iOS cannot reach.
+    ///
+    /// Cleared by `watchPairingCode` (a new rendezvous is a new question) and by
+    /// `dismiss()` (the user has read it).
+    @Published public private(set) var unsupportedPairingPeer = false
 
     /// The socket of the pairing room this object currently owns, for the ONE
     /// caller that needs it: the legacy connection the fallback builds.
@@ -329,6 +461,14 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// inbound link" is otherwise only observable by running a whole pairing
     /// room. `TransferModuleTests` drives the transitions that move it.
     var acceptsInboundLinkNow: Bool { gate.isAvailable }
+
+    /// What the gate would answer for ONE peer, reservation included.
+    ///
+    /// Internal, and read by tests only, for the same reason as above. The
+    /// distinction from `acceptsInboundLinkNow` is the whole point of the
+    /// reservation: during a relay hold the general answer is no and the answer
+    /// for the peer this side has already committed to is yes.
+    func admitsInboundLink(from peerId: String) -> Bool { gate.accepts(peerId) }
 
     /// Keep the advisory mirror in step with the app's own ownership fact.
     ///
@@ -428,6 +568,33 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// than here is what lets that connection outlive this object's attempt —
     /// see `LinkRoomHandle`.
     private let pairingRoomHandle: LinkRoomHandle
+    /// **What this client announces in the pairing room it opens.**
+    ///
+    /// Defaulted to `linkCapsHello`, so iOS, the headless acceptance hosts and
+    /// every test built before this seam announce exactly what they announced
+    /// before. macOS passes `linkOnlyCapsHello` for the same reason it passes
+    /// `legacyFallback: .terminateUnsupported`: this build refuses a legacy
+    /// peer, and a client that refuses a lane must not advertise it.
+    ///
+    /// The two facts are set together in `AppEnvironment` on purpose. Rejecting
+    /// `text/1` while still announcing it is the dishonest half-state — the peer
+    /// is told it may open a conversation and is then met with silence — and
+    /// pairing them here is what makes that combination unreachable.
+    private let localHello: (Bool) -> JSONValue
+    /// What a second Send does while one message is still waiting. Immutable for
+    /// the model's life: a policy that changed mid-session would answer two
+    /// presses by two different rules.
+    private let pendingMessages: LinkPendingMessagePolicy
+    /// What this composition does with a pairing peer that is not exact
+    /// `link/1`. Immutable for the model's life: a policy that could change
+    /// mid-room would let one peer be answered by two different rules.
+    private let legacyFallback: LinkPairingFallbackPolicy
+
+    /// What this composition does with a pairing peer that is not exact
+    /// `link/1`, readable so a test can assert the DEFAULT rather than only its
+    /// consequences — a behavioural test built through a helper that re-supplies
+    /// the argument proves nothing about the value every real caller inherits.
+    public var pairingFallbackPolicy: LinkPairingFallbackPolicy { legacyFallback }
     /// Every bounded wait this object arms: the capability window, the relay
     /// warning and the relay deadline. One scheduler so a test can drive all
     /// three without a clock.
@@ -459,7 +626,16 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// it. Sending it before the RTC configuration is decided would either race
     /// the choice or start the timeout against a wait the peer knows nothing
     /// about.
-    private var gatedLinkAttempt: (peerId: String, peerLabel: String, generation: Int)?
+    ///
+    /// **Every write to this also moves the acceptance gate's reservation**, so
+    /// the parked intent and the one peer the gate will admit during the hold
+    /// cannot disagree. `didSet` rather than five call sites: the intent is
+    /// cleared on gate release, on a peer departure, on attempt replacement and
+    /// on terminal teardown, and a reservation left standing past any one of
+    /// them would keep admitting a peer this room is no longer building with.
+    private var gatedLinkAttempt: (peerId: String, peerLabel: String, generation: Int)? {
+        didSet { gate.reserve(gatedLinkAttempt?.peerId) }
+    }
 
     /// Bumped by every attempt, so a request settlement, a projection change or
     /// an availability re-check belonging to an older one changes nothing.
@@ -515,13 +691,20 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
                             requiresVerification: @escaping () -> Bool,
                             iceClient: ICEConfigClient?,
                             connectPairingSocket: ((String) -> SignalingClient)? = nil,
-                            pairingRoomHandle: LinkRoomHandle? = nil) {
+                            pairingRoomHandle: LinkRoomHandle? = nil,
+                            legacyFallback: LinkPairingFallbackPolicy = .adoptLegacySession,
+                            localHello: @escaping (Bool) -> JSONValue
+                                = linkCapsHello(linkRoomActive:),
+                            pendingMessages: LinkPendingMessagePolicy = .replaceWaiting) {
         self.init(capabilities: capabilities,
                   receiveDirectory: receiveDirectory,
                   requiresVerification: requiresVerification,
                   iceClient: iceClient,
                   connectPairingSocket: connectPairingSocket,
                   pairingRoomHandle: pairingRoomHandle,
+                  legacyFallback: legacyFallback,
+                  localHello: localHello,
+                  pendingMessages: pendingMessages,
                   assemble: LinkWorkspaceModel.liveAssembly)
     }
 
@@ -551,6 +734,13 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
          iceClient: ICEConfigClient?,
          connectPairingSocket: ((String) -> SignalingClient)? = nil,
          pairingRoomHandle: LinkRoomHandle? = nil,
+         // Defaulted, so every existing caller — the paused iOS composition, the
+         // headless acceptance hosts, every test built before this seam — keeps
+         // the behaviour it had. Only a composition that says so gets the other
+         // one.
+         legacyFallback: LinkPairingFallbackPolicy = .adoptLegacySession,
+         localHello: @escaping (Bool) -> JSONValue = linkCapsHello(linkRoomActive:),
+         pendingMessages: LinkPendingMessagePolicy = .replaceWaiting,
          scheduler: LinkRecoveryScheduler = LinkDispatchRecoveryScheduler(),
          now: @escaping () -> Date = Date.init,
          // The real probe, as a literal rather than a `static let` beside
@@ -572,6 +762,9 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // with no app-supplied handle still owns its room's socket, it simply
         // has no legacy path to hand it to.
         self.pairingRoomHandle = pairingRoomHandle ?? LinkRoomHandle()
+        self.legacyFallback = legacyFallback
+        self.localHello = localHello
+        self.pendingMessages = pendingMessages
         self.scheduler = scheduler
         self.now = now
         self.relayMeasure = relayMeasure
@@ -591,7 +784,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         self.admission = LinkAdmission(
             selfId: { socketBox.selfId },
             supportsLink: { active.supportsLink($0) },
-            canAcceptLink: { _ in gate.isAvailable })
+            canAcceptLink: { gate.accepts($0) })
 
         self.session = LinkRoomSession(admission: admission) { [weak self] peerId, role, signal in
             guard let self else {
@@ -894,6 +1087,21 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         /// Peers this room has already decided about, so a second roster frame
         /// cannot start a second capability window or a second fallback.
         var decided: Set<String> = []
+        /// Peers this room has heard a real capability HELLO from, empty or not.
+        ///
+        /// The registry cannot answer this: `announcements(for:)` returns an
+        /// empty array both for a peer that announced `{"caps":[]}` and for one
+        /// that has never said anything, and those are opposite facts —
+        /// the first is a peer stating it speaks none of these, the second is a
+        /// peer that has not spoken yet. The room sees the difference (the
+        /// listener's `announced` flag) and is the only thing that can remember
+        /// it, so it does.
+        ///
+        /// Read by exactly one rule: whether a non-`link/1` peer is decidable
+        /// NOW or is still owed the rest of its capability window. A peer that
+        /// has revoked its capabilities has given its answer; a silent one has
+        /// not.
+        var spoke: Set<String> = []
         var resolved = false
 
         init(code: String, legacyRole: Role,
@@ -980,6 +1188,10 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // previous room's code would still be offered as "the same code" beside
         // a session that has nothing to do with it.
         handedOverPairing = nil
+        // And the previous room's REFUSAL goes with it, for the same reason: a
+        // new code is a new question, and "the other device is too old" is an
+        // answer about a peer that is not in this room.
+        unsupportedPairingPeer = false
         beginAttempt(peerLabel: code)
         if !files.isEmpty { armBatch(files: files, sources: sources) }
         connection = .watching(code: code)
@@ -1047,7 +1259,12 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         room.announcer = LinkCapabilityAnnouncer(
             registry: capabilities,
             linkRoomActive: { linkRoomActive(isCodelessRoom: false) },
-            send: { [weak socket] peerId, signal in socket?.sendSignal(to: peerId, data: signal) })
+            send: { [weak socket] peerId, signal in socket?.sendSignal(to: peerId, data: signal) },
+            // The composition's own hello — see `localHello`. A pairing room and
+            // the code-less room must announce the SAME thing: a client that
+            // withdrew `text/1` on one and kept it on the other would be two
+            // different clients depending on how it was reached.
+            hello: localHello)
         // A listener, never an interceptor: a hello must keep travelling to
         // whatever else is on this socket, and it must not compete with the link
         // router for a frame.
@@ -1091,7 +1308,12 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
                 // Only a real hello retires the retries this side owes: proof
                 // read off an establishment frame says what the peer speaks, not
                 // that it has heard us.
-                if announced { room.announcer?.didHearFrom(peerId: from) }
+                if announced {
+                    room.announcer?.didHearFrom(peerId: from)
+                    // Recorded even when the hello was EMPTY — especially then.
+                    // See `PairingRoom.spoke`.
+                    room.spoke.insert(from)
+                }
                 self.pairingPeerAnnounced(from, generation: mine)
             }
         }
@@ -1629,8 +1851,27 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         guard room.capabilities.supports(peerId, LINK_CAPABILITY) else {
             // Announced, and NOT this protocol. The answer is already known, so
             // the window is not worth waiting out.
-            let announced = room.capabilities.supports(peerId, TEXT_CAPABILITY)
-            if announced { fallBackToLegacy(peerId: peerId, generation: mine) }
+            //
+            // **What counts as "already known" differs by policy, and only the
+            // non-default one is widened.** Under `adoptLegacySession` the
+            // question is "which lane does this peer get", and only a `text/1`
+            // announcement answers it — an empty hello, a `link/2` or a
+            // capitalised variant still waits out `pairingCapabilityWait`,
+            // because the lane decision also reads the armed batch and a batch
+            // can still be armed inside that window. That behaviour is
+            // deliberately untouched: iOS and the acceptance hosts run it.
+            //
+            // Under `terminateUnsupported` there is no lane to choose and no
+            // batch that could change the answer. ANY hello without exact
+            // `link/1` is the whole decision, so it is made on the spot rather
+            // than five seconds later with the same result — which is what turns
+            // `link/2`, `LINK/1`, `text/2` and an empty revocation from a silent
+            // wait into an immediate, truthful refusal. Only genuine silence
+            // still waits, because silence is not yet an announcement.
+            let decidable = legacyFallback == .terminateUnsupported
+                ? room.spoke.contains(peerId)
+                : room.capabilities.supports(peerId, TEXT_CAPABILITY)
+            if decidable { fallBackToLegacy(peerId: peerId, generation: mine) }
             return
         }
         room.resolved = true
@@ -1714,6 +1955,21 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// even armed, so the decision lands at or before the moment it used to.
     private func fallBackToLegacy(peerId: String, generation mine: Int) {
         guard generation == mine, let room = pairing, !room.resolved else { return }
+        // **The seam, and it is deliberately the FIRST thing here.**
+        //
+        // Everything below this line prepares a hand-over: it reads the room's
+        // ICE answer, announces a downgrade naming the lane the legacy session
+        // will run, keeps the socket open for that session to build on, and
+        // records the rendezvous so the legacy pane can offer a message session
+        // over the same digits. A composition with no legacy transport wants
+        // none of it — and, crucially, must not DEFER on `room.config` either:
+        // a room whose configuration never arrives would sit resolved-but-silent
+        // forever, which is a worse version of the stall the fallback exists to
+        // prevent.
+        guard legacyFallback == .adoptLegacySession else {
+            refuseUnsupportedPairingPeer(peerId: peerId, generation: mine)
+            return
+        }
         guard let config = room.config else {
             // First decision wins, exactly as `room.decided` makes the live path
             // one-per-peer: a second peer in the room does not get to replace
@@ -1777,6 +2033,62 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         adoptLegacyRoom?(peerId, room.legacyRole, config, mode)
     }
 
+    /// **Refuse the room instead of handing it over: the peer is not `link/1`
+    /// and this composition has nothing else to offer it.**
+    ///
+    /// Reached only under `LinkPairingFallbackPolicy.terminateUnsupported`, from
+    /// the one place the hand-over was reached from, so a peer decided by the
+    /// capability window and a peer decided by its own announcement take exactly
+    /// the same path. There is no second entry point for a second rule to hide
+    /// in.
+    ///
+    /// **What it deliberately does NOT do**, item by item, because each of these
+    /// is something the hand-over does and each would be a promise this build
+    /// cannot keep:
+    ///
+    ///  - **No `adoptLegacyRoom` and no `onLegacyFallbackBatch`.** There is no
+    ///    session to adopt the room and no lane to enqueue a batch into. A
+    ///    callback that fired into nothing would leave the socket open with
+    ///    nobody closing it.
+    ///  - **No `announceDowngrade`.** That frame names the lane the legacy
+    ///    session is about to run. This side is not about to run one, and
+    ///    announcing an empty or `text/1` hello would revoke a `link/1` this
+    ///    build genuinely still speaks — a lie told to the one peer it could
+    ///    still matter to.
+    ///  - **No offer, no request, no attempt, no SAS.** `beginLinkAttempt` is
+    ///    never called on this path, so nothing is claimed, nothing is
+    ///    established and no digits are derived. The peer is told nothing and
+    ///    asked for nothing.
+    ///  - **No `handedOverPairing`.** Nothing was handed over, so the offer to
+    ///    start a message session over the same digits — which exists only for a
+    ///    legacy fallback that still holds its rendezvous — must stay nil.
+    ///
+    /// What it DOES do is end the room the way an ordinary room ends:
+    /// `endPairingRoom` retires the capability registry, cancels every timer,
+    /// detaches the router and CLOSES the socket. The armed batch is dropped
+    /// with the attempt that would have carried it, which is the same thing
+    /// `leave()` does — it was never sent, and there is no lane left to hold it
+    /// for.
+    private func refuseUnsupportedPairingPeer(peerId: String, generation mine: Int) {
+        guard generation == mine, let room = pairing, !room.resolved else { return }
+        // Latched before the room is torn down, exactly as `fallBackToLegacy`
+        // latches it: a second peer in the same room must not be able to reach a
+        // second decision, and `endPairingRoom` is about to make `pairing` nil
+        // anyway.
+        room.resolved = true
+        room.decided.insert(peerId)
+        endPairingRoom()
+        armedBatches = []
+        connection = .idle
+        peerLabel = nil
+        relayDeadline = nil
+        relayExpiringSoon = false
+        // Published LAST, after every piece of room state has been cleared, so a
+        // surface that redraws on this flag cannot catch the room half torn
+        // down — it is the one edge the connect screen switches on.
+        unsupportedPairingPeer = true
+    }
+
     /// A batch the user armed before the room resolved, handed back when the
     /// room turns out to be legacy. Nothing is lost and nothing is sent twice.
     public var onLegacyFallbackBatch: (([FileMeta], [PlaintextSource]) -> Void)?
@@ -1815,6 +2127,23 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// otherwise that stale `.showingCode` state reappears when the link ends.
     public var onPairingLinkActivated: (() -> Void)?
 
+    /// **The mirror of `onPairingLinkActivated`: a pairing room this object
+    /// opened has ended WITHOUT producing a link.**
+    ///
+    /// A code names a rendezvous, and a rendezvous whose room is gone names
+    /// nothing. Only the success half was published, so on every terminal path
+    /// — a peer that could not speak `link/1`, a code the hub would not resolve,
+    /// a socket that closed before the room ever opened — the digits and their
+    /// QR stayed on screen over a closed socket, under a "waiting for the other
+    /// device" that would wait forever.
+    ///
+    /// Fired AFTER the room state is cleared and after any published outcome, so
+    /// a surface that redraws on this callback sees the settled answer. It says
+    /// only that the room is over; whatever the surface should now be showing —
+    /// a refusal to read, an ending to dismiss — is published separately and is
+    /// deliberately NOT cleared by it.
+    public var onPairingRoomRetired: (() -> Void)?
+
     /// Close a room that was handed to the legacy path once nothing is using it.
     ///
     /// The hand-over deliberately leaves the socket open — the connection built
@@ -1852,8 +2181,21 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     }
 
     /// Close the code's socket and forget everything scoped to it.
+    ///
+    /// **`onPairingRoomRetired` fires from HERE**, which is the one function
+    /// that ends a pairing room — so every terminal path is covered by
+    /// construction rather than by each of them remembering to call it. The
+    /// alternative was a call at each site, and the sites are exactly where the
+    /// omission happened: the success path published, and the refusal and the
+    /// unresolvable-code path did not.
+    ///
+    /// It is safe on the success path too. There, `onPairingLinkActivated` has
+    /// already retired the code, and `PairingCodeModel.cancel()` is idempotent —
+    /// so a link that ends normally fires this against a code that is already
+    /// idle.
     private func endPairingRoom() {
         guard let room = pairing else { return }
+        defer { onPairingRoomRetired?() }
         pairing = nil
         pairingTask?.cancel()
         pairingTask = nil
@@ -1976,15 +2318,24 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// this adds is the one `ensure` and the observer on its outcome.
     private func beginLinkAttempt(peerId: String, peerLabel: String) {
         self.peerLabel = peerLabel
-        if !connection.hasPeer { connection = .requesting }
         let mine = generation
         // The room is still deciding which relay this link will be built on.
         // Held rather than asked: `ensure` is what puts the first legal `link/1`
         // request or offer on the wire, and its thirty-second request timeout
         // starts with it. The screen already says `requesting`, which is the
         // truth — this side has decided to ask.
-        guard relayGateOpen else {
-            gatedLinkAttempt = (peerId: peerId, peerLabel: peerLabel, generation: mine)
+        let held = !relayGateOpen
+        // **Parked BEFORE the line below, and the order is the point.**
+        // Publishing `requesting` is what claims this module's surface, and the
+        // app's availability observer answers that claim synchronously by
+        // shutting the acceptance gate. Inbound frames are routed on the
+        // socket's own delivery queue, so a reservation written after the claim
+        // leaves a window in which the gate refuses the very peer this intent
+        // names. Writing it first closes that window: the gate is never shut
+        // against this peer at any instant an inbound frame could observe.
+        if held { gatedLinkAttempt = (peerId: peerId, peerLabel: peerLabel, generation: mine) }
+        if !connection.hasPeer { connection = .requesting }
+        guard !held else {
             // Naming a peer in a link intent is the strongest evidence this room
             // has that the peer is there, and on the initiating side it can
             // precede every frame the peer sends. It also RETARGETS the grace
@@ -2302,14 +2653,49 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// The lane's consent step is preserved exactly: the peer sees a request and
     /// answers it. What this removes is the user having to know that — the draft
     /// is held for the one round trip and sent the instant the lane says open.
-    public func send(message body: String) {
-        guard !body.isEmpty else { return }
+    /// **One message may be waiting for a conversation at a time.**
+    ///
+    /// A second Send while the first is still waiting for the peer to accept
+    /// used to overwrite `pendingMessage` — the first message was gone, with no
+    /// error and no trace, and the composer had already been cleared for it.
+    /// Refusing says so instead, and leaves the words where the user can still
+    /// see them.
+    ///
+    /// `canSendMessage` is the same answer, published so the button can be
+    /// disabled rather than only refusing after the press.
+    /// **Reports whether it TOOK the message**, so a composer cannot infer
+    /// acceptance from having called it.
+    ///
+    /// The view used to clear its draft unconditionally after calling this. Every
+    /// refusal above therefore erased the words it was refusing: a ⌘Return while
+    /// a first message was still waiting for the peer was declined by the model
+    /// AND wiped by the view, in the same turn, leaving an error about a message
+    /// the user could no longer see.
+    ///
+    /// `@discardableResult` for the callers that genuinely do not care — a
+    /// headless host driving a scripted send — while the composer must care and
+    /// is guarded by a source rule that says so.
+    @discardableResult
+    public func send(message body: String) -> Bool {
+        guard !body.isEmpty else { return false }
         guard acceptsWork else {
             actionError = L10n.t(.linkNotReady)
-            return
+            return false
+        }
+        guard pendingMessages == .replaceWaiting || pendingMessage == nil else {
+            actionError = L10n.t(.linkNotReady)
+            return false
         }
         pendingMessage = body
         flushOrOpenConversation()
+        return true
+    }
+
+    /// Whether a Send would be taken right now. False while one message is
+    /// already waiting for the conversation to open.
+    public var canSendMessage: Bool {
+        guard acceptsWork else { return false }
+        return pendingMessages == .replaceWaiting || pendingMessage == nil
     }
 
     private func flushOrOpenConversation() {
@@ -2450,6 +2836,45 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// End the link, whatever state it is in. Idempotent.
     public func leave() { leave(ending: .closed) }
 
+    /// **End the link AND discard the local text the user was warned about.**
+    ///
+    /// The confirmation on the exit says the transcript and the unsent draft are
+    /// permanently discarded. `leave()` alone does not do that: `finish` keeps
+    /// the projections on purpose, so the ended page still held the conversation
+    /// — the warning was untrue, and the Done on that page then met the same
+    /// predicate and asked a second time.
+    ///
+    /// So the confirmed path is its own operation and it does what it said,
+    /// once. The FILE projection is deliberately kept: a terminal batch's
+    /// result, its Reveal in Finder and its drag-out promise are not the local
+    /// text anybody was warned about, and discarding them would be a second
+    /// unannounced loss in the other direction.
+    public func leaveDiscardingLocalText() {
+        // **All three holders, in one place.** The view used to clear the draft
+        // itself and then dismiss, which missed `returnedDraft` — a message the
+        // lane handed back after a refusal survived a user-CONFIRMED destructive
+        // Done and rode into the next session, invisible and unasked for. Every
+        // piece of model-owned local text goes through this operation now, so a
+        // fourth holder would be added here rather than in a view.
+        draft = ""
+        returnedDraft = nil
+        pendingMessage = nil
+        if case .ended = connection {
+            // Already terminal: there is nothing left to end, and the confirmed
+            // action on that page is Done — the user is finished looking. So
+            // this dismisses, exactly as an ordinary Done does, including the
+            // file results it has always cleared.
+            dismiss()
+            return
+        }
+        leave()
+        // After `finish`, so the ending is published with the transcript already
+        // gone rather than in a frame that still shows it. The FILE projection is
+        // deliberately kept: a terminal batch's result is not the local text
+        // anybody was warned about.
+        textModel = nil
+    }
+
     private func leave(ending reason: LinkWorkspaceEnding) {
         guard connection.isActive else { return }
         // Retires the attempt and releases the room. The attempt's bridge is
@@ -2500,6 +2925,18 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // of an immediate, truthful refusal. Only attaching a live socket
         // clears it.
         attachPending()
+    }
+
+    /// **The user has read the refusal.**
+    ///
+    /// Its own entry point rather than a clause inside `dismiss()`, because
+    /// `dismiss()` guards on `case .ended` and this state is `.idle`: no attempt
+    /// was ever claimed, so there is no ended connection to clear. Folding the
+    /// two together would either loosen that guard — which is what keeps a live
+    /// link from being dismissed out from under itself — or leave this flag
+    /// permanently set on a surface whose Cancel appeared to do nothing.
+    public func dismissUnsupportedPairingPeer() {
+        unsupportedPairingPeer = false
     }
 
     /// Whether the Workspace should be rendering this object at all: a live
@@ -2671,15 +3108,46 @@ final class LinkCapabilityBox: @unchecked Sendable {
 final class LinkAcceptanceGate: @unchecked Sendable {
     private let lock = NSLock()
     private var available = true
+    private var reserved: String?
 
     var isAvailable: Bool {
         lock.lock(); defer { lock.unlock() }
         return available
     }
 
+    /// **The general answer, OR the one peer this side is already building with.**
+    ///
+    /// `available` speaks for the SURFACE — "may an unsolicited link take it" —
+    /// and the app writes it false the instant a module claims one. That is the
+    /// right answer for a stranger and the wrong one for the peer this side has
+    /// itself chosen, and the gap between those two is a real window rather than
+    /// a theoretical one: a link attempt parked behind the room's relay gate has
+    /// claimed the surface and published `requesting`, but has NOT yet reached
+    /// `router.ensure`, so `LinkAdmission` is still `.idle` and its own
+    /// `.requesting(peer)` exemption does not apply. A request arriving from
+    /// that exact peer inside the hold was answered `busy`, and the peer settled
+    /// `.refused` — measured against a built app in the macOS acceptance run.
+    ///
+    /// A remote peer cannot manufacture the exemption: the reservation is
+    /// written only by this side's own parked intent and compared exactly, so a
+    /// SECOND peer is still refused for the whole hold.
+    func accepts(_ peerId: String) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        if available { return true }
+        guard let reserved else { return false }
+        return reserved == peerId
+    }
+
     func setAvailable(_ value: Bool) {
         lock.lock()
         available = value
+        lock.unlock()
+    }
+
+    /// Bind, or release, the exact peer the exemption above is for.
+    func reserve(_ peerId: String?) {
+        lock.lock()
+        reserved = peerId
         lock.unlock()
     }
 }

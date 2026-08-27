@@ -20,15 +20,17 @@ text_sources=(
   "$repo_root/apps/RelayiumKit/Sources/RelayiumKit/RealtimeWire/RealtimeTextFrame.swift"
   "$repo_root/apps/RelayiumKit/Tests/RelayiumKitTests/RealtimeTextSessionModelTests.swift"
   "$repo_root/apps/RelayiumKit/Tests/RelayiumKitTests/RealtimeTextFrameTests.swift"
-  # Was RealtimeTextPane.swift, then the merged Workspace's two panes. The two
-  # transfer destinations are separate again, so an ephemeral text session is
-  # started from whichever connection method the user picked — same-network on
-  # one screen, a pairing code on the other — and its live/terminal half is the
-  # one shared session pane. The capability itself is unchanged through both
-  # moves: same model, same wire, same consent steps.
+  # Was RealtimeTextPane.swift, then the merged Workspace's two panes, then the
+  # two connect screens plus one shared legacy session pane. That pane is gone
+  # with the legacy transports it rendered: macOS composes one `link/1`, and an
+  # ephemeral conversation is a LANE on it rather than a session of its own. So
+  # the live/terminal half is now the unified link surface, and it is named here
+  # in place of the deleted pane. The capability itself survives every one of
+  # those moves — the user still starts a conversation from whichever connection
+  # method they picked, and still compares one SAS before anything moves.
   "$repo_root/apps/mac/Relayium/Transfer/LanConnectPane.swift"
   "$repo_root/apps/mac/Relayium/Transfer/CrossNetworkConnectPane.swift"
-  "$repo_root/apps/mac/Relayium/Transfer/TransferSessionPane.swift"
+  "$repo_root/apps/mac/Relayium/Transfer/TransferLinkPane.swift"
 )
 for source_path in "${text_sources[@]}"; do
   if [ ! -f "$source_path" ]; then

@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 // commit rule is behaviour, and the two lanes' reads of it are three lines App
 // declares and hands out. See the last describe block.
 import { chooseRtcConfig, type RelayEntry } from "./ice";
+import en from "./i18n/en";
+import zh from "./i18n/zh";
 import { createRelaySelection } from "./relay-selection";
 
 // Source contract, like activity-visibility.test.ts and
@@ -47,6 +49,11 @@ const fn = (name: string): string => {
  *  rule names the very calls it is a rule about. */
 const code = (text: string) =>
   text.split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+/** Markup and statements only — HTML comments removed as well as line comments.
+ *  A comment beside a removal legitimately NAMES what was removed, and several
+ *  of the peer card's do; an assertion that reads them proves nothing about what
+ *  the browser renders. */
+const strip = (text: string) => code(text.replace(/<!--[\s\S]*?-->/g, ""));
 /** The statements between two anchors — a declaration block rather than a
  *  function body, which is what a dependency object is. */
 const block = (from: string, to: string): string => {
@@ -97,38 +104,100 @@ describe("link-capable LAN peer card", () => {
     // The single action is inside the unified branch…
     expect(actions.indexOf("open-workspace")).toBeGreaterThan(branch);
     expect(actions.indexOf("open-workspace")).toBeLessThan(fork);
-    // …and every legacy control is behind the else, so a link-capable peer
-    // cannot render both.
-    for (const legacy of ["pa-files", "webkitdirectory", "workspace.openText(p.id)"]) {
-      expect(actions.indexOf(legacy), legacy).toBeGreaterThan(fork);
+    // …and the per-peer file/folder/message controls are gone from the card
+    // altogether — not merely moved behind the else. The else no longer selects
+    // a second working transport, so a control there would open a chooser and
+    // hand the router a batch it drops.
+    for (const gone of ["pa-files", "webkitdirectory", "workspace.openText(p.id)", "pickFile(e, p.id)"]) {
+      expect(strip(card), gone).not.toContain(gone);
     }
   });
 
-  it("keeps the pairing/legacy card's file, folder and message controls exactly", () => {
+  it("states an unreachable peer instead of leaving a branch nothing can take", () => {
     const actions = card.slice(card.indexOf('<div class="peer-actions">'));
-    const legacy = actions.slice(actions.indexOf("{:else}"));
-    // The three controls, their existing ids, their existing disabled rule and
-    // the platform gate on the folder picker are all unchanged.
-    expect(legacy).toContain('id={`pick-${p.id}`}');
-    expect(legacy).toContain("onchange={(e) => pickFile(e, p.id)}");
-    expect(legacy).toContain("{#if folderUploadSupported}");
-    expect(legacy).toContain("{#if workspace.routes(p.id) || peerSupportsText(p.id)}");
-    expect(legacy).toContain('{ textCompose = ""; void workspace.openText(p.id); }');
-    expect(legacy).toContain("disabled={intentBlocked}");
-    // A pairing room never routes link/1 (peer-caps' linkRoomActive), so
-    // `unifiedPeer` is false there and this is the branch it renders.
-    expect(card).toContain("{@const intentBlocked = workspace.blocksNewIntent(p.id)}");
+    const behindElse = strip(actions.slice(actions.indexOf("{:else}")));
+    // `unifiedPeer` IS `workspace.routes(p.id)`, so a second `routes` test
+    // inside the else was a branch that could never be taken. It used to be
+    // `routes(p.id) || peerSupportsText(p.id)`, which could; withdrawing the
+    // text half turned it into dead markup, and dead markup shaped like a
+    // feature gate is how a control gets "restored" later by mistake.
+    expect(card).toContain("{@const unifiedPeer = workspace.routes(p.id)}");
+    expect(behindElse).not.toContain("workspace.routes(p.id)");
+    expect(behindElse).not.toContain("peerSupportsText");
+    // What is there instead: one localized sentence, and nothing else.
+    expect(behindElse).toContain('<p class="pa-unsupported">{t.peerUnsupported}</p>');
+    expect(behindElse).not.toContain("intentBlocked");
+    // The lead stops promising a send it cannot perform, in both room shapes:
+    // `pickSendTo` and `pickHint` are the two strings that did, and neither is
+    // reachable from this card any more.
+    expect(strip(card)).not.toContain("t.pickSendTo");
+    expect(strip(card)).not.toContain("t.pickHint");
   });
 
   it("routes the card's pointer shortcut to that same single action", () => {
     const pcard = card.slice(card.indexOf('class="pcard"'), card.indexOf('<span class="pavatar"'));
-    expect(pcard).toContain("openWorkspace(p.id)");
-    // The legacy shortcut (focus + click the hidden file input) survives only
-    // for the legacy branch, and the selection-drag suppression still guards
-    // both — a click that ends a text selection is not a tap.
+    // Attached only where that action exists. A handler present on every card
+    // and guarded internally leaves the unreachable card a click target with a
+    // no-op body — see `a11y-semantics.test.ts` for the affordance that made
+    // that visible, and for the cascade assertions that hold it down.
+    expect(pcard).toContain("onclick={unifiedPeer ? (e) => {");
+    expect(pcard).toContain("openWorkspace(p.id);");
+    expect(pcard).toContain("} : undefined}");
+    // The selection-drag suppression still guards it — a click that ends a text
+    // selection is not a tap.
     expect(pcard).toContain("picked.containsNode");
-    expect(pcard).toContain("document.getElementById(`pick-${p.id}`)");
-    expect(pcard.indexOf("openWorkspace(p.id)")).toBeLessThan(pcard.indexOf("document.getElementById"));
+    // The pre-link shortcut (focus + click the hidden file input) is gone with
+    // the input it addressed.
+    expect(strip(pcard)).not.toContain("document.getElementById");
+    expect(strip(pcard)).not.toContain("input?.click()");
+  });
+
+  it("says the unreachable state in both maintained languages, and says the same thing", () => {
+    // New user-facing copy ships in English and Simplified Chinese together, and
+    // `Messages` makes the PRESENCE of the key a compile error rather than a
+    // test. What a compiler cannot check is whether the two sentences make the
+    // same promise — a translation that says "cannot receive messages" beside an
+    // English one that says "cannot connect" is exactly the understatement this
+    // string was added to remove.
+    for (const [code, table] of [["en", en], ["zh", zh]] as const) {
+      const copy = table.peerUnsupported;
+      expect(copy, code).toBeTruthy();
+      // Names the OTHER device, not this page: the reader's own browser is fine.
+      expect(copy, code).toMatch(code === "en" ? /device/i : /对方|对端/);
+      // Names the remedy, and names it for BOTH ends — either side may be the
+      // old one and the reader cannot tell which from here.
+      expect(copy, code).toMatch(code === "en" ? /update/i : /更新/);
+      expect(copy, code).toMatch(code === "en" ? /both/i : /两端|两台|双方/);
+      // …and does NOT narrow the loss to messages, which is what
+      // `text.unsupported` says and why that string could not be reused.
+      expect(copy, code).not.toBe(table.text.unsupported);
+    }
+    // Both lanes are named as lost, because both are.
+    expect(en.peerUnsupported).toMatch(/files/i);
+    expect(en.peerUnsupported).toMatch(/messages/i);
+    expect(zh.peerUnsupported).toMatch(/文件/);
+    expect(zh.peerUnsupported).toMatch(/消息/);
+  });
+
+  it("refuses a drop on an unreachable peer with a reason rather than in silence", () => {
+    const li = card.slice(card.indexOf("<li"), card.indexOf('class="pcard"'));
+    expect(li).toContain("flash(messages[lang()].busy)");
+    expect(li).toContain("if (!unifiedPeer) { e.preventDefault(); flash(messages[lang()].peerUnsupported); return; }");
+    // The drag affordance is withheld too: highlighting a drop target that will
+    // refuse the drop is an invitation taken back after the user acted on it.
+    expect(li).toContain("if (!intentBlocked && unifiedPeer)");
+  });
+
+  it("arms no send for a peer the router would drop it for", () => {
+    const all = code(app);
+    // The auto-send effect is the one place a batch can be committed WITHOUT a
+    // card control: a preselected batch plus a single peer arms it, and in a
+    // verified code room it arms the confirmation bar instead. Both end at
+    // `workspace.sendFiles`, so both need the terminal answer and not only the
+    // "not right now" one.
+    const effect = all.slice(all.indexOf("const liveOwed = solo ? liveLinkFor(solo.id) : 0;"));
+    expect(effect).toContain("if (solo && workspace.routes(solo.id) && (liveOwed > 0 || keysPending) && surfaceShown");
+    expect(effect).toContain("!workspace.blocksNewIntent(solo.id)");
   });
 });
 
@@ -331,7 +400,7 @@ describe("the mixed workspace owns the screen", () => {
     // A link built by the file lane has an idle text lane for a moment. The
     // workspace still owns the screen, so its composer/attachment surface has to
     // be the thing on it — the old condition rendered nothing at all.
-    expect(surface).toContain('{#if mixed || activeText.status !== "idle"}');
+    expect(surface).toContain('{#if mixed || surfaceText.status !== "idle"}');
     expect(surface.match(/<MessagePanel\b/g)).toHaveLength(1);
   });
 
@@ -381,11 +450,12 @@ describe("the unified surface reads the link's own text lane", () => {
     app.indexOf(";", app.indexOf("const surfaceText = $derived(")) + 1,
   );
 
-  it("resolves the surface session to the mixed lane whenever the workspace owns the screen", () => {
-    expect(surfaceText).toContain("workspace.usingMixed ? workspace.mixed.text");
-    // The legacy branch is the ONLY place `workspace.text` may still answer.
-    expect(surfaceText.indexOf("workspace.mixed.text"))
-      .toBeLessThan(surfaceText.indexOf(":", surfaceText.indexOf("?")));
+  it("resolves the surface session to the router's one lane, with no branch left", () => {
+    // There is exactly one conversation lane, so the surface reads it directly.
+    // A conditional here would mean a second lane had been reintroduced.
+    expect(surfaceText).toContain("workspace.text");
+    expect(surfaceText).not.toContain("usingMixed");
+    expect(surfaceText).not.toContain("?");
   });
 
   it("samples the mixed lane's own status for the once-per-link auto-open", () => {
@@ -417,21 +487,20 @@ describe("the unified surface reads the link's own text lane", () => {
       ["onClear", "clearSurfaceText"],
       ["onEnd", "endSurfaceText"],
     ]) expect(panel, prop).toContain(`${prop}={`), expect(panel, prop).toContain(handler);
-    // Inside a mixed workspace each one addresses the link's lane directly;
-    // outside one the workspace router decides exactly as before, keeping its
-    // legacy/mixed ownership bookkeeping.
-    for (const [name, mixedCall, legacyCall] of [
-      ["sendSurfaceText", "workspace.mixed.text.send(body)", "workspace.sendText(body)"],
-      ["acceptSurfaceText", "workspace.mixed.text.accept()", "workspace.acceptText()"],
-      ["rejectSurfaceText", "workspace.mixed.text.reject()", "workspace.rejectText()"],
-      ["clearSurfaceText", "workspace.mixed.text.clearHistory()", "workspace.clearText()"],
-      ["endSurfaceText", "workspace.mixed.text.end()", "workspace.endText()"],
+    // One lane, so each handler is one unconditional call on the router. A
+    // `usingMixed` branch here would mean a second conversation lane had been
+    // reintroduced behind the panel.
+    for (const [name, call] of [
+      ["sendSurfaceText", "workspace.sendText(body)"],
+      ["acceptSurfaceText", "workspace.acceptText()"],
+      ["rejectSurfaceText", "workspace.rejectText()"],
+      ["clearSurfaceText", "workspace.clearText()"],
+      ["endSurfaceText", "workspace.endText()"],
     ]) {
       const body = fn(name);
-      expect(body, name).toContain("workspace.usingMixed");
-      expect(body, name).toContain(mixedCall);
-      expect(body, name).toContain(legacyCall);
-      expect(body.indexOf(mixedCall), name).toBeLessThan(body.indexOf(legacyCall));
+      expect(body, name).toContain(call);
+      expect(body, name).not.toContain("workspace.usingMixed");
+      expect(body, name).not.toContain("workspace.mixed.text");
     }
   });
 
@@ -495,13 +564,14 @@ describe("the unified surface reads the link's own text lane", () => {
     expect(reveal).not.toMatch(/activeText/);
   });
 
-  it("leaves the legacy history gates on the retaining getter, and uses it for nothing else", () => {
-    // "Is there legacy text history still to render?" is the one question
-    // `workspace.text` is the right answer to, precisely because it retains.
-    expect(surface).toContain('{#if mixed || activeText.status !== "idle"}');
-    expect(surface).toContain('activeText.status !== "idle" || mixed');
-    // Its declaration plus those two gates — nothing else in App may read it.
-    expect(app.match(/activeText/g)).toHaveLength(3);
+  it("reads one conversation getter everywhere, with no retaining twin left", () => {
+    // `activeText` existed only to answer "is there legacy text history still to
+    // render?". With one lane there is nothing to retain, so the surface gates
+    // and every side effect read the same `surfaceText` — and the retaining twin
+    // must not come back under any name.
+    expect(surface).toContain('{#if mixed || surfaceText.status !== "idle"}');
+    expect(surface).toContain('surfaceText.status !== "idle" || mixed');
+    expect(app).not.toMatch(/activeText/);
   });
 });
 
@@ -595,7 +665,16 @@ describe("pre-upload: the batch is split between two transports", () => {
     // question reopens the same hole on that one path.
     const all = code(app);
     expect(all).toContain("if (liveLinkFor(peerId) && !needsSendConfirmation(verifyOn, roomCode))");
-    expect(all).toContain("if (liveLinkFor(p.id)) { e.preventDefault();");
+    // There were two of these. The second guarded the per-peer picker's own
+    // drain, and it went with the picker: a peer that does not route `link/1`
+    // has no card control to drain from, and one that does drains through
+    // `openWorkspace` above. What matters is that no drain is left ungated —
+    // asserted positively below rather than by the absence of that one line.
+    for (const drain of [...all.matchAll(/drainFor\(/g)]) {
+      const before = all.slice(Math.max(0, drain.index - 700), drain.index);
+      expect(before, `an ungated drainFor at offset ${drain.index}`)
+        .toMatch(/liveLinkFor\(|workspace\.routes\(|authorizeHandoff\(/);
+    }
     // The standing release control asks a WIDER question than the drain: a batch
     // whose entries are all pre-uploaded is not an empty batch, and measuring it
     // with the live lane's ruler renders no control at all for it.
@@ -981,8 +1060,6 @@ describe("the room is joined while /api/ice is still in flight", () => {
       "signaling.onPeerLeft(",
       "signaling.onSignal(onPeerRelayRtt);",
       "signaling.onClose(",
-      "session.listenForIncoming();",
-      "textSession.listenForRequests();",
       "workspace.start();",
     ]) {
       expect(body, `${listener} runs behind the ICE await, so its frames are dropped`)
@@ -1169,91 +1246,6 @@ describe("no transport is built while the room has no configuration", () => {
     expect(readiness).toContain("if (live)");
   });
 
-  // ── the legacy file and text lanes ──────────────────────────────────────────
-  it("parks the two ways this page STARTS a legacy transport", () => {
-    // The router forks to these for every peer that does not route `link/1`, and
-    // neither has ever gone through the relay gate. Parked rather than refused:
-    // a satisfied wait goes on to build exactly once, and a superseded one
-    // abandons, because the room the intent was for is gone.
-    const files = block("const legacyFiles = {", "const legacyText = {");
-    expect(files).toContain("async sendFiles(peerId: string, files: PickedFile[]) {");
-    expect(files).toContain("if (!(await whenRoomIce())) return;");
-    expect(files).toContain("await session.sendFiles(peerId, files);");
-    expect(files.indexOf("await whenRoomIce()"))
-      .toBeLessThan(files.indexOf("await session.sendFiles"));
-
-    const text = block("const legacyText = {", "const workspace: PeerWorkspace = createPeerWorkspace({");
-    expect(text).toContain("async openWith(peerId: string) {");
-    expect(text).toContain("if (!(await whenRoomIce())) return;");
-    expect(text).toContain("await textSession.openWith(peerId);");
-    expect(text.indexOf("await whenRoomIce()"))
-      .toBeLessThan(text.indexOf("await textSession.openWith"));
-
-    // The router is handed the parked lanes, not the raw sessions — the fork
-    // lives inside it, so this is the one place that reaches both branches.
-    expect(all).toContain("legacyFiles,");
-    expect(all).toContain("legacyText,");
-    expect(all).not.toContain("legacyFiles: session,");
-    expect(all).not.toContain("legacyText: textSession,");
-  });
-
-  // The INBOUND half of each lane cannot be gated from this component at all:
-  // both snapshot `rtcConfig()` inside their own offer handler, which App never
-  // reaches. The only two levers it has from here are the file lane's
-  // `textActive` and the message lane's `canAccept` — and both mean "somebody
-  // else has this lane", which every legacy sender reads as TERMINAL. Refusing
-  // there turned a slow `/api/ice` into a deterministic failed transfer for a
-  // peer that had done nothing wrong and was very likely already waiting.
-  //
-  // So the lanes take the gate itself and park the offer. What they DO with it —
-  // park rather than refuse, at most one, retire exactly once, build exactly one
-  // transport from the installed configuration, and still answer `busy` to a
-  // genuine conflict — is executed, not restated:
-  //   - transfer-session.routing.test.ts (the file lane, and `routeOffer`)
-  //   - text-link.test.ts (the message lane)
-  // What is asserted here is only the composition those tests cannot see: that
-  // this component builds ONE gate and gives it to BOTH lanes.
-  it("hands the room's readiness to both legacy lanes", () => {
-    const gate = block("const roomIce: RoomIceGate = {", "const textLink = createTextLink({");
-    // The same two facts the outbound wrappers use, so a lane and a wrapper can
-    // never disagree about whether this room is ready.
-    expect(gate).toContain("pending: () => roomIcePending,");
-    expect(gate).toContain("whenReady: () => whenRoomIce(),");
-    const textLinkDeps = block("const textLink = createTextLink({", "const textSession = createTextSession({");
-    const fileDeps = block("const session = createTransferSession({", "const legacyFiles = {");
-    expect(textLinkDeps).toContain("roomIce,");
-    expect(fileDeps).toContain("roomIce,");
-    // …and the refusal it replaces is gone from both levers. Either one would
-    // put the pending room back where a sender reads it as "peer busy" — and
-    // `textActive` would additionally carry it into `busy`, which is what
-    // `warnsOnLeave` is built from, prompting on every reload.
-    expect(textLinkDeps).toContain("canAccept: (from) => textSession.canAcceptFrom(from),");
-    expect(textLinkDeps).not.toContain("roomIcePending");
-    expect(fileDeps).not.toContain("roomIcePending");
-    const files = block("const legacyFiles = {", "const legacyText = {");
-    expect(files).toContain("get busy() { return session.busy; },");
-    expect(files).toContain("get transferActive() { return session.transferActive; },");
-  });
-
-  it("retires parked inbound work at every boundary that ends the room", () => {
-    // A parked offer outliving its room is the one way this could build a stale
-    // transport, so every end-of-room event has to reach both lanes. The room
-    // switch is covered twice over — `settleRoomIce(false)` supersedes the wait
-    // itself — and that is deliberate: retirement is idempotent by identity, and
-    // the explicit calls also cover a cancellation that does not switch rooms.
-    const left = block("signaling.onPeerLeft((peerId) => {", "signaling.onSignal(onPeerRelayRtt);");
-    expect(left).toContain("session.peerGone(peerId);");
-    expect(left).toContain("textLink.peerGone(peerId);");
-    // Before the branch: a code room that was never joined closes terminally and
-    // never settles the window, so anything parked there would wait forever.
-    const closed = block("signaling.onClose(() => {", "if (roomCode && !joinedRoom)");
-    expect(closed).toContain("session.retireParkedInbound();");
-    expect(closed).toContain("textLink.retireParkedInbound();");
-    const switching = code(fn("switchRoom"));
-    expect(switching).toContain("session.abortAll();"); // …which retires the file lane's
-    expect(switching).toContain("session.reset();");
-    expect(switching).toContain("textLink.retireParkedInbound();");
-  });
 
   it("leaves a LAN room, a codeless page and a STUN-only code exactly as immediate", () => {
     // Every one of those is answered with a pool-less configuration, and
@@ -1405,9 +1397,11 @@ describe("the relay choice is committed by the link path and only by it", () => 
     expect(all).toContain(
       "const linkRtcConfig = (): RtcConfig => relayRtcConfig(relaySelection.takeChoice());",
     );
-    expect(all).toContain(
-      "const legacyRtcConfig = (): RtcConfig => relayRtcConfig(relaySelection.selectedRelayId);",
-    );
+    // …and there is no second, non-committing reader left. `linkRtcConfig` is
+    // the only consumer of the choice now, which is why it may commit the room
+    // unconditionally: a plain read here would be a lane that builds a transport
+    // without ever recording itself as a consumer of the gate.
+    expect(all).not.toContain("legacyRtcConfig");
     // ONE commit in the whole component, and it is the link reader's. A second
     // `takeChoice()` anywhere is another lane able to spend the record.
     expect(all.match(/takeChoice\(\)/g)).toHaveLength(1);
@@ -1418,12 +1412,8 @@ describe("the relay choice is committed by the link path and only by it", () => 
     );
     expect(workspaceDeps).toContain("rtcConfig: () => linkRtcConfig(),");
     expect(workspaceDeps).not.toContain("takeChoice");
-    // …and both legacy lanes take the plain one. They are the two the router
-    // forks to for every peer that does not route `link/1`.
-    const textLinkDeps = block("const textLink = createTextLink({", "const textSession = createTextSession({");
-    const fileDeps = block("const session = createTransferSession({", "const legacyFiles = {");
-    expect(textLinkDeps).toContain("rtcConfig: () => legacyRtcConfig(),");
-    expect(fileDeps).toContain("rtcConfig: () => legacyRtcConfig(),");
+    // …and there is no second lane taking a plain read beside it. The link is
+    // the room's only consumer of the choice.
     // The composed reader they all used is gone, so a fourth consumer cannot
     // reappear on it and silently pick up the commit.
     expect(all).not.toContain("rtcConfig: () => rtcConfig(),");

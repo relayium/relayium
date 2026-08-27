@@ -302,6 +302,72 @@ else
   ok 'the launcher takes the method names from the library'
 fi
 
+printf '%s\n' 'the /api/ice limiter window between default rounds'
+
+# The launcher runs each default method as its own xcodebuild process against ONE
+# server, and every process it starts is on 127.0.0.1 — so the whole run spends
+# one address's `/api/ice` budget. Measured before this rule existed: the second
+# method's counterpart was answered 429, ended `roomUnavailable` and never opened
+# its link, against a build with no defect in it.
+#
+# The rule is sourced rather than re-implemented here. The launcher stops after
+# defining it when asked to, so this costs no server, no build and no minute of
+# real time — and it is the SAME text the run uses, which a copy would not be.
+MACOS_UI_ACCEPTANCE_RULES_ONLY=1
+export MACOS_UI_ACCEPTANCE_RULES_ONLY
+# shellcheck source=../macos-ui-session-acceptance.sh
+if . "$LAUNCHER"; then
+  ok 'the launcher defines its sequencing rule without starting a run'
+else
+  bad 'the launcher defines its sequencing rule without starting a run'
+fi
+unset MACOS_UI_ACCEPTANCE_RULES_ONLY
+
+# The window is the server's, not a number this script picked. `/api/ice` is
+# capped per TRAILING minute (`signal.RateLimiter.Allow` keeps only the hits
+# newer than the window), so a launcher waiting less than a minute would still
+# be counted against the round before it.
+assert_eq 'the wait window is the limiter window' \
+  "${ice_limiter_window_seconds:-unset}" '60'
+if grep -q 'PerInstanceThreshold(5, div), time.Minute' "$ROOT/server/main.go"; then
+  ok 'the server still caps /api/ice at 5 per minute'
+else
+  bad 'the server still caps /api/ice at 5 per minute'
+fi
+
+# The remainder, so time already spent between rounds counts — and never a
+# negative sleep, which `sleep` would reject and `set -e` would turn into a
+# failed run minutes after the tests themselves passed.
+assert_eq 'a round that has just exited waits the whole window' \
+  "$(ice_limiter_wait_seconds 60 0)" '60'
+assert_eq 'time already spent between rounds counts towards the wait' \
+  "$(ice_limiter_wait_seconds 60 10)" '50'
+assert_eq 'a window that has exactly passed waits no longer' \
+  "$(ice_limiter_wait_seconds 60 60)" '0'
+assert_eq 'a window long past never answers a negative sleep' \
+  "$(ice_limiter_wait_seconds 60 90)" '0'
+
+# Where the wait is spent is as load-bearing as how long it is. It belongs
+# BETWEEN default rounds only: waiting before the first would be a minute
+# proving nothing, and a caller's own selectors are one invocation that has
+# nothing to wait for.
+if grep -q 'previous_round_exited=$' "$LAUNCHER"; then
+  ok 'the first default round does not wait'
+else
+  bad 'the first default round does not wait'
+fi
+# shellcheck disable=SC2016 # the literal $name IS the pattern: this greps source text
+launcher_waits="$(grep -c 'ice_limiter_wait_seconds "\$ice_limiter_window_seconds"' "$LAUNCHER" | tr -d ' ')"
+assert_eq 'exactly one place in the launcher spends the wait' "$launcher_waits" '1'
+# That one place is inside the default loop, which is the `else` branch of the
+# caller-selector test — so a caller's `-only-testing:` run is unchanged.
+caller_branch="$(sed -n '/^if \[ "\$#" -gt 0 \]; then$/,/^else$/p' "$LAUNCHER")"
+if printf '%s' "$caller_branch" | grep -q 'ice_limiter_wait_seconds'; then
+  bad 'a caller-supplied selection still runs unchanged'
+else
+  ok 'a caller-supplied selection still runs unchanged'
+fi
+
 if [ "$fail" -eq 0 ]; then
   printf '\nPASS: the selector mapping answers every supported shape and refuses the rest.\n'
 else

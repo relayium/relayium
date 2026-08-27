@@ -11,9 +11,7 @@
   import { roomCode as roomCodeStore, initRoomFromLocation } from "./lib/room.svelte";
   import type { Conn, ConnPath, RtcConfig } from "./lib/webrtc";
   import { applyRename } from "./lib/apply-rename";
-  import { CapsAnnouncer, recordPeerCaps, retainPeers, resetPeerCaps, peerSupportsText } from "./lib/peer-caps.svelte";
-  import { createTextSession } from "./lib/text-session.svelte";
-  import { createTextLink } from "./lib/text-link";
+  import { CapsAnnouncer, recordPeerCaps, retainPeers, resetPeerCaps } from "./lib/peer-caps.svelte";
   import { pastedText } from "./lib/paste-text";
   import MessagePanel from "./lib/MessagePanel.svelte";
   import ConfirmModal from "./lib/ConfirmModal.svelte";
@@ -23,10 +21,7 @@
   import { registerServiceWorker, drainSharedFiles } from "./lib/share-target";
   import { requestNotifyPermission, notifyTransfer } from "./lib/notify";
   import { MAX_FILES } from "./lib/transfer";
-  import {
-    createTransferSession, createLaneClaim, createRosterDepartures,
-    type RoomIceGate, type Xfer,
-  } from "./lib/transfer-session.svelte";
+  import type { Xfer } from "./lib/transfer-model";
   import { createPeerWorkspace, type PeerWorkspace } from "./lib/peer-workspace.svelte";
   import { createUnifiedTextOpener } from "./lib/unified-text-open";
   import { createActivityAnnouncer, type ActivityEdge } from "./lib/activity-announcement";
@@ -118,125 +113,8 @@
   let selfIP = $state("");
   let peers = $state<Peer[]>([]);
 
-  /**
-   * This room's ICE readiness, handed to both legacy lanes below.
-   *
-   * The SAME gate the outbound wrappers use (`whenRoomIce`), given to the lanes
-   * because the INBOUND half of each lane is inside the lane: both snapshot
-   * `legacyRtcConfig()` in their own offer handler, which this component never
-   * reaches. The only lever it has from here is a refusal, and a refusal is
-   * answered `busy` — terminal to every legacy sender, which does not retry. A
-   * room joined a round trip early would then deterministically fail a transfer
-   * for a peer that was already waiting. So the lanes park the offer instead,
-   * and this is what they park on.
-   */
-  /**
-   * The room's single legacy setup slot, shared by both lanes through the gate.
-   *
-   * Plain state rather than `$state`: nothing renders it, and it is written and
-   * read inside one synchronous turn by the two continuations the gate wakes.
-   * Reactivity there would be a liability, not a feature — a `$derived` reading
-   * it would be recomputed in the middle of the arbitration it is meant to
-   * settle. See `createLaneClaim` for what it is for.
-   */
-  const laneClaim = createLaneClaim();
-  const roomIce: RoomIceGate = {
-    pending: () => roomIcePending,
-    whenReady: () => whenRoomIce(),
-    claimLane: (lane) => laneClaim.claim(lane),
-    releaseLane: (lane) => laneClaim.release(lane),
-    laneClaimedByOther: (lane) => laneClaim.heldByOther(lane),
-  };
-  // 收发管道 + 它们的状态（send/recv/incoming/SAS/每向路径）都住在这里。
-  // 依赖用 getter 传进去：signaling 会随房间切换整个换掉，rtcConfig 依赖中继选优
-  // 的结果，两者都不能在创建时定死。
-  // 消息会话。phase 1 里它和文件传输互斥，靠 textActive 让 busy() 看见它。
-  // textLink 和 textSession 互相引用（前者预检后者的策略，后者用前者建连），所以两边都
-  // 用 thunk 接：真正调用都发生在两者构造完之后。session 同理，它声明在下面。
-  const textLink = createTextLink({
-    signaling: () => signaling,
-    rtcConfig: () => legacyRtcConfig(),
-    // 握手之前就问：能拒就别白跑一次 commit-reveal，也别白占一次 TURN 分配。
-    // 只问冲突。"这间房还没拿到 ICE 答复"不是冲突，由 roomIce 那条路等，不是从这里拒。
-    canAccept: (from) => textSession.canAcceptFrom(from),
-    roomIce,
-  });
-  const textSession = createTextSession({
-    connect: textLink.connect,
-    listen: textLink.listen,
-    // 互斥的另一半：文件传输在跑的时候不接消息会话，否则屏幕上会同时挂两串 SAS。
-    // 这里读的是只算文件那一半的 transferActive，不是 busy()——busy() 本身读 textActive，
-    // 拿它来问会绕回自己。
-    transferActive: () => session.transferActive || workspace?.blocksLegacyInbound === true,
-    now: () => Date.now(),
-  });
-  let textCompose = $state(""); // 粘贴进来的草稿，交给面板预填
-  const session = createTransferSession({
-    signaling: () => signaling,
-    rtcConfig: () => legacyRtcConfig(),
-    t: () => messages[lang()],
-    flash,
-    // 互斥那一半，只算真正的冲突。房间的 ICE 答复没到不属于这里：它走 roomIce，
-    // 停下来等，而不是混进 busy() 里冒充"有人在传"——busy 对发起方是终局。
-    textActive: () => textSession.active() || workspace?.blocksLegacyInbound === true,
-    roomIce,
-  });
-  /**
-   * The legacy lanes as the workspace router sees them.
-   *
-   * Two overrides and nothing else: every other member forwards, so the router,
-   * the surface and the navigation guard read the sessions themselves exactly as
-   * before — `busy` included, which is what keeps `warnsOnLeave` from prompting
-   * on every reload while the page waits for an HTTP response.
-   *
-   * `sendFiles`/`openWith` are the two ways this page STARTS a legacy transport,
-   * and the router reaches them for every peer that does not route `link/1`.
-   * They park on the room's answer instead of snapshotting an empty
-   * configuration into a connection that then carries the whole transfer.
-   * Parked, not refused: a superseded wait abandons (the room the intent was for
-   * is gone), and a satisfied one goes on to build exactly once. The inbound
-   * halves park on the same gate, but inside the lanes — see `roomIce`.
-   */
-  const legacyFiles = {
-    get incoming() { return session.incoming; },
-    get recv() { return session.recv; },
-    get send() { return session.send; },
-    get sasCode() { return session.sasCode; },
-    get sendPath() { return session.sendPath; },
-    get recvPath() { return session.recvPath; },
-    get busy() { return session.busy; },
-    get transferActive() { return session.transferActive; },
-    async sendFiles(peerId: string, files: PickedFile[]) {
-      if (!(await whenRoomIce())) return;
-      await session.sendFiles(peerId, files);
-    },
-    accept: () => session.accept(),
-    reject: () => session.reject(),
-    abort: (dir: "send" | "recv") => session.abort(dir),
-    abortAll: () => session.abortAll(),
-    dismissSend: (x: Xfer) => session.dismissSend(x),
-    dismissRecv: (x: Xfer) => session.dismissRecv(x),
-    reset: () => session.reset(),
-    conn: () => session.conn(),
-  };
-  const legacyText = {
-    get status() { return textSession.status; },
-    get peerId() { return textSession.peerId; },
-    get sasCode() { return textSession.sasCode; },
-    get path() { return textSession.path; },
-    get history() { return textSession.history; },
-    get errorKey() { return textSession.errorKey; },
-    async openWith(peerId: string) {
-      if (!(await whenRoomIce())) return;
-      await textSession.openWith(peerId);
-    },
-    accept: () => textSession.accept(),
-    reject: () => textSession.reject(),
-    send: (body: string) => textSession.send(body),
-    end: () => textSession.end(),
-    clearHistory: () => textSession.clearHistory(),
-    active: () => textSession.active(),
-  };
+  /** 粘贴进来的草稿，交给面板预填。 */
+  let textCompose = $state("");
   const workspace: PeerWorkspace = createPeerWorkspace({
     selfId: () => selfId,
     joined: () => joinedRoom,
@@ -256,8 +134,6 @@
     // The gate the link manager holds its first legal `link/1` frame behind —
     // this room's whole readiness, not only its relay agreement. See `roomGate`.
     relayGate: () => roomGate,
-    legacyFiles,
-    legacyText,
     requestNotify: requestNotifyPermission,
     // Pre-upload key handoff (frame kind 12). A PULL of the CURRENT set, asked
     // again on every (re)established transport — which is exactly the protocol's
@@ -297,51 +173,23 @@
   const send = $derived(workspace.send);
   const recv = $derived(workspace.recv);
   const incoming = $derived(workspace.incoming);
-  /** The workspace router's own answer, which deliberately RETAINS a non-idle
-   *  legacy transcript so it stays rendered while a mixed lane is idle.
+  /** The one conversation lane there is: the link's own.
    *
-   *  That retention is the whole point of it, and it is why this is now used for
-   *  exactly one question: "is there still legacy text history to render?" Every
-   *  product side effect — auto-accept, the reveal/announcement, the new-message
-   *  notification — reads `surfaceText` instead, because they must act on the
-   *  session that is actually on screen rather than on a preserved one. */
-  const activeText = $derived(workspace.text);
-  /** The text session the workspace SURFACE renders and acts on.
-   *
-   *  Deliberately not `workspace.text`. That getter keeps a non-idle LEGACY
-   *  transcript on screen while the mixed lane is idle, which is correct for the
-   *  legacy card and its history — and wrong the moment a link owns the screen.
-   *  A `link/1` workspace is usually established by the FILE lane, so its text
-   *  lane is idle for a while; reading the legacy session during that window put
-   *  an EARLIER peer's conversation on screen under the LINKED peer's name, and
-   *  told the auto-opener the lane was already busy so the real one never opened.
-   *  Inside a mixed workspace the link's own lane is the only identity; outside
-   *  one nothing changes. */
-  const surfaceText = $derived(workspace.usingMixed ? workspace.mixed.text : workspace.text);
-  // Panel actions land on the session the panel is showing, for the same reason
-  // its props read it: inside a mixed workspace that is the link's own lane, and
-  // outside one the workspace router decides exactly as before — it owns the
-  // legacy/mixed lane bookkeeping and is left untouched.
-  function sendSurfaceText(body: string) {
-    if (workspace.usingMixed) void workspace.mixed.text.send(body);
-    else void workspace.sendText(body);
-  }
-  function acceptSurfaceText() {
-    if (workspace.usingMixed) workspace.mixed.text.accept();
-    else workspace.acceptText();
-  }
-  function rejectSurfaceText() {
-    if (workspace.usingMixed) workspace.mixed.text.reject();
-    else workspace.rejectText();
-  }
-  function clearSurfaceText() {
-    if (workspace.usingMixed) workspace.mixed.text.clearHistory();
-    else workspace.clearText();
-  }
-  function endSurfaceText() {
-    if (workspace.usingMixed) workspace.mixed.text.end();
-    else workspace.endText();
-  }
+   *  This used to be two getters. `workspace.text` deliberately RETAINED a
+   *  non-idle legacy transcript while the link's lane was idle, and
+   *  `surfaceText` existed to bypass that retention for every product side
+   *  effect — auto-accept, the reveal/announcement, the new-message
+   *  notification — because acting on a preserved transcript put an EARLIER
+   *  peer's conversation on screen under the LINKED peer's name. With the legacy
+   *  lane gone there is nothing to retain and nothing to bypass, so the router's
+   *  answer and the surface's are the same object by construction rather than by
+   *  two expressions somebody has to keep equal. */
+  const surfaceText = $derived(workspace.text);
+  function sendSurfaceText(body: string) { void workspace.sendText(body); }
+  function acceptSurfaceText() { workspace.acceptText(); }
+  function rejectSurfaceText() { workspace.rejectText(); }
+  function clearSurfaceText() { workspace.clearText(); }
+  function endSurfaceText() { workspace.endText(); }
   // 「高级验证」偏好，默认关。关的时候 SAS 不上屏，围绕比对它建立的额外确认步骤
   // 也一并省掉；开的时候完全恢复原来的行为。理由与边界写在 verify-pref 里——
   // 尤其是：这个开关**不**影响 commit-reveal / AEAD，也不影响接收文件的保存同意。
@@ -406,10 +254,10 @@
     if (!textOpener.shouldOpen({
       hasLink: workspace.hasLink,
       linkGeneration: generation,
-      // The LINK's own lane, never the legacy-preserving workspace getter: that
-      // one still resolves to a retained legacy transcript while this lane is
-      // idle, and a stale "ended" read from it would permanently suppress the
-      // single open this workspace promises. See surfaceText.
+      // The link's own lane. `workspace.text` IS that lane now, but this reads
+      // it through the link so the sampling cannot drift if the router ever
+      // grows a second answer again: a stale "ended" read here would permanently
+      // suppress the single open this workspace promises. See surfaceText.
       textIdle: workspace.mixed.text.status === "idle",
     })) return;
     // Spend the generation BEFORE starting the open: openText is async, and a
@@ -489,29 +337,6 @@
    * relay-selection.ts.
    */
   const linkRtcConfig = (): RtcConfig => relayRtcConfig(relaySelection.takeChoice());
-  /**
-   * The read on the two LEGACY lanes, which does not commit — a plain read, the
-   * one `main` always made here.
-   *
-   * The commit record above is about the gate the `link/1` path waits behind,
-   * and only a `link/1` transport is ever built from it. The legacy file and
-   * text lanes never go through that gate at all (see the block below): they
-   * build on whatever the choice is at that instant, so marking the room
-   * "committed" from here would be recording a consumer that does not exist.
-   *
-   * And the record is load-bearing in one direction only — it FORBIDS the
-   * departure re-lock. So a legacy construction that set it would leave a room
-   * that has built nothing on the gate unable to take the gate back when the
-   * peer it opened for leaves, and the replacement's first legal `link/1` frame
-   * would go out on the departed peer's relay, or on the fallback, before its
-   * own map could arrive. That is exactly the defect `relock` exists to close,
-   * reached from a lane that has no `link/1` connection to protect.
-   *
-   * Nothing else changes for these two: same pool, same credentials, same
-   * transport policy, same fallback when no choice has settled, and the same
-   * value `takeChoice` would have returned.
-   */
-  const legacyRtcConfig = (): RtcConfig => relayRtcConfig(relaySelection.selectedRelayId);
 
   // ── nearest-relay selection ──────────────────────────────────────────────────────
   // Each peer measures its RTT to every pool relay; the maps are swapped over signaling
@@ -520,11 +345,11 @@
   // join, and each relay is published the moment it answers, so a dead node costs only
   // its own absence rather than the whole map.
   //
-  // A unified link/1 connection WAITS for that agreement — see relay-selection.ts — and
-  // by the time one is wanted the wait is usually already over. The legacy file and text
-  // paths do not wait: they read whatever `legacyRtcConfig()` answers, which without a
-  // choice is the whole advertised set folded together — and, because they do not wait,
-  // they do not commit either. No effect on LAN either way (empty pool).
+  // The one link/1 connection WAITS for that agreement — see relay-selection.ts — and by
+  // the time one is wanted the wait is usually already over. It is also the only consumer
+  // of the choice now, which is why `linkRtcConfig` may commit the room unconditionally:
+  // there is no second, non-waiting reader left to record as a consumer that never was.
+  // No effect on LAN either way (empty pool).
   let relayMeasureEpoch = 0;
   // The room's exchange, gate and choice. Plain (non-reactive) state on purpose:
   // rtcConfig() must read the value that is true at the instant a connection is
@@ -605,7 +430,8 @@
    *    the very transport the join no longer waits in order to avoid: empty
    *    `iceServers`, empty pool, no credential, "all" transport policy — the
    *    default RTC configuration, committed to for the life of the connection.
-   *  - and the legacy file and text lanes never went through it at all.
+   *  - and the retired file and text lanes never went through it at all, which
+   *    is the reason the commit record below can now be unconditional.
    *
    * So readiness is ONE fact with ONE settler: `applyRoomIce`, running on this
    * room's real answer. There is deliberately no timeout of its own here.
@@ -636,15 +462,15 @@
    * **May this page build a transport for this room yet?**
    *
    * `true` once this room's own answer is installed, `false` when the wait was
-   * superseded. The one readiness decision the legacy lanes go through, so there
-   * is a single answer rather than one per call site.
+   * superseded. One readiness answer for the whole page rather than one per call
+   * site.
    *
    * It waits for the ANSWER, not for the relay agreement. `peer-link` waits for
    * both, because a `link/1` connection is long-lived and a mis-chosen relay
-   * costs it twice the metered bandwidth for its whole life; the legacy lanes
-   * have never waited for the agreement, and making them start would delay every
-   * transfer in a pooled room by up to a peer's whole grace — a behaviour change,
-   * and not this correction. So the wait ends in the turn `applyRoomIce` runs,
+   * costs it twice the metered bandwidth for its whole life. This weaker wait is
+   * what the retired lanes used, and it is kept because the page still has
+   * non-link readiness questions to answer; nothing builds a transport from it.
+   * So the wait ends in the turn `applyRoomIce` runs,
    * which is also why a LAN room, a codeless page and a STUN-only code are
    * exactly as immediate as they were: their answer settles this in the same
    * turn it lands, and once settled this resolves without yielding to a timer.
@@ -739,16 +565,6 @@
     roomIcePending = true;
     heldRelayRtt = [];
     heldRelayRoster = new Set();
-    // The next room's ids mean nothing to this one's membership, so the diff
-    // starts empty rather than reporting the whole previous roster as departed.
-    laneRoster.reset();
-    // …and the slot goes back unconditionally. Every lane has already been told
-    // to retire its work (`workspace.resetRoom()` and the two explicit retire
-    // calls in `switchRoom` run before this), and a slot still held on behalf of
-    // a peer in the room being left would answer the NEXT room's first offer
-    // `busy` — terminal, for a peer that did nothing wrong. It is also what
-    // bounds a claim whose handshake never completes at all.
-    laneClaim.clear();
     // Deliberately no deadline of this window's own. `fetchIceConfig` bounds
     // itself and always answers, so the only thing a timer here could do is
     // permit the empty configuration it exists to forbid — see `whenRoomIce`.
@@ -800,27 +616,8 @@
   // describes, where a roster id changes while the socket and DataChannel live
   // on, cannot reach any of this. See `noteRoster`.
   //
-  /** The legacy lanes' own membership diff, which is NOT scoped to a pool.
-   *
-   *  Same rule, same idempotence and the same "departures first" ordering as the
-   *  relay selection's — but it has to run during the ICE window too, because
-   *  that is precisely when the two lanes are holding a parked offer on a peer's
-   *  behalf. Both lanes go through the one diff so a roster frame can never
-   *  retire one lane's work and leave the other's standing. */
-  const laneRoster = createRosterDepartures([session, textLink]);
   function noteRelayPeers(ids: string[]) {
     const others = ids.filter((id) => id !== selfId);
-    // FIRST, and before anything below notes an arrival. `left` is not the only
-    // way a peer goes away, and during the ICE window it is not even the
-    // likeliest: a roster that replaces a peer, or simply stops naming one, can
-    // be the whole of the evidence. The lanes' own diff, because
-    // `relaySelection.noteRoster` below is scoped to a room that already has a
-    // pool — so during the window, which is exactly when offers are parked, it
-    // reports nothing at all. Without this a parked offer outlives its peer and
-    // BUILDS when the answer lands: a transport and a receive card for an id the
-    // hub no longer routes, holding the room's single lane against the peer that
-    // replaced it. See `createRosterDepartures`.
-    laneRoster.note(others);
     for (const gone of relaySelection.noteRoster(others)) workspace.rosterPeerGone(gone);
     // The same rule one round trip earlier. `noteRoster` is scoped to a room
     // with a pool, so during the pre-answer window it reports nothing at all —
@@ -986,8 +783,26 @@
    * tab's memory and nothing on the server that could hand them over again.
    */
   const busy = $derived(workspace.warnsOnLeave || storedReceiver.active());
+  /**
+   * Whether a drop has nowhere to go.
+   *
+   * **`routes` is part of this, and its absence was a silent data loss.** The
+   * paste handler has always required a peer that routes exact `link/1`; the
+   * drop path checked only whether the peer was mid-intent. So a sole peer that
+   * announced nothing, `text/1`, `LINK/1` or a later `link/2` still made
+   * `dropTarget` answer "send": the overlay invited the drop, the drop was
+   * accepted, and `workspace.sendFiles` handed the router a batch it drops.
+   * The file went nowhere and nothing was said anywhere.
+   *
+   * A peer that cannot be reached is exactly as unable to take a drop as one
+   * that is busy, so it belongs in the same predicate rather than in a second
+   * check somewhere downstream.
+   */
   const dropBusy = $derived(
-    visiblePeers.length === 0 || visiblePeers.every((peer) => workspace.blocksNewIntent(peer.id)),
+    visiblePeers.length === 0
+      || visiblePeers.every(
+        (peer) => workspace.blocksNewIntent(peer.id) || !workspace.routes(peer.id),
+      ),
   );
   // `storedReceiver` is part of this test because a pre-uploaded batch does not
   // need the peer any more: the ciphertext is on the server and the keys are
@@ -1058,8 +873,7 @@
   // clearHistory 之后不会重播。
   // 读的是 surfaceText，和面板同一个会话：通知报的是**谁**发来的消息，而这个"谁"必须
   // 是屏幕上那条对话的对端。统一工作区里那是这条链路自己的通道；`workspace.text` 在这
-  // 条通道还空着的时候会保留旧的 legacy 记录，拿它报名字就会用上一个对端的名字去通知
-  // 一条根本不在屏幕上的对话。
+  // 条通道就是屏幕上那条对话；这两者如今是同一个对象，读同一个是为了让它保持如此。
   let lastNotifiedMsgId = 0;
   $effect(() => {
     const last = surfaceText.history.at(-1);
@@ -1227,7 +1041,16 @@
     // back one flush after the user answered it.
     const keysPending = solo !== null && handoffOwed(solo.id) > 0
       && !(workspace.hasLink && workspace.linkPeerId === solo.id && keysReleasedTo(solo.id));
-    if (solo && (liveOwed > 0 || keysPending) && surfaceShown
+    // `routes` as well as `blocksNewIntent`, and this is the difference between
+    // them: `blocksNewIntent` answers "not right now" (a link owns the screen, a
+    // disconnect is suppressed), while `routes` answers "not this device, ever".
+    // Everything below arms a SEND — the frictionless auto-send, the pre-upload
+    // handoff, and the confirmation bar with its Send. All three end at
+    // `workspace.sendFiles`, which drops a batch for a peer that does not
+    // announce exact `link/1`. Without this the bar would appear for an
+    // unreachable peer, tell the user to compare a code that can never exist,
+    // and lose the batch to a Send that reports nothing.
+    if (solo && workspace.routes(solo.id) && (liveOwed > 0 || keysPending) && surfaceShown
       && !workspace.blocksNewIntent(solo.id)) {
       const peer = solo;
       // The extra sender confirmation belongs to advanced verification: its only
@@ -1402,12 +1225,10 @@
   // what lands on disk (and carries the user gesture the save-target picker
   // needs), so it stays in every mode — see ReceiveActions.
   //
-  // Both halves read the surface, never `workspace.text`: an automatic accept is
-  // only defensible for the conversation the user is actually looking at. Inside
-  // a mixed workspace the retained legacy session is neither on screen nor
-  // reachable, so letting it decide here would silently accept a stranger's
-  // request the user was never shown — and `acceptSurfaceText` is what lands the
-  // accept on that same session instead of routing it back to the legacy lane.
+  // Both halves read the surface: an automatic accept is only defensible for the
+  // conversation the user is actually looking at. There is one conversation lane
+  // now, so `surfaceText` and the router's answer are the same object — reading
+  // the surface keeps that a property of the code rather than of the moment.
   $effect(() => {
     if (autoAcceptsIncomingText(verifyOn, surfaceText.status)) acceptSurfaceText();
   });
@@ -1419,7 +1240,7 @@
   type ActivityRevealTarget = "pending" | "incoming" | "file" | "text";
   // `lead` is the edge itself; the verification code is kept apart from it so a
   // unified workspace can decide whether this edge still needs to say the code.
-  // A legacy surface always appends it, exactly as before.
+  // Outside one — a link that has not been established yet — it is appended.
   type ActivityReveal = ActivityEdge & {
     key: string;
     target: ActivityRevealTarget;
@@ -1481,13 +1302,12 @@
         sasCompare: t.codeCompare,
       };
     }
-    // The surface, never `workspace.text`: this edge is a reveal, a spoken
-    // identity and a verification code, and all three have to describe the
-    // conversation the panel is showing. A retained legacy transcript read here
-    // while a link owns the screen scrolls to a card that is not on it, names
-    // the wrong peer, and — worst — reads out the LEGACY session's code under
-    // the linked peer's name, which is a verification step pointed at the wrong
-    // connection.
+    // The surface: this edge is a reveal, a spoken identity and a verification
+    // code, and all three have to describe the conversation the panel is
+    // showing. Reading anything else here scrolls to a card that is not on
+    // screen, names the wrong peer, and — worst — reads out one connection's
+    // code under another's name, which is a verification step pointed at the
+    // wrong connection.
     if (
       surfaceText.sasCode &&
       (surfaceText.status === "waitingAccept" || surfaceText.status === "incomingRequest")
@@ -1556,8 +1376,8 @@
       // no-op in Chrome on this page, while nearest+auto reveals correctly and
       // satisfies reduced-motion without a preference branch.
       //
-      // "nearest" is the legacy behaviour and stays that way: it scrolls the
-      // minimum, so a decision that is already on screen never moves the page.
+      // "nearest" is the long-standing behaviour and stays that way: it scrolls
+      // the minimum, so a decision already on screen never moves the page.
       //
       // A unified workspace cannot use it. Its anchor sits inside a card whose
       // consent buttons are below the fold, and "nearest" does nothing at all for
@@ -1685,12 +1505,6 @@
     });
     signaling.onPeerLeft((peerId) => {
       workspace.peerLeft(peerId);
-      // A legacy offer of that peer's, parked on this room's answer, goes with
-      // it: the answer would be addressed to an id the hub no longer routes, and
-      // the record must not survive into a wake-up that builds for nobody.
-      // Scoped to the departing peer — another peer's parked offer is untouched.
-      session.peerGone(peerId);
-      textLink.peerGone(peerId);
       // The gate stops waiting for a peer the server says has gone, and drops
       // the map it measured with: the next peer gets its own full grace rather
       // than an instant release on somebody else's numbers.
@@ -1700,12 +1514,6 @@
     });
     signaling.onSignal(onPeerRelayRtt); // capture peers' relay-RTT maps (ignored by the WebRTC handlers)
     signaling.onClose(() => {
-      // Whatever this close turns out to mean, an inbound offer parked on this
-      // room's answer cannot be answered any more: the socket that would carry
-      // the answer is gone, and peer ids do not survive a reconnect. Retired
-      // before the branch, because the terminal one never settles the window.
-      session.retireParkedInbound();
-      textLink.retireParkedInbound();
       // In a code room, a close before we ever joined means the code/link was
       // invalid/expired or the room was full — surface that, don't retry.
       if (roomCode && !joinedRoom) { linkDead = true; return; }
@@ -1718,8 +1526,6 @@
       connState = "reconnecting";
       scheduleReconnect();
     });
-    session.listenForIncoming();
-    textSession.listenForRequests();
     workspace.start();
     socketRoomKey = roomCode;
     connState = "ready";
@@ -1770,7 +1576,6 @@
     const epoch = ++roomEpoch; // newer switch supersedes any slower in-flight one
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = undefined; }
     reconnectAttempt = 0; // a deliberate room switch is not an outage — don't inherit its backoff
-    session.abortAll();
     workspace.resetRoom();
     peers = [];
     selfId = "";
@@ -1788,18 +1593,12 @@
     iceServers = [];
     relayPool = [];
     relayBound = null;
-    session.reset();
     connState = "connecting";
     resetRelaySelection(); // the new room has its own relay pool + measurements
     resetPeerCaps(); // the new room has its own peers; nothing carries over
     capsAnnouncer.roomChanged(); // …including who we still owe an announcement
     resetHandoffLanes(); // …including which of them had settled a pre-upload lane
     revokeHandoff(); // …and any Send confirmed against the room being left
-    textSession.end(); // 换房间就是换对端，消息会话跟着结束（历史留在页面上）
-    // …连同停在旧房间答复上的那条入站消息 offer。文件那条道由上面的 abortAll/reset
-    // 一并作废；两条道最终都还会再被 resetRelaySelection 的 settleRoomIce(false)
-    // 唤醒一次并作废——同一条记录只会被处理一次，重复调用是空操作。
-    textLink.retireParkedInbound();
     // **The join and the configuration are started together, not in order.**
     //
     // Joining a room needs a code and a socket; it does not need an ICE server,
@@ -1922,24 +1721,45 @@
     };
     const onWindowDrop = (e: DragEvent) => {
       if (!hasFiles(e.dataTransfer?.types)) return;
-      e.preventDefault();
+      // The overlay goes either way. It is this page's own state, not the
+      // browser's drop, so resetting it is not consuming anything — and leaving
+      // it up after a refused drop would be a highlight with nothing behind it.
       dragDepth = 0;
       dragActive = false;
-      if (surfaceShown && dropTarget(visiblePeers.length, dropBusy) === "send" && e.dataTransfer) {
-        const peer = visiblePeers[0].id;
-        filesFromDataTransfer(e.dataTransfer).then((picked) => { if (picked.length) workspace.sendFiles(peer, picked); });
-      }
+
+      // **Every gate BEFORE `preventDefault`, because preventDefault IS the
+      // consumption.**
+      //
+      // Suppressing the browser's default is what stops it opening or
+      // downloading the file, so calling it and then returning is the worst of
+      // both: the page takes the drop away from the OS and does nothing with
+      // it. The file vanishes with no overlay, no error and no transfer.
+      //
+      // `routes` is re-asked here rather than trusted from `dropBusy`, which is
+      // derived from the frame that drew the overlay: a roster tick can revoke a
+      // capability while the file is in the air. A peer that cannot be reached
+      // must leave the drop to the browser, exactly as an empty roster does.
+      if (!surfaceShown) return;
+      if (dropTarget(visiblePeers.length, dropBusy) !== "send") return;
+      const transfer = e.dataTransfer;
+      if (!transfer) return;
+      const peer = visiblePeers[0]?.id;
+      if (!peer || !workspace.routes(peer)) return;
+
+      e.preventDefault();
+      filesFromDataTransfer(transfer).then((picked) => { if (picked.length) workspace.sendFiles(peer, picked); });
     };
     // 粘贴文本 = 打开草稿框并预填，**不发送**。粘贴不是"同意发出去"，而且粘贴常常是
     // 手误——按下发送这一步必须留给用户。作用域和拖放覆盖层一样窄：只有传输界面真的
-    // 在屏幕上、有一个明确的目标对端、那个对端声明过能收消息、而且当前不忙的时候才接手。
+    // 在屏幕上、有一个明确的目标对端、那个对端**路由 link/1**、而且当前不忙的时候
+    // 才接手。声明过 text/1 但没有 link/1 的对端不再是一个可以开会话的目标——这条
+    // 道已经没有了，接下这次粘贴只会打开一个永远连不上的草稿框。
     const onPaste = (e: ClipboardEvent) => {
       if (!surfaceShown) return;
       const text = pastedText(e);
       if (text === null) return;
       const peer = effectiveSelected;
-      if (!peer || workspace.blocksNewIntent(peer)
-        || (!workspace.routes(peer) && !peerSupportsText(peer))) return;
+      if (!peer || workspace.blocksNewIntent(peer) || !workspace.routes(peer)) return;
       e.preventDefault();
       textCompose = text;
       void workspace.openText(peer);
@@ -2152,52 +1972,78 @@
 <main>
 {#snippet peerCard(p: Peer, solo: boolean)}
   {@const intentBlocked = workspace.blocksNewIntent(p.id)}
-  <!-- Whether this peer can carry a unified workspace: it announced exactly
-       `link/1`. Every room qualifies now — LAN and pairing-code alike (see
-       peer-caps' linkRoomActive) — so what decides this is the peer, not the
-       room. A peer that does not speak the protocol (older browsers, the native
-       clients, the CLI) is false here and renders the untouched legacy card
-       below; it must never be sent a two-channel offer it would read as a file
-       transfer whose manifest never arrives. -->
+  <!-- Whether this peer can be reached AT ALL: it announced exactly `link/1`.
+       Every room qualifies now — LAN and pairing-code alike (see peer-caps'
+       linkRoomActive) — so what decides this is the peer, not the room.
+
+       This used to select between two WORKING cards, and it no longer does. The
+       browser composes one transport, so a peer that does not announce exactly
+       `link/1` — nothing at all, `text/1`, `LINK/1`, a later `link/2` — has no
+       lane here for files OR for messages, and the router's `routes` gate ends
+       every intent aimed at it. So the else branch is a STATEMENT, not a second
+       set of controls: rendering the old pickers there would open a chooser,
+       hand the router a batch it drops, and report nothing anywhere. The one
+       state that is true gets said once, in the user's language. -->
   {@const unifiedPeer = workspace.routes(p.id)}
   <li
     class="peer"
     class:disabled={intentBlocked}
-    ondragover={(e) => { e.preventDefault(); if (!intentBlocked) (e.currentTarget as HTMLElement).classList.add("drag"); }}
+    class:unreachable={!unifiedPeer}
+    ondragover={(e) => {
+      e.preventDefault();
+      // The drag affordance is withheld from a peer that will refuse the drop.
+      // Highlighting a target and then rejecting what lands on it is an
+      // invitation taken back after the user has already acted on it.
+      if (!intentBlocked && unifiedPeer) (e.currentTarget as HTMLElement).classList.add("drag");
+    }}
     ondragleave={(e) => (e.currentTarget as HTMLElement).classList.remove("drag")}
-    ondrop={(e) => { e.stopPropagation(); if (intentBlocked) { e.preventDefault(); flash(messages[lang()].busy); return; } onDrop(e, p.id); }}
+    ondrop={(e) => {
+      e.stopPropagation();
+      // Refused with a REASON in both cases, and refused HERE rather than at the
+      // router. A drop the router silently drops is indistinguishable from one
+      // the page never received — the file vanishes and nothing is said.
+      if (intentBlocked) { e.preventDefault(); flash(messages[lang()].busy); return; }
+      if (!unifiedPeer) { e.preventDefault(); flash(messages[lang()].peerUnsupported); return; }
+      onDrop(e, p.id);
+    }}
   >
-    <!-- The whole card is a pointer/touch shortcut to the primary picker below —
-         not a second <label> for it. It used to be `<label for={pick-…}>`, which
-         left one input associated with two labels (this card plus the .pa-files
-         wrapper): axe flags form-field-multiple-labels and every AT gets to pick
-         a different name. The name belongs to the visible action ("Send files");
-         this card's text is *who* the files go to, which is already wired up as
-         the input's aria-describedby.
-         svelte-ignore: the keyboard path is deliberately not duplicated here. The
-         real <input> is itself the tab stop for this action, so a key handler on
-         the card would be a second control for the same thing. -->
+    <!-- The whole card is a pointer/touch shortcut to the peer's one action —
+         never a form label. It was once a wrapper around the per-peer file
+         picker, which left that control owned by two labels at once (this card
+         and the visible action beside it): axe flags form-field-multiple-labels
+         and every assistive technology gets to pick a different name. That
+         picker is not on this card any more — a routing peer's controls live in
+         the workspace it opens, and a peer that does not route has none — so the
+         rule is held by construction rather than by care.
+
+         The handler is ATTACHED CONDITIONALLY, and that is the point. A peer
+         that does not route has no action for this shortcut to reach, so a
+         handler here would be a listener whose whole body is a guard that
+         returns — and the card would still be, to every pointer and every
+         inspector, a thing that handles clicks. `.peer.unreachable` withdraws
+         the matching visual affordance (see the cursor and hover rules): a card
+         that looks pressable and answers nothing is worse than a plain one,
+         because the user reads the silence as a failure they caused.
+         svelte-ignore: the keyboard path is deliberately not duplicated here.
+         The visible button below is itself the tab stop for this action, so a
+         key handler on the card would be a second control for the same thing. -->
     <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
     <div
       class="pcard"
-      onclick={(e) => {
-        // A click that ends a selection drag over the peer name is not a tap. The
-        // <label> this replaces suppressed its activation in exactly that case,
-        // and "I was selecting the name" is the one way opening a file chooser
-        // here can surprise someone. A stale selection cannot block the shortcut:
-        // mousedown collapses it before this ever runs.
+      onclick={unifiedPeer ? (e) => {
+        // A click that ends a selection drag over the peer name is not a tap.
+        // The form label this replaces suppressed its activation in exactly that
+        // case, and "I was selecting the name" is the one way opening a
+        // workspace here can surprise someone. A stale selection cannot block
+        // the shortcut: mousedown collapses it before this ever runs.
         const picked = getSelection();
         if (intentBlocked || (picked && !picked.isCollapsed && picked.containsNode(e.currentTarget as Node, true))) return;
-        // A unified peer has one action, so the card shortcut is that same one
-        // action rather than a picker the card no longer shows.
-        if (unifiedPeer) { openWorkspace(p.id); return; }
-        const input = document.getElementById(`pick-${p.id}`) as HTMLInputElement | null;
-        // Native label activation focuses its control before opening the picker.
-        // Preserve that continuation point for pointer/keyboard mixed use without
-        // letting a clipped 1px input scroll the page.
-        input?.focus({ preventScroll: true, focusVisible: false });
-        input?.click();
-      }}
+        // One peer, one action. This used to fork — open the workspace, or focus
+        // and click the hidden file input of the pre-link card. That input no
+        // longer exists, and a pointer shortcut to a control that is not on the
+        // card is how a tap becomes a no-op nobody can explain.
+        openWorkspace(p.id);
+      } : undefined}
     >
       <span class="pavatar" class:big={solo}>{p.name.slice(0, 1).toUpperCase()}</span>
       <span class="ptext">
@@ -2207,18 +2053,21 @@
                the one action looking like it only sends files. -->
           <span class="pname" id={`peer-target-${p.id}`}>{solo ? t.workspace.openWith(p.name) : p.name}</span>
           <span class="pick">{t.workspace.openHint}</span>
-        {:else if solo}
-          <span class="pname" id={`peer-target-${p.id}`}>{t.pickSendTo(p.name)}</span>
         {:else}
+          <!-- Deliberately just the name. "Click or drop files to send to X" and
+               "Click to choose files · or drop them here" are promises this card
+               cannot keep for this peer, and a lead that keeps making them is
+               worse than a plain label: what follows is silence. What this peer's
+               state IS gets said once, below, where an action would have been. -->
           <span class="pname" id={`peer-target-${p.id}`}>{p.name}</span>
-          <span class="pick">{t.pickHint(MAX_FILES)}</span>
         {/if}
       </span>
     </div>
-    <!-- 这三个动作共用全局 .btn 原语（其中两个是包着隐藏 file input 的 <label>，
-         :disabled 对 label 不生效，所以停用态走 .is-disabled）。以前它们是本组件
-         里自成一套的 .act-btn：透明底 + --border 描边，在暗色下边框只有 1.36:1，
-         等于看不见。 -->
+    <!-- 一个动作，或者一句话。这里以前是三个并排动作（文件 / 文件夹 / 消息），
+         其中两个是包着隐藏 file input 的表单标签；现在能被连上的对端只有"打开工作区"
+         这一个按钮，连不上的对端一个控件都没有。按钮沿用全局 .btn 原语——本组件曾经
+         自成一套 .act-btn：透明底 + --border 描边，在暗色下边框只有 1.36:1，等于
+         看不见。 -->
     <div class="peer-actions">
       {#if unifiedPeer}
       <!-- ONE action. Files, folders and messages are all inside the workspace it
@@ -2231,26 +2080,15 @@
         <span class="pa-icon" aria-hidden="true"><Icon name="message" /></span><span class="pa-label">{t.workspace.open}</span>
       </button>
       {:else}
-      <label class="btn btn-secondary btn-sm pa-files" class:is-disabled={intentBlocked}>
-        <span class="pa-icon" aria-hidden="true"><Icon name="file" /></span><span class="pa-label" id={`send-file-label-${p.id}`}>{t.sendFile}</span>
-        <input class="file-pick-input" id={`pick-${p.id}`} type="file" multiple disabled={intentBlocked}
-          aria-labelledby={`send-file-label-${p.id}`}
-          aria-describedby={`peer-target-${p.id}`}
-          onclick={(e) => { if (liveLinkFor(p.id)) { e.preventDefault(); workspace.sendFiles(p.id, drainFor(p.id)); } }}
-          onchange={(e) => pickFile(e, p.id)} />
-      </label>
-      {#if folderUploadSupported}
-        <label class="btn btn-secondary btn-sm" class:is-disabled={intentBlocked}>
-          <span class="pa-icon" aria-hidden="true"><Icon name="folder" /></span><span class="pa-label">{t.sendFolder}</span>
-          <input class="file-pick-input" type="file" webkitdirectory multiple disabled={intentBlocked} onchange={(e) => pickFile(e, p.id)} />
-        </label>
-      {/if}
-      {#if workspace.routes(p.id) || peerSupportsText(p.id)}
-        <button type="button" class="btn btn-secondary btn-sm" disabled={intentBlocked}
-          onclick={() => { textCompose = ""; void workspace.openText(p.id); }}>
-          <span class="pa-icon" aria-hidden="true"><Icon name="message" /></span><span class="pa-label">{t.text.open}</span>
-        </button>
-      {/if}
+      <!-- No controls, and no DISABLED control either. A greyed-out Send says
+           "not now"; the truth is "not this device", and those are different
+           answers to "should I wait?". A `<p>`, not a button: there is nothing
+           for the user to do to THIS peer here, so a focus stop leading nowhere
+           would be a keyboard detour with no destination — and not
+           `aria-disabled` either, because this is not a control in any state.
+           The statement names the device in words, so it borrows no accessible
+           name from the card. -->
+      <p class="pa-unsupported">{t.peerUnsupported}</p>
       {/if}
     </div>
   </li>
@@ -2260,7 +2098,7 @@
   {@const solo = visiblePeers.length === 1}
   {@const revealFile = [send, recv].find((x) => x && !x.done && workspace.sasCode)}
   {@const mixed = workspace.usingMixed}
-  {@const hasActivity = !!pendingPeer || !!incoming || !!send || !!recv || activeText.status !== "idle" || mixed
+  {@const hasActivity = !!pendingPeer || !!incoming || !!send || !!recv || surfaceText.status !== "idle" || mixed
     || storedReceiver.status !== "idle"}
   <!-- This live node exists before an event occurs; mounting a live region and
        its message in the same update is not announced reliably. Protected text
@@ -2269,10 +2107,11 @@
 
   <!-- One authenticated link, one trust header. Peer name, link state, the single
        path label, the single SAS and the explicit Disconnect live here and only
-       here; every lane card below deliberately renders none of them again. Legacy
-       peers (workspace.usingMixed === false) keep their untouched per-surface
-       chrome — that is now the path for exactly one thing: a peer that does not
-       speak link/1, in either kind of room. -->
+       here; every lane card below deliberately renders none of them again. The
+       `!mixed` branches below are what a page shows before a workspace exists —
+       they are no longer a second peer's second transport, because there is not
+       one. See the residual note in the checkpoint: their reachability now
+       depends only on link lifecycle, not on peer capability. -->
   {#if mixed}
     <WorkspaceHeader
       peerName={nameOf(workspace.linkPeerId)}
@@ -2305,7 +2144,7 @@
       <!-- Two sentences, not one: who is asking, and what to do before saying
            yes. Gated on `shownSas` rather than on the preference, because that
            is exactly "a code is on screen right now" — in the workspace header
-           above, or in the legacy card below. Telling someone to compare a code
+           above, or in the pending card below. Telling someone to compare a code
            they cannot see would be worse than saying nothing. Naming the
            comparison is the whole point of the stop; "a device wants to receive
            — [Send]" is a prompt with no stated way to answer it correctly. -->
@@ -2374,7 +2213,7 @@
           <li><span class="fname">{f.name}</span><span class="fsize">{formatSize(f.size)}</span></li>
         {/each}
       </ul>
-      <!-- Legacy surface. The verification box is shown only when the preference
+      <!-- Pre-workspace surface. The verification box is shown only when the preference
            is on, but the reveal anchor is NOT optional: without it a consent
            card arriving below the fold would never be scrolled into view. The
            anchor keeps the box's position either way. -->
@@ -2427,7 +2266,7 @@
         <p class="ui-callout quota-note">{relayFailNote(t, relayStatus)}</p>
       {/if}
       <!-- Same rule for the path badge: one link, one path label, and it is in the
-           header. Legacy keeps its per-direction badge. -->
+           header. The pre-workspace surface keeps its per-direction badge. -->
       {#if !xf.done}
         {@const path = mixed ? undefined : xf.dir === "send" ? workspace.sendPath : workspace.recvPath}
         <!-- Named by the card's own heading ("Sending to Alice"): a bare
@@ -2448,7 +2287,8 @@
 
   <!-- Picking more files during a transfer queues instead of disabling the file
        control, so that queue has to be visible and cancellable rather than an
-       invisible backlog. Mixed links only: the legacy path has no queue. -->
+       invisible backlog. Only a mixed link has one; there is nothing else that
+       could hold a batch. -->
   {#if mixed && workspace.queuedBatches.length}
     <QueuedBatches
       batches={workspace.queuedBatches}
@@ -2462,9 +2302,9 @@
        in the panel (`unified`). It therefore renders for a mixed link even while
        the text lane is still idle — the link exists, so its composer and its
        attachment controls are what should be on the screen.
-       Every prop below is opt-in on the panel side; the legacy branch passes
-       `unified={false}` and behaves exactly as before. -->
-  {#if mixed || activeText.status !== "idle"}
+       Every prop below is opt-in on the panel side; a conversation that is not
+       (yet) inside a workspace passes `unified={false}`. -->
+  {#if mixed || surfaceText.status !== "idle"}
     <!-- Remounted once per torn-down link, so no draft crosses from one
          authenticated link into the next. See linkEpoch for why this is not the
          link identity: that advances at establishment, which is mid-compose. -->
@@ -2499,8 +2339,8 @@
        per-peer file/folder/message controls and the message-availability hint all
        describe a device you have NOT connected to yet — leaving them up next to a
        live workspace offers a second, contradictory way to start one. Disconnect
-       brings this whole section straight back. Legacy peers and every pairing
-       room never take this branch. -->
+       brings this whole section straight back. A peer this page cannot reach at
+       all never takes this branch. -->
   <!-- `showsPeerRoster` is the second half of the sibling boundary. LAN keeps
        its section unconditionally — the empty state IS its answer, and the
        scanning signal lives inside it. Cross-network keeps it only while the
@@ -2966,8 +2806,12 @@
   /* Cross is already constrained by its 720px page card and benefits from using
      the full 672px inner measure; LAN keeps the Batch-3 560px action measure. */
   .peers.cross ul { max-inline-size: none; }
-  /* A single connected peer (typical cross-network) reads as one prominent send target. */
-  .peers ul.solo .peer { border-style: solid; border-color: var(--accent-border); background: var(--accent-bg); }
+  /* A single connected peer (typical cross-network) reads as one prominent send
+     target — which is a claim, so it is withheld from a peer that is not one.
+     `:not(.unreachable)`: the accent fill here is the SAME treatment the hover
+     rule below applies, so leaving it on a terminal-unsupported solo peer would
+     paint the card permanently in its own "you are about to act on this" state. */
+  .peers ul.solo .peer:not(.unreachable) { border-style: solid; border-color: var(--accent-border); background: var(--accent-bg); }
   .peers ul.solo .peer .pcard { justify-content: center; padding: 20px; }
   /* --control-border, not --border: the peer card is an interactive drop/pick
      target, so its dashed outline is a control boundary and has to clear 3:1. */
@@ -2976,10 +2820,21 @@
     border: 1.5px dashed var(--control-border); border-radius: 14px;
     transition: border-color .15s, background .15s;
   }
-  .peer:not(.disabled):hover, .peer:global(.drag) { border-color: var(--accent-border); background: var(--accent-bg); }
+  /* Hover-as-affordance, and therefore only for a card that HAS one. A terminal
+     unsupported peer is excluded rather than merely unhandled: it used to light
+     up on hover exactly like a reachable peer and carry `cursor: pointer`, so it
+     advertised a click it could never answer. `.drag` needs no such exclusion —
+     the dragover handler only sets it when the peer routes. */
+  .peer:not(.disabled):not(.unreachable):hover, .peer:global(.drag) { border-color: var(--accent-border); background: var(--accent-bg); }
   .peer.disabled { opacity: .5; }
   .peer .pcard { display: flex; align-items: center; gap: 14px; padding: 14px 16px; cursor: pointer; }
   .peer.disabled .pcard { cursor: not-allowed; }
+  /* `default`, not `not-allowed`. `not-allowed` is the cursor for a control that
+     exists and is refusing; there is no control here at all, and the card is
+     ordinary text plus a statement. It is listed after `.disabled` on purpose —
+     a peer can be both unreachable and mid-intent, and "nothing to press" is the
+     truer of the two answers. */
+  .peer.unreachable .pcard { cursor: default; }
   .pavatar {
     flex: none; width: 40px; height: 40px; line-height: 40px; text-align: center;
     border-radius: 50%; color: #fff; font-weight: 600;
@@ -2998,8 +2853,15 @@
     margin-block: 0 10px; margin-inline: 12px;
   }
   .peer-actions > .btn { flex: 1 1 165px; min-block-size: 36px; }
-  .peer-actions > .pa-files { flex-basis: 100%; }
   .peer-actions .btn { gap: 6px; }
+  /* The terminal-unsupported statement. Full width and set in the body colour
+     rather than an error red: this is a fact about the other device, not a
+     failure the user caused or can retry. It is the card's whole remaining
+     content, so it must read as information and never as a pressable thing. */
+  .pa-unsupported {
+    flex-basis: 100%; margin: 0;
+    font-size: 0.9375rem; line-height: 1.5; color: var(--text);
+  }
   .pa-icon { flex: none; }
   .pa-label { min-inline-size: 0; overflow-wrap: anywhere; }
   /* The scoped desktop floor above is more specific than global .btn, so repeat
@@ -3064,7 +2926,13 @@
     50% { box-shadow: var(--shadow), 0 0 0 6px color-mix(in srgb, var(--accent) 0%, transparent); }
   }
   @media (prefers-reduced-motion: reduce) { .dropzone-inner { animation: none; } }
-  .peers ul.dragging .peer { border-color: var(--accent-border); background: var(--accent-bg); }
+  /* Every card lights up while a file is over the list — except one that will
+     refuse the drop. The per-card `ondragover` already withholds `.drag` from an
+     unreachable peer for exactly that reason ("an invitation taken back after
+     the user has already acted on it"); this list-level rule re-granted the
+     identical accent treatment to the same card, so the withholding above was
+     invisible in the one state it was written for. */
+  .peers ul.dragging .peer:not(.unreachable) { border-color: var(--accent-border); background: var(--accent-bg); }
 
   /* ?debug=1 connection diagnostics — fixed, unobtrusive, monospace. */
 </style>

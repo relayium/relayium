@@ -291,11 +291,34 @@ public final class LanDiscoveryModel: ObservableObject {
         // the build flag is the only thing that can turn it off.
         linkRoomActive: { linkRoomActive(isCodelessRoom: true) }
     )
-    private lazy var announcer = LinkCapabilityAnnouncer(
-        registry: capabilities,
-        linkRoomActive: { linkRoomActive(isCodelessRoom: true) },
-        send: { [weak self] peerId, signal in self?.client?.sendSignal(to: peerId, data: signal) }
-    )
+    /// **What this client announces in the code-less room.**
+    ///
+    /// Injectable, and defaulted to `linkCapsHello` so every existing consumer —
+    /// the paused iOS composition, the headless acceptance hosts, every test
+    /// written before this seam — announces exactly what it announced before.
+    ///
+    /// macOS passes `linkOnlyCapsHello`. Its legacy file and text transports are
+    /// deleted and it refuses every legacy inbound session, so a hello naming
+    /// `text/1` would be a promise the app cannot keep: the peer would open a
+    /// lane this build has no surface, model or exit for. `AppEnvironment` is
+    /// where that is stated, once, for both room types.
+    public var localHello: (Bool) -> JSONValue = linkCapsHello(linkRoomActive:) {
+        didSet { announcerBox = nil }
+    }
+
+    private var announcerBox: LinkCapabilityAnnouncer?
+    private var announcer: LinkCapabilityAnnouncer {
+        if let announcerBox { return announcerBox }
+        let made = LinkCapabilityAnnouncer(
+            registry: capabilities,
+            linkRoomActive: { linkRoomActive(isCodelessRoom: true) },
+            send: { [weak self] peerId, signal in
+                self?.client?.sendSignal(to: peerId, data: signal)
+            },
+            hello: localHello)
+        announcerBox = made
+        return made
+    }
 
     public var selectedDevice: NearbyDevice? { devices.first { $0.id == selectedId } }
 

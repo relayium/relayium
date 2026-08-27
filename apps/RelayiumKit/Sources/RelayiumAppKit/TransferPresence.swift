@@ -133,6 +133,36 @@ public final class TransferPresence: ObservableObject {
             .eraseToAnyPublisher())
     }
 
+    /// **The macOS composition's liveness: one `link/1`, and the code that is
+    /// waiting for a peer to bring one.**
+    ///
+    /// A THIRD overload rather than a nil-legacy variant of the two above,
+    /// because those two are the paused iOS implementation's and must keep
+    /// answering exactly what they answer today. This one is added, not
+    /// substituted: neither existing overload changes, and nothing iOS
+    /// subscribes to is reachable from here.
+    ///
+    /// It still installs the ONE subscription `observeSessionLiveness` owns, so
+    /// "exactly one thing releases the surface" survives the macOS contraction
+    /// unchanged — a second observer would let a link's claim be dropped by
+    /// whichever publisher reported idle first.
+    ///
+    /// **The code is a liveness source and the link is not enough on its own.**
+    /// A creator sits with six digits on screen while `connection` is
+    /// `.watching` — work this module holds with nothing drawn for it — and,
+    /// before the room is even joined, in `.minting` while `connection` is still
+    /// `.idle`. A link-only publisher would report idle through both and release
+    /// the surface under a code the user is reading out loud. That is the same
+    /// rule `TransferModule.retainsWork(code:link:)` states for every
+    /// surface-local release, asked here from the one app-scoped place, so the
+    /// observer and the views cannot disagree — which is exactly how they
+    /// disagreed before the rule was written down once.
+    public func observeSessions(code: PairingCodeModel, link: LinkWorkspaceModel) {
+        observeSessionLiveness(Publishers.CombineLatest(code.$state, link.$connection)
+            .map { TransferModule.retainsWork(code: $0, link: $1) }
+            .eraseToAnyPublisher())
+    }
+
     /// Take, or keep, the right to present the session.
     ///
     /// Idempotent for the owner and refused for anyone else. The refusal leaves

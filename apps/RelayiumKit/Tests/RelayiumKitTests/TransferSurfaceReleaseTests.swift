@@ -172,7 +172,7 @@ final class TransferSurfaceReleaseTests: XCTestCase {
         }
 
         var link: LinkWorkspaceModel { module.link }
-        var files: RealtimeSessionModel { module.files }
+        var code: PairingCodeModel { module.code }
         var presence: TransferPresence { module.presence }
 
         /// The hub's own frames, on the room's socket.
@@ -211,6 +211,11 @@ final class TransferSurfaceReleaseTests: XCTestCase {
                 return socket
             },
             pairingRoomHandle: LinkRoomHandle(),
+            // **Exactly as `AppEnvironment.makeDirectLinkWorkspaceModel` builds
+            // the shipped one.** This whole file is about a macOS module's
+            // surface lifecycle, so a rig on the shared default would be
+            // exercising the paused iOS composition's behaviour instead.
+            legacyFallback: .terminateUnsupported,
             scheduler: scheduler,
             assemble: { signaling, peerId, role, servers, relayOnly, generation,
                         directory, admission, signal in
@@ -225,17 +230,8 @@ final class TransferSurfaceReleaseTests: XCTestCase {
                         { _ in throw LinkTransportError.notReady }
                     })
             })
-        let module = TransferModule(
-            route: .pairingCode,
-            files: RealtimeSessionModel(pairClient: pair, iceClient: StubICE(),
-                                        makeConnection: { _, _, _ in
-                                            throw NearbyError.notScanning
-                                        }),
-            text: RealtimeTextSessionModel(pairClient: pair, iceClient: StubICE(),
-                                           makeConnection: { _, _, _ in
-                                               throw NearbyError.notScanning
-                                           }),
-            link: link)
+        let module = TransferModule(route: .pairingCode, link: link,
+                                    code: PairingCodeModel(client: pair))
         let rig = Rig(module: module, pair: pair, ice: ice, scheduler: scheduler)
         box = rig
         // **The app's own wiring, verbatim.** `RelayiumApp` sets exactly this,
@@ -243,11 +239,13 @@ final class TransferSurfaceReleaseTests: XCTestCase {
         // transition the release rule has to survive.
         link.onPairingLinkActivated = { [weak module] in
             rig.handoffs += 1
-            module?.files.cancel()
+            module?.code.cancel()
         }
-        link.adoptLegacyRoom = { peerId, role, _, mode in
-            rig.adopted.append((peerId, role, mode))
-        }
+        // **`adoptLegacyRoom` is deliberately NOT set**, exactly as `RelayiumApp`
+        // no longer sets it. `rig.adopted` therefore stays empty for the life of
+        // every test here, which is the assertion rather than an omission: this
+        // module's link is built with `legacyFallback: .terminateUnsupported`,
+        // so there is no hand-over for a callback to receive.
         return rig
     }
 
@@ -260,10 +258,10 @@ final class TransferSurfaceReleaseTests: XCTestCase {
     /// then watch the room the code names.
     @discardableResult
     private func createCode(_ rig: Rig) async -> String {
-        XCTAssertTrue(rig.presence.beginSession(.pairingCode, mode: .files))
-        await rig.files.mintCode(token: "acceptance")
-        guard case let .showingCode(code, _) = rig.files.state else {
-            XCTFail("the legacy model did not reach a shown code: \(rig.files.state)")
+        XCTAssertTrue(rig.presence.beginSession(.pairingCode))
+        await rig.code.mint(token: "acceptance")
+        guard let code = rig.code.state.code else {
+            XCTFail("the code model did not reach a shown code: \(rig.code.state)")
             return ""
         }
         XCTAssertTrue(rig.link.watchPairingCode(code, legacyRole: .initiator),
@@ -353,7 +351,7 @@ final class TransferSurfaceReleaseTests: XCTestCase {
         // and the link has a peer.
         XCTAssertEqual(rig.handoffs, 1,
                        "the pairing room did not resolve to link/1")
-        XCTAssertEqual(rig.files.state, .idle,
+        XCTAssertEqual(rig.code.state, .idle,
                        "the code model was not retired, so this is not the handoff")
         XCTAssertTrue(rig.link.hasSession,
                       "the link published no session for the surface to keep")
@@ -454,10 +452,20 @@ final class TransferSurfaceReleaseTests: XCTestCase {
                       "the module cannot start a session after its link ended")
     }
 
-    /// The legacy fallback is untouched: a peer that does not announce `link/1`
-    /// still gets the room handed over, and the surface stays claimed for the
-    /// legacy session built on it.
-    func testALegacyPeerStillTakesTheRoomWithoutReleasingTheSurface() async {
+    /// **A peer that cannot link terminates the room, and the surface is still
+    /// released cleanly.**
+    ///
+    /// This test used to assert the opposite half of the same lifecycle: the
+    /// room was HANDED to a legacy session and the surface had to stay claimed
+    /// for the session it was handing over to. This module is built with
+    /// `legacyFallback: .terminateUnsupported` — exactly as `AppEnvironment`
+    /// builds the shipped one — so there is no hand-over and no session to hold
+    /// the surface for.
+    ///
+    /// What has to hold instead is that the refusal is complete: nothing is
+    /// adopted, the room's socket is closed, and the module can be released and
+    /// used again rather than being left owning a surface with no session on it.
+    func testAPeerThatCannotLinkTerminatesTheRoomAndFreesTheModule() async {
         let rig = makeRig()
         await createCode(rig)
 
@@ -466,13 +474,28 @@ final class TransferSurfaceReleaseTests: XCTestCase {
         rig.roster(["zzz-web"])
         await settle()
 
-        XCTAssertEqual(rig.adopted.count, 1, "the legacy peer was not handed the room")
-        XCTAssertEqual(rig.link.connection, .idle,
-                       "a handed-over room left the link holding the connection too")
-        XCTAssertNotNil(rig.link.handedOverPairing,
-                        "the handed-over rendezvous was not recorded")
+        XCTAssertTrue(rig.adopted.isEmpty,
+                      "the peer was handed a legacy session this build cannot compose")
+        XCTAssertTrue(rig.link.unsupportedPairingPeer,
+                      "the refusal was not published for the surface to state")
+        XCTAssertEqual(rig.link.connection, .idle)
+        XCTAssertNil(rig.link.handedOverPairing,
+                     "a rendezvous was recorded for a hand-over that never happened")
+        XCTAssertTrue(rig.channels[0].closed,
+                      "the refused room's socket was left open")
+
+        // The surface is still owned — the user is looking at a screen that has
+        // something to say — and releasing it is a normal, complete operation
+        // rather than one blocked by a room nobody closed.
         XCTAssertEqual(rig.presence.owner, .pairingCode,
-                       "the legacy fallback released the surface it was handing a session to")
+                       "the refusal blanked the surface that has to state it")
+        rig.module.cancelPairingCode()
+        await settle()
+        XCTAssertNil(rig.presence.owner, "the module could not be released after a refusal")
+        XCTAssertFalse(rig.link.unsupportedPairingPeer,
+                       "the refusal outlived the screen that showed it")
+        XCTAssertTrue(rig.module.acceptsNewSession,
+                      "a refused code left the module unable to start another")
     }
 
     // MARK: - 3. cancelling or expiring a creator's code
@@ -486,10 +509,10 @@ final class TransferSurfaceReleaseTests: XCTestCase {
         let rig = makeRig()
         let code = await createCode(rig)
 
-        rig.files.cancel()
+        rig.code.cancel()
         await settle()
 
-        XCTAssertEqual(rig.files.state, .idle)
+        XCTAssertEqual(rig.code.state, .idle)
         XCTAssertEqual(rig.link.connection, .watching(code: code),
                        "the watched room did not survive the lane's cancel, so this test "
                        + "no longer describes the defect it is about")
@@ -512,7 +535,7 @@ final class TransferSurfaceReleaseTests: XCTestCase {
         rig.module.cancelPairingCode()
         await settle()
 
-        XCTAssertEqual(rig.files.state, .idle, "the lane holding the code is still running")
+        XCTAssertEqual(rig.code.state, .idle, "the model holding the code is still showing it")
         XCTAssertEqual(rig.link.connection, .idle,
                        "the pairing room outlived the code it was opened for")
         XCTAssertTrue(rig.channels[0].closed,
@@ -557,10 +580,11 @@ final class TransferSurfaceReleaseTests: XCTestCase {
     /// so ending it is a no-op and the room is what actually goes.
     func testAJoinersCancelStillEndsOnlyTheWatchedRoom() async {
         let rig = makeRig()
-        XCTAssertTrue(rig.presence.beginSession(.pairingCode, mode: .files))
+        XCTAssertTrue(rig.presence.beginSession(.pairingCode))
         XCTAssertTrue(rig.link.watchPairingCode("771155", legacyRole: .responder))
         await settle()
-        XCTAssertEqual(rig.files.state, .idle, "a joiner's legacy lane starts idle")
+        XCTAssertEqual(rig.code.state, .idle,
+                       "a joiner that adopted no code starts with nothing shown")
 
         rig.module.cancelPairingCode()
         await settle()
@@ -620,20 +644,14 @@ final class TransferSurfaceReleaseTests: XCTestCase {
         let rig = makeRig()
         let nearby = TransferModule(
             route: .nearby,
-            files: RealtimeSessionModel(pairClient: StubPair(), iceClient: StubICE(),
-                                        makeConnection: { _, _, _ in
-                                            throw NearbyError.notScanning
-                                        }),
-            text: RealtimeTextSessionModel(pairClient: StubPair(), iceClient: StubICE(),
-                                           makeConnection: { _, _, _ in
-                                               throw NearbyError.notScanning
-                                           }),
             link: LinkWorkspaceModel(
                 capabilities: PeerCapabilityRegistry(linkRoomActive: { true }),
                 receiveDirectory: { self.directory },
                 requiresVerification: { false },
-                iceClient: nil))
-        XCTAssertTrue(nearby.presence.beginSession(.nearby, mode: .files, peerLabel: "Studio Mac"))
+                iceClient: nil,
+                legacyFallback: .terminateUnsupported),
+            code: PairingCodeModel(client: StubPair()))
+        XCTAssertTrue(nearby.presence.beginSession(.nearby, peerLabel: "Studio Mac"))
 
         await createCode(rig)
         rig.module.cancelPairingCode()
@@ -642,5 +660,240 @@ final class TransferSurfaceReleaseTests: XCTestCase {
         XCTAssertEqual(nearby.presence.owner, .nearby,
                        "cancelling a pairing code released the same-network surface")
         XCTAssertEqual(nearby.presence.sessionPeerLabel, "Studio Mac")
+    }
+}
+
+/// **A pairing code cannot outlive the room it names, and a failed mint cannot
+/// lock the screen.**
+///
+/// Both of these shipped as dead ends: a module that held its surface for ever,
+/// and six digits with a QR over a socket that was already closed. They are
+/// tested together because they are the same invariant from two directions —
+/// the code's lifetime is the room's lifetime, and neither may strand the
+/// surface.
+@MainActor
+final class TerminalPairingLifecycleTests: XCTestCase {
+
+    private final class StubPair: PairCodeClient, @unchecked Sendable {
+        var answer: MintedCode? = MintedCode(code: "483920", expiresAt: 4_102_444_800)
+        func mint(token: String) async throws -> MintedCode {
+            guard let answer else { throw AccountError.rateLimited }
+            return answer
+        }
+    }
+    private final class StubICE: ICEConfigClient, @unchecked Sendable {
+        var config: ICEConfig? = ICEConfig(iceServers: [], relays: [])
+        func fetch(code: String) async throws -> ICEConfig {
+            guard let config else { throw AccountError.network }
+            return config
+        }
+    }
+
+    private var directory: URL!
+    override func setUpWithError() throws {
+        directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("terminal-pairing-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+    override func tearDownWithError() throws { try? FileManager.default.removeItem(at: directory) }
+
+    /// Sockets are opened by `watchPairingCode`, which runs long after the rig
+    /// is built — so the channels are read through a reference rather than
+    /// copied into a struct that would forever hold the empty list.
+    private final class Sockets { var channels: [FakeWebSocketChannel] = [] }
+
+    private struct Rig {
+        let module: TransferModule
+        let code: PairingCodeModel
+        let link: LinkWorkspaceModel
+        let pair: StubPair
+        let ice: StubICE
+        let sockets: Sockets
+        var channels: [FakeWebSocketChannel] { sockets.channels }
+    }
+
+    /// The module wired exactly as `RelayiumApp` wires the Direct one — both
+    /// pairing callbacks included, because the whole point is that the terminal
+    /// one is no longer missing.
+    private func makeRig() -> Rig {
+        let pair = StubPair()
+        let ice = StubICE()
+        let directory = self.directory!
+        let box = Sockets()
+        let link = LinkWorkspaceModel(
+            capabilities: PeerCapabilityRegistry(linkRoomActive: { true }),
+            receiveDirectory: { directory },
+            requiresVerification: { false },
+            iceClient: ice,
+            connectPairingSocket: { _ in
+                let channel = FakeWebSocketChannel()
+                let socket = SignalingClient(channel: channel, name: "Mac")
+                channel.fireOpen()
+                box.channels.append(channel)
+                return socket
+            },
+            legacyFallback: .terminateUnsupported,
+            localHello: linkOnlyCapsHello(linkRoomActive:))
+        let code = PairingCodeModel(client: pair)
+        let module = TransferModule(route: .pairingCode, link: link, code: code)
+        link.onPairingLinkActivated = { [weak code] in code?.cancel() }
+        link.onPairingRoomRetired = { [weak code] in code?.cancel() }
+        return Rig(module: module, code: code, link: link, pair: pair, ice: ice,
+                   sockets: box)
+    }
+
+    private func settle(_ turns: Int = 14) async {
+        for _ in 0..<turns { await Task.yield() }
+    }
+
+    /// Everything `CrossNetworkConnectPane.createCode` + `PairingCodeStart`
+    /// do, in their order.
+    ///
+    /// Inlined rather than called: `PairingCodeStart` lives in the macOS app
+    /// target, which this package cannot import. The two steps are short and the
+    /// ORDER is what matters here — claim, mint, watch — so a copy that got them
+    /// wrong would fail these tests rather than hide behind them.
+    private func createCode(_ rig: Rig) async {
+        XCTAssertTrue(rig.module.presence.beginSession(.pairingCode))
+        await rig.code.mint(token: "acceptance")
+        if let minted = rig.code.state.code {
+            _ = rig.link.watchPairingCode(minted, legacyRole: .initiator,
+                                          files: [], sources: [])
+        }
+        await settle()
+    }
+
+    // MARK: - A. a failed mint
+
+    /// **A failed mint keeps its message and still lets the user try again.**
+    ///
+    /// `.failed` is active on purpose, so the reason survives the app-scoped
+    /// liveness observer. That is what held the surface — and with the surface
+    /// held, `acceptsNewSession` was false, which is what disabled Create AND
+    /// Join underneath the message. One failed mint made the screen permanently
+    /// unusable.
+    func testAFailedMintKeepsItsReasonAndStillLocksTheScreenUntilDismissed() async {
+        let rig = makeRig()
+        rig.pair.answer = nil
+
+        await createCode(rig)
+
+        guard case .failed = rig.code.state else {
+            return XCTFail("a refused mint did not report a failure: \(rig.code.state)")
+        }
+        // The message survives, which is why the surface is still held.
+        XCTAssertTrue(rig.module.retainsWork)
+        XCTAssertEqual(rig.module.presence.owner, .pairingCode)
+        XCTAssertFalse(rig.module.acceptsNewSession,
+                       "this is the state the screen is locked in; if it is not "
+                       + "reachable the recovery below is testing nothing")
+    }
+
+    /// …and dismissing is the recovery: idle code, idle link, released surface,
+    /// and the next mint or join is permitted.
+    func testDismissingAFailedMintFullyReleasesTheModule() async {
+        let rig = makeRig()
+        rig.pair.answer = nil
+        await createCode(rig)
+
+        rig.module.cancelPairingCode()
+        await settle()
+
+        XCTAssertEqual(rig.code.state, .idle, "the failure outlived its dismissal")
+        XCTAssertEqual(rig.link.connection, .idle)
+        XCTAssertNil(rig.module.presence.owner,
+                     "a dismissed failure kept the surface, so the screen stays locked")
+        XCTAssertFalse(rig.module.retainsWork)
+        XCTAssertTrue(rig.module.acceptsNewSession,
+                      "Create and Join are still disabled after the failure was dismissed")
+
+        // And the next attempt really works.
+        rig.pair.answer = MintedCode(code: "517341", expiresAt: 4_102_444_800)
+        await createCode(rig)
+        XCTAssertEqual(rig.code.state.code, "517341",
+                       "the module could not mint again after recovering")
+    }
+
+    // MARK: - B. a room that ends without a link
+
+    /// **A peer that cannot speak `link/1` retires the code with the room.**
+    ///
+    /// The refusal is retained — the user is owed the reason — but the digits,
+    /// their QR and the "waiting for the other device" go, because the socket
+    /// they belonged to is closed.
+    func testAnUnsupportedPeerRetiresTheCodeButKeepsTheWarning() async {
+        let rig = makeRig()
+        await createCode(rig)
+        XCTAssertEqual(rig.code.state.code, "483920", "the code was never shown")
+
+        rig.channels[0].fire(Envelope(type: SignalType.welcome, name: "aaa-mac"))
+        rig.channels[0].fire(Envelope(type: SignalType.signal, from: "zzz-web",
+                                      data: capsField([TEXT_CAPABILITY])))
+        rig.channels[0].fire(Envelope(type: SignalType.peers,
+                                      peers: [Peer(id: "zzz-web", name: "peer")]))
+        await settle()
+
+        XCTAssertTrue(rig.link.unsupportedPairingPeer,
+                      "the reason the code stopped is not on screen")
+        XCTAssertEqual(rig.code.state, .idle,
+                       "the digits and their QR outlived the room they named, over a "
+                       + "closed socket, under a wait that would never end")
+        XCTAssertEqual(rig.link.connection, .idle)
+        XCTAssertTrue(rig.channels[0].closed)
+    }
+
+    /// A code the hub will not resolve ends the same way: the ending is shown,
+    /// the digits are not.
+    func testACodeThatCannotBeJoinedRetiresItsDigits() async {
+        let rig = makeRig()
+        rig.ice.config = nil
+
+        await createCode(rig)
+        await settle()
+
+        XCTAssertEqual(rig.link.connection, .ended(.roomUnavailable),
+                       "the unresolvable code did not reach its own ending")
+        XCTAssertEqual(rig.code.state, .idle,
+                       "a code the hub refused is still being offered")
+    }
+
+    /// …and Done on that ending returns the module completely, so the next
+    /// attempt is permitted.
+    func testDoneOnAnUnjoinableCodeReleasesTheModule() async {
+        let rig = makeRig()
+        rig.ice.config = nil
+        await createCode(rig)
+        await settle()
+
+        rig.link.dismiss()
+        await settle()
+
+        XCTAssertEqual(rig.link.connection, .idle)
+        XCTAssertNil(rig.module.presence.owner,
+                     "dismissing an unjoinable code kept the surface claimed")
+        XCTAssertTrue(rig.module.acceptsNewSession)
+    }
+
+    /// **The success path is unchanged**, and this is the control: a code that
+    /// reaches a real `link/1` is retired by the activation callback, not by the
+    /// retirement one, and the link keeps its session.
+    func testASuccessfulLinkStillRetiresTheCodeAndKeepsItsSession() async {
+        let rig = makeRig()
+        await createCode(rig)
+
+        rig.channels[0].fire(Envelope(type: SignalType.welcome, name: "aaa-mac"))
+        rig.channels[0].fire(Envelope(type: SignalType.signal, from: "zzz-web",
+                                      data: capsField([TEXT_CAPABILITY, LINK_CAPABILITY])))
+        rig.channels[0].fire(Envelope(type: SignalType.peers,
+                                      peers: [Peer(id: "zzz-web", name: "peer")]))
+        await settle()
+
+        XCTAssertEqual(rig.code.state, .idle, "a spent code stayed on screen")
+        XCTAssertFalse(rig.link.unsupportedPairingPeer,
+                       "a link/1 peer was reported as unsupported")
+        XCTAssertTrue(rig.link.hasSession,
+                      "the code was retired but no link took its place")
+        XCTAssertEqual(rig.module.presence.owner, .pairingCode,
+                       "retiring the code released the surface under a live link")
     }
 }

@@ -62,12 +62,43 @@ public final class AppDeepLinkCoordinator: ObservableObject {
     /// public reader would be a second way to learn a decryption key.
     @Published private(set) var waiting: AppDeepLink?
 
+    /// **Where a pairing code from a link is written, and what has to be quiet
+    /// before writing it.**
+    ///
+    /// A seam rather than a stored pair of models, because the two platforms
+    /// keep the join field in different places and neither should have to know
+    /// about the other's. iOS still types into the two legacy models — its
+    /// pairing surface is still theirs — and macOS types into a
+    /// `PairingCodeModel`, because its legacy transports are deleted and the
+    /// field moved with the code.
+    ///
+    /// It is deliberately NOT an optional model or a platform `#if`: an
+    /// optional would make every call site unwrap something that is always
+    /// present on the platform it runs on, and a conditional would put the
+    /// decision here instead of at the composition that actually knows.
+    private struct CodeSink {
+        /// Write the code into whatever holds the join field.
+        let write: @MainActor (String) -> Void
+        /// Whether the thing that would carry the session is mid-transfer.
+        ///
+        /// **Empty for a link-only composition, and that is not a gap.** A
+        /// `PairingCodeModel` opens nothing, so it has no busy state to consult;
+        /// what would be unsafe to write over is a session, and on macOS a live
+        /// or retained one always owns its module's surface — which
+        /// `presence.owner` already answers, for both platforms, in the same
+        /// clause. The legacy pair contributes its own flags because a model can
+        /// be busy in the window before ownership is taken.
+        let isBusy: @MainActor () -> Bool
+        /// The busy BOUNDARIES to wake on. Empty where `isBusy` is constant.
+        let busyChanges: [AnyPublisher<Bool, Never>]
+        /// Select files-or-text, for a legacy link that names one.
+        let selectMode: @MainActor (TransferMode) -> Void
+    }
+
     private let navigation: AppNavigationModel
     private let download: CloudDownloadModel
-    private let realtime: RealtimeSessionModel
-    private let realtimeText: RealtimeTextSessionModel
+    private let code: CodeSink
     private let presence: TransferPresence
-    private let selectRealtimeMode: @MainActor (TransferMode) -> Void
     /// Live only while a link is waiting, and — see `watchForIdle` — subscribed
     /// to the busy BOUNDARIES rather than to every publish. Both halves matter:
     /// this way a waiting link costs a handful of wake-ups for the whole
@@ -75,6 +106,13 @@ public final class AppDeepLinkCoordinator: ObservableObject {
     /// nothing at all.
     private var watch: Set<AnyCancellable> = []
 
+    /// **The composition that still has the two legacy lanes.** iOS, and every
+    /// existing caller.
+    ///
+    /// Unchanged in signature and in behaviour: it builds the seam above from
+    /// exactly the models it always held, and every rule below reads the seam
+    /// rather than the models, so the answers are the ones this initializer
+    /// always produced.
     public init(navigation: AppNavigationModel,
                 download: CloudDownloadModel,
                 realtime: RealtimeSessionModel,
@@ -83,10 +121,46 @@ public final class AppDeepLinkCoordinator: ObservableObject {
                 selectRealtimeMode: @escaping @MainActor (TransferMode) -> Void) {
         self.navigation = navigation
         self.download = download
-        self.realtime = realtime
-        self.realtimeText = realtimeText
         self.presence = presence
-        self.selectRealtimeMode = selectRealtimeMode
+        self.code = CodeSink(
+            write: { typed in
+                // BOTH, even though only one of them will end up carrying the
+                // session. A legacy URL does not say whether the sender chose
+                // files or text, so the two fields have to stay in step.
+                realtime.updateJoinCode(typed)
+                realtimeText.updateJoinCode(typed)
+            },
+            isBusy: { realtime.isBusy || realtimeText.isBusy },
+            busyChanges: [realtime.busyChanges, realtimeText.busyChanges],
+            selectMode: selectRealtimeMode)
+    }
+
+    /// **The composition whose only transport is `link/1`.** macOS.
+    ///
+    /// A pairing code is held by a `PairingCodeModel` there, because the legacy
+    /// transports that used to hold it are deleted — so there is one field to
+    /// write and no lane to select.
+    ///
+    /// **No `selectRealtimeMode`, and that is the product decision rather than
+    /// an omission.** `AppDeepLink.realtimeWithMode` is a link shape older
+    /// senders still emit, and its `mode` names which of two legacy signalling
+    /// generations to use. This composition has neither, and one `link/1`
+    /// carries both lanes — so the code is honoured and the lane hint is
+    /// ignored, which is exactly what a peer on this build would do with it
+    /// anyway. Dropping the code as well would break a working link over a
+    /// field that no longer means anything.
+    public init(navigation: AppNavigationModel,
+                download: CloudDownloadModel,
+                pairingCode: PairingCodeModel,
+                presence: TransferPresence) {
+        self.navigation = navigation
+        self.download = download
+        self.presence = presence
+        self.code = CodeSink(
+            write: { [weak pairingCode] typed in pairingCode?.updateJoinCode(typed) },
+            isBusy: { false },
+            busyChanges: [],
+            selectMode: { _ in })
     }
 
     /// One link from the OS: navigate now, write to the models now or later.
@@ -148,18 +222,16 @@ public final class AppDeepLinkCoordinator: ObservableObject {
         switch link {
         case .download:
             return !download.isBusy
-        case let .realtime(code):
-            guard code != nil else { return true }
-            // BOTH, even though only one of them will end up carrying the
-            // session. A legacy URL does not say whether the sender chose files
-            // or text, so the two fields have to stay in step — and prefilling the
-            // idle half while the other half is mid-session would leave the two
-            // pickers disagreeing about which code this device is joining. The
-            // owner closes the earlier gap: a surface is claimed synchronously,
-            // before its task has moved either model out of idle.
-            return presence.owner == nil && !realtime.isBusy && !realtimeText.isBusy
+        case let .realtime(typed):
+            guard typed != nil else { return true }
+            // Ownership plus whatever the composition's own field can be busy
+            // with — see `CodeSink.isBusy`. The owner closes the earlier gap: a
+            // surface is claimed synchronously, before any task has moved a
+            // model out of idle, so a code cannot be prefilled under a session
+            // that is starting.
+            return presence.owner == nil && !code.isBusy()
         case .realtimeWithMode:
-            return presence.owner == nil && !realtime.isBusy && !realtimeText.isBusy
+            return presence.owner == nil && !code.isBusy()
         }
     }
 
@@ -170,19 +242,15 @@ public final class AppDeepLinkCoordinator: ObservableObject {
             // Metadata and the encrypted manifest only. Nothing is written to
             // disk until the user chooses to save.
             download.resolve()
-        case let .realtime(code):
+        case let .realtime(typed):
             // A code-less link is FULLY handled by the selection its delivery
             // already made — which is why `canApply` calls it safe rather than
             // queueing it behind a live session. There is nothing to write here
             // and nothing left to wait for.
-            if let code {
-                realtime.updateJoinCode(code)
-                realtimeText.updateJoinCode(code)
-            }
-        case let .realtimeWithMode(code, mode):
-            selectRealtimeMode(mode)
-            realtime.updateJoinCode(code)
-            realtimeText.updateJoinCode(code)
+            if let typed { code.write(typed) }
+        case let .realtimeWithMode(typed, mode):
+            code.selectMode(mode)
+            code.write(typed)
         }
     }
 
@@ -212,10 +280,7 @@ public final class AppDeepLinkCoordinator: ObservableObject {
     /// duplicates, so what arrives here is the boundaries themselves.
     private func watchForIdle() {
         guard watch.isEmpty else { return }
-        for edges in [download.busyChanges,
-                      realtime.busyChanges,
-                      realtimeText.busyChanges,
-                      presence.ownershipChanges] {
+        for edges in [download.busyChanges] + code.busyChanges + [presence.ownershipChanges] {
             // The edge's VALUE is deliberately ignored. Acting only on a falling
             // one would save a wake-up per transfer start and cost the property
             // that makes this safe: every edge re-asks `canApply`, which is the

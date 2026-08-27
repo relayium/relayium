@@ -137,7 +137,12 @@ final class LinkWorkspaceModelTests: XCTestCase {
 
     private func rig(requiresVerification: Bool = false,
                      selfId: String = "aaa",
-                     roomActive: Bool = true) -> Rig {
+                     roomActive: Bool = true,
+                     // Defaulted to the SHARED default, so every test written
+                     // before this seam still drives the behaviour it was
+                     // written for — and a flipped default fails rather than
+                     // quietly re-scoping the whole file.
+                     pendingMessages: LinkPendingMessagePolicy = .replaceWaiting) -> Rig {
         let capabilities = PeerCapabilityRegistry(linkRoomActive: { roomActive })
         let channel = FakeWebSocketChannel()
         let signaling = SignalingClient(channel: channel, name: "self")
@@ -151,6 +156,7 @@ final class LinkWorkspaceModelTests: XCTestCase {
             receiveDirectory: { dir },
             requiresVerification: { requiresVerification },
             iceClient: nil,
+            pendingMessages: pendingMessages,
             assemble: { signaling, peerId, role, iceServers, relayOnly, generation,
                         receiveDirectory, admission, initialSignal in
                 let transport = WorkspaceTransport()
@@ -453,8 +459,10 @@ final class LinkWorkspaceModelTests: XCTestCase {
         rig.transports[0].onFrame?(.text, [RealtimeControl.reject.rawValue])
         await settle()
 
-        XCTAssertEqual(rig.model.takeReturnedDraft(), "please take this")
-        XCTAssertNil(rig.model.takeReturnedDraft(), "handed back exactly once")
+        XCTAssertEqual(rig.model.returnedDraft, "please take this")
+        XCTAssertTrue(rig.model.restoreReturnedDraft(), "the refusal handed nothing back")
+        XCTAssertEqual(rig.model.draft, "please take this")
+        XCTAssertNil(rig.model.returnedDraft, "handed back exactly once")
         XCTAssertNotNil(rig.model.actionError)
     }
 
@@ -564,7 +572,10 @@ final class LinkWorkspaceModelTests: XCTestCase {
         rig.model.leave()
         await settle()
 
-        XCTAssertEqual(rig.model.takeReturnedDraft(), "unsent")
+        XCTAssertEqual(rig.model.returnedDraft, "unsent")
+        XCTAssertTrue(rig.model.restoreReturnedDraft())
+        XCTAssertEqual(rig.model.draft, "unsent",
+                       "a message the lane never took did not reach the composer")
     }
 
     // MARK: - 4. signalling loss
@@ -1246,5 +1257,377 @@ final class LinkWorkspaceModelTests: XCTestCase {
         //    fault invisible for as long as it was: the pane had no reason to
         //    rebuild until something ENDED the link.
         XCTAssertTrue(rig.model.connection.isOpen)
+    }
+}
+
+// MARK: - the composer's text, and who owns it
+
+extension LinkWorkspaceModelTests {
+
+    /// **The draft belongs to the link, not to a view.**
+    ///
+    /// macOS keeps running with its window closed, so the pane is torn down and
+    /// rebuilt while the link survives. A view-local draft vanished on every
+    /// close/reopen with the connection still up, and the quit guard could not
+    /// see it either — ⌘Q with a draft and no transcript warned about nothing
+    /// and discarded it.
+    ///
+    /// Reconstruction is modelled as what it is: the view goes away and the
+    /// model does not.
+    func testADraftSurvivesTheViewThatWasTypingIt() async {
+        let rig = rig()
+        _ = await openLink(rig)
+
+        rig.model.draft = "half a sentence"
+        // The pane is rebuilt: nothing about that touches the model.
+        XCTAssertEqual(rig.model.draft, "half a sentence",
+                       "the draft was lost with the view that held it")
+        XCTAssertTrue(rig.model.holdsLocalText,
+                      "a draft alone is not reported as local text, so ⌘Q would "
+                      + "discard it without warning")
+    }
+
+    /// Whitespace is not content, so an accidental newline does not turn a
+    /// hangup into a dialog.
+    func testWhitespaceAloneIsNotLocalText() async {
+        let rig = rig()
+        _ = await openLink(rig)
+        rig.model.draft = "   \n  "
+        XCTAssertFalse(rig.model.holdsLocalText)
+    }
+
+    /// **A confirmed destructive leave actually discards.**
+    ///
+    /// `leave()` keeps the projections on purpose, so the ended page still held
+    /// the conversation — the confirmation's promise was untrue, and the Done on
+    /// that page met the same predicate and asked a second time. One
+    /// confirmation, one discard.
+    func testAConfirmedLeaveDiscardsTheLocalTextItWarnedAbout() async {
+        let rig = rig()
+        let transport = await openLink(rig)
+        rig.model.draft = "unsent"
+        // A message still waiting for the peer to accept is local text too: it
+        // is in the model rather than on the wire, and a teardown loses it.
+        rig.model.send(message: "also unsent")
+        await settle()
+        XCTAssertTrue(rig.model.holdsLocalText, "there is nothing at risk to discard")
+
+        rig.model.leaveDiscardingLocalText()
+        await settle()
+
+        XCTAssertEqual(rig.model.draft, "", "the confirmed discard kept the draft")
+        XCTAssertNil(rig.model.textModel,
+                     "the confirmed discard kept the transcript it warned about")
+        XCTAssertFalse(rig.model.holdsLocalText,
+                       "the terminal page still holds local text, so Done asks again")
+        guard case .ended = rig.model.connection else {
+            return XCTFail("the confirmed discard did not end the link")
+        }
+    }
+
+    /// …and the file results survive it. A terminal batch's result is not the
+    /// local text anybody was warned about, and discarding it would be a second
+    /// unannounced loss in the other direction.
+    func testAConfirmedLeaveKeepsTerminalFileResults() async {
+        let rig = rig()
+        _ = await openLink(rig)
+        XCTAssertNotNil(rig.model.fileModel)
+
+        rig.model.leaveDiscardingLocalText()
+        await settle()
+
+        XCTAssertNotNil(rig.model.fileModel,
+                        "the confirmed text discard also threw away the file results")
+    }
+
+    /// An ordinary leave with nothing at risk keeps the transcript projection as
+    /// it always did — this is the control that stops the discard from being
+    /// applied to every exit.
+    func testAnOrdinaryLeaveKeepsTheProjectionsItAlwaysKept() async {
+        let rig = rig()
+        _ = await openLink(rig)
+
+        rig.model.leave()
+        await settle()
+
+        XCTAssertNotNil(rig.model.textModel,
+                        "an unconfirmed leave discarded a projection nobody warned about")
+    }
+
+    // MARK: - one message waiting at a time
+
+    /// **A second Send cannot overwrite the first while it waits.**
+    ///
+    /// `pendingMessage` was assigned unconditionally, so a second Send while the
+    /// peer had not yet accepted the conversation replaced the first — gone,
+    /// with no error and no trace, and the composer already cleared for it.
+    func testASecondSendCannotOverwriteAMessageStillWaiting() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        // The first send opens the conversation and waits for the peer, which is
+        // the window a second send used to overwrite.
+        rig.model.send(message: "first")
+        await settle()
+        XCTAssertFalse(rig.model.canSendMessage,
+                       "the composer stays live while a message is already waiting")
+
+        XCTAssertFalse(rig.model.send(message: "second"),
+                       "a second send while one waits reported acceptance")
+
+        XCTAssertNotNil(rig.model.actionError,
+                        "the refused second send said nothing")
+        XCTAssertTrue(rig.model.isWaitingForConversation)
+    }
+
+    /// **A refused send reports refusal, so the composer can keep the words.**
+    ///
+    /// The view cleared its draft unconditionally after calling `send`, so every
+    /// refusal erased the text it was refusing. `send` returning the model's own
+    /// answer is what makes the composer's clear transactional rather than an
+    /// inference from having called it.
+    func testSendReportsWhetherItTookTheMessage() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+
+        XCTAssertTrue(rig.model.send(message: "first"), "an accepted send reported refusal")
+        await settle()
+        XCTAssertFalse(rig.model.canSendMessage,
+                       "the composer is still live for a press the model would refuse")
+        XCTAssertFalse(rig.model.send(message: "second"))
+
+        // …and it becomes sendable again once the first resolves. The peer
+        // refusing the conversation hands the first message back and frees the
+        // lane for another attempt.
+        rig.transports[0].onFrame?(.text, [RealtimeControl.reject.rawValue])
+        await settle()
+        XCTAssertEqual(rig.model.returnedDraft, "first",
+                       "the refused conversation did not hand the message back")
+        XCTAssertNotNil(rig.model.actionError, "a refusal with no explanation")
+        XCTAssertTrue(rig.model.canSendMessage,
+                      "the lane stayed blocked after the pending message resolved")
+    }
+
+    /// **A returned message is not consumed into a composer that is busy.**
+    ///
+    /// `takeReturnedDraft` cleared the model's copy and THEN checked whether the
+    /// composer was free, so a user who had started typing something new lost
+    /// the returned text entirely — out of the model, refused by the
+    /// destination, held by nobody.
+    func testAReturnedMessageIsNotConsumedIntoABusyComposer() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        rig.model.send(message: "held")
+        await settle()
+        rig.model.leave()
+        await settle()
+
+        XCTAssertEqual(rig.model.returnedDraft, "held",
+                       "a message the lane never took was not handed back")
+
+        // The user typed something else in the meantime.
+        rig.model.draft = "new words"
+        XCTAssertFalse(rig.model.restoreReturnedDraft(),
+                       "the returned message overwrote what the user was typing")
+        XCTAssertEqual(rig.model.draft, "new words")
+        XCTAssertEqual(rig.model.returnedDraft, "held",
+                       "the refused restore consumed the text anyway, losing it")
+
+        // …and it lands as soon as the composer is free again.
+        rig.model.draft = ""
+        XCTAssertTrue(rig.model.restoreReturnedDraft())
+        XCTAssertEqual(rig.model.draft, "held")
+        XCTAssertNil(rig.model.returnedDraft, "a landed message was not consumed")
+    }
+}
+
+
+// MARK: - the pending-message policy, and the returned draft
+
+extension LinkWorkspaceModelTests {
+
+    /// **The shared default still replaces**, which is what the paused iOS
+    /// composer needs.
+    ///
+    /// That composer gates Send on `canCompose`, ignores what `send` returns and
+    /// clears its own view-local draft either way. Refusing globally did not
+    /// protect it — it broke it: the second message was declined by the model
+    /// AND wiped by the view, a silent loss where there had been a visible
+    /// replacement. Asserted by NOT naming a policy, so a flipped default fails
+    /// here rather than reading as a test update.
+    func testTheDefaultPolicyStillReplacesAWaitingMessage() async {
+        let rig = rig()
+        _ = await openLink(rig)
+
+        XCTAssertTrue(rig.model.send(message: "first"))
+        await settle()
+        XCTAssertTrue(rig.model.canSendMessage,
+                      "the shared default stopped allowing a replacement")
+        XCTAssertTrue(rig.model.send(message: "second"),
+                      "the shared default refused, which the iOS composer cannot see")
+
+        // **A Bool is not the behaviour.** Reporting acceptance and then keeping
+        // the first message would satisfy every assertion above while silently
+        // dropping the second — so the replacement is proved by which message
+        // the lane hands back when the conversation is refused.
+        rig.transports[0].onFrame?(.text, [RealtimeControl.reject.rawValue])
+        await settle()
+        XCTAssertEqual(rig.model.returnedDraft, "second",
+                       "the shared default reported acceptance but kept the first "
+                       + "message, so the second was lost after all")
+    }
+
+    /// …and a composition that opted in refuses instead.
+    func testTheOptedInPolicyRefusesAWaitingMessage() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+
+        XCTAssertTrue(rig.model.send(message: "first"))
+        await settle()
+        XCTAssertFalse(rig.model.canSendMessage)
+        XCTAssertFalse(rig.model.send(message: "second"))
+    }
+
+    /// **A handed-back message is guarded and eventually lands.**
+    ///
+    /// It refuses to overwrite live text — correctly — but nothing retried, so
+    /// it sat in the model invisible and unreachable. And `holdsLocalText`
+    /// omitted it, so the one text nobody could see was also the one nobody
+    /// warned about before a quit or a Leave.
+    func testAReturnedMessageIsGuardedUntilTheComposerIsFree() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        rig.model.send(message: "first")
+        await settle()
+        rig.transports[0].onFrame?(.text, [RealtimeControl.reject.rawValue])
+        await settle()
+        XCTAssertEqual(rig.model.returnedDraft, "first")
+
+        // The user has typed something else in the meantime.
+        rig.model.draft = "second"
+        XCTAssertFalse(rig.model.restoreReturnedDraft(),
+                       "the returned message overwrote live text")
+        XCTAssertEqual(rig.model.returnedDraft, "first", "…and was consumed anyway")
+        // It is protected while it waits: a quit or a Leave must warn.
+        XCTAssertTrue(rig.model.holdsLocalText)
+
+        // Sending or clearing the second frees the composer, and it lands.
+        rig.model.draft = ""
+        XCTAssertTrue(rig.model.restoreReturnedDraft())
+        XCTAssertEqual(rig.model.draft, "first")
+        XCTAssertNil(rig.model.returnedDraft)
+    }
+
+    /// A returned message ALONE is still local text — the case where the
+    /// composer is empty and the transcript is empty, which is exactly when a
+    /// predicate that omitted it warned about nothing.
+    func testAReturnedMessageAloneIsLocalText() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        rig.model.send(message: "held")
+        await settle()
+        rig.transports[0].onFrame?(.text, [RealtimeControl.reject.rawValue])
+        await settle()
+
+        // Simulate a composer that is busy at the moment it is handed back, so
+        // the model keeps it rather than placing it.
+        rig.model.draft = "typing"
+        _ = rig.model.restoreReturnedDraft()
+        rig.model.draft = ""
+        // …and before the retry runs, it is already protected.
+        XCTAssertNotNil(rig.model.returnedDraft)
+        XCTAssertTrue(rig.model.holdsLocalText,
+                      "a handed-back message is invisible AND unguarded")
+    }
+
+    /// The confirmed discard clears it too, so a session cannot carry it away.
+    func testAConfirmedDiscardClearsTheReturnedMessage() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        rig.model.send(message: "held")
+        await settle()
+        rig.transports[0].onFrame?(.text, [RealtimeControl.reject.rawValue])
+        await settle()
+        rig.model.draft = "typing"
+        _ = rig.model.restoreReturnedDraft()
+        XCTAssertNotNil(rig.model.returnedDraft)
+
+        rig.model.leaveDiscardingLocalText()
+        await settle()
+
+        XCTAssertNil(rig.model.returnedDraft,
+                     "the confirmed discard left a handed-back message behind")
+        XCTAssertFalse(rig.model.holdsLocalText)
+    }
+}
+
+
+// MARK: - the confirmed discard, on a session that has already ended
+
+extension LinkWorkspaceModelTests {
+
+    /// **A handed-back message cannot survive the Done that promised to discard
+    /// it.**
+    ///
+    /// The pane's ended branch cleared the draft itself and then dismissed,
+    /// which missed `returnedDraft` entirely: a message the lane handed back
+    /// after a refusal outlived a user-CONFIRMED destructive Done and carried
+    /// into the next session, invisible and unasked for. Every holder goes
+    /// through the one model operation now.
+    func testAConfirmedDoneOnAnEndedSessionClearsEveryLocalTextHolder() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+
+        // A message waits, the peer refuses it, and the lane hands it back while
+        // the composer is busy — so the model keeps it rather than placing it.
+        rig.model.send(message: "held")
+        await settle()
+        rig.transports[0].onFrame?(.text, [RealtimeControl.reject.rawValue])
+        await settle()
+        rig.model.draft = "typing"
+        _ = rig.model.restoreReturnedDraft()
+        XCTAssertNotNil(rig.model.returnedDraft, "the setup did not reach the state at issue")
+
+        // Now the link ends, and the user confirms the destructive Done.
+        rig.model.leave()
+        await settle()
+        guard case .ended = rig.model.connection else {
+            return XCTFail("the session did not reach its terminal page")
+        }
+        XCTAssertTrue(rig.model.holdsLocalText,
+                      "the terminal page holds text but would not have warned")
+
+        rig.model.leaveDiscardingLocalText()
+        await settle()
+
+        XCTAssertNil(rig.model.returnedDraft,
+                     "a handed-back message survived the Done that discarded it")
+        XCTAssertEqual(rig.model.draft, "")
+        XCTAssertFalse(rig.model.holdsLocalText,
+                       "the next session would inherit text nobody asked to keep")
+        XCTAssertEqual(rig.model.connection, .idle,
+                       "the confirmed Done did not dismiss the ended session")
+        // Done has always cleared the result page it dismisses; that is what
+        // Done means, and it is unchanged here.
+        XCTAssertNil(rig.model.fileModel)
+        XCTAssertNil(rig.model.textModel)
+    }
+
+    /// The LIVE confirmed discard still keeps the file results, which is the
+    /// other half of the same rule and must not drift with the change above.
+    func testAConfirmedDiscardOnALiveLinkStillKeepsFileResults() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        rig.model.draft = "unsent"
+
+        rig.model.leaveDiscardingLocalText()
+        await settle()
+
+        XCTAssertEqual(rig.model.draft, "")
+        XCTAssertNil(rig.model.textModel, "the transcript it warned about survived")
+        XCTAssertNotNil(rig.model.fileModel,
+                        "the text discard also threw away the file results")
+        guard case .ended = rig.model.connection else {
+            return XCTFail("the confirmed discard did not end the live link")
+        }
     }
 }

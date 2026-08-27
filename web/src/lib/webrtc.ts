@@ -1,7 +1,17 @@
 // 建连的入口。传输那一层（offer/answer、ICE、DataChannel、状态机、拆除）在
 // webrtc-core.ts 的 establish()；本文件只留 relayium 自己的那一层：
-//   connect()       —— 首次建连，带 commit-then-reveal 密钥握手
-//   connectResume() —— 掉线重连，纯传输，另一个信令世代
+//   connectLink()       —— 首次建连一条 link/1，带 commit-then-reveal 密钥握手
+//   connectResumeLink() —— 掉线重连，纯传输，另一个信令世代
+//
+// 只剩这两个。原来还有单道文件、单道消息两个首次建连入口和它们共用的那个 resume，
+// 那是浏览器同时支持三种世代时的形状；现在浏览器只组合 link/1 这一条传输，留着另外
+// 三个入口就等于把第二条传输摆在手边——它们在本文件里一个调用点都没有，而一个没有
+// 调用点的建连原语只会在下一次"临时兜个底"的时候被接回去。
+// （名字刻意不写在这里：link-only-surface 的守卫是对生产源码的子串检查，一句注释里
+//  的旧名字会让它对着自己的墓志铭报警。）
+// 世代**词表**（webrtc-core 的 Generation）反而必须留全：peer-link 用
+// `signalGeneration(msg) === "link"` 精确判定，"file"/"text" 得存在，那条精确
+// 比较才有东西可以拒绝。
 import type { SignalingClient } from "./signaling";
 import { commitKey, randomNonce, verifyCommit } from "./crypto";
 import { advertisedCaps } from "./peer-caps.svelte";
@@ -34,26 +44,14 @@ export function localCaps(): readonly string[] {
  *  much smaller than the file flow-control window: pre-attachment traffic has
  *  not reached a content-consent state yet. */
 export const LINK_CAPTURE_MAX_BYTES = 256 * 1024;
-/**
- * The same retention for the legacy text generation's single lane.
- *
- * Its window is the one between "the channel opened" and "the message session
- * owns it" — connectText still has a key handshake to finish, and its caller
- * still has a path to sample. A peer that accepts automatically speaks inside
- * that window, and a DataChannel drops what has no handler.
- *
- * Deliberately smaller than a link's, and deliberately explicit: what may
- * legitimately land here is a one-byte ACCEPT/REJECT and the first message or
- * two typed straight after it. 192 KiB holds that control byte plus a pair of
- * maximum-size text frames (64 KiB of plaintext seals into 65 557 B) with room
- * to spare. Past it the caller fails the session closed rather than replay a
- * stream with a hole in it.
- */
-export const TEXT_CAPTURE_MAX_BYTES = 192 * 1024;
 /** The exact lane labels a mixed link carries, in primary-first order. One
  *  constant so the first connection and an authenticated transport resume can
  *  never disagree about which SCTP streams make up a link. */
-export const LINK_CHANNEL_LABELS: readonly string[] = ["relayium", "relayium-text"];
+/** Re-exported from core, where the option types can name the exact tuple.
+ *  `readonly string[]` here admitted the one-element legacy list, which is what
+ *  kept a single-lane connection constructible. */
+export { LINK_CHANNEL_LABELS } from "./webrtc-core";
+import { LINK_CHANNEL_LABELS } from "./webrtc-core";
 
 export interface ConnectOpts {
   signaling: SignalingClient;
@@ -165,33 +163,21 @@ function unb64(s: string): Uint8Array {
 }
 
 /**
- * 首次建连。传输交给 establish()，本函数只负责 commit-then-reveal：
+ * 首次建连一条 link/1。传输交给 establish()，本函数只负责 commit-then-reveal：
  * 随 SDP 发出 BLAKE2b(selfKey || selfNonce)，等拿到对端的 commit 之后才揭示
  * selfKey/selfNonce。为什么这一步才让 6 位 SAS 挡得住恶意信令服务器的中间人，
  * 见 crypto.ts 的注释。
- */
-export function connect(opts: ConnectOpts): Promise<Conn> {
-  return handshakeConnect(opts, "file");
-}
-
-/**
- * 为**消息会话**建连。跑的是完整的 commit-reveal（不是 resume），所以它协商出自己的
- * 会话密钥和自己的 6 位 SAS——消息面板显示的就是那一串。
  *
- * 它跑在自己的信令世代上：一条 text 世代的 offer 永远不会落到 listenForIncoming 手里
- * （否则对端会当成一次文件传输开始收，然后等一个永远不来的 manifest），一条文件 offer
- * 也永远不会落到消息监听器手里。phase 1 里消息会话和文件传输本来就互斥（busy()），
- * 但世代隔离让那条互斥是一道**保证**，而不是一场竞态。
+ * Capability gating and ownership live in the link coordinator; keeping this
+ * transport primitive free of roster state makes it testable and prevents it
+ * from advertising early.
+ *
+ * 世代写死成 `"link"`，不再是参数。它曾经是参数，是因为同一套握手要服务三个世代；
+ * 现在只剩一个，而一个"想建哪个世代就传哪个"的参数正好是把 file/text 世代接回来
+ * 所需要的最后一块。
  */
-export function connectText(opts: ConnectOpts): Promise<Conn> {
-  return handshakeConnect(opts, "text");
-}
-
-/** Establishes the trust layer for a mixed file+text link. Capability gating and
- *  ownership live in the link coordinator; keeping this transport primitive free
- *  of roster state makes it testable and prevents it from advertising early. */
 export function connectLink(opts: ConnectOpts): Promise<Conn> {
-  return handshakeConnect(opts, "link");
+  return handshakeConnect(opts);
 }
 
 /**
@@ -219,7 +205,8 @@ const KEY_REVEAL_TIMEOUT_MS = 30_000;
  */
 const SETUP_DEADLINE_MS = 90_000;
 
-async function handshakeConnect(opts: ConnectOpts, generation: Generation): Promise<Conn> {
+async function handshakeConnect(opts: ConnectOpts): Promise<Conn> {
+  const generation: Generation = "link";
   const { signaling, peerId, selfKey, role, onPeerKey } = opts;
 
   const selfNonce = randomNonce();
@@ -254,16 +241,12 @@ async function handshakeConnect(opts: ConnectOpts, generation: Generation): Prom
   // otherwise re-trigger this after the SAS is already fixed.
   //
   // 这一条**绕过了 establish 的 send()**（reveal 不是 SDP/ICE，钩子也拿不到那个闭包），
-  // 所以世代标记得在这里自己盖上。resume 世代不跑 commit-reveal，从来没有 reveal 要发，
-  // 所以这个绕行以前无关紧要；有了第三个**也跑握手**的世代之后，漏掉标记的后果是对端
-  // 按世代把它过滤掉，握手永远完不成。
+  // 所以世代标记得在这里自己盖上。漏掉标记的后果是对端按世代把它过滤掉，握手永远完
+  // 不成——resume 世代不跑 commit-reveal，所以只有这一条路会踩到。
   function sendReveal() {
     if (revealSent) return;
     revealSent = true;
-    const msg: InboundSignal = { reveal: { key: b64(selfKey), nonce: b64(selfNonce) } };
-    if (generation === "text") msg.text = true;
-    if (generation === "link") msg.link = true;
-    signaling.sendSignal(peerId, msg);
+    signaling.sendSignal(peerId, { link: true, reveal: { key: b64(selfKey), nonce: b64(selfNonce) } });
   }
 
   let conn: Conn;
@@ -273,14 +256,11 @@ async function handshakeConnect(opts: ConnectOpts, generation: Generation): Prom
       peerId,
       role,
       generation,
-      // Keeps "connection failed" and "text connection failed" apart in logs and
-      // tests; the file generation keeps its existing unlabelled wording.
-      label: generation === "text" ? "text" : generation === "link" ? "link" : undefined,
-      channelLabels: generation === "link" ? LINK_CHANNEL_LABELS : undefined,
-      captureBeforeReadyBytes:
-        generation === "link" ? LINK_CAPTURE_MAX_BYTES
-        : generation === "text" ? TEXT_CAPTURE_MAX_BYTES
-        : undefined,
+      label: "link",
+      // A link is not usable until BOTH lanes exist, so the complete set is
+      // required here rather than discovered by a caller later.
+      channelLabels: LINK_CHANNEL_LABELS,
+      captureBeforeReadyBytes: LINK_CAPTURE_MAX_BYTES,
       config: opts.config,
       initialSignal: opts.initialSignal,
       onStateChange: opts.onStateChange,
@@ -368,7 +348,7 @@ interface ResumeOpts {
   peerId: string;
   role: "initiator" | "responder";
   /** Authenticates this connection's signalling with the keys the first
-   *  connection already anchored. Required in the app — see connectResume. */
+   *  connection already anchored. Mandatory — see connectResumeLink. */
   auth: SignalAuth;
   config?: RtcConfig;
   initialSignal?: InboundSignal;
@@ -377,55 +357,32 @@ interface ResumeOpts {
 }
 
 /**
- * Re-establish a data channel for a transfer whose original connection dropped,
- * WITHOUT re-running the commit-reveal handshake. Trust and the session keys were
- * already anchored (and SAS-verified by the user) on the first connection; the
- * caller reuses those keys, so no new key is exchanged here and the SAS is
- * unchanged.
+ * Re-establish BOTH lanes of an existing link, WITHOUT re-running the
+ * commit-reveal handshake. Trust and the session keys were already anchored (and
+ * SAS-verified by the user) on the first connection; the caller reuses those
+ * keys, so no new key is exchanged here and the SAS is unchanged.
  *
- * 它和 connect() 共用 establish() 的传输骨架，但**不重跑握手**——这就是
- * "纯传输" 这句话在代码里的形态，而不是一句注释里的承诺。`resume: true` 让它跑在
+ * 它和 connectLink() 共用 establish() 的传输骨架，但**不重跑握手**——这就是
+ * "纯传输" 这句话在代码里的形态，而不是一句注释里的承诺。`resume` 世代让它跑在
  * 另一个信令世代上：正在死掉的原连接与它互相看不见对方的 SDP。
+ *
+ * It waits for the complete label-keyed channel set (arrival order is
+ * irrelevant) rather than resolving on the first channel: a link whose text lane
+ * never opened is not a degraded link, it is a link that cannot honour `link/1`,
+ * and discovering that at a call site later is how a half-built transport gets
+ * used.
  *
  * 唯一挂上的是 `auth`：这条路径没有 commit-reveal，如果信令不做对端认证，能改写
  * 信令的中间人就可以自己发一个 resume offer 接管这一半会话——密文他解不开（密钥没
  * 换），但足以窥探进度元数据、投递畸形的 RESUME_REQ、重放密文把传输弄坏。用会话
  * 密钥派生的 HMAC 绑定信令，"拿得出这个 tag" 本身就等价于 "持有第一次连接协商出的
- * 密钥"，而那正是用户当时用 SAS 核对过的东西。
- */
-export async function connectResume(opts: ResumeOpts): Promise<Conn> {
-  return establish({ ...opts, generation: "resume", label: "resume" });
-}
-
-/**
- * Re-establish BOTH lanes of an existing mixed link, WITHOUT re-running the
- * commit-reveal handshake — connectResume's dual-channel sibling.
- *
- * The whole reason this is a separate entry point rather than an option on
- * connectResume is that the two differ in exactly one thing that must never be
- * decided at a call site by accident: how many SCTP streams make up a working
- * connection. A link whose text lane never opened is not a degraded link, it is
- * a link that cannot honour `link/1` — so this waits for the complete
- * label-keyed set (arrival order is irrelevant) instead of resolving on the
- * first channel and letting the caller discover the missing lane later.
- *
- * Everything else is deliberately identical to connectResume, including the
- * `resume` signalling generation and the mandatory `auth`: this path runs no
- * commit-reveal, so possession of the first connection's session keys — the
- * ones the user compared as a SAS — is what proves the offer came from the same
- * peer. The link keeps its one SessionKeys, its one SAS and its four codecs;
- * only the transport underneath is rebuilt (see the link's Trust and nonce
- * invariants).
+ * 密钥"，而那正是用户当时用 SAS 核对过的东西。**这就是"未认证或过期的 resume 永远
+ * 接不上一条 link"这句话在代码里的位置**：`auth` 不是可选参数。
  *
  * Both lanes capture from the moment each channel is collected, bounded by the
  * same LINK_CAPTURE_MAX_BYTES the first connection uses: the peer may start
  * sending on the resumed file lane while this side's text lane is still
  * completing DCEP, and those frames belong to codecs that already exist.
- *
- * Sharing the `resume` generation with connectResume is deliberate and safe:
- * two resume connections alive at once (a legacy file transfer's and a link's)
- * each verify under their OWN session's keys, so neither can consume the other's
- * offer — the auth tag, not the tag vocabulary, is what separates them.
  */
 export async function connectResumeLink(opts: ResumeOpts): Promise<Conn> {
   return establish({

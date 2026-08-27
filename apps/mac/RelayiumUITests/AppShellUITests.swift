@@ -720,9 +720,13 @@ final class AppShellUITests: XCTestCase {
     }
 
     /// The exact launch-blocking path reported from the installed app: creating
-    /// a pairing-code text session must not be mistaken for unsolicited Nearby
-    /// receive, and its handoff must be usable without transcribing six digits.
-    func testCreatingATextCodeStaysOnPairingAndShowsEveryHandoff() {
+    /// a pairing code must not be mistaken for unsolicited Nearby receive, and
+    /// its handoff must be usable without transcribing six digits.
+    ///
+    /// It used to be named for a "text code". Nothing mints one: the verb no
+    /// longer carries a lane, and the code this screen produces is the same code
+    /// whatever the peer turns out to want to send.
+    func testCreatingAPairingCodeStaysOnPairingAndShowsEveryHandoff() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
 
@@ -759,15 +763,27 @@ final class AppShellUITests: XCTestCase {
                       "the join link cannot be copied")
         XCTAssertTrue(window.buttons["Share"].exists,
                       "the join link cannot use the system share sheet")
-        XCTAssertTrue(window.activityIndicators["Waiting for the other device…"].exists,
-                      "the generated-code surface hides its live status")
+        // **Counted, not merely found.** This screen used to render the wait
+        // and its Cancel twice — once in the handoff card and once beside it —
+        // so a `.exists` check passed while a click on either raised for
+        // matching two elements. The requirement is not "a status is present",
+        // it is "the page says this once", and only a count can state that.
+        XCTAssertEqual(window.activityIndicators
+            .matching(NSPredicate(format: "label == %@", "Waiting for the other device…"))
+            .count, 1,
+                       "the generated-code surface does not show its live status exactly once")
         XCTAssertTrue(visibleElement(
             id: "pairing-code-expiry-note",
             text: "Only this pairing code expires. A transfer that has already started can continue.",
             in: window).exists,
                       "the handoff leaves it ambiguous whether the code or transfer expires")
-        XCTAssertTrue(window.buttons["Cancel"].exists,
-                      "the generated-code surface hides its escape action")
+        // The same count for the escape, and for the same reason: one page, one
+        // way out of it. Taken by label, which is what a person reads and what a
+        // duplicate would double.
+        let cancels = window.buttons.matching(NSPredicate(format: "label == %@", "Cancel"))
+        XCTAssertEqual(cancels.count, 1,
+                       "the generated-code surface does not offer exactly one Cancel")
+        let cancelWatch = cancels.element
         XCTAssertEqual(window.title, "Cross-network Transfer",
                        "creating a pairing-code message session navigated elsewhere")
         XCTAssertFalse(window.descendants(matching: .any)["transfer-lane-note"]
@@ -776,7 +792,7 @@ final class AppShellUITests: XCTestCase {
 
         // No conversation or transcript exists yet. Cancel must be the whole
         // exit, not the first half of Cancel -> Session ended -> Done.
-        window.buttons["Cancel"].click()
+        cancelWatch.click()
         XCTAssertTrue(window.buttons["Create a pairing code"].waitForExistence(timeout: 10),
                       "Cancel did not return directly to code creation")
         XCTAssertTrue(window.buttons["Connect"].exists,
@@ -823,11 +839,12 @@ final class AppShellUITests: XCTestCase {
                       "a complete code cannot be connected with")
 
         window.buttons["Connect"].click()
-        XCTAssertTrue(window.descendants(matching: .any)["transfer-waiting-pairing-peer"]
-            .firstMatch.waitForExistence(timeout: 10),
+        // By label rather than by identifier: the joiner's wait is the handoff
+        // card's own, now that the pane no longer draws a second one beside it.
+        let waiting = window.activityIndicators["Waiting for the other device…"]
+        XCTAssertTrue(waiting.waitForExistence(timeout: 10),
                       "joining a code leaves a blank screen while it waits")
-        let cancel = window.descendants(matching: .any)["transfer-cancel-pairing-watch"]
-            .firstMatch
+        let cancel = window.buttons["Cancel"]
         XCTAssertTrue(cancel.exists, "a pairing-room wait has no escape")
         cancel.click()
         XCTAssertTrue(window.textFields["pairing.joinCode"].waitForExistence(timeout: 10),
@@ -1023,110 +1040,8 @@ final class AppShellUITests: XCTestCase {
                       "leaving and returning discarded the live session")
     }
 
-    /// **Both modules hold a session at once, survive navigation in both
-    /// directions, and are cancelled one at a time.**
-    ///
-    /// The owner's requirement, offline and deterministic. Two acceptance
-    /// fixtures are combined, and combining them is only possible BECAUSE the
-    /// modules are separate: `--relayium-ui-testing-terminal-nearby` drives the
-    /// Nearby module's own file model to a retained session, and
-    /// `--relayium-ui-testing-file-code` holds the Direct module's on a minted
-    /// code. Before the split those two flags addressed one model and the second
-    /// one silently did nothing.
-    ///
-    /// What this cannot claim, and `LocalSessionUITests` covers instead: that two
-    /// genuinely ESTABLISHED WebRTC connections survive the same navigation. The
-    /// Nearby half here is a retained terminal session rather than a live one,
-    /// because a live one needs a second process and a server. What it does
-    /// prove without either is the part that was actually broken — that each
-    /// module keeps its own surface, its own controls and its own exit while the
-    /// other one is occupied.
-    func testEachTransferModuleKeepsItsOwnSessionAcrossNavigationAndCancel() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-terminal-nearby", "--relayium-ui-testing-file-code"]
-        app.launch()
-        ensureProductWindowIsOpen()
-
-        let window = mainWindow
-        XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let lan = sidebarDestination("LAN Transfer", in: window)
-        let cross = sidebarDestination("Cross-network Transfer", in: window)
-        let peer = window.descendants(matching: .any)["transfer-session-peer"].firstMatch
-        let code = window.descendants(matching: .any)["pairing-code-value"].firstMatch
-
-        // The Nearby module opens holding its own session.
-        XCTAssertTrue(peer.waitForExistence(timeout: 20),
-                      "the same-network module did not open on its own session")
-
-        // Navigating to Direct finds a screen that is FREE — the whole point.
-        XCTAssertTrue(cross.waitForExistence(timeout: 10))
-        cross.click()
-        let create = window.buttons["Create a pairing code"]
-        XCTAssertTrue(create.waitForExistence(timeout: 10),
-                      "a same-network session hid the Direct screen's own controls")
-        XCTAssertTrue(create.isEnabled,
-                      "a same-network session disabled the Direct screen's Create")
-        XCTAssertFalse(window.descendants(matching: .any)["transfer-busy-elsewhere"]
-            .firstMatch.exists,
-                       "the Direct screen still explains a lock it no longer has")
-        XCTAssertFalse(peer.exists,
-                       "the same-network session is drawn on the Direct screen too")
-
-        // A second, independent session. Both modules are now occupied.
-        create.click()
-        XCTAssertTrue(code.waitForExistence(timeout: 20),
-                      "the Direct module could not start a session of its own")
-
-        // (1) LAN → Direct → LAN: the same-network session is still there.
-        XCTAssertTrue(lan.waitForExistence(timeout: 10))
-        lan.click()
-        XCTAssertTrue(peer.waitForExistence(timeout: 10),
-                      "the same-network session did not survive a visit to Direct")
-        XCTAssertFalse(code.exists, "the pairing code is drawn on the LAN screen too")
-
-        // (2) Direct → LAN → Direct: the pairing session is still there.
-        cross.click()
-        XCTAssertTrue(code.waitForExistence(timeout: 10),
-                      "the pairing session did not survive a visit to LAN Transfer")
-
-        // Repeated alternation, because a defect that ends a session on the
-        // SECOND return would pass everything above.
-        for _ in 0..<5 {
-            lan.click()
-            XCTAssertTrue(peer.waitForExistence(timeout: 10),
-                          "repeated navigation ended the same-network session")
-            cross.click()
-            XCTAssertTrue(code.waitForExistence(timeout: 10),
-                          "repeated navigation ended the pairing session")
-        }
-
-        // (4) Cancel on Direct ends Direct, and only Direct.
-        let cancelDirect = window.buttons["Cancel"].firstMatch
-        XCTAssertTrue(cancelDirect.waitForExistence(timeout: 10),
-                      "the minted code offered no Cancel")
-        cancelDirect.click()
-        XCTAssertTrue(create.waitForExistence(timeout: 20),
-                      "cancelling the pairing session did not release its own screen")
-        lan.click()
-        XCTAssertTrue(peer.waitForExistence(timeout: 10),
-                      "cancelling the pairing session ended the same-network one too")
-
-        // …and then the same-network one, whose own exit leaves Direct idle.
-        let leaveNearby = window.buttons["Leave this session"]
-        XCTAssertTrue(leaveNearby.waitForExistence(timeout: 10),
-                      "the same-network session offered no exit")
-        leaveNearby.click()
-        XCTAssertTrue(window.buttons["Start receiving"].waitForExistence(timeout: 20),
-                      "leaving the same-network session did not return its own roster")
-        cross.click()
-        XCTAssertTrue(create.waitForExistence(timeout: 10),
-                      "leaving the same-network session disturbed the Direct screen")
-    }
-
     /// **The pairing code counts down, dies exactly at its deadline, and can be
-    /// replaced in one press — with an independent Nearby session untouched
-    /// throughout.**
+    /// replaced in one press.**
     ///
     /// The deadline is REAL. `UITestPairClient` mints the first code of this
     /// launch with a genuine seconds-from-now `expiresAt` and lets the shipped
@@ -1135,31 +1050,30 @@ final class AppShellUITests: XCTestCase {
     /// directly. `PairingCodeExpiryTests` pins the second on either side of the
     /// boundary; this proves the surface obeys it.
     ///
-    /// The Nearby half is here because "without disturbing Nearby" is half the
-    /// requirement, and a regeneration that reached across modules would be
-    /// invisible on the Direct screen it happened on.
+    /// **Standalone, and deliberately so.** It used to open a fabricated Nearby
+    /// session beside the code and re-check it at the end, to claim that
+    /// expiring or regenerating disturbs nothing across the module boundary.
+    /// That half is gone with the fixture that faked the session: module
+    /// independence is now proved by `LocalSessionUITests` against two
+    /// genuinely established `link/1` connections, which is a stronger claim
+    /// than this one could make. What is left here is the part only an offline
+    /// suite can drive — a real deadline arriving on its own.
     func testTheExpiringPairingCodeCountsDownDiesAndCanBeReplaced() {
         app.terminate()
         app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-terminal-nearby", "--relayium-ui-testing-expiring-code"]
+            + ["--relayium-ui-testing-expiring-code"]
         app.launch()
         ensureProductWindowIsOpen()
 
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let lan = sidebarDestination("LAN Transfer", in: window)
         let cross = sidebarDestination("Cross-network Transfer", in: window)
-        let peer = window.descendants(matching: .any)["transfer-session-peer"].firstMatch
         let code = window.descendants(matching: .any)["pairing-code-value"].firstMatch
         // `staticTexts`, not `descendants(matching: .any)`: the latter can match
         // a wrapper that carries the identifier and no label, which reads as "the
         // countdown is not a clock" when the clock is right there underneath it.
         let countdown = window.staticTexts["pairing-code-countdown"]
         let expired = window.descendants(matching: .any)["pairing-code-expired"].firstMatch
-
-        // The Nearby module opens holding its own session, and keeps it.
-        XCTAssertTrue(peer.waitForExistence(timeout: 20),
-                      "the same-network module did not open on its own session")
 
         XCTAssertTrue(cross.waitForExistence(timeout: 10))
         cross.click()
@@ -1210,15 +1124,6 @@ final class AppShellUITests: XCTestCase {
         // by this module for the whole action.
         XCTAssertFalse(create.exists,
                        "regenerating dropped the user back to the connect screen")
-
-        // (4) …and the Nearby module never noticed any of it.
-        lan.click()
-        XCTAssertTrue(peer.waitForExistence(timeout: 10),
-                      "expiring or regenerating a pairing code disturbed the "
-                      + "same-network session")
-        cross.click()
-        XCTAssertTrue(code.waitForExistence(timeout: 10),
-                      "the replacement code did not survive a visit to LAN Transfer")
     }
 
     /// What a `Text` on this platform actually reads.
@@ -1245,18 +1150,27 @@ final class AppShellUITests: XCTestCase {
         return parts.reduce(0) { $0 * 60 + $1 }
     }
 
-    /// A terminal task is not an invitation to start another one on top of it.
-    /// The one exit is the explicit boundary that releases the old
-    /// connection/history; only after it is pressed may the connect controls
-    /// return.
+    /// **A mint that fails says so, and the screen it failed on still works
+    /// afterwards.**
     ///
-    /// With one surface, that boundary is now structural rather than per-state:
-    /// the connect controls live in a different view, so a terminal session
-    /// cannot leak one.
-    func testTerminalTextSessionMustBeDismissedBeforeStartingAgain() {
+    /// This test used to drive a terminal legacy TEXT session and press its
+    /// "Leave this session" boundary. There is no such session to fail any more,
+    /// and the fixture it launched with does something different now: it makes
+    /// `UITestPairClient.mint` throw, which is a failure of the pairing code
+    /// itself.
+    ///
+    /// Retargeted rather than deleted, because that is a shipping path with a
+    /// defect fixed in this very change and no other offline coverage. `.failed`
+    /// is deliberately ACTIVE so the message survives the app-scoped liveness
+    /// observer — and holding the surface is what disabled Create and Join
+    /// underneath it, leaving Cross-network permanently unusable for the life of
+    /// the process with the reason showing and nothing to press. Dismiss is the
+    /// whole recovery, so the test is: the reason is readable, the controls are
+    /// honestly locked while it is, and one press gives them back.
+    func testAFailedPairingMintSaysSoAndCanBeRecoveredFrom() {
         app.terminate()
         app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-terminal-text"]
+            + ["--relayium-ui-testing-failing-mint"]
         app.launch()
         ensureProductWindowIsOpen()
 
@@ -1265,54 +1179,39 @@ final class AppShellUITests: XCTestCase {
         let cross = sidebarDestination("Cross-network Transfer", in: window)
         XCTAssertTrue(cross.waitForExistence(timeout: 10))
         cross.click()
-        XCTAssertTrue(window.buttons["Create a pairing code"].waitForExistence(timeout: 10))
-        window.buttons["Create a pairing code"].click()
+        let create = window.buttons["Create a pairing code"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10))
+        create.click()
 
-        let leave = window.buttons["Leave this session"]
-        XCTAssertTrue(leave.waitForExistence(timeout: 10),
-                      "the failed session has no cleanup boundary")
-        XCTAssertFalse(window.buttons["Create a pairing code"].exists,
-                       "a new create path replaced a terminal session before the exit")
-        XCTAssertFalse(window.buttons["Connect"].exists,
-                       "a new join path replaced a terminal session before the exit")
-        XCTAssertFalse(window.buttons["Start receiving"].exists,
-                       "the roster replaced a terminal session before the exit")
+        // (1) The reason is on screen, and it is a message rather than a silence.
+        let failure = window.descendants(matching: .any)["pairing-code-failed"].firstMatch
+        XCTAssertTrue(failure.waitForExistence(timeout: 10),
+                      "a mint that failed left the screen looking like nothing happened")
+        XCTAssertFalse(window.descendants(matching: .any)["pairing-code-value"]
+            .firstMatch.exists,
+                       "a failed mint published a code it never received")
 
-        leave.click()
-        XCTAssertTrue(window.buttons["Create a pairing code"].waitForExistence(timeout: 10),
-                      "the start controls did not return after cleanup")
-        XCTAssertTrue(window.buttons["Connect"].exists)
-    }
+        // (2) The lock is honest while the message stands: the surface is held
+        // so the reason cannot be swept off it, and Create says so by being
+        // disabled rather than by failing again when pressed.
+        XCTAssertTrue(create.exists,
+                      "the failed mint hid the control it failed from")
+        XCTAssertFalse(create.isEnabled,
+                       "Create stayed live under a failure still holding the surface")
 
-    /// A terminal Nearby task retains both its peer context and a real cleanup
-    /// boundary. This catches the regression where ownership was folded into a
-    /// generic `busy` value, making `if !busy` false for the entire lifetime of
-    /// the very surface that needed to expose Back to devices.
-    func testTerminalNearbySessionNamesItsPeerAndReturnsToTheRoster() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-terminal-nearby"]
-        app.launch()
-        ensureProductWindowIsOpen()
+        // (3) One press is the whole recovery — and THIS is the regression: the
+        // shipped build had no press to make here.
+        let dismiss = window.buttons["pairing-code-failed-dismiss"]
+        XCTAssertTrue(dismiss.exists,
+                      "a failed mint offers no way out of itself, so the screen "
+                      + "stays unusable for the life of the process")
+        dismiss.click()
 
-        let window = mainWindow
-        XCTAssertTrue(window.waitForExistence(timeout: 20))
-        XCTAssertTrue(visibleElement(
-            id: "transfer-session-peer", text: "Session with Studio Mac · 19af02",
-            in: window).waitForExistence(timeout: 10),
-                      "the terminal task lost who it was with")
-        XCTAssertTrue(window.staticTexts[
-            "This name is provided by the other device and is not verified identity."
-        ].exists)
-
-        let back = window.buttons["Leave this session"]
-        XCTAssertTrue(back.waitForExistence(timeout: 10),
-                      "the retained session owner made its own exit unreachable")
-        back.click()
-        XCTAssertTrue(window.buttons["Start receiving"].waitForExistence(timeout: 10),
-                      "leaving did not release the terminal task")
-        XCTAssertFalse(window.staticTexts["Session with Studio Mac · 19af02"].exists,
-                       "the released task kept stale peer context on screen")
+        XCTAssertFalse(failure.exists, "dismissing left the stale failure on screen")
+        XCTAssertTrue(create.isEnabled,
+                      "dismissing the failure did not give the screen back")
+        XCTAssertTrue(window.buttons["Connect"].exists,
+                      "dismissing the failure did not restore the join path")
     }
 
     /// Settings opens as a SECOND window rather than a replacement — the main

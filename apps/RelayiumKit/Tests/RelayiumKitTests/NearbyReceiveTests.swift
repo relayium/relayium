@@ -1243,3 +1243,143 @@ final class InboundGateTests: XCTestCase {
         XCTAssertFalse(gate.isEngaged)
     }
 }
+
+// MARK: - the listener-only composition
+
+/// **A `NearbyReceiveModel` for a build with no legacy transport.**
+///
+/// macOS deletes both legacy session models, so the object that observes the
+/// discovery room can no longer be constructed from them — and must not be
+/// constructed from inert stand-ins either, which is a shipped legacy
+/// implementation hidden behind a guard exception.
+///
+/// What has to hold is that the listener half is behaviourally identical (this
+/// is what keeps the Mac reachable and the menu bar honest) and that the
+/// admission half refuses in a way the peer can read.
+@MainActor
+final class NearbyReceiveListenerOnlyTests: XCTestCase {
+
+    private func rig() -> (NearbyReceiveModel, LanDiscoveryModel, FakeWebSocketChannel) {
+        let channel = FakeWebSocketChannel()
+        let discovery = LanDiscoveryModel(connect: {
+            let client = SignalingClient(channel: channel, name: "Mac")
+            channel.fireOpen()
+            return client
+        })
+        let receive = AppEnvironment.makeListeningOnlyNearbyReceiveModel(
+            discovery: discovery, inboundRoom: InboundRoom())
+        return (receive, discovery, channel)
+    }
+
+    private func settle(_ rounds: Int = 12) async {
+        for _ in 0..<rounds { await Task.yield() }
+    }
+
+    /// The tagged `busy` frames this Mac put on the wire, with the generation
+    /// each one answers — the same shape `NearbyReceiveTests.busyReplies` reads,
+    /// against a channel this suite owns.
+    private func busyReplies(on channel: FakeWebSocketChannel)
+        -> [(to: String, generation: RealtimeGeneration)] {
+        channel.sent.compactMap {
+            guard let envelope = try? JSONDecoder().decode(Envelope.self, from: Data($0.utf8)),
+                  envelope.type == SignalType.signal,
+                  let to = envelope.to, let data = envelope.data,
+                  parseBusy(data) else { return nil }
+            return (to, signalGeneration(data))
+        }
+    }
+
+    // MARK: - the listener half is unchanged
+
+    /// It is the room's observer, which is what makes it survive a reconnect —
+    /// every new socket needs a new subscription, and a model that is not the
+    /// observer never gets one.
+    func testItIsTheDiscoveryRoomsObserver() {
+        let (receive, discovery, _) = rig()
+        XCTAssertTrue(discovery.observer === receive,
+                      "the listener-only model is not the room's observer, so this Mac "
+                      + "stops being reachable after the first reconnect")
+    }
+
+    /// Listening readiness follows the room's own lifecycle, exactly as it does
+    /// for the legacy composition. This is what the menu bar and the LAN screen
+    /// render, and it is the whole reason the object survives the deletion.
+    func testListeningReadinessFollowsTheRoomLifecycle() async {
+        let (receive, discovery, _) = rig()
+        XCTAssertEqual(receive.state, .off, "a model that has not started is not ready")
+
+        discovery.start()
+        await settle()
+        XCTAssertNotEqual(receive.state, .off,
+                          "starting the room left the listener reporting off")
+
+        discovery.stop()
+        await settle()
+        XCTAssertEqual(receive.state, .off)
+    }
+
+    /// **Never busy, because there is no legacy session to be busy with.**
+    ///
+    /// The `link/1` a Mac does run is a different object with its own admission;
+    /// this model was never its authority, so reporting anything else here would
+    /// be inventing a fact.
+    func testItNeverReportsAnActiveLegacySession() async {
+        let (receive, discovery, _) = rig()
+        discovery.start()
+        await settle()
+        receive.refreshActivity()
+        XCTAssertNil(receive.activeKind,
+                     "a build with no legacy transport reported a legacy session")
+    }
+
+    // MARK: - the admission half refuses, readably
+
+    /// An inbound legacy offer is answered with the tagged `busy` reply a
+    /// genuinely busy Mac sends — the one reply the peer already knows how to
+    /// read — rather than silence it would have to wait out a stall watchdog to
+    /// interpret.
+    func testAnInboundLegacyOfferIsRefusedWithATaggedBusyReply() async {
+        let (receive, discovery, channel) = rig()
+        discovery.start()
+        await settle()
+        channel.fire(Envelope(type: SignalType.welcome, name: "mac-self"))
+        await settle()
+
+        channel.fire(Envelope(type: SignalType.signal, from: "peer-1",
+                              data: sdpSignal(kind: "offer", sdp: "v=0", commit: "Yw==",
+                                              generation: .file, caps: [])))
+        await settle()
+
+        XCTAssertEqual(busyReplies(on: channel).map(\.generation), [.file],
+                       "a legacy offer was met with silence instead of a readable refusal")
+        XCTAssertEqual(busyReplies(on: channel).map(\.to), ["peer-1"],
+                       "the refusal went to somebody other than the peer that offered")
+        // …and nothing was published, claimed or built for it.
+        XCTAssertNil(receive.activeKind,
+                     "a refused offer put a session on screen")
+        XCTAssertEqual(receive.state, .ready,
+                       "a refused offer changed what the user is told about listening")
+    }
+
+    /// A refusal must release the reservation, or one legacy offer would make
+    /// this Mac deaf for the rest of the process — including to the `link/1`
+    /// that arrives next in the same room.
+    func testARefusedOfferLeavesTheRoomServiceable() async {
+        let (receive, discovery, channel) = rig()
+        discovery.start()
+        await settle()
+        channel.fire(Envelope(type: SignalType.welcome, name: "mac-self"))
+        await settle()
+
+        for _ in 0..<3 {
+            channel.fire(Envelope(type: SignalType.signal, from: "peer-1",
+                                  data: sdpSignal(kind: "offer", sdp: "v=0", commit: "Yw==",
+                                                  generation: .file, caps: [])))
+            await settle()
+        }
+
+        XCTAssertEqual(busyReplies(on: channel).count, 3,
+                       "the reservation was not released, so later offers went unanswered")
+        XCTAssertEqual(receive.state, .ready)
+    }
+}

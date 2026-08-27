@@ -89,8 +89,25 @@ public final class NearbyReceiveModel: ObservableObject, NearbyRoomObserver {
     /// Deliberately not a peer name: names are peer-supplied labels.
     @Published public private(set) var lastFailure: String?
 
-    private let fileModel: RealtimeSessionModel
-    private let textModel: RealtimeTextSessionModel
+    /// **The legacy sessions this model may admit an offer into, or nil.**
+    ///
+    /// Nil is a real composition rather than a missing dependency: macOS deletes
+    /// both legacy transports, so there is nothing for an inbound `text/1` or
+    /// legacy-file offer to become. What that build still needs from this object
+    /// is everything else it does — observe the discovery room, publish
+    /// listening readiness, and answer an offer it cannot serve — and none of
+    /// that ever touched a session model.
+    ///
+    /// A bundle of closures rather than two optionals, so "either both or
+    /// neither" is structural: a composition cannot end up with a file lane and
+    /// no text lane, which is a half-state no caller ever wanted and every
+    /// `if let` pair would eventually allow.
+    private struct LegacySessions {
+        let isBusy: @MainActor () -> Bool
+        let accept: @MainActor (NearbyReceiveKind, String, @escaping () -> Void) async -> Bool
+    }
+
+    private let legacy: LegacySessions?
     private let room: InboundRoom
     private let gate = InboundGate()
     private var subscription: SignalSubscription?
@@ -123,11 +140,23 @@ public final class NearbyReceiveModel: ObservableObject, NearbyRoomObserver {
 
     private var cancellables: Set<AnyCancellable> = []
 
+    /// **The composition that can run a legacy session.** iOS, and every
+    /// existing caller.
+    ///
+    /// Unchanged in signature and in behaviour: it bundles exactly the two
+    /// models it always held, and every rule below reads the bundle rather than
+    /// the models, so the answers are the ones this initializer always gave.
     public init(fileModel: RealtimeSessionModel,
                 textModel: RealtimeTextSessionModel,
                 room: InboundRoom) {
-        self.fileModel = fileModel
-        self.textModel = textModel
+        self.legacy = LegacySessions(
+            isBusy: { fileModel.isBusy || textModel.isBusy },
+            accept: { kind, peerId, handoff in
+                switch kind {
+                case .text: return await textModel.acceptNearby(peerId: peerId, handoff: handoff)
+                case .file: return await fileModel.acceptNearby(peerId: peerId, handoff: handoff)
+                }
+            })
         self.room = room
         // `@Published` fires on `willSet`, so the models still read their old
         // value inside the sink. Deferring one hop is what makes `refreshActivity`
@@ -139,6 +168,27 @@ public final class NearbyReceiveModel: ObservableObject, NearbyRoomObserver {
         textModel.$state
             .sink { [weak self] _ in Task { @MainActor in self?.refreshActivity() } }
             .store(in: &cancellables)
+    }
+
+    /// **The composition whose only transport is `link/1`.** macOS.
+    ///
+    /// It listens, observes the room, and publishes readiness — and it admits
+    /// nothing, because there is nothing to admit into. An inbound legacy offer
+    /// gets the same tagged `busy` reply a genuinely busy Mac sends, which is
+    /// what stops the peer waiting out a stall watchdog to learn the same fact.
+    ///
+    /// **No session models, not even inert ones.** A draft of this batch
+    /// constructed two and never started them, which kept the deleted
+    /// implementation in the shipped composition behind a source-guard
+    /// exception. There is no exception now: macOS names neither type.
+    ///
+    /// There are no state subscriptions either, and that is a consequence rather
+    /// than an omission — the only thing they drove was `refreshActivity`, whose
+    /// session half is constant here. Room lifecycle still drives it, so
+    /// listening readiness is behaviourally identical.
+    public init(listeningOnlyIn room: InboundRoom) {
+        self.legacy = nil
+        self.room = room
     }
 
     /// Follows the room's own lifecycle so the reported state cannot drift from
@@ -251,6 +301,23 @@ public final class NearbyReceiveModel: ObservableObject, NearbyRoomObserver {
             return
         }
         let kind: NearbyReceiveKind = (generation == .text) ? .text : .file
+        // **A composition with no legacy transport answers first, and answers
+        // honestly.**
+        //
+        // Ahead of `shouldAcceptSession`, because this is not an ownership
+        // question: there is no session to arbitrate for. The peer gets the same
+        // tagged `busy` reply a genuinely busy Mac sends — which is the one
+        // reply it already knows how to read — rather than silence it would have
+        // to wait out a stall watchdog to interpret. Nothing is published, no
+        // surface is claimed, and the reservation is released so a later `link/1`
+        // in the same room is still serviceable.
+        guard let legacy else {
+            gate.release()
+            signaling.sendSignal(to: peerId,
+                                 data: taggedSignal(busySignal(), generation: generation))
+            refreshActivity()
+            return
+        }
         // App-level ownership is checked before anything is published or a
         // responder is built. A refusal must be visible to the initiator as a
         // tagged busy reply, not as a connection timeout, and must release the
@@ -276,16 +343,8 @@ public final class NearbyReceiveModel: ObservableObject, NearbyRoomObserver {
         onSessionStarted?(kind)
         // The responder is built on THIS socket or not at all.
         room.signaling = signaling
-        let started: Bool
-        switch kind {
-        case .text:
-            started = await textModel.acceptNearby(peerId: peerId) { [weak self] in
-                self?.gate.handoff(to: signaling)
-            }
-        case .file:
-            started = await fileModel.acceptNearby(peerId: peerId) { [weak self] in
-                self?.gate.handoff(to: signaling)
-            }
+        let started = await legacy.accept(kind, peerId) { [weak self] in
+            self?.gate.handoff(to: signaling)
         }
         if !started, mine == epoch {
             // Every failure and cancel path lands here: the ICE fetch failed,
@@ -317,7 +376,10 @@ public final class NearbyReceiveModel: ObservableObject, NearbyRoomObserver {
 
     // MARK: - activity
 
-    private var isBusy: Bool { fileModel.isBusy || textModel.isBusy }
+    /// A listener-only composition is never busy with a legacy session: it has
+    /// none. The `link/1` a Mac does run is a different object with its own
+    /// admission, and this model was never its authority.
+    private var isBusy: Bool { legacy?.isBusy() ?? false }
 
     /// Re-reads the models and republishes both the gate's busy mirror and what
     /// the user is shown. Called by the app layer on every model state change,

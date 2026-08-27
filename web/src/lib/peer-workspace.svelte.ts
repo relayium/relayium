@@ -1,29 +1,26 @@
-// Capability router and mutual-exclusion boundary for the public peer surface.
-// App.svelte should express user intent through this object; protocol generation
-// selection and the "never show two SAS values" rule stay here.
+// Capability gate and single-transport boundary for the public peer surface.
+//
+// App.svelte expresses user intent through this object. There is exactly one
+// transport behind it — an authenticated `link/1` peer link — so this file no
+// longer SELECTS between protocol generations: it decides whether a peer may be
+// reached at all, and every intent that survives that decision reaches the link.
+//
+// A peer that does not announce exact `link/1` is unsupported, and unsupported
+// is terminal here. There is deliberately no second transport to fall through
+// to: the removed legacy file and text lanes were the only reason `routes`
+// ever had a false branch that still did something, and re-adding one would
+// reintroduce the two-SAS surface this composition exists to prevent.
 
 import { createMixedSession, type MixedSession, type MixedSessionDeps } from "./mixed-session.svelte";
 import { peerSupportsLink } from "./peer-caps.svelte";
 import type { QueuedFileBatch } from "./mixed-file-session.svelte";
 import type { PeerLinkStatus } from "./peer-link.svelte";
 import type { PickedFile } from "./drag";
-import type { TextSession } from "./text-session.svelte";
-import type { Incoming, TransferSession, Xfer } from "./transfer-session.svelte";
+import type { Incoming, Xfer } from "./transfer-model";
 import type { RelayGate } from "./relay-selection";
 import type { Conn, ConnPath } from "./webrtc";
 
 export const EXPLICIT_DISCONNECT_SUPPRESS_MS = 60_000;
-
-type LegacyFiles = Pick<TransferSession,
-  "incoming" | "recv" | "send" | "sasCode" | "sendPath" | "recvPath"
-  | "busy" | "transferActive" | "sendFiles" | "accept" | "reject" | "abort"
-  | "abortAll" | "dismissSend" | "dismissRecv" | "reset" | "conn"
->;
-
-type LegacyText = Pick<TextSession,
-  "status" | "peerId" | "sasCode" | "path" | "history" | "errorKey"
-  | "openWith" | "accept" | "reject" | "send" | "end" | "clearHistory" | "active"
->;
 
 export interface PeerWorkspaceDeps extends Omit<MixedSessionDeps,
   "supportsLink" | "canAcceptLink" | "now" | "onLinkState" | "joined"
@@ -31,8 +28,6 @@ export interface PeerWorkspaceDeps extends Omit<MixedSessionDeps,
   joined(): boolean;
   peerIds(): readonly string[];
   unsupported(): boolean;
-  legacyFiles: LegacyFiles;
-  legacyText: LegacyText;
   supportsLink?(peerId: string): boolean;
   now?: () => number;
   /**
@@ -55,7 +50,7 @@ export interface PeerWorkspace {
   readonly sasCode: string;
   readonly sendPath: ConnPath | undefined;
   readonly recvPath: ConnPath | undefined;
-  readonly text: LegacyText | MixedSession["text"];
+  readonly text: MixedSession["text"];
   readonly textPath: ConnPath | undefined;
   readonly usingMixed: boolean;
   /** Whether an authenticated link object genuinely exists right now.
@@ -65,7 +60,6 @@ export interface PeerWorkspace {
    *  the user asks for it. Anything that must not act before the peers are
    *  authenticated — opening a lane, for instance — reads this instead. */
   readonly hasLink: boolean;
-  readonly blocksLegacyInbound: boolean;
   readonly warnsOnLeave: boolean;
   /** The one link the unified workspace header describes. "" outside mixed mode. */
   readonly linkPeerId: string;
@@ -75,14 +69,14 @@ export interface PeerWorkspace {
    *  code) keys off this rather than off the code itself, so a later link is
    *  never mistaken for the current one because six digits happened to repeat. */
   readonly linkGeneration: number;
-  /** The link's single connection path. The legacy surfaces keep their own
-   *  per-direction labels; a mixed link has exactly one. */
+  /** The link's single connection path. Every surface reads this one label:
+   *  a link has exactly one transport under both of its lanes. */
   readonly linkPath: ConnPath | undefined;
-  /** Local file batches waiting for the lane. Always empty on the legacy path,
-   *  which has no queue at all. */
+  /** Local file batches waiting for the lane. Empty whenever no workspace is
+   *  open, which is the only state that has no queue. */
   readonly queuedBatches: readonly QueuedFileBatch[];
-  /** The relayed link is inside its credential warning window. Always false on
-   *  the legacy path and on any link with no credential boundary. */
+  /** The relayed link is inside its credential warning window. False on any
+   *  link with no credential boundary. */
   readonly relayExpiring: boolean;
   /** False while a live link could NOT be rebuilt if its transport died — the
    *  signalling socket is gone, rejoined under a new identity, or was refused.
@@ -105,7 +99,7 @@ export interface PeerWorkspace {
    * is frame kind 12, and that frame needs a link to travel on and the link's
    * verification code to be on screen before a sender confirmation can mean
    * anything. Its own call, rather than an empty batch (which is a manifest with
-   * no files in it) or a text session nobody asked for.
+   * no files in it) or a conversation nobody asked for.
    *
    * Sends no keys by itself. The file lane pulls the current set on every
    * (re)established transport, and what that pull answers is gated separately —
@@ -168,7 +162,6 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
    * ever read from inside an event handler.
    */
   let departed = $state.raw<ReadonlySet<string>>(new Set());
-  let textOwner: "legacy" | "mixed" = "legacy";
 
   /**
    * Whether an established link with a live transport already binds this peer.
@@ -178,10 +171,9 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
    * own id, and a capability announcement that arrives over signalling and is
    * pruned with the roster (peer-caps' `retainPeers`) — and none of those is a
    * fact about the DataChannel between the two pages. A peer's socket dropping,
-   * or this page's own, therefore used to flip a healthy, authenticated,
-   * mutually verified link's peer back to "legacy": new file batches fell
-   * through to a second connection with a second SAS, or were refused outright
-   * by `blocksNewIntent`, while the unified link carried on working.
+   * or this page's own, therefore used to make a healthy, authenticated,
+   * mutually verified link's peer read as unreachable: new file batches were
+   * refused outright by `blocksNewIntent` while the link carried on working.
    *
    * Scoped to `open`, so this is never a way to bypass a gate. A held link has
    * no transport under it and getting one back means a rebuild through the
@@ -198,10 +190,6 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
   function routes(peerId: string): boolean {
     if (linkAuthoritative(peerId)) return true;
     return deps.joined() && deps.selfId() !== "" && supports(peerId);
-  }
-
-  function legacyEngaged(): boolean {
-    return deps.legacyFiles.transferActive || deps.legacyText.active();
   }
 
   function isSuppressed(peerId: string): boolean {
@@ -225,7 +213,6 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
       return deps.joined() && deps.selfId() !== ""
         && deps.peerIds().includes(peerId)
         && !deps.unsupported()
-        && !legacyEngaged()
         && !isSuppressed(peerId);
     },
     connect: deps.connect,
@@ -272,7 +259,7 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
       // on screen to SAY so. Without this the surface silently reverts to the
       // device chooser and the only evidence that a transfer stopped mid-flight
       // is that it is no longer there. Deliberately not part of
-      // `blocksLegacyInbound`/`blocksNewIntent` below: it holds the screen, it
+      // `linkEngaged`/`blocksNewIntent` below: it holds the screen, it
       // does not hold the peer — starting a new link is exactly the way out, and
       // doing so clears it.
       || mixed.endReason !== ""
@@ -291,32 +278,25 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
       // `dismissLinkEnd`, which clears `endReason` and calls the manager's
       // `clearFailed` to put it back to `idle`, returning this getter to false.
       // So the terminal state is readable AND has a way out. Kept out of
-      // `blocksLegacyInbound`/`blocksNewIntent` for the same reason `endReason`
+      // `linkEngaged`/`blocksNewIntent` for the same reason `endReason`
       // is: it holds the screen, not the peer.
       || mixed.status === "failed";
   }
 
-  function blocksLegacyInbound(): boolean {
+  /**
+   * Whether this page is committed to a link right now — requested, connecting,
+   * open, or with either lane still doing something.
+   *
+   * Internal, and deliberately no longer on the public interface. It used to be
+   * `blocksLegacyInbound`, read by the two legacy lanes to refuse an inbound
+   * offer while a link owned the screen. Those lanes are gone, so its only
+   * remaining reader is `blocksNewIntent` below — and a member named for a
+   * transport that no longer exists would be a standing invitation to wire one
+   * back up.
+   */
+  function linkEngaged(): boolean {
     return mixed.status === "requesting" || mixed.status === "connecting"
       || mixed.status === "open" || !!mixed.link || mixed.file.active() || mixed.text.active();
-  }
-
-  function usesMixedText(): boolean {
-    if (mixed.text.active()) {
-      textOwner = "mixed";
-      return true;
-    }
-    if (deps.legacyText.active()) {
-      textOwner = "legacy";
-      return false;
-    }
-    if (textOwner === "mixed"
-      && (mixed.text.status !== "idle" || mixed.text.history.length > 0)) return true;
-    if (textOwner === "legacy"
-      && (deps.legacyText.status !== "idle" || deps.legacyText.history.length > 0)) return false;
-    if (mixed.text.status !== "idle" && deps.legacyText.status === "idle") return true;
-    if (deps.legacyText.status !== "idle" && mixed.text.status === "idle") return false;
-    return textOwner === "mixed";
   }
 
   function clearSuppressionForIntent(peerId: string) {
@@ -324,8 +304,7 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
   }
 
   function blocksNewIntent(peerId: string): boolean {
-    if (legacyEngaged()) return true;
-    if (blocksLegacyInbound()) {
+    if (linkEngaged()) {
       return !(routes(peerId) && mixed.peerId === peerId);
     }
     return false;
@@ -333,18 +312,17 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
 
   return {
     get mixed() { return mixed; },
-    get send() { return mixed.file.send ?? deps.legacyFiles.send; },
-    get recv() { return mixed.file.recv ?? deps.legacyFiles.recv; },
-    get incoming() { return mixed.file.incoming ?? deps.legacyFiles.incoming; },
-    get sasCode() { return mixed.link?.sas ?? deps.legacyFiles.sasCode; },
-    get sendPath() { return mixed.file.send ? mixed.path ?? undefined : deps.legacyFiles.sendPath; },
-    get recvPath() { return mixed.file.recv ? mixed.path ?? undefined : deps.legacyFiles.recvPath; },
-    get text() { return usesMixedText() ? mixed.text : deps.legacyText; },
-    get textPath() { return usesMixedText() ? mixed.path ?? undefined : deps.legacyText.path; },
+    get send() { return mixed.file.send; },
+    get recv() { return mixed.file.recv; },
+    get incoming() { return mixed.file.incoming; },
+    get sasCode() { return mixed.link?.sas ?? ""; },
+    get sendPath() { return mixed.file.send ? mixed.path ?? undefined : undefined; },
+    get recvPath() { return mixed.file.recv ? mixed.path ?? undefined : undefined; },
+    get text() { return mixed.text; },
+    get textPath() { return mixed.path ?? undefined; },
     get usingMixed() { return usingMixed(); },
     get hasLink() { return !!mixed.link; },
-    get blocksLegacyInbound() { return blocksLegacyInbound(); },
-    get warnsOnLeave() { return deps.legacyFiles.busy || mixed.active(); },
+    get warnsOnLeave() { return mixed.active(); },
     get linkPeerId() { return usingMixed() ? mixed.peerId : ""; },
     get linkStatus() { return mixed.status; },
     get linkGeneration() { return mixed.linkGeneration; },
@@ -354,20 +332,13 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
     get recoveryAvailable() { return mixed.recoveryAvailable; },
     get linkEndReason() { return mixed.endReason; },
     dismissLinkEnd() { mixed.dismissEnded(); },
-    cancelQueuedBatch(id) {
-      // Deliberately unconditional: the legacy path never populates this queue,
-      // so there is nothing for a stray id to cancel there.
-      mixed.file.cancelQueued(id);
-    },
+    cancelQueuedBatch(id) { mixed.file.cancelQueued(id); },
     routes,
     blocksNewIntent,
     prepareHandoff(peerId) {
       if (!peerId) return;
       if (blocksNewIntent(peerId)) return;
-      // No legacy fallback, deliberately: the legacy transport has no handoff
-      // frame at all, so a link built for a peer that does not route would be a
-      // connection with nothing to say on it. Those entries reach that peer
-      // through the live lane's own one-way release instead (handoff-lane).
+      // Unsupported is terminal, exactly as it is for every other intent below.
       if (!routes(peerId)) return;
       // The one intent that does NOT clear the explicit-disconnect suppression,
       // because it is the one intent the user did not express. Clearing it would
@@ -384,72 +355,34 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
       // An empty batch is never a transfer, and the one caller that can produce
       // one is the auto-send effect draining a queue whose only entries are
       // uploading or already uploaded. Refused HERE as well as at that call site
-      // because this is the single choke point both transports pass through: the
-      // legacy path would otherwise seal and send a manifest with no files in it,
-      // and the peer would raise a consent prompt for nothing.
+      // because this is the single choke point every batch passes through.
       if (!files.length) return;
       if (blocksNewIntent(peerId)) return;
+      // Unsupported is terminal. There is no second transport to seal this batch
+      // onto, so the batch is simply not started — and because `routes` is the
+      // exact `link/1` test, a peer that announced nothing, `text/1`, a cased
+      // variant or a later version never receives a speculative offer here.
+      if (!routes(peerId)) return;
       clearSuppressionForIntent(peerId);
-      if (routes(peerId)) mixed.file.enqueue(peerId, files);
-      else {
-        if (mixed.file.send || mixed.file.recv || mixed.file.incoming) mixed.file.reset();
-        deps.legacyFiles.sendFiles(peerId, files);
-      }
+      mixed.file.enqueue(peerId, files);
     },
     async openText(peerId) {
       if (blocksNewIntent(peerId)) return;
+      if (!routes(peerId)) return;
       clearSuppressionForIntent(peerId);
-      if (routes(peerId)) {
-        textOwner = "mixed";
-        await mixed.text.openWith(peerId);
-      } else {
-        textOwner = "legacy";
-        await deps.legacyText.openWith(peerId);
-      }
+      await mixed.text.openWith(peerId);
     },
-    acceptFile() {
-      if (mixed.file.incoming) mixed.file.accept();
-      else deps.legacyFiles.accept();
-    },
-    rejectFile() {
-      if (mixed.file.incoming) mixed.file.reject();
-      else deps.legacyFiles.reject();
-    },
-    abortFile(dir) {
-      const activeMixed = dir === "send" ? mixed.file.send : mixed.file.recv;
-      if (activeMixed || mixed.file.active()) mixed.file.cancel(dir);
-      else deps.legacyFiles.abort(dir);
-    },
-    dismissSend(xfer) {
-      if (mixed.file.send === xfer) mixed.file.dismissSend(xfer);
-      else deps.legacyFiles.dismissSend(xfer);
-    },
-    dismissRecv(xfer) {
-      if (mixed.file.recv === xfer) mixed.file.dismissRecv(xfer);
-      else deps.legacyFiles.dismissRecv(xfer);
-    },
-    acceptText() {
-      if (usesMixedText()) { textOwner = "mixed"; mixed.text.accept(); }
-      else { textOwner = "legacy"; deps.legacyText.accept(); }
-    },
-    rejectText() {
-      if (usesMixedText()) { textOwner = "mixed"; mixed.text.reject(); }
-      else { textOwner = "legacy"; deps.legacyText.reject(); }
-    },
-    sendText(body) {
-      if (usesMixedText()) { textOwner = "mixed"; return mixed.text.send(body); }
-      textOwner = "legacy";
-      return deps.legacyText.send(body);
-    },
-    clearText() {
-      if (usesMixedText()) mixed.text.clearHistory();
-      else deps.legacyText.clearHistory();
-    },
-    endText() {
-      if (usesMixedText()) { textOwner = "mixed"; mixed.text.end(); }
-      else { textOwner = "legacy"; deps.legacyText.end(); }
-    },
-    conn() { return mixed.link?.conn ?? deps.legacyFiles.conn() ?? null; },
+    acceptFile() { mixed.file.accept(); },
+    rejectFile() { mixed.file.reject(); },
+    abortFile(dir) { mixed.file.cancel(dir); },
+    dismissSend(xfer) { mixed.file.dismissSend(xfer); },
+    dismissRecv(xfer) { mixed.file.dismissRecv(xfer); },
+    acceptText() { mixed.text.accept(); },
+    rejectText() { mixed.text.reject(); },
+    sendText(body) { return mixed.text.send(body); },
+    clearText() { mixed.text.clearHistory(); },
+    endText() { mixed.text.end(); },
+    conn() { return mixed.link?.conn ?? null; },
     start() { mixed.start(); },
     syncPeers() {
       // A target we are still WAITING on gets the same rule. A device's current
@@ -459,24 +392,6 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
       // accept…" for a page that is no longer anybody's target.
       const awaiting = mixed.manager.requestedPeerId;
       if (awaiting && !deps.peerIds().includes(awaiting)) mixed.disconnect();
-      // The same rule for the legacy text session, which is still the path for
-      // every peer that does not speak link/1 — native clients included — in
-      // either kind of room. A live session whose
-      // peer is no longer in the roster is not merely stale on screen: it still
-      // counts as busy, so the user cannot start a new one with the page that
-      // replaced it either.
-      // Do not tear down an established or incoming session merely because its
-      // peer stopped representing the device: a focus handoff removes that peer
-      // id from the chooser even though its socket/data channel is still alive.
-      // Those sessions own their transport close lifecycle. Only an outgoing
-      // attempt that has not opened yet can be the stale-target wait reported by
-      // the user.
-      const chatting = deps.legacyText.peerId;
-      const awaitingLegacy = deps.legacyText.status === "connecting"
-        || deps.legacyText.status === "waitingAccept";
-      if (chatting && awaitingLegacy && !deps.peerIds().includes(chatting)) {
-        deps.legacyText.end();
-      }
       for (const suppressed of suppressedUntil.keys()) {
         if (!deps.peerIds().includes(suppressed)) suppressedUntil.delete(suppressed);
       }
@@ -503,9 +418,6 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
       if (!mixed.peerDeparted(peerId) && mixed.manager.boundPeerId === peerId) {
         mixed.disconnect();
       }
-      if (deps.legacyText.peerId === peerId && deps.legacyText.active()) {
-        deps.legacyText.end();
-      }
       suppressedUntil.delete(peerId);
     },
     disconnect() {
@@ -524,7 +436,6 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
       // boundary; an explanation about the old room's link is not about anything
       // the user can still see.
       mixed.dismissEnded();
-      textOwner = "legacy";
     },
     stop() {
       suppressedUntil.clear();

@@ -21,9 +21,8 @@ import RelayiumKit
 /// It was briefly half of one merged Workspace row, on the argument that a
 /// pairing code and same-network discovery are two ways to reach one peer rather
 /// than two products. Underneath, that is true and still is: both drive the same
-/// `RealtimeSessionModel`, `RealtimeTextSessionModel` and `LinkWorkspaceModel`,
-/// and `TransferPresence` still hands the one live session to exactly one of
-/// them. On screen it was not: the two methods have different preconditions —
+/// `LinkWorkspaceModel`, and `TransferPresence` still hands the one live session
+/// to exactly one of them. On screen it was not: the two methods have different preconditions —
 /// this one requires the same network and no account, the other requires an
 /// account to mint a code and explicitly does NOT require a shared network — and
 /// a merged screen had to state both, so it stated neither first. Splitting the
@@ -37,8 +36,7 @@ import RelayiumKit
 /// cannot be reached by a later edit either.
 ///
 /// **And not the session, any more.** For several rounds the two screens drove
-/// one `RealtimeSessionModel`, one `RealtimeTextSessionModel`, one
-/// `LinkWorkspaceModel` and one `TransferPresence`, and that sharing had three
+/// one `LinkWorkspaceModel` and one `TransferPresence`, and that sharing had three
 /// consequences the owner asked to have removed: a same-network session
 /// disabled every control on the Cross-network screen, one `link/1` owner routed
 /// two rooms so the LAN roster's churn cancelled pairing requests in flight, and
@@ -69,13 +67,12 @@ struct LanTransferDestination: View {
     /// Cross-network destination.
     private let route = AppDestination.nearby
 
-    private var presence: TransferPresence { module.presence }
-    private var fileModel: RealtimeSessionModel { module.files }
-    private var textModel: RealtimeTextSessionModel { module.text }
-    /// The unified `link/1`, for peers that announced it.
+    /// The unified `link/1` — the ONLY transport this screen composes. A peer
+    /// that does not announce exact `link/1` is stated as unsupported by
+    /// `LanConnectPane` and is never dialled.
     private var link: LinkWorkspaceModel { module.link }
 
-    private var pane: TransferSurfacePane { module.pane }
+    private var pane: LinkTransferPane { module.pane }
 
     /// Locked the moment anything is claimed, live or retained **in this
     /// module** — and by nothing on the other destination. The models read the
@@ -91,8 +88,6 @@ struct LanTransferDestination: View {
             switch pane {
             case .link:
                 TransferLinkPane(link: link)
-            case .legacySession:
-                TransferSessionPane(module: module)
             case .connect:
                 LanConnectPane(module: module,
                                discovery: discovery,
@@ -106,24 +101,19 @@ struct LanTransferDestination: View {
             // something they do not understand happen.
             HelpCard(surface: .lanTransfer)
         }
-        // A session nobody asked for decides its own kind, so the mode follows
-        // it. `task(id:)` rather than `onChange`, because this window may have
-        // been closed when the session started and rebuilt — with the mode back
-        // at its default — while it is still running.
-        //
-        // Only this destination does it: an unsolicited same-network session
-        // routes to `.nearby` (`AppRouting.destination(forIncoming:)`), and the
-        // Cross-network screen claiming one would be a second surface admitting
-        // a session it does not route.
-        .task(id: receive.activeKind) { followIncoming() }
     }
 
-    /// Puts an incoming session on screen in the mode that can render it.
-    /// Without this, a file transfer arriving while the mode sat on text shows
-    /// the text lane's idle state and the transfer is invisible.
-    private func followIncoming() {
-        guard let kind = receive.activeKind else { return }
-        presence.claim(AppRouting.destination(forIncoming: kind),
-                       mode: kind == .file ? .files : .text)
-    }
+    // **No `followIncoming`, and no `activeKind` task.**
+    //
+    // Both existed to put an unsolicited LEGACY session on screen in the lane
+    // that could render it — a file transfer arriving while the mode sat on text
+    // was otherwise invisible. `RelayiumApp` now refuses every legacy inbound
+    // session (`receive.shouldAcceptSession` answers false), so `activeKind`
+    // can never become non-nil and the task could only be a no-op that still
+    // read as a route.
+    //
+    // An unsolicited `link/1` is a different gate on a different frame:
+    // `shouldAcceptLink` claims this module's surface and navigates here, and
+    // `pane` answers `.link` from `link.hasSession` alone. There is no mode to
+    // follow, because one link carries both lanes.
 }

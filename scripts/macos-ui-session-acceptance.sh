@@ -77,6 +77,51 @@
 # PASS line is allowed to claim. `lib/macos-ui-test-selection.sh` holds that
 # mapping and the reasoning behind it.
 
+# ── the shared-loopback `/api/ice` budget, and the wait it forces ───────────
+#
+# Every process this script starts — the app under test, the throwaway server
+# and every counterpart — runs on `127.0.0.1`, so the whole run spends ONE
+# address's budget at an endpoint sized for one real user. `/api/ice` allows
+# five requests per trailing minute per IP (`server/main.go`:
+# `account.PerInstanceThreshold(5, div)`, and the divisor is 1 here), and `/ws`
+# shares a five-DIFFERENT-codes budget with it. One method spends several: the
+# same-network room fetches with an empty code, and each pairing room fetches
+# once per side.
+#
+# Measured, and the reason this exists: two methods back to back, and the second
+# method's counterpart is answered 429, ends `roomUnavailable` and never opens
+# its link — while the app is already establishing, so the app's own screen
+# looks right and only the far end says otherwise. A red run against a correct
+# build. Each method passes on its own, against a budget nothing has spent.
+#
+# **The limiter is a TRAILING window, not a bucket that empties on a fixed
+# boundary**: `signal.RateLimiter.Allow` keeps only the hits newer than the
+# window and counts those. So the rule is not "wait for a reset" — there is none
+# — it is "let the previous round's newest hit age out". A full window measured
+# from the moment the previous `xcodebuild` EXITED does that with nothing left to
+# assume: none of that round's requests can be newer than its own exit.
+#
+# This neither weakens nor bypasses the limiter. It runs at its real production
+# setting for the whole run against a real server; what changes is only that
+# this script stops asking one address for more than one address may have.
+ice_limiter_window_seconds=60
+
+# How long a default round must wait before it may spend `/api/ice` again.
+#
+# Pure — window and elapsed in, seconds out — so the rule is testable without a
+# server, a build or a minute of real time. The REMAINDER rather than the whole
+# window, so anything that already took time between the rounds counts towards
+# it; 0, never a negative number, once the window has passed.
+ice_limiter_wait_seconds() {
+  if [ "$2" -ge "$1" ]; then printf '0\n'; else printf '%s\n' "$(($1 - $2))"; fi
+}
+
+# Sourced by `scripts/test/macos-ui-selection-test.sh` to test the rule above.
+# Everything BELOW this line has an effect on the machine — a server, a signed
+# build, counterpart processes — and nothing above it does, which is what makes
+# stopping here safe rather than a partial run.
+[ "${MACOS_UI_ACCEPTANCE_RULES_ONLY:-0}" = 1 ] && return 0
+
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -271,11 +316,24 @@ if [ "$#" -gt 0 ]; then
   run_xcodebuild xcodebuild "$@"
 else
   round=0
+  # Empty until a round has actually exited, so the FIRST round never waits:
+  # nothing has spent the budget yet, and a minute of sleep before the first
+  # build would be a minute that proves nothing.
+  previous_round_exited=
   for test_method in $selected_methods; do
     round=$((round + 1))
+    if [ -n "$previous_round_exited" ]; then
+      wait_seconds="$(ice_limiter_wait_seconds "$ice_limiter_window_seconds" \
+        "$(($(date +%s) - previous_round_exited))")"
+      if [ "$wait_seconds" -gt 0 ]; then
+        say "-- letting the previous round's /api/ice requests age out (${wait_seconds}s)"
+        sleep "$wait_seconds"
+      fi
+    fi
     say "== driving LocalSessionUITests/$test_method (process $round of $selected_count) =="
     run_xcodebuild "xcodebuild-$round" \
       "-only-testing:RelayiumUITests/LocalSessionUITests/$test_method"
+    previous_round_exited="$(date +%s)"
   done
 fi
 

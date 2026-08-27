@@ -7,8 +7,6 @@ import { createPeerWorkspace, type PeerWorkspace } from "./peer-workspace.svelte
 import { needsSendConfirmation, shownSasCode } from "./verify-gates";
 import type { Peer } from "./protocol";
 import type { SignalingClient } from "./signaling";
-import type { TextSession } from "./text-session.svelte";
-import type { TransferSession } from "./transfer-session.svelte";
 import type { Conn, ConnectOpts, InboundSignal } from "./webrtc";
 
 // The preselected-batch journey, end to end through the REAL objects: the shared
@@ -54,18 +52,6 @@ function setup() {
       stats: async () => new Map() as unknown as RTCStatsReport,
     };
   });
-  const legacyFiles = {
-    incoming: null, recv: null, send: null, sasCode: "", sendPath: undefined,
-    recvPath: undefined, busy: false, transferActive: false,
-    sendFiles: vi.fn(), accept: vi.fn(), reject: vi.fn(), abort: vi.fn(),
-    abortAll: vi.fn(), dismissSend: vi.fn(), dismissRecv: vi.fn(), reset: vi.fn(),
-    conn: vi.fn(),
-  } as unknown as TransferSession;
-  const legacyText = {
-    status: "idle", peerId: "", sasCode: "", path: undefined, history: [], errorKey: "",
-    openWith: vi.fn(), accept: vi.fn(), reject: vi.fn(), send: vi.fn(), end: vi.fn(),
-    clearHistory: vi.fn(), active: () => false,
-  } as unknown as TextSession;
   const workspace = createPeerWorkspace({
     selfId: () => "a",
     joined: () => true,
@@ -73,12 +59,10 @@ function setup() {
     unsupported: () => false,
     signaling: () => signaling,
     rtcConfig: () => ({ iceServers: [] }),
-    legacyFiles,
-    legacyText,
     supportsLink: () => true,
     connect,
   });
-  return { workspace, legacyFiles, connect, ...app(workspace) };
+  return { workspace, connect, ...app(workspace) };
 }
 
 /**
@@ -166,7 +150,6 @@ describe("a preselected batch meeting a unified peer", () => {
     expect(h.workspace.hasLink).toBe(false);
     expect(h.workspace.mixed.file.send).toBeNull();
     expect(h.workspace.mixed.file.queued).toHaveLength(0);
-    expect(h.legacyFiles.sendFiles).not.toHaveBeenCalled();
     expect(h.peer()).toEqual(target);
 
     // 3. Opening the workspace builds the link and drains NOTHING — the whole

@@ -264,6 +264,19 @@ final class LinkPairingRoomTests: XCTestCase {
             }
         }
 
+        /// Every peer this side answered `busy` — the refusal a peer settles
+        /// `.refused` on. Separate from `linkFramesSent`, which counts only what
+        /// this side ASKED for: a refusal is not an ask, and a test that watched
+        /// asks alone would call a room that refused its own counterpart quiet.
+        var busyRefusalsSent: [String] {
+            channels[0].sent.compactMap { text in
+                guard let envelope = try? JSONDecoder().decode(Envelope.self, from: Data(text.utf8)),
+                      envelope.type == SignalType.signal, let data = envelope.data,
+                      parseBusy(data) else { return nil }
+                return envelope.to
+            }
+        }
+
         /// A `link`-generation SDP offer, exactly as `webrtc.ts` frames one:
         /// the SDP, the generation tag, the handshake commit and the
         /// per-connection capability confirmation in a single frame.
@@ -277,6 +290,10 @@ final class LinkPairingRoomTests: XCTestCase {
 
     private func rig(config: ICEConfig,
                      requiresVerification: Bool = false,
+                     // Defaulted to the shipped policy, so every test written
+                     // before this seam existed still drives the fallback path
+                     // and still asserts the behaviour it was written for.
+                     legacyFallback: LinkPairingFallbackPolicy = .adoptLegacySession,
                      selfId: String = "aaa-mac",
                      iceByCode: [String: ICEConfig] = [:],
                      iceLatches: [String: ICELatch] = [:],
@@ -303,6 +320,7 @@ final class LinkPairingRoomTests: XCTestCase {
                 return socket
             },
             pairingRoomHandle: handle,
+            legacyFallback: legacyFallback,
             scheduler: scheduler,
             now: { now },
             relayMeasure: relayMeasure,
@@ -1315,6 +1333,301 @@ final class LinkPairingRoomTests: XCTestCase {
         XCTAssertNil(rig.handle.signaling,
                      "a room nobody was handed must not be left in the handle")
     }
+    // MARK: - the fallback policy, and the composition that has nothing to fall
+    //         back to
+
+    /// **The default is the shipped behaviour, and this test proves it by NOT
+    /// naming a policy.**
+    ///
+    /// It builds its model inline rather than through `rig(...)`, and that is
+    /// the whole point. The rig carries its own defaulted `legacyFallback`
+    /// argument, so a rig-based "default" test would pass the rig's default and
+    /// never touch the production one — flipping
+    /// `LinkWorkspaceModel.init`'s default would leave it green. This omits the
+    /// argument entirely, so the value under test is the one every existing
+    /// caller inherits: the paused iOS composition, the headless acceptance
+    /// hosts, and every test written before this seam existed.
+    func testTheProductionDefaultStillHandsAStrippedRoomToTheLegacyPath() async {
+        let dir = self.dir!
+        let scheduler = ManualScheduler()
+        let channel = FakeWebSocketChannel()
+        var adopted: [(peerId: String, role: Role, mode: TransferMode)] = []
+        let model = LinkWorkspaceModel(
+            capabilities: PeerCapabilityRegistry(linkRoomActive: { true }),
+            receiveDirectory: { dir }, requiresVerification: { false },
+            iceClient: StubICEClient(config: stunOnlyConfig(), perCode: [:], latches: [:]),
+            connectPairingSocket: { _ in
+                let socket = SignalingClient(channel: channel, name: "Mac")
+                channel.fireOpen()
+                return socket
+            },
+            // NO `legacyFallback:` argument. Adding one here would defeat the test.
+            scheduler: scheduler,
+            assemble: { _, _, _, _, _, _, _, _, _ in
+                XCTFail("a stripped room must not assemble a link")
+                fatalError()
+            })
+        model.adoptLegacyRoom = { peerId, role, _, mode in adopted.append((peerId, role, mode)) }
+
+        XCTAssertTrue(model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        channel.fire(Envelope(type: SignalType.welcome, name: "aaa-mac"))
+        channel.fire(Envelope(type: SignalType.peers, peers: [Peer(id: "zzz-web", name: "peer")]))
+        await settle()
+        scheduler.advance(to: LinkWorkspaceModel.pairingCapabilityWait)
+        await settle()
+
+        XCTAssertEqual(adopted.map(\.peerId), ["zzz-web"],
+                       "the production default must keep handing the room over")
+        XCTAssertEqual(adopted.map(\.role), [.responder], "the verb the user pressed")
+        XCTAssertFalse(model.unsupportedPairingPeer,
+                       "the production default must never publish the refusal")
+        XCTAssertFalse(channel.closed,
+                       "and must keep the socket open for the session it handed it to")
+    }
+
+    /// The same default, read directly. A behavioural test says what the default
+    /// DOES; this says what it IS, so a flip is named in the diff of whichever
+    /// one the author was not thinking about.
+    func testTheProductionDefaultPolicyIsTheLegacyHandover() async {
+        let dir = self.dir!
+        let model = LinkWorkspaceModel(
+            capabilities: PeerCapabilityRegistry(linkRoomActive: { true }),
+            receiveDirectory: { dir }, requiresVerification: { false },
+            iceClient: nil)
+        // The convenience initializer's default, through the public surface the
+        // app targets actually call.
+        XCTAssertEqual(model.pairingFallbackPolicy, .adoptLegacySession)
+    }
+
+    /// **The positive control, under the new policy.** Contracting the fallback
+    /// must not contract the protocol: a peer that announces exact `link/1` gets
+    /// the same unified link it always did, over the same one socket, with the
+    /// same activation callback and the same verified transport.
+    ///
+    /// Written first and deliberately: every assertion below it is an absence,
+    /// and a rig that had silently stopped linking at all would satisfy every
+    /// one of them.
+    func testExactLinkStillOpensNormallyWhenTheFallbackIsDisabled() async throws {
+        let rig = rig(config: stunOnlyConfig(), legacyFallback: .terminateUnsupported)
+        let transport = await openPairedLink(rig)
+        let opened = try XCTUnwrap(transport, "exact link/1 must still reach a transport")
+
+        XCTAssertTrue(rig.model.connection.isOpen)
+        XCTAssertEqual(rig.pairingLinkActivations, 1)
+        XCTAssertEqual(rig.transports.count, 1, "one link, on one connection")
+        XCTAssertEqual(rig.joinedCodes.count, 1, "and one room for it")
+        XCTAssertFalse(rig.model.unsupportedPairingPeer,
+                       "a link/1 peer is not unsupported")
+        XCTAssertTrue(rig.adopted.isEmpty, "and no legacy session was started for it")
+
+        // …and it carries both lanes, which is the whole claim the code makes.
+        rig.model.send(message: "hello")
+        await settle()
+        XCTAssertEqual(opened.sent[.text]?.first, [LINK_TEXT_REQUEST])
+        rig.model.send(files: [FileMeta(name: "a.bin", size: 4, path: nil)],
+                       sources: [DataSource(name: "a.bin", bytes: [1, 2, 3, 4])])
+        await settle()
+        XCTAssertFalse(opened.sent[.file, default: []].isEmpty,
+                       "the file lane must still carry a batch")
+    }
+
+    /// **Every inbound tag that is not exactly `link/1` terminates as
+    /// unsupported, and none of them reaches a fallback, an offer or a
+    /// transport.**
+    ///
+    /// The table is the adversarial half. `LINK/1` and `Link/1` are case folds,
+    /// `link/2` is a later wire, `link/1x` is a prefix, `text/1` is the legacy
+    /// lane and the mixed rows are a peer announcing a real capability beside a
+    /// near-miss — the shape that would pass any `contains`-flavoured check
+    /// written against a substring instead of an element.
+    ///
+    /// An EMPTY hello is deliberately in this table too: it is a hello, and
+    /// under this policy it is a decidable one, so it must not wait out the
+    /// window. Genuine silence is the separate test below.
+    func testNoNonExactAnnouncementReachesAnythingWhenTheFallbackIsDisabled() async {
+        let cases: [[String]] = [
+            [],
+            [TEXT_CAPABILITY],
+            ["LINK/1"],
+            ["Link/1", "preupload/1"],
+            ["link/2"],
+            ["link/1x"],
+            ["link/10"],
+            [TEXT_CAPABILITY, "link/2"],
+            ["preupload/1"],
+        ]
+        for caps in cases {
+            let rig = rig(config: stunOnlyConfig(), legacyFallback: .terminateUnsupported)
+            XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .initiator))
+            await settle()
+            rig.welcome("aaa-mac")
+            rig.announce("zzz-web", caps)
+            rig.roster(["zzz-web"])
+            await settle()
+
+            XCTAssertTrue(rig.model.unsupportedPairingPeer,
+                          "caps \(caps) did not terminate as unsupported")
+            // Decided on the spot: the clock is never advanced above, so a rule
+            // that still waited out `pairingCapabilityWait` fails here.
+            XCTAssertTrue(rig.adopted.isEmpty, "caps \(caps) reached a legacy session")
+            XCTAssertTrue(rig.handedBackBatches.isEmpty, "caps \(caps) handed a batch back")
+            XCTAssertEqual(rig.pairingLinkActivations, 0, "caps \(caps)")
+            XCTAssertTrue(rig.transports.isEmpty, "caps \(caps) assembled a transport")
+            XCTAssertEqual(rig.linkFramesSent, [],
+                           "caps \(caps) put a speculative link frame on the wire")
+            XCTAssertEqual(rig.model.connection, .idle, "caps \(caps)")
+            XCTAssertNil(rig.model.handedOverPairing, "caps \(caps) recorded a handover")
+            XCTAssertTrue(rig.channels[0].closed,
+                          "caps \(caps) left the refused room's socket open")
+            XCTAssertNil(rig.handle.signaling, "caps \(caps) left a socket in the handle")
+        }
+    }
+
+    /// A peer that says nothing at all still waits out the window — silence is
+    /// not an announcement — and then terminates rather than falling back.
+    func testASilentPeerWaitsTheWindowAndThenTerminatesUnsupported() async {
+        let rig = rig(config: stunOnlyConfig(), legacyFallback: .terminateUnsupported)
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+        rig.roster(["zzz-web"])
+        await settle()
+
+        XCTAssertFalse(rig.model.unsupportedPairingPeer,
+                       "the window has not elapsed; a silent peer may still announce")
+        XCTAssertEqual(rig.model.connection, .watching(code: "AB12CD"))
+
+        rig.scheduler.advance(to: LinkWorkspaceModel.pairingCapabilityWait)
+        await settle()
+
+        XCTAssertTrue(rig.model.unsupportedPairingPeer)
+        XCTAssertTrue(rig.adopted.isEmpty)
+        XCTAssertTrue(rig.channels[0].closed)
+    }
+
+    /// **A late hello inside the window still promotes**, even under the policy
+    /// whose whole job is to refuse. The window is a grace, not a countdown to a
+    /// refusal, and a peer whose roster frame beat its hello must not be
+    /// answered before it has spoken.
+    func testALateExactHelloInsideTheWindowStillPromotesUnderTheStrictPolicy() async {
+        let rig = rig(config: stunOnlyConfig(), legacyFallback: .terminateUnsupported)
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+        rig.roster(["zzz-web"])
+        await settle()
+
+        rig.scheduler.advance(to: LinkWorkspaceModel.pairingCapabilityWait - 0.01)
+        rig.announce("zzz-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        await settle()
+
+        XCTAssertFalse(rig.model.unsupportedPairingPeer,
+                       "a hello that arrived inside the window is not a refusal")
+        XCTAssertEqual(rig.pairingLinkActivations, 1)
+        XCTAssertEqual(rig.transports.count, 1)
+
+        // And the window that was already armed must not fire behind it.
+        rig.scheduler.advance(to: LinkWorkspaceModel.pairingCapabilityWait * 3)
+        await settle()
+        XCTAssertFalse(rig.model.unsupportedPairingPeer,
+                       "the elapsed window retired a link that had already been claimed")
+        XCTAssertTrue(rig.adopted.isEmpty)
+    }
+
+    /// A batch the user armed before the peer turned up is DROPPED, not handed
+    /// back — there is no lane left to hand it to — and it is never put on the
+    /// wire.
+    ///
+    /// The armed-batch path is where the default policy does its most work
+    /// (`legacyFallbackMode` reads it to choose a lane), so it is the most
+    /// likely place for the old behaviour to survive the seam.
+    func testAnArmedBatchIsDroppedRatherThanHandedBackWhenTheFallbackIsDisabled() async {
+        let rig = rig(config: stunOnlyConfig(), legacyFallback: .terminateUnsupported)
+        XCTAssertTrue(rig.model.watchPairingCode(
+            "AB12CD", legacyRole: .initiator,
+            files: [FileMeta(name: "secret.pdf", size: 9, path: nil)],
+            sources: [DataSource(name: "secret.pdf", bytes: [UInt8](repeating: 7, count: 9))]))
+        await settle()
+        rig.welcome("aaa-mac")
+        rig.announce("zzz-web", [TEXT_CAPABILITY])
+        rig.roster(["zzz-web"])
+        await settle()
+
+        XCTAssertTrue(rig.model.unsupportedPairingPeer)
+        XCTAssertTrue(rig.handedBackBatches.isEmpty,
+                      "a batch handed back has nowhere to go and would be held forever")
+        XCTAssertTrue(rig.model.armedFiles.isEmpty,
+                      "and it must not stay armed for whatever the object does next")
+        XCTAssertTrue(rig.transports.isEmpty)
+        XCTAssertEqual(rig.linkFramesSent, [])
+    }
+
+    /// The refusal does not announce a downgrade.
+    ///
+    /// The hand-over sends one — it names the lane the legacy session is about
+    /// to run — and sending it here would revoke a `link/1` this build genuinely
+    /// still speaks. Asserted on the SOCKET, because that is where a lie would
+    /// actually be told.
+    func testTheRefusalTellsThePeerNothingAtAll() async {
+        let rig = rig(config: stunOnlyConfig(), legacyFallback: .terminateUnsupported)
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .initiator))
+        await settle()
+        rig.welcome("aaa-mac")
+        let before = rig.channels[0].sent.count
+        rig.announce("zzz-web", [TEXT_CAPABILITY])
+        rig.roster(["zzz-web"])
+        await settle()
+
+        XCTAssertTrue(rig.model.unsupportedPairingPeer)
+        let after = rig.channels[0].sent.dropFirst(before)
+        let downgrades = after.filter { text in
+            guard let envelope = try? JSONDecoder().decode(Envelope.self, from: Data(text.utf8)),
+                  envelope.type == SignalType.signal, let data = envelope.data else { return false }
+            // Any hello at all: an empty `caps` array is the revocation the
+            // hand-over sends for a file lane, and it is exactly what must not
+            // appear here.
+            if case let .object(root) = data { return root["caps"] != nil }
+            return false
+        }
+        XCTAssertEqual(Array(downgrades), [],
+                       "the refusal withdrew a capability this build still has")
+    }
+
+    /// The refusal is cleared by a new rendezvous and by the user reading it,
+    /// and by nothing else. A flag that survived the next code would make a
+    /// fresh room open under somebody else's answer.
+    func testTheRefusalIsClearedByANewCodeAndByDismissal() async {
+        let rig = rig(config: stunOnlyConfig(), legacyFallback: .terminateUnsupported)
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .initiator))
+        await settle()
+        rig.welcome("aaa-mac")
+        rig.announce("zzz-web", [TEXT_CAPABILITY])
+        rig.roster(["zzz-web"])
+        await settle()
+        XCTAssertTrue(rig.model.unsupportedPairingPeer)
+
+        rig.model.dismissUnsupportedPairingPeer()
+        XCTAssertFalse(rig.model.unsupportedPairingPeer)
+
+        // …and a refusal still standing does not block the next code, which is
+        // the failure a latched flag would actually cause.
+        XCTAssertTrue(rig.model.watchPairingCode("EF34GH", legacyRole: .initiator),
+                      "a refused room must not hold the next one out")
+        await settle()
+        rig.welcome("aaa-mac", at: 1)
+        rig.announce("yyy-web", [TEXT_CAPABILITY], at: 1)
+        rig.roster(["yyy-web"], at: 1)
+        await settle()
+        XCTAssertTrue(rig.model.unsupportedPairingPeer)
+        rig.model.dismissUnsupportedPairingPeer()
+
+        XCTAssertTrue(rig.model.watchPairingCode("IJ56KL", legacyRole: .initiator))
+        await settle()
+        XCTAssertFalse(rig.model.unsupportedPairingPeer,
+                       "watching a new code must clear the previous room's answer")
+    }
+
     // MARK: - N. the room's relay choice
 
     /// Two pool relays plus the legacy top-level TURN, which is the shape a
@@ -2039,6 +2352,130 @@ final class LinkPairingRoomTests: XCTestCase {
         XCTAssertEqual(rig.relayOnly, [true])
         XCTAssertEqual(rig.transports.count, 1, "one establishment")
         XCTAssertEqual(rig.pairingLinkActivations, 1, "and one user-visible settlement")
+    }
+
+    // MARK: - R. the peer this side already chose, asking during the relay hold
+
+    /// A room that has parked its link intent behind a shut relay gate, with the
+    /// surface already claimed — the exact state a macOS pairing is in between
+    /// the peer announcing and the relay choice being made.
+    ///
+    /// `setAvailableForInboundLink(false)` is not a contrivance: it is precisely
+    /// what `TransferModule`'s observer writes here. Its predicate is
+    /// `owner == nil || connection.isWatchingPairingRoom`, and `beginLinkAttempt`
+    /// leaves `.watching` for `.requesting` as it parks — so from the instant
+    /// this room decides which peer it wants until the gate opens, the surface
+    /// answer is no.
+    ///
+    /// Nobody publishes a relay map, so the choice cannot settle and the gate
+    /// cannot open until a test releases it. No timer, no sleep.
+    private func heldGateWithAChosenPeer() async -> Rig {
+        let rig = rig(config: pooledConfig(),
+                      relayMeasure: { pool, publish in
+                          for entry in pool { publish(entry.id, entry.id == "near" ? 10 : 90) }
+                      })
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")           // smaller id: this side is asked to offer
+        rig.roster(["zzz-web"])
+        // The surface is claimed, exactly as the app claims it.
+        rig.model.setAvailableForInboundLink(false)
+        rig.announce("zzz-web", [LINK_CAPABILITY])
+        await settle()
+
+        // The preconditions the tests below are worthless without.
+        XCTAssertEqual(rig.model.connection, .requesting,
+                       "this side has chosen its peer and says so")
+        XCTAssertEqual(rig.linkFramesSent, [],
+                       "and the gate is shut, so nothing it chose is on the wire")
+        XCTAssertTrue(rig.transports.isEmpty)
+        XCTAssertFalse(rig.model.acceptsInboundLinkNow,
+                       "the general answer is no, which is what makes this a hold")
+        return rig
+    }
+
+    /// **The defect this section exists for, at the wire.**
+    ///
+    /// A peer parked behind the relay gate has claimed the surface and published
+    /// `requesting`, but has NOT reached `router.ensure` — so `LinkAdmission` is
+    /// still `.idle`, and its own `.requesting(peer)` exemption cannot apply. The
+    /// surface predicate is the whole decision there, and it says no. A request
+    /// from the one peer this room was opened for was therefore answered `busy`,
+    /// and that peer settled `.refused`: measured in the macOS acceptance run as
+    /// a counterpart that minted a code, waited, asked six seconds later and was
+    /// refused by the device it had paired with.
+    ///
+    /// Role-dependent, which is why it survived: only when the ids make this side
+    /// the offerer does the peer send a request into the hold at all.
+    func testAChosenPeersRequestDuringTheRelayHoldIsNotRefused() async {
+        let rig = await heldGateWithAChosenPeer()
+
+        rig.request(from: "zzz-web")
+        await settle()
+
+        XCTAssertEqual(rig.busyRefusalsSent, [],
+                       "the room refused the one peer it was opened for")
+        XCTAssertEqual(rig.model.connection, .requesting,
+                       "and nothing about the refusal reached the screen either")
+        // The hold still holds. Admitting the request claims and BUFFERS it in
+        // the router; it must not build a transport on a relay nobody has chosen.
+        XCTAssertTrue(rig.transports.isEmpty,
+                      "an establishment was built before the relay choice")
+        XCTAssertEqual(rig.linkFramesSent, [],
+                       "and an SDP or request went out ahead of the choice")
+
+        // Releasing the gate settles the SAME conversation — the buffered inbound
+        // claim and this side's own parked intent are one link, not two.
+        relayRtt(rig, from: "zzz-web", ["near": 15, "far": 400])
+        await settle()
+
+        XCTAssertEqual(rig.transports.count, 1, "exactly one establishment")
+        XCTAssertEqual(rig.serverUrls, [["turn:near.relayium.test:3478"]],
+                       "and it was built on the choice the gate was held for")
+        XCTAssertEqual(rig.relayOnly, [true])
+        XCTAssertEqual(rig.busyRefusalsSent, [])
+    }
+
+    /// The exemption is for ONE peer, compared exactly.
+    ///
+    /// Asked of the gate directly, because this is a statement about the gate
+    /// rather than about a room: a second peer arriving mid-hold is refused by
+    /// the resolved room before the gate is ever consulted, so a wire-level test
+    /// would pass whether the reservation were exact or not.
+    func testTheHoldsExemptionAdmitsOnlyTheChosenPeer() async {
+        let rig = await heldGateWithAChosenPeer()
+
+        XCTAssertTrue(rig.model.admitsInboundLink(from: "zzz-web"),
+                      "the peer this side chose is not a stranger to it")
+        XCTAssertFalse(rig.model.admitsInboundLink(from: "yyy-web"),
+                       "a second peer took the surface the hold is reserving")
+        XCTAssertFalse(rig.model.admitsInboundLink(from: ""),
+                       "an unnamed peer matched a reservation")
+    }
+
+    /// The reservation dies with the intent it belongs to.
+    ///
+    /// `leave` is the terminal teardown; a reservation that survived it would
+    /// keep one peer able to take a surface this module has given up.
+    func testTheHoldsExemptionIsReleasedWithTheAttempt() async {
+        let rig = await heldGateWithAChosenPeer()
+
+        rig.model.leave()
+        await settle()
+
+        XCTAssertFalse(rig.model.admitsInboundLink(from: "zzz-web"),
+                       "a reservation outlived the attempt that made it")
+    }
+
+    /// And with the peer, when the room is told it left.
+    func testAChosenPeersDepartureReleasesItsExemption() async {
+        let rig = await heldGateWithAChosenPeer()
+
+        rig.channels[0].fireText(#"{"type":"left","peer":"zzz-web"}"#)
+        await settle()
+
+        XCTAssertFalse(rig.model.admitsInboundLink(from: "zzz-web"),
+                       "a departed peer kept its reservation")
     }
 
     // MARK: - Q. the gate had already opened, and then that peer left

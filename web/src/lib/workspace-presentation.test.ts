@@ -46,7 +46,7 @@ describe("unified mixed peer workspace presentation", () => {
     expect(head).toBeLessThan(surface.indexOf("{#each [send, recv].filter(Boolean)"));
     // The message panel is also the unified workspace's activity surface, so its
     // gate now admits a mixed link whose text lane has not opened yet.
-    expect(head).toBeLessThan(surface.indexOf('{#if mixed || activeText.status !== "idle"}'));
+    expect(head).toBeLessThan(surface.indexOf('{#if mixed || surfaceText.status !== "idle"}'));
     expect(head).toBeLessThan(surface.indexOf('<section class="peers"'));
 
     for (const prop of [
@@ -251,7 +251,14 @@ describe("unified mixed peer workspace presentation", () => {
     // failure mode: advertising a capability we then refuse to route (or the
     // reverse) strands a peer that believed us.
     expect(caps.match(/CAP_PREUPLOAD\]/g)).toHaveLength(1);
-    expect(caps).toContain("linkRoomActive() ? [CAP_TEXT, CAP_LINK, CAP_PREUPLOAD] : [CAP_TEXT]");
+    expect(caps).toContain("return linkRoomActive() ? [CAP_LINK, CAP_PREUPLOAD] : [];");
+    // …and the withdrawn lane is not in it. `text/1` is still a NAMED constant —
+    // a native peer announces it and a fixture has to be able to say so — but
+    // this build must never put it in its own hello, because the transport it
+    // promised is gone. The constant surviving while the announcement does not
+    // is the exact shape the contraction has.
+    expect(caps).toContain('export const CAP_TEXT = "text/1";');
+    expect(caps.slice(caps.indexOf("export function advertisedCaps"))).not.toContain("CAP_TEXT");
     // preupload/1 is inside the SAME expression, not a second announcement:
     // its frame travels on the link's file channel, so a scope that withdraws
     // link/1 must withdraw it too rather than leave a promise we cannot keep.

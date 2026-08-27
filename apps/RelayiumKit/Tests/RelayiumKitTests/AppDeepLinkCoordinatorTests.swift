@@ -812,3 +812,111 @@ final class AppDeepLinkCoordinatorTests: XCTestCase {
         XCTAssertNil(rig.coordinator.waiting)
     }
 }
+
+// MARK: - the link-only composition
+
+extension AppDeepLinkCoordinatorTests {
+
+    /// **The seam macOS adds, and the three properties the amendment asks for:**
+    /// a realtime link reaches the `PairingCodeModel`, presence ownership defers
+    /// it, and a deferred link is applied when ownership clears.
+    ///
+    /// The legacy initializer above is untouched and every test before this one
+    /// still drives it — which is the point. Two compositions, one coordinator,
+    /// and the rules are asserted separately for each because the thing that
+    /// differs is exactly where the join field lives.
+    private func linkOnlyRig() -> (AppDeepLinkCoordinator, PairingCodeModel,
+                                   TransferPresence, AppNavigationModel) {
+        let code = PairingCodeModel(client: StubPair())
+        let presence = TransferPresence()
+        let navigation = AppNavigationModel(selection: .storedReceive)
+        let coordinator = AppDeepLinkCoordinator(
+            navigation: navigation, download: makeDownload(),
+            pairingCode: code, presence: presence)
+        return (coordinator, code, presence, navigation)
+    }
+
+    private func settleLinkOnly(_ turns: Int = 8) async {
+        for _ in 0..<turns { await Task.yield() }
+    }
+
+    func testALinkOnlyRealtimeLinkPrefillsThePairingCodeModel() async {
+        let (coordinator, code, _, navigation) = linkOnlyRig()
+
+        coordinator.deliver(.realtime(code: "481203"))
+        await settleLinkOnly()
+
+        XCTAssertEqual(code.joinCode, "481203",
+                       "a pairing link did not reach the field the screen binds to")
+        XCTAssertTrue(code.canJoin)
+        XCTAssertEqual(navigation.selection, .pairingCode,
+                       "a pairing link must put the user on the screen it is for")
+    }
+
+    /// The code is normalized on the way in, exactly as typing it is: a link
+    /// carrying separators must not leave a field the join verb refuses.
+    func testALinkOnlyCodeIsNormalizedByTheModelThatHoldsIt() async {
+        let (coordinator, code, _, _) = linkOnlyRig()
+        coordinator.deliver(.realtime(code: "48-12 03"))
+        await settleLinkOnly()
+        XCTAssertEqual(code.joinCode, "481203")
+    }
+
+    /// **Ownership defers it.** A module holding a code or a live link owns its
+    /// surface, and prefilling the field under that would change which room the
+    /// user is about to join while they are already in one.
+    func testALinkOnlyLinkArrivingDuringASessionIsDeferred() async {
+        let (coordinator, code, presence, navigation) = linkOnlyRig()
+        XCTAssertTrue(presence.beginSession(.pairingCode))
+
+        coordinator.deliver(.realtime(code: "481203"))
+        await settleLinkOnly()
+
+        XCTAssertEqual(code.joinCode, "",
+                       "a link was written into the field under a live session")
+        // Delivery still navigates: refusing that would leave the user with no
+        // sign the link they tapped had been received at all.
+        XCTAssertEqual(navigation.selection, .pairingCode)
+    }
+
+    /// …and it is applied once the surface is given up, without being delivered
+    /// again.
+    func testALinkOnlyDeferredLinkIsAppliedWhenOwnershipClears() async {
+        let (coordinator, code, presence, _) = linkOnlyRig()
+        XCTAssertTrue(presence.beginSession(.pairingCode))
+        coordinator.deliver(.realtime(code: "481203"))
+        await settleLinkOnly()
+        XCTAssertEqual(code.joinCode, "")
+
+        presence.releaseAll()
+        await settleLinkOnly()
+
+        XCTAssertEqual(code.joinCode, "481203",
+                       "the deferred link never landed after the session ended")
+    }
+
+    /// A link that names a legacy LANE still delivers its code. The lane is a
+    /// property of a transport this composition does not have, so it is ignored
+    /// — dropping the code with it would break a working link over a field that
+    /// no longer means anything.
+    func testALinkOnlyLegacyModeLinkStillDeliversItsCode() async {
+        let (coordinator, code, _, _) = linkOnlyRig()
+        coordinator.deliver(.realtimeWithMode(code: "481203", mode: .text))
+        await settleLinkOnly()
+        XCTAssertEqual(code.joinCode, "481203")
+    }
+
+    /// A code-less link is a request to look at the screen, and must never clear
+    /// a code the user has already typed.
+    func testALinkOnlyCodelessLinkNavigatesWithoutClearingATypedCode() async {
+        let (coordinator, code, _, navigation) = linkOnlyRig()
+        code.updateJoinCode("481203")
+
+        coordinator.deliver(.realtime(code: nil))
+        await settleLinkOnly()
+
+        XCTAssertEqual(code.joinCode, "481203",
+                       "a code-less link discarded a code the user had typed")
+        XCTAssertEqual(navigation.selection, .pairingCode)
+    }
+}

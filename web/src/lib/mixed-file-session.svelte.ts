@@ -7,7 +7,7 @@
 import type { PickedFile } from "./drag";
 import type { StatusKey } from "./i18n.svelte";
 import { pickSaveTarget as defaultPickSaveTarget, saveFailureStatus, SaveCancelledError, type FileSink, type SaveTarget } from "./filesink";
-import type { Incoming, Xfer } from "./transfer-session.svelte";
+import type { Incoming, Xfer } from "./transfer-model";
 import type { MixedPeerLink } from "./peer-link.svelte";
 import {
   ACCEPT,
@@ -34,7 +34,7 @@ import {
   type FileMeta,
   type ResumePoint,
 } from "./transfer";
-import { wouldExceedDeclared } from "./transfer-session.svelte";
+import { wouldExceedDeclared } from "./transfer-model";
 import { isStoredKeysFrame, sameHandoffSet, type HandoffItem } from "./preupload-handoff";
 import { peerSupportsPreupload as defaultSupportsPreupload } from "./peer-caps.svelte";
 

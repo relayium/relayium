@@ -1,10 +1,13 @@
 // 建连的公共骨架：offer/answer + ICE + DataChannel + 状态机 + 拆除。
 //
-// connect()（首次建连，带 commit-reveal）和 connectResume()（掉线重连，只搬运输层）
-// 曾经是两份约 200 行逐字重复的代码，且已经开始漂移——`busy` 处理只加进了 connect
-// 那一份。这里只抽**传输**这一层；密钥承诺/揭示那一层留在 webrtc.ts 的 connect 里，
-// 通过下面的钩子挂进来。分界线是有意的：安全状态机不进这个文件，读 connectResume
-// 的人也就不需要先说服自己"这条路径没有偷偷共享任何鉴权状态"。
+// 首次建连（带 commit-reveal）和掉线重连（只搬运输层）曾经是两份约 200 行逐字重复
+// 的代码，且已经开始漂移——`busy` 处理只加进了其中一份。这里只抽**传输**这一层；
+// 密钥承诺/揭示那一层留在 webrtc.ts，通过下面的钩子挂进来。分界线是有意的：安全状态机
+// 不进这个文件，读重连那条路径的人也就不需要先说服自己"它没有偷偷共享任何鉴权状态"。
+//
+// 世代**词表**（下面的 Generation）比用它的那些世代活得久：浏览器如今只建 link/1，
+// 但 peer-link 用 `signalGeneration(msg) === "link"` 精确判定，"file"/"text" 必须
+// 继续存在，那条精确比较才有东西可以拒绝。
 import type { SignalingClient } from "./signaling";
 import { negotiatedMaxMessageBytes } from "./wire-limit";
 
@@ -40,9 +43,9 @@ export interface InboundSignal {
   /** Sent only after this side has seen the peer's commit. */
   reveal?: Reveal;
   ice?: RTCIceCandidateInit;
-  /** Marks a signal as belonging to a resume (connectResume) connection rather
-   *  than the original connect(). Each side ignores the other generation's
-   *  signals, so a dying original connection can't cross-route a resume offer. */
+  /** Marks a signal as belonging to a transport-only resume rather than the
+   *  first connection. Each side ignores the other generation's signals, so a
+   *  dying original connection can't cross-route a resume offer. */
   resume?: boolean;
   /** The peer refused the offer because it is already in a transfer. Lets the
    *  sender fail fast with a "peer busy" message instead of waiting out the ICE
@@ -55,7 +58,7 @@ export interface InboundSignal {
   /** Peer renamed itself; the roster entry for that peer id should be updated to
    *  this display name. Opaque to the WebRTC handlers (like relayRtt/busy). */
   rename?: string;
-  /** Capabilities the peer advertises, e.g. ["text/1"]. Rides the offer/answer
+  /** Capabilities the peer advertises, e.g. ["link/1"]. Rides the offer/answer
    *  as the per-connection confirmation of the roster-level hello in
    *  peer-caps.svelte.ts, and is opaque to the handlers here.
    *
@@ -63,14 +66,16 @@ export interface InboundSignal {
    *  is explicit so that adding one here cannot change what a resume tag covers.
    *  A hint, never a security input. */
   caps?: string[];
-  /** Marks a signal as belonging to a message session's connection rather than a
-   *  file transfer's, the same way `resume` marks the resume generation. Declared
-   *  here so the type is one place; the generation filter that acts on it lands
-   *  with connectText. */
+  /** The retired single-lane message generation. **Nothing in this build sends
+   *  it.** It stays in the vocabulary because `signalGeneration` must be able to
+   *  NAME it in order to keep an inbound frame carrying it away from the link
+   *  generation — a tag we cannot classify would fall through to "file" and be
+   *  refused for the wrong reason. */
   text?: boolean;
-  /** Marks the unified file+text link generation. It is sent only to peers that
-   *  announced the roster-level `link/1` capability; older peers treat unknown
-   *  offers as legacy file offers, so the tag alone is not a compatibility gate. */
+  /** Marks the unified file+text link generation — the only one this build
+   *  establishes. It is sent only to peers that announced the roster-level
+   *  `link/1` capability; older peers treat unknown offers as legacy file
+   *  offers, so the tag alone is not a compatibility gate. */
   link?: boolean;
   /** Content-free request asking the deterministic (lower peer-id) offerer to
    *  establish a link. Not a generation tag and not authenticated; capability
@@ -85,9 +90,9 @@ export interface InboundSignal {
   leave?: boolean;
 }
 
-/** The peer declined a fresh offer because it is mid-transfer (one at a time).
- *  Thrown by connect() so the caller can surface "peer busy" rather than a
- *  generic connection failure. */
+/** The peer declined a fresh offer because it is already bound to a link.
+ *  Thrown by the first-connection path so the caller can surface "peer busy"
+ *  rather than a generic connection failure. */
 export class PeerBusyError extends Error {
   constructor() {
     super("relayium: peer busy");
@@ -103,9 +108,10 @@ export type ConnPath = "lan" | "p2p" | "relay" | "unknown";
 
 export interface Conn {
   channel: RTCDataChannel;
-  /** Exact-label lookup for connections that carry more than one logical lane.
-   *  Legacy callers keep using `channel`, which is always the first requested
-   *  label (and defaults to `relayium`). */
+  /** Exact-label lookup for a connection's logical lanes. `channel` remains the
+   *  first requested label — the primary lane of the tuple every caller now
+   *  states — so a caller that only ever wants that lane does not have to name
+   *  it. There is no default: `channelLabels` is the exact link tuple. */
   getChannel(label: string): RTCDataChannel | undefined;
   /** Atomically detach and drain frames captured from the moment this channel
    *  was collected. Present only when pre-ready capture was requested. */
@@ -236,12 +242,46 @@ export function linkLeavePayload(from: string, to: string): string {
 /**
  * Which concurrent connection a signal belongs to.
  *
- * Two or three can be alive on one signalling link at once — a dying transfer and
- * its resume, a transfer and a message session — and each must ignore the others'
- * SDP. `"file"` is the untagged generation, which is what every already-deployed
- * peer sends and what this code has always sent.
+ * A link and its resume can be alive on one signalling link at once, and each
+ * must ignore the other's SDP.
+ *
+ * **This is the INBOUND vocabulary, and it is wider than what can be built.**
+ * `"file"` is the untagged generation an already-deployed peer still sends and
+ * `"text"` the retired single-lane one; this build sends neither — see
+ * `OutboundGeneration` — but must keep naming them, because a tag it could not
+ * classify would fall through to `"file"` and be answered as a legacy transfer.
  */
 export type Generation = "file" | "resume" | "text" | "link";
+
+/**
+ * The generations this build can CONSTRUCT.
+ *
+ * Deliberately a different type from `Generation`, which is the inbound
+ * classification vocabulary and must keep naming `file` and `text` in order to
+ * recognise them — a tag this code could not classify would fall through to
+ * `file` and be answered as a legacy transfer, which is the failure the tags
+ * exist to prevent. Recognising a generation and being able to build one are
+ * different questions, and collapsing them is what let a legacy transport stay
+ * constructible after its lanes were deleted.
+ *
+ * `CoreOpts.generation` is REQUIRED and of this type, so there is no untagged
+ * default to fall back into: `file` was the default, which meant every caller
+ * that forgot the argument silently built the retired single-lane transfer.
+ */
+export type OutboundGeneration = "resume" | "link";
+
+/**
+ * The exact two lanes a `link/1` carries, in primary-first order.
+ *
+ * Declared here rather than in `webrtc.ts` so the option types below can name
+ * the TUPLE — `readonly string[]` admitted any list, including the one-element
+ * one that was the old default, so a guard on "channelLabels is required" was
+ * satisfied by `["relayium"]` and the single-lane connection stayed
+ * constructible. Keeping the literal in core also avoids an import cycle:
+ * `webrtc.ts` imports core, not the other way round.
+ */
+export const LINK_CHANNEL_LABELS = ["relayium", "relayium-text"] as const;
+export type LinkChannelLabels = typeof LINK_CHANNEL_LABELS;
 
 /**
  * A signal's generation, from its tags.
@@ -258,7 +298,8 @@ export function signalGeneration(msg: InboundSignal): Generation {
   return "file";
 }
 
-export interface CoreOpts extends CoreHooks {
+/** Everything both constructible generations need, in the same shape. */
+interface CoreOptsBase extends CoreHooks {
   signaling: SignalingClient;
   peerId: string;
   role: "initiator" | "responder";
@@ -268,45 +309,80 @@ export interface CoreOpts extends CoreHooks {
   /** Cancels an in-progress establishment immediately. Once a Conn has been
    *  returned, callers use Conn.close() instead. */
   signal?: AbortSignal;
-  /** 这条连接属于哪个信令世代。**双向**生效：外发信令一律盖上这个世代的标记，入站
-   *  信令也只收同一个世代的。掉线重连时原连接和它的替身同时活着；消息会话和文件传输
-   *  也可能同时活着——靠它互不串台。默认 "file"，也就是所有旧版本对端发的那种无标记
-   *  信令。 */
-  generation?: Generation;
   /** 错误文案前缀，让 "connection failed" 和 "resume connection failed" 在日志和
    *  测试里可区分。 */
   label?: string;
-  /** 给这条连接的信令加**对端认证**。不传 = 不认证（connect() 就不传：它自己跑
-   *  commit-reveal）。传了就是双向强制：外发全签，入站没签或签不对的一律丢弃。 */
-  auth?: SignalAuth;
-  /** Reliable ordered DataChannels required before this connection is ready.
-   *  The initiator opens them through DCEP; the responder collects them by exact
-   *  label, so arrival order is irrelevant. Defaults to the legacy single lane.
-   *  Keep this list small: every label consumes an SCTP stream in each direction. */
-  channelLabels?: readonly string[];
   /** Combined byte ceiling for frames retained before application handlers are
    *  attached. Zero/absent preserves the legacy no-capture behavior. */
   captureBeforeReadyBytes?: number;
+  /** Reliable ordered DataChannels required before this connection is ready.
+   *  The initiator opens them through DCEP; the responder collects them by exact
+   *  label, so arrival order is irrelevant.
+   *
+   *  **The exact link tuple, not a list.** It defaulted to `["relayium"]` — the
+   *  legacy single lane — and even once required, `readonly string[]` still
+   *  admitted that one-element list, so the single-lane connection stayed
+   *  constructible and a guard on "required" false-greened. */
+  channelLabels: LinkChannelLabels;
 }
 
+/**
+ * **The initial `link/1` handshake.**
+ *
+ * No `auth`, and that is a type-level statement rather than a convention: this
+ * connection runs its own commit-reveal (`connect()` in `webrtc.ts`) and has no
+ * shared secret to sign with yet. Accepting a `SignalAuth` here would mean the
+ * caller had one BEFORE the handshake that derives it.
+ */
+export interface LinkCoreOpts extends CoreOptsBase {
+  generation: "link";
+  auth?: never;
+}
+
+/**
+ * **An authenticated transport resume.**
+ *
+ * `auth` is REQUIRED. A resume re-attaches to a link whose keys already exist,
+ * so it is the one generation that can sign — and must: an unauthenticated
+ * resume is a second connection anybody on the signalling path could offer into
+ * a session that has already been verified. It was constructible because `auth`
+ * was optional for every generation at once.
+ */
+export interface ResumeCoreOpts extends CoreOptsBase {
+  generation: "resume";
+  auth: SignalAuth;
+}
+
+/**
+ * What `establish` accepts.
+ *
+ * A union rather than one interface with optional fields, because the two
+ * generations have genuinely different requirements and an interface can only
+ * express their intersection — which is what let an unauthenticated resume and
+ * a single-lane link both typecheck.
+ */
+export type CoreOpts = LinkCoreOpts | ResumeCoreOpts;
+
 export async function establish(opts: CoreOpts): Promise<Conn> {
-  const { signaling, peerId, role, generation = "file" } = opts;
+  const { signaling, peerId, role, generation } = opts;
   const what = opts.label ? `${opts.label} connection` : "connection";
   const pc = new RTCPeerConnection(opts.config ?? DEFAULT_ICE);
-  const channelLabels = opts.channelLabels ?? ["relayium"];
-  if (channelLabels.length === 0 || new Set(channelLabels).size !== channelLabels.length
-      || channelLabels.some((label) => !label)) {
+  // The type is the tuple, so length and non-emptiness are compile-time facts.
+  // Uniqueness is checked at runtime anyway: the constant is exported and a
+  // JavaScript caller — a test, a future non-TypeScript consumer — is not bound
+  // by the type. Failing closed is cheaper than a connection that waits for a
+  // lane it already has.
+  const channelLabels: readonly string[] = opts.channelLabels;
+  if (new Set(channelLabels).size !== channelLabels.length) {
     try { pc.close(); } catch { /* constructor succeeded; close is best effort */ }
-    throw new Error("relayium: channel labels must be non-empty and unique");
+    throw new Error("relayium: channel labels must be unique");
   }
 
-  /** 给外发信令盖上世代标记。"file" 不盖任何标记——旧版本对端看到的字节因此和
-   *  这套世代命名之前完全一致。 */
-  const tag = <T extends object>(msg: T): T & { resume?: boolean; text?: boolean; link?: boolean } =>
-    generation === "resume" ? { ...msg, resume: true }
-    : generation === "link" ? { ...msg, link: true }
-    : generation === "text" ? { ...msg, text: true }
-    : msg;
+  /** 给外发信令盖上世代标记。只有两种世代能构造，所以这里没有"不盖标记"的分支——
+   *  以前那条 `: msg` 兜底就是那条已经删掉的无标记旧世代，任何漏配的调用点都会掉
+   *  进去。入站分类仍然认识 `file` 和 `text`，见 `signalGeneration`。 */
+  const tag = <T extends object>(msg: T): T & { resume?: boolean; link?: boolean } =>
+    generation === "resume" ? { ...msg, resume: true } : { ...msg, link: true };
 
   // 外发信令统一走这里：盖世代标记 → 签名 → 发。签名是异步的，所以用一条串行链
   // 保序——offer 之后紧跟的 ICE 候选如果因为签名耗时反超到 offer 前面，对端会把它

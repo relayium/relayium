@@ -158,6 +158,22 @@ export interface Messages {
   pickHint: (max: number) => string;
   maxSize: (size: string) => string; // upload max-size hint shown near the file picker, e.g. "Max 200 MB"
   pickSendTo: (name: string) => string; // prominent single-peer send label
+  /**
+   * The whole of what a device card says when this browser cannot reach that
+   * peer at all.
+   *
+   * Terminal, and deliberately not a variant of `text.unsupported`. That string
+   * says a peer cannot receive MESSAGES, which was true while a second, file-only
+   * transport still existed to fall back to. It does not any more: the browser
+   * composes exactly one `link/1` connection, so a peer that does not announce
+   * it has no lane for files either, and reusing the message wording would
+   * understate the state by exactly the half that used to still work.
+   *
+   * It must read as a fact about the other device plus the one action that can
+   * change it — updating BOTH ends, because either side may be the old one and
+   * the reader cannot tell which.
+   */
+  peerUnsupported: string;
   generating: string; // transient "creating…" state while a code/link is minted
   footer: string;
   offlineFooter: string; // async page's own footer: random-key AES-256-GCM, ciphertext durably stored (NOT the LAN/realtime X25519 footer)

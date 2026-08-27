@@ -7,22 +7,21 @@ import RelayiumKit
 /// verified once, carrying an always-visible composer and as many file or folder
 /// batches as the user wants.
 ///
-/// ## What this replaces
+/// ## What this replaced
 ///
-/// `TransferSessionPane` renders the shipped legacy wire, which carries a file
-/// transfer *or* an ephemeral conversation and says so in one sentence
+/// A second pane rendered the shipped legacy wire, which carried a file transfer
+/// *or* an ephemeral conversation and said so in one sentence
 /// (`workspace.messagesOnlyNote` / `workspace.filesOnlyNote`). Those notes were
-/// the bounded honesty of the surface-convergence batch. They are still correct
-/// for a legacy peer and they are still rendered for one; what changes here is
-/// that a peer which announced exact `link/1` no longer gets them, because on
-/// that connection they are no longer true.
+/// the bounded honesty of the surface-convergence batch: true for a legacy peer,
+/// and untrue on this connection, which is why a peer that announced exact
+/// `link/1` never got them.
 ///
-/// The two panes never appear together. The owning destination asks
-/// `LinkWorkspaceModel.hasSession` through `TransferSurfacePresentation.pane`,
-/// and a link session and a legacy session cannot both exist —
-/// `LinkWorkspaceModel.shouldAcceptLink` and the legacy
-/// `NearbyReceiveModel.shouldAcceptSession` both resolve through the same
-/// `TransferPresence` owner.
+/// **That pane is deleted and there is no second one.** macOS composes one
+/// transport, so this is the only session surface the platform has; the owning
+/// destination asks `LinkWorkspaceModel.hasSession` through `TransferModule.pane`
+/// and gets `.link` or `.connect`. A peer that does not announce exact `link/1`
+/// reaches no session pane at all — `LanConnectPane` states it as unsupported,
+/// and a pairing room refuses it (`legacyFallback: .terminateUnsupported`).
 ///
 /// ## The order on screen, and why
 ///
@@ -45,7 +44,29 @@ import RelayiumKit
 struct TransferLinkPane: View {
     @ObservedObject var link: LinkWorkspaceModel
 
-    @State private var draft = ""
+    /// The composer's text lives on the LINK, not here.
+    ///
+    /// macOS keeps running with its window closed, so this pane is torn down and
+    /// rebuilt while the link survives — a view-local draft vanished on every
+    /// close/reopen with the connection still up, and the quit guard could not
+    /// see it either. See `LinkWorkspaceModel.draft`.
+    private var draft: String {
+        get { link.draft }
+        nonmutating set { link.draft = newValue }
+    }
+    /// Raised by the exit when leaving would destroy local text.
+    ///
+    /// **Two things can be lost, and both are unrecoverable.** The transcript is
+    /// local-only — `link.historyIsLocal` says so on the exit — and is gone with
+    /// the link. The draft is view-local and nothing else holds it: `sendDraft`
+    /// hands text to the model only once Send is pressed, so anything still in
+    /// the composer dies with this view.
+    ///
+    /// An earlier version of this confirmed the draft ALONE, which silently
+    /// destroyed a transcript whenever the composer happened to be empty — the
+    /// ordinary case after somebody has sent a message. That was a real
+    /// weakening of what the deleted legacy pane protected.
+    @State private var confirmingLocalTextDiscard = false
     @State private var actionError: String?
 
     /// **What a Finder drag has staged, and has not sent.**
@@ -138,11 +159,26 @@ struct TransferLinkPane: View {
     }
 
     /// Put a handed-back draft in front of the user again, without overwriting
-    /// something they have since typed.
+    /// something they have since typed — and without consuming it if it cannot
+    /// land. The order lives on the model now; see
+    /// `LinkWorkspaceModel.restoreReturnedDraft`.
     private func restoreReturnedDraft() {
-        guard let returned = link.takeReturnedDraft() else { return }
-        guard trimmedDraft.isEmpty else { return }
-        draft = returned
+        link.restoreReturnedDraft()
+    }
+
+    /// **Retry the restore whenever the composer becomes free.**
+    ///
+    /// The first attempt runs when the link hands a message back, and it refuses
+    /// if the user has since typed something else — correctly, because
+    /// overwriting live text is the worse loss. But nothing tried again: the
+    /// `task(id:)` that made the first attempt does not re-fire when the draft
+    /// later clears or sends, so the handed-back message sat in the model
+    /// invisible and unreachable for the rest of the session.
+    ///
+    /// Keyed on emptiness rather than on the text, so ordinary typing does not
+    /// re-ask on every keystroke.
+    private var composerIsFree: Bool {
+        link.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     // MARK: - who
@@ -239,8 +275,8 @@ struct TransferLinkPane: View {
     ///  - **Return inserts a newline.** `TextEditor` does that natively, and the
     ///    `.defaultAction` shortcut is gone from Send — it was what took Return
     ///    away.
-    ///  - **⌘Return sends**, which is the same binding the legacy text session
-    ///    already uses, so the two composers in this app do not disagree.
+    ///  - **⌘Return sends.** The one composer this platform has, and the
+    ///    binding a text field in a chat is expected to answer to.
     ///  - **The hint is on screen**, not learned. A shortcut nobody is told about
     ///    is a shortcut for the person who wrote it.
     ///
@@ -253,7 +289,7 @@ struct TransferLinkPane: View {
     private var composer: some View {
         VStack(alignment: .leading, spacing: Metrics.tight) {
             ZStack(alignment: .topLeading) {
-                TextEditor(text: $draft)
+                TextEditor(text: $link.draft)
                     .font(.body)
                     // The editor draws its own opaque background, which on the
                     // window background reads as a second surface rather than
@@ -298,7 +334,11 @@ struct TransferLinkPane: View {
                     // NOT `.defaultAction`: that is plain Return, and plain
                     // Return belongs to the editor above.
                     .keyboardShortcut(.return, modifiers: .command)
-                    .disabled(!link.canCompose || trimmedDraft.isEmpty)
+                    // `canSendMessage`, not `canCompose`. The latter answers
+                    // "is this link open and verified" and stays true while a
+                    // first message is waiting for the peer to accept — so the
+                    // button stayed live for a press the model would refuse.
+                    .disabled(!link.canSendMessage || trimmedDraft.isEmpty)
                     .accessibilityIdentifier("link-send-message")
                 Text(L10n.t(.composerShortcutHint))
                     .font(.caption).foregroundStyle(.secondary)
@@ -489,12 +529,42 @@ struct TransferLinkPane: View {
 
     private var exit: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Button(leaveTitle) { leave() }
+            Button(leaveTitle) { leaveOrConfirmLocalTextDiscard() }
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("link-leave-session")
             Text(L10n.t(.linkHistoryIsLocal))
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+        // **Asked only when there is something to lose**, so an ordinary hangup
+        // is still one press.
+        //
+        // Both copies are shipped and fully localized, and which one is used is
+        // decided by what is actually at risk: `text.discardLocalContent.*` names
+        // "any local message history and unsent draft", so it is truthful
+        // whenever a transcript exists — with or without a draft — while
+        // `text.discardDraft.*` is the narrower, more accurate sentence for a
+        // session where only the composer holds anything. Reusing them is why
+        // this repair needs no new key.
+        // Retried whenever the composer becomes free — including immediately
+        // after an accepted send, which clears the draft. See `composerIsFree`.
+        .task(id: composerIsFree) { if composerIsFree { link.restoreReturnedDraft() } }
+        .confirmationDialog(L10n.t(hasTranscript ? .textDiscardLocalContentConfirmTitle
+                                                      : .textDiscardDraftConfirmTitle),
+                            isPresented: $confirmingLocalTextDiscard,
+                            titleVisibility: .visible) {
+            // **The confirmed path discards**, which is what the sentence above
+            // promises. `leave()` alone keeps the transcript on the ended page,
+            // so the warning would be untrue and the Done underneath it would
+            // meet the same predicate and ask a second time.
+            Button(leaveTitle, role: .destructive) { leaveDiscardingLocalText() }
+                .accessibilityIdentifier("link-discard-local-text-confirm")
+            Button(L10n.t(.commonCancel), role: .cancel) {
+                confirmingLocalTextDiscard = false
+            }
+        } message: {
+            Text(L10n.t(hasTranscript ? .textDiscardLocalContentConfirmBody
+                                           : .textDiscardDraftConfirmBody))
         }
     }
 
@@ -509,14 +579,24 @@ struct TransferLinkPane: View {
         draft.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// **Transactional: the composer is cleared only if the model took the
+    /// message.**
+    ///
+    /// It used to clear unconditionally, so every refusal erased the words it
+    /// was refusing — a ⌘Return while a first message was still waiting for the
+    /// peer was declined by the model AND wiped here, in the same turn, leaving
+    /// an error about text the user could no longer see.
+    ///
+    /// The acceptance is the model's answer, not an inference from having called
+    /// it: `send(message:)` returns whether it took the message.
     private func sendDraft() {
         let body = trimmedDraft
         guard !body.isEmpty else { return }
         actionError = nil
-        link.send(message: body)
-        // Cleared once the model has taken responsibility for it. The model
-        // holds an unsent draft itself until the conversation opens and hands it
-        // back as `actionError` if the peer refuses, so nothing is silently lost.
+        guard link.send(message: body) else { return }
+        // Reached only on acceptance. The model holds the message until the
+        // conversation opens and hands it back through `returnedDraft` if the
+        // peer refuses, so clearing here loses nothing.
         draft = ""
     }
 
@@ -591,6 +671,53 @@ struct TransferLinkPane: View {
         }
     }
 
+    /// **Whether this session holds a conversation that leaving would destroy.**
+    ///
+    /// Any message at all, sent or received: the transcript is local-only and
+    /// unrecoverable, so a received message is exactly as lost as a sent one.
+    /// The same predicate `TransferModule.hasLocalText` gives the quit guard,
+    /// asked here of this pane's own link — so ⌘Q and Leave cannot disagree
+    /// about whether there is anything to warn about.
+    /// The ONE predicate, asked of the model. `TransferModule.hasLocalText` —
+    /// the quit guard's answer — reads the same property, so ⌘Q and Leave cannot
+    /// disagree about whether there is anything to warn about.
+    private var hasLocalText: Bool { link.holdsLocalText }
+
+    /// Which sentence the confirmation uses. The local-content copy names
+    /// history AND draft, so it is truthful whenever a transcript exists; the
+    /// draft copy is the narrower, more accurate one when only the composer
+    /// holds something.
+    private var hasTranscript: Bool { !(link.textModel?.textMessages.isEmpty ?? true) }
+
+    /// **Ask before discarding text the user has written or received, and only
+    /// then.**
+    ///
+    /// Whitespace-only is not content — `trimmedDraft` is the same answer
+    /// `sendDraft` refuses to send — so a stray newline does not turn a hangup
+    /// into a dialog. An empty session with no conversation still leaves in one
+    /// press, which is the ordinary case and must stay cheap.
+    ///
+    /// The phase is deliberately NOT consulted. A link that has already ended
+    /// can no longer send the draft and can no longer add to the transcript,
+    /// which makes the loss more certain rather than less.
+    private func leaveOrConfirmLocalTextDiscard() {
+        if hasLocalText {
+            confirmingLocalTextDiscard = true
+        } else {
+            leave()
+        }
+    }
+
+    /// The confirmed destructive exit: end the link and discard the local text,
+    /// exactly once. A link that has already ended is dismissed the same way, so
+    /// a terminal page holding a transcript still honours its own confirmation.
+    /// One model operation for both phases. The ended branch used to clear the
+    /// draft here and dismiss, which missed `returnedDraft` entirely — a handed
+    /// back message survived the confirmation that promised to discard it.
+    private func leaveDiscardingLocalText() {
+        link.leaveDiscardingLocalText()
+    }
+
     private func leave() {
         if case .ended = link.connection {
             link.dismiss()
@@ -655,7 +782,8 @@ struct LinkTranscriptView: View {
     @ObservedObject var model: LinkSessionPresentationModel
     /// Presentation state only, and an id rather than a body: acknowledging the
     /// copy must not put a second copy of ephemeral plaintext in view state.
-    /// Same rule, same shape, as `RealtimeTextSessionView.copiedMessageID`.
+    /// The id, never the body: a second copy of ephemeral plaintext would be
+    /// readable in any memory capture, for no purpose the user asked for.
     @State private var copiedMessageID: Int?
 
     /// An empty conversation is an empty `ForEach`, and the container stays
@@ -800,12 +928,19 @@ struct LinkTransferListView: View {
                         .buttonStyle(.bordered)
                 }
             }
+            // **Queued is neutral; transferring is destructive.** Nothing has
+            // left the queue yet, so cancelling one is withdrawing an intent —
+            // the same weight as not having pressed Send. Cancelling a batch
+            // that is MOVING throws away partial progress on both ends and
+            // cannot be resumed, which is the cost the legacy lane's own
+            // mid-transfer Cancel was required to state and which survived the
+            // transport it was written for.
             if case .queued = batch.state, batch.direction == .outbound {
                 Button(L10n.t(.commonCancel)) { link.cancelQueuedBatch(batch.id) }
                     .buttonStyle(.bordered)
             }
             if case .transferring = batch.state, batch.direction == .outbound {
-                Button(L10n.t(.commonCancel)) { link.cancelOutboundBatch() }
+                Button(L10n.t(.commonCancel), role: .destructive) { link.cancelOutboundBatch() }
                     .buttonStyle(.bordered)
             }
             if let files = batch.receivedFiles, !files.isEmpty {

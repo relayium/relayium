@@ -171,7 +171,11 @@ final class MacSurfaceGuardTests: XCTestCase {
     private let crossDestination = "Destinations/CrossNetworkTransferDestination.swift"
     private let lanConnect = "Transfer/LanConnectPane.swift"
     private let crossConnect = "Transfer/CrossNetworkConnectPane.swift"
-    private let transferSession = "Transfer/TransferSessionPane.swift"
+    /// The unified link surface. Named `transferSession` still, because it is
+    /// what the deleted `TransferSessionPane` was pointing at all along: the
+    /// screen a transfer destination draws once it has a peer. There is one of
+    /// them now instead of two.
+    private let transferSession = "Transfer/TransferLinkPane.swift"
     private let transferStaging = "Transfer/TransferStagingSection.swift"
 
     /// The surfaces that no longer exist. Asserted as absences, because a
@@ -319,12 +323,23 @@ final class MacSurfaceGuardTests: XCTestCase {
         let bare = all.filter { $0.text.contains("ProgressView()") }.map(\.name)
         XCTAssertTrue(bare.isEmpty, "unlabelled progress indicators in \(bare)")
 
-        let file = try source(named: "RealtimeFileSessionView.swift")
-        XCTAssertTrue(file.contains("Text(L10n.t(.sessionTransferProgress))"),
-                      "file progress reports a number without naming the work")
-        let text = try source(named: "RealtimeTextSessionView.swift")
-        XCTAssertTrue(text.contains("ProgressView { Text(L10n.t(.textWaitingAccept)) }"),
-                      "the peer-accept wait is unnamed")
+        // The two legacy session views are deleted, and the waits they named are
+        // now the link's and the pairing code's. The rule is unchanged and its
+        // subjects moved: a bare `ProgressView()` is forbidden above across
+        // EVERY macOS source, and these are the two named waits a user actually
+        // sits in.
+        //
+        // The code's wait is asserted where it is DRAWN. `CrossNetworkConnectPane`
+        // used to render a second copy of it beside the handoff card, so this
+        // guard passed against the duplicate; with that copy gone the one named
+        // wait a person sits in belongs to `PairingCodeHandoffView`, and naming
+        // its real home is what keeps the guard able to fail.
+        let code = try source(named: "QRCode.swift")
+        XCTAssertTrue(code.contains("ProgressView(L10n.t(.directWaitingForDevice))"),
+                      "the wait for the other device to enter the code is unnamed")
+        let link = try source(named: "Transfer/TransferLinkPane.swift")
+        XCTAssertTrue(link.contains("ProgressView(") || link.contains("ProgressView {"),
+                      "the link surface reports no named progress at all")
     }
 
     func testMacUITestNavigationCannotMistakePageHeadingsForSidebarRows() throws {
@@ -631,16 +646,36 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "a hosted desktop failure can occupy the runner indefinitely")
     }
 
-    func testRealtimeFileDetailsSurviveTransferAndCompletion() throws {
-        let view = try source(named: "RealtimeFileSessionView.swift")
-        XCTAssertGreaterThanOrEqual(view.components(separatedBy: "fileList").count - 1, 3,
-                                    "the manifest must render while active and after completion")
-        XCTAssertTrue(view.contains("model.sessionFiles"))
-        XCTAssertTrue(view.contains("L10n.bytes(Int64(file.size))"),
+    /// **A user can see what a batch holds, before and after it moves.**
+    ///
+    /// Migrated from the deleted legacy file view. The shape differs because the
+    /// link's transfer list is not a file browser — a folder batch can hold
+    /// thousands of entries — so identity is split: a batch about to be SENT
+    /// shows its files through the shared list, and a batch in flight or
+    /// finished shows a count and a size that survive into its terminal state.
+    ///
+    /// My first attempt asserted `FileIdentityPresentation.name(for:` directly on
+    /// this pane, which was simply wrong: the pane delegates per-file rendering
+    /// to `PendingFileList` and never names a file itself. Delegation is the
+    /// stronger property anyway — it is what stops a second, unsanitized
+    /// renderer appearing.
+    func testLinkBatchDetailsSurviveTransferAndCompletion() throws {
+        let pane = try source(named: "Transfer/TransferLinkPane.swift")
+        // Before sending: the shared list, never a local one.
+        XCTAssertTrue(pane.contains("PendingFileList(files: dropped.files)"),
+                      "a batch about to be sent no longer shows what is in it")
+        XCTAssertFalse(pane.contains("FileIdentityPresentation.name(for:"),
+                       "the link pane renders file names itself instead of delegating "
+                       + "to the one sanitizing list")
+        XCTAssertFalse(pane.contains("safeDisplayName("),
+                       "the link pane can render an empty sanitized name")
+        // In flight and afterwards: a count and a size, computed from the batch
+        // itself so a terminal batch keeps them.
+        XCTAssertTrue(pane.contains("L10n.plural(.selectionFiles, batch.files.count)"))
+        XCTAssertTrue(pane.contains("L10n.bytes(Int64(batch.totalBytes))"),
                       "file identity without size does not meet the send confirmation standard")
-        XCTAssertTrue(view.contains(
-            "FileTransferCompletionPresentation.title(received: model.received != nil)"),
-            "completion does not tell the user whether files were sent or received")
+        XCTAssertTrue(pane.contains("Text(summary(batch))"),
+                      "a batch row no longer states what it contains")
     }
 
     /// Each source's CODE, with whole-line comments dropped — the same loader
@@ -715,8 +750,11 @@ final class MacSurfaceGuardTests: XCTestCase {
     }
 
     func testEveryMacFileListUsesTheSharedSafeLocalizedIdentity() throws {
-        for name in ["PendingFileList.swift", "RealtimeFileSessionView.swift",
-                     "DownloadPane.swift"] {
+        // The two surfaces that render a file NAME. `TransferLinkPane` is
+        // deliberately not among them: it delegates to `PendingFileList`, which
+        // is the stronger property and is asserted by
+        // `testLinkBatchDetailsSurviveTransferAndCompletion`.
+        for name in ["PendingFileList.swift", "DownloadPane.swift"] {
             let text = try source(named: name)
             XCTAssertTrue(text.contains("FileIdentityPresentation.name(for:"),
                           "\(name) does not use the shared file identity")
@@ -741,17 +779,15 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// Creating a code removes the picker, but it must not remove the sender's
     /// answer to “what am I about to send?” during minting or while the peer joins.
     func testFilePairingKeepsTheStagedFileNamesAndSizesVisibleUntilDone() throws {
-        let pane = try source(named: transferSession)
-        let minting = try XCTUnwrap(pane.components(
-            separatedBy: "case .minting:").dropFirst().first?
-            .components(separatedBy: "case let .showingCode").first)
-        let showing = try XCTUnwrap(pane.components(
-            separatedBy: "case let .showingCode(code, expiresAt):").dropFirst().first?
-            .components(separatedBy: "case .failed(let message):").first)
-        for phase in [minting, showing] {
-            XCTAssertTrue(phase.contains("PendingFileList(sessionFiles: fileModel.sessionFiles)"),
-                          "code creation hides the files it is waiting to send")
-        }
+        // **There is no staged manifest beside a code any more, and there cannot
+        // be.** The pairing surface has no picker, so `PendingFileList` beside
+        // the digits had nothing left to render — what a code opens is a
+        // connection, and what it carries is chosen inside it. The rule that
+        // replaced "keep the manifest visible" is the stronger one asserted
+        // below: the create path may not read a selection at all.
+        let pane = try source(named: crossConnect)
+        XCTAssertFalse(pane.contains("PendingFileList("),
+                       "a batch is staged beside a code again")
         // **There is no batch to expand before minting any more**, and that is
         // the connect-first change rather than a weakening of the old refusal.
         // The pane has no picker, so a code is minted for a connection and the
@@ -772,24 +808,25 @@ final class MacSurfaceGuardTests: XCTestCase {
             return XCTFail("the create action lost its mint")
         }
         let starter = try source(named: "Transfer/PairingCodeStart.swift")
-        XCTAssertTrue(starter.contains("await fileModel.mintCode(token: token)"),
-                      "the shared pairing start no longer mints on the file model")
+        XCTAssertTrue(starter.contains("await code.mint(token: token)"),
+                      "the shared pairing start no longer mints on the code model")
+        XCTAssertFalse(starter.contains("RealtimeSessionModel"),
+                       "minting reached back into a legacy transport model")
         XCTAssertFalse(connect.contains("selection"),
                        "the pairing create path reads a staged selection again")
         XCTAssertFalse(connect.contains("stageRealtimeFiles("),
                        "the pairing screen expands a batch before there is a peer")
 
-        let session = try source(named: "RealtimeFileSessionView.swift")
-        let connecting = try XCTUnwrap(session.components(
-            separatedBy: "case .joining, .connecting:").dropFirst().first?
-            .components(separatedBy: "case let .verifying").first)
-        let verifying = try XCTUnwrap(session.components(
-            separatedBy: "private func verifying(").dropFirst().first?
-            .components(separatedBy: "private func transferring").first)
-        for phase in [connecting, verifying] {
-            XCTAssertTrue(phase.contains("fileList"),
-                          "a connection phase hides the staged file identity")
-        }
+        // The two connection phases that used to have to keep the staged
+        // manifest visible were the legacy file lane's, and that lane is gone
+        // with the view that drew it. The requirement it protected — a user can
+        // see what they are about to send while the connection is being made —
+        // is carried by the link's own batch list, which renders from
+        // `batchesNewestFirst` for every state a batch can be in rather than
+        // per-phase. Asserted where it now lives.
+        let link = try source(named: "Transfer/TransferLinkPane.swift")
+        XCTAssertTrue(link.contains("batchesNewestFirst"),
+                      "the link surface stopped rendering its batches through the model")
     }
 
     /// Clearing a staged selection changes the pending send task; it is not a
@@ -809,18 +846,15 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// A terminal pairing task still owns cleanup and, for text, the only local
-    /// transcript. It must not expose a second Create/Join path until Done has
-    /// returned the model to idle. iOS already enforces this same boundary.
-    /// A terminal task still owns its dead connection, its partial receive and,
-    /// for text, the only local transcript. It must not expose a second
-    /// create/join path until the user has crossed the cleanup boundary.
+    /// **A live or terminal session exposes its exit and no connect controls.**
     ///
-    /// Both transfer destinations make that STRUCTURAL rather than per-state:
-    /// the connect controls live in a different view, and each destination
-    /// renders exactly one pane. So the assertions are (1) the session pane
-    /// names no connect control at all, and (2) each destination's `switch` over
-    /// `TransferSurfacePane` is the whole reason it cannot.
+    /// Two corrections from the migration, both because I asserted a symbol
+    /// rather than reading the surface. The exit's verb is
+    /// `workspace.leaveSession` (and `common.done` once ended) — `linkLeaveConnection`
+    /// is a different key this pane does not use — and the `.link` button style
+    /// on this surface belongs to the per-message COPY chip, which is neither
+    /// destructive nor navigation. The original rule was about the terminal
+    /// boundary presenting itself as a task, so it is scoped to the exit.
     func testPairingTerminalStatesExposeOnlyTheirCleanupBoundary() throws {
         let session = try source(named: transferSession)
         for connectControl in ["createControls", "joinControls", "roster", "deviceRow",
@@ -828,104 +862,107 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertFalse(session.contains(connectControl),
                            "the live/terminal session surface exposes \(connectControl)")
         }
-        XCTAssertTrue(session.contains("Button(L10n.t(.workspaceLeaveSession)) { leaveOrConfirm() }"),
+        let exit = try XCTUnwrap(session.components(separatedBy: "private var exit: some View")
+            .dropFirst().first?.components(separatedBy: "private var leaveTitle").first)
+        XCTAssertTrue(exit.contains("accessibilityIdentifier(\"link-leave-session\")"),
                       "a retained terminal session has no explicit cleanup boundary")
-        XCTAssertFalse(session.contains("buttonStyle(.link)"),
+        XCTAssertTrue(exit.contains(".buttonStyle(.bordered)"),
+                      "the exit is not shaped as a task boundary")
+        XCTAssertFalse(exit.contains("buttonStyle(.link)"),
                        "a task mutation is presented as navigation")
+        XCTAssertTrue(session.contains("L10n.t(.workspaceLeaveSession)")
+                      && session.contains("L10n.t(.commonDone)"),
+                      "the exit stopped naming both of its states")
 
         for (name, connectPane) in [(lanDestination, "LanConnectPane("),
                                     (crossDestination, "CrossNetworkConnectPane(")] {
             let destination = try source(named: name)
+            // TWO cases, and the third is gone with the transport it drew. A
+            // `legacySession` case here would be a branch nothing can reach —
+            // and dead markup shaped like a feature gate is how a surface gets
+            // "restored" later by mistake.
             XCTAssertTrue(destination.contains("switch pane {")
                           && destination.contains("case .connect:")
-                          && destination.contains("case .legacySession:")
                           && destination.contains("case .link:"),
                           "\(name) no longer chooses exactly one pane")
-            // The Cross-network one additionally hands in the regeneration
-            // action, because it is the surface that holds the account gate a
-            // replacement code has to be minted against.
-            XCTAssertTrue(destination.contains("TransferSessionPane(module: module)")
-                          || destination.contains(
-                            "TransferSessionPane(module: module, regenerate: regeneratePairingCode)"),
-                          "\(name) draws a session pane it did not hand its own module")
+            XCTAssertFalse(destination.contains("case .legacySession:"),
+                           "\(name) still branches on a pane macOS cannot reach")
+            XCTAssertFalse(destination.contains("TransferSessionPane"),
+                           "\(name) draws a session pane that no longer exists")
             XCTAssertTrue(destination.contains(connectPane),
                           "\(name) must render both phases of the one task")
-            XCTAssertTrue(destination.contains("private var pane: TransferSurfacePane { module.pane }"),
+            XCTAssertTrue(destination.contains("private var pane: LinkTransferPane { module.pane }"),
                           "\(name) decides which pane to draw without asking its module")
         }
-        // And the module still keys the answer on OWNERSHIP rather than on model
-        // state, which is what stops a session appearing on a route that does
-        // not own it.
         XCTAssertTrue(try appKitSource(named: "TransferModule.swift")
-            .contains("TransferSurfacePresentation.pane(route: route,"),
+            .contains("guard presence.owner == route else { return .connect }"),
                       "the module chose a pane without asking ownership")
-
-        let fileSession = try source(named: "RealtimeFileSessionView.swift")
-        let completed = try XCTUnwrap(fileSession.components(
-            separatedBy: "case .completed:").dropFirst().first)
-        XCTAssertTrue(completed.contains("Button(L10n.t(.commonDone), action: onDone)"))
-        XCTAssertFalse(completed.components(separatedBy: "private func verifying").first?.contains(
-            "buttonStyle(.link)") ?? true)
     }
 
-    /// One exit, one confirmation. The Workspace has a single leave control for
-    /// both lanes, so the local-transcript question is asked once rather than
-    /// once per pane — which is also why the confirmation's destructive button is
-    /// now the leave verb rather than Done.
-    func testPairingDoneCannotDiscardAnyLocalTextWithoutConfirmation() throws {
-        let source = try source(named: transferSession)
-        XCTAssertTrue(source.contains("@State private var confirmingLocalTextLeave = false"))
-        XCTAssertTrue(source.contains("if mode == .text, textModel.hasLocalContent"))
-        XCTAssertTrue(source.contains(
-            "Button(L10n.t(.workspaceLeaveSession), role: .destructive) { leaveSession() }"))
-        XCTAssertTrue(source.contains("L10n.t(.textDiscardLocalContentConfirmTitle)"))
-        XCTAssertTrue(source.contains("L10n.t(.textDiscardLocalContentConfirmBody)"))
-        XCTAssertEqual(occurrences(of: "confirmationDialog(", in: source), 1,
-                       "two confirmations for one exit is two answers to one question")
+
+    /// **A failed batch still says what was in it, and names its own outcome.**
+    ///
+    /// Migrated from the legacy file lane, which is deleted. The rule was never
+    /// about that lane: a transfer that failed is exactly when a user needs to
+    /// know what it contained and that it did not arrive.
+    ///
+    /// The shape it takes here is different and stronger. The legacy lane had
+    /// one transfer and rendered a per-phase manifest, so the guard had to check
+    /// the failure phase specifically; the link renders EVERY batch from one
+    /// list, so a failed batch keeps its identity by construction and what has
+    /// to be checked is that the list is exhaustive over states and that
+    /// `failed` is named rather than left blank.
+    func testALinkBatchFailureKeepsItsManifestAndNamesItsOutcome() throws {
+        let pane = try source(named: "Transfer/TransferLinkPane.swift")
+        let list = try XCTUnwrap(pane.components(separatedBy: "struct LinkTransferListView")
+            .dropFirst().first)
+
+        // Every batch, terminal ones included, renders through the model.
+        XCTAssertTrue(list.contains("ForEach(model.batchesNewestFirst)"))
+        // Its identity: how many files and how large. `summary` is applied to
+        // the batch itself rather than to a live-only projection, so a failed
+        // batch keeps it.
+        XCTAssertTrue(list.contains("Text(summary(batch))"),
+                      "a batch row no longer states what it contains")
+        XCTAssertTrue(list.contains("L10n.plural(.selectionFiles, batch.files.count)"))
+        // …and its outcome is named. `stateText` is exhaustive — no `default:` —
+        // so a seventh batch state has to state its own words rather than
+        // inherit somebody else's or render empty.
+        XCTAssertTrue(list.contains("case .failed: return L10n.t(.linkBatchFailed)"),
+                      "a failed batch renders no outcome at all")
+        let states = try XCTUnwrap(list.components(separatedBy: "private func stateText(")
+            .dropFirst().first)
+        XCTAssertFalse(states.contains("default:"),
+                       "a batch state can inherit another state's words")
     }
 
-    func testNearbyFileFailureKeepsTheManifestIdentityUntilBack() throws {
-        let session = try source(named: "RealtimeFileSessionView.swift")
-        let failed = try XCTUnwrap(session.components(
-            separatedBy: "case .failed:").dropFirst().first?
-            .components(separatedBy: "case .joining").first)
-        XCTAssertTrue(failed.contains("fileList"),
-                      "a failed transfer hides which files failed")
 
+
+    /// **Nothing app-scoped is left for a finished transfer to clear.**
+    ///
+    /// The original rule — which finished task keeps the staged batch — existed
+    /// because one `SelectionStore` outlived every session and both exits had to
+    /// decide what to do with it. There is no such store: a link send expands its
+    /// batch inside `pick(directories:)` and it dies with the call.
+    ///
+    /// So what survives the deleted pane is the ABSENCE, asserted on the surface
+    /// that sends now. A `selection.clear()` or an `@ObservedObject var
+    /// selection` reappearing here would mean an app-scoped staging context had
+    /// come back with it.
+    func testTheLinkSurfaceHoldsNoAppScopedStagedBatchToClear() throws {
         let pane = try source(named: transferSession)
-        let lane = try XCTUnwrap(pane.components(
-            separatedBy: "case .failed(let message):").dropFirst().first?
-            .components(separatedBy: "case .joining, .connecting").first)
-        XCTAssertLessThan(try XCTUnwrap(lane.range(of: "InlineMessage(.failure")).lowerBound,
-                          try XCTUnwrap(lane.range(of: "RealtimeFileSessionView")).lowerBound,
-                          "a long file list pushes the failure reason below the fold")
-    }
-
-    func testFileCompletionClearsOnlyTheBatchThatWasActuallySent() throws {
-        let session = try source(named: "RealtimeFileSessionView.swift")
-        XCTAssertTrue(session.contains("let onDone: () -> Void"))
-        XCTAssertTrue(session.contains("Button(L10n.t(.commonDone), action: onDone)"))
-
-        // One pane, one rule, for both routes — which is the point of the merge:
-        // the pairing half and the same-network half used to answer this
-        // separately, and separately is how two answers drift.
-        let pane = try source(named: transferSession)
-        XCTAssertTrue(pane.contains(
-            "RealtimeFileSessionView(model: fileModel, onDone: finishCompletedFileTransfer)"))
-        // **Nothing app-scoped is left to clear.** The rule this used to state —
-        // which finished task keeps the staged batch — existed because one
-        // `SelectionStore` outlived every session and both exits had to decide
-        // what to do with it. There is no such store: a connect-first send
-        // expands its batch inside `send(directories:)` and it dies with the
-        // call. A `selection.clear()` reappearing here would mean an app-scoped
-        // staging context had come back with it.
         XCTAssertEqual(occurrences(of: "selection.clear()", in: pane), 0,
-                       "the session pane clears an app-scoped staged batch again")
+                       "the link surface clears an app-scoped staged batch again")
         XCTAssertFalse(pane.contains("@ObservedObject var selection"),
-                       "the session pane holds an app-scoped selection again")
+                       "the link surface holds an app-scoped selection again")
         XCTAssertFalse(pane.contains("preservesFailedFiles"),
                        "a staged-batch retention rule survived the store it was about")
+        // The positive control: it does still send, through its own short-lived
+        // store, so this is not satisfied by having removed sending.
+        XCTAssertTrue(pane.contains("let store = SelectionStore()"),
+                      "the link surface no longer expands a batch of its own")
     }
+
 
     /// Minting is a locked network wait: the idle controls are gone until the
     /// request settles, so both pairing modes need an explicit way back.
@@ -937,19 +974,26 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// `watchPairingCode` refuses a second room while one is held, so the next
     /// code that process minted was never watched and fell back to the legacy
     /// wire. See `TransferModule.cancelPairingCode`.
-    func testPairingMintingCanBeCancelledInBothModes() throws {
-        let pane = try source(named: transferSession)
-        let fileMinting = try XCTUnwrap(pane.components(separatedBy: "case .minting:")
-            .dropFirst().first?.components(separatedBy: "case let .showingCode").first)
+    /// **One minting state, because there is one code.**
+    ///
+    /// It used to be two — a file lane's and a text lane's — and the test had to
+    /// check both, because a code was minted INTO whichever legacy transport the
+    /// user's verb had selected. A pairing code names a rendezvous, not a kind
+    /// of transfer, so there is one `PairingCodeModel` and one wait.
+    ///
+    /// What has to survive is the affordance: a real round trip gets a NAMED
+    /// wait with an escape, never the create button greyed out — which says
+    /// "you cannot do this" when the truth is "it is happening".
+    func testPairingMintingCanBeCancelled() throws {
+        let pane = try source(named: crossConnect)
+        let minting = try XCTUnwrap(pane.components(separatedBy: "case .minting:")
+            .dropFirst().first?.components(separatedBy: "case .idle, .failed:").first)
+        XCTAssertTrue(minting.contains("ProgressView(L10n.t(.directCreatingCode))"),
+                      "the mint is unnamed, or is drawn as a disabled control")
         XCTAssertTrue(
-            fileMinting.contains("Button(L10n.t(.commonCancel)) { module.cancelPairingCode() }"))
-        XCTAssertTrue(fileMinting.contains(".buttonStyle(.bordered)"))
-
-        let textMinting = try XCTUnwrap(pane.components(separatedBy: "case .minting:")
-            .dropFirst().dropFirst().first?.components(separatedBy: "case let .showingCode").first)
-        XCTAssertTrue(
-            textMinting.contains("Button(L10n.t(.commonCancel)) { module.cancelPairingCode() }"))
-        XCTAssertTrue(textMinting.contains(".buttonStyle(.bordered)"))
+            minting.contains("Button(L10n.t(.commonCancel)) { module.cancelPairingCode() }"),
+            "a mint in flight cannot be abandoned")
+        XCTAssertTrue(minting.contains(".buttonStyle(.bordered)"))
     }
 
     /// **Every creator-side code exit is the SAME operation, and no surface
@@ -972,7 +1016,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// `TransferModule.retainsWork` and is asserted directly in
     /// `TransferModuleTests`.
     func testEveryPairingCodeExitGoesThroughTheOneModuleOperation() throws {
-        let pane = try source(named: transferSession)
+        let pane = try source(named: crossConnect)
 
         XCTAssertFalse(pane.contains("private func releaseOwner()"),
                        "the pane released ownership without asking whether the whole "
@@ -985,38 +1029,37 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(pane.contains("private func cancelPairingWatch()"),
                        "a second, joiner-only spelling of the code cancel came back")
 
-        // Every Cancel that ends a code — minting, the shown code, the expired
-        // code beneath it, and the joiner's wait — names the one operation.
-        XCTAssertEqual(occurrences(of: "module.cancelPairingCode()", in: pane), 5,
+        // Every Cancel that ends a code names the one operation, and there are
+        // exactly four of them: the mint in flight, the live code's handoff, the
+        // expired code, and the failed mint's own recovery — the exit that did
+        // not exist and left the screen locked for the life of the process.
+        //
+        // It was five while the pane drew its own wait beside the handoff card,
+        // which is what made the live-code screen offer two identical Cancels
+        // and left an offline test unable to click either.
+        XCTAssertEqual(occurrences(of: "module.cancelPairingCode()", in: pane), 4,
                        "a pairing-code exit stopped using the shared cancel, or a new "
                        + "one appeared without it")
-        // The expired-code branch has no cancel of its own: it is handed the
-        // same closure the live handoff is, so the two cannot diverge.
-        let expired = try XCTUnwrap(pane.components(separatedBy: "private func expiredCode(")
+        let expired = try XCTUnwrap(pane.components(separatedBy: "private var expiredCode: some View")
             .dropFirst().first?
-            .components(separatedBy: "private var waitingOnJoinedCode").first)
-        XCTAssertTrue(expired.contains("Button(L10n.t(.commonCancel), action: cancel)"),
-                      "the expired code grew a cancel that is not the handoff's")
-        XCTAssertFalse(expired.contains("fileModel.") || expired.contains("textModel."),
+            .components(separatedBy: "// MARK: - pairing code").first)
+        XCTAssertTrue(expired.contains("Button(L10n.t(.commonCancel)) { module.cancelPairingCode() }"),
+                      "the expired code grew a cancel that is not the shared one")
+        XCTAssertFalse(expired.contains("code.cancel()") || expired.contains("link.leave()"),
                        "the expired code reaches a model directly instead of the "
                        + "operation that also ends the watched room")
     }
 
     // MARK: - the mode picker is gone
 
-    /// **No macOS surface may ask "files or text?" before there is a peer.**
+    /// **No mode picker, and no writer for the mode it used to set.**
     ///
-    /// The segmented picker was the single most damaging thing left on this
-    /// screen: it made a user who only wanted to say something choose a
-    /// transport mode first, it sat above every other control on two
-    /// destinations, and it was disabled the instant a session was claimed — so
-    /// its only lasting effect was to be in the way. Each connect action now
-    /// states its own kind, and `TransferPresence.mode` is written by those
-    /// actions rather than by a control the user has to interpret.
-    ///
-    /// Asserted as an absence across every macOS source, because a picker
-    /// reintroduced on one card is exactly the regression a screenshot review
-    /// would call a nice touch.
+    /// The picker went when the two lanes merged; the WRITER goes with the
+    /// legacy transports. `selectMode` had exactly one surviving macOS call
+    /// site — the `selectRealtimeMode` closure handed to the shared deep-link
+    /// coordinator — and the link-only initializer takes no such closure,
+    /// because a pairing code names a rendezvous and one link carries both
+    /// lanes. So the answer is now zero rather than one, which is stronger.
     func testNoSegmentedModePickerSurvivesAnywhereOnMacOS() throws {
         for (name, text) in try sources(under: try macRoot, atLeast: 20) {
             XCTAssertFalse(text.contains("pickerStyle(.segmented)"),
@@ -1028,31 +1071,14 @@ final class MacSurfaceGuardTests: XCTestCase {
                                "\(name) still renders separate-mode copy: \(retired)")
             }
         }
-        // `selectMode` was the picker's setter. A mode is now decided by the verb
-        // that starts a session, through `beginSession(_:mode:)`, which takes
-        // ownership in the same synchronous step — so a second caller would be a
-        // second authority able to repoint an intent nobody restated.
-        //
-        // Exactly ONE site survives, and it is not a control: `RelayiumApp` hands
-        // `AppDeepLinkCoordinator` a `selectRealtimeMode` closure, because that
-        // coordinator is shared with iOS, where the mode still has a picker
-        // (`DirectModeSelection`). On macOS the write is inert by construction —
-        // the coordinator refuses to apply a link while anything is claimed, and
-        // the next `beginSession` sets the mode itself — so it is kept as the
-        // shared seam rather than special-cased per platform. Naming the file
-        // here is what stops that argument from being quietly extended to a view.
         let modeWriters = try sources(under: try macRoot, atLeast: 20)
             .filter { $0.text.contains("selectMode(") }.map(\.name).sorted()
-        XCTAssertEqual(modeWriters, ["RelayiumApp.swift"],
-                       "a macOS surface writes the transfer mode outside a session claim")
+        XCTAssertEqual(modeWriters, [],
+                       "a macOS surface writes a transfer mode that no longer selects "
+                       + "anything: \(modeWriters)")
         let app = try source(named: "RelayiumApp.swift")
-        XCTAssertEqual(occurrences(of: "selectMode(", in: app), 1)
-        // The DIRECT module's presence, because `AppRouting` sends a realtime
-        // link to `.pairingCode`. Handed the Nearby module's, the coordinator
-        // would apply a pairing link's mode to a same-network session.
-        XCTAssertTrue(app.contains(
-            "selectRealtimeMode: { mode in directModule.presence.selectMode(mode) }"),
-                      "the one surviving mode write is no longer the shared deep-link seam")
+        XCTAssertFalse(app.contains("selectRealtimeMode:"),
+                       "the scene hands the deep-link coordinator a lane selector again")
     }
 
     /// The verification setting is the one control that still has to lock at
@@ -1095,21 +1121,20 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(setting.contains(".disabled(locked)"))
     }
 
+    /// **One liveness subscription, owned by the module, never by a view.**
+    ///
+    /// The link is still observed in the SAME subscription as the module's other
+    /// liveness source rather than in a second one — a separate observer would
+    /// release the surface the instant a link started, because the other source
+    /// reads idle for its whole life. What changed is only which source that is:
+    /// the two legacy models became one `PairingCodeModel`, and a minted or
+    /// shown code is work the module holds exactly as a non-idle lane was.
     func testSessionOwnershipCleanupIsAppScopedAndNeverRunsFromInitialViewIdle() throws {
-        // The liveness subscription moved into `TransferModule`, which is where
-        // it belongs now that each module has its own presence — one place, one
-        // copy, applied identically to both. The link is still the THIRD source
-        // in the SAME subscription: a separate observer would release the
-        // surface the instant a link started, because a link uses neither legacy
-        // model and both read idle for its whole life.
         let module = try appKitSource(named: "TransferModule.swift")
-        XCTAssertTrue(module.contains(
-            "presence.observeSessions(fileModel: files, textModel: text, link: link)"))
-        XCTAssertFalse(module.contains(
-            "presence.observeSessions(fileModel: files, textModel: text)\n"),
-            "a second liveness subscription would race the first")
-        // And the scene no longer wires one itself, which is what stops a third
-        // app-scoped presence appearing beside the two modules'.
+        XCTAssertTrue(module.contains("presence.observeSessions(code: code, link: link)"),
+                      "the module stopped observing its own liveness in one place")
+        XCTAssertEqual(occurrences(of: "presence.observeSessions(", in: module), 1,
+                       "a second liveness subscription would race the first")
         let app = try source(named: "RelayiumApp.swift")
         XCTAssertFalse(app.contains(".observeSessions("),
                        "the scene wires a liveness subscription the modules already own")
@@ -1123,69 +1148,45 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertFalse(destination.contains("cancelEverything()"),
                            "\(name) can end the other module's session as well as its own")
         }
-        // Only the owner may let go, and the release must name ITS OWN route
-        // rather than whatever the presence object currently holds — a stale
-        // view rebuilt on the other transfer screen would otherwise blank a live
-        // session.
-        //
-        // **That release now lives on the module**, guarded by `retainsWork`,
-        // and the pane delegates to it. It had to move: the pane released on the
-        // idle edge of the ONE lane it was drawing, so the `link/1` handoff —
-        // which retires a creator's code model precisely because a link has
-        // taken over — gave the surface up under a live link. The route is still
-        // the module's own, which is the same guarantee with one fewer thing for
-        // a caller to get wrong.
-        XCTAssertTrue(module.contains("guard !retainsWork else { return false }")
-                      && module.contains("presence.release(route)"),
-                      "the module releases a route it may not own, or releases it "
-                      + "without asking whether anything still holds work")
-        XCTAssertFalse(module.contains("presence.release(presence.owner)"),
-                       "the module releases whichever route happens to own the session")
-        let session = try source(named: transferSession)
-        XCTAssertTrue(session.contains("private var route: AppDestination { module.route }"),
-                      "the session pane lost the route its own claims are checked against")
-        XCTAssertTrue(session.contains("module.releaseSurfaceIfIdle()"),
-                      "the session pane no longer releases through the module's rule")
+        XCTAssertTrue(module.contains("presence.release(route)"),
+                      "the module releases whatever the presence happens to hold")
     }
 
-    /// **The two modules share no session object at all**, which is what makes
-    /// "a connection survives navigating to the other screen" a property of the
-    /// composition rather than a behaviour somebody has to preserve.
+    /// **Two modules, no shared state.**
     ///
-    /// Three separate claims, and each one has a failure it prevents:
-    ///
-    ///  * each module is built with its OWN presence, so neither can lock,
-    ///    release or refuse the other's session;
-    ///  * the Nearby module's models carry no code path and the Direct module's
-    ///    carry no roster path, so neither screen can start the other's kind of
-    ///    session even if a later edit asked it to;
-    ///  * only the Direct link watches a pairing code, and only the Nearby link
-    ///    observes the room — one model registered for both is what let the LAN
-    ///    roster's churn cancel a pairing request in flight.
+    /// The factory list shrank with the models: each module is now a `link/1`
+    /// owner and a `PairingCodeModel`, so the module-specific link factories are
+    /// what has to be named. The rule is unchanged and is the one the split
+    /// exists for — a session on one screen must not reach the other.
     func testTheTwoTransferModulesShareNoSessionState() throws {
         let app = try source(named: "RelayiumApp.swift")
-        // Composed from the module-specific factories, never the general ones.
-        for factory in ["makeNearbyRealtimeModel(", "makeNearbyRealtimeTextModel(",
-                        "makeNearbyLinkWorkspaceModel(", "makeDirectRealtimeModel(",
-                        "makeDirectRealtimeTextModel(", "makeDirectLinkWorkspaceModel("] {
+        // Composed from the module-specific factories, never a general one.
+        for factory in ["makeNearbyLinkWorkspaceModel(", "makeDirectLinkWorkspaceModel("] {
             XCTAssertTrue(app.contains(factory),
                           "the scene stopped composing modules through \(factory)")
         }
-        for shared in ["AppEnvironment.makeRealtimeModel(", "AppEnvironment.makeRealtimeTextModel(",
-                       "AppEnvironment.makeLinkWorkspaceModel("] {
-            XCTAssertFalse(app.contains(shared),
-                           "the scene rebuilt a model both modules would share: \(shared)")
-        }
-        // No app-scoped presence, and no app-scoped session model, beside them.
+        XCTAssertFalse(app.contains("AppEnvironment.makeLinkWorkspaceModel("),
+                       "the scene rebuilt a link both modules would share")
+        // Two codes, for the same reason: one would let a code minted on the
+        // pairing screen appear on the same-network one.
+        //
+        // Counted as BINDINGS rather than as factory calls. `directCode` has two
+        // call sites — the DEBUG acceptance mint and the production one it falls
+        // back to — so counting calls would drift with every fixture and would
+        // not have answered the question anyway.
+        XCTAssertEqual(occurrences(of: "let nearbyCode = ", in: app), 1)
+        XCTAssertEqual(occurrences(of: "let directCode = ", in: app), 2,
+                       "the DEBUG and release bindings of the pairing code diverged")
+        XCTAssertTrue(app.contains("TransferModule(route: .nearby, link: nearbyLink, code: nearbyCode)")
+                      && app.contains("TransferModule(route: .pairingCode, link: directLink, code: directCode)"),
+                      "the two modules share one pairing code model")
+        // No app-scoped presence beside them.
         XCTAssertFalse(app.contains("@StateObject private var presence: TransferPresence"),
                        "a shared presence would arbitrate the two modules again")
         // **And neither module is HANDED one.** `TransferModule`'s `presence`
         // parameter exists so a test can pre-claim a surface; passing the same
-        // instance to both here is the one edit that restores the shipped defect
-        // while leaving every other assertion in this file green. It was checked
-        // by mutation: with one shared presence, the two built-App paths in
-        // `AppShellUITests` fail on "a same-network session disabled the Direct
-        // screen's Create", and nothing in this file did.
+        // instance to both is the one edit that restores the shipped defect
+        // while leaving every other assertion in this file green.
         for construction in app.components(separatedBy: "TransferModule(route:").dropFirst() {
             XCTAssertFalse(String(construction.prefix(240)).contains("presence:"),
                            "a module is built with a presence somebody else may also hold")
@@ -1194,52 +1195,8 @@ final class MacSurfaceGuardTests: XCTestCase {
                         "@StateObject private var realtimeTextModel",
                         "@StateObject private var linkWorkspace"] {
             XCTAssertFalse(app.contains(retired),
-                           "a shared session model survived the module split: \(retired)")
+                           "an app-scoped session model came back beside the modules: \(retired)")
         }
-        // The environment carries the container, so a destination is HANDED one
-        // module rather than reaching for whichever is in scope.
-        XCTAssertTrue(app.contains(".environmentObject(transferModules)"))
-        let shell = try source(named: "Shell/AppShellView.swift")
-        XCTAssertTrue(shell.contains("LanTransferDestination(module: modules.nearby)")
-                      && shell.contains(
-                        "CrossNetworkTransferDestination(module: modules.direct)"),
-                      "the shell no longer hands each destination exactly one module")
-        // The Nearby module's own factories refuse the code path, and the
-        // Direct module's refuse the roster path. Read from the factory file,
-        // because that is where the refusal actually is.
-        let environment = try appKitSource(named: "AppEnvironment.swift")
-        for nearbyFactory in ["makeNearbyRealtimeModel", "makeNearbyRealtimeTextModel"] {
-            let body = try declaration(of: nearbyFactory, in: environment)
-            XCTAssertTrue(body.contains("makeConnection: { _, _, _ in throw NearbyError.notScanning }"),
-                          "\(nearbyFactory) can join or mint a pairing code")
-            XCTAssertFalse(body.contains("makeRoomConnection:"),
-                           "\(nearbyFactory) can adopt a pairing room")
-        }
-        for directFactory in ["makeDirectRealtimeModel", "makeDirectRealtimeTextModel"] {
-            let body = try declaration(of: directFactory, in: environment)
-            XCTAssertFalse(body.contains("makeNearbyConnection:"),
-                           "\(directFactory) can dial a same-network roster peer")
-            XCTAssertFalse(body.contains("makeInboundConnection:"),
-                           "\(directFactory) can answer an unsolicited same-network offer")
-        }
-        // One room each. The direct link is not a room observer; the nearby link
-        // has no pairing socket to open.
-        XCTAssertFalse(try declaration(of: "makeDirectLinkWorkspaceModel", in: environment)
-            .contains("addRoomObserver"),
-                       "the pairing module observes the same-network roster again")
-        XCTAssertFalse(try declaration(of: "makeNearbyLinkWorkspaceModel", in: environment)
-            .contains("connectPairingSocket"),
-                       "the same-network module can open a pairing code's socket")
-        // Only the DIRECT module is wired to the pairing fallback and the code
-        // handoff; only the NEARBY module answers an unsolicited link.
-        XCTAssertTrue(app.contains("directLink.adoptLegacyRoom =")
-                      && app.contains("directLink.onLegacyFallbackBatch =")
-                      && app.contains("directLink.onPairingLinkActivated ="),
-                      "the pairing fallback reaches a module other than Direct")
-        XCTAssertTrue(app.contains("nearbyLink.shouldAcceptLink ="),
-                      "an unsolicited same-network link is admitted by the wrong module")
-        XCTAssertTrue(app.contains("presence: nearbyModule.presence, navigation: routing)"),
-                      "an inbound same-network offer is admitted against the wrong presence")
     }
 
     /// Quit is the ONE action that means every module, and the only caller of
@@ -1265,135 +1222,202 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
     }
 
-    func testInboundNearbyOfferPassesOwnershipAdmissionBeforeBuildingResponder() throws {
+    /// **The one inbound path claims ownership before it accepts.**
+    ///
+    /// The legacy half of this rule is gone with the transport: macOS composes
+    /// its receive observer through the listener-only seam and admits no legacy
+    /// session at all (`testMacComposesTheListenerWithoutAnyLegacyAdmission`).
+    ///
+    /// The rule itself is unchanged for the path that remains. An unsolicited
+    /// `link/1` must take the module's surface synchronously — before the
+    /// transport is built — or an outbound action that claimed a moment earlier
+    /// and has not published yet gets overwritten by it.
+    func testAnInboundLinkClaimsOwnershipBeforeItIsAccepted() throws {
         let app = try source(named: "RelayiumApp.swift")
-        XCTAssertTrue(app.contains("receive.shouldAcceptSession = { kind, peerID in"),
-                      "macOS can build an inbound responder during an outbound claim-before-busy gap")
-        XCTAssertTrue(app.contains(
-            "peerLabel: nearby.label(forPeerID: peerID)"),
-                      "inbound admission must use the same atomic claim-before-navigation route")
+        let gate = try XCTUnwrap(app.components(separatedBy: "nearbyLink.shouldAcceptLink = ")
+            .dropFirst().first)
+        XCTAssertTrue(gate.contains("guard nearbyModule.presence.beginSession("),
+                      "an unsolicited link is admitted without claiming the surface")
+        XCTAssertTrue(gate.contains("else { return false }"),
+                      "a lost claim still admits the link")
+        XCTAssertTrue(gate.contains("peerLabel: nearby.label(forPeerID: peerID)"),
+                      "inbound admission stopped using the sanitized roster label")
+        let claim = try XCTUnwrap(gate.range(of: "beginSession("))
+        let navigate = try XCTUnwrap(gate.range(of: "routing.select(.nearby)"))
+        XCTAssertLessThan(claim.lowerBound, navigate.lowerBound,
+                          "the shell navigates before the surface is claimed")
     }
 
-    func testAReopenedWindowReconcilesRatherThanReadmittingTheLiveSession() throws {
+    /// **A reopened window has no session left to re-admit.**
+    ///
+    /// The shell used to reconcile an unsolicited LEGACY session onto the Nearby
+    /// surface, because that admission was not app-scoped and a closed window
+    /// could miss it. There is no such session now, and the task is deleted
+    /// rather than repointed: `activeKind` can no longer become non-nil, so it
+    /// could only ever have been a no-op that still read as a live route.
+    ///
+    /// The property it provided is structural now. `shouldAcceptLink` is
+    /// installed in `RelayiumApp.init` and lives as long as the process, so an
+    /// unsolicited link claims and navigates whether or not a window exists.
+    func testAReopenedWindowHasNoSessionToReadmit() throws {
         let shell = try source(named: "Shell/AppShellView.swift")
-        XCTAssertTrue(shell.contains("AppRouting.reconcileIncoming(kind,"),
-                      "window reconstruction cannot use strict new-offer admission")
         XCTAssertFalse(shell.contains("AppRouting.claimIncoming(kind,"),
-                       "the shell must not make an existing session look like a new offer")
+                       "the shell makes an existing session look like a new offer")
+        XCTAssertFalse(shell.contains("AppRouting.reconcileIncoming(kind,"),
+                       "the shell reconciles a legacy session that can no longer exist")
+        XCTAssertFalse(shell.contains("nearbyReceive.activeKind"),
+                       "the shell routes on a legacy inbound kind again")
+        let app = try source(named: "RelayiumApp.swift")
+        XCTAssertTrue(app.contains("nearbyLink.shouldAcceptLink = { peerID in"),
+                      "the app-scoped inbound gate is gone, so a closed window would "
+                      + "miss an unsolicited link entirely")
     }
 
-    func testNearbySessionKeepsItsPeerVisibleAfterTheRosterDisappears() throws {
+    /// **A session keeps naming its peer after the roster that named it is
+    /// gone, and never presents that name as verified identity.**
+    ///
+    /// Migrated to the link surface, which is the only session surface left. The
+    /// second header shape — "connected with a code" — went with the pane that
+    /// drew a code as a session: a code is not a session, it is the connect
+    /// screen with digits on it, so there is one header now and it names a peer.
+    func testALinkSessionKeepsItsPeerVisibleAfterTheRosterDisappears() throws {
         let pane = try source(named: transferSession)
-        XCTAssertTrue(pane.contains("presence.sessionPeerLabel"))
-        XCTAssertTrue(pane.contains("L10n.t(.nearbySessionWith"))
+        // The label is the link's own snapshot, not a live roster read — a peer
+        // that left the roster mid-session must not blank its own header.
+        XCTAssertTrue(pane.contains("L10n.t(.linkOpenWith, [L10n.token(link.peerLabel ?? \"\")])"),
+                      "the session header reads something other than the link's own label")
         XCTAssertTrue(pane.contains("L10n.t(.nearbySessionPeerDisclaimer)"),
                       "a peer-supplied label must not be presented as verified identity")
-        // A pairing-code session has no roster label to snapshot. It says how the
-        // peer was reached rather than leaving the header blank or, worse,
-        // inventing a name for somebody nobody named.
-        XCTAssertTrue(pane.contains("L10n.t(.workspaceSessionWithCode)"),
-                      "a code-reached session renders no header at all")
-        XCTAssertEqual(occurrences(of: ".accessibilityIdentifier(\"transfer-session-peer\")",
-                                   in: pane), 2,
-                       "both header shapes need the same stable runtime identity")
+        XCTAssertEqual(occurrences(of: ".accessibilityIdentifier(\"link-session-peer\")", in: pane), 1,
+                       "the one header shape needs exactly one stable runtime identity")
+        // The name is isolated rather than interpolated raw, so a bidi or
+        // control character in a peer-supplied label cannot reshape the sentence.
+        XCTAssertTrue(pane.contains("L10n.token(link.peerLabel"),
+                      "a peer-supplied name is interpolated without isolation")
     }
 
-    /// Before a text peer connects there is no transcript or result to retain.
-    /// Cancel should match the file flow and return directly to the start screen.
-    func testTextConnectingCancelDoesNotCreateAnEmptyTerminalTask() throws {
-        let source = try source(named: "RealtimeTextSessionView.swift")
-        let connecting = try XCTUnwrap(source.components(
-            separatedBy: "case .joining, .connecting:").dropFirst().first?
-            .components(separatedBy: "case let .verifying").first)
-        XCTAssertTrue(connecting.contains("Button(L10n.t(.commonCancel)) { model.reset() }"))
-        XCTAssertFalse(connecting.contains("model.end()"),
-                       "Cancel creates an empty Session ended task that still needs Done")
+
+
+
+
+    /// **Leaving cannot silently discard local text — transcript or draft.**
+    ///
+    /// This guard has been wrong twice, in opposite directions, and both
+    /// versions are worth naming because each looked reasonable.
+    ///
+    /// First it asserted that the model held an unsent draft, so no confirmation
+    /// was needed. False: `sendDraft` hands text to the model only once Send is
+    /// pressed, so anything in the composer is view-local `@State`.
+    ///
+    /// Then it confirmed on the DRAFT alone. Also wrong, and worse: the ordinary
+    /// state after sending a message is a full transcript and an empty composer,
+    /// so that version leaked exactly the case the deleted legacy pane protected
+    /// — `hasLocalContent` there meant the HISTORY.
+    ///
+    /// So all three states are pinned, because the rule is a three-way answer
+    /// and any two of them can be satisfied by the wrong predicate.
+    func testLeavingALinkCannotSilentlyDiscardLocalText() throws {
+        let pane = try source(named: "Transfer/TransferLinkPane.swift")
+
+        // The exit asks rather than acting.
+        XCTAssertTrue(pane.contains("Button(leaveTitle) { leaveOrConfirmLocalTextDiscard() }"),
+                      "the exit discards local text without asking")
+
+        // 1. An empty session leaves in one press — the ordinary case stays cheap.
+        // 2. A draft alone confirms.  3. A transcript alone confirms.
+        // One expression decides all three, and it is the CONJUNCTION that makes
+        // case 3 work: `trimmedDraft.isEmpty` alone would leave silently.
+        XCTAssertTrue(pane.contains("if hasLocalText {"),
+                      "the exit no longer answers all three of empty / draft-only / "
+                      + "transcript-only, so one of them is silently destructive")
+        // …and the predicate is the MODEL's, so ⌘Q and Leave cannot disagree.
+        XCTAssertTrue(pane.contains("private var hasLocalText: Bool { link.holdsLocalText }"),
+                      "the exit re-derives what is at risk instead of asking the link")
+        // **The confirmed path discards.** `leave()` keeps the projections, so a
+        // confirmation wired to it promised something that did not happen and
+        // the Done underneath asked again.
+        XCTAssertTrue(pane.contains(
+            "Button(leaveTitle, role: .destructive) { leaveDiscardingLocalText() }"),
+            "the confirmation says it discards and then does not")
+        XCTAssertTrue(pane.contains("link.leaveDiscardingLocalText()"),
+                      "the confirmed exit does not reach the model operation that discards")
+
+        // The transcript predicate is any message at all, sent or received: a
+        // received message is exactly as unrecoverable as a sent one.
+        // The model's predicate counts all three things a teardown destroys.
+        let model = try appKitSource(named: "LinkWorkspaceModel.swift")
+        XCTAssertTrue(model.contains("!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty")
+                      && model.contains("|| pendingMessage != nil")
+                      && model.contains("|| !(textModel?.textMessages.isEmpty ?? true)"),
+                      "the local-text predicate stopped counting the draft, a message "
+                      + "still waiting, or the transcript")
+        // …and the quit guard reads exactly that, so ⌘Q and Leave agree.
+        XCTAssertTrue(try appKitSource(named: "TransferModule.swift")
+            .contains("public var hasLocalText: Bool { link.holdsLocalText }"),
+            "the quit guard and the exit read different answers")
+
+        // The confirmation: destructive, cancellable, and worded from shipped
+        // copy rather than a new key. Which sentence is used follows what is
+        // actually at risk — the local-content copy names history AND draft, so
+        // it is truthful whenever a transcript exists.
+        XCTAssertTrue(pane.contains("hasTranscript ? .textDiscardLocalContentConfirmTitle")
+                      && pane.contains(": .textDiscardDraftConfirmTitle"),
+                      "the confirmation title does not follow what is at risk")
+        XCTAssertTrue(pane.contains("hasTranscript ? .textDiscardLocalContentConfirmBody")
+                      && pane.contains(": .textDiscardDraftConfirmBody"),
+                      "the confirmation body does not follow what is at risk")
+        XCTAssertTrue(pane.contains("Button(L10n.t(.commonCancel), role: .cancel)"),
+                      "the confirmation has no way back")
+        XCTAssertEqual(occurrences(of: "confirmationDialog(", in: pane), 1,
+                       "two confirmations for one exit is two answers to one question")
+
+        // One exit, and it still states the standing cost where the exit is.
+        let exit = try XCTUnwrap(pane.components(separatedBy: "private var exit: some View")
+            .dropFirst().first?.components(separatedBy: "private var leaveTitle").first)
+        XCTAssertTrue(exit.contains("L10n.t(.linkHistoryIsLocal)"),
+                      "the exit no longer states that the transcript is unrecoverable")
+        XCTAssertEqual(occurrences(of: "link-leave-session", in: pane), 1)
+        XCTAssertFalse(pane.contains("clearHistory"),
+                       "a Clear history action appeared with no confirmation behind it")
     }
 
-    /// Mismatch, refusal and ending all terminate the live relationship. Their
-    /// macOS controls must carry the same destructive semantics as iOS, while
-    /// Match and Accept remain the only prominent affirmative choices.
-    func testTextSessionTerminationActionsAreVisiblyDestructive() throws {
-        let session = try source(named: "RealtimeTextSessionView.swift")
-        for action in [".sessionTheyDontMatch", ".commonReject"] {
-            XCTAssertEqual(occurrences(of: "Button(L10n.t(\(action)), role: .destructive)",
-                                       in: session), 1,
-                           "\(action) lost its destructive role")
-        }
-        XCTAssertEqual(occurrences(of:
-            "Button(L10n.t(.commonEndSession), role: .destructive)", in: session), 3,
-            "waiting, open and draft-confirmation termination must be destructive")
-        XCTAssertEqual(occurrences(of: ".buttonStyle(.bordered)", in: session), 4,
-                       "each destructive session action needs an explicit task-button shape")
-        XCTAssertEqual(occurrences(of: ".buttonStyle(.borderedProminent)", in: session), 3,
-                       "only Match, Accept and the open-session Send action are prominent")
+
+
+    /// **Mismatch and mid-transfer cancel state their destructive cost.**
+    ///
+    /// Migrated from the legacy file lane, and this is the second correction to
+    /// it. My first migration kept only the SAS rejection and dropped the
+    /// mid-transfer cancel as having "no analogue" — it has one, and dropping
+    /// the assertion silently dropped the guarantee: the link's outbound cancel
+    /// while `.transferring` throws away partial progress on both ends and could
+    /// not be resumed, exactly as the legacy lane's could not.
+    ///
+    /// The queued/transferring split is the part worth stating. Cancelling a
+    /// QUEUED batch withdraws an intent — nothing has left — and stays neutral,
+    /// which is why a blanket "every Cancel is destructive" would be wrong in
+    /// the other direction.
+    func testMismatchAndMidTransferCancelStateTheirDestructiveCost() throws {
+        let pane = try source(named: "Transfer/TransferLinkPane.swift")
+
+        XCTAssertTrue(pane.contains(
+            "Button(L10n.t(.linkVerifyDiffers), role: .destructive) { link.rejectSAS() }"),
+            "rejecting the digits lost its destructive role")
+        XCTAssertTrue(pane.contains(
+            "Button(L10n.t(.commonCancel), role: .destructive) { link.cancelOutboundBatch() }"),
+            "cancelling a batch that is already moving no longer states its cost")
+        // …and the withdrawal of a queued batch stays neutral, so the
+        // destructive role keeps meaning something.
+        XCTAssertTrue(pane.contains(
+            "Button(L10n.t(.commonCancel)) { link.cancelQueuedBatch(batch.id) }"),
+            "withdrawing a queued batch is presented as destructive, which makes "
+            + "the role meaningless on the one action that is")
+        XCTAssertFalse(pane.contains("Button(L10n.t(.linkVerifyMatches), role: .destructive)"),
+                       "confirming a match is not a destructive action")
     }
 
-    func testEndingAnOpenTextSessionCannotSilentlyDiscardADraft() throws {
-        let source = try source(named: "RealtimeTextSessionView.swift")
-        XCTAssertTrue(source.contains("@State private var confirmingDraftDiscard = false"))
-        XCTAssertTrue(source.contains("if model.draft.isEmpty"))
-        XCTAssertTrue(source.contains(
-            "Button(L10n.t(.commonEndSession), role: .destructive) { endOrConfirmDraftDiscard() }"))
-        XCTAssertEqual(occurrences(of: "model.discardDraftAndEnd()", in: source), 1)
-        let waiting = try XCTUnwrap(source.components(separatedBy: "private func waiting(")
-            .dropFirst().first?.components(separatedBy: "private func incomingRequest").first)
-        XCTAssertTrue(waiting.contains("model.end()"))
-        XCTAssertFalse(waiting.contains("model.discardDraftAndEnd()"))
-        let confirmation = try XCTUnwrap(source.components(
-            separatedBy: "L10n.t(.textDiscardDraftConfirmTitle)").dropFirst().first)
-        XCTAssertTrue(confirmation.contains("model.discardDraftAndEnd()"))
-        XCTAssertTrue(source.contains("L10n.t(.textDiscardDraftConfirmTitle)"))
-        XCTAssertTrue(source.contains("L10n.t(.textDiscardDraftConfirmBody)"))
-        XCTAssertTrue(source.contains("terminalMessage\n                retainedDraft"))
-        XCTAssertTrue(source.contains("Text(model.draft)"))
-        XCTAssertTrue(source.contains(".textSelection(.enabled)"))
-        XCTAssertTrue(source.contains("@State private var copiedDraft = false"))
-        XCTAssertTrue(source.contains("copyText(model.draft)"))
-        XCTAssertTrue(source.contains("copiedDraft ? .commonCopied : .commonCopy"))
-    }
 
-    func testFileMismatchAndMidTransferCancelStateTheirDestructiveCost() throws {
-        let session = try source(named: "RealtimeFileSessionView.swift")
-        XCTAssertTrue(session.contains(
-            "Button(L10n.t(.sessionTheyDontMatch), role: .destructive) { model.rejectSAS() }"))
-        XCTAssertTrue(session.contains(
-            "Button(L10n.t(.commonCancel), role: .destructive) { model.cancel() }"))
-        XCTAssertEqual(occurrences(of:
-            "Button(L10n.t(.commonCancel)) { model.cancel() }", in: session), 1,
-            "only pre-transfer connection Cancel should remain neutral")
-    }
 
-    func testClearingTheOnlyLocalTextHistoryRequiresDestructiveConfirmation() throws {
-        let session = try source(named: "RealtimeTextSessionView.swift")
-        XCTAssertEqual(occurrences(of: "confirmingHistoryClear = true", in: session), 2,
-                       "open and terminal history must enter the same confirmation")
-        XCTAssertEqual(occurrences(of: "model.clearHistory()", in: session), 1,
-                       "history may only be erased by the confirmation action")
-        XCTAssertTrue(session.contains(
-            "Button(L10n.t(.textClearHistory), role: .destructive) { model.clearHistory() }"))
-        XCTAssertTrue(session.contains("L10n.t(.textClearHistoryConfirmTitle)"))
-        XCTAssertTrue(session.contains("L10n.t(.textClearHistoryConfirmBody)"))
-    }
 
-    /// Waiting on a code the peer never joined is not a session to END — there is
-    /// no transcript and no connection. Cancelling returns straight to the
-    /// connect phase, in both lanes, through each model's own reset/cancel.
-    func testTextCodeWaitingCancelReturnsDirectlyToThePairingEntry() throws {
-        let source = try source(named: transferSession)
-        let text = try XCTUnwrap(source.components(
-            separatedBy: "private var textLane:").dropFirst().first?
-            .components(separatedBy: "private func codeHandoff").first)
-        XCTAssertTrue(text.contains("cancel: { module.cancelPairingCode() }"),
-                      "the text handoff lost its direct way back")
-        XCTAssertFalse(text.contains("textModel.end()"),
-                       "Cancel creates an empty Session ended task that still needs Done")
-        let files = try XCTUnwrap(source.components(
-            separatedBy: "private var fileLane:").dropFirst().first?
-            .components(separatedBy: "private var textLane").first)
-        XCTAssertTrue(files.contains("cancel: { module.cancelPairingCode() }"),
-                      "the file handoff lost its direct way back")
-    }
 
     func testGeneratedCodeCancelIsPresentedAsATaskButton() throws {
         let source = try source(named: "QRCode.swift")
@@ -1408,10 +1432,10 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// One handoff builder for both lanes now, so the expiry scope cannot be
     /// stated correctly in one and ambiguously in the other.
     func testPairingExpiryIsNamedAsCodeExpiryNotTransferExpiry() throws {
-        let source = try source(named: transferSession)
+        let source = try source(named: crossConnect)
         let handoff = try XCTUnwrap(source.components(
-            separatedBy: "private func codeHandoff(").dropFirst().first?
-            .components(separatedBy: "// MARK: - what this connection carries").first)
+            separatedBy: "private func liveCode(").dropFirst().first?
+            .components(separatedBy: "private var expiresAt: Int64").first)
         XCTAssertTrue(handoff.contains("L10n.t(.pairingCodeExpiryNote)"),
                       "the expiry scope is ambiguous")
         XCTAssertTrue(handoff.contains(
@@ -1427,7 +1451,10 @@ final class MacSurfaceGuardTests: XCTestCase {
         // And the countdown, the withdrawal of the handoff and the expired
         // notice are all ONE answer, so they cannot disagree about the instant
         // the code dies.
-        XCTAssertTrue(handoff.contains("PairingCodeExpiry.presentation(expiresAt: expiresAt,"),
+        // Wrapped across two lines in the source, so the call is matched by its
+        // two load-bearing halves rather than by one formatting-sensitive string.
+        XCTAssertTrue(handoff.contains("PairingCodeExpiry.presentation(")
+                      && handoff.contains("expiresAt: expiresAt"),
                       "the surface decides expiry itself instead of asking the one rule")
         XCTAssertTrue(handoff.contains("if deadline.isUsable {"),
                       "the join handoff is offered without asking whether the code works")
@@ -1444,10 +1471,10 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// PARSING a mode is untouched, and deliberately: links already passed on
     /// have to keep working. That is `AppDeepLinkTests`' half.
     func testPairingHandoffCarriesTheCodeAndNoLaneHint() throws {
-        let pane = try source(named: transferSession)
-        XCTAssertTrue(pane.contains("transferPairingJoinURL(code: code)"),
+        let pane = try source(named: crossConnect)
+        XCTAssertTrue(pane.contains("transferPairingJoinURL(code: live)"),
                       "the handoff link is built with something other than the bare code")
-        XCTAssertFalse(pane.contains("transferPairingJoinURL(code: code, mode:"),
+        XCTAssertFalse(pane.contains("transferPairingJoinURL(code: live, mode:"),
                        "the handoff link still names a lane the sender never chose")
         // No macOS surface emits one at all — the parser keeps its `mode`
         // parameter for inbound links, and this is what stops a second caller
@@ -1578,55 +1605,62 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "Send another is exposed as a navigation Link")
     }
 
-    /// Leaving Nearby tears down the active task and drops local state. The
-    /// visible control and its accessibility role must describe a Button, as
-    /// the equivalent iOS surface already does, rather than harmless navigation.
-    func testNearbyBackToDevicesKeepsTaskBoundaryButtonSemantics() throws {
+    /// **The exit is a task boundary, not navigation, and it is reachable.**
+    ///
+    /// Migrated to the link surface. The gate changed shape with the model — the
+    /// legacy pane gated on `hasRetainedSession && !modelBusy` because it had two
+    /// lanes whose terminal states it had to reconcile; the link renders its exit
+    /// for the whole session and names it `Done` once ended — but the semantics
+    /// this guards are the ones that matter and are unchanged: a bordered task
+    /// button, never a `.link` style, with a stable identity.
+    func testTheLinkExitKeepsTaskBoundaryButtonSemantics() throws {
         let source = try source(named: transferSession)
-        let exit = try XCTUnwrap(source.components(
-            separatedBy: "private var exit: some View").dropFirst().first)
-            .components(separatedBy: "// MARK: - actions").first ?? ""
+        let exit = try XCTUnwrap(source.components(separatedBy: "private var exit: some View")
+            .dropFirst().first?.components(separatedBy: "private var leaveTitle").first)
 
         XCTAssertTrue(exit.contains(".buttonStyle(.bordered)"))
         XCTAssertFalse(exit.contains(".buttonStyle(.link)"),
-                       "Leave this session is exposed as a navigation Link")
-        XCTAssertTrue(exit.contains("if hasRetainedSession && !modelBusy"),
-                      "a claimed owner made the terminal exit permanently unreachable")
-        XCTAssertTrue(exit.contains(".accessibilityIdentifier(\"transfer-leave-session\")"),
+                       "the exit is exposed as a navigation Link")
+        XCTAssertTrue(exit.contains(".accessibilityIdentifier(\"link-leave-session\")"),
                       "the one exit has no stable runtime identity")
-        // Exactly one exit for the whole surface. Two — one per lane, as the two
-        // panes this replaced had — is what let "Back to devices" and "Done"
-        // disagree about what a finished task keeps.
-        XCTAssertEqual(occurrences(of: "L10n.t(.workspaceLeaveSession)", in: source), 2,
-                       "the exit exists once, plus its confirmation")
+        // Always reachable while the surface is drawn — there is no state in
+        // which a user holds this pane and cannot get out of it.
+        XCTAssertFalse(exit.contains("if hasRetainedSession"),
+                       "the exit is gated on a legacy two-lane reconciliation again")
+        // It names both of its states, and the terminal one is Done.
+        XCTAssertTrue(source.contains("if case .ended = link.connection { return L10n.t(.commonDone) }"),
+                      "a terminal link still offers Leave rather than Done")
+        XCTAssertTrue(source.contains("return L10n.t(.workspaceLeaveSession)"))
     }
 
-    func testNearbyLocalTextCannotBeDiscardedByAnUnconfirmedExit() throws {
-        let source = try source(named: transferSession)
-        XCTAssertTrue(source.contains("@State private var confirmingLocalTextLeave = false"))
-        XCTAssertTrue(source.contains("if mode == .text, textModel.hasLocalContent"))
-        XCTAssertTrue(source.contains(
-            "Button(L10n.t(.workspaceLeaveSession), role: .destructive) { leaveSession() }"))
-        XCTAssertTrue(source.contains("L10n.t(.textDiscardLocalContentConfirmTitle)"))
-        XCTAssertTrue(source.contains("L10n.t(.textDiscardLocalContentConfirmBody)"))
-    }
 
-    /// Copying ephemeral text changes the system clipboard, but previously gave
-    /// no success signal. Feedback must follow the exact row and disappear when
-    /// its history entry does, without retaining another plaintext body in view
-    /// state.
-    func testTextCopyAcknowledgesTheExactMessageWithoutRetainingPlaintext() throws {
-        let source = try source(named: "RealtimeTextSessionView.swift")
-        XCTAssertTrue(source.contains("@State private var copiedMessageID: Int?"))
-        XCTAssertTrue(source.contains("copiedMessageID = message.id"))
-        XCTAssertTrue(source.contains("copiedMessageID == message.id ? .commonCopied : .commonCopy"))
-        XCTAssertTrue(source.contains("!history.contains(where: { $0.id == copiedMessageID })"))
-        XCTAssertTrue(source.contains("ShareLink(item: message.body)"))
-        XCTAssertTrue(source.contains("TextMessagePresentation.copyActionLabel("))
-        XCTAssertTrue(source.contains("TextMessagePresentation.shareActionLabel("))
-        XCTAssertFalse(source.contains("@State private var copiedMessage:"),
+    /// **Copy acknowledges the exact message, and the view retains no second
+    /// copy of ephemeral plaintext.**
+    ///
+    /// Migrated from the legacy text view to the transcript that replaced it.
+    /// Both halves are user-visible guarantees rather than implementation
+    /// detail: the acknowledgement has to name the row the user pressed, and an
+    /// `@State` holding the BODY would be a second copy of a message the product
+    /// promises is ephemeral — readable in any memory capture, for no purpose
+    /// the user asked for.
+    func testLinkCopyAcknowledgesTheExactMessageWithoutRetainingPlaintext() throws {
+        let pane = try source(named: "Transfer/TransferLinkPane.swift")
+        // The id, never the body.
+        XCTAssertTrue(pane.contains("@State private var copiedMessageID: Int?"))
+        XCTAssertTrue(pane.contains("copiedMessageID = message.id"))
+        XCTAssertTrue(pane.contains("copiedMessageID == message.id ? .commonCopied : .commonCopy"))
+        // The acknowledgement is dropped when the row it names is gone, so it
+        // cannot end up labelling a different message.
+        XCTAssertTrue(pane.contains("!messages.contains(where: { $0.id == copiedMessageID })"))
+        // Reachable to VoiceOver, not only as a changed glyph.
+        XCTAssertTrue(pane.contains("TextMessagePresentation.copyActionLabel("))
+        // The rule this exists for.
+        XCTAssertFalse(pane.contains("@State private var copiedMessage:"),
+                       "the view retains a second copy of ephemeral plaintext")
+        XCTAssertFalse(pane.contains("@State private var copiedBody"),
                        "the view retains a second copy of ephemeral plaintext")
     }
+
 
     /// A stored recovery link contains its decryption key. The macOS Account
     /// row must offer the platform handoff already present on iOS, while an
@@ -2401,52 +2435,54 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "UI acceptance still reaches the production pairing ICE client")
     }
 
-    /// **The offline fixtures apply to the OFFLINE launch, and to no other.**
+    /// **The offline fixtures never reach a loopback acceptance launch.**
     ///
-    /// This is the guard for a defect that cost a whole acceptance round. The
-    /// three transfer substitutions were selected on `UITestMode.isActive`, which
-    /// is true for the loopback built-App run as well — so that run was handed a
-    /// pairing socket factory that could open no room and an ICE client
-    /// that sleeps for five minutes. `LinkWorkspaceModel.watchPairingCode` at
-    /// the time read ICE before it opened the room, so the app published `.watching` and never
-    /// opened a socket at all. Two native ends then waited for each other for the
-    /// full budget, and the measurement — "neither side promotes" — was written up
-    /// as a defect in the pairing wire rather than in the harness.
-    ///
-    /// So the predicate is asserted here by name. `usesOfflineTransfer` is the
-    /// exact complement of `allowsResidency`: an acceptance launch that resolved a
-    /// loopback origin composes `AppEnvironment`'s real models, and every launch
-    /// that did not keeps the fixtures it always had.
+    /// The substitution list shrank with the models: the two legacy text
+    /// fixtures are deleted along with the sessions they held on screen, so what
+    /// remains to be scoped are the two link models. The rule is unchanged and
+    /// is the one that matters — a LOOPBACK run is pointed at a real server and
+    /// must exercise the real transfer graph, or every built-App run becomes
+    /// evidence about the fixtures instead.
     func testTheOfflineTransferFixturesNeverReachALoopbackAcceptanceLaunch() throws {
         let mode = try source(named: "UITestMode.swift")
         XCTAssertTrue(mode.contains("static let usesOfflineTransfer = isActive && !allowsResidency"),
                       "the offline fixtures are not scoped to the offline launch")
         let app = try source(named: "RelayiumApp.swift")
-        // Every substitution that would otherwise silently replace the real
-        // transfer graph in a built-App run.
-        for substitution in ["let nearbyText = UITestMode.usesOfflineTransfer",
-                             "let directText = UITestMode.usesOfflineTransfer",
-                             "let nearbyLink = UITestMode.usesOfflineTransfer",
+        for substitution in ["let nearbyLink = UITestMode.usesOfflineTransfer",
                              "let directLink = UITestMode.usesOfflineTransfer"] {
             XCTAssertTrue(app.contains(substitution),
                           "a transfer model is substituted for every acceptance launch, "
                           + "including the loopback one: \(substitution)")
         }
-        // And none of them is selected on `isActive` any more, which is the exact
-        // edit that reintroduces the defect.
-        for restored in ["let nearbyText = UITestMode.isActive",
-                         "let directText = UITestMode.isActive",
-                         "let nearbyLink = UITestMode.isActive",
+        // And none of them is selected on `isActive`, which is the exact edit
+        // that reintroduces the defect.
+        for restored in ["let nearbyLink = UITestMode.isActive",
                          "let directLink = UITestMode.isActive"] {
             XCTAssertFalse(app.contains(restored),
                            "a transfer model went back to substituting on isActive: \(restored)")
         }
-        // The per-fixture flags keep their OWN guards — they are only ever passed
-        // by the offline suite, and folding them into the predicate above would
-        // make a loopback launch unable to drive a deterministic terminal state.
-        XCTAssertTrue(mode.contains("guard showsGeneratedFileCode else { return nil }")
-                      && mode.contains("guard showsTerminalNearby else { return nil }"),
-                      "a per-fixture launch flag lost its own guard")
+        // The deleted legacy fixtures stay deleted: they are the one caller that
+        // could still reach a transport this build does not compose.
+        for gone in ["makeWaitingFileModel", "makeRealtimeTextModel",
+                     "makeTerminalNearbyFileModel"] {
+            XCTAssertFalse(mode.contains(gone),
+                           "a legacy session fixture came back: \(gone)")
+            XCTAssertFalse(app.contains(gone),
+                           "the scene calls a legacy session fixture again: \(gone)")
+        }
+        // The pairing-code mint is substituted too, and it is scoped BOTH ways:
+        // to the offline launch, and to the fixtures that asked for a generated
+        // code. Folding either half away would make a loopback launch mint
+        // against a fixture instead of the real server.
+        XCTAssertTrue(app.contains("let directCode = UITestMode.makePairingCodeModel()"),
+                      "the offline acceptance mint is no longer wired to the code model")
+        XCTAssertTrue(mode.contains(
+            "guard usesOfflineTransfer, showsGeneratedFileCode || showsExpiringCode else { return nil }"),
+            "the acceptance mint lost its offline scope or its per-fixture guard")
+        // …and the Nearby module never gets it: that screen has no control that
+        // mints, and a fixture reaching it would be a code on the wrong surface.
+        XCTAssertTrue(app.contains("let nearbyCode = AppEnvironment.makePairingCodeModel()"),
+                      "the same-network module was handed an acceptance mint")
     }
 
     /// One destination file per `MacSurface` — six, because the hidden one still
@@ -2958,37 +2994,34 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "the same-network screen grew an account wall")
     }
 
-    /// Every terminal surface can be dismissed, and the exit is unreachable
-    /// while work is running.
+    /// **One dismissal per terminal thing, on each surface.**
     ///
-    /// A terminal state is deliberately NOT `.idle` — a completed transfer's
-    /// result, a message transcript and a failure all keep their place on screen
-    /// instead of blinking past. Presence is reconciled on "both models are
-    /// `.idle`", so a terminal surface with no way out holds the claim for as
-    /// long as the user leaves it there. The wiring that closes that is one
-    /// visible Button, which is exactly the kind of thing a later refactor drops
-    /// without any test noticing.
+    /// The link has ONE exit for the whole connection — one link, one
+    /// verification, one hangup — where the two-lane pane needed a gated Leave
+    /// beside a per-transfer Done.
     ///
-    /// Bounded rather than merely present: an exit offered mid-transfer would
-    /// abandon a live session on a button whose label promises tidying up, which
-    /// is why it is gated on `!modelBusy` and why the mid-transfer Cancel stays
-    /// the destructive control inside `RealtimeFileSessionView`.
+    /// The pre-link surface has two terminal things it can show, and neither is
+    /// a session: an expired code, and a peer that cannot be reached. Each
+    /// carries exactly one way out, and neither carries a Done — a Done there
+    /// would claim a session had finished.
     func testEveryPairingCodeTerminalSurfaceCarriesExactlyOneDone() throws {
         let pane = try source(named: transferSession)
-        guard let exit = pane.range(of: "private var exit: some View"),
-              let gated = pane.range(of: "if hasRetainedSession && !modelBusy {",
-                                     range: exit.lowerBound..<pane.endIndex),
-              let button = pane.range(of: "Button(L10n.t(.workspaceLeaveSession)) { leaveOrConfirm() }",
-                                      range: gated.lowerBound..<pane.endIndex) else {
-            return XCTFail("the session pane no longer has one gated exit")
-        }
-        XCTAssertLessThan(gated.upperBound, button.lowerBound)
-        // The session pane offers no Done of its own: the only Done left belongs
-        // to a COMPLETED file transfer, and it is the shared session view's.
-        XCTAssertFalse(pane.contains(".commonDone"),
-                       "a second dismissal verb competes with the one exit")
-        let fileSession = try source(named: "RealtimeFileSessionView.swift")
-        XCTAssertEqual(occurrences(of: ".commonDone", in: fileSession), 1)
+        XCTAssertEqual(occurrences(of: "link-leave-session", in: pane), 1,
+                       "the link surface has more than one way to end the connection")
+
+        let connect = try source(named: crossConnect)
+        XCTAssertFalse(connect.contains(".commonDone"),
+                       "a pre-connect surface grew a session's dismissal verb")
+        // The expired code: one regenerate, one cancel.
+        XCTAssertEqual(occurrences(of: "pairing-code-expired-cancel", in: connect), 1)
+        XCTAssertEqual(occurrences(of: "pairing-code-regenerate", in: connect), 1)
+        // The unsupported peer: one dismiss, and the two start actions that
+        // supersede it clear it as well so a stale refusal cannot outlive the
+        // room it was about.
+        XCTAssertEqual(occurrences(of: "pairing-peer-unsupported-dismiss", in: connect), 1)
+        XCTAssertEqual(occurrences(of: "link.dismissUnsupportedPairingPeer()", in: connect), 3,
+                       "the refusal is cleared somewhere other than its own button and "
+                       + "the two actions that supersede it")
     }
 
     /// The menu bar is the only way back once the window is closed.
@@ -3719,21 +3752,23 @@ final class MacSurfaceGuardTests: XCTestCase {
         // refuse to apply a pairing link because a same-network transfer was
         // running — cross-module interference in the one place a link arrives.
         for wiring in ["navigation: routing, download: downloads,",
-                       "realtime: directFiles, realtimeText: directText,",
-                       "presence: directModule.presence,",
-                       "selectRealtimeMode: { mode in directModule.presence.selectMode(mode) }",
+                       "pairingCode: directCode, presence: directModule.presence",
                        "_transferModules = StateObject(wrappedValue: modules)",
                        "_navigation = StateObject(wrappedValue: routing)",
                        "_downloadModel = StateObject(wrappedValue: downloads)"] {
             XCTAssertTrue(app.contains(wiring),
                           "the coordinator must share the app's models: \(wiring)")
         }
-        // The models it was handed are the very ones the Direct module was built
-        // from — not a private pair that would never see the session the user is
-        // actually in.
+        // The code it writes into is the very one the Direct module was built
+        // from — not a private holder that would never reach the field the user
+        // is looking at. That mistake shipped once, as a pair of inert legacy
+        // models kept alive purely to catch the coordinator's write.
         XCTAssertTrue(app.contains(
-            "let directModule = TransferModule(route: .pairingCode, files: directFiles,"),
-                      "the coordinator watches models the Direct module does not own")
+            "let directModule = TransferModule(route: .pairingCode, link: directLink, code: directCode)"),
+                      "the coordinator writes a code the Direct module does not own")
+        // And it takes no lane selector, because there is no lane to select.
+        XCTAssertFalse(app.contains("selectRealtimeMode:"),
+                       "the coordinator selects a legacy lane again")
         // One injection, and it is the unique window's. The MenuBarExtra root
         // deliberately does not get it: nothing there subscribes, and a second
         // injection point is how a second subscriber starts.
@@ -3887,19 +3922,24 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "an unqualified consume can discard a newer batch")
     }
 
+    /// **⌘Q cannot discard the only copy of a conversation without saying so.**
+    ///
+    /// Unchanged in substance; the source of the answer moved. A module's
+    /// transcript now lives on the link's presentation model rather than on a
+    /// legacy text model, and it is still local-only and unrecoverable — so any
+    /// message at all, sent or received, is content a quit would destroy.
     func testQuitGuardIncludesTheOnlyLocalTextHistory() throws {
         let app = try source(named: "RelayiumApp.swift")
         XCTAssertTrue(app.contains("final class AppQuitGuard"))
         XCTAssertTrue(app.contains("var hasLocalText: (() -> Bool)?"))
-        XCTAssertTrue(app.contains("quitGuard.hasLocalText = {"))
         // BOTH modules. Either one can be holding the only copy of typed text,
         // and a guard that asked one of them would let ⌘Q discard the other's
         // without ever mentioning it.
         XCTAssertTrue(app.contains("quitGuard.hasLocalText = { transferModules.hasLocalText }"))
-        XCTAssertTrue(try appKitSource(named: "TransferModule.swift")
-            .contains("public var hasLocalText: Bool { text.hasLocalContent }"))
-        XCTAssertTrue(try appKitSource(named: "TransferModule.swift")
-            .contains("public var hasLocalText: Bool { all.contains { $0.hasLocalText } }"),
+        let module = try appKitSource(named: "TransferModule.swift")
+        XCTAssertTrue(module.contains("public var hasLocalText: Bool { link.holdsLocalText }"),
+                      "a module's local-text answer no longer reads its link's own predicate")
+        XCTAssertTrue(module.contains("public var hasLocalText: Bool { all.contains { $0.hasLocalText } }"),
                       "the app-wide answer ignores one of the two modules")
         XCTAssertTrue(app.contains("QuitPresentation.risk("))
         XCTAssertTrue(app.contains("QuitPresentation.prompt(for: risk)"))
@@ -4379,131 +4419,104 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// Claim refusal is a real concurrency result, not an impossible branch:
-    /// an inbound offer can win between the last render and an outbound click.
-    /// Every macOS start path must stop before touching its shared model.
+    /// **Every outbound start claims its own surface first, and names its own
+    /// route.**
     ///
-    /// **Three outbound starts now, three claims.** The LAN screen had two verbs
-    /// and four starts — a link and a legacy path for each of `Send a message`
-    /// and `Send files`. Connect-first leaves one verb, so it has one link start
-    /// and one legacy start, and the legacy one carries whichever mode
-    /// `LegacyLane.mode` answered rather than whichever button was pressed. That
-    /// the kind is written by the claim, from the peer's announcement, is the
-    /// whole removal: there is no moment at which an intent exists without
-    /// ownership behind it, and no moment at which a lane exists without evidence
-    /// behind it.
+    /// The lane-resolution half is gone: `LegacyLane.mode` chose between two
+    /// transports and there is one. Every claim is now mode-less, which is the
+    /// removed question staying removed. The rule that remains is the one with
+    /// teeth — a start path with no claim, or a claim naming the other screen's
+    /// route, is how a session appears where nobody started it.
     func testEveryOutboundRealtimeStartRequiresItsSurfaceClaim() throws {
         let lan = try source(named: lanConnect)
         let cross = try source(named: crossConnect)
-        // Each claim names `route` — the file's own destination, declared once —
-        // rather than a literal, so a start path cannot claim the other screen's
-        // route while rendering on this one.
-        let lanClaims = [
-            "guard presence.beginSession(route, mode: mode, peerLabel: live.label) else { return }",
-        ]
-        let crossClaims = [
-            // Two paths — create and connect — and both take `.files`
-            // PROVISIONALLY rather than as a kind the user chose: the file model
-            // is the one that holds a minted code, and `adoptLegacyRoom` moves
-            // the surface if the room resolves to a legacy text peer.
-            "guard presence.beginSession(route, mode: .files) else { return }",
-        ]
-        // The ONE unified-link start. It takes the mode-less claim, because a
-        // link has no files-or-text mode to arbitrate — and it RELEASES the claim
-        // when the link refuses, which the mode-carrying legacy path does not
-        // need because its model publishes a failure state instead.
+
+        // LAN: exactly one start, and it claims with the peer's sanitized label
+        // before dialling — then hands the surface BACK if the link refuses,
+        // which nothing else on this screen has to do.
         XCTAssertEqual(occurrences(
             of: "guard presence.beginSession(route, peerLabel: live.label) else { return }",
             in: lan), 1,
             "the link start must claim the surface before connecting")
         XCTAssertEqual(occurrences(of: "presence.release(route)", in: lan), 1,
                        "a refused link must hand the surface back rather than strand it")
-        for claim in lanClaims {
-            XCTAssertEqual(occurrences(of: claim, in: lan), 1,
-                           "\(lanConnect) can start a shared model after losing ownership: "
-                           + claim)
-        }
-        // The claim's mode is the resolver's answer, read once, before the claim
-        // — never a literal, which is how a lane chosen by a button comes back.
-        let flatLan = lan.components(separatedBy: .whitespacesAndNewlines).joined()
-        guard let resolve = flatLan.range(
-                of: "letmode=LegacyLane.mode(peerAnnouncesText:live.announcesLegacyText,"
-                    + "hasArmedBatch:false)"),
-              let claim = flatLan.range(
-                of: lanClaims[0].components(separatedBy: .whitespacesAndNewlines).joined(),
-                range: resolve.upperBound..<flatLan.endIndex) else {
-            return XCTFail("the LAN legacy start no longer resolves its lane from evidence")
-        }
-        XCTAssertLessThan(resolve.lowerBound, claim.lowerBound)
-        XCTAssertFalse(lan.contains("mode: .text"),
-                       "the same-network screen names a lane at connect time again")
-        XCTAssertFalse(lan.contains("mode: .files"),
-                       "the same-network screen names a lane at connect time again")
-        // Every start is behind one. A bare `Task { await` that no claim
-        // precedes is the regression this counts.
-        XCTAssertEqual(occurrences(of: "presence.beginSession(", in: lan),
-                       lanClaims.count + 1,
+        XCTAssertEqual(occurrences(of: "presence.beginSession(", in: lan), 1,
                        "a LAN start path exists with no ownership claim, or the reverse")
+
+        // Cross-network: two starts — create and join — and both claim.
         XCTAssertEqual(occurrences(of: "presence.beginSession(", in: cross), 2,
                        "a pairing start path exists with no ownership claim, or the reverse")
-        XCTAssertEqual(occurrences(of: crossClaims[0], in: cross), 2,
-                       "\(crossConnect) can start a shared model after losing ownership")
-        // Neither screen may claim the other's route.
+        XCTAssertEqual(occurrences(of: "guard presence.beginSession(route) else { return }",
+                                   in: cross), 2,
+                       "\(crossConnect) can start a session after losing ownership")
+
+        // No claim carries a lane, on either screen.
+        for (name, text) in [(lanConnect, lan), (crossConnect, cross)] {
+            XCTAssertFalse(text.contains("beginSession(route, mode:"),
+                           "\(name) names a lane at connect time again")
+            XCTAssertFalse(text.contains("LegacyLane."),
+                           "\(name) resolves a legacy lane again")
+        }
+        // And neither screen claims the other's route.
         XCTAssertFalse(lan.contains("beginSession(.pairingCode"),
                        "the same-network screen claims the pairing-code route")
         XCTAssertFalse(cross.contains("beginSession(.nearby"),
                        "the pairing-code screen claims the same-network route")
     }
 
-    /// One Connect verb, and the snapshot rule it inherited unchanged.
+    /// **The typed code is snapshotted and validated before ownership is taken,
+    /// and spent through the one watched-room path.**
     ///
-    /// The code is read once, validated, and then only the local `code` is used.
-    /// The field stays editable until the asynchronous start publishes state, so
-    /// reading it again inside the `Task` would turn one valid click into a
+    /// The legacy fallback half is gone: `PairingCodeStart` no longer has a
+    /// legacy join to fall back to, because there is no legacy transport to join
+    /// with. The ordering rule is untouched and is what this is for — reading
+    /// mutable input after taking ownership turns one valid click into a
     /// different or incomplete code.
     func testPairingJoinSnapshotsAValidatedCodeBeforeClaimAndTask() throws {
         let source = try source(named: crossConnect)
-        XCTAssertTrue(source.contains("let code = fileModel.joinCode"))
-        XCTAssertTrue(source.contains("guard fileModel.canJoin else { return }"))
-        // The join itself runs inside `watch`'s fallback closure — the room is
-        // watched for a `link/1` peer first. That closure lives in
-        // `PairingCodeStart` now, shared with the expired-code surface's mint,
-        // so the snapshot is read HERE and spent THERE.
-        XCTAssertTrue(source.contains("PairingCodeStart(module: module).joinAndWatch(code: code)"),
-                      "the join no longer goes through the one watched-room path")
-        // `self.source`, because the local binding above shadows the method.
-        XCTAssertTrue(try self.source(named: "Transfer/PairingCodeStart.swift")
-            .contains("await fileModel.join(code: code)"),
-                      "the legacy fallback lost its join")
-        for model in ["fileModel", "textModel"] {
-            XCTAssertFalse(source.contains("\(model).join(code: \(model).joinCode)"),
-                           "the join reads mutable input after taking ownership")
+        guard let snapshot = source.range(of: "let typed = code.joinCode"),
+              let validate = source.range(of: "guard code.canJoin else { return }",
+                                          range: snapshot.upperBound..<source.endIndex),
+              let claim = source.range(of: "guard presence.beginSession(route) else { return }",
+                                       range: validate.upperBound..<source.endIndex),
+              let spend = source.range(
+                of: "PairingCodeStart(module: module).joinAndWatch(code: typed)",
+                range: claim.upperBound..<source.endIndex) else {
+            return XCTFail("the join lost its snapshot-validate-claim-spend order")
         }
-        // And there is exactly ONE of them. A second join verb would be the
-        // removed kind-question wearing a different label.
+        XCTAssertLessThan(claim.lowerBound, spend.lowerBound)
+        XCTAssertFalse(source.contains("joinAndWatch(code: code.joinCode)"),
+                       "the join reads mutable input after taking ownership")
+        // Exactly ONE join verb. A second would be the removed kind-question
+        // wearing a different label.
         XCTAssertEqual(occurrences(of: "private func join()", in: source), 1)
         XCTAssertFalse(source.contains("func join(mode:"),
                        "joining asks which kind again")
+        // …and the shared starter has no legacy join left to fall back to.
+        let starter = try self.source(named: "Transfer/PairingCodeStart.swift")
+        XCTAssertFalse(starter.contains("legacyStart"),
+                       "the pairing start grew a legacy fallback again")
     }
 
-    /// **One field, both models.** The two join verbs share a code, so the
-    /// binding writes both models in the one state transition. Writing only one
-    /// would leave the two buttons disagreeing about which code this device is
-    /// about to join — the same class of drift the old two-pane split had, moved
-    /// one level down and made unrepresentable instead.
-    func testPairingJoinNormalizesAtomicallyInBothModes() throws {
+    /// **One field, normalized inside the one state transition.**
+    ///
+    /// "Both modes" was two legacy models kept in step; there is one holder now,
+    /// so there is nothing left to keep in step — which makes the drift this
+    /// guarded against structurally impossible rather than merely checked. What
+    /// remains is the rule that still has teeth: the filtering happens in the
+    /// setter, not in an `onChange` behind it, so a fast paste cannot be
+    /// overwritten by an older partial value.
+    func testPairingJoinNormalizesAtomicallyInOnePlace() throws {
         let source = try source(named: crossConnect)
         XCTAssertTrue(source.contains("private var normalizedJoinCode: Binding<String>"))
-        XCTAssertTrue(source.contains("fileModel.updateJoinCode($0)"))
-        XCTAssertTrue(source.contains("textModel.updateJoinCode($0)"))
+        XCTAssertTrue(source.contains("set: { code.updateJoinCode($0) }"),
+                      "the field writes a raw value and corrects it afterwards")
         XCTAssertTrue(source.contains("text: normalizedJoinCode"))
         XCTAssertTrue(source.contains(".accessibilityIdentifier(\"pairing.joinCode\")"))
         XCTAssertEqual(occurrences(of: "TextField(L10n.t(.commonCode)", in: source), 1,
                        "one code, one field: two would be two answers to one question")
-        for stale in [".onChange(of: fileModel.joinCode)", ".onChange(of: textModel.joinCode)"] {
-            XCTAssertFalse(source.contains(stale),
-                           "the join field can overwrite fast input with an older partial value")
-        }
+        XCTAssertFalse(source.contains(".onChange(of: code.joinCode)"),
+                       "the join field can overwrite fast input with an older partial value")
         let uiURL = try macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
@@ -4522,26 +4535,21 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(login.contains("session.register(email: draft.email"))
     }
 
-    /// Everything a Create must settle SYNCHRONOUSLY, in order: expand and open
-    /// the batch the user picked (a useless code for an unreadable selection is
-    /// worse than a refusal), re-read live access, claim ownership, and only
-    /// then start async work.
+    /// **The account is re-read and the surface claimed, both synchronously,
+    /// before the asynchronous mint starts.**
     ///
-    /// One `createCode()` — no argument, because there is nothing left to ask —
-    /// so the ordering is stated once instead of twice with a chance to disagree.
+    /// Unchanged in substance. The claim no longer carries a `mode:` — a pairing
+    /// code names a rendezvous and one link carries both lanes — so what is
+    /// asserted is the ORDER, which is what the rule was always about.
     func testPairingCreateSettlesIntentBeforeStartingAsyncMint() throws {
         let connect = try source(named: crossConnect)
         XCTAssertTrue(connect.contains(
             "Button(L10n.t(.workspaceCreatePairingCode)) { createCode() }"))
-        // The account is re-read and the surface is claimed, both SYNCHRONOUSLY,
-        // before the asynchronous mint starts. There is no staging step between
-        // them any more — that is the connect-first removal, and its absence is
-        // asserted below rather than merely unmentioned.
         guard let create = connect.range(of: "private func createCode() {"),
               let access = connect.range(of: "guard let access = accessNow() else {",
                                          range: create.lowerBound..<connect.endIndex),
               let claim = connect.range(of:
-                "guard presence.beginSession(route, mode: .files) else { return }",
+                "guard presence.beginSession(route) else { return }",
                 range: access.lowerBound..<connect.endIndex),
               let task = connect.range(
                 of: "Task { await mintAndWatch(token: access.token) }",
@@ -4549,15 +4557,17 @@ final class MacSurfaceGuardTests: XCTestCase {
             return XCTFail("code creation lost its synchronous intent boundary")
         }
         XCTAssertLessThan(claim.lowerBound, task.lowerBound)
-        // A code needs nothing staged, and that is now structural: there is no
-        // selection on this screen to be conditional on, and no disabled state
-        // that could depend on one.
+        // A code needs nothing staged, and that is structural: there is no
+        // selection on this screen to be conditional on.
         XCTAssertFalse(connect.contains("if !selection.isEmpty {"),
                        "creating a code reads a staged batch again")
         XCTAssertFalse(connect.contains(".disabled(selection.isEmpty"),
                        "the create action is gated on a staged batch again")
         XCTAssertTrue(connect.contains(".disabled(sessionLocked)"),
                       "the create action lost the one lock that may stop it")
+        // And it carries no lane, which is the removed question staying removed.
+        XCTAssertFalse(connect.contains("beginSession(route, mode:"),
+                       "creating a code picks a lane again")
     }
 
     /// Account gating is presentation, not authorization. A button from the
@@ -5034,9 +5044,14 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the live marker must be derived through TransferPresence")
         XCTAssertTrue(sidebar.contains("sessionIsBusy: module.isBusy"),
                       "activity must come from the session models, not from a cached flag")
-        XCTAssertTrue(try appKitSource(named: "TransferModule.swift")
-            .contains("public var isBusy: Bool { files.isBusy || text.isBusy }"),
-                      "the module caches activity instead of asking its models")
+        // Activity is derived from the LINK's own file lane rather than cached:
+        // a batch that is not terminal is bytes moving, and a watched code or an
+        // ended link is not. The module owns no flag of its own.
+        let module = try appKitSource(named: "TransferModule.swift")
+        XCTAssertTrue(module.contains("return files.batches.contains { !$0.isTerminal }"),
+                      "the module caches activity instead of asking its link")
+        XCTAssertTrue(module.contains("guard link.connection.isOpen, let files = link.fileModel"),
+                      "a closed or watching link is reported as running a transfer")
         // One route per row again, and BOTH facts come from that row's own
         // module — so the marked row is the one the session is actually on, and
         // two rows can be marked at once because two modules really can be
@@ -5139,24 +5154,29 @@ final class MacSurfaceGuardTests: XCTestCase {
                            "the LAN screen stages before connecting again: \(staging)")
         }
 
-        // **Removing the question did not turn into answering it here.**
+        // **Removing the question did not turn into answering it here — and now
+        // there is no question left to answer.**
         //
-        // The pre-connect pair let the user pick the legacy generation; the one
-        // verb has to get that answer from somewhere, and the only honest source
-        // is the peer's own announcement, which the roster already holds. A
-        // screen that hard-coded `.files` instead would compile, pass every
-        // other assertion in this file, and hand a legacy TEXT peer a file
-        // offer it never answers — the exact silent failure `LegacyLane` was
-        // extracted to prevent. So the call is pinned whole: this surface asks
-        // `LegacyLane.mode`, with THIS device's announcement, and with no armed
-        // batch, because a connect-first screen has nothing that could arm one.
-        XCTAssertTrue(connect.components(separatedBy: .whitespacesAndNewlines).joined()
-            .contains("LegacyLane.mode(peerAnnouncesText:live.announcesLegacyText,hasArmedBatch:false)"),
-            "the LAN screen decides the legacy lane without asking the peer")
-        // And it acts on the answer rather than computing and discarding it: the
-        // claim and both starts are keyed on the same `mode`.
-        XCTAssertTrue(connect.contains("presence.beginSession(route, mode: mode, peerLabel: live.label)"),
-                      "the claimed session mode is not the one the peer's announcement chose")
+        // The pre-connect pair let the user pick a legacy generation, and the one
+        // verb then had to get that answer from the peer's own announcement
+        // (`LegacyLane.mode`) rather than hard-code it. Both generations are
+        // deleted: this screen composes one transport, so there is no lane to
+        // choose and the resolver would have nothing to resolve between.
+        //
+        // What replaced it is the stronger version of the same rule. The screen
+        // still refuses to GUESS what a peer can do — it reads `supportsLink`,
+        // which is exact-match on the peer's own announcement — and a device that
+        // fails it is told so rather than dialled speculatively.
+        XCTAssertFalse(connect.contains("LegacyLane."),
+                       "the LAN screen resolves a legacy lane that no longer exists")
+        XCTAssertTrue(connect.contains("if device.supportsLink {"),
+                      "the LAN screen stopped reading the peer's own announcement")
+        // …and it re-asks at ACTIVATION, because an announcement can be revoked
+        // between the frame that drew the button and the press.
+        XCTAssertTrue(connect.contains("guard link.canLink(peerId: live.id) else {"),
+                      "the connect verb dials a peer whose announcement may have gone")
+        XCTAssertTrue(connect.contains("presence.beginSession(route, peerLabel: live.label)"),
+                      "the claim no longer carries the peer's sanitized label")
 
         // Every verb carries a stable runtime identity, and the two screens'
         // identities are DISJOINT — which is how the UI suite proves that each
@@ -5224,31 +5244,26 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "one Connect action, called from exactly one control")
     }
 
-    /// **Exactly one create action and one join action, and no residue of the
-    /// four they replaced.**
+    /// **Two actions before a code exists, and no kind choice anywhere.**
     ///
-    /// The removed distinction is the kind of thing that comes back a piece at a
-    /// time — a hint sentence, an accessibility identifier, a `mode:` argument —
-    /// so this asserts the absence of every name it had, in the copy, in the
-    /// source and in the link the screen hands over.
+    /// The button count is taken on the branch that renders the CONTROLS, not on
+    /// the whole file: this screen now also draws the code itself, its countdown
+    /// and its two terminal states, and those buttons belong to a code that
+    /// already exists. Counting the file would make the assertion drift with
+    /// every state the surface learns to render.
     func testTheCrossNetworkScreenOffersOneCreateAndOneJoinAndNoKindChoice() throws {
         let cross = try source(named: crossConnect)
 
-        // One of each control, by identifier.
         for identifier in ["cross-network-create-code", "cross-network-join-code"] {
             XCTAssertEqual(occurrences(of: ".accessibilityIdentifier(\"\(identifier)\")",
                                        in: cross), 1,
                            "the pairing screen offers \(identifier) more than once")
         }
-        // And exactly two `Button(`s in total on the connect surface: create and
-        // connect. A third is either a kind choice returning or a control that
-        // belongs on a different screen.
-        XCTAssertEqual(occurrences(of: "Button(L10n.t(", in: cross), 2,
-                       "the pairing screen grew a third action")
+        let controls = try XCTUnwrap(cross.components(separatedBy: "private var pairingCode: some View")
+            .dropFirst().first?.components(separatedBy: "// MARK: - actions").first)
+        XCTAssertEqual(occurrences(of: "Button(L10n.t(", in: controls), 2,
+                       "the pairing screen grew a third pre-connect action")
 
-        // No retired copy anywhere in the app, not merely on this screen: these
-        // keys are gone from `L10nKey`, so a reference would not compile — what
-        // this catches is a NEW string reintroducing the same product idea.
         for (name, text) in try sources(under: try macRoot, atLeast: 20) {
             for retired in ["createMessageCode", "createFileCode", "joinMessages",
                             "joinFiles", "joinKindHint"] {
@@ -5257,51 +5272,28 @@ final class MacSurfaceGuardTests: XCTestCase {
             }
         }
 
-        // The model takes no kind either. `watchPairingCode` lost its `mode:`
-        // parameter, which is what makes "the screen cannot ask" structural
-        // rather than a convention this file describes. The call itself lives in
-        // `PairingCodeStart` — one implementation for the connect surface's mint
-        // and join AND for the expired surface's replacement mint, because three
-        // copies is how they would come to disagree about the legacy role.
         let starter = try source(named: "Transfer/PairingCodeStart.swift")
         for pairing in [cross, starter] {
             XCTAssertFalse(pairing.contains("mode: .text"),
                            "the pairing path still names a lane at connect time")
-            XCTAssertFalse(pairing.contains("watchPairingCode(code, legacyRole: legacyRole, mode:"),
-                           "the room is still watched for one kind")
         }
-        XCTAssertTrue(starter.contains("link.watchPairingCode(code,"))
         XCTAssertEqual(occurrences(of: "watchPairingCode(", in: starter), 1,
                        "the shared pairing start watches a room from two places")
         XCTAssertFalse(cross.contains("watchPairingCode("),
                        "the connect surface kept its own copy of the watch")
 
-        // **And nothing that could hold work before there is a peer.**
-        //
-        // Pairing is ONE workspace, not a Files lane and a Text lane, and a
-        // workspace with no connection in it has nothing to offer. The staging
-        // section is the exact shape the owner ruled out — a "Files and folders"
-        // group beside the two code actions, which reads as a third choice about
-        // what kind of thing this code is for.
+        // Nothing is staged before there is a peer, on either.
         for staging in ["TransferStagingSection", "workspaceStagingHeading",
                         "FileDropZone(", "PendingFileList(", "SelectionStore",
-                        "selection", "stageRealtimeFiles(", "stageSend("] {
+                        "stageRealtimeFiles(", "stageSend("] {
             XCTAssertFalse(cross.contains(staging),
                            "the pairing screen stages before connecting again: \(staging)")
-        }
-        // The room is watched with an EMPTY batch, by construction rather than
-        // by a nil that a caller chose to pass — there is no other batch it
-        // could be handed.
-        XCTAssertTrue(starter.components(separatedBy: .whitespacesAndNewlines).joined()
-            .contains("link.watchPairingCode(code,legacyRole:legacyRole,files:[],sources:[])"),
-            "the pairing screen arms a batch before the room has a peer")
-        // …and the shared starter stages nothing either, which is the same ban
-        // one file further along the path it now owns.
-        for staging in ["FileDropZone(", "PendingFileList(", "SelectionStore",
-                        "selection", "stageRealtimeFiles(", "stageSend("] {
             XCTAssertFalse(starter.contains(staging),
                            "the shared pairing start stages before connecting: \(staging)")
         }
+        XCTAssertTrue(starter.components(separatedBy: .whitespacesAndNewlines).joined()
+            .contains("files:[],sources:[]"),
+            "the pairing screen arms a batch before the room has a peer")
     }
 
     // MARK: - connect-first
@@ -5347,7 +5339,15 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// is for, which is the lane question in a different costume.
     func testThePairingScreenOffersCreateAndEnterCodeAndNothingElse() throws {
         let cross = try source(named: crossConnect)
-        XCTAssertEqual(occurrences(of: "Button(L10n.t(", in: cross), 2,
+        // **Two actions BEFORE a code exists**, which is the claim this test has
+        // always made. The screen now also draws the code itself and its
+        // terminal states, so the count is taken on the branch that renders the
+        // controls rather than on the whole file — the other buttons belong to a
+        // code that already exists and are covered by their own tests.
+        let controls = try XCTUnwrap(cross.components(separatedBy: "private var pairingCode: some View")
+            .dropFirst().first?
+            .components(separatedBy: "// MARK: - actions").first)
+        XCTAssertEqual(occurrences(of: "Button(L10n.t(", in: controls), 2,
                        "the pairing screen grew a third pre-connect action")
         XCTAssertEqual(occurrences(of: "TextField(", in: cross), 1,
                        "the pairing screen grew a second field")
@@ -5357,7 +5357,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         // complete — six digits are in, or they are not.
         XCTAssertEqual(occurrences(of: "{ join() }", in: cross), 1,
                        "entering a code enables more than one action")
-        XCTAssertTrue(cross.contains(".disabled(!fileModel.canJoin || sessionLocked)"),
+        XCTAssertTrue(cross.contains(".disabled(!code.canJoin || sessionLocked)"),
                       "the join action is live before a complete code is entered")
         // Every lane-shaped heading and verb the owner ruled out, by the copy key
         // that would render it. Checked across the whole macOS target rather than
@@ -5374,17 +5374,13 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// **And after it connects, both kinds of work are reachable.**
+    /// **The connected surface offers the work the connect screen no longer
+    /// does.**
     ///
-    /// The removal is only honest if the workspace it hands off to can do what
-    /// the removed controls promised. Two panes can be on the far side of a
-    /// connection and each is checked for what it actually offers:
-    ///
-    ///  - `TransferLinkPane`, for a peer that announced exact `link/1`: a
-    ///    composer AND file/folder sends, on one verified connection.
-    ///  - `TransferSessionPane`, for a legacy peer: the lane the wire really
-    ///    gave, with the honest note about the other — and, on the file lane, a
-    ///    send that a connect-first session could not otherwise ever make.
+    /// The legacy half is deleted with its lane. The rule it protected was that
+    /// a connect-first session must not leave the user holding an open, verified
+    /// connection with nothing to put on it — and on this platform that is now
+    /// one surface's job rather than two.
     func testAConnectedWorkspaceOffersTheWorkTheConnectScreenNoLongerDoes() throws {
         let link = try source(named: "Transfer/TransferLinkPane.swift")
         XCTAssertTrue(link.contains("Button(L10n.t(.linkSend)) { sendDraft() }"),
@@ -5394,209 +5390,130 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(link.contains("Button(L10n.t(.linkSendFile)) { pick(directories: false) }")
                       && link.contains("Button(L10n.t(.linkSendFolder)) { pick(directories: true) }"),
                       "the unified workspace lost a file or folder send")
-
-        // The legacy file lane's own send. Without it a connect-first session
-        // against a legacy file peer is an open, verified connection the user
-        // cannot put anything on — a dead end this change would have created.
-        let session = try source(named: transferSession)
-        XCTAssertTrue(session.contains("if fileModel.canSendNow {"),
-                      "the legacy file lane offers a send that would be swallowed, or none")
-        XCTAssertTrue(session.contains(
-            "fileModel.sendNow(sources: staged.sources, metas: staged.metas)"),
-            "the legacy file lane's send does not reach the model")
-        for identifier in ["transfer-session-send-file", "transfer-session-send-folder"] {
-            XCTAssertTrue(session.contains(".accessibilityIdentifier(\"\(identifier)\")"),
-                          "the legacy file lane lost its \(identifier) control")
+        // …and the connect screens offer none of it, which is the other half of
+        // "connect first": nothing can be staged before there is a peer.
+        for name in [lanConnect, crossConnect] {
+            let connect = try source(named: name)
+            XCTAssertFalse(connect.contains("chooseForLinkSend("),
+                           "\(name) offers a picker before there is a connection")
+            XCTAssertFalse(connect.contains("linkSendFile") || connect.contains("linkSendFolder"),
+                           "\(name) offers a send before there is a connection")
         }
-        // The gate is the MODEL's answer, never a second copy of it: a pane that
-        // re-derived "is this connection ready" would be the copy that
-        // contradicts the model on the frame that matters.
-        XCTAssertFalse(session.contains("sasConfirmed"),
-                       "the session pane re-derives the model's send readiness")
-        XCTAssertEqual(occurrences(of: "canSendNow", in: session), 1,
-                       "the post-connect send gate is asked in more than one place")
     }
 
-    /// **The one route out of a file-only legacy lane, and the order it has to
-    /// take.**
-    ///
-    /// `workspace.filesOnlyNote` tells the user a message needs a session of its
-    /// own and that leaving this one is how to start it. On a connect-first
-    /// pairing surface that instruction could not be followed: the code was
-    /// consumed by the file lane and macOS mints one nowhere else, so re-pairing
-    /// reproduced the same file lane every time. The route lives beside the
-    /// sentence that promises it, and only where the promise can be kept — a
-    /// legacy fallback that still holds its rendezvous.
-    ///
-    /// Four properties, and every one of them has a way to be wrong that looks
-    /// fine on screen:
-    ///
-    ///  1. It is offered ONLY on the file lane of a handed-over pairing room. A
-    ///     same-network legacy session has no code to re-enter, and a button
-    ///     there would be one that always fails.
-    ///  2. The surface is CLAIMED before either lane moves. `TransferPresence`
-    ///     gives the surface up the moment every model reads idle, and
-    ///     `observeSurfaceIdle` turns that into closing the very room this route
-    ///     is about to re-enter.
-    ///  3. The old room is RELEASED before the new one is joined. Joining first
-    ///     puts two sockets from this process into one two-peer code room and
-    ///     spends the address's join budget twice.
-    ///  4. It does not restore a pre-pair mode question. The route is reached
-    ///     from inside a connected session, never before one.
-    func testTheFileOnlyLegacyLaneOffersAMessageSessionOverTheSameCode() throws {
-        let session = try source(named: transferSession)
 
-        XCTAssertTrue(session.contains("if mode == .files, let handed = link.handedOverPairing {"),
-                      "the message route is offered where its rendezvous may not exist")
-        XCTAssertTrue(session.contains(".accessibilityIdentifier(\"transfer-start-message-session\")"),
-                      "the message route lost its control")
-        XCTAssertTrue(session.contains("L10n.t(.workspaceStartMessageSession)")
-                      && session.contains("L10n.t(.workspaceStartMessageSessionHint)"),
-                      "the message route lost its label or the sentence that makes it followable")
-
-        let body = session
-            .components(separatedBy: "private func startMessageSession(")
-            .dropFirst().first ?? ""
-        XCTAssertFalse(body.isEmpty, "startMessageSession is gone")
-        let claim = body.range(of: "presence.claim(route, mode: .text)")
-        let cancel = body.range(of: "fileModel.cancel()")
-        let release = body.range(of: "link.releaseHandedOverPairingRoom()")
-        let join = body.range(of: "await textModel.join(code: handed.code, role: handed.role)")
-        XCTAssertNotNil(claim); XCTAssertNotNil(cancel)
-        XCTAssertNotNil(release); XCTAssertNotNil(join)
-        if let claim, let cancel, let release, let join {
-            XCTAssertLessThan(claim.lowerBound, cancel.lowerBound,
-                              "the surface is released mid-route, which closes the room it needs")
-            XCTAssertLessThan(cancel.lowerBound, release.lowerBound,
-                              "the room is closed under a connection still built on it")
-            XCTAssertLessThan(release.lowerBound, join.lowerBound,
-                              "two sockets from this process would sit in one code room")
-        }
-
-        // The role is the fallback's, not a fresh guess: both ends answering is
-        // a session neither dials.
-        XCTAssertTrue(body.contains("role: handed.role"),
-                      "the message session re-derives a role the room already decided")
-        // And nothing here reintroduces a question before there is a peer.
-        XCTAssertFalse(session.contains("DirectModeSelection"),
-                       "the pre-pair mode picker came back to the session pane")
-    }
-
-    /// **A send that lost the race to the picker has to be said out loud.**
+    /// **A send refused while the picker was open is reported, not swallowed.**
     ///
-    /// `chooseForLinkSend` is a modal system panel and the session runs
-    /// underneath it, so between the press and the files coming back the peer
-    /// can start its own transfer or the connection can end. `sendNow` rechecks
-    /// and refuses — correctly, because queueing the batch would be the
-    /// pre-connect staging this change removed — and the pane it returns to has
-    /// already swapped the send controls for progress. So the refusal is the
-    /// user's chosen files disappearing unless the pane says otherwise.
+    /// The gap this guards is unchanged and is the reason it exists: the picker
+    /// is a modal panel and the session runs underneath it, so the link can end
+    /// or the peer can start its own transfer while the user is still choosing.
+    /// By the time the panel returns, the controls that opened it may be gone —
+    /// so the refusal has to reach a surface that is still on screen.
     ///
-    /// Three things are guarded, and each one alone would let that silence back:
-    /// the model's answer is READ, both refusal reasons reach copy of their own,
-    /// and the message renders OUTSIDE the `canSendNow` arm — inside it, the
-    /// branch the refusal itself flips would take the sentence off screen with
-    /// the buttons.
+    /// The shape differs from the deleted lane's. That lane returned a
+    /// four-case `SendResult` the pane had to dispose arm by arm; the link
+    /// reports through `link.actionError`, which the model owns and the pane
+    /// renders in ONE place at the top, above everything the refusal removes.
     func testASendRefusedAfterThePickerClosedIsReportedRatherThanSwallowed() throws {
-        let session = try source(named: transferSession)
-        XCTAssertTrue(session.contains(
-            "switch fileModel.sendNow(sources: staged.sources, metas: staged.metas) {"),
-            "the pane drops the model's send result, so a raced send is silent again")
-        for arm in ["case .sent:",
-                    "case .refused(.transferInFlight):",
-                    "case .refused(.sessionNotReady):",
-                    "case .refused(.invalidFileList):"] {
-            XCTAssertTrue(session.contains(arm),
-                          "the pane does not dispose \(arm) — a refusal reaches no copy")
-        }
-        XCTAssertTrue(session.contains("sendError = L10n.t(.workspaceSendRefusedBusy)"),
-                      "a session that was already transferring refuses with no sentence")
-        XCTAssertTrue(session.contains("sendError = L10n.t(.workspaceSendRefusedUnavailable)"),
-                      "a session that ended under the picker refuses with no sentence")
-        XCTAssertTrue(session.contains(".accessibilityIdentifier(\"transfer-session-send-error\")"),
-                      "the refusal is not reachable to VoiceOver or to a UI test")
-
-        // Rendered once, in the live-session arm, above the `fileSend` the
-        // refusal removes — not inside it.
-        XCTAssertEqual(occurrences(of: "if let sendError {", in: session), 1,
+        let pane = try source(named: transferSession)
+        // Rendered once, at the top, from the model's answer OR the view's own —
+        // a selection that could not be expanded never reaches the model.
+        XCTAssertTrue(pane.contains("if let message = link.actionError ?? actionError {"),
+                      "the pane drops the model's refusal, so a raced send is silent again")
+        XCTAssertEqual(occurrences(of: "link-action-error", in: pane), 1,
                        "the refusal message is drawn in more than one place")
-        guard let gate = session.range(of: "if fileModel.canSendNow {"),
-              let render = session.range(of: "if let sendError {"),
-              let fileSendDeclaration = session.range(of: "private var fileSend: some View") else {
-            return XCTFail("the session pane no longer has the shape this guards")
+        XCTAssertTrue(pane.contains(".accessibilityIdentifier(\"link-action-error\")"),
+                      "the refusal is not reachable to VoiceOver or to a UI test")
+        // The view's own half: an unreadable or empty selection is reported
+        // rather than silently dropped.
+        XCTAssertTrue(pane.contains("actionError = store.error ?? L10n.t(.nearbyAddFilesFirst)"),
+                      "a selection that could not be expanded fails silently")
+        // Above the header's own content and above the controls, so a refusal
+        // that removes the buttons is still visible where they were.
+        guard let render = pane.range(of: "if let message = link.actionError ?? actionError {"),
+              let composer = pane.range(of: "private var composer: some View") else {
+            return XCTFail("the link pane no longer has the shape this guards")
         }
-        XCTAssertLessThan(gate.lowerBound, render.lowerBound)
-        XCTAssertLessThan(render.upperBound, fileSendDeclaration.lowerBound,
-                          "the refusal renders inside the arm that a refusal removes")
+        XCTAssertLessThan(render.lowerBound, composer.lowerBound,
+                          "the refusal renders below the controls a refusal removes")
     }
 
-    /// **Never claim that one legacy connection carries both lanes.**
+    /// **No connection-shape claim before there is a peer, and the opposite
+    /// claim once there is one.**
     ///
-    /// The surface is unified; a legacy session is not. Once capability
-    /// negotiation has selected that session pane, it names the lane the
-    /// connection does NOT have. The connect phase cannot make that claim for a
-    /// pairing code whose peer is not known yet.
-    func testTheTransferScreensStateTheOneLaneLimitOnlyAfterCapabilityIsKnown() throws {
+    /// The one-lane limit is gone with the lanes: a `link/1` carries messages
+    /// and files together, so `workspace.messagesOnlyNote` / `filesOnlyNote`
+    /// describe nothing this build can produce. What survives is the TIMING rule
+    /// underneath them — a screen must not guess what a peer can do before the
+    /// peer has said — and it now guards the promise rather than the limit.
+    func testTheTransferScreensClaimNothingAboutAPeerUntilThereIsOne() throws {
+        // Before a peer: a pairing code names a rendezvous and nothing about who
+        // will answer it.
         let connect = try source(named: crossConnect)
-        XCTAssertFalse(connect.contains("one-connection-note"),
-                       "the connect phase guesses a pairing peer's capability")
+        for premature in ["one-connection-note", "workspaceOneConnectionNote",
+                          "linkOneConnectionNote", "workspaceMessagesOnlyNote",
+                          "workspaceFilesOnlyNote"] {
+            XCTAssertFalse(connect.contains(premature),
+                           "the pairing screen guesses a peer's capability: \(premature)")
+        }
 
+        // After: the promise is made once, and only once the link is open AND
+        // verified — an unverified link cannot carry anything yet, so claiming
+        // it can would be true of the protocol and false of the screen.
         let session = try source(named: transferSession)
         XCTAssertTrue(session.contains(
-            "L10n.t(mode == .text ? .workspaceMessagesOnlyNote : .workspaceFilesOnlyNote)"),
-            "a live session no longer names the lane it does not have")
-        XCTAssertTrue(session.contains(".accessibilityIdentifier(\"transfer-lane-note\")"))
-        XCTAssertTrue(session.contains("if peerCapabilityIsKnown { laneNote }"),
-                      "the lane warning is shown before a pairing peer is classified")
-        XCTAssertTrue(session.contains("case .idle, .minting, .showingCode, .failed:"),
-                      "a no-peer failure is described as a classified legacy connection")
-        XCTAssertTrue(session.contains("transfer-waiting-pairing-peer"))
-        XCTAssertTrue(session.contains("transfer-cancel-pairing-watch"))
-        guard let laneNote = session.range(of: "private var laneNote: some View"),
-              let body = session.range(of: "var body: some View"),
-              let exit = session.range(of: "\n            exit", range: body.lowerBound..<laneNote.lowerBound),
-              let laneContent = session.range(of: "switch mode", range: body.lowerBound..<laneNote.lowerBound),
-              let gatedLaneNote = session.range(
-                of: "if peerCapabilityIsKnown { laneNote }",
-                range: body.lowerBound..<laneNote.lowerBound
-              ) else {
-            return XCTFail("the session pane no longer has the shape this guards")
+            "if link.connection.isOpen && !link.isVerificationPending {"),
+            "the one-connection promise is made before the link can keep it")
+        XCTAssertTrue(session.contains("L10n.t(.linkOneConnectionNote)"))
+        XCTAssertTrue(session.contains(".accessibilityIdentifier(\"link-one-connection-note\")"))
+        // And the retired one-lane copy is not rendered anywhere on this platform.
+        for (name, text) in try sources(under: try macRoot, atLeast: 20) {
+            for retired in ["workspaceMessagesOnlyNote", "workspaceFilesOnlyNote",
+                            "workspaceStartMessageSession"] {
+                XCTAssertFalse(text.contains(retired),
+                               "\(name) renders copy about a lane limit that cannot exist: \(retired)")
+            }
         }
-        XCTAssertLessThan(body.lowerBound, laneNote.lowerBound)
-        XCTAssertLessThan(exit.lowerBound, laneContent.lowerBound,
-                          "the exit must remain reachable above long lane content")
-        XCTAssertLessThan(laneContent.lowerBound, gatedLaneNote.lowerBound,
-                          "the capability-gated note must sit outside either transfer lane")
     }
 
-    /// **The connect phase says the right thing about the DEVICE, not about the
-    /// screen.**
+    /// **The roster states what THAT device gets, per device.**
     ///
-    /// A pairing-code peer is not known on the connect phase, so that section
-    /// makes neither claim. A same-network device carries whichever its own
-    /// announcement earns, so its note is a branch on `device.supportsLink`.
-    ///
-    /// The failure this prevents is the tempting one: a single note above both
-    /// sections, which is necessarily a stale claim about one of them.
-    func testTheConnectPhaseStatesTheRightLimitPerDevice() throws {
+    /// The branch changed with the product: it used to choose between two
+    /// connection shapes, and now chooses between a connection and none. A
+    /// device that announced exact `link/1` is told what one link carries; a
+    /// device that did not is told it cannot be reached and is given no control
+    /// at all — which is the honest form of "the right limit for this device".
+    func testTheConnectPhaseStatesTheRightOutcomePerDevice() throws {
         let connect = try source(named: lanConnect)
 
-        // Per device, branching on the peer's own announcement.
-        XCTAssertTrue(connect.contains("""
-            InlineMessage(.info, L10n.t(device.supportsLink
-                                        ? .linkOneConnectionNote
-                                        : .workspaceOneConnectionNote))
-"""), "the device actions no longer state what THAT device's connection carries")
-        XCTAssertTrue(connect.contains(
-            ".accessibilityIdentifier(\"lan-device-connection-note\")"))
+        // Reachable: the promise, and the action that keeps it.
+        XCTAssertTrue(connect.contains("if device.supportsLink {"),
+                      "the roster stopped branching on the peer's own announcement")
+        XCTAssertTrue(connect.contains("InlineMessage(.info, L10n.t(.linkOneConnectionNote))"),
+                      "a reachable device is no longer told what its connection carries")
+        XCTAssertTrue(connect.contains(".accessibilityIdentifier(\"lan-device-connection-note\")"))
+        XCTAssertTrue(connect.contains(".accessibilityIdentifier(\"lan-connect-device\")"))
 
-        // A pairing code has no peer yet, so neither connection-shape claim is
-        // made on that screen until negotiation selects a session pane.
+        // Unreachable: a statement, and NO control — not a disabled one, which
+        // says "not now" when the truth is "not this device".
+        let unreachable = try XCTUnwrap(connect.components(
+            separatedBy: "if device.supportsLink {").dropFirst().first?
+            .components(separatedBy: "        .frame(maxWidth: Metrics.readingMeasure").first?
+            .components(separatedBy: "} else {").dropFirst().first)
+        XCTAssertTrue(unreachable.contains("L10n.t(.errorRealtimeLegacyPeer)"),
+                      "an unreachable device is not told why, or not told what would fix it")
+        XCTAssertTrue(unreachable.contains(".accessibilityIdentifier(\"lan-device-unsupported\")"),
+                      "the refusal is not reachable to VoiceOver or to a UI test")
+        XCTAssertFalse(unreachable.contains("Button("),
+                       "an unreachable device is offered a control that cannot work")
+        // The retired two-shape copy is gone from this screen.
+        XCTAssertFalse(connect.contains("workspaceOneConnectionNote"),
+                       "the roster still describes a one-lane legacy connection")
+
+        // A pairing code has no peer yet, so neither claim is made there.
         let cross = try source(named: crossConnect)
-        XCTAssertFalse(cross.contains("workspaceOneConnectionNote"),
-                       "pairing-code setup guessed a legacy peer")
-        XCTAssertFalse(cross.contains("linkOneConnectionNote"),
-                       "pairing-code setup guessed a link-capable peer")
+        XCTAssertFalse(cross.contains("workspaceOneConnectionNote"))
+        XCTAssertFalse(cross.contains("linkOneConnectionNote"))
     }
 
     /// Create and join sit on one screen, so only one control can be the keyboard
@@ -5619,10 +5536,9 @@ final class MacSurfaceGuardTests: XCTestCase {
                             in: text, named: crossConnect)
         XCTAssertFalse(try source(named: lanConnect).contains(".keyboardShortcut(.defaultAction)"),
                        "the same-network screen competes for the window's default action")
-        XCTAssertTrue(text.contains(".disabled(!fileModel.canJoin || sessionLocked)"),
+        XCTAssertTrue(text.contains(".disabled(!code.canJoin || sessionLocked)"),
                       "the default action must stay inert until six digits are in")
-        XCTAssertTrue(text.contains("fileModel.updateJoinCode($0)")
-                      && text.contains("textModel.updateJoinCode($0)"),
+        XCTAssertTrue(text.contains("code.updateJoinCode($0)"),
                       "six-digit normalization — including a leading 1 — must survive")
         // And exactly one on this surface's other file: the session pane must
         // not inherit a default from the phase that started it, because Return
@@ -5633,97 +5549,40 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// A live session must not inherit a default button from the surface that
-    /// started it: Return over a transfer in flight has nothing safe to mean.
-    func testTheSharedSessionViewsClaimNoKeyboardDefault() throws {
-        for file in ["RealtimeFileSessionView.swift", "RealtimeTextSessionView.swift"] {
-            XCTAssertFalse(try source(named: file).contains(".keyboardShortcut(.defaultAction)"),
-                           "\(file) must not claim the window's default action")
-        }
-    }
+
 
     // MARK: - the composer
 
-    /// **Return writes a newline; ⌘Return sends. Both composers, one contract.**
+    /// **The composer takes Return as a newline and sends on ⌘Return.**
     ///
-    /// The link's composer was a one-line `TextField` growing to four, with
-    /// `.defaultAction` on Send — so Return, the key that starts a paragraph
-    /// everywhere else a message is written, delivered the message instead. The
-    /// only way to find that out was to lose one.
-    ///
-    /// Four properties carry the repair, and each fails in a different way:
-    ///
-    ///  1. It is a `TextEditor`. A `TextField` handles Return itself, so no
-    ///     amount of shortcut wiring makes it a place to write a paragraph.
-    ///  2. Send carries `.keyboardShortcut(.return, modifiers: .command)` and
-    ///     NOT `.defaultAction`. `.defaultAction` IS plain Return; one modifier
-    ///     less and the newline is gone again.
-    ///  3. The height is bounded at both ends — big enough to write in, capped
-    ///     so a long draft scrolls inside it rather than pushing the transcript
-    ///     and the exit out of a 560pt window.
-    ///  4. The binding is stated on screen. A shortcut nobody is told about is a
-    ///     shortcut for whoever wrote it, and both composers say it with the
-    ///     SAME key, so a user cannot learn it on one screen and doubt it on the
-    ///     other.
-    func testBothComposersTakeReturnAsANewlineAndSendOnCommandReturn() throws {
+    /// One composer now: the legacy text view is deleted, so what was "both" is
+    /// the link's. The rule is the one that mattered — a message box people type
+    /// paragraphs into must not send on Return, and the send must still have a
+    /// keyboard path — and neither half is weakened by there being one subject.
+    func testTheComposerTakesReturnAsANewlineAndSendsOnCommandReturn() throws {
         let link = try source(named: "Transfer/TransferLinkPane.swift")
-        let legacy = try source(named: "RealtimeTextSessionView.swift")
 
         // 1. A real editor, with a bounded, writable height.
-        XCTAssertTrue(link.contains("TextEditor(text: $draft)"),
-                      "the link composer is a one-line field again")
+        XCTAssertTrue(link.contains("TextEditor(text: $link.draft)"),
+                      "the composer is a one-line field again, or is back to a "
+                      + "view-local draft the window teardown would lose")
         XCTAssertTrue(link.contains(".frame(minHeight: Metrics.composerMinHeight,\n"
                                     + "                           maxHeight: Metrics.composerMaxHeight)"),
-                      "the link composer has no practical minimum or no bounded growth")
-        XCTAssertTrue(legacy.contains(".frame(minHeight: Metrics.composerMinHeight,\n"
-                                      + "                       maxHeight: Metrics.composerMaxHeight)"),
-                      "the legacy composer is still shorter or grows without a bound")
+                      "the composer has no practical minimum or no bounded growth")
         XCTAssertFalse(link.contains("axis: .vertical") || link.contains(".lineLimit(1...4)"),
-                       "the link composer is a growing text field rather than an editor")
+                       "the composer is a growing text field rather than an editor")
 
-        // 2. ⌘Return sends, on both, and plain Return belongs to neither Send.
-        for (name, text) in [("TransferLinkPane", link), ("RealtimeTextSessionView", legacy)] {
-            XCTAssertTrue(text.contains(".keyboardShortcut(.return, modifiers: .command)"),
-                          "\(name) does not send on ⌘Return")
-            XCTAssertFalse(text.contains(".keyboardShortcut(.defaultAction)"),
-                           "\(name) took plain Return away from its editor")
-            // 4. …and says so.
-            XCTAssertTrue(text.contains("L10n.t(.composerShortcutHint)"),
-                          "\(name) leaves its keyboard contract to be discovered")
-        }
-
-        // Whitespace-only stays refused, and the trim is what makes internal
-        // newlines survive: it strips the ends, never the middle.
-        XCTAssertTrue(link.contains("draft.trimmingCharacters(in: .whitespacesAndNewlines)"))
-        XCTAssertTrue(link.contains(".disabled(!link.canCompose || trimmedDraft.isEmpty)"),
-                      "a whitespace-only draft can be sent")
-        XCTAssertTrue(link.contains("guard !body.isEmpty else { return }"),
-                      "the send action does not re-check the trimmed draft")
-
-        // A draft handed back is restored EXACTLY, and only over an empty field:
-        // overwriting something the user has since typed would lose the newer of
-        // the two.
-        XCTAssertTrue(link.contains("guard let returned = link.takeReturnedDraft() else { return }"))
-        XCTAssertTrue(link.contains("guard trimmedDraft.isEmpty else { return }"))
-        XCTAssertTrue(link.contains("draft = returned"),
-                      "a returned draft is transformed on its way back to the field")
-        XCTAssertTrue(link.contains(".task(id: link.returnedDraft) { restoreReturnedDraft() }"),
-                      "the hand-back is a view-on-appear side effect again")
-
-        // The placeholder is decoration; the editor carries the name. A
-        // placeholder doing double duty disappears from VoiceOver the moment
-        // somebody types.
-        XCTAssertTrue(link.contains(".accessibilityLabel(L10n.t(.linkComposerLabel))"))
-        XCTAssertTrue(link.contains("Text(L10n.t(.linkComposerPlaceholder))"))
-        guard let placeholder = link.range(of: "Text(L10n.t(.linkComposerPlaceholder))") else {
-            return XCTFail("the composer lost its placeholder")
-        }
-        let placeholderStyling = String(link[placeholder.upperBound...].prefix(400))
-        XCTAssertTrue(placeholderStyling.contains(".accessibilityHidden(true)"),
-                      "the placeholder is read as a second name for the editor")
-        XCTAssertTrue(placeholderStyling.contains(".allowsHitTesting(false)"),
-                      "the placeholder swallows clicks aimed at the editor under it")
+        // 2. ⌘Return sends, and plain Return belongs to no Send on this screen.
+        XCTAssertTrue(link.contains(".keyboardShortcut(.return, modifiers: .command)"),
+                      "the composer does not send on ⌘Return")
+        XCTAssertFalse(link.contains(".keyboardShortcut(.defaultAction)"),
+                       "the link surface claimed the window's default action, which "
+                       + "would make Return send instead of inserting a newline")
+        // 3. …and the shortcut is discoverable rather than folklore.
+        XCTAssertTrue(link.contains("accessibilityIdentifier(\"link-composer-shortcut\")"),
+                      "the send shortcut is not stated anywhere the user can find it")
     }
+
 
     private func assertDefaultAction(attachesTo anchor: String,
                                      in text: String,
@@ -6570,11 +6429,15 @@ final class MacSurfaceGuardTests: XCTestCase {
     // `RealtimeTextSessionModelTests`, `LinkSessionPresentationTextTests` and
     // `LinkSessionPresentationFileTests` hold the accessors themselves.
 
+    /// **Every growing record on this platform reads newest first, through its
+    /// model.**
+    ///
+    /// The legacy text history was the second subject here and is deleted with
+    /// its view. The rule is unchanged for the two records that remain, and they
+    /// are the only ones macOS renders now.
     func testEveryGrowingMacOSRecordIsRenderedNewestFirstThroughItsModel() throws {
         let link = try source(named: "Transfer/TransferLinkPane.swift")
-        let legacy = try source(named: "RealtimeTextSessionView.swift")
 
-        // The unified transcript and the unified transfer list.
         XCTAssertTrue(link.contains("ForEach(model.textMessagesNewestFirst)"),
                       "the unified transcript renders oldest first again")
         XCTAssertTrue(link.contains("ForEach(model.batchesNewestFirst)"),
@@ -6583,30 +6446,20 @@ final class MacSurfaceGuardTests: XCTestCase {
                        || link.contains("ForEach(model.batches)"),
                        "a unified list reads the stored order directly")
 
-        // The legacy text history, in BOTH of its two renderings. Counting is
-        // what makes this a rule rather than an intention: the live list and the
-        // retained one are separate `ForEach`es and fixing one is the shape this
-        // guard exists to catch.
-        XCTAssertEqual(occurrences(of: "ForEach(model.historyNewestFirst)", in: legacy), 2,
-                       "the live and retained histories do not both read newest first")
-        XCTAssertFalse(legacy.contains("ForEach(model.history)"),
-                       "a legacy history list reads the stored order directly")
-
         // Nothing reverses for itself. A view-local reversal is a second answer
         // to a question the model already answers.
-        for (name, text) in [("TransferLinkPane", link), ("RealtimeTextSessionView", legacy)] {
-            XCTAssertFalse(text.contains(".reversed()"),
-                           "\(name) reverses a list in the view layer")
-        }
+        XCTAssertFalse(link.contains(".reversed()"),
+                       "TransferLinkPane reverses a list in the view layer")
 
         // …and the comments that said otherwise are gone, checked against the
-        // sources WITH their comments intact.
+        // source WITH its comments intact.
         let rawLink = try rawSource(named: "Transfer/TransferLinkPane.swift")
         XCTAssertFalse(rawLink.contains("The conversation, oldest first."),
                        "the unified transcript still documents the old order")
         XCTAssertFalse(rawLink.contains("Every batch this link knows about, in the order it became known."),
                        "the unified transfer list still documents the old order")
     }
+
 
     /// **A message you cannot get out of an ephemeral session is a message you
     /// have to retype.**
@@ -6662,24 +6515,15 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// **The pane that does not observe a model must not decide when that
-    /// model's list is empty.**
+    /// **The pane mounts its nested lists on existence alone and never reads
+    /// what it does not observe.**
     ///
-    /// `TransferLinkPane` observes `LinkWorkspaceModel` only. A nested
-    /// `ObservableObject` publishing does not invalidate a view that merely
-    /// holds a reference to it, so a mount condition here reading
-    /// `text.textMessages` or `files.batches` was evaluated when the LINK last
-    /// changed and never again: on a stable link the peer's messages and
-    /// batches landed in models whose only observers — `LinkTranscriptView` and
-    /// `LinkTransferListView` — had never been mounted, and the surfaces stayed
-    /// blank until some unrelated link change rebuilt this body and everything
-    /// appeared at once.
-    ///
-    /// So the mount is unconditional on content: the child observes, therefore
-    /// the child decides what empty looks like. The transcript's answer is an
-    /// empty `ForEach`; the transfer list has a visible heading and so keeps a
-    /// real suppression — but inside the observing view, with BOTH halves of
-    /// that one decision on the same side of the observation boundary.
+    /// Unchanged in substance. The one adjustment is that the pane now legitimately
+    /// reads `textMessages` in ONE place — `hasLocalTranscript`, which decides
+    /// whether leaving needs a confirmation — so the blanket "never names the
+    /// member" is scoped to the rendering path it was written about. A value read
+    /// for a one-shot decision at press time is not a value captured into a view
+    /// that never refreshes, which is the fault this guards.
     func testTheLinkPaneMountsItsNestedListsWithoutReadingTheirContents() throws {
         let link = try source(named: "Transfer/TransferLinkPane.swift")
         let transcriptView = try XCTUnwrap(link.range(of: "struct LinkTranscriptView"),
@@ -6697,11 +6541,13 @@ final class MacSurfaceGuardTests: XCTestCase {
                       && parent.contains("LinkTransferListView(model: files, link: link)"),
                       "the transfer list is no longer mounted whenever the file model exists")
 
-        // …and never reads what it does not observe. Naming the members at all
-        // is the regression, not just `.isEmpty`: any read from here is a value
-        // captured once and never refreshed.
-        XCTAssertFalse(parent.contains("textMessages"),
-                       "the pane reads a message list it does not observe")
+        // …and reads a list it does not observe in exactly one place, which is
+        // the exit's press-time question rather than a rendering decision.
+        XCTAssertEqual(occurrences(of: "textMessages", in: parent), 1,
+                       "the pane reads a message list it does not observe from a "
+                       + "rendering path, where the value would be captured once")
+        XCTAssertTrue(parent.contains("private var hasTranscript: Bool"),
+                      "the one permitted read is no longer the confirmation's wording")
         XCTAssertFalse(parent.contains("batches"),
                        "the pane reads a batch list it does not observe")
 
@@ -6713,4 +6559,476 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "the batch suppression is decided in more than one place")
     }
 
+}
+
+
+// MARK: - the link/1-only contraction, asserted as a property of what ships
+
+extension MacSurfaceGuardTests {
+
+    /// **The three deleted files, named as literal paths.**
+    ///
+    /// Paths rather than identifiers, because an identifier-shaped guard
+    /// survives the rename that defeats it: a `TransferSessionPane` brought back
+    /// as `LegacySessionPane` would satisfy any symbol check and would be the
+    /// same surface.
+    func testTheThreeLegacyMacSurfacesAreGone() throws {
+        let root = try macRoot
+        for path in ["RealtimeFileSessionView.swift",
+                     "RealtimeTextSessionView.swift",
+                     "Transfer/TransferSessionPane.swift"] {
+            XCTAssertFalse(
+                FileManager.default.fileExists(
+                    atPath: root.appendingPathComponent(path).path),
+                "\(path) is back in the macOS target")
+        }
+    }
+
+    /// **No macOS production source constructs a legacy realtime model, holds
+    /// one, or wires a fallback callback to one.**
+    ///
+    /// This is the guard the deep-link amendment asks for by name. A draft of
+    /// this batch kept two `RealtimeSessionModel`/`RealtimeTextSessionModel`
+    /// objects alive purely as deep-link code sinks, behind a shared factory and
+    /// a guard exception — which would have preserved the deleted implementation
+    /// in the shipped composition while making it invisible. There is no
+    /// exception here, and that absence is the assertion: a sink, a mirror or a
+    /// "temporary" holder would all fail.
+    func testNoMacSourceConstructsOrHoldsALegacyRealtimeModel() throws {
+        for (name, text) in try sources(under: try macRoot, atLeast: 20) {
+            let code = stripComments(text)
+            // **No exception, for any file.** An earlier draft exempted
+            // `RelayiumApp` because `NearbyReceiveModel`'s initializer required
+            // two legacy models, and kept them alive inert. The model has a
+            // listener-only initializer now and macOS names neither type.
+            for legacy in ["RealtimeSessionModel", "RealtimeTextSessionModel"] {
+                XCTAssertFalse(code.contains(legacy),
+                               "\(name) still names \(legacy) in code")
+            }
+            for callback in ["adoptLegacyRoom", "onLegacyFallbackBatch",
+                             "handedOverPairing", "LegacyLane."] {
+                XCTAssertFalse(code.contains(callback),
+                               "\(name) still wires the legacy fallback: \(callback)")
+            }
+        }
+        // …and the AppKit factory the Mac composes through does not build one
+        // for it either. The hidden-sink draft lived exactly here: two legacy
+        // models constructed inside a shared factory purely to catch a deep-link
+        // string, invisible to every guard in this file.
+        let env = stripComments(try appKitSource(named: "AppEnvironment.swift"))
+        XCTAssertFalse(env.contains("makeLinkOnlyDeepLinkCoordinator"),
+                       "the hidden-sink deep-link factory is back")
+    }
+
+    /// **The listener survives the deletion; the admission does not.**
+    ///
+    /// `NearbyReceiveModel` is what keeps this Mac reachable — the discovery
+    /// room's observer and the publisher the menu bar reads listening readiness
+    /// from — so it is composed, not deleted. What it may no longer do is admit
+    /// a legacy session, and that refusal is STRUCTURAL: the listener-only
+    /// initializer holds no session models, so `accept` has nothing to accept
+    /// into and answers the peer a tagged `busy` before ownership is consulted.
+    ///
+    /// An earlier draft instead built two inert legacy models here and exempted
+    /// this file from the guard above. That kept the deleted implementation in
+    /// the shipped composition behind a source-guard exception, which is the
+    /// thing this contraction removes rather than relocates.
+    ///
+    /// A `shouldAcceptSession = { _, _ in false }` override is deliberately
+    /// absent too. It would be a second, weaker spelling of the same refusal —
+    /// one a later edit could flip back on, against models that no longer exist.
+    func testMacComposesTheListenerWithoutAnyLegacyAdmission() throws {
+        let app = stripComments(try source(named: "RelayiumApp.swift"))
+        XCTAssertTrue(app.contains("AppEnvironment.makeListeningOnlyNearbyReceiveModel("),
+                      "macOS builds its room observer through a composition that can "
+                      + "admit a legacy session again")
+        XCTAssertFalse(app.contains("AppEnvironment.makeNearbyReceiveModel("),
+                       "macOS is back on the legacy receive composition")
+        XCTAssertFalse(app.contains("shouldAcceptSession"),
+                       "a redundant admission override returned; the refusal is structural")
+    }
+
+    /// **The Mac announces exactly `link/1` in BOTH room types.**
+    ///
+    /// Rejecting every legacy session while still advertising `text/1` is the
+    /// dishonest half-state the capability amendment exists to close: the peer
+    /// is told it may open a conversation and is then met with silence. The two
+    /// call sites are asserted together because a client that withdrew the lane
+    /// on one room and kept it on the other would be two different clients
+    /// depending on how it was reached.
+    func testBothMacRoomTypesAnnounceExactlyLinkOne() throws {
+        let env = try appKitSource(named: "AppEnvironment.swift")
+        // The two macOS room factories, each sliced by name rather than by
+        // conditional-compilation boundaries: the file has several `#if
+        // os(macOS)` blocks and a slice keyed on the first one silently measured
+        // the wrong region.
+        let lan = try XCTUnwrap(env.components(
+            separatedBy: "public static func makeNearbyLinkWorkspaceModel(").dropFirst().first?
+            .components(separatedBy: "public static func ").first)
+        let pairing = try XCTUnwrap(env.components(
+            separatedBy: "public static func makeDirectLinkWorkspaceModel(").dropFirst().first?
+            .components(separatedBy: "public static func ").first)
+        XCTAssertTrue(lan.contains("nearby.localHello = linkOnlyCapsHello(linkRoomActive:)"),
+                      "the code-less room lost its truthful hello")
+        XCTAssertTrue(pairing.contains("localHello: linkOnlyCapsHello(linkRoomActive:)"),
+                      "the pairing room lost its truthful hello")
+        // Paired with the refusal in BOTH, so the two cannot drift into the
+        // half-state this amendment exists to close: a build that rejects every
+        // legacy session while still advertising the lane.
+        for (room, name) in [(lan, "code-less"), (pairing, "pairing")] {
+            XCTAssertTrue(room.contains("legacyFallback: .terminateUnsupported"),
+                          "the \(name) room still adopts a legacy session")
+            XCTAssertFalse(room.contains("linkCapsHello(linkRoomActive:)")
+                           && !room.contains("linkOnlyCapsHello(linkRoomActive:)"),
+                           "the \(name) room announces the shared native hello")
+        }
+        // And the DEFAULT is untouched, which is what keeps iOS announcing the
+        // lane it still implements.
+        XCTAssertTrue(try appKitSource(named: "LinkWorkspaceModel.swift").contains(
+            "localHello: @escaping (Bool) -> JSONValue = linkCapsHello(linkRoomActive:)"),
+            "the shared default hello changed, which would re-answer for iOS")
+    }
+
+    /// The deep-link coordinator's macOS composition writes into the pairing
+    /// code model and nothing else.
+    func testTheMacDeepLinkCompositionIsTheLinkOnlySeam() throws {
+        let app = stripComments(try source(named: "RelayiumApp.swift"))
+        XCTAssertTrue(app.contains("pairingCode: directCode"),
+                      "the Mac deep-link router no longer writes the pairing code model")
+        XCTAssertFalse(app.contains("realtime:") && app.contains("realtimeText:"),
+                       "the Mac deep-link router took a legacy model again")
+        XCTAssertFalse(app.contains("selectRealtimeMode:"),
+                       "the Mac composition selects a lane that no longer exists")
+    }
+
+    /// Comments legitimately NAME what they explain is gone; only code is
+    /// checked above.
+    private func stripComments(_ text: String) -> String {
+        var out = text.replacingOccurrences(
+            of: "///[^\n]*", with: "", options: .regularExpression)
+        out = out.replacingOccurrences(of: "//[^\n]*", with: "", options: .regularExpression)
+        return out
+    }
+}
+
+
+// MARK: - the notification centre's subscription lifecycle
+
+extension MacSurfaceGuardTests {
+
+    /// **Each lane's subscription is replaced only by its own model, and the
+    /// de-duplication cursor is reset when a session is replaced.**
+    ///
+    /// A source guard rather than a behavioural test, and the reason is target
+    /// isolation: `TransferNotificationCenter` lives in the macOS app target,
+    /// which this package cannot import. What it can do is read the source, and
+    /// the two defects this pins were both invisible to every other assertion
+    /// in this file.
+    ///
+    /// **Defect 1 — a shared store, and an ordering assumption.** The first
+    /// migration kept ONE `Set<AnyCancellable>` per route and an `appending:`
+    /// flag to decide whether a publication joined it or replaced it.
+    /// `LinkWorkspaceModel` publishes `textModel` and then `fileModel`, so the
+    /// text sink installed with `appending: true` and the file sink then
+    /// replaced the whole set — throwing the text subscription away
+    /// microseconds after it was made. Incoming MESSAGES stopped being
+    /// announced at all, and nothing failed: the flag encoded an assumption
+    /// about an order that belongs to another type.
+    ///
+    /// **Defect 2 — a cursor that outlived its session.** Both ids are
+    /// model-local and restart at zero with every new presentation model, so a
+    /// cursor keyed only by route suppresses the first message or batch of the
+    /// next session whenever the id repeats — which for a counter that restarts
+    /// is the common case. The implementation this replaced keyed message
+    /// de-duplication by MODEL IDENTITY for exactly this reason; a route key
+    /// plus a reset is the same guarantee without an entry per session that is
+    /// never reclaimed.
+    func testTheNotificationCentreKeepsEachLanesSubscriptionIndependent() throws {
+        let notifications = try source(named: "TransferNotifications.swift")
+
+        // Two stores, keyed per route, one per lane. A `Set` shared between the
+        // lanes is the shape the defect needs.
+        XCTAssertTrue(notifications.contains(
+            "private var fileSubscriptions: [AppDestination: AnyCancellable] = [:]"),
+            "the file lane has no store of its own")
+        XCTAssertTrue(notifications.contains(
+            "private var textSubscriptions: [AppDestination: AnyCancellable] = [:]"),
+            "the text lane has no store of its own")
+        XCTAssertFalse(notifications.contains("[AppDestination: Set<AnyCancellable>]"),
+                       "the two lanes share one subscription store again, so whichever "
+                       + "model publishes second discards the other's subscription")
+
+        // Each sink writes ONLY its own key. Order-independence is the property;
+        // a helper that took an `appending:` flag is the property being decided
+        // by an assumption instead.
+        XCTAssertTrue(notifications.contains("self.fileSubscriptions[route] = files?.$batches"),
+                      "the file sink no longer replaces only its own store")
+        XCTAssertTrue(notifications.contains("self.textSubscriptions[route] = text?.$textMessages"),
+                      "the text sink no longer replaces only its own store")
+        XCTAssertFalse(notifications.contains("appending"),
+                       "the lifecycle depends on the order two models are published in")
+        XCTAssertFalse(notifications.contains("replaceLaneSubscriptions"),
+                       "the shared-store helper came back")
+
+        // The cursor is cleared in the SAME step that installs the new
+        // subscription, so a session change cannot be observed without it.
+        XCTAssertTrue(notifications.contains("self.announcedBatchIDs[route] = []"),
+                      "a batch record survives the session whose ids it counted")
+        XCTAssertTrue(notifications.contains("self.lastAnnouncedMessageID[route] = nil"),
+                      "a message cursor survives the session whose ids it counted")
+        // …and it is reset where the model arrives, not somewhere that only
+        // runs for a session that ended cleanly.
+        let fileSink = try XCTUnwrap(notifications.components(separatedBy: "module.link.$fileModel")
+            .dropFirst().first?.components(separatedBy: "module.link.$textModel").first)
+        XCTAssertTrue(fileSink.contains("announcedBatchIDs[route] = []"),
+                      "the batch record is not reset by the publication that replaces the model")
+        let textSink = try XCTUnwrap(notifications.components(separatedBy: "module.link.$textModel")
+            .dropFirst().first)
+        XCTAssertTrue(textSink.contains("lastAnnouncedMessageID[route] = nil"),
+                      "the message cursor is not reset by the publication that replaces the model")
+    }
+
+    /// The publication ORDER this guard is written against, pinned at its
+    /// source so the guard above cannot quietly stop describing production.
+    ///
+    /// It is not that the order must stay this way — the point of two stores is
+    /// that it may change freely. It is that the order which BROKE the shared
+    /// store is the order the shipped model actually uses, so a future reader
+    /// finds the evidence rather than the claim.
+    func testTheLinkPublishesItsTextModelBeforeItsFileModel() throws {
+        let model = try appKitSource(named: "LinkWorkspaceModel.swift")
+        let attach = try XCTUnwrap(model.range(of: "textModel = assembly.attempt.model"))
+        let attachFiles = try XCTUnwrap(model.range(of: "fileModel = assembly.attempt.fileModel",
+                                                    range: attach.upperBound..<model.endIndex))
+        XCTAssertLessThan(attach.lowerBound, attachFiles.lowerBound,
+                          "the attach order changed; the notification centre's per-lane "
+                          + "stores make that safe, but this evidence is now stale")
+    }
+}
+
+
+// MARK: - the terminal pairing lifecycle, in the Mac composition
+
+extension MacSurfaceGuardTests {
+
+    /// **Both halves of the pairing-room lifecycle are wired, not just the one
+    /// that succeeds.**
+    ///
+    /// `onPairingLinkActivated` retired the code when a peer turned up and could
+    /// speak `link/1`. Nothing retired it on any of the terminal paths — a peer
+    /// that could not, a code the hub would not resolve, a socket that closed
+    /// before the room opened — so the digits and their QR stayed on screen over
+    /// an already-closed socket, under a "waiting for the other device" that
+    /// would wait for ever.
+    ///
+    /// `TerminalPairingLifecycleTests` drives the model behaviour; this is the
+    /// half that behaviour test cannot see, because it wires the callbacks
+    /// itself. Losing the wiring HERE is invisible to it.
+    func testTheMacCompositionWiresBothPairingRoomOutcomes() throws {
+        let app = stripComments(try source(named: "RelayiumApp.swift"))
+        XCTAssertTrue(app.contains("directLink.onPairingLinkActivated = { directCode.cancel() }"),
+                      "a code spent on a real link is no longer retired")
+        XCTAssertTrue(app.contains("directLink.onPairingRoomRetired = { directCode.cancel() }"),
+                      "a pairing room that ends WITHOUT a link no longer retires its "
+                      + "code, so dead digits stay on screen over a closed socket")
+        // The Nearby module has no code path, so it wires neither — a callback
+        // there would be a code on a screen that cannot mint one.
+        XCTAssertFalse(app.contains("nearbyLink.onPairingLinkActivated")
+                       || app.contains("nearbyLink.onPairingRoomRetired"),
+                       "the same-network module wired a pairing-code callback")
+    }
+
+    /// **A failed mint has a way out of itself.**
+    ///
+    /// `PairingCodeState.failed` is active on purpose, so the reason survives
+    /// the app-scoped liveness observer rather than being taken off screen
+    /// before it can be read. That is what holds the module's surface — and with
+    /// the surface held, `sessionLocked` disables BOTH Create and Join
+    /// underneath. One refused mint left Cross-network transfer unusable for the
+    /// rest of the process, with the reason showing and nothing to press.
+    func testAFailedMintOffersARecoveryRatherThanLockingTheScreen() throws {
+        let connect = try source(named: crossConnect)
+        let failed = try XCTUnwrap(connect.components(separatedBy: "case let .failed(message) = code.state")
+            .dropFirst().first?.components(separatedBy: "if let actionError").first)
+        XCTAssertTrue(failed.contains(".accessibilityIdentifier(\"pairing-code-failed\")"),
+                      "the failure lost the message the user is owed")
+        XCTAssertTrue(failed.contains("Button(L10n.t(.commonDismiss)) { module.cancelPairingCode() }"),
+                      "a failed mint offers no way back, so Create and Join stay "
+                      + "disabled underneath it for the rest of the process")
+        XCTAssertTrue(failed.contains(".accessibilityIdentifier(\"pairing-code-failed-dismiss\")"),
+                      "the recovery is not reachable to VoiceOver or to a UI test")
+        // …and it is the SHARED cancel, so recovering also leaves whatever room
+        // was opened rather than retiring half the state.
+        XCTAssertFalse(failed.contains("code.cancel()"),
+                       "the recovery reaches the code model directly and leaves the "
+                       + "room it was minted for open")
+    }
+}
+
+
+// MARK: - the batch announcement, per batch rather than per publication
+
+extension MacSurfaceGuardTests {
+
+    /// **Every newly terminal batch is announced, not just the newest one.**
+    ///
+    /// The migration reduced a publication to `batches.last(where: isTerminal)`
+    /// and stored one high-water id. Batches do not finish in the order they
+    /// started, and that cost two real cases:
+    ///
+    ///  - A small batch queued SECOND finishes first, the cursor holds #2, and
+    ///    #1 finishing afterwards reads as already-announced. The transfer the
+    ///    user was actually waiting on is the one that goes unannounced.
+    ///  - One publication carrying two newly terminal batches announces one and
+    ///    silently drops the other.
+    ///
+    /// A set makes both impossible, and clearing it per session is what stops it
+    /// growing for the life of the process AND what keeps model-local ids —
+    /// which restart at zero — from suppressing the next session's first batch.
+    func testEveryNewlyTerminalBatchIsAnnouncedRatherThanTheNewestOne() throws {
+        let notifications = try source(named: "TransferNotifications.swift")
+
+        // A set, per route, cleared per session.
+        XCTAssertTrue(notifications.contains(
+            "private var announcedBatchIDs: [AppDestination: Set<Int>] = [:]"),
+            "the batch record is a high-water cursor again, which loses a batch "
+            + "that finishes out of order")
+        XCTAssertFalse(notifications.contains("lastAnnouncedBatchID"),
+                       "the single-id batch cursor came back")
+
+        // Every newly terminal batch, filtered against the set and iterated —
+        // never reduced to one.
+        XCTAssertTrue(notifications.contains(
+            "let newlyTerminal = batches.filter { $0.isTerminal && !announced.contains($0.id) }"),
+            "the announcement no longer considers every newly terminal batch")
+        XCTAssertTrue(notifications.contains("for batch in newlyTerminal {"),
+                      "the announcement still collapses a publication to one batch")
+        XCTAssertFalse(notifications.contains("last(where: { $0.isTerminal })"),
+                       "the newest-terminal-only reduction came back")
+
+        // The set is written back BEFORE the first notification, so a re-entrant
+        // publish cannot see the old set and announce the same batch twice.
+        let body = try XCTUnwrap(notifications.components(
+            separatedBy: "private func announceFinishedBatch(").dropFirst().first)
+        let record = try XCTUnwrap(body.range(of: "announcedBatchIDs[route] = announced"))
+        let announce = try XCTUnwrap(body.range(of: "for batch in newlyTerminal {"))
+        XCTAssertLessThan(record.lowerBound, announce.lowerBound,
+                          "the record is written after the notifications, so a re-entrant "
+                          + "publish can announce the same batch twice")
+
+        // The message cursor may stay scalar — messages are appended in order —
+        // but it must still reset per session, which is asserted next door.
+        XCTAssertTrue(notifications.contains("private var lastAnnouncedMessageID: [AppDestination: Int]"),
+                      "the message cursor changed shape without this rule changing with it")
+    }
+}
+
+
+// MARK: - the composer's submission is transactional
+
+extension MacSurfaceGuardTests {
+
+    /// **The composer clears only when the model took the message, and is
+    /// disabled by the same answer that would refuse it.**
+    ///
+    /// Two halves of one defect, both at the UI boundary the model fix did not
+    /// reach:
+    ///
+    ///  - Send was disabled by `canCompose`, which answers "is this link open
+    ///    and verified" and stays TRUE while a first message is waiting for the
+    ///    peer to accept. The button was live for a press the model refuses.
+    ///  - `sendDraft` cleared the draft unconditionally after calling `send`, so
+    ///    that refusal erased the words it was refusing — an error about a
+    ///    message the user could no longer see.
+    func testTheComposerClearsOnlyWhatTheModelAccepted() throws {
+        let pane = try source(named: "Transfer/TransferLinkPane.swift")
+
+        XCTAssertTrue(pane.contains(".disabled(!link.canSendMessage || trimmedDraft.isEmpty)"),
+                      "Send is gated on link liveness again, so it stays live while a "
+                      + "message is already waiting for the peer")
+        XCTAssertFalse(pane.contains("!link.canCompose"),
+                       "the stale composer predicate governs Send again")
+
+        XCTAssertTrue(pane.contains("guard link.send(message: body) else { return }"),
+                      "the composer infers acceptance from having called send")
+        let body = try XCTUnwrap(pane.components(separatedBy: "private func sendDraft()")
+            .dropFirst().first?.components(separatedBy: "\n    }").first)
+        let accepted = try XCTUnwrap(body.range(of: "guard link.send(message: body) else { return }"))
+        let clear = try XCTUnwrap(body.range(of: "draft = \"\""))
+        XCTAssertLessThan(accepted.upperBound, clear.lowerBound,
+                          "the draft is cleared before the model has accepted it")
+
+        let model = try appKitSource(named: "LinkWorkspaceModel.swift")
+        XCTAssertTrue(model.contains("public func send(message body: String) -> Bool"),
+                      "send stopped reporting whether it took the message")
+        // Policy-conditional since K: the shared default still allows a
+        // replacement, for the composer that cannot see a refusal. What must
+        // hold is that the predicate consults BOTH — a version that ignored the
+        // policy would re-break iOS, and one that ignored `pendingMessage` would
+        // re-open the press this test is about.
+        XCTAssertTrue(model.contains("guard acceptsWork else { return false }")
+                      && model.contains("return pendingMessages == .replaceWaiting || pendingMessage == nil"),
+                      "the sendable predicate no longer excludes a waiting message under "
+                      + "the policy the Mac composes")
+    }
+}
+
+
+// MARK: - the pending-message policy is opted into, never defaulted
+
+extension MacSurfaceGuardTests {
+
+    /// **Every Mac composition opts in, and the shared default is untouched.**
+    ///
+    /// Making the model refuse globally changed iOS-visible behaviour: that
+    /// composer gates Send on `canCompose`, ignores what `send` returns and
+    /// clears its own view-local draft either way — so a global refusal turned a
+    /// visible replacement into a silent loss there. The rule belongs to the
+    /// composition whose composer was also fixed.
+    ///
+    /// All FOUR Mac link models are named: the two production factories and the
+    /// two acceptance substitutions. A fixture on a different rule would make
+    /// every built-App run evidence about the fixture instead of the product.
+    func testEveryMacLinkCompositionOptsIntoRefusingAWaitingMessage() throws {
+        let env = try appKitSource(named: "AppEnvironment.swift")
+        for factory in ["makeNearbyLinkWorkspaceModel(", "makeDirectLinkWorkspaceModel("] {
+            let body = try XCTUnwrap(env.components(separatedBy: "public static func " + factory)
+                .dropFirst().first?.components(separatedBy: "public static func ").first)
+            XCTAssertTrue(body.contains("pendingMessages: .refuseWhileWaiting"),
+                          "\(factory) is back on the shared replace-waiting rule, which "
+                          + "its composer does not implement")
+        }
+        let fixtures = try source(named: "UITestMode.swift")
+        XCTAssertEqual(occurrences(of: "pendingMessages: .refuseWhileWaiting", in: fixtures), 2,
+                       "an acceptance link model answers a different rule from the "
+                       + "production one it stands in for")
+
+        let model = try appKitSource(named: "LinkWorkspaceModel.swift")
+        XCTAssertTrue(model.contains(
+            "pendingMessages: LinkPendingMessagePolicy = .replaceWaiting"),
+            "the shared default changed, which re-answers for the paused iOS composer")
+        XCTAssertTrue(model.contains("pendingMessages == .replaceWaiting || pendingMessage == nil"),
+                      "the refusal stopped being conditional on the policy")
+    }
+
+    /// **A handed-back message is protected and retried.**
+    ///
+    /// It refuses to overwrite live text, which is right; nothing tried again,
+    /// which was not. The `task(id:)` that made the first attempt does not
+    /// re-fire when the draft later clears or sends, so the message sat in the
+    /// model invisible and — because `holdsLocalText` omitted it — unguarded.
+    func testTheComposerRetriesARefusedRestoreWhenItBecomesFree() throws {
+        let pane = try source(named: "Transfer/TransferLinkPane.swift")
+        XCTAssertTrue(pane.contains("private var composerIsFree: Bool"),
+                      "the retry has no emptiness key, so it cannot re-fire")
+        XCTAssertTrue(pane.contains(
+            ".task(id: composerIsFree) { if composerIsFree { link.restoreReturnedDraft() } }"),
+            "a handed-back message is never retried once the composer frees up")
+        XCTAssertFalse(pane.contains(".task(id: link.draft)"),
+                       "the retry re-asks on every keystroke")
+
+        let model = try appKitSource(named: "LinkWorkspaceModel.swift")
+        XCTAssertTrue(model.contains("|| returnedDraft != nil"),
+                      "a handed-back message is invisible to the exit and to ⌘Q")
+    }
 }

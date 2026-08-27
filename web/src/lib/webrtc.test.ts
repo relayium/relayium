@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
-import { connect, connectLink, connectResume, connectResumeLink, connectText, classifyPath, summarizeStats, PeerBusyError, localCaps, LINK_CAPTURE_MAX_BYTES, LINK_CHANNEL_LABELS, TEXT_CAPTURE_MAX_BYTES, authPayload as reExportedAuthPayload, type InboundSignal } from "./webrtc";
+import { connectLink, connectResumeLink, classifyPath, summarizeStats, PeerBusyError, localCaps, LINK_CAPTURE_MAX_BYTES, LINK_CHANNEL_LABELS, authPayload as reExportedAuthPayload, type InboundSignal } from "./webrtc";
 import { TEXT_MAX_BYTES, TEXT_FRAME_OVERHEAD } from "./text-wire";
 import { clearRoom, enterRoom } from "./room.svelte";
 import { advertisedCaps } from "./peer-caps.svelte";
@@ -59,7 +59,7 @@ class RacingDataChannel {
 const instances: FakePC[] = [];
 
 class FakePC {
-  static inboundLabels: string[] = ["relayium"];
+  static inboundLabels: string[] = [...LINK_CHANNEL_LABELS];
   /** How a remotely-created (responder-side) lane is built. Swappable so a test
    *  can hand the collector a lane with real-browser open-dispatch timing. */
   static inboundChannel: (label: string) => FakeDataChannel = (label) => new FakeDataChannel(label);
@@ -156,7 +156,7 @@ async function pairAuth(): Promise<{ I: SignalAuth; R: SignalAuth; iKeys: Sessio
 beforeAll(async () => { await ready(); });
 afterEach(() => {
   instances.length = 0;
-  FakePC.inboundLabels = ["relayium"];
+  FakePC.inboundLabels = [...LINK_CHANNEL_LABELS];
   FakePC.inboundChannel = (label) => new FakeDataChannel(label);
   vi.useRealTimers(); // a test that installed the jumpable clock must not leak it
   vi.unstubAllGlobals();
@@ -167,7 +167,7 @@ describe("webrtc commit-then-reveal handshake", () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
     const controller = new AbortController();
-    const p = connect({
+    const p = connectLink({
       signaling: hub.I, peerId: "R", selfKey: generateKeyPair().publicKey,
       role: "initiator", onPeerKey: () => {}, signal: controller.signal,
     });
@@ -191,10 +191,10 @@ describe("webrtc commit-then-reveal handshake", () => {
     // Answers the offer (transport comes up) but never reveals.
     hub.R.onSignal((from, data) => {
       const msg = data as InboundSignal;
-      if (msg.sdp?.type === "offer") hub.R.sendSignal(from, { sdp: { type: "answer", sdp: "answer" }, commit: "AAAA" });
+      if (msg.sdp?.type === "offer") hub.R.sendSignal(from, { sdp: { type: "answer", sdp: "answer" }, commit: "AAAA", link: true });
     });
 
-    const p = connect({
+    const p = connectLink({
       signaling: hub.I, peerId: "R", selfKey: generateKeyPair().publicKey,
       role: "initiator", onPeerKey: () => {}, signal: controller.signal,
     });
@@ -212,7 +212,7 @@ describe("webrtc commit-then-reveal handshake", () => {
     const hub = makeHub();
     const controller = new AbortController();
     controller.abort();
-    const p = connect({
+    const p = connectLink({
       signaling: hub.I, peerId: "R", selfKey: generateKeyPair().publicKey,
       role: "initiator", onPeerKey: () => {}, signal: controller.signal,
     });
@@ -229,8 +229,8 @@ describe("webrtc commit-then-reveal handshake", () => {
     let iPeer: Uint8Array | undefined;
     let rPeer: Uint8Array | undefined;
 
-    const rP = connect({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: (k) => (rPeer = k) });
-    const iP = connect({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: (k) => (iPeer = k) });
+    const rP = connectLink({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: (k) => (rPeer = k) });
+    const iP = connectLink({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: (k) => (iPeer = k) });
 
     await flush();
     // Both sides learned the peer's *real* public key via a verified reveal.
@@ -252,11 +252,11 @@ describe("webrtc commit-then-reveal handshake", () => {
     const remove = vi.spyOn(controller.signal, "removeEventListener");
     const rKey = generateKeyPair();
     const iKey = generateKeyPair();
-    const rP = connect({
+    const rP = connectLink({
       signaling: hub.R, peerId: "I", selfKey: rKey.publicKey,
       role: "responder", onPeerKey: () => {},
     });
-    const iP = connect({
+    const iP = connectLink({
       signaling: hub.I, peerId: "R", selfKey: iKey.publicKey,
       role: "initiator", onPeerKey: () => {}, signal: controller.signal,
     });
@@ -274,13 +274,15 @@ describe("webrtc commit-then-reveal handshake", () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
     const iKey = generateKeyPair();
-    // Stand-in for a mid-transfer responder: on the initiator's offer, refuse
-    // with { busy: true } instead of answering.
+    // Stand-in for an already-bound responder: on the initiator's offer, refuse
+    // with { busy: true } instead of answering. Tagged, exactly as `peer-link`
+    // tags every refusal it sends — an untagged refusal is filtered out by the
+    // generation check and the caller waits out its deadline instead.
     hub.R.onSignal((from, data) => {
-      if ((data as InboundSignal).sdp?.type === "offer") hub.R.sendSignal(from, { busy: true });
+      if ((data as InboundSignal).sdp?.type === "offer") hub.R.sendSignal(from, { busy: true, link: true });
     });
 
-    const iP = connect({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {} });
+    const iP = connectLink({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {} });
     const rejected = expect(iP).rejects.toBeInstanceOf(PeerBusyError);
     await flush();
     await rejected;
@@ -300,8 +302,8 @@ describe("webrtc commit-then-reveal handshake", () => {
     hub.setIntercept((d) => (d.reveal ? { ...d, reveal: { ...d.reveal, key: attackerB64 } } : d));
 
     let rPeer: Uint8Array | undefined;
-    const rP = connect({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: (k) => (rPeer = k) });
-    const iP = connect({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {} });
+    const rP = connectLink({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: (k) => (rPeer = k) });
+    const iP = connectLink({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {} });
     // Attach the rejection expectation up front: the responder rejects mid-flush,
     // so waiting until afterwards would leave the rejection momentarily unhandled.
     const rejected = expect(rP).rejects.toThrow(/commitment|MITM/);
@@ -362,10 +364,10 @@ describe("the setup deadline", () => {
   /** A syntactically plausible remote candidate. Distinct per index, because the
    *  progress ledger counts each piece of evidence exactly once. */
   const candidate = (i: number): InboundSignal =>
-    ({ ice: { candidate: `candidate:${i} 1 udp 2122260223 10.0.0.${i} 5000 typ host`, sdpMid: "0", sdpMLineIndex: 0 } });
+    ({ link: true, ice: { candidate: `candidate:${i} 1 udp 2122260223 10.0.0.${i} 5000 typ host`, sdpMid: "0", sdpMLineIndex: 0 } });
 
   function startInitiator(hub: ReturnType<typeof makeHub>) {
-    return connect({
+    return connectLink({
       signaling: hub.I, peerId: "R", selfKey: generateKeyPair().publicKey,
       role: "initiator", onPeerKey: () => {},
     });
@@ -398,7 +400,7 @@ describe("the setup deadline", () => {
     // A phone that took 25 s to wake up and answer. The old flat cut-off had
     // five seconds left for the whole of ICE; this restarts the window.
     await vi.advanceTimersByTimeAsync(25_000);
-    hub.inject("I", "R", { sdp: { type: "answer", sdp: "answer" }, commit: "AAAA" });
+    hub.inject("I", "R", { sdp: { type: "answer", sdp: "answer" }, commit: "AAAA", link: true });
     await flush();
 
     await vi.advanceTimersByTimeAsync(20_000); // t≈45s — past the old deadline
@@ -553,18 +555,21 @@ describe("summarizeStats", () => {
   });
 });
 
-// connectResume is the transport-only mirror of connect(): no commit/reveal, and
-// every signal tagged `resume: true` so a dying original connection and its
-// replacement can't cross-route each other's SDP. Both properties are load-bearing
-// (a mid-transfer resume is exactly when both generations are alive at once), and
-// neither had a test before the connect/connectResume dedup.
-describe("connectResume", () => {
+// `connectResumeLink` is the transport-only mirror of `connectLink`: no
+// commit/reveal, and every signal tagged `resume: true` so a dying original
+// connection and its replacement can't cross-route each other's SDP. Both
+// properties are load-bearing — a mid-transfer resume is exactly when two
+// generations are alive at once.
+//
+// This block covers what resuming means; the block further down covers what
+// makes it a LINK resume (both lanes, or nothing).
+describe("an authenticated transport-only resume", () => {
   it("establishes a channel with no commit/reveal exchange", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
     const a = await pairAuth();
-    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
-    const iP = connectResume({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
+    const rP = connectResumeLink({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
+    const iP = connectResumeLink({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
 
     await flush();
     openAll();
@@ -583,8 +588,8 @@ describe("connectResume", () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
     const a = await pairAuth();
-    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
-    const iP = connectResume({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
+    const rP = connectResumeLink({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
+    const iP = connectResumeLink({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
     await flush();
     openAll();
     const [ic, rc] = await Promise.all([iP, rP]);
@@ -602,7 +607,7 @@ describe("connectResume", () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
     const a = await pairAuth();
-    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
+    const rP = connectResumeLink({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
     await flush();
     // An offer from the *original* generation (no resume tag) must not be answered.
     hub.inject("R", "I", { sdp: { type: "offer", sdp: "stale" } });
@@ -619,11 +624,11 @@ describe("connectResume", () => {
     (await rP).close();
   });
 
-  it("connect() ignores resume-tagged signals for the same reason", async () => {
+  it("a first connection ignores resume-tagged signals for the same reason", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
     const rKey = generateKeyPair();
-    const rP = connect({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {} });
+    const rP = connectLink({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {} });
     await flush();
     hub.inject("R", "I", { sdp: { type: "offer", sdp: "resume-gen" }, resume: true });
     await flush();
@@ -637,8 +642,8 @@ describe("connectResume", () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
     const a = await pairAuth();
-    const p = connectResume({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
-    const rejected = expect(p).rejects.toThrow(/resume connection failed/);
+    const p = connectResumeLink({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
+    const rejected = expect(p).rejects.toThrow(/resume link connection failed/);
     await flush();
     const pc = instances[0];
     pc.connectionState = "failed";
@@ -651,7 +656,7 @@ describe("connectResume", () => {
     const hub = makeHub();
     const a = await pairAuth();
     const seen: string[] = [];
-    const p = connectResume({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I, onStateChange: (s) => seen.push(s) });
+    const p = connectResumeLink({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I, onStateChange: (s) => seen.push(s) });
     await flush();
     openAll();
     const c = await p;
@@ -938,7 +943,7 @@ describe("connectResumeLink", () => {
     const hub = makeHub();
     const legacy = await pairAuth();
     const linked = await pairAuth();
-    const legacyP = connectResume({ signaling: hub.R, peerId: "I", role: "responder", auth: legacy.R });
+    const legacyP = connectResumeLink({ signaling: hub.R, peerId: "I", role: "responder", auth: legacy.R });
     const linkP = connectResumeLink({ signaling: hub.R, peerId: "I", role: "responder", auth: linked.R });
     await flush();
 
@@ -961,21 +966,20 @@ describe("connectResumeLink", () => {
     linkP.catch(() => {});
   });
 
-  // The legacy contract, asserted next to the new one: connectResume still opens
-  // exactly one lane and still captures nothing. A resumed one-shot file
-  // transfer must not start waiting for a text channel an older peer never opens.
-  it("leaves the legacy connectResume single-lane and capture-free", async () => {
+  // The single-lane resume this used to be asserted against is gone with the
+  // lane that needed it, so what remains is the positive statement of the only
+  // contract left: a resume opens the COMPLETE label set or it is not a link.
+  it("opens the complete lane set and never a partial one", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
     const a = await pairAuth();
-    const p = connectResume({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
+    const p = connectResumeLink({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
     await flush();
-    expect(instances[0].channels.map((ch) => ch.label)).toEqual(["relayium"]);
+    expect(instances[0].channels.map((ch) => ch.label)).toEqual([...LINK_CHANNEL_LABELS]);
     openAll();
     const conn = await p;
     expect(conn.channel.label).toBe("relayium");
-    expect(conn.getChannel("relayium-text")).toBeUndefined();
-    expect(conn.takeCaptured).toBeUndefined();
+    expect(conn.getChannel("relayium-text")?.label).toBe("relayium-text");
     conn.close();
   });
 });
@@ -989,8 +993,8 @@ describe("resume signalling is bound to the session keys", () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
     const a = await pairAuth();
-    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
-    const iP = connectResume({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
+    const rP = connectResumeLink({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
+    const iP = connectResumeLink({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
     await flush();
     openAll();
     const [ic, rc] = await Promise.all([iP, rP]);
@@ -1011,7 +1015,7 @@ describe("resume signalling is bound to the session keys", () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
     const a = await pairAuth();
-    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
+    const rP = connectResumeLink({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
     await flush();
     hub.inject("R", "I", { sdp: { type: "offer", sdp: "mitm" }, resume: true });
     await flush();
@@ -1024,7 +1028,7 @@ describe("resume signalling is bound to the session keys", () => {
     const hub = makeHub();
     const a = await pairAuth();
     const other = await pairAuth(); // an attacker running its own key exchange
-    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
+    const rP = connectResumeLink({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
     await flush();
     const forged: InboundSignal = { sdp: { type: "offer", sdp: "mitm" }, resume: true };
     forged.auth = await other.I.sign(authPayload(forged));
@@ -1040,8 +1044,8 @@ describe("resume signalling is bound to the session keys", () => {
     const a = await pairAuth();
     // The MITM keeps the real tag but swaps the SDP for one pointing at itself.
     hub.setIntercept((d) => (d.sdp ? { ...d, sdp: { ...d.sdp, sdp: "attacker-sdp" } } : d));
-    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
-    const iP = connectResume({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
+    const rP = connectResumeLink({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
+    const iP = connectResumeLink({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
     await flush();
     // The responder never answers a tampered offer, so no channel is ever built.
     expect(hub.sent.R.some((m) => m.sdp?.type === "answer")).toBe(false);
@@ -1090,8 +1094,9 @@ describe("capability piggyback", () => {
     expect(await a.R.verify(authPayload(BASE), tagFromNewPeer)).toBe(true);
   });
 
-  it("advertises text/1", () => {
-    expect(localCaps()).toContain("text/1");
+  it("advertises link/1, and no longer the lane it deleted", () => {
+    expect(localCaps()).toContain("link/1");
+    expect(localCaps()).not.toContain("text/1");
   });
 
   // The per-connection confirmation is derived from `advertisedCaps()` and is
@@ -1101,10 +1106,10 @@ describe("capability piggyback", () => {
   // after a live room switch (no reload) confirms exactly that. Advertised
   // there, refused here — or the reverse — is the asymmetry that strands a peer.
   it("confirms exactly what the roster hello announces, in either room", () => {
-    expect(localCaps()).toEqual(["text/1", "link/1", "preupload/1"]);
+    expect(localCaps()).toEqual(["link/1", "preupload/1"]);
     expect([...localCaps()]).toEqual([...advertisedCaps()]);
     enterRoom({ code: "123456" });
-    expect(localCaps()).toEqual(["text/1", "link/1", "preupload/1"]);
+    expect(localCaps()).toEqual(["link/1", "preupload/1"]);
     expect([...localCaps()]).toEqual([...advertisedCaps()]);
     clearRoom();
     expect([...localCaps()]).toEqual([...advertisedCaps()]);
@@ -1125,8 +1130,8 @@ describe("capability piggyback", () => {
     let iSaw: string[] | undefined;
     let rSaw: string[] | undefined;
 
-    const rP = connect({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {}, onPeerCaps: (c) => (rSaw = c) });
-    const iP = connect({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {}, onPeerCaps: (c) => (iSaw = c) });
+    const rP = connectLink({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {}, onPeerCaps: (c) => (rSaw = c) });
+    const iP = connectLink({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {}, onPeerCaps: (c) => (iSaw = c) });
     await flush();
 
     const offer = hub.sent.I.find((m) => m.sdp?.type === "offer");
@@ -1153,8 +1158,8 @@ describe("capability piggyback", () => {
     hub.setIntercept((d) => { const { caps: _drop, ...rest } = d; return rest as InboundSignal; });
 
     let iPeer: Uint8Array | undefined;
-    const rP = connect({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {} });
-    const iP = connect({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: (k) => (iPeer = k), onPeerCaps: (c) => (iSaw = c) });
+    const rP = connectLink({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {} });
+    const iP = connectLink({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: (k) => (iPeer = k), onPeerCaps: (c) => (iSaw = c) });
     await flush();
 
     // The SAS handshake is unaffected; we simply learn nothing about caps.
@@ -1172,9 +1177,9 @@ describe("capability piggyback", () => {
     const hub = makeHub();
     const rKey = generateKeyPair();
     let rSaw: string[] | undefined;
-    const rP = connect({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {}, onPeerCaps: (c) => (rSaw = c) });
+    const rP = connectLink({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {}, onPeerCaps: (c) => (rSaw = c) });
     await flush();
-    hub.inject("R", "I", { sdp: { type: "offer", sdp: "v=0" }, caps: [1, "text/1", null] as unknown as string[] });
+    hub.inject("R", "I", { sdp: { type: "offer", sdp: "v=0" }, link: true, caps: [1, "text/1", null] as unknown as string[] });
     await flush();
     expect(rSaw).toEqual(["text/1"]);
     rP.catch(() => {});
@@ -1185,9 +1190,12 @@ describe("capability piggyback", () => {
     const hub = makeHub();
     const rKey = generateKeyPair();
     let called = false;
-    const rP = connect({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {}, onPeerCaps: () => (called = true) });
+    const rP = connectLink({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {}, onPeerCaps: () => (called = true) });
     await flush();
-    hub.inject("R", "I", { sdp: { type: "offer", sdp: "v=0" }, caps: "text/1" as unknown as string[] });
+    // Tagged, so the frame genuinely REACHES the connection: an untagged one is
+    // dropped by the generation filter and this assertion would then be
+    // satisfied by the wrong mechanism.
+    hub.inject("R", "I", { sdp: { type: "offer", sdp: "v=0" }, link: true, caps: "text/1" as unknown as string[] });
     await flush();
     expect(called).toBe(false);
     rP.catch(() => {});
@@ -1212,9 +1220,10 @@ describe("signalling generations", () => {
     expect(signalGeneration({ link: false })).toBe("file");
   });
 
-  // Pinned so the precedence is a decision rather than an accident. Phase 1
-  // never produces both (connectText does not resume); phase 2 must revisit this
-  // if it resumes a message session.
+  // Pinned so the precedence is a decision rather than an accident. Nothing this
+  // build sends carries more than one tag; the vocabulary outlived the
+  // generations that used it precisely so an inbound frame that DOES carry two
+  // has a defined reading rather than an emergent one.
   it("pins resume > link > text precedence when tags overlap", () => {
     expect(signalGeneration({ resume: true, link: true, text: true })).toBe("resume");
     expect(signalGeneration({ link: true, text: true })).toBe("link");
@@ -1295,7 +1304,7 @@ describe("signalling generations", () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
     const a = await pairAuth();
-    const iP = connectResume({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
+    const iP = connectResumeLink({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
     await flush();
     const offer = hub.sent.I.find((m) => m.sdp?.type === "offer");
     expect(offer?.resume).toBe(true);
@@ -1303,24 +1312,12 @@ describe("signalling generations", () => {
     iP.catch(() => {});
   });
 
-  // The compatibility assertion: a file-generation signal is byte-identical to
-  // what this code sent before generations were named, so an older peer sees no
-  // new field at all.
-  it("leaves a file connection's outbound signals untagged", async () => {
-    vi.stubGlobal("RTCPeerConnection", FakePC);
-    const hub = makeHub();
-    const iKey = generateKeyPair();
-    const iP = connect({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {} });
-    await flush();
-    for (const m of hub.sent.I) {
-      expect("resume" in m).toBe(false);
-      expect("text" in m).toBe(false);
-    }
-    expect(hub.sent.I.some((m) => m.sdp?.type === "offer")).toBe(true);
-    iP.catch(() => {});
-  });
-
-  it("tags a text connection's outbound signals and completes its own handshake", async () => {
+  // Every signal a first connection sends is now tagged `link`, and tagged with
+  // NOTHING else. This is the assertion that replaced "a file connection's
+  // signals are untagged": the untagged generation was the compatibility shape
+  // for a peer that predates naming, and this build no longer offers one — an
+  // untagged offer is a stranger's, not ours.
+  it("tags a first connection's outbound signals as link, and completes its handshake", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
     const iKey = generateKeyPair();
@@ -1328,8 +1325,8 @@ describe("signalling generations", () => {
     let iPeer: Uint8Array | undefined;
     let rPeer: Uint8Array | undefined;
 
-    const rP = connectText({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: (k) => (rPeer = k) });
-    const iP = connectText({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: (k) => (iPeer = k) });
+    const rP = connectLink({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: (k) => (rPeer = k) });
+    const iP = connectLink({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: (k) => (iPeer = k) });
     await flush();
 
     // A full commit-reveal, not a resume: both sides learn the peer's real key
@@ -1337,10 +1334,19 @@ describe("signalling generations", () => {
     expect(iPeer && Array.from(iPeer)).toEqual(Array.from(rKey.publicKey));
     expect(rPeer && Array.from(rPeer)).toEqual(Array.from(iKey.publicKey));
     expect(sas(iKey.publicKey, iPeer!)).toBe(sas(rKey.publicKey, rPeer!));
-    // Every signal it sends is tagged.
+
     expect(hub.sent.I.length).toBeGreaterThan(0);
-    for (const m of hub.sent.I) expect(m.text).toBe(true);
-    for (const m of hub.sent.R) expect(m.text).toBe(true);
+    expect(hub.sent.R.length).toBeGreaterThan(0);
+    for (const m of [...hub.sent.I, ...hub.sent.R]) {
+      expect(m.link).toBe(true);
+      expect("text" in m).toBe(false);
+      expect("resume" in m).toBe(false);
+    }
+    // Including the reveal, which bypasses establish()' own send() and therefore
+    // has to stamp the tag itself. An unstamped reveal is filtered by the peer
+    // and the handshake never completes.
+    const reveal = hub.sent.I.find((m) => m.reveal);
+    expect(reveal?.link).toBe(true);
 
     openAll();
     const [ic, rc] = await Promise.all([iP, rP]);
@@ -1348,20 +1354,20 @@ describe("signalling generations", () => {
     rc.close();
   });
 
-  // The channel opens well before connectText resolves -- the key handshake and
+  // The channels open well before connectLink resolves -- the key handshake and
   // the caller's path sample both run after it -- and an auto-accepting peer
   // speaks in exactly that window. Retention is bounded and the drain is
   // one-shot; the caller replays it under its own ordering rules.
-  it("retains a text lane's frames from open, bounded, until the caller drains them", async () => {
+  it("retains a lane's frames from open, bounded, until the caller drains them", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
     const iKey = generateKeyPair();
     const rKey = generateKeyPair();
-    const rP = connectText({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {} });
-    const iP = connectText({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {} });
+    const rP = connectLink({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {} });
+    const iP = connectLink({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {} });
     await flush();
     openAll();
-    // The peer's ACCEPT byte, before the caller awaiting connectText can attach
+    // The peer's ACCEPT byte, before the caller awaiting connectLink can attach
     // anything. Delivered on both sides' lanes: each captures its own.
     for (const pc of instances) for (const ch of pc.channels) ch._message(new Uint8Array([0xfe]).buffer);
     const [ic, rc] = await Promise.all([iP, rP]);
@@ -1369,12 +1375,12 @@ describe("signalling generations", () => {
     expect(ic.takeCaptured?.("relayium").frames.map((f) => [...new Uint8Array(f)])).toEqual([[0xfe]]);
     expect(ic.takeCaptured?.("relayium").frames).toEqual([]); // one-shot; never replayed
     expect(rc.takeCaptured?.("relayium").frames).toHaveLength(1);
+    // Both lanes retain, not only the primary one: the text lane is where an
+    // auto-accepting peer's first bytes actually land.
+    expect(ic.takeCaptured?.("relayium-text").frames.map((f) => [...new Uint8Array(f)])).toEqual([[0xfe]]);
     // The bound must admit a full-size message frame (64 KiB + 21 B) -- a first
     // message that legitimately lands here must not fail the session it starts.
-    expect(TEXT_CAPTURE_MAX_BYTES).toBeGreaterThan(TEXT_MAX_BYTES + TEXT_FRAME_OVERHEAD);
-    // And must stay well under a link's: this window holds control bytes and a
-    // message or two, not a manifest.
-    expect(TEXT_CAPTURE_MAX_BYTES).toBeLessThan(LINK_CAPTURE_MAX_BYTES);
+    expect(LINK_CAPTURE_MAX_BYTES).toBeGreaterThan(TEXT_MAX_BYTES + TEXT_FRAME_OVERHEAD);
     ic.close();
     rc.close();
   });
@@ -1385,7 +1391,7 @@ describe("signalling generations", () => {
   // has to be proven under that configuration too, rather than assumed to carry
   // over. The config assertions are the point: without them this test would
   // silently degrade into a duplicate of the LAN case.
-  it("retains an early text frame on the relay-only cross-network config too", async () => {
+  it("retains an early frame on the relay-only cross-network config too", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
     const iKey = generateKeyPair();
@@ -1396,8 +1402,8 @@ describe("signalling generations", () => {
       iceServers: [{ urls: "turn:turn.relayium.test:3478?transport=udp", username: "u", credential: "c" }],
       iceTransportPolicy: "relay",
     };
-    const rP = connectText({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {}, config: relayOnly });
-    const iP = connectText({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {}, config: relayOnly });
+    const rP = connectLink({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {}, config: relayOnly });
+    const iP = connectLink({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {}, config: relayOnly });
     await flush();
 
     // Both ends really are on the relay-only path -- not silently on DEFAULT_ICE.
@@ -1409,7 +1415,7 @@ describe("signalling generations", () => {
 
     openAll();
     // The auto-accepting peer's ACCEPT byte, spoken before the caller awaiting
-    // connectText can attach a handler.
+    // connectLink can attach a handler.
     for (const pc of instances) for (const ch of pc.channels) ch._message(new Uint8Array([0xfe]).buffer);
     const [ic, rc] = await Promise.all([iP, rP]);
 
@@ -1419,27 +1425,27 @@ describe("signalling generations", () => {
     rc.close();
   });
 
-  it("reports text-lane capture overflow instead of truncating it silently", async () => {
+  it("reports lane capture overflow instead of truncating it silently", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
     const iKey = generateKeyPair();
     const rKey = generateKeyPair();
-    const rP = connectText({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {} });
-    const iP = connectText({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {} });
+    const rP = connectLink({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {} });
+    const iP = connectLink({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {} });
     await flush();
     openAll();
-    for (const pc of instances) for (const ch of pc.channels) ch._message(new ArrayBuffer(TEXT_CAPTURE_MAX_BYTES + 1));
+    for (const pc of instances) for (const ch of pc.channels) ch._message(new ArrayBuffer(LINK_CAPTURE_MAX_BYTES + 1));
     const [ic, rc] = await Promise.all([iP, rP]);
     expect(ic.takeCaptured?.("relayium")).toEqual({ frames: [], overflow: true });
     ic.close();
     rc.close();
   });
 
-  // The MITM defence is not weakened by running on its own generation: the same
-  // commit-reveal, so the same refusal. Shaped after the file-path MITM test
-  // above -- the responder rejects mid-flush, so the expectation is attached
-  // before the flush rather than after it.
-  it("aborts a text connection on a commitment mismatch, like the file one", async () => {
+  // The MITM defence, asserted a second time from the responder's side and with
+  // a relay that swaps the key on every reveal it sees. The handshake test above
+  // proves the initiator refuses; this proves the responder does, and that the
+  // refusal is what ends the connection rather than a timeout.
+  it("aborts on a commitment mismatch, from the responder's side too", async () => {
     useJumpableClock();
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
@@ -1450,23 +1456,20 @@ describe("signalling generations", () => {
     hub.setIntercept((d) => (d.reveal ? { ...d, reveal: { ...d.reveal, key: attackerB64 } } : d));
 
     let rPeer: Uint8Array | undefined;
-    const rP = connectText({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: (k) => (rPeer = k) });
-    const iP = connectText({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {} });
+    const rP = connectLink({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: (k) => (rPeer = k) });
+    const iP = connectLink({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {} });
     const rejected = expect(rP).rejects.toThrow(/commitment|MITM/);
 
     await flush();
     await rejected;
     expect(rPeer).toBeUndefined();
 
-    // Same as the file path: the text initiator is bounded by the handshake
-    // deadline rather than left holding a keyless connection forever.
+    // The initiator is bounded by the handshake deadline rather than left
+    // holding a keyless connection forever.
     openAll();
     await expectHandshakeTimeout(iP);
   });
 
-  // The same property webrtc.test.ts already pins for resume, now across the
-  // pair that matters: without it, a text offer lands in listenForIncoming and
-  // starts a file receive on the peer.
   // The reported symptom was "正在建立加密连接 at 0% for a long time". The
   // transport timeout in webrtc-core only covers "did a channel open"; it is
   // cleared the moment one does. But the reveal that completes commit-reveal
@@ -1486,10 +1489,10 @@ describe("signalling generations", () => {
     // right after the answer.
     hub.R.onSignal((from, data) => {
       const msg = data as InboundSignal;
-      if (msg.sdp?.type === "offer") hub.R.sendSignal(from, { sdp: { type: "answer", sdp: "answer" }, commit: "AAAA" });
+      if (msg.sdp?.type === "offer") hub.R.sendSignal(from, { sdp: { type: "answer", sdp: "answer" }, commit: "AAAA", link: true });
     });
 
-    const iP = connect({
+    const iP = connectLink({
       signaling: hub.I, peerId: "R", selfKey: generateKeyPair().publicKey,
       role: "initiator", onPeerKey: () => {},
     });
@@ -1500,41 +1503,44 @@ describe("signalling generations", () => {
     expect(instances[0].connectionState).toBe("closed");
   });
 
-  it("does not cross-route between a live file connection and a live text one", async () => {
+  // The cross-routing case that used to be "a live file connection beside a live
+  // text one" is gone with the second generation. What replaced it is the pair
+  // that still occurs: a first connection and its own resume, alive together for
+  // exactly as long as a rebuild takes. Neither may answer the other's offer.
+  it("does not cross-route between a live link and a live resume", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
-    const iFileKey = generateKeyPair();
-    const iTextKey = generateKeyPair();
-    const rFileKey = generateKeyPair();
-    const rTextKey = generateKeyPair();
+    const a = await pairAuth();
 
-    // Both generations listening on the same signalling link, at the same time.
-    const rFile = connect({ signaling: hub.R, peerId: "I", selfKey: rFileKey.publicKey, role: "responder", onPeerKey: () => {} });
-    const rText = connectText({ signaling: hub.R, peerId: "I", selfKey: rTextKey.publicKey, role: "responder", onPeerKey: () => {} });
+    const rLink = connectLink({ signaling: hub.R, peerId: "I", selfKey: generateKeyPair().publicKey, role: "responder", onPeerKey: () => {} });
+    const rResume = connectResumeLink({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
 
-    const iFile = connect({ signaling: hub.I, peerId: "R", selfKey: iFileKey.publicKey, role: "initiator", onPeerKey: () => {} });
+    const iLink = connectLink({ signaling: hub.I, peerId: "R", selfKey: generateKeyPair().publicKey, role: "initiator", onPeerKey: () => {} });
     await flush();
-    // Exactly one answer, from the file side, and it is untagged.
+    // Exactly one answer, from the link side, and it carries the link tag.
     const answers1 = hub.sent.R.filter((m) => m.sdp?.type === "answer");
     expect(answers1.length).toBe(1);
-    expect(answers1[0].text).toBeUndefined();
+    expect(answers1[0].link).toBe(true);
+    expect(answers1[0].resume).toBeUndefined();
 
-    const iText = connectText({ signaling: hub.I, peerId: "R", selfKey: iTextKey.publicKey, role: "initiator", onPeerKey: () => {} });
+    const offer: InboundSignal = { sdp: { type: "offer", sdp: "rebuild" }, resume: true };
+    offer.auth = await a.I.sign(authPayload(offer));
+    hub.inject("R", "I", offer);
     await flush();
     const answers2 = hub.sent.R.filter((m) => m.sdp?.type === "answer");
     expect(answers2.length).toBe(2);
-    expect(answers2.filter((m) => m.text === true).length).toBe(1);
-    expect(answers2.filter((m) => m.text === undefined).length).toBe(1);
+    expect(answers2.filter((m) => m.resume === true).length).toBe(1);
+    expect(answers2.filter((m) => m.link === true).length).toBe(1);
 
     openAll();
-    for (const p of [rFile, rText, iFile, iText]) (await p.catch(() => null))?.close();
+    for (const p of [rLink, rResume, iLink]) (await p.catch(() => null))?.close();
   });
 
-  it("a text-tagged offer never reaches a file connection", async () => {
+  it("a text-tagged offer never reaches a link connection", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
     const rKey = generateKeyPair();
-    const rP = connect({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {} });
+    const rP = connectLink({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {} });
     await flush();
     hub.inject("R", "I", { sdp: { type: "offer", sdp: "v=0" }, text: true, commit: btoa("c".repeat(32)) });
     await flush();
@@ -1542,11 +1548,14 @@ describe("signalling generations", () => {
     rP.catch(() => {});
   });
 
-  it("an untagged offer never reaches a text connection", async () => {
+  // The untagged generation is what every pre-`link/1` peer sends, and this
+  // build answers none of it. That refusal IS the compatibility contraction: an
+  // old peer gets silence rather than a connection neither side can use.
+  it("an untagged offer never reaches a link connection", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
     const rKey = generateKeyPair();
-    const rP = connectText({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {} });
+    const rP = connectLink({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {} });
     await flush();
     hub.inject("R", "I", { sdp: { type: "offer", sdp: "v=0" }, commit: btoa("c".repeat(32)) });
     await flush();

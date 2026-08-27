@@ -1,14 +1,13 @@
-// 房间里哪些对端说过自己能开消息会话。
+// 房间里哪些对端说过自己能开一条 link/1 连接。
 //
-// 这条声明走的是**名册层**，不是某条连接的 SDP，原因是老版本对端：
-// listenForIncoming 对**任何**入站 offer 都会开始收文件（transfer-session.svelte.ts），
-// 所以一条为消息而建的连接，在跑着旧版本的对端看来就是一次"manifest 永远不来"的文件
-// 传输——它会一直等，然后被 45 秒的停滞看门狗判失败。跟着那条连接的 SDP 一起到达的
-// capability 来得太晚，挡不住它本来要挡的事。
+// 这条声明走的是**名册层**，不是某条连接的 SDP。原因是老版本对端：它们对**任何**入站
+// offer 都会开始收文件，所以一条为别的用途建的连接，在跑着旧版本的对端看来就是一次
+// "manifest 永远不来"的文件传输——它会一直等，然后被停滞看门狗判失败。跟着那条连接的
+// SDP 一起到达的 capability 来得太晚，挡不住它本来要挡的事。
 //
 // 传输方式就是 relay-RTT 表已经在用的那种裸 signal 帧（App.svelte 的 broadcastRelayRtt），
 // WebRTC 那几个处理器不认识它就会忽略。**没声明就是不支持**：一个从不声明的对端永远
-// 不会被邀请开消息会话。
+// 不会被邀请建立 link。
 //
 // 它是一个**提示**，不是安全输入。信令中继看得见每一帧，可以删掉它（消息功能被禁用
 // ——纯拒绝服务），也可以伪造它（我们向一个开不了会话的对端发起邀请——同样是拒绝服务）。
@@ -17,11 +16,20 @@
 
 import { CAP_PREUPLOAD } from "./preupload-handoff";
 
-/** The one capability this version advertises. Versioned so a later, wire-
- *  incompatible message format can be introduced without ambiguity. */
+/**
+ * The single-lane legacy conversation wire. **This build does not speak it.**
+ *
+ * Kept as a named constant because it is still a real capability on this room's
+ * wire — a paused iOS build and the CLI announce it — and because naming the
+ * thing we do NOT implement is what lets a fixture describe a legacy peer
+ * without a bare string. Nothing here advertises it and nothing routes on it:
+ * a peer whose hello is exactly this is unsupported, terminally, and that is
+ * the whole of the Web's answer to it.
+ */
 export const CAP_TEXT = "text/1";
 /** Unified two-lane Web link: one authenticated connection carrying an ordered
- *  file lane and an ordered text lane. Versioned for the same reason text/1 is. */
+ *  file lane and an ordered text lane. The only transport the browser composes,
+ *  and versioned so a later, wire-incompatible format is unambiguous. */
 export const CAP_LINK = "link/1";
 
 /** Pre-upload key handoff (DataChannel frame kind 12). Re-exported from the
@@ -73,15 +81,29 @@ export function linkRoomActive(): boolean {
   return LINK_BUILD_SUPPORT;
 }
 
-/** What this build announces, at the roster level and (via localCaps) in its
- *  SDP confirmation. One expression for both, so the two announcements cannot
- *  disagree — and so neither can disagree with the routing rule below, which
- *  reads the same predicate. */
+/**
+ * What this build announces, at the roster level and (via localCaps) in its SDP
+ * confirmation. One expression for both, so the two announcements cannot
+ * disagree — and so neither can disagree with the routing rule below, which
+ * reads the same predicate.
+ *
+ * `text/1` used to lead this list and no longer does. It was an announcement
+ * this build could not honour: the single-lane conversation transport behind it
+ * is gone, so a peer that took the browser up on it reached a page with no lane
+ * to open. An untruthful capability is worse than a missing one — it is the one
+ * input a peer is entitled to act on, and acting on it produced a connection
+ * that could only stall. What the browser can do it says exactly, and what it
+ * cannot do it does not say.
+ *
+ * preupload/1 rides with link/1 and can never be announced without it: the
+ * handoff frame travels on the LINK's file channel, so a build (or a scope) that
+ * cannot open a link has no way to deliver the keys it would be promising. With
+ * `text/1` withdrawn, a build that cannot open a link has nothing left to
+ * announce at all — an empty hello, which is still a hello, and still says
+ * "nothing here for you" rather than nothing.
+ */
 export function advertisedCaps(): readonly string[] {
-  // preupload/1 rides with link/1 and can never be announced without it: the
-  // handoff frame travels on the LINK's file channel, so a build (or a scope)
-  // that cannot open a link has no way to deliver the keys it would be promising.
-  return linkRoomActive() ? [CAP_TEXT, CAP_LINK, CAP_PREUPLOAD] : [CAP_TEXT];
+  return linkRoomActive() ? [CAP_LINK, CAP_PREUPLOAD] : [];
 }
 
 /** What each peer in the room has told us it supports. Reactive: the peer cards
@@ -119,10 +141,10 @@ export function recordPeerCaps(peerId: string, data: unknown): boolean {
  * deliberately do not have.
  *
  * Every `peerSupportsX` here answers a two-valued question, because for the
- * things they gate that is the right shape: not announcing `text/1` and
- * announcing `text/2` both mean "do not offer this peer a message session", and
- * the cost of being wrong for one roster tick is an offer not made. Nothing is
- * destroyed by guessing "no" early.
+ * things they gate that is the right shape: not announcing `link/1` and
+ * announcing `link/2` both mean "do not reach this peer", and the cost of being
+ * wrong for one roster tick is an offer not made. Nothing is destroyed by
+ * guessing "no" early.
  *
  * `preupload/1` is the one capability where that is false. The "no" branch there
  * returns already-uploaded ciphertext to the live lane and discards the only
@@ -140,22 +162,18 @@ export function peerCapsKnown(peerId: string): boolean {
   return announced[peerId] !== undefined;
 }
 
-/** Exact match, deliberately: "text/2" is a different wire and must not be
- *  read as this one. */
-export function peerSupportsText(peerId: string): boolean {
-  return (announced[peerId] ?? []).includes(CAP_TEXT);
-}
-
 /**
  * Exact match; callers must never infer link support from text/1.
  *
- * "Exact" is the load-bearing word and the only downgrade boundary left. An
- * older Web peer, a native client or the CLI announces `text/1` and nothing
- * else, and `listenForIncoming` on such a peer starts receiving FILES from any
- * inbound offer — so a speculative two-channel offer to it becomes a transfer
- * whose manifest never arrives, and it waits out a stall watchdog. `link/2`, a
- * capitalised variant or a peer that never announced are all equally not this
- * protocol.
+ * "Exact" is the load-bearing word, and this is now the browser's ONLY admission
+ * decision: there is no second transport to fall through to, so a false answer
+ * here is not a downgrade, it is a connection that cannot work. An older Web
+ * peer, a native client or the CLI announces `text/1` and nothing else, and such
+ * a peer starts receiving FILES from any inbound offer — so a speculative
+ * two-channel offer to it becomes a transfer whose manifest never arrives, and it
+ * waits out a stall watchdog. `link/2`, a capitalised variant, `text/1` and a
+ * peer that never announced are all equally not this protocol, and all equally
+ * unreachable.
  *
  * Enforced HERE, not only at the announcement, because this is the predicate
  * every routing decision reads (peer-workspace's `routes`, the manager's inbound

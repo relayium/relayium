@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   CAP_LINK, CAP_TEXT, CapsAnnouncer, LINK_CAPS_ANNOUNCE_ATTEMPTS, LINK_CAPS_RETRY_INTERVAL_MS,
-  advertisedCaps, capsSignal, peerSupportsLink, peerSupportsText, recordPeerCaps, resetPeerCaps,
+  advertisedCaps, capsSignal, peerCapsKnown, peerSupportsLink, recordPeerCaps, resetPeerCaps,
 } from "./peer-caps.svelte";
 import { linkRole } from "./peer-link.svelte";
 import { clearRoom } from "./room.svelte";
@@ -22,6 +22,19 @@ import { ready, sas } from "./crypto";
  *
  * To regenerate after a deliberate change:
  *   node scripts/gen-realtime-wire-vectors.mjs      (from web/)
+ *
+ * ## What this side stopped asserting, and why that is not a gap
+ *
+ * `legacyLane`, `resolvesImmediately` and `revocation.text` are still in the
+ * generated file and are still asserted — by `LinkCapabilityVectorTests.swift`
+ * alone. They describe which single-lane legacy transport a peer that is not
+ * exact `link/1` falls to, and whether that fall waits out the capability
+ * window. The browser has neither: there is one transport, and a peer that does
+ * not announce it is unsupported, terminally and immediately. Asserting those
+ * fields here would mean re-deriving a native concept from a browser predicate
+ * that no longer exists, which is how the drift this file was written to catch
+ * started. iOS still ships the lane, so the rows stay; this suite pins the half
+ * that is genuinely shared.
  */
 const WIRE = "../apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json";
 const CRYPTO = "../apps/RelayiumKit/Tests/Fixtures/crypto-vectors.json";
@@ -57,14 +70,21 @@ describe("capability vectors (shared with the native clients)", () => {
     expect([...advertisedCaps()]).toEqual(cap.hello.web.caps);
   });
 
-  it("understands the native hello, which is deliberately a smaller list", () => {
-    // Not equal, and the assertion is the inequality: `preupload/1` is a Web
-    // lane the native clients do not implement. A test that asserted equality
-    // here would be the same mistake the Swift side made in the other direction.
+  it("understands the native hello, which is neither this one nor a subset of it", () => {
+    // Not equal, and the assertion is the inequality — in BOTH directions now.
+    // `preupload/1` is a Web lane the native clients do not implement, and
+    // `text/1` is a native lane this build deleted. A test that asserted a
+    // subset either way would be asserting a fiction, which is the mistake the
+    // Swift side originally made in the other direction.
     expect(cap.hello.native.caps).not.toEqual(cap.hello.web.caps);
+    expect(cap.hello.native.caps).toContain(CAP_TEXT);
+    expect(cap.hello.web.caps).not.toContain(CAP_TEXT);
+    // What IS shared is the one string either side may act on.
+    expect(cap.hello.native.caps).toContain(CAP_LINK);
+    expect(cap.hello.web.caps).toContain(CAP_LINK);
+
     expect(recordPeerCaps("mac", cap.hello.native)).toBe(true);
     expect(peerSupportsLink("mac")).toBe(true);
-    expect(peerSupportsText("mac")).toBe(true);
   });
 
   it("uses the same bounded retry cadence as the native clients", () => {
@@ -79,15 +99,23 @@ describe("capability vectors (shared with the native clients)", () => {
   });
 
   it("promotes on exactly the announcements the vector promotes on", () => {
+    // The rows are pinned against the source so a row deleted from the generator
+    // fails loudly here instead of silently narrowing the loop below.
+    expect(cap.promotion.map((row) => row.caps.join("+"))).toEqual([
+      "text/1+link/1+preupload/1", "text/1+link/1", "link/1",
+      "text/1", "", "link/2", "LINK/1", "text/2",
+    ]);
+    expect(cap.promotion.filter((row) => row.link)).toHaveLength(3);
+
     for (const row of cap.promotion) {
       resetPeerCaps();
       expect(recordPeerCaps("p", { caps: row.caps }), `${row.caps} was not read as a hello`).toBe(true);
       expect(peerSupportsLink("p"), `promotion disagreed for ${row.caps}`).toBe(row.link);
-      const decided = peerSupportsLink("p") || peerSupportsText("p");
-      expect(decided, `immediacy disagreed for ${row.caps}`).toBe(row.resolvesImmediately);
-      if (row.legacyLane) {
-        expect(peerSupportsText("p"), `lane disagreed for ${row.caps}`).toBe(row.legacyLane === "text");
-      }
+      // Every row announced SOMETHING, including the empty one. On this side
+      // that is the whole of the decision: there is no window to wait out and no
+      // second lane to fall to, so a row that does not promote is unsupported at
+      // the instant its hello lands.
+      expect(peerCapsKnown("p"), `${row.caps} was not recorded`).toBe(true);
     }
   });
 
@@ -96,7 +124,9 @@ describe("capability vectors (shared with the native clients)", () => {
     expect(peerSupportsLink("p")).toBe(true);
     expect(recordPeerCaps("p", cap.revocation.then)).toBe(true);
     expect(peerSupportsLink("p")).toBe(cap.revocation.link);
-    expect(peerSupportsText("p")).toBe(cap.revocation.text);
+    // …and the peer is still HEARD FROM. Revoking is a hello, not a silence, so
+    // the browser's answer is "this peer said it cannot", not "we are waiting".
+    expect(peerCapsKnown("p")).toBe(true);
   });
 
   it("does not read a frame without a caps array as a hello", () => {
@@ -108,22 +138,27 @@ describe("capability vectors (shared with the native clients)", () => {
     }
   });
 
-  it("accepts a native downgrade announcement and reaches the lane it names", () => {
+  it("accepts a native downgrade announcement, and answers both rows the same way", () => {
     // The native client sends this when it gives up on `link/1`, so the
     // withdrawal is agreed rather than one-sided: this page latches nothing and
     // would otherwise keep re-asking a peer that had stopped listening.
-    recordPeerCaps("mac", cap.hello.native);
-    expect(peerSupportsLink("mac")).toBe(true);
-
-    expect(recordPeerCaps("mac", cap.downgrade.text)).toBe(true);
-    expect(peerSupportsLink("mac")).toBe(false);
-    expect(peerSupportsText("mac"), "a text lane must stay offerable").toBe(true);
-
-    recordPeerCaps("mac", cap.hello.native);
-    expect(recordPeerCaps("mac", cap.downgrade.files),
-      "an empty caps array is still a hello — that is what makes it revoke").toBe(true);
-    expect(peerSupportsLink("mac")).toBe(false);
-    expect(peerSupportsText("mac"), "a file lane must not be offered a conversation").toBe(false);
+    //
+    // Which lane the row names is a native fact (see the header). What the
+    // browser does with either is identical and is the assertion here: the peer
+    // stops being routable, because the lanes both rows name are gone from this
+    // side. That sameness is the contraction, stated rather than implied.
+    for (const [label, row] of [["text", cap.downgrade.text], ["files", cap.downgrade.files]] as const) {
+      resetPeerCaps();
+      recordPeerCaps("mac", cap.hello.native);
+      expect(peerSupportsLink("mac"), label).toBe(true);
+      expect(recordPeerCaps("mac", row),
+        "an empty caps array is still a hello — that is what makes it revoke").toBe(true);
+      expect(peerSupportsLink("mac"), label).toBe(false);
+      expect(peerCapsKnown("mac"), label).toBe(true);
+    }
+    // The two rows are genuinely different frames; answering them alike is a
+    // decision, not an artefact of the fixture being the same twice.
+    expect(cap.downgrade.text.caps).not.toEqual(cap.downgrade.files.caps);
   });
 
   it("assigns the same role as the native clients, in both directions", () => {

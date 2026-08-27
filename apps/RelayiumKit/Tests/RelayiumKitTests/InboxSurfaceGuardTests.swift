@@ -1523,12 +1523,18 @@ final class InboxSurfaceGuardTests: XCTestCase {
                        "a delivery or its journal may not land somewhere the system can purge")
         XCTAssertFalse(fixture.contains("cachesDirectory"))
 
-        let pane = try macSource("Transfer/TransferSessionPane.swift")
-        let body = try XCTUnwrap(pane.range(of: "sessionPeer"))
-        let exit = try XCTUnwrap(pane.range(of: "            exit", range: body.upperBound..<pane.endIndex))
-        let lane = try XCTUnwrap(pane.range(of: "            if waitingOnJoinedCode",
+        // The same ordering rule, on the surface that replaced the deleted pane.
+        // A session's only exit must sit ABOVE its potentially long content: on
+        // the minimum window an exit below a full transcript exists in the lazy
+        // scroll tree but is not visible, leaving the owner with no apparent
+        // release.
+        let pane = try macSource("Transfer/TransferLinkPane.swift")
+        let body = try XCTUnwrap(pane.range(of: "var body: some View"))
+        let exit = try XCTUnwrap(pane.range(of: "\n            exit",
                                             range: body.upperBound..<pane.endIndex))
-        XCTAssertLessThan(exit.lowerBound, lane.lowerBound,
-                          "long terminal content hides the session owner's only exit")
+        let transcript = try XCTUnwrap(pane.range(of: "\n            transcript",
+                                                  range: body.upperBound..<pane.endIndex))
+        XCTAssertLessThan(exit.lowerBound, transcript.lowerBound,
+                          "long session content hides the session owner's only exit")
     }
 }

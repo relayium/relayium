@@ -24,20 +24,25 @@ import RelayiumKit
 /// worth naming what the question was. `Send a message` and `Send files` were
 /// never two transports; they were two intents that happened, on the legacy
 /// wire, to select two non-interoperating signalling generations. A peer handed
-/// the wrong one waits for a manifest that never arrives, so *something* has to
+/// the wrong one waits for a manifest that never arrives, so *something* had to
 /// pick — and the person pressing the button was the worst available answer,
 /// because the fact that decides it is the peer's own announcement, which they
 /// cannot see and the roster already holds.
 ///
-/// So `LegacyLane.mode` picks, from `NearbyDevice.announcesLegacyText`, at the
-/// moment Connect is pressed. Neither answer is a dead end: a text lane opens
-/// with its composer, and a file lane can send through
-/// `RealtimeSessionModel.sendNow` — which is the change that made removing the
-/// pre-connect picker possible rather than merely tidier.
+/// **Both of those generations are gone, and with them the question.** Connect
+/// opens one `link/1`, and `TransferLinkPane` carries messages and as many file
+/// or folder batches as the user wants on that one verified connection.
 ///
-/// **For a peer that announced exact `link/1` there is no lane at all.** Connect
-/// opens one `link/1` and `TransferLinkPane` carries messages and as many file
-/// or folder batches as the user wants, on that one verified connection.
+/// ## A device that cannot be reached says so, and offers nothing
+///
+/// `NearbyDevice.supportsLink` is exact-match on `link/1` and it is now the
+/// whole admission decision: there is no second transport to fall through to, so
+/// a device that does not announce it has no lane here for files OR for
+/// messages. That device gets a STATEMENT where its Connect button would be —
+/// not a disabled button, which says "not now" when the truth is "not this
+/// device", and not a button that starts something and fails. The roster still
+/// lists it, because a device the user can see on the network and cannot find in
+/// the app is a worse answer than one that explains itself.
 struct LanConnectPane: View {
     /// This screen's module, and the only one it can reach.
     @ObservedObject var module: TransferModule
@@ -52,11 +57,9 @@ struct LanConnectPane: View {
     /// or retained, which is the second-start refusal it was always meant to be.
     let sessionLocked: Bool
 
-    private var fileModel: RealtimeSessionModel { module.files }
-    private var textModel: RealtimeTextSessionModel { module.text }
     /// The unified `link/1`. Consulted per DEVICE: a peer that announced it gets
-    /// one connection carrying everything, and one that did not gets the legacy
-    /// lane its own announcement selects.
+    /// one connection carrying everything, and one that did not is unreachable
+    /// and is told so.
     private var link: LinkWorkspaceModel { module.link }
     private var presence: TransferPresence { module.presence }
 
@@ -519,13 +522,13 @@ struct LanConnectPane: View {
     /// and `Send files`, greyed until something was staged — which between them
     /// asked the user two questions before there was a peer: *what am I going to
     /// send*, and *which of two things can this connection be*. Neither has an
-    /// answer worth asking for at this moment. The second one is the peer's to
-    /// give (`LegacyLane.mode`, from what the roster already heard), and the
-    /// first belongs inside the session, where the user can see who they are
-    /// talking to.
+    /// answer worth asking for at this moment. The second one no longer exists,
+    /// and the first belongs inside the session, where the user can see who they
+    /// are talking to.
     ///
     /// What is left is the only fact the screen genuinely owns: *this* is the
-    /// device, and pressing this opens an encrypted connection to it.
+    /// device, and pressing this opens an encrypted connection to it — or, for a
+    /// device that cannot be reached at all, why there is nothing to press.
     @ViewBuilder
     private func actions(for device: NearbyDevice) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -533,27 +536,32 @@ struct LanConnectPane: View {
             // characters by `safeDisplayName`, and isolated rather than translated.
             Text(L10n.t(.nearbySendTo, [L10n.token(device.label)]))
                 .font(.subheadline.weight(.semibold))
-            Button(L10n.t(.workspaceConnectToDevice)) { connect(to: device) }
-                .buttonStyle(.borderedProminent)
-                .disabled(sessionLocked)
-                .accessibilityIdentifier("lan-connect-device")
-            Text(L10n.t(.workspaceConnectToDeviceHint))
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            // Says what actually happens on the other end rather than implying a
-            // human gate that is not there.
-            Text(L10n.t(.nearbyAcceptanceNote))
-                .font(.caption2).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            // What THIS device's connection will carry, attached to that device
-            // rather than to the screen. One connection carries both lanes for a
-            // peer that announced exact `link/1` and one lane for a peer that did
-            // not, and only the peer decides which — so a note above the roster
-            // could only ever be right about one of them.
-            InlineMessage(.info, L10n.t(device.supportsLink
-                                        ? .linkOneConnectionNote
-                                        : .workspaceOneConnectionNote))
-                .accessibilityIdentifier("lan-device-connection-note")
+            if device.supportsLink {
+                Button(L10n.t(.workspaceConnectToDevice)) { connect(to: device) }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(sessionLocked)
+                    .accessibilityIdentifier("lan-connect-device")
+                Text(L10n.t(.workspaceConnectToDeviceHint))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                // Says what actually happens on the other end rather than
+                // implying a human gate that is not there.
+                Text(L10n.t(.nearbyAcceptanceNote))
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                // What this connection carries, attached to the DEVICE rather
+                // than to the screen.
+                InlineMessage(.info, L10n.t(.linkOneConnectionNote))
+                    .accessibilityIdentifier("lan-device-connection-note")
+            } else {
+                // **No control at all, and no disabled one either.** A greyed
+                // Connect says "not now"; the truth is "not this device", and
+                // those are different answers to "should I wait?". A statement
+                // names what would actually fix it — an update on the OTHER
+                // machine — and leaves no focus stop leading nowhere.
+                InlineMessage(.warning, L10n.t(.errorRealtimeLegacyPeer))
+                    .accessibilityIdentifier("lan-device-unsupported")
+            }
         }
         .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
     }
@@ -563,21 +571,24 @@ struct LanConnectPane: View {
     /// **The one start path on this screen**, and the only place a same-network
     /// session is created at all.
     ///
-    /// Three decisions, in this order, and each is made at ACTIVATION rather
-    /// than at render — an announcement can arrive, a device can leave and a
-    /// room can end between the frame that drew the button and the press:
+    /// Two decisions, in this order, and each is made at ACTIVATION rather than
+    /// at render — an announcement can arrive, a device can leave and a room can
+    /// end between the frame that drew the button and the press:
     ///
     ///  1. **Is the device still there?** The roster is live, and a stale id is
     ///     how the wrong device gets dialled.
     ///  2. **Can this peer speak `link/1`?** `canLink` is the exact-capability
-    ///     predicate and the only thing that decides which of the two products
-    ///     this peer gets. Nothing is armed: on a connect-first surface there is
-    ///     nothing that could be.
-    ///  3. **Otherwise, which legacy generation?** `LegacyLane.mode` with no
-    ///     armed batch, so the answer is the peer's own `text/1` announcement
-    ///     and nothing else. The claim carries that mode because the pane
-    ///     renders one lane at a time and must render the one the session
-    ///     actually has.
+    ///     predicate, and it is now the whole admission decision rather than a
+    ///     choice between two products. Nothing is armed: on a connect-first
+    ///     surface there is nothing that could be.
+    ///
+    /// **Re-asked here even though the button is only rendered for a device that
+    /// announced it.** `supportsLink` is read from the roster row that drew the
+    /// frame; `canLink` is read from the registry at the instant of the press,
+    /// and an announcement can be revoked in between. A revoked peer must be
+    /// refused rather than dialled speculatively — this build has nothing to
+    /// offer it and would leave the user watching a connection that cannot
+    /// complete.
     private func connect(to device: NearbyDevice) {
         // A second press while the first connect is still setting up would dial
         // again. The button is disabled while locked; this is the guard that does
@@ -588,26 +599,20 @@ struct LanConnectPane: View {
             return
         }
         actionError = nil
+        // The exact-capability gate, at the moment of the press. A peer whose
+        // announcement was revoked between the render and this line is refused
+        // with the reason rather than dialled — there is no second transport to
+        // put it on, so a speculative offer could only ever stall.
+        guard link.canLink(peerId: live.id) else {
+            actionError = L10n.t(.errorRealtimeLegacyPeer)
+            return
+        }
         // Claimed before dialling, so the session this starts is presented here.
         // A concurrent inbound offer can win after the last frame rendered, so
         // refusal is enforced here, not by visibility.
-        guard !link.canLink(peerId: live.id) else {
-            guard presence.beginSession(route, peerLabel: live.label) else { return }
-            if !link.connect(peerId: live.id, peerLabel: live.label) {
-                presence.release(route)
-            }
-            return
-        }
-        let mode = LegacyLane.mode(peerAnnouncesText: live.announcesLegacyText,
-                                   hasArmedBatch: false)
-        guard presence.beginSession(route, mode: mode, peerLabel: live.label) else { return }
-        switch mode {
-        case .text:
-            Task { await textModel.connectNearby(peerId: live.id, role: .initiator) }
-        case .files:
-            // No `stageSend`: this connection is opened with nothing to carry,
-            // and `TransferSessionPane` offers the picker once it is cleared.
-            Task { await fileModel.connectNearby(peerId: live.id, role: .initiator) }
+        guard presence.beginSession(route, peerLabel: live.label) else { return }
+        if !link.connect(peerId: live.id, peerLabel: live.label) {
+            presence.release(route)
         }
     }
 }

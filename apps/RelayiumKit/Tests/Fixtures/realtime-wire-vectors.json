@@ -539,7 +539,6 @@
     "hello": {
       "web": {
         "caps": [
-          "text/1",
           "link/1",
           "preupload/1"
         ]

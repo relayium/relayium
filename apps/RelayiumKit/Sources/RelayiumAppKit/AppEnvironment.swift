@@ -842,12 +842,49 @@ public enum AppEnvironment {
             capabilities: nearby.capabilities,
             receiveDirectory: receiveDirectory ?? defaultLinkReceiveDirectory,
             requiresVerification: { verification.requiresSASConfirmation },
-            iceClient: HTTPICEClient(baseURL: baseURL))
+            iceClient: HTTPICEClient(baseURL: baseURL),
+            // Stated even though this model watches no pairing code and can
+            // therefore never reach the fallback: the policy is a claim about
+            // what this COMPOSITION can do, and a same-network model left on the
+            // shared default would be the one Mac object still saying it has a
+            // legacy session to offer. `MacSurfaceGuardTests` reads both call
+            // sites, so the two cannot drift apart.
+            legacyFallback: .terminateUnsupported,
+            // This composition's composer reads `canSendMessage` and honours
+            // what `send` returns, so it can refuse rather than replace — see
+            // `LinkPendingMessagePolicy`. The shared default stays
+            // `replaceWaiting` for the paused iOS composer, which does neither.
+            pendingMessages: .refuseWhileWaiting)
+        // **And the room's hello matches what this build can honour.** Rejecting
+        // every legacy session while still announcing `text/1` is the dishonest
+        // half-state: the peer is told it may open a conversation and is then
+        // met with silence. Set on the discovery model because the code-less
+        // room's announcer is its own.
+        nearby.localHello = linkOnlyCapsHello(linkRoomActive:)
         nearby.addRoomObserver(model)
         model.resolvePeerLabel { [weak nearby] peerId in
             nearby?.label(forPeerID: peerId) ?? peerId
         }
         return model
+    }
+
+    /// **The six digits a Cross-network transfer starts from, and nothing
+    /// else.**
+    ///
+    /// Its own factory because it is its own object now. Minting used to be a
+    /// `RealtimeSessionModel` state, so asking for a code meant building a whole
+    /// transport — which is what coupled retiring a code to ending a session,
+    /// and what made a build with no legacy transport unable to mint at all.
+    ///
+    /// The Nearby module gets one too. It is never minted into: that screen has
+    /// no control that mints and same-network transfer has no code. Handing both
+    /// modules the same shape keeps `TransferModule` unconditional, and the
+    /// thing that would actually go wrong is prevented by the surface rather
+    /// than by an optional nobody can see the reason for.
+    @MainActor
+    public static func makePairingCodeModel(baseURL: URL = transferBaseURL,
+                                            client: PairCodeClient? = nil) -> PairingCodeModel {
+        PairingCodeModel(client: client ?? HTTPPairClient(baseURL: baseURL))
     }
 
     /// The Direct module's `link/1` owner: whichever room a pairing code names.
@@ -882,10 +919,29 @@ public enum AppEnvironment {
                                         code: code,
                                         name: deviceName())
             },
-            // The SAME handle the direct module's legacy models read their
-            // fallback socket from. Two would be two rooms, and the fallback
-            // would build on the one nobody joined.
-            pairingRoomHandle: pairingRoom)
+            // The handle the room's socket is registered in. It used to be
+            // shared with the direct module's legacy models so a fallback could
+            // build on the room this joined; macOS has no such fallback now, and
+            // the handle is kept because it is still where a room's socket is
+            // recorded and released.
+            pairingRoomHandle: pairingRoom,
+            // **macOS has nothing to fall back to, so it refuses instead.**
+            //
+            // This is the one place the platform states it, and it is stated
+            // here rather than at each call site so a second composition cannot
+            // be built that quietly keeps the hand-over. The shared default is
+            // untouched: iOS and the headless acceptance hosts still adopt a
+            // legacy session, because they still compose one.
+            legacyFallback: .terminateUnsupported,
+            // The same hello the code-less room sends. A client that withdrew
+            // `text/1` on one room type and kept it on the other would be two
+            // different clients depending on how it was reached.
+            localHello: linkOnlyCapsHello(linkRoomActive:),
+            // This composition's composer reads `canSendMessage` and honours
+            // what `send` returns, so it can refuse rather than replace — see
+            // `LinkPendingMessagePolicy`. The shared default stays
+            // `replaceWaiting` for the paused iOS composer, which does neither.
+            pendingMessages: .refuseWhileWaiting)
     }
 
     #else
@@ -940,6 +996,26 @@ public enum AppEnvironment {
     }
 
     #endif
+
+    /// **The discovery room's observer for a composition with no legacy
+    /// transport.**
+    ///
+    /// Same wiring as the overload below — it becomes the discovery model's
+    /// observer, subscribes to the room's own lifecycle and is handed the
+    /// current state — so listening readiness is published identically. What it
+    /// does not do is admit a legacy session, because there is none to admit
+    /// into; `NearbyReceiveModel.init(listeningOnlyIn:)` answers such an offer
+    /// with the tagged `busy` reply the peer already understands.
+    @MainActor
+    public static func makeListeningOnlyNearbyReceiveModel(
+        discovery: LanDiscoveryModel, inboundRoom: InboundRoom
+    ) -> NearbyReceiveModel {
+        let receive = NearbyReceiveModel(listeningOnlyIn: inboundRoom)
+        discovery.observer = receive
+        receive.observe(discovery)
+        receive.roomStateChanged(discovery.state)
+        return receive
+    }
 
     /// Background receive, wired to the one room socket the discovery model
     /// owns. Registering itself as the observer is what makes the listener

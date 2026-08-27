@@ -35,10 +35,14 @@ import XCTest
 /// offline suite and not to a launch that resolved a loopback origin. Nothing
 /// about the pairing protocol changed.
 ///
-/// `AppShellUITests.testEachTransferModuleKeepsItsOwnSessionAcrossNavigationAndCancel`
-/// covers the same requirement offline and deterministically. Both are needed,
-/// and neither replaces the other: that one runs on every push with no server,
-/// and this one is the only place two real connections coexist.
+/// **These methods are the sole acceptance owner of that requirement.** An
+/// offline `AppShellUITests` method used to make a weaker version of the same
+/// claim, against a fabricated same-network session beside a minted code. It is
+/// gone with the fixture that faked the session: two sessions that were never
+/// established cannot show that either one survives, and a second answer to the
+/// question was free to disagree with this one. Two real connections coexisting,
+/// surviving navigation, and being cancelled one at a time in both orders is
+/// proved here or nowhere.
 ///
 /// ## The third method: the app as the code's CREATOR
 ///
@@ -484,7 +488,7 @@ final class LocalSessionUITests: XCTestCase {
         // legacy fallback that never announced `link/1`.
         XCTAssertTrue(element("link-session-peer").waitForExistence(timeout: 120),
                       "the pairing link never reached a session — "
-                      + "waiting=\(element("transfer-waiting-pairing-peer").exists) "
+                      + "waiting=\(element("pairing-code-value").exists) "
                       + "ended=\(element("link-ended").exists) "
                       + "legacyPeer=\(element("transfer-session-peer").exists) "
                       + "stillOnConnect=\(element("cross-network-join-code").exists)")
