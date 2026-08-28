@@ -57,6 +57,27 @@ export const MIXED_FILE_RECEIVE_STALL_MS = 60_000;
  * i.e. with 2x margin, and matches the bound the native lane already ships.
  */
 export const MIXED_FILE_COMPLETE_STALL_MS = 150_000;
+/**
+ * How long the sender waits for flow-control credit **with no durable progress
+ * at all**.
+ *
+ * Same shape as MIXED_FILE_COMPLETE_STALL_MS and for the same reason, one phase
+ * earlier: once the batch has put FLOW_WINDOW bytes ahead of the receiver's
+ * durable point, the only thing that can move it again is an ACK, and the
+ * receiver emits one at most per FLOW_ACK_INTERVAL (512 KiB) of bytes it has
+ * actually written. On the ~7 KB/s cross-continent relay path measured in
+ * production 2026-08-26 that is one ACK roughly every 75 s, so the 60 s bound
+ * this replaces expired before the first ACK that could have relieved a full
+ * window could physically arrive: a receiver writing steadily to disk was
+ * reported as one that had "stopped acknowledging". 150 s out-waits that
+ * interval at half the measured rate, matching the completion bound.
+ *
+ * This is a stall bound, not a cap on how long sending may take. `waitForCredit`
+ * re-enters the loop — and arms a NEW window — for every ACK that actually
+ * advanced `acked`, so a slow-but-progressing batch runs indefinitely, while a
+ * receiver that has genuinely gone quiet still fails inside one window.
+ */
+export const MIXED_FILE_SEND_PROGRESS_STALL_MS = 150_000;
 /** How long this lane will sit in a transport gap with no replacement channel.
  *  Deliberately longer than the link-level recovery window so link teardown wins
  *  that race and a lane-only channel close still has a bounded, fail-closed end. */
@@ -74,6 +95,11 @@ class TransportGapError extends Error {
 }
 
 const UI_TICK_MS = 150;
+/** Buffer-drain bound only: how long a frame may sit unable to enter an open
+ *  channel whose send buffer never falls back to its low threshold. That is a
+ *  local transport symptom with no remote pacing in it, so it keeps the 60 s
+ *  bound; the receiver-paced credit wait uses
+ *  MIXED_FILE_SEND_PROGRESS_STALL_MS. */
 const SEND_STALL_MS = 60_000;
 
 export type FileLaneErrorKey = "" | "failed" | "unsupported";
@@ -1431,6 +1457,22 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     }
   }
 
+  /**
+   * Park until the receiver's durable point buys this batch more window.
+   *
+   * The deadline measures SILENCE, not the time spent parked. Each pass of the
+   * loop arms one fresh MIXED_FILE_SEND_PROGRESS_STALL_MS window, and the only
+   * thing that ends a pass early is `handleControl` firing `creditWake` — which
+   * it does exclusively for an ACK that moved `acked` forward, on this batch's
+   * live generation, while it is still sending. `advanceAck` clamps a duplicate,
+   * a rewind and a forged value beyond what this attempt emitted back to `acked`
+   * before that branch is reached, an ACK from a retired generation or a stale
+   * link never reaches this batch at all, and a terminal batch has already had
+   * its wake spent. So none of them buys a second window; only progress does.
+   *
+   * The other wakes — cancel, remote stop, gap retirement, terminal — resolve
+   * this wait so the caller can settle the lane visibly instead of sitting here.
+   */
   async function waitForCredit(current: Outbound) {
     while (current.phase !== "resuming" && !current.cancelRequested && !current.remoteStop && !current.terminal
         && current.sentBytes - current.acked > FLOW_WINDOW) {
@@ -1438,7 +1480,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         const timer = setTimeout(() => {
           current.creditWake = null;
           reject(new Error("relayium: receiver stopped acknowledging file data"));
-        }, SEND_STALL_MS);
+        }, MIXED_FILE_SEND_PROGRESS_STALL_MS);
         current.creditWake = () => {
           clearTimeout(timer);
           current.creditWake = null;
