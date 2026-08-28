@@ -7,8 +7,14 @@
 // /cross-network and /offline-transfer.
 //
 // Copy mirrors src/lib/i18n/*.ts (appsPage.* / cards.*) so the static page and
-// the SPA hub stay consistent. Bundle ids com.relayium.mac / com.relayium.app
-// are kept verbatim.
+// the SPA hub stay consistent. The bundle id com.relayium.mac is kept verbatim.
+//
+// `en` and `zh` are the maintained pair and are the only two revised on
+// 2026-08-28, when the iOS, Android and Windows platform copy was removed. The
+// seven archived locales below keep the copy they were published with, exactly
+// as maintained-frozen-split.mjs and apps-generated-twin.test.mjs require: they
+// are archived translations carrying an archived-translation notice, not live
+// product pages, and rewriting them would make them look maintained.
 //
 // The English master is the `en` doc below — a real object, not a comment, so
 // the per-route SPA shell (/cross-network etc. serve the app, not a static page)
@@ -25,9 +31,9 @@ const MAC_AVAILABLE = RELEASES.macos.available === true;
 const MAC_DOWNLOAD_URL = MAC_AVAILABLE ? RELEASES.macos.downloadUrl : null;
 
 const en = {
-  title: "Get Relayium — Web, CLI, macOS, iOS, Android & Windows",
+  title: "Get Relayium — Web, CLI and the macOS app",
   description:
-    "Use Relayium on the Web, install the CLI, download the macOS app, or check development status for iOS, Android and Windows. End-to-end encrypted file and ephemeral text transfer.",
+    "Use Relayium in any modern browser, install the command-line client on macOS, Linux or Windows, or download the native macOS app. End-to-end encrypted file and ephemeral text transfer.",
   hero: {
     h1: "Get Relayium",
     pitch:
@@ -42,9 +48,7 @@ const en = {
       MAC_AVAILABLE
         ? "macOS app — download the signed and notarized native menu-bar app."
         : "macOS app — the native menu-bar app is an engineering build and is not publicly available yet.",
-      "iOS app — a native iPhone & iPad app that moves files and text while it is open, and takes files, folders, photos or videos from the system share sheet to wait on Send; not publicly available yet.",
-      "Android app — a native app is in development. Until it lands, the web app runs in any Android browser with nothing to install.",
-      "Windows app — a native desktop app is in development. The command line already works on Windows today.",
+      "Everywhere else — iPhone, iPad, Android, Windows and Linux run the web app in the browser with nothing to install; Windows and Linux can also install the command line.",
     ],
   },
   why: {
@@ -61,20 +65,12 @@ const en = {
       {
         title: "macOS app",
         desc: MAC_AVAILABLE
-          ? "A true native menu-bar app (com.relayium.mac): files and text with nearby devices or by pairing code, encrypted links to send and open, and account management — available as a signed and notarized download."
+          ? "A true native menu-bar app (com.relayium.mac): files and text with nearby devices or by pairing code, encrypted links to send and open, and account management — available as a signed and notarized download, and separately on the Mac App Store."
           : "A true native menu-bar app (com.relayium.mac): files and text with nearby devices or by pairing code, encrypted links to send and open, and account management. It is an engineering build and is not publicly available yet.",
       },
       {
-        title: "iOS app",
-        desc: "A native iPhone & iPad app (com.relayium.app): open an encrypted link with no account, send files and text to nearby devices or by six-digit code, and manage your account — while the app is open. Files, folders, photos or videos shared to it from the system share sheet are copied onto the device and wait on Send until you open the app and send them.",
-      },
-      {
-        title: "Android app",
-        desc: "A native Android app is being built. Until it lands, the web app is the way to use Relayium on Android — it opens in your browser, with nothing to install.",
-      },
-      {
-        title: "Windows app",
-        desc: "A native Windows desktop app is being built. The command line already works on Windows today, and it covers transfers, folder sync and scheduled backups.",
+        title: "Every other platform",
+        desc: "iPhone, iPad, Android, Windows and Linux use Relayium through the browser — the same end-to-end encrypted transfer, with nothing to install. On Windows and Linux the command line adds scripting, folder sync and scheduled backups. Relayium publishes no app for those platforms.",
       },
     ],
   },
@@ -83,15 +79,15 @@ const en = {
   // menu-bar app, the Share extension's file/image/video activation rule, the
   // CFBundleDocumentTypes "Open With" + Dock drop entry, the applinks
   // associated domain, and Device Inbox's chosen-folder residency. Speed,
-  // background transfer, iOS background/push and store availability are all
-  // absent on purpose — none of them is true.
+  // background transfer and push are absent on purpose — none of them is true.
+  // The Mac App Store IS named: that listing is public and recorded in
+  // web/mac-app-store-release.json. TestFlight and Google Play are not.
   //
-  // The iOS paragraph is bounded the same way, against apps/ios/RelayiumShare:
-  // the activation rule accepts files/images/movies (never text or a web page),
-  // the target's only entitlement is the App Group, and Apple gives
-  // NSExtensionContext.open to no share extension. So the staging, the absence
-  // of upload/encryption/link, and the manual reopen-and-Send step are each a
-  // fact in that directory rather than a promise made here.
+  // The third block used to describe the iOS app. It was removed on 2026-08-28
+  // with the iOS, Android and Windows cards: iOS development is paused and has
+  // no public listing, and apps/ contains no Android or Windows target to
+  // describe at all. What replaces it is the answer a reader on one of those
+  // platforms actually needs — the browser is the client.
   compare: {
     heading: "Web or a native app?",
     items: [
@@ -104,8 +100,8 @@ const en = {
         body: "It lives in the menu bar, so it is one click away with no window or tab to keep track of. You can send from the Share menu in Finder, Photos and other apps — files, images and video go straight to Relayium — or use Open With in Finder, or drop files and folders on the Dock icon, to start a transfer from where the files already are. A relayium.com transfer link opens in the app instead of the browser. And with Device Inbox, files sent to this Mac from your own account are written into the folder you chose on it, and are only reported saved once they are on disk.",
       },
       {
-        title: "What the iOS app does — and does not do yet",
-        body: "The iOS app is in development and is not publicly available. It moves files and text while it is open, like the web app does. What it adds is the system share sheet: sharing files, folders, photos or videos to Relayium copies them into storage only the app can read, and stops there — nothing is encrypted, uploaded or turned into a link, and iOS does not let a share extension open its own app. You open Relayium yourself, and they wait on Send until you choose them and press Send.",
+        title: "On every other platform, the browser is the app",
+        body: "iPhone, iPad, Android, Windows and Linux all open relayium.com and get the same end-to-end encrypted transfer, with nothing to install and nothing to update. On Windows and Linux the command line adds scripting, folder sync and scheduled backups. Relayium publishes no client for those platforms, so the web app is not a fallback there — it is the product.",
       },
     ],
   },
@@ -114,9 +110,9 @@ const en = {
 };
 
 const zh = {
-  title: "获取 Relayium——网页版、命令行与各平台原生应用",
+  title: "获取 Relayium——网页版、命令行与 macOS 应用",
   description:
-    "使用 Relayium 网页版、安装命令行工具、下载 macOS 应用，或查看 iOS、Android 与 Windows 应用的开发状态。端到端加密传输文件与临时文本。",
+    "在任意现代浏览器里使用 Relayium，在 macOS、Linux 或 Windows 上安装命令行工具，或下载原生 macOS 应用。端到端加密传输文件与临时文本。",
   hero: {
     h1: "获取 Relayium",
     pitch: "同一套端到端加密的传输，既传文件也发临时文本，随处可用。选择你的平台。",
@@ -130,9 +126,7 @@ const zh = {
       MAC_AVAILABLE
         ? "macOS 应用——下载已经签名并通过公证的原生菜单栏应用。"
         : "macOS 应用——原生菜单栏应用目前是工程版本，尚未开放公开下载。",
-      "iOS 应用——原生 iPhone 与 iPad 应用，在打开时互传文件与文本，也能接收从系统分享面板分享过来的文件、文件夹、照片或视频，等你在「发送」里发出；尚未开放公开下载。",
-      "Android 应用——原生应用正在开发中。在它发布之前，任意 Android 浏览器打开网页版即可使用，无需安装。",
-      "Windows 应用——原生桌面应用正在开发中。命令行工具今天就已经支持 Windows。",
+      "其他平台——iPhone、iPad、Android、Windows 与 Linux 都用浏览器打开网页版，无需安装；Windows 与 Linux 还可以另外装命令行工具。",
     ],
   },
   why: {
@@ -149,24 +143,18 @@ const zh = {
       {
         title: "macOS 应用",
         desc: MAC_AVAILABLE
-          ? "真正的原生菜单栏应用（com.relayium.mac）：与附近设备或用配对码互传文件和文本、收发加密链接、管理账号与设备。现已提供经过签名和公证的下载版本。"
+          ? "真正的原生菜单栏应用（com.relayium.mac）：与附近设备或用配对码互传文件和文本、收发加密链接、管理账号与设备。现已提供经过签名和公证的下载版本，也可从 Mac App Store 获取。"
           : "真正的原生菜单栏应用（com.relayium.mac）：与附近设备或用配对码互传文件和文本、收发加密链接、管理账号与设备。目前是工程版本，尚未开放公开下载。",
       },
       {
-        title: "iOS 应用",
-        desc: "原生 iPhone 与 iPad 应用（com.relayium.app）：无需账号即可打开加密链接，还能与附近设备或用六位配对码互传文件和文本，并管理账号——都在应用打开时进行。从系统分享面板分享给它的文件、文件夹、照片或视频会复制到本机，在「发送」里等着，直到你打开应用把它们发出去。",
-      },
-      {
-        title: "Android 应用",
-        desc: "原生 Android 应用正在开发中。在它发布之前，网页版就是在 Android 上使用 Relayium 的方式——用浏览器打开即可，无需安装。",
-      },
-      {
-        title: "Windows 应用",
-        desc: "原生 Windows 桌面应用正在开发中。命令行工具今天就已经支持 Windows，文件传输、文件夹同步和定时备份都能用。",
+        title: "其他所有平台",
+        desc: "iPhone、iPad、Android、Windows 与 Linux 都通过浏览器使用 Relayium——同一套端到端加密传输，无需安装。在 Windows 与 Linux 上，命令行工具还能做脚本化传输、文件夹同步与定时备份。Relayium 没有为这些平台发布任何客户端程序。",
       },
     ],
   },
   // 与 SPA 的 appsPage.chooser（src/lib/i18n/zh.ts）保持一致，逐条对应。
+  // 2026-08-28：iOS / Android / Windows 三张卡片连同 iOS 段落一并移除——
+  // apps/ 下没有 Android 或 Windows 目标，iOS 开发已暂停且没有公开上架。
   compare: {
     heading: "该用网页版还是原生应用？",
     items: [
@@ -179,8 +167,8 @@ const zh = {
         body: "它常驻菜单栏，点一下就用，不必再去找某个窗口或某个标签页。你可以在访达、照片等应用里用「分享」菜单直接发送——文件、图片和视频都能交给 Relayium；也可以在访达里用「打开方式」，或者把文件和文件夹拖到程序坞图标上，就地开始传输。relayium.com 的传输链接会直接在应用里打开，而不是回到浏览器。用设备收件箱接收时，从你自己账户发到这台 Mac 的文件会写进你在这台机器上选定的文件夹，而且只有真正落盘之后才会报告为「已保存」。",
       },
       {
-        title: "iOS 应用能做什么、还做不到什么",
-        body: "iOS 应用仍在开发中，尚未公开发布。和网页版一样，它在应用打开时收发文件与文本。它多出来的一步是系统分享面板：把文件、文件夹、照片或视频分享给 Relayium，只会把它们复制进只有这个应用能读的存储，到此为止——不加密、不上传，也不会生成链接，而 iOS 不允许分享扩展打开自己的应用。你自己打开 Relayium，它们就在「发送」里等着，直到你选中并按下发送。",
+        title: "在其他平台上，浏览器就是那个应用",
+        body: "iPhone、iPad、Android、Windows 与 Linux 打开 relayium.com，得到的就是同一套端到端加密传输，不用安装，也不用更新。在 Windows 与 Linux 上，命令行工具还能做脚本化传输、文件夹同步与定时备份。Relayium 没有为这些平台发布客户端，所以在那里网页版不是退而求其次的方案——它就是产品本身。",
       },
     ],
   },

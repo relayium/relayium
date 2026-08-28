@@ -15,11 +15,7 @@ import apps from "./content/apps.mjs";
 import { MAINTAINED_LANGS, FROZEN_LANGS } from "./shared.mjs";
 import en from "../../src/lib/i18n/en.ts";
 import zh from "../../src/lib/i18n/zh.ts";
-import {
-  FORBIDDEN_APP_CLAIMS,
-  FORBIDDEN_IOS_SHARE_CLAIMS,
-  IOS_SHARE_EXTENSION_FACTS,
-} from "../../src/lib/apps-claim-rules.ts";
+import { FORBIDDEN_APP_CLAIMS, violatesClaim } from "../../src/lib/apps-claim-rules.ts";
 
 const APP = { en, zh };
 
@@ -32,14 +28,14 @@ function strings(v, out = []) {
 }
 
 describe("the generated /apps prose obeys the same claim rules as the SPA", () => {
-  it.each(MAINTAINED_LANGS)("%s says none of the five forbidden things", (lang) => {
+  it.each(MAINTAINED_LANGS)("%s says none of the forbidden things", (lang) => {
     // Walked as VALUES, not as source text: apps.mjs's own comments name the
     // banned words in order to explain why they are banned, so a source-text
     // scan trips on its own documentation. (It did, on the first run.)
     const copy = strings(apps.langs[lang]);
-    expect(copy.length, `${lang} has no copy to check`).toBeGreaterThan(20);
-    for (const { why, re } of FORBIDDEN_APP_CLAIMS) {
-      expect(copy.find((s) => re.test(s)), `${lang}: ${why}`).toBeUndefined();
+    expect(copy.length, `${lang} has no copy to check`).toBeGreaterThan(15);
+    for (const rule of FORBIDDEN_APP_CLAIMS) {
+      expect(copy.find((s) => violatesClaim(s, rule)), `${lang}: ${rule.why}`).toBeUndefined();
     }
   });
 
@@ -47,39 +43,49 @@ describe("the generated /apps prose obeys the same claim rules as the SPA", () =
     // The seven are archived, not rewritten. They keep the release-status facts
     // macos-release-surface.test.mjs enforces (signed/notarized when there is a
     // download, "not publicly available yet" when there is not) and they do NOT
-    // get the new platform copy — the only thing added to them is the
+    // get the maintained platform copy — the only thing added to them is the
     // archived-translation notice the template renders.
+    //
+    // This is also why the forbidden-claim sweep above is MAINTAINED_LANGS and
+    // not LANGS: the archived seven still describe an iOS app, which the
+    // maintained pair may no longer do. Freezing a translation means freezing
+    // what it says, and a page that carried the notice while being silently
+    // rewritten would be an archive in name only.
     for (const lang of FROZEN_LANGS) {
       const doc = apps.langs[lang];
       expect(doc, `${lang} lost its archived /apps page`).toBeTruthy();
-      expect(doc.how.steps.length, `${lang} was given the new platform bullets`).toBe(4);
-      expect(doc.compare.items.length, `${lang} was given the new comparison`).toBe(2);
+      expect(doc.how.steps.length, `${lang} was given the maintained platform bullets`).toBe(4);
+      expect(doc.compare.items.length, `${lang} was given the maintained comparison`).toBe(2);
     }
   });
 });
 
 describe("the maintained twin carries the same product facts as the SPA", () => {
-  it("states the Android and Windows development status in both", () => {
+  it("names no platform this repository does not ship, on either surface", () => {
+    // The three cards removed on 2026-08-28. Asserted on both surfaces because
+    // the failure this file exists for is asymmetric drift: /device-inbox kept
+    // badging macOS "In testing" for three published releases because the page
+    // had two answers and only one of them was maintained.
     for (const lang of MAINTAINED_LANGS) {
       const prose = strings(apps.langs[lang]).join("\n");
-      const cards = APP[lang].appsPage.cards;
-      for (const id of ["android", "windows"]) {
-        // Not string equality: the static page is prose and the SPA is cards, so
-        // they are allowed to word it differently. What must match is the fact.
-        expect(prose, `${lang} static /apps omits ${id}`).toMatch(
-          lang === "en" ? new RegExp(`${id}`, "i") : new RegExp(id === "android" ? "Android" : "Windows"),
-        );
-        expect(cards[id]?.name, `${lang} SPA has no ${id} card`).toBeTruthy();
-        expect(cards[id]?.cta, `${lang} ${id} card must stay actionless`).toBeUndefined();
+      const spa = strings(APP[lang].appsPage).join("\n");
+      expect(APP[lang].appsPage.cards.ios, `${lang} SPA still has an iOS card`).toBeUndefined();
+      expect(APP[lang].appsPage.cards.android, `${lang} SPA still has an Android card`).toBeUndefined();
+      expect(APP[lang].appsPage.cards.windows, `${lang} SPA still has a Windows card`).toBeUndefined();
+      for (const [surface, copy] of [["static", prose], ["SPA", spa]]) {
+        expect(copy, `${lang} ${surface} /apps still describes a native app for an unshipped platform`)
+          .not.toMatch(/\b(?:iOS|iPhone|iPad|Android|Windows)\s+(?:native\s+|desktop\s+)*app\b|(?:iOS|iPhone|iPad|Android|Windows)\s*(?:桌面)?(?:原生)?应用/i);
       }
     }
   });
 
-  it("keeps the Windows CLI fact and the Android web-app pointer on both surfaces", () => {
-    // The two things that stop an actionless card from being a dead end.
+  it("still answers the reader on those platforms, rather than going silent", () => {
+    // Deleting three cards must not delete the answer they carried. The OS
+    // names stay — what changes is that they point at the browser and the CLI,
+    // which is what actually serves those readers today.
     const facts = {
-      en: [/command line already works on Windows/i, /web app is the way to use Relayium on Android|web app runs in any Android browser/i],
-      zh: [/命令行工具今天就已经支持 Windows/, /网页版/],
+      en: [/iPhone, iPad, Android, Windows and Linux/, /command line/i, /nothing to install/i],
+      zh: [/iPhone、iPad、Android、Windows 与 Linux/, /命令行/, /无需安装/],
     };
     for (const lang of MAINTAINED_LANGS) {
       const prose = strings(apps.langs[lang]).join("\n");
@@ -91,13 +97,25 @@ describe("the maintained twin carries the same product facts as the SPA", () => 
     }
   });
 
+  it("names the Mac App Store on both surfaces", () => {
+    // The listing is public (web/mac-app-store-release.json) and the page was
+    // forbidden from saying so until 2026-08-28. Required positively, because
+    // simply lifting the ban leaves a page that is just as silent and passes.
+    for (const lang of MAINTAINED_LANGS) {
+      expect(strings(apps.langs[lang]).join("\n"), `${lang} static /apps hides the App Store channel`)
+        .toMatch(/Mac App Store/);
+      expect(strings(APP[lang].appsPage).join("\n"), `${lang} SPA /apps hides the App Store channel`)
+        .toMatch(/Mac App Store/);
+    }
+  });
+
   it("carries the Web-versus-native section on both surfaces, with the same heading", () => {
     for (const lang of MAINTAINED_LANGS) {
       expect(apps.langs[lang].compare.heading, `${lang} static heading`)
         .toBe(APP[lang].appsPage.chooser.heading);
-      // Three blocks on the static side (web, macOS, the iOS limitation) against
-      // the SPA's two columns plus its footnote — same three facts, laid out for
-      // two different media.
+      // Three blocks on the static side (web, macOS, everywhere else) against
+      // the SPA's two columns plus its footnote — same three facts, laid out
+      // for two different media.
       expect(apps.langs[lang].compare.items.length, `${lang} static comparison`).toBe(3);
     }
   });
@@ -113,41 +131,6 @@ describe("the maintained twin carries the same product facts as the SPA", () => 
       for (const re of CLAIMS[lang]) {
         expect(prose, `${lang} static comparison drops ${re}`).toMatch(re);
         expect(spa, `${lang} SPA comparison drops ${re}`).toMatch(re);
-      }
-    }
-  });
-
-  it("keeps the iOS while-open limitation on both", () => {
-    const OPEN = { en: /while it is open/i, zh: /应用打开时/ };
-    for (const lang of MAINTAINED_LANGS) {
-      expect(strings(apps.langs[lang]).join("\n"), `${lang} static`).toMatch(OPEN[lang]);
-      expect(strings(APP[lang].appsPage).join("\n"), `${lang} SPA`).toMatch(OPEN[lang]);
-    }
-  });
-
-  it("carries the whole Share Extension boundary on both, not half of it on one", () => {
-    // The failure this exists for is asymmetric drift: the SPA gaining the
-    // capability sentence while the prerendered page — what a crawler, an answer
-    // engine and a no-JS reader get at the same URL — keeps saying iOS only
-    // moves things while it is open. Either surface stating the feature without
-    // its limits, or the limits without the feature, is the same defect.
-    for (const lang of MAINTAINED_LANGS) {
-      const prose = strings(apps.langs[lang]).join("\n");
-      const spa = strings(APP[lang].appsPage).join("\n");
-      for (const f of IOS_SHARE_EXTENSION_FACTS) {
-        expect(prose, `${lang} static /apps does not state: ${f.fact}`).toMatch(f[lang]);
-        expect(spa, `${lang} SPA /apps does not state: ${f.fact}`).toMatch(f[lang]);
-      }
-    }
-  });
-
-  it("lets neither surface overstate what the extension does", () => {
-    for (const lang of MAINTAINED_LANGS) {
-      const prose = strings(apps.langs[lang]).join("\n");
-      const spa = strings(APP[lang].appsPage).join("\n");
-      for (const { why, re } of FORBIDDEN_IOS_SHARE_CLAIMS) {
-        expect(prose, `${lang} static /apps: ${why}`).not.toMatch(re);
-        expect(spa, `${lang} SPA /apps: ${why}`).not.toMatch(re);
       }
     }
   });

@@ -158,6 +158,53 @@ describe("reading the canonical record fails closed", () => {
   });
 });
 
+// The operator's half. `docs/macos-app-store-submission.md` is what a release
+// operator reads before touching App Store Connect, and it is the one surface
+// the version literal is NOT interpolated into — it is prose about a build
+// number, a publication date and a consumed-number floor. It drifted exactly
+// the way every other copy did: it carried `1.2.0` in its app-record table and
+// described `1.3.8 (26)` as "the next release" for two days after Apple made
+// that build public. A stale operator document is worse than a stale marketing
+// page, because acting on it re-uploads a consumed build number.
+describe("the release operator's document agrees with the canonical record", () => {
+  const doc = readFile(resolve(repoRoot, "docs/macos-app-store-submission.md"), "utf8");
+  /** Whitespace-flattened, so an assertion survives ordinary Markdown rewrapping. */
+  const flat = async () => (await doc).replace(/\s+/g, " ");
+
+  it("states the published version and its publication date as current truth", async () => {
+    const text = await flat();
+    expect(text, "the app-record table must name the published version")
+      .toContain(`| Current published version | \`${record.version}\``);
+    expect(text, "the current-state section must say the version is published, not pending")
+      .toContain(`**\`${record.version}\` (build \`26\`) is PUBLISHED on the Mac App Store, public since ${record.publishedAt}.**`);
+    expect(text, "the document must point at the canonical record rather than restate it")
+      .toContain("web/mac-app-store-release.json");
+  });
+
+  it("never describes the published version as the next release", async () => {
+    // The exact shape of the failure this replaces: a sentence that names the
+    // live version and a forward-looking verb in the same clause.
+    const text = await flat();
+    const pattern = new RegExp(
+      `(?:next release is|next submission is|about to submit)[^.]{0,80}${record.version.replace(/\./g, "\\.")}`,
+      "i",
+    );
+    expect(text, "the published version is described as pending").not.toMatch(pattern);
+  });
+
+  it("leaves no superseded version in the app-record table", async () => {
+    // The table is the first thing an operator reads. It said `1.2.0` through
+    // six later releases, and nothing failed, because no test read it.
+    const table = (await doc).split("## App record")[1]?.split("\n\n### ")[0] ?? "";
+    expect(table, "the app-record table is missing").toContain("Apple ID");
+    const versions = new Set(
+      [...table.matchAll(/(?<![0-9.v])[0-9]+\.[0-9]+\.[0-9]+(?![0-9])(?!\.[0-9])/g)].map((m) => m[0]),
+    );
+    expect(versions, "the app-record table names a version that is not the published one")
+      .toEqual(new Set([record.version]));
+  });
+});
+
 // The generated half. `content/releases.mjs` interpolates the version into all
 // nine locales, so these nine files are where the correction either landed or
 // silently did not.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LANGS } from "../../shared.mjs";
+import { LANGS, MAINTAINED_LANGS } from "../../shared.mjs";
 import privacy from "./privacy.mjs";
 import security from "./security.mjs";
 import terms from "./terms.mjs";
@@ -41,7 +41,13 @@ describe("legal pages describe temporary text accurately", () => {
       // byte counters kept per account for a quota, and not analytics.
       const metering = sectionBlob(privacy, lang, 5);
 
-      expect(privacy.langs[lang].updated).toBe("2026-08-13");
+      // The maintained pair moved on 2026-08-28, when this reconciliation
+      // narrowed "Our native apps" to the one native app that exists. The seven
+      // frozen translations are archived at the 2026-08-14 language freeze and
+      // keep the date their prose was last actually true for.
+      expect(privacy.langs[lang].updated).toBe(
+        MAINTAINED_LANGS.includes(lang) ? "2026-08-28" : "2026-08-13",
+      );
       expect(all).toMatch(TEXT_WORD[lang]);
       expect(all).toMatch(ONLINE_WORD[lang]);
       expect(account).toMatch(/account|账号|アカウント|계정|Konto|compte|حساب|cuenta|conta/i);

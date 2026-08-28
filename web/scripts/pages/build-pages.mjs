@@ -239,7 +239,15 @@ export function buildSitemap(docs, { home = true, landing = null, articles = [],
   }
   for (const doc of docs) {
     for (const lang of LANGS) {
-      urls.push({ loc: absUrl(urlPath(doc.slug, lang)), lastmod: doc.langs.en.updated, priority: "0.3", changefreq: "yearly" });
+      // Each localized legal URL is dated from ITS OWN locale, not from English.
+      // This read `doc.langs.en.updated` for every language, which was harmless
+      // only while all nine locales moved together. Since the 2026-08-14 freeze
+      // they do not: correcting the maintained en/zh privacy text on 2026-08-28
+      // left the seven frozen translations at 2026-08-13, and the English fanout
+      // told crawlers that /ja/privacy/ had been revised on a day its prose did
+      // not change. A <lastmod> is a claim about the document at that URL, and a
+      // false one is the kind search engines learn to stop believing.
+      urls.push({ loc: absUrl(urlPath(doc.slug, lang)), lastmod: doc.langs[lang].updated, priority: "0.3", changefreq: "yearly" });
     }
   }
   for (const article of articles) {

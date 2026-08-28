@@ -13,7 +13,7 @@ const en = {
   updatedLabel: "Last updated",
   lead: [
     "\"Peer-to-peer\" gets used loosely, so here's what it actually means for a file transfer: your file goes straight from one device to the other, not up to a company's server and back down. No stop in the middle where a copy could sit.",
-    "That sounds simple, but routes differ in practice. This page first explains generic WebRTC/ICE, where TURN can be a fallback, then separates Relayium's actual choices: LAN browser WebRTC is direct, cross-network browser sessions use TURN by design, and the CLI is direct-only.",
+    "That sounds simple, but routes differ in practice. This page first explains generic WebRTC/ICE, where TURN can be a fallback, then separates Relayium's actual choices: LAN browser WebRTC is direct, cross-network browser sessions use TURN by design, and the CLI's transfer modes — push, pull, sync, serve, send and receive — are direct and never relayed.",
   ],
   sections: [
     {
@@ -83,7 +83,7 @@ const en = {
           code: ["https://relayium.com/cross-network"],
         },
         {
-          text: "Read the label again. P2P direct means a direct path was found across the internet. Relayed means one could not be, and the encrypted relay carried the bytes instead.",
+          text: "Read the label again. Across networks in the browser it reads Relayed, every time. That is the design and not a failed attempt: the app asks ICE for a relay-only path from the start, so no direct candidate is ever gathered for it to prefer.",
         },
         {
           text: "Note which you got, and on which pair of networks. That is your own answer to the question this article opened with, rather than ours.",
@@ -92,8 +92,8 @@ const en = {
       success: {
         label: "What the labels tell you",
         body: [
-          "On one network you get LAN direct. Across networks you get either P2P direct or Relayed, and which one depends on the two networks rather than on anything you configured.",
-          "Relayed is not a failure. It is the fallback existing and doing its job, and the relay only ever carries ciphertext — it is the case this article's TURN section describes, seen from the inside.",
+          "On one network you get LAN direct. Across networks, in the browser, you get Relayed — not sometimes, and not depending on your two networks. That is the one place Relayium departs from the generic ICE ladder this article described above.",
+          "Relayed is not a failure, and here it is not a fallback either: nothing direct was tried and lost. Relayium makes the choice up front because on a cross-network path the direct candidates usually fail anyway, and waiting out their checks costs about twenty seconds before ICE reaches the relay it was going to use. The relay only ever carries ciphertext.",
         ],
       },
       body: [
@@ -114,7 +114,7 @@ const en = {
             code: [
               `https://relayium.com/cross-network   # the path label reads the same on both ends`,
             ],
-            fix: "Check whether both ends are on mobile data or behind carrier-grade NAT, which is the usual reason no direct path exists. There is nothing to fix: this is the designed fallback, the relay carries ciphertext only, and same-network transfers between the same two devices still go direct and stay free.",
+            fix: "Nothing is wrong, and there is nothing to check — that is the only label this flow can show. Relayium's browser app requests a relay-only ICE path for every cross-network session, so a direct one is never attempted and never reported. The relay carries ciphertext only, and the same two devices on one network still transfer directly, and free.",
           },
           {
             symptom: "On one Wi-Fi it never says LAN direct.",
@@ -173,7 +173,7 @@ const zh = {
   updatedLabel: "最近更新",
   lead: [
     "「点对点」这个词经常被随意使用，但对文件传输来说，它的确切含义是：文件直接从一台设备到另一台设备，而不是先上传到某家公司的服务器再下载下来。中间没有一站可以停留、可能留下副本。",
-    "听起来很简单，但实际路径并不相同。本文先解释通用 WebRTC/ICE 中 TURN 可作为后备的概念，再明确区分 Relayium 的实现：局域网浏览器 WebRTC 直连、跨网络浏览器按设计使用 TURN、CLI 仅直连。",
+    "听起来很简单，但实际路径并不相同。本文先解释通用 WebRTC/ICE 中 TURN 可作为后备的概念，再明确区分 Relayium 的实现：局域网浏览器 WebRTC 直连、跨网络浏览器按设计使用 TURN；CLI 的传输模式——push、pull、sync、serve、send、receive——都是直连，从不走中继。",
   ],
   sections: [
     {
@@ -243,7 +243,7 @@ const zh = {
           code: ["https://relayium.com/cross-network"],
         },
         {
-          text: "再读一次标签。「P2P 直连」表示跨互联网找到了直连路径；「中继」表示没找到，字节是由加密中继代为转发的。",
+          text: "再读一次标签。在浏览器里跨网络时，它每次都写「中继」。这是设计如此，而不是一次失败的尝试：应用从一开始就向 ICE 请求仅中继路径，因此根本不会收集到直连候选供它优先选择。",
         },
         {
           text: "记下你得到的是哪一个，以及当时是哪两个网络。这就是你自己对本文开头那个问题的答案，而不是我们给的答案。",
@@ -252,8 +252,8 @@ const zh = {
       success: {
         label: "这些标签告诉了你什么",
         body: [
-          "同一网络下你会看到「局域网直连」。跨网络时你会看到「P2P 直连」或「中继」之一，而具体是哪一个取决于那两个网络，与你做过什么配置无关。",
-          "「中继」不是失败。它是兜底机制存在并且正在起作用，而中继全程只承载密文——这正是本文 TURN 那一节描述的情形，只不过这次是从里面看到的。",
+          "同一网络下你会看到「局域网直连」。在浏览器里跨网络时，你会看到「中继」——不是有时候，也不取决于你的那两个网络。这正是 Relayium 与本文上面描述的通用 ICE 阶梯唯一不同的地方。",
+          "「中继」不是失败，在这里也不是兜底：并没有先尝试直连再失败。Relayium 提前做出这个选择，是因为跨网络路径上的直连候选通常本来就会失败，而等它们逐个检查完，要多花大约二十秒才会用上那条它本来就要用的中继。中继全程只承载密文。",
         ],
       },
       body: [
@@ -274,7 +274,7 @@ const zh = {
             code: [
               `https://relayium.com/cross-network   # the path label reads the same on both ends`,
             ],
-            fix: "检查一下是不是两端都在蜂窝数据上，或者处在运营商级 NAT 之后——那是找不到直连路径最常见的原因。这里没有需要修的东西：这就是设计中的兜底，中继只承载密文，而同样这两台设备在同一网络下依然走直连、依然免费。",
+            fix: "没有出错，也没有什么需要检查——这条流程只会显示这一个标签。Relayium 浏览器端对每一个跨网络会话都请求仅中继的 ICE 路径，所以直连既不会被尝试，也不会被报告。中继只承载密文；同样这两台设备在同一网络下依然走直连，依然免费。",
           },
           {
             symptom: "在同一个 Wi-Fi 下，却从来不显示「局域网直连」。",

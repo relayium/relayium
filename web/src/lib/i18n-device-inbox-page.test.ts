@@ -93,8 +93,9 @@ describe.each(CODES)("%s /device-inbox copy", (code) => {
   });
 
   it("gives the three release statuses three distinct words", () => {
-    // A locale that translated two of them identically would show "planned" and
-    // "available now" as the same badge — the one thing the badge exists to do.
+    // A locale that translated two of them identically would show "no native
+    // app" and "available now" as the same badge — the one thing the badge
+    // exists to do.
     const set = new Set([d.statusAvailable, d.statusTesting, d.statusPlanned]);
     expect(set.size).toBe(3);
   });
@@ -306,15 +307,26 @@ describe("English keeps the availability boundaries it is the master of", () => 
       for (const m of all.matchAll(/(\w+\s+){0,2}guaranteed/gi)) {
         expect(m[0], `${id}: an unnegated guarantee`).toMatch(/\b(never|not|no)\b/i);
       }
-      expect(p.setup, id).toMatch(/planned, not built/i);
-      expect(p.residency, id).toMatch(/best[- ]effort/i);
+      // Inverted 2026-08-28. This used to REQUIRE "planned, not built" and a
+      // "best-effort" background story, which was an honest description of work
+      // that was going to happen. It is not going to: iOS development is paused
+      // and there is no Android commitment, so the same sentences became a
+      // roadmap promise for apps nobody is building. What the section owes a
+      // reader now is the absence, said plainly.
+      expect(p.setup, id).toMatch(/Relayium publishes no (iPhone or iPad|Android) app/i);
+      expect(p.setup, id).toMatch(/nothing to install here/i);
+      expect(p.residency, id).toMatch(/receives nothing here/i);
     }
-    expect(d.platforms.iphone.residency).toMatch(/never always-on/i);
+    expect(d.platforms.iphone.residency).toMatch(/no always-on iPhone receiver/i);
+    expect(d.platforms.android.residency).toMatch(/publishes no Android app/i);
   });
 
   it("describes Windows as foreground-only with no service or startup entry", () => {
     const w = d.platforms.windows;
-    expect(w.setup).toMatch(/planned and not built/i);
+    // Also inverted 2026-08-28: the tray receiver used to be described as
+    // "planned and not built". There is no Windows app commitment, so the
+    // absence is the whole claim.
+    expect(w.setup).toMatch(/Relayium publishes no Windows app/i);
     expect(w.setup).toMatch(/no Windows service and no startup entry/i);
     expect(w.residency).not.toMatch(/always[- ]on receiver\b(?!.{0,30}\bnot\b|:)/i);
   });
@@ -359,5 +371,116 @@ describe("English keeps the availability boundaries it is the master of", () => 
   it("distinguishes the Linux desktop user service from the server one", () => {
     expect(d.platforms.linux.residency).toMatch(/stops when you log out/i);
     expect(d.platforms.linux.residency).toMatch(/linger/i);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The roadmap ban, added 2026-08-28.
+//
+// Every guard above is written against a sentence that must be PRESENT. That
+// shape cannot catch the defect this section exists for, because the defect is
+// an extra sentence: copy that is individually true about today and still sells
+// a native app that is not coming. Relayium's platforms are Web, the CLI and the
+// published macOS app. iOS development is paused, and there is no Android or
+// Windows app commitment — so on /device-inbox, "not yet" is not a smaller
+// version of the truth, it is a different claim, and one this page has no
+// authority to make.
+//
+// Both maintained languages are scanned with their own words. An English-only
+// pattern would pass vacuously in Chinese, which is the failure mode the whole
+// file is built around.
+describe("maintained copy never promises a native app that is not coming", () => {
+  /** Platforms Relayium publishes no app for. macOS is deliberately absent: it
+   *  HAS a published app, so its section is allowed to talk about one. */
+  const NO_APP = ["iphone", "android", "windows"] as const;
+
+  /** Future-native promises, per maintained language. Each entry is a phrase
+   *  that only makes sense if an unshipped native client is on its way. */
+  const ROADMAP: Record<Code, { label: string; re: RegExp }[]> = {
+    en: [
+      { label: "planned", re: /\bplanned?\b/i },
+      { label: "not built (yet)", re: /\bnot (yet )?built\b/i },
+      { label: "coming soon", re: /\bcoming soon\b/i },
+      { label: "not yet / yet to", re: /\b(not yet|yet to)\b/i },
+      { label: "roadmap", re: /\broadmap\b/i },
+      { label: "when the native app", re: /\bwhen the native app\b/i },
+      { label: "wait for the app", re: /\bwait for the (native )?app\b/i },
+      { label: "will be able to", re: /\bwill (be able to|receive|ship|land|support)\b/i },
+      { label: "we are working on it", re: /\bwe('re| are) (working|building|planning)\b/i },
+      { label: "in development", re: /\bin development\b/i },
+      { label: "future", re: /\bfuture\b/i },
+    ],
+    zh: [
+      { label: "计划中", re: /计划/ },
+      { label: "尚未/暂未实现", re: /(尚未|暂未|还没)/ },
+      { label: "即将", re: /即将/ },
+      { label: "敬请期待", re: /敬请期待/ },
+      { label: "等原生", re: /等(原生|native)/ },
+      { label: "将来会", re: /将来/ },
+      { label: "路线图", re: /路线图/ },
+      { label: "开发中", re: /开发中/ },
+    ],
+  };
+
+  for (const code of CODES) {
+    const d = locales[code].deviceInboxPage;
+
+    it(`${code}: says the app is absent, not delayed, on iPhone, Android and Windows`, () => {
+      for (const id of NO_APP) {
+        const p = d.platforms[id];
+        const prose = [p.use, p.setup, p.files, p.residency, p.send, p.recovery, p.stop].join("\n");
+        for (const { label, re } of ROADMAP[code]) {
+          expect(re.test(prose), `${code}.platforms.${id} promises a future native app (${label})`).toBe(false);
+        }
+      }
+    });
+
+    it(`${code}: keeps the roadmap out of the shared platform framing too`, () => {
+      // The badge and the section lead are rendered above every platform, so a
+      // promise here reaches all six at once. `statusPlanned` is a legacy KEY
+      // name — see device-inbox-platforms.ts — and its VALUE is what a reader
+      // sees, so it is scanned like any other sentence.
+      const shared = [d.platformsLead, d.statusPlanned].join("\n");
+      for (const { label, re } of ROADMAP[code]) {
+        expect(re.test(shared), `${code}: shared platform copy promises a future native app (${label})`).toBe(false);
+      }
+    });
+
+    it(`${code}: names the mobile browser as the way a phone sends`, () => {
+      // The positive half. Removing a promise must not leave the phone sections
+      // saying nothing about what a phone owner can actually do today, and the
+      // macOS section must not fill the gap by implying an iPhone app.
+      for (const id of ["iphone", "android"] as const) {
+        const send = [d.platforms[id].setup, d.platforms[id].send].join("\n");
+        expect(send, `${code}.platforms.${id}`).toMatch(code === "en" ? /browser|safari/i : /浏览器|Safari/i);
+      }
+      const mac = d.platforms.macos.send;
+      expect(mac, `${code}.platforms.macos.send`).toMatch(code === "en" ? /browser/i : /浏览器/);
+      expect(mac, `${code}.platforms.macos.send names an iPhone app`).not.toMatch(/iPhone|iPad/i);
+    });
+  }
+
+  it("english states the absence itself, so the ban cannot pass by saying nothing", () => {
+    const d = locales.en.deviceInboxPage;
+    expect(d.platforms.iphone.setup).toMatch(/publishes no iPhone or iPad app/i);
+    expect(d.platforms.android.setup).toMatch(/publishes no Android app/i);
+    expect(d.platforms.windows.setup).toMatch(/publishes no Windows app/i);
+    // iPhone and Android are senders, not Inbox receivers, and both say so.
+    for (const id of ["iphone", "android"] as const) {
+      expect(d.platforms[id].files, id).toMatch(/not a Device Inbox receiver/i);
+    }
+    // Windows keeps the one receiver it really has.
+    expect(d.platforms.windows.setup).toMatch(/command-line receiver running in the foreground/i);
+  });
+
+  it("chinese states the same absence in its own words", () => {
+    const d = locales.zh.deviceInboxPage;
+    expect(d.platforms.iphone.setup).toMatch(/不提供 iPhone \/ iPad 应用/);
+    expect(d.platforms.android.setup).toMatch(/不提供 Android 应用/);
+    expect(d.platforms.windows.setup).toMatch(/不提供 Windows 原生应用/);
+    for (const id of ["iphone", "android"] as const) {
+      expect(d.platforms[id].files, id).toMatch(/不是设备收件箱的接收端/);
+    }
+    expect(d.platforms.windows.setup).toMatch(/命令行接收端的前台运行/);
   });
 });

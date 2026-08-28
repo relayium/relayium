@@ -3,7 +3,7 @@ import privacy from "./privacy.mjs";
 import terms from "./terms.mjs";
 import security from "./security.mjs";
 import support from "./support.mjs";
-import { LANGS } from "../../shared.mjs";
+import { LANGS, MAINTAINED_LANGS, FROZEN_LANGS } from "../../shared.mjs";
 
 const docs = { privacy, terms, security, support };
 const REQUIRED = ["title", "description", "updatedLabel", "updated", "otherDocLabel", "lead", "sections"];
@@ -20,17 +20,39 @@ describe("legal content", () => {
       it(`${name}.${lang} has every required field`, () => {
         const d = doc.langs[lang];
         for (const k of REQUIRED) expect(d, `${name}.${lang}.${k}`).toHaveProperty(k);
-        // Pin every language to the doc's own English date rather than one
+        // Pin the MAINTAINED pair to the doc's own English date rather than one
         // hardcoded literal: a per-doc date lets documents be revised
-        // independently, while still catching the real bug (one language
-        // silently keeping a stale "last updated" after a revision).
-        expect(d.updated, `${name}.${lang}.updated`).toBe(doc.langs.en.updated);
+        // independently, while still catching the real bug (one maintained
+        // language silently keeping a stale "last updated" after a revision).
+        //
+        // The seven frozen locales are excluded on purpose, and that exclusion
+        // is the point rather than a loophole. Their prose is archived at the
+        // 2026-08-14 language freeze and is not edited when en/zh are corrected
+        // — so making them inherit the English date would have them tell a
+        // reader their translation was reviewed on a day nobody reviewed it.
+        // The invariant that replaces equality is below: one shared cohort date,
+        // never ahead of English.
+        if (MAINTAINED_LANGS.includes(lang))
+          expect(d.updated, `${name}.${lang}.updated`).toBe(doc.langs.en.updated);
         expect(d.updated).toMatch(/^\d{4}-\d{2}-\d{2}$/);
         expect(d.lead.length).toBeGreaterThan(0);
         expect(d.sections.length).toBeGreaterThan(0);
         for (const s of d.sections) expect(typeof s.heading).toBe("string");
       });
     }
+
+    it(`${name} dates the frozen seven as one archived cohort, never ahead of English`, () => {
+      // They were frozen together, so they carry one date; and a frozen
+      // translation can only ever be as current as the English it was made
+      // from, never more current. Both halves fail loudly if somebody "tidies"
+      // the dates in either direction.
+      const frozen = FROZEN_LANGS.map((l) => doc.langs[l].updated);
+      expect(new Set(frozen).size, `${name}: frozen locales disagree on their archive date`).toBe(1);
+      expect(
+        frozen[0] <= doc.langs.en.updated,
+        `${name}: a frozen translation claims to be newer than the English it came from`,
+      ).toBe(true);
+    });
 
     it(`${name} has the same section count across languages`, () => {
       const counts = LANGS.map((l) => doc.langs[l].sections.length);

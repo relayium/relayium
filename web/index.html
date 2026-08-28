@@ -91,11 +91,10 @@
             "applicationSubCategory": "File and text transfer",
             "operatingSystem": "Web (Chrome, Edge, Firefox, Safari; desktop and mobile)",
             "browserRequirements": "Requires a modern browser with WebRTC over HTTPS",
-            "softwareVersion": "M0",
             "isAccessibleForFree": true,
             "license": "https://www.gnu.org/licenses/agpl-3.0.html",
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-            "inLanguage": ["en", "zh", "ja", "ko", "de", "fr", "ar", "es", "pt"],
+            "inLanguage": ["en", "zh"],
             "author": { "@id": "https://relayium.com/#org" },
             "publisher": { "@id": "https://relayium.com/#org" },
             "sameAs": ["https://github.com/relayium/relayium"],
@@ -125,7 +124,7 @@
               {
                 "@type": "Question",
                 "name": "Is Relayium free?",
-                "acceptedAnswer": { "@type": "Answer", "text": "Yes. Relayium is free and open source (AGPL-3.0), with no installation. Same-network file and live text transfers need no account. Creating a cross-network pairing code for files or text requires sign-in; joining with a code does not. Creating a stored download link also requires sign-in." }
+                "acceptedAnswer": { "@type": "Answer", "text": "The software is free and open source (AGPL-3.0), with no installation, and you can run it yourself. The hosted service at relayium.com has a free tier rather than unlimited free hosting. Same-network file and live text transfers are free and need no account, and joining with a code never needs one. Creating a cross-network pairing code or a stored download link requires sign-in and draws on your plan's limits: a monthly traffic allowance that counts hosted uploads, hosted downloads and relayed bytes together, a separate cap on how much encrypted data you keep stored at once, a separate retention window, and a separate daily upload limit. Free accounts get an allowance of each; the paid Plus, Pro and Max plans raise them." }
               },
               {
                 "@type": "Question",
@@ -230,7 +229,7 @@
 
         <h2>Frequently asked questions</h2>
         <h3>Is Relayium free?</h3>
-        <p>Yes — free and open source (AGPL-3.0), with no installation. Same-network file and live text transfers need no account. Creating a cross-network pairing code for files or text requires sign-in; joining with a code does not. Creating a stored download link also requires sign-in.</p>
+        <p>The software is free and open source (AGPL-3.0), with no installation, and you can run it yourself. The hosted service at relayium.com has a free tier rather than unlimited free hosting. Same-network file and live text transfers are free and need no account, and joining with a code never needs one. Creating a cross-network pairing code or a stored download link requires sign-in and draws on your plan&#39;s limits: a monthly traffic allowance that counts hosted uploads, hosted downloads and relayed bytes together, a separate cap on how much encrypted data you keep stored at once, a separate retention window, and a separate daily upload limit. Free accounts get an allowance of each; the paid Plus, Pro and Max plans raise them.</p>
         <h3>Do my files get uploaded to a server?</h3>
         <p>On the same network: no — files stream directly between the two devices over WebRTC and never touch the server. Across networks, browser sessions use an encrypted TURN relay by design that only ever sees ciphertext. There is also an optional stored download-link mode where your browser encrypts files before upload and the server stores only zero-knowledge ciphertext (AES-256-GCM, key only in the URL fragment).</p>
         <h3>Can I send text instead of a file?</h3>
@@ -251,7 +250,19 @@
           <li><a href="/how-to/send-files-pc-to-phone-wirelessly/">Send files from PC to phone wirelessly</a></li>
           <li><a href="/how-to/send-large-files-without-cloud/">Send large files without the cloud</a></li>
         </ul>
-        <p>Also available in: <a href="/zh/">中文</a> · <a href="/ja/">日本語</a> · <a href="/ko/">한국어</a> · <a href="/de/">Deutsch</a> · <a href="/fr/">Français</a> · <a href="/ar/">العربية</a> · <a href="/es/">Español</a> · <a href="/pt/">Português</a></p>
+        <!-- Same two languages as the hreflang cluster and the og:locale set
+             above, and for the same reason: this is ordinary navigation, so
+             every language it lists reads as one the product currently offers.
+             It offers two. The seven archived landings (/ja/, /ko/, /de/,
+             /fr/, /ar/, /es/, /pt/) stayed here until 2026-08-28, which made
+             this the last maintained page on the site still linking them —
+             every generated maintained page dropped its nine-way language bar
+             in the 2026-08-14 freeze. They remain public, `index, follow` and
+             in the sitemap, each self-labelled as an archived translation with
+             links back to its current English and Chinese version, so removing
+             the link strands no reader; it only stops advertising seven
+             languages the interface is not maintained in. -->
+        <p>Also available in: <a href="/zh/">中文</a></p>
 
         <p>
           Source code on <a href="https://github.com/relayium/relayium">GitHub</a>.

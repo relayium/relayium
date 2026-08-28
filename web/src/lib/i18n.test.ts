@@ -628,19 +628,15 @@ const FILE_WORD: Record<Lang, RegExp> = {
   zh: /文件/,
 };
 
-// 苹果在维护的这两种语言里都不翻译商店名，所以一条正则就够守住全部译文。两个原生 App 都
-// 既不在 App Store 也不在 Mac App Store，"即将登陆"同样是没有依据的分发承诺：这里
-// 干脆连提都不许提，页面上"即将推出"的分组标题已经把状态说清楚了。
+// 苹果在维护的这两种语言里都不翻译商店名，所以一条正则就够守住全部译文。
+//
+// 2026-08-28 改动：Mac App Store 上架是**真的**（1.3.8 自 2026-08-26 起公开，
+// 记录在 web/mac-app-store-release.json），所以整页不再禁止提它——规则表
+// apps-claim-rules.ts 里那条已经改成"只有 Mac App Store 这一家店可以提"。
+// 这里保留的是更窄的一条：SPA 的 macOS **卡片**只有一份不分支的文案，分发状态由
+// "现已可用"分组和清单驱动的 CTA 表达，所以卡片本身仍然不谈任何商店。渠道的说明
+// 放在 chooser 里（见下面那条正向断言）。
 const STORE_CLAIM = /app\s*store/i;
-
-// iOS 的 Share Extension 现在是**存在**的：apps/ios/RelayiumShare 是一个
-// com.apple.share-services 扩展目标，随 app 一起嵌进 PlugIns/RelayiumShare.appex。
-// 这条原来是负向断言（"不许提分享扩展"），当时对、现在反了——它守着的是一句已经
-// 落后于代码的文案。改成正向判据：iOS 卡片必须说出这条系统分享入口。
-const SHARE_SHEET: Record<Lang, RegExp> = {
-  en: /share[\s-]?sheet|share extension/i,
-  zh: /系统分享面板|分享面板|分享菜单|共享菜单|分享扩展/,
-};
 
 // macOS 卡片过去写着"已签名并通过公证，可一键安装"。被公证的是**更早一个构建**的
 // DMG，而当时的 native-releases.json 是 available:false——页面上既没有下载，也没有
@@ -657,7 +653,12 @@ const NOTARY_CLAIM: Record<Lang, RegExp> = {
   zh: /公证/,
 };
 
-describe("原生 macOS / iOS 卡片如实描述已实现的能力", () => {
+describe("原生 macOS 卡片如实描述已实现的能力", () => {
+  // 2026-08-28：iOS / Android / Windows 三张卡片已经删掉，所以这一组里原本
+  // 逐条断言 cards.ios 的用例也一并删掉了——不是放宽，而是它们守的那段文案
+  // 不该再存在。apps/ 下压根没有 Android 或 Windows 目标；iOS 开发已暂停，
+  // 也没有公开上架。"这一页不许重新长出这三个 App"这条，由
+  // apps-claim-rules.ts 里的新规则在两个渲染面上一起守。
   it("macOS 卡片不把公证/一键安装写成当前可得的分发状态", () => {
     for (const { code } of LANGS) {
       expect(messages[code].appsPage.cards.mac.desc, `${code} 的 macOS 卡片宣称了当前并不存在的公证下载`)
@@ -665,47 +666,55 @@ describe("原生 macOS / iOS 卡片如实描述已实现的能力", () => {
     }
   });
 
-  it("两张卡片在每种语言里都同时讲文件与临时文本", () => {
+  it("macOS 卡片在每种语言里都同时讲文件与临时文本", () => {
     for (const { code } of LANGS) {
-      const { mac, ios } = messages[code].appsPage.cards;
+      const { mac } = messages[code].appsPage.cards;
       expect(mac.desc, `${code} 的 macOS 卡片漏掉了已实现的文本能力`).toMatch(TEXT_WORD[code]);
       expect(mac.desc, `${code} 的 macOS 卡片漏掉了文件能力`).toMatch(FILE_WORD[code]);
-      expect(ios.desc, `${code} 的 iOS 卡片漏掉了已实现的文本能力`).toMatch(TEXT_WORD[code]);
-      expect(ios.desc, `${code} 的 iOS 卡片漏掉了文件能力`).toMatch(FILE_WORD[code]);
     }
   });
 
-  it("两张卡片都不宣称任何 App Store 分发", () => {
+  it("macOS 卡片本身不谈商店，渠道说明留给 chooser", () => {
+    // 卡片文案不分支，清单一旦翻回 available:false 它也不会改一个字；商店与
+    // 直接下载这两条渠道的差别属于"该选哪个"，放在 chooser 里说才不会变成
+    // 一句随时可能过期的分发承诺。
     for (const { code } of LANGS) {
-      const { mac, ios } = messages[code].appsPage.cards;
-      expect(mac.desc, `${code} 的 macOS 卡片宣称了不存在的商店分发`).not.toMatch(STORE_CLAIM);
-      expect(ios.desc, `${code} 的 iOS 卡片宣称了不存在的商店分发`).not.toMatch(STORE_CLAIM);
+      expect(messages[code].appsPage.cards.mac.desc, `${code} 的 macOS 卡片把渠道写进了能力描述`)
+        .not.toMatch(STORE_CLAIM);
     }
   });
 
-  it("iOS 卡片说出已经落地的系统分享入口", () => {
-    // 反过来了：这条以前禁止提分享扩展，因为 apps/ios 里没有扩展目标；现在
-    // apps/ios/RelayiumShare 就是那个目标，卡片再不提就是把已交付的能力藏起来。
-    // 完整的边界（只暂存、不上传、不自动打开、要手动发送）由 AppsPage.claims.test.ts
-    // 按渲染结果守，规则表在 apps-claim-rules.ts，只有一份。
+  it("chooser 如实点出 Mac App Store 这条真实存在的渠道", () => {
+    // 正向断言，因为这一整轮修的就是"页面被禁止说出一件真事"：上架是公开的，
+    // 记录在 web/mac-app-store-release.json，app-store-release.test.mjs 守着它。
     for (const { code } of LANGS) {
-      expect(messages[code].appsPage.cards.ios.desc, `${code} 的 iOS 卡片漏掉了已经落地的系统分享入口`)
-        .toMatch(SHARE_SHEET[code]);
+      const points = messages[code].appsPage.chooser.mac.points.join("\n");
+      expect(points, `${code} 的 chooser 没有提到 Mac App Store 这条渠道`)
+        .toMatch(/Mac App Store/);
     }
   });
 
-  // 英文是母本，其余八种是从它翻的：把"哪些话不能说"钉在这里，跨语言的正则只需要守
-  // 住上面那三条真正跨语言成立的判据，不必逐句复制八份译文（那等于把文案抄进测试）。
+  it("chooser 的“其他平台”一句把浏览器说成正解，而不是某个 App 的替代品", () => {
+    for (const { code } of LANGS) {
+      const note = messages[code].appsPage.chooser.elsewhereNote;
+      expect(note, `${code} 的说明漏掉了 Android`).toMatch(/Android/);
+      expect(note, `${code} 的说明漏掉了 Windows`).toMatch(/Windows/);
+      expect(note, `${code} 的说明没有指向浏览器/网页版`).toMatch(/browser|浏览器|网页版/i);
+    }
+  });
+
+  // 英文是母本：把"哪些话不能说"钉在这里，跨语言的正则只需要守住上面那几条真正
+  // 跨语言成立的判据，不必逐句复制译文（那等于把文案抄进测试）。
   it("英文原生文案保持已实现能力与未实现能力的边界", () => {
     const a = messages.en.appsPage;
-    // iOS 的实时与云端传输都只在前台跑，没有后台传输、断点续传或推送。
-    expect(a.cards.ios.desc).toMatch(/while the app is open/i);
-    expect(a.cards.ios.desc).not.toMatch(/background|notification|push\b/i);
     // macOS 的浏览器设备批准不是原生 Sign in with Apple，别把它写成后者。
     expect(a.cards.mac.desc).not.toMatch(/sign in with apple/i);
     // 整页定位曾把临时文本限定在网页版与命令行，而原生端现在两样都有。
     expect(a.metaDesc).not.toMatch(/text in the web app and the CLI/i);
     expect(a.subhead).not.toMatch(/text in the web app and the CLI/i);
+    // 标题与描述曾经把 iOS / Android / Windows 列成"可获取的平台"。
+    expect(a.metaTitle).not.toMatch(/\biOS\b|\bAndroid\b/i);
+    expect(a.metaDesc).not.toMatch(/\biOS\b|\bAndroid\b/i);
   });
 });
 

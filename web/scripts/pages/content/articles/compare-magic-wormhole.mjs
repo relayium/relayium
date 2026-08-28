@@ -73,7 +73,7 @@ const en = {
     items: [
       {
         q: "Is Relayium's CLI free?",
-        a: "Yes, completely. There's no paid tier and nothing to meter — every mode connects the two ends directly, and the CLI is open source.",
+        a: "The CLI is open source, and its direct modes — push, pull, sync, daemon direct and send / receive — connect the two ends directly with nothing to meter. The one exception is up, which stores a file under your Relayium account and counts against your plan's storage limit; magic-wormhole has no equivalent.",
       },
       {
         q: "Does it need an account?",
@@ -169,7 +169,7 @@ const zh = {
     items: [
       {
         q: "Relayium 的 CLI 免费吗？",
-        a: "完全免费。没有付费档位，也没有什么可计量的——每种模式都是两端直接连接，CLI 开源。",
+        a: "CLI 是开源的，它的直连模式——push、pull、sync、daemon 直连与 send / receive——都是两端直接连接，没有什么可计量。唯一的例外是 up：它把文件存放在你的 Relayium 账号下，受套餐的存储上限约束；magic-wormhole 没有对应功能。",
       },
       {
         q: "需要账号吗？",

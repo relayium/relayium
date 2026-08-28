@@ -10,11 +10,31 @@ peers that are both online — and contributions of all kinds are welcome.
   are the most valuable contribution of all. (For *vulnerabilities*, please follow [SECURITY.md](SECURITY.md)
   rather than opening a public issue.)
 - **Bug reports** — open an issue with steps to reproduce, your browser/OS, and what you expected.
-- **Features and fixes** — see the roadmap in the [README](README.md#roadmap) and the design docs in
-  [`docs/`](docs/) before starting larger work.
-- **Translations** — one table per language in [`web/src/lib/i18n/`](web/src/lib/i18n), loaded by
-  [`web/src/lib/i18n.svelte.ts`](web/src/lib/i18n.svelte.ts); adding or improving a language is a
-  self-contained, friendly first contribution.
+- **Features and fixes** — see [Delivery status](README.md#delivery-status) in the README for what
+  ships on which platform today, and the design docs in [`docs/`](docs/), before starting larger
+  work. (`#roadmap` used to be linked here and never existed as a heading; the anchor silently
+  landed readers at the top of the README.)
+- **Translations** — Relayium maintains **English and Simplified Chinese** (`zh-Hans`) and nothing
+  else. English is the source language and the fallback for anything unresolved. Improving either
+  of those two is a self-contained, friendly first contribution: one table per language in
+  [`web/src/lib/i18n/`](web/src/lib/i18n), loaded by
+  [`web/src/lib/i18n.svelte.ts`](web/src/lib/i18n.svelte.ts).
+
+  Seven earlier locales — 日本語, 한국어, Deutsch, Français, العربية, Español, Português — are
+  **archived, not maintained**. Their already-published tutorial and documentation pages stay
+  publicly reachable, labelled as archived translations and linked to their current English or
+  Chinese version, but the app interface is not offered in them and their copy is not updated
+  alongside product changes. Please do not open a PR that adds copy to a frozen locale or adds a
+  new language: partial coverage produces mixed-language screens for real users, so it is worse
+  than no translation.
+
+  Reviving a locale — or adding one — is an explicit product decision, taken one language at a
+  time. It needs a complete translation of the *current* copy (not a refresh of the archived
+  copy), a layout, RTL and accessibility review, and regression coverage, and it is gated by the
+  same tests that keep the maintained set honest (`web/scripts/pages/maintained-frozen-split.test.mjs`
+  checks the app's `Lang` union and the generated pages agree on exactly which languages are
+  offered). If you want a language back, please open an issue describing the demand rather than a
+  PR adding strings — the decision is what unblocks the work, not the strings.
 - **Docs** — clarifications to the README, design spec, or test procedure.
 
 ## Development setup

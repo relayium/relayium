@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import privacy from "./content/legal/privacy.mjs";
 import terms from "./content/legal/terms.mjs";
 import { buildLegalPages, buildSitemap, articleGroupsByLang, buildGuidesIndexPages } from "./build-pages.mjs";
-import { landingUrl, landingPath, ctaHref, validateLangs, LANDING_LANGS, SPA_ONLY_EN_SLUGS, NO_LOCALIZED_TWIN_SLUGS, urlPath } from "./shared.mjs";
+import { landingUrl, landingPath, ctaHref, validateLangs, LANDING_LANGS, SPA_ONLY_EN_SLUGS, NO_LOCALIZED_TWIN_SLUGS, urlPath, LANGS, MAINTAINED_LANGS, FROZEN_LANGS } from "./shared.mjs";
 import guidesIndex from "./content/guides-index.mjs";
 
 const docs = [privacy, terms];
@@ -36,6 +36,72 @@ describe("buildSitemap", () => {
     expect(xml).toContain("<loc>https://relayium.com/privacy/</loc>");
     expect(xml).toContain("<loc>https://relayium.com/zh/terms/</loc>");
     expect((xml.match(/<loc>/g) || []).length).toBe(19);
+  });
+});
+
+// Every <loc> in an emitted sitemap, mapped to the <lastmod> that follows it.
+function lastmods(sitemapXml) {
+  const out = new Map();
+  for (const m of sitemapXml.matchAll(/<loc>([^<]*)<\/loc>\s*<lastmod>([^<]*)<\/lastmod>/g)) {
+    out.set(m[1], m[2]);
+  }
+  return out;
+}
+
+// A <lastmod> is a per-URL claim, and this loop emitted English's date for all
+// nine. That was invisible while the nine locales moved together and became a
+// false statement the moment they stopped: the 2026-08-14 freeze left the seven
+// archived privacy translations at 2026-08-13, and the maintained pair moved to
+// 2026-08-28, so /ja/privacy/ was telling crawlers it had been revised on a day
+// its prose did not change.
+describe("localized legal URLs are dated from their own locale", () => {
+  const dated = lastmods(buildSitemap([privacy], { home: false }));
+
+  it("gives each locale the date its own document carries", () => {
+    for (const lang of LANGS) {
+      const url = `https://relayium.com${urlPath("privacy", lang)}`;
+      expect(dated.get(url), `${lang} privacy lastmod`).toBe(privacy.langs[lang].updated);
+    }
+  });
+
+  it("shows the maintained pair as revised and the frozen seven as archived", () => {
+    // Spelled out as literals as well as derived above, because the derived
+    // assertion alone would still pass if every locale collapsed onto one date.
+    // These are the two dates that must actually appear, and the split between
+    // them is the whole point of the fix.
+    for (const lang of MAINTAINED_LANGS) {
+      expect(dated.get(`https://relayium.com${urlPath("privacy", lang)}`), lang).toBe("2026-08-28");
+    }
+    for (const lang of FROZEN_LANGS) {
+      expect(dated.get(`https://relayium.com${urlPath("privacy", lang)}`), lang).toBe("2026-08-13");
+    }
+  });
+
+  it("does not copy English's date onto a single frozen legal URL", () => {
+    // The regression this file exists to catch, stated as the fanout itself
+    // rather than as a date: if English is ever re-revised, this keeps failing
+    // for the right reason instead of needing a new literal.
+    const en = privacy.langs.en.updated;
+    const leaked = FROZEN_LANGS.filter(
+      (lang) => dated.get(`https://relayium.com${urlPath("privacy", lang)}`) === en,
+    );
+    expect(
+      leaked,
+      `frozen locales given English's ${en}; a lastmod must describe the document at its own URL`,
+    ).toEqual([]);
+    // And the guard is only meaningful while the two dates actually differ.
+    expect(privacy.langs.ja.updated).not.toBe(en);
+  });
+
+  it("still dates a doc whose nine locales agree with that one date", () => {
+    // terms/ has not diverged, so the fix must be a no-op there — the change is
+    // "read the locale's own value", not "make frozen locales older".
+    const termsDated = lastmods(buildSitemap([terms], { home: false }));
+    for (const lang of LANGS) {
+      expect(termsDated.get(`https://relayium.com${urlPath("terms", lang)}`), lang).toBe(
+        terms.langs.en.updated,
+      );
+    }
   });
 });
 

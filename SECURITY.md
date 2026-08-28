@@ -44,11 +44,30 @@ Especially valuable areas to scrutinize:
 - **TURN/relay credentials and metering** (`server/account/turn.go`, `server/internal/metering/`) —
   ephemeral TURN-REST credential issuance, the multi-relay pool, and relay-usage/quota attribution for
   cross-network pairing-code transfers.
+- **Device Inbox — persistent device identity and the encrypted task queue**
+  (`server/internal/inbox/`, `server/account/deviceinbox*.go`,
+  `server/internal/inboxclient/`, `web/src/lib/device-inbox.ts`,
+  `web/src/lib/device-seal.ts`). This shipped on 2026-08-24, so the long-standing
+  "not implemented" note below it was retired: devices now enrol, register and
+  rotate X25519 public keys, hold presence, and claim leased work from a queue.
+  The surfaces worth attacking are exactly the ones that entry used to defer —
+  key registration, rotation and revocation; the sealed-box wrapping of a task's
+  content key to a target device's public key; claim, lease and idempotency
+  handling; and the boundary that a capability link authenticates nothing and can
+  never cause a device to write to disk. The wire contract is
+  [`docs/protocol/relayium-device-inbox-v1.md`](docs/protocol/relayium-device-inbox-v1.md)
+  and [`v2`](docs/protocol/relayium-device-inbox-v2.md); the frozen invariants are
+  [`docs/DEVICE-INBOX-ADMISSION-CONTRACT.md`](docs/DEVICE-INBOX-ADMISSION-CONTRACT.md).
 
-Out of scope for now (known limitations, documented in [`docs/TESTING.md`](docs/TESTING.md)):
+Out of scope for now:
 
 - Denial-of-service against the public demo's signaling server.
-- Persistent device identity (not implemented yet).
+
+Realtime browser and CLI transfers still use a fresh **per-transfer** ephemeral
+X25519 keypair with no long-term endpoint identity, which is why their SAS is
+compared per session. That is a design choice rather than an unimplemented
+feature, and it is independent of the Device Inbox device keys above — the two
+answer different questions and neither authenticates the other's path.
 
 ## Disclosure
 

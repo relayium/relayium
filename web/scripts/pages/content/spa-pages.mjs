@@ -16,11 +16,11 @@ export const pricing = {
   // title + " · Relayium", and pricingPage.subtitle) — see the note in shells.mjs.
   title: "Simple, honest pricing · Relayium",
   description:
-    "Same-network file and live-text transfers are always free. Cross-network browser relay and cloud storage run on a monthly allowance — every account gets one, and paid plans raise it. You can also stay 100% free by running your own node.",
+    "Same-network file and live-text transfers are always free. Cross-network browser relay and hosted storage draw on your plan's monthly traffic allowance, with a separate cap on how much you keep stored at once — every account gets both, and paid plans raise them. You can also stay 100% free by running your own node.",
   hero: {
     h1: "Simple, honest pricing",
     pitch:
-      "Same-network file and live-text transfers are always free. Cross-network browser relay and cloud storage run on a monthly allowance — every account gets one, and paid plans raise it. You can also stay 100% free by running your own node.",
+      "Same-network file and live-text transfers are always free. Cross-network browser relay and hosted storage draw on your plan's monthly traffic allowance, with a separate cap on how much you keep stored at once — every account gets both, and paid plans raise them. You can also stay 100% free by running your own node.",
     cta: "See the plans",
   },
   how: {
@@ -36,19 +36,19 @@ export const pricing = {
     items: [
       {
         title: "Relay bandwidth",
-        desc: "Cross-network file or text transfers in the browser can run through an encrypted relay, so they connect through strict firewalls and NATs. Every account gets a free monthly allowance; paid plans raise it. This uses real bandwidth.",
+        desc: "Cross-network file or text transfers in the browser go through an encrypted relay by design rather than as a fallback, so they connect through strict firewalls and NATs. Those bytes count against the same monthly traffic allowance as hosted uploads and downloads; every account gets one, and paid plans raise it. This uses real bandwidth.",
       },
       {
-        title: "Temporary cloud storage",
-        desc: "Send to someone who's offline; we hold the encrypted file until they download it, then it's deleted.",
+        title: "Temporary hosted storage",
+        desc: "Send to someone who's offline; we hold the encrypted file until they download it or it expires, then it's deleted. It occupies your storage cap while it is live, and the bytes moved count against your monthly traffic.",
       },
       {
         title: "Higher limits",
-        desc: "More storage, more monthly traffic, and longer retention as you move up tiers.",
+        desc: "Four separate limits rise as you move up tiers: the monthly traffic allowance, the cap on storage held live at once, the retention window, and the daily upload quota.",
       },
       {
         title: "No ads, no data selling",
-        desc: "Relay bandwidth and cloud storage are our only real costs, so that's all paid plans fund. It keeps Relayium sustainable and independent.",
+        desc: "Relay bandwidth and hosted storage are our only real costs, so that's all paid plans fund. It keeps Relayium sustainable and independent.",
       },
     ],
   },
@@ -66,15 +66,15 @@ export const pricing = {
     items: [
       {
         q: "Is it really free?",
-        a: "Yes. Same-network file or live-text transfers and direct CLI transfers are end-to-end encrypted and completely free — you don't even need an account to receive a file or join a text session. Files are unlimited in size; ephemeral text requires both devices online, and Relayium servers keep no message bodies or server-side history — though each device can copy or keep the text it receives. Cross-network browser relay and cloud storage draw on a monthly allowance that every account gets, Free included; you pay only when you need more.",
+        a: "Yes for the direct paths. Same-network file or live-text transfers and the CLI's direct modes are end-to-end encrypted and completely free — you don't even need an account to receive a file or join a text session. Files are unlimited in size; ephemeral text requires both devices online, and Relayium servers keep no message bodies or server-side history — though each device can copy or keep the text it receives. Cross-network browser relay and hosted storage draw on allowances that every account gets, Free included: a monthly traffic allowance counting relayed bytes together with hosted uploads and downloads, a separate cap on storage held live at once, a retention window, and a daily upload limit. You pay only when you need more.",
       },
       {
         q: "What's the difference between direct and relayed transfers?",
-        a: "A direct transfer sends files or live text straight from one device to the other — fastest, and free; that's how same-network browser transfers and the CLI work. Cross-network browser transfers can go through an encrypted relay so they connect reliably through strict firewalls and NATs — the relay only ever carries ciphertext, and the bandwidth it uses is what your monthly allowance and paid plans cover.",
+        a: "A direct transfer sends files or live text straight from one device to the other — fastest, and free; that's how same-network browser transfers and the CLI's direct modes work. Cross-network browser transfers go through an encrypted relay by design rather than as a fallback, so they connect reliably through strict firewalls and NATs — the relay only ever carries ciphertext, and the bytes it moves count against the same monthly traffic allowance as hosted uploads and downloads.",
       },
       {
         q: "Why is there a paid tier at all?",
-        a: "Relay bandwidth and cloud storage cost real money. Rather than run ads or sell data, we charge for exactly those costs, so the project stays sustainable and independent. Anything that's free for us to run stays free for you.",
+        a: "Relay bandwidth and hosted storage cost real money. Rather than run ads or sell data, we charge for exactly those costs, so the project stays sustainable and independent. Anything that's free for us to run stays free for you.",
       },
       {
         q: "Can I avoid paying entirely?",
@@ -212,20 +212,20 @@ export const deviceInbox = {
         desc: "Your own workstation receiving into your own home directory, via the CLI and a systemd --user service. Deliberately not the unattended server deployment: a user service stops when you log out unless you enable lingering, which needs root once.",
       },
       {
-        title: "macOS — in testing",
-        desc: "The native Mac app's Device Inbox is still an engineering build, so there is no download here. What works on macOS today is the same command-line receiver supervised by launchd, which runs while you are logged in and returns after a restart once you log in again.",
+        title: "macOS — available now",
+        desc: "The Mac app is published: install it from the Apps page, sign in to the same account, choose a receive folder and set Receiving to Ask every time or Automatic. It receives while it is running, including with its window closed, and Open at Login brings it back after you log in again. It is not a system daemon — quit it and it stops receiving, which is what the launchd command-line receiver below is for on a Mac you run unattended or administer over SSH.",
       },
       {
-        title: "Windows — planned",
-        desc: "The native tray receiver is planned and not built. What is verified today is the command-line receiver in the foreground: it receives while the terminal window stays open and ends when you close it. There is no Windows service and no startup entry.",
+        title: "Windows — no native app",
+        desc: "Relayium publishes no Windows app: no tray receiver, no Windows service and no startup entry, and none is offered. What is verified today is the command-line receiver in the foreground: it receives while the terminal window stays open and ends when you close it. For a receiver that survives a logout and a reboot, use the Linux server deployment above.",
       },
       {
-        title: "iPhone — planned",
-        desc: "The native share-sheet sender and background receiving are planned, not built. Today an iPhone signs in to relayium.com in Safari and sends from this page to a Mac, PC or server. Receiving on iOS will be best-effort background work scheduled by the system — never always-on and never guaranteed to be immediate.",
+        title: "iPhone — no native app",
+        desc: "Relayium publishes no iPhone or iPad app, so there is nothing to install here. What works today: an iPhone signs in to relayium.com in Safari and sends from this page to a Mac, PC or server of yours that has Device Inbox switched on. iPhone is a sender here and not a receiver, so nothing is delivered onto the phone.",
       },
       {
-        title: "Android — planned",
-        desc: "Native sharing and a native receiver are planned, not built. Today an Android phone signs in in its mobile browser and sends from this page. A future receiver would have to live within Android's foreground-service and background-work rules, and battery optimisation would make timing best-effort.",
+        title: "Android — no native app",
+        desc: "Relayium publishes no Android app, so there is nothing to install here. Today an Android phone signs in in its mobile browser and sends from this page to any device of yours that has Device Inbox switched on. Android is a sender here and not a receiver, so nothing is delivered onto the phone.",
       },
     ],
   },
@@ -267,7 +267,7 @@ export const deviceInbox = {
       },
       {
         q: "Which platforms can receive today?",
-        a: "Linux servers, through the published installer and a low-privilege systemd system service, and Linux desktops through the CLI and a systemd --user service. macOS can run the same command-line receiver under launchd while the native app's Device Inbox is still in testing. Windows can run the receiver in the foreground only. iPhone and Android are senders today; their native clients are planned.",
+        a: "Linux servers, through the published installer and a low-privilege systemd system service, and Linux desktops through the CLI and a systemd --user service. macOS can receive in the published Mac app, or through the same command-line receiver under launchd on a Mac you run unattended. Windows can run the receiver in the foreground only. iPhone and Android are senders here: Relayium publishes no app for either, and none is offered.",
       },
       {
         q: "Can Relayium read my files or their names?",

@@ -27,20 +27,35 @@ describe("public repository status", () => {
     expect(readme).toContain("## Delivery status");
     const statusRows = Object.fromEntries(
       readme.split("\n")
-        .filter((line) => /^\| \*\*(?:macOS|iOS)\*\* \|/.test(line))
+        .filter((line) => /^\| \*\*[^*]+\*\* \|/.test(line))
         .map((line) => [line.match(/^\| \*\*([^*]+)\*\*/)?.[1], line]),
     );
     const macosRow = statusRows.macOS ?? "";
-    const iosRow = statusRows.iOS ?? "";
     expect(macosRow).toContain(`${macos.version} direct download`);
     expect(macosRow).toContain(`/releases/tag/macos-v${macos.version}`);
     expect(macosRow).toContain(`${appStore.version} on the Mac App Store`);
     expect(macosRow).toContain(appStore.url);
-    expect(iosRow).toMatch(/Internal development and TestFlight/i);
-    expect(iosRow).toMatch(/Not publicly available on the App Store/i);
-    expect(iosRow).not.toMatch(/\[[^\]]+\]\([^)]+\)/);
-    expect(iosRow).toMatch(/remain in the foreground/i);
-    expect(iosRow).toMatch(/push notifications are not supported/i);
+
+    // iOS left the Delivery-status table on 2026-08-28. The row used to say
+    // "Internal development and TestFlight", which is a development commitment,
+    // and development is paused — so a status table that kept listing it as a
+    // platform Relayium delivers on was making a promise nobody intends to keep.
+    //
+    // Both halves are needed. Deleting the row alone would leave a reader who
+    // had heard of the iOS build with no answer at all, and this project's
+    // recurring documentation failure is exactly that shape: a claim removed
+    // rather than corrected. So the table must not carry an iOS row, AND the
+    // section must still state, in prose, what `apps/ios/` is.
+    expect(statusRows.iOS, "iOS is back in the delivery-status table").toBeUndefined();
+    const delivery = readme.split("## Delivery status")[1]?.split("\n## ")[0] ?? "";
+    expect(delivery, "the delivery section no longer explains what apps/ios is")
+      .toMatch(/`apps\/ios\/`[^.]*\*\*paused\*\*/);
+    expect(delivery).toMatch(/never been publicly released/i);
+    expect(delivery).toMatch(/no App Store listing/i);
+    // …and the platforms that have no app must still be told what to use.
+    const browserRow = statusRows["iPhone, iPad, Android, Windows, Linux"] ?? "";
+    expect(browserRow, "the no-native-app platforms lost their row").toContain("web app");
+    expect(browserRow).toMatch(/publishes no app for these platforms/i);
     // Distribution truth, matched by shape rather than by one exact sentence, so
     // it survives an ordinary rewrite of the surrounding prose.
     //
@@ -64,13 +79,11 @@ describe("public repository status", () => {
     expect(readme).toContain(`macos-v${macos.version}`);
     expect(new Set([...readme.matchAll(/macos-v[0-9][0-9.]*/g)].map((m) => m[0])))
       .toEqual(new Set([`macos-v${macos.version}`]));
-    // R3-D/E/F shipped the iOS realtime, nearby and account-management work the
-    // status section used to list as unbuilt. What is still missing is the
-    // lifecycle around it, and the section has to keep saying which is which:
-    // the app has no background execution, so nothing keeps running once it
-    // leaves the foreground. Match that lifecycle truth by shape, across the
-    // Markdown line breaks, rather than by one exact sentence.
     expect(readme).not.toMatch(/realtime and nearby transfer[^.]*still to be built/);
+    // No iOS product promise anywhere in the README, in either tense. The
+    // repository ships no iOS app and is not building one.
+    expect(readme, "the README still promises an iOS app")
+      .not.toMatch(/\bthe iOS app (?:is|will be|runs|now)\b/i);
     expect(readme).not.toContain("status-M0%20MVP");
     expect(readme).not.toContain("This repository is **M0**");
     expect(readme).not.toContain("This is an early MVP");

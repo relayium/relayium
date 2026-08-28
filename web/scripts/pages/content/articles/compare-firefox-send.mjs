@@ -60,7 +60,7 @@ const en = {
       },
       {
         q: "Is Relayium free?",
-        a: "Yes. Relayium is free and open source under the AGPL-3.0 license. Creating a stored download link requires the sender to sign in (links count against your account's storage quota), but the recipient never needs an account to download.",
+        a: "The software is free and open source under the AGPL-3.0 license, and the direct paths cost nothing: same-network browser transfers, and the CLI's push/pull over SSH, sync, daemon direct and send / receive. The hosted service has a free tier rather than being free without limit — a stored download link like the one this article is about is held in Relayium's encrypted storage, so it draws on the sender's plan storage allowance and retention window, and paid plans (Plus, Pro, Max) raise both. Creating one requires the sender to sign in; the recipient never needs an account, or a plan, to download.",
       },
     ],
   },
@@ -127,7 +127,7 @@ const zh = {
       },
       {
         q: "Relayium 免费吗？",
-        a: "免费。Relayium 采用 AGPL-3.0 许可，免费开源。生成存储下载链接需要发送方登录（链接计入你账号的存储配额），但收件方下载始终无需账号。",
+        a: "软件本身免费开源，采用 AGPL-3.0 许可；直连路径也不花钱：同一网络内的浏览器传输，以及 CLI 的 SSH push/pull、sync、daemon 直连与 send / receive。托管服务则是「有免费额度」而不是「无限免费」——本文所说的存储下载链接保存在 Relayium 的加密存储里，会计入发送方套餐的存储额度与留存时长，付费套餐（Plus、Pro、Max）会把两者都提高。生成链接需要发送方登录；收件方下载始终无需账号，也无需任何套餐。",
       },
     ],
   },

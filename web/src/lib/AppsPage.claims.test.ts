@@ -15,11 +15,7 @@ import { flushSync, mount, unmount } from "svelte";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import AppsPage from "./AppsPage.svelte";
-import {
-  FORBIDDEN_APP_CLAIMS,
-  FORBIDDEN_IOS_SHARE_CLAIMS,
-  IOS_SHARE_EXTENSION_FACTS,
-} from "./apps-claim-rules";
+import { FORBIDDEN_APP_CLAIMS, violatesClaim } from "./apps-claim-rules";
 import { LANGS, messages, setLang, loadLang, type Lang } from "./i18n.svelte";
 import type { Platform } from "./platform";
 
@@ -47,54 +43,149 @@ afterEach(async () => {
 
 const text = () => (target.textContent ?? "").replace(/\s+/g, " ");
 
-// ── The five things /apps may not say ────────────────────────────────────────
+// ── The things /apps may not say ─────────────────────────────────────────────
 //
 // Each is paired with the reason it is false, because a banned phrase with no
 // reason is a rule the next person deletes.
 //
 // The shared list lives in apps-claim-rules.ts so importing it from the static
-// twin test does not also register and rerun this test suite.
+// twin test does not also register and rerun this test suite. Its probes now
+// live on the rules themselves: they used to be a positional array here, and
+// inserting or removing a rule silently re-paired every rule after it with
+// somebody else's evidence.
 
 describe("what the Apps page may not claim", () => {
-  it("proves every rule can catch both its English and Chinese form", () => {
-    const probes = [
-      ["faster transfers", "传输更快"],
-      ["background transfer", "支持后台传输"],
-      ["push notifications", "支持推送通知"],
-      ["App Store", "即将上架应用商店"],
-      ["coming soon", "即将推出"],
-    ];
-    expect(FORBIDDEN_APP_CLAIMS).toHaveLength(probes.length);
-    FORBIDDEN_APP_CLAIMS.forEach(({ why, re }, index) => {
-      for (const probe of probes[index]) {
-        expect(probe, `${why}: rule does not match ${probe}`).toMatch(re);
+  it("proves every rule can catch its English and its Chinese form", () => {
+    expect(FORBIDDEN_APP_CLAIMS.length).toBeGreaterThan(0);
+    for (const rule of FORBIDDEN_APP_CLAIMS) {
+      expect(rule.probes.length, `${rule.why}: rule carries no probe`).toBeGreaterThan(1);
+      for (const probe of rule.probes) {
+        expect(violatesClaim(probe, rule), `${rule.why}: rule does not catch "${probe}"`).toBe(true);
       }
-    });
-  });
-
-  it.each(LANGS.map((l) => l.code))("%s says none of the five forbidden things", async (code) => {
-    await mountPage(code);
-    for (const { why, re } of FORBIDDEN_APP_CLAIMS) {
-      expect(text(), `${code}: ${why} — matched ${re}`).not.toMatch(re);
     }
   });
 
-  it("keeps the iOS limitation truthful rather than silent", async () => {
-    // The honest sentence has to survive, not just the dishonest ones die. A
-    // page that simply deleted "while it is open" would pass every negative
-    // above and still mislead.
+  it("lets a rule's permitted phrasing through, and only that phrasing", () => {
+    // The half `allow` exists for. "Mac App Store" is a public listing recorded
+    // in web/mac-app-store-release.json; a bare "App Store", TestFlight and
+    // Google Play are not, and subtracting the true phrase must not disarm the
+    // rule for the false ones. Asserted here because a rule that permits
+    // everything reads exactly like a rule that permits one thing.
+    const permitting = FORBIDDEN_APP_CLAIMS.filter((r) => r.permitted?.length);
+    expect(permitting.length, "no rule exercises the allow path").toBeGreaterThan(0);
+    for (const rule of permitting) {
+      for (const allowed of rule.permitted!) {
+        expect(violatesClaim(allowed, rule), `${rule.why}: rejects the true phrasing "${allowed}"`)
+          .toBe(false);
+      }
+      for (const probe of rule.probes) {
+        expect(violatesClaim(`${rule.permitted![0]} ${probe}`, rule),
+               `${rule.why}: the permitted phrase disarmed the rule for "${probe}"`).toBe(true);
+      }
+    }
+  });
+
+  // Direction, pinned separately from the declarative probes/permitted pairs
+  // above, because the bug these rules had was one-way. They fired on the words
+  // and not on the assertion, so the accurate correction — "Relayium publishes
+  // no Windows app", "no shipped client receives push notifications" — was
+  // itself a violation, and the only copy that satisfied every rule was copy
+  // that said nothing. A negator only counts when it precedes the phrase and
+  // shares its clause: a negator afterwards does not unsay it.
+  it("reads a denial as a denial, and only forwards within one clause", () => {
+    const iosRule = FORBIDDEN_APP_CLAIMS.find((r) => r.why.includes("no iOS, Android or Windows app"))!;
+    const pushRule = FORBIDDEN_APP_CLAIMS.find((r) => r.why.includes("push"))!;
+
+    for (const denial of [
+      "Relayium publishes no Windows app.",
+      "There is no iPhone app, and none is offered.",
+      "Relayium 没有 Android 应用。",
+    ])
+      expect(violatesClaim(denial, iosRule), `denial flagged: ${denial}`).toBe(false);
+    expect(violatesClaim("No shipped client receives push notifications.", pushRule)).toBe(false);
+
+    // A negator that arrives after the claim does not retract it…
+    expect(violatesClaim("We ship an iOS app, no really.", iosRule)).toBe(true);
+    // …and one in an earlier clause is a different sentence, not a scope.
+    expect(violatesClaim("There is no Mac app yet. Download the Android app.", iosRule)).toBe(true);
+    // The denial must not disarm the rule for a promise later in the same text.
+    expect(
+      violatesClaim("Relayium publishes no Windows app. The iOS app is in development.", iosRule),
+    ).toBe(true);
+  });
+
+  // Word order, which the platform rule did not have. It only recognised
+  // "<platform> app", so three ordinary ways of promising the same thing walked
+  // straight past it — while the one phrasing that is TRUE today, running the
+  // web app in a phone browser, has to keep working.
+  it("catches an app promised in any word order, and spares the web-platform one", () => {
+    const rule = FORBIDDEN_APP_CLAIMS.find((r) => r.why.includes("no iOS, Android or Windows app"))!;
+    for (const promise of [
+      "Download the app for Android.",
+      "Install our client on iPhone.",
+      "The Android version of the app lands this year.",
+      "客户端支持 Android。",
+    ])
+      expect(violatesClaim(promise, rule), `missed: ${promise}`).toBe(true);
+    for (const truthful of [
+      "Open the web app on iPhone — nothing to install.",
+      "It runs in the browser on Android.",
+      "在 iPhone 的浏览器里打开网页版即可。",
+    ])
+      expect(violatesClaim(truthful, rule), `flagged a true web statement: ${truthful}`).toBe(false);
+  });
+
+  it.each(LANGS.map((l) => l.code))("%s says none of the forbidden things", async (code) => {
+    await mountPage(code);
+    for (const rule of FORBIDDEN_APP_CLAIMS) {
+      expect(violatesClaim(text(), rule), `${code}: ${rule.why} — matched ${rule.re}`).toBe(false);
+    }
+  });
+
+  it("names the Mac App Store rather than going silent about it", async () => {
+    // The positive half of the revised store rule, and the reason it could be
+    // relaxed at all. Until 2026-08-28 the page was forbidden from mentioning
+    // any store; the listing had been public since 2026-08-26, so the guard was
+    // enforcing a false statement by omission. Deleting the ban without
+    // requiring the fact would have left the page equally silent and passing.
+    for (const code of LANGS.map((l) => l.code)) {
+      await mountPage(code);
+      expect(text(), `${code} does not name the Mac App Store channel`).toMatch(/Mac App Store/);
+      if (app) unmount(app as never);
+      app = undefined;
+      target.remove();
+    }
+  });
+
+  it("tells a reader on an unsupported platform what to use, rather than nothing", async () => {
+    // Removing the iOS, Android and Windows cards must not turn into silence:
+    // a visitor on one of those platforms still has to learn that the browser
+    // is the client. This is the sentence that replaced three cards.
     await mountPage("en");
-    expect(text()).toMatch(/while (?:the app )?it is open/i);
+    expect(text()).toMatch(/iPhone, iPad, Android, Windows and Linux/);
+    expect(text()).toMatch(/nothing to install/i);
     await setLang("zh");
     flushSync();
-    expect(text()).toMatch(/应用打开时/);
+    expect(text()).toMatch(/浏览器/);
+    expect(text()).toMatch(/无需安装/);
+  });
+
+  it("renders no card for a platform this repository does not ship", async () => {
+    // Structural, not textual. `apps/` contains mac/, ios/ and RelayiumKit/ and
+    // nothing else; iOS development is paused with no public listing. A card is
+    // an advertisement whatever its status line says.
+    await mountPage("en");
+    for (const id of ["#app-ios", "#app-android", "#app-windows"]) {
+      expect(target.querySelector(id), `${id} is back on the page`).toBeNull();
+    }
   });
 
   it("is checked against a page that actually rendered", async () => {
     // Guards the guards: every negative above passes on an empty string.
     await mountPage("en");
-    expect(text().length).toBeGreaterThan(1500);
-    expect(target.querySelectorAll("article").length).toBe(8);
+    expect(text().length).toBeGreaterThan(1200);
+    // Three platform cards plus the two decision columns below them.
+    expect(target.querySelectorAll("article").length).toBe(5);
   });
 });
 
@@ -154,7 +245,7 @@ describe("the macOS advantages are ones this repository actually ships", () => {
     }
   });
 
-  it("names the Share extension's real scope, not text or links", async () => {
+  it("names the macOS Share extension's real scope, not text or links", async () => {
     // The extension declares File/Image/Movie/Attachments activation and
     // deliberately NOT SupportsText/SupportsWebURL/SupportsWebPage, because
     // sharing a paragraph would produce a text file nobody asked for. The page
@@ -182,156 +273,15 @@ describe("the macOS advantages are ones this repository actually ships", () => {
   });
 });
 
-describe("the iOS Share Extension the page describes is the one apps/ios ships", () => {
-  // Same discipline as the macOS block above: the page may say this because
-  // apps/ios/RelayiumShare says it, and each assertion names the file that would
-  // put the claim back in question. The extension is presentation-free here —
-  // what is being checked is its BOUNDARY, which is a set of absences, and an
-  // absence has no runtime a browser test could observe.
-  const repoFile = (p: string) => readFileSync(resolve(process.cwd(), "..", p), "utf8");
-
-  /** Swift source with its comments removed.
-   *
-   * `ShareViewController.swift` documents the boundary by NAMING the symbols it
-   * refuses to contain — `URLSession`, `NSExtensionContext.open`, the responder
-   * walk. A raw scan therefore matches the explanation of the rule and calls it
-   * a violation. There are no block comments in this target; `//` and `///` are
-   * the whole of it. */
-  const swiftSource = (p: string) =>
-    repoFile(p).split("\n").filter((line) => !/^\s*\/\//.test(line)).join("\n");
-
-  /** A plist's declarations, without its XML comments.
-   *
-   * The same trap one level over: both plists in this target explain the keys
-   * they deliberately DO NOT carry — `keychain-access-groups`,
-   * `associated-domains`, `SupportsText` — so a scan of the raw file finds every
-   * absence present and every one of these assertions inverts. */
-  const plistBody = (p: string) => repoFile(p).replace(/<!--[\s\S]*?-->/g, "");
-
-  const IOS_SHARE = "apps/ios/RelayiumShare";
-
-  it("is a share-sheet extension that takes files, images and movies — not text or a link", () => {
-    const plist = plistBody(`${IOS_SHARE}/Info.plist`);
-    expect(plist, "the iOS target is no longer a share extension")
-      .toMatch(/com\.apple\.share-services/);
-    for (const kind of ["File", "Image", "Movie", "Attachments"]) {
-      expect(plist, `the activation rule dropped ${kind}`)
-        .toMatch(new RegExp(`NSExtensionActivationSupports${kind}WithMaxCount`));
-    }
-    // The page says "files, folders, photos or videos" and stops there because
-    // the sheet stops there. Text and web pages are deliberately unsupported.
-    for (const absent of ["SupportsText", "SupportsWebURL", "SupportsWebPage"]) {
-      expect(plist, `the rule now activates for ${absent}, which the page does not promise`)
-        .not.toMatch(new RegExp(`NSExtensionActivation${absent}`));
-    }
-  });
-
-  it("holds one entitlement, so 'nothing is uploaded' is structural", () => {
-    const ents = plistBody(`${IOS_SHARE}/RelayiumShare.entitlements`);
-    expect(ents, "the App Group is what makes the local hand-off possible")
-      .toMatch(/com\.apple\.security\.application-groups/);
-    // The three that would make the copy a lie: a credential to upload with, a
-    // domain to be launched for, and a network client to upload through.
-    expect(ents, "a keychain group would put a bearer inside the extension")
-      .not.toMatch(/keychain-access-groups/);
-    expect(ents, "an associated domain would give the extension a link to route")
-      .not.toMatch(/associated-domains/);
-    for (const file of ["ShareViewController.swift", "ShareRootView.swift"]) {
-      const swift = swiftSource(`${IOS_SHARE}/${file}`);
-      for (const symbol of ["URLSession", "URLRequest", "CloudUploader", "AccountSession"]) {
-        expect(swift, `${file} gained ${symbol}; the page still says nothing is uploaded`)
-          .not.toMatch(new RegExp(symbol));
-      }
-    }
-  });
-
-  it("never opens its containing app, which is why the page asks the reader to", () => {
-    const controller = swiftSource(`${IOS_SHARE}/ShareViewController.swift`);
-    // Apple gives `open(_:completionHandler:)` to the Today and iMessage points,
-    // not to a share extension — plus the three ways of half-doing it anyway.
-    expect(controller, "the extension now opens the app; the manual step is no longer true")
-      .not.toMatch(/\.open\(/);
-    expect(controller).not.toMatch(/UIApplication/);
-    expect(controller).not.toMatch(/UIPasteboard/);
-    // What it does instead: hand the request back with nothing returned.
-    expect(controller, "the extension no longer finishes by completing the request")
-      .toMatch(/completeRequest\(returningItems: \[\]/);
-  });
-
-  it("states the whole boundary in English and in Chinese, on the rendered page", async () => {
-    await mountPage("en");
-    for (const f of IOS_SHARE_EXTENSION_FACTS) {
-      expect(text(), `English /apps does not state: ${f.fact}`).toMatch(f.en);
-    }
-    await setLang("zh");
-    flushSync();
-    for (const f of IOS_SHARE_EXTENSION_FACTS) {
-      expect(text(), `Chinese /apps does not state: ${f.fact}`).toMatch(f.zh);
-    }
-  });
-
-  it("proves every forbidden share claim can catch its English and Chinese form", () => {
-    // Guards the guards, exactly as the five-claim rule table above is guarded:
-    // a negative that has never matched anything is not a negative.
-    for (const { why, re, probes } of FORBIDDEN_IOS_SHARE_CLAIMS) {
-      for (const probe of probes) {
-        expect(probe, `${why}: rule does not match ${probe}`).toMatch(re);
-      }
-    }
-  });
-
-  it.each(LANGS.map((l) => l.code))("%s claims no upload, no auto-open and no automatic send", async (code) => {
-    await mountPage(code);
-    for (const { why, re } of FORBIDDEN_IOS_SHARE_CLAIMS) {
-      expect(text(), `${code}: ${why} — matched ${re}`).not.toMatch(re);
-    }
-  });
-});
-
-describe("the in-development cards", () => {
-  it("mark Android and Windows in development, with no action of their own", async () => {
-    await mountPage("en");
-    for (const id of ["#app-android", "#app-windows"]) {
-      const card = target.querySelector(id)!;
-      expect(card, `${id} is missing`).toBeTruthy();
-      expect(card.querySelector("a, button"), `${id} offers an action`).toBeNull();
-      expect(card.querySelector(".future-status")?.textContent)
-        .toBe(messages.en.appsPage.inDevelopmentBadge);
-      expect(card.closest(".future-grid"), `${id} is not in the in-development group`).toBeTruthy();
-    }
-    expect(messages.en.appsPage.inDevelopmentBadge).toBe("In development");
-    await setLang("zh");
-    expect(messages.zh.appsPage.inDevelopmentBadge).toBe("正在开发中");
-  });
-
-  it("tells a Windows reader that the CLI already works", async () => {
-    // The one thing a Windows visitor can act on today. An in-development card
-    // with no action AND no mention of the working alternative is a dead end.
-    await mountPage("en");
-    expect(target.querySelector("#app-windows")!.textContent).toMatch(/command line already works on Windows/i);
-    await setLang("zh");
-    flushSync();
-    expect(target.querySelector("#app-windows")!.textContent).toMatch(/命令行工具今天就已经支持 Windows/);
-  });
-
-  it("points an Android reader at the web app without giving the card a button", async () => {
-    await mountPage("en");
-    const card = target.querySelector("#app-android")!;
-    expect(card.textContent).toMatch(/web app/i);
-    expect(card.querySelector("a, button"), "the future card must stay actionless").toBeNull();
-    // …and the web app it names is on the same page, with a real button.
-    expect(target.querySelector("#app-web a.btn")).toBeTruthy();
-  });
-});
-
-describe("platform detection recognises the new cards without inventing availability", () => {
+describe("platform detection points every visitor at something they can use", () => {
   const CASES: { platform: Platform; marked: string[]; note: string | null }[] = [
-    // Windows matches in both groups: the CLI works today AND a native app is
-    // being built. Neither statement is complete without the other.
-    { platform: "windows", marked: ["app-cli", "app-windows"], note: "Windows" },
-    { platform: "android", marked: ["app-web", "app-android"], note: "Android" },
+    { platform: "windows", marked: ["app-cli"], note: "Windows" },
+    // iOS and Android resolve to the web card. They used to resolve to a card
+    // that said "in development", which told a visitor their platform was not
+    // served by the very page serving it — the browser IS the client there.
+    { platform: "android", marked: ["app-web"], note: "Android" },
+    { platform: "ios", marked: ["app-web"], note: "iOS" },
     { platform: "mac", marked: ["app-mac"], note: "macOS" },
-    { platform: "ios", marked: ["app-ios"], note: "iOS" },
     { platform: "linux", marked: ["app-cli"], note: "Linux" },
     { platform: "unknown", marked: ["app-web"], note: null },
   ];
@@ -346,13 +296,15 @@ describe("platform detection recognises the new cards without inventing availabi
     expect(target.querySelectorAll(".future-grid .is-platform").length).toBeLessThanOrEqual(1);
   });
 
-  it.each(CASES.map((c) => c.platform))("%s never turns a marked card into an offer", async (platform) => {
+  it.each(CASES.map((c) => c.platform))("%s is marked on a card that carries an action", async (platform) => {
+    // The inverse of the rule this replaces. There is no in-development group
+    // any more, so "a highlight never becomes an offer" has nothing to guard;
+    // what matters now is that a highlight is never a dead end.
     await mountPage("en", platform);
-    for (const el of target.querySelectorAll(".future-grid .is-platform")) {
-      expect(el.querySelector("a, button"), `${platform} manufactured an action`).toBeNull();
-      expect(el.querySelector(".future-status")?.textContent)
-        .toBe(messages.en.appsPage.inDevelopmentBadge);
+    for (const el of target.querySelectorAll(".is-platform")) {
+      expect(el.querySelector("a.btn"), `${platform}: ${el.id} highlighted with no way in`).toBeTruthy();
     }
+    expect(target.querySelectorAll(".future-grid").length, "an empty group was still drawn").toBe(0);
   });
 
   it("captions the highlight only when it can name the OS", async () => {

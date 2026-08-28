@@ -206,7 +206,7 @@ const en: Messages = {
   pricingPage: {
     navLink: "Pricing",
     title: "Simple, honest pricing",
-    subtitle: "Same-network file and live-text transfers are always free. Cross-network browser relay and cloud storage run on a monthly allowance — every account gets one, and paid plans raise it. You can also stay 100% free by running your own node.",
+    subtitle: "Same-network file and live-text transfers are always free. Cross-network browser relay and hosted storage draw on your plan's monthly traffic allowance, with a separate cap on how much you keep stored at once — every account gets both, and paid plans raise them. You can also stay 100% free by running your own node.",
     signedOutCta: "Sign in to subscribe or change your plan.",
     freeTitle: "Always free",
     freeLead: "Move files and ephemeral text at zero cost on direct paths, forever:",
@@ -216,20 +216,20 @@ const en: Messages = {
     freeWhy: "Direct and LAN file or text transfers cost us nothing, so they stay free for everyone — no sign-up needed to receive or join.",
     paidTitle: "What you pay for",
     paidLead: "Paid plans cover the two things that actually cost money to run:",
-    paid1: "Relay bandwidth — cross-network file or text transfers in the browser can run through an encrypted relay, so they connect through strict firewalls and NATs. Every account gets a free monthly allowance; paid plans raise it. This uses real bandwidth.",
-    paid2: "Temporary cloud storage — send to someone who's offline; we hold the encrypted file until they download it, then it's deleted.",
-    paid3: "Higher limits — more storage, more monthly traffic, and longer retention as you move up tiers.",
-    paidWhy: "Relay bandwidth and cloud storage are our only real costs, so that's all paid plans fund — no ads, no selling data. It keeps Relayium sustainable and independent.",
+    paid1: "Relay bandwidth — cross-network file or text transfers in the browser go through an encrypted relay by design rather than as a fallback, so they connect through strict firewalls and NATs. Those bytes count against the same monthly traffic allowance as hosted uploads and downloads; every account gets one, and paid plans raise it. This uses real bandwidth.",
+    paid2: "Temporary hosted storage — send to someone who's offline; we hold the encrypted file until they download it or it expires, then it's deleted. It occupies your storage cap while it is live, and the bytes moved count against your monthly traffic.",
+    paid3: "Higher limits — four separate ones rise as you move up tiers: the monthly traffic allowance, the cap on storage held live at once, the retention window, and the daily upload quota.",
+    paidWhy: "Relay bandwidth and hosted storage are our only real costs, so that's all paid plans fund — no ads, no selling data. It keeps Relayium sustainable and independent.",
     selfhostTitle: "Want 100% free? Run your own node",
     selfhostBody: "Relayium is open source. Spin up your own relay + storage node on any machine you control — a VPS, a home server, an old laptop — with a single install command. Your transfers route through your own infrastructure, with no usage limits and nothing to pay. You bring the bandwidth; we provide the software.",
     selfhostCta: "Add a node in your account →",
     faqTitle: "Frequently asked questions",
     q1: "Is it really free?",
-    a1: "Yes. Same-network file or live-text transfers and direct CLI transfers are end-to-end encrypted and completely free — you don't even need an account to receive a file or join a text session. Files are unlimited in size; ephemeral text requires both devices online, and Relayium keeps no server-side message history. Cross-network browser relay and cloud storage draw on a monthly allowance that every account gets, Free included; you pay only when you need more.",
+    a1: "Yes for the direct paths. Same-network file or live-text transfers and the CLI's direct modes are end-to-end encrypted and completely free — you don't even need an account to receive a file or join a text session. Files are unlimited in size; ephemeral text requires both devices online, and Relayium keeps no server-side message history. Cross-network browser relay and hosted storage draw on allowances that every account gets, Free included: a monthly traffic allowance counting relayed bytes together with hosted uploads and downloads, a separate cap on storage held live at once, a retention window, and a daily upload limit. You pay only when you need more.",
     q2: "What's the difference between direct and relayed transfers?",
-    a2: "A direct transfer sends files or live text straight from one device to the other — fastest, and free; that's how same-network browser transfers and the CLI work. Cross-network browser transfers can go through an encrypted relay so they connect reliably through strict firewalls and NATs — the relay only ever carries ciphertext, and the bandwidth it uses is what your monthly allowance and paid plans cover.",
+    a2: "A direct transfer sends files or live text straight from one device to the other — fastest, and free; that's how same-network browser transfers and the CLI's direct modes work. Cross-network browser transfers go through an encrypted relay by design rather than as a fallback, so they connect reliably through strict firewalls and NATs — the relay only ever carries ciphertext, and the bytes it moves count against the same monthly traffic allowance as hosted uploads and downloads.",
     q3: "Why is there a paid tier at all?",
-    a3: "Relay bandwidth and cloud storage cost real money. Rather than run ads or sell data, we charge for exactly those costs, so the project stays sustainable and independent. Anything that's free for us to run stays free for you.",
+    a3: "Relay bandwidth and hosted storage cost real money. Rather than run ads or sell data, we charge for exactly those costs, so the project stays sustainable and independent. Anything that's free for us to run stays free for you.",
     q4: "Can I avoid paying entirely?",
     a4: "Yes — run your own node. Because Relayium is open source, you can host your own relay and storage on hardware you control and route every transfer through it, with no limits and no fees. Add one from your account page.",
     q5: "Can I change plans later?",
@@ -526,9 +526,9 @@ const en: Messages = {
     cta: "Explore the CLI →",
   },
   appsPage: {
-    metaTitle: "Get Relayium — Web, CLI, macOS, iOS, Android & Windows",
+    metaTitle: "Get Relayium — Web, CLI and the macOS app",
     metaDesc:
-      "Use Relayium on the Web, install the CLI, download the macOS app, or check development status for iOS, Android and Windows. End-to-end encrypted file and ephemeral text transfer.",
+      "Use Relayium in any modern browser, install the command-line client on macOS, Linux or Windows, or download the native macOS app. End-to-end encrypted file and ephemeral text transfer.",
     heading: "Get Relayium",
     subhead:
       "One end-to-end encrypted transfer for files and ephemeral text, everywhere you work. Pick your platform.",
@@ -552,18 +552,6 @@ const en: Messages = {
         desc: "A true native menu-bar app (com.relayium.mac): files and text with nearby devices or by pairing code, encrypted links to send and open, and account and device management.",
         cta: "Download for macOS",
       },
-      ios: {
-        name: "iOS app",
-        desc: "A native iPhone & iPad app (com.relayium.app): open an encrypted link with no account, send files and text to nearby devices or by six-digit code, and manage your account — while the app is open. Files, folders, photos or videos shared to it from the system share sheet are copied onto the device and wait on Send until you open the app and send them.",
-      },
-      android: {
-        name: "Android app",
-        desc: "A native Android app is being built. Until it lands, the web app is the way to use Relayium on Android — it opens in your browser, with nothing to install.",
-      },
-      windows: {
-        name: "Windows app",
-        desc: "A native Windows desktop app is being built. The command line already works on Windows today, and it covers transfers, folder sync and scheduled backups.",
-      },
     },
     chooser: {
       heading: "Web or a native app?",
@@ -573,7 +561,7 @@ const en: Messages = {
         points: [
           "Nothing to install, and nothing to update. Open the page and transfer.",
           "Any modern browser on any operating system — including the ones with no native app.",
-          "Right for a one-off transfer, a borrowed computer, or a device you do not administer.",
+          "Right for a one-off transfer, a borrowed computer, a phone, or a device you do not administer.",
         ],
       },
       mac: {
@@ -584,10 +572,11 @@ const en: Messages = {
           "Open With in Finder, or drop files and folders on the Dock icon, to start a transfer from where the files already are.",
           "A relayium.com transfer link opens in the app instead of the browser.",
           "Receive with Device Inbox: files sent to this Mac from your own account are written into the folder you chose on it, and are only reported saved once they are on disk.",
+          "Two channels, one app: the direct download, which updates itself, or the Mac App Store listing, which is versioned on its own schedule.",
         ],
       },
-      iosNote:
-        "The iOS app is in development and is not publicly available. It moves files and text while it is open, like the web app does. What it adds is the system share sheet: sharing files, folders, photos or videos to Relayium copies them into storage only the app can read, and stops there — nothing is encrypted, uploaded or turned into a link, and iOS does not let a share extension open its own app. You open Relayium yourself, and they wait on Send until you choose them and press Send.",
+      elsewhereNote:
+        "Everywhere else, the browser is the Relayium client. iPhone, iPad, Android, Windows and Linux all run the web app with nothing to install, and Windows and Linux additionally run the command-line client. Relayium publishes no app for those platforms.",
     },
   },
   deviceInboxPage: {
@@ -655,10 +644,10 @@ const en: Messages = {
     setUpServerCta: "Set up a server receiver",
     platformsH2: "Your platform",
     platformsLead:
-      "Six platforms, each with what actually exists today. Where a native receiver is still planned, this page says so and points at the path that works now instead of showing a button that does nothing.",
+      "Six platforms, each with what actually exists today. Where Relayium publishes no native receiver, this page says so and points at the path that works now instead of showing a button that does nothing.",
     statusAvailable: "Available now",
     statusTesting: "In testing",
-    statusPlanned: "Planned",
+    statusPlanned: "No native app",
     statusLabel: (status) => `Status: ${status}`,
     labelUse: "What it's for",
     labelSetup: "Set it up",
@@ -707,7 +696,7 @@ const en: Messages = {
           "The folder you chose in the app, or the one you passed to --dir on the command line. Nothing is overwritten, nothing is unpacked, and a received file is never opened for you.",
         residency:
           "The app receives while it is running, including with its window closed, and Open at Login starts it again after you log back in to this Mac. It is not a system daemon: quit it and it stops receiving, which is what the launchd agent below is for.",
-        send: "From this page in a browser, or from an iPhone signed in to the same account.",
+        send: "From this page in any browser signed in to the same account, including a mobile browser on a phone or tablet.",
         recovery:
           "The app says whether the problem is your receive folder or your credentials, and offers to choose the folder again. On the command line, relayium inbox status draws the same distinction and inbox enable re-points the folder.",
         stop:
@@ -717,10 +706,10 @@ const en: Messages = {
         name: "Windows",
         use: "A Windows PC that should receive files into a folder you choose.",
         setup:
-          "The native tray receiver — sign-in, a fixed folder, start at login, notifications, reveal in Explorer, pause and resume — is planned and not built. What is verified today is the command-line receiver running in the foreground: it receives while the window stays open, and closing that window ends it. There is no Windows service and no startup entry.",
+          "Relayium publishes no Windows app: no tray receiver, no Windows service and no startup entry, and none is offered. What is verified today is the command-line receiver running in the foreground: it receives while the window stays open, and closing that window ends it.",
         files: "The folder you passed to --dir — %USERPROFILE%\\Relayium-inbox above.",
         residency:
-          "None beyond that open window. Do not treat this as an always-on receiver: for that, use a Linux server today or wait for the native app.",
+          "None beyond that open window. Do not treat this as an always-on receiver: for that, use the Linux server receiver, which is the one that survives a logout and a reboot.",
         send: "From this page, in any browser signed in to the same account.",
         recovery:
           "relayium inbox status names the folder, the credential and the worker separately, so a missing folder can be told from an expired sign-in.",
@@ -731,26 +720,26 @@ const en: Messages = {
         name: "iPhone",
         use: "The device you actually have in your hand when you want to move a photo or a document onto your Mac or your server.",
         setup:
-          "The native share-sheet sender and background receiving are planned, not built, so there is nothing to install here yet. What works today: open Relayium in Safari, sign in, and send files from this page to your Mac, PC or server.",
+          "Relayium publishes no iPhone or iPad app, so there is nothing to install here. What works today: open Relayium in Safari, sign in, and send files from this page to any device of yours that has Device Inbox switched on — your Mac, your PC or your server.",
         files:
-          "Not applicable yet — iPhone is a sender today. When the native app can receive, its files will land in a fixed Relayium folder in Files.",
+          "Not applicable: iPhone is a sender here and not a Device Inbox receiver, so nothing is delivered onto the phone.",
         residency:
-          "None is claimed, and none will be. iOS does not let an app stay awake as a general-purpose daemon, so receiving on iPhone will be best-effort background work scheduled by the system — never always-on, never guaranteed to be immediate.",
+          "None, because iPhone receives nothing here. Relayium publishes no iOS app at all, and iOS does not let an app stay awake as a general-purpose daemon, so there is no always-on iPhone receiver and this page does not describe one.",
         send: "Open this page in Safari on the phone and send to any device that has Device Inbox switched on.",
-        recovery: "Not applicable while iPhone is a sender only.",
-        stop: "Not applicable while iPhone is a sender only.",
+        recovery: "Not applicable: iPhone is a sender here, so there is no receive folder or device credential on the phone to repair.",
+        stop: "Not applicable: nothing is enrolled on the phone, so there is nothing here to pause, stop or revoke.",
       },
       android: {
         name: "Android",
         use: "The same idea as iPhone: get something off the phone and onto a machine you own, in one step.",
         setup:
-          "Native sharing and a native receiver are planned, not built. Today: open Relayium in your mobile browser, sign in, and send from this page.",
-        files: "Not applicable yet — Android is a sender today.",
+          "Relayium publishes no Android app, so there is nothing to install here. Today: open Relayium in your mobile browser, sign in, and send from this page to any device of yours that has Device Inbox switched on.",
+        files: "Not applicable: Android is a sender here and not a Device Inbox receiver, so nothing is delivered onto the phone.",
         residency:
-          "None is claimed. A receiver would have to live within Android's foreground-service and background-work rules, and battery optimisation on many phones would make timing best-effort. That is a constraint we are planning around, not something already shipped.",
+          "None, because Android receives nothing here. Relayium publishes no Android app, so there is no Android receiver to keep alive and no always-on behaviour is claimed for the phone.",
         send: "Open this page in your mobile browser and send to any device that has Device Inbox switched on.",
-        recovery: "Not applicable while Android is a sender only.",
-        stop: "Not applicable while Android is a sender only.",
+        recovery: "Not applicable: Android is a sender here, so there is no receive folder or device credential on the phone to repair.",
+        stop: "Not applicable: nothing is enrolled on the phone, so there is nothing here to pause, stop or revoke.",
       },
     },
     macNoDownload:

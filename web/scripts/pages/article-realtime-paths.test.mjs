@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LANGS } from "./shared.mjs";
+import { LANGS, MAINTAINED_LANGS } from "./shared.mjs";
 import expiringLink from "./content/articles/howto-share-file-expiring-link.mjs";
 import folder from "./content/articles/howto-send-a-folder.mjs";
 import largeFiles from "./content/articles/howto-large-files-without-cloud.mjs";
@@ -77,9 +77,12 @@ const NO_REALTIME_RETENTION = {
   pt: /(?:não mantém cópia (?:no servidor|de conteúdo)|não armazena conteúdo nem histórico|não fica cópia de conteúdo)/i,
 };
 
+// The seven frozen locales keep the sentence they were archived with, and it
+// is not corrected — their prose is byte-stable by policy. The two maintained
+// ones may no longer say it: `relayium up` and `relayium down` are CLI modes
+// and they read and write hosted storage, so "the CLI is direct-only" is false
+// of the CLI and true only of the modes this lead now enumerates.
 const CLI_DIRECT_ONLY = {
-  en: /CLI (?:remains|is).*direct-only/i,
-  zh: /CLI.*仅直连/,
   ja: /CLI.*直接接続専用/,
   ko: /CLI.*직접 연결 전용/,
   de: /CLI.*direct-only/i,
@@ -87,6 +90,16 @@ const CLI_DIRECT_ONLY = {
   ar: /CLI.*مباشرة فقط/u,
   es: /CLI.*direct-only/i,
   pt: /CLI.*direct-only/i,
+};
+// What the maintained lead must say instead: which modes are direct.
+const CLI_DIRECT_MODES = {
+  en: /CLI'?s? transfer modes[^.]*are direct and never relayed/i,
+  zh: /CLI 的传输模式[^。]*都是直连，从不走中继/,
+};
+// …and what it may not say: that the CLI as a whole is direct.
+const CLI_WHOLE_IS_DIRECT = {
+  en: /\bCLI\b[^.]{0,40}\b(?:is|remains|stays)\b[^.]{0,25}direct[- ]only/i,
+  zh: /CLI[^。]{0,20}仅直连/,
 };
 
 describe("article realtime path claims", () => {
@@ -123,12 +136,20 @@ describe("article realtime path claims", () => {
     expect(copy).not.toMatch(/multi-gigabyte file the direct way/i);
   });
 
-  it("separates generic TURN fallback from Relayium's deliberate routes and direct-only CLI", () => {
+  it("separates generic TURN fallback from Relayium's deliberate routes and the direct CLI modes", () => {
+    const maintained = new Set(MAINTAINED_LANGS);
     for (const lang of LANGS) {
       const copy = text(p2pGuide.langs[lang]);
-      expect(copy, `p2p-guide [${lang}] must describe the CLI as direct-only`).toMatch(
-        CLI_DIRECT_ONLY[lang],
-      );
+      if (maintained.has(lang)) {
+        expect(copy, `p2p-guide [${lang}] must name which CLI modes are direct`).toMatch(
+          CLI_DIRECT_MODES[lang],
+        );
+        expect(copy, `p2p-guide [${lang}] must not call the whole CLI direct-only`).not.toMatch(
+          CLI_WHOLE_IS_DIRECT[lang],
+        );
+      } else {
+        expect(copy, `p2p-guide [${lang}] archived lead changed`).toMatch(CLI_DIRECT_ONLY[lang]);
+      }
     }
 
     const turnExplanation = p2pGuide.langs.en.sections[2].body[1];

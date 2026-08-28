@@ -12,10 +12,14 @@
 // **The rule this file exists to enforce (PRD §12 "一级产品入口"): a platform whose
 // native receiver does not exist gets no native command or button.** A separately
 // shipped CLI/Web alternative may appear only with its limitation in the same
-// section, whether the native status is testing or planned. iPhone and Android
-// therefore have no command at all; macOS shows the launchd CLI as the
-// unattended alternative BESIDE its published app, and Windows shows only the
-// verified foreground CLI.
+// section, whatever the native status is. iPhone and Android therefore have no
+// command at all; macOS shows the launchd CLI as the unattended alternative
+// BESIDE its published app, and Windows shows only the verified foreground CLI.
+//
+// The second rule, added 2026-08-28: **an absent native receiver is stated as an
+// absence, never as a plan.** Relayium publishes a native app for macOS only.
+// iOS development is paused, and there is no Android or Windows app commitment,
+// so nothing here — badge, prose or comment — may describe a future one.
 
 import type { IconName } from "./icon-name.js";
 
@@ -25,9 +29,14 @@ import type { IconName } from "./icon-name.js";
  *    promises it survives.
  *  - `testing` — the code exists and is being exercised, but it is not something
  *    a user can install from this page. No download CTA.
- *  - `planned` — the native receiver is not shipped. The section explains the
- *    plan and may point at a distinct, explicitly limited CLI/Web path that
- *    works today. */
+ *  - `planned` — a legacy id, kept deliberately: it now means **Relayium
+ *    publishes no native receiver for this platform, and none is promised**. The
+ *    section says that as an absence and may point at a distinct, explicitly
+ *    limited CLI/Web path that works today. The id was NOT renamed on 2026-08-28
+ *    because it is the discriminant behind the `statusPlanned` message key, and
+ *    that key is typed by seven frozen locales whose prose must stay byte-stable.
+ *    What a reader sees is the maintained en/zh label, which no longer says
+ *    "planned" — see `deviceInboxPage.statusPlanned` in i18n/en.ts and zh.ts. */
 export type PlatformStatus = "available" | "testing" | "planned";
 
 /**
@@ -164,10 +173,10 @@ tail -f ~/.config/relayium/logs/relayium-inbox.log \\
 launchctl bootout gui/$(id -u)/com.relayium.inbox   # stop the agent
 relayium inbox disable                              # revoke inbox + keys`;
 
-// Windows. There is no Windows service, no startup entry and no tray app: the
-// only thing this repository ships for Windows is the same binary run in the
-// foreground. Saying so — including that closing the window ends it — is the
-// whole content of this section's honesty.
+// Windows. There is no Windows service, no startup entry and no tray app, and
+// none is planned: the only thing this repository ships for Windows is the same
+// binary run in the foreground. Saying so — including that closing the window
+// ends it — is the whole content of this section's honesty.
 const WINDOWS_SETUP = `relayium login --device-name my-pc
 relayium inbox enable --dir %USERPROFILE%\\Relayium-inbox
 
@@ -180,7 +189,8 @@ relayium inbox resume
 relayium inbox disable    # revoke the inbox and delete its private keys`;
 
 /** The six platform sections, in the order the page renders them: what works
- *  today first, then the engineering build, then the three planned clients. */
+ *  today first, then macOS, then the three platforms Relayium publishes no app
+ *  for. */
 export const INBOX_PLATFORMS: readonly InboxPlatform[] = [
   {
     id: "server",
@@ -213,9 +223,10 @@ export const INBOX_PLATFORMS: readonly InboxPlatform[] = [
     id: "windows",
     status: "planned",
     icon: "window",
-    // Windows has no resident receiver, but it DOES have a verified foreground
-    // one. It is shown with its limit stated in the same breath; that is why
-    // this planned platform is the one exception with a non-null `setup`.
+    // Windows has no resident receiver and no Relayium app, but it DOES have a
+    // verified foreground one. It is shown with its limit stated in the same
+    // breath; that is why this platform is the one `planned` entry with a
+    // non-null `setup`.
     setup: WINDOWS_SETUP,
     setupTitle: "windows · foreground receiver (terminal must stay open)",
     control: WINDOWS_CONTROL,
