@@ -17,8 +17,12 @@ final class UITestSubscriptionStore: SubscriptionStore, @unchecked Sendable {
         }
     }
 
-    func purchase(productID: String, appAccountToken: UUID) async throws -> StorePurchaseOutcome {
-        .delivered(SignedStoreTransaction(
+    /// Conformance only: `authorize` is called once, exactly where the real
+    /// adapter calls it, and its token discarded.
+    func purchase(productID: String,
+                  authorize: @escaping StorePurchaseAuthorization) async throws -> StorePurchaseOutcome {
+        _ = try await authorize()
+        return .delivered(SignedStoreTransaction(
             id: StoreTransactionID(rawValue: 9_002),
             jws: "eyJhbGciOiJFUzI1NiJ9.eyJ1aSI6Mn0.sig"))
     }

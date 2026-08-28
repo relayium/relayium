@@ -41,6 +41,31 @@ private final class FakeStore: SubscriptionStore, @unchecked Sendable {
     private var _onPurchase: (@Sendable () -> Void)?
     private var _holdPurchase = false
     private var _holdSynchronize = false
+    /// The store's own pre-authorization step: what the real adapter's
+    /// `Product.products` lookup answers. A failure here provably charged
+    /// nobody, and must reach the model with no dispatch behind it.
+    private var _lookup: Result<Void, Error> = .success(())
+    private var _onLookup: (@Sendable () -> Void)?
+    /// How many times this store asks for authorization before charging. `1` is
+    /// the real adapter; `2` is one that asked twice for a single sheet.
+    private var _authorizeCalls = 1
+    /// A broken store that charges without ever authorizing.
+    private var _skipAuthorize = false
+    /// The callback, kept past the call it was given for — which is exactly
+    /// what a leaky adapter would do, and what the model has to refuse.
+    private var _retainedAuthorize: StorePurchaseAuthorization?
+    private var _wrapAuthorizeFailure = false
+    /// A store that asks again, is refused, and charges anyway with the one
+    /// token it already holds — the shape that proves a refusal costs the
+    /// legitimate first purchase nothing.
+    private var _ignoreAuthorizeRefusal = false
+    /// A broken adapter that starts authorization in a task it never awaits and
+    /// then answers on its own, leaving that callback suspended inside the
+    /// server arm. The predicate holds the answer back until the arm is
+    /// genuinely in flight: answering sooner would stage the trivial case the
+    /// entry check already refuses, not the one this exists for.
+    private var _abandonAuthorizeWhen: (@Sendable () -> Bool)?
+    private var _spawnedAuthorize: Task<UUID, Error>?
 
     init(journal: PurchaseJournal) { self.journal = journal }
 
@@ -55,6 +80,25 @@ private final class FakeStore: SubscriptionStore, @unchecked Sendable {
     /// staged truthfully.
     func setOnPurchase(_ body: (@Sendable () -> Void)?) { sync { _onPurchase = body } }
     func setHoldPurchase(_ value: Bool) { sync { _holdPurchase = value } }
+    /// Fail the store's product lookup — the step that runs BEFORE the model is
+    /// asked to authorize anything.
+    func setLookup(_ value: Result<Void, Error>) { sync { _lookup = value } }
+    /// Run something at the pre-authorization step, before any arm exists.
+    func setOnLookup(_ body: (@Sendable () -> Void)?) { sync { _onLookup = body } }
+    func setAuthorizeCalls(_ value: Int) { sync { _authorizeCalls = value } }
+    func setSkipAuthorize(_ value: Bool) { sync { _skipAuthorize = value } }
+    /// Catch the app's own refusal and throw something of the store's own
+    /// instead. This is why the model may not read "is an arm open?" off an
+    /// error's type: the type it would test is the adapter's to choose.
+    func setWrapAuthorizeFailure(_ value: Bool) { sync { _wrapAuthorizeFailure = value } }
+    /// Swallow a refused authorization and charge with the token already held,
+    /// rather than propagating it.
+    func setIgnoreAuthorizeRefusal(_ value: Bool) { sync { _ignoreAuthorizeRefusal = value } }
+    /// Abandon the authorization callback: start it, never await it, and answer
+    /// once `readyToAnswer` says the server arm is really in flight.
+    func setAbandonAuthorize(when readyToAnswer: (@Sendable () -> Bool)?) {
+        sync { _abandonAuthorizeWhen = readyToAnswer }
+    }
     /// Park `synchronize()` until released, so an operation can be caught
     /// genuinely in flight rather than assumed to be.
     func setHoldSynchronize(_ value: Bool) { sync { _holdSynchronize = value } }
@@ -63,7 +107,23 @@ private final class FakeStore: SubscriptionStore, @unchecked Sendable {
     var finished: [StoreTransactionID] { sync { _finished } }
     var requestedIDs: [[String]] { sync { _requestedIDs } }
     var appAccountTokens: [UUID] { sync { _appAccountTokens } }
+    /// Every sheet this store was given permission to open, in order.
+    ///
+    /// The same values as `appAccountTokens`, read under the meaning that
+    /// matters to money. **One issued token is one chance to charge somebody.**
+    /// Apple attributes a purchase by `appAccountToken` and does not deduplicate
+    /// purchases by it, so two entries here are two purchases it may take money
+    /// for — including, and especially, two IDENTICAL entries. Counting
+    /// dispatches instead would miss exactly that case: one dispatch can hand
+    /// out two permissions.
+    var chargeableSheets: [UUID] { sync { _appAccountTokens } }
     var updateStreamsTerminated: Int { sync { _updateStreamsTerminated } }
+    /// The authorization callback from the most recent purchase call, so a test
+    /// can invoke it after that call has already answered.
+    var retainedAuthorize: StorePurchaseAuthorization? { sync { _retainedAuthorize } }
+    /// The authorization this store started and then abandoned, so a test can
+    /// await whatever it answers once the server finally replies to its arm.
+    var spawnedAuthorize: Task<UUID, Error>? { sync { _spawnedAuthorize } }
 
     /// Push one delivery through the update stream, as a renewal or a
     /// redelivery would arrive.
@@ -79,9 +139,41 @@ private final class FakeStore: SubscriptionStore, @unchecked Sendable {
         return try sync { _offers }.get()
     }
 
-    func purchase(productID: String, appAccountToken: UUID) async throws -> StorePurchaseOutcome {
+    /// **Shaped like the real adapter, in the order that matters.** The lookup
+    /// that can fail without charging anybody runs first; authorization runs
+    /// after it; and only then does anything that could take money happen.
+    ///
+    /// `"storeLookup"` and `"purchase"` are separate journal entries for exactly
+    /// that reason: `"purchase"` continues to mean "a sheet opened and money
+    /// could move", which is what every count assertion in this file is about.
+    func purchase(productID: String,
+                  authorize: @escaping StorePurchaseAuthorization) async throws -> StorePurchaseOutcome {
+        journal.record("storeLookup")
+        sync { _retainedAuthorize = authorize }
+        sync { _onLookup }?()
+        try sync { _lookup }.get()
+        if let readyToAnswer = sync({ _abandonAuthorizeWhen }) {
+            let spawned = Task { try await authorize() }
+            sync { _spawnedAuthorize = spawned }
+            while !readyToAnswer() { await Task.yield() }
+            // No `"purchase"` entry: this adapter answered without ever holding
+            // an attribution token, so no sheet could have opened.
+            throw AbandonedAuthorizationFailure()
+        }
+        if !sync({ _skipAuthorize }) {
+            for _ in 0..<sync({ _authorizeCalls }) {
+                let appAccountToken: UUID
+                do {
+                    appAccountToken = try await authorize()
+                } catch {
+                    if sync({ _ignoreAuthorizeRefusal }) { break }
+                    guard sync({ _wrapAuthorizeFailure }) else { throw error }
+                    throw WrappedAuthorizationFailure(underlying: error)
+                }
+                sync { _appAccountTokens.append(appAccountToken) }
+            }
+        }
         journal.record("purchase")
-        sync { _appAccountTokens.append(appAccountToken) }
         sync { _onPurchase }?()
         while sync({ _holdPurchase }) { await Task.yield() }
         return try sync { _purchase }.get()
@@ -126,6 +218,41 @@ private final class FakeStore: SubscriptionStore, @unchecked Sendable {
 }
 
 private enum CapabilityStoreFailure: Error { case unavailable }
+
+/// What a store that resolves nothing throws — the shape of the real adapter's
+/// `productUnavailable`, before anything has been authorized.
+private struct ProductLookupFailure: Error {}
+
+/// What an adapter that abandoned its own authorization callback answers with.
+/// Deliberately carries nothing: the model may not learn from an error whether
+/// an arm exists, and this is the error it would have to learn it from.
+private struct AbandonedAuthorizationFailure: Error {}
+
+private struct TestTimeout: Error {}
+
+/// Await `body`, failing rather than hanging.
+///
+/// Every deliberately-broken control below runs through here. Removing the
+/// identity binding this suite pins turns some of these waits into waits on an
+/// attempt that already answered, and a suite that hangs reports far less than
+/// one that fails.
+private func withTimeout<T: Sendable>(
+    seconds: Double = 5,
+    _ body: @escaping @Sendable () async throws -> T
+) async throws -> T {
+    try await withThrowingTaskGroup(of: T.self) { group in
+        group.addTask { try await body() }
+        group.addTask {
+            try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            throw TestTimeout()
+        }
+        defer { group.cancelAll() }
+        return try await group.next()!
+    }
+}
+
+/// An adapter that swallowed the app's refusal and raised its own.
+private struct WrappedAuthorizationFailure: Error { let underlying: Error }
 
 /// A Keychain-shaped store whose first clear fails. This models the only
 /// retirement failure that matters: the server has converged, but the local
@@ -228,6 +355,16 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
     /// What the next dispatch answers as `continuationSecret`. `nil` is the
     /// LEGACY server: no capability is issued at all.
     private var _mintSecret: String?
+    /// Park every dispatch until released, so a test can catch an arm genuinely
+    /// in flight rather than assume it is.
+    private var _holdDispatch = false
+    /// Dispatches ENTERED, counted before the hold — so a test can wait for the
+    /// arm to be really in flight instead of racing it.
+    private var _dispatchAttempts = 0
+    /// Run something inside the arm request, after it has been recorded — the
+    /// only truthful place to stage "the account changed once a sheet was
+    /// armed", which is a state that exists nowhere else.
+    private var _onDispatch: (@Sendable () -> Void)?
 
     struct ReportedOutcome: Equatable {
         let attemptID: String
@@ -257,6 +394,9 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
     /// it. `holdSubmit(after: 0)` parks the first.
     func holdSubmit(after calls: Int) { sync { _holdSubmitAfter = calls } }
     func releaseSubmit() { sync { _holdSubmitAfter = nil } }
+    func setHoldDispatch(_ value: Bool) { sync { _holdDispatch = value } }
+    func setOnDispatch(_ body: (@Sendable () -> Void)?) { sync { _onDispatch = body } }
+    var dispatchAttempts: Int { sync { _dispatchAttempts } }
 
     func setMintedSecret(_ value: String?) { sync { _mintSecret = value } }
     /// Failures for `reportApplePurchaseOutcome`, consumed in order; the last
@@ -292,7 +432,10 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
             _accountTokenBearers.append(token)
             _dispatchContinuations.append(continuation)
             _dispatchProductIDs.append(productID)
+            _dispatchAttempts += 1
         }
+        sync { _onDispatch }?()
+        while sync({ _holdDispatch }) { await Task.yield() }
         let configured: Result<ApplePurchaseDispatch, Error>? = sync {
             guard let first = _dispatches.first else { return nil }
             if _dispatches.count > 1 { _dispatches.removeFirst() }
@@ -469,10 +612,14 @@ final class AppleSubscriptionModelTests: XCTestCase {
         let billing: FakeBilling
         let journal: PurchaseJournal
         let bearer: BearerBox
+        /// The signed-in Relayium account id, changeable mid-test. Switching
+        /// accounts between the arm and the sheet is a real sequence.
+        let account: BearerBox
     }
 
-    /// The session's credential, changeable mid-test — signing out while a
-    /// purchase sheet is open is a real sequence, not a hypothetical one.
+    /// One mutable piece of session authority — the credential, or the account
+    /// id — changeable mid-test. Signing out or switching accounts while a
+    /// purchase is being arranged is a real sequence, not a hypothetical one.
     private final class BearerBox: @unchecked Sendable {
         private let lock = NSLock()
         private var value: String?
@@ -489,13 +636,15 @@ final class AppleSubscriptionModelTests: XCTestCase {
         let store = FakeStore(journal: journal)
         let billing = FakeBilling(journal: journal, accountToken: Fixture.accountToken)
         let box = BearerBox(bearer)
+        let account = BearerBox("acct-A")
         let model = AppleSubscriptionModel(
             store: store, billing: billing, bundleID: Fixture.bundleID,
             bearer: { box.current },
-            accountID: { "acct-A" },
+            accountID: { account.current },
             refreshAccount: { journal.record("refresh") },
             purchaseDispatchPolicy: purchaseDispatchPolicy)
-        return Rig(model: model, store: store, billing: billing, journal: journal, bearer: box)
+        return Rig(model: model, store: store, billing: billing, journal: journal,
+                   bearer: box, account: account)
     }
 
     /// A rig that speaks the **continuation protocol**, over a capability store
@@ -514,15 +663,17 @@ final class AppleSubscriptionModelTests: XCTestCase {
         let store = FakeStore(journal: journal)
         let billing = FakeBilling(journal: journal, accountToken: Fixture.accountToken)
         let box = BearerBox(bearer)
+        let account = BearerBox("acct-A")
         let model = AppleSubscriptionModel(
             store: store, billing: billing, bundleID: Fixture.bundleID,
             bearer: { box.current },
-            accountID: { "acct-A" },
+            accountID: { account.current },
             refreshAccount: { journal.record("refresh") },
             continuation: ApplePurchaseCapabilityRepository(store: capabilityStore),
             outcomeJournal: outcomeJournal,
             appInstanceID: appInstanceID)
-        return Rig(model: model, store: store, billing: billing, journal: journal, bearer: box)
+        return Rig(model: model, store: store, billing: billing, journal: journal,
+                   bearer: box, account: account)
     }
 
     private func makeReadyContinuationRig(
@@ -665,8 +816,8 @@ final class AppleSubscriptionModelTests: XCTestCase {
         await rig.model.purchase(productID: Fixture.catalog[0])
 
         XCTAssertEqual(rig.journal.all,
-                       ["catalog", "offers", "catalog", "accountToken", "purchase",
-                        "submit", "finish", "refresh"])
+                       ["catalog", "offers", "catalog", "storeLookup", "accountToken",
+                        "purchase", "submit", "finish", "refresh"])
         XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement))
         XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
     }
@@ -688,15 +839,24 @@ final class AppleSubscriptionModelTests: XCTestCase {
         XCTAssertEqual(rig.billing.submittedBearers, ["rlm_app_T"])
     }
 
-    /// The account token is fetched BEFORE the store is asked to charge anyone.
-    /// A server that cannot mint one leaves no purchase sheet and no money moved.
-    func testAFailureToMintTheAccountTokenNeverReachesTheStore() async {
+    /// The account token is minted BEFORE the store is allowed to charge
+    /// anyone, and a server that cannot mint one leaves no purchase sheet and
+    /// no money moved.
+    ///
+    /// The store is now *entered* first — its product lookup is the step that
+    /// deliberately runs before authorization — but it never gets past that
+    /// step. `"purchase"`, which this file uses to mean "a sheet opened and
+    /// money could move", is absent, and so is any attribution token.
+    func testAFailureToMintTheAccountTokenOpensNoSheet() async {
         let rig = await makeReadyRig()
         rig.billing.setAccountToken(.failure(AppleBillingError.server(status: 500)))
         await rig.model.purchase(productID: Fixture.catalog[0])
 
-        XCTAssertEqual(rig.journal.all, ["catalog", "offers", "catalog", "accountToken"])
+        XCTAssertEqual(rig.journal.all,
+                       ["catalog", "offers", "catalog", "storeLookup", "accountToken"])
         XCTAssertEqual(rig.model.state, .failed(.billing(.server(status: 500))))
+        XCTAssertEqual(rig.journal.count("purchase"), 0)
+        XCTAssertTrue(rig.store.appAccountTokens.isEmpty)
         XCTAssertTrue(rig.store.finished.isEmpty)
     }
 
@@ -709,7 +869,8 @@ final class AppleSubscriptionModelTests: XCTestCase {
         rig.store.setPurchase(.success(.userCancelled))
         await rig.model.purchase(productID: Fixture.catalog[0])
 
-        XCTAssertEqual(rig.journal.all, ["catalog", "offers", "catalog", "accountToken", "purchase"])
+        XCTAssertEqual(rig.journal.all,
+                       ["catalog", "offers", "catalog", "storeLookup", "accountToken", "purchase"])
         XCTAssertEqual(rig.model.state, .idle)
         XCTAssertTrue(rig.store.finished.isEmpty)
         XCTAssertEqual(rig.journal.count("refresh"), 0)
@@ -723,7 +884,8 @@ final class AppleSubscriptionModelTests: XCTestCase {
         rig.store.setPurchase(.success(.pending))
         await rig.model.purchase(productID: Fixture.catalog[0])
 
-        XCTAssertEqual(rig.journal.all, ["catalog", "offers", "catalog", "accountToken", "purchase"])
+        XCTAssertEqual(rig.journal.all,
+                       ["catalog", "offers", "catalog", "storeLookup", "accountToken", "purchase"])
         XCTAssertEqual(rig.model.state, .deferred)
         XCTAssertTrue(rig.store.finished.isEmpty)
         XCTAssertEqual(rig.journal.count("refresh"), 0)
@@ -825,7 +987,8 @@ final class AppleSubscriptionModelTests: XCTestCase {
         rig.store.setOnPurchase { box.set(nil) }
         await rig.model.purchase(productID: Fixture.catalog[0])
 
-        XCTAssertEqual(rig.journal.all, ["catalog", "offers", "catalog", "accountToken", "purchase"])
+        XCTAssertEqual(rig.journal.all,
+                       ["catalog", "offers", "catalog", "storeLookup", "accountToken", "purchase"])
         XCTAssertEqual(rig.model.state, .failed(.billing(.notSignedIn)))
         XCTAssertTrue(rig.store.finished.isEmpty)
     }
@@ -1287,7 +1450,8 @@ final class AppleSubscriptionModelTests: XCTestCase {
             await rig.model.purchase(productID: Fixture.catalog[0])
 
             XCTAssertEqual(rig.journal.all,
-                           ["catalog", "offers", "catalog", "accountToken", "purchase", "submit"],
+                           ["catalog", "offers", "catalog", "storeLookup", "accountToken",
+                            "purchase", "submit"],
                            "\(refusal) produced a finish or a refresh")
             XCTAssertTrue(rig.store.finished.isEmpty, "\(refusal) finished a transaction")
             guard case .failed = rig.model.state else {
@@ -2572,5 +2736,554 @@ extension AppleSubscriptionModelTests {
         await waitFor(resolved) { $0.journal.count("submit") >= 1 }
         XCTAssertNil(ApplePurchaseCapabilityRepository(store: capabilityStore).load(),
                      "a resolved attempt left its capability behind")
+    }
+}
+
+// MARK: - authorization is asked for after the store's own lookup
+
+/// **Which side of the arm a failure lands on, and what that costs.**
+///
+/// The purchase attempt has exactly one irreversible boundary: the moment
+/// Relayium's server arms a sheet. Before it, a failure has consumed nothing and
+/// the same user may simply try again. After it, nothing on the device can prove
+/// whether Apple charged, so the attempt is reported `failed` and locked — and
+/// an account whose attempt is locked cannot buy anything until an operator
+/// intervenes.
+///
+/// The store's product lookup used to sit on the wrong side of that boundary:
+/// the attribution token was a parameter, so it had already been minted — and
+/// the sheet already armed — before the adapter ever asked Apple whether the
+/// product exists. An identifier this storefront does not carry, or a device
+/// that lost its network between the catalog read and the sale, therefore locked
+/// the account out of buying anything at all.
+///
+/// These tests state the boundary in both directions, and state that the model
+/// decides which side it is on from **its own MainActor state** rather than from
+/// the type of whatever the adapter threw.
+extension AppleSubscriptionModelTests {
+
+    private struct StoreCharged: Error {}
+
+    /// **A lookup failure dispatches nothing, and the very same model buys the
+    /// very same product on the next press.**
+    ///
+    /// The retry is the whole claim. Asserting only that the first attempt
+    /// failed would pass just as well against the defect being removed here,
+    /// where the attempt also failed — and then stayed failed for ever.
+    func testALookupFailureDispatchesNothingAndTheSameModelRetriesSuccessfully() async {
+        let rig = await makeReadyRig()
+        rig.store.setLookup(.failure(ProductLookupFailure()))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.journal.all, ["catalog", "offers", "catalog", "storeLookup"],
+                       "a pre-authorization failure still reached the arm")
+        XCTAssertEqual(rig.billing.dispatchAttempts, 0)
+        XCTAssertEqual(rig.model.state, .failed(.unexpected(type: "ProductLookupFailure")))
+        XCTAssertTrue(rig.store.appAccountTokens.isEmpty)
+
+        rig.store.setLookup(.success(()))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.billing.dispatchAttempts, 1)
+        XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement))
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
+    }
+
+    /// The same claim where it actually bites: under the continuation protocol,
+    /// a pre-authorization failure must also leave **no capability**. A
+    /// capability persisted for a sheet that was never armed is what the next
+    /// attempt would refuse against.
+    func testALookupFailurePersistsNoCapabilityAndTheRetryArmsAFreshOne() async {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+        rig.store.setLookup(.failure(ProductLookupFailure()))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.billing.dispatchAttempts, 0)
+        XCTAssertTrue(rig.billing.reports.isEmpty,
+                      "an outcome was reported for a sheet that was never armed")
+        XCTAssertNil(ApplePurchaseCapabilityRepository(store: capabilityStore).load(),
+                     "a capability was persisted for a purchase that never dispatched")
+        XCTAssertEqual(rig.model.state, .failed(.unexpected(type: "ProductLookupFailure")))
+
+        rig.store.setLookup(.success(()))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.billing.dispatchContinuations.count, 1,
+                       "the retry did not get a first arm of its own")
+        XCTAssertEqual(rig.billing.reports.map(\.outcome), [.success])
+        XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement))
+    }
+
+    /// **The two sides of the boundary, against one capability store.**
+    ///
+    /// Before authorization: nothing armed, nothing locked, retryable. After it:
+    /// reported `failed` and locked, because an error says nothing about whether
+    /// Apple charged.
+    func testOnlyAThrowAfterAuthorizationLocksTheAttempt() async {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+
+        rig.store.setLookup(.failure(ProductLookupFailure()))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+        XCTAssertNil(ApplePurchaseCapabilityRepository(store: capabilityStore).load(),
+                     "a pre-authorization throw locked the attempt")
+
+        rig.store.setLookup(.success(()))
+        rig.store.setPurchase(.failure(StoreCharged()))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.billing.reports.map(\.outcome), [.failed])
+        XCTAssertEqual(ApplePurchaseCapabilityRepository(store: capabilityStore).load()?.phase,
+                       .locked, "an ambiguous post-authorization throw did not lock")
+        XCTAssertEqual(rig.model.state, .failed(.unexpected(type: "StoreCharged")))
+    }
+
+    /// **The model reads "is an arm open?" off its own state, never off the
+    /// error.**
+    ///
+    /// Here the store catches the app's refusal and throws its own type. The
+    /// truthful failure `arm` already wrote must survive: a model that mapped
+    /// the adapter's wrapper instead would replace "your account may not buy
+    /// this" with "something unexpected happened", and — far worse — a model
+    /// that decided whether to report an outcome from that type would be
+    /// guessing about money.
+    func testAnArmRefusalSurvivesAStoreThatWrapsIt() async {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+        rig.billing.setDispatches([
+            .failure(AppleBillingError.purchaseAuthorityManaged(provider: "apple")),
+        ])
+        rig.store.setWrapAuthorizeFailure(true)
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.model.state, .failed(.purchaseNotAllowed(blockedBy: "apple")),
+                       "the adapter's wrapper replaced the server's own refusal")
+        XCTAssertEqual(rig.journal.count("purchase"), 0, "a refused arm still opened a sheet")
+        XCTAssertTrue(rig.billing.reports.isEmpty,
+                      "an outcome was reported for an arm the server refused to create")
+        XCTAssertTrue(rig.store.appAccountTokens.isEmpty)
+    }
+
+    /// **One sheet, one TOKEN — an adapter that asks twice gets refused, not
+    /// served from the arm that already exists.**
+    ///
+    /// This is deliberately not a dispatch-count test, because dispatch count is
+    /// not what costs money. `appAccountToken` is *attribution*: Apple reads it
+    /// out of the signed payload to decide whose purchase a transaction is, and
+    /// does **not** deduplicate purchases by it. So a single dispatch can still
+    /// hand out two permissions to charge — return the same token twice and a
+    /// broken adapter opens two sheets, Apple may take money for both, and
+    /// `store.purchase` returns once, so this model reports exactly one outcome
+    /// for the one arm behind them. The two charges are still distinguishable to
+    /// Apple — separate transaction IDs — and the shared token still attributes
+    /// both to this Relayium account. What breaks is the one-to-one mapping: one
+    /// arm and one `store.purchase` return cannot say which sheet either belongs
+    /// to, so this protocol has no way to report both outcomes truthfully, and
+    /// this attempt initially observes only one of the two returns.
+    ///
+    /// Hence the ledger assertion: every sheet the store was given permission to
+    /// open is matched by exactly one outcome this model reported to the server.
+    /// A test that only counted dispatches would pass while that identity broke.
+    func testASecondAuthorizationForOneSheetIsRefusedWithoutASecondToken() async {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+        rig.store.setAuthorizeCalls(2)
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.store.chargeableSheets, [Fixture.accountToken], """
+            the model issued a second attribution token for one arm. Each issued \
+            token is permission to open a sheet Apple may charge for, and \
+            `appAccountToken` is not an idempotency key, so the extra one is a \
+            second purchase this single-arm attempt has no outcome slot for and \
+            does not observe returning here.
+            """)
+        XCTAssertEqual(rig.billing.reports.count, rig.store.chargeableSheets.count, """
+            the sheets the store could open and the outcomes the server was told \
+            about no longer match one for one.
+            """)
+        XCTAssertEqual(rig.billing.dispatchAttempts, 1, "one sheet took two dispatches")
+        // Refusing the second ask is a post-authorization failure like any
+        // other: ambiguous about whether the FIRST sheet charged, so it locks.
+        XCTAssertEqual(rig.billing.reports.map(\.outcome), [.failed],
+                       "a refused second authorization did not lock the armed attempt")
+        XCTAssertEqual(rig.model.state,
+                       .failed(.unexpected(type: "StorePurchaseAuthorizationRefused")))
+    }
+
+    /// **The refusal costs the legitimate first purchase nothing.**
+    ///
+    /// The test above leaves the adapter propagating its refusal, which locks.
+    /// This one has it swallow the refusal and charge with the single token it
+    /// was actually given — so what is proved here is that failing closed on the
+    /// SECOND ask does not disturb the first: one dispatch, one sheet, one
+    /// success reported, entitlement applied.
+    func testARefusedSecondAuthorizationLeavesTheFirstPurchaseIntact() async {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+        rig.store.setAuthorizeCalls(2)
+        rig.store.setIgnoreAuthorizeRefusal(true)
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.store.chargeableSheets, [Fixture.accountToken],
+                       "one sheet was authorized more than once")
+        XCTAssertEqual(rig.billing.dispatchAttempts, 1, "one sheet took two dispatches")
+        XCTAssertEqual(rig.billing.reports.map(\.outcome), [.success],
+                       "the valid first purchase no longer reports its own outcome")
+        XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement))
+    }
+
+    /// **A callback the adapter kept is refused, and moves nothing.**
+    ///
+    /// Not merely "it throws": the assertions are that no dispatch, no stored
+    /// capability and no screen state changed, because a refusal that still
+    /// drifted state would be the same defect in a quieter form.
+    func testAnAuthorizationCallbackRetainedPastThePurchaseArmsNothing() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        let late = try XCTUnwrap(rig.store.retainedAuthorize)
+        let dispatchesBefore = rig.billing.dispatchAttempts
+        let reportsBefore = rig.billing.reports
+        let capabilityBefore = try capabilityStore.loadCapability()
+        let stateBefore = rig.model.state
+
+        do {
+            _ = try await late()
+            XCTFail("a retained callback armed a sheet after its purchase had answered")
+        } catch StorePurchaseAuthorizationRefused.notAwaiting {
+            // Expected: there is no attempt for this callback to arm for.
+        } catch {
+            XCTFail("the late callback was refused for the wrong reason: \(error)")
+        }
+
+        XCTAssertEqual(rig.billing.dispatchAttempts, dispatchesBefore,
+                       "a late callback produced a second dispatch")
+        XCTAssertEqual(rig.billing.reports, reportsBefore)
+        XCTAssertEqual(try capabilityStore.loadCapability(), capabilityBefore,
+                       "a late callback moved the stored capability")
+        XCTAssertEqual(rig.model.state, stateBefore)
+    }
+
+    /// A second authorization requested while the first is still being arranged
+    /// is refused rather than queued. One sheet gets one dispatch and one issued
+    /// token, and the first request still completes normally.
+    func testASecondAuthorizationWhileTheFirstIsInFlightIsRefused() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+        rig.billing.setHoldDispatch(true)
+        let purchase = Task { await rig.model.purchase(productID: Fixture.catalog[0]) }
+        await waitFor(rig) { $0.billing.dispatchAttempts == 1 }
+
+        let concurrent = try XCTUnwrap(rig.store.retainedAuthorize)
+        do {
+            _ = try await concurrent()
+            XCTFail("a second authorization was granted while the first was in flight")
+        } catch StorePurchaseAuthorizationRefused.alreadyInFlight {
+            // Expected: the server has not answered the first arm yet.
+        } catch {
+            XCTFail("the concurrent authorization was refused for the wrong reason: \(error)")
+        }
+
+        rig.billing.setHoldDispatch(false)
+        await purchase.value
+
+        XCTAssertEqual(rig.billing.dispatchAttempts, 1, "one sheet took two dispatches")
+        XCTAssertEqual(rig.store.chargeableSheets, [Fixture.accountToken],
+                       "the concurrent request was still issued a token to charge with")
+        XCTAssertEqual(rig.billing.reports.map(\.outcome), [.success])
+        XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement))
+    }
+
+    /// **A callback belongs to ONE attempt, not to whichever attempt is
+    /// current when it runs.**
+    ///
+    /// The retained-callback test above refuses a late callback because nothing
+    /// at all is waiting. This is the harder half: something IS waiting, it is
+    /// open, and it is already armed — so a callback that read back "the current
+    /// authorization" instead of naming its own would sail through every check
+    /// and be handed the OTHER attempt's token. That is one arm behind two
+    /// sheets, and attempt A's product charged against attempt B's dispatch.
+    func testACallbackFromAnEarlierAttemptCannotAuthorizeALaterOnesSheet() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+
+        // Attempt A ends as a cancellation — the one outcome the server re-arms
+        // on — so B below is an ordinary next purchase rather than a second
+        // sheet on a capability that is already locked.
+        rig.store.setPurchase(.success(.userCancelled))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+        let callbackA = try XCTUnwrap(rig.store.retainedAuthorize)
+        XCTAssertEqual(rig.model.state, .idle)
+        XCTAssertEqual(rig.billing.reports.map(\.outcome), [.userCancelled])
+
+        // Attempt B, parked INSIDE its own purchase call: its authorization is
+        // current, open and armed. A distinct token makes "was B's token
+        // handed out?" a fact rather than an inference.
+        let tokenB = UUID(uuidString: "9A7B1C2D-3E4F-4A5B-8C6D-7E8F9A0B1C2D")!
+        rig.billing.setAccountToken(.success(tokenB))
+        rig.store.setPurchase(.success(.delivered(Fixture.delivery)))
+        rig.store.setHoldPurchase(true)
+        let purchaseB = Task { await rig.model.purchase(productID: Fixture.catalog[0]) }
+        await waitFor(rig) { $0.journal.count("purchase") == 2 }
+
+        let dispatchesBefore = rig.billing.dispatchAttempts
+        let reportsBefore = rig.billing.reports
+        let capabilityBefore = try capabilityStore.loadCapability()
+        let tokensBefore = rig.store.appAccountTokens
+        XCTAssertEqual(tokensBefore, [Fixture.accountToken, tokenB],
+                       "B did not reach the state this test is about")
+
+        do {
+            let leaked = try await withTimeout { try await callbackA() }
+            XCTFail("A's callback was handed \(leaked) for an attempt it does not belong to")
+        } catch StorePurchaseAuthorizationRefused.notAwaiting {
+            // Expected: A names its own attempt, and that attempt is over.
+        } catch {
+            XCTFail("A's retained callback was refused for the wrong reason: \(error)")
+        }
+
+        XCTAssertEqual(rig.billing.dispatchAttempts, dispatchesBefore,
+                       "a callback from an earlier attempt produced a dispatch")
+        XCTAssertEqual(rig.billing.reports, reportsBefore,
+                       "a callback from an earlier attempt produced an outcome statement")
+        XCTAssertEqual(try capabilityStore.loadCapability(), capabilityBefore,
+                       "a callback from an earlier attempt moved B's stored capability")
+        XCTAssertEqual(rig.store.appAccountTokens, tokensBefore,
+                       "a callback from an earlier attempt obtained B's attribution token")
+
+        rig.store.setHoldPurchase(false)
+        await purchaseB.value
+
+        // B is untouched: its own single dispatch, its own single outcome, and
+        // no third sheet from the callback that tried to borrow it.
+        XCTAssertEqual(rig.journal.count("purchase"), 2, "a third sheet opened")
+        XCTAssertEqual(rig.billing.dispatchAttempts, 2, "B's sheet took more than one dispatch")
+        XCTAssertEqual(rig.billing.reports.map(\.outcome), [.userCancelled, .success],
+                       "B did not complete with exactly its own one outcome")
+        XCTAssertEqual(rig.store.appAccountTokens, [Fixture.accountToken, tokenB])
+        XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement))
+    }
+
+    /// **An adapter abandons its authorization while the arm is in flight, and
+    /// a second purchase replays that exact arm.**
+    ///
+    /// This is the schedule that decides what an abandoned callback may do. The
+    /// adapter starts the callback, never awaits it, and answers on its own, so
+    /// the attempt is closed while the server is still arming. The capability
+    /// was persisted BEFORE that request and is therefore still `preparing`, so
+    /// the next purchase replays the same prepared arm and the server answers
+    /// both requests with one authoritative arm and one token. That second
+    /// purchase is now the legitimate waiter, and it is the one that may open a
+    /// sheet.
+    ///
+    /// So "my attempt stopped waiting" cannot license a release. The abandoned
+    /// callback returns no token and — this is the part that matters — reports
+    /// no outcome at all: cancelling here would release the arm B is opening a
+    /// sheet on, and a later attempt could then re-arm over a purchase Apple may
+    /// charge for.
+    func testAnAbandonedAuthorizationNeverCancelsAnArmAnotherPurchaseReplayed() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+        let billing = rig.billing
+        rig.billing.setHoldDispatch(true)
+        rig.store.setAbandonAuthorize(when: { billing.dispatchAttempts == 1 })
+
+        // A: the adapter answers on its own, leaving its callback parked inside
+        // the arm request.
+        await rig.model.purchase(productID: Fixture.catalog[0])
+        let abandoned = try XCTUnwrap(rig.store.spawnedAuthorize)
+        XCTAssertEqual(rig.billing.dispatchAttempts, 1)
+        XCTAssertEqual(rig.journal.count("purchase"), 0,
+                       "a sheet opened for an authorization the adapter abandoned")
+        XCTAssertTrue(rig.billing.reports.isEmpty)
+
+        // The persisted capability is what makes the replay below the SAME arm
+        // rather than a second one. If this were already `armed`, B would be
+        // refused and this test would be staging a different schedule.
+        XCTAssertEqual(ApplePurchaseCapabilityRepository(store: capabilityStore).load()?.phase,
+                       .preparing, "A's capability is not in the state a replay plans from")
+
+        // B: an ordinary next purchase, which replays that exact prepared arm
+        // and parks in the same still-held request.
+        rig.store.setAbandonAuthorize(when: nil)
+        let purchaseB = Task { await rig.model.purchase(productID: Fixture.catalog[0]) }
+        await waitFor(rig) { $0.billing.dispatchAttempts == 2 }
+
+        let arms = rig.billing.dispatchContinuations.compactMap { $0?.armRequestID }
+        XCTAssertEqual(arms.count, 2, "both requests should carry continuation fields")
+        XCTAssertEqual(arms.first, arms.last, """
+            B minted a fresh arm instead of replaying A's prepared one, so this \
+            run does not stage the overlap the guard exists for.
+            """)
+
+        // Both requests now answer, with the same authoritative arm and token.
+        rig.billing.setHoldDispatch(false)
+        do {
+            let leaked = try await withTimeout { try await abandoned.value }
+            XCTFail("an abandoned authorization returned \(leaked) after its purchase ended")
+        } catch StorePurchaseAuthorizationRefused.notAwaiting {
+            // Expected: the attempt this callback names stopped waiting.
+        } catch {
+            XCTFail("the abandoned authorization failed for the wrong reason: \(error)")
+        }
+        await purchaseB.value
+
+        // **A cancelled nothing.** B's own outcome is the only statement made
+        // about this arm, and it is the one B actually observed.
+        XCTAssertEqual(rig.billing.reports.map(\.outcome), [.success], """
+            the abandoned callback reported an outcome for an arm another \
+            purchase was using: \(rig.billing.reports.map(\.outcome))
+            """)
+        XCTAssertEqual(rig.billing.reports.first?.armRequestID, arms.first)
+        // One sheet, one token, and no third dispatch: nothing re-armed.
+        XCTAssertEqual(rig.journal.count("purchase"), 1, "more than one sheet opened")
+        XCTAssertEqual(rig.store.appAccountTokens, [Fixture.accountToken],
+                       "a token escaped the attempt that had already answered")
+        XCTAssertEqual(rig.billing.dispatchAttempts, 2, "a second fresh arm was created")
+        XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement))
+    }
+
+    /// **The same abandonment with nobody replaying, which is the price of the
+    /// rule above.**
+    ///
+    /// No second purchase exists, so the arm this callback created really is
+    /// unused — but the callback cannot know that, and a client that guessed
+    /// would be guessing about money. It returns no token and reports nothing,
+    /// the capability stays `armed`, and the next purchase is refused pending
+    /// reconciliation or the operator procedure rather than arming a second
+    /// sheet. That is an availability loss, and it is confined to an adapter
+    /// that broke the callback contract.
+    func testAnAbandonedAuthorizationLeavesItsArmAuthoritativeAndRefusesLater() async throws {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+        let billing = rig.billing
+        rig.billing.setHoldDispatch(true)
+        rig.store.setAbandonAuthorize(when: { billing.dispatchAttempts == 1 })
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        // The adapter has answered and the model has closed the attempt, while
+        // the arm it started is still parked in the server.
+        XCTAssertEqual(rig.billing.dispatchAttempts, 1)
+        XCTAssertEqual(rig.journal.count("purchase"), 0,
+                       "a sheet opened for an authorization the adapter abandoned")
+        XCTAssertTrue(rig.store.appAccountTokens.isEmpty)
+        XCTAssertTrue(rig.billing.reports.isEmpty, "an outcome was reported before the arm existed")
+
+        // Now the server answers the arm nobody is waiting for any more.
+        rig.store.setAbandonAuthorize(when: nil)
+        rig.billing.setHoldDispatch(false)
+        let spawned = try XCTUnwrap(rig.store.spawnedAuthorize)
+        do {
+            let leaked = try await withTimeout { try await spawned.value }
+            XCTFail("an abandoned authorization returned \(leaked) after its purchase ended")
+        } catch StorePurchaseAuthorizationRefused.notAwaiting {
+            // Expected: the attempt this callback names stopped waiting.
+        } catch {
+            XCTFail("the abandoned authorization failed for the wrong reason: \(error)")
+        }
+
+        XCTAssertEqual(rig.billing.dispatchAttempts, 1, "the abandoned callback armed a second sheet")
+        XCTAssertEqual(rig.journal.count("purchase"), 0, "a sheet opened after the purchase had ended")
+        XCTAssertTrue(rig.store.appAccountTokens.isEmpty,
+                      "an attribution token escaped an attempt that had already answered")
+        XCTAssertTrue(rig.billing.reports.isEmpty, """
+            the abandoned callback released its arm. It cannot prove the arm is \
+            unused — only that no token escaped through itself — so a release \
+            here is the one that can cancel a replaying purchase's live sheet.
+            """)
+        // Armed, under the arm that was ACTUALLY created: authoritative, owed an
+        // outcome, and not resumable by this client.
+        let capability = ApplePurchaseCapabilityRepository(store: capabilityStore).load()
+        XCTAssertEqual(capability?.phase, .armed, "the abandoned arm was released or retired")
+        XCTAssertEqual(capability?.armRequestID,
+                       try XCTUnwrap(rig.billing.dispatchContinuations.first??.armRequestID))
+
+        // And the next purchase refuses rather than arming over it.
+        rig.store.setPurchase(.success(.delivered(Fixture.delivery)))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.model.state, .failed(.billing(.purchaseOutcomeRequired)),
+                       "a purchase was allowed over an arm whose outcome nobody reported")
+        XCTAssertEqual(rig.billing.dispatchAttempts, 1, "the next purchase armed a second sheet")
+        XCTAssertEqual(rig.journal.count("purchase"), 0, "a second sheet opened")
+        XCTAssertTrue(rig.billing.reports.isEmpty)
+        XCTAssertEqual(ApplePurchaseCapabilityRepository(store: capabilityStore).load()?.phase,
+                       .armed, "the refused purchase moved the outstanding capability")
+    }
+
+    /// **The account changes between the arm and the sheet.**
+    ///
+    /// The re-check that used to sit between `arm` and `store.purchase` now sits
+    /// between the arm and the store's own charge, and still does the same two
+    /// things: it releases the arm as the explicit cancellation it is — no sheet
+    /// was opened, so this client knows more certainly than a real cancellation
+    /// does that nothing was charged — and it hands the store no attribution
+    /// token, so the provider purchase never happens.
+    func testAnAccountSwitchAfterTheArmReleasesItAndOpensNoSheet() async {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+        let account = rig.account
+        // Inside the arm request: after the server has armed a sheet, and before
+        // anything could open one.
+        rig.billing.setOnDispatch { account.set("acct-B") }
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.billing.dispatchAttempts, 1)
+        XCTAssertEqual(rig.journal.count("purchase"), 0,
+                       "a sheet opened for an account that had already changed")
+        XCTAssertTrue(rig.store.appAccountTokens.isEmpty,
+                      "the store was handed an attribution token after the account changed")
+        XCTAssertEqual(rig.billing.reports.map(\.outcome), [.userCancelled],
+                       "the arm was not released as the explicit cancellation it is")
+        XCTAssertEqual(ApplePurchaseCapabilityRepository(store: capabilityStore).load()?.phase,
+                       .cancelled, "a released arm was left locked")
+        XCTAssertEqual(rig.model.state, .failed(.billing(.notSignedIn)))
+    }
+
+    /// **A store that delivers without ever authorizing.**
+    ///
+    /// Defensive, and deliberately asymmetric: the transaction is signed and the
+    /// money is real, so it is still submitted and finished under the ordinary
+    /// policy — but no purchase outcome is sent, because there is no arm for one
+    /// to belong to and inventing a statement about a dispatch that does not
+    /// exist is how a real attempt elsewhere gets resolved by accident.
+    func testADeliveryWithoutAuthorizationIsSubmittedButReportsNoOutcome() async {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+        rig.store.setSkipAuthorize(true)
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.billing.dispatchAttempts, 0,
+                       "a store that never authorized still armed a sheet")
+        XCTAssertTrue(rig.billing.reports.isEmpty,
+                      "an outcome was reported for an arm that does not exist")
+        XCTAssertNil(ApplePurchaseCapabilityRepository(store: capabilityStore).load())
+        XCTAssertEqual(rig.billing.submittedJWS, [Fixture.jws],
+                       "a real signed transaction was dropped")
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
+        XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement))
+    }
+
+    /// **The whole order, once, with the outcome report in it.**
+    ///
+    /// `storeLookup` before `accountToken` is the property this batch adds;
+    /// `accountToken` before `purchase` is the property it must not lose.
+    func testTheStoreResolvesThenAuthorizesThenChargesInThatOrder() async {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.journal.all,
+                       ["catalog", "offers", "catalog", "storeLookup", "accountToken",
+                        "purchase", "outcome", "submit", "finish", "refresh"])
     }
 }

@@ -45,10 +45,17 @@ final class UITestSubscriptionStore: SubscriptionStore, @unchecked Sendable {
     /// A delivered purchase. The JWS is a shaped literal and is submitted to the
     /// fixture transport byte for byte, so the model's real submit-then-finish
     /// path runs.
-    func purchase(productID: String, appAccountToken: UUID) async throws -> StorePurchaseOutcome {
+    ///
+    /// `authorize` is called, and its token discarded, for the same reason the
+    /// real adapter calls it exactly once immediately before charging: a fake
+    /// that skipped it would drive the model's defensive no-arm path instead of
+    /// the armed one an acceptance launch exists to cover.
+    func purchase(productID: String,
+                  authorize: @escaping StorePurchaseAuthorization) async throws -> StorePurchaseOutcome {
+        _ = try await authorize()
         // nonlocalized: an acceptance fixture, not a real transaction
-        .delivered(SignedStoreTransaction(id: StoreTransactionID(rawValue: 9_001),
-                                          jws: "eyJhbGciOiJFUzI1NiJ9.eyJ1aSI6MX0.sig"))
+        return .delivered(SignedStoreTransaction(id: StoreTransactionID(rawValue: 9_001),
+                                                 jws: "eyJhbGciOiJFUzI1NiJ9.eyJ1aSI6MX0.sig"))
     }
 
     func currentEntitlements() async -> [SignedStoreTransaction] { [] }

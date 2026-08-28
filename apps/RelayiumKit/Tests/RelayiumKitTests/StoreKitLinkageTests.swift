@@ -27,7 +27,10 @@ import XCTest
 ///  8. the direct build keeps the web plan hand-off it has always had;
 ///  9. **the purchase surface carries a working privacy policy and terms link**,
 ///     unconditionally, through the same environment boundary every other URL
-///     goes through.
+///     goes through;
+/// 10. **the adapter resolves the product before it asks the app to arm a
+///     sheet, and charges immediately after** — the one ordering that decides
+///     whether a routine lookup failure is retryable or locks the account.
 ///
 /// Absences have no runtime to observe, which is why these are read out of the
 /// sources and the project files that decide what a binary contains.
@@ -768,5 +771,174 @@ final class StoreKitLinkageTests: XCTestCase {
         // target's build.
         let store: any SubscriptionStore = StoreKitSubscriptionStore()
         XCTAssertTrue(store is StoreKitSubscriptionStore)
+    }
+
+    // MARK: - 10: the arm is asked for after the lookup, and nothing follows it
+
+    /// The adapter's own source, whole-line comments removed by the same loader
+    /// every other guard here uses.
+    private func adapterSource() throws -> String {
+        try XCTUnwrap(try sources(under: try adapterRoot, atLeast: 1).first,
+                      "the adapter source is missing").code
+    }
+
+    /// The store seam every purchase crosses, loaded the same way.
+    private func seamSource() throws -> String {
+        try XCTUnwrap(
+            try sources(under: try sourcesRoot, atLeast: 60)
+                .first { $0.path.hasSuffix("RelayiumAppKit/SubscriptionStore.swift") },
+            "the store seam is missing").code
+    }
+
+    /// The statements of a function body, trimmed, from a source whose
+    /// whole-line comments are already gone.
+    ///
+    /// Deliberately line-based. "Nothing may be inserted between the arm and the
+    /// charge" is a claim about how many statements there are, and a guard that
+    /// only searched for substrings could not make it: every substring it looked
+    /// for would still be present with a fourth statement wedged between them. A
+    /// reformat that splits one of these statements across lines fails here, and
+    /// is meant to — the shape is the contract.
+    private func statements(ofFunction name: String, in code: String) throws -> [String] {
+        let lines = code.components(separatedBy: "\n")
+        let declaration = try XCTUnwrap(lines.firstIndex { $0.contains("func \(name)") },
+                                        "\(name) is no longer declared in this source")
+        // The signature may span lines; the body opens at the first one ending
+        // in `{`, and closes at the first `}` back at the declaration's indent.
+        let indent = String(lines[declaration].prefix { $0 == " " })
+        var open = declaration
+        while open < lines.count,
+              !lines[open].trimmingCharacters(in: .whitespaces).hasSuffix("{") {
+            open += 1
+        }
+        guard open < lines.count else {
+            XCTFail("\(name) has no body")
+            return []
+        }
+        var close = open + 1
+        while close < lines.count, lines[close] != indent + "}" { close += 1 }
+        guard close < lines.count else {
+            XCTFail("\(name)'s body does not close at its own indentation")
+            return []
+        }
+        return lines[(open + 1)..<close]
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// **The reader above counts statements, rather than finding the ones it
+    /// was told to look for.**
+    ///
+    /// It is the load-bearing part of the two guards below, and its failure mode
+    /// is the one this target worries about most: a scan that quietly reads
+    /// nothing passes every claim it makes. So it is checked here against a
+    /// shipped shape and against the same shape with one statement wedged in
+    /// after the arm — which is precisely the edit the guards exist to catch,
+    /// stated over a literal rather than by editing the adapter.
+    func testTheStatementReaderSeesAStatementWedgedInAfterTheArm() throws {
+        let shipped = """
+            actor Example {
+                static func order() async throws -> Int {
+                    guard let resolved = try await resolve() else { throw unresolved }
+                    let appAccountToken = try await authorize()
+                    return try await charge(resolved, appAccountToken)
+                }
+            }
+            """
+        XCTAssertEqual(try statements(ofFunction: "order", in: shipped).count, 3,
+                       "the reader miscounted a body it should read exactly")
+
+        let wedged = shipped.replacingOccurrences(
+            of: "        return try await charge",
+            with: "        try await somethingThatCanFailAfterTheArm()\n"
+                + "        return try await charge")
+        XCTAssertEqual(try statements(ofFunction: "order", in: wedged).count, 4,
+                       "a statement inserted between the arm and the charge was not seen")
+    }
+
+    /// **The ordering claim, read out of the source that ships.**
+    ///
+    /// `StoreKitSubscriptionStoreTests` proves the helper *behaves* this way, by
+    /// running it over three recording closures. This proves the helper is still
+    /// the three statements that behaviour is a consequence of. Neither guard
+    /// replaces the other: a source scan cannot see what code does, and the
+    /// executable one cannot see a fourth statement that has not been given a
+    /// closure to call.
+    func testTheAdapterResolvesBeforeArmingAndChargesImmediatelyAfterwards() throws {
+        let body = try statements(ofFunction: "resolveAuthorizeThenPurchase",
+                                  in: try adapterSource())
+
+        XCTAssertEqual(body.count, 3, """
+            the ordering helper is no longer exactly three statements: \(body). \
+            Anything inserted here is work that can fail AFTER Relayium's server \
+            armed a sheet, and a failure on that side of the line is ambiguous \
+            about whether Apple charged — so it locks the account's attempt \
+            instead of leaving it retryable.
+            """)
+        guard body.count == 3 else { return }
+        XCTAssertTrue(body[0].contains("resolve()") && body[0].contains("throw unresolved"),
+                      "the product lookup is no longer what happens first: \(body[0])")
+        XCTAssertTrue(body[1].contains("authorize()"),
+                      "the sheet is no longer armed second: \(body[1])")
+        XCTAssertTrue(body[2].hasPrefix("return") && body[2].contains("charge("),
+                      "charging is no longer the last thing that happens: \(body[2])")
+    }
+
+    /// **The shipped purchase goes through that helper, and hands the callback
+    /// over rather than calling it.**
+    ///
+    /// The helper's ordering is worth nothing if production reaches
+    /// `Product.purchase` some other way, so this reads the real method: the
+    /// lookup is its `resolve:` step, the app's callback is passed straight
+    /// through, and Apple's charge sits inside `charge:`.
+    func testTheProductionPurchaseIsWiredThroughTheOrderingHelper() throws {
+        let body = try statements(ofFunction: "purchase(productID:", in: try adapterSource())
+        let joined = body.joined(separator: "\n")
+
+        XCTAssertTrue(joined.contains("Self.resolveAuthorizeThenPurchase("),
+                      "the shipped purchase no longer states its ordering through the helper")
+        let resolveStep = try XCTUnwrap(body.first { $0.hasPrefix("resolve:") },
+                                        "the helper is no longer given a resolve step")
+        XCTAssertTrue(resolveStep.contains("Product.products("), """
+            the product lookup is no longer the pre-authorization step: \
+            \(resolveStep). It is the call that fails routinely and provably \
+            without charging anybody, so it is what has to happen before the arm.
+            """)
+        // Handed over, never invoked here: at-most-once, the account re-check and
+        // the refusal are the model's to enforce, and a second call site is how
+        // one sheet acquires two dispatches.
+        XCTAssertTrue(body.contains("authorize: authorize,"),
+                      "the app's authorization callback is no longer passed straight through")
+        XCTAssertFalse(joined.contains("authorize()"),
+                       "the adapter now invokes the authorization callback itself")
+
+        let chargeStep = try XCTUnwrap(body.firstIndex { $0.hasPrefix("charge:") },
+                                       "the helper is no longer given a charge step")
+        let normalized = try XCTUnwrap(body.firstIndex { $0.contains("normalizedPurchaseResult") },
+                                       "the purchase no longer normalizes Apple's typed cancellation")
+        XCTAssertGreaterThan(normalized, chargeStep, """
+            `normalizedPurchaseResult` no longer sits inside the charge step. It \
+            turns Apple's typed cancellation into a cancelled RESULT, so an \
+            authorization refused above this seam must stay outside it: a refusal \
+            is not a user cancelling a sheet that was never opened.
+            """)
+    }
+
+    /// **The seam carries no pre-minted attribution token.**
+    ///
+    /// A token that crosses this boundary as a value has already been minted,
+    /// and minting is what arms one sheet on Relayium's server. That is what put
+    /// the adapter's own product lookup on the ambiguous side of the arm, where
+    /// a storefront that does not carry the identifier locked the account out of
+    /// buying anything at all.
+    func testTheStoreSeamAsksForAuthorizationRatherThanTakingAToken() throws {
+        let seam = try seamSource()
+
+        XCTAssertTrue(seam.contains("authorize: @escaping StorePurchaseAuthorization)"),
+                      "the store seam no longer takes an authorization callback")
+        XCTAssertTrue(seam.contains("public typealias StorePurchaseAuthorization"),
+                      "the authorization callback is no longer declared at the seam")
+        XCTAssertFalse(seam.contains("appAccountToken"),
+                       "the store seam names a pre-minted attribution token again")
     }
 }

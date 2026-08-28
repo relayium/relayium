@@ -97,23 +97,38 @@ public actor StoreKitSubscriptionStore: SubscriptionStore {
 
     // MARK: - buying
 
+    /// **Resolve the product first, authorize second, charge third.**
+    ///
+    /// `Product.products` is a call to Apple that fails routinely — an
+    /// identifier this storefront does not carry, an App Store Connect row not
+    /// yet cleared for sale, a device with no network — and it charges nobody
+    /// when it does. It therefore runs BEFORE `authorize`, which is the call
+    /// that arms one sheet on Relayium's server and makes every subsequent
+    /// failure ambiguous about money. See ``StorePurchaseAuthorization``.
     public func purchase(productID: String,
-                         appAccountToken: UUID) async throws -> StorePurchaseOutcome {
-        guard let product = try await Product.products(for: [productID]).first else {
-            throw StoreKitStoreError.productUnavailable
-        }
-        // The attribution token is the ONLY option passed. It is the value
-        // Relayium's server minted for the authenticated account, and it is what
-        // the server later reads out of Apple's signed payload to decide whose
-        // purchase this is.
-        let options: Set<Product.PurchaseOption> = [.appAccountToken(appAccountToken)]
-        let result = try await Self.normalizedPurchaseResult {
+                         authorize: @escaping StorePurchaseAuthorization) async throws -> StorePurchaseOutcome {
+        let result = try await Self.resolveAuthorizeThenPurchase(
+            resolve: { try await Product.products(for: [productID]).first },
+            unresolved: StoreKitStoreError.productUnavailable,
+            authorize: authorize,
+            charge: { product, appAccountToken in
+                // The attribution token is the ONLY option passed. It is the
+                // value Relayium's server minted for the authenticated account,
+                // and it is what the server later reads out of Apple's signed
+                // payload to decide whose purchase this is.
+                let options: Set<Product.PurchaseOption> = [.appAccountToken(appAccountToken)]
+                // `authorize` is deliberately OUTSIDE this: `normalizedPurchaseResult`
+                // turns Apple's typed cancellation into a cancelled RESULT, and a
+                // refusal raised above this seam is not a user cancelling a sheet
+                // that was never opened.
+                return try await Self.normalizedPurchaseResult {
 #if os(macOS)
-            try await purchase(product: product, options: options)
+                    try await self.purchase(product: product, options: options)
 #else
-            try await product.purchase(options: options)
+                    try await product.purchase(options: options)
 #endif
-        }
+                }
+            })
         switch result {
         case .success(let verification):
             return .delivered(await record(verification))
@@ -124,6 +139,37 @@ public actor StoreKitSubscriptionStore: SubscriptionStore {
         @unknown default:
             throw StoreKitStoreError.unknownPurchaseResult
         }
+    }
+
+    /// **The adapter's whole ordering claim, in three lines and no StoreKit
+    /// types.**
+    ///
+    /// Generic over what is resolved and what charging answers, so the claim is
+    /// executable under `swift test` with no store at all: production passes
+    /// `Product.products`, the app's authorization callback and
+    /// `Product.purchase`; a test passes three recording fakes and reads the
+    /// order back. The alternative — asserting the shape by reading this file
+    /// as text — can only ever check that some words are present.
+    ///
+    /// **Nothing may be inserted between the last two statements.** Anything
+    /// there would be work that can fail after Relayium's server has armed a
+    /// sheet, and a failure on that side of the line is ambiguous about whether
+    /// Apple charged, so it locks the account's attempt instead of leaving it
+    /// retryable. `StoreKitLinkageTests` reads those two statements back and
+    /// fails if a third appears between them.
+    ///
+    /// The claim is about *this body*. What the `charge` step does on its way
+    /// into StoreKit is its own, and on macOS that is not suspension-free; see
+    /// the window-bound overload below for why none of it can fail.
+    static func resolveAuthorizeThenPurchase<Resolved, Charged>(
+        resolve: () async throws -> Resolved?,
+        unresolved: Error,
+        authorize: StorePurchaseAuthorization,
+        charge: (Resolved, UUID) async throws -> Charged
+    ) async throws -> Charged {
+        guard let resolved = try await resolve() else { throw unresolved }
+        let appAccountToken = try await authorize()
+        return try await charge(resolved, appAccountToken)
     }
 
     /// StoreKit has two explicit ways to report the same user action. Most
@@ -147,6 +193,14 @@ public actor StoreKitSubscriptionStore: SubscriptionStore {
     /// window-bound overload arrived in macOS 15.2; Relayium's macOS 13–15.1
     /// users retain the API their systems provide. A missing window falls back
     /// rather than throwing after the server has already armed the purchase.
+    ///
+    /// **This is the suspension the ordering contract does permit.** Entering
+    /// the charge step crosses to MainActor and looks up a window, so the path
+    /// from the arm to Apple's purchase call does have suspension points — but
+    /// neither hop can throw, and a `nil` window takes the unbound overload
+    /// instead of failing. No fallible prerequisite of the adapter's own
+    /// survives on the ambiguous side of the arm; only `Product.purchase`
+    /// itself may fail there, and its failure is ambiguous by nature.
     @MainActor
     private func purchase(
         product: Product,
