@@ -37,6 +37,19 @@ for the other.
 - Refund, revoke, expiry, billing retry, grace period, renewal, upgrade,
   downgrade, cross-grade, and Production-over-Sandbox ordering converge from
   signed provider state.
+- Everything the store can fail at without charging anybody — the product
+  lookup above all — happens BEFORE the purchase dispatch that arms a sheet.
+  A lookup that throws or resolves nothing arms nothing, persists no
+  continuation capability, reports no outcome, and leaves the same model able
+  to buy the same product on the next attempt. Only a failure after that
+  authorization is ambiguous, and only that one locks.
+- One purchase attempt yields at most one attribution token. `appAccountToken`
+  is attribution and not an idempotency key — Apple does not deduplicate
+  purchases by it — so a repeat authorization request is refused rather than
+  answered from the arm that already exists. The count that has to stay bounded
+  is issued tokens, not server dispatches: a single dispatch can otherwise hand
+  out two permissions to open a sheet, against one arm the app reports exactly
+  one outcome for.
 - StoreKit remains absent from the Developer ID target and linked only by App
   Store targets.
 
@@ -101,22 +114,71 @@ second Cancel again returned to idle. Each server outcome response was
 `resumable: true`; no transaction was completed and the account remained Free.
 
 The owner subsequently released 1.3.6 publicly on 2026-08-26. Apple's public
-lookup reports it live from 2026-08-26 01:15:37 UTC. The two availability risks
-below were not removed by that publication and remain explicit follow-up work:
+lookup reports it live from 2026-08-26 01:15:37 UTC. Two availability risks
+survived that publication:
 
-- an already-locked local Keychain continuation must be able to reconcile an
-  operator-resolved server attempt without broad or automatic capability
-  deletion;
-- a product lookup or other provably pre-sheet failure must not be recorded as
-  an ambiguous post-sheet failure that permanently locks the attempt.
+- **Open.** An already-locked local Keychain continuation must be able to
+  reconcile an operator-resolved server attempt without broad or automatic
+  capability deletion. No protocol for this is designed yet.
+- **Repaired in source, unreleased (2026-08-28).** A product lookup or other
+  provably pre-sheet failure must not be recorded as an ambiguous post-sheet
+  failure that permanently locks the attempt. The attribution token was a
+  parameter of the store seam, so it had already been minted — and a sheet
+  already armed — before the adapter asked Apple whether the product exists.
+  It is now minted by a callback the adapter invokes after its own product
+  lookup and immediately before it charges, so every provably pre-sheet failure
+  lands before the arm and no adapter-owned fallible prerequisite remains
+  between authorization and the StoreKit purchase call. `Product.products`
+  resolves first, the authorization callback is the next statement, and the
+  charge is the one immediately after it. That path into StoreKit is not
+  suspension-free on macOS — it crosses to MainActor and looks up the
+  confirmation window — but neither hop can throw and a missing window falls
+  back to the unbound purchase overload, so nothing on the ambiguous side of
+  the arm can fail before Apple's own call does.
+  StoreKit's own purchase call is deliberately fallible and stays on the
+  ambiguous side: it may throw with a charge already made, so it still reports
+  `failed` and still locks. **No public build carries this.** It is authored on
+  `fix/apple-preflight-before-arm` and is
+  unmerged, unreleased and not submitted; the App Store behavior described
+  above is still what 1.3.6 through 1.3.8 ship.
 
-These are availability risks, not duplicate-charge relaxations. Until their
-protocol is designed, ambiguous outcomes remain locked and affected accounts use
-only the evidence-gated operator procedure. The 1.3.7 transfer-performance
-release carries this already-public purchase behavior forward unchanged; it does
-not treat publication as evidence that either risk was fixed. Cancellation of the
-App Store credential dialog during Restore Purchases is a separate UI-only
-truthfulness issue: it arms no purchase and changes no billing state.
+The repair changes no Apple outcome vocabulary, HTTP route, server path,
+catalog capability, authority rule or provider configuration: it moves *when*
+the existing dispatch is requested, and nothing else.
+
+Moving the request into a callback makes the callback itself the money boundary,
+so it is bound to exactly one attempt. Each callback captures the identity of
+the authorization it was minted for; the model refuses any call whose captured
+identity is not the authorization currently open, and re-checks that identity
+after the arm request returns. An adapter that retains a callback past its own
+purchase therefore cannot be handed a later attempt's token; one that asks a
+second time for an attempt already armed is refused without a token, because
+returning the token it already holds would be issuing a second permission to
+charge rather than merely repeating an answer; and one that abandons a callback
+while its arm is still in flight receives no token at all and reports no
+outcome. Reporting one would be unsound: the capability is
+persisted before the initial request, so a purchase starting after the
+abandoning one ends replays that exact prepared arm and the server answers both
+idempotently with the same arm and token. The replaying purchase is then the
+legitimate waiter and may already be opening a sheet, so an abandoned callback
+that released the arm could cancel *that* sheet and let a later attempt re-arm
+over a chargeable purchase. "My attempt stopped waiting" does not prove the arm
+is unused. The arm is therefore left authoritative: a live replaying waiter
+alone obtains the token and reports what it actually observes, and with no such
+waiter the capability stays `armed`, so the next purchase refuses pending
+reconciliation or the operator procedure rather than arming a second sheet.
+That is an availability loss confined to an adapter that broke the callback
+contract, and it is the only side of the choice that cannot spend money.
+None of these properties is trusted to adapter behavior. Ambiguity itself is not
+relaxed — a throw after authorization still reports `failed` and still locks,
+a refused repeat request is one such throw and locks the same way, and affected
+accounts still use only the evidence-gated operator procedure.
+These remain availability risks, not duplicate-charge relaxations. The 1.3.7
+transfer-performance release carries the already-public purchase behavior
+forward unchanged; it does not treat publication as evidence that either risk
+was fixed. Cancellation of the App Store credential dialog during Restore
+Purchases is a separate UI-only truthfulness issue: it arms no purchase and
+changes no billing state.
 
 ## macOS 1.3.8 Finder drag-and-drop release
 

@@ -319,6 +319,19 @@ public final class AppleSubscriptionModel: ObservableObject {
     /// never be used to abandon a server arm merely because a catalog refresh
     /// became the newest screen operation.
     private var purchaseInProgress = false
+    /// The one in-flight authorization, and **the only place the answer to "has
+    /// the server armed a sheet for this attempt?" is kept.**
+    ///
+    /// MainActor state, deliberately, because after `store.purchase` throws the
+    /// model has to decide whether an arm is open and owes an outcome. An
+    /// adapter's error type cannot answer that: the adapter chooses it, anything
+    /// between here and StoreKit can wrap it, and a fake could throw the same
+    /// value on either side of the arm. This is written by this object, on this
+    /// actor, at the instant the server answered.
+    private var authorization: PurchaseAuthorization?
+    /// Names each authorization, so a write that follows a suspension can never
+    /// land on a value that has since been replaced or cleared.
+    private var authorizationSeq = 0
 
     public init(store: SubscriptionStore,
                 billing: AppleBillingService,
@@ -584,69 +597,141 @@ public final class AppleSubscriptionModel: ObservableObject {
             return
         }
 
-        // Permission to open exactly one sheet, plus the arm identity that
-        // permission is named by. Everything about the continuation capability —
-        // planning, persisting, and failing closed — happens in here, BEFORE the
-        // store is asked to charge anybody.
-        guard let armed = await arm(productID: productID, token: token,
-                                    ownerAccountID: ownerAccountID,
-                                    generation: g) else { return }
-        // Do not gate this boundary on `generation`. Once the server has armed
-        // a sheet, a later catalog/UI operation may own the screen but cannot
-        // erase the money-side obligation to obtain and report one StoreKit
-        // outcome. `purchaseInProgress` prevents a second purchase from sharing
-        // this arm; the account snapshot below prevents cross-account use.
-        guard currentBearer() == token,
-              ownerAccountID == nil || currentAccountID() == ownerAccountID else {
-            // No StoreKit call has happened yet. Release the server arm as an
-            // explicit cancellation under the authority snapshot that created
-            // it; if delivery fails, the recorded outcome remains replayable.
-            await report(.userCancelled, for: armed, token: token)
-            guard !superseded(g) else { return }
-            state = .failed(.billing(.notSignedIn))
-            return
-        }
-        let dispatch = armed.dispatch
+        // **The arm now happens inside the store's own purchase call**, through
+        // the authorization callback below. Everything the store must do that
+        // can fail without Relayium's server knowing anything — resolving the
+        // product with Apple, above all — happens BEFORE that callback runs,
+        // and the sheet opens immediately after it returns.
+        //
+        // A product lookup that fails therefore leaves no dispatch, no
+        // capability, and a purchase the same user may simply try again. While
+        // the token was a plain parameter that lookup threw AFTER the arm, and
+        // a post-arm throw is ambiguous about whether Apple charged, so it
+        // locked the account out of buying anything at all.
+        authorizationSeq += 1
+        let authorizationID = authorizationSeq
+        authorization = PurchaseAuthorization(id: authorizationID, productID: productID,
+                                              token: token, ownerAccountID: ownerAccountID,
+                                              generation: g)
+        defer { if authorization?.id == authorizationID { authorization = nil } }
 
         let outcome: StorePurchaseOutcome
         do {
-            outcome = try await store.purchase(productID: productID,
-                                               appAccountToken: dispatch.appAccountToken)
+            outcome = try await store.purchase(
+                productID: productID,
+                authorize: { [weak self, authorizationID] in
+                    // `weak`, because the store holds this for as long as a sheet
+                    // a user may leave open: a model that has gone away has no
+                    // attempt to arm for.
+                    //
+                    // **`authorizationID` is captured, not read back.** This
+                    // callback authorizes exactly one attempt — the one it was
+                    // minted inside — and says so in its own captured state. A
+                    // callback that instead asked "what is the current
+                    // authorization?" would answer for whichever attempt happened
+                    // to be live when the adapter finally ran it, so an adapter
+                    // that retained this past its own purchase could hand a
+                    // LATER attempt's token to an EARLIER product's sheet, or put
+                    // two sheets on one arm. Neither is a hypothetical an
+                    // adapter's good behavior may be trusted to exclude.
+                    guard let self else { throw StorePurchaseAuthorizationRefused.notAwaiting }
+                    return try await self.authorizePurchase(authorizationID)
+                })
         } catch {
-            // **The store threw, and that is not a cancellation.** It is
-            // reported as `failed`, which locks the attempt: an error says
-            // nothing about whether Apple will charge, and re-arming on one is
-            // the double-charge path this protocol exists to close.
+            let attempt = closeAuthorization(authorizationID)
+            // **Whether an arm exists is read from this object's own state,
+            // never from the error.** An adapter chooses its error type,
+            // anything in between may wrap it, and the same value can be thrown
+            // on either side of the arm — so a type test here would be a guess
+            // about money. `attempt.armed` was written by this model, on this
+            // actor, at the instant the server answered.
+            if let refused = attempt?.refusal {
+                // This model refused, and the refusing code already did whatever
+                // its refusal owed: released the arm it had just created, or
+                // wrote the failure state itself. Neither may happen twice, and
+                // the error the adapter surfaced for our own refusal is not the
+                // reason the screen should show.
+                guard !superseded(g) else { return }
+                if case .failure(let failure) = refused { state = .failed(failure) }
+                return
+            }
+            if let armed = attempt?.armed {
+                // **The store threw after authorization, and that is not a
+                // cancellation.** It is reported as `failed`, which locks the
+                // attempt: an error says nothing about whether Apple will
+                // charge, and re-arming on one is the double-charge path this
+                // protocol exists to close.
+                //
+                // Reported BEFORE the supersession guard, and awaited: a newer
+                // purchase must not find this arm still open, and dropping the
+                // report because the screen moved on would leave the account
+                // deadlocked on an arm nobody will ever resolve.
+                await report(.failed, for: armed, token: token)
+            }
+            // Two shapes reach here with nothing reported, and they differ only
+            // in what the NEXT attempt finds:
             //
-            // Reported BEFORE the supersession guard, and awaited: a newer
-            // purchase must not find this arm still open, and dropping the
-            // report because the screen moved on would leave the account
-            // deadlocked on an arm nobody will ever resolve.
-            await report(.failed, for: armed, token: token)
+            //  * nothing armed and nothing in flight — **nothing was ever
+            //    dispatched.** The store failed before it asked for
+            //    authorization, so there is no arm, no capability and nothing
+            //    that could have charged; the same product may simply be chosen
+            //    again. This is the whole reason the token became a callback.
+            //  * an authorization still in flight when the store answered — a
+            //    broken adapter that abandoned its own callback. This attempt
+            //    holds no handle to report an arm under, and does not invent
+            //    one. When that arm request lands it finds itself no longer
+            //    awaited, returns no token and reports nothing at all: it can
+            //    prove no token escaped through IT, but not that the arm is
+            //    unused, because the persisted capability lets the next purchase
+            //    replay this exact arm and become its legitimate waiter. So the
+            //    arm is left authoritative — the replaying attempt resolves it
+            //    if one exists, and otherwise it stays armed and the next
+            //    purchase refuses rather than arming a second sheet.
             guard !superseded(g) else { return }
             state = .failed(Self.failure(for: error))
             return
         }
+        let attempt = closeAuthorization(authorizationID)
+        // `nil` when the store answered without ever asking for authorization,
+        // and also when this model already reported an outcome for the arm and
+        // the adapter answered around that refusal. Either way there is no open
+        // arm a further outcome could belong to.
+        let armed = attempt?.reported == true ? nil : attempt?.armed
 
         switch outcome {
         case .userCancelled:
             // **The one resumable outcome**, and the only one the server will
             // re-arm on. Reported before the supersession guard for the same
             // reason a thrown error is: this is what releases the dispatch.
-            await report(.userCancelled, for: armed, token: token)
+            if let armed { await report(.userCancelled, for: armed, token: token) }
             guard !superseded(g) else { return }
             // The whole meaning of cancelling is that nothing happened. No
-            // submission, no finish, and no error the user did not cause.
-            state = .idle
+            // submission, no finish, and no error the user did not cause —
+            // unless this model itself refused, in which case its own reason
+            // stands rather than the idle screen an adapter answered around it
+            // with.
+            if let refused = attempt?.refusal {
+                if case .failure(let failure) = refused { state = .failed(failure) }
+            } else {
+                state = .idle
+            }
         case .pending:
             // Ask to Buy or a bank approval. It may still become a real charge,
             // so it LOCKS rather than releasing: `pending` is not `cancelled`,
             // and the server is told which one it was.
-            await report(.pending, for: armed, token: token)
+            if let armed { await report(.pending, for: armed, token: token) }
             guard !superseded(g) else { return }
-            state = .deferred
+            if let refused = attempt?.refusal {
+                if case .failure(let failure) = refused { state = .failed(failure) }
+            } else {
+                state = .deferred
+            }
         case .delivered(let delivery):
-            await report(.success, for: armed, token: token)
+            // Reported only when an arm exists. A store that delivered without
+            // ever authorizing has none, so there is no outcome to report and
+            // none is invented — but the transaction is signed and that money is
+            // real, so it is still submitted below rather than dropped.
+            if let armed { await report(.success, for: armed, token: token) }
             guard !superseded(g) else { return }
             state = .submitting
             switch await settle(delivery) {
@@ -665,6 +750,195 @@ public final class AppleSubscriptionModel: ObservableObject {
         }
     }
 
+    // MARK: - authorizing exactly one sheet
+
+    /// **Mint the one attribution token this attempt may open a sheet with.**
+    ///
+    /// Called by the store adapter after it has resolved the product and
+    /// immediately before it charges, which is the whole reason the arm moved in
+    /// here: everything that can fail without Relayium's server knowing anything
+    /// has already happened, and everything after this returns is ambiguous
+    /// about money.
+    ///
+    /// **At-most-once is enforced here rather than trusted to the adapter, and
+    /// the thing counted is the token, not the dispatch.** A second call for a
+    /// sheet already armed is refused without a token; a second call while the
+    /// first is still being arranged is refused; a call after `store.purchase`
+    /// has answered is refused. None of them can produce a second arm, and none
+    /// of them can produce a second permission to charge against the first.
+    ///
+    /// Handing the same token back to a repeat caller would look like the safe
+    /// answer — one arm, one dispatch — and is not. `appAccountToken` attributes
+    /// a purchase to an account; Apple does not treat it as an idempotency key.
+    /// Two sheets carrying it are two purchases Apple may charge for, against
+    /// one arm this model can report only one outcome for.
+    ///
+    /// **`callbackID` names the one attempt this call may answer for, and it is
+    /// re-checked after every suspension.** The identity is what makes the
+    /// preceding paragraph true across attempts rather than only within one:
+    /// "the sheet already armed" must mean *this* callback's sheet, and "a call
+    /// after `store.purchase` answered" must stay refused even when a different
+    /// purchase has since installed an authorization that is perfectly open.
+    /// Arming the server suspends, so the attempt can be closed or replaced
+    /// while this call is inside it — and past that point no token may escape,
+    /// because there is no longer anything that will report an outcome for it.
+    /// It also reports nothing: losing its own waiter says nothing about
+    /// whether another attempt has replayed and is now waiting on the very
+    /// same arm, so the arm is left authoritative rather than released.
+    private func authorizePurchase(_ callbackID: Int) async throws -> UUID {
+        guard let attempt = authorization,
+              attempt.id == callbackID,
+              attempt.open else {
+            // A callback the adapter retained past the attempt it belonged to —
+            // either because nothing is waiting at all, or because what is
+            // waiting is somebody ELSE's attempt. Arming for the first would
+            // open a sheet nobody would ever report; answering for the second
+            // would attribute this product's sheet to that attempt's arm.
+            throw StorePurchaseAuthorizationRefused.notAwaiting
+        }
+        if attempt.armed != nil {
+            // **This attempt already spent its one authorization, so it is
+            // refused — the token is not handed back.**
+            //
+            // Answering with the same token would be the cheap-looking mistake
+            // here, on the reasoning that one arm can only produce one dispatch.
+            // The dispatch is not what costs money. `appAccountToken` is
+            // *attribution*: Apple reads it to decide whose purchase this is,
+            // and does not deduplicate purchases by it. So a second copy of that
+            // token is a second permission to open a sheet, and two sheets are
+            // two charges Apple may take — while `store.purchase` returns once
+            // and this model reports exactly one outcome for the single arm
+            // behind them. The second charge would then be money this attempt
+            // has no outcome slot to report: one arm and one `store.purchase`
+            // return do not map to two sheets.
+            //
+            // At-most-once therefore has to mean at most one *token*, not at
+            // most one dispatch, and it is enforced here rather than trusted to
+            // an adapter that has already demonstrated it asks twice.
+            //
+            // No release, and nothing reported from here. A sheet may be open on
+            // this arm right now, and refusing a second one says nothing about
+            // what the first will do. The refusal propagates as a throw out of
+            // `store.purchase` like any other post-authorization failure, and
+            // `purchase(productID:)` locks the attempt on the ambiguity — the
+            // one direction that cannot charge somebody twice.
+            guard attempt.refusal == nil else {
+                // Already refused for a reason this model recorded and owes the
+                // screen; that reason outranks this one.
+                throw StorePurchaseAuthorizationRefused.refused
+            }
+            throw StorePurchaseAuthorizationRefused.alreadyAuthorized
+        }
+        guard !attempt.arming else {
+            // A concurrent second request, while the server is still answering
+            // the first. One sheet gets one dispatch.
+            throw StorePurchaseAuthorizationRefused.alreadyInFlight
+        }
+        let id = callbackID
+        note(id) { $0.arming = true }
+        // Permission to open exactly one sheet, plus the arm identity that
+        // permission is named by. Everything about the continuation capability —
+        // planning, persisting, and failing closed — happens in here, and still
+        // BEFORE the store is asked to charge anybody.
+        let sheet = await arm(productID: attempt.productID, token: attempt.token,
+                              ownerAccountID: attempt.ownerAccountID,
+                              generation: attempt.generation)
+        note(id) { $0.arming = false }
+        guard let sheet else {
+            // `arm` has already written the truthful failure state — or was
+            // superseded and deliberately wrote none — and it armed nothing, so
+            // there is nothing to report and nothing to release.
+            note(id) { $0.refusal = .stateAlreadyWritten }
+            throw StorePurchaseAuthorizationRefused.refused
+        }
+        guard isAwaiting(callbackID) else {
+            // **A sheet was armed for an attempt that stopped waiting for it.**
+            // The adapter answered — returned or threw — while this callback was
+            // still suspended inside the arm request, so `store.purchase` has
+            // already closed this attempt and may have been replaced by another.
+            //
+            // No token may be returned. The attempt that would have reported an
+            // outcome for it is gone, and a later attempt's report would name a
+            // different arm.
+            //
+            // **And nothing is reported — not even the cancellation this
+            // callback can prove about itself.** "This callback has not
+            // returned" proves no attribution token reached the store *through
+            // it*; it does not prove this arm is unused. The capability is
+            // persisted before the initial request, so while that request is in
+            // flight the stored phase is still `preparing` — and a purchase
+            // starting after the abandoning one ends replays that exact prepared
+            // arm, which the server answers idempotently with the same arm and
+            // the same token. That second purchase is then the legitimate
+            // waiter, and it may already be opening a sheet on this arm.
+            // Releasing it here would cancel THAT sheet and leave a later
+            // attempt free to re-arm over a purchase Apple may charge for.
+            // "Nobody is waiting on my attempt" is not "nobody is waiting on
+            // this arm", and only the second would justify a release.
+            //
+            // So the arm stays authoritative and untouched. If a live waiter
+            // holds it, that waiter alone obtains the token and reports the
+            // outcome it actually observes. If none does, the capability stays
+            // `armed` and the next purchase is refused pending reconciliation or
+            // operator recovery — an availability loss confined to an adapter
+            // that broke the callback contract, and the only side of this choice
+            // that cannot spend somebody's money.
+            throw StorePurchaseAuthorizationRefused.notAwaiting
+        }
+        note(id) { $0.armed = sheet }
+        // Do not gate this boundary on `generation`. Once the server has armed a
+        // sheet, a later catalog/UI operation may own the screen but cannot
+        // erase the money-side obligation to obtain and report one StoreKit
+        // outcome. `purchaseInProgress` prevents a second purchase from sharing
+        // this arm; the account snapshot below prevents cross-account use.
+        guard currentBearer() == attempt.token,
+              attempt.ownerAccountID == nil
+                || currentAccountID() == attempt.ownerAccountID else {
+            // No StoreKit call has happened yet — the store is blocked on this
+            // very call — so this is the same explicit cancellation it was
+            // before the arm moved inside the sheet's own call. Release the
+            // server arm under the authority snapshot that created it; if
+            // delivery fails, the recorded outcome remains replayable.
+            await report(.userCancelled, for: sheet, token: attempt.token)
+            note(id) {
+                $0.reported = true
+                $0.refusal = .failure(.billing(.notSignedIn))
+            }
+            throw StorePurchaseAuthorizationRefused.refused
+        }
+        return sheet.dispatch.appAccountToken
+    }
+
+    /// Whether `id` still names the authorization this model is waiting on, and
+    /// that authorization is still accepting one.
+    ///
+    /// Both halves are load-bearing and neither implies the other: a closed
+    /// attempt may still be the current one, and an open attempt may be a
+    /// different one entirely.
+    private func isAwaiting(_ id: Int) -> Bool {
+        guard let attempt = authorization else { return false }
+        return attempt.id == id && attempt.open
+    }
+
+    /// Write back to the in-flight authorization only while it is still the same
+    /// one. Every mutation here follows a suspension.
+    private func note(_ id: Int, _ body: (inout PurchaseAuthorization) -> Void) {
+        guard var attempt = authorization, attempt.id == id else { return }
+        body(&attempt)
+        authorization = attempt
+    }
+
+    /// Stop accepting authorization for this attempt, and hand back what it
+    /// recorded. Called the moment `store.purchase` answers, so a callback the
+    /// adapter kept is refused during the awaits that follow it.
+    @discardableResult
+    private func closeAuthorization(_ id: Int) -> PurchaseAuthorization? {
+        guard var attempt = authorization, attempt.id == id else { return nil }
+        attempt.open = false
+        authorization = attempt
+        return attempt
+    }
+
     // MARK: - arming one sheet
 
     /// One authorized sheet, and the identity its outcome must be reported under.
@@ -677,6 +951,41 @@ public final class AppleSubscriptionModel: ObservableObject {
         /// capability so a report is bound to the identity that was ACTUALLY
         /// opened, not to whatever the store has drifted to since.
         let armRequestID: String?
+    }
+
+    /// One purchase attempt's authorization, from the moment `store.purchase`
+    /// is entered to the moment it answers.
+    private struct PurchaseAuthorization {
+        let id: Int
+        let productID: String
+        /// The bearer snapshot the arm is created under, and the one every
+        /// report about it is sent under.
+        let token: String
+        let ownerAccountID: String?
+        let generation: Int
+        /// Non-nil once the server armed a sheet. **The fact that decides
+        /// whether an outcome is owed.**
+        var armed: ArmedSheet?
+        /// True while the arm request is in flight, so a concurrent second
+        /// authorization cannot start a second dispatch.
+        var arming = false
+        /// True once an outcome has already been reported for `armed` from
+        /// inside the callback. One sheet gets one statement.
+        var reported = false
+        /// What this model decided when it refused, so the caller does not
+        /// re-derive a reason from whatever error the adapter surfaced.
+        var refusal: Refusal?
+        /// Cleared the moment `store.purchase` answers. A callback retained past
+        /// that point may not arm anything.
+        var open = true
+
+        enum Refusal {
+            /// The refusing code already wrote the failure state itself, and
+            /// armed nothing.
+            case stateAlreadyWritten
+            /// Refused with this failure, which the screen is still owed.
+            case failure(AppleSubscriptionFailure)
+        }
     }
 
     /// **Get permission to open exactly one StoreKit sheet.**

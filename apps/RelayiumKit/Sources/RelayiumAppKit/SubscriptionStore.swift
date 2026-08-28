@@ -1,5 +1,74 @@
 import Foundation
 
+/// Mint the attribution token for **one** purchase sheet, at the moment the
+/// store is ready to open it.
+///
+/// The adapter still cannot choose this value: it is minted by Relayium's
+/// server for the authenticated account, and a store layer that could supply
+/// its own would be able to attribute a purchase to an account nobody proved
+/// they hold. What a callback changes is only *when* it is asked for.
+///
+/// **Why a callback rather than a parameter.** Obtaining the token costs an
+/// authenticated round trip that arms exactly one sheet on Relayium's server,
+/// and once that arm exists every later failure is ambiguous about money: a
+/// throw out of StoreKit says nothing about whether Apple charged, so it locks
+/// the attempt rather than releasing it. But the adapter's own product lookup
+/// is a call to Apple that fails routinely and *provably without charging* —
+/// an identifier this storefront does not carry, a device with no network —
+/// and as a plain parameter the token sat on the wrong side of that line: it
+/// had already been minted, so a lookup failure locked the account out of
+/// buying anything at all. Asking through a callback puts every provably
+/// pre-sheet failure before the arm, and leaves no adapter-owned prerequisite
+/// between the arm and StoreKit's own purchase call.
+///
+/// **That is not a claim that nothing after the arm can fail.**
+/// `Product.purchase` is deliberately fallible and its failures are ambiguous
+/// about money — StoreKit may throw with a charge already made — so everything
+/// on that side of the callback still locks the attempt. What the callback
+/// moves is only the provably-harmless work, so a routine lookup failure stops
+/// being paid for with a permanent lockout.
+///
+/// **Calling this more than once does not produce a second token, ever.** The
+/// value it returns is permission to open one sheet, and permission is what
+/// costs money — Apple attributes a purchase by `appAccountToken` but does not
+/// deduplicate by it, so two sheets carrying one token are two purchases it may
+/// charge for, against a single arm the app can report only one outcome for. A
+/// repeat call is therefore refused rather than answered from the arm that
+/// already exists.
+///
+/// Throwing refuses the purchase: the adapter propagates the error and opens
+/// no sheet.
+public typealias StorePurchaseAuthorization = @Sendable () async throws -> UUID
+
+/// Why the app refused to authorize a sheet the store was about to open.
+///
+/// **Nothing above the seam reads this to decide whether an arm exists.** The
+/// app knows that from its own state; an error's type is chosen by the adapter,
+/// can be wrapped by anything in between, and a fake could throw the same value
+/// on either side of the arm. This exists so an adapter has something typed to
+/// propagate and a test has something to name — so it carries no server
+/// vocabulary and no transaction material.
+public enum StorePurchaseAuthorizationRefused: Error, Equatable {
+    /// There is no purchase attempt waiting for this authorization: it was
+    /// never started, or it has already finished and the callback was retained
+    /// past it. Nothing is armed, and nothing may be.
+    case notAwaiting
+    /// A second authorization was requested while the first was still being
+    /// arranged. One sheet gets one dispatch, and one token.
+    case alreadyInFlight
+    /// This attempt has already been given its token. **No second one exists,
+    /// and none is minted.**
+    ///
+    /// The token is attribution, not an idempotency key: Apple does not
+    /// deduplicate purchases by `appAccountToken`, so handing the same value
+    /// back a second time would be handing out a second permission to charge,
+    /// against a single arm the app can only ever report one outcome for.
+    case alreadyAuthorized
+    /// The app refused, and has already recorded why. The reason stays above
+    /// this seam rather than being encoded into an error the store could act on.
+    case refused
+}
+
 /// The app's whole view of an in-app purchase store, with no `import StoreKit`
 /// anywhere in it.
 ///
@@ -24,14 +93,39 @@ public protocol SubscriptionStore: Sendable {
     /// know is simply absent, never invented.
     func offers(for productIDs: [String]) async throws -> [SubscriptionOffer]
 
-    /// Buy one product, attributed to `appAccountToken`.
+    /// Buy one product, attributed to the token `authorize` mints.
     ///
-    /// The token is a parameter rather than something the adapter fetches
-    /// because the adapter must not be able to choose it: it is minted by
-    /// Relayium's server for the authenticated account, and a store layer that
-    /// could supply its own would be able to attribute a purchase to an account
-    /// nobody proved they hold.
-    func purchase(productID: String, appAccountToken: UUID) async throws -> StorePurchaseOutcome
+    /// **The ordering is the contract, not an implementation detail.** An
+    /// implementation must do everything that can fail without charging
+    /// anybody — resolving the product, above all — BEFORE it calls
+    /// `authorize`, and must invoke the store's own purchase path as the
+    /// immediate next step after `authorize` returns, with no fallible
+    /// prerequisite of its own left in between. Reaching that path may still
+    /// suspend — the macOS adapter hops to MainActor and asks for a
+    /// confirmation window — and that is allowed exactly because neither hop
+    /// can throw and a missing window has a defined fallback rather than a
+    /// failure. What may not remain on that side of the line is anything that
+    /// can fail. The charge itself may of course throw; that failure is
+    /// ambiguous about money and locks the attempt, which is exactly why
+    /// nothing avoidable may join it there.
+    /// ``StoreKitSubscriptionStore/resolveAuthorizeThenPurchase(resolve:unresolved:authorize:charge:)``
+    /// is where the production path states that shape once, and
+    /// `StoreKitLinkageTests` reads this file and the adapter's to check it is
+    /// still the shape shipped.
+    ///
+    /// An implementation that never calls `authorize` has no attribution and
+    /// must not open a sheet. If one does anyway, the caller still submits
+    /// whatever transaction comes back — that money is real — but reports no
+    /// purchase outcome, because there is no arm for an outcome to belong to.
+    ///
+    /// An implementation must call `authorize` exactly once. A second call is
+    /// refused rather than answered, because the token is attribution and not
+    /// an idempotency key: reusing it would give this call two sheets Apple may
+    /// each charge for, and the caller one arm to report. If an implementation
+    /// asks twice anyway, that refusal is ambiguous about money like any other
+    /// post-authorization failure, and the attempt locks.
+    func purchase(productID: String,
+                  authorize: @escaping StorePurchaseAuthorization) async throws -> StorePurchaseOutcome
 
     /// Everything this Apple ID currently owns for this app, as signed
     /// transactions. The restore path's input.
