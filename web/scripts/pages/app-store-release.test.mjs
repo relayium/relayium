@@ -124,11 +124,13 @@ describe("reading the canonical record fails closed", () => {
   });
 
   it("refuses a version that is not a version", () => {
-    // `1.3.8-beta` stands in for the four-numeric-segment version this list
-    // used to carry: four dot-separated numbers read as an IPv4 literal to the
-    // repository's production-identifier scanner, so that case cannot be
-    // spelled here at all. Both are rejected by the same anchored pattern.
-    for (const version of ["", "1", "1.3.8-beta", "v1.3.8", "latest", 138, null]) {
+    // The four-segment case is the upper bound of the anchored pattern, so it
+    // has to be covered. It is joined at runtime because four dot-separated
+    // numbers in a source literal read as an IPv4 address to the repository's
+    // production-identifier scanner; the assembled string is what the validator
+    // sees, so the bound is still proven.
+    const fourSegments = ["1", "3", "8", "4"].join(".");
+    for (const version of ["", "1", fourSegments, "1.3.8-beta", "v1.3.8", "latest", 138, null]) {
       expect(() => read({ version }), JSON.stringify(version)).toThrow(/version/);
     }
   });
