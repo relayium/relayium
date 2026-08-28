@@ -480,10 +480,32 @@ func (s *SQLiteStore) BindStripePurchaseSubscription(ctx context.Context, userID
 	if err != nil {
 		return err
 	}
-	if n != 1 {
-		return ErrBillingPurchaseAmbiguous
+	if n == 1 {
+		return nil
 	}
-	return nil
+	// The dispatched CAS matched nothing. That is normally genuine ambiguity,
+	// but Stripe does not order webhook deliveries: customer.subscription.*
+	// can arrive first, and ApplyAuthorizedStripeLifecycle may already have
+	// moved this exact attempt to 'resolved' with this exact subscription. A
+	// later — or redelivered — checkout.session.completed would then find
+	// nothing in 'dispatched' and fail forever. So prove the attempt is
+	// already exactly what this event asks for (same user, attempt, Stripe
+	// provider, session, and the same subscription, both ids prefix-validated
+	// above and therefore non-empty) and report idempotent success.
+	//
+	// 'resolved' is deliberately NOT folded into the UPDATE above: this read
+	// grants nothing and writes nothing. A resolved attempt whose subscription
+	// is empty or different stays ErrBillingPurchaseAmbiguous, so an abandoned
+	// Checkout can never acquire a subscription through this path.
+	var bound int
+	readErr := s.reader().QueryRowContext(ctx, `SELECT 1 FROM billing_purchase_attempts WHERE id=? AND user_id=? AND provider='stripe' AND state='resolved' AND provider_session_id=? AND provider_subscription_id=?`, attemptID, userID, sessionID, subscriptionID).Scan(&bound)
+	if readErr == nil && bound == 1 {
+		return nil
+	}
+	if readErr != nil && !errors.Is(readErr, sql.ErrNoRows) {
+		return readErr
+	}
+	return ErrBillingPurchaseAmbiguous
 }
 
 // PrepareBillingPurchase creates at most one unresolved provider dispatch for
