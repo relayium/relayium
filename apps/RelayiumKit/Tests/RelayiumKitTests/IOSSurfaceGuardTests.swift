@@ -2678,28 +2678,57 @@ final class IOSSurfaceGuardTests: XCTestCase {
 
     // MARK: - what the root README may claim about this app
 
-    /// One row of the concise root README delivery-status table.
-    private func deliveryStatusEntry(_ platform: String) throws -> String {
-        let readme = try RepoRoot.text("README.md")
-        let row = try XCTUnwrap(readme.split(separator: "\n").first {
-            $0.hasPrefix("| **\(platform)** |")
-        }, "the README no longer has a `\(platform)` delivery-status row")
-        return row.lowercased()
+    /// Whitespace collapsed to single spaces, so an assertion about a sentence
+    /// survives ordinary Markdown rewrapping.
+    private func flattenedText(_ text: String) -> String {
+        text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
-    /// The iOS bullet once listed *resume* among the things this build has no
-    /// version of, when what it has no version of is background execution. A
-    /// reader who believes "no resume" discards a staged upload the app would
-    /// have finished for them, so both halves must be stated and neither may
-    /// stand in for the other.
-    func testTheReadmeIOSEntrySeparatesNoBackgroundFromReopenAndResume() throws {
-        let ios = try deliveryStatusEntry("iOS")
+    /// One row of the concise root README delivery-status table, or nil.
+    private func deliveryStatusEntry(_ platform: String) throws -> String? {
+        let readme = try RepoRoot.text("README.md")
+        return readme.split(separator: "\n").first {
+            $0.hasPrefix("| **\(platform)** |")
+        }?.lowercased()
+    }
 
-        XCTAssertTrue(ios.contains("internal development and testflight"))
-        XCTAssertTrue(ios.contains("not publicly available on the app store"))
-        XCTAssertTrue(ios.contains("foreground"))
-        XCTAssertTrue(ios.contains("background transfer"))
-        XCTAssertTrue(ios.contains("push notifications"))
+    /// The root README stopped listing iOS as a delivery platform on
+    /// 2026-08-28, and this pair of assertions inverted with it.
+    ///
+    /// The row used to be required to say "internal development and TestFlight"
+    /// plus the foreground/background/push limits — a precise description of a
+    /// build's capabilities. Development is paused, and the app has never been
+    /// released, so listing it in a table of what Relayium delivers made a
+    /// commitment nobody intends to keep, however carefully each clause was
+    /// worded. Precision about an unshipped product is not honesty about it.
+    ///
+    /// So the requirement moves rather than disappearing, which is the same
+    /// discipline `MacSurfaceGuardTests` applies to the macOS status sentence:
+    /// the table must not carry the row, AND the section must still tell a
+    /// reader who has heard of `apps/ios/` what it actually is. Deleting the
+    /// row alone would be this repository's recurring documentation failure —
+    /// a claim removed instead of corrected.
+    func testTheReadmeDoesNotListIOSAsADeliveryPlatform() throws {
+        XCTAssertNil(try deliveryStatusEntry("iOS"),
+                     "iOS is back in the README delivery-status table")
+
+        let readme = try RepoRoot.text("README.md")
+        let delivery = readme.components(separatedBy: "## Delivery status")
+            .dropFirst().first?.components(separatedBy: "\n## ").first ?? ""
+        let flat = flattenedText(delivery)
+        XCTAssertTrue(flat.contains("`apps/ios/` exists in this repository and its development is **paused**"),
+                      "the delivery section no longer says iOS development is paused")
+        XCTAssertTrue(flat.contains("It has never been publicly released"),
+                      "the delivery section no longer says iOS was never released")
+        XCTAssertTrue(delivery.lowercased().contains("no app store listing"),
+                      "the delivery section no longer says there is no listing")
+
+        // The platforms with no native client are still told what to use, so
+        // removing the row is not the same as removing the answer.
+        let browsers = try XCTUnwrap(deliveryStatusEntry("iPhone, iPad, Android, Windows, Linux"),
+                                     "the no-native-app platforms lost their row")
+        XCTAssertTrue(browsers.contains("web app"))
+        XCTAssertTrue(browsers.contains("publishes no app for these platforms"))
     }
 
     /// The Next bullet is the roadmap, so what it lists as remaining has to be
@@ -2723,18 +2752,21 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "the root README grew a second long-form roadmap")
     }
 
-    /// The iOS bullet describes what a link DOES, and bounds it.
+    /// What the README may never do, whether or not iOS has a row.
     ///
-    /// "Universal links supported" would be true and useless: the two ways this
-    /// feature could be dangerous are joining a stranger's session and writing a
-    /// stranger's files, and a reader has no way to know it does neither unless
-    /// the entry says so. The third clause is the one a reviewer would drop —
-    /// that a link arriving mid-transfer waits instead of replacing it.
-    func testTheReadmeIOSEntryStatesWhatALinkDoesAndDoesNot() throws {
-        let ios = try deliveryStatusEntry("iOS")
-
-        XCTAssertFalse(ios.contains("]("), "the unpublished iOS row contains a download link")
-        XCTAssertTrue(ios.contains("not publicly available"), "the unpublished state is only implied")
+    /// This used to require the iOS row to carry no Markdown link, because a
+    /// link in an unpublished row is an offer. With the row gone the same
+    /// hazard just moves: any iOS download link anywhere in the README would
+    /// point at something that does not exist. Asserted over the whole file so
+    /// it cannot be satisfied by the row's absence alone.
+    func testTheReadmeOffersNoIOSDownload() throws {
+        let readme = flattenedText(try RepoRoot.text("README.md")).lowercased()
+        for offer in ["download the ios app", "get it on the app store",
+                      "testflight.apple.com"] {
+            XCTAssertFalse(readme.contains(offer), "the README offers an iOS download: \(offer)")
+        }
+        XCTAssertTrue(readme.contains("there is no relayium app for ios, android or windows"),
+                      "the README no longer states that these platforms have no app")
     }
 
     /// The management model is app-scoped and injected once.

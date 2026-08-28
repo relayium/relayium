@@ -77,7 +77,11 @@ Authoritative implementation:
 - `web/src/lib/device-send.ts`, `stored-file.ts`, `store-crypto.ts` — the web
   sender, its `sealedManifest` upload option, and the purpose/manifest pairing.
 
-Product source of truth: `DEVICE-INBOX-PRD.md`.
+The product requirements behind this specification are not published in this
+repository. The authorities a reader can check are this document,
+[`relayium-device-inbox-v1.md`](relayium-device-inbox-v1.md) for everything it
+does not supersede, [`../DEVICE-INBOX-ADMISSION-CONTRACT.md`](../DEVICE-INBOX-ADMISSION-CONTRACT.md)
+for the frozen invariants, and the implementation files listed above.
 
 ---
 

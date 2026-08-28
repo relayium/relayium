@@ -8,9 +8,16 @@ land on. The *sending* half is the Web one: sign in at relayium.com, open
 introduces the whole flow end to end. This document
 describes what exists, and says so where something does not.
 
-Product source of truth: `DEVICE-INBOX-PRD.md` §7.1, §8, §9, §10.
-Wire protocol: [`protocol/relayium-device-inbox-v1.md`](protocol/relayium-device-inbox-v1.md).
-Implementation: `server/internal/inboxclient/`, `server/cmd/relayium/inbox.go`.
+Authorities, all in this repository — the product requirements this was built from
+are not published here, so nothing below cites them:
+
+- Wire protocol: [`protocol/relayium-device-inbox-v1.md`](protocol/relayium-device-inbox-v1.md)
+  (enrolment and key lifecycle §7, the queue state machine §13, claims and leases §15,
+  destination rules §21, commit and recovery §22) and
+  [`protocol/relayium-device-inbox-v2.md`](protocol/relayium-device-inbox-v2.md)
+  (content kind, the encrypted manifest, negotiation).
+- Frozen invariants: [`DEVICE-INBOX-ADMISSION-CONTRACT.md`](DEVICE-INBOX-ADMISSION-CONTRACT.md).
+- Implementation: `server/internal/inboxclient/`, `server/cmd/relayium/inbox.go`.
 
 ## What it does
 

@@ -235,7 +235,18 @@ describe("the six platform sections", () => {
     expect(status("server")).toBe("available");
     expect(status("linux")).toBe("available");
     // macOS is derived, not declared — see the manifest pair below.
+    //
+    // `planned` is a legacy discriminant, retained on 2026-08-28 rather than
+    // renamed: it is the key behind `statusPlanned`, which seven frozen locales
+    // type against. It now means "Relayium publishes no native receiver here",
+    // and the maintained badge a reader sees says exactly that — asserted on the
+    // next line so the id and the visible word cannot drift apart again.
     for (const id of ["windows", "iphone", "android"]) expect(status(id), id).toBe("planned");
+    for (const id of ["windows", "iphone", "android"]) {
+      const badge = root.querySelector(`[data-platform="${id}"] .badge`)!.textContent!;
+      expect(badge, id).toContain(en().statusPlanned);
+      expect(badge, `${id} badge still promises a plan`).not.toMatch(/\bplanned\b/i);
+    }
   });
 
   // The badge and the download button answer to ONE input, and this is the pair
@@ -269,7 +280,7 @@ describe("the six platform sections", () => {
       const sec = root.querySelector(`[data-platform="${id}"]`)!;
       expect(sec.querySelector("pre"), id).toBeNull();
     }
-    // Windows is planned as a native tray app but DOES have a verified
+    // Relayium publishes no Windows app, but Windows DOES have a verified
     // foreground command — shown, with its limit stated in the same section.
     const win = root.querySelector('[data-platform="windows"]')!;
     expect(win.querySelector("pre")).not.toBeNull();

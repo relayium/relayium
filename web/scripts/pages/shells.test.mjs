@@ -2,12 +2,15 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { buildShells, applyShell, HEAD_MARKERS, BODY_MARKERS } from "./shells.mjs";
+import { MAINTAINED_LANGS } from "./shared.mjs";
 import crossNetwork from "./content/cross-network.mjs";
 import offlineTransfer from "./content/offline-transfer.mjs";
 import apps from "./content/apps.mjs";
 import { pricing, cli, deviceInbox } from "./content/spa-pages.mjs";
 import { CLI_ARTICLES } from "./content/cli-articles.mjs";
 import en from "../../src/lib/i18n/en";
+import { INBOX_PLATFORMS, REQUIRED_PLATFORM_IDS, platformStatus } from "../../src/lib/device-inbox-platforms";
+import nativeReleases from "../../native-releases.json";
 
 // Vitest runs with `web/` as the root, so these resolve off the project dir.
 const read = (p) => readFileSync(resolve(process.cwd(), p), "utf8");
@@ -34,6 +37,34 @@ describe("private route crawler policy", () => {
     for (const route of ["/verify-email", "/reset-password", "/magic-link"]) {
       expect(robotsTxt.match(new RegExp(`^Disallow: ${route}$`, "gm")), route).toHaveLength(2);
     }
+  });
+});
+
+// The homepage's structured data is the machine-readable version of what the
+// product currently is, and two of its fields had drifted away from that:
+//
+//  * `inLanguage` listed nine locales. The product maintains two. The other
+//    seven are archived translations that self-label as archives — reachable,
+//    but not languages the application is offered in, and declaring them here
+//    invites a crawler to advertise a Japanese product surface that does not
+//    exist.
+//  * `softwareVersion: "M0"` was a planning milestone. The Web app is
+//    continuously deployed and has no product version at all, so the honest
+//    schema has no such field rather than an invented one. Read as an absence
+//    on purpose: this must fail if someone reintroduces a Web version number.
+describe("index.html structured data matches the current product", () => {
+  const graph = JSON.parse(
+    indexHtml.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1],
+  )["@graph"];
+  const app = graph.find((n) => [].concat(n["@type"]).includes("WebApplication"));
+
+  it("declares only the maintained product languages", () => {
+    expect(app.inLanguage).toEqual([...MAINTAINED_LANGS]);
+  });
+
+  it("claims no version for a continuously deployed web app", () => {
+    expect(app).not.toHaveProperty("softwareVersion");
+    expect(indexHtml).not.toContain('"softwareVersion"');
   });
 });
 
@@ -171,18 +202,68 @@ describe("buildShells", () => {
     for (const name of ["Linux server", "Linux desktop", "macOS", "Windows", "iPhone", "Android"]) {
       expect(body, name).toContain(name);
     }
-    // …each with a status, and none of the three planned ones claiming to exist.
-    expect(body).toContain("available now");
-    expect(body).toContain("in testing");
-    expect((body.match(/— planned/g) ?? []).length).toBe(3);
     // The two claims this page is not allowed to blur.
     expect(body).toContain("Uploaded is not saved");
     expect(body).toContain("A link can never make one of your devices write to disk");
     // The account prerequisite and the offline queue.
     expect(body).toMatch(/same account/i);
     expect(body).toMatch(/waits in the queue/i);
-    // No download CTA for the engineering-build Mac app.
-    expect(body).not.toMatch(/\.dmg/i);
+  });
+
+  // Statuses are asserted against the authority rather than pinned as literals.
+  //
+  // The pinned version of this test froze the defect it was meant to prevent.
+  // It asserted "in testing" and exactly three "— planned" on the crawler shell,
+  // and that no .dmg was offered. All three had been false since macOS 1.3.8
+  // shipped: device-inbox-platforms.ts derives the macOS badge from
+  // native-releases.json precisely so the page cannot claim one thing while the
+  // download button does another, and this file was the one place still writing
+  // the pre-release answer down a second time. So it now reads the same two
+  // inputs the page reads, and the literals live only in i18n.
+  it("gives every Device Inbox platform the status its authority says it has", () => {
+    const body = byFile["device-inbox.html"].body;
+    const macDownloadable = Boolean(nativeReleases?.macos?.available);
+    const label = {
+      available: en.deviceInboxPage.statusAvailable,
+      testing: en.deviceInboxPage.statusTesting,
+      planned: en.deviceInboxPage.statusPlanned,
+    };
+    // The array and the PRD's required set have to agree before either is used
+    // to judge the shell; otherwise a dropped platform silently narrows this.
+    expect([...INBOX_PLATFORMS].map((p) => p.id).sort()).toEqual([...REQUIRED_PLATFORM_IDS].sort());
+
+    for (const p of INBOX_PLATFORMS) {
+      const status = platformStatus(p, macDownloadable);
+      const name = en.deviceInboxPage.platforms[p.id].name;
+      // The shell names the platform and carries its status word, case-folded
+      // because a heading renders it differently from a badge.
+      expect(body, p.id).toContain(name);
+      expect(body.toLowerCase(), `${p.id} status`).toContain(label[status].toLowerCase());
+      // …and never the status it does NOT have. macOS is the one this catches:
+      // with 1.3.8 published, "in testing" beside it is a false badge.
+      for (const [other, text] of Object.entries(label))
+        if (other !== status)
+          expect(body, `${p.id} must not also read "${text}"`).not.toContain(`${name} — ${text.toLowerCase()}`);
+    }
+  });
+
+  it("promises no native receiver Relayium does not publish", () => {
+    const body = byFile["device-inbox.html"].body;
+    // An absent native receiver is stated as an absence, never as a plan — the
+    // rule device-inbox-platforms.ts records for the same reason. Windows,
+    // iPhone and Android had "planned, not built" prose here describing share
+    // sheets and tray receivers that no roadmap commits to.
+    for (const promise of [
+      /\bplanned\b/i,
+      /\bcoming soon\b/i,
+      /\bwill be (available|released|shipped)\b/i,
+      /\ba future (receiver|app|client|version)\b/i,
+      /\bnative (client|receiver)s? are (planned|coming)\b/i,
+    ])
+      expect(body, `${promise}`).not.toMatch(promise);
+    // And each platform without a published app says so as an absence.
+    for (const id of ["windows", "iphone", "android"])
+      expect(body, id).toMatch(new RegExp(`publishes no [^.]*${id === "iphone" ? "iPhone" : id}`, "i"));
   });
 
   it("emits FAQPage structured data where the doc has an FAQ", () => {

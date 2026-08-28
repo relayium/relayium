@@ -75,9 +75,16 @@ describe("/apps web and CLI copy covers files and ephemeral text", () => {
 
 // The native half of this file used to assert the opposite: that the macOS and
 // iOS cards must NOT mention text, because neither client had a text session.
-// Both do now — macOS by pairing code and nearby, iOS since R3-D/E/F — so the
-// old guard was keeping a stale sentence green. What is still untrue is the
-// store distribution: neither app is on any store.
+// Both did by then — macOS by pairing code and nearby, iOS since R3-D/E/F — so
+// the old guard was keeping a stale sentence green.
+//
+// It moved again on 2026-08-28. The maintained pair no longer has an iOS card:
+// `apps/` holds no Android or Windows target and iOS development is paused with
+// no public listing, so the maintained docs carry web / CLI / macOS / "every
+// other platform" and the archived seven keep the four they were published
+// with. Card index 3 therefore means two different things depending on which
+// set a locale is in, and every assertion below now says which set it is about
+// rather than sharing one index constant across both.
 const FILE_WORD = {
   en: /\bfiles?\b/i,
   zh: /文件/,
@@ -91,9 +98,15 @@ const FILE_WORD = {
 };
 
 // Apple leaves the store name untranslated in all nine locales, so one pattern
-// covers every doc. "Coming to the App Store" is a distribution promise with
-// nothing behind it; the page's own "coming soon" grouping states the status.
+// covers every doc.
+//
+// The Mac App Store is subtracted first. That listing went public on 2026-08-26
+// (`web/mac-app-store-release.json`), so naming it is a fact and not a promise;
+// a bare "App Store" for an unlisted app still is one, which is what this
+// catches. The same subtraction is applied by `apps-claim-rules.ts` across the
+// whole page — this file only keeps the narrower per-card form.
 const STORE_CLAIM = /app\s*store/i;
+const withoutMacStore = (text) => text.replace(/\bMac App Store\b/gi, " ");
 
 // Per-locale, and used in BOTH directions now: required of the two maintained
 // docs, forbidden of the seven archived ones. Matching only Latin spellings
@@ -112,67 +125,89 @@ const SHARE_SHEET = {
 };
 
 const MAC_CARD = 2;
-const IOS_CARD = 3;
+/** Card 3. The iOS card in the archived seven; "every other platform" in en/zh. */
+const FOURTH_CARD = 3;
 
 describe("/apps native copy matches what the native apps actually do", () => {
-  it("gives both native cards their shipped file and text capability, in every locale", () => {
+  it("gives the macOS card its shipped file and text capability, in every locale", () => {
     for (const lang of LANGS) {
-      const { items } = apps.langs[lang].why;
-      for (const i of [MAC_CARD, IOS_CARD]) {
-        expect(items[i].desc, `${lang} native card ${i} dropped its text capability`).toMatch(TEXT_WORD[lang]);
-        expect(items[i].desc, `${lang} native card ${i} dropped its file capability`).toMatch(FILE_WORD[lang]);
-      }
+      const { desc } = apps.langs[lang].why.items[MAC_CARD];
+      expect(desc, `${lang} macOS card dropped its text capability`).toMatch(TEXT_WORD[lang]);
+      expect(desc, `${lang} macOS card dropped its file capability`).toMatch(FILE_WORD[lang]);
     }
   });
 
-  it("promises no store distribution in the bullets or the cards", () => {
+  it("gives the archived iOS card its file and text capability", () => {
+    // The seven still describe an iOS app, because they are frozen. While that
+    // description is published, it has to stay as accurate as it was.
+    for (const lang of FROZEN_LANGS) {
+      const { desc } = apps.langs[lang].why.items[FOURTH_CARD];
+      expect(desc, `${lang} archived iOS card dropped its text capability`).toMatch(TEXT_WORD[lang]);
+      expect(desc, `${lang} archived iOS card dropped its file capability`).toMatch(FILE_WORD[lang]);
+    }
+  });
+
+  it("promises no store distribution beyond the one listing that exists", () => {
+    // The Mac App Store is subtracted, so what is left is a claim about a store
+    // Relayium is not on. Every card is swept, not only the native ones: a
+    // claim moved into another bullet is the same claim.
     for (const lang of LANGS) {
       const doc = apps.langs[lang];
-      for (const i of [MAC_CARD, IOS_CARD]) {
-        expect(doc.how.steps[i], `${lang} bullet ${i} promises store distribution`).not.toMatch(STORE_CLAIM);
-        expect(doc.why.items[i].desc, `${lang} card ${i} promises store distribution`).not.toMatch(STORE_CLAIM);
+      for (const [i, step] of doc.how.steps.entries()) {
+        expect(withoutMacStore(step), `${lang} bullet ${i} promises store distribution`)
+          .not.toMatch(STORE_CLAIM);
+      }
+      for (const [i, item] of doc.why.items.entries()) {
+        expect(withoutMacStore(item.desc), `${lang} card ${i} promises store distribution`)
+          .not.toMatch(STORE_CLAIM);
       }
     }
   });
 
-  it("names the shipped iOS Share Extension in the maintained bullet and card", () => {
-    // `apps/ios/RelayiumShare` is a real `com.apple.share-services` target
-    // embedded at `PlugIns/RelayiumShare.appex`. This assertion is the inverse
-    // of the one it replaces: while the target did not exist, the page naming a
-    // share sheet was the lie; now the page omitting it is.
+  it("names the Mac App Store in the maintained macOS card", () => {
+    // Positive, because the whole point of relaxing the ban is that the page
+    // states the fact. Maintained only: the archives keep their published copy.
     for (const lang of MAINTAINED_LANGS) {
-      const doc = apps.langs[lang];
-      expect(doc.how.steps[IOS_CARD], `${lang} iOS bullet hides the shipped Share Extension`).toMatch(SHARE_SHEET[lang]);
-      expect(doc.why.items[IOS_CARD].desc, `${lang} iOS card hides the shipped Share Extension`).toMatch(SHARE_SHEET[lang]);
+      expect(apps.langs[lang].why.items[MAC_CARD].desc, `${lang} macOS card hides the App Store channel`)
+        .toMatch(/Mac App Store/);
     }
   });
 
-  it("leaves the archived locales the copy they were published with", () => {
+  it("leaves the archived locales the iOS copy they were published with", () => {
     // The seven are preserved, not retranslated: back-filling one sentence into
     // a page whose surrounding paragraphs are frozen produces a page that is
     // current in one place and stale everywhere else, which reads as current
     // throughout. The archived-translation notice the template renders is the
-    // only thing these pages gain.
+    // only thing these pages gain. They were never given the maintained pair's
+    // Share-Extension sentence, and they keep not having it.
     for (const lang of FROZEN_LANGS) {
       const doc = apps.langs[lang];
-      expect(doc.how.steps[IOS_CARD], `${lang} archive was given the new iOS bullet`).not.toMatch(SHARE_SHEET[lang]);
-      expect(doc.why.items[IOS_CARD].desc, `${lang} archive was given the new iOS card`).not.toMatch(SHARE_SHEET[lang]);
+      expect(doc.how.steps[FOURTH_CARD], `${lang} archive was given the maintained iOS bullet`)
+        .not.toMatch(SHARE_SHEET[lang]);
+      expect(doc.why.items[FOURTH_CARD].desc, `${lang} archive was given the maintained iOS card`)
+        .not.toMatch(SHARE_SHEET[lang]);
     }
   });
 
-  // English is the master the other eight are translated from; pinning the
+  // English is the master the archived eight were translated from; pinning the
   // exact boundaries here beats copying eight sentences into the test.
   it("keeps the English boundaries between shipped and unshipped work", () => {
     const doc = apps.langs.en;
-    expect(doc.why.items[IOS_CARD].desc).toMatch(/while the app is open/i);
-    expect(doc.why.items[IOS_CARD].desc).not.toMatch(/background|notification|push\b/i);
-    // The page-level positioning scoped ephemeral text to web + CLI; both
-    // native clients now send text too.
+    // The fourth card is no longer about iOS. It is the answer for every
+    // platform with no client, and its job is to name them and point at the
+    // browser rather than to describe an app.
+    const fourth = doc.why.items[FOURTH_CARD].desc;
+    expect(fourth).toMatch(/iPhone, iPad, Android, Windows and Linux/);
+    expect(fourth).toMatch(/publishes no app for those platforms/i);
+    expect(fourth).not.toMatch(/background|notification|push\b/i);
+    // The page-level positioning scoped ephemeral text to web + CLI; the macOS
+    // client sends text too.
     expect(doc.description).not.toMatch(/text in the web app and the CLI/i);
     expect(doc.hero.pitch).not.toMatch(/text in the web app and the CLI/i);
-    // iOS is a real, running app now — "planned" understates it as badly as a
-    // store date overstates it.
-    expect(doc.compare.items[1].body).not.toMatch(/iOS planned|with iOS planned/i);
+    // …and neither the title nor the description may list a platform whose app
+    // does not exist. Both did until 2026-08-28.
+    expect(doc.title).not.toMatch(/\biOS\b|\bAndroid\b/i);
+    expect(doc.description).not.toMatch(/\biOS\b|\bAndroid\b/i);
   });
 });
 

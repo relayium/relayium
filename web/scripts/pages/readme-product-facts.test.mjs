@@ -48,8 +48,68 @@ describe("README product facts", () => {
   it("distinguishes LAN, browser TURN, and CLI content paths", () => {
     expect(prose).toContain("On a LAN, file bytes stream directly between devices");
     expect(prose).toContain("Cross-network browser transfers use a TURN relay by design");
-    expect(readme).toContain("The CLI is direct-only");
     expect(readme).not.toContain("Files never hit a server");
     expect(readme).not.toContain("file bytes flow over the WebRTC DataChannel and **never traverse the server**");
+  });
+
+  // `relayium up` uploads a client-side-encrypted copy into hosted storage
+  // (server/cmd/relayium/cloud.go runUp) and the server truncates its TTL to the
+  // account plan's cap (cloud_ttl_notice_test.go), so it is metered storage by
+  // construction. Until 2026-08-28 this README said the opposite three ways:
+  // "every CLI mode" was unmetered and free, the CLI was "Completely free", and
+  // "The CLI is direct-only" — the last of which an earlier version of THIS FILE
+  // required verbatim, so the guard was pinning the defect in place. The rule is
+  // now shaped the other way round: the overbroad claims may not come back, and
+  // the exception has to stay named.
+  it("never calls every CLI mode direct, free, or unmetered", () => {
+    for (const retired of [
+      "every CLI mode",
+      "The CLI is direct-only",
+      "Completely free",
+    ]) {
+      expect(readme, `the retired claim came back: ${retired}`).not.toContain(retired);
+    }
+    // Not just the exact retired strings — the claim shape, in either order.
+    expect(prose).not.toMatch(/\b(every|all|any) CLI (mode|command|verb)s?\b/i);
+    expect(prose).not.toMatch(/\bthe CLI (is|are|stays?) (completely |entirely |always )?(free|direct|unmetered)\b/i);
+  });
+
+  // The plan has four caps and they measure four different things
+  // (server/account/plan_enforce.go): monthly traffic is hosted upload +
+  // hosted download + billable relay; storage is how much ciphertext is live
+  // right now; retention is how long a stored file may live; the daily upload
+  // quota is a rolling 24-hour window. README called relay and storage alike
+  // "a monthly allowance of both", which makes storage sound like a monthly
+  // budget you can spend down and refill — it is occupancy, and deleting a
+  // file frees it immediately while refunding no traffic.
+  it("keeps the four plan limits four, and storage out of the monthly bucket", () => {
+    for (const dimension of [
+      /monthly traffic allowance/i,
+      /storage cap/i,
+      /retention window/i,
+      /daily upload quota/i,
+    ])
+      expect(readme, `${dimension} is missing`).toMatch(dimension);
+    // What monthly traffic actually sums, said once rather than implied.
+    expect(readme).toMatch(/hosted uploads?,? hosted downloads? and relayed bytes/i);
+    expect(readme).toMatch(/occupancy rather than a monthly total|hosted uploads \+ hosted downloads \+ relayed bytes/i);
+    // The retired shape, and the shapes it could return as.
+    expect(readme).not.toContain("gets a monthly allowance of both");
+    expect(readme).not.toMatch(/monthly[^.\n]{0,40}\bstorage\b/i);
+    expect(readme).not.toMatch(/\bstorage\b[^.\n]{0,25}\bper month\b/i);
+  });
+
+  it("names `up` as the hosted-storage exception wherever the CLI is called direct", () => {
+    // The honest replacement has to be present, not merely the absence above: a
+    // reader deciding whether `relayium up` costs them anything must be told.
+    expect(prose).toContain("The one CLI mode that is not direct is `relayium up`");
+    expect(prose).toMatch(/`relayium up`[^.]{0,200}hosted storage/);
+    expect(prose).toMatch(/`relayium up`[^.]{0,400}exactly like a stored download link/);
+    expect(prose).not.toMatch(/`relayium up`[^.]{0,400}storage cap and\s+retention window/);
+    // And the direct modes still have to be enumerable, or "not free" replaces
+    // one wrong claim with another.
+    for (const mode of ["`push`/`pull`", "`sync`", "daemon-direct", "`send`/`receive`", "`text`"]) {
+      expect(prose, `the direct-mode list lost ${mode}`).toContain(mode);
+    }
   });
 });

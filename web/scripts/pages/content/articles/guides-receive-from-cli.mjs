@@ -202,7 +202,7 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     items: [
       {
         q: "Do I need an account to receive files?",
-        a: "No. All three ways — receive, serve, and pull — are completely free and need no Relayium account on your side. The one sign-in anywhere is the sender's in receive mode, so their CLI can mint the pairing code.",
+        a: "No. All three — relayium receive, relayium serve, and relayium pull — are completely free and need no Relayium account on your side. The one sign-in anywhere is the sender's in receive mode, so their CLI can mint the pairing code.",
       },
       {
         q: "Does relayium receive interoperate with the browser's pairing code?",
@@ -427,7 +427,7 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     items: [
       {
         q: "接收文件需要账号吗？",
-        a: "不需要。三种方式——receive、serve、pull——都完全免费，你这一端不需要 Relayium 账号。整个过程里唯一需要登录的，是 receive 模式下的发送方，好让发送端的 CLI 生成配对码。",
+        a: "不需要。三种方式——relayium receive、relayium serve、relayium pull——都完全免费，你这一端不需要 Relayium 账号。整个过程里唯一需要登录的，是 receive 模式下的发送方，好让发送端的 CLI 生成配对码。",
       },
       {
         q: "relayium receive 和浏览器的配对码互通吗？",

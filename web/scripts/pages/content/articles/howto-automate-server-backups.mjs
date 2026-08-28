@@ -381,7 +381,7 @@ $ echo $?
       },
       {
         q: "需要账号吗，这个要收费吗？",
-        a: "都不需要。CLI 完全免费，push、pull、sync 都不需要账号——传输走的是你自己的 SSH 连接，或者一条daemon 直连，不经过 Relayium 的服务器。",
+        a: "都不需要。CLI 的 push、pull、sync 都不需要账号，也不收费——传输走的是你自己的 SSH 连接，或者一条daemon 直连，不经过 Relayium 的服务器。",
       },
     ],
   },

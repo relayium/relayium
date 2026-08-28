@@ -90,7 +90,7 @@ const en = {
       },
       {
         q: "Is Relayium's CLI free?",
-        a: "Yes, completely — no paid tier, AGPL-3.0-licensed and open source, and every mode connects the two ends directly.",
+        a: "The CLI is AGPL-3.0-licensed and open source, and the modes this comparison is about — push, pull and daemon direct — connect the two ends directly with nothing metered and nothing to pay. The one command that draws on your Relayium plan is up, which stores an encrypted copy in hosted storage; scp has no equivalent.",
       },
     ],
   },
@@ -185,7 +185,7 @@ const zh = {
       },
       {
         q: "Relayium 的 CLI 免费吗？",
-        a: "完全免费——没有付费档位，AGPL-3.0 许可并开源，每种模式都是两端直接连接。",
+        a: "CLI 采用 AGPL-3.0 许可并开源，本文对比涉及的 push、pull 与 daemon 直连都是两端直接连接，不计量，也不收费。唯一会用到 Relayium 套餐的是 up：它把加密副本存入托管存储；scp 没有对应功能。",
       },
     ],
   },

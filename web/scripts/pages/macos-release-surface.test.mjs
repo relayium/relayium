@@ -3,6 +3,11 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { LANGS, MAINTAINED_LANGS } from "./shared.mjs";
 import apps from "./content/apps.mjs";
+import en from "../../src/lib/i18n/en.ts";
+import zh from "../../src/lib/i18n/zh.ts";
+
+/** The SPA's two maintained message tables, keyed the way MAINTAINED_LANGS is. */
+const APP_TABLES = { en, zh };
 
 // The one canonical manifest, read once and shared by every case below.
 //
@@ -114,13 +119,20 @@ describe("macOS release surface", () => {
   // MAINTAINED_LANGS, not LANGS: the SPA ships two message tables now. The
   // checks below that read apps.langs stay on all nine, because the ARCHIVED
   // pages are still public and a release-status claim on one is still a claim.
-  it("has a localized macOS download CTA in every SPA locale", async () => {
+  //
+  // Read from the parsed tables rather than by pattern-matching the source. The
+  // old form anchored on the text between `mac: {` and the `ios:` key that
+  // followed it; removing the iOS card on 2026-08-28 made that match empty, and
+  // an empty match is a guard that asserts nothing about a string it never
+  // found. What the check is actually about — the macOS card has a CTA, and
+  // does not call the shipped app unfinished — does not need the neighbour.
+  it("has a localized macOS download CTA in every SPA locale", () => {
     for (const code of MAINTAINED_LANGS) {
-      const source = await readFile(resolve(process.cwd(), `src/lib/i18n/${code}.ts`), "utf8");
-      const macCard = source.match(/mac:\s*\{[\s\S]*?\},\s*(?:\n\s*)?ios:/)?.[0] ?? "";
-      expect(macCard, `${code} is missing its macOS card`).toContain("cta:");
-      expect(macCard, `${code} still describes the macOS app as in development`)
-        .not.toMatch(/in the works|正在开发|開発中|개발 중|in Arbeit|en cours de développement|قيد التطوير|en desarrollo|em desenvolvimento/i);
+      const mac = APP_TABLES[code]?.appsPage?.cards?.mac;
+      expect(mac, `${code} is missing its macOS card`).toBeTruthy();
+      expect(mac.cta?.trim(), `${code} macOS card has no CTA label`).toBeTruthy();
+      expect(`${mac.name} ${mac.desc}`, `${code} still describes the macOS app as in development`)
+        .not.toMatch(/in the works|in development|正在开发|開発中|개발 중|in Arbeit|en cours de développement|قيد التطوير|en desarrollo|em desenvolvimento/i);
     }
   });
 

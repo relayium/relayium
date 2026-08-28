@@ -1,47 +1,70 @@
-# Svelte + TS + Vite
+# `web/` — the Relayium web client
 
-This template should help get you started developing with Svelte and TypeScript in Vite.
+The Svelte 5 single-page app served at [relayium.com](https://relayium.com/),
+plus the static-page generator that prerenders ~450 crawler-facing pages into
+`public/`. It is built with Vite and TypeScript, and licensed **AGPL-3.0** (see
+[`LICENSE`](LICENSE)) — unlike `apps/`, which is Apache-2.0.
 
-## Recommended IDE Setup
+The Go server in [`../server`](../server) serves the built `dist/` directory as
+well as the API and WebSocket signaling, so a real two-device transfer is tested
+against that binary rather than against the Vite dev server. See the
+[Quick start](../README.md#quick-start-run-it-locally) in the root README.
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
+## Commands
 
-## Need an official Svelte framework?
+Every command below is a script in [`package.json`](package.json); run them from
+this directory.
 
-Check out [SvelteKit](https://github.com/sveltejs/kit#readme), which is also powered by Vite. Deploy anywhere with its serverless-first approach and adapt to various platforms, with out of the box support for TypeScript, SCSS, and Less, and easily-added support for mdsvex, GraphQL, PostCSS, Tailwind CSS, and more.
+| Command | What it does |
+| --- | --- |
+| `npm install` | Install dependencies (Node 20+). |
+| `npm run dev` | Generate static pages, then start the Vite dev server. Good for UI work; signaling is same-origin, so it cannot complete a real transfer on its own. |
+| `npm run build` | Generate static pages, then build into `dist/`. |
+| `npm run preview` | Serve a build that has already been produced. |
+| `npm run check` | `svelte-check` over `tsconfig.app.json`, then `tsc -p tsconfig.node.json`. |
+| `npm test` | Vitest in watch mode. `npx vitest run` for a single pass. |
+| `npm run gen:pages` | Write the static pages, `sitemap.xml` and `client-policy.json` into `public/`. Also runs automatically before `dev` and `build`. |
 
-## Technical considerations
+Cross-language wire vectors, which the Swift clients read as fixtures:
 
-**Why use this over SvelteKit?**
+| Command | What it does |
+| --- | --- |
+| `npm run test:vectors` | Re-run the generators twice and fail if the tracked bytes moved. Restores what it found, so it never edits your tree. CI runs this form. |
+| `npm run gen:vectors` | The writing form. Run it and commit the result with the change that moved the wire. |
 
-- It brings its own routing solution which might not be preferable for some users.
-- It is first and foremost a framework that just happens to use Vite under the hood, not a Vite app.
+Browser-driven checks. Each drives real Chrome and needs a running server, so
+none of them is part of `npm test`:
 
-This template contains as little as possible to get started with Vite + TypeScript + Svelte, while taking into account the developer experience with regards to HMR and intellisense. It demonstrates capabilities on par with the other `create-vite` templates and is a good starting point for beginners dipping their toes into a Vite + Svelte project.
+| Command | What it does |
+| --- | --- |
+| `npm run test:e2e` | Same-network transfer between two real browser contexts. |
+| `npm run test:e2e:mixed` | Mixed stored-link flow. |
+| `npm run test:e2e:code-room` | Cross-network pairing-code room. |
+| `npm run test:e2e:share-target` | PWA share-target entry. |
+| `npm run test:device-inbox` | Device Inbox delivery, end to end. |
+| `npm run test:device-inbox-entry` | The `/device-inbox` entry points. |
+| `npm run test:device-discovery` | LAN peer discovery. |
+| `npm run test:a11y` | axe-core scan over the generated pages. |
+| `npm run test:interop` | Device-seal interop against the Go implementation (`RELAYIUM_GO_INTEROP=1`). |
 
-Should you later need the extended capabilities and extensibility provided by SvelteKit, the template has been structured similarly to SvelteKit so that it is easy to migrate.
+## Layout
 
-**Why `global.d.ts` instead of `compilerOptions.types` inside `jsconfig.json` or `tsconfig.json`?**
+- `src/` — the SPA. `src/lib/` holds the crypto, transport and protocol modules
+  (`crypto.ts`, `webrtc.ts`, `signaling.ts`, `transfer.ts`, `device-inbox.ts`)
+  alongside the components; `src/lib/i18n/` holds the message tables.
+- `scripts/pages/` — the static-page generator and, next to it, the tests that
+  hold the generated pages and the SPA to the same product facts.
+- `public/` — committed generated output plus static assets. Do not hand-edit a
+  file the generator owns; change its source under `scripts/pages/content/` and
+  run `npm run gen:pages`.
+- `e2e/` — the browser-driven harnesses listed above.
+- `native-releases.json`, `mac-app-store-release.json`, `native-client-policy.json`
+  — the canonical release records the app and the pages read from. Each has one
+  owner; nothing else may restate a version they carry.
 
-Setting `compilerOptions.types` shuts out all other types not explicitly listed in the configuration. Using triple-slash references keeps the default TypeScript setting of accepting type information from the entire workspace, while also adding `svelte` and `vite/client` type information.
+## Languages
 
-**Why include `.vscode/extensions.json`?**
-
-Other templates indirectly recommend extensions via the README, but this file allows VS Code to prompt the user to install the recommended extension upon opening the project.
-
-**Why enable `allowJs` in the TS template?**
-
-While `allowJs: false` would indeed prevent the use of `.js` files in the project, it does not prevent the use of JavaScript syntax in `.svelte` files. In addition, it would force `checkJs: false`, bringing the worst of both worlds: not being able to guarantee the entire codebase is TypeScript, and also having worse typechecking for the existing JavaScript. In addition, there are valid use cases in which a mixed codebase may be relevant.
-
-**Why is HMR not preserving my local component state?**
-
-HMR state preservation comes with a number of gotchas! It has been disabled by default in both `svelte-hmr` and `@sveltejs/vite-plugin-svelte` due to its often surprising behavior. You can read the details [here](https://github.com/rixo/svelte-hmr#svelte-hmr).
-
-If you have state that's important to retain within a component, consider creating an external store which would not be replaced by HMR.
-
-```ts
-// store.ts
-// An extremely simple external store
-import { writable } from 'svelte/store'
-export default writable(0)
-```
+The product is maintained in **English and Simplified Chinese**. Seven earlier
+locales stay published as archived translations and are not updated with product
+changes — see [Translations](../CONTRIBUTING.md#ways-to-contribute) before
+touching any locale.

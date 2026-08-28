@@ -16,7 +16,8 @@ describe("/pricing static shell covers files and ephemeral text", () => {
     const relay = pricing.why.items.find((item) => item.title === "Relay bandwidth");
     expect(relay?.desc).toMatch(/file or text/i);
     expect(relay?.desc).toMatch(/browser/i);
-    expect(relay?.desc).toMatch(/monthly allowance/i);
+    expect(relay?.desc).toMatch(/monthly traffic allowance/i);
+    expect(relay?.desc).toMatch(/by design rather than as a fallback/i);
   });
 
   it("documents the online-only text boundary in the FAQ", () => {

@@ -6210,13 +6210,33 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// published, said in the same breath as the word.
     func testTheDocsStateTheIOSEngineeringBuildStatusOutright() throws {
         let apps = flattened(try claimSurfaceText("apps/README.md"))
-        XCTAssertTrue(apps.contains("The iOS app and its share extension are engineering builds distributed through internal TestFlight and are not publicly released."),
-                      "apps/README.md must say outright that iOS is unpublished")
-        XCTAssertTrue(apps.contains("**In development and not public**"),
+        // Inverted again on 2026-08-28. The sentence this used to require said
+        // the two iOS targets "are engineering builds distributed through
+        // internal TestFlight" — present tense, so it read as a distribution
+        // channel Relayium is running right now. Development is paused, so that
+        // TestFlight use is history. The guard keeps the historical evidence and
+        // adds the ban that makes the tense load-bearing.
+        XCTAssertTrue(apps.contains("iOS development is paused: internal TestFlight builds were used for development acceptance before the pause, and neither the iOS app nor its share extension is currently developed or publicly offered."),
+                      "apps/README.md must date the internal TestFlight use as history, not current distribution")
+        XCTAssertFalse(apps.contains("are engineering builds distributed through internal TestFlight"),
+                       "apps/README.md must not present internal TestFlight as a current iOS distribution channel")
+        XCTAssertTrue(apps.contains("**Development paused and not public**"),
                       "the iOS section must keep its own status line")
+        XCTAssertTrue(apps.contains("**Development paused, 2026-08-28.**"),
+                      "the iOS section must be marked as a record rather than as work in progress")
 
+        // The root README stopped describing iOS as a product on 2026-08-28.
+        // The sentence this used to require — "The iOS app runs its transfer,
+        // nearby and account workflows in the foreground and is **not public**"
+        // — is a capability claim for an app nobody can install and nobody is
+        // building, so its accuracy was beside the point. What the root README
+        // owes a reader instead is what `apps/ios/` is: paused, never released.
         let root = flattened(try claimSurfaceText("README.md"))
-        XCTAssertTrue(root.contains("The iOS app runs its transfer, nearby and account workflows in the foreground and is **not public**"),
+        XCTAssertFalse(root.contains("The iOS app runs its transfer, nearby and account workflows"),
+                       "the root README describes iOS capabilities for an app that ships nowhere")
+        XCTAssertTrue(root.contains("`apps/ios/` exists in this repository and its development is **paused**"),
+                      "the root README must say outright that iOS development is paused")
+        XCTAssertTrue(root.contains("It has never been publicly released"),
                       "the root README must say outright that iOS is unpublished")
     }
 
@@ -6338,7 +6358,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         let version = try publishedMacVersion()
         XCTAssertTrue(apps.contains("**Status: released as \(version).**"),
                       "apps/README.md must state the macOS status precisely")
-        XCTAssertTrue(apps.contains("The iOS app and its share extension are engineering builds distributed through internal TestFlight and are not publicly released."),
+        XCTAssertTrue(apps.contains("iOS development is paused: internal TestFlight builds were used for development acceptance before the pause, and neither the iOS app nor its share extension is currently developed or publicly offered."),
                       "apps/README.md must scope that status to macOS and say what iOS is")
 
         let readiness = flattened(try claimSurfaceText("apps/mac/release-readiness.json"))

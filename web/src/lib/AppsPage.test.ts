@@ -37,7 +37,13 @@ afterEach(() => {
 });
 
 describe("AppsPage executable hierarchy", () => {
-  it("groups the current Web/CLI actions ahead of actionless native futures", async () => {
+  // The page carries three cards: web, CLI and macOS. It carried six until
+  // 2026-08-28, when the iOS, Android and Windows cards were removed — `apps/`
+  // has no Android or Windows target at all and iOS development is paused with
+  // no public listing, so half the grid advertised products a reader could not
+  // get. The in-development GROUP survives with nothing in it, because the
+  // unreleased-macOS manifest state still routes through it.
+  it("groups the current Web/CLI actions ahead of an unreleased macOS card", async () => {
     await mountPage({ platformOverride: "mac" });
     const m = messages.en.appsPage;
 
@@ -45,10 +51,10 @@ describe("AppsPage executable hierarchy", () => {
     expect(target.querySelector("#available-apps-heading")?.textContent).toBe(m.availableBadge);
     expect(target.querySelector("#future-apps-heading")?.textContent).toBe(m.inDevelopmentBadge);
     expect(idsIn("available-apps-heading")).toEqual(["app-web", "app-cli"]);
-    expect(idsIn("future-apps-heading")).toEqual(["app-mac", "app-ios", "app-android", "app-windows"]);
+    expect(idsIn("future-apps-heading")).toEqual(["app-mac"]);
 
     const cards = target.querySelectorAll("article.app-card");
-    expect(cards.length).toBe(6);
+    expect(cards.length).toBe(3);
     for (const card of cards) {
       expect(card.classList.contains("ui-card")).toBe(true);
       expect(card.classList.contains("ui-stack")).toBe(true);
@@ -56,8 +62,8 @@ describe("AppsPage executable hierarchy", () => {
     expect(target.querySelectorAll(".available-grid a.btn.btn-primary").length).toBe(2);
     expect(target.querySelectorAll(".future-grid a, .future-grid button").length).toBe(0);
     expect(target.querySelectorAll("button[disabled]").length).toBe(0);
-    // Six platform cards plus the two decision columns below them.
-    expect(target.querySelectorAll("article h3").length).toBe(8);
+    // Three platform cards plus the two decision columns below them.
+    expect(target.querySelectorAll("article h3").length).toBe(5);
 
     // UA matching stays truthful but neutral: it marks the actual macOS card,
     // associates the localized note, and cannot manufacture an action.
@@ -72,41 +78,48 @@ describe("AppsPage executable hierarchy", () => {
     await mountPage({ macRelease: { available: true, downloadUrl: url }, platformOverride: "mac" });
 
     expect(idsIn("available-apps-heading")).toEqual(["app-web", "app-cli", "app-mac"]);
-    expect(idsIn("future-apps-heading")).toEqual(["app-ios", "app-android", "app-windows"]);
     const link = target.querySelector<HTMLAnchorElement>("#app-mac a.btn.btn-primary")!;
     expect(link.href).toBe(url);
     expect(link.textContent?.trim()).toBe(messages.en.appsPage.cards.mac.cta);
     expect(target.querySelector("#app-mac")?.classList.contains("is-platform")).toBe(true);
-    expect(target.querySelector(".future-grid")?.children.length).toBe(3);
+    // Nothing is left in development, so the group is not drawn at all rather
+    // than rendered as an empty heading over an empty grid.
+    expect(target.querySelector("#future-apps-heading")).toBeNull();
+    expect(target.querySelector(".future-grid")).toBeNull();
   });
 
   it("fails a half-filled macOS manifest closed", async () => {
     await mountPage({ macRelease: { available: true, downloadUrl: null }, platformOverride: "mac" });
 
     expect(idsIn("available-apps-heading")).toEqual(["app-web", "app-cli"]);
-    expect(idsIn("future-apps-heading")).toEqual(["app-mac", "app-ios", "app-android", "app-windows"]);
+    expect(idsIn("future-apps-heading")).toEqual(["app-mac"]);
     expect(target.querySelector("#app-mac a, #app-mac button")).toBeNull();
   });
 
   it("keeps an unavailable native card free of actions and distribution promises", async () => {
-    // The iOS UA is the worst case for this: the card the visitor's own device
-    // points at is the one there is nothing to hand them.
+    // The macOS card in its pre-release state: the one card that can exist with
+    // nothing to hand the reader.
+    await mountPage({ platformOverride: "mac" });
+
+    const card = target.querySelector("#app-mac")!;
+    expect(card.querySelector("a, button"), "the card offers an action it cannot honour").toBeNull();
+    expect(card.querySelector(".future-status")?.textContent).toBe(messages.en.appsPage.inDevelopmentBadge);
+    // Rendered text, not the message table: a card with no download must not
+    // read as one, and must not stand in for the store listing either.
+    expect(card.textContent ?? "", "the card promises store distribution").not.toMatch(/app\s*store/i);
+    expect(card.textContent ?? "", "the card promises a download").not.toMatch(/\bdownloads?\b/i);
+  });
+
+  it("renders no card for a platform this repository does not ship", async () => {
     await mountPage({ platformOverride: "ios" });
-
-    for (const id of ["#app-mac", "#app-ios", "#app-android", "#app-windows"]) {
-      const card = target.querySelector(id)!;
-      expect(card.querySelector("a, button"), `${id} offers an action it cannot honour`).toBeNull();
-      expect(card.querySelector(".future-status")?.textContent).toBe(messages.en.appsPage.inDevelopmentBadge);
-      // Rendered text, not the message table: what a visitor actually reads
-      // must not promise a store listing or a file to download. Neither app is
-      // distributed anywhere yet, and this page is where people come to install.
-      expect(card.textContent ?? "", `${id} promises store distribution`).not.toMatch(/app\s*store/i);
-      expect(card.textContent ?? "", `${id} promises a download`).not.toMatch(/\bdownloads?\b/i);
+    for (const id of ["#app-ios", "#app-android", "#app-windows"]) {
+      expect(target.querySelector(id), `${id} is back on the page`).toBeNull();
     }
-
-    const ios = target.querySelector("#app-ios")!;
-    expect(ios.classList.contains("is-platform")).toBe(true);
-    expect(ios.getAttribute("aria-describedby")).toBe("platform-note");
+    // …and the iOS visitor is still pointed somewhere real.
+    const web = target.querySelector("#app-web")!;
+    expect(web.classList.contains("is-platform")).toBe(true);
+    expect(web.getAttribute("aria-describedby")).toBe("platform-note");
+    expect(web.querySelector("a.btn")).toBeTruthy();
   });
 
   it("makes the long install command a named, keyboard-scrollable LTR region", async () => {

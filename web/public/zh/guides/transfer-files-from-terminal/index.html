@@ -28,7 +28,7 @@
     <meta name="twitter:title" content="用 Relayium CLI 从终端传输文件与文本" />
     <meta name="twitter:description" content="安装免费、端到端加密的 Relayium CLI，通过 SSH、配对码或 daemon 直连传输文件，并在两台机器同时在线时发送临时文本。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 从终端传输文件与文本","description":"安装免费、端到端加密的 Relayium CLI，通过 SSH、配对码或 daemon 直连传输文件，并在两台机器同时在线时发送临时文本。","inLanguage":"zh-Hans","datePublished":"2026-07-08","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/transfer-files-from-terminal/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"用 Relayium CLI 从终端传输文件与文本"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"CLI 要收费吗？","acceptedAnswer":{"@type":"Answer","text":"不收费。CLI 完全免费。直连的文件与文本字节都不经过 Relayium 中继，因此没有什么可计量，也没有什么可付费。"}},{"@type":"Question","name":"需要 Relayium 账号吗？","acceptedAnswer":{"@type":"Answer","text":"send 或 text 生成配对码时需要账号，云端 up 也需要。push / pull 使用你自己的 SSH，daemon 直连使用公钥信任，都无需账号。服务器只为已登录账号签发配对码，因此创建端先运行一次 relayium login；持别人给你的码加入无需登录，receive 接收方也始终无需登录。"}},{"@type":"Question","name":"支持哪些操作系统？","acceptedAnswer":{"@type":"Answer","text":"macOS、Linux 和 Windows 上均提供预编译二进制，覆盖 x86-64 和 arm64。安装脚本适用于 macOS 和 Linux；在 Windows 上，请从发布页下载 .zip。"}},{"@type":"Question","name":"我的文件会经过 Relayium 的服务器吗？","acceptedAnswer":{"@type":"Answer","text":"不会。在每种模式下，文件字节都在两端之间直接传输。只有 send / receive 会联系到我们的服务器，而且只是为了一次很小的会合握手——从不涉及文件内容。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 从终端传输文件与文本","description":"安装免费、端到端加密的 Relayium CLI，通过 SSH、配对码或 daemon 直连传输文件，并在两台机器同时在线时发送临时文本。","inLanguage":"zh-Hans","datePublished":"2026-07-08","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/transfer-files-from-terminal/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"用 Relayium CLI 从终端传输文件与文本"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"CLI 要收费吗？","acceptedAnswer":{"@type":"Answer","text":"CLI 本身免费且开源，直连模式——push、pull、daemon 直连与 send / receive——用起来也不花钱：这些文件与文本字节都不经过 Relayium 中继，因此没有什么可计量。会用到套餐额度的是 up 和 down，它们把加密副本写入、读回你的账号。up 会同时受四项互相独立的限制约束——每月流量额度、同时存放的存储上限、套餐的留存时长上限，以及滚动的每日上传额度；down 读回副本时计入每月流量额度。付费套餐会把这些都调高。"}},{"@type":"Question","name":"需要 Relayium 账号吗？","acceptedAnswer":{"@type":"Answer","text":"send 或 text 生成配对码时需要账号，云端 up 也需要。push / pull 使用你自己的 SSH，daemon 直连使用公钥信任，都无需账号。服务器只为已登录账号签发配对码，因此创建端先运行一次 relayium login；持别人给你的码加入无需登录，receive 接收方也始终无需登录。"}},{"@type":"Question","name":"支持哪些操作系统？","acceptedAnswer":{"@type":"Answer","text":"macOS、Linux 和 Windows 上均提供预编译二进制，覆盖 x86-64 和 arm64。安装脚本适用于 macOS 和 Linux；在 Windows 上，请从发布页下载 .zip。"}},{"@type":"Question","name":"我的文件会经过 Relayium 的服务器吗？","acceptedAnswer":{"@type":"Answer","text":"直连模式不会。用 push、pull、daemon 直连和 send / receive 时，文件字节都在两端之间直接传输；只有 send / receive 会联系到我们的服务器，而且只是为了一次很小的会合握手——从不涉及文件内容。up 是有意为之的例外：它会把加密副本上传到你账号的存储里，服务器只保存密文，无法读取。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -98,8 +98,8 @@ ol.steps>li>pre{margin:8px 0 0}
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-08-07</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/transfer-files-from-terminal/">English</a><a href="/zh/guides/transfer-files-from-terminal/" aria-current="true">中文</a></nav>
-      <p class="lead">Relayium CLI 是一个体积很小的单一二进制文件，用来从终端传输文件与临时文本——端到端加密、可自托管、完全免费。你可以把文件复制到服务器、在机器间推送构建产物、跨网络发送压缩包，也可以直接传 URL、命令或代码片段，无需先保存成文件。</p>
-      <p class="lead">无论用哪种方式，文件字节都在两端之间直接传输，从不经过 Relayium 的服务器。本指南带你完成安装并走通第一次传输，然后指向每种模式更深入的操作指南。</p>
+      <p class="lead">Relayium CLI 是一个体积很小的单一二进制文件，用来从终端传输文件与临时文本——端到端加密、可自托管，并且以 AGPL-3.0 许可免费开源。你可以把文件复制到服务器、在机器间推送构建产物、跨网络发送压缩包，也可以直接传 URL、命令或代码片段，无需先保存成文件。</p>
+      <p class="lead">在直连模式下——push、pull、daemon 直连以及 send / receive——文件字节都在两端之间直接传输，从不经过 Relayium 的服务器，因此不计量、也不收费。例外是 up：它会把加密副本存放在你的账号下，会占用套餐的每月流量额度、同时存放的存储上限、留存时长与每日上传额度这四项独立限制。本指南带你完成安装并走通第一次传输，然后指向各个模式更深入的操作指南。</p>
       <h2>一条命令完成安装</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">你需要准备</p><ul><li>一台有终端的 macOS、Linux 或 Windows 机器。三个系统都提供 x86-64 和 arm64 的预编译二进制。</li><li>curl，用于 macOS 和 Linux 上的一行安装——curl --version 会打印版本号。Windows 请改从发布页下载 .zip。</li><li>一个可写的安装目录。脚本能写 /usr/local/bin 时就用它，否则用 ~/.local/bin，最后几行会写明它选了哪个。</li><li>push、pull 和 daemon 直连不需要别的东西。只有用 send 或 text 生成配对码、以及用 up 上传，才需要一个免费的 Relayium 账号。</li></ul></div>
       <p>在 macOS 或 Linux 上，一条命令就能下载适配你操作系统的预编译二进制，并放进你的 PATH：</p>
@@ -131,19 +131,19 @@ echo $?
 relayium text
 relayium text 483920</code></pre><p>两端跑的是不同的命令。发消息就两台都用 relayium text；传文件就一台 relayium send、另一台 relayium receive。这种不匹配会在拨号之前就被拒绝，所以什么都没发出去。</p></dd></dl></div>
       <h2>免费，且从设计上保护隐私</h2>
-      <p>没有任何费用。上面三种方式里，唯一需要登录的是 send / receive 模式下的发送方，好让 CLI 生成配对码（云端 up 也会用到你的账号，用来存文件）。CLI 直接连接两端，因此你的文件永远不会上传到中间的服务器——唯一会接触 Relayium 的，是 send / receive 模式下一次很小的会合握手，用来牵线搭桥，绝不是文件本身。</p>
+      <p>上面三种直连方式都不收费。三者之中，唯一需要登录的是 send / receive 模式下的发送方，好让 CLI 生成配对码。CLI 直接连接两端，因此你的文件永远不会上传到中间的服务器——唯一会接触 Relayium 的，是 send / receive 模式下一次很小的会合握手，用来牵线搭桥，绝不是文件本身。云端 up 则不同：它把加密副本存放在你的账号下，所以需要登录，并会占用套餐的每月流量额度、存储上限、留存时长与每日上传额度。</p>
       <p>每次传输都端到端加密，每个文件到达时都会用 SHA-256 哈希校验，中断的传输会从断点续传而不是从头再来。它可在 macOS、Linux 和 Windows 上运行，整个项目开源、可自托管。</p>
       <h2>常见问题</h2>
       <h3>CLI 要收费吗？</h3>
-      <p>不收费。CLI 完全免费。直连的文件与文本字节都不经过 Relayium 中继，因此没有什么可计量，也没有什么可付费。</p>
+      <p>CLI 本身免费且开源，直连模式——push、pull、daemon 直连与 send / receive——用起来也不花钱：这些文件与文本字节都不经过 Relayium 中继，因此没有什么可计量。会用到套餐额度的是 up 和 down，它们把加密副本写入、读回你的账号。up 会同时受四项互相独立的限制约束——每月流量额度、同时存放的存储上限、套餐的留存时长上限，以及滚动的每日上传额度；down 读回副本时计入每月流量额度。付费套餐会把这些都调高。</p>
       <h3>需要 Relayium 账号吗？</h3>
       <p>send 或 text 生成配对码时需要账号，云端 up 也需要。push / pull 使用你自己的 SSH，daemon 直连使用公钥信任，都无需账号。服务器只为已登录账号签发配对码，因此创建端先运行一次 relayium login；持别人给你的码加入无需登录，receive 接收方也始终无需登录。</p>
       <h3>支持哪些操作系统？</h3>
       <p>macOS、Linux 和 Windows 上均提供预编译二进制，覆盖 x86-64 和 arm64。安装脚本适用于 macOS 和 Linux；在 Windows 上，请从发布页下载 .zip。</p>
       <h3>我的文件会经过 Relayium 的服务器吗？</h3>
-      <p>不会。在每种模式下，文件字节都在两端之间直接传输。只有 send / receive 会联系到我们的服务器，而且只是为了一次很小的会合握手——从不涉及文件内容。</p>
+      <p>直连模式不会。用 push、pull、daemon 直连和 send / receive 时，文件字节都在两端之间直接传输；只有 send / receive 会联系到我们的服务器，而且只是为了一次很小的会合握手——从不涉及文件内容。up 是有意为之的例外：它会把加密副本上传到你账号的存储里，服务器只保存密文，无法读取。</p>
       <div class="ctacard">
-        <p>安装 Relayium CLI，完成你的第一次传输——完全免费。</p>
+        <p>安装免费开源的 Relayium CLI，完成你的第一次直连传输。</p>
         <a class="cta" href="/cli">获取 CLI</a>
       </div>
       <h2>继续阅读</h2>

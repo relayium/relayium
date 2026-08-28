@@ -18,7 +18,7 @@ All file/line references are relative to `server/` in the
 ## Contents
 
 - [The short version](#the-short-version)
-- [What actually costs money: relay bytes, and only relay bytes](#what-actually-costs-money-relay-bytes-and-only-relay-bytes)
+- [What actually costs money: relayed bytes and hosted storage](#what-actually-costs-money-relayed-bytes-and-hosted-storage)
 - [What is recorded, table by table](#what-is-recorded-table-by-table)
 - [What the server structurally cannot know](#what-the-server-structurally-cannot-know)
 - [What the server could know but chooses not to keep](#what-the-server-could-know-but-chooses-not-to-keep)
@@ -31,16 +31,31 @@ All file/line references are relative to `server/` in the
 
 - A transfer between two devices on the same LAN never touches relayium.com's
   infrastructure after the initial handshake, and **nothing about it is billed
-  or persisted**. The same is true of any CLI transfer, which is direct-only.
-- The only thing relayium.com meters is **bytes relayed through a TURN
-  server**, for the (fairly common) case where a direct connection can't be
-  established. That's the entire billable event. It requires the sender to be
-  signed in, because it's the only path that costs us real bandwidth.
-- "Stored" transfers (a downloadable link, for when the receiver isn't online
-  at the same time) also land on server or self-hosted-node disk — as
-  opaque ciphertext, encrypted client-side before it ever reaches an
-  HTTP request. Their size counts toward storage and monthly traffic quotas,
-  same as relay bytes do.
+  or persisted**. The same is true of the CLI's **direct** modes — `push`,
+  `pull`, `sync`, `serve` and daemon-direct, `send`/`receive` and `text`. They
+  move bytes between the two ends and never ask relayium.com to relay them or
+  to hold them.
+- What relayium.com meters is **hosted bytes**, and they arrive by two
+  different routes: encrypted data it *stores* for you, and bytes it *relays*
+  for you through a TURN server. Both land in one figure —
+  `currentMonthTraffic` (`account/plan_enforce.go:62`) adds hosted upload and
+  download (`usage_monthly`) to billable relay (`usage_events`) — so "monthly
+  traffic" is not a relay meter with storage bolted on; it is the sum.
+- **Four separate limits, not one.** Monthly traffic (above) is how much moved.
+  **Storage** is a different question — how much ciphertext you are keeping
+  live *right now*, checked by `remainingStorage`
+  (`account/plan_enforce.go:191`) against `CurrentStorage`, so deleting a file
+  frees storage and refunds no traffic. **Retention** is how long a stored file
+  may live, and the **daily upload quota** is a rolling 24-hour window. This
+  document describes each separately because the code does; see
+  [How quotas are enforced](#how-quotas-are-enforced).
+- The **hosted** paths are a browser "stored download link" (a downloadable
+  link, for when the receiver isn't online at the same time), the CLI's
+  `relayium up` / `relayium down`, and Device Inbox. All of them land on server
+  or self-hosted-node disk as opaque ciphertext, encrypted client-side before
+  it ever reaches an HTTP request. `relayium up` is the reason "the CLI is
+  direct-only" is not a true sentence: it is a CLI command that deliberately
+  is not direct.
 - File **contents and filenames** are never visible to the server in either
   case — see [What the server structurally cannot know](#what-the-server-structurally-cannot-know)
   for why that's an architectural property, not a policy promise.
@@ -48,7 +63,7 @@ All file/line references are relative to `server/` in the
   reasons — notably a device-login flow's origin IP, and admin action logs.
   Those are called out explicitly, not glossed over.
 
-## What actually costs money: relay bytes, and only relay bytes
+## What actually costs money: relayed bytes and hosted storage
 
 Which path a transfer takes, precisely — this is narrower than "it tries direct
 first" and the difference is what decides whether anything is billed:
@@ -63,12 +78,20 @@ first" and the difference is what decides whether anything is billed:
   anyway, and waiting out their checks costs about 20 seconds before ICE reaches
   the relay it would have used. So **there is no STUN-P2P rung for the browser**,
   and a cross-network browser transfer is a metered transfer.
-- **CLI:** direct only. It never uses a relay, so it is never metered.
+- **CLI:** never relayed — there is no ICE or TURN code path in
+  `server/cmd/relayium/` at all. Its **direct** modes (`push`, `pull`, `sync`,
+  `serve` and daemon-direct, `send`/`receive`, `text`) therefore carry nothing
+  relayium.com can meter. Its **hosted** modes are the exception, and they are
+  not relayed either: `relayium up` and `relayium down` write and read the same
+  encrypted server-side storage a browser stored link uses, so they count
+  toward monthly traffic — and `up`, being an upload, also against the storage
+  cap and the daily upload quota.
 
 The root [`README.md`](../README.md#how-it-works) states the same thing
-("LAN: direct · browser cross-network: TURN carries ciphertext only"). Only the
-relayed path runs bytes through infrastructure relayium.com pays for, and only
-that path is metered.
+("LAN: direct · browser cross-network: TURN carries ciphertext only"). Relayed
+bytes and hosted storage are the two things that run through infrastructure
+relayium.com pays for, and between them they are what is metered. The direct
+paths — LAN browser, and the CLI's direct modes — run through neither.
 
 **Getting a relay credential at all requires being signed in and under quota.**
 `handleICE` (`account/turn.go:59`) is the endpoint that hands out
@@ -113,14 +136,25 @@ only sums `billable = 1` rows (see the comment in
 `internal/metering/metering.go:100-105`), so BYO relay never counts against
 your plan.
 
-**Stored-transfer bytes also count**, separately from relay: uploading to a
+**Hosted bytes count too, and against different dimensions.** Uploading to a
 "stored download link" writes ciphertext to central or node disk
-(`account/files.go:81`, `handleUploadFile`), and both the storage occupied
-and the bytes transferred count toward the same monthly traffic /storage
-caps a relay transfer would (`account/plan_enforce.go:53-68`,
-`currentMonthTraffic` sums `usage_monthly` — stored upload/download — plus
-billable `usage_events` — relay). An own-node (BYO) upload skips this
-entirely: `persistStoredFile(ctx, f, enforceCaps=false)`
+(`account/files.go:81`, `handleUploadFile`), and that one upload is checked
+against three separate limits in that handler: the storage cap
+(`s.overStorage`, `account/files.go:218`), the monthly traffic cap
+(`s.overTraffic`, `account/files.go:222`) and the rolling daily quota
+(`ReserveUpload`, `account/files.go:304`). Only the traffic one is shared with
+relay: `currentMonthTraffic` (`account/plan_enforce.go:53-68`) sums
+`usage_monthly` — hosted upload/download — plus billable `usage_events` —
+relay. Storage is occupancy, not throughput, and is not something a relay
+transfer can consume at all.
+
+The same handler is what `relayium up` uploads through, so the CLI's hosted
+mode is bounded identically. Delivery to a **Device Inbox** is metered on the
+same traffic dimension when the target device collects its task
+(`s.overTraffic`, `account/deviceinbox_task.go:103`).
+
+An own-node (BYO) upload skips the caps entirely:
+`persistStoredFile(ctx, f, enforceCaps=false)`
 (`account/plan_enforce.go:264`) writes straight to the store with no cap
 check, because it lands on the user's own disk, never central's.
 
@@ -284,14 +318,14 @@ numbers this document describes, not a hidden internal metric.
 
 ## The free tier, and what needs no account at all
 
-**Same-LAN realtime transfers need no account, ever.** `handleICE` only
+**Same-LAN realtime transfers need no account, ever, and no allowance.** `handleICE` only
 withholds relay credentials for an invalid/unattributable pairing code
 (`account/turn.go:71-73`); a same-public-IP transfer never calls that
 endpoint at all — the two browsers find each other in the in-memory
 signaling hub and negotiate a DataChannel directly.
 
-**A cross-network browser transfer does need payment**, and this document
-used to say the opposite. It claimed that STUN alone might connect the two
+**A cross-network browser transfer is always relayed, and therefore always
+metered** — this document used to claim that STUN alone might connect the two
 peers so that no TURN credential was consumed. The browser never tries that:
 `chooseRtcConfig` forces `iceTransportPolicy: "relay"` whenever a relay is in
 the list, so a cross-network browser session is relayed and metered from the
@@ -301,16 +335,29 @@ email verification) **and** the relay bytes it is about to spend
 (`account/turn.go:63-135` issues the credentials once the code clears those
 gates).
 
-The unmetered cross-network path that does exist is the **CLI**, which is
-direct-only and never asks for a relay.
+**Metered is not the same as paid.** What the gate actually checks is a
+verified email and *remaining allowance*, not a subscription:
+`s.trafficAllowanceSpent` (`account/plan_enforce.go:164`) withholds the TURN
+credential only once the month's traffic is exhausted. Free is a plan with an
+allowance like any other, so a signed-in Free account relays cross-network
+transfers until that allowance runs out and pays nothing. Paying is what you
+do when you want a bigger one.
 
-**What actually costs money on the Free tier**: relay bytes beyond 1 GiB/month
-combined with stored-transfer traffic, storage beyond 100 MiB live at once,
-or wanting files to survive longer than 1 day / need a bigger daily upload
-allowance. All three are the same three levers in the plan table above —
-there's no separate "download fee" or per-transfer charge; it's flat monthly
+The cross-network paths that consume no relay allowance at all are the CLI's
+**direct** modes — `send`/`receive`, `text`, `push`/`pull`/`sync` over your own
+SSH, and daemon-direct — which never ask for a relay. `relayium up` and
+`relayium down` are cross-network too, but they are hosted rather than direct,
+so they draw on the same limits a browser stored link does.
+
+**What actually reaches a limit on the Free tier**, in the plan table's own
+four dimensions: monthly traffic (hosted upload + hosted download + billable
+relay, together) beyond the Free cap; storage held live at once beyond the Free
+cap; wanting a stored file to outlive the Free retention window; or needing a
+bigger rolling daily upload allowance. Those four are the only levers — there
+is no separate "download fee" and no per-transfer charge; it is flat monthly
 tiers via Stripe Checkout/subscription (`account/billing.go:18-22`,
-`handleBillingCheckout`).
+`handleBillingCheckout`). The current numbers for each are the plan table
+above, which an admin can edit live.
 
 ## Retention: how long anything is kept
 

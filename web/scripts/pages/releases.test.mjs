@@ -340,8 +340,14 @@ describe("the generated pages", () => {
 // not an archive being old — it is nine live pages being wrong about a product a
 // reader can open right now. `mac-app-store-release.json` is where that fact
 // lives, `content/releases.mjs` interpolates it, and the table below reads it.
-// The iOS-unreleased sentence stays asserted in all nine for the same reason: no
-// direct release moves it, so an archive that dropped it would be wrong today.
+// The iOS sentence is now asserted in the FROZEN seven only. It left the
+// maintained pair on 2026-08-28: iOS development is paused and the app cannot be
+// obtained, so a release page that still listed it was promising a product by
+// placement. The archives keep it because an archive is frozen prose — the
+// sentence they were published with is still true of what they describe, and
+// silently editing seven pages that carry an archived-translation notice would
+// make the notice a lie. So the split is deliberate and asserted in both
+// directions: the seven must still say it, and the two must not.
 //
 // Per locale rather than one alternation, because the assertions are positive:
 // a union would be satisfied by any locale's sentence, so nine pages carrying
@@ -373,10 +379,11 @@ describe("what /releases says about the native apps", () => {
     pt: new RegExp(`versão da Mac App Store.+atualmente a ${appStoreVersion}`),
   };
 
-  /** iOS is still an engineering build, and the page has to keep saying so. */
+  /** The archived seven still carry the iOS sentence they were published with.
+   *  `en` and `zh` are deliberately absent: the maintained pair no longer names
+   *  the iOS app at all, and `it("names no unobtainable product…")` below is
+   *  the assertion that keeps it that way. */
   const IOS_UNRELEASED = {
-    en: /iOS app is an engineering build and has not been released publicly/,
-    zh: /iOS 应用仍是开发版，尚未公开发布/,
     ja: /iOS アプリは開発ビルドであり、まだ公開されていません/,
     ko: /iOS 앱은 개발 빌드이며 아직 공개 릴리스가 아닙니다/,
     de: /iOS-App ist ein Entwicklungs-Build und wurde nicht öffentlich veröffentlicht/,
@@ -395,7 +402,27 @@ describe("what /releases says about the native apps", () => {
       expect(macTags(bullet), `${lang} names a superseded macOS release tag`)
         .toEqual(new Set([CURRENT_TAG]));
       expect(bullet, `${lang} does not name the current Mac App Store release`).toMatch(APP_STORE_CURRENT[lang]);
-      expect(bullet, `${lang} stops saying the iOS app is unreleased`).toMatch(IOS_UNRELEASED[lang]);
+    }
+  });
+
+  it("names no unobtainable product in the maintained locales", () => {
+    // The positive-by-absence half of the 2026-08-28 change, checked over the
+    // whole maintained document rather than one bullet: a claim moved from the
+    // bullet into the lead is the same claim. `apps/` has no Android or Windows
+    // target at all and iOS development is paused with no public listing, so
+    // /releases — the page a reader opens to find out what they can download —
+    // must not list any of the three.
+    const NATIVE_APP = /\b(?:iOS|iPhone|iPad|Android|Windows)\s+(?:native\s+|desktop\s+)*app\b|(?:iOS|iPhone|iPad|Android|Windows)\s*(?:桌面)?(?:原生)?应用/i;
+    for (const lang of MAINTAINED_LANGS) {
+      const doc = releases.langs[lang];
+      const copy = [
+        ...doc.lead,
+        ...doc.sections.flatMap((s) => [...(s.body ?? []), ...(s.bullets ?? [])]),
+      ];
+      expect(copy.length, `${lang} has no copy to check`).toBeGreaterThan(5);
+      for (const line of copy) {
+        expect(line, `${lang} /releases names a product a reader cannot get`).not.toMatch(NATIVE_APP);
+      }
     }
   });
 
@@ -410,6 +437,9 @@ describe("what /releases says about the native apps", () => {
   //     This is what the seven pages were, for the whole 1.3.1-to-1.3.8 window.
   //   * "iOS is unreleased" is not a fact about 1.2.5 either — no macOS release
   //     moves it — so an archive that stopped saying it would be wrong today.
+  //     The maintained pair dropped the sentence on 2026-08-28 (see above); the
+  //     archives keep it, because editing frozen prose is what "frozen" rules
+  //     out and because the sentence remains true of the state they describe.
   //   * Internal consistency of the frozen half. Frozen means a locale keeps the
   //     direct tag it was published with; it does not mean half of it may be
   //     refreshed. The bullet's tag and the lead's bare version are one claim

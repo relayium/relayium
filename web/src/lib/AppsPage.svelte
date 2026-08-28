@@ -5,7 +5,13 @@
   import releases from "../../native-releases.json";
 
   type MacRelease = { available: boolean; downloadUrl: string | null };
-  type AppId = "web" | "cli" | "mac" | "ios" | "android" | "windows";
+  // The ids this page can render. It lost `ios`, `android` and `windows` on
+  // 2026-08-28: `apps/` contains no Android or Windows target at all, and iOS
+  // development is paused with no public listing, so three of the six cards
+  // advertised products a reader could not get. The in-development group and
+  // every path that feeds it stayed — see `futureCards` — because the next
+  // platform that really is being built should be one entry, not a rebuild.
+  type AppId = "web" | "cli" | "mac";
   type AppCard = {
     id: AppId;
     name: string;
@@ -38,25 +44,25 @@
   // when the visitor's browser is that exact platform — being highlighted is
   // "this row is about your machine", never "this is ready for you".
   //
-  // A set rather than one id, because a platform can legitimately match in both
-  // groups. On Windows the CLI works today AND a native Windows app is being
-  // built; a visitor whose highlight named only one of the two would be shown
-  // either an unavailable app with no mention of what does work, or a working
-  // tool with no mention of what is coming. At most one card per group is ever
-  // marked, so the page never lights up.
+  // A set rather than one id, because a platform can legitimately match in more
+  // than one group; at most one card per group is ever marked, so the page
+  // identifies rather than lights up.
+  //
+  // iOS and Android now resolve to the web card, which is the honest answer:
+  // the browser IS the Relayium client on those platforms. Pointing them at a
+  // card that said "in development" told a visitor their platform was not
+  // served, when the very page they were reading is what serves it.
   const highlightIds = $derived<Set<AppId>>(
     new Set<AppId>(
       platform === "mac" ? ["mac"]
-      : platform === "ios" ? ["ios"]
-      : platform === "windows" ? ["cli", "windows"]
-      : platform === "linux" ? ["cli"]
-      : platform === "android" ? ["web", "android"]
+      : platform === "windows" || platform === "linux" ? ["cli"]
       : ["web"],
     ),
   );
   // Human OS name for the "looks like you're on X" caption; empty when unknown.
-  // Android is named now that it has a card of its own to name: before, the
-  // caption would have pointed at a highlight the reader could not see.
+  // Still named for every platform detection can identify, including the ones
+  // with no native app: the caption points at a highlighted card, and every
+  // platform now has one to point at.
   const osName = $derived(
     platform === "mac" ? "macOS"
     : platform === "ios" ? "iOS"
@@ -87,24 +93,12 @@
       available: macAvailable, href: macAvailable ? macRelease.downloadUrl! : undefined,
       cta: macAvailable ? t.appsPage.cards.mac.cta : undefined,
     },
-    {
-      id: "ios", name: t.appsPage.cards.ios.name, desc: t.appsPage.cards.ios.desc,
-      available: false,
-    },
-    // Two independent products, not one "desktop/mobile, later" bucket, and
-    // neither carries an action: `available: false` is what keeps them out of
-    // the CTA path, and the absent `cta`/`href` is what keeps them out of it
-    // even if a future edit moved them.
-    {
-      id: "android", name: t.appsPage.cards.android.name, desc: t.appsPage.cards.android.desc,
-      available: false,
-    },
-    {
-      id: "windows", name: t.appsPage.cards.windows.name, desc: t.appsPage.cards.windows.desc,
-      available: false,
-    },
   ]);
   const availableCards = $derived(cards.filter((card) => card.available));
+  // Empty today, and rendered conditionally rather than deleted. A card whose
+  // `available` is false — the unreleased macOS manifest state, or a genuinely
+  // in-development platform added later — lands here with no action and the
+  // "In development" status line, without anyone re-deriving the layout.
   const futureCards = $derived(cards.filter((card) => !card.available));
 </script>
 
@@ -172,8 +166,8 @@
   <!-- The question the grid above raises but does not answer. It sits after the
        cards, not before them: a reader who already knows which platform they
        are on should reach their card first, and only the undecided one reads
-       on. The two columns are the two real choices — the CLI has its own page
-       and the in-development apps have nothing to choose yet. -->
+       on. The two columns are the two real choices — the CLI has its own page —
+       and the note under them names the platforms that have neither. -->
   <section class="chooser" aria-labelledby="chooser-heading">
     <h2 class="group-title" id="chooser-heading">{t.appsPage.chooser.heading}</h2>
     <p class="chooser-lead">{t.appsPage.chooser.lead}</p>
@@ -191,7 +185,7 @@
         </ul>
       </article>
     </div>
-    <p class="chooser-note">{t.appsPage.chooser.iosNote}</p>
+    <p class="chooser-note">{t.appsPage.chooser.elsewhereNote}</p>
   </section>
 </section>
 
@@ -210,11 +204,9 @@
      cards when macOS is unreleased, three when it is (which it is), each an
      equal track instead of a half-width orphan. */
   .available-grid { grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); }
-  /* auto-fit, not `repeat(2, …)`. With iOS, Android and Windows in development
-     a fixed two-column track left the third card alone on a half-width row —
-     which reads as an afterthought rather than a third product. Equal tracks
-     give every in-development platform the same weight, and the count can
-     change (one ships, another starts) without the layout acquiring an orphan. */
+  /* auto-fit, not `repeat(2, …)`. The group is empty today; when it is not, the
+     count is whatever is genuinely being built, and equal tracks give each of
+     them the same weight without the layout acquiring a half-width orphan. */
   .future-grid { grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); }
   .app-card { min-inline-size: 0; }
   .app-card h3 { margin: 0; font-size: var(--fs-h3); color: var(--text-h); }

@@ -31,16 +31,18 @@
 // "web app" or "macOS" against v0.15.0 would have been the easy, untrue version
 // of this page.
 //
-// The native apps sit outside that list on purpose, and since 2026-08-10 the two
-// of them are in DIFFERENT states, which the copy has to carry: the macOS app is
-// released publicly under its own tag namespace (currently `macos-v1.3.8`, a
-// Developer ID-signed and Apple-notarized DMG attached to that GitHub Release —
-// not a Mac App Store listing), while the iOS app is still an engineering build
-// that has been released nowhere. "The native apps are engineering builds" was
-// one true sentence about two things; it is now false about one of them, and a
-// page whose whole purpose is being checkable cannot carry it. See
-// releases.test.mjs, which also keeps the `v*` list from being failed by the
-// `macos-v*` tag it must not contain.
+// The macOS app sits outside that list on purpose: it is released publicly under
+// its own tag namespace (currently `macos-v1.3.8`, a Developer ID-signed and
+// Apple-notarized DMG attached to that GitHub Release) and, on an independent
+// version line, on the Mac App Store. See releases.test.mjs, which also keeps
+// the `v*` list from being failed by the `macos-v*` tag it must not contain.
+//
+// The maintained pair, en and zh, stopped naming the iOS app on 2026-08-28. The
+// sentence was true — it was an unreleased engineering build — but a release
+// page listing a product that is not being developed and cannot be obtained is
+// a promise by placement rather than by wording. The seven archived locales
+// keep the sentence they were published with, and releases.test.mjs still pins
+// it there: an archive is frozen prose, not a page that gets quietly edited.
 //
 // The version in that sentence is the CURRENT release, not the first one, and it
 // moves. `macos-v1.0` sat here — and in all nine locales below — through 1.1,
@@ -142,7 +144,7 @@ const en = {
   updatedLabel: "Last updated",
   otherDocLabel: "Privacy Policy",
   lead: [
-    "Relayium ships in three rhythms, and this page is honest about all three: the web app is deployed continuously, the command-line tools are numbered and tagged, and the native apps are released on their own — macOS 1.3.8 is a signed download from GitHub, while the iOS app is still an engineering build that has not been released publicly.",
+    "Relayium ships in three rhythms, and this page is honest about all three: the web app is deployed continuously, the command-line tools are numbered and tagged, and the macOS app is released on its own — macOS 1.3.8 is a signed download from GitHub, and the Mac App Store carries it on a version line of its own.",
     "Every version below was tagged automatically from the main branch, and only after the checks on that exact commit passed. A version's complete notes — every commit it contains — are one click away on GitHub.",
   ],
   sections: [
@@ -153,7 +155,7 @@ const en = {
       ],
       bullets: [
         "The web app has no version number. It is deployed from the main branch as soon as its checks pass, so what you use in a browser is usually newer than the newest version listed here.",
-        `The macOS app is released under its own tag, macos-v1.3.8: a Developer ID-signed, Apple-notarized direct download from GitHub. The separately versioned Mac App Store release is currently ${APP_STORE.version}. No version below ships either app. The iOS app is an engineering build and has not been released publicly.`,
+        `The macOS app is released under its own tag, macos-v1.3.8: a Developer ID-signed, Apple-notarized direct download from GitHub. The separately versioned Mac App Store release is currently ${APP_STORE.version}. No version below ships that app.`,
         "A node does not follow this list by itself: it asks the server it belongs to which version to run, so a new version changes nothing until someone starts a rollout. The command-line tool updates with relayium update.",
       ],
     },
@@ -189,7 +191,7 @@ const zh = {
   updatedLabel: "最后更新",
   otherDocLabel: "隐私政策",
   lead: [
-    "Relayium 有三种发布节奏，这一页对三种都如实说明：网页版持续部署，命令行工具带版本号打标签发布，原生应用则各自单独发布——macOS 1.3.8 已可从 GitHub 下载，iOS 应用仍是开发版，尚未公开发布。",
+    "Relayium 有三种发布节奏，这一页对三种都如实说明：网页版持续部署，命令行工具带版本号打标签发布，macOS 应用单独发布——macOS 1.3.8 已可从 GitHub 下载，同时也在 Mac App Store 上架，版本号自成一条线。",
     "下面每一个版本都是从 main 分支自动打标签的，而且只在该提交的检查全部通过之后才发布。某个版本的完整说明——它包含的每一条提交——在 GitHub 上一点即达。",
   ],
   sections: [
@@ -200,7 +202,7 @@ const zh = {
       ],
       bullets: [
         "网页版没有版本号。它在检查通过后就从 main 分支部署，所以你在浏览器里用到的，通常比这里最新的版本还要新。",
-        `macOS 应用用自己的标签 macos-v1.3.8 单独发布：这是一份经过 Developer ID 签名、通过 Apple 公证、直接从 GitHub 下载的安装包。独立维护版本号的 Mac App Store 版本当前为 ${APP_STORE.version}。下面任何一个版本都不包含这些应用。iOS 应用仍是开发版，尚未公开发布。`,
+        `macOS 应用用自己的标签 macos-v1.3.8 单独发布：这是一份经过 Developer ID 签名、通过 Apple 公证、直接从 GitHub 下载的安装包。独立维护版本号的 Mac App Store 版本当前为 ${APP_STORE.version}。下面任何一个版本都不包含这个应用。`,
         "节点不会自己跟着这个列表走：它会向所属的服务器询问该运行哪个版本，所以在有人发起灰度更新之前，新版本什么也不会改变。命令行工具用 relayium update 更新。",
       ],
     },

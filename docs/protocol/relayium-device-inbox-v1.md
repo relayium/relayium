@@ -31,8 +31,14 @@ lives in `web/src/lib/device-send.ts`, `web/src/lib/device-seal.ts` and
 `web/src/lib/device-inbox.ts`, and it drives the §24-§28 surface. Its UI is not
 specified here — this document specifies the wire and the receiver, not the
 sender's presentation. The iOS clients (Phase 3) are not specified here and are
-not implemented. Product source of truth: `DEVICE-INBOX-PRD.md` §6, §8, §9, §10,
-§11.
+not implemented, and iOS development is paused.
+
+The product requirements this specification was written from are not published in
+this repository, so nothing here cites them. Where an earlier revision pointed at
+an internal requirements document, the authority a reader can check is this
+document, its v2 companion,
+[`../DEVICE-INBOX-ADMISSION-CONTRACT.md`](../DEVICE-INBOX-ADMISSION-CONTRACT.md),
+and the implementation listed next.
 
 Authoritative implementation: `server/internal/inbox/inbox.go` and
 `server/internal/inbox/task.go` (protocol vocabulary and the state machine),
@@ -84,7 +90,7 @@ together.
   file chunks are encrypted with that content key exactly as today; Device Inbox
   changes only how the key reaches the target.
 - No sender identity is carried. Authorisation for the MVP is the **account**
-  (PRD §8: same-account only), not a sender key. A sealed box is chosen partly
+  (same-account only — §11.2), not a sender key. A sealed box is chosen partly
   for that reason: it needs no sender long-term key to exist.
 
 Central cannot open a sealed box: it never holds the device private key. This is
@@ -121,7 +127,7 @@ Defined in v1:
 | Token | Meaning |
 |---|---|
 | `inbox.receive.v1` | **Required.** The device can claim a queued task, unwrap its content key, verify and commit atomically. |
-| `inbox.autoaccept.v1` | The device implements the same-account automatic-receive policy (PRD §8). Absence is meaningful: such a device may only be sent to under `ask`. |
+| `inbox.autoaccept.v1` | The device implements the same-account automatic-receive policy (§5, §14). Absence is meaningful: such a device may only be sent to under `ask`. |
 | `inbox.resume.v1` | The device resumes an interrupted ciphertext download from a complete frame boundary. |
 
 Negotiation rules:
@@ -162,11 +168,11 @@ Phase 1C.
   `last_heartbeat_at` is left alone — it is the honest record of when the device
   was last heard from.
 - `CanReceive` is deliberately **separate** from presence. An offline but
-  properly enrolled device is still a valid queue target (PRD §7.3); conflating
+  properly enrolled device is still a valid queue target; conflating
   the two would turn "offline" into "rejected" and remove the whole reason the
   asynchronous queue exists.
 
-iOS note (PRD §11.2): a heartbeat from an iOS app expires exactly like any other.
+iOS note: a heartbeat from an iOS app expires exactly like any other.
 Nothing in this design lets iOS be presented as always-online.
 
 ## 7. Key lifecycle
@@ -183,7 +189,7 @@ future write path bypasses the rotation compare-and-swap.
 | revoked (`revoked_at ≠ 0`) | Withdrawn. Never usable again, for new or queued tasks. |
 
 Superseded and revoked are **not** the same state. Collapsing them would either
-strand tasks queued before a rotation (PRD open question §16.2) or keep trusting
+strand tasks queued before a rotation or keep trusting
 a key a human withdrew.
 
 ### Rotation is a compare-and-swap
@@ -347,7 +353,7 @@ history impossible even under a concurrent rotation.
 2. **A public link never writes to disk.** Every queue endpoint is
    authenticated, and the target device is always resolved under the caller's
    own account. A capability link authenticates nothing and reaches none of it.
-   MVP task creation is same-account only (PRD §8).
+   MVP task creation is same-account only, enforced in `server/account/deviceinbox_task.go`.
 3. **Session ≠ device.** A browser session may create, list, read and delete
    tasks — it is the primary *sender*. Only the machine itself may claim work or
    assert what it did with a file.
@@ -394,11 +400,11 @@ two behave differently.
 
 ## 13. State machine
 
-Server-visible states (PRD §10 items 3-12): `queued`, `notified`,
+Server-visible states: `queued`, `notified`,
 `downloading`, `verifying`, `saved`, `attention_required`, `expired`, `revoked`,
 `failed_retryable`, `failed_terminal`.
 
-`encrypting` and `uploading` (PRD §10 items 1-2) are **sender-local**. Central
+`encrypting` and `uploading` are **sender-local**. Central
 cannot observe either, so it stores neither and refuses them *by name* with a
 distinct error rather than as unknown strings. The database `CHECK` constraint
 repeats the server set, so no write path can invent a state.
@@ -493,7 +499,9 @@ a moment earlier wins the race.
 | Claim batch | 32 | One call cannot lease a device's whole queue and strand it for the lease TTL. |
 | Terminal-row retention | 7 days | Bounds the table while a sender can still see what happened yesterday. |
 
-None of these is a commercial quota; PRD §13 rules pricing numbers out of scope.
+None of these is a commercial quota: pricing numbers are out of scope for this
+specification and live in the plan rows the server seeds (`defaultPlans` in
+`server/account/settings.go`).
 
 ## 16. Error codes (queue)
 
@@ -612,7 +620,7 @@ Constraints, so the invariants do not rest on application code alone:
 
 - `UNIQUE(user_id, idempotency_key)` — creation idempotency survives a
   concurrent duplicate the application read would miss.
-- `CHECK (state IN …)` — the closed PRD §10 server set.
+- `CHECK (state IN …)` — the closed server-visible state set from §13.
 - `CHECK (saved_at = 0 OR state = 'saved')` — no code path can leave a "saved
   at" timestamp on a task that was never saved.
 - `CHECK (lease_expires_at = 0 OR claim_token_hash <> '')` — a lease always has
@@ -1032,7 +1040,7 @@ grant, journal, destination plan, commit, receiver, one-pass engine).
    immutable flag and a revoked TCC grant all leave the bits looking fine, and
    `receiveDirReady` (§19.6) decides whether a sender is told their file will
    land.
-6. **Automatic receive is a separate persisted flag and defaults off** (PRD §8).
+6. **Automatic receive is a separate persisted flag and defaults off** (§5, §14).
    Choosing a folder is not consent to unattended writes; enabling with no folder
    chosen is refused. Both the grant and the opt-in are stored per account.
 7. **No usable folder means no receive claim.** A pass with an unusable folder

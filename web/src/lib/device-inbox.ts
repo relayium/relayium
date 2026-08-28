@@ -2,18 +2,20 @@
 // what is truthfully happening to what I sent" that does not touch the DOM,
 // the network or a key. Kept pure so every branch below is unit-testable.
 //
-// Protocol: docs/protocol/relayium-device-inbox-v1.md §§2, 5, 6, 9, 13, 14, 16.
-// Product:  DEVICE-INBOX-PRD.md §6.1, §7, §8, §10.
+// Protocol: docs/protocol/relayium-device-inbox-v1.md §§2, 5, 6, 9, 13, 14, 16,
+//           and relayium-device-inbox-v2.md for content kind and the manifest.
+// Contract: docs/DEVICE-INBOX-ADMISSION-CONTRACT.md (the frozen invariants).
+// Server:   server/internal/inbox/task.go — the same state machine, enforced.
 //
 // Two rules shape this whole file:
 //
 //  1. **Presence is advisory, capability is not.** An offline device that is
 //     properly enrolled is a legitimate target — the task queues and lands when
-//     it comes back (PRD §7.3). Only enrolment, revocation, key material,
+//     it comes back (protocol §6). Only enrolment, revocation, key material,
 //     capability and the device-owner's automatic-receive policy can make a
 //     device unsendable. Collapsing the two would make "offline" mean
 //     "rejected" and delete the reason the queue exists.
-//  2. **Never say "sent".** PRD §10 is explicit: "ciphertext uploaded" and
+//  2. **Never say "sent".** Protocol §13 is explicit: "ciphertext uploaded" and
 //     "the target device saved it" must not share one vague state. So the
 //     sender-local phases and the server states are different types here, and
 //     `saved` is reachable only from the server's own `saved`.
@@ -348,11 +350,12 @@ export function textDraftSize(draft: string): TextDraftSize {
 
 // ── Sender-local phases vs. server states ──────────────────────────────────
 
-/** PRD §10 items 1-2. Central stores neither and refuses them by name
+/** The two sender-local phases. Central stores neither and refuses them by name
  *  (protocol §13); they exist only in this browser, for this attempt. */
 export type LocalPhase = "encrypting" | "uploading" | "registering";
 
-/** PRD §10 items 3-12 — the closed set of states central can hold. */
+/** The closed set of states central can hold (protocol §13), repeated by the
+ *  database CHECK constraint so no write path can invent one. */
 export const SERVER_TASK_STATES = [
   "queued",
   "notified",

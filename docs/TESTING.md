@@ -242,15 +242,43 @@ shasum check).
 
 **Note on degradation:** Firefox and Safari do not implement `showSaveFilePicker`, so the
 receiving side accumulates chunks in a `Blob` and triggers a standard download link at completion.
-For large files this exhausts tab memory. Stick to files ≤ 50 MB on these browsers at M0.
+For large files this exhausts tab memory. The ≤ 50 MB figure in the matrix above is this
+procedure's own test bound, not the product's limit: the shipped app warns above roughly
+256 MB and says so on the page. Use the matrix bound when running these steps, and the
+product's figure everywhere else.
 
 ---
 
-## 8. Known limitations (M0)
+## 8. Known limitations (M0) — HISTORICAL, superseded
 
-These are explicitly out of scope for the first milestone and are **not** defects:
+> **⚠️ This table describes the M0 milestone and is kept as a record of it. Do
+> not read any row as current behaviour.** Several of its rows were already
+> false when this warning was added: Relayium runs a TURN relay in production
+> and cross-network pairing-code rooms depend on it, the live deployment is
+> HTTPS/WSS only (a secure context is required for the Web Crypto API and
+> streaming-to-disk at all), and the buffered-browser advice moved from
+> "≤ 50 MB" and "~200 MB" to the single ~256 MB warning the product actually
+> shows. Where a row still holds, the current statement of it lives elsewhere
+> and that is the copy to trust:
+>
+> - **Relay and cross-network reachability** — "Cross-network transfer" and
+>   "Cross-network TURN relay" below, which are the current procedures.
+> - **Buffered-browser limits** — the browser-support table in the root
+>   [`README.md`](../README.md) and `web/public/llms.txt`, both pinned to the
+>   same ~256 MB figure by `web/scripts/pages/llms-text.test.mjs`.
+> - **Stored-link size and quota bounds** — the plan rows the server seeds
+>   (`defaultPlans` in `server/account/settings.go`), surfaced live at
+>   https://relayium.com/pricing. Figures are not copied into this file, because
+>   an operator can edit a plan from the admin dashboard.
+> - **Transport and origin rules** — `server/main.go` and
+>   [`self-hosting.md`](self-hosting.md).
+>
+> No row below is a supported statement about the shipped product.
 
-| Limitation | Details |
+These were explicitly out of scope for the first milestone and were **not**
+defects at that time:
+
+| Limitation (M0, historical) | Details as written then |
 |---|---|
 | Same-LAN / same-public-IP only | No TURN relay is implemented. Peers behind different NATs (different public IPs) will fail ICE. Use a TURN server or run on the same LAN. |
 | Same-origin WebSocket only | `websocket.Accept` defaults to same-origin enforcement. Both browsers must open the app from the Go server's own origin (e.g. `http://192.168.1.10:8080`), not from the Vite dev server (`http://localhost:5173`), otherwise the WebSocket upgrade is rejected. |
@@ -534,15 +562,35 @@ copy control, each with an audible name. In the composer, **Enter inserts a
 newline and does not send**; ⌘/Ctrl+Enter sends. Focus rings are visible on every
 control.
 
-### 9. RTL
+### 9. RTL — archived, not a current step
 
-Switch the UI language to **العربية**.
+**Do not run this one.** It is kept as a record of how the message panel was
+checked while Arabic was a maintained product language; it is not executable
+today, and nothing was substituted for it.
 
-**Expect:** the panel mirrors (controls and alignment move to the right), and a
-message body containing Latin text still reads **left-to-right** inside the
-mirrored layout — each body carries `dir="auto"` independently of the UI
-direction. Send an Arabic body and confirm it reads right-to-left. Neither
-direction may cause horizontal page scrolling.
+The app ships two languages, `en` and `zh` (`MAINTAINED_LANGS` in
+`web/scripts/pages/shared.mjs`, and the two tables under `web/src/lib/i18n/` —
+the other seven live in `web/src/lib/i18n/archive/`). There is no way to put the
+running SPA into Arabic: the language selector offers only the two, and
+`setLang` (`web/src/lib/i18n.svelte.ts`) accepts only a loaded language. A step
+that begins "switch the UI language to العربية" therefore has no first action.
+
+> **What it used to say.** Switch the UI language to **العربية**. Expect the
+> panel to mirror (controls and alignment move to the right), and a message body
+> containing Latin text to still read left-to-right inside the mirrored layout —
+> each body carries `dir="auto"` independently of the UI direction. Send an
+> Arabic body and confirm it reads right-to-left. Neither direction may cause
+> horizontal page scrolling.
+
+**What is still true, and where it is checked instead.** `dir()` still answers
+`"rtl"` for `ar`, because the archived Arabic pages under `web/public/ar/` are
+still served with `dir="rtl"` — they are archived translations, not a supported
+product language. That is covered automatically rather than by hand:
+`src/lib/Nav.test.ts` asserts `dir("ar") === "rtl"` and pins the chevron flip,
+and `scripts/pages/rtl-head-isolation.test.mjs` covers the archived pages' head.
+Restoring Arabic as a maintained locale would bring this manual step back; under
+the supported-language policy that is an explicit owner decision, not something
+a test pass can trigger.
 
 ### 10. CLI — two live processes
 

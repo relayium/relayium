@@ -4,7 +4,7 @@ const en = {
   description:
     "How Relayium handles files and ephemeral text: content is end-to-end encrypted, live message bodies are never stored by Relayium, and stored download links keep files zero-knowledge encrypted.",
   updatedLabel: "Last updated",
-  updated: "2026-08-13",
+  updated: "2026-08-28",
   otherDocLabel: "Terms of Service",
   lead: [
     "Relayium is built so that your files and ephemeral text stay yours. Local browser sessions are direct; cross-network browser sessions may carry end-to-end encrypted ciphertext through TURN; CLI text is direct-only; and stored download links hold only zero-knowledge encrypted file ciphertext.",
@@ -81,7 +81,7 @@ const en = {
         "Google, if you sign in with Google — we receive your email and basic profile to create the account.",
         "Apple, if you use Sign in with Apple — we receive a stable identifier and the email (or Apple's private relay address) you choose to share.",
         "Stripe, our payment processor for subscriptions purchased on the web — see Payments.",
-        "Apple, for subscriptions purchased inside our iOS and macOS apps via in-app purchase — see Payments.",
+        "Apple, for subscriptions purchased inside our macOS app via in-app purchase — see Payments.",
         "An email delivery provider, to send account emails such as magic-link sign-in and verification.",
       ],
     },
@@ -92,19 +92,19 @@ const en = {
       ],
       bullets: [
         "On the web, payments are handled by Stripe. Card details go to Stripe, not to us; we receive only a customer reference and the resulting subscription status.",
-        "In our iOS and macOS apps, subscriptions are bought through Apple in-app purchase. Apple processes the payment under your Apple ID, and we never see your payment method. The app sends us Apple's signed record of the transaction, and we keep what it says about the purchase: which subscription product you bought, Apple's identifier for that subscription, and its status, billing period, and renewal or expiry dates. We also generate a random token that ties an App Store purchase to your Relayium account.",
+        "In our macOS app, subscriptions are bought through Apple in-app purchase. Apple processes the payment under your Apple ID, and we never see your payment method. The app sends us Apple's signed record of the transaction, and we keep what it says about the purchase: which subscription product you bought, Apple's identifier for that subscription, and its status, billing period, and renewal or expiry dates. We also generate a random token that ties an App Store purchase to your Relayium account.",
         "For your account we store only your current plan, subscription status, billing cycle, period dates, and your payment provider's reference for the subscription — never card data.",
       ],
     },
     {
       heading: "The Relayium app",
       body: [
-        "Our native apps handle a little device-level data that the website does not:",
+        "Our macOS app handles a little device-level data that the website does not:",
       ],
       bullets: [
-        "Push notifications: if you enable them, we store an Apple Push Notification service (APNs) device token so we can deliver notifications to your device. You can turn notifications off at any time in your device settings.",
-        "Camera and photos: used only on your device to scan a QR code or pick files to send. Nothing is captured or uploaded from the camera or your library except the files you deliberately choose to transfer.",
-        "The app does not track you across other apps or websites, and contains no advertising or third-party analytics SDKs.",
+        "This Mac's name: the app reads the computer name from your Mac's Sharing settings and uses it as this device's label — sent with an email-and-password sign-in so your account can tell your devices apart and you can sign one out, and announced to the other devices in the room when you pair over the same network. macOS often seeds that name from your full name, so renaming the Mac changes what is sent.",
+        "An installation identifier: 32 random bytes the app generates on this Mac and keeps in its keychain, sent when you sign in through your browser so that signing back in returns to the device entry this Mac already has instead of adding another. It is random and never derived from your hardware — no serial number, MAC address, or hostname — so it identifies an installation and nothing about the machine.",
+        "What the app does not do: it registers no push token and receives no push notifications. A finished transfer or a new inbox delivery is announced by macOS on this Mac itself, and those banners deliberately carry no file names, links, or codes. The app does not track you across other apps or websites, and contains no advertising or third-party analytics SDKs.",
       ],
     },
     {
@@ -143,7 +143,7 @@ const zh = {
   description:
     "Relayium 如何处理文件与临时文本：内容采用端到端加密，Relayium 不存储实时消息正文，暂存下载链接中的文件保持零知识加密。",
   updatedLabel: "最后更新",
-  updated: "2026-08-13",
+  updated: "2026-08-28",
   otherDocLabel: "服务条款",
   lead: [
     "Relayium 的设计宗旨是让你的文件与临时文本始终属于你。浏览器局域网会话直接连接；跨网络浏览器会话可能通过 TURN 传输端到端加密的密文；CLI 文本仅直连；暂存下载链接只保存零知识加密的文件密文。",
@@ -213,7 +213,7 @@ const zh = {
         "Google——如果你用 Google 登录，我们会获取你的邮箱和基本资料以创建账号。",
         "Apple——如果你使用「通过 Apple 登录」，我们会获取一个稳定标识符，以及你选择分享的邮箱（或 Apple 的私密转发地址）。",
         "Stripe——我们在网页端订阅的支付处理方，详见「支付」。",
-        "Apple——在我们的 iOS 与 macOS App 内通过应用内购买订阅时的处理方，详见「支付」。",
+        "Apple——在我们的 macOS App 内通过应用内购买订阅时的处理方，详见「支付」。",
         "邮件发送服务商——用于发送账号邮件，如魔法链接登录与验证邮件。",
       ],
     },
@@ -224,19 +224,19 @@ const zh = {
       ],
       bullets: [
         "在网页端，支付由 Stripe 处理。卡片信息提交给 Stripe，而非我们；我们只拿到一个客户标识和由此产生的订阅状态。",
-        "在我们的 iOS 与 macOS App 内，订阅通过 Apple 应用内购买完成。Apple 从你的 Apple ID 处理支付，我们绝不会看到你的支付方式。App 会把 Apple 签名的交易记录发给我们，我们保存其中关于这笔购买的内容：你购买的订阅商品、Apple 为该订阅分配的标识符，以及订阅状态、计费周期与续订或到期日期。我们还会生成一个随机令牌，把 App Store 购买与你的 Relayium 账号关联起来。",
+        "在我们的 macOS App 内，订阅通过 Apple 应用内购买完成。Apple 从你的 Apple ID 处理支付，我们绝不会看到你的支付方式。App 会把 Apple 签名的交易记录发给我们，我们保存其中关于这笔购买的内容：你购买的订阅商品、Apple 为该订阅分配的标识符，以及订阅状态、计费周期与续订或到期日期。我们还会生成一个随机令牌，把 App Store 购买与你的 Relayium 账号关联起来。",
         "就你的账号而言，我们只存储你当前的套餐、订阅状态、计费周期、周期起止日期，以及支付服务商为该订阅提供的引用标识——绝不存储卡片数据。",
       ],
     },
     {
       heading: "Relayium App",
       body: [
-        "我们的原生 App 会处理少量网站不涉及的设备级数据：",
+        "我们的 macOS App 会处理少量网站不涉及的设备级数据：",
       ],
       bullets: [
-        "推送通知：如果你开启，我们会存储一个 Apple 推送通知服务（APNs）设备令牌，以便向你的设备投递通知。你可以随时在设备设置中关闭通知。",
-        "相机与相册：仅在你的设备本地用于扫描二维码或选择要发送的文件。除你主动选择传输的文件外，不会从相机或相册采集或上传任何内容。",
-        "App 不会跨其他 App 或网站追踪你，也不含广告或第三方分析 SDK。",
+        "这台 Mac 的名称：App 会读取 Mac「共享」设置中的电脑名称，作为本设备的标签——使用邮箱与密码登录时随请求发送，便于你在账号中区分各台设备并注销其中一台；在同一网络配对时，也会公布给同一房间内的其他设备。macOS 通常会以你的全名生成该名称，因此重命名这台 Mac 就会改变发送出去的内容。",
+        "安装标识符：App 在这台 Mac 上生成 32 字节随机值并保存在本机钥匙串中，通过浏览器登录时发送，使你重新登录后回到这台 Mac 已有的设备条目，而不是新增一条。它是随机的，绝不由硬件推导——不含序列号、MAC 地址或主机名——因此它只标识某一次安装，而不透露这台机器的任何信息。",
+        "App 不做的事：它不注册推送令牌，也不接收推送通知。传输完成或收件箱有新投递，都由 macOS 在这台 Mac 本地提示，且这些横幅刻意不含文件名、链接或配对码。App 不会跨其他 App 或网站追踪你，也不含广告或第三方分析 SDK。",
       ],
     },
     {

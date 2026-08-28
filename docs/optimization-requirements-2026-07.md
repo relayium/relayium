@@ -12,11 +12,35 @@
 > | P1-2 Wake Lock / 断点续传 / 连接路径徽标 | ✅ | `wakelock.ts`、续传 E2E（`web/e2e/lan-transfer.mjs` 第三幕）、`pathLan/pathP2p/pathRelay` |
 > | P1-3 文件夹发送 / >10 文件 / ZIP | ✅ | 上限 1,000、`webkitdirectory`（iOS 隐藏）、zip 4GiB |
 > | P1-4 CLI 客户端 | ✅ | 已发布，`server/cmd/relayium`，22 个版本见 `/releases/` |
-> | P1-5 持久设备配对（UI 层） | ❌ **未做** | 代码里没有任何持久配对 / 信任设备的痕迹；报告指出它需基于密钥指纹做，不是照抄 PairDrop 的 room |
+> | P1-5 持久设备配对（UI 层） | ✅ **已交付（2026-08-24，被"设备收件箱"取代）** | 见本节下方 2026-08-28 的更正说明；原始快照写于 2026-08-05，当时确属未做 |
 > | P2 A-1 信任背书区（MIT/无跟踪/GitHub/changelog） | ⏳ **基本完成** | `/releases/` 已上线（`1140ed55`）并进入页脚；**注意报告里的「MIT」已过时**——项目已改为开放内核：`server/`+`web/` AGPL-3.0、`apps/` Apache-2.0、`docs/` CC BY 4.0。首页尚无集中的"背书区"区块，链接分散在 FeatureStrip / 页脚 |
 > | P2 A-2 独立 Use Cases / Compare / Docs 页 | ✅ | 12 篇 compare 文章 + `/compare/` 真 hub + `/how-to/` 真 hub（`5e4addaf`）；UseCases 卡片已可点 |
 > | P2 B-3 中继策略统一叙事（降级链可视化） | ❌ **未做**（依赖 P1-2 之后的自动降级功能本身） |
 > | P2 B-4 管理后台国际化 | ✅ **已完成**（2026-08-06 复核） | `server/account/admin_i18n.go`（24 KB）+ `admin_i18n_test.go`；`adminLangFrom()`、语言 Cookie、`POST /admin/lang`（`admin.go`），`Lang` 已贯穿每个模板结构体。提交 `0c9e30d4`…`bf8e527d`。有意保留中文的只剩切换器自身的「中文 / EN」（语言名以自身语言呈现）与 Go 注释 |
+
+> **更正（2026-08-28）。** 上表其余各行仍是 2026-08-05 那次逐条复核留下的快照，
+> 不再逐行重核；只有 P1-5 这一行被就地更新，因为它已经被实现取代，而"❌ 未做"
+> 会把一件已交付的能力读成待办。
+>
+> P1-5「持久设备配对」由 **设备收件箱（Device Inbox / My Devices）** 交付并
+> **取代**，2026-08-24 合并（提交 `c63d4c5e`）。交付形态与原需求写的不同，
+> 因此记为 superseded 而非逐字完成：设备不是靠一次 SAS 比对互相"记住"，而是
+> 在账户下**登记为设备**并注册可轮换、可吊销的长期 X25519 公钥；发送方把任务
+> 内容密钥用 sealed box 封给目标设备的公钥，中央既读不到明文也读不到密钥。
+> 原需求想解决的痛点（自己的机器之间反复传文件不必每次比对校验码）因此成立，
+> 而且比原方案更强：目标离线时任务进队列等待，设备上线后自己领取、解密、校验并
+> 落盘，只有设备回报"已写入磁盘"才算 `saved`。
+>
+> 可核对的入口（本仓库内，不依赖任何未发布文档）：
+> 线路协议 `docs/protocol/relayium-device-inbox-v1.md`（§7 密钥生命周期、
+> §13 状态机、§15 领取与租约）与 `relayium-device-inbox-v2.md`；
+> 冻结不变量 `docs/DEVICE-INBOX-ADMISSION-CONTRACT.md`；
+> 实现 `server/internal/inbox/`、`server/account/deviceinbox*.go`、
+> `server/internal/inboxclient/`、`web/src/lib/device-inbox.ts`；
+> 公开产品页 `/device-inbox`。
+>
+> 下方"P1-5 持久设备配对（UI 层）"小节保留 2026-07 的原始需求措辞，作为当时的
+> 记录，不再作为待办。
 
 > 来源：一份基于公开页面的竞品调研报告（LocalSend / PairDrop / ShareDrop / ToffeeShare / Wormhole / AirDrop / Quick Share），
 > 经过与代码库实况逐条核对后筛选。报告作者未读源码，因此部分建议已实现、部分建议与实际情况有偏差，本文档只保留**真实缺口**，并补充了报告没有发现的问题。
@@ -112,10 +136,16 @@
 - **理由**：这是项目最初的定位（服务器之间传文件、CLI-first），也是与所有浏览器竞品拉开差距的一步。README 说「crypto layer is deliberately decoupled from transport」——CLI 是兑现这句话的证明。
 - **提醒**：协议层已与传输解耦，越晚做越容易被 Web 端假设绑死；正式开工前建议先出一版协议层复用设计，确保 CLI 与 Web 共用同一套 X25519/AEAD/SAS 实现。
 
-### P1-5 持久设备配对（UI 层）
-- **现状**：服务端 `/api/devices` 设备注册表已存在，但 UI 层的「常用设备免重复确认」被显式推迟（`docs/superpowers/specs/2026-06-30-cross-device-my-files-DEFERRED.md`）。
-- **需求**：不必等「我的文件」保险库方案，可先做轻量版：两台设备完成一次 SAS 验证后可互相「记住」，下次直接出现在附近列表，跳过校验码比对（密钥指纹固定，变更即警告，类似 SSH known_hosts）。
-- **理由**：自己的 MacBook ↔ 手机反复传文件每次都要比对校验码，是留存杀手；PairDrop 的 Persistent Pairing 已验证需求。注意与已推迟的 my-files Mode 2 解耦，避免范围蔓延。
+### P1-5 持久设备配对（UI 层）—— 已由设备收件箱取代（2026-08-24，`c63d4c5e`）
+
+> **状态：superseded。** 以下三条是 2026-07 写下的原始需求，原样保留作为记录。
+> 交付物是设备收件箱（Device Inbox / My Devices），形态与这里描述的"轻量版
+> 互相记住"不同——见本文档开头 2026-08-28 的更正说明与其中列出的仓库内权威。
+> 不要把这一节当作待办来排期。
+
+- **现状（2026-07 原文）**：服务端 `/api/devices` 设备注册表已存在，但 UI 层的「常用设备免重复确认」被显式推迟（`docs/superpowers/specs/2026-06-30-cross-device-my-files-DEFERRED.md`）。
+- **需求（2026-07 原文）**：不必等「我的文件」保险库方案，可先做轻量版：两台设备完成一次 SAS 验证后可互相「记住」，下次直接出现在附近列表，跳过校验码比对（密钥指纹固定，变更即警告，类似 SSH known_hosts）。
+- **理由（2026-07 原文）**：自己的 MacBook ↔ 手机反复传文件每次都要比对校验码，是留存杀手；PairDrop 的 Persistent Pairing 已验证需求。注意与已推迟的 my-files Mode 2 解耦，避免范围蔓延。
 
 ---
 

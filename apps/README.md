@@ -20,12 +20,13 @@
   as `<team>.<group>`, so `AppGroup.identifier` resolves per platform. It ships
   inside the released 1.3.8 app. The system Share menu is verified to list it; a
   real Finder share has not yet been driven by hand.
-- `ios/` — iOS SwiftUI app (`com.relayium.app`), same local package. In development, not public.
+- `ios/` — iOS SwiftUI app (`com.relayium.app`), same local package. **Development
+  paused and not public.**
 - `ios/RelayiumShare/` — the iOS Share Extension (`com.relayium.app.share`),
   embedded in the app at `PlugIns/RelayiumShare.appex`. Links `RelayiumShareKit`
-  only. In development and not public. It has run on a physical iPad, where a
-  real system share reached the containing app; coverage of real iPhone Photos,
-  Files and third-party providers is still open.
+  only. **Development paused and not public.** It has run on a physical iPad,
+  where a real system share reached the containing app; coverage of real iPhone
+  Photos, Files and third-party providers was still open when work stopped.
 
 Licensed under Apache-2.0 (unlike `server/`/`web/`, which are AGPL-3.0) — see
 [`apps/LICENSE`](LICENSE). Apache-2.0 was chosen specifically so these clients can
@@ -88,9 +89,10 @@ from rewriting it. Its StoreKit build excludes Sparkle. See "Delivery status" in
 the root [`README.md`](../README.md) for what this release does and does not
 include.
 
-That covers macOS only. The iOS app and its share extension are engineering
-builds distributed through internal TestFlight and are not publicly released.
-There is no public App Store release.
+That covers macOS only. iOS development is paused: internal TestFlight builds
+were used for development acceptance before the pause, and neither the iOS app
+nor its share extension is currently developed or publicly offered. There is no
+public App Store release and no Relayium download surface offers iOS.
 
 ### Two macOS products, one source
 
@@ -978,11 +980,19 @@ Developer ID identity.
 
 ## iOS app
 
+> **Development paused, 2026-08-28.** Everything in this section is a record of
+> where the iOS work stopped, not a description of work in progress. It is kept
+> verbatim because it is accurate about the tree — the targets, the slices and
+> the evidence below are all really there — but nothing here is a commitment to
+> ship, and no public surface (the root `README.md`, `/apps`, `/releases`,
+> `llms.txt`) may present iOS as a Relayium platform while this note stands.
+> Resuming is a product decision, not something to infer from this material.
+
 `apps/ios/Relayium.xcodeproj` (bundle id `com.relayium.app`,
 `IPHONEOS_DEPLOYMENT_TARGET = 16.0`, iPhone + iPad) is a SwiftUI app over the
-same local `RelayiumKit` package. **In development and not public** — internal
-TestFlight builds are used for development acceptance, but there is no public
-App Store listing and the website offers no iOS download.
+same local `RelayiumKit` package. **Development paused and not public** —
+internal TestFlight builds were used for development acceptance, but there is no
+public App Store listing and the website offers no iOS download.
 
 R3-A, the first slice, does exactly one thing: receive an anonymous encrypted
 stored link. Paste the link, inspect the decrypted manifest, its safe file

@@ -11,8 +11,8 @@ const en = {
     "Install the free, end-to-end-encrypted Relayium CLI to move files over SSH, pairing codes, or daemon-direct — and send ephemeral text while both machines are online.",
   updatedLabel: "Last updated",
   lead: [
-    "The Relayium CLI is a single small binary that moves files and ephemeral text from your terminal — encrypted end to end, self-hostable, and completely free. It handles copying files to a server, pushing a build between machines, sending an archive across networks, and moving a URL, command, or code snippet without first saving it as a file.",
-    "Whichever way you use it, the file bytes travel directly between the two ends and never pass through Relayium's servers. This guide gets you installed and through your first transfer, then points you at the deeper how-tos for each mode.",
+    "The Relayium CLI is a single small binary that moves files and ephemeral text from your terminal — encrypted end to end, self-hostable, and free and open source under the AGPL-3.0. It handles copying files to a server, pushing a build between machines, sending an archive across networks, and moving a URL, command, or code snippet without first saving it as a file.",
+    "In the direct modes — push, pull, daemon direct, and send / receive — the file bytes travel directly between the two ends and never pass through Relayium's servers, so there is nothing metered and nothing to pay. The exception is up, which stores an encrypted copy under your account and draws on four separate plan limits: monthly traffic, the storage you hold live at once, retention, and a rolling daily upload quota. This guide gets you installed and through your first transfer, then points you at the deeper how-tos for each mode.",
   ],
   sections: [
     {
@@ -151,7 +151,7 @@ relayium text 483920`,
     {
       heading: "Free, and private by design",
       body: [
-        "There is nothing to pay. Of the three ways above, the only sign-in is the sender's in send / receive mode, so its CLI can mint a pairing code (cloud up uses your account too, to store the file). The CLI connects the two ends directly, so your files are never uploaded to a server in the middle — the only thing that ever touches Relayium is a tiny rendezvous handshake in send / receive mode, used to introduce the two ends, never the file itself.",
+        "There is nothing to pay for the three direct ways above. Of the three, the only sign-in is the sender's in send / receive mode, so its CLI can mint a pairing code. The CLI connects the two ends directly, so your files are never uploaded to a server in the middle — the only thing that ever touches Relayium is a tiny rendezvous handshake in send / receive mode, used to introduce the two ends, never the file itself. Cloud up is the one that works differently: it stores an encrypted copy under your account, so it needs a sign-in and counts against your plan's monthly traffic allowance, its storage cap, its retention ceiling and its daily upload quota.",
         "Every transfer is encrypted end to end, every file is verified with a SHA-256 hash on arrival, and an interrupted transfer resumes from where it stopped instead of starting over. It runs on macOS, Linux and Windows, and the whole thing is open source and self-hostable.",
       ],
     },
@@ -161,7 +161,7 @@ relayium text 483920`,
     items: [
       {
         q: "Does the CLI cost anything?",
-        a: "No. The CLI is completely free. Direct file and text bytes never pass through a Relayium relay, so there is nothing to meter and nothing to pay.",
+        a: "The CLI itself is free and open source, and the direct modes — push, pull, daemon direct and send / receive — cost nothing to use: those file and text bytes never pass through a Relayium relay, so there is nothing to meter. The commands that draw on your plan are up and down, which write and read an encrypted copy held under your account. up counts against four separate limits — your monthly traffic allowance, the cap on how much you keep stored at once, your plan's retention ceiling, and a rolling daily upload quota — and down counts against the traffic allowance as it reads the copy back. Paid plans raise all of them.",
       },
       {
         q: "Do I need a Relayium account?",
@@ -173,12 +173,12 @@ relayium text 483920`,
       },
       {
         q: "Do my files pass through Relayium's servers?",
-        a: "No. In every mode the file bytes travel directly between the two ends. Only send / receive contacts our servers at all, and only for a small rendezvous handshake — never the file contents.",
+        a: "Not with the direct modes. With push, pull, daemon direct and send / receive the file bytes travel directly between the two ends, and only send / receive contacts our servers at all — for a small rendezvous handshake, never the file contents. up is the deliberate exception: it uploads an encrypted copy to your account's storage, which the server holds but cannot read.",
       },
     ],
   },
   cta: {
-    text: "Install the Relayium CLI and make your first transfer — completely free.",
+    text: "Install the free, open-source Relayium CLI and make your first direct transfer.",
     button: "Get the CLI",
     href: "/cli",
   },
@@ -191,8 +191,8 @@ const zh = {
     "安装免费、端到端加密的 Relayium CLI，通过 SSH、配对码或 daemon 直连传输文件，并在两台机器同时在线时发送临时文本。",
   updatedLabel: "最近更新",
   lead: [
-    "Relayium CLI 是一个体积很小的单一二进制文件，用来从终端传输文件与临时文本——端到端加密、可自托管、完全免费。你可以把文件复制到服务器、在机器间推送构建产物、跨网络发送压缩包，也可以直接传 URL、命令或代码片段，无需先保存成文件。",
-    "无论用哪种方式，文件字节都在两端之间直接传输，从不经过 Relayium 的服务器。本指南带你完成安装并走通第一次传输，然后指向每种模式更深入的操作指南。",
+    "Relayium CLI 是一个体积很小的单一二进制文件，用来从终端传输文件与临时文本——端到端加密、可自托管，并且以 AGPL-3.0 许可免费开源。你可以把文件复制到服务器、在机器间推送构建产物、跨网络发送压缩包，也可以直接传 URL、命令或代码片段，无需先保存成文件。",
+    "在直连模式下——push、pull、daemon 直连以及 send / receive——文件字节都在两端之间直接传输，从不经过 Relayium 的服务器，因此不计量、也不收费。例外是 up：它会把加密副本存放在你的账号下，会占用套餐的每月流量额度、同时存放的存储上限、留存时长与每日上传额度这四项独立限制。本指南带你完成安装并走通第一次传输，然后指向各个模式更深入的操作指南。",
   ],
   sections: [
     {
@@ -331,7 +331,7 @@ relayium text 483920`,
     {
       heading: "免费，且从设计上保护隐私",
       body: [
-        "没有任何费用。上面三种方式里，唯一需要登录的是 send / receive 模式下的发送方，好让 CLI 生成配对码（云端 up 也会用到你的账号，用来存文件）。CLI 直接连接两端，因此你的文件永远不会上传到中间的服务器——唯一会接触 Relayium 的，是 send / receive 模式下一次很小的会合握手，用来牵线搭桥，绝不是文件本身。",
+        "上面三种直连方式都不收费。三者之中，唯一需要登录的是 send / receive 模式下的发送方，好让 CLI 生成配对码。CLI 直接连接两端，因此你的文件永远不会上传到中间的服务器——唯一会接触 Relayium 的，是 send / receive 模式下一次很小的会合握手，用来牵线搭桥，绝不是文件本身。云端 up 则不同：它把加密副本存放在你的账号下，所以需要登录，并会占用套餐的每月流量额度、存储上限、留存时长与每日上传额度。",
         "每次传输都端到端加密，每个文件到达时都会用 SHA-256 哈希校验，中断的传输会从断点续传而不是从头再来。它可在 macOS、Linux 和 Windows 上运行，整个项目开源、可自托管。",
       ],
     },
@@ -341,7 +341,7 @@ relayium text 483920`,
     items: [
       {
         q: "CLI 要收费吗？",
-        a: "不收费。CLI 完全免费。直连的文件与文本字节都不经过 Relayium 中继，因此没有什么可计量，也没有什么可付费。",
+        a: "CLI 本身免费且开源，直连模式——push、pull、daemon 直连与 send / receive——用起来也不花钱：这些文件与文本字节都不经过 Relayium 中继，因此没有什么可计量。会用到套餐额度的是 up 和 down，它们把加密副本写入、读回你的账号。up 会同时受四项互相独立的限制约束——每月流量额度、同时存放的存储上限、套餐的留存时长上限，以及滚动的每日上传额度；down 读回副本时计入每月流量额度。付费套餐会把这些都调高。",
       },
       {
         q: "需要 Relayium 账号吗？",
@@ -353,12 +353,12 @@ relayium text 483920`,
       },
       {
         q: "我的文件会经过 Relayium 的服务器吗？",
-        a: "不会。在每种模式下，文件字节都在两端之间直接传输。只有 send / receive 会联系到我们的服务器，而且只是为了一次很小的会合握手——从不涉及文件内容。",
+        a: "直连模式不会。用 push、pull、daemon 直连和 send / receive 时，文件字节都在两端之间直接传输；只有 send / receive 会联系到我们的服务器，而且只是为了一次很小的会合握手——从不涉及文件内容。up 是有意为之的例外：它会把加密副本上传到你账号的存储里，服务器只保存密文，无法读取。",
       },
     ],
   },
   cta: {
-    text: "安装 Relayium CLI，完成你的第一次传输——完全免费。",
+    text: "安装免费开源的 Relayium CLI，完成你的第一次直连传输。",
     button: "获取 CLI",
     href: "/cli",
   },

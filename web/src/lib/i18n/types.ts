@@ -559,8 +559,9 @@ export interface Messages {
     deleteFailed: string; // 明确的失败，且可重试
   };
   // Device Inbox, sender half — the My Devices card that sends files to one of
-  // your own machines (DEVICE-INBOX-PRD.md §7, §10;
-  // docs/protocol/relayium-device-inbox-v1.md §§5, 6, 14, 16).
+  // your own machines. Authority: docs/protocol/relayium-device-inbox-v1.md
+  // §§5, 6, 13, 14, 16, docs/DEVICE-INBOX-ADMISSION-CONTRACT.md, and
+  // web/src/lib/device-inbox.ts, which is where these states are typed.
   //
   // Two rules govern every string in here, and both are product requirements
   // rather than style:
@@ -568,7 +569,7 @@ export interface Messages {
   //  1. **Presence never reads as permission.** An offline device that is
   //     properly enrolled is still a valid target: the file queues and lands
   //     when it comes back. So "offline" copy says *queued*, never *cannot*.
-  //  2. **Never say "sent".** PRD §10 forbids one vague word covering both
+  //  2. **Never say "sent".** Protocol §13 forbids one vague word covering both
   //     "the ciphertext reached Relayium" and "the target device saved it".
   //     `stateSaved` is the ONLY string that may claim a file landed, and the
   //     UI reaches it only from the server's own `saved` plus its commit
@@ -647,14 +648,14 @@ export interface Messages {
     // Relayium and does store and display the plaintext (§13.2 of the v2 spec).
     messagePrivacyNote: string;
     messageSummary: (bytes: number) => string; // what this send carries — a size, never the text
-    // Sender-local phases (PRD §10 items 1-2). Central stores neither.
+    // Sender-local phases (protocol §13). Central stores neither.
     phaseEncrypting: (pct: number) => string;
     phaseUploading: (pct: number) => string;
     phaseRegistering: string;
     progressLabel: (name: string) => string; // accessible name of the progress bar
     cancel: string;
     cancelLabel: (name: string) => string; // accessible name of the cancel button
-    // Server states (PRD §10 items 3-12 / protocol §13). `uploadedNotSaved`
+    // Server states (protocol §13). `uploadedNotSaved`
     // is the sentence that keeps "queued" from being read as "delivered".
     uploadedNotSaved: string;
     stateQueued: string;
@@ -785,7 +786,7 @@ export interface Messages {
     footerLegalLabel: string; footerGuidesLabel: string;
     lanTab: string; crossTab: string; offlineTab: string; cliTab: string; appsTab: string;
     /** Sixth primary destination: /device-inbox. It is a product entry point of
-     *  the same rank as the other five (PRD §12), not a page reachable only from
+     *  the same rank as the other five, not a page reachable only from
      *  a device card, so it gets a nav label rather than a link buried in prose.
      *  Keep it SHORT — six labels share one row, and both maintained languages
      *  have to fit a 320px rail without any of them being truncated. */
@@ -804,33 +805,40 @@ export interface Messages {
   cli: { subtitle: string };
   cliCallout: { heading: string; blurb: string; cta: string };
   // /apps downloads/apps hub page (AppsPage.svelte). One end-to-end encrypted
-  // transfer across web, CLI, macOS & iOS. The release manifest decides whether
-  // the macOS CTA is live; iOS remains "coming soon".
+  // transfer across the web app, the CLI and the macOS app — which is what
+  // Relayium actually ships. The release manifest decides whether the macOS CTA
+  // is live.
+  //
+  // Revised 2026-08-28. This block used to declare six cards: three shipping
+  // ones plus `ios`, `android` and `windows`, the last two saying a native app
+  // "is being built". No Android or Windows app exists anywhere in `apps/`, and
+  // iOS development is paused with no public listing, so the page advertised
+  // three products a reader could never get. The three keys are gone rather
+  // than reworded, because an actionless card for a product that is not being
+  // built is still an advertisement for it.
   appsPage: {
     metaTitle: string; // <title> for /apps (page-meta.ts)
     metaDesc: string; // <meta description> for /apps
     heading: string; // <h1>
     subhead: string; // one-line pitch under the h1
     availableBadge: string; // "Available"
-    // "In development", not "Coming soon". A date is a promise and none of these
-    // three has one; what is true is that they are being built. The same string
-    // is the group heading and each card's own status line, so a reader who
-    // scrolls past the heading still sees the status on the card.
+    // "In development", not "Coming soon" — a date is a promise. Nothing renders
+    // this today: every shipped card is available, so AppsPage's future group is
+    // empty and the heading is not drawn. It is kept, with its rendering path,
+    // so the next platform that genuinely enters development is a card plus a
+    // translated name rather than a new section and a new layout decision.
     inDevelopmentBadge: string;
     yourPlatformNote: (os: string) => string; // "We think you're on {os}." highlight caption
     cliInstallLabel: string; // label above the curl one-liner
+    // One shape for every card. A future in-development card omits `cta`: there
+    // is nothing to press, and a disabled button that never becomes enabled is
+    // worse than no button. AppsPage keys its own availability off the release
+    // manifest and the absent `cta`, not off which ids are listed here, so
+    // adding a platform is one entry per maintained language.
     cards: {
       web: { name: string; desc: string; cta: string };
       cli: { name: string; desc: string; cta: string };
       mac: { name: string; desc: string; cta: string };
-      // The three in-development cards carry no `cta`: there is nothing to press
-      // yet, and a disabled button that never becomes enabled is worse than no
-      // button. Their `desc` is where the honest today-answer lives — Windows
-      // says the CLI already works, Android points at the web app — because that
-      // sentence is a statement of fact, not an action.
-      ios: { name: string; desc: string };
-      android: { name: string; desc: string };
-      windows: { name: string; desc: string };
     };
     // "Web or a native app?" — the section that answers the question the card
     // grid raises. Every macOS bullet must name a capability that is actually
@@ -843,30 +851,36 @@ export interface Messages {
     //
     // What must NOT appear here, because none of it is true: a faster transfer
     // (same protocol, same relay), background transfer as a general native
-    // property, anything about iOS running in the background or receiving push,
-    // and any store listing or availability claim for either native app.
-    // AppsPage.claims.test.ts enforces all five as negatives.
+    // property, push notifications, a TestFlight or Google Play claim, and an
+    // app for iOS, Android or Windows. The Mac App Store is the one store
+    // listing that may be named — it is public and recorded in
+    // `web/mac-app-store-release.json`. `apps-claim-rules.ts` holds the rules
+    // and `AppsPage.claims.test.ts` enforces them as negatives.
     chooser: {
       heading: string;
       lead: string;
       web: { title: string; points: string[] };
       mac: { title: string; points: string[] };
-      iosNote: string; // the one truthful sentence about the iOS limitation
+      // Replaced `iosNote` on 2026-08-28. The page needs one sentence about the
+      // platforms with no native client, and the truthful version of it names
+      // all of them and points at the browser, rather than describing an iOS
+      // app whose development is paused as though it were arriving.
+      elsewhereNote: string;
     };
   };
   // /device-inbox — the public, first-class entry point for Device Inbox
-  // (DeviceInboxPage.svelte). PRD §12 requires this to be a product page, not a
-  // marketing stub: it has to explain the model, state the prerequisites, give a
+  // (DeviceInboxPage.svelte). This is a product page, not a marketing stub:
+  // it has to explain the model, state the prerequisites, give a
   // signed-out visitor an executable way in, give a signed-in one their real next
   // step, and describe six named platforms with an honest status each.
   //
   // Two invariants are enforced by i18n-device-inbox-page.test.ts because losing
   // either in one translation is a lie only that language's readers would see:
   //
-  //  1. **Upload is not save** (PRD §10). `notSavedBody` is the sentence that
+  //  1. **Upload is not save** (protocol §13). `notSavedBody` is the sentence that
   //     keeps "the ciphertext reached Relayium" apart from "the device wrote the
   //     file to disk".
-  //  2. **A public download link is a different permission** (PRD §8). A
+  //  2. **A public download link is a different permission** (protocol §11.2). A
   //     capability link lets a holder download by hand; it can never make a
   //     device write to disk. `linkBoundary` carries that.
   //
@@ -931,6 +945,10 @@ export interface Messages {
     platformsLead: string;
     statusAvailable: string;
     statusTesting: string;
+    /** Badge for a platform Relayium publishes no native receiver for. The key
+     *  name is legacy and stays put — seven frozen locales type against it and
+     *  their prose is byte-stable — but the maintained en/zh values must state
+     *  the absence, not a plan. See `PlatformStatus` in device-inbox-platforms.ts. */
     statusPlanned: string;
     /** Accessible prefix for the badge, e.g. "Status: available now". */
     statusLabel: (status: string) => string;
@@ -957,8 +975,9 @@ export interface Messages {
         stop: string; // pause / stop / revoke
       }
     >;
-    /** Why the macOS section has no download button while the app is an
-     *  engineering build. Shown only while native-releases.json is unavailable. */
+    /** Why the macOS section shows no download button. The Mac app is published,
+     *  so this is a manifest-outage message: it is rendered only while
+     *  native-releases.json carries no build. */
     macNoDownload: string;
     /** Label of the macOS download link, used only if the release manifest
      *  actually carries a build. */

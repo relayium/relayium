@@ -17,7 +17,7 @@ or releasing a version. Relayium uses manual App Store release.
 | Platforms | macOS only |
 | Bundle ID | `com.relayium.mac` |
 | SKU | `relayium-macos` |
-| Version | `1.2.0` |
+| Current published version | `1.3.8` (build `26`), public since 2026-08-26 — from `web/mac-app-store-release.json` |
 | Release method | Manual |
 | Primary category | Utilities |
 | Secondary category | Productivity |
@@ -25,23 +25,38 @@ or releasing a version. Relayium uses manual App Store release.
 | Support URL | `https://relayium.com/support/` |
 | Marketing URL | `https://relayium.com/` |
 
-### Current release state and 1.3.8 submission
+### Current release state
 
-Apple's public lookup reports macOS `1.3.6 (24)` live from
-2026-08-26 01:15:37 UTC with minimum macOS 13.0. Build 24 is therefore consumed
-and must never be rebuilt or re-uploaded. Build 25 (`1.3.7`) was delivered to
-App Store Connect/TestFlight and is likewise consumed. The next release is
-`1.3.8 (26)` from product source on `work/macos-1.3.8-drag-drop`, based on
-`a41df11c0b7f7eb83a76fce90160dbd1427759bd`, or its version-only descendant. It
-keeps minimum macOS 13.0 and does not remove compatibility with older Relayium
-clients.
+**`1.3.8` (build `26`) is PUBLISHED on the Mac App Store, public since
+2026-08-26.** It is not a pending submission and must not be described as the
+next release. The canonical record is `web/mac-app-store-release.json`
+(`version`, `publishedAt`, `appleId`, `url`); every other surface that prints
+the App Store version — the root `README.md`, `apps/README.md`, the nine
+`/releases` pages — interpolates or is checked against that file, and
+`web/scripts/pages/app-store-release.test.mjs` holds this document to it too.
 
-`1.3.8` is a Finder drag-and-drop parity release (requirement M-1). It changes
-no subscription product, price, entitlement, purchase transition or provider
-configuration, and adds no capability that reaches user files beyond the
-selection pipeline the file pickers already used.
+Build numbers consumed so far, none of which may be rebuilt or re-uploaded:
+`5`, `6`, `7`, `11`, `12`, `24` (`1.3.6`), `25` (`1.3.7`) and `26` (`1.3.8`).
+**The next archive of any version needs a build number strictly above `26`.**
+The published minimum is macOS 13.0, and the published build does not remove
+compatibility with older Relayium clients.
 
-What's New for 1.3.8:
+There is no submission in flight. Nothing below authorizes preparing one.
+
+#### Delivered submission copy, retained as history
+
+Everything from here to the end of this section describes releases that have
+already been delivered. It is kept so a later operator can see what was said,
+and **must not be re-submitted**.
+
+`1.3.8` was a Finder drag-and-drop parity release (requirement M-1), built from
+product source on `work/macos-1.3.8-drag-drop`, based on
+`a41df11c0b7f7eb83a76fce90160dbd1427759bd` or its version-only descendant. It
+changed no subscription product, price, entitlement, purchase transition or
+provider configuration, and added no capability that reached user files beyond
+the selection pipeline the file pickers already used.
+
+What's New for 1.3.8 (delivered):
 
 > You can now drag files and folders straight from Finder into Cross-network
 > Transfer and the Device Inbox, the same way you already could when sending a
@@ -49,7 +64,7 @@ What's New for 1.3.8:
 > a separate step, and choosing the files with the buttons works exactly as
 > before.
 
-What to Test for 1.3.8:
+What to Test for 1.3.8 (delivered):
 
 > Connect a cross-network transfer with a pairing code, then drag one file and
 > then several files and a folder from Finder onto the send controls. Confirm
@@ -59,17 +74,17 @@ What to Test for 1.3.8:
 > item twice does not duplicate it, and the Choose Files or Folders buttons
 > still work.
 
-Prior release copy (`1.3.7`, build 25, transfer performance) is retained below
-for the record; it has already been delivered and must not be re-submitted.
+Prior release copy (`1.3.7`, build 25, transfer performance) follows; it has
+already been delivered and must not be re-submitted either.
 
-What's New for 1.3.7:
+What's New for 1.3.7 (delivered):
 
 > Large encrypted transfers now use memory more efficiently and keep processing
 > smoothly for longer downloads. This update also improves transfer reliability
 > and resumable-download handling while remaining compatible with earlier
 > Relayium versions.
 
-What to Test for 1.3.7:
+What to Test for 1.3.7 (delivered):
 
 > Send and receive a multi-gigabyte file, keep the transfer running for several
 > minutes, and confirm progress remains responsive. Cancel one download and
@@ -100,12 +115,14 @@ Every replacement upload after this one must use a strictly higher build number
 again; an upload consumes its number even if it is only used in TestFlight or is
 later rejected.
 
-That rule has since consumed two more numbers. Build `11` was uploaded at public
+That rule then consumed two more numbers. Build `11` was uploaded at public
 version `1.2.4` on 2026-08-15, and build `12` at public version `1.2.5` on
-2026-08-16. Both are **consumed** and must not be rebuilt or re-uploaded, so the
-next archive of any version needs a build number strictly above `12`. Consuming
-a number is a fact about the upload alone — see "TestFlight state" below for
-what has and has not been observed downstream of it.
+2026-08-16. Both are **consumed** and must not be rebuilt or re-uploaded.
+Consuming a number is a fact about the upload alone — see "TestFlight state"
+below for what has and has not been observed downstream of it. Builds `24`,
+`25` and `26` were consumed after these, so the live floor is the one stated at
+the top of this section (strictly above `26`), not the `12` this paragraph
+recorded when it was written.
 
 Nothing here changes an already-published artifact. `web/native-releases.json`,
 `web/public/apps/macos/appcast.xml`, the `macos-v1.1.3` tag and the GitHub
@@ -166,23 +183,34 @@ Keywords:
 
 `file transfer,send files,encrypted,end-to-end,e2ee,p2p,share,privacy,secure,lan,wi-fi,link,inbox`
 
-App Privacy is saved as an unpublished draft in App Store Connect. It declares
+> **Historical below this line, for the metadata state recorded in the `1.2.x`
+> cycle.** A public `1.3.8` listing exists, so the App Privacy disclosure, the
+> description and the What's New text were necessarily completed and published
+> for at least that version. Treat the paragraphs below as the declared
+> *content* — which is still what the app must keep saying — and not as the
+> *status* of those fields. Re-read the current state from App Store Connect
+> before the next submission.
+
+App Privacy was saved as an unpublished draft in App Store Connect when this was
+written. It declares
 Name, Email Address, User ID, Device ID, Purchase History, and Other Usage Data;
 each is used only for App Functionality, linked to the user's identity, and not
 used for tracking. The Privacy Policy URL is `https://relayium.com/privacy/`.
-Do not publish the disclosure until the release candidate and final metadata are
-ready for submission.
+The standing rule that produced that wording — do not publish a disclosure ahead
+of the release candidate and final metadata — still applies to the next
+submission.
 
 The age-rating questionnaire is saved with Messaging and Chat enabled and all
 other content/capability-frequency answers set to none/false. App Store Connect
 calculates a global `4+` rating with its normal regional equivalents; the app is
 not marked Made for Kids and no higher-rating override is applied.
 
-The full description and What's New text still need owner approval. They must
-not imply that the relay can read user content, that every transfer is peer to
+The full description and What's New text needed owner approval at the time of
+writing; a published `1.3.8` means that approval was given for the shipped
+version. The constraint on their content is permanent: they must not imply that the relay can read user content, that every transfer is peer to
 peer, or that a web/Stripe subscription is managed by Apple.
 
-### Release note for `1.3.0 (18)` — drafted, not yet entered in App Store Connect
+### Release note for `1.3.0 (18)` — historical draft, superseded by the shipped `1.3.8`
 
 Version `1.3.0` build `18` is the response to the App Review rejection under
 Guideline 2.4.5(iii): the app added itself to auto-launch at start up when the
@@ -230,6 +258,14 @@ separate owner decision that has not been made. The full App Store description
 is still unapproved and unwritten.
 
 ## TestFlight state and information draft
+
+> **Historical, as observed in the `1.2.x` cycle (2026-08-13 to 2026-08-16).**
+> The Mac App Store listing has since gone public and is at `1.3.8` (build
+> `26`), so nothing below describes the current store state. It is retained
+> because the build-number and export-compliance facts it records are still
+> binding, and because the upload-versus-readiness distinction it draws is the
+> procedure a later operator has to repeat. Read it as evidence of what was
+> seen then, not as an open checklist.
 
 This section separates two states that are easy to conflate. **Upload
 acceptance** is App Store Connect taking the package and starting to process it;
@@ -473,7 +509,19 @@ Suggested set:
 
 ## External decisions and activation gates
 
-The following items are intentionally unresolved and must not be guessed:
+> **Historical, written before the listing went public.** `1.3.8` (build `26`)
+> has been published on the Mac App Store since 2026-08-26, so the
+> submission-blocking framing below — screenshots, description and What's New,
+> the App Privacy draft, the content-rights, review-contact and demo-account
+> fields, and Add for Review itself — describes gates that were subsequently
+> cleared for a shipped version. What remains binding is the standing policy in
+> each item: the export-compliance answer, the Paid Apps Agreement and bank/tax
+> state, the storefront selection, the notification URLs, and manual release.
+> Verify each against App Store Connect before the next submission rather than
+> reading any status word here as current.
+
+The following items were unresolved when this section was written and must not
+be guessed:
 
 - Export compliance is **resolved for builds `1.2.0 (6)` and `1.2.0 (7)`**
   (2026-08-14) and must stay truthful for every later build. The app embeds
