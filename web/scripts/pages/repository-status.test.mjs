@@ -12,6 +12,15 @@ describe("public repository status", () => {
     // against, so deriving the expected tag from it is the difference between
     // "the README names A tag" and "the README names THE tag a reader can fetch".
     const { macos } = JSON.parse(await readFile(resolve(process.cwd(), "native-releases.json"), "utf8"));
+    // The other macOS channel, from its own canonical record. Independently
+    // versioned means independently sourced: `native-releases.json` describes
+    // one artifact on GitHub, and nothing in it can say what Apple is currently
+    // serving. The literal that used to sit here said 1.3.1 while the listing
+    // was at 1.3.8, and it was green the whole time because it was checking the
+    // README against itself.
+    const appStore = JSON.parse(
+      await readFile(resolve(process.cwd(), "mac-app-store-release.json"), "utf8"),
+    );
 
     expect(readme).toContain("status-active%20development");
     expect(readme).toContain("The production web app and CLI");
@@ -25,8 +34,8 @@ describe("public repository status", () => {
     const iosRow = statusRows.iOS ?? "";
     expect(macosRow).toContain(`${macos.version} direct download`);
     expect(macosRow).toContain(`/releases/tag/macos-v${macos.version}`);
-    expect(macosRow).toContain("1.3.1 on the Mac App Store");
-    expect(macosRow).toContain("apps.apple.com/app/id6801142976");
+    expect(macosRow).toContain(`${appStore.version} on the Mac App Store`);
+    expect(macosRow).toContain(appStore.url);
     expect(iosRow).toMatch(/Internal development and TestFlight/i);
     expect(iosRow).toMatch(/Not publicly available on the App Store/i);
     expect(iosRow).not.toMatch(/\[[^\]]+\]\([^)]+\)/);

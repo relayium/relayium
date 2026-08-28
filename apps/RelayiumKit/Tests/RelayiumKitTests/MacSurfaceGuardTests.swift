@@ -302,6 +302,54 @@ final class MacSurfaceGuardTests: XCTestCase {
         return version
     }
 
+    /// The shape `web/mac-app-store-release.json` is required to have.
+    ///
+    /// Every field is non-optional, so a record missing any of them fails to
+    /// decode rather than yielding a partially-known release the assertions
+    /// below would happily certify a README against.
+    private struct AppStoreRelease: Decodable {
+        var schema: Int
+        var appleId: String
+        var version: String
+        var publishedAt: String
+        var url: String
+    }
+
+    /// The published Mac App Store release, read from its own canonical record.
+    ///
+    /// macOS ships on two channels that are versioned independently, and the
+    /// direct manifest cannot describe the second one: Apple decides when a
+    /// submitted build goes live, and the repository finds out afterwards. So
+    /// `web/mac-app-store-release.json` owns that fact and this reads it.
+    ///
+    /// It used to be the literal `"1.3.1"`, written here and in both READMEs.
+    /// The listing moved to 1.3.8 on 2026-08-26 and this assertion stayed green
+    /// the whole time, because it was checking the READMEs against a literal
+    /// copied out of the READMEs — the same self-referential staleness
+    /// `publishedMacVersion()` was written to end for the direct channel, one
+    /// channel over.
+    ///
+    /// Validated, not merely decoded, for the same reason the manifest is. The
+    /// URL is the case that matters: a numeric Apple ID and a resolvable
+    /// apps.apple.com link each look right alone, and a record where they
+    /// disagree would have this test demand that both READMEs send readers to
+    /// somebody else's app.
+    private func publishedAppStoreRelease() throws -> AppStoreRelease {
+        let path = "web/mac-app-store-release.json"
+        let data = try Data(contentsOf: try repoRoot.appendingPathComponent(path))
+        let release = try JSONDecoder().decode(AppStoreRelease.self, from: data)
+        XCTAssertEqual(release.schema, 1, "\(path) declares a schema this guard does not read")
+        XCTAssertFalse(release.version.isEmpty, "\(path) carries an empty App Store version")
+        XCTAssertFalse(release.appleId.isEmpty, "\(path) carries an empty App Apple ID")
+        XCTAssertTrue(release.appleId.allSatisfy(\.isNumber),
+                      "\(path) carries an App Apple ID that is not a bare numeric identifier")
+        XCTAssertEqual(release.publishedAt.count, 10,
+                       "\(path) carries no ISO-8601 publication date")
+        XCTAssertEqual(release.url, "https://apps.apple.com/app/id\(release.appleId)",
+                       "\(path) names a product URL that does not address its own App Apple ID")
+        return release
+    }
+
     func testNearbyProgressNamesRealReconnectWorkAndNeverDecoratesLookAgain() throws {
         let pane = try source(named: lanConnect)
         XCTAssertFalse(pane.contains("ProgressView()"),
@@ -6055,13 +6103,36 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// Require the public App Store identity and its independent current
     /// version. This prevents a future direct-download bump from either erasing
     /// the App Store channel or falsely assigning the same version to it.
+    ///
+    /// Both halves come from `web/mac-app-store-release.json`, which is what
+    /// makes the second one real. As a literal it was `"1.3.1"` and it stayed
+    /// green through every later App Store release, up to and including 1.3.8,
+    /// live since 2026-08-26, because a README and an assertion that were copied
+    /// from each other agree no matter what Apple is actually serving.
+    ///
+    /// The version is required INSIDE the product link rather than merely
+    /// somewhere in the file. Since 2026-08-26 both channels are at 1.3.8, so a
+    /// bare `contains(version)` is satisfied by the Developer ID sentence alone
+    /// and would stay green through a rewrite that erased the App Store version
+    /// entirely — which is exactly what `bumpReleaseDocs` would do to an
+    /// unlinked claim. The link is the only part of the prose that says which
+    /// channel a version belongs to, and it is the same span the bump protects.
     func testTheDocsNameTheMacAppStoreRelease() throws {
+        let release = try publishedAppStoreRelease()
         for path in ["README.md", "apps/README.md"] {
             let text = flattened(try claimSurfaceText(path))
-            XCTAssertTrue(text.contains("apps.apple.com/app/id6801142976"),
+            XCTAssertTrue(text.contains(release.url),
                           "\(path) must link the public Mac App Store product")
-            XCTAssertTrue(text.contains("1.3.1"),
-                          "\(path) must name the independently versioned App Store release")
+            let claims = text.components(separatedBy: "](\(release.url))")
+                .dropLast()
+                .map { $0.components(separatedBy: "[").last ?? "" }
+            XCTAssertFalse(claims.isEmpty,
+                           "\(path) carries no Mac App Store link to read a version out of")
+            for claim in claims {
+                XCTAssertTrue(claim.contains(release.version),
+                              "\(path) links the Mac App Store product without naming its release "
+                              + "\(release.version): [\(claim)]")
+            }
         }
     }
 

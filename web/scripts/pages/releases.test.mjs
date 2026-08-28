@@ -42,6 +42,29 @@ const MAC = JSON.parse(
   await readFile(resolve(process.cwd(), "native-releases.json"), "utf8"),
 ).macos;
 
+/**
+ * The published Mac App Store release, read from its OWN canonical record.
+ *
+ * The two channels are independently versioned and move on independent
+ * schedules, so they cannot share `native-releases.json` — that manifest is the
+ * Developer ID download, and the /apps CTA, the Device Inbox badge and Sparkle
+ * all resolve an artifact URL from it. `mac-app-store-release.json` carries the
+ * other channel and nothing else.
+ *
+ * Read rather than written down again for the same reason `MAC` is. The App
+ * Store literal sat at 1.3.1 in this file, in both READMEs and in all nine
+ * locales while the listing was already at 1.3.8 — one fact copied into every
+ * one of those places, each copy of which had to be remembered separately, and
+ * none of which failed when the fact moved.
+ */
+const APP_STORE = JSON.parse(
+  await readFile(resolve(process.cwd(), "mac-app-store-release.json"), "utf8"),
+);
+
+/** The App Store version as a regex fragment, so the tables below carry the
+ *  wording they are testing and not a second copy of the version. */
+const appStoreVersion = APP_STORE.version.replace(/\./g, "\\.");
+
 /** The one macOS release tag this page is allowed to name. */
 const CURRENT_TAG = `macos-v${MAC.version}`;
 
@@ -303,31 +326,51 @@ describe("the generated pages", () => {
 // sentence about both of them, and it went false the moment the first one
 // shipped.
 //
-// The current-release claims are pinned in the two MAINTAINED_LANGS, en and zh —
+// The DIRECT-DOWNLOAD claims are pinned in the two MAINTAINED_LANGS, en and zh —
 // the locales whose copy is kept current and where new copy ships. The other
 // seven are frozen archives: they stay published and stay correct about what
 // they were written for, but their macOS version is not moved release by
 // release, so pinning them to the manifest would fail every native release
-// rather than catch drift. Only the CURRENT-release claim narrows, though: the
-// separate App Store version and the iOS-unreleased sentence are facts no direct release
-// moves, so they stay asserted in all nine — for en and zh alongside the pin,
-// for the frozen seven in their own test below.
+// rather than catch drift.
+//
+// The App Store version is the exception, and it is pinned in all nine. The
+// freeze is over PROSE and over the direct tag a locale was published with; it
+// was never over an operational fact about the other channel. Both READMEs, this
+// file and all nine locales said 1.3.1 while the listing was at 1.3.8, which is
+// not an archive being old — it is nine live pages being wrong about a product a
+// reader can open right now. `mac-app-store-release.json` is where that fact
+// lives, `content/releases.mjs` interpolates it, and the table below reads it.
+// The iOS-unreleased sentence stays asserted in all nine for the same reason: no
+// direct release moves it, so an archive that dropped it would be wrong today.
 //
 // Per locale rather than one alternation, because the assertions are positive:
 // a union would be satisfied by any locale's sentence, so nine pages carrying
 // the English wording — or eight carrying nothing — would pass.
 describe("what /releases says about the native apps", () => {
-  /** The independently versioned public Mac App Store channel is at 1.3.1. */
+  /**
+   * The independently versioned public Mac App Store channel, pinned to
+   * `mac-app-store-release.json` in ALL NINE locales.
+   *
+   * This is the one claim on the page that the freeze does not cover. An
+   * archived translation freezes PROSE — the wording, and the direct-download
+   * tag it was published with. It does not freeze an operational fact about a
+   * DIFFERENT channel that is still live: an archive saying the App Store is at
+   * 1.3.1 is not old, it is wrong today, and it is wrong in the direction that
+   * sends a reader to look for a version the listing no longer offers.
+   *
+   * So the version is interpolated from the canonical record and the wording is
+   * not, which is exactly the split the freeze draws.
+   */
   const APP_STORE_CURRENT = {
-    en: /Mac App Store release is currently 1\.3\.1/,
-    zh: /Mac App Store 版本当前为 1\.3\.1/,
-    ja: /Mac App Store 版は現在 1\.3\.1/,
-    ko: /Mac App Store 릴리스는 현재 1\.3\.1/,
-    de: /Mac-App-Store-Version ist derzeit 1\.3\.1/,
-    fr: /version Mac App Store.+actuellement la 1\.3\.1/,
-    ar: /إصدار Mac App Store.+حاليًا 1\.3\.1/,
-    es: /versión de la Mac App Store.+actualmente la 1\.3\.1/,
-    pt: /versão da Mac App Store.+atualmente a 1\.3\.1/,
+    en: new RegExp(`Mac App Store release is currently ${appStoreVersion}`),
+    zh: new RegExp(`Mac App Store 版本当前为 ${appStoreVersion}`),
+    ja: new RegExp(`Mac App Store 版は現在 ${appStoreVersion}`),
+    ko: new RegExp(`Mac App Store 릴리스는 현재 ${appStoreVersion}`),
+    de: new RegExp(`Mac-App-Store-Version ist derzeit ${appStoreVersion}`),
+    fr: new RegExp(`version Mac App Store.+actuellement la ${appStoreVersion}`),
+    ar: new RegExp(`إصدار Mac App Store.+حاليًا ${appStoreVersion}`),
+    es: new RegExp(`versión de la Mac App Store.+actualmente la ${appStoreVersion}`),
+    pt: new RegExp(`versão da Mac App Store.+atualmente a ${appStoreVersion}`),
   };
 
   /** iOS is still an engineering build, and the page has to keep saying so. */
@@ -356,20 +399,23 @@ describe("what /releases says about the native apps", () => {
     }
   });
 
-  // The frozen seven lose the pin, not the coverage. Two things stay true of an
-  // archived translation, and after the narrowing above nothing else in this
-  // suite would notice either one disappearing:
+  // The frozen seven lose the DIRECT-DOWNLOAD pin, not the coverage. Three
+  // things stay true of an archived translation, and after the narrowing above
+  // nothing else in this suite would notice any of them disappearing:
   //
-  //   * The independently versioned App Store claim and "iOS
-  //     is unreleased" are not facts about 1.2.5 — no macOS release moves them,
-  //     so an archive that stopped saying either would be wrong TODAY, not
-  //     merely old. These are the seven entries in the tables above that the
-  //     maintained loop no longer reads.
-  //   * Internal consistency. Frozen means a locale keeps the tag it was
-  //     published with; it does not mean half of it may be refreshed. The
-  //     bullet's tag and the lead's bare version are one claim written twice, so
-  //     they must agree with each other even while they disagree with the
-  //     manifest — the drift the pin used to catch and can no longer see here.
+  //   * The App Store version is still pinned, to `mac-app-store-release.json`
+  //     and not to the direct manifest. It is an operational fact about a
+  //     channel that keeps moving under the archive, so an archive naming a
+  //     superseded App Store version is wrong TODAY rather than merely old.
+  //     This is what the seven pages were, for the whole 1.3.1-to-1.3.8 window.
+  //   * "iOS is unreleased" is not a fact about 1.2.5 either — no macOS release
+  //     moves it — so an archive that stopped saying it would be wrong today.
+  //   * Internal consistency of the frozen half. Frozen means a locale keeps the
+  //     direct tag it was published with; it does not mean half of it may be
+  //     refreshed. The bullet's tag and the lead's bare version are one claim
+  //     written twice, so they must agree with each other even while they
+  //     disagree with the manifest — the drift the pin used to catch and can no
+  //     longer see here.
   it("keeps the frozen locales archived rather than half-refreshed", () => {
     for (const lang of FROZEN_LANGS) {
       const bullet = releases.langs[lang].sections[0].bullets[1];

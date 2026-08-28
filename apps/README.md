@@ -79,12 +79,14 @@ build as GitHub Release
 a universal, Developer ID-signed, Apple-notarized and stapled `Relayium.dmg`
 with its SHA-256 alongside. Distribution is that direct download and Sparkle
 updates from it. The separately versioned Mac App Store channel is also public,
-currently at [1.3.1](https://apps.apple.com/app/id6801142976) under App Apple ID
-`6801142976`. Its StoreKit build excludes Sparkle. Source version 1.3.3 (21) is
-being prepared and must not be described as published until Apple delivery,
-review, and release complete. See
-"Delivery status" in the root [`README.md`](../README.md) for what this release
-does and does not include.
+currently at [1.3.8](https://apps.apple.com/app/id6801142976) under App Apple ID
+`6801142976`. [`web/mac-app-store-release.json`](../web/mac-app-store-release.json)
+is the record of that version and the day Apple published it. The generated
+release pages interpolate it; the two READMEs state it in prose, and the macOS
+surface guards hold that prose to the record and keep a direct-download bump
+from rewriting it. Its StoreKit build excludes Sparkle. See "Delivery status" in
+the root [`README.md`](../README.md) for what this release does and does not
+include.
 
 That covers macOS only. The iOS app and its share extension are engineering
 builds distributed through internal TestFlight and are not publicly released.

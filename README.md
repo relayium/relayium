@@ -52,7 +52,7 @@ in **pre-1.0 versioning** (`v0.x`). The macOS app is on its own track and is at
 build, published as a direct download from its own GitHub Release,
 [`macos-v1.3.8`](https://github.com/relayium/relayium/releases/tag/macos-v1.3.8).
 A separately versioned Mac App Store release is also public, currently
-[1.3.1](https://apps.apple.com/app/id6801142976).
+[1.3.8](https://apps.apple.com/app/id6801142976).
 The iOS app runs its transfer, nearby and account workflows in the
 foreground and is **not public**: internal TestFlight builds exist, but there
 is no public App Store listing.
@@ -241,7 +241,7 @@ pairing code requires sign-in; joining with that code does not.
 | --- | --- | --- |
 | **Web** | [Live at relayium.com](https://relayium.com/) | LAN and cross-network file/text transfer, encrypted stored links, accounts, and usage controls. |
 | **CLI and nodes** | [Published on GitHub](https://github.com/relayium/relayium/releases) | Pairing-code transfer, encrypted links, direct transfer, folder sync, self-hosting, and relay/storage nodes. |
-| **macOS** | [1.3.8 direct download](https://github.com/relayium/relayium/releases/tag/macos-v1.3.8) and [1.3.1 on the Mac App Store](https://apps.apple.com/app/id6801142976) | The independently versioned channels share product behavior but use Developer ID/Sparkle and Mac App Store/StoreKit delivery respectively. |
+| **macOS** | [1.3.8 direct download](https://github.com/relayium/relayium/releases/tag/macos-v1.3.8) and [1.3.8 on the Mac App Store](https://apps.apple.com/app/id6801142976) | The independently versioned channels share product behavior but use Developer ID/Sparkle and Mac App Store/StoreKit delivery respectively. |
 | **iOS** | Internal development and TestFlight | Not publicly available on the App Store. Realtime work requires the app to remain in the foreground; background transfer and push notifications are not supported. |
 
 Relayium currently maintains English and Simplified Chinese. Detailed native
