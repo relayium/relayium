@@ -65,6 +65,16 @@ import RelayiumKit
 ///     server saying the attempt is resolved — and on nothing else. A
 ///     time-based release would re-create the double-charge window on a device
 ///     whose clock is wrong.
+///  7. **An `armed` or `locked` capability may be *asked about*, never released
+///     locally.** Those two phases are this client's own record, and the attempt
+///     behind them can end without this installation learning it — an operator
+///     release after audited evidence, or another installation's transaction.
+///     So a purchase press may carry the capability and a **fresh** arm identity
+///     to `purchase-dispatch`, which refuses while the attempt is unresolved and
+///     returns a replacement only when nothing unresolved remains. Rule 6 is
+///     untouched by that: no answer short of the server's own 200 moves anything
+///     here, and no refusal retires anything. See
+///     ``ApplePurchasePlan/recoverIfResolved(_:armRequestID:productID:)``.
 ///
 /// The secret's storage rules live with ``ApplePurchaseCapabilityStoring``.
 
@@ -493,6 +503,20 @@ public enum ApplePurchasePlan: Equatable {
     /// arm, same product — which the server reads back idempotently without
     /// opening a second logical sheet.
     case replayResume(ApplePurchaseCapability, armRequestID: String, productID: String)
+    /// This client holds a capability the SERVER may already have resolved, and
+    /// nothing local can tell which. Ask `purchase-dispatch` for a replacement
+    /// attempt with a fresh identity, and act on its answer alone.
+    ///
+    /// **This is not a resume, and it deliberately does not pretend to be one.**
+    /// A resume is planned from `cancelled` — a state whose whole meaning is
+    /// that the sheet it names provably cannot charge. This is planned from
+    /// `armed` or `locked`, where exactly the opposite is true, and the client
+    /// therefore asserts nothing at all: it presents the capability, a fresh arm
+    /// identity and the product the user chose, and the server refuses while the
+    /// old attempt is still unresolved. Only a `200` — which the server emits
+    /// only when no unresolved attempt exists for the current authority — may
+    /// become a sheet.
+    case recoverIfResolved(ApplePurchaseCapability, armRequestID: String, productID: String)
     /// An outcome report was recorded and never confirmed delivered. Replay it
     /// **exactly** — same arm, same outcome — before anything else may be
     /// planned, and open no sheet until the server has answered it.
@@ -513,8 +537,11 @@ public enum ApplePurchaseRefusal: Equatable, Sendable {
     /// A sheet is authorized and no outcome for it has been **recorded** — this
     /// process died while it was open, or it is open right now.
     ///
-    /// Never a second sheet. What converges it depends on what StoreKit did, and
-    /// only one of the two has an automatic path:
+    /// Never a second sheet, and never released here. What converges it depends
+    /// on what StoreKit did, and only one of the two has an automatic path
+    /// (the third way out — asking the server whether the attempt still exists
+    /// at all — is ``ApplePurchasePlan/recoverIfResolved(_:armRequestID:productID:)``,
+    /// which is planned before this refusal rather than by it):
     ///
     ///  * a purchase that completed carries a signed transaction, and
     ///    `Transaction.updates`/`restore` redeliver it until the server accepts
@@ -565,10 +592,27 @@ public enum ApplePurchaseContinuation {
     /// value has already moved past falls through to the phase, because the
     /// server superseded that arm itself: `armRequestID` moves only on an
     /// authoritative 200, and an arm identity is never reissued.
+    ///
+    /// ## `mayRecoverIfResolved`, and why it is a parameter
+    ///
+    /// `armed` and `locked` are refusals *about this client's own record*, not
+    /// about the server's. An attempt an operator released after audited
+    /// evidence, or one another installation's transaction converged, leaves
+    /// this value behind saying "blocked" for ever — the last offline wedge, and
+    /// the one the caller may spend one authenticated request to open.
+    ///
+    /// It is a parameter because only the FIRST planning pass of a purchase may
+    /// do that. A capability the same call has already moved — by replaying an
+    /// owed outcome, say — was written from an answer the server gave seconds
+    /// ago, so probing it again would ask the same question twice in one press
+    /// and could record a recovery intent over state that is already current.
+    /// The second bounded pass therefore passes `false` and gets the offline
+    /// refusal, which is the truthful answer for a fact this call just learned.
     public static func plan(capability: ApplePurchaseCapability?,
                             productID: String,
                             appInstanceID: String,
-                            freshArmRequestID: String) -> ApplePurchasePlan {
+                            freshArmRequestID: String,
+                            mayRecoverIfResolved: Bool) -> ApplePurchasePlan {
         guard let capability else { return .blocked(.locked) }
         if let intent = capability.unconfirmedResume {
             return .replayResume(capability,
@@ -583,8 +627,17 @@ public enum ApplePurchaseContinuation {
         }
         switch capability.phase {
         case .preparing: return .initialArm(capability)
-        case .armed: return .blocked(.sheetOutstanding)
-        case .locked: return .blocked(.locked)
+        case .armed, .locked:
+            // Neither phase is locally resumable and neither becomes so here.
+            // The plan is to ASK: the request carries a fresh arm identity the
+            // server refuses to spend while the old attempt is unresolved, so a
+            // sheet can follow only an authoritative replacement.
+            guard mayRecoverIfResolved else {
+                return .blocked(capability.phase == .locked ? .locked : .sheetOutstanding)
+            }
+            return .recoverIfResolved(capability,
+                                      armRequestID: freshArmRequestID,
+                                      productID: productID)
         case .cancelled:
             return .resume(capability,
                            armRequestID: freshArmRequestID,
@@ -642,11 +695,14 @@ public enum ApplePurchaseContinuation {
                                        phase: .armed)
     }
 
-    /// Record a resume **before sending it**, so a lost response is replayable.
+    /// Record a resume — or a recovery — **before sending it**, so a lost
+    /// response is replayable.
     ///
-    /// The phase deliberately stays `cancelled`: nothing is armed until the
-    /// server says so, and claiming `armed` here would block the very replay
-    /// this record exists to enable.
+    /// **The phase deliberately does not move**, whichever it was. Nothing is
+    /// armed until the server says so: claiming `armed` over a `cancelled` value
+    /// would block the very replay this record exists to enable, and moving an
+    /// `armed`/`locked` value would assert something about an old attempt this
+    /// client has been refused any authority to judge.
     public static func recordingResumeIntent(_ capability: ApplePurchaseCapability,
                                              armRequestID: String,
                                              productID: String) -> ApplePurchaseCapability {

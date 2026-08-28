@@ -178,11 +178,11 @@ final class AppleBillingClientTests: XCTestCase {
 
     /// **The uniform capability refusal, on both endpoints.**
     ///
-    /// `403 continuation_invalid` is deliberately NOT mapped to
-    /// `purchaseAuthorityManaged`: nothing about the account's billing authority
-    /// is wrong, this client's capability is, and the two have different repairs.
-    /// It must never become a fresh one-shot dispatch — the capability being
-    /// unusable says nothing about whether a sheet is open.
+    /// `403 continuation_invalid` is deliberately its own case: what is unusable
+    /// is this client's capability, not the attempt it was minted for, and the
+    /// two have different repairs. It must never become a fresh one-shot
+    /// dispatch — the capability being unusable says nothing about whether a
+    /// sheet is open.
     func testTheUniformCapabilityRefusalIsItsOwnCase() async {
         StubURLProtocol.stub = .init(
             status: 403, body: Data(#"{"error":"continuation_invalid","provider":"apple"}"#.utf8))
@@ -220,7 +220,8 @@ final class AppleBillingClientTests: XCTestCase {
     ///
     /// It means a sheet this account armed has not said what StoreKit did. Kept
     /// apart from `purchaseAuthorityManaged` because the repair is the client's
-    /// own — report the arm's outcome — rather than a durable billing conflict.
+    /// own — report the arm's outcome — rather than the server's resolution of
+    /// an attempt this client cannot judge.
     func testAnArmedSheetAwaitingItsOutcomeIsItsOwnCase() async {
         StubURLProtocol.stub = .init(
             status: 409,
@@ -271,6 +272,67 @@ final class AppleBillingClientTests: XCTestCase {
                 bundleID: "com.relayium.mac", productID: "p", continuation: nil, token: "t")) {
                 XCTAssertEqual($0 as? AppleBillingError, expected)
             }
+        }
+    }
+
+    /// **`purchaseAuthorityManaged` has exactly one preimage, and that is what
+    /// licenses its wording.**
+    ///
+    /// The case name reads like "another channel owns this account's billing",
+    /// and the contract is narrower: `purchase-dispatch` raises it only for 409
+    /// `purchase_reconciliation_required`, which the server emits from its
+    /// unresolved-ATTEMPT branch. The two codes that really are account-level
+    /// authority answers arrive as `initialArmRejected` and stay presentable as
+    /// ownership. This pins the whole 409 vocabulary at once, so widening this
+    /// case by adding a code to that branch cannot pass silently: every sentence
+    /// above it is chosen on the strength of this mapping.
+    func testTheUnresolvedAttemptCodeIsTheOnlyPreimageOfPurchaseAuthorityManaged() async {
+        let vocabulary: [(String, AppleBillingError)] = [
+            ("purchase_reconciliation_required", .purchaseAuthorityManaged(provider: "apple")),
+            ("manage_with_apple", .initialArmRejected(code: "manage_with_apple", provider: "apple")),
+            ("billing_authority_conflict",
+             .initialArmRejected(code: "billing_authority_conflict", provider: "apple")),
+            ("purchases_paused", .initialArmRejected(code: "purchases_paused", provider: "apple")),
+            ("purchase_outcome_required", .purchaseOutcomeRequired),
+            ("something_new", .server(status: 409)),
+        ]
+        for (code, expected) in vocabulary {
+            StubURLProtocol.stub = .init(
+                status: 409, body: Data("{\"error\":\"\(code)\",\"provider\":\"apple\"}".utf8))
+            await XCTAssertThrowsErrorAsync(try await self.client().dispatchApplePurchase(
+                bundleID: "com.relayium.mac", productID: "p", continuation: nil, token: "t")) {
+                XCTAssertEqual($0 as? AppleBillingError, expected, "409 \(code) changed meaning")
+            }
+        }
+
+        // And no other status may raise it. A 4xx/5xx that happens to carry the
+        // same word is not this server's unresolved-attempt answer.
+        for status in [400, 403, 429, 500, 503] {
+            StubURLProtocol.stub = .init(
+                status: status,
+                body: Data(#"{"error":"purchase_reconciliation_required","provider":"apple"}"#.utf8))
+            await XCTAssertThrowsErrorAsync(try await self.client().dispatchApplePurchase(
+                bundleID: "com.relayium.mac", productID: "p", continuation: nil, token: "t")) {
+                XCTAssertNotEqual($0 as? AppleBillingError,
+                                  .purchaseAuthorityManaged(provider: "apple"),
+                                  "status \(status) was read as an unresolved attempt")
+            }
+        }
+
+        // The contract carried through to what the user reads, in both shipped
+        // languages: an unresolved attempt is reconciliation, and the authority
+        // conflict beside it is still ownership. Same 409, opposite sentences.
+        for language in [AppLanguage.en, .zh] {
+            XCTAssertEqual(
+                AppleSubscriptionPresentation.message(
+                    for: .billing(.purchaseAuthorityManaged(provider: "apple")), language: language),
+                L10n.t(.subscriptionErrorReconciliation, language: language),
+                "the unresolved-attempt refusal lost its sentence in \(language)")
+            XCTAssertEqual(
+                AppleSubscriptionPresentation.message(
+                    for: .purchaseNotAllowed(blockedBy: "apple"), language: language),
+                L10n.t(.subscriptionBlockedByAppleApp, language: language),
+                "the authority conflict lost its sentence in \(language)")
         }
     }
 

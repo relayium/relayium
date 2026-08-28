@@ -935,3 +935,89 @@ outcome-required answer, so the endpoint stays **non-oracular** — a caller lea
 nothing about whether the id it named is current, historical or never seen —
 while the request **mutates nothing**. Fable's final review must still inspect
 this; Codex's acceptance is gate 2.
+
+## 11. Recovering a capability that outlived its attempt
+
+Numbered §11 for the same reason §10 was appended rather than inserted: existing
+references to §9 and §10 stay valid.
+
+**The wedge this closes.** Everything above makes an *explicitly cancelled*
+attempt recoverable. It leaves one state unrecoverable from the client at all: a
+capability that reached `armed` or `locked` while the server has **already
+resolved** that attempt. The two states are not symmetric with the cancelled one
+— neither proves a sheet cannot charge — so the client refused them offline,
+before contacting the server. But the attempt behind them can end without this
+installation ever learning it:
+
+- an operator releases a `locked_failed_continuation` attempt after audited
+  evidence, which resolves it and advances the authority generation;
+- another installation's signed transaction converges the attempt;
+- this Mac's own convergence retire failed (a locked Keychain), or the resolving
+  device is simply a different one.
+
+In every one of those the server would happily arm a fresh attempt, and the
+answer sat one authenticated request away from a customer who could not buy.
+
+**The protocol is the request that already exists.** There is no status endpoint
+and deliberately no new one: a read-only "is my attempt resolved?" call
+duplicates the predicate and adds a check-to-arm race in which the answer can go
+stale between the two calls. `purchase-dispatch` is already the one **atomic
+compare-and-arm**, so the client asks it directly, with the capability it holds
+and a **fresh** arm identity:
+
+- while the old attempt is still `dispatched`, `resumeAppleAttemptTx` refuses —
+  `409 purchase_outcome_required` for `armed`, `409 purchase_reconciliation_required`
+  for `locked` — and, because a refused resume commits nothing, it does not even
+  spend the fresh identity that was presented;
+- once nothing unresolved remains for the current authority, the same request
+  falls through to the fresh-attempt path and returns **one** replacement
+  attempt id and attribution token. `attempt-id-v2` is required to reach that
+  path, so a client that would ignore a replacement id cannot get one.
+
+The client therefore asserts nothing about the old attempt. **The server is the
+only thing that decides**, exactly as it does for a cancellation.
+
+**Client rules, and what each one prevents.**
+
+1. It runs **only inside an explicit purchase press**, after the fresh catalog,
+   eligibility, account-snapshot and product-resolution gates — never on launch,
+   a timer, a TTL or a launch count. A background probe would re-create the
+   clock-based release this design refuses everywhere else.
+2. **Anything already owed outranks it.** An unconfirmed outcome report and an
+   already-recorded arm intent are both planned first: the recovery is a question
+   about state this client has not finished describing until they are discharged.
+3. **One recovery per press.** Only the first bounded planning pass may ask; the
+   second gets the offline refusal, because a capability that same call has
+   already moved was written from an answer the server gave seconds ago.
+4. The fresh arm intent is **recorded durably before the request is sent**, so a
+   lost `200` is replayed byte for byte — same arm, same product — which the
+   server reads back idempotently instead of authorizing a second logical sheet.
+   That is the same rule, and the same field, as a resume.
+5. Only a `200` may adopt the returned attempt id, arm and product, and that
+   write must **succeed before StoreKit opens**. A post-`200` save failure opens
+   no sheet: a sheet whose outcome could never be reported is the deadlock this
+   whole protocol removes.
+6. **No refusal and no transport failure retires anything or widens an outcome.**
+   `403`, either `409`, a timeout, a decode failure and a storage failure all
+   leave the capability, its phase and its recorded intent exactly as they were,
+   and none of them opens a sheet. A `pending`, `failed` or `success` is never
+   reinterpreted as a cancellation on the way.
+7. A recorded intent for a **different product** than the user has now chosen is
+   replayed first, released with the explicit no-sheet cancellation this client
+   can prove, and only then does the second bounded pass arm the chosen product —
+   one sheet, for the product actually selected.
+8. Cross-account, cross-device and stale-capability shapes stay fail-closed at
+   both ends: the account-scoped repository refuses to read another account's
+   capability at all, and the server answers the uniform `403` for a wrong
+   instance, a wrong secret or a spent arm.
+
+**Legacy is untouched.** A client with no capability store is still strict
+one-shot: it has nothing to present and nothing to recover with.
+
+**The accepted residual is operator-owned and unchanged.** Releasing a
+`locked_failed_continuation` attempt already accepts the documented possibility
+of a late signed transaction. This change makes that audited escape hatch
+*effective* — before it, the operator could resolve the attempt and the customer
+still could not buy — and grants no automatic release of its own. A declined
+Ask-to-Buy remains a separate question, because current operator evidence
+correctly refuses `client_outcome=pending`.

@@ -382,8 +382,14 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
     // MARK: - failure copy
 
     /// **Every failure has its own sentence, and no two classes collapse into
-    /// one except where that is argued.** The pairs that DO share wording are
-    /// pinned here too, so merging a third into them is a visible edit.
+    /// one except where that is argued.** The groups that DO share wording are
+    /// pinned here too, so merging one more into them is a visible edit.
+    ///
+    /// `.billing(.initialArmRejected)` is the one case deliberately absent: it
+    /// is a code CARRIER rather than a class, the model resolves its codes into
+    /// `purchasesPaused`, `selectionChanged` or `purchaseNotAllowed` before this
+    /// layer sees it, and pinning the wording of its unresolved fallback here
+    /// would freeze an answer no path produces.
     func testEveryFailureClassIsWordedAndTheOverlapsAreTheIntendedOnes() {
         let everyFailure: [AppleSubscriptionFailure] = [
             .billing(.notSignedIn), .billing(.network), .billing(.rateLimited),
@@ -391,12 +397,15 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
             .billing(.subscriptionOwned), .billing(.appleSubscriptionConflict),
             .billing(.verifierUnavailable),
             .billing(.unknownBundle), .billing(.server(status: 418)),
+            .billing(.reconciliationUnavailable), .billing(.purchaseOutcomeRequired),
+            .billing(.continuationRejected),
+            .billing(.purchaseAuthorityManaged(provider: "apple")),
             .unexpected(type: "StoreFailure"),
             .purchaseNotAllowed(blockedBy: "stripe"),
             .purchaseNotAllowed(blockedBy: "admin"),
             .purchaseNotAllowed(blockedBy: "apple"),
             .purchaseNotAllowed(blockedBy: ""),
-            .purchasesPaused,
+            .purchasesPaused, .selectionChanged,
         ]
         var seen: [String: [String]] = [:]
         for failure in everyFailure {
@@ -404,15 +413,89 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
             XCTAssertFalse(text.isEmpty, "\(failure) has no words")
             seen[text, default: []].append(String(describing: failure))
         }
-        // A refused JWS and an unreadable 200 are the same fact to the user, and
-        // have the same repair. Nothing else may join them: in particular a
-        // purchase already completed by Apple needs different recovery wording
-        // from a pre-purchase eligibility block.
+        // Two groups share wording, and each one is argued.
+        //
+        // 1. A refused JWS and an unreadable 200 are the same fact to the user,
+        //    and have the same repair.
+        // 2. The reconciliation family. Canonical status unavailable, a sheet
+        //    whose outcome was never reported, a capability this device can no
+        //    longer present, and an earlier attempt the server has not resolved
+        //    are one fact on screen — Apple has not confirmed this yet — and one
+        //    repair. `purchaseAuthorityManaged` is in this group and not beside
+        //    the eligibility blocks despite its name: it carries only 409
+        //    `purchase_reconciliation_required`, which is a statement about an
+        //    unresolved ATTEMPT, so wording it as ownership would tell somebody
+        //    who has never completed a purchase that they already subscribe.
+        //
+        // Nothing else may join either: in particular a purchase already
+        // completed by Apple needs different recovery wording from a
+        // pre-purchase eligibility block, and the eligibility blocks — which
+        // assert a subscription DOES exist — may never collapse into group 2.
         let collapsed = seen.values.filter { $0.count > 1 }.map { $0.sorted() }.sorted { $0[0] < $1[0] }
         XCTAssertEqual(collapsed,
-                       [["billing(RelayiumKit.AppleBillingError.decoding)",
+                       [["billing(RelayiumKit.AppleBillingError.continuationRejected)",
+                         "billing(RelayiumKit.AppleBillingError.purchaseAuthorityManaged(provider: \"apple\"))",
+                         "billing(RelayiumKit.AppleBillingError.purchaseOutcomeRequired)",
+                         "billing(RelayiumKit.AppleBillingError.reconciliationUnavailable)"],
+                        ["billing(RelayiumKit.AppleBillingError.decoding)",
                          "billing(RelayiumKit.AppleBillingError.invalidTransaction)"]],
                        "failure classes share wording that was not argued: \(collapsed)")
+    }
+
+    /// **This layer, on its own, never words an unresolved attempt as
+    /// ownership — in either shipped language, for any provider value.**
+    ///
+    /// `AppleSubscriptionModel` already maps `purchaseAuthorityManaged` onto the
+    /// reconciliation answer, so today nothing arrives here carrying it. This is
+    /// the second lock: `message(for:)` is public, a view or a future call site
+    /// may present a raw `AppleBillingError`, and the case NAME reads like an
+    /// authority conflict while its only wire preimage — 409
+    /// `purchase_reconciliation_required` — is a statement about one purchase
+    /// ATTEMPT that has not converged. Wording it from `provider` would tell a
+    /// user who has never completed an App Store purchase that they already have
+    /// a subscription, and send them to a Manage Subscriptions screen with
+    /// nothing on it.
+    ///
+    /// The provider is varied deliberately: it is echoed from the body and names
+    /// where the stuck attempt lives, so no value of it may select a sentence.
+    func testAnUnresolvedAttemptIsNeverWordedAsOwnershipByThisLayerAlone() {
+        for provider in ["apple", "stripe", "admin", "something_new", ""] {
+            for language in [AppLanguage.en, .zh] {
+                let shown = AppleSubscriptionPresentation.message(
+                    for: .billing(.purchaseAuthorityManaged(provider: provider)), language: language)
+                XCTAssertEqual(shown, L10n.t(.subscriptionErrorReconciliation, language: language),
+                               "provider \(provider) lost the reconciliation sentence in \(language)")
+                for owned: L10nKey in [.subscriptionBlockedByAppleApp, .subscriptionBlockedByWeb,
+                                       .subscriptionBlockedByAdmin, .subscriptionBlockedByOther] {
+                    XCTAssertNotEqual(shown, L10n.t(owned, language: language),
+                                      "provider \(provider) was worded as \(owned) in \(language)")
+                }
+            }
+        }
+    }
+
+    /// **The other half: a REAL authority refusal still names the channel that
+    /// holds the subscription.** `manage_with_apple` and
+    /// `billing_authority_conflict` are decided from the ACCOUNT and reach this
+    /// layer as `.purchaseNotAllowed(blockedBy:)`. Softening either into the
+    /// reconciliation sentence would hide the one screen where a user can stop a
+    /// charge they are already paying.
+    func testATrueAuthorityRefusalStillNamesTheChannelThatHoldsIt() {
+        let expected: [String: L10nKey] = ["apple": .subscriptionBlockedByAppleApp,
+                                           "stripe": .subscriptionBlockedByWeb,
+                                           "admin": .subscriptionBlockedByAdmin,
+                                           "": .subscriptionBlockedByOther]
+        for (provider, key) in expected {
+            for language in [AppLanguage.en, .zh] {
+                let shown = AppleSubscriptionPresentation.message(
+                    for: .purchaseNotAllowed(blockedBy: provider), language: language)
+                XCTAssertEqual(shown, L10n.t(key, language: language),
+                               "\(provider) lost its ownership sentence in \(language)")
+                XCTAssertNotEqual(shown,
+                                  L10n.t(.subscriptionErrorReconciliation, language: language),
+                                  "\(provider) was softened into reconciliation in \(language)")
+            }
+        }
     }
 
     func testCompletedAppleConflictNamesThePostChargeRecovery() {

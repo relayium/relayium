@@ -372,24 +372,43 @@ public enum AppleSubscriptionPresentation {
                 return L10n.t(.subscriptionErrorAlreadyLinked, language: language)
             case .appleSubscriptionConflict:
                 return L10n.t(.subscriptionErrorAppleConflict, language: language)
-            case .purchaseAuthorityManaged(let provider):
-                return blockedNotice(blockedBy: provider, language: language)
             case .verifierUnavailable:
                 return L10n.t(.subscriptionErrorNotReady, language: language)
             case .reconciliationUnavailable, .purchaseOutcomeRequired,
-                 .continuationRejected, .initialArmRejected:
-                // All three together, and for the same reason `.invalidTransaction`
-                // and `.decoding` are grouped above: the user-facing FACT and the
-                // REPAIR are identical. A sheet whose outcome was never reported,
-                // a capability this device can no longer present, and canonical
-                // status being unavailable all mean "Apple has not confirmed this
-                // yet, and reconciliation will converge it" — which is exactly
-                // what this sentence says, and it is true of each.
+                 .continuationRejected, .initialArmRejected,
+                 .purchaseAuthorityManaged:
+                // All of these together, and for the same reason
+                // `.invalidTransaction` and `.decoding` are grouped above: the
+                // user-facing FACT and the REPAIR are identical. A sheet whose
+                // outcome was never reported, a capability this device can no
+                // longer present, and canonical status being unavailable all mean
+                // "Apple has not confirmed this yet, and reconciliation will
+                // converge it" — which is exactly what this sentence says, and it
+                // is true of each.
                 //
                 // Deliberately NOT distinguished on screen. The two continuation
                 // cases differ in what the CLIENT must do next, not in anything
                 // the user can act on, and naming the capability would describe a
                 // mechanism the product never told them about.
+                //
+                // **`.purchaseAuthorityManaged` belongs here, and its `provider`
+                // is deliberately not read.** Its name suggests an authority
+                // conflict; the wire says otherwise. It carries exactly one
+                // server answer, 409 `purchase_reconciliation_required`, which
+                // `purchase-dispatch` emits only from its unresolved-attempt
+                // branch — a legacy attempt with nothing to present, or a
+                // `locked` one whose StoreKit outcome was pending, an error or
+                // unknown. Selecting a provider sentence from it would tell
+                // somebody who has never completed an App Store purchase that
+                // they already have one, and send them to a Manage Subscriptions
+                // screen with nothing on it. `AppleSubscriptionModel` maps the
+                // same case the same way; this arm is what keeps a call site that
+                // presents a raw billing error from reintroducing that claim.
+                //
+                // The refusals that DO mean ownership — `manage_with_apple` and
+                // `billing_authority_conflict` — are decided from the account
+                // rather than from an attempt and arrive as
+                // `.purchaseNotAllowed(blockedBy:)`, which still says so.
                 return L10n.t(.subscriptionErrorReconciliation, language: language)
             case .unknownBundle:
                 return L10n.t(.subscriptionErrorWrongBuild, language: language)
@@ -418,6 +437,13 @@ public enum AppleSubscriptionPresentation {
     /// An unrecognised value — including `""` — gets the general sentence rather
     /// than being treated as permission. This layer never turns "I do not
     /// recognise this" into "go ahead and pay".
+    ///
+    /// **Only ACCOUNT-level refusals may be worded here.** Every sentence this
+    /// returns asserts that a subscription exists somewhere, so it is reached
+    /// from catalog eligibility and from `.purchaseNotAllowed`, whose codes are
+    /// decided from the account. A refusal about an unresolved purchase ATTEMPT
+    /// carries a provider name too and must not be routed through this: see
+    /// `.purchaseAuthorityManaged` above.
     private static func blockedNotice(blockedBy: String,
                                       language: AppLanguage? = nil) -> String {
         switch blockedBy {

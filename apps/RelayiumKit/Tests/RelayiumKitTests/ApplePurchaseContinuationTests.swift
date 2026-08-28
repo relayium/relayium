@@ -45,7 +45,8 @@ final class ApplePurchaseContinuationTests: XCTestCase {
             armRequestID: "arm-1", productID: "pro.monthly")
         let plan = ApplePurchaseContinuation.plan(capability: prepared, productID: "pro.monthly",
                                                   appInstanceID: instance,
-                                                  freshArmRequestID: "arm-1")
+                                                  freshArmRequestID: "arm-1",
+                                                  mayRecoverIfResolved: true)
         XCTAssertEqual(plan, .initialArm(prepared))
         XCTAssertEqual(prepared.phase, .preparing)
         XCTAssertEqual(prepared.attemptID, "")
@@ -115,32 +116,115 @@ final class ApplePurchaseContinuationTests: XCTestCase {
         let next = ApplePurchaseContinuation.applying(
             .userCancelled, to: armed(), forArm: "arm-1", serverResumable: false)
         XCTAssertEqual(next?.phase, .locked)
-        // And the plan built from it opens nothing.
+        // And the plan built from it opens nothing locally.
         XCTAssertEqual(ApplePurchaseContinuation.plan(capability: next, productID: "pro.monthly",
                                                       appInstanceID: instance,
-                                                      freshArmRequestID: "arm-9"),
+                                                      freshArmRequestID: "arm-9",
+                                                      mayRecoverIfResolved: false),
                        .blocked(.locked))
     }
 
-    /// A locked attempt refuses, and it refuses as `locked` rather than as the
-    /// outstanding-sheet answer — the two have different repairs.
+    /// A locked attempt is **never locally resumable**, and the recovery plan is
+    /// deliberately a different case rather than a resume that pretends it is.
+    ///
+    /// A resume asserts something — "the sheet I armed provably cannot charge".
+    /// Nothing here asserts anything: the request presents the capability and a
+    /// fresh identity, and the SERVER refuses while the attempt is unresolved.
     func testALockedAttemptIsNeverResumable() {
         var locked = armed()
         locked.phase = .locked
+        let plan = ApplePurchaseContinuation.plan(capability: locked, productID: "pro.monthly",
+                                                  appInstanceID: instance,
+                                                  freshArmRequestID: "arm-9",
+                                                  mayRecoverIfResolved: true)
+        XCTAssertEqual(plan, .recoverIfResolved(locked, armRequestID: "arm-9",
+                                                productID: "pro.monthly"))
+        XCTAssertNotEqual(plan, .resume(locked, armRequestID: "arm-9",
+                                        productID: "pro.monthly"),
+                          "a locked attempt was planned as if it were locally resumable")
+        // Without the one recovery pass, it is the offline refusal it always was,
+        // and it refuses as `locked` rather than as the outstanding-sheet answer
+        // — the two have different repairs.
         XCTAssertEqual(ApplePurchaseContinuation.plan(capability: locked, productID: "pro.monthly",
                                                       appInstanceID: instance,
-                                                      freshArmRequestID: "arm-9"),
+                                                      freshArmRequestID: "arm-9",
+                                                      mayRecoverIfResolved: false),
                        .blocked(.locked))
     }
 
     /// **Silence is not a cancellation.** A process that died with the sheet open
-    /// leaves `armed`, and `armed` blocks. Nothing in this type can turn "no
-    /// report arrived" into permission to open another sheet.
+    /// leaves `armed`, and nothing in this type can turn "no report arrived" into
+    /// permission to open another sheet.
+    ///
+    /// What it may do is ask. The recovery plan carries a fresh identity to the
+    /// same compare-and-arm every purchase uses, and the server refuses it while
+    /// that sheet's attempt is still unresolved.
     func testAnUnreportedSheetBlocksRatherThanReArming() {
+        let plan = ApplePurchaseContinuation.plan(capability: armed(), productID: "pro.monthly",
+                                                  appInstanceID: instance,
+                                                  freshArmRequestID: "arm-9",
+                                                  mayRecoverIfResolved: true)
+        XCTAssertEqual(plan, .recoverIfResolved(armed(), armRequestID: "arm-9",
+                                                productID: "pro.monthly"))
+        XCTAssertNotEqual(plan, .resume(armed(), armRequestID: "arm-9",
+                                        productID: "pro.monthly"),
+                          "an outstanding sheet was planned as a local resume")
         XCTAssertEqual(ApplePurchaseContinuation.plan(capability: armed(), productID: "pro.monthly",
                                                       appInstanceID: instance,
-                                                      freshArmRequestID: "arm-9"),
+                                                      freshArmRequestID: "arm-9",
+                                                      mayRecoverIfResolved: false),
                        .blocked(.sheetOutstanding))
+    }
+
+    /// The recovery names the product the user actually chose, exactly as a
+    /// resume does: convergence is exact on product, and the server repoints the
+    /// replacement attempt at what is being authorized.
+    func testARecoveryCarriesTheChosenProductAndAFreshIdentity() {
+        var locked = armed(arm: "arm-spent", product: "pro.monthly")
+        locked.phase = .locked
+        XCTAssertEqual(ApplePurchaseContinuation.plan(capability: locked,
+                                                      productID: "plus.monthly",
+                                                      appInstanceID: instance,
+                                                      freshArmRequestID: "arm-fresh",
+                                                      mayRecoverIfResolved: true),
+                       .recoverIfResolved(locked, armRequestID: "arm-fresh",
+                                          productID: "plus.monthly"))
+    }
+
+    /// **Anything already owed outranks the recovery**, on both phases it can be
+    /// planned from.
+    ///
+    /// An owed outcome is a statement about a sheet that really opened, and an
+    /// already-recorded arm intent is a request the server may already have
+    /// answered. Probing before either is discharged would ask about state this
+    /// client has not finished describing.
+    func testAnythingAlreadyOwedOutranksTheRecovery() {
+        for phase in [ApplePurchaseCapability.Phase.armed, .locked] {
+            var owed = armed()
+            owed.phase = phase
+            owed.unconfirmedOutcome = ApplePurchaseOutcomeIntent(armRequestID: "arm-1",
+                                                                 outcome: .pending)
+            XCTAssertEqual(ApplePurchaseContinuation.plan(capability: owed,
+                                                          productID: "pro.monthly",
+                                                          appInstanceID: instance,
+                                                          freshArmRequestID: "arm-9",
+                                                          mayRecoverIfResolved: true),
+                           .replayOutcome(owed, armRequestID: "arm-1", outcome: .pending),
+                           "\(phase.rawValue) probed the server with a report still owed")
+
+            var recorded = armed()
+            recorded.phase = phase
+            recorded.unconfirmedResume = ApplePurchaseResumeIntent(armRequestID: "arm-2",
+                                                                   productID: "plus.monthly")
+            XCTAssertEqual(ApplePurchaseContinuation.plan(capability: recorded,
+                                                          productID: "max.yearly",
+                                                          appInstanceID: instance,
+                                                          freshArmRequestID: "arm-9",
+                                                          mayRecoverIfResolved: true),
+                           .replayResume(recorded, armRequestID: "arm-2",
+                                         productID: "plus.monthly"),
+                           "\(phase.rawValue) minted a second identity over a recorded one")
+        }
     }
 
     // MARK: - resume
@@ -150,7 +234,8 @@ final class ApplePurchaseContinuationTests: XCTestCase {
     func testAResumeMintsAFreshArmIdentity() {
         let plan = ApplePurchaseContinuation.plan(capability: cancelled(), productID: "pro.monthly",
                                                   appInstanceID: instance,
-                                                  freshArmRequestID: "arm-2")
+                                                  freshArmRequestID: "arm-2",
+                                                  mayRecoverIfResolved: true)
         XCTAssertEqual(plan, .resume(cancelled(), armRequestID: "arm-2", productID: "pro.monthly"))
     }
 
@@ -165,7 +250,8 @@ final class ApplePurchaseContinuationTests: XCTestCase {
         let plan = ApplePurchaseContinuation.plan(capability: cancelled(product: "pro.monthly"),
                                                   productID: "plus.monthly",
                                                   appInstanceID: instance,
-                                                  freshArmRequestID: "arm-2")
+                                                  freshArmRequestID: "arm-2",
+                                                  mayRecoverIfResolved: true)
         guard case let .resume(_, armRequestID, productID) = plan else {
             return XCTFail("expected a resume, got \(plan)")
         }
@@ -206,7 +292,8 @@ final class ApplePurchaseContinuationTests: XCTestCase {
         // A different fresh identity is offered and deliberately ignored.
         let plan = ApplePurchaseContinuation.plan(capability: intent, productID: "plus.monthly",
                                                   appInstanceID: instance,
-                                                  freshArmRequestID: "arm-99")
+                                                  freshArmRequestID: "arm-99",
+                                                  mayRecoverIfResolved: true)
         XCTAssertEqual(plan, .replayResume(intent, armRequestID: "arm-2",
                                            productID: "plus.monthly"))
     }
@@ -219,7 +306,8 @@ final class ApplePurchaseContinuationTests: XCTestCase {
             cancelled(), armRequestID: "arm-2", productID: "plus.monthly")
         let plan = ApplePurchaseContinuation.plan(capability: intent, productID: "max.yearly",
                                                   appInstanceID: instance,
-                                                  freshArmRequestID: "arm-99")
+                                                  freshArmRequestID: "arm-99",
+                                                  mayRecoverIfResolved: true)
         XCTAssertEqual(plan, .replayResume(intent, armRequestID: "arm-2",
                                            productID: "plus.monthly"))
     }
@@ -234,11 +322,21 @@ final class ApplePurchaseContinuationTests: XCTestCase {
             return XCTFail("a valid authoritative attempt id was refused")
         }
         XCTAssertNil(confirmed.unconfirmedResume)
+        // The discharge is the point: the intent is gone, so the next plan is an
+        // ordinary one about the arm that is now open — never a second replay.
         XCTAssertEqual(ApplePurchaseContinuation.plan(capability: confirmed,
                                                       productID: "plus.monthly",
                                                       appInstanceID: instance,
-                                                      freshArmRequestID: "arm-3"),
+                                                      freshArmRequestID: "arm-3",
+                                                      mayRecoverIfResolved: false),
                        .blocked(.sheetOutstanding))
+        XCTAssertEqual(ApplePurchaseContinuation.plan(capability: confirmed,
+                                                      productID: "plus.monthly",
+                                                      appInstanceID: instance,
+                                                      freshArmRequestID: "arm-3",
+                                                      mayRecoverIfResolved: true),
+                       .recoverIfResolved(confirmed, armRequestID: "arm-3",
+                                          productID: "plus.monthly"))
     }
 
     // MARK: - stale arms
@@ -302,14 +400,25 @@ final class ApplePurchaseContinuationTests: XCTestCase {
     /// no record the phase stays `armed` and every later purchase is refused for
     /// ever; with one, the next attempt replays the report instead.
     func testAnUnrecordedCancellationBlocksButARecordedOneReplays() {
+        // Unrecorded, this client knows nothing: it may ask the server, and it
+        // may not plan a local resume. Only the RECORDED half below replays.
         XCTAssertEqual(ApplePurchaseContinuation.plan(capability: armed(), productID: "pro.monthly",
                                                       appInstanceID: instance,
-                                                      freshArmRequestID: "arm-9"),
+                                                      freshArmRequestID: "arm-9",
+                                                      mayRecoverIfResolved: false),
                        .blocked(.sheetOutstanding),
                        "an unrecorded cancellation is the permanent lockout")
+        XCTAssertEqual(ApplePurchaseContinuation.plan(capability: armed(), productID: "pro.monthly",
+                                                      appInstanceID: instance,
+                                                      freshArmRequestID: "arm-9",
+                                                      mayRecoverIfResolved: true),
+                       .recoverIfResolved(armed(), armRequestID: "arm-9",
+                                          productID: "pro.monthly"),
+                       "an unrecorded cancellation became a local resume")
         XCTAssertEqual(ApplePurchaseContinuation.plan(capability: recorded(), productID: "pro.monthly",
                                                       appInstanceID: instance,
-                                                      freshArmRequestID: "arm-9"),
+                                                      freshArmRequestID: "arm-9",
+                                                      mayRecoverIfResolved: true),
                        .replayOutcome(recorded(), armRequestID: "arm-1", outcome: .userCancelled),
                        "a recorded cancellation was not replayed")
     }
@@ -325,7 +434,8 @@ final class ApplePurchaseContinuationTests: XCTestCase {
             XCTAssertEqual(ApplePurchaseContinuation.plan(capability: value,
                                                           productID: "plus.monthly",
                                                           appInstanceID: instance,
-                                                          freshArmRequestID: "arm-9"),
+                                                          freshArmRequestID: "arm-9",
+                                                          mayRecoverIfResolved: true),
                            .replayOutcome(value, armRequestID: "arm-1", outcome: outcome),
                            "\(outcome.rawValue) did not replay as itself")
             // The server answers each report honestly, and only one of them can
@@ -335,13 +445,25 @@ final class ApplePurchaseContinuationTests: XCTestCase {
             XCTAssertNil(answered?.unconfirmedOutcome, "the answer did not discharge the record")
             let next = ApplePurchaseContinuation.plan(capability: answered, productID: "plus.monthly",
                                                       appInstanceID: instance,
-                                                      freshArmRequestID: "arm-9")
+                                                      freshArmRequestID: "arm-9",
+                                                      mayRecoverIfResolved: true)
             if outcome == .userCancelled {
                 XCTAssertEqual(next, .resume(answered!, armRequestID: "arm-9",
                                              productID: "plus.monthly"))
             } else {
-                XCTAssertEqual(next, .blocked(.locked),
+                // Never a local resume: a non-cancellation may only be carried
+                // to the server as a question, and it is the offline refusal
+                // once this call has already spent its one recovery pass.
+                XCTAssertEqual(next, .recoverIfResolved(answered!, armRequestID: "arm-9",
+                                                        productID: "plus.monthly"),
                                "\(outcome.rawValue) reached a plan that could arm")
+                XCTAssertEqual(ApplePurchaseContinuation.plan(capability: answered,
+                                                              productID: "plus.monthly",
+                                                              appInstanceID: instance,
+                                                              freshArmRequestID: "arm-9",
+                                                              mayRecoverIfResolved: false),
+                               .blocked(.locked),
+                               "\(outcome.rawValue) did not fall back to the offline refusal")
             }
         }
     }
@@ -357,9 +479,19 @@ final class ApplePurchaseContinuationTests: XCTestCase {
                                                               outcome: .userCancelled)
         XCTAssertEqual(ApplePurchaseContinuation.plan(capability: stale, productID: "plus.monthly",
                                                       appInstanceID: instance,
-                                                      freshArmRequestID: "arm-9"),
+                                                      freshArmRequestID: "arm-9",
+                                                      mayRecoverIfResolved: false),
                        .blocked(.sheetOutstanding),
                        "a stale record released a newer arm")
+        // With the recovery pass available it is still not a replay: the plan
+        // presents a FRESH identity, never the superseded one the record names.
+        XCTAssertEqual(ApplePurchaseContinuation.plan(capability: stale, productID: "plus.monthly",
+                                                      appInstanceID: instance,
+                                                      freshArmRequestID: "arm-9",
+                                                      mayRecoverIfResolved: true),
+                       .recoverIfResolved(stale, armRequestID: "arm-9",
+                                          productID: "plus.monthly"),
+                       "a stale record became a replay")
     }
 
     /// An authoritative arm move discharges any record for the arm it leaves
@@ -398,7 +530,8 @@ final class ApplePurchaseContinuationTests: XCTestCase {
                                                            productID: "plus.monthly")
         XCTAssertEqual(ApplePurchaseContinuation.plan(capability: both, productID: "max.yearly",
                                                       appInstanceID: instance,
-                                                      freshArmRequestID: "arm-9"),
+                                                      freshArmRequestID: "arm-9",
+                                                      mayRecoverIfResolved: true),
                        .replayResume(both, armRequestID: "arm-2", productID: "plus.monthly"))
     }
 
@@ -416,7 +549,8 @@ final class ApplePurchaseContinuationTests: XCTestCase {
                        ApplePurchaseOutcomeIntent(armRequestID: "arm-1", outcome: .userCancelled))
         XCTAssertEqual(ApplePurchaseContinuation.plan(capability: after, productID: "pro.monthly",
                                                       appInstanceID: instance,
-                                                      freshArmRequestID: "arm-9"),
+                                                      freshArmRequestID: "arm-9",
+                                                      mayRecoverIfResolved: true),
                        .replayOutcome(after, armRequestID: "arm-1", outcome: .userCancelled))
     }
 
@@ -451,7 +585,8 @@ final class ApplePurchaseContinuationTests: XCTestCase {
         XCTAssertEqual(loaded.phase, .cancelled)
         XCTAssertEqual(ApplePurchaseContinuation.plan(capability: loaded, productID: "pro.monthly",
                                                       appInstanceID: instance,
-                                                      freshArmRequestID: "arm-9"),
+                                                      freshArmRequestID: "arm-9",
+                                                      mayRecoverIfResolved: true),
                        .resume(loaded, armRequestID: "arm-9", productID: "pro.monthly"),
                        "an upgraded client lost a live capability")
     }
