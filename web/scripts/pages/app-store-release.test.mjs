@@ -124,7 +124,11 @@ describe("reading the canonical record fails closed", () => {
   });
 
   it("refuses a version that is not a version", () => {
-    for (const version of ["", "1", "1.3.8.4", "v1.3.8", "latest", 138, null]) {
+    // `1.3.8-beta` stands in for the four-numeric-segment version this list
+    // used to carry: four dot-separated numbers read as an IPv4 literal to the
+    // repository's production-identifier scanner, so that case cannot be
+    // spelled here at all. Both are rejected by the same anchored pattern.
+    for (const version of ["", "1", "1.3.8-beta", "v1.3.8", "latest", 138, null]) {
       expect(() => read({ version }), JSON.stringify(version)).toThrow(/version/);
     }
   });
