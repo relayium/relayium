@@ -278,3 +278,151 @@ func TestAppleLegacyPurchaseRecoveryRefusesArmedContinuationAttempt(t *testing.T
 		t.Fatalf("evidence=%+v", evidence)
 	}
 }
+
+// The client-side recovery this operator release exists to make effective:
+// a Mac holding a `locked` continuation capability asks purchase-dispatch —
+// with the SAME capability and a FRESH arm identity — whether its attempt still
+// exists. This is the server half of that contract, and it has exactly two
+// legal answers.
+
+const replacementRecoveryArm = "33333333-3333-4333-8333-333333333333"
+const replacementRecoveryToken = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+
+// appleAttemptSnapshot is every field the recovery contract may not disturb.
+type appleAttemptSnapshot struct {
+	state, continuationState, armRequestID, clientOutcome, productID string
+	resumeCount, epoch                                               int64
+	attempts, armIDs                                                 int
+}
+
+func snapshotAppleAttempts(t *testing.T, store *SQLiteStore, userID, attemptID string) appleAttemptSnapshot {
+	t.Helper()
+	var out appleAttemptSnapshot
+	if err := store.db.QueryRow(`SELECT state,continuation_state,arm_request_id,client_outcome,product_id,resume_count,epoch
+ FROM billing_purchase_attempts WHERE id=?`, attemptID).Scan(&out.state, &out.continuationState,
+		&out.armRequestID, &out.clientOutcome, &out.productID, &out.resumeCount, &out.epoch); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.db.QueryRow(`SELECT count(*) FROM billing_purchase_attempts WHERE user_id=?`, userID).Scan(&out.attempts); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.db.QueryRow(`SELECT count(*) FROM apple_purchase_arm_ids WHERE user_id=?`, userID).Scan(&out.armIDs); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// TestApplePurchaseRecoveryRefusesUnresolvedLockedAttemptWithoutMutation is the
+// answer that must dominate: while the locked attempt is still dispatched, the
+// recovery request is refused and NOTHING moves. Not the attempt, not the arm
+// identity, not the epoch, and not the arm-id history — a refused request must
+// not even burn the fresh identity it presented, or an honest client would have
+// to mint a new one for every retry.
+func TestApplePurchaseRecoveryRefusesUnresolvedLockedAttemptWithoutMutation(t *testing.T) {
+	store, u, authority, attempt := seedLockedFailedAppleRecovery(t)
+	before := snapshotAppleAttempts(t, store, u.ID, attempt.ID)
+
+	out, err := store.ArmAppleBillingPurchase(context.Background(), authority, AppleDispatchRequest{
+		ProductID: "com.relayium.mac.plus.monthly", CandidateToken: replacementRecoveryToken,
+		ContinuationProtocol: appleContinuationProtocolAttemptIDV2,
+		AppInstanceID:        failedRecoveryInstance, ContinuationSecret: testContinuationSecret(0x71),
+		ArmRequestID: replacementRecoveryArm, Now: 110,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Armed || out.Resumed || out.Replayed || out.Refusal != appleRefusalReconcile {
+		t.Fatalf("an unresolved locked attempt answered %+v", out)
+	}
+	if after := snapshotAppleAttempts(t, store, u.ID, attempt.ID); after != before {
+		t.Fatalf("a refused recovery mutated state: before=%+v after=%+v", before, after)
+	}
+	if _, ok, err := store.AppleBillingSubjectByToken(context.Background(), replacementRecoveryToken); err != nil || ok {
+		t.Fatalf("a refused recovery minted an attribution subject ok=%t err=%v", ok, err)
+	}
+}
+
+// TestApplePurchaseRecoveryAllowsExactlyOneReplacementAfterAuditedRelease is the
+// other answer, and the whole reason the client is allowed to ask.
+//
+// After the owner-audited release resolves the locked attempt and advances the
+// authority, the SAME capability plus a FRESH arm creates exactly one
+// replacement attempt. "Exactly one" is the money bound and is checked three
+// ways: a new attempt appears once, the identical request reads that same
+// attempt back instead of creating a second, and a further fresh identity is
+// refused because the replacement now has a sheet of its own.
+func TestApplePurchaseRecoveryAllowsExactlyOneReplacementAfterAuditedRelease(t *testing.T) {
+	store, u, authority, attempt := seedLockedFailedAppleRecovery(t)
+	evidence, err := ListAppleLegacyPurchaseRecoveryEvidence(context.Background(), store, attempt.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := ReleaseAppleLegacyPurchase(context.Background(), store, attempt.ID,
+		"owner", "observed explicit StoreKit cancellation on affected client", evidence.Digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Epoch != authority.Epoch+1 {
+		t.Fatalf("the audited release did not advance the authority: %+v", result)
+	}
+
+	// Exactly what the handler does on the next explicit purchase press.
+	next, err := store.AcquireBillingAuthority(context.Background(), BillingAuthorityRequest{
+		UserID: u.ID, Provider: ProviderApple, ExternalScope: testBundleMac,
+		AppleAccountToken: replacementRecoveryToken, Now: 120,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Epoch != authority.Epoch+1 {
+		t.Fatalf("authority epoch=%d want %d", next.Epoch, authority.Epoch+1)
+	}
+	request := AppleDispatchRequest{
+		ProductID: "com.relayium.mac.pro.monthly", CandidateToken: replacementRecoveryToken,
+		ContinuationProtocol: appleContinuationProtocolAttemptIDV2,
+		AppInstanceID:        failedRecoveryInstance, ContinuationSecret: testContinuationSecret(0x71),
+		ArmRequestID: replacementRecoveryArm, Now: 121,
+	}
+	replacement, err := store.ArmAppleBillingPurchase(context.Background(), next, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !replacement.Armed || replacement.Refusal != "" || replacement.Attempt.ID == attempt.ID {
+		t.Fatalf("the released attempt did not yield one replacement: %+v", replacement)
+	}
+	// The replacement is armed for the product actually requested and for the
+	// new generation, and the released attempt keeps its own ledger row.
+	if replacement.Attempt.ProductID != request.ProductID || replacement.Attempt.Epoch != next.Epoch {
+		t.Fatalf("replacement=%+v", replacement.Attempt)
+	}
+	after := snapshotAppleAttempts(t, store, u.ID, attempt.ID)
+	if after.attempts != 2 || after.state != "resolved" {
+		t.Fatalf("attempt ledger=%+v", after)
+	}
+
+	// A lost 200 replays byte for byte: the same answer, and still one attempt.
+	replay, err := store.ArmAppleBillingPurchase(context.Background(), next, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !replay.Replayed || replay.Armed || replay.Attempt.ID != replacement.Attempt.ID {
+		t.Fatalf("an exact replay was not idempotent: %+v", replay)
+	}
+
+	// And the replacement is now a sheet of its own: another fresh identity is
+	// refused rather than authorizing a second concurrent sheet.
+	second := request
+	second.ArmRequestID = "44444444-4444-4444-8444-444444444444"
+	second.CandidateToken = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+	again, err := store.ArmAppleBillingPurchase(context.Background(), next, second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Armed || again.Refusal != appleRefusalOutcome {
+		t.Fatalf("a second sheet was authorized over the replacement: %+v", again)
+	}
+	var attempts int
+	if err := store.db.QueryRow(`SELECT count(*) FROM billing_purchase_attempts WHERE user_id=?`, u.ID).Scan(&attempts); err != nil || attempts != 2 {
+		t.Fatalf("attempts=%d err=%v", attempts, err)
+	}
+}

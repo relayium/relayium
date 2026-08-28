@@ -1030,7 +1030,11 @@ public final class AppleSubscriptionModel: ObservableObject {
         // Falling out of the loop is itself fail-closed: it means a pass
         // replayed something and the store could not persist the answer, so the
         // refusal below opens no sheet and the replay is simply owed again.
-        for _ in 0..<2 {
+        //
+        // The pass index is read for exactly one decision: only the first pass
+        // may ask the server whether a local `armed`/`locked` capability has
+        // outlived its attempt. See `mayRecoverIfResolved` on the planner.
+        for pass in 0..<2 {
             guard currentBearer() == token, currentAccountID() == ownerAccountID else {
                 state = .failed(.billing(.notSignedIn))
                 return nil
@@ -1090,12 +1094,22 @@ public final class AppleSubscriptionModel: ObservableObject {
             let plan = ApplePurchaseContinuation.plan(capability: stored,
                                                       productID: productID,
                                                       appInstanceID: appInstanceID,
-                                                      freshArmRequestID: freshArm)
+                                                      freshArmRequestID: freshArm,
+                                                      mayRecoverIfResolved: pass == 0)
             switch plan {
             case let .blocked(refusal):
                 // Both refusals fail closed, and neither is retried as a fresh
                 // dispatch: a sheet whose outcome nobody reported may still
                 // charge.
+                //
+                // **This is now the SECOND pass's answer.** On the first pass an
+                // `armed`/`locked` capability is planned as `.recoverIfResolved`
+                // instead, so reaching here means either that this same call has
+                // already heard from the server about this attempt — a replayed
+                // outcome it just applied — or that there is no capability at
+                // all. In neither case is there anything left to ask, and a
+                // refused recovery has already written its own truthful state
+                // before returning, so it does not arrive here either.
                 //
                 // `sheetOutstanding` now means no outcome was ever RECORDED —
                 // a sheet genuinely open, or a process that died between the
@@ -1191,11 +1205,38 @@ public final class AppleSubscriptionModel: ObservableObject {
                 }
 
             case let .resume(capability, armID, product),
-                 let .replayResume(capability, armID, product):
-                // **Recorded before it is sent, on both arms of this case.** A
+                 let .replayResume(capability, armID, product),
+                 let .recoverIfResolved(capability, armID, product):
+                // **One transport, three meanings, and the difference is the
+                // server's to state — which is exactly why they share it.**
+                //
+                // `resume` asks to re-arm an attempt this client proved
+                // cancelled; `recoverIfResolved` asks whether an `armed` or
+                // `locked` attempt still exists at all; `replayResume` re-sends
+                // whichever of the two was recorded and never answered. All
+                // three carry the capability and a fresh arm identity to the one
+                // atomic compare-and-arm, and in every one of them this client
+                // asserts nothing about the old attempt: a 409/403 refusal
+                // leaves it exactly where it was, and only a 200 — which the
+                // server emits only when nothing unresolved remains for this
+                // authority — may become a sheet. Writing a second dispatch path
+                // for the recovery would duplicate the record-before-send,
+                // adopt-before-sheet and save-or-refuse rules below, which are
+                // the money rules.
+                //
+                // **Recorded before it is sent, on all three arms of this case.** A
                 // replay is already recorded and re-recording it is a no-op with
                 // the same bytes; a first resume must be recorded or a lost
                 // response strands the account on an identity it never learned.
+                //
+                // **And a refusal is read the same way for all three**, because
+                // the server does not vary it by plan either: its one
+                // reconciliation code answers for an unresolved attempt whether
+                // this client asked about an `armed` one, replayed a lost
+                // request, or resumed a `cancelled` one. Mapping it is therefore
+                // ``failure(for:)``'s job here as everywhere else, and an
+                // earlier attempt to special-case this call site produced copy
+                // that was false on the paths it did not cover.
                 let intent = ApplePurchaseContinuation.recordingResumeIntent(
                     capability, armRequestID: armID, productID: product)
                 do { try continuation.save(intent) } catch {
@@ -1771,8 +1812,32 @@ public final class AppleSubscriptionModel: ObservableObject {
                 default: return .purchaseNotAllowed(blockedBy: provider ?? "apple")
                 }
             }
-            if case .purchaseAuthorityManaged(let provider) = billing {
-                return .purchaseNotAllowed(blockedBy: provider)
+            // **`purchaseAuthorityManaged` is not an ownership statement, on any
+            // path, so this is not path-sensitive.** The client name is broader
+            // than the fact: it carries exactly one server answer, the dispatch
+            // endpoint's 409 `purchase_reconciliation_required`, and that code
+            // is emitted from one branch only — the one that inspects an
+            // EXISTING UNRESOLVED ATTEMPT. Either it is a legacy attempt armed
+            // before the capability protocol, with nothing to present, or it is
+            // a `locked` one whose StoreKit outcome was pending, an error, or
+            // unknown. Both are one purchase that has not converged.
+            //
+            // The account-level conflicts — `manage_with_apple` and
+            // `billing_authority_conflict` — are decided earlier in that same
+            // handler, from the account's catalog eligibility, from a plan that
+            // must be changed in an existing App Store subscription, or from a
+            // billing authority another provider already holds. Never from an
+            // attempt. They arrive above as `initialArmRejected`, and THOSE keep
+            // the ownership notice, because for those it is true.
+            //
+            // So this maps onto `continuationRejected`, which is what is true
+            // and is already worded: Apple has not confirmed this yet, and
+            // reconciliation is what converges it. No case, key or copy is
+            // added. Reading it as ownership instead would tell somebody who has
+            // never completed an App Store purchase that they already have one,
+            // and send them to a Manage Subscriptions screen with nothing on it.
+            if case .purchaseAuthorityManaged = billing {
+                return .billing(.continuationRejected)
             }
             return .billing(billing)
         }

@@ -385,8 +385,29 @@ public enum AppleBillingError: Error, Equatable {
     /// Relayium App Store app. Finishing would strand the newly charged
     /// transaction, so it remains pending for an operator/user resolution.
     case appleSubscriptionConflict
-    /// The account is durably managed by another billing channel/app, or an
-    /// earlier Apple dispatch is unresolved. It is not a transient retry.
+    /// 409 `purchase_reconciliation_required` — an EARLIER Apple purchase
+    /// attempt on this account has not resolved. That is the whole fact.
+    ///
+    /// **The case name is broader than what it carries, and the name is the
+    /// trap.** It is kept — renaming it would change nothing here and touch
+    /// every call site — but it must not be read as "another channel owns this
+    /// account's billing". `purchase-dispatch` emits this one code from one
+    /// branch only, the one that inspects an existing unresolved attempt:
+    /// either a legacy attempt armed before the capability protocol, or a
+    /// `locked` one whose StoreKit outcome was pending, an error, or unknown.
+    /// Neither is proof that a subscription exists, and the account being
+    /// unable to arm a NEW purchase right now is the only thing it establishes.
+    ///
+    /// The genuine account-level authority answers — `manage_with_apple` and
+    /// `billing_authority_conflict` — are decided earlier in that same handler,
+    /// from eligibility and from the authority a provider already holds, and
+    /// they arrive as `initialArmRejected`. Those, and only those, may be
+    /// presented as ownership.
+    ///
+    /// `provider` is echoed from the body for diagnostics. It names the channel
+    /// the unresolved attempt belongs to, not a channel that owns anything, so
+    /// no user-facing sentence may be selected from it: presentation answers
+    /// this case with the reconciliation copy regardless of its value.
     case purchaseAuthorityManaged(provider: String)
     /// 403 `continuation_invalid` — the uniform capability refusal.
     ///
@@ -476,9 +497,9 @@ extension AccountClient: AppleBillingService {
 			throw AppleBillingError.server(status: 400)
 		case 403:
 			// New-protocol only: the uniform capability refusal. It is
-			// deliberately NOT `purchaseAuthorityManaged` — nothing about the
-			// account's billing authority is wrong, this client's capability is —
-			// and it must never be retried as a fresh one-shot dispatch.
+			// deliberately its own case — what is unusable is this client's
+			// capability, not the attempt it was minted for — and it must never
+			// be retried as a fresh one-shot dispatch.
 			let body = try? JSONDecoder().decode(AppleErrorBody.self, from: data)
 			if body?.error == "continuation_invalid" { throw AppleBillingError.continuationRejected }
 			throw AppleBillingError.server(status: 403)
@@ -493,6 +514,12 @@ extension AccountClient: AppleBillingService {
 			// NOT an authority conflict and NOT a charge: reconciling means
 			// reporting what StoreKit did, or letting updates/restore converge.
 			if body?.error == "purchase_outcome_required" { throw AppleBillingError.purchaseOutcomeRequired }
+			// The ONE preimage of `purchaseAuthorityManaged`, and the reason that
+			// case may be worded as reconciliation everywhere: the two codes
+			// that do mean an account-level authority conflict are mapped to
+			// `initialArmRejected` above, so nothing that reaches here is an
+			// ownership statement. Adding a second code to this branch would
+			// silently widen the case past what its copy can truthfully say.
 			if body?.error == "purchase_reconciliation_required" {
 				throw AppleBillingError.purchaseAuthorityManaged(provider: body?.provider ?? "apple")
 			}

@@ -50,6 +50,24 @@ for the other.
   is issued tokens, not server dispatches: a single dispatch can otherwise hand
   out two permissions to open a sheet, against one arm the app reports exactly
   one outcome for.
+- A local purchase capability that outlived its attempt is recovered by the
+  SERVER and never by a local rule. Inside an explicit purchase press, and only
+  after the fresh catalog, eligibility, account and product-resolution gates, an
+  `armed` or `locked` capability with nothing already owed records one durable
+  fresh-arm intent and sends it to the same `purchase-dispatch` compare-and-arm.
+  A still-unresolved attempt is refused with zero StoreKit sheets, and the
+  capability, its phase and its recorded intent are all retained; only a 200
+  adopts the replacement attempt id, arm and product, and that write must
+  succeed before any sheet opens. No refusal, timeout, decode failure or storage
+  failure retires a capability or widens a `pending`, `failed` or `success` into
+  a cancellation. There is no clock, TTL or launch-count release, and no
+  background probe.
+- The audited operator release is what makes that recovery reach an answer: a
+  `locked_failed_continuation` release resolves the attempt and advances the
+  authority generation, after which the same capability plus one fresh arm
+  identity yields exactly one replacement attempt — proved by a server contract
+  test that also pins the unresolved case refusing without mutating the attempt,
+  the arm-id history or the authority.
 - StoreKit remains absent from the Developer ID target and linked only by App
   Store targets.
 
@@ -71,6 +89,9 @@ server entitlement for every case.
    account, then attempt restore under a different Relayium account and confirm
    it is refused without rebinding ownership.
 7. Exercise Ask to Buy pending, approval, and rejection.
+7a. With an attempt left `armed` or `locked`, confirm the next purchase press is
+    refused with no sheet; then release that attempt through the audited
+    operator recovery and confirm the very next press buys once.
 8. Exercise interrupted purchase, failed renewal, billing retry, grace period,
    recovery, expiry, refund, refund reversal, and revoke.
 9. Complete or renew outside the running app and confirm launch processing.
