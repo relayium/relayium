@@ -1142,3 +1142,22 @@ func TestPreviewChangeFallsBackToUpcoming(t *testing.T) {
 		t.Fatalf("want 521 from upcoming fallback, got %d", pv.AmountDueCents)
 	}
 }
+
+// The webhook handler's bind exemption is keyed on the event type because the
+// projection cannot distinguish "no subscription" any other way: an expired or
+// async-failed Checkout carries the full attempt attribution and an empty
+// SubscriptionID, exactly like a paid event whose subscription reference is
+// genuinely missing. This pins the input shape that boundary reads.
+func TestVerifyWebhookProjectsAbandonedCheckoutWithoutSubscription(t *testing.T) {
+	c := NewStripeClient("sk_test", "whsec_abc", "")
+	for _, eventType := range []string{"checkout.session.expired", "checkout.session.async_payment_failed"} {
+		body := fmt.Sprintf(`{"id":"evt_abandoned","type":%q,"data":{"object":{"id":"cs_abandoned","object":"checkout.session","customer":"cus_1","client_reference_id":"user_1","metadata":{"billing_attempt_id":"attempt_1"}}}}`, eventType)
+		ev, err := c.VerifyWebhook([]byte(body), signStripe("whsec_abc", body, 3000), 3000)
+		if err != nil {
+			t.Fatalf("%s: %v", eventType, err)
+		}
+		if ev.SubscriptionID != "" || ev.ClientRefUserID != "user_1" || ev.MetadataBillingAttemptID != "attempt_1" {
+			t.Fatalf("%s projection = %+v", eventType, ev)
+		}
+	}
+}

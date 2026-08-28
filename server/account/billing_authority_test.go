@@ -695,3 +695,125 @@ func TestTokenlessCanonicalUpdateUsesBoundExternalIdentity(t *testing.T) {
 		t.Fatalf("tokenless canonical update result=%+v err=%v", result, err)
 	}
 }
+
+// stripeAttemptRow is the persisted attempt state the Stripe checkout webhook
+// path must be able to observe but, on an unbindable or already-bound event,
+// must not move.
+type stripeAttemptRow struct {
+	UserID, Provider, ProductID, State, ProviderSessionID, ProviderSubscriptionID string
+	Epoch                                                                         int64
+}
+
+func mustStripeAttemptRow(t *testing.T, store *SQLiteStore, attemptID string) stripeAttemptRow {
+	t.Helper()
+	var got stripeAttemptRow
+	if err := store.db.QueryRow(`SELECT user_id,provider,product_id,state,provider_session_id,provider_subscription_id,epoch FROM billing_purchase_attempts WHERE id=?`, attemptID).
+		Scan(&got.UserID, &got.Provider, &got.ProductID, &got.State, &got.ProviderSessionID, &got.ProviderSubscriptionID, &got.Epoch); err != nil {
+		t.Fatalf("read attempt %s: %v", attemptID, err)
+	}
+	return got
+}
+
+// dispatchedStripeAttempt returns a fresh store holding one user with a single
+// dispatched Stripe attempt bound to sessionID.
+func dispatchedStripeAttempt(t *testing.T, email, sessionID string) (*SQLiteStore, string, BillingPurchaseAttempt) {
+	t.Helper()
+	store := newTestStore(t)
+	ctx := context.Background()
+	u, err := store.UpsertUserByEmail(ctx, email, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	authority, err := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{UserID: u.ID, Provider: ProviderStripe, Now: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt, _, err := store.DispatchBillingPurchase(ctx, authority, "price_pro_monthly", 101)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetBillingPurchaseProviderSession(ctx, u.ID, attempt.ID, sessionID, "https://checkout.stripe.test/"+sessionID); err != nil {
+		t.Fatal(err)
+	}
+	return store, u.ID, attempt
+}
+
+// The dispatched bind stays a CAS on state='dispatched'. Repeating it with the
+// identical subscription is the ordinary Stripe redelivery and must succeed
+// without moving anything.
+func TestBindStripePurchaseSubscriptionDispatchedBindIsIdempotent(t *testing.T) {
+	store, uid, attempt := dispatchedStripeAttempt(t, "bind-dispatched@example.test", "cs_dispatched")
+	ctx := context.Background()
+	for i := 0; i < 2; i++ {
+		if err := store.BindStripePurchaseSubscription(ctx, uid, attempt.ID, "cs_dispatched", "sub_dispatched"); err != nil {
+			t.Fatalf("bind %d: %v", i, err)
+		}
+	}
+	got := mustStripeAttemptRow(t, store, attempt.ID)
+	if got.State != "dispatched" || got.ProviderSubscriptionID != "sub_dispatched" {
+		t.Fatalf("dispatched bind state=%+v", got)
+	}
+}
+
+// When the subscription event resolved this exact attempt first, the later
+// checkout.session.completed must read as already-done rather than ambiguous:
+// same user, same attempt, same session, same non-empty subscription.
+func TestBindStripePurchaseSubscriptionAcceptsExactResolvedAttempt(t *testing.T) {
+	store, uid, attempt := dispatchedStripeAttempt(t, "bind-resolved-exact@example.test", "cs_exact")
+	ctx := context.Background()
+	if _, err := store.db.ExecContext(ctx, `UPDATE billing_purchase_attempts SET state='resolved',provider_subscription_id='sub_exact' WHERE id=?`, attempt.ID); err != nil {
+		t.Fatal(err)
+	}
+	before := mustStripeAttemptRow(t, store, attempt.ID)
+	for i := 0; i < 2; i++ {
+		if err := store.BindStripePurchaseSubscription(ctx, uid, attempt.ID, "cs_exact", "sub_exact"); err != nil {
+			t.Fatalf("exact resolved bind %d: %v", i, err)
+		}
+	}
+	if got := mustStripeAttemptRow(t, store, attempt.ID); got != before {
+		t.Fatalf("exact resolved bind mutated the attempt: %+v want %+v", got, before)
+	}
+}
+
+// Adversarial: everything that is NOT the exact same already-bound purchase
+// stays ambiguous. The resolved-with-empty-subscription case is the money
+// boundary — an abandoned attempt that some other path resolved without a
+// subscription must never be handed a subscription by the checkout webhook,
+// because that would let one Checkout observation bind a purchase nobody
+// proved happened.
+func TestBindStripePurchaseSubscriptionRejectsInexactResolvedAttempt(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name                   string
+		resolvedSubscriptionID string
+		bindSessionID          string
+		bindSubscriptionID     string
+		useOtherUser           bool
+	}{
+		{name: "resolved_empty_subscription", resolvedSubscriptionID: "", bindSessionID: "cs_inexact", bindSubscriptionID: "sub_inexact"},
+		{name: "resolved_different_subscription", resolvedSubscriptionID: "sub_other", bindSessionID: "cs_inexact", bindSubscriptionID: "sub_inexact"},
+		{name: "resolved_different_session", resolvedSubscriptionID: "sub_inexact", bindSessionID: "cs_other", bindSubscriptionID: "sub_inexact"},
+		{name: "resolved_different_user", resolvedSubscriptionID: "sub_inexact", bindSessionID: "cs_inexact", bindSubscriptionID: "sub_inexact", useOtherUser: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store, uid, attempt := dispatchedStripeAttempt(t, "bind-"+tc.name+"@example.test", "cs_inexact")
+			if _, err := store.db.ExecContext(ctx, `UPDATE billing_purchase_attempts SET state='resolved',provider_subscription_id=? WHERE id=?`, tc.resolvedSubscriptionID, attempt.ID); err != nil {
+				t.Fatal(err)
+			}
+			if tc.useOtherUser {
+				other, err := store.UpsertUserByEmail(ctx, "bind-other-"+tc.name+"@example.test", "")
+				if err != nil {
+					t.Fatal(err)
+				}
+				uid = other.ID
+			}
+			before := mustStripeAttemptRow(t, store, attempt.ID)
+			if err := store.BindStripePurchaseSubscription(ctx, uid, attempt.ID, tc.bindSessionID, tc.bindSubscriptionID); !errors.Is(err, ErrBillingPurchaseAmbiguous) {
+				t.Fatalf("bind = %v, want ErrBillingPurchaseAmbiguous", err)
+			}
+			if got := mustStripeAttemptRow(t, store, attempt.ID); got != before {
+				t.Fatalf("rejected bind mutated the attempt: %+v want %+v", got, before)
+			}
+		})
+	}
+}

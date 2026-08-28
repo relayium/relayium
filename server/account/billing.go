@@ -1304,7 +1304,25 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
-			if ev.MetadataBillingAttemptID != "" {
+			// Which checkout events may skip the bind is decided by the event
+			// TYPE together with an empty subscription, not by a generic "is
+			// the subscription id empty" test. Stripe delivers
+			// checkout.session.expired and .async_payment_failed carrying this
+			// product's client reference and attempt metadata, but when the
+			// event itself carries no subscription there is nothing to bind
+			// yet: this event observed no subscription. So ACK the observation
+			// and leave the attempt untouched, rather than treating it as a
+			// failed bind; the previous unconditional bind returned 500 and
+			// made Stripe retry an event it could never satisfy. A later event
+			// on the same session (an async payment that succeeds after an
+			// earlier failure) still binds through this same path once it
+			// carries a subscription. checkout.session.completed and
+			// .async_payment_succeeded assert a purchase, so a missing
+			// subscription on those stays a loud failure. Either observation
+			// that does carry a real subscription still binds normally.
+			unbindableObservation := ev.SubscriptionID == "" &&
+				(ev.Type == "checkout.session.expired" || ev.Type == "checkout.session.async_payment_failed")
+			if ev.MetadataBillingAttemptID != "" && !unbindableObservation {
 				binder, ok := s.Store().(interface {
 					BindStripePurchaseSubscription(context.Context, string, string, string, string) error
 				})

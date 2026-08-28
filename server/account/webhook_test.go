@@ -836,3 +836,194 @@ func TestWebhookUnknownEventTypeIgnored200(t *testing.T) {
 		t.Fatalf("unknown event type must not change plan, got %q", u.PlanID)
 	}
 }
+
+// dispatchedStripeCheckout logs a user in and leaves them holding exactly one
+// dispatched Stripe attempt bound to sessionID — the state a real user is in
+// while the Stripe-hosted Checkout page is open and nothing has been charged.
+func dispatchedStripeCheckout(t *testing.T, ts *httptest.Server, store *SQLiteStore, mail *capturingMailer, email, sessionID string) (string, BillingPurchaseAttempt) {
+	t.Helper()
+	ctx := context.Background()
+	loginCookie(t, ts, mail, email)
+	uid := mustUserID(t, store, email)
+	authority, err := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{UserID: uid, Provider: ProviderStripe, Now: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt, _, err := store.DispatchBillingPurchase(ctx, authority, "price_pro_m", 101)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetBillingPurchaseProviderSession(ctx, uid, attempt.ID, sessionID, "https://checkout.stripe.test/"+sessionID); err != nil {
+		t.Fatal(err)
+	}
+	return uid, attempt
+}
+
+// A Checkout that expires unpaid, or whose async payment fails, is delivered
+// with this product's client_reference_id and billing_attempt_id metadata but,
+// in these fixtures, no subscription on the event. With nothing to bind yet,
+// the handler must acknowledge the observation and leave the attempt, plan and
+// authority generation exactly as they were. The previous unconditional bind
+// turned this into ErrBillingPurchaseAmbiguous → 500, and Stripe retried an
+// event it could never satisfy until it gave up. A later event on the same
+// session that does carry a subscription (an async payment succeeding after an
+// earlier failure) still reaches the bind path through this same handler.
+func TestAbandonedCheckoutObservationAcknowledgedWithoutBinding(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	secret := "whsec_abandoned_observation"
+	svc.biller = newWebhookFixtureClient(secret)
+	ctx := context.Background()
+	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
+	uid, attempt := dispatchedStripeCheckout(t, ts, store, mail, "abandoned-observation@example.test", "cs_abandoned")
+
+	beforeAttempt := mustStripeAttemptRow(t, store, attempt.ID)
+	beforeUser, err := store.GetUserByID(ctx, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeAuthority, ok, err := store.BillingAuthority(ctx, uid)
+	if err != nil || !ok {
+		t.Fatalf("authority ok=%v err=%v", ok, err)
+	}
+
+	for i, eventType := range []string{"checkout.session.expired", "checkout.session.async_payment_failed"} {
+		body := fmt.Sprintf(`{"id":"evt_abandoned_%d","type":%q,"created":%d,"livemode":false,"data":{"object":{"id":"cs_abandoned","object":"checkout.session","customer":"cus_abandoned","client_reference_id":%q,"metadata":{"user_id":%q,"billing_attempt_id":%q}}}}`,
+			i, eventType, 200+i, uid, uid, attempt.ID)
+		resp := postWebhook(t, ts, secret, body)
+		responseBody, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s status=%d body=%s, want 200", eventType, resp.StatusCode, responseBody)
+		}
+		if got := mustStripeAttemptRow(t, store, attempt.ID); got != beforeAttempt {
+			t.Fatalf("%s moved the attempt: %+v, want %+v", eventType, got, beforeAttempt)
+		}
+		u, err := store.GetUserByID(ctx, uid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if u.PlanID != beforeUser.PlanID || u.PlanSource != beforeUser.PlanSource ||
+			u.SubscriptionStatus != beforeUser.SubscriptionStatus || u.StripeSubscriptionID != beforeUser.StripeSubscriptionID {
+			t.Fatalf("%s changed entitlement: plan=%q source=%q status=%q sub=%q", eventType, u.PlanID, u.PlanSource, u.SubscriptionStatus, u.StripeSubscriptionID)
+		}
+		after, ok, err := store.BillingAuthority(ctx, uid)
+		if err != nil || !ok || after.Epoch != beforeAuthority.Epoch || after.IntentID != beforeAuthority.IntentID {
+			t.Fatalf("%s advanced the authority generation: %+v want %+v (ok=%v err=%v)", eventType, after, beforeAuthority, ok, err)
+		}
+	}
+}
+
+// The exemption above is keyed on the event TYPE together with an empty
+// subscription, not on a generic "no subscription" check.
+// checkout.session.completed and
+// checkout.session.async_payment_succeeded assert a purchase: a missing
+// subscription there is a real inconsistency between Stripe and this product,
+// so the delivery must still fail loudly and stay visible in Stripe's retry
+// queue rather than being silently acknowledged.
+func TestPaidCheckoutWithoutSubscriptionStillFailsLoudly(t *testing.T) {
+	t.Run("completed", func(t *testing.T) {
+		ts, svc, store, mail := newBillingServer(t)
+		secret := "whsec_completed_no_sub"
+		svc.biller = newWebhookFixtureClient(secret)
+		mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
+		uid, attempt := dispatchedStripeCheckout(t, ts, store, mail, "completed-no-sub@example.test", "cs_completed_no_sub")
+		body := fmt.Sprintf(`{"id":"evt_completed_no_sub","type":"checkout.session.completed","created":200,"livemode":false,"data":{"object":{"id":"cs_completed_no_sub","object":"checkout.session","customer":"cus_completed_no_sub","client_reference_id":%q,"metadata":{"billing_attempt_id":%q}}}}`, uid, attempt.ID)
+		resp := postWebhook(t, ts, secret, body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("completed without subscription = %d, want 500", resp.StatusCode)
+		}
+	})
+
+	t.Run("async_payment_succeeded", func(t *testing.T) {
+		ts, svc, store, mail := newBillingServer(t)
+		secret := "whsec_async_success_no_sub"
+		mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
+		uid, attempt := dispatchedStripeCheckout(t, ts, store, mail, "async-success-no-sub@example.test", "cs_async_no_sub")
+		// A canonical payment chain that really did charge, yet names no
+		// subscription: the money moved and the attempt cannot be bound.
+		provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			switch r.URL.Path {
+			case "/v1/checkout/sessions/cs_async_no_sub":
+				fmt.Fprintf(w, `{"id":"cs_async_no_sub","customer":"cus_async_no_sub","client_reference_id":%q,"payment_intent":"pi_async_no_sub","payment_status":"paid"}`, uid)
+			case "/v1/payment_intents/pi_async_no_sub":
+				io.WriteString(w, `{"id":"pi_async_no_sub","latest_charge":"ch_async_no_sub"}`)
+			default:
+				t.Errorf("unexpected canonical read: %s", r.URL.Path)
+			}
+		}))
+		defer provider.Close()
+		client := newWebhookFixtureClient(secret)
+		client.base, client.http = provider.URL, provider.Client()
+		svc.biller = client
+
+		body := fmt.Sprintf(`{"id":"evt_async_success_no_sub","type":"checkout.session.async_payment_succeeded","created":200,"livemode":false,"data":{"object":{"id":"cs_async_no_sub","object":"checkout.session","customer":"cus_async_no_sub","client_reference_id":%q,"payment_status":"paid","metadata":{"billing_attempt_id":%q}}}}`, uid, attempt.ID)
+		resp := postWebhook(t, ts, secret, body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("async success without subscription = %d, want 500", resp.StatusCode)
+		}
+	})
+}
+
+// Stripe does not order webhook deliveries. When customer.subscription.* wins
+// the race, ApplyAuthorizedStripeLifecycle already moves this exact attempt to
+// 'resolved' with this exact subscription; the checkout.session.completed that
+// follows then finds nothing in 'dispatched'. That is the same purchase
+// arriving twice, not an ambiguous one, so the later delivery — and any
+// redelivery of it — must be idempotent success rather than a permanent 500.
+func TestCompletedCheckoutAfterSubscriptionResolvedAttemptIsIdempotent(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	secret := "whsec_sub_first"
+	svc.biller = newWebhookFixtureClient(secret)
+	ctx := context.Background()
+	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
+	uid, attempt := dispatchedStripeCheckout(t, ts, store, mail, "sub-first@example.test", "cs_sub_first")
+	beforeAuthority, _, err := store.BillingAuthority(ctx, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	subscriptionBody := fmt.Sprintf(`{"id":"evt_sub_first","type":"customer.subscription.updated","created":200,"livemode":false,"data":{"object":{"id":"sub_first","object":"subscription","customer":"cus_sub_first","status":"active","current_period_end":9999,"metadata":{"user_id":%q,"billing_attempt_id":%q},"items":{"data":[{"price":{"id":"price_pro_m"}}]}}}}`, uid, attempt.ID)
+	resp := postWebhook(t, ts, secret, subscriptionBody)
+	responseBody, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("subscription-first status=%d body=%s", resp.StatusCode, responseBody)
+	}
+	resolved := mustStripeAttemptRow(t, store, attempt.ID)
+	if resolved.State != "resolved" || resolved.ProviderSubscriptionID != "sub_first" {
+		t.Fatalf("subscription-first did not resolve the attempt: %+v", resolved)
+	}
+
+	// Two deliveries with distinct event ids: the first is the out-of-order
+	// completed event, the second a redelivery of the same fact. Distinct ids
+	// keep both from being short-circuited by the webhook ledger, so each one
+	// actually reaches the binder.
+	for i := 0; i < 2; i++ {
+		body := fmt.Sprintf(`{"id":"evt_completed_after_sub_%d","type":"checkout.session.completed","created":%d,"livemode":false,"data":{"object":{"id":"cs_sub_first","object":"checkout.session","customer":"cus_sub_first","subscription":"sub_first","client_reference_id":%q,"metadata":{"billing_attempt_id":%q}}}}`,
+			i, 201+i, uid, attempt.ID)
+		resp := postWebhook(t, ts, secret, body)
+		responseBody, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("completed delivery %d status=%d body=%s, want 200", i, resp.StatusCode, responseBody)
+		}
+		if got := mustStripeAttemptRow(t, store, attempt.ID); got != resolved {
+			t.Fatalf("completed delivery %d moved the resolved attempt: %+v want %+v", i, got, resolved)
+		}
+	}
+
+	u, err := store.GetUserByID(ctx, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.PlanID != "pro" || u.StripeSubscriptionID != "sub_first" {
+		t.Fatalf("purchase did not land: plan=%q subscription=%q", u.PlanID, u.StripeSubscriptionID)
+	}
+	after, _, err := store.BillingAuthority(ctx, uid)
+	if err != nil || after.Epoch != beforeAuthority.Epoch {
+		t.Fatalf("idempotent replay advanced the authority generation: %+v want epoch %d (err=%v)", after, beforeAuthority.Epoch, err)
+	}
+}
