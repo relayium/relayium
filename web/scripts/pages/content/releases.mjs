@@ -53,6 +53,41 @@
 // left behind in them. The other seven locales are frozen archives: their copy
 // keeps the tag it was published with and is not moved release by release, so
 // only en and zh below change when a new macOS version ships.
+//
+// ── The Mac App Store version is the one thing the freeze does not cover ────
+// Since 2026-08-15 the same bullet also names the OTHER macOS channel, which is
+// versioned independently and moves on Apple's schedule rather than on a tag
+// here. That number was a literal, written nine times. Seven of those copies
+// live in archived locales nobody revisits, so on 2026-08-28 all nine still said
+// 1.3.1 — a version the listing had left behind two months earlier, and two days
+// after Apple published the one the record names today. An archive keeping the
+// direct tag it was published with is old; an archive naming a superseded App
+// Store version is WRONG, today, about a product a reader can open right now.
+//
+// Note that this comment names no CURRENT App Store version, deliberately. A
+// bare one here would be a tenth copy — and one the bump's link-span protection
+// cannot see, since a comment has no product link to carve out. The only
+// version literals in this file are direct-download tags, which the bump is
+// supposed to move.
+//
+// So the direct tag stays frozen per locale and the App Store version is
+// interpolated from `web/mac-app-store-release.json` in all nine. That is the
+// whole split: prose is archived, an operational pointer is not. `readMacAppStore-
+// Release` validates the record and throws, so a build that cannot state this
+// fact fails instead of rendering nine pages that quietly omit it —
+// `bumpReleaseDocs` requires this module to keep deriving it, and
+// releases.test.mjs pins all nine rendered sentences to the record.
+
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { readMacAppStoreRelease } from "../../macos-release-candidate.mjs";
+
+/** The published Mac App Store release. Read at generation time, from the one
+ *  record that owns it, and never written down again below. */
+const APP_STORE = readMacAppStoreRelease({
+  repoRoot: resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", ".."),
+});
 
 /**
  * Every published version, newest first: the tag and the date it was created.
@@ -118,7 +153,7 @@ const en = {
       ],
       bullets: [
         "The web app has no version number. It is deployed from the main branch as soon as its checks pass, so what you use in a browser is usually newer than the newest version listed here.",
-        "The macOS app is released under its own tag, macos-v1.3.8: a Developer ID-signed, Apple-notarized direct download from GitHub. The separately versioned Mac App Store release is currently 1.3.1. No version below ships either app. The iOS app is an engineering build and has not been released publicly.",
+        `The macOS app is released under its own tag, macos-v1.3.8: a Developer ID-signed, Apple-notarized direct download from GitHub. The separately versioned Mac App Store release is currently ${APP_STORE.version}. No version below ships either app. The iOS app is an engineering build and has not been released publicly.`,
         "A node does not follow this list by itself: it asks the server it belongs to which version to run, so a new version changes nothing until someone starts a rollout. The command-line tool updates with relayium update.",
       ],
     },
@@ -165,7 +200,7 @@ const zh = {
       ],
       bullets: [
         "网页版没有版本号。它在检查通过后就从 main 分支部署，所以你在浏览器里用到的，通常比这里最新的版本还要新。",
-        "macOS 应用用自己的标签 macos-v1.3.8 单独发布：这是一份经过 Developer ID 签名、通过 Apple 公证、直接从 GitHub 下载的安装包。独立维护版本号的 Mac App Store 版本当前为 1.3.1。下面任何一个版本都不包含这些应用。iOS 应用仍是开发版，尚未公开发布。",
+        `macOS 应用用自己的标签 macos-v1.3.8 单独发布：这是一份经过 Developer ID 签名、通过 Apple 公证、直接从 GitHub 下载的安装包。独立维护版本号的 Mac App Store 版本当前为 ${APP_STORE.version}。下面任何一个版本都不包含这些应用。iOS 应用仍是开发版，尚未公开发布。`,
         "节点不会自己跟着这个列表走：它会向所属的服务器询问该运行哪个版本，所以在有人发起灰度更新之前，新版本什么也不会改变。命令行工具用 relayium update 更新。",
       ],
     },
@@ -212,7 +247,7 @@ const ja = {
       ],
       bullets: [
         "ウェブアプリにバージョン番号はありません。チェックが通り次第 main ブランチからデプロイされるので、ブラウザで使っているものは、たいていここに並ぶ最新バージョンより新しいです。",
-        "macOS アプリは macos-v1.2.3 という独自のタグで別にリリースされます。Developer ID で署名し Apple の公証を通した GitHub からの直接ダウンロードです。別管理の Mac App Store 版は現在 1.3.1 です。以下のどのバージョンにも含まれていません。iOS アプリは開発ビルドであり、まだ公開されていません。",
+        `macOS アプリは macos-v1.2.3 という独自のタグで別にリリースされます。Developer ID で署名し Apple の公証を通した GitHub からの直接ダウンロードです。別管理の Mac App Store 版は現在 ${APP_STORE.version} です。以下のどのバージョンにも含まれていません。iOS アプリは開発ビルドであり、まだ公開されていません。`,
         "ノードはこの一覧を自分で追いかけません。所属するサーバーにどのバージョンを動かすか尋ねるため、誰かがロールアウトを始めるまで新しいバージョンは何も変えません。コマンドラインツールは relayium update で更新します。",
       ],
     },
@@ -259,7 +294,7 @@ const ko = {
       ],
       bullets: [
         "웹 앱에는 버전 번호가 없습니다. 검사가 통과하는 대로 main 브랜치에서 배포되므로, 브라우저에서 쓰는 것은 대개 여기 있는 최신 버전보다 새롭습니다.",
-        "macOS 앱은 macos-v1.2.3이라는 자체 태그로 따로 릴리스합니다. Developer ID로 서명하고 Apple 공증을 마친 GitHub 직접 다운로드입니다. 별도로 버전을 관리하는 Mac App Store 릴리스는 현재 1.3.1입니다. 아래 어떤 버전에도 포함되어 있지 않습니다. iOS 앱은 개발 빌드이며 아직 공개 릴리스가 아닙니다.",
+        `macOS 앱은 macos-v1.2.3이라는 자체 태그로 따로 릴리스합니다. Developer ID로 서명하고 Apple 공증을 마친 GitHub 직접 다운로드입니다. 별도로 버전을 관리하는 Mac App Store 릴리스는 현재 ${APP_STORE.version}입니다. 아래 어떤 버전에도 포함되어 있지 않습니다. iOS 앱은 개발 빌드이며 아직 공개 릴리스가 아닙니다.`,
         "노드는 이 목록을 스스로 따라가지 않습니다. 소속된 서버에 어떤 버전을 실행할지 물어보므로, 누군가 롤아웃을 시작하기 전까지 새 버전은 아무것도 바꾸지 않습니다. 명령줄 도구는 relayium update로 업데이트합니다.",
       ],
     },
@@ -308,7 +343,7 @@ const de = {
       ],
       bullets: [
         "Die Web-App hat keine Versionsnummer. Ausgeliefert wird aus dem main-Branch, sobald ihre Prüfungen grün sind — was du im Browser benutzt, ist also meist neuer als die neueste Version in dieser Liste.",
-        "Die macOS-App wird unter einem eigenen Tag veröffentlicht, macos-v1.2.3: ein mit Developer ID signierter, von Apple notarisierter Direkt-Download bei GitHub. Die separat versionierte Mac-App-Store-Version ist derzeit 1.3.1. Keine der Versionen unten enthält sie. Die iOS-App ist ein Entwicklungs-Build und wurde nicht öffentlich veröffentlicht.",
+        `Die macOS-App wird unter einem eigenen Tag veröffentlicht, macos-v1.2.3: ein mit Developer ID signierter, von Apple notarisierter Direkt-Download bei GitHub. Die separat versionierte Mac-App-Store-Version ist derzeit ${APP_STORE.version}. Keine der Versionen unten enthält sie. Die iOS-App ist ein Entwicklungs-Build und wurde nicht öffentlich veröffentlicht.`,
         "Ein Node folgt dieser Liste nicht von selbst: Er fragt den Server, zu dem er gehört, welche Version er ausführen soll. Eine neue Version ändert also nichts, bis jemand einen Rollout startet. Die CLI aktualisierst du mit relayium update.",
       ],
     },
@@ -355,7 +390,7 @@ const fr = {
       ],
       bullets: [
         "L'application web n'a pas de numéro de version. Elle est déployée depuis la branche main dès que ses vérifications passent : ce que vous utilisez dans le navigateur est donc généralement plus récent que la dernière version listée ici.",
-        "L'application macOS est publiée sous son propre tag, macos-v1.2.3 : un téléchargement direct depuis GitHub, signé Developer ID et notarisé par Apple. La version Mac App Store, gérée séparément, est actuellement la 1.3.1. Aucune version ci-dessous ne la contient. L'application iOS reste une version d'ingénierie, non diffusée publiquement.",
+        `L'application macOS est publiée sous son propre tag, macos-v1.2.3 : un téléchargement direct depuis GitHub, signé Developer ID et notarisé par Apple. La version Mac App Store, gérée séparément, est actuellement la ${APP_STORE.version}. Aucune version ci-dessous ne la contient. L'application iOS reste une version d'ingénierie, non diffusée publiquement.`,
         "Un nœud ne suit pas cette liste de lui-même : il demande au serveur auquel il appartient quelle version exécuter, si bien qu'une nouvelle version ne change rien tant que personne n'a lancé de déploiement progressif. La CLI se met à jour avec relayium update.",
       ],
     },
@@ -402,7 +437,7 @@ const ar = {
       ],
       bullets: [
         "تطبيق الويب ليس له رقم إصدار. يُنشر من فرع main حالما تجتاز فحوصه، فما تستخدمه في المتصفح يكون عادة أحدث من أحدث إصدار مذكور هنا.",
-        "تطبيق macOS يصدر بعلامته الخاصة macos-v1.2.3: تنزيل مباشر من GitHub موقّع بـ Developer ID وموثّق من Apple. وإصدار Mac App Store المنفصل في ترقيمه هو حاليًا 1.3.1. ولا يتضمنه أي إصدار في الأسفل. أما تطبيق iOS فنسخة تطوير لم تُنشر للعموم.",
+        `تطبيق macOS يصدر بعلامته الخاصة macos-v1.2.3: تنزيل مباشر من GitHub موقّع بـ Developer ID وموثّق من Apple. وإصدار Mac App Store المنفصل في ترقيمه هو حاليًا ${APP_STORE.version}. ولا يتضمنه أي إصدار في الأسفل. أما تطبيق iOS فنسخة تطوير لم تُنشر للعموم.`,
         "العقدة لا تتبع هذه القائمة من تلقاء نفسها: تسأل الخادم الذي تنتمي إليه أي إصدار تشغّل، فلا يغير الإصدار الجديد شيئًا حتى يبدأ أحدهم طرحًا تدريجيًا. أما أداة سطر الأوامر فتُحدَّث بالأمر relayium update.",
       ],
     },
@@ -449,7 +484,7 @@ const es = {
       ],
       bullets: [
         "La aplicación web no tiene número de versión. Se despliega desde la rama main en cuanto pasan sus comprobaciones, así que lo que usas en el navegador suele ser más reciente que la última versión de esta lista.",
-        "La aplicación de macOS se publica con su propia etiqueta, macos-v1.2.3: una descarga directa desde GitHub, firmada con Developer ID y notarizada por Apple. La versión de la Mac App Store, con numeración independiente, es actualmente la 1.3.1. Ninguna versión de abajo la incluye. La aplicación de iOS es una compilación de ingeniería y no se ha publicado.",
+        `La aplicación de macOS se publica con su propia etiqueta, macos-v1.2.3: una descarga directa desde GitHub, firmada con Developer ID y notarizada por Apple. La versión de la Mac App Store, con numeración independiente, es actualmente la ${APP_STORE.version}. Ninguna versión de abajo la incluye. La aplicación de iOS es una compilación de ingeniería y no se ha publicado.`,
         "Un nodo no sigue esta lista por su cuenta: le pregunta al servidor al que pertenece qué versión ejecutar, así que una versión nueva no cambia nada hasta que alguien inicia un despliegue gradual. La CLI se actualiza con relayium update.",
       ],
     },
@@ -496,7 +531,7 @@ const pt = {
       ],
       bullets: [
         "O app web não tem número de versão. Ele é implantado a partir do branch main assim que as verificações passam, então o que você usa no navegador costuma ser mais novo do que a versão mais recente desta lista.",
-        "O app de macOS é publicado com a própria tag, macos-v1.2.3: um download direto do GitHub, assinado com Developer ID e notarizado pela Apple. A versão da Mac App Store, com numeração independente, é atualmente a 1.3.1. Nenhuma versão abaixo o inclui. O app de iOS é um build de engenharia e não foi publicado.",
+        `O app de macOS é publicado com a própria tag, macos-v1.2.3: um download direto do GitHub, assinado com Developer ID e notarizado pela Apple. A versão da Mac App Store, com numeração independente, é atualmente a ${APP_STORE.version}. Nenhuma versão abaixo o inclui. O app de iOS é um build de engenharia e não foi publicado.`,
         "Um nó não segue esta lista sozinho: ele pergunta ao servidor a que pertence qual versão executar, então uma versão nova não muda nada até alguém iniciar uma implantação gradual. A CLI se atualiza com relayium update.",
       ],
     },

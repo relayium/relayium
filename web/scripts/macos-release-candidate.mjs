@@ -35,6 +35,7 @@
 // makes the candidate; the suites judge it, and they run before publication.
 
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import process from "node:process";
@@ -54,6 +55,48 @@ export const RELEASE_DOCS = [
 ];
 
 export const RELEASE_HISTORY_DOC = "web/scripts/pages/content/releases.mjs";
+
+/**
+ * The canonical record of the OTHER published macOS channel.
+ *
+ * Relayium ships macOS twice, and the two are versioned independently: a
+ * Developer ID DMG on GitHub, described by `web/native-releases.json`, and a Mac
+ * App Store listing, described here. Nothing in the direct manifest can say what
+ * Apple is currently serving — Apple decides when a submitted build goes live
+ * and the repository finds out afterwards — so the App Store version needs a
+ * record of its own or it becomes a literal copied into prose and never moved
+ * again. It did: every document here still said 1.3.1 while the listing moved
+ * on through later releases to 1.3.8, and the suites that checked those
+ * documents held them to a literal copied out of the same documents.
+ *
+ * This file is NOT part of a Developer ID release candidate — see
+ * `CANDIDATE_PATHS`, which deliberately does not list it, so a release commit
+ * that also moved the App Store fact is rejected as mixing two channels.
+ */
+export const MAC_APP_STORE_RELEASE_DOC = "web/mac-app-store-release.json";
+
+/**
+ * The release documents that STATE the App Store version as a literal, and are
+ * therefore both protected from the bump and held to the record.
+ *
+ * `content/releases.mjs` is not among them because it derives the value instead;
+ * `APP_STORE_DERIVED_DOCS` is the rule that keeps it that way.
+ */
+export const APP_STORE_CLAIM_DOCS = ["README.md", "apps/README.md"];
+
+/**
+ * The release documents that must DERIVE the App Store version rather than
+ * restate it.
+ *
+ * `content/releases.mjs` carries the claim in nine languages. Nine literals is
+ * nine things to remember, and the seven archived ones are exactly the copies
+ * nobody thinks to move — which is how seven live pages spent two months naming
+ * a superseded App Store version. It reads the record instead, and this list is
+ * what fails if someone inlines the number back: a literal there would be
+ * invisible to the link-span protection below and would follow the next
+ * Developer ID bump straight into a false claim.
+ */
+export const APP_STORE_DERIVED_DOCS = [RELEASE_HISTORY_DOC];
 
 /**
  * The artifact-derived half of the candidate: written by the workflow from the
@@ -157,6 +200,97 @@ function assertVersion(version, label) {
   }
 }
 
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Escape a literal for embedding in a `RegExp`. */
+function quoteRegExp(literal) {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Validate a decoded App Store record, or refuse it.
+ *
+ * Every consumer — this file when it protects the claim, `content/releases.mjs`
+ * when it renders nine pages, `MacSurfaceGuardTests` when it checks the READMEs
+ * — resolves a PUBLIC claim from this record. A half-read one does not produce a
+ * smaller claim, it produces a confident wrong one, so each field is checked for
+ * the property its consumers actually depend on rather than merely for presence.
+ *
+ * The URL is the case worth naming. A numeric Apple ID and a resolvable
+ * apps.apple.com link each look correct alone, and a record where they disagree
+ * writes a README sentence that sends readers to somebody else's app. So the
+ * link is required to be the canonical product page FOR that ID, which makes the
+ * two fields one fact stored twice and checked against itself.
+ */
+export function validateMacAppStoreRelease(record, source = MAC_APP_STORE_RELEASE_DOC) {
+  if (record === null || typeof record !== "object" || Array.isArray(record)) {
+    throw new Error(`${source} is not a Mac App Store release record: ${JSON.stringify(record)}`);
+  }
+  if (record.schema !== 1) {
+    throw new Error(`${source} declares schema ${JSON.stringify(record.schema)}, not the schema 1 this tool reads`);
+  }
+  if (typeof record.version !== "string" || !VERSION.test(record.version)) {
+    throw new Error(`${source} carries no supported App Store version: ${JSON.stringify(record.version)}`);
+  }
+  if (typeof record.appleId !== "string" || !/^[0-9]+$/.test(record.appleId)) {
+    throw new Error(`${source} carries no App Apple ID: ${JSON.stringify(record.appleId)}`);
+  }
+  // A real calendar day, not merely ten characters shaped like one: `2026-02-30`
+  // passes the pattern and is not a date anything was published on. The
+  // round-trip is guarded by an explicit validity check first, because
+  // `2026-13-45` parses to an Invalid Date whose `toISOString` THROWS — a
+  // RangeError escaping this function instead of the refusal it is meant to be.
+  if (typeof record.publishedAt !== "string" || !ISO_DAY.test(record.publishedAt)
+      || Number.isNaN(Date.parse(`${record.publishedAt}T00:00:00Z`))
+      || new Date(`${record.publishedAt}T00:00:00Z`).toISOString().slice(0, 10) !== record.publishedAt) {
+    throw new Error(`${source} carries no ISO-8601 publication date: ${JSON.stringify(record.publishedAt)}`);
+  }
+  if (record.url !== `https://apps.apple.com/app/id${record.appleId}`) {
+    throw new Error(`${source} names a product URL that does not address App Apple ID ${record.appleId}: ${JSON.stringify(record.url)}`);
+  }
+  return record;
+}
+
+/**
+ * Read the canonical App Store record, failing closed on every way it can be
+ * absent or unusable.
+ *
+ * Synchronous because `content/releases.mjs` is plain data evaluated at import,
+ * and because a build that cannot state this fact must not proceed to render
+ * nine pages that quietly omit it.
+ */
+export function readMacAppStoreRelease({ repoRoot }) {
+  const path = resolve(repoRoot, MAC_APP_STORE_RELEASE_DOC);
+  let raw;
+  try {
+    raw = readFileSync(path, "utf8");
+  } catch (cause) {
+    throw new Error(`${MAC_APP_STORE_RELEASE_DOC} is missing or unreadable: ${cause.message}`);
+  }
+  let record;
+  try {
+    record = JSON.parse(raw);
+  } catch (cause) {
+    throw new Error(`${MAC_APP_STORE_RELEASE_DOC} is not valid JSON: ${cause.message}`);
+  }
+  return validateMacAppStoreRelease(record);
+}
+
+/**
+ * Every Mac App Store claim in a document: a Markdown link whose target is the
+ * canonical product page.
+ *
+ * The link is what makes the claim identifiable. Once both channels sit at the
+ * same version — 1.3.8 on each since 2026-08-26 — the version literal alone
+ * carries no information about which channel a sentence is talking about, and
+ * the href is the only part of the prose that does.
+ */
+function appStoreClaimPattern(url) {
+  return new RegExp(`\\[[^\\]\\n]*\\]\\(${quoteRegExp(url)}\\)`, "g");
+}
+
+const appStoreClaims = (text, url) => text.match(appStoreClaimPattern(url)) ?? [];
+
 const CLI_TAG = /^v(\d+)\.(\d+)\.(\d+)$/;
 const TAG_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const RELEASES_BLOCK = /export const RELEASES = \[\n(?:  \{ version: "v\d+\.\d+\.\d+", date: "\d{4}-\d{2}-\d{2}" \},\n)+\];/;
@@ -237,13 +371,106 @@ export async function syncCliReleaseHistory({ repoRoot, tagTable } = {}) {
  *     that nobody archived or uploaded — the precise class of untrue
  *     distribution claim the surface guards exist to prevent. It stays put and a
  *     human edits it when the App Store side actually moves.
+ *
+ * What this pattern CANNOT do is the reason `bumpReleaseDocs` no longer applies
+ * it to whole documents. The published App Store version is 1.3.8 and so is the
+ * published Developer ID version; from 2026-08-26 the two channels name the same
+ * number, and no amount of look-around can tell "1.3.8 on the Mac App Store"
+ * from "1.3.8 direct download" — they differ by which product the sentence links
+ * to, not by how the digits are spelled. `appStoreClaimPattern` carves those
+ * links out and this pattern runs on what is left.
  */
-function releaseVersionPattern(version) {
+function releaseVersionPattern(version, { global = true } = {}) {
   const escaped = version.replace(/\./g, "\\.");
   return new RegExp(
     `(?<![0-9])(?<![0-9]\\.)${escaped}(?![0-9])(?!\\.[0-9])(?! \\([0-9])`,
-    "g",
+    global ? "g" : "",
   );
+}
+
+/** Rewrite `pattern` everywhere EXCEPT inside the document's App Store claims. */
+function rewriteOutsideAppStoreClaims(text, pattern, to, url) {
+  let out = "";
+  let cursor = 0;
+  for (const claim of text.matchAll(appStoreClaimPattern(url))) {
+    out += text.slice(cursor, claim.index).replace(pattern, to) + claim[0];
+    cursor = claim.index + claim[0].length;
+  }
+  return out + text.slice(cursor).replace(pattern, to);
+}
+
+/**
+ * Hold a derived document to deriving, by what it CONTAINS rather than by what
+ * it calls.
+ *
+ * `content/releases.mjs` states the claim in nine languages, seven of them in
+ * scripts this repository does not read, so the link-span protection that works
+ * on English Markdown has nothing to grip: `。` is not `. `, and a Chinese
+ * sentence carrying both the direct tag and the App Store claim is one
+ * unsplittable segment. The only durable rule is that the App Store version is
+ * not in there AT ALL.
+ *
+ * So the direct-download forms are removed — `macos-v<version>` and
+ * `macOS <version>`, both Latin in all nine locales — and the App Store version
+ * must not survive the removal. That holds whether or not the two channels are
+ * at the same version, and it does not care how the value is imported: an
+ * earlier check for the reader's NAME was defeated by an import alias whose
+ * identifier merely contained it.
+ *
+ * The name check is kept beside it, word-bounded, for the case the outcome check
+ * cannot see: a document that dropped the claim entirely restates nothing and
+ * would pass. `releases.test.mjs` is what actually holds the nine rendered
+ * sentences to the record; this is the tripwire that fires first, in the tool
+ * that assembles the release.
+ */
+function assertAppStoreDerived(doc, text, release) {
+  if (!/\breadMacAppStoreRelease\s*\(/.test(text)) {
+    throw new Error(`${doc} must read the Mac App Store version from ${MAC_APP_STORE_RELEASE_DOC}`);
+  }
+  const withoutDirectClaims = text
+    .replace(/macos-v[0-9]+(?:\.[0-9]+){1,2}/g, "")
+    .replace(/macOS [0-9]+(?:\.[0-9]+){1,2}/g, "");
+  if (releaseVersionPattern(release.version, { global: false }).test(withoutDirectClaims)) {
+    throw new Error(
+      `${doc} restates the Mac App Store release ${release.version} instead of deriving it from ${MAC_APP_STORE_RELEASE_DOC}`,
+    );
+  }
+}
+
+/**
+ * Hold a claim document to the canonical App Store record, in both directions.
+ *
+ * PRESENT and CURRENT. `MacSurfaceGuardTests` requires both READMEs to name the
+ * App Store product and its version, so a document that lost the claim is
+ * broken; and a document whose claim names a version the record does not is the
+ * state this repository was actually in for two months, protected from the bump
+ * and wrong the whole time. Protected staleness is still staleness.
+ *
+ * LINKED. The protection above is span-based, so a version stated in bare prose
+ * beside App Store wording is invisible to it and would follow the next
+ * Developer ID bump into a false claim. That is refused rather than silently
+ * mishandled: the segment split is conservative — lines, table cells and
+ * sentence ends — so it errs toward letting an unrelated sentence through
+ * rather than toward blocking a release over adjacent prose.
+ */
+function assertAppStoreClaims(doc, text, release) {
+  const claims = appStoreClaims(text, release.url);
+  if (claims.length === 0) {
+    throw new Error(`${doc} carries no Mac App Store release claim linking ${release.url}`);
+  }
+  for (const claim of claims) {
+    if (!claim.includes(release.version)) {
+      throw new Error(`${doc} does not name the Mac App Store release ${release.version}: ${claim}`);
+    }
+  }
+  const version = releaseVersionPattern(release.version, { global: false });
+  for (const segment of text.replace(appStoreClaimPattern(release.url), "").split(/\n|\||(?<=\.)\s/)) {
+    if (segment.includes("App Store") && version.test(segment)) {
+      throw new Error(
+        `${doc} names the Mac App Store release ${release.version} outside a Mac App Store link: ${segment.trim()}`,
+      );
+    }
+  }
 }
 
 /**
@@ -263,6 +490,23 @@ function releaseVersionPattern(version) {
  * the prose drifted off the published version at some earlier point, and
  * silently returning "nothing to do" would hand the publication step a candidate
  * that is incomplete in exactly the way this whole file exists to prevent.
+ *
+ * ── The Mac App Store claim, which must NOT move ────────────────────────────
+ * Until 2026-08-26 this was safe by accident. The App Store literal in these
+ * documents was 1.3.1 while the Developer ID release was 1.3.8, so a bump keyed
+ * on 1.3.8 could not reach it however blunt it was. Both channels are at 1.3.8
+ * now. Every occurrence of `from` in these documents is ambiguous, and a bump to
+ * 1.3.9 would rewrite "1.3.8 on the Mac App Store" into a public claim about a
+ * build Apple has never reviewed — the same class of untrue distribution claim
+ * the surface guards exist to prevent, produced by the tool that assembles the
+ * release.
+ *
+ * So the bump is scoped: `web/mac-app-store-release.json` says which version the
+ * App Store is at, the claims that link the product page are carved out of the
+ * rewrite, and the result is checked to be byte-identical to what was read. All
+ * of it fails closed. A missing or malformed record, a document that lost its
+ * claim, a claim that has drifted off the record, or a version stated outside a
+ * link is a refusal — because the alternative to refusing here is publishing.
  */
 export async function bumpReleaseDocs({ repoRoot, from, to, docs = RELEASE_DOCS }) {
   assertVersion(from, "the previously published version");
@@ -270,6 +514,9 @@ export async function bumpReleaseDocs({ repoRoot, from, to, docs = RELEASE_DOCS 
   if (from === to) {
     throw new Error(`the published version is already ${to}; nothing to bump`);
   }
+  // Read first, so a tree with no App Store record is refused before anything is
+  // rewritten rather than best-effort bumped without the protection.
+  const appStore = readMacAppStoreRelease({ repoRoot });
 
   // Every document is read and checked before any is written, so a third
   // document that no longer names `from` cannot leave the first two rewritten.
@@ -280,10 +527,23 @@ export async function bumpReleaseDocs({ repoRoot, from, to, docs = RELEASE_DOCS 
   for (const doc of docs) {
     const path = resolve(repoRoot, doc);
     const before = await readFile(path, "utf8");
-    const after = before.replace(pattern, to);
+    const after = rewriteOutsideAppStoreClaims(before, pattern, to, appStore.url);
     if (after === before) {
       throw new Error(`${doc} names no published macOS release ${from}`);
     }
+    if (APP_STORE_CLAIM_DOCS.includes(doc)) {
+      assertAppStoreClaims(doc, before, appStore);
+      // The carve-out, proven rather than trusted. Comparing the claims found in
+      // the rewritten text against the ones read is what would have caught this
+      // whole defect class if it had existed: it fails on the OUTPUT, so no
+      // refinement of the pattern can quietly stop protecting them.
+      const moved = appStoreClaims(after, appStore.url);
+      const kept = appStoreClaims(before, appStore.url);
+      if (moved.join("\n") !== kept.join("\n")) {
+        throw new Error(`${doc}'s Mac App Store claim was rewritten by the ${from} -> ${to} bump`);
+      }
+    }
+    if (APP_STORE_DERIVED_DOCS.includes(doc)) assertAppStoreDerived(doc, before, appStore);
     rewritten.push({ doc, path, after });
   }
   for (const { path, after } of rewritten) {
