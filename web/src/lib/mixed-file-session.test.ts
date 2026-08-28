@@ -5,6 +5,7 @@ import {
   createMixedFileSession,
   MIXED_FILE_COMPLETE_STALL_MS,
   MIXED_FILE_GAP_TIMEOUT_MS,
+  MIXED_FILE_SEND_PROGRESS_STALL_MS,
 } from "./mixed-file-session.svelte";
 import { SaveCancelledError, type SaveTarget } from "./filesink";
 import type { MixedPeerLink } from "./peer-link.svelte";
@@ -2212,63 +2213,63 @@ describe("stored-key handoff on the file lane", () => {
   });
 });
 
+/**
+ * A sender whose peer is hand-driven.
+ *
+ * A second live session would ACK on its own schedule, which is exactly what
+ * these cases must control: "the receiver is slow but still progressing" and
+ * "the receiver is talking but making no progress" differ only in which frames
+ * arrive at which point on the clock.
+ */
+async function senderOnly() {
+  const aKey = generateKeyPair();
+  const bKey = generateKeyPair();
+  const aKeys = await deriveSession("initiator", aKey, bKey.publicKey);
+  const file = channelPair();
+  const text = channelPair();
+  const aLink: MixedPeerLink = {
+    peerId: "b",
+    role: "initiator",
+    conn: { close: vi.fn(), maxFrameBytes: () => CHROME_MAX_MESSAGE_BYTES } as unknown as MixedPeerLink["conn"],
+    fileChannel: file.a as unknown as RTCDataChannel,
+    textChannel: text.a as unknown as RTCDataChannel,
+    keys: aKeys,
+    sas: "123456",
+    fileSender: new Sender(),
+    fileReceiver: new Receiver(),
+    textSender: new TextSender(),
+    textReceiver: new TextReceiver(),
+    storedKeysSender: new StoredKeysSender(),
+    storedKeysReceiver: new StoredKeysReceiver(),
+  };
+  const a = createMixedFileSession({ ensureLink: vi.fn(async () => aLink) });
+  a.attach(aLink);
+  return { a, aLink, file };
+}
+
+/** Fake-clock `until`: step the clock 1 ms at a time so work that is not
+ *  clock-bound (sealing, File reads, the channels' microtask delivery) still
+ *  settles, without letting a 150 s window elapse by accident. */
+async function settle(check: () => boolean, budgetMs = 3_000) {
+  for (let i = 0; i < budgetMs; i++) {
+    if (check()) return;
+    await vi.advanceTimersByTimeAsync(1);
+  }
+  throw new Error("condition timed out on the fake clock");
+}
+
+/** Deliver a peer frame and let the lane react, without moving the clock. */
+async function peerSends(channel: FakeChannel, frame: ArrayBuffer | ArrayBufferView) {
+  channel.send(frame);
+  await vi.advanceTimersByTimeAsync(0);
+}
+
 // The sender's wait for COMPLETE is a STALL bound, not a cap on how long
 // finishing may take. The distinction is the whole defect: on the ~7 KB/s
 // cross-continent relay path measured 2026-08-26 the receiver's first paced ACK
 // arrives after the old 60 s one-shot deadline, so a transfer that was still
 // making durable progress — and did complete — was reported Failed.
 describe("mixed file session completion stall window", () => {
-  /**
-   * A sender whose peer is hand-driven.
-   *
-   * A second live session would ACK on its own schedule, which is exactly what
-   * these cases must control: "the receiver is slow but still progressing" and
-   * "the receiver is talking but making no progress" differ only in which frames
-   * arrive at which point on the clock.
-   */
-  async function senderOnly() {
-    const aKey = generateKeyPair();
-    const bKey = generateKeyPair();
-    const aKeys = await deriveSession("initiator", aKey, bKey.publicKey);
-    const file = channelPair();
-    const text = channelPair();
-    const aLink: MixedPeerLink = {
-      peerId: "b",
-      role: "initiator",
-      conn: { close: vi.fn(), maxFrameBytes: () => CHROME_MAX_MESSAGE_BYTES } as unknown as MixedPeerLink["conn"],
-      fileChannel: file.a as unknown as RTCDataChannel,
-      textChannel: text.a as unknown as RTCDataChannel,
-      keys: aKeys,
-      sas: "123456",
-      fileSender: new Sender(),
-      fileReceiver: new Receiver(),
-      textSender: new TextSender(),
-      textReceiver: new TextReceiver(),
-      storedKeysSender: new StoredKeysSender(),
-      storedKeysReceiver: new StoredKeysReceiver(),
-    };
-    const a = createMixedFileSession({ ensureLink: vi.fn(async () => aLink) });
-    a.attach(aLink);
-    return { a, aLink, file };
-  }
-
-  /** Fake-clock `until`: step the clock 1 ms at a time so work that is not
-   *  clock-bound (sealing, File reads, the channels' microtask delivery) still
-   *  settles, without letting a 150 s window elapse by accident. */
-  async function settle(check: () => boolean, budgetMs = 3_000) {
-    for (let i = 0; i < budgetMs; i++) {
-      if (check()) return;
-      await vi.advanceTimersByTimeAsync(1);
-    }
-    throw new Error("condition timed out on the fake clock");
-  }
-
-  /** Deliver a peer frame and let the lane react, without moving the clock. */
-  async function peerSends(channel: FakeChannel, frame: ArrayBuffer | ArrayBufferView) {
-    channel.send(frame);
-    await vi.advanceTimersByTimeAsync(0);
-  }
-
   const BODY = 4096;
   const source = (name: string) => [{ file: new File([new Uint8Array(BODY)], name) }];
 
@@ -2418,4 +2419,214 @@ describe("mixed file session completion stall window", () => {
     expect(a.errorKey).toBe("failed");
     expect(vi.getTimerCount()).toBe(0);
   });
+});
+
+// One phase earlier than the suite above, and the same defect: the sender's wait
+// for flow-control CREDIT is a stall bound, not a cap on how long sending may
+// take. Once FLOW_WINDOW bytes are outstanding the batch cannot move until the
+// receiver acks, and the receiver acks at most once per FLOW_ACK_INTERVAL of
+// bytes it has durably written — ~75 s apart on the ~7 KB/s relay path measured
+// 2026-08-26. A 60 s bound there fails a Web-originated file whose receiver is
+// writing steadily, as soon as it is larger than the window.
+describe("mixed file session send credit stall window", () => {
+  /** Comfortably larger than FLOW_WINDOW plus every byte the paced ACKs below
+   *  release, so the batch is still parked on credit when the last one lands. */
+  const BODY = 14 * 1024 * 1024;
+  const source = (name: string) => [{ file: new File([new Uint8Array(BODY)], name) }];
+  /** The measured cadence this bound exists to out-wait. Seven of these is over
+   *  500 s of sending — more than three whole windows. */
+  const ACK_EVERY_MS = 75_000;
+  const ACK_ROUNDS = 7;
+
+  afterEach(() => { vi.useRealTimers(); });
+
+  /** Bytes of file content this side has put on the wire, which is exactly the
+   *  `sentBytes` the credit gate compares against `acked`. */
+  const onWire = (channel: FakeChannel) => channel.sent
+    .filter((frame) => new Uint8Array(frame)[0] === FRAME.CHUNK)
+    .reduce((sum, frame) => sum + frame.byteLength - CHUNK_OVERHEAD, 0);
+
+  /**
+   * Parked on credit, not merely between chunks.
+   *
+   * The window is full AND a timer exists, which on this lane can only be the
+   * credit wait's own: the producer is inside the await rather than about to
+   * emit the next frame.
+   */
+  const parkedOnCredit = (channel: FakeChannel, acked: number) => () =>
+    onWire(channel) - acked > FLOW_WINDOW && vi.getTimerCount() === 1;
+
+  it("derives the send-credit window from the same ACK pacing as the completion window", () => {
+    // A full window can only be relieved by an ACK, and the receiver emits one
+    // at most per FLOW_ACK_INTERVAL of durable bytes. At half the slowest rate
+    // ever measured end to end, the bound must still out-wait one interval.
+    const slowestBytesPerSecond = 7 * 1024;
+    const oneAckInterval = (FLOW_ACK_INTERVAL / slowestBytesPerSecond) * 1000;
+    expect(MIXED_FILE_SEND_PROGRESS_STALL_MS).toBeGreaterThanOrEqual(oneAckInterval * 2);
+  });
+
+  it("keeps a sending batch alive far past the window while credit ACKs keep advancing", async () => {
+    const { a, file } = await senderOnly();
+    vi.useFakeTimers();
+    a.enqueue("b", source("slow-credit.bin"));
+    await settle(() => a.send?.status === "waitingAccept");
+    await peerSends(file.b, ACCEPT);
+    await settle(() => a.send?.status === "sending");
+
+    let acked = 0;
+    await settle(parkedOnCredit(file.a, acked), 60_000);
+    const parkedAt = Date.now();
+
+    // Over 500 s of sending, crossed by ACKs that each genuinely move the send
+    // window on the receiver's real pacing. Raising the constant alone cannot
+    // pass this; only re-arming the window per advance can.
+    for (let round = 1; round <= ACK_ROUNDS; round++) {
+      await vi.advanceTimersByTimeAsync(ACK_EVERY_MS);
+      expect(a.send?.status, `still sending before ACK ${round}`).toBe("sending");
+      expect(a.errorKey, `lane alive before ACK ${round}`).toBe("");
+      acked = round * FLOW_ACK_INTERVAL;
+      await peerSends(file.b, ackFrame(acked));
+      // The credit that ACK bought is spent on real frames, and the batch parks
+      // again on a window armed from this advance, not from the first one.
+      await settle(parkedOnCredit(file.a, acked), 60_000);
+      expect(vi.getTimerCount(), "one window at a time, re-armed not stacked").toBe(1);
+    }
+    expect(Date.now() - parkedAt).toBeGreaterThan(500_000);
+    expect(a.send?.status).toBe("sending");
+    expect(a.errorKey).toBe("");
+
+    // Release the rest and let the batch finish normally. An ACK is only ever
+    // worth the bytes this attempt actually emitted, so it is acked exactly.
+    while (a.send?.status === "sending") {
+      await peerSends(file.b, ackFrame(onWire(file.a)));
+      await settle(() => a.send?.status !== "sending" || parkedOnCredit(file.a, onWire(file.a))(), 60_000);
+    }
+    expect(a.send?.status).toBe("finishing");
+    // Positive control: the fake clock moved, and so did every byte.
+    expect(onWire(file.a)).toBe(BODY);
+    await peerSends(file.b, COMPLETE);
+    await settle(() => a.send?.done === true);
+    expect(a.send?.status).toBe("sendDone");
+    expect(a.errorKey).toBe("");
+    expect(vi.getTimerCount()).toBe(0);
+  }, 120_000);
+
+  it("keeps a RESUMED send alive on the same credit terms as the first attempt", async () => {
+    const { a, aLink, file } = await senderOnly();
+    vi.useFakeTimers();
+    a.enqueue("b", source("resumed-credit.bin"));
+    await settle(() => a.send?.status === "waitingAccept");
+    await peerSends(file.b, ACCEPT);
+    await settle(() => a.send?.status === "sending");
+    await settle(parkedOnCredit(file.a, 0), 60_000);
+
+    // Lose the transport while parked on credit, then rebuild it with the SAME
+    // codecs and let the receiver ask for its durable point. The resumed attempt
+    // restarts `sentBytes`/`acked` from that point, so it fills — and must then
+    // survive — a window of its own.
+    file.a.close();
+    await settle(() => a.send?.status === "resuming");
+    const swap = channelPair();
+    a.attach({ ...aLink, fileChannel: swap.a as unknown as RTCDataChannel });
+    await peerSends(swap.b, resumeReqFrame(0, 0));
+    await settle(() => a.send?.status === "sending");
+
+    let acked = 0;
+    await settle(parkedOnCredit(swap.a, acked), 60_000);
+    const parkedAt = Date.now();
+
+    for (let round = 1; round <= ACK_ROUNDS; round++) {
+      await vi.advanceTimersByTimeAsync(ACK_EVERY_MS);
+      expect(a.send?.status, `resumed send still sending before ACK ${round}`).toBe("sending");
+      expect(a.errorKey, `lane alive before ACK ${round}`).toBe("");
+      acked = round * FLOW_ACK_INTERVAL;
+      await peerSends(swap.b, ackFrame(acked));
+      await settle(parkedOnCredit(swap.a, acked), 60_000);
+      expect(vi.getTimerCount(), "one window at a time, re-armed not stacked").toBe(1);
+    }
+    expect(Date.now() - parkedAt).toBeGreaterThan(500_000);
+    expect(a.send?.status).toBe("sending");
+
+    while (a.send?.status === "sending") {
+      await peerSends(swap.b, ackFrame(onWire(swap.a)));
+      await settle(() => a.send?.status !== "sending" || parkedOnCredit(swap.a, onWire(swap.a))(), 60_000);
+    }
+    expect(a.send?.status).toBe("finishing");
+    // The resumed attempt re-sent the whole file from its (0,0) resume point.
+    expect(onWire(swap.a)).toBe(BODY);
+    await peerSends(swap.b, COMPLETE);
+    await settle(() => a.send?.done === true);
+    expect(a.send?.status).toBe("sendDone");
+    expect(a.errorKey).toBe("");
+    expect(vi.getTimerCount()).toBe(0);
+  }, 120_000);
+
+  it("fails a genuinely silent receiver at the new bound and settles the lane visibly", async () => {
+    const { a, file } = await senderOnly();
+    vi.useFakeTimers();
+    a.enqueue("b", source("silent-credit.bin"));
+    await settle(() => a.send?.status === "waitingAccept");
+    await peerSends(file.b, ACCEPT);
+    await settle(() => a.send?.status === "sending");
+    await settle(parkedOnCredit(file.a, 0), 60_000);
+    const parkedAt = Date.now();
+
+    // The bound this replaces would already have failed here, with the first
+    // ACK of a slow-but-healthy receiver still ~15 s away.
+    await vi.advanceTimersByTimeAsync(61_000);
+    expect(a.send?.status, "60 s of silence is not a stall").toBe("sending");
+    expect(a.errorKey).toBe("");
+
+    await vi.advanceTimersByTimeAsync(MIXED_FILE_SEND_PROGRESS_STALL_MS - 61_000 - 1_000);
+    expect(a.send?.status, "still inside the window").toBe("sending");
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    await settle(() => a.send?.done === true);
+    // Bounded: it does not sit here forever either.
+    expect(Date.now() - parkedAt).toBeLessThan(MIXED_FILE_SEND_PROGRESS_STALL_MS + 5_000);
+    expect(a.send?.status).toBe("sendFail");
+    expect(a.errorKey).toBe("failed");
+    // Visible on both sides: the peer's channel is closed rather than left
+    // waiting on a sender that has given up.
+    expect(file.a.readyState).toBe("closed");
+    expect(vi.getTimerCount()).toBe(0);
+  }, 120_000);
+
+  it("gives a talkative receiver no extra credit time when its ACKs carry no progress", async () => {
+    const { a, file } = await senderOnly();
+    vi.useFakeTimers();
+    a.enqueue("b", source("no-credit-progress.bin"));
+    await settle(() => a.send?.status === "waitingAccept");
+    await peerSends(file.b, ACCEPT);
+    await settle(() => a.send?.status === "sending");
+    await settle(parkedOnCredit(file.a, 0), 60_000);
+
+    // One real advance, which re-arms the window from where the batch re-parks.
+    await vi.advanceTimersByTimeAsync(100_000);
+    const acked = FLOW_ACK_INTERVAL;
+    await peerSends(file.b, ackFrame(acked));
+    await settle(parkedOnCredit(file.a, acked), 60_000);
+    const armedAt = Date.now();
+
+    // Then the receiver keeps talking and says nothing new: a duplicate of the
+    // ACK already applied, a rewind, and a forged value beyond every byte this
+    // attempt emitted. advanceAck rejects all three, so none is progress and
+    // none may buy a second window.
+    for (const forged of [acked, acked - 1024, Number.MAX_SAFE_INTEGER]) {
+      await vi.advanceTimersByTimeAsync(40_000);
+      expect(a.send?.status, `alive at ${(Date.now() - armedAt) / 1000}s`).toBe("sending");
+      await peerSends(file.b, ackFrame(forged));
+    }
+
+    // 120 s of chatter later the last ACK of any kind was 0 s ago and the last
+    // one that MEANT anything was 120 s ago. The window belongs to the latter.
+    await vi.advanceTimersByTimeAsync(MIXED_FILE_SEND_PROGRESS_STALL_MS - 120_000 - 1_000);
+    expect(a.send?.status).toBe("sending");
+    await vi.advanceTimersByTimeAsync(2_000);
+    await settle(() => a.send?.done === true);
+    expect(Date.now() - armedAt).toBeLessThan(MIXED_FILE_SEND_PROGRESS_STALL_MS + 5_000);
+    expect(a.send?.status).toBe("sendFail");
+    expect(a.errorKey).toBe("failed");
+    expect(vi.getTimerCount()).toBe(0);
+  }, 120_000);
 });
