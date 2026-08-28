@@ -15,7 +15,9 @@
 //   1. The prose bump itself — including the two sentences that must NOT move.
 //   2. A README that stayed behind while the manifest advanced.
 //   3. A maintained generated page that was never regenerated.
-//   4. A frozen locale that `gen-pages.mjs` quietly dragged onto the new URL.
+//   4. A frozen locale page that `gen-pages.mjs` quietly rewrote — every
+//      archived path except the seven `/apps` twins, whose macOS download URL
+//      the manifest owns and whose absence is now failure 3 in another costume.
 //
 // The bump is exercised against the repository's REAL documents rather than a
 // fixture. A fixture would drift from the sentences it stands for, and the whole
@@ -27,6 +29,7 @@ import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  ARCHIVED_APP_PAGES,
   CANDIDATE_PATHS,
   FROZEN_PAGE_PREFIXES,
   MAINTAINED_GENERATED_PAGES,
@@ -250,18 +253,48 @@ describe("judging an assembled release candidate by what it changes", () => {
     expect(CANDIDATE_PATHS).not.toContain("web/public/sitemap.xml");
   });
 
-  it("rejects a candidate that moved an archived locale", () => {
-    // `gen-pages.mjs` rewrites all nine `/apps` pages from the manifest, so an
-    // ordinary regeneration drags the seven frozen locales onto the new download
-    // URL. They are archived translations: they keep the version they were
-    // published with. The publication step restores them, and this is the check
-    // that proves the restore actually happened.
+  it("requires every archived /apps page, whose download URL the manifest owns", () => {
+    // The drift this list exists to end. `gen-pages.mjs` renders the manifest's
+    // `downloadUrl` into all nine `/apps` pages; the publication job used to
+    // restore seven of them back onto the PREVIOUS tag before committing, so
+    // main shipped seven public download buttons naming a superseded release
+    // while the deployed site — same manifest, no restore — served the new one.
+    // Missing one is now incomplete in exactly the way a stale README is.
+    expect(ARCHIVED_APP_PAGES).toHaveLength(FROZEN_PAGE_PREFIXES.length);
+    for (const page of ARCHIVED_APP_PAGES) {
+      const result = checkCandidateScope(complete().filter((path) => path !== page));
+      expect(result.ok, `${page} may be omitted`).toBe(false);
+      expect(result.missing).toEqual([page]);
+      // Not the frozen axis. A required path reported as frozen could never be
+      // satisfied, so the exemption has to remove it from that list entirely.
+      expect(result.frozen).toEqual([]);
+      expect(result.problems.join("\n")).toMatch(/incomplete/);
+    }
+  });
+
+  it("rejects every OTHER archived page that moved", () => {
+    // The freeze is narrowed by exactly one file per locale, not lifted. An
+    // archived `/releases` page carries translated PROSE about a release; a
+    // release commit that refreshed it would be republishing a translation the
+    // product no longer maintains, which is the thing the freeze is for.
     for (const prefix of FROZEN_PAGE_PREFIXES) {
-      const mutated = `${prefix}apps/index.html`;
+      const mutated = `${prefix}releases/index.html`;
       const result = checkCandidateScope([...complete(), mutated]);
       expect(result.ok, `${mutated} may be rewritten`).toBe(false);
       expect(result.frozen).toEqual([mutated]);
       expect(result.problems.join("\n")).toMatch(/byte-for-byte/);
+    }
+  });
+
+  it("keeps the archived exemption to /apps/index.html and nothing beside it", () => {
+    // A prefix-shaped exemption would quietly cover `/apps/anything`. Only the
+    // one generated file per locale is manifest-derived.
+    for (const prefix of FROZEN_PAGE_PREFIXES) {
+      for (const sibling of [`${prefix}apps/index.htm`, `${prefix}apps/macos/index.html`]) {
+        const result = checkCandidateScope([...complete(), sibling]);
+        expect(result.ok, `${sibling} may be rewritten`).toBe(false);
+        expect(result.frozen).toEqual([sibling]);
+      }
     }
   });
 
@@ -299,7 +332,22 @@ describe("re-running publication after the metadata already landed", () => {
   });
 
   it("still refuses an archived locale that moved", () => {
-    const result = checkCandidateScope(["web/public/de/apps/index.html"], { alreadyDelivered: true });
+    const result = checkCandidateScope(["web/public/de/releases/index.html"], { alreadyDelivered: true });
     expect(result.ok).toBe(false);
+    expect(result.frozen).toEqual(["web/public/de/releases/index.html"]);
+  });
+
+  it("refuses an archived /apps page that moved, even though a fresh release requires it", () => {
+    // The exemption makes these seven required candidate content; it does not
+    // make them reproducible-rerun content. If re-deriving a version main
+    // already documents moves one of them, the manifest and the committed bytes
+    // disagreed before the rerun started, and pushing a second commit on top of
+    // a public release is the wrong way to find that out.
+    for (const page of ARCHIVED_APP_PAGES) {
+      const result = checkCandidateScope([page], { alreadyDelivered: true });
+      expect(result.ok, `${page} may move on a rerun`).toBe(false);
+      expect(result.unexpected).toEqual([page]);
+      expect(result.problems.join("\n")).toMatch(/must change nothing/);
+    }
   });
 });

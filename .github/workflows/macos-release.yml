@@ -492,8 +492,8 @@ jobs:
       #
       # The job is split into two phases with one hard boundary. This step is the
       # WRITE phase: every command that can rewrite a tracked file — the document
-      # bump, `gen:pages`, `npm run check`, `npm run build` and the archived-locale
-      # restore — runs here and only here. The step after it is the JUDGE phase:
+      # bump, `gen:pages`, `npm run check` and `npm run build` — runs here and
+      # only here. The step after it is the JUDGE phase:
       # it stages the result and then does nothing but read. That boundary is the
       # point. Tests that ran before a later generation step judged a tree that no
       # longer exists, and "generation is deterministic" is an assumption, not a
@@ -551,25 +551,37 @@ jobs:
           # before the candidate is staged, instead of silently editing a tree
           # the suite had already judged.
           npm run check
+          # `npm run build` runs gen-pages again on its way to vite, so this is
+          # the LAST tracked-file write in the whole job. Nothing restores
+          # anything after it.
+          #
+          # There used to be a `git checkout --` here that put the seven
+          # archived locales back the way main had them. It was wrong, and it is
+          # the defect this job was carrying. An archived translation freezes
+          # PROSE; it does not freeze an operational pointer. The only such
+          # pointer on an archived page is the macOS CTA on `/apps`, which
+          # gen-pages derives from `web/native-releases.json` — so the restore
+          # was pushing seven public download buttons back onto the PREVIOUS
+          # release tag in the very commit that published the new one, while the
+          # deployed site (built from the same manifest, with no restore) served
+          # the new one. Committed main disagreed with production, and every
+          # ordinary `npm run build` dirtied seven tracked files.
+          #
+          # Those seven `/apps` pages are now required candidate content, listed
+          # in `ARCHIVED_APP_PAGES`. Every OTHER archived path is still frozen,
+          # and the scope check below is what enforces it: an archived
+          # `/releases` page, guide or landing page that moved now FAILS the
+          # release rather than being silently restored away. Failing is the
+          # point — a whole-directory restore could not tell an intended
+          # manifest pointer from an accidental prose rewrite, and answered both
+          # by discarding them.
           npm run build
           cd ..
-          # gen-pages rewrites all nine /apps pages from the manifest, including
-          # the seven archived locales, which are byte-for-byte frozen. Restoring
-          # them from the index is what keeps a release commit from quietly
-          # refreshing a translation the product no longer maintains; the scope
-          # check below is what proves the restore happened.
-          #
-          # `npm run build` runs gen-pages again on its way to vite, so this is
-          # placed after the build rather than after gen:pages — and it is the
-          # last tracked-file write in the whole job.
-          git checkout -- \
-            web/public/ar web/public/de web/public/es web/public/fr \
-            web/public/ja web/public/ko web/public/pt
       # The JUDGE phase. Nothing below rewrites a tracked file: the candidate is
       # staged first, and every verdict — the scope check and the owning web
       # suite — is rendered against exactly those staged bytes. This is the
-      # ordering invariant that the previous revision of this job broke by
-      # running `npm run build` and the locale restore after `npm test`: the
+      # ordering invariant that an earlier revision of this job broke by
+      # running `npm run build` and a locale restore after `npm test`: the
       # bytes the suite approved were then regenerated before being committed,
       # so what shipped was only *expected* to equal what passed.
       - name: Validate the staged candidate

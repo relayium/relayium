@@ -112,12 +112,41 @@ export const FROZEN_PAGE_PREFIXES = [
   "web/public/pt/",
 ];
 
+/**
+ * The seven archived `/apps` pages, which are the ONE exception to the freeze.
+ *
+ * An archived translation freezes PROSE. It does not freeze an operational
+ * pointer that the manifest derives, and `/apps` is the only archived page that
+ * carries one: its macOS CTA is `native-releases.json`'s `downloadUrl`,
+ * rendered into the committed HTML by `gen-pages.mjs`.
+ *
+ * Treating that href as frozen prose is what produced the drift this list
+ * exists to end. `gen-pages.mjs` writes all nine `/apps` pages from the
+ * manifest, the runtime suites hold the source to the manifest, and production
+ * serves whatever the build most recently generated — while the publication job
+ * restored these seven back onto the previously published tag before committing.
+ * Committed main therefore named a superseded release, every ordinary `npm run
+ * build` dirtied seven tracked files, and the deployed site disagreed with the
+ * repository. Both tags happened to still resolve, so it read as noise rather
+ * than as the release-trust defect it was.
+ *
+ * So these seven are REQUIRED candidate content, exactly like the maintained
+ * generated pages: a release that moves the manifest and leaves them behind is
+ * incomplete. Their prose is still frozen — `releases.test.mjs` and
+ * `macos-release-surface.test.mjs` own that half, and every OTHER archived path
+ * stays byte-for-byte frozen and is still rejected below.
+ */
+export const ARCHIVED_APP_PAGES = FROZEN_PAGE_PREFIXES.map(
+  (prefix) => `${prefix}apps/index.html`,
+);
+
 /** Every path a complete candidate is required to contain, and the only ones
  *  it is allowed to contain. */
 export const CANDIDATE_PATHS = [
   ...RELEASE_ARTIFACT_FILES,
   ...RELEASE_DOCS,
   ...MAINTAINED_GENERATED_PAGES,
+  ...ARCHIVED_APP_PAGES,
 ];
 
 const VERSION = /^[0-9]+(?:\.[0-9]+){1,2}$/;
@@ -226,8 +255,9 @@ function releaseVersionPattern(version) {
  * construction: they name the version they were published with (1.2.3 at the
  * time of writing), not the current one, so nothing in them matches. That is a
  * property worth stating rather than relying on — `checkCandidateScope` fails
- * on any frozen page that moves, and `releases.test.mjs` fails if a frozen
- * locale's tag and lead stop agreeing with each other.
+ * on any frozen page that moves except the seven manifest-derived `/apps`
+ * twins, and `releases.test.mjs` fails if a frozen locale's tag and lead stop
+ * agreeing with each other.
  *
  * A document that does not name `from` at all is an error, not a no-op. It means
  * the prose drifted off the published version at some earlier point, and
@@ -273,13 +303,13 @@ export async function bumpReleaseDocs({ repoRoot, from, to, docs = RELEASE_DOCS 
  *     required, so a stale README or an unregenerated maintained page is a
  *     failure of the candidate rather than a failure discovered afterwards.
  *
- *   * EXTRA. The seven archived locales are byte-for-byte frozen, and
- *     `gen-pages.mjs` does NOT respect that on its own: it rewrites all nine
- *     `/apps` pages from the manifest, so an ordinary regeneration silently
- *     drags seven frozen pages onto the new download URL. The publication step
- *     restores them; this is the check that proves the restore happened. Any
- *     other unexpected path fails too, because a release commit is the worst
- *     possible place to discover unrelated staged work.
+ *   * EXTRA. The archived locales are byte-for-byte frozen everywhere EXCEPT
+ *     their seven `/apps` twins, which carry the manifest-derived download URL
+ *     and are required above. Every other archived path — a `/releases` page, a
+ *     guide, a landing page — is still rejected, so a release commit cannot
+ *     quietly refresh a translation the product no longer maintains. Any other
+ *     unexpected path fails too, because a release commit is the worst possible
+ *     place to discover unrelated staged work.
  *
  * `alreadyDelivered` inverts the first direction and only that one. It is set
  * when main already documents the version being published — a rerun of the
@@ -291,8 +321,13 @@ export async function bumpReleaseDocs({ repoRoot, from, to, docs = RELEASE_DOCS 
  */
 export function checkCandidateScope(paths, { alreadyDelivered = false } = {}) {
   const seen = new Set(paths);
+  // The seven `/apps` twins are subtracted from the freeze rather than added to
+  // the allow-list: `frozen` is reported and rejected on its own axis, so a path
+  // that stayed in it could never be satisfied by also being required.
+  const archivedAppPages = new Set(ARCHIVED_APP_PAGES);
   const frozen = [...seen]
     .filter((path) => FROZEN_PAGE_PREFIXES.some((prefix) => path.startsWith(prefix)))
+    .filter((path) => !archivedAppPages.has(path))
     .sort();
   // A rerun requires the empty candidate, so it requires nothing and allows
   // nothing; both directions fall out of the same two lists.

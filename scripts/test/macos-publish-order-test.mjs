@@ -16,7 +16,7 @@
 //
 // Reordering the job fixed that, but the first reordering only fixed it at STEP
 // granularity, and the defect had moved inside a step: the validate step ran
-// `npm test`, then `npm run build`, then the archived-locale restore, and only
+// `npm test`, then `npm run build`, then an archived-locale restore, and only
 // then staged and committed. Every step-level assertion passed while the bytes
 // that shipped were regenerated after the suite approved them — equal only if
 // page generation is perfectly deterministic, which is an assumption and not a
@@ -214,11 +214,22 @@ const gateWatch = lineRunning("gh run watch", "the candidate gate result");
 const push = lineRunning("$CANDIDATE:main", "the protected-main delivery push");
 
 /**
- * The archived-locale restore, as a line index.
+ * The archived-locale restore, as a line index — kept in order to assert that
+ * there is none.
  *
  * `git checkout --detach` also contains `git checkout --`, so a restore is
  * identified by its continuation: the command plus the lines that follow it name
  * all seven frozen locales.
+ *
+ * The job used to REQUIRE one of these, and that requirement was itself the
+ * defect. An archived translation freezes prose; it does not freeze the
+ * manifest-derived macOS download URL that `gen-pages.mjs` renders into all nine
+ * `/apps` pages. So the restore put seven public download buttons back onto the
+ * PREVIOUS release tag inside the very commit publishing the new one, while the
+ * deployed site — built from the same manifest, with no restore — served the new
+ * one. The seven `/apps` twins are required candidate content now
+ * (`ARCHIVED_APP_PAGES`), and every other archived path is held frozen by the
+ * scope check FAILING rather than by a restore silently discarding it.
  */
 const restores = exec
   .map((line, index) => ({ line, index }))
@@ -246,18 +257,13 @@ before(syncHistory, stage, "the candidate is staged before CLI release history i
 before(genPages, stage, "the candidate is staged before the pages are generated");
 before(build, stage, "the candidate is staged before the web build regenerates the pages");
 before(typecheck, stage, "the candidate is staged before the typecheck, which may emit");
-check(restores.length > 0, "no publish step restores the seven archived locales after regenerating pages");
-if (restores.length > 0) {
-  // A restore is itself a tracked-file write, so every one of them belongs to
-  // the write phase — and the last one has to fall after the last generation,
-  // because `npm run build` runs gen-pages again on its way to vite. Extra
-  // restores earlier in the phase are harmless and not the test's business.
-  before(build, restores[restores.length - 1],
-    "no archived-locale restore runs after the build regenerates the pages");
-  for (const restore of restores) {
-    before(restore, stage, "the candidate is staged before the archived locales are restored");
-  }
-}
+check(
+  restores.length === 0,
+  "a publish step restores the seven archived locales; their /apps twins carry the"
+  + " manifest-derived macOS download URL and are required candidate content, so a"
+  + " restore would ship a release commit whose seven public download buttons still"
+  + " name the previous tag",
+);
 
 // 2. The judge phase. Both verdicts are rendered against the staged bytes, and
 //    the suite is the last of them.
@@ -269,7 +275,7 @@ before(suite, commit, "the candidate is committed before the web suite has judge
 
 // 3. THE boundary. From `git add -A` to `git commit` the job may read and may
 //    not write. This is the assertion that fails for the observed defect, in
-//    which `npm run build` and the archived-locale restore ran after `npm test`
+//    which `npm run build` and an archived-locale restore ran after `npm test`
 //    and before `git add -A`/`git commit`: the committed bytes were regenerated
 //    after the only thing that had judged them, and were therefore equal to the
 //    tested bytes only by assumption.
@@ -293,6 +299,30 @@ const MUTATORS = [
   "git add",
   "cp ", "mv ", "rm ", "sed -i", "tee ",
 ];
+
+// Back to section 1 for one assertion that needed `MUTATORS` to exist: the build
+// is the LAST tracked-file write in the job.
+//
+// That property used to be stated narrowly, as "no archived-locale restore runs
+// after the build regenerates the pages" — true, but only about the one writer
+// that happened to be there. With the restore gone the invariant is the general
+// one and is asserted generally. `npm run build` runs gen-pages again on its way
+// to vite, so anything that writes after it and before `git add -A` produces
+// bytes no generator has reconciled; a restore reintroduced there, a second
+// generator, or a stray `cp` all fail here rather than reaching a candidate.
+if (build >= 0 && stage >= 0) {
+  for (let i = build + 1; i < stage; i += 1) {
+    for (const mutator of MUTATORS) {
+      check(
+        !exec[i].text.includes(mutator),
+        `"${exec[i].step}" runs ${mutator.trim()} after the web build regenerates the`
+        + ` pages and before the candidate is staged; the build must be the last`
+        + ` tracked-file write in the job`,
+      );
+    }
+  }
+}
+
 if (stage >= 0 && suite >= 0 && commit >= 0) {
   for (let i = stage + 1; i < commit; i += 1) {
     // The suite's own invocation is the thing being protected, not a violation
@@ -344,9 +374,6 @@ before(suite, create, "the release is created before the web suite runs");
 before(build, create, "the release is created before the web build runs");
 before(scope, create, "the release is created before the candidate scope is checked");
 before(commit, create, "the candidate is not committed before the release is created");
-for (const restore of restores) {
-  before(restore, create, "archived locales are restored only after the release is created");
-}
 
 // 5. The frozen candidate is checked on its own SHA before protected main
 //    moves, and the immutable public release is created only after delivery.
