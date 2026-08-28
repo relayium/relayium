@@ -1287,18 +1287,31 @@ final class AppShellUITests: XCTestCase {
 
     /// Every shipped language renders, in the running app.
     ///
-    /// `LocalizedCopyTests` proves the catalogs line up and that `ErrorCopy` in
-    /// Arabic is Arabic — through the model seams, and its own header says so.
-    /// What no test asserted is that a launch in each language produces a shell
-    /// whose destinations are in that language: a missing bundle, a resource not
-    /// copied into the app, or a language the shell never asks for all look
-    /// exactly like a correct catalog from inside the package.
+    /// `LocalizedCopyTests` proves the catalogs line up — through the model
+    /// seams, and its own header says so. What no test asserted is that a launch
+    /// in each language produces a shell whose destinations are in that
+    /// language: a missing bundle, a resource not copied into the app, or a
+    /// language the shell never asks for all look exactly like a correct catalog
+    /// from inside the package.
+    ///
+    /// The shared package ships exactly `en` and `zh-Hans`. This matrix listed
+    /// nine, from when it did; the other seven catalogs are frozen under
+    /// `apps/RelayiumKit/LocalizationArchive/` and `AppLanguage` can no longer
+    /// name them, so a launch under one of those preferences resolves to English
+    /// and renders the English shell. Those rows asserted translations that no
+    /// longer exist anywhere in the build.
+    ///
+    /// This app's own `Info.plist` still declares nine localizations, which is a
+    /// separate, known and deliberate mismatch: iOS product development is
+    /// paused, that build is unshipped, and the plist is pinned as a
+    /// pending-resume item in `LocalizationIntegrityTests` and
+    /// `IOSSurfaceGuardTests` rather than corrected here. It is why an Arabic
+    /// launch still mirrors the layout — see
+    /// `testAnArabicLaunchLaysTheShellOutRightToLeft`, which is unchanged and
+    /// still passes: UIKit takes direction from the bundle list, not from the
+    /// package catalogs.
     func testEveryShippedLanguageRendersItsOwnShell() {
-        let shipped = [
-            ("en", "Nearby"), ("zh-Hans", "附近设备"), ("ja", "近くのデバイス"),
-            ("ko", "근처 기기"), ("de", "In der Nähe"), ("fr", "À proximité"),
-            ("ar", "الأجهزة القريبة"), ("es", "Cerca"), ("pt", "Por perto"),
-        ]
+        let shipped = [("en", "Nearby"), ("zh-Hans", "附近设备")]
         for (code, nearby) in shipped {
             app.terminate()
             app.launchArguments = ["--relayium-ui-testing",

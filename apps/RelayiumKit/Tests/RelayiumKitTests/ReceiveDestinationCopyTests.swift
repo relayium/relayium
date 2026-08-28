@@ -40,42 +40,16 @@ final class ReceiveDestinationCopyTests: XCTestCase {
               chosenFolder: "outside the folder you chose",
               tryAnotherFolder: "Try another folder",
               filesApp: "Files app", mergeReason: "half-finished download"),
-        .init(language: .de, pickerAdvice: "Wähle einen anderen Ordner",
-              chosenFolder: "außerhalb des gewählten Ordners",
-              tryAnotherFolder: "Versuch einen anderen Ordner",
-              filesApp: "„Dateien“", mergeReason: "halb fertigen Download"),
-        .init(language: .fr, pickerAdvice: "Choisissez un autre dossier",
-              chosenFolder: "hors du dossier choisi",
-              tryAnotherFolder: "Essayez un autre dossier",
-              filesApp: "app Fichiers", mergeReason: "téléchargement inachevé"),
-        .init(language: .es, pickerAdvice: "Elige otra carpeta",
-              chosenFolder: "fuera de la carpeta que elegiste",
-              tryAnotherFolder: "Prueba con otra carpeta",
-              filesApp: "app Archivos", mergeReason: "descarga a medias"),
-        .init(language: .pt, pickerAdvice: "Escolha outra pasta",
-              chosenFolder: "fora da pasta que escolheu",
-              tryAnotherFolder: "Tente outra pasta",
-              filesApp: "app Ficheiros", mergeReason: "transferência a meio"),
-        .init(language: .ja, pickerAdvice: "別のフォルダを選んでください",
-              chosenFolder: "選んだフォルダの外",
-              tryAnotherFolder: "別のフォルダをお試しください",
-              filesApp: "「ファイル」App", mergeReason: "中断したダウンロード"),
-        .init(language: .ko, pickerAdvice: "다른 폴더를 선택하세요",
-              chosenFolder: "선택한 폴더 바깥",
-              tryAnotherFolder: "다른 폴더로 시도하세요",
-              filesApp: "파일 앱", mergeReason: "중단된 다운로드"),
         .init(language: .zh, pickerAdvice: "请另选一个文件夹",
               chosenFolder: "你所选文件夹之外",
               tryAnotherFolder: "请换一个文件夹",
               filesApp: "「文件」App", mergeReason: "半途而废的下载"),
-        .init(language: .ar, pickerAdvice: "اختر مجلدًا آخر",
-              chosenFolder: "خارج المجلد الذي اخترته",
-              tryAnotherFolder: "جرّب مجلدًا آخر",
-              filesApp: "«الملفات»", mergeReason: "تنزيل غير مكتمل"),
     ]
 
-    /// Nine, so a language added to `AppLanguage` without a row here fails
-    /// instead of quietly going unchecked.
+    /// Both, so a language added to `AppLanguage` without a row here fails
+    /// instead of quietly going unchecked. The seven rows for the archived
+    /// languages were removed with their catalogs; the assertion is against
+    /// `AppLanguage.allCases`, so restoring a locale re-arms it automatically.
     func testEveryShippedLanguageIsCovered() {
         XCTAssertEqual(Set(expectations.map(\.language)), Set(AppLanguage.allCases))
     }
@@ -104,7 +78,7 @@ final class ReceiveDestinationCopyTests: XCTestCase {
     /// from the other four and would otherwise go unchecked.
     ///
     /// This is also the guard on the macOS side of the seam: none of these
-    /// `error.destination.*` strings was touched, in any of the nine catalogs.
+    /// `error.destination.*` strings was touched, in either shipped catalog.
     func testTheSharedCopyStillGivesTheAdviceThisFileReplaces() {
         for e in expectations {
             func shared(_ error: DownloadDestinationError) -> String {
@@ -130,9 +104,9 @@ final class ReceiveDestinationCopyTests: XCTestCase {
 
     // MARK: - no re-worded case may name a picker
 
-    /// The one claim that has to hold for all five at once, in all nine: nothing
-    /// the iOS user reads points at a folder picker, in either of the two
-    /// wordings the shared catalog uses for one.
+    /// The one claim that has to hold for all five at once, in both shipped
+    /// languages: nothing the iOS user reads points at a folder picker, in
+    /// either of the two wordings the shared catalog uses for one.
     func testNoRewordedCaseSendsAnIOSUserToAFolderPicker() {
         for e in expectations {
             for error in reworded {
@@ -279,9 +253,9 @@ final class ReceiveDestinationCopyTests: XCTestCase {
         }
     }
 
-    /// Nine distinct translations, not English nine times. The catalogs are
-    /// checked for completeness elsewhere; this checks that the LOOKUP for every
-    /// re-worded key resolves per language rather than falling back.
+    /// Distinct translations, not English twice. The catalogs are checked for
+    /// completeness elsewhere; this checks that the LOOKUP for every re-worded
+    /// key resolves per language rather than falling back.
     func testEveryRewordedMessageIsTranslatedInEveryLanguage() {
         let english = reworded.map { ReceiveDestinationCopy.message(for: $0, language: .en) }
         for language in AppLanguage.allCases where language != .en {
@@ -383,7 +357,7 @@ final class ReceiveDestinationCopyTests: XCTestCase {
         }
     }
 
-    /// Nine translations of it, not English nine times — the same guard the
+    /// A real translation of it, not English twice — the same guard the
     /// re-worded errors get, because the interpolation made this key a format
     /// string and a lookup that fell back would still substitute correctly.
     func testTheDoneStateIsTranslatedInEveryLanguage() {
@@ -400,41 +374,59 @@ final class ReceiveDestinationCopyTests: XCTestCase {
     /// and the bytes between the marks are still exactly what was passed — so a
     /// hostile name cannot rearrange the sentence around it, and the user can
     /// still read and copy the value they have to act on or report.
-    func testArabicIsolatesEveryInterpolationWithoutAlteringIt() {
+    /// Every interpolation survives VERBATIM, and none is wrapped.
+    ///
+    /// This was an Arabic test: it asserted that each technical value arrived
+    /// inside U+2068/U+2069 so the bidi algorithm could not rearrange a hostile
+    /// file name around the sentence. Arabic is frozen and no shipped language is
+    /// right-to-left, so the isolation seam is a no-op — but the property a user
+    /// depends on is the other half of that guarantee and is unchanged: the name,
+    /// the route and the errno come out byte-for-byte as they went in.
+    ///
+    /// The hostile name matters more than ever here, not less. `U+202E` is a
+    /// RIGHT-TO-LEFT OVERRIDE a sender can put in a file name, and it reorders
+    /// the text that FOLLOWS it regardless of the UI language. What this asserts
+    /// is that the product neither strips it nor sanitises it away — the user is
+    /// shown exactly the bytes that arrived, which is what lets them recognise
+    /// and report the attempt.
+    func testEveryInterpolationSurvivesVerbatimAndIsNotWrapped() {
         // U+202E RIGHT-TO-LEFT OVERRIDE, escaped rather than typed: a sender can
         // put one in a file name, and this source file should not carry one.
         let name = "\u{202E}report.pdf"
-        func isolated(_ value: String) -> String { "\u{2068}" + value + "\u{2069}" }
 
-        let collision = ReceiveDestinationCopy.message(
-            for: DownloadDestinationError.fileExists(name: name), language: .ar)
-        XCTAssertTrue(collision.contains(isolated(name)), collision)
-        XCTAssertTrue(collision.contains(isolated("Relayium/Received")), collision)
+        for language in AppLanguage.allCases {
+            let tag = language.rawValue
 
-        let unsafe = ReceiveDestinationCopy.message(
-            for: DownloadDestinationError.unsafeName(name), language: .ar)
-        XCTAssertTrue(unsafe.contains(isolated(name)), unsafe)
+            let collision = ReceiveDestinationCopy.message(
+                for: DownloadDestinationError.fileExists(name: name), language: language)
+            XCTAssertTrue(collision.contains(name), "\(tag): \(collision.debugDescription)")
+            XCTAssertTrue(collision.contains("Relayium/Received"), "\(tag): \(collision)")
 
-        let notPermitted = ReceiveDestinationCopy.message(
-            for: DownloadDestinationError.systemError(EACCES), language: .ar)
-        XCTAssertTrue(notPermitted.contains(isolated("Relayium/Received")), notPermitted)
+            let unsafe = ReceiveDestinationCopy.message(
+                for: DownloadDestinationError.unsafeName(name), language: language)
+            XCTAssertTrue(unsafe.contains(name), "\(tag): \(unsafe.debugDescription)")
 
-        // Two in one sentence: the folder and the errno, each its own unit, so
-        // neither is reordered into the other.
-        let systemError = ReceiveDestinationCopy.message(
-            for: DownloadDestinationError.systemError(EIO), language: .ar)
-        XCTAssertTrue(systemError.contains(isolated("Relayium/Received")), systemError)
-        XCTAssertTrue(systemError.contains(isolated(String(EIO))), systemError)
+            let notPermitted = ReceiveDestinationCopy.message(
+                for: DownloadDestinationError.systemError(EACCES), language: language)
+            XCTAssertTrue(notPermitted.contains("Relayium/Received"), "\(tag): \(notPermitted)")
 
-        // The success sentence too: the route is a technical value in Arabic
-        // prose exactly as it is in the failures, and a route the bidi algorithm
-        // reordered would read as folders in an order that does not exist.
-        let done = ReceiveDestinationCopy.savedLocation(language: .ar)
-        XCTAssertTrue(done.contains(isolated("Relayium/Received")), done)
-        for language in AppLanguage.allCases where language != .ar {
-            XCTAssertFalse(ReceiveDestinationCopy.savedLocation(language: language)
-                            .contains("\u{2068}"),
-                           "\(language.rawValue) wrapped a technical value it should not have")
+            // Two in one sentence: the folder and the errno, each intact.
+            let systemError = ReceiveDestinationCopy.message(
+                for: DownloadDestinationError.systemError(EIO), language: language)
+            XCTAssertTrue(systemError.contains("Relayium/Received"), "\(tag): \(systemError)")
+            XCTAssertTrue(systemError.contains(String(EIO)), "\(tag): \(systemError)")
+
+            // The success sentence too, and no isolation marks anywhere: with no
+            // right-to-left language shipped, a marker in rendered copy would be
+            // a stray character on screen rather than a layout fix.
+            let done = ReceiveDestinationCopy.savedLocation(language: language)
+            XCTAssertTrue(done.contains("Relayium/Received"), "\(tag): \(done)")
+            for rendered in [collision, unsafe, notPermitted, systemError, done] {
+                XCTAssertFalse(rendered.contains("\u{2068}"),
+                               "\(tag) wrapped a technical value it should not have: "
+                               + rendered.debugDescription)
+                XCTAssertFalse(rendered.contains("\u{2069}"), "\(tag): \(rendered)")
+            }
         }
     }
 

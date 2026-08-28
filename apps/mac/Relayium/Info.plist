@@ -4,23 +4,26 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
-	<!-- The nine languages this app ships. The catalogs live in the
-	     RelayiumAppKit package bundle rather than this bundle, so the list keeps
-	     the app's declared localizations in step with AppLanguage. The macOS
-	     scene also applies that resolved language's layout direction explicitly:
-	     CFBundleLocalizations alone did not mirror a package-backed Arabic UI on
-	     a real build. The release-readiness script checks this list. -->
+	<!-- The two languages this app ships. The catalogs live in the
+	     RelayiumShareKit package bundle rather than this bundle, so the list
+	     keeps the app's declared localizations in step with AppLanguage.
+
+	     This list must be EXACTLY these two. A locale named here that has no
+	     catalog is a claim macOS acts on: it makes the app a candidate for a
+	     language it cannot render, so a Japanese Mac would be told Relayium
+	     speaks Japanese and then shown English. The seven languages Relayium no
+	     longer offers are frozen under apps/RelayiumKit/LocalizationArchive/ and must not
+	     reappear here; test-release-readiness.sh checks this list in both
+	     directions, and MacSurfaceGuardTests asserts the same set.
+
+	     The macOS scene also applies the resolved language's layout direction
+	     explicitly, because CFBundleLocalizations alone did not mirror a
+	     package-backed Arabic UI on a real build. That path stays wired and now
+	     resolves left-to-right for every shipped language. -->
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>en</string>
 		<string>zh-Hans</string>
-		<string>ja</string>
-		<string>ko</string>
-		<string>de</string>
-		<string>fr</string>
-		<string>ar</string>
-		<string>es</string>
-		<string>pt</string>
 	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
@@ -69,9 +72,9 @@
 	     `CFBundleTypeName` is not localized. `Alternate` with a `Viewer` role
 	     does not make Relayium the owner of `public.data` or `public.folder`, so
 	     the places a type name is read — the Kind column, Get Info — are expected
-	     to keep answering with the real owner's name, and nine InfoPlist.strings
-	     would be nine translations of a string this app is not expected to
-	     display. That expectation has not been re-measured on an installed
+	     to keep answering with the real owner's name, and an InfoPlist.strings
+	     per shipped language would be translations of a string this app is not
+	     expected to display. That expectation has not been re-measured on an installed
 	     `Alternate` build; the installed Open With acceptance that is still
 	     required is the place to check it. -->
 	<key>CFBundleDocumentTypes</key>

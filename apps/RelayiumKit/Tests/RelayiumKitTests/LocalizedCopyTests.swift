@@ -17,24 +17,16 @@ final class LocalizedCopyTests: XCTestCase {
 
     func testLocalTextDiscardConfirmationNamesEveryCostEverywhere() throws {
         let permanent: [AppLanguage: String] = [
-            .en: "permanently", .zh: "永久", .ja: "完全", .ko: "영구",
-            .de: "dauerhaft", .fr: "définitivement", .ar: "نهائيًا",
-            .es: "permanentemente", .pt: "permanentemente",
+            .en: "permanently", .zh: "永久",
         ]
         let history: [AppLanguage: String] = [
-            .en: "history", .zh: "消息历史", .ja: "メッセージ履歴", .ko: "메시지 기록",
-            .de: "Nachrichtenverlauf", .fr: "historique local", .ar: "سجل الرسائل",
-            .es: "historial local", .pt: "histórico local",
+            .en: "history", .zh: "消息历史",
         ]
         let draft: [AppLanguage: String] = [
-            .en: "unsent draft", .zh: "未发送草稿", .ja: "未送信の下書き", .ko: "보내지 않은 초안",
-            .de: "nicht gesendeten Entwürfe", .fr: "brouillon non envoyé", .ar: "مسودة غير مرسلة",
-            .es: "borrador sin enviar", .pt: "rascunho não enviado",
+            .en: "unsent draft", .zh: "未发送草稿",
         ]
         let copyFirst: [AppLanguage: String] = [
-            .en: "Copy", .zh: "先复制", .ja: "先にコピー", .ko: "먼저 복사",
-            .de: "Kopiere vorher", .fr: "Copiez d’abord", .ar: "انسخ أولًا",
-            .es: "Copia antes", .pt: "Copie primeiro",
+            .en: "Copy", .zh: "先复制",
         ]
         for language in AppLanguage.allCases {
             let text = L10n.t(.textDiscardLocalContentConfirmBody, language: language)
@@ -48,14 +40,10 @@ final class LocalizedCopyTests: XCTestCase {
 
     func testLocalTextHistoryNamesItsUnsavedProcessLifetimeEverywhere() throws {
         let notSaved: [AppLanguage: String] = [
-            .en: "not saved", .zh: "不会保存", .ja: "保存されず", .ko: "저장되지",
-            .de: "nicht gespeichert", .fr: "n’est pas enregistré", .ar: "لا يُحفظ",
-            .es: "no se guarda", .pt: "não é guardado",
+            .en: "not saved", .zh: "不会保存",
         ]
         let systemClose: [AppLanguage: String] = [
-            .en: "system closes", .zh: "系统关闭", .ja: "システムがアプリを終了",
-            .ko: "시스템이 앱을 종료", .de: "System die App beendet", .fr: "système ferme",
-            .ar: "أغلق النظام", .es: "sistema cierra", .pt: "sistema fechar",
+            .en: "system closes", .zh: "系统关闭",
         ]
         for language in AppLanguage.allCases {
             let text = L10n.t(.textLocalHistoryBody, language: language)
@@ -70,20 +58,13 @@ final class LocalizedCopyTests: XCTestCase {
 
     func testOpenTextSessionWarnsBeforeUnsavedHistoryCanBeLost() throws {
         let unsaved: [AppLanguage: String] = [
-            .en: "not saved", .zh: "不会保存", .ja: "保存されず", .ko: "저장되지",
-            .de: "nicht gespeichert", .fr: "n’est pas enregistré", .ar: "لا يُحفظ",
-            .es: "no se guarda", .pt: "não é guardado",
+            .en: "not saved", .zh: "不会保存",
         ]
         let appClose: [AppLanguage: String] = [
-            .en: "app closes", .zh: "应用关闭", .ja: "アプリが終了", .ko: "앱이 종료",
-            .de: "App beendet", .fr: "fermeture de l’app", .ar: "إغلاق التطبيق",
-            .es: "app se cierra", .pt: "app fechar",
+            .en: "app closes", .zh: "应用关闭",
         ]
         let peerRetention: [AppLanguage: String] = [
-            .en: "Either device", .zh: "任何一方设备", .ja: "どちらのデバイス",
-            .ko: "어느 쪽 기기", .de: "Beide Geräte", .fr: "Chaque appareil",
-            .ar: "أي من الجهازين", .es: "cualquiera de los dispositivos",
-            .pt: "qualquer dos dispositivos",
+            .en: "Either device", .zh: "任何一方设备",
         ]
         for language in AppLanguage.allCases {
             let text = L10n.t(.textNoServerHistory, language: language)
@@ -192,13 +173,18 @@ final class LocalizedCopyTests: XCTestCase {
 
     /// The sharpest sentence in the app has to survive translation with its
     /// instruction intact: stop, and pair again — never "retry".
-    func testTheMitmWarningKeepsItsMeaningInChineseAndArabic() {
+    func testTheMitmWarningKeepsItsMeaningInChinese() {
         let zh = ErrorCopy.message(for: HandshakeError.mitm, language: .zh)
         XCTAssertTrue(zh.contains("干扰"), zh)          // someone may be interfering
         XCTAssertTrue(zh.contains("重新配对"), zh)       // pair again
-        let ar = ErrorCopy.message(for: HandshakeError.mitm, language: .ar)
-        XCTAssertTrue(ar.contains("سر مشترك"), ar)      // shared secret
-        XCTAssertTrue(ar.contains("الاقتران"), ar)      // pairing
+        // It is a real translation, not the English string in a Chinese slot.
+        XCTAssertNotEqual(zh, ErrorCopy.message(for: HandshakeError.mitm, language: .en))
+        // And an archived preference gets the English sentence in full, with its
+        // instruction intact — never a raw key at the sharpest moment in the app.
+        let archived = ErrorCopy.message(for: HandshakeError.mitm,
+                                         language: AppLanguage.resolve(preferred: ["ar-EG"]))
+        XCTAssertEqual(archived, ErrorCopy.message(for: HandshakeError.mitm, language: .en))
+        XCTAssertTrue(archived.lowercased().contains("pair again"), archived)
     }
 
     /// A user's own file name is data, not copy: it appears verbatim inside the
@@ -214,18 +200,23 @@ final class LocalizedCopyTests: XCTestCase {
         }
     }
 
-    /// Under Arabic the same name is wrapped in a first-strong isolate so the
-    /// bidi algorithm lays it out as one unit — and the bytes between the marks
-    /// are still exactly the name, so it is still copyable and still searchable.
-    func testArabicIsolatesTechnicalValuesWithoutAlteringThem() {
+    /// A hostile path reaches the user verbatim, and unwrapped.
+    ///
+    /// This asserted Arabic isolation: the path was wrapped in a first-strong
+    /// isolate so the bidi algorithm laid it out as one unit. Arabic is frozen
+    /// and no shipped language is right-to-left, so the wrap is a no-op — what
+    /// remains is the half that always mattered, which is that the bytes are
+    /// exactly the path. A user shown `../../etc/passwd` can recognise and
+    /// report it; one shown a sanitised version cannot.
+    func testHostilePathsAreRenderedVerbatimAndUnwrapped() {
         let path = "../../etc/passwd"
-        let arabic = ErrorCopy.message(for: ManifestPathError.unsafePath(path), language: .ar)
-        XCTAssertTrue(arabic.contains("\u{2068}" + path + "\u{2069}"), arabic)
-        // English is untouched by the isolation, so the pre-localization wording
-        // is byte-identical.
-        let english = ErrorCopy.message(for: ManifestPathError.unsafePath(path), language: .en)
-        XCTAssertFalse(english.contains("\u{2068}"), english)
-        XCTAssertTrue(english.contains(path), english)
+        for language in AppLanguage.allCases {
+            let message = ErrorCopy.message(for: ManifestPathError.unsafePath(path),
+                                            language: language)
+            XCTAssertTrue(message.contains(path), "\(language.rawValue): \(message)")
+            XCTAssertFalse(message.contains("\u{2068}"),
+                           "\(language.rawValue) wrapped a path with no RTL language shipped")
+        }
     }
 
     /// Diagnostic numbers stay diagnostic: no grouping separators, no digit
@@ -263,24 +254,31 @@ final class LocalizedCopyTests: XCTestCase {
 
     // MARK: - plurals in context
 
-    /// Arabic picks a different form for 1, 2, 3 and 11 — the whole reason the
-    /// plural layer exists rather than a single "%@ files" string.
-    func testArabicSelectionSummaryUsesFourDifferentPluralForms() throws {
-        let one = L10n.plural(.selectionFiles, 1, language: .ar)
-        let two = L10n.plural(.selectionFiles, 2, language: .ar)
-        let few = L10n.plural(.selectionFiles, 3, language: .ar)
-        let many = L10n.plural(.selectionFiles, 11, language: .ar)
-        XCTAssertEqual(Set([one, two, few, many]).count, 4,
-                       "Arabic collapsed plural forms: \(one) / \(two) / \(few) / \(many)")
-        for rendered in [one, two, few, many] {
-            // Combining marks removed first: `ملفًا` carries tanwin, and Swift's
-            // `contains` works on grapheme clusters, so a literal `contains("ملف")`
-            // would report a correct Arabic string as missing the word.
-            let stripped = String(String.UnicodeScalarView(
-                rendered.unicodeScalars.filter { !CharacterSet.nonBaseCharacters.contains($0) }))
-            XCTAssertTrue(stripped.contains("ملف"), rendered)
+    /// English inflects the noun and Chinese does not — which is the whole
+    /// reason the plural layer exists rather than a single "%@ files" string.
+    ///
+    /// Arabic's four distinct forms used to be what this demonstrated. That
+    /// catalog is frozen, so the remaining contrast is the one between the two
+    /// shipped languages: English must change its noun at the singular boundary
+    /// and Chinese must not change it at all. Every count still carries its
+    /// digits, in both.
+    func testTheSelectionSummaryPluralizesInEnglishAndNotInChinese() throws {
+        let englishOne = L10n.plural(.selectionFiles, 1, language: .en)
+        let englishMany = L10n.plural(.selectionFiles, 2, language: .en)
+        XCTAssertNotEqual(englishOne, englishMany,
+                          "English collapsed its singular and plural: \(englishOne)")
+        XCTAssertTrue(englishOne.contains("file"), englishOne)
+        XCTAssertTrue(englishMany.contains("files"), englishMany)
+        XCTAssertFalse(englishOne.contains("files"), englishOne)
+
+        // Chinese: one form, so the sentence differs only by the number itself.
+        let chinese = [1, 2, 3, 11].map { L10n.plural(.selectionFiles, $0, language: .zh) }
+        let withoutDigits = Set(chinese.map { $0.filter { !$0.isNumber } })
+        XCTAssertEqual(withoutDigits.count, 1,
+                       "Chinese inflected a noun it has no plural for: \(chinese)")
+        for (count, rendered) in zip([1, 2, 3, 11], chinese) {
+            XCTAssertTrue(rendered.contains("\(count)"), rendered)
         }
-        XCTAssertTrue(few.contains("3"), few)
     }
 
     /// Chinese has one form and must not gain an English "s".
@@ -291,29 +289,37 @@ final class LocalizedCopyTests: XCTestCase {
         XCTAssertEqual(many, "12 个文件")
     }
 
-    /// French and Portuguese take the SINGULAR noun at zero; German and English
-    /// take the plural. Asserted on the words rather than on the category, so it
-    /// is a statement about what the user reads.
-    func testZeroTakesTheSingularNounInFrenchAndPortugueseOnly() {
-        let fr0 = L10n.plural(.selectionFiles, 0, language: .fr)
-        XCTAssertTrue(fr0.contains("fichier prêt"), fr0)
-        XCTAssertFalse(fr0.contains("fichiers"), fr0)
-        XCTAssertTrue(L10n.plural(.selectionFiles, 2, language: .fr).contains("fichiers prêts"))
-
-        let pt0 = L10n.plural(.selectionFiles, 0, language: .pt)
-        XCTAssertTrue(pt0.contains("ficheiro pronto"), pt0)
-        XCTAssertTrue(L10n.plural(.selectionFiles, 2, language: .pt).contains("ficheiros prontos"))
-
-        XCTAssertTrue(L10n.plural(.selectionFiles, 0, language: .de).contains("Dateien"))
+    /// Zero takes the PLURAL noun in English, and an archived preference gets
+    /// that same English behaviour rather than the rule its own language had.
+    ///
+    /// This used to assert the opposite case: French and Portuguese put zero in
+    /// the `one` category and read "0 fichier prêt". Both catalogs are frozen, so
+    /// what has to be proved now is that a French Mac no longer gets French
+    /// agreement — it resolves to English and reads "0 files ready". A stale
+    /// `PluralRule` branch is exactly what this would catch.
+    func testZeroTakesThePluralNounInEnglishAndForEveryArchivedPreference() {
         XCTAssertTrue(L10n.plural(.selectionFiles, 0, language: .en).contains("files"))
+        XCTAssertFalse(L10n.plural(.selectionFiles, 1, language: .en).contains("files"))
+
+        for tag in ["fr-CA", "pt-BR", "de-AT", "ar-EG"] {
+            let resolved = AppLanguage.resolve(preferred: [tag])
+            let zero = L10n.plural(.selectionFiles, 0, language: resolved)
+            XCTAssertEqual(zero, L10n.plural(.selectionFiles, 0, language: .en),
+                           "\(tag) did not get the English zero form")
+            XCTAssertTrue(zero.contains("files"), "\(tag): \(zero)")
+        }
     }
 
     func testResetTextPluralizesPerLanguage() {
         let now = Date(timeIntervalSince1970: 1_780_000_000)
         let five = UsagePresentation.resetText(resetsAt: 1_780_000_000 + 5 * 86_400,
-                                               now: now, language: .ar)
+                                               now: now, language: .en)
         XCTAssertTrue(five.contains("5"), five)
-        XCTAssertTrue(five.contains("أيام"), five)      // Arabic `few`
+        XCTAssertTrue(five.contains("days"), five)      // English `other`
+        let one = UsagePresentation.resetText(resetsAt: 1_780_000_000 + 86_400,
+                                              now: now, language: .en)
+        XCTAssertTrue(one.contains("day"), one)
+        XCTAssertFalse(one.contains("days"), one)       // English `one`
         XCTAssertEqual(UsagePresentation.resetText(resetsAt: 1_780_000_000 + 3_600,
                                                    now: now, language: .zh),
                        "今天重置")
@@ -341,10 +347,12 @@ final class LocalizedCopyTests: XCTestCase {
         XCTAssertTrue(zh.contains("1 个文件夹"), zh)
         XCTAssertTrue(zh.contains("1 个空文件夹无法发送"), zh)
 
-        let de = try XCTUnwrap(store.summaryText(language: .de))
-        XCTAssertTrue(de.contains("2 Dateien bereit"), de)
-        XCTAssertTrue(de.contains("in 1 Ordner"), de)
-        XCTAssertTrue(de.contains("1 leerer Ordner"), de)
+        let en = try XCTUnwrap(store.summaryText(language: .en))
+        XCTAssertTrue(en.contains("2 files ready"), en)
+        XCTAssertTrue(en.contains("1 folder"), en)
+        XCTAssertTrue(en.lowercased().contains("empty"), en)
+        // The two are genuinely different sentences, not one string twice.
+        XCTAssertNotEqual(en, zh)
     }
 
     // MARK: - presentation seams
@@ -358,16 +366,22 @@ final class LocalizedCopyTests: XCTestCase {
             XCTAssertFalse(zh.isEmpty)
             XCTAssertNotEqual(zh, en, "state \(state) is not translated")
         }
-        XCTAssertEqual(NearbyStatusPresentation.text(for: .ready, language: .ar),
-                       "الاستقبال من القريبين: جاهز")
+        XCTAssertEqual(NearbyStatusPresentation.text(for: .ready, language: .zh),
+                       L10n.t(.nearbyStatusReady, language: .zh))
     }
 
     func testTtlLabelsAreTranslatedAndUnknownValuesStayUsable() {
         XCTAssertEqual(TtlPresentation.label(seconds: 1_209_600, language: .en), "14 days")
         XCTAssertEqual(TtlPresentation.label(seconds: 1_209_600, language: .zh), "14 天")
-        XCTAssertEqual(TtlPresentation.label(seconds: 1_209_600, language: .ja), "14 日")
-        // A retention this build has no name for is shown rather than hidden.
-        XCTAssertTrue(TtlPresentation.label(seconds: 4242, language: .fr).contains("4242"))
+        // A retention this build has no name for is shown rather than hidden, in
+        // every shipped language and for an archived preference too.
+        for language in AppLanguage.allCases {
+            XCTAssertTrue(TtlPresentation.label(seconds: 4242, language: language)
+                .contains("4242"), language.rawValue)
+        }
+        XCTAssertTrue(TtlPresentation
+            .label(seconds: 4242, language: AppLanguage.resolve(preferred: ["fr-CA"]))
+            .contains("4242"))
     }
 
     func testAccountRowDetailsAreLocalized() {
@@ -379,10 +393,12 @@ final class LocalizedCopyTests: XCTestCase {
         let file = StoredFileSummary(id: "abc", size: 2_097_152, createdAt: 1_780_000_000,
                                      expiresAt: 0, burnAfterRead: true,
                                      downloaded: false, downloadCount: 3)
-        let fr = AccountPresentation.fileDetail(file, language: .fr)
-        XCTAssertTrue(fr.contains("chiffrés"), fr)
-        XCTAssertTrue(fr.contains("sans expiration"), fr)
-        XCTAssertTrue(fr.contains("téléchargé 3 fois"), fr)
+        let en = AccountPresentation.fileDetail(file, language: .en)
+        XCTAssertTrue(en.lowercased().contains("encrypted"), en)
+        XCTAssertTrue(en.contains("3"), en)
+        let zhFile = AccountPresentation.fileDetail(file, language: .zh)
+        XCTAssertNotEqual(zhFile, en, "the file detail is not translated")
+        XCTAssertTrue(zhFile.contains("3"), zhFile)
     }
 
     func testDownloadSummaryPluralizesAndSizesPerLanguage() {
@@ -390,13 +406,13 @@ final class LocalizedCopyTests: XCTestCase {
                                                             totalBytes: 1_048_576,
                                                             language: .en),
                        "1 file · 1.0 MB")
-        // German writes the decimal separator as a comma.
+        // Chinese: one plural form, a dot separator, and its own noun.
         XCTAssertEqual(DownloadPresentation.manifestSummary(fileCount: 2,
                                                             totalBytes: 1_048_576,
-                                                            language: .de),
-                       "2 Dateien · 1,0 MB")
-        XCTAssertEqual(DownloadPresentation.savedSummary(fileCount: 1, language: .pt),
-                       "Guardado 1 ficheiro")
+                                                            language: .zh),
+                       "2 个文件 · 1.0 MB")
+        XCTAssertNotEqual(DownloadPresentation.savedSummary(fileCount: 1, language: .zh),
+                          DownloadPresentation.savedSummary(fileCount: 1, language: .en))
     }
 
     func testNotificationBodiesPluralizeAndCarryNoUserData() {
@@ -414,20 +430,28 @@ final class LocalizedCopyTests: XCTestCase {
     /// to a `KB` symbol readable), with the separator each language writes.
     func testByteFiguresUseLatinDigitsAndTheLanguagesSeparator() {
         XCTAssertEqual(L10n.bytes(1024, language: .en), "1.0 KB")
-        XCTAssertEqual(L10n.bytes(1024, language: .fr), "1,0 KB")
-        XCTAssertEqual(L10n.bytes(1024, language: .de), "1,0 KB")
-        XCTAssertEqual(L10n.bytes(1024, language: .es), "1,0 KB")
-        XCTAssertEqual(L10n.bytes(1024, language: .pt), "1,0 KB")
         XCTAssertEqual(L10n.bytes(1024, language: .zh), "1.0 KB")
-        XCTAssertEqual(L10n.bytes(1024, language: .ar), "1.0 KB")
+        // Both shipped languages write a dot. The comma branch left with the
+        // seven frozen European catalogs, and an archived preference must NOT
+        // get it back: a French Mac reads English words, so "1,0 KB" beside them
+        // would be a formatting rule with no language behind it.
+        for tag in ["fr-CA", "de-AT", "es-MX", "pt-BR", "ar-EG"] {
+            XCTAssertEqual(L10n.bytes(1024, language: AppLanguage.resolve(preferred: [tag])),
+                           "1.0 KB", tag)
+        }
         // Below 1 KB there is no fraction at all, so no separator question.
-        XCTAssertEqual(L10n.bytes(512, language: .de), "512 B")
+        XCTAssertEqual(L10n.bytes(512, language: .en), "512 B")
+        XCTAssertEqual(L10n.bytes(512, language: .zh), "512 B")
     }
 
     func testPercentagesArePositionedByTheCatalog() {
         XCTAssertEqual(L10n.percent(done: 1, total: 2, language: .en), "50%")
-        XCTAssertEqual(L10n.percent(done: 1, total: 2, language: .de), "50 %")
         XCTAssertEqual(L10n.percent(done: 1, total: 2, language: .zh), "50%")
+        // The catalog decides the position, so a language that wanted "50 %"
+        // could still have it. Both shipped languages happen not to.
+        XCTAssertEqual(L10n.percent(done: 1, total: 2,
+                                    language: AppLanguage.resolve(preferred: ["de-AT"])),
+                       "50%")
         // No total yet: the caller shows "Starting…" instead of a meaningless 0%.
         XCTAssertNil(L10n.percent(done: 0, total: 0, language: .en))
     }
@@ -435,11 +459,14 @@ final class LocalizedCopyTests: XCTestCase {
     func testDatesAreFormattedInTheRenderedLanguage() {
         let date = Date(timeIntervalSince1970: 1_780_000_000)
         let en = L10n.date(date, dateStyle: .medium, timeStyle: .none, language: .en)
-        let de = L10n.date(date, dateStyle: .medium, timeStyle: .none, language: .de)
-        let ja = L10n.date(date, dateStyle: .medium, timeStyle: .none, language: .ja)
-        XCTAssertNotEqual(en, de)
-        XCTAssertNotEqual(en, ja)
+        let zh = L10n.date(date, dateStyle: .medium, timeStyle: .none, language: .zh)
+        XCTAssertNotEqual(en, zh, "the date is not formatted in the rendered language")
         XCTAssertFalse(en.isEmpty)
+        XCTAssertFalse(zh.isEmpty)
+        // An archived preference renders the English date, not its own locale's.
+        XCTAssertEqual(L10n.date(date, dateStyle: .medium, timeStyle: .none,
+                                 language: AppLanguage.resolve(preferred: ["de-AT"])),
+                       en)
     }
 
     // MARK: - claims that must survive translation
@@ -452,9 +479,7 @@ final class LocalizedCopyTests: XCTestCase {
     /// means naming each language's word for it and having read the sentence it
     /// sits in. Same nouns R3-B established for `error.manifest.duplicatePath`.
     private let deviceNoun: [AppLanguage: String] = [
-        .en: "this device", .zh: "这台设备", .ja: "このデバイス", .ko: "이 기기",
-        .de: "diesem Gerät", .fr: "cet appareil", .ar: "هذا الجهاز",
-        .es: "este dispositivo", .pt: "este dispositivo",
+        .en: "this device", .zh: "这台设备",
     ]
 
     /// The upload success notice is the app's E2E claim, not decoration: the key
@@ -498,7 +523,8 @@ final class LocalizedCopyTests: XCTestCase {
                               "\(language.rawValue) fell through to the raw key")
         }
         XCTAssertTrue(L10n.t(.accountDeleteFileBody, language: .zh).contains("无法撤销"))
-        XCTAssertTrue(L10n.t(.accountDeleteFileBody, language: .ar).contains("لا يمكن التراجع"))
+        XCTAssertNotEqual(L10n.t(.accountDeleteFileBody, language: .zh),
+                          L10n.t(.accountDeleteFileBody, language: .en))
     }
 
     // MARK: - deleting the account itself
@@ -543,51 +569,9 @@ final class LocalizedCopyTests: XCTestCase {
                    revokedAccess: "登录会话和设备访问权限",
                    reactivate: "重新登录",
                    overclaims: ["进行中的传输", "同一封邮件"]),
-        .ja: .init(email: "メール",
-                   notYet: "まで、何も削除されません",
-                   permanent: "完全に",
-                   revokedAccess: "セッションとデバイスのアクセス権",
-                   reactivate: "もう一度サインイン",
-                   overclaims: ["進行中の転送", "同じメール"]),
-        .ko: .init(email: "메일",
-                   notYet: "전에는 아무것도 삭제되지 않습니다",
-                   permanent: "영구",
-                   revokedAccess: "세션과 기기 접근 권한",
-                   reactivate: "다시 로그인",
-                   overclaims: ["진행 중인 전송", "같은 메일"]),
-        .de: .init(email: "E-Mail",
-                   notYet: "wird nichts entfernt",
-                   permanent: "endgültig",
-                   revokedAccess: "Sitzungen und Gerätezugriffe",
-                   reactivate: "erneut anmelden",
-                   overclaims: ["laufende Übertragungen", "dieselbe E-Mail"]),
-        .fr: .init(email: "e-mail",
-                   notYet: "Rien n'est supprimé tant que",
-                   permanent: "définitive",
-                   revokedAccess: "sessions Relayium et l'accès des appareils",
-                   reactivate: "reconnectez-vous",
-                   overclaims: ["transferts en cours", "même e-mail"]),
-        .ar: .init(email: "البريد",
-                   notYet: "لا يتم حذف أي شيء قبل فتح",
-                   permanent: "نهائيًا",
-                   revokedAccess: "جلسات Relayium وصلاحية وصول الأجهزة",
-                   reactivate: "سجّل الدخول مرة أخرى",
-                   overclaims: ["عمليات النقل الجارية", "الرسالة نفسها"]),
-        .es: .init(email: "correo",
-                   notYet: "No se elimina nada hasta",
-                   permanent: "definitiva",
-                   revokedAccess: "sesiones de Relayium y el acceso de los dispositivos",
-                   reactivate: "vuelve a iniciar sesión",
-                   overclaims: ["transferencias en curso", "mismo correo"]),
-        .pt: .init(email: "e-mail",
-                   notYet: "Nada é apagado até",
-                   permanent: "definitiva",
-                   revokedAccess: "sessões do Relayium e o acesso dos dispositivos",
-                   reactivate: "inicie sessão novamente",
-                   overclaims: ["transferências em curso", "mesmo e-mail"]),
     ]
 
-    /// The safety claims, in all nine languages.
+    /// The safety claims, in both shipped languages.
     ///
     /// This is the only destructive action in the app whose copy is the safety
     /// mechanism: the button sends an email and nothing else, and a translation
@@ -638,8 +622,9 @@ final class LocalizedCopyTests: XCTestCase {
         }
     }
 
-    /// Every string the deletion section adds is real copy in all nine, not a
-    /// key echoed back and not a template with an unsubstituted placeholder.
+    /// Every string the deletion section adds is real copy in both shipped
+    /// languages, not a key echoed back and not a template with an unsubstituted
+    /// placeholder.
     func testTheAccountDeletionCopyIsTranslatedEverywhere() {
         let plain: [L10nKey] = [
             .accountDeleteAccountHeading, .accountDeleteAccount,
@@ -745,8 +730,9 @@ final class LocalizedCopyTests: XCTestCase {
 
     // MARK: - in-app registration
 
-    /// Every string the create-account flow adds is real copy in all nine, not a
-    /// key echoed back and not a template with an unsubstituted placeholder.
+    /// Every string the create-account flow adds is real copy in both shipped
+    /// languages, not a key echoed back and not a template with an unsubstituted
+    /// placeholder.
     func testTheRegistrationCopyIsTranslatedEverywhere() {
         let added: [L10nKey] = [
             .loginSignInTitle, .loginSignInBody,
@@ -794,8 +780,8 @@ final class LocalizedCopyTests: XCTestCase {
     /// The old copy ended in "sign in again", which was written for the only way
     /// this state was reachable then — a sign-in against an unverified account.
     /// A registration reaches it too, and "again" would be describing something
-    /// that never happened. The address itself must survive verbatim in all
-    /// nine, isolated under Arabic.
+    /// that never happened. The address itself must survive verbatim in both
+    /// shipped languages.
     func testTheCheckEmailBodyNamesTheAddressAndPointsBackToTheApp() {
         for language in AppLanguage.allCases {
             let email = "ada@example.com"
@@ -958,13 +944,6 @@ final class LocalizedCopyTests: XCTestCase {
         let receiving: [AppLanguage: String] = [
             .en: "Receiving a link never does",
             .zh: "接收链接则始终不需要账户",
-            .ja: "リンクの受信にアカウントは一切要りません",
-            .ko: "링크를 받을 때는 계정이 전혀 필요하지 않습니다",
-            .de: "Zum Empfangen eines Links nie",
-            .fr: "La réception d’un lien n’en demande jamais",
-            .ar: "أمّا استلام رابط فلا يتطلّب حسابًا أبدًا",
-            .es: "Recibir un enlace nunca lo requiere",
-            .pt: "Receber uma ligação nunca exige",
         ]
         for language in AppLanguage.allCases {
             let body = L10n.t(.sendAccountBody, language: language)
@@ -987,13 +966,6 @@ final class LocalizedCopyTests: XCTestCase {
     private let noAccountPhrase: [AppLanguage: String] = [
         .en: "needs no account",
         .zh: "不需要账户",
-        .ja: "アカウントは不要です",
-        .ko: "계정이 필요하지 않습니다",
-        .de: "kein Konto",
-        .fr: "aucun compte",
-        .ar: "لا يتطلب",
-        .es: "no requiere ninguna cuenta",
-        .pt: "não exige qualquer conta",
     ]
 
     /// The claim this whole round turns on: three capabilities work signed out,
@@ -1027,7 +999,7 @@ final class LocalizedCopyTests: XCTestCase {
     /// the same is not a cosmetic problem — it is a destination the user cannot
     /// tell apart from another one, in that language only. English is where the
     /// copy is written, so English is the one place a collision would be noticed
-    /// by hand; the other eight are why this is a test.
+    /// by hand; Simplified Chinese is why this is a test.
     ///
     /// These are the five BROWSEABLE rows, which is why `nav.storedReceive` is
     /// not among them: Open a link has a window title and no row. The two
@@ -1070,38 +1042,22 @@ final class LocalizedCopyTests: XCTestCase {
     /// that no shared network is needed. A merged row could carry neither.
     func testSidebarSubtitlesKeepTheDecisiveLimitation() throws {
         let bothOnline: [AppLanguage: String] = [
-            .en: "both sides online", .zh: "双方须同时在线", .ja: "双方がオンライン",
-            .ko: "양쪽 모두 온라인", .de: "beide Seiten online", .fr: "les deux en ligne",
-            .ar: "اتصال الطرفين", .es: "ambos en línea", .pt: "ambos online",
+            .en: "both sides online", .zh: "双方须同时在线",
         ]
         let largeFiles: [AppLanguage: String] = [
-            .en: "Large files", .zh: "大文件", .ja: "大きなファイル",
-            .ko: "큰 파일", .de: "Große Dateien", .fr: "Gros fichiers",
-            .ar: "ملفات كبيرة", .es: "Archivos grandes", .pt: "Ficheiros grandes",
+            .en: "Large files", .zh: "大文件",
         ]
         // The network requirement, per language, in the form each one uses. The
         // point of writing them down by hand is that somebody read every
         // translation and confirmed the distinction is really in it.
         let thisNetwork: [AppLanguage: String] = [
-            .en: "on this network", .zh: "同一网络", .ja: "同じネットワーク",
-            .ko: "같은 네트워크", .de: "im selben Netzwerk", .fr: "sur le même réseau",
-            .ar: "على الشبكة نفسها", .es: "en la misma red", .pt: "na mesma rede",
+            .en: "on this network", .zh: "同一网络",
         ]
         let networkNotRequiredCaption: [AppLanguage: String] = [
             .en: "same network not required", .zh: "不要求同一网络",
-            .ja: "同じネットワークでなくても", .ko: "같은 네트워크일 필요 없이",
-            .de: "gleiches Netzwerk nicht erforderlich", .fr: "même réseau non requis",
-            .ar: "لا يلزم أن تكون الشبكة نفسها", .es: "no requiere la misma red",
-            .pt: "mesma rede não obrigatória",
         ]
         let networkNotRequiredExplanation: [AppLanguage: String] = [
             .en: "do not need to be on the same network", .zh: "不要求处于同一网络",
-            .ja: "同じネットワークにある必要はありません",
-            .ko: "같은 네트워크에 있을 필요는 없습니다",
-            .de: "nicht im selben Netzwerk", .fr: "pas besoin d’être sur le même réseau",
-            .ar: "لا يلزم أن يكون الجهازان على الشبكة نفسها",
-            .es: "no tienen que estar en la misma red",
-            .pt: "não têm de estar na mesma rede",
         ]
         for language in AppLanguage.allCases {
             let lan = L10n.t(.navLanTransferSubtitle, language: language)
@@ -1224,9 +1180,7 @@ final class LocalizedCopyTests: XCTestCase {
     /// instead of the claim. Same nouns as `deviceNoun` above, reduced to the
     /// part that survives every case the R3-D sentences put them in.
     private let deviceWord: [AppLanguage: String] = [
-        .en: "device", .zh: "设备", .ja: "デバイス", .ko: "기기",
-        .de: "Gerät", .fr: "appareil", .ar: "الجهاز",
-        .es: "dispositivo", .pt: "dispositivo",
+        .en: "device", .zh: "设备",
     ]
 
     /// The badge on the row for the credential this app is holding.
@@ -1236,9 +1190,7 @@ final class LocalizedCopyTests: XCTestCase {
     /// drifted into a sentence would be a capsule that no longer fits at large
     /// Dynamic Type sizes.
     private let thisDeviceBadge: [AppLanguage: String] = [
-        .en: "This device", .zh: "这台设备", .ja: "このデバイス", .ko: "이 기기",
-        .de: "Dieses Gerät", .fr: "Cet appareil", .ar: "هذا الجهاز",
-        .es: "Este dispositivo", .pt: "Este dispositivo",
+        .en: "This device", .zh: "这台设备",
     ]
 
     func testTheCurrentDeviceBadgeIsTheSameShortPhraseInEveryLanguage() throws {
@@ -1275,9 +1227,7 @@ final class LocalizedCopyTests: XCTestCase {
     /// A root, for the same reason `deviceWord` is one: the sentence inflects it
     /// and pinning the inflection would assert grammar rather than the claim.
     private let ciphertextWord: [AppLanguage: String] = [
-        .en: "ciphertext", .zh: "密文", .ja: "暗号文", .ko: "암호문",
-        .de: "Chiffrat", .fr: "chiffré", .ar: "مُعمّى",
-        .es: "cifrado", .pt: "cifrado",
+        .en: "ciphertext", .zh: "密文",
     ]
 
     /// **R3-E's correction, and the half a platform ban cannot make.**
@@ -1290,7 +1240,8 @@ final class LocalizedCopyTests: XCTestCase {
     /// weaker than the thing it explains, which is exactly how a toggle comes to
     /// be read as "turn this on to be encrypted".
     ///
-    /// So this asserts both directions in all nine: no platform is named, and
+    /// So this asserts both directions in both shipped languages: no platform is
+    /// named, and
     /// the sentence still names the device the keys are generated on, still
     /// names Relayium as the party they are never sent to, and still says the
     /// relay carries only ciphertext.
@@ -1316,7 +1267,7 @@ final class LocalizedCopyTests: XCTestCase {
         }
     }
 
-    /// The R3-E copy the Direct tab adds, in all nine.
+    /// The R3-E copy the Direct tab adds, in both shipped languages.
     ///
     /// Two claims about the same three sentences, and they pull against each
     /// other, which is why both are here. They must not name a platform — this
@@ -1327,16 +1278,13 @@ final class LocalizedCopyTests: XCTestCase {
     /// the network.
     func testTheDirectPositioningCopyIsHonestAndPlatformNeutral() throws {
         let bothDevices: [AppLanguage: String] = [
-            .en: "both devices", .zh: "两台设备", .ja: "両方のデバイス", .ko: "두 기기",
-            .de: "beiden Geräten", .fr: "les deux appareils", .ar: "الجهازين",
-            .es: "ambos dispositivos", .pt: "dois dispositivos",
+            .en: "both devices", .zh: "两台设备",
         ]
         // Direct can be slower depending on the route; it is not universally
         // slower than the stored two-leg path. Keep the recommendation honest
         // in every catalog rather than turning it into an absolute benchmark.
         let possibility: [AppLanguage: String] = [
-            .en: "can", .zh: "可能", .ja: "ことがあり", .ko: "수 있고",
-            .de: "kann", .fr: "peut", .ar: "قد", .es: "puede", .pt: "pode",
+            .en: "can", .zh: "可能",
         ]
         for language in AppLanguage.allCases {
             for key in [L10nKey.directLargeFilesTitle, .directLargeFilesBody,
@@ -1487,14 +1435,10 @@ final class LocalizedCopyTests: XCTestCase {
     /// address can try, and pausing is how you stop it.
     func testTheSharedListeningBodyNamesNoSaveLocationAndKeepsItsWarning() throws {
         let pauseWord: [AppLanguage: String] = [
-            .en: "pause", .zh: "暂停", .ja: "一時停止", .ko: "일시 중지",
-            .de: "pausier", .fr: "suspend", .ar: "أوقف",
-            .es: "ausa", .pt: "ause",
+            .en: "pause", .zh: "暂停",
         ]
         let downloadsWord: [AppLanguage: String] = [
-            .en: "Downloads", .zh: "下载", .ja: "ダウンロード", .ko: "다운로드",
-            .de: "Downloads", .fr: "Téléchargements", .ar: "التنزيلات",
-            .es: "Descargas", .pt: "Transferências",
+            .en: "Downloads", .zh: "下载",
         ]
         for language in AppLanguage.allCases {
             let shared = L10n.t(.nearbyListeningBody, language: language)
@@ -1620,18 +1564,13 @@ final class LocalizedCopyTests: XCTestCase {
     /// nothing.
     func testTheNearbyExplanationKeepsItsThreeClaimsInEveryLanguage() throws {
         let publicAddress: [AppLanguage: String] = [
-            .en: "public address", .zh: "公网地址", .ja: "グローバルアドレス", .ko: "공인 주소",
-            .de: "öffentliche Adresse", .fr: "adresse publique", .ar: "العنوان العام",
-            .es: "dirección pública", .pt: "endereço público",
+            .en: "public address", .zh: "公网地址",
         ]
         let gateway: [AppLanguage: String] = [
-            .en: "VPN", .zh: "VPN", .ja: "VPN", .ko: "VPN",
-            .de: "VPN", .fr: "VPN", .ar: "VPN", .es: "VPN", .pt: "VPN",
+            .en: "VPN", .zh: "VPN",
         ]
         let scans: [AppLanguage: String] = [
-            .en: "never scans", .zh: "从不扫描", .ja: "スキャンしません", .ko: "스캔하지 않습니다",
-            .de: "nie", .fr: "ne scanne jamais", .ar: "لا يفحص",
-            .es: "nunca escanea", .pt: "nunca examina",
+            .en: "never scans", .zh: "从不扫描",
         ]
         for language in AppLanguage.allCases {
             let text = L10n.t(.nearbyExplain, language: language)
@@ -1655,22 +1594,17 @@ final class LocalizedCopyTests: XCTestCase {
     /// worse screen than the one it replaced, not a shorter one.
     func testTheAlwaysVisibleNearbySummaryKeepsTheStrangerClaim() throws {
         let publicAddress: [AppLanguage: String] = [
-            .en: "public address", .zh: "公网地址", .ja: "グローバルアドレス", .ko: "공인 주소",
-            .de: "öffentliche Adresse", .fr: "adresse publique", .ar: "العنوان العام",
-            .es: "dirección pública", .pt: "endereço público",
+            .en: "public address", .zh: "公网地址",
         ]
         // The gateways that make the address someone else's too. VPN is the one
-        // word all nine catalogs keep verbatim, so it is the one asserted.
+        // word every catalog keeps verbatim, so it is the one asserted.
         let gateway: [AppLanguage: String] = [
-            .en: "VPN", .zh: "VPN", .ja: "VPN", .ko: "VPN",
-            .de: "VPN", .fr: "VPN", .ar: "VPN", .es: "VPN", .pt: "VPN",
+            .en: "VPN", .zh: "VPN",
         ]
         // A root rather than the inflected form: the sentence declines it, and
         // pinning the inflection would assert grammar instead of the claim.
         let strangers: [AppLanguage: String] = [
-            .en: "stranger", .zh: "陌生人", .ja: "見知らぬ", .ko: "모르는 사람",
-            .de: "Fremde", .fr: "inconnu", .ar: "غرباء",
-            .es: "desconocido", .pt: "desconhecido",
+            .en: "stranger", .zh: "陌生人",
         ]
         for language in AppLanguage.allCases {
             let text = L10n.t(.nearbySafetySummary, language: language)
@@ -1703,8 +1637,9 @@ final class LocalizedCopyTests: XCTestCase {
     }
 
     /// The disclosure's title says what is behind it. A chevron labelled with a
-    /// bare word — or with English in eight catalogs — is a control nobody opens,
-    /// which would make the collapse equivalent to deleting the explanation.
+    /// bare word — or with English in the Chinese catalog — is a control nobody
+    /// opens, which would make the collapse equivalent to deleting the
+    /// explanation.
     func testTheNearbyDisclosureTitleIsRealCopyEverywhere() {
         for language in AppLanguage.allCases {
             let title = L10n.t(.nearbyHowItWorks, language: language)

@@ -104,7 +104,10 @@ final class ShareViewController: NSViewController {
         }
         // The direction the copy layer resolved, applied at this surface's root
         // for the reason the app's two scene roots do it: the catalogs live in a
-        // package bundle, so SwiftUI does not mirror an Arabic UI on its own.
+        // package bundle, so SwiftUI does not mirror an RTL UI on its own.
+        // Left-to-right for both shipped languages since Arabic was frozen; kept
+        // derived rather than hard-coded so a restored RTL language reaches this
+        // extension too.
         let hosting = NSHostingController(
             rootView: root.environment(\.layoutDirection,
                                        L10n.current.isRightToLeft ? .rightToLeft : .leftToRight))

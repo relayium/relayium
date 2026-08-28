@@ -478,7 +478,8 @@ final class AppShellUITests: XCTestCase {
     func testEveryDestinationIsReachableFromTheSidebar() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        // English is the CI locale; the localized suites cover the other eight.
+        // English is the CI locale; the language matrix above covers the other
+        // shipped language and the archived-preference fallback.
         for destination in ["LAN Transfer", "Cross-network Transfer", "Send a link",
                             "Device Inbox", "Account"] {
             let row = sidebarDestination(destination, in: window)
@@ -1998,12 +1999,10 @@ final class AppShellUITests: XCTestCase {
     /// or a language the shell never asks for, looks exactly like a correct
     /// catalog from inside the package.
     func testEveryShippedLanguageRendersItsOwnShell() {
-        let shipped = [
-            ("en", "LAN Transfer"), ("zh-Hans", "局域网传输"), ("ja", "LAN 転送"),
-            ("ko", "LAN 전송"), ("de", "LAN-Übertragung"),
-            ("fr", "Transfert sur le réseau local"), ("ar", "النقل عبر الشبكة المحلية"),
-            ("es", "Transferencia en red local"), ("pt", "Transferência na rede local"),
-        ]
+        // Exactly the two Relayium ships. The seven that used to be here left
+        // with their catalogs; what a Mac set to one of them now sees is asserted
+        // by `testAnArchivedLanguagePreferenceRendersACompleteEnglishLeftToRightShell`.
+        let shipped = [("en", "LAN Transfer"), ("zh-Hans", "局域网传输")]
         for (code, lanTransfer) in shipped {
             app.terminate()
             app.launchArguments = ["--relayium-ui-testing", "-AppleLanguages", "(\(code))",
@@ -2022,28 +2021,52 @@ final class AppShellUITests: XCTestCase {
         }
     }
 
-    /// An Arabic launch lays the window out right-to-left, not merely in Arabic.
+    /// **An archived language preference renders a complete ENGLISH, LEFT-TO-RIGHT
+    /// shell — in the running app.**
     ///
-    /// The sidebar is the leading pane, so under RTL it belongs on the RIGHT.
-    /// Geometry is what separates a translated app from a localized one: strings
-    /// in a left-to-right layout survive a screenshot review and are wrong for
-    /// every RTL reader. `sidebarDestination` deliberately is not used here —
-    /// it resolves rows by assuming the sidebar is on the left, which is the
-    /// very thing under test.
-    func testAnArabicLaunchLaysTheWindowOutRightToLeft() {
-        app.terminate()
-        app.launchArguments = ["--relayium-ui-testing", "-AppleLanguages", "(ar)",
-                               "-AppleLocale", "ar", "-SUEnableAutomaticChecks", "NO"]
-        app.launch()
-        ensureProductWindowIsOpen()
+    /// This test used to assert the opposite for Arabic: that the window laid
+    /// itself out right-to-left, because a translated app in a left-to-right
+    /// layout is wrong for every RTL reader. Arabic is frozen now, so the
+    /// requirement inverted, and the geometry half is exactly why this still has
+    /// to run against a real launch rather than only through the model seams.
+    ///
+    /// Two failures are possible here and neither is visible from inside the
+    /// package. The app could still ADVERTISE Arabic — `CFBundleLocalizations`
+    /// is what macOS reads to decide layout direction, so a stale entry would
+    /// mirror the window while the copy came back English, producing an English
+    /// UI laid out right to left. Or a resolver that matched a language whose
+    /// catalog is gone would render raw keys. Both are asserted against, for an
+    /// RTL preference and a non-RTL archived one.
+    ///
+    /// `sidebarDestination` deliberately is not used: it resolves rows by
+    /// assuming the sidebar is on the left, which is part of what is under test.
+    func testAnArchivedLanguagePreferenceRendersACompleteEnglishLeftToRightShell() {
+        for code in ["ar", "ja"] {
+            app.terminate()
+            app.launchArguments = ["--relayium-ui-testing", "-AppleLanguages", "(\(code))",
+                                   "-AppleLocale", code, "-SUEnableAutomaticChecks", "NO"]
+            app.launch()
+            ensureProductWindowIsOpen()
 
-        let window = mainWindow
-        XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let row = window.descendants(matching: .any)["sidebar-lanTransfer"].firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 15),
-                      "the Arabic window has no LAN Transfer destination")
-        XCTAssertGreaterThan(row.frame.midX, window.frame.midX,
-                             "an Arabic launch kept the sidebar on the leading-left side")
+            let window = mainWindow
+            XCTAssertTrue(window.waitForExistence(timeout: 20),
+                          "\(code) did not produce a window at all")
+            let row = window.descendants(matching: .any)["sidebar-lanTransfer"].firstMatch
+            XCTAssertTrue(row.waitForExistence(timeout: 15),
+                          "the \(code) window has no LAN Transfer destination")
+
+            // English words, not the archived translation and not a raw key.
+            let shown = (row.value as? String) ?? row.label
+            XCTAssertEqual(shown, "LAN Transfer",
+                           "a \(code) launch did not render the English shell")
+            XCTAssertFalse(shown.hasPrefix("nav."),
+                           "a \(code) launch rendered a raw catalog key: \(shown)")
+
+            // And laid out left to right: the sidebar is the LEADING pane, so
+            // under LTR it belongs on the left half of the window.
+            XCTAssertLessThan(row.frame.midX, window.frame.midX,
+                              "a \(code) launch mirrored the window to right-to-left")
+        }
     }
 
     /// The window's smallest work area still carries the whole task.

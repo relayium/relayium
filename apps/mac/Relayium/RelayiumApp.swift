@@ -291,6 +291,14 @@ struct RelayiumApp: App {
     /// Arabic package catalog in a left-to-right app even though
     /// `CFBundleLocalizations` named Arabic. Resolve the same language the copy
     /// layer uses and make that answer explicit at both scene roots.
+    ///
+    /// **This resolves to `.leftToRight` for everything Relayium ships today.**
+    /// Arabic was the only right-to-left catalog and it is frozen, so
+    /// `isRightToLeft` answers `false` for `en` and `zh` alike — and for every
+    /// archived preference, which now resolves to English. The seam is kept
+    /// wired rather than replaced by a constant precisely because it is derived:
+    /// restoring an RTL language is a change to `AppLanguage`, not a hunt for
+    /// every scene root that forgot to ask.
     private var appLayoutDirection: LayoutDirection {
         L10n.current.isRightToLeft ? .rightToLeft : .leftToRight
     }

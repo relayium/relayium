@@ -7,7 +7,7 @@ import XCTest
 ///
 /// The claim is made in the UI — the shell renders unconditionally, two
 /// destinations hold no account reference, and three lines of copy say "needs no
-/// account" in nine languages. `MacSurfaceGuardTests` can only prove those
+/// account" in both shipped languages. `MacSurfaceGuardTests` can only prove those
 /// surfaces do not *name* the account. What it cannot prove is that the code
 /// underneath them does not send a credential anyway, which is the assertion
 /// that decides whether the copy is true.

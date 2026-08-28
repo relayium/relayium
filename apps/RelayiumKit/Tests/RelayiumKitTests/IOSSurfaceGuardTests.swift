@@ -2095,11 +2095,29 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(counts["NSExtensionActivationSupportsAttachmentsWithMaxCount"] as? Int,
                        SHARED_DRAFT_MAX_FILES,
                        "no aggregate bound: three per-type maxima can be satisfied at once")
-        // Nine languages, or an Arabic sheet renders correct words laid out
-        // left to right — the extension has its own bundle, so it needs its own
-        // list.
+        // **A KNOWN, PENDING iOS/shared-package mismatch — pinned, not fixed.**
+        //
+        // The extension has its own bundle, so it needs its own localization
+        // list. This one still names nine, while the shared package now ships
+        // exactly `en` and `zh-Hans`: the Mac two-language contraction moved the
+        // other seven catalogs to `apps/RelayiumKit/LocalizationArchive/` and could not
+        // touch `apps/ios/**`, which is read-only while iOS product development
+        // is paused. That build is unshipped, so nothing reaches a user from it.
+        //
+        // Asserted as a LITERAL rather than against `AppLanguage`. Deriving it
+        // would fail here for a reason that is not this extension's fault and
+        // would block Mac truth; deleting it would leave nothing to notice when
+        // iOS resumes. When it does, replace this literal with
+        // `AppLanguage.allCases.map(\.lproj).sorted()` — the assertion the Mac
+        // appex already gets in `MacSurfaceGuardTests`.
         XCTAssertEqual((plist["CFBundleLocalizations"] as? [String])?.sorted(),
-                       AppLanguage.allCases.map(\.lproj).sorted())
+                       ["ar", "de", "en", "es", "fr", "ja", "ko", "pt", "zh-Hans"],
+                       "apps/ios/RelayiumShare/Info.plist changed. If iOS resumed and this "
+                       + "was contracted deliberately, switch this to AppLanguage; if not, "
+                       + "an iOS file was edited under a Mac-only lease.")
+        XCTAssertGreaterThan((plist["CFBundleLocalizations"] as? [String])?.count ?? 0,
+                             AppLanguage.allCases.count,
+                             "iOS no longer over-declares; see the note above")
     }
 
     /// The extension declares a non-empty `CFBundleDisplayName`, and it is the
@@ -3203,8 +3221,15 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertNil(plist["NSPhotoLibraryUsageDescription"])
         XCTAssertNil(plist["NSPhotoLibraryAddUsageDescription"])
         XCTAssertNil(plist["UIBackgroundModes"])
+        // The same known, pending mismatch as the appex above: the iOS app still
+        // declares nine while the shared package ships two. Kept as a literal so
+        // it fails when iOS resumes and its plist is corrected, rather than
+        // failing now for a Mac change it does not own. See
+        // `testTheExtensionActivatesOnlyForFilesImagesAndMovies`.
         XCTAssertEqual(plist["CFBundleLocalizations"] as? [String],
-                       ["en", "zh-Hans", "ja", "ko", "de", "fr", "ar", "es", "pt"])
+                       ["en", "zh-Hans", "ja", "ko", "de", "fr", "ar", "es", "pt"],
+                       "apps/ios/Relayium/Info.plist changed under a Mac-only lease, or "
+                       + "iOS resumed and this should now derive from AppLanguage")
     }
 
     // MARK: - R3-E: the Direct tab

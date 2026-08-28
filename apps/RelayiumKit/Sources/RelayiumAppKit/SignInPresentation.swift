@@ -106,7 +106,7 @@ public enum RegistrationProblem: Equatable, Sendable {
 
     /// The sentence to show. `passwordTooShort` borrows the SERVER's key: it is
     /// the server's rule, and one rule stated two ways is two rules to keep in
-    /// step across nine catalogs.
+    /// step across every shipped catalog.
     public var messageKey: L10nKey {
         switch self {
         case .emailMissing:     return .loginErrorEmailMissing

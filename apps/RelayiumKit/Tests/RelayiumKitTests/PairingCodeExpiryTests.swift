@@ -120,18 +120,28 @@ final class PairingCodeExpiryTests: XCTestCase {
         }
     }
 
-    /// The clock reading keeps its own reading order in a right-to-left
-    /// language: a bare `4:32` dropped into an Arabic sentence is laid out by
-    /// the bidi algorithm against the surrounding text, which can reverse it.
-    func testTheClockIsIsolatedInARightToLeftLanguage() throws {
-        let arabic = try XCTUnwrap(PairingCodeExpiry.presentation(
-            expiresAt: mintedAt + 272, now: at(0), language: .ar).countdown)
-        XCTAssertTrue(arabic.contains("4:32"), "the clock digits were rewritten")
-        XCTAssertTrue(arabic.hasPrefix("\u{2068}") && arabic.hasSuffix("\u{2069}"),
-                      "the clock is not isolated, so bidi may reorder it")
-        // …and untouched in a left-to-right one, so English output is unchanged.
+    /// The clock reading goes through `L10n.token`, so it keeps its own reading
+    /// order in a right-to-left language: a bare `4:32` dropped into such a
+    /// sentence is laid out by the bidi algorithm against the surrounding text,
+    /// which can reverse it.
+    ///
+    /// Arabic was the language that made this necessary and it is now frozen, so
+    /// what is left to assert is the property that still has a user: the clock
+    /// renders as exactly `4:32`, unwrapped and unrewritten, in both shipped
+    /// languages. The routing through `token` is kept rather than inlined — it
+    /// is what makes a restored RTL language correct without revisiting this
+    /// screen — and `LocalizationIntegrityTests` covers the wrapping branch.
+    func testTheClockIsRenderedVerbatimInEveryShippedLanguage() throws {
+        for language in AppLanguage.allCases {
+            let shown = try XCTUnwrap(PairingCodeExpiry.presentation(
+                expiresAt: mintedAt + 272, now: at(0), language: language).countdown)
+            XCTAssertEqual(shown, "4:32",
+                           "\(language.rawValue) rewrote or wrapped the clock")
+        }
+        // An archived preference resolves to English and gets the same clock.
+        let archived = AppLanguage.resolve(preferred: ["ar-EG"])
         XCTAssertEqual(PairingCodeExpiry.presentation(expiresAt: mintedAt + 272,
-                                                      now: at(0), language: .en).countdown,
+                                                      now: at(0), language: archived).countdown,
                        "4:32")
     }
 

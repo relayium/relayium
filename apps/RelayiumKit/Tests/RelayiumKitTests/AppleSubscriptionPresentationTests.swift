@@ -9,7 +9,7 @@ import XCTest
 /// that lives inside a SwiftUI view: which sentence a failure gets, whether a
 /// row is "your current plan", whether a build may link out to the website. Each
 /// one is a claim to a paying customer at the moment something is going wrong,
-/// and none of them is observable from a screenshot in nine languages.
+/// and none of them is observable from a screenshot in either shipped language.
 final class AppleSubscriptionPresentationTests: XCTestCase {
 
     private func offer(_ id: String, plan: String, name: String, cycle: String,
@@ -565,8 +565,8 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
 
     // MARK: - every language
 
-    /// Nine catalogs, every new sentence, no key falling through to its own
-    /// name. `LocalizationIntegrityTests` proves the keys EXIST everywhere; this
+    /// Both shipped catalogs, every new sentence, no key falling through to its
+    /// own name. `LocalizationIntegrityTests` proves the keys EXIST everywhere; this
     /// proves the ones this surface actually renders resolve to words.
     func testEverySubscriptionSentenceResolvesInEveryLanguage() {
         let states: [AppleSubscriptionState] = [

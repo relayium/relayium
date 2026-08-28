@@ -3,10 +3,14 @@ import Foundation
 /// Every localizable string the native clients render, named once.
 ///
 /// This enum is the CANON. `LocalizationIntegrityTests` walks `allCases` against
-/// all nine catalogs and fails on a key that any catalog is missing, and walks
-/// each catalog's own keys back against this enum and fails on one that nothing
-/// references. So a string cannot be added to a `.strings` file and forgotten in
-/// code, or added in code and forgotten in eight languages.
+/// both shipped catalogs and fails on a key that either catalog is missing, and
+/// walks each catalog's own keys back against this enum and fails on one that
+/// nothing references. So a string cannot be added to a `.strings` file and
+/// forgotten in code, or added in code and forgotten in Simplified Chinese.
+///
+/// "Both" means `en` and `zh-Hans`. The seven frozen catalogs under
+/// `apps/RelayiumKit/LocalizationArchive/frozen-locales/` are NOT walked and are not held
+/// to this enum — they are history, and they will drift as keys are added here.
 ///
 /// It also removes the class of bug that a bare string key invites: a typo in
 /// `"account.filesHedaing"` compiles, ships, and renders the typo.
@@ -53,7 +57,9 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case formatDetailPair = "format.detailPair"
     /// %1$@ the step's number, %2$@ the step. In the catalog so the numeral,
     /// its separator and their order are the language's business — `"\(n). "`
-    /// is English punctuation, and one of the nine reads right to left.
+    /// is English punctuation, and a restored language need not agree with it.
+    /// (This was originally written because Arabic, then shipped, reads right to
+    /// left; no shipped language does today, and the key stays keyed anyway.)
     case formatHelpStep = "format.helpStep"
 
     // MARK: - App lifecycle, menus
@@ -343,8 +349,8 @@ public enum L10nKey: String, CaseIterable, Sendable {
     //
     // The `workspace.` prefix is the namespace these strings shipped under and
     // is deliberately left alone: it names nothing on screen, and renaming
-    // thirty keys across nine catalogs to rename a namespace is churn with a
-    // translation-loss risk and no user-visible result.
+    // thirty keys across the shipped catalogs to rename a namespace is churn
+    // with a translation-loss risk and no user-visible result.
 
     case workspaceSameNetworkHeading = "workspace.sameNetworkHeading"
     case workspacePairingHeading = "workspace.pairingHeading"
@@ -373,7 +379,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// at the batch. macOS renders none of them since the transfer screens became
     /// connect-first; `nearby.addFilesHint` and `nearby.selectionSendHint` are
     /// still iOS's, which stages before connecting. Kept so a re-enable of
-    /// pre-staging restores the copy rather than reinventing it, and so eight
+    /// pre-staging restores the copy rather than reinventing it, and so its
     /// translations are not discarded for a decision that may be revisited.
     case workspaceSendMessage = "workspace.sendMessage"
     /// The Workspace's own version of `nearby.addFilesHint`, which says
@@ -567,7 +573,8 @@ public enum L10nKey: String, CaseIterable, Sendable {
     // stored bytes, an account pays for the relayed traffic a minted code
     // reserves — and each ends by naming the half that needs no account, because
     // the most damaging thing the old shell did was imply the whole product did.
-    // That final clause is load-bearing and is asserted in all nine languages.
+    // That final clause is load-bearing and is asserted in both shipped
+    // languages.
 
     case gateSendLinkTitle = "gate.sendLinkTitle"
     case gateSendLinkBody = "gate.sendLinkBody"
@@ -908,8 +915,8 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// The third of the three "needs no account" lines, and the one that carries
     /// the most weight: receiving a stored link is the capability the old
     /// sign-in-first shell hid most completely. Its clause must survive
-    /// translation in all nine — it is the same sentence `gate.sendLinkBody`
-    /// ends with, said where the capability actually is.
+    /// translation in both shipped languages — it is the same sentence
+    /// `gate.sendLinkBody` ends with, said where the capability actually is.
     case downloadNoAccountNeeded = "download.noAccountNeeded"
 
     // MARK: - Ephemeral text
@@ -1247,8 +1254,8 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case accountUnnamedDevice = "account.unnamedDevice"
     /// The badge on the row for the credential this app is holding.
     ///
-    /// The key still spells *thisMac* because renaming it would rewrite nine
-    /// catalogs for no user-visible gain; the WORDING is device-neutral from
+    /// The key still spells *thisMac* because renaming it would rewrite every
+    /// catalog for no user-visible gain; the WORDING is device-neutral from
     /// R3-D onwards, because iOS renders the same badge. `LocalizedCopyTests`
     /// pins the phrase itself in every language.
     case accountThisMac = "account.thisMac"
@@ -1315,7 +1322,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
 
     // MARK: - Deleting the account itself
     //
-    // Every one of these is held to the same three claims, in all nine
+    // Every one of these is held to the same three claims, in both shipped
     // languages, by `LocalizedCopyTests`: the confirmation still happens by
     // EMAIL, asking is NOT yet deleting, and what confirming destroys is stated
     // rather than implied. The wording is device-neutral — iOS renders these
@@ -1688,10 +1695,9 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// %@ — how many files a receipt's row did NOT have room to name.
     ///
     /// **Deliberately not a `PluralKey`.** "+4 more" is a tail marker, not a
-    /// sentence with a noun in it, so no language in the maintained set inflects
-    /// it — and a plural key must define every category in every one of the nine
-    /// catalogs, which would mean editing seven frozen locales to add a string
-    /// whose grammar does not vary.
+    /// sentence with a noun in it, so neither maintained language inflects it —
+    /// and a plural key must define every category in every shipped catalog, to
+    /// add a string whose grammar does not vary.
     ///
     /// It is also deliberately a different key from `inbox.savedFiles`: that one
     /// is the NOTIFICATION's count, it must never grow a file name, and reusing

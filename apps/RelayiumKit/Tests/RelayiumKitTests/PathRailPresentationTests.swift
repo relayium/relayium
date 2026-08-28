@@ -163,9 +163,11 @@ final class PathRailPresentationTests: XCTestCase {
                                "\(language.rawValue) fell back to a raw rail key")
             }
         }
-        // English is the fallback for the seven frozen catalogs, so the sentence
-        // a frozen locale renders is still a sentence rather than a key.
-        XCTAssertEqual(L10n.t(.pathThisDevice, language: .ja),
+        // A Mac or iPhone set to one of the seven frozen languages resolves to
+        // English, so the sentence it renders is still a sentence rather than a
+        // key. Asserted through `resolve` rather than against a language value,
+        // because `AppLanguage` can no longer name Japanese at all.
+        XCTAssertEqual(L10n.t(.pathThisDevice, language: AppLanguage.resolve(preferred: ["ja"])),
                        L10n.t(.pathThisDevice, language: .en))
     }
 

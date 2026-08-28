@@ -3,11 +3,20 @@ import Foundation
 /// The languages the Relayium clients ship, and nothing else.
 ///
 /// Deliberately a closed enum rather than a `Locale`: the product contract is
-/// "these nine, with English as the fallback", and a type that can hold `fr-CA`
-/// or `xh` invites a lookup that silently resolves to nothing. The nine match
-/// the web client's `LANGS` (`web/src/lib/i18n/types.ts`) one for one — adding a
+/// "these two, with English as the fallback", and a type that can hold `fr-CA`
+/// or `xh` invites a lookup that silently resolves to nothing. The two match the
+/// web client's `LANGS` (`web/src/lib/i18n/types.ts`) one for one — adding a
 /// language means adding it in both places, and `LocalizationIntegrityTests`
 /// fails if the catalogs and this enum disagree.
+///
+/// The clients used to ship nine. Arabic, German, Spanish, French, Japanese,
+/// Korean and Portuguese are no longer offered: their catalogs are frozen under
+/// `apps/RelayiumKit/LocalizationArchive/frozen-locales/`, outside every build
+/// target. That move is what removes them from the packaged bundle — `Package.swift` uses
+/// `.process("Resources")`, so a catalog left beside `en.lproj` would ship no
+/// matter what this enum said. Dropping the cases here is the other half: it is
+/// what makes a user who asks for Japanese get English rather than a language
+/// the app can name but has no words for.
 ///
 /// The raw value is the *Relayium* language id, the same token the web uses, so
 /// `zh` is Simplified Chinese. The Apple resource directory is `lproj`, which is
@@ -16,13 +25,6 @@ import Foundation
 public enum AppLanguage: String, CaseIterable, Sendable, Hashable {
     case en
     case zh
-    case ja
-    case ko
-    case de
-    case fr
-    case ar
-    case es
-    case pt
 
     /// The deterministic fallback. Every lookup that finds nothing in the asked
     /// language tries this one before it gives up, and `Package.swift` names the
@@ -40,9 +42,19 @@ public enum AppLanguage: String, CaseIterable, Sendable, Hashable {
         }
     }
 
-    /// Written right-to-left. Only Arabic today; a property rather than a
-    /// comparison so the RTL rule has one home.
-    public var isRightToLeft: Bool { self == .ar }
+    /// Written right-to-left. No shipped language is, since Arabic was frozen —
+    /// English and Simplified Chinese both read left to right.
+    ///
+    /// Kept as a property rather than deleted, and kept load-bearing at its call
+    /// sites, because it is the one home of the RTL rule. `RelayiumApp` and
+    /// `ShareViewController` still derive each scene's `layoutDirection` from it
+    /// and `L10n.token` still consults it before adding isolation markers; with
+    /// this answering `false` those paths resolve to a left-to-right shell and a
+    /// verbatim token, which is the required behaviour for both shipped
+    /// languages *and* for every archived preference that now falls back to
+    /// English. Restoring Arabic means restoring a `true` here, not rebuilding
+    /// the plumbing that reads it.
+    public var isRightToLeft: Bool { false }
 
     /// The locale used for number, percent, date and byte formatting.
     ///
@@ -60,6 +72,15 @@ public enum AppLanguage: String, CaseIterable, Sendable, Hashable {
     /// falling through to English. A user who reads any Chinese is better served
     /// by the Chinese catalog than by English; a separate Traditional catalog is
     /// a product decision the web has not made either.
+    ///
+    /// Every other preference now reaches `fallback`, including the seven
+    /// archived languages: `AppLanguage(rawValue: "ja")` is `nil` once the case
+    /// is gone, so a Japanese-first Mac walks the rest of its preference list and
+    /// otherwise renders English. That is the intended outcome and not a hole —
+    /// English is complete, and there is no Japanese catalog in the bundle for a
+    /// partial resolution to half-succeed against. The regional forms behave the
+    /// same way: `de-AT` and `pt-BR` are English, `zh-Hant-HK` is Simplified
+    /// Chinese.
     public static func resolve(preferred: [String]) -> AppLanguage {
         for tag in preferred {
             let subtag = tag.split(separator: "-").first.map { $0.lowercased() } ?? tag.lowercased()

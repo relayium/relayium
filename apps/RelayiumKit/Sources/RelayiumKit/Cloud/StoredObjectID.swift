@@ -44,7 +44,7 @@ import Foundation
 /// It raises `StoredLinkKeyError.invalidIdentifier` rather than a case of its
 /// own. That error is already the shared one — `AccountClient` has always raised
 /// it without touching a key store — and it is the case `ErrorCopy` localizes,
-/// so one refusal keeps one sentence in all nine catalogs.
+/// so one refusal keeps one sentence in every shipped catalog.
 public enum StoredObjectID {
     /// Wide enough for any plausible future id format, narrow enough that every
     /// member is inert in a keychain attribute, a URL path and a link.

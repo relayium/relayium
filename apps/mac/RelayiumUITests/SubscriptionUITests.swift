@@ -5,7 +5,7 @@ import XCTest
 /// **What this adds over the package suites.** `AppleSubscriptionModelTests`
 /// drives the whole purchase policy against a fake store, and
 /// `AppleSubscriptionPresentationTests` pins every sentence it can produce in
-/// nine languages. Neither can say whether any of it reaches a screen: a card
+/// both shipped languages. Neither can say whether any of it reaches a screen: a card
 /// that fails to build, a row that renders no price, a Subscribe button that is
 /// never enabled, a busy state nobody can see, or — the one that would be a
 /// review rejection rather than a bug — a web pricing link sitting beside an
