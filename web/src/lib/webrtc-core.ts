@@ -363,20 +363,83 @@ export interface ResumeCoreOpts extends CoreOptsBase {
  */
 export type CoreOpts = LinkCoreOpts | ResumeCoreOpts;
 
+/** Structural check for a usable `SignalAuth`. Presence alone is not enough:
+ *  `auth` whose `sign` is not callable would throw inside `send`'s chain, which
+ *  logs and continues — a resume that quietly signs nothing and emits nothing,
+ *  i.e. the same fail-open shape the required `auth` exists to prevent. */
+function isSignalAuth(value: unknown): value is SignalAuth {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Partial<SignalAuth>;
+  return typeof candidate.sign === "function" && typeof candidate.verify === "function";
+}
+
+/**
+ * The construction contract, enforced at runtime.
+ *
+ * `CoreOpts` states all of this already — but a type binds TypeScript callers
+ * and nobody else. A test reaching through `as never`, a future JavaScript
+ * consumer, or options that arrived as `any` from a JSON boundary walk straight
+ * past the union, and what they get is not a compile error but a peer
+ * connection plus a tagged (and possibly signed) offer already on the wire for
+ * a shape this build cannot honour. So the checks run FIRST, before
+ * `new RTCPeerConnection` and before the first `sendSignal`: an illegal call
+ * costs a rejected promise and nothing observable.
+ *
+ * Every rule here is a fail-closed restatement of a comment on the types above;
+ * none of them narrows what a legal TypeScript caller may do.
+ */
+function assertConstructible(opts: CoreOpts): void {
+  // Read each field through `unknown`. The parameter's type already asserts
+  // these are correct, so a direct comparison would be narrowed away as an
+  // impossible one — exactly the reasoning that leaves a JS caller unchecked.
+  const generation = opts.generation as unknown;
+  if (generation !== "link" && generation !== "resume") {
+    // Deliberately NOT "unrecognised, treat it as link". `file` and `text` are
+    // names this build still classifies INBOUND (see `Generation`) and can
+    // never construct; anything else is a caller bug. Either way, silently
+    // picking a generation is how the retired single-lane transfer stayed
+    // reachable — an unbuildable tag has to be refused under its own name.
+    throw new Error(`relayium: cannot establish generation ${JSON.stringify(generation)}`);
+  }
+
+  // The exact link tuple, in primary-first order. This subsumes the uniqueness
+  // check it replaces: `["relayium", "relayium"]` fails it, and so do the empty
+  // list, the one-element legacy lane, a reversed pair, and an extra lane —
+  // each of which `readonly string[]` admitted at runtime, and the first of
+  // which is precisely the single-lane connection that must stay unbuildable.
+  const labels = opts.channelLabels as unknown;
+  const wrongTuple = !Array.isArray(labels)
+    || labels.length !== LINK_CHANNEL_LABELS.length
+    || LINK_CHANNEL_LABELS.some((label, i) => labels[i] !== label);
+  if (wrongTuple) {
+    throw new Error(`relayium: channelLabels must be exactly [${LINK_CHANNEL_LABELS.join(", ")}]`);
+  }
+
+  const auth = opts.auth as unknown;
+  if (generation === "link" && auth != null) {
+    // A first connection has no shared secret yet — its own commit-reveal is
+    // what derives one. Auth offered here came from somewhere else, and taking
+    // it would mean signing the handshake with a key the handshake has not
+    // agreed on.
+    throw new Error("relayium: the link generation cannot carry auth");
+  }
+  if (generation === "resume" && !isSignalAuth(auth)) {
+    // An unauthenticated resume is a second connection anybody on the
+    // signalling path could offer into an already SAS-verified session.
+    throw new Error("relayium: the resume generation requires auth");
+  }
+}
+
 export async function establish(opts: CoreOpts): Promise<Conn> {
+  // Before any side effect: no peer connection, no signalling subscription and
+  // no outbound signal for a call the construction contract already refuses.
+  assertConstructible(opts);
   const { signaling, peerId, role, generation } = opts;
   const what = opts.label ? `${opts.label} connection` : "connection";
   const pc = new RTCPeerConnection(opts.config ?? DEFAULT_ICE);
-  // The type is the tuple, so length and non-emptiness are compile-time facts.
-  // Uniqueness is checked at runtime anyway: the constant is exported and a
-  // JavaScript caller — a test, a future non-TypeScript consumer — is not bound
-  // by the type. Failing closed is cheaper than a connection that waits for a
-  // lane it already has.
+  // Validated above as the exact tuple; widened here only so the collection
+  // logic below can compare arbitrary inbound labels against it.
   const channelLabels: readonly string[] = opts.channelLabels;
-  if (new Set(channelLabels).size !== channelLabels.length) {
-    try { pc.close(); } catch { /* constructor succeeded; close is best effort */ }
-    throw new Error("relayium: channel labels must be unique");
-  }
 
   /** 给外发信令盖上世代标记。只有两种世代能构造，所以这里没有"不盖标记"的分支——
    *  以前那条 `: msg` 兜底就是那条已经删掉的无标记旧世代，任何漏配的调用点都会掉
