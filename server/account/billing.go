@@ -130,6 +130,60 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
+	// An existing attempt normally means "you already have a Checkout open".
+	// But a Checkout the user abandoned stays dispatched forever, and until
+	// something retires it the same-plan retry below hands back a dead URL and
+	// the changed-plan path 409s permanently. releaseAbandonedStripeCheckout
+	// retires it only when a live canonical Session read proves it expired,
+	// unpaid and free of any liability or recovery lineage. A blocked release
+	// proved nothing and falls through to exactly the behaviour below; a lost
+	// one proved the Session dead and is handled separately, because that
+	// fall-through would hand back a URL already known to be expired.
+	//
+	// This runs at most ONCE and is not a loop: it advances the authority
+	// generation, so the re-dispatch either creates the single new attempt or
+	// it does not, and either way no third pass exists to create another
+	// Session.
+	if !created {
+		outcome, releaseErr := s.releaseAbandonedStripeCheckout(r.Context(), u, authority, attempt, customerID)
+		if releaseErr != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if outcome == checkoutReleaseLost {
+			// The canonical read PROVED this Session dead, and then the CAS did
+			// not apply. Falling through would serve attempt.ProviderURL — a URL
+			// we have just established is expired — so this returns the
+			// reconciliation refusal instead. It deliberately does not retry the
+			// dispatch: the CAS may have lost to a concurrent release, but it may
+			// equally have lost to a webhook binding a subscription, an account
+			// freeze, or an authority change, and those must not be dispatched
+			// through on an assumption. The next request re-reads the real state
+			// and proceeds from there.
+			httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "billing_reconciliation_required"})
+			return
+		}
+		if outcome == checkoutReleaseDone {
+			// Re-read the authority: the release advanced its epoch and intent,
+			// and dispatching against the stale generation would conflict.
+			authority, err = authorities.AcquireBillingAuthority(r.Context(), BillingAuthorityRequest{
+				UserID: u.ID, Provider: ProviderStripe, Now: s.Now().Unix(),
+			})
+			if errors.Is(err, ErrBillingAuthorityConflict) {
+				writeAlreadySubscribed(w, "billing_authority")
+				return
+			}
+			if err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+			attempt, created, err = authorities.DispatchBillingPurchase(r.Context(), authority, priceID, s.Now().Unix())
+			if err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+		}
+	}
 	if attempt.ProductID != priceID {
 		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "billing_reconciliation_required"})
 		return
