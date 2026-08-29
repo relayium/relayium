@@ -3,18 +3,19 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * `lan-transfer.mjs` 的 `/apps` 那一幕，用一条**能跑**的门守着。
+ * 托管 `/apps` 那一幕（`page-shell.mjs`），用一条**能跑**的门守着。
  *
- * 为什么需要这个：那一幕本身现在跑不到（`npm run test:e2e` 不是 CI 门，而且尾巴
- * 从 `mobileRelayFallbackScenario` 起就撞在 d175f863 删掉的老控件上——见
- * `docs/TESTING.md` §1a）。`appsHierarchyScenario` 位于尾巴**之前**，所以本地跑
- * 时它确实会执行；但没有任何托管流水线会替你执行它。于是它的那几条纪律——从源码
- * **推导**卡片模型、两个主题都量、可用组非空、以及把 EXERCISED / NOT EXERCISED
- * 这条披露**钉住**而不是只打印——可以被悄悄删掉几行而没有任何东西变红。
+ * 为什么需要这个：`appsHierarchyScenario` 现在跑在 `npm run test:e2e:page-shell`
+ * 里，是一条托管 CI 门（`.github/workflows/web.yml`）；但那条门验的是它某一次的
+ * 运行结果，不是它的写法。于是它的那几条纪律——从源码**推导**卡片模型、两个主题
+ * 都量、可用组非空、以及把 EXERCISED / NOT EXERCISED 这条披露**钉住**而不是只
+ * 打印——仍然可以被悄悄删掉几行而没有任何东西变红，只要改动没有巧到让运行结果
+ * 本身也跟着变。
  *
- * 这套用例读的是 `lan-transfer.mjs` 的源码，不是它的运行结果。这是有意的、也是
- * 唯一诚实的做法：那一幕要两个真标签页和一台真服务器才跑得起来，而这里要守的
- * 恰恰是"那一幕的形状"，不是它某一次的输出。
+ * 这套用例读的是 `page-shell.mjs` 的源码，不是它的运行结果——这里要守的恰恰是
+ * "那一幕的形状"，不是它某一次的输出。这个场景在 2026-08-29 从 `lan-transfer.mjs`
+ * 移到了这里（Phase 3D C2）；这份契约的 `SOURCE` 跟着移，否则它会一直验着一份
+ * 不再执行的死代码，而真正跑在 CI 里的那一份反倒没人守。
  *
  * 刻意**不**做的事：不复制当前的卡片 id、也不复制当前的张数。那正是这一幕原本
  * 犯过的错——三张退休的卡片和 6 / 3 / 8 这组字面量在源码里当了几个月的第二份
@@ -23,7 +24,7 @@ import { describe, expect, it } from "vitest";
  */
 
 // `process.cwd()` 是 vitest 的 root（`web/`），和本目录其它源码契约用例同一套写法。
-const SOURCE = readFileSync(resolve(process.cwd(), "e2e/lan-transfer.mjs"), "utf8");
+const SOURCE = readFileSync(resolve(process.cwd(), "e2e/page-shell.mjs"), "utf8");
 
 /** 取一个顶层函数的函数体，好让下面的断言不会被文件里别处的同名文字满足。 */
 function topLevelFunction(name) {

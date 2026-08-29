@@ -63,24 +63,31 @@ matter; take them in order.
 
 ### It is not a CI gate
 
-`.github/workflows/web.yml` runs five hosted browser lanes, and this is not one
-of them:
+`.github/workflows/web.yml` runs six hosted browser lanes, and `lan-transfer.mjs`
+is not one of them:
 
 | Lane | Script | Job |
 |---|---|---|
 | Accessibility scan of the built `dist` | `test:a11y` | `test` |
+| Page-shell contracts (auth landing, `/apps`, `/pricing`, unsupported layout) | `test:e2e:page-shell` | `test` |
 | Pairing-code room, unified workspace | `test:e2e:code-room` | `test` |
 | Device-discovery findability journey | `test:device-discovery` | `test` |
 | Device Inbox entry journey | `test:device-inbox-entry` | `test` |
 | Device Inbox: browser → server → CLI → disk | `test:device-inbox` | `device-inbox-e2e` |
 
-`test:e2e` appears in none of them. Nothing in `lan-transfer.mjs` — including the
-`/apps` hierarchy contract — is executed by a push or a pull request. It runs only
-when someone runs it locally against a freshly built `dist`:
+`test:e2e` (`lan-transfer.mjs`) appears in none of them. As of 2026-08-29
+(Phase 3D C2) the `/apps` hierarchy contract, along with the auth-landing and
+`/pricing` page contracts and the insecure-context layout contract, moved out of
+`lan-transfer.mjs` into `web/e2e/page-shell.mjs` — the `test:e2e:page-shell` row
+above — so those four **are** now executed by every push and pull request.
+Nothing else in `lan-transfer.mjs` is:
 
 ```bash
 cd web && npm run build && npm run test:e2e
-# Today: the first three scenarios print "ok", then the run stops in the tail.
+# Today: the run fails immediately. mobileRelayFallbackScenario — now main()'s
+# first call, since the four page contracts that used to run ahead of it moved
+# out — drives the same removed .file-pick-input control described below, so no
+# scenario prints "ok" before the run dies.
 ```
 
 ### Why it stops in the tail
@@ -98,23 +105,27 @@ the suite presents as a legacy `text/1`-only peer — and the scenarios then dri
 the fork that such a peer used to be given. That fork no longer exists, so those
 scenarios address elements the component does not render.
 
-What that leaves:
+What that leaves, now that the four single-tab page contracts have moved to
+`web/e2e/page-shell.mjs` (see Stage 1 below):
 
-- **Executed and passing** — `authLandingScenario`, `appsHierarchyScenario` and
-  `pricingHierarchyScenario`. All three are single-tab page contracts (`/magic-link`,
-  `/apps`, `/pricing`); none opens a peer card, so the removal does not reach them.
-- **Not executed** — everything from `mobileRelayFallbackScenario` onward. It is the
-  first scenario in `main()`'s order to drive a removed control
-  (`web/e2e/lan-transfer.mjs:1950` picks up `.file-pick-input`, which now resolves
+- **Executed and passing — nowhere in this file anymore.** The three that used to
+  pass here (`authLandingScenario`, `appsHierarchyScenario`,
+  `pricingHierarchyScenario`) moved out entirely, and `unsupportedLayoutScenario`
+  moved with them (it never depended on anything removed; it only ever failed to
+  run here because of ordering, not content — see Stage 1). None of the four is
+  in `lan-transfer.mjs` any longer, executed or not.
+- **Not executed** — everything, starting from `mobileRelayFallbackScenario`,
+  which is now `main()`'s first call. It drives a removed control
+  (`web/e2e/lan-transfer.mjs:1420` picks up `.file-pick-input`, which now resolves
   to `null`), and the run does not get past it. The main LAN transfer act and every
-  scenario after it — small-message-cap, transfer-boundary, unsupported-layout,
-  early-failure, mobile-no-picker, desktop-picker-cancel, resume, the four message
-  scenarios, multi-page-device and caps-suppressed — are downstream of that point
-  and currently produce no signal at all.
+  scenario after it — small-message-cap, transfer-boundary, early-failure,
+  mobile-no-picker, desktop-picker-cancel, resume, the four message scenarios,
+  multi-page-device and caps-suppressed — are downstream of that point and
+  currently produce no signal at all.
 
-So the suite today proves three page contracts and nothing else. Do not extend an
-`[AUTOMATED — LOCAL]` reading onto the tail: the honest status is three scenarios
-`[AUTOMATED — LOCAL]`, the remainder `[NOT RUN]`.
+So `lan-transfer.mjs` itself proves nothing today: `[NOT RUN]` end to end. The
+four page contracts it used to carry are `[AUTOMATED]` in their new home,
+`web/e2e/page-shell.mjs`, executed on every push and pull request.
 
 ### What is actually lost — smaller than the tail's length suggests
 
@@ -145,9 +156,10 @@ Those eight are the actual regression exposure, and they are what the migration
 below has to carry across. Everything else in the tail can be retired rather than
 ported, because a hosted suite already asserts it.
 
-Note what does still hold for the part that runs: it is only as recent as the last
-person who ran it. A change to `AppsPage.svelte` or `native-releases.json` can merge
-green without `appsHierarchyScenario` having executed at all.
+That staleness risk is closed as of Stage 1 below: `appsHierarchyScenario` now
+runs in hosted CI on every push and pull request, so a change to
+`AppsPage.svelte` or `native-releases.json` can no longer merge without it
+having executed.
 
 ### The migration direction for the stranded tail
 
@@ -159,13 +171,23 @@ user can ever get, which is worse than asserting nothing.
 The migration is staged, and the stages are ordered so that coverage is never
 lower than it is today. Each stage lands and goes green before the next begins.
 
-**Stage 1 — a hosted page-shell suite.** The three scenarios that still pass are
-page contracts, not transfer contracts, and they do not belong in a transfer
-suite at all. They move into a new hosted suite covering auth, `/apps`,
-`/pricing`, the current layout contract and route isolation, and that suite is
-added to `.github/workflows/web.yml`. This stage alone converts the `/apps`
-hierarchy contract from local-only to hosted — the first time it is enforced by
-anything other than someone remembering to run it.
+**Stage 1 — a hosted page-shell suite — complete, 2026-08-29 (Phase 3D C2).**
+The three scenarios that used to pass here were page contracts, not transfer
+contracts, and did not belong in a transfer suite at all. They moved, together
+with `unsupportedLayoutScenario` (the current single-column layout contract,
+which was already content-independent of the removed controls and only failed
+to run here for ordering reasons), into `web/e2e/page-shell.mjs`: a new
+vite-preview-only hosted suite covering auth-landing route isolation, `/apps`,
+`/pricing` and the insecure-context layout contract, wired into
+`.github/workflows/web.yml` as `test:e2e:page-shell`. It needs no live Go
+server — none of the four scenarios' assertions depend on real backend
+responses; `/api/plans` is answered by the same in-process fixture the
+accessibility scan already uses. `page-shell-contract.test.mjs` guards the
+runner itself against silently dropping a scenario: it asserts a fixed
+`EXPECTED_SCENARIO_COUNT` (not a comparison against the array's own, mutable
+`.length`) and pins the new CI step as unconditional. This stage converts the
+`/apps` hierarchy contract from local-only to hosted — the first time it is
+enforced by anything other than someone remembering to run it.
 
 **Stage 2 — the transfer uniques move into `mixed-link.mjs`, and `mixed-link`
 becomes hosted.** Uniques 1–6 above are about the real pipeline (commit-reveal,
@@ -219,8 +241,9 @@ prevent.
 
 ### The conditional coverage inside `appsHierarchyScenario`
 
-This subsection describes one of the three scenarios that **does** still execute,
-so what follows is live, not aspirational — subject to the local-only caveat above.
+This subsection describes the `/apps` scenario now hosted in
+`web/e2e/page-shell.mjs` (Stage 1 above), so what follows is live and hosted,
+not aspirational or local-only.
 
 The `/apps` assertions are **derived** from `src/lib/AppsPage.svelte` and
 `native-releases.json` (see `appsCardModel`), not pinned to a card list. They
@@ -245,10 +268,9 @@ over an empty list passes without measuring anything. The scenario therefore:
 **Revisit trigger:** when a card is next added to `AppsPage.svelte` with an
 `available:` expression that is not `true` — i.e. the first time the
 in-development group is non-empty again — the disclosure flips to `EXERCISED` on
-its own and the future-card contrast assertion resumes with no edit here. At
-that point re-run `npm run test:e2e` and delete this subsection's "currently
-empty" framing — the run still stops later in the tail until that migration
-lands, but `appsHierarchyScenario` reports before it gets there. A new
+its own and the future-card contrast assertion resumes with no edit here, and
+the next hosted `test:e2e:page-shell` run proves it without a manual step. At
+that point delete this subsection's "currently empty" framing. A new
 `available:` expression the model cannot resolve fails loudly (`unrecognised
 availability`) by design; teach `AVAILABILITY` what it means rather than widening
 the regex.

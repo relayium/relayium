@@ -18,6 +18,7 @@
     "test:e2e:code-room": "node e2e/code-room.mjs",
     "test:e2e:share-target": "node e2e/share-target.mjs",
     "test:a11y": "node e2e/a11y-scan.mjs",
+    "test:e2e:page-shell": "node e2e/page-shell.mjs",
     "test:device-inbox": "node e2e/device-inbox.mjs",
     "test:device-inbox-entry": "node e2e/device-inbox-entry.mjs",
     "test:device-discovery": "node e2e/device-discovery.mjs",
