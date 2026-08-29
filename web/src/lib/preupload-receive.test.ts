@@ -7,9 +7,9 @@
 // the real 410 were wrong — and those are the three things that decide whether a
 // receiver gets its files or is quietly told it did.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { createStoredReceiver } from "./preupload-receive.svelte";
+import { createStoredReceiver, STORED_RECEIVE_SAVE_OPTS } from "./preupload-receive.svelte";
 import { completionProof, encryptFiles, encryptManifest, generateStoreKey, encodeKey, decodeKey, type StoredManifest } from "./store-crypto";
-import { SaveCancelledError, type FileMetaLite, type SaveTarget } from "./filesink";
+import { SaveCancelledError, type FileMetaLite, type SaveOptions, type SaveTarget } from "./filesink";
 import type { HandoffItem } from "./preupload-handoff";
 
 interface MemoryTarget extends SaveTarget {
@@ -252,7 +252,7 @@ async function until(check: () => boolean, timeout = 4_000) {
 let target: MemoryTarget;
 const make = (
   over: Partial<{
-    pick: (f: FileMetaLite[]) => Promise<SaveTarget>;
+    pick: (f: FileMetaLite[], opts?: SaveOptions) => Promise<SaveTarget>;
     backoff: readonly number[];
   }> = {},
 ) =>
@@ -283,6 +283,36 @@ describe("receiving pre-uploaded files", () => {
     expect(target.output.size).toBe(0); // nothing written before the answer
 
     await r.accept();
+    expect(r.status).toBe("done");
+    expect(new TextDecoder().decode(target.output.get("a.txt"))).toBe("hello");
+    expect(target.doneCalls).toBe(1);
+  });
+
+  it("opens the stored receive target with the shared, exactly empty save options", async () => {
+    // Stored receive treats a sink acknowledgement as durability, so enabling
+    // the service-worker stream here would report Saved before bytes reached
+    // disk. Observe the actual picker boundary: asserting the exported object
+    // alone would still pass if accept() omitted it or substituted another one.
+    const one = await makeObject("obj1", [{ name: "a.txt", body: "hello" }]);
+    installServer([one]);
+    let seenOptions: SaveOptions | undefined;
+    const r = make({
+      pick: async (_files, opts) => {
+        seenOptions = opts;
+        return target;
+      },
+    });
+    r.offer([one.item]);
+    await until(() => r.status === "prompt");
+
+    await r.accept();
+
+    // Identity catches an inline replacement at the call site; exact equality
+    // catches a future option (especially swStream) being enabled on the shared
+    // boundary. The real ciphertext write below is the positive control that
+    // proves the picker and receiver ran rather than making absence look green.
+    expect(seenOptions).toBe(STORED_RECEIVE_SAVE_OPTS);
+    expect(seenOptions).toEqual({});
     expect(r.status).toBe("done");
     expect(new TextDecoder().decode(target.output.get("a.txt"))).toBe("hello");
     expect(target.doneCalls).toBe(1);
