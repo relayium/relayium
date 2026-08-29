@@ -26,6 +26,8 @@
  *   （它同时兜 SPA 和 /ws）。
  */
 import { createHash, randomBytes } from "node:crypto";
+// /apps 的卡片期望值是**推导**出来的，不是抄来的：见 appsCardModel。
+import { readFileSync } from "node:fs";
 // CDP 客户端、标签页把手、浏览器生命周期和另存为桩都在 harness.mjs 里，和
 // mixed-link.mjs 共用同一份——两个脚本的超时语义和挂死检测必须是同一套。
 import {
@@ -1477,6 +1479,109 @@ async function authLandingScenario(browser) {
   await browser.send("Target.closeTarget", { targetId: tab.targetId });
 }
 
+const APPS_SOURCE = readFileSync(new URL("../src/lib/AppsPage.svelte", import.meta.url), "utf8");
+const ROUTER_SOURCE = readFileSync(new URL("../src/lib/router.svelte.ts", import.meta.url), "utf8");
+const NATIVE_RELEASES = JSON.parse(readFileSync(new URL("../native-releases.json", import.meta.url), "utf8"));
+
+/** A required capture out of a source file, or a loud failure saying it moved. */
+function grab(source, re, what) {
+  const hit = re.exec(source)?.[1];
+  if (hit === undefined) {
+    throw new Error(`apps card model: ${what} is no longer greppable — this derivation is stale, fix it before trusting the assertions below`);
+  }
+  return hit;
+}
+
+/**
+ * Every `available:` expression AppsPage.svelte is allowed to use, resolved
+ * against the source that actually decides it.
+ *
+ * Fail-closed on purpose. A fourth card introduced with a new expression stops
+ * this scenario with a named error instead of being silently filed as a future
+ * card — the failure mode that let three retired cards stay asserted for months.
+ */
+const AVAILABILITY = {
+  // The cards the component makes executable unconditionally.
+  true: () => true,
+  // The half-filled-manifest guard, read the way the component reads it: the
+  // flag alone is not enough, the download URL has to be there too.
+  macAvailable: () =>
+    NATIVE_RELEASES.macos.available === true && Boolean(NATIVE_RELEASES.macos.downloadUrl),
+};
+
+/**
+ * Where each executable card's CTA must point, from whoever owns the
+ * destination: the router for the two in-app routes, the release manifest for
+ * the download. Checked for completeness against the derived card list, so a
+ * new card cannot reach the assertions with an unstated CTA.
+ */
+const CTA_TARGET = {
+  web: grab(ROUTER_SOURCE, /export const LAN_PATH = "([^"]+)";/, "LAN_PATH"),
+  cli: grab(ROUTER_SOURCE, /export const CLI_PATH = "([^"]+)";/, "CLI_PATH"),
+  mac: NATIVE_RELEASES.macos.downloadUrl,
+};
+
+/**
+ * The /apps card model, derived from the two sources that own it.
+ *
+ * This scenario used to pin the answer instead: three available ids, three
+ * future ids named ios/android/windows, and the structural counts 6 / 3 / 8.
+ * All three future cards were removed on 2026-08-28 — `apps/` contains no
+ * Android or Windows target and iOS is paused — and every one of those literals
+ * became a second, wrong copy of a decision taken somewhere else. A browser test
+ * that has to be hand-edited whenever a platform ships or stops shipping is not
+ * testing the product, it is testing a memory of it.
+ *
+ * So read the model. AppsPage.svelte owns which cards exist and what makes each
+ * one executable; native-releases.json owns whether the macOS release is real.
+ * The id groups, the heading counts and the CTA hrefs below are all computed
+ * from those two, which is why removing a card needs no edit here — and why
+ * adding one that this derivation cannot explain fails loudly.
+ */
+function appsCardModel() {
+  const declared = grab(APPS_SOURCE, /type AppId = ([^;]+);/, "the AppId union");
+  const list = grab(APPS_SOURCE, /const cards = \$derived<AppCard\[\]>\(\[([\s\S]*?)\n {2}\]\);/, "the cards array");
+
+  const ids = [...declared.matchAll(/"([a-z]+)"/g)].map((m) => m[1]);
+  const entries = [...list.matchAll(/id: "([a-z]+)",[\s\S]*?available: ([A-Za-z]+),/g)]
+    .map(([, id, expr]) => ({ id, expr }));
+  if (JSON.stringify(entries.map((e) => e.id)) !== JSON.stringify(ids)) {
+    throw new Error(`apps card model: AppId ${JSON.stringify(ids)} does not match the cards array ${JSON.stringify(entries.map((e) => e.id))}`);
+  }
+  const unknown = entries.filter((e) => !(e.expr in AVAILABILITY));
+  if (unknown.length) {
+    throw new Error(`apps card model: unrecognised availability ${JSON.stringify(unknown)} — teach AVAILABILITY what it means rather than guessing`);
+  }
+  const missingCta = ids.filter((id) => !CTA_TARGET[id]);
+  if (missingCta.length) {
+    throw new Error(`apps card model: no CTA target declared for ${missingCta.join(", ")}`);
+  }
+
+  const available = entries.filter((e) => AVAILABILITY[e.expr]()).map((e) => e.id);
+  const future = entries.filter((e) => !AVAILABILITY[e.expr]()).map((e) => e.id);
+
+  // The chooser's two columns are H3s as well, and they are part of the page's
+  // heading structure whether or not a card is in development. Counted from the
+  // component so a third column would be reflected, not tripped over.
+  const chooserColumns = (APPS_SOURCE.match(/class="ui-card ui-stack choice"/g) ?? []).length;
+  if (chooserColumns < 2) throw new Error("apps card model: the chooser columns are no longer greppable");
+  // Three group titles in the source; the middle one is inside
+  // `{#if futureCards.length}`, so whether it renders is a fact about the
+  // manifest rather than a constant. Assert the shape the arithmetic assumes.
+  const groupTitles = (APPS_SOURCE.match(/class="group-title"/g) ?? []).length;
+  if (groupTitles !== 3 || !/\{#if futureCards\.length\}/.test(APPS_SOURCE)) {
+    throw new Error(`apps card model: the group structure changed (${groupTitles} titles) — recheck the heading counts`);
+  }
+
+  return {
+    available,
+    future,
+    cards: ids,
+    h2: 2 + (future.length ? 1 : 0),
+    h3: ids.length + chooserColumns,
+  };
+}
+
 /**
  * /apps is a release surface, not a four-item wishlist. Executable choices must
  * stay ahead of future products, and a half-finished native release must not
@@ -1484,6 +1589,7 @@ async function authLandingScenario(browser) {
  * translated layout here; component tests cover the released/half-filled seams.
  */
 async function appsHierarchyScenario(browser) {
+  const model = appsCardModel();
   const tab = await newTab(browser, BASE + "/apps");
   await setWideViewport(tab);
   await tab.waitFor("!!document.querySelector('#app-web')", "apps hierarchy to render");
@@ -1497,7 +1603,7 @@ async function appsHierarchyScenario(browser) {
       const x = lum(a), y = lum(b);
       return (Math.max(x, y) + .05) / (Math.min(x, y) + .05);
     };
-    const futureMetrics = () => [...document.querySelectorAll('.future-card')].map((card) => {
+    const cardMetrics = (selector) => [...document.querySelectorAll(selector)].map((card) => {
       const el = card.querySelector('.card-desc');
       const foreground = getComputedStyle(el).color;
       let parent = el, background = '';
@@ -1509,14 +1615,20 @@ async function appsHierarchyScenario(browser) {
         }
         parent = parent.parentElement;
       }
-      return { contrast: contrast(foreground, background), opacity: parseFloat(getComputedStyle(card).opacity) };
+      return { id: card.id, contrast: contrast(foreground, background), opacity: parseFloat(getComputedStyle(card).opacity) };
     });
+    // Measured in BOTH themes, and on both groups. The available group is what
+    // keeps this probe honest: the in-development group is empty whenever every
+    // card ships, and a contrast check that only ever runs over an empty list
+    // is a deleted contrast check that still prints a tick.
     const root = document.documentElement;
     const originalTheme = root.getAttribute('data-theme');
     root.dataset.theme = 'light';
-    const lightFuture = futureMetrics();
+    const lightFuture = cardMetrics('.future-card');
+    const lightAvailable = cardMetrics('.available-grid .app-card');
     root.dataset.theme = 'dark';
-    const darkFuture = futureMetrics();
+    const darkFuture = cardMetrics('.future-card');
+    const darkAvailable = cardMetrics('.available-grid .app-card');
     if (originalTheme === null) root.removeAttribute('data-theme');
     else root.setAttribute('data-theme', originalTheme);
 
@@ -1538,6 +1650,8 @@ async function appsHierarchyScenario(browser) {
       sharedCards: document.querySelectorAll('.app-card.ui-card').length,
       lightFuture,
       darkFuture,
+      lightAvailable,
+      darkAvailable,
       platformMarker: {
         id: platformCard?.id,
         border: platformCard ? getComputedStyle(platformCard).borderTopColor : '',
@@ -1547,22 +1661,61 @@ async function appsHierarchyScenario(browser) {
       pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
     };
   })()`);
+  // Everything on the right-hand side comes from appsCardModel(), so the only
+  // way to change what this asserts is to change the component or the manifest.
+  const wantAvailable = model.available.map((id) => `app-${id}`);
+  const wantFuture = model.future.map((id) => `app-${id}`);
+  const wantActions = model.available.map((id) => CTA_TARGET[id]);
   if (
-    JSON.stringify(desktop.available) !== JSON.stringify(["app-web", "app-cli", "app-mac"]) ||
-    JSON.stringify(desktop.future) !== JSON.stringify(["app-ios", "app-android", "app-windows"]) ||
+    JSON.stringify(desktop.available) !== JSON.stringify(wantAvailable) ||
+    JSON.stringify(desktop.future) !== JSON.stringify(wantFuture) ||
     desktop.headings.filter((tag) => tag === "H1").length !== 1 ||
-    desktop.headings.filter((tag) => tag === "H2").length !== 3 ||
-    desktop.headings.filter((tag) => tag === "H3").length !== 8 ||
-    desktop.actions.length !== 3 || desktop.actions[0] !== "/" || desktop.actions[1] !== "/cli" ||
-    !desktop.actions[2]?.endsWith("/Relayium.dmg") || desktop.futureControls !== 0 ||
-    desktop.sharedCards !== 6 ||
-    [...desktop.lightFuture, ...desktop.darkFuture].some((metric) => metric.contrast < 4.5 || metric.opacity !== 1) ||
+    desktop.headings.filter((tag) => tag === "H2").length !== model.h2 ||
+    desktop.headings.filter((tag) => tag === "H3").length !== model.h3 ||
+    JSON.stringify(desktop.actions) !== JSON.stringify(wantActions) ||
+    desktop.futureControls !== 0 ||
+    desktop.sharedCards !== model.cards.length ||
     !desktop.platformMarker.id || desktop.platformMarker.border !== desktop.platformMarker.neutral ||
     desktop.platformMarker.border === desktop.platformMarker.accent ||
     desktop.pageOverflow !== 0
   ) {
-    throw new Error(`desktop apps hierarchy contract failed: ${JSON.stringify(desktop)}`);
+    throw new Error(`desktop apps hierarchy contract failed against ${JSON.stringify(model)}: ${JSON.stringify(desktop)}`);
   }
+
+  // ── card contrast, and an explicit account of what it did NOT cover ────────
+  //
+  // The in-development group is empty whenever every declared card ships, which
+  // is true today. Deleting the check in that state would be invisible, so it
+  // is not deleted: the same probe runs over the AVAILABLE cards, which are
+  // never empty, and the future group's coverage is stated in the output rather
+  // than assumed. `metrics` therefore always has something in it.
+  const metrics = [
+    ["available", model.available, desktop.lightAvailable, desktop.darkAvailable],
+    ["in-development", model.future, desktop.lightFuture, desktop.darkFuture],
+  ];
+  for (const [group, want, light, dark] of metrics) {
+    if (light?.length !== want.length || dark?.length !== want.length) {
+      throw new Error(`apps ${group} contrast probe measured ${light?.length}/${dark?.length} cards, model says ${want.length}: ${JSON.stringify(desktop)}`);
+    }
+    const failing = [...light, ...dark].filter((m) => m.contrast < 4.5 || m.opacity !== 1);
+    if (failing.length) {
+      throw new Error(`apps ${group} card contrast/opacity contract failed: ${JSON.stringify(failing)}`);
+    }
+  }
+  if (!desktop.lightAvailable.length) {
+    throw new Error("apps contrast probe measured nothing at all — the check is no longer running");
+  }
+  // The disclosure, pinned rather than merely printed: a run that reports
+  // neither branch, or reports the wrong one for the model it derived, fails
+  // here instead of quietly reducing coverage.
+  const futureCoverage = model.future.length
+    ? `in-development card contrast/opacity EXERCISED on ${model.future.length} card(s): ${wantFuture.join(", ")}`
+    : "in-development card contrast/opacity NOT EXERCISED: the release model declares no in-development card";
+  if (futureCoverage.includes("NOT EXERCISED") !== (desktop.lightFuture.length === 0)) {
+    throw new Error(`apps future-coverage disclosure disagrees with what the browser measured (${desktop.lightFuture.length} card(s)): ${futureCoverage}`);
+  }
+  ok(`apps card contrast measured in light and dark on ${desktop.lightAvailable.length} available card(s)`);
+  ok(futureCoverage);
 
   await tab.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
   await setWideViewport(tab, 390, 844);
@@ -1632,7 +1785,7 @@ async function appsHierarchyScenario(browser) {
 
   const errs = tab.errors.filter((e) => !/401|Failed to load resource/.test(e));
   if (errs.length) throw new Error(`apps page logged errors:\n    ${errs.join("\n    ")}`);
-  ok("apps separated executable choices from native futures in both maintained languages");
+  ok(`apps rendered exactly the ${model.available.length} executable and ${model.future.length} in-development card(s) the release model declares, in both maintained languages`);
   await browser.send("Target.closeTarget", { targetId: tab.targetId });
 }
 

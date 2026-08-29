@@ -99,7 +99,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最終更新: <bdi>2026-08-05</bdi></p>
-      <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links">最新版：<a href="/guides/sync-a-large-folder-between-servers/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/sync-a-large-folder-between-servers/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
+      <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links archived-pricing">このページに記載されている料金プランや利用上限は古くなっている可能性があります。現在の内容は<a href="/pricing">料金</a>のページでご確認ください。</p><p class="archived-links">最新版：<a href="/guides/sync-a-large-folder-between-servers/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/sync-a-large-folder-between-servers/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">一方のサーバーに大きなフォルダー（数十 GB）があり、それをもう一方に完全な複製として欲しいとします。何時間もターミナルを見張ることはできませんし、途中で落ちた転送が最初からやり直しになるのも困ります。relayium sync はまさにこのために作られています。一方向の増分ミラーで、すでにあるものはスキップし、途中まで送ったファイルは止まったところから再開し、送信した各ファイルを端から端まで検証します。</p>
       <p class="lead">本ガイドでは、無人で自己修復する転送を構築します。送信側を一度だけ承認し、リスナーをバックグラウンドで動かし、tmux 内のリトライループで relayium sync を回して、接続が切れても続行させ、フォルダー全体が届くまで走らせます。</p>
       <h2>なぜ relayium sync がこの用途に向くのか</h2>

@@ -220,52 +220,83 @@ export function esc(s) {
 //   2. the product is maintained in English and Simplified Chinese, and the app
 //      itself no longer offers this language — so what is described here may
 //      differ from what the reader will see;
-//   3. where the current version of THIS page is, in both maintained languages.
+//   3. where the current version of THIS page is, in both maintained languages;
+//   4. that the plans and limits this page quotes may be stale, and where the
+//      current ones are.
 //
 // Point 3 is what makes it more than a warning. A notice that says "this may be
 // out of date" and stops has told the reader their next click is a guess.
-const ARCHIVE_COPY = {
+//
+// Point 4 is the same principle applied to the one class of detail on these
+// pages that costs a reader money to get wrong. The archived corpus was written
+// before the paid plans existed and still describes free tiers, quotas and
+// retention windows in the present tense. Point 2 already says "details may
+// differ", but a general caveat is not a price correction, and nothing on the
+// page pointed at the one surface that is current. So the notice carries a
+// second, narrower sentence with the ONE link that answers it, using each
+// locale's existing PRICING_LABELS entry as the link text — the same words that
+// locale's footer already uses for the same destination.
+//
+// How much of the corpus that covers is deliberately NOT asserted here. The
+// answer depends entirely on what one counts as a price claim, so a prose
+// number in a comment is a measurement no reader can re-run — loosening the
+// pattern by one term moves it by a hundred pages. The executable version lives
+// in archived-pricing-pointer.test.mjs: it carries the per-locale patterns,
+// measures the corpus with them, and fails if a page they match ships without
+// this notice.
+//
+// It is a pointer, not a restatement: it names no tier, quota, currency or
+// amount. Repeating today's prices in seven frozen locales would create seven
+// more copies to go stale, which is the defect, not the fix.
+export const ARCHIVE_COPY = {
   ja: {
     label: "アーカイブされた翻訳",
     body:
       "このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。",
     lead: "最新版",
+    pricing: { before: "このページに記載されている料金プランや利用上限は古くなっている可能性があります。現在の内容は", after: "のページでご確認ください。" },
   },
   ko: {
     label: "보관된 번역",
     body:
       "이 페이지는 기록으로 보관 중인 한국어 번역입니다. Relayium 제품과 최신 문서는 영어와 중국어 간체로 관리되며, 앱 자체도 더 이상 한국어를 제공하지 않습니다. 여기에 적힌 화면과 세부 사항은 현재 동작과 다를 수 있습니다.",
     lead: "최신 버전",
+    pricing: { before: "이 페이지에 적혀 있는 요금제와 사용 한도는 오래된 내용일 수 있습니다. 현재 내용은 ", after: " 페이지에서 확인하세요." },
   },
   de: {
     label: "Archivierte Übersetzung",
     body:
       "Diese Seite ist eine archivierte deutsche Übersetzung. Produkt und aktuelle Dokumentation von Relayium werden auf Englisch und in vereinfachtem Chinesisch gepflegt; die App selbst bietet kein Deutsch mehr an. Beschriebene Bildschirme und Details können deshalb vom heutigen Verhalten abweichen.",
     lead: "Aktuelle Fassung",
+    pricing: { before: "Die hier genannten Tarife und Nutzungsgrenzen können veraltet sein; die aktuellen stehen auf der Seite ", after: "." },
   },
   fr: {
     label: "Traduction archivée",
     body:
       "Cette page est une traduction française archivée. Le produit Relayium et sa documentation à jour sont maintenus en anglais et en chinois simplifié ; l'application elle-même ne propose plus le français. Les écrans et les détails décrits ici peuvent donc différer du comportement actuel.",
     lead: "Version à jour",
+    pricing: { before: "Les offres et les limites d'utilisation citées ici peuvent être obsolètes ; les actuelles figurent sur la page ", after: "." },
   },
   ar: {
     label: "ترجمة مؤرشفة",
     body:
       "هذه الصفحة ترجمة عربية محفوظة للأرشيف. يجري صيانة منتج Relayium وتوثيقه الحالي بالإنجليزية والصينية المبسّطة، ولم يعد التطبيق نفسه يوفّر العربية. لذلك قد تختلف الشاشات والتفاصيل الموصوفة هنا عن السلوك الحالي.",
     lead: "النسخة الحالية",
+    pricing: { before: "قد تكون الباقات وحدود الاستخدام المذكورة هنا قديمة؛ والحالية منها موجودة في صفحة ", after: "." },
   },
   es: {
     label: "Traducción archivada",
     body:
       "Esta página es una traducción al español archivada. El producto Relayium y su documentación actual se mantienen en inglés y en chino simplificado; la propia aplicación ya no ofrece español. Por eso las pantallas y los detalles descritos aquí pueden diferir del comportamiento actual.",
     lead: "Versión actual",
+    pricing: { before: "Los planes y los límites de uso mencionados aquí pueden estar desactualizados; los actuales están en la página ", after: "." },
   },
   pt: {
     label: "Tradução arquivada",
     body:
       "Esta página é uma tradução em português arquivada. O produto Relayium e sua documentação atual são mantidos em inglês e em chinês simplificado; o próprio aplicativo não oferece mais português. Por isso as telas e os detalhes descritos aqui podem diferir do comportamento atual.",
     lead: "Versão atual",
+    pricing: { before: "Os planos e os limites de uso mencionados aqui podem estar desatualizados; os atuais estão na página ", after: "." },
   },
 };
 
@@ -293,6 +324,19 @@ const ARCHIVE_COLON = { fr: " : ", ja: "：", ko: ": ", de: ": ", ar: ": ", es:
  * are what a reader looking for their own language scans for. They carry `lang`
  * and `hreflang` so a screen reader switches voice, and `<bdi>` so the Arabic
  * page does not reorder two Latin/CJK runs around their separator.
+ *
+ * The pricing pointer is rendered from the same table and is not optional: a
+ * locale that has archive copy but no `pricing` entry throws rather than
+ * quietly emitting a notice that leaves this page's stale plans uncorrected.
+ * That is the fail-closed half of "one notice, one place" — the alternative is
+ * a half-notice on 50 pages that no template author would ever see.
+ *
+ * Its label is `pricingLabel(lang)`, so the sentence and that locale's footer
+ * call the destination the same thing; `pricing-label.test.mjs` already pins
+ * that label against the app's own. The paragraph keeps `archived-links` as
+ * well as `archived-pricing` because ARCHIVE_STYLE draws archive links through
+ * `.archived-links a` — one class for the styling that already exists, one for
+ * the guards to key on, and no new rule in the emitted stylesheet.
  */
 export function archiveNotice(lang, twins) {
   const copy = ARCHIVE_COPY[lang];
@@ -300,6 +344,11 @@ export function archiveNotice(lang, twins) {
   if (!twins?.en || !twins?.zh) {
     throw new Error(`archiveNotice: ${lang} needs both maintained twins, got ${JSON.stringify(twins)}`);
   }
+  if (!copy.pricing?.before || !copy.pricing?.after) {
+    throw new Error(`archiveNotice: ${lang} has no pricing pointer, got ${JSON.stringify(copy.pricing)}`);
+  }
+  const label = pricingLabel(lang);
+  if (!label) throw new Error(`archiveNotice: ${lang} has no pricing label`);
   const links =
     `<a href="${twins.en}" lang="en" hreflang="en"><bdi>English</bdi></a>` +
     ` <span aria-hidden="true">·</span> ` +
@@ -308,6 +357,12 @@ export function archiveNotice(lang, twins) {
     `<aside class="archived" aria-label="${esc(copy.label)}">` +
     `<p class="archived-label">${esc(copy.label)}</p>` +
     `<p>${esc(copy.body)}</p>` +
+    // The narrower half of the disclosure: the sentence above says details may
+    // differ, this one says which details cost money and where the current
+    // answer lives. Before the twin links, so the notice still closes on "here
+    // is this page, in a language we maintain".
+    `<p class="archived-links archived-pricing">${esc(copy.pricing.before)}` +
+    `<a href="${PRICING_URL}">${esc(label)}</a>${esc(copy.pricing.after)}</p>` +
     // The separator carries its own trailing space (or, for Japanese, does not:
     // a full-width "：" already sets its own spacing and a space after it reads
     // as a gap).
