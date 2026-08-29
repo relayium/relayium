@@ -10,43 +10,65 @@ const relay = (id: string): RelayEntry => ({
   iceServers: [{ urls: [`turn:${id}.example:3478`], username: `u-${id}`, credential: `c-${id}` }],
 });
 
+interface FakeTimer { cb: () => void; ms: number; cleared: boolean; fired: boolean }
+
 /**
  * A selection with a hand-driven clock, so a deadline is a fact rather than a
  * wait.
  *
- * One slot, because the implementation holds at most one armed deadline: every
- * path that arms clears first. `armCount` is what makes "a fresh grace" testable
- * — a second peer must produce a SECOND arming, not inherit the first one's
- * remaining time.
+ * The room's two wake-ups are kept in two lists, exactly as the implementation
+ * keeps them in two slots. `timers`/`expire`/`armCount` are the GRACE — the
+ * bounded peer/fallback deadline — and mean what they always meant; the early
+ * exit has its own `domTimers`/`fireDominance`/`domArmCount`, so a test can
+ * state which of the two opened a gate rather than inferring it. `armCount` is
+ * what makes "a fresh grace" testable: a second peer must produce a SECOND
+ * arming, not inherit the first one's remaining time.
+ *
+ * The clock starts at zero and only `advance` moves it, so a room that never
+ * touches it measures zero elapsed probe time — which is the state in which the
+ * early exit can only be reached by evidence rather than by the clock.
  */
 function harness(pool: RelayEntry[], deadlineMs = RELAY_GATE_MS) {
   const published: Record<string, number>[] = [];
-  const timers: Array<{ cb: () => void; cleared: boolean; fired: boolean }> = [];
+  const timers: FakeTimer[] = [];
+  const domTimers: FakeTimer[] = [];
+  let clock = 0;
+  // Grace handles are their plain index, so `fireTimer(0)` still names the
+  // room's first grace; dominance handles are negative, which is what lets one
+  // `clearTimer` serve both lists without either being able to clear the other.
   const selection = createRelaySelection({
     publish: (map) => published.push({ ...map }),
     deadlineMs,
-    setTimer: (cb) => {
-      timers.push({ cb, cleared: false, fired: false });
+    now: () => clock,
+    setTimer: (cb, ms, kind) => {
+      if (kind === "dominance") {
+        domTimers.push({ cb, ms, cleared: false, fired: false });
+        return -domTimers.length as unknown as ReturnType<typeof setTimeout>;
+      }
+      timers.push({ cb, ms, cleared: false, fired: false });
       return (timers.length - 1) as unknown as ReturnType<typeof setTimeout>;
     },
     clearTimer: (handle) => {
-      const t = timers[handle as unknown as number];
+      const h = handle as unknown as number;
+      const t = h < 0 ? domTimers[-h - 1] : timers[h];
       if (t) t.cleared = true;
     },
   });
   selection.reset(pool);
   const liveIndex = () => timers.findIndex((t) => !t.cleared && !t.fired);
+  const liveDom = () => domTimers.findIndex((t) => !t.cleared && !t.fired);
   return {
     selection, published,
-    /** Run the deadline that is actually armed, if one is. */
+    /** Run the grace deadline that is actually armed, if one is. */
     expire() {
       const i = liveIndex();
       if (i < 0) return;
       timers[i].fired = true;
       timers[i].cb();
     },
-    /** Run a specific deadline's callback whether or not it was cleared — how a
-     *  timer that fired in the same turn its owner was superseded behaves. */
+    /** Run a specific grace deadline's callback whether or not it was cleared —
+     *  how a timer that fired in the same turn its owner was superseded
+     *  behaves. */
     fireTimer(i: number) {
       const t = timers[i];
       if (!t) throw new Error(`no timer ${i}`);
@@ -54,9 +76,33 @@ function harness(pool: RelayEntry[], deadlineMs = RELAY_GATE_MS) {
       t.cb();
     },
     get deadlineArmed() { return liveIndex() >= 0; },
-    /** How many deadlines this room has ever armed. A second peer must produce a
-     *  SECOND one rather than inherit the first's remaining time. */
+    /** How many grace deadlines this room has ever armed. A second peer must
+     *  produce a SECOND one rather than inherit the first's remaining time. */
     get armCount() { return timers.length; },
+
+    /** Monotonic milliseconds since this room was created. */
+    get nowMs() { return clock; },
+    advance(ms: number) { clock += ms; },
+    /** Run the early exit that is actually armed, if one is. */
+    fireDominance() {
+      const i = liveDom();
+      if (i < 0) return;
+      domTimers[i].fired = true;
+      domTimers[i].cb();
+    },
+    /** Run a specific early exit whether or not it was cleared — a wake-up that
+     *  was already in flight when its room was superseded. */
+    fireDominanceTimer(i: number) {
+      const t = domTimers[i];
+      if (!t) throw new Error(`no dominance timer ${i}`);
+      t.fired = true;
+      t.cb();
+    },
+    get dominanceArmed() { return liveDom() >= 0; },
+    /** The delay the armed early exit was asked for, which is what pins it to
+     *  the pick's worse leg rather than to a constant. */
+    get dominanceDelay() { const i = liveDom(); return i < 0 ? null : domTimers[i].ms; },
+    get domArmCount() { return domTimers.length; },
   };
 }
 
@@ -401,6 +447,269 @@ describe("relay selection gate", () => {
  * replacement's supposedly fresh grace found a choice already waiting for it and
  * built its link on a relay chosen by somebody who was no longer there.
  */
+/**
+ * **The early exit: a silent relay must not hold a choice the room already has.**
+ *
+ * A browser probe runs for nine seconds before it gives up, and the gate's peer
+ * grace is five — so one advertised relay that drops packets silently used to
+ * cost every pairing the whole five seconds and then open on the FALLBACK,
+ * with a perfectly good common relay sitting in both maps the entire time. That
+ * is the production shape a dead relay in the pool produced.
+ *
+ * What retires the silent probe is arithmetic, not a guess: it has been running
+ * for the elapsed time, so it cannot report less, and a relay that cannot report
+ * less than the current pick's worse leg cannot become the pick.
+ */
+describe("the relay gate, when a probe is still running", () => {
+  it("opens on a fast common relay in well under a second while a nine-second probe stays silent", () => {
+    const h = harness([relay("fast"), relay("dead")]);
+    const run = vi.fn();
+    h.selection.gate.whenReady(run);
+    h.selection.notePeer("peer");
+    expect(h.armCount).toBe(1); // the five-second grace, armed and never fired
+
+    // 30 ms in, the near relay answers and the peer's map is already here.
+    h.advance(30);
+    h.selection.record("fast", 30);
+    h.selection.receive("peer", { relayRtt: { fast: 40 } });
+    expect(h.selection.gate.ready()).toBe(false);
+    // The wake-up is one millisecond past the pick's worse leg — 40 — measured
+    // from the first result, not a constant and not the grace.
+    expect(h.dominanceDelay).toBe(41);
+
+    h.advance(41);
+    h.fireDominance();
+    expect(h.selection.gate.ready()).toBe(true);
+    expect(h.selection.selectedRelayId).toBe("fast");
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(h.nowMs).toBeLessThan(1_000);
+    // The grace neither fired nor opened anything, and nothing waits on the
+    // silent probe's nine-second timeout.
+    expect(h.deadlineArmed).toBe(false); // release abandons it
+    expect(h.armCount).toBe(1);
+  });
+
+  /**
+   * **Elapsed time is counted from the first RESULT, never from `reset`.**
+   *
+   * `App.svelte` calls `reset` and then `measureRelays`, so an arbitrarily long
+   * main-thread stall can sit between the two. Anchoring on `reset` would credit
+   * that stall to probes that had not started, which over-estimates the one
+   * quantity the rule uses as a LOWER bound — and retires relays that can still
+   * win. A first result is the earliest instant every probe is known to have
+   * started; see `measureRelays`.
+   *
+   * Five seconds of stall here: an anchor at `reset` would have opened this gate
+   * immediately, on a probe that had been running for nothing at all.
+   */
+  it("measures a probe's elapsed time from the first result, not from the room's reset", () => {
+    const h = harness([relay("fast"), relay("dead")]);
+    h.selection.notePeer("peer");
+    h.advance(5_000); // the stall a reset anchor would have charged to the probes
+
+    h.selection.record("fast", 30);
+    h.selection.receive("peer", { relayRtt: { fast: 40 } });
+    expect(h.selection.gate.ready()).toBe(false);
+    expect(h.dominanceDelay).toBe(41);
+
+    h.advance(40);
+    h.fireDominance();
+    expect(h.selection.gate.ready()).toBe(false);
+    h.advance(1);
+    h.fireDominance();
+    expect(h.selection.gate.ready()).toBe(true);
+  });
+
+  /**
+   * Equality is not domination: a pending relay that ties on the worse leg still
+   * goes to `pickRelay`'s sum and then to its id, either of which can hand it
+   * the room. Retiring a candidate that could tie is retiring one that could
+   * win, and the two peers would then disagree.
+   */
+  it("keeps waiting at exactly the pick's worse leg, and stops one millisecond later", () => {
+    const h = harness([relay("a"), relay("b")]);
+    h.selection.notePeer("peer");
+    h.selection.record("a", 40);
+    h.selection.receive("peer", { relayRtt: { a: 40 } });
+
+    h.advance(40);
+    h.fireDominance();
+    expect(h.selection.gate.ready()).toBe(false);
+    // Woken early, the exit re-arms on the remainder rather than being lost.
+    expect(h.dominanceDelay).toBe(1);
+
+    h.advance(1);
+    h.fireDominance();
+    expect(h.selection.gate.ready()).toBe(true);
+  });
+
+  /** The half the equality rule protects: `b` ties on the worse leg and takes
+   *  the room on the sum. Retiring it at equality would have chosen `a` here,
+   *  while a peer that waited chose `b`. */
+  it("lets a pending relay that ties on the worse leg still take the room", () => {
+    const h = harness([relay("a"), relay("b")]);
+    h.selection.notePeer("peer");
+    h.selection.record("a", 40);
+    h.selection.receive("peer", { relayRtt: { a: 40, b: 10 } });
+    h.advance(40);
+    h.fireDominance();
+    expect(h.selection.gate.ready()).toBe(false);
+
+    h.selection.record("b", 40); // max(40,10)=40, sum 50 < 80 → b
+    h.selection.finishMeasurement();
+    expect(h.selection.selectedRelayId).toBe("b");
+  });
+
+  it("keeps waiting for a pending relay that can still beat the pick", () => {
+    const h = harness([relay("tok"), relay("fra")]);
+    h.selection.notePeer("peer");
+    h.selection.record("tok", 400);
+    h.selection.receive("peer", { relayRtt: { tok: 400, fra: 10 } });
+    // Far from the bound: `fra` has been running 399 ms, and a 399 ms round trip
+    // still beats max(400, 400).
+    h.advance(399);
+    h.fireDominance();
+    expect(h.selection.gate.ready()).toBe(false);
+    h.selection.record("fra", 399);
+    expect(h.selection.gate.ready()).toBe(true);
+    expect(h.selection.selectedRelayId).toBe("fra");
+  });
+
+  /**
+   * The clock is not the only way a probe stops mattering. If the PEER has
+   * already measured a relay and found it worse than the pick's worse leg, then
+   * the worse of the two legs is worse whatever our own probe reports — so it is
+   * retired with no elapsed time at all, and no wake-up is scheduled.
+   */
+  it("retires a pending relay on the peer's leg alone, with no clock and no timer", () => {
+    const h = harness([relay("fast"), relay("far")]);
+    const run = vi.fn();
+    h.selection.gate.whenReady(run);
+    h.selection.notePeer("peer");
+    h.selection.record("fast", 30);
+    h.selection.receive("peer", { relayRtt: { fast: 20, far: 900 } });
+
+    expect(h.selection.gate.ready()).toBe(true);
+    expect(h.selection.selectedRelayId).toBe("fast");
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(h.nowMs).toBe(0);
+    expect(h.domArmCount).toBe(0);
+  });
+
+  /** Every relay in the pool has answered, so `mine` cannot grow: the room does
+   *  not need `finishMeasurement` to tell it that, and waiting for the probe
+   *  machinery to unwind is waiting for nothing. */
+  it("opens once every relay in the pool has answered, without waiting to be told measurement finished", () => {
+    const h = harness([relay("a"), relay("b")]);
+    h.selection.notePeer("peer");
+    h.selection.record("a", 10);
+    h.selection.record("b", 90);
+    h.selection.receive("peer", { relayRtt: { a: 15, b: 400 } });
+    expect(h.selection.gate.ready()).toBe(true);
+    expect(h.selection.selectedRelayId).toBe("a");
+  });
+
+  it("cannot be opened by an early exit the room switch left behind", () => {
+    const h = harness([relay("fast"), relay("dead")]);
+    h.selection.notePeer("peer");
+    h.selection.record("fast", 30);
+    h.selection.receive("peer", { relayRtt: { fast: 40 } });
+    expect(h.domArmCount).toBe(1);
+
+    h.selection.reset([relay("other"), relay("dead")]);
+    h.selection.notePeer("peer");
+    h.advance(10_000);
+    // The previous room's wake-up, arriving in the next one — and its elapsed
+    // reading would be true of a room that no longer exists.
+    h.fireDominanceTimer(0);
+    expect(h.selection.gate.ready()).toBe(false);
+    expect(h.selection.selectedRelayId).toBeNull();
+  });
+
+  it("cannot be opened by an early exit a suspend left behind", () => {
+    const h = harness([relay("fast"), relay("dead")]);
+    h.selection.notePeer("peer");
+    h.selection.record("fast", 30);
+    h.selection.receive("peer", { relayRtt: { fast: 40 } });
+
+    h.selection.suspend();
+    h.advance(10_000);
+    h.fireDominanceTimer(0);
+    expect(h.selection.gate.ready()).toBe(false);
+  });
+
+  /**
+   * A departure unmakes the choice the early exit was armed for, and the
+   * wake-up that was already in flight must not open the gate for the peer that
+   * replaces it. Same rule as the grace, on its own token — see `relock`.
+   */
+  it("cannot be opened by an early exit a departure left behind", () => {
+    const h = harness([relay("fast"), relay("dead")]);
+    h.selection.noteRoster(["first"]);
+    h.selection.notePeer("first");
+    h.selection.record("fast", 30);
+    h.selection.receive("first", { relayRtt: { fast: 40 } });
+    expect(h.selection.gate.ready()).toBe(false);
+    expect(h.domArmCount).toBe(1);
+
+    h.selection.peerGone("first");
+    h.selection.notePeer("second");
+    h.advance(41);
+    // The departed peer's wake-up, arriving after the departure re-locked the
+    // gate. Its elapsed reading is still true of our own probes — the room did
+    // not restart them — but the choice it was armed for no longer exists, and
+    // an invalidated wake-up must not act on that.
+    h.fireDominanceTimer(0);
+    expect(h.selection.gate.ready()).toBe(false);
+    expect(h.selection.selectedRelayId).toBeNull();
+    // What ends the replacement's wait is its OWN map, evaluated against a
+    // local measurement that is by now genuinely settled — or its own full
+    // fresh grace, which is still armed and still five seconds.
+    expect(h.armCount).toBe(2);
+    h.selection.receive("second", { relayRtt: { fast: 40 } });
+    expect(h.selection.gate.ready()).toBe(true);
+    expect(h.selection.selectedRelayId).toBe("fast");
+  });
+
+  /** A peer that sends nothing at all still costs exactly the bounded grace —
+   *  the early exit has no choice to be early about, so it changes nothing. */
+  it("leaves the map-less fallback exactly as it was", () => {
+    const h = harness([relay("fast"), relay("dead")]);
+    h.selection.notePeer("peer");
+    h.selection.record("fast", 30);
+    h.advance(10_000);
+    expect(h.selection.gate.ready()).toBe(false);
+    expect(h.dominanceArmed).toBe(false); // nothing chosen, nothing to be early about
+    h.expire();
+    expect(h.selection.gate.ready()).toBe(true);
+    expect(h.selection.selectedRelayId).toBeNull();
+  });
+
+  /**
+   * A peer's cumulative map can arrive out of order, and `receive` merges rather
+   * than assigns. What must not happen is an early exit surviving a re-derived
+   * choice: the wake-up is a function of the pick's worse leg, so a new map
+   * supersedes it rather than adding to it.
+   */
+  it("re-derives the early exit when a peer's map moves the choice", () => {
+    const h = harness([relay("a"), relay("b"), relay("dead")]);
+    h.selection.notePeer("peer");
+    h.selection.record("a", 30);
+    h.selection.record("b", 300);
+    h.selection.receive("peer", { relayRtt: { a: 500 } });
+    expect(h.dominanceDelay).toBe(501); // pick a, worse leg 500
+
+    h.selection.receive("peer", { relayRtt: { a: 20, b: 310 } });
+    expect(h.selection.selectedRelayId).toBe("a");
+    expect(h.dominanceDelay).toBe(31); // worse leg is now 30
+    expect(h.domArmCount).toBe(2);
+
+    h.advance(31);
+    h.fireDominance();
+    expect(h.selection.gate.ready()).toBe(true);
+  });
+});
+
 describe("the relay gate, when a roster stops naming a peer", () => {
   /**
    * The ordinary first seconds of a room: one relay has answered and another is

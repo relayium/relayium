@@ -14,7 +14,9 @@
 // before it puts the first legal `link/1` request or offer on the wire and
 // before it answers one.
 
-import { pickRelay, type RelayEntry } from "./ice";
+import {
+  pickRelay, relayChoiceDominates, relayDominanceElapsedMs, type RelayEntry,
+} from "./ice";
 
 /**
  * How long a room waits for a PEER's map before building on the fallback
@@ -114,12 +116,38 @@ export interface RelayGate {
   whenReady(cb: () => void): void;
 }
 
+/**
+ * Which of the room's two wake-ups a timer is.
+ *
+ * `grace` is the bounded peer/fallback deadline — the one that opens the gate on
+ * nothing when a peer never speaks. `dominance` is the early exit: the instant
+ * at which our own unfinished probes can no longer beat the relay already
+ * chosen (see `relayChoiceDominates`). They are separate slots, with separate
+ * invalidation tokens, because they mean opposite things — one gives up, the
+ * other stops waiting for an answer it already has — and because abandoning one
+ * must not silently disarm the other.
+ */
+export type RelayTimerKind = "grace" | "dominance";
+
 export interface RelaySelectionOptions {
   /** Broadcast this side's cumulative map. Called once per relay that answers. */
   publish: (map: Record<string, number>) => void;
   deadlineMs?: number;
-  setTimer?: (cb: () => void, ms: number) => ReturnType<typeof setTimeout>;
+  setTimer?: (cb: () => void, ms: number, kind: RelayTimerKind) => ReturnType<typeof setTimeout>;
   clearTimer?: (handle: ReturnType<typeof setTimeout>) => void;
+  /**
+   * Monotonic elapsed-time source, in milliseconds.
+   *
+   * MUST be monotonic: it is what stands in for an unfinished probe's round trip
+   * (`relayChoiceDominates`), where it is used as a LOWER bound — so the unsafe
+   * direction is a clock that runs FAST. A wall clock stepped FORWARD (an NTP
+   * correction, a user setting the date, a VM resuming) inflates elapsed past
+   * the probe's real running time and retires a relay that could still win. A
+   * backward step is the harmless one: elapsed shrinks, the bound gets weaker,
+   * and the room waits longer than it strictly had to. `performance.now()` is
+   * monotonic; `Date.now()` is not.
+   */
+  now?: () => number;
 }
 
 /**
@@ -134,8 +162,35 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
   const deadlineMs = opts.deadlineMs ?? RELAY_GATE_MS;
   const setTimer = opts.setTimer ?? ((cb, ms) => setTimeout(cb, ms));
   const clearTimer = opts.clearTimer ?? ((h) => clearTimeout(h));
+  const now = opts.now ?? (() => performance.now());
 
   let pool: RelayEntry[] = [];
+  /** `pool`'s ids, which is what the dominance rule iterates. Derived once per
+   *  room rather than per evaluation; the pool never changes within one. */
+  let poolIds: string[] = [];
+  /**
+   * **The instant this room's probes are all known to have started**, on the
+   * monotonic clock, or null before that is known.
+   *
+   * The FIRST `record` of the room, and deliberately not `reset`. The anchor
+   * `relayChoiceDominates` needs is one at or after every pending probe's own
+   * start, because elapsed time is being used as a LOWER bound on what those
+   * probes will report; an anchor taken any earlier over-estimates that bound
+   * and retires relays that can still win. `reset` is exactly such an earlier
+   * anchor — `App.svelte` calls it before `measureRelays`, so an arbitrarily
+   * long main-thread stall can sit between it and the first probe.
+   *
+   * A first result is the anchor instead because `measureRelays` starts every
+   * probe in one synchronous job and cannot publish anything until that job has
+   * ended; the proof is on `measureRelays`, and `ice.test.ts` pins it against a
+   * stalled construction. What this costs is the time up to the first answer,
+   * which is not credited to the bound — conservative, and in the shape this
+   * exists for (one fast relay, one silent one) a few tens of milliseconds.
+   *
+   * Null therefore means "no sound bound yet", which is also exactly the state
+   * in which `mine` is empty and no relay can have been chosen at all.
+   */
+  let probeAnchorMs: number | null = null;
   let mine: Record<string, number> = {};
   let theirs: Record<string, number> = {};
   /** Who `theirs` was learned from, so a room that loses every contributor stops
@@ -147,6 +202,14 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
   let open = true;
   let waiters: Array<() => void> = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
+  /** The early-exit wake-up, held in its own slot. It coexists with the grace —
+   *  a room routinely has both armed at once — so it cannot share `timer`, and
+   *  it carries its own token so abandoning one never disarms the other. */
+  let domTimer: ReturnType<typeof setTimeout> | undefined;
+  /** `waitToken`'s counterpart for the dominance wake-up. Same job: a callback
+   *  that was already in flight when its room was superseded must be able to
+   *  recognise that, whether or not `clearTimer` also stopped it. */
+  let domToken = 0;
   /** The peer whose grace is currently running, or null when nobody is here to
    *  wait for. A room with no peer waits indefinitely on purpose: there is no
    *  link to build and therefore nothing the fallback would unblock. */
@@ -215,7 +278,67 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
       // running its own full wait.
       if (waitToken !== token) return;
       onExpire();
-    }, ms);
+    }, ms, "grace");
+  }
+
+  /**
+   * Stop the early exit, and make the one that was running unrecognisable.
+   *
+   * The exact counterpart of `abandonDeadline`, on its own token: a room that
+   * abandons a departed peer's grace has not learned anything about its own
+   * probes, and a room whose choice changed has not learned anything about the
+   * peer it is waiting for.
+   */
+  function abandonDominance() {
+    if (domTimer !== undefined) clearTimer(domTimer);
+    domTimer = undefined;
+    domToken += 1;
+  }
+
+  /**
+   * Whether our own unfinished probes can still change the choice.
+   *
+   * Null elapsed — no local result yet — is passed through as "no sound bound",
+   * not as zero. See `probeAnchorMs`.
+   */
+  function dominant(): boolean {
+    return relayChoiceDominates(
+      selected, mine, theirs, poolIds,
+      probeAnchorMs === null ? null : now() - probeAnchorMs,
+    );
+  }
+
+  /**
+   * Schedule the instant at which the early exit becomes true, if it is not
+   * already and could still become so.
+   *
+   * Necessary because the rule turns true with the CLOCK rather than with an
+   * event: a room whose peer has spoken and whose fast relay has answered gets
+   * no further callback until the silent probe's nine-second timeout, and
+   * waiting for that is the whole defect. Superseded on every re-derivation of
+   * the choice, because the deadline it computes is a function of the pick's
+   * worse leg, and that moves when the pick does.
+   */
+  function armDominance() {
+    abandonDominance();
+    if (open || measured || selected === null || probeAnchorMs === null) return;
+    const worstLeg = Math.max(mine[selected], theirs[selected]);
+    const delay = relayDominanceElapsedMs(worstLeg) - (now() - probeAnchorMs);
+    // Not reachable while `dominant()` is false — the rule and this deadline are
+    // the same inequality — but a caller-supplied clock is a caller-supplied
+    // clock. Written as "not positive" rather than "at most zero" so a NaN
+    // delay stops here too: a wake-up that re-arms itself on NaN forever is the
+    // one failure mode a timer this file owns could actually spin on.
+    if (!(delay > 0)) return;
+    const token = domToken;
+    domTimer = setTimer(() => {
+      domTimer = undefined;
+      if (domToken !== token) return; // superseded, or a room that has moved on
+      if (settled()) release();
+      // Woken early — only a hand-driven clock can do that — so re-arm on the
+      // remainder rather than lose the exit until the next event.
+      else armDominance();
+    }, delay, "dominance");
   }
 
   /** Open the gate and run everything parked behind it, exactly once. */
@@ -226,6 +349,7 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
     waiters = [];
     gracePeer = null;
     abandonDeadline();
+    abandonDominance();
     for (const cb of parked) cb();
   }
 
@@ -241,12 +365,23 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
    * for the same reason.
    */
   function settled(): boolean {
-    return measured && selected !== null;
+    if (selected === null) return false;
+    // "Our own measurement has finished" is the sufficient condition, not the
+    // necessary one. What actually matters is that no probe still running can
+    // change the answer, and a probe that has been running longer than the
+    // current pick's worse leg cannot — see `relayChoiceDominates`. Without
+    // that, one silently dropped relay spends the whole nine-second probe
+    // budget holding a choice the room already has, and the peer grace expires
+    // first: five seconds of spinner for an answer that was ready in 200 ms.
+    return measured || dominant();
   }
 
   function reselect() {
     selected = pickRelay(mine, theirs);
     if (settled()) release();
+    // The choice moved, so the instant its worse leg retires every pending
+    // probe moved with it. Recomputed rather than adjusted.
+    else armDominance();
   }
 
   /**
@@ -289,10 +424,13 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
     // here. What is taken back is the PERMISSION, which is the whole of what an
     // open gate is.
     gracePeer = null;
-    // Nothing is armed while the gate is open, so this arms nothing new; it
-    // invalidates. A deadline that fired in the same turn its owner was
-    // superseded must not be able to recognise the room it wakes up in.
+    // Nothing is armed while the gate is open, so these arm nothing new; they
+    // invalidate. A wake-up that fired in the same turn its owner was
+    // superseded must not be able to recognise the room it wakes up in — and
+    // that is as true of the early exit as of the grace, because a re-locked
+    // gate is one whose choice was just unmade.
     abandonDeadline();
+    abandonDominance();
     // A peer that is STILL here gets its own bounded grace rather than an
     // indefinite hold: the gate may have been opened by somebody else's elapsed
     // deadline, and nothing would arm a grace for this one until its next frame,
@@ -340,8 +478,11 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
      */
     reset(next: RelayEntry[]) {
       abandonDeadline();
+      abandonDominance();
       waiters = [];
       pool = next;
+      poolIds = next.map((r) => r.id);
+      probeAnchorMs = null;
       mine = {};
       theirs = {};
       contributors = new Set();
@@ -482,6 +623,9 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
     suspend() {
       waiters = [];
       pool = [];
+      poolIds = [];
+      probeAnchorMs = null;
+      abandonDominance();
       mine = {};
       theirs = {};
       contributors = new Set();
@@ -506,6 +650,10 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
      */
     record(id: string, rttMs: number) {
       if (!pool.some((r) => r.id === id)) return;
+      // The first result of the room is the anchor every later elapsed reading
+      // is taken from, because it is the earliest instant this file can prove is
+      // at or after every probe's own start. See `probeAnchorMs`.
+      if (probeAnchorMs === null) probeAnchorMs = now();
       mine = { ...mine, [id]: rttMs };
       opts.publish(mine);
       reselect();

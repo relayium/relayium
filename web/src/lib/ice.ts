@@ -244,6 +244,118 @@ export function pickRelay(
   return best;
 }
 
+/**
+ * Whether `selectedId` already beats every relay of ours that is still being
+ * probed — so waiting for the rest of our own measurement cannot change it.
+ *
+ * ## What the gate needs this for
+ *
+ * `pickRelay` is only final once `mine` can no longer grow, and `mine` stops
+ * growing at the LAST probe: a relay that is silently dropping packets spends
+ * the whole 9 s `measureRelay` budget and pins the answer behind it. The gate's
+ * five-second peer bound then expires first, and a pairing that had a good
+ * common relay in hand after 200 ms still waits five seconds for it. That is
+ * the production shape a dead advertised relay produced.
+ *
+ * ## The two ways a pending relay is retired
+ *
+ * `pickRelay` orders candidates by the WORSE of the two peers' legs, so a
+ * pending relay can only win if its own worst leg lands at or below the current
+ * pick's `worstLeg`.
+ *
+ *  - **By the peer's leg alone, with no clock at all.** If `theirs[id]` is
+ *    already strictly greater than `worstLeg`, then `max(ours, theirs)` for that
+ *    relay is too, whatever our probe eventually reports.
+ *  - **By elapsed measurement time**, when — and only when — the caller can
+ *    supply a monotonic elapsed reading whose anchor is at or after the instant
+ *    EVERY still-pending probe began timing. See `elapsedMs`.
+ *
+ * ## Why it is `>` and never `>=`
+ *
+ * At equality the pending relay ties on the worst leg and `pickRelay` falls
+ * through to the sum and then to the id, either of which can still hand it the
+ * room. Retiring a candidate that could tie is retiring one that could win.
+ *
+ * ## What this deliberately does NOT claim
+ *
+ * Only that our own remaining probes cannot change the answer, evaluated
+ * against the two maps as they stand. `theirs` may still grow — a relay we have
+ * measured but the peer has not can become a candidate when it does, and a peer
+ * that revises a leg downwards can revive one the peer-leg test retired. Both
+ * are exactly the uncertainty the already-shipped "measurement finished"
+ * release accepts, because a peer map arriving after it moves the choice in the
+ * same way; the peer deadline is what bounds it. This adds no new exposure.
+ *
+ * Mirrored by `RelayChoice.dominates` in RelayiumKit.
+ *
+ * @param elapsedMs Monotonic milliseconds since an anchor that is at or after
+ *   the start of every probe still missing from `mine`, or `null` when no such
+ *   anchor is available — in which case only the peer-leg test may retire a
+ *   pending relay. `null` is the honest answer, not a degenerate one: an anchor
+ *   taken BEFORE a probe started makes elapsed time an over-estimate of that
+ *   probe's round trip, which retires relays that can still win.
+ */
+export function relayChoiceDominates(
+  selectedId: string | null,
+  mine: Record<string, number>,
+  theirs: Record<string, number>,
+  poolIds: readonly string[],
+  elapsedMs: number | null,
+): boolean {
+  if (selectedId === null) return false;
+  const myLeg = own(mine, selectedId);
+  const peerLeg = own(theirs, selectedId);
+  // Not a common relay, so not something `pickRelay` could have returned and
+  // not something a pending probe has to beat. Defensive: unreachable through
+  // `pickRelay`, which only ever names an id both maps carry.
+  if (myLeg === undefined || peerLeg === undefined) return false;
+  const worstLeg = Math.max(myLeg, peerLeg);
+
+  // `measureRelay` reports `Math.round(...)`, so the comparison has to be made
+  // in that same rounded domain or it is out by up to half a millisecond in the
+  // unsafe direction. Rounding is monotone, so for a probe that has not
+  // published yet — its true duration already exceeds `elapsedMs` — the value
+  // it will eventually report is at least `Math.round(elapsedMs)`.
+  const lowerBound = elapsedMs === null ? null : Math.round(elapsedMs);
+  const clockRetires = lowerBound !== null && lowerBound > worstLeg;
+
+  for (const id of poolIds) {
+    if (own(mine, id) !== undefined) continue; // answered — `pickRelay` weighed it
+    const known = own(theirs, id);
+    if (known !== undefined && known > worstLeg) continue;
+    if (clockRetires) continue;
+    return false;
+  }
+  return true;
+}
+
+/** An OWN entry of an RTT map, and `undefined` for anything inherited. Relay ids
+ *  are strings this client did not author — `"toString"` is a legal one — and
+ *  plain-object indexing would answer with `Object.prototype`'s member for it,
+ *  which reads as "already measured" and would retire a probe that is running. */
+function own(map: Record<string, number>, id: string): number | undefined {
+  if (!Object.prototype.hasOwnProperty.call(map, id)) return undefined;
+  const v = map[id];
+  return typeof v === "number" ? v : undefined;
+}
+
+/**
+ * The elapsed measurement time at which `relayChoiceDominates` is guaranteed to
+ * retire every unfinished probe, for a pick whose worse leg is `worstLegMs`.
+ *
+ * What a caller uses to schedule the wake-up rather than poll for it. One whole
+ * millisecond past the leg: the rule is a STRICT inequality evaluated on
+ * `Math.round(elapsedMs)`, so `worstLegMs + 1` is the smallest integer elapsed
+ * that clears it for certain (`worstLegMs + 0.5` also would, and rounding a
+ * scheduled delay down is exactly what would make the wake-up find the
+ * condition still false and have to arm itself again).
+ *
+ * Mirrored by `RelayChoice.dominanceElapsedMs` in RelayiumKit.
+ */
+export function relayDominanceElapsedMs(worstLegMs: number): number {
+  return worstLegMs + 1;
+}
+
 /** Measure the TURN Allocate round-trip to one relay: time from setLocalDescription
  *  to its first `relay` candidate. Relay-only so nothing but the TURN path is probed.
  *  Returns null if no relay candidate arrives before the timeout (relay down / bad
@@ -297,6 +409,40 @@ export async function measureRelay(entry: RelayEntry, timeoutMs = 9000): Promise
  * The resolved map is still the complete one, for a caller that wants to know
  * when measurement has FINISHED — which is a different question from what has
  * been measured so far, and the one a relay gate waits on.
+ *
+ * ## Every probe has started before the first `onResult`
+ *
+ * `relayChoiceDominates` stands elapsed time in for an unfinished probe's round
+ * trip, and that substitution is sound only against an anchor at or after the
+ * instant that probe began timing. This function is what makes the FIRST
+ * `onResult` such an anchor, and the argument is entirely about which
+ * JavaScript job each line runs in:
+ *
+ *  - `pool.map(cb)` calls `cb` for every entry synchronously, in one job.
+ *  - `cb` is `async`, so its body runs synchronously up to its first `await`.
+ *    That first `await` is `await measureRelay(e)`, whose operand is evaluated
+ *    first — so `measureRelay` is ENTERED in the same job.
+ *  - `measureRelay` likewise runs synchronously to its own first `await`, which
+ *    is `await new Promise(...)`. A promise executor runs synchronously during
+ *    construction, and `const start = performance.now()` — the probe's clock —
+ *    is on the line above it.
+ *
+ * So every probe's `start` is taken during the synchronous execution of
+ * `pool.map`. `onResult` is reachable only after an `await` resumes, which is a
+ * microtask at the very earliest, and no microtask runs until that synchronous
+ * job has finished. The first published result therefore happens strictly after
+ * the last probe started, and a main-thread stall of any length between two
+ * constructions moves both sides of that ordering, not one.
+ *
+ * The three loose ends, none of which weakens it: a relay whose
+ * `RTCPeerConnection` constructor throws leaves a rejected promise and the loop
+ * continues, so the other probes still start; a relay that never answers is
+ * simply never published, and stays pending, which is the conservative side; and
+ * an empty pool publishes nothing at all, so there is no anchor and no choice to
+ * make one for.
+ *
+ * `web/src/lib/ice.test.ts` pins this ordering against a deliberately stalled
+ * construction, so it is a test rather than a comment.
  */
 export async function measureRelays(
   pool: RelayEntry[],

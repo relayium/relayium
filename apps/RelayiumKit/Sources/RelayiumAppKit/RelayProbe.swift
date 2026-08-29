@@ -5,10 +5,11 @@ import RelayiumKit
 /// Times the TURN Allocate round trip to each relay in the pool.
 ///
 /// ⚠️ NOT UNIT-TESTED, deliberately. Every decision this feature makes lives in
-/// `RelayChoice` and `RelayNegotiator`, which are pure and covered; what is
-/// left here is a stopwatch and no branches, and nothing short of a live
-/// allocation would exercise it. Keep it that way — logic that arrives in this
-/// file becomes logic nothing can test.
+/// `RelayChoice`, `RelayNegotiator` and `ProbeStartBarrier`, which are pure and
+/// covered; what is left here is a stopwatch and no branches, and nothing short
+/// of a live allocation would exercise it. Keep it that way — logic that arrives
+/// in this file becomes logic nothing can test. The all-started rule below is
+/// wired here and decided in `ProbeStartBarrier` for exactly that reason.
 ///
 /// Mirrors `measureRelay` in `web/src/lib/ice.ts`: a relay-only peer connection
 /// with just this relay's servers, timed from `setLocalDescription` to the
@@ -27,21 +28,61 @@ public enum RelayProbe {
     /// entire relay-choice budget and produced nothing for it. Publishing per
     /// probe means a slow relay costs only its own absence.
     ///
-    /// `publish` is called from several child tasks at once, so it must be
+    /// `sink` is called from several child tasks at once, so it must be
     /// safe to call concurrently.
+    ///
+    /// ## The all-started edge
+    ///
+    /// `sink.allProbesStarted()` fires once, from inside whichever child
+    /// acknowledged last, and it is what lets `RelayNegotiator` use elapsed time
+    /// as a lower bound on an unfinished probe's round trip. The claim it makes
+    /// is narrow and the implementation is what makes it true rather than
+    /// hopeful:
+    ///
+    ///  - Each child calls `barrier.acknowledge` from inside `measure`, on the
+    ///    statement AFTER it takes the `start` it will subtract from, and BEFORE
+    ///    its first `await`. So an acknowledgement means that probe's clock is
+    ///    running, not that its task was created.
+    ///  - The barrier tracks entries by index rather than counting, so a
+    ///    duplicate acknowledgement cannot stand in for a probe that has not
+    ///    started.
+    ///  - A child that cannot build a peer connection at all acknowledges on the
+    ///    way out. It will never publish, so it stays pending forever, and the
+    ///    bound retires it — correctly, since nothing it could report would win.
+    ///    Not acknowledging would instead stall the barrier for the whole
+    ///    session and silently cost every other relay the early exit.
+    ///
+    /// Hoisting one timestamp above the loop would be simpler and wrong: the gap
+    /// between it and a child actually reaching a thread is executor delay, and
+    /// counting it as round-trip time the probe has already spent over-states
+    /// the bound in the unsafe direction.
+    ///
+    /// `now` is the same monotonic clock `RelayNegotiator` compares against —
+    /// `systemUptime`, not a wall clock — because the two quantities are only
+    /// comparable in one domain. Injectable for the same reason it is there.
     public static func measureAll(_ pool: [RelayEntry],
                                   timeout: TimeInterval = 4,
-                                  publish: @escaping @Sendable (String, Int) -> Void) async {
+                                  now: @escaping @Sendable () -> TimeInterval
+                                      = { ProcessInfo.processInfo.systemUptime },
+                                  sink: RelayProbeSink) async {
+        let barrier = ProbeStartBarrier(expected: pool.count,
+                                        onAllStarted: { sink.allProbesStarted() })
         await withTaskGroup(of: Void.self) { group in
-            for entry in pool {
+            for (index, entry) in pool.enumerated() {
                 group.addTask {
-                    if let ms = await measure(entry, timeout: timeout) { publish(entry.id, ms) }
+                    if let ms = await measure(entry, timeout: timeout, now: now,
+                                              started: { barrier.acknowledge(index) }) {
+                        sink(entry.id, ms)
+                    }
                 }
             }
         }
     }
 
-    private static func measure(_ entry: RelayEntry, timeout: TimeInterval) async -> Int? {
+    private static func measure(_ entry: RelayEntry,
+                                timeout: TimeInterval,
+                                now: @Sendable () -> TimeInterval,
+                                started: () -> Void) async -> Int? {
         ensureRTCSSL()
         let factory = RTCPeerConnectionFactory()
         let config = RTCConfiguration()
@@ -53,18 +94,33 @@ public enum RelayProbe {
         let delegate = FirstRelayCandidate()
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
         guard let pc = factory.peerConnection(with: config, constraints: constraints,
-                                              delegate: delegate) else { return nil }
+                                              delegate: delegate) else {
+            // The one path out of here that never starts a clock, and it still
+            // acknowledges: this entry can never publish, so leaving the barrier
+            // one short would cost the whole pool its early exit for the rest of
+            // the session. See `measureAll`.
+            started()
+            return nil
+        }
         defer { pc.close() }
 
         // A data channel gives the offer an m-line, without which ICE gathers
         // nothing at all and every relay would look unreachable.
         _ = pc.dataChannel(forLabel: "probe", configuration: RTCDataChannelConfiguration())
 
-        let start = Date()
+        // Monotonic, and the instant `started()` on the next line is a claim
+        // ABOUT — the subtraction below and the acknowledgement above it are the
+        // same `start`, which is what makes elapsed time comparable with the
+        // number this returns. Nothing suspends between them.
+        let start = now()
+        started()
         guard let offer = try? await pc.offer(for: constraints) else { return nil }
         try? await pc.setLocalDescription(offer)
         guard await delegate.wait(timeout: timeout) else { return nil }
-        return Int(Date().timeIntervalSince(start) * 1000)
+        // Truncated, exactly as `RelayNegotiator` truncates its elapsed reading:
+        // a lower bound compared in a rounded domain against a truncated one
+        // would be out by up to a millisecond in the unsafe direction.
+        return Int((now() - start) * 1000)
     }
 }
 

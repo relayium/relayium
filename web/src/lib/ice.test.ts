@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { fetchIceConfig, fetchIceServers, hasTurnServer, measureRelays, pickRelay, type RelayEntry } from "./ice";
+import {
+  fetchIceConfig, fetchIceServers, hasTurnServer, measureRelays, pickRelay,
+  relayChoiceDominates, relayDominanceElapsedMs, type RelayEntry,
+} from "./ice";
 
 // 服务端下发什么就是什么的夹具。故意不写成公共 STUN 的地址——那会让人以为
 // 代码里还有一个第三方默认值。
@@ -147,6 +150,148 @@ describe("pickRelay", () => {
   });
 });
 
+/**
+ * **The shared dominance table.**
+ *
+ * Every row is a decision both clients must make identically, so the same table
+ * is transcribed into `RelayChoiceTests.testMatchesTheBrowsersDominanceTable` in
+ * RelayiumKit. A row added here without adding it there is a divergence, which
+ * is a second relay, a second hop and roughly twice the metered bandwidth.
+ *
+ * `elapsed: null` is the honest "no sound lower bound available" — see
+ * `relayChoiceDominates`. Both clients spend time in that state: the browser
+ * before its first result, the native client before `RelayProbe`'s all-started
+ * barrier fires. Both then supply a real bound, which is why the clock rows
+ * below have to agree too and not only the timing-free ones.
+ */
+const DOMINANCE_TABLE: Array<{
+  name: string;
+  selected: string | null;
+  mine: Record<string, number>;
+  theirs: Record<string, number>;
+  pool: string[];
+  elapsed: number | null;
+  expected: boolean;
+}> = [
+  {
+    name: "no choice yet dominates nothing",
+    selected: null, mine: {}, theirs: {}, pool: ["a", "b"], elapsed: 10_000, expected: false,
+  },
+  {
+    name: "a pick both maps carry, with every probe answered, needs no clock",
+    selected: "a", mine: { a: 20, b: 90 }, theirs: { a: 30, b: 40 },
+    pool: ["a", "b"], elapsed: null, expected: true,
+  },
+  {
+    name: "an unfinished probe with no elapsed bound and no peer leg keeps waiting",
+    selected: "a", mine: { a: 20 }, theirs: { a: 30 },
+    pool: ["a", "b"], elapsed: null, expected: false,
+  },
+  {
+    name: "a peer leg already worse than the pick's worst retires it with no clock",
+    selected: "a", mine: { a: 20 }, theirs: { a: 30, b: 31 },
+    pool: ["a", "b"], elapsed: null, expected: true,
+  },
+  {
+    name: "a peer leg EQUAL to the pick's worst does not: sum and id can still turn it",
+    selected: "a", mine: { a: 20 }, theirs: { a: 30, b: 30 },
+    pool: ["a", "b"], elapsed: null, expected: false,
+  },
+  {
+    name: "elapsed strictly past the pick's worst leg retires every unfinished probe",
+    selected: "a", mine: { a: 20 }, theirs: { a: 30 },
+    pool: ["a", "b"], elapsed: 31, expected: true,
+  },
+  {
+    name: "elapsed EQUAL to the pick's worst leg does not",
+    selected: "a", mine: { a: 20 }, theirs: { a: 30 },
+    pool: ["a", "b"], elapsed: 30, expected: false,
+  },
+  {
+    name: "and neither does a fractional elapsed that rounds down onto it",
+    selected: "a", mine: { a: 20 }, theirs: { a: 30 },
+    pool: ["a", "b"], elapsed: 30.4, expected: false,
+  },
+  {
+    name: "one retired by the clock and one by the peer's leg is still dominance",
+    selected: "a", mine: { a: 20 }, theirs: { a: 30, c: 900 },
+    pool: ["a", "b", "c"], elapsed: 31, expected: true,
+  },
+  {
+    name: "one relay short of the bound holds the whole room",
+    selected: "a", mine: { a: 20 }, theirs: { a: 30, c: 900 },
+    pool: ["a", "b", "c"], elapsed: 30, expected: false,
+  },
+  {
+    name: "a pick the peer has not measured is not a pick at all",
+    selected: "b", mine: { a: 20, b: 5 }, theirs: { a: 30 },
+    pool: ["a", "b"], elapsed: 10_000, expected: false,
+  },
+  {
+    name: "relays outside the pool are not probes and cannot hold the gate",
+    selected: "a", mine: { a: 20 }, theirs: { a: 30, z: 1 },
+    pool: ["a"], elapsed: null, expected: true,
+  },
+];
+
+describe("relayChoiceDominates", () => {
+  for (const row of DOMINANCE_TABLE) {
+    it(row.name, () => {
+      expect(relayChoiceDominates(row.selected, row.mine, row.theirs, row.pool, row.elapsed))
+        .toBe(row.expected);
+    });
+  }
+
+  /**
+   * **The rule may never retire a relay that could still win.**
+   *
+   * Stated as the property rather than as a case: for every pending relay, if
+   * dominance holds then no round trip consistent with the bound can make
+   * `pickRelay` choose that relay instead. `mine[pending] = lowerBound` is the
+   * best case the bound allows, so if the pick survives that it survives
+   * everything.
+   */
+  it("never retires a relay that some legal round trip would hand the room to", () => {
+    const ids = ["a", "b", "c"];
+    for (let seed = 0; seed < 4_000; seed++) {
+      // A cheap deterministic spread; the point is coverage of the boundary,
+      // not statistical quality.
+      const n = (k: number) => ((seed * 2654435761 + k * 40503) >>> 8) % 60;
+      const mine: Record<string, number> = {};
+      const theirs: Record<string, number> = {};
+      ids.forEach((id, i) => {
+        if (n(i) % 5 !== 0) mine[id] = n(i + 10);
+        if (n(i + 20) % 5 !== 0) theirs[id] = n(i + 30);
+      });
+      const elapsed = seed % 3 === 0 ? null : n(99);
+      const selected = pickRelay(mine, theirs);
+      if (!relayChoiceDominates(selected, mine, theirs, ids, elapsed)) continue;
+      expect(selected).not.toBeNull();
+      const bound = elapsed === null ? null : Math.round(elapsed);
+      for (const pending of ids.filter((id) => !(id in mine))) {
+        // Every round trip the bound still permits, at its most favourable.
+        const candidates = bound === null ? [0, 1, 5, 60, 5_000] : [bound, bound + 1, 9_000];
+        for (const rtt of candidates) {
+          expect(pickRelay({ ...mine, [pending]: rtt }, theirs))
+            .toBe(selected);
+        }
+      }
+    }
+  });
+});
+
+describe("relayDominanceElapsedMs", () => {
+  it("names an elapsed time at which the strict rule is certain to hold", () => {
+    for (const worst of [0, 1, 30, 199, 4_321]) {
+      const at = relayDominanceElapsedMs(worst);
+      expect(relayChoiceDominates("a", { a: worst }, { a: worst }, ["a", "b"], at)).toBe(true);
+      // …and not one millisecond earlier, which is what stops a wake-up
+      // scheduled on it from finding the condition still false.
+      expect(relayChoiceDominates("a", { a: worst }, { a: worst }, ["a", "b"], at - 1)).toBe(false);
+    }
+  });
+});
+
 describe("measureRelays", () => {
   const relay = (id: string): RelayEntry => ({
     id,
@@ -207,5 +352,77 @@ describe("measureRelays", () => {
     expect(Object.keys(map).sort()).toEqual(["fast", "slow"]);
     expect(seen).toEqual(["fast", "slow"]);
     vi.useRealTimers();
+  });
+
+  /**
+   * **The ordering the whole dominance rule rests on, under a stall long enough
+   * to break any fixed slack.**
+   *
+   * `relayChoiceDominates` uses elapsed time as a LOWER bound on what a probe
+   * that has not answered will report, and that is sound only against an anchor
+   * at or after the instant that probe started timing. The gate anchors on the
+   * FIRST published result, which is a claim about `measureRelays`: it starts
+   * every probe in one synchronous job, and nothing it publishes can escape that
+   * job. This runs on real timers with a genuine 150 ms main-thread stall
+   * between the two probes and asserts both halves —
+   *
+   *  - that the anchor is sound: elapsed measured from the first result never
+   *    exceeds what the still-pending probe eventually reports; and
+   *  - that the anchor the first draft used was NOT: elapsed measured from the
+   *    call — the closest stand-in for `createRelaySelection.reset` — overstates
+   *    that probe's round trip by the whole length of the stall, which is more
+   *    than the 100 ms discount that draft applied to it.
+   *
+   * The stall is in a CONSTRUCTOR, so it sits between the call and the second
+   * probe's own clock start, which is exactly where a scheduling or main-thread
+   * stall sits in the browser.
+   */
+  it("starts every probe before it publishes anything, however long a construction stalls", async () => {
+    const STALL_MS = 150;
+    const constructedAt: number[] = [];
+    vi.stubGlobal("RTCPeerConnection", class {
+      onicecandidate: ((e: { candidate: { candidate: string } | null }) => void) | null = null;
+      private readonly id: string;
+      constructor(cfg: { iceServers: { urls: string[] }[] }) {
+        this.id = /turn:(.+)\.example/.exec(cfg.iceServers[0].urls[0])![1];
+        // A busy main thread, not a sleep: this must be time that elapses
+        // BETWEEN two probe constructions, which is the shape a discount from a
+        // pre-probe anchor cannot bound.
+        if (this.id === "stalled") {
+          const until = performance.now() + STALL_MS;
+          while (performance.now() < until) { /* deliberately blocking */ }
+        }
+        constructedAt.push(performance.now());
+      }
+      createDataChannel() {}
+      async createOffer() { return { type: "offer", sdp: "v=0" }; }
+      async setLocalDescription() {
+        setTimeout(() => {
+          this.onicecandidate?.({ candidate: { candidate: "candidate:1 1 udp 1 1.2.3.4 1 typ relay" } });
+        }, this.id === "instant" ? 0 : 40);
+      }
+      close() {}
+    });
+
+    const results: Array<{ id: string; ms: number; at: number; startedByThen: number }> = [];
+    const calledAt = performance.now();
+    const map = await measureRelays(
+      [relay("stalled"), relay("instant")],
+      (id, ms) => results.push({ id, ms, at: performance.now(), startedByThen: constructedAt.length }),
+    );
+
+    expect(Object.keys(map).sort()).toEqual(["instant", "stalled"]);
+    expect(results[0].id).toBe("instant");
+    // Both probes had been constructed — and therefore had taken their own
+    // clock start, which `measureRelay` does on the next line — before the
+    // first result could be published.
+    expect(results[0].startedByThen).toBe(2);
+
+    const anchor = results[0].at;
+    const stalled = results.find((r) => r.id === "stalled")!;
+    // Sound: elapsed from the anchor is never more than the probe reports.
+    expect(Math.round(stalled.at - anchor)).toBeLessThanOrEqual(stalled.ms);
+    // Unsound: elapsed from before the probes started is, by the whole stall.
+    expect(Math.round(stalled.at - calledAt)).toBeGreaterThan(stalled.ms + STALL_MS - 20);
   });
 });

@@ -461,4 +461,596 @@ final class RelayNegotiatorTests: XCTestCase {
         let chosen = await n.waitForChoice(deadline: 1.0)
         XCTAssertEqual(chosen?.id, "x")
     }
+
+    /// **A probe the PEER has already ruled out cannot hold the choice.**
+    ///
+    /// The timing-free half of `RelayChoice.dominates`, which is the half this
+    /// type can use soundly today. `slow` never answers inside the deadline, but
+    /// the peer measured it at 900 ms against a pick whose worse leg is 30 — so
+    /// whatever our own probe eventually reports, `max` for `slow` is worse and
+    /// it cannot become the pick. Waiting for it is waiting for nothing.
+    ///
+    /// The lower bound is what makes this a test rather than a coincidence: the
+    /// old `measurementFinished`-only rule ran the full 0.5 s deadline here.
+    func testAPeerLegAlreadyWorseThanThePickRetiresAnUnfinishedProbe() async {
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        let n = RelayNegotiator(signaling: sig, pool: pool(["fast", "slow"]),
+                                measure: { _, publish in
+            publish("fast", 30)
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            publish("slow", 1)
+        })
+        n.start()
+        n.handleSignal(from: "peer", data: RelayRttMessage.encode(["fast": 20, "slow": 900]))
+
+        let began = Date()
+        let chosen = await n.waitForChoice(deadline: 0.5)
+        XCTAssertEqual(chosen?.id, "fast")
+        XCTAssertLessThan(Date().timeIntervalSince(began), 0.4,
+                          "a probe the peer has already ruled out must not cost the deadline")
+    }
+
+    /// The other side of the same rule, and the one that keeps it honest: a peer
+    /// leg EQUAL to the pick's worse leg is not worse. `slow` at 30 against a
+    /// pick of max(30, 20) = 30 ties, and `pick` then goes to the sum — where
+    /// `slow` would win — so the wait must run its full deadline.
+    ///
+    /// This measurement deliberately never fires `allProbesStarted`, which is
+    /// what isolates the peer-leg half of the rule: with no anchor there is no
+    /// elapsed bound, so the only thing that could retire `slow` is the peer's
+    /// leg, and an equal one does not.
+    /// `testTheClockRetiresAProbeAnEqualPeerLegCannot` is the same state WITH
+    /// the barrier, where the clock does retire it — for a different reason,
+    /// which is the point of keeping both.
+    func testAnEqualPeerLegDoesNotRetireAnUnfinishedProbe() async {
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        let n = RelayNegotiator(signaling: sig, pool: pool(["fast", "slow"]),
+                                measure: { _, publish in
+            publish("fast", 30)
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            publish("slow", 1)
+        })
+        n.start()
+        n.handleSignal(from: "peer", data: RelayRttMessage.encode(["fast": 20, "slow": 30]))
+
+        let began = Date()
+        let chosen = await n.waitForChoice(deadline: 0.3)
+        XCTAssertEqual(chosen?.id, "fast", "the deadline must still yield the best relay so far")
+        XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(began), 0.3,
+                                    "an equal peer leg leaves the sum and the id able to turn the choice")
+    }
+
+    /// Every relay in the pool has answered, so `mine` cannot grow — and the
+    /// room does not need `measure` to return before it knows that. The probe
+    /// task here stays alive for five seconds after its last publish; waiting
+    /// for it is waiting for machinery, not for evidence.
+    func testAFullyAnsweredPoolSettlesWithoutWaitingForMeasureToReturn() async {
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        let n = RelayNegotiator(signaling: sig, pool: pool(["a", "b"]),
+                                measure: { _, publish in
+            publish("a", 10)
+            publish("b", 90)
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+        })
+        n.start()
+        n.handleSignal(from: "peer", data: RelayRttMessage.encode(["a": 15, "b": 400]))
+
+        let began = Date()
+        let chosen = await n.waitForChoice(deadline: 2.0)
+        XCTAssertEqual(chosen?.id, "a")
+        XCTAssertLessThan(Date().timeIntervalSince(began), 1.0,
+                          "a pool that has fully answered must not wait for the probe task to unwind")
+        XCTAssertNil(n.measuredMs(),
+                     "and it is still honest about our own measurement not having finished")
+    }
+
+    // MARK: - the elapsed lower bound, and the barrier that makes it sound
+
+    /// **The defect this whole change exists for, at the negotiator.**
+    ///
+    /// One relay answers in 40 ms, the other is the production shape: advertised,
+    /// allocated for, and silent for the whole nine-second probe budget. The
+    /// peer has spoken. Nothing further will happen until that silent probe
+    /// times out — so without the clock the room sits on an answer it already
+    /// has until the five-second deadline gives up on it, which is exactly what
+    /// the 2026-08-29 pairing measurements showed.
+    ///
+    /// The measurement here is `RelayProbe.measureAll`'s own shape — the same
+    /// task group, the same `ProbeStartBarrier`, acknowledged from inside each
+    /// child — so this also pins that the barrier cannot deadlock the group it
+    /// is called from, and that a child which never finishes cannot stop the
+    /// edge from firing.
+    func testAFastCommonRelayOpensInUnderASecondDespiteANineSecondSilentProbe() async {
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        let n = RelayNegotiator(signaling: sig, pool: pool(["fast", "silent"]),
+                                measure: { pool, sink in
+            let barrier = ProbeStartBarrier(expected: pool.count,
+                                            onAllStarted: { sink.allProbesStarted() })
+            await withTaskGroup(of: Void.self) { group in
+                for (index, entry) in pool.enumerated() {
+                    group.addTask {
+                        // Stands in for "this probe's clock is running", exactly
+                        // where `RelayProbe.measure` acknowledges.
+                        barrier.acknowledge(index)
+                        if entry.id == "fast" { sink(entry.id, 40) }
+                        else { try? await Task.sleep(nanoseconds: 9_000_000_000) }
+                    }
+                }
+            }
+        })
+        n.start()
+        n.handleSignal(from: "peer", data: RelayRttMessage.encode(["fast": 55]))
+
+        let began = Date()
+        let chosen = await n.waitForChoice(deadline: 5.0)
+        let waited = Date().timeIntervalSince(began)
+        XCTAssertEqual(chosen?.id, "fast")
+        XCTAssertLessThan(waited, 1.0,
+                          "a silent advertised relay must not hold a choice the room already has")
+        XCTAssertNil(n.measuredMs(),
+                     "and it returned while our own measurement was genuinely still running")
+    }
+
+    /// **An early publication is buffered, and gets no elapsed bound.**
+    ///
+    /// Three deadlines, in order, and each one rules out a different wrong
+    /// anchor:
+    ///
+    /// 1. `fast` has answered and the peer has spoken, but the barrier has not
+    ///    fired. Five seconds pass on the clock. The room must still wait — a
+    ///    result is not a start.
+    /// 2. The barrier fires at that five-second mark. The room must STILL wait,
+    ///    because elapsed is now zero. If the anchor were `start()`'s instant —
+    ///    the tempting one, and the unsound one — elapsed would read 5 000 ms
+    ///    and this deadline would return instantly.
+    /// 3. One millisecond past the pick's worse leg, and only then, it returns.
+    func testAnEarlyPublicationIsBufferedAndTheAnchorIsTheBarrierNotTheStart() async {
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        let clock = TestClock()
+        let published = Gate(), release = Gate(), anchored = Gate()
+        let n = RelayNegotiator(signaling: sig, pool: pool(["fast", "silent"]),
+                                now: clock.read,
+                                measure: { _, sink in
+            sink("fast", 30)
+            await published.open()
+            await release.wait()
+            sink.allProbesStarted()
+            await anchored.open()
+            try? await Task.sleep(nanoseconds: 9_000_000_000)
+        })
+        n.start()
+        await published.wait()
+        n.handleSignal(from: "peer", data: RelayRttMessage.encode(["fast": 30]))
+        XCTAssertEqual(n.maps().mine, ["fast": 30], "the early result must still be recorded")
+
+        clock.advance(ms: 5_000)
+        await assertWaitsOutTheDeadline(n, deadline: 0.25, expecting: "fast",
+                                        "elapsed dominance must not run before every probe started")
+
+        await release.open()
+        await anchored.wait()
+        await assertWaitsOutTheDeadline(n, deadline: 0.25, expecting: "fast",
+                                        "the anchor is the barrier, not the call to start()")
+
+        clock.advance(ms: 31)
+        await assertReturnsImmediately(n, expecting: "fast",
+                                        "one millisecond past the worse leg retires the silent probe")
+    }
+
+    /// Equality, at the negotiator rather than in the pure rule: elapsed exactly
+    /// ON the pick's worse leg is not past it, because `pick` would fall through
+    /// to the sum and then the id, either of which can still hand `silent` the
+    /// room. One more millisecond is the whole difference.
+    func testTheClockRetiresAProbeOnlyStrictlyPastThePicksWorseLeg() async {
+        let (n, clock) = await barrierNegotiator(pool: ["fast", "silent"],
+                                                 answers: ["fast": 30],
+                                                 peer: ["fast": 20])
+        // max(30, 20) = 30.
+        clock.advance(ms: 30)
+        await assertWaitsOutTheDeadline(n, deadline: 0.25, expecting: "fast",
+                                        "equality leaves the sum and the id able to turn the choice")
+        clock.advance(ms: 1)
+        await assertReturnsImmediately(n, expecting: "fast", "31 ms is strictly past 30")
+    }
+
+    /// The same state as `testAnEqualPeerLegDoesNotRetireAnUnfinishedProbe`,
+    /// but with the barrier fired. There the peer's equal leg could not retire
+    /// `silent`; here the CLOCK can, and for an independent reason: our own
+    /// probe has been running longer than 30 ms, so whatever it reports is
+    /// worse than 30, so `max` for `silent` is worse than the pick's.
+    func testTheClockRetiresAProbeAnEqualPeerLegCannot() async {
+        let (n, clock) = await barrierNegotiator(pool: ["fast", "silent"],
+                                                 answers: ["fast": 30],
+                                                 peer: ["fast": 20, "silent": 30])
+        clock.advance(ms: 30)
+        await assertWaitsOutTheDeadline(n, deadline: 0.25, expecting: "fast",
+                                        "an equal peer leg and an equal clock retire nothing")
+        clock.advance(ms: 1)
+        await assertReturnsImmediately(n, expecting: "fast",
+                                        "the clock is an independent route to the same retirement")
+    }
+
+    /// A pending relay the peer rates BETTER than the pick's worse leg is the
+    /// case the peer-leg test cannot touch — `silent` at 5 could obviously win.
+    /// Only the clock retires it, and only because our own unfinished leg is
+    /// what would be compared: `max(≥ 31, 5)` is worse than 30.
+    func testAPendingRelayThePeerRatesBetterIsRetiredOnlyByTheClock() async {
+        let (n, clock) = await barrierNegotiator(pool: ["fast", "silent"],
+                                                 answers: ["fast": 20],
+                                                 peer: ["fast": 30, "silent": 5])
+        clock.advance(ms: 30)
+        await assertWaitsOutTheDeadline(n, deadline: 0.25, expecting: "fast",
+                                        "a relay the peer rates at 5 ms can still win at 30 ms elapsed")
+        clock.advance(ms: 1)
+        await assertReturnsImmediately(n, expecting: "fast",
+                                        "at 31 ms our own leg for it is already worse than the pick's")
+    }
+
+    /// **The wake-up is recomputed when the pick moves.**
+    ///
+    /// The exit instant is a function of the pick's worse leg, so a peer map
+    /// that improves the pick moves it — here from 101 ms to 21 ms, earlier
+    /// rather than later. A wake-up armed against the old pick and left alone
+    /// would cost the room 80 ms it no longer owes; one that fired on the old
+    /// deadline against the new pick would be worse.
+    func testMovingThePickRecomputesTheExitInstant() async {
+        let (n, clock) = await barrierNegotiator(pool: ["a", "b", "c"],
+                                                 answers: ["a": 100, "b": 10],
+                                                 peer: ["a": 100])
+        // pick a: max(100, 100) = 100, so nothing before 101 ms retires `c`.
+        clock.advance(ms: 21)
+        await assertWaitsOutTheDeadline(n, deadline: 0.25, expecting: "a",
+                                        "21 ms is nowhere near the current pick's worse leg")
+        // The peer measures b. pick moves to b: max(10, 20) = 20 — and 21 ms is
+        // already past it.
+        n.handleSignal(from: "peer", data: RelayRttMessage.encode(["a": 100, "b": 20]))
+        await assertReturnsImmediately(n, expecting: "b",
+                                        "the exit instant follows the pick that is actually held")
+    }
+
+    /// A second `allProbesStarted` keeps the FIRST anchor. A later instant would
+    /// also be at-or-after every start, so it would be sound — but it would
+    /// silently move an exit the room had already earned, and a `Measure` that
+    /// fires the edge twice honoured the contract on the first one.
+    func testADuplicateAllProbesStartedKeepsTheFirstAnchor() async {
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        let clock = TestClock()
+        let anchored = Gate(), again = Gate(), reanchored = Gate()
+        let n = RelayNegotiator(signaling: sig, pool: pool(["fast", "silent"]),
+                                now: clock.read,
+                                measure: { _, sink in
+            sink("fast", 30)
+            sink.allProbesStarted()
+            await anchored.open()
+            await again.wait()
+            sink.allProbesStarted()
+            await reanchored.open()
+            try? await Task.sleep(nanoseconds: 9_000_000_000)
+        })
+        n.start()
+        await anchored.wait()
+        n.handleSignal(from: "peer", data: RelayRttMessage.encode(["fast": 30]))
+
+        clock.advance(ms: 20)
+        await again.open()
+        await reanchored.wait()
+
+        // 20 ms have already elapsed against the first anchor. A second anchor
+        // taken here would reset that to zero and need 31 more.
+        clock.advance(ms: 11)
+        await assertReturnsImmediately(n, expecting: "fast",
+                                        "a duplicate edge must not restart the elapsed bound")
+    }
+
+    /// A departed peer's map cannot be dominated into opening the gate. The
+    /// clock has run far past anything the room ever held, but `peerLeft` took
+    /// the last contributor's map with it, so there is no pick — and dominance
+    /// over nothing is not dominance.
+    func testADepartedPeersMapIsNotRetiredIntoAChoice() async {
+        let (n, clock) = await barrierNegotiator(pool: ["fast", "silent"],
+                                                 answers: ["fast": 30],
+                                                 peer: ["fast": 30])
+        n.peerLeft("peer")
+        clock.advance(ms: 5_000)
+
+        let began = Date()
+        let chosen = await n.waitForChoice(deadline: 0.25)
+        XCTAssertNil(chosen, "a departed peer's measurements are not a choice")
+        XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(began), 0.25,
+                                    "and nothing may release the wait on them")
+        XCTAssertFalse(n.hasPeerMaps())
+    }
+
+    /// An empty pool has no probe to start, so no `Measure` runs and no edge
+    /// ever fires. `waitForChoice` still refuses it outright rather than
+    /// dividing by an anchor that does not exist.
+    func testAnEmptyPoolNeverMeasuresAndNeverAnchors() async {
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        let clock = TestClock()
+        let n = RelayNegotiator(signaling: sig, pool: [], now: clock.read,
+                                measure: { _, _ in XCTFail("an empty pool must not be measured") })
+        n.start()
+        clock.advance(ms: 60_000)
+        let began = Date()
+        let chosen = await n.waitForChoice(deadline: 0.5)
+        XCTAssertNil(chosen)
+        XCTAssertLessThan(Date().timeIntervalSince(began), 0.2,
+                          "an empty pool is answered without waiting")
+        XCTAssertNotNil(n.measuredMs(), "and its measurement is finished, honestly, at once")
+    }
+
+    /// A one-relay pool that answers has nothing pending, so it settles on the
+    /// timing-free half with the clock still at zero — the barrier costs it
+    /// nothing and changes nothing.
+    func testASingletonPoolThatAnswersSettlesWithNoElapsedAtAll() async {
+        let (n, _) = await barrierNegotiator(pool: ["only"],
+                                             answers: ["only": 44],
+                                             peer: ["only": 51])
+        await assertReturnsImmediately(n, expecting: "only",
+                                        "a fully answered pool needs no clock")
+    }
+
+    /// A one-relay pool that stays silent is the case the clock must NOT rescue:
+    /// there is no common relay, so there is nothing to be dominant over, and no
+    /// amount of elapsed time invents a pick.
+    func testASingletonSilentPoolIsNotRescuedByTheClock() async {
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        let clock = TestClock()
+        let anchored = Gate()
+        let n = RelayNegotiator(signaling: sig, pool: pool(["silent"]), now: clock.read,
+                                measure: { _, sink in
+            sink.allProbesStarted()
+            await anchored.open()
+            try? await Task.sleep(nanoseconds: 9_000_000_000)
+        })
+        n.start()
+        await anchored.wait()
+        n.handleSignal(from: "peer", data: RelayRttMessage.encode(["silent": 12]))
+        clock.advance(ms: 60_000)
+
+        let began = Date()
+        let chosen = await n.waitForChoice(deadline: 0.25)
+        XCTAssertNil(chosen, "no common relay is no choice, however long we wait")
+        XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(began), 0.25)
+    }
+
+    /// Eight probes acknowledging and publishing from eight concurrent children
+    /// while a waiter is parked, and the barrier's callback reaching back into
+    /// the negotiator from inside one of them. Nothing here may deadlock, drop a
+    /// result, or fire the edge more than once.
+    func testConcurrentStartsAndPublicationsNeitherDeadlockNorLoseResults() async {
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        let ids = (0..<8).map { "r\($0)" }
+        let edges = Counter()
+        let measured = Gate()
+        let n = RelayNegotiator(signaling: sig, pool: pool(ids),
+                                measure: { pool, sink in
+            let barrier = ProbeStartBarrier(expected: pool.count, onAllStarted: {
+                edges.increment()
+                sink.allProbesStarted()
+            })
+            await withTaskGroup(of: Void.self) { group in
+                for (index, entry) in pool.enumerated() {
+                    group.addTask {
+                        barrier.acknowledge(index)
+                        // A duplicate from the same child: the barrier must not
+                        // count it as another probe having started.
+                        barrier.acknowledge(index)
+                        sink(entry.id, 10 + index)
+                    }
+                }
+            }
+            await measured.open()
+        })
+        n.start()
+        n.handleSignal(from: "peer",
+                       data: RelayRttMessage.encode(Dictionary(uniqueKeysWithValues:
+                            ids.enumerated().map { ($0.element, 20 + $0.offset) })))
+
+        let chosen = await n.waitForChoice(deadline: 2.0)
+        XCTAssertEqual(chosen?.id, "r0", "max(10, 20) = 20 is the best worse leg")
+
+        // Deliberately AFTER the measurement has actually finished rather than
+        // after the wait returned. The wait is entitled to return with `mine`
+        // still growing — every other relay's peer leg is already worse than
+        // the pick's 20, so all seven are retired the moment `r0` and the peer
+        // map meet — and asserting on the map before then is asserting that the
+        // early exit did not happen.
+        await measured.wait()
+        XCTAssertEqual(n.maps().mine.count, 8, "every concurrent publication was recorded")
+        XCTAssertEqual(edges.value, 1, "the all-started edge fires exactly once")
+    }
+
+    // MARK: - ProbeStartBarrier
+
+    func testTheBarrierFiresOnlyWhenEveryEntryHasAcknowledged() {
+        let fired = Counter()
+        let barrier = ProbeStartBarrier(expected: 3, onAllStarted: { fired.increment() })
+        barrier.acknowledge(0)
+        XCTAssertEqual(fired.value, 0)
+        barrier.acknowledge(2)
+        XCTAssertEqual(fired.value, 0)
+        barrier.acknowledge(1)
+        XCTAssertEqual(fired.value, 1)
+    }
+
+    /// The reason the barrier tracks indices instead of counting. Two
+    /// acknowledgements from probe 0 and one from probe 1 is three
+    /// acknowledgements and two started probes; a counter would fire on a claim
+    /// that is false, and the anchor taken there would precede probe 2's start.
+    func testDuplicateAcknowledgementsCannotStandInForAProbeThatHasNotStarted() {
+        let fired = Counter()
+        let barrier = ProbeStartBarrier(expected: 3, onAllStarted: { fired.increment() })
+        barrier.acknowledge(0)
+        barrier.acknowledge(0)
+        barrier.acknowledge(0)
+        barrier.acknowledge(1)
+        barrier.acknowledge(1)
+        XCTAssertEqual(fired.value, 0, "five acknowledgements from two probes are still two probes")
+        barrier.acknowledge(2)
+        XCTAssertEqual(fired.value, 1)
+    }
+
+    func testALateAcknowledgementAfterTheBarrierFiredIsANoOp() {
+        let fired = Counter()
+        let barrier = ProbeStartBarrier(expected: 2, onAllStarted: { fired.increment() })
+        barrier.acknowledge(0)
+        barrier.acknowledge(1)
+        XCTAssertEqual(fired.value, 1)
+        barrier.acknowledge(0)
+        barrier.acknowledge(1)
+        barrier.acknowledge(7)
+        XCTAssertEqual(fired.value, 1, "the edge is one-shot")
+    }
+
+    func testAnEmptyBarrierIsAlreadySatisfied() {
+        let fired = Counter()
+        _ = ProbeStartBarrier(expected: 0, onAllStarted: { fired.increment() })
+        XCTAssertEqual(fired.value, 1)
+        let negative = Counter()
+        _ = ProbeStartBarrier(expected: -3, onAllStarted: { negative.increment() })
+        XCTAssertEqual(negative.value, 1, "a nonsense count is satisfied, not a trap")
+    }
+
+    func testTheBarrierFiresExactlyOnceUnderConcurrentAcknowledgement() {
+        for _ in 0..<50 {
+            let fired = Counter()
+            let barrier = ProbeStartBarrier(expected: 16, onAllStarted: { fired.increment() })
+            DispatchQueue.concurrentPerform(iterations: 16) { index in
+                barrier.acknowledge(index)
+                barrier.acknowledge(index)
+            }
+            XCTAssertEqual(fired.value, 1)
+        }
+    }
+
+    // MARK: - helpers for the bound
+
+    /// A negotiator whose measurement fires the all-started edge, publishes
+    /// `answers`, and then stays alive without ever answering for anything else
+    /// in `pool` — the production shape. Returns once the anchor is taken and
+    /// the peer's map has been applied, so a test can advance the clock and know
+    /// exactly what elapsed reading it is producing.
+    private func barrierNegotiator(pool ids: [String],
+                                   answers: [String: Int],
+                                   peer: [String: Int])
+        async -> (RelayNegotiator, TestClock) {
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        let clock = TestClock()
+        let anchored = Gate()
+        let n = RelayNegotiator(signaling: sig, pool: pool(ids), now: clock.read,
+                                measure: { _, sink in
+            for (id, ms) in answers.sorted(by: { $0.key < $1.key }) { sink(id, ms) }
+            sink.allProbesStarted()
+            await anchored.open()
+            try? await Task.sleep(nanoseconds: 9_000_000_000)
+        })
+        n.start()
+        await anchored.wait()
+        n.handleSignal(from: "peer", data: RelayRttMessage.encode(peer))
+        return (n, clock)
+    }
+
+    /// The wait must run its whole deadline and still hand back the best relay
+    /// so far — "not settled" never means "no answer".
+    private func assertWaitsOutTheDeadline(_ n: RelayNegotiator,
+                                           deadline: TimeInterval,
+                                           expecting id: String,
+                                           _ message: String,
+                                           file: StaticString = #filePath,
+                                           line: UInt = #line) async {
+        let began = Date()
+        let chosen = await n.waitForChoice(deadline: deadline)
+        XCTAssertEqual(chosen?.id, id, message, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(began), deadline, message,
+                                    file: file, line: line)
+    }
+
+    /// Settled: `waitForChoice` answers from `settledChoice` without parking, so
+    /// the deadline it is given is irrelevant and a generous one is the stronger
+    /// assertion.
+    private func assertReturnsImmediately(_ n: RelayNegotiator,
+                                          expecting id: String,
+                                          _ message: String,
+                                          file: StaticString = #filePath,
+                                          line: UInt = #line) async {
+        let began = Date()
+        let chosen = await n.waitForChoice(deadline: 5.0)
+        XCTAssertEqual(chosen?.id, id, message, file: file, line: line)
+        XCTAssertLessThan(Date().timeIntervalSince(began), 0.5, message, file: file, line: line)
+    }
+}
+
+/// A hand-driven monotonic clock, in seconds, matching `RelayNegotiator`'s
+/// `now`.
+///
+/// Monotonic by construction: `advance` is the only mutator and it only adds.
+/// The starting value is deliberately far from zero — an anchor bug that
+/// happened to read a zero-based clock could otherwise pass by coincidence.
+private final class TestClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var seconds: TimeInterval = 9_876.5
+
+    func read() -> TimeInterval { lock.lock(); defer { lock.unlock() }; return seconds }
+
+    func advance(ms: Int) {
+        lock.lock()
+        seconds += TimeInterval(ms) / 1000
+        lock.unlock()
+    }
+}
+
+/// A one-shot rendezvous, so a test can hand control back and forth with a
+/// measurement instead of polling or sleeping for it.
+///
+/// Every wait in these tests has a `Gate` behind it rather than a duration:
+/// what is being pinned is an ORDER — result before barrier, barrier before
+/// clock — and a sleep long enough to be reliable is also long enough to hide
+/// the ordering it was meant to establish.
+private actor Gate {
+    private var opened = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func open() {
+        guard !opened else { return }
+        opened = true
+        let pending = waiters
+        waiters = []
+        for w in pending { w.resume() }
+    }
+
+    func wait() async {
+        if opened { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+}
+
+/// A lock-guarded counter, for assertions made from concurrent probe children.
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var value: Int { lock.lock(); defer { lock.unlock() }; return count }
+
+    func increment() { lock.lock(); count += 1; lock.unlock() }
 }
