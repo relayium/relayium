@@ -619,12 +619,12 @@ describe("the runners this lifecycle serves", () => {
 });
 
 /**
- * `mixed-link.mjs`'s own inventory: one scenario, seventeen acts.
+ * `mixed-link.mjs`'s own inventory: one scenario, eighteen acts.
  *
  * `page-shell-contract.test.mjs` guards its runner from silently dropping a
  * scenario, and the same failure exists here one level down and is worse. That
  * suite has four scenarios, so counting them is a real check. This one has a
- * single `mixedScenario` that performs seventeen distinct acts against one live
+ * single `mixedScenario` that performs eighteen distinct acts against one live
  * link — so `1/1` would be reported by a run that had been edited down to its
  * first assertion, and by a run whose 5 MiB resume act quietly stopped
  * executing. The literal that actually protects it is the ACT count.
@@ -650,6 +650,7 @@ describe("mixed-link's scenario inventory and act ledger", () => {
     "queued-batch",
     "declined-batch",
     "byte-identical-text",
+    "picker-cancel-retry",
     "live-progressbar",
     "byte-resume",
     "narrow-locale-theme",
@@ -679,7 +680,7 @@ describe("mixed-link's scenario inventory and act ledger", () => {
 
   it("checks both counts against fixed literals, not against array lengths", () => {
     expect(src).toMatch(/const EXPECTED_SCENARIO_COUNT = 1;/);
-    expect(src).toMatch(/const EXPECTED_ACT_COUNT = 17;/);
+    expect(src).toMatch(/const EXPECTED_ACT_COUNT = 18;/);
     expect(src).toMatch(/ran !== EXPECTED_SCENARIO_COUNT/);
     expect(src).toMatch(/ledger\.length !== EXPECTED_ACT_COUNT/);
     // The comparisons this guard exists to forbid: an array and its own length
@@ -826,6 +827,95 @@ describe("mixed-link scans the progressbar while it is live", () => {
 });
 
 /**
+ * Hosted migration of lan-transfer unique #2: a real built ReceiveActions card
+ * must survive an AbortError and require a second explicit user gesture. The
+ * expensive browser run proves behavior; these source checks make deletion and
+ * reordering fail in the ordinary Vitest lane instead of waiting for Chrome.
+ */
+describe("mixed-link retries a cancelled desktop save picker on the same consent", () => {
+  const src = read("e2e/mixed-link.mjs");
+
+  it("injects a browser-native AbortError on exactly the first picker call", () => {
+    expect(src).toMatch(/window\.__e2e\.pickerCalls\+\+;/);
+    expect(src).toMatch(/window\.__e2e\.pickerCalls === 1/);
+    expect(src).toContain("throw new DOMException('e2e: user cancelled Save As', 'AbortError')");
+    expect(src).toContain("return saveAfterFirstAttempt(...args)");
+  });
+
+  it("consumes exactly one classified cancellation only inside the marked act window", () => {
+    const mark = src.indexOf("const pickerErrorWindow = { a: a.errors.length, b: b.errors.length }");
+    const firstClick = src.indexOf("the same consent card to become retryable after the cancelled picker");
+    const consume = src.indexOf("const pickerWindowErrors =");
+    const secondClick = src.indexOf("This second click is the only event allowed to reopen the picker");
+    for (const [name, at] of [["error-window mark", mark], ["first picker attempt", firstClick],
+      ["exact consumption", consume], ["second picker attempt", secondClick]]) {
+      expect(at, `${name} anchor is missing; the cancellation exception could be swallowed globally`)
+        .toBeGreaterThan(-1);
+    }
+    expect(firstClick).toBeGreaterThan(mark);
+    expect(consume).toBeGreaterThan(firstClick);
+    expect(secondClick).toBeGreaterThan(consume);
+    expect(src).toContain(
+      '"relayium mixed file picker error SaveCancelledError: save picker cancelled by the user (showSaveFilePicker)"',
+    );
+    expect(src).toContain("pickerWindowErrors.a.length !== 0");
+    expect(src).toContain("pickerWindowErrors.b.length !== 1");
+    expect(src).toContain('pickerWindowErrors.b[0]?.split("\\n") ?? []');
+    expect(src).toContain("pickerErrorLines.length !== 3");
+    expect(src).toContain("pickerErrorLines[0] !== EXPECTED_PICKER_CANCEL_ERROR");
+    expect(src).toContain("pickerErrorLines.slice(1).every((line) => builtAssetFrame.test(line))");
+    expect(src).toContain("const escapedBase = base.replace");
+    const normalizedEscapes = src.replaceAll("\\\\", "\\");
+    expect(normalizedEscapes).toContain("/assets/index-[A-Za-z0-9_-]+\\.js:\\d+:\\d+");
+    expect(src).toContain("b.errors.splice(pickerErrorWindow.b, 1)");
+    expect(src, "the final sweep was weakened instead of consuming one exact windowed entry")
+      .toContain('const errs = [...a.errors, ...b.errors].filter((e) => !/401|Failed to load resource/.test(e));');
+  });
+
+  it("proves the retry subject before the second explicit click", () => {
+    const firstClick = src.indexOf("the same consent card to become retryable after the cancelled picker");
+    const proof = src.indexOf("const afterPickerCancel =");
+    const secondClick = src.indexOf("This second click is the only event allowed to reopen the picker");
+    const durable = src.indexOf("at least two durable chunks before the forced transport gap");
+    for (const [name, at] of [["first cancelled click", firstClick], ["retry proof", proof],
+      ["second explicit click", secondClick], ["durable bytes", durable]]) {
+      expect(at, `${name} anchor is missing; order checks would be vacuous`).toBeGreaterThan(-1);
+    }
+    expect(proof).toBeGreaterThan(firstClick);
+    expect(secondClick).toBeGreaterThan(proof);
+    expect(durable).toBeGreaterThan(secondClick);
+    expect(src).toContain("afterPickerCancel.pickerCalls !== 1");
+    expect(src).toContain("afterPickerCancel.opens !== 0");
+    expect(src).toContain("afterPickerCancel.bytes !== 0");
+    expect(src).toContain("afterPickerCancel.requests !== 1");
+    expect(src).toContain("afterPickerCancel.retryHints !== 1");
+    expect(src).toContain('afterPickerCancel.retryRole !== "status"');
+    expect(src).toContain("afterPickerCancel.head !== consentBeforeCancel.head");
+    expect(src).toContain("afterPickerCancel.badTransfers !== consentBeforeCancel.badTransfers");
+    expect(src).toContain("senderAfterCancel.badTransfers !== senderBeforeCancel.badTransfers");
+    expect(src).toContain("senderAfterCancel.composers !== 1");
+    expect(src).toContain('oneSas(tab, who, "after cancelling the save picker")');
+  });
+
+  it("requires exactly two picker calls and preserves the exact resume evidence", () => {
+    const retryAct = src.indexOf('act("picker-cancel-retry"');
+    const progressAct = src.indexOf('act("live-progressbar"');
+    const resumeAct = src.indexOf('act("byte-resume"');
+    expect(retryAct, "the picker retry act is missing").toBeGreaterThan(-1);
+    expect(progressAct).toBeGreaterThan(retryAct);
+    expect(resumeAct).toBeGreaterThan(progressAct);
+    expect(src).toContain("retriedPicker.pickerCalls !== 2");
+    expect(src).toContain("retriedPicker.opens !== 1");
+    expect(src).toContain('retriedPicker.name !== "resume-on-the-same-link.bin"');
+    expect(src).toContain("resumed.pickerCalls !== 2");
+    expect(src).toContain('resumed.name !== "resume-on-the-same-link.bin"');
+    expect(src).toMatch(/resumed\.bytes !== RESUME_BYTES/);
+    expect(src).toMatch(/resumed\.mismatch !== -1/);
+    expect(src).toMatch(/senderPcs <= pcCounts\.a \|\| resumed\.peerConnections <= pcCounts\.b/);
+  });
+});
+
+/**
  * The selectors this runner shares with the ordinary Vitest lane.
  *
  * `dom-contracts.mjs` exists because a selector written twice is not a contract
@@ -842,6 +932,7 @@ describe("mixed-link owns no private copy of a shared selector", () => {
 
   for (const [what, pattern] of [
     ["the consent card", /['"]\.request/],
+    ["the retry hint", /['"]\.savehint\.retry/],
     ["the transfer card", /['"]\.xfer/],
     ["the progress bar", /progress-bar/],
   ]) {
@@ -870,6 +961,7 @@ describe("mixed-link owns no private copy of a shared selector", () => {
     expect(contracts, "the consent buttons are named by presentation role")
       .toMatch(/primary: "\.btn-primary"/);
     expect(contracts).toMatch(/ghost: "\.btn-ghost"/);
+    expect(contracts).toMatch(/retryHint: "\.savehint\.retry"/);
     expect(contracts, "a consent selector reclaimed a semantic name that inverts")
       .not.toMatch(/^\s*(accept|decline):/m);
     // And that the runner guards on the warning before BOTH consent clicks it
@@ -881,10 +973,10 @@ describe("mixed-link owns no private copy of a shared selector", () => {
     // names `RECEIVE.warning` too, so counting the identifier would make this a
     // comment-edit tripwire instead of a contract.
     const guards = src.match(/querySelector\('\$\{RECEIVE\.card\} \$\{RECEIVE\.warning\}'\)/g);
-    expect(guards, "a consent click is no longer guarded by the warning check").toHaveLength(2);
+    expect(guards, "a consent click is no longer guarded by the warning check").toHaveLength(3);
     // One guard per click, and no unguarded click left over.
     const clicks = src.match(/querySelector\('\$\{RECEIVE\.card\} \$\{RECEIVE\.(primary|ghost)\}'\)/g);
-    expect(clicks, "the guarded consent clicks changed count").toHaveLength(2);
+    expect(clicks, "the guarded consent clicks changed count").toHaveLength(3);
   });
 });
 

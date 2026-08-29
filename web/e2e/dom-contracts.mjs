@@ -93,6 +93,9 @@ export const RECEIVE = {
   /** "What pressing the accepting button will do" — a picker, or the download
    *  directory. Which button that is depends on `warning`. */
   saveHint: ".savehint",
+  /** The same live hint after a desktop picker was cancelled. Its presence
+   *  proves the original consent is retryable rather than terminal. */
+  retryHint: ".savehint.retry",
 };
 
 /**

@@ -156,13 +156,14 @@ and teardown are all driven by those two — on the unified `link/1` surface tha
 replaced the fork, and `code-room.mjs` runs in hosted CI on every push.
 
 The audit originally listed **eight** current unique assertions as stranded.
-Three of those rows have since changed status, so the live count is **five
-stranded, one hosted migration, two retired**:
+Four of those rows have since changed status, so the live count is **four
+stranded, one hosted migration, one local migration awaiting hosted CI, and two
+retired**:
 
 | # | Unique assertion | Status |
 |---|---|---|
 | 1 | Mobile no-picker fallback (no `showSaveFilePicker`) | stranded |
-| 2 | Desktop save-picker cancellation | stranded |
+| 2 | Desktop save-picker cancellation | **migrated locally; awaiting hosted CI** (C3b-4) |
 | 3 | SCTP negotiated max-message-size boundary (RFC 8841 default, 64 KiB) | stranded |
 | 4 | Response race (responder accepts while the initiator is still taking ownership) | **retired** — see below |
 | 5 | Pre-open PeerConnection failure (`failed` before the DataChannel opens) | **retired** — see below |
@@ -332,8 +333,8 @@ recording:
   file finish, every wait below it would time out blaming something else, and the
   scene would have degraded silently into a plain uninterrupted transfer.
 - *What did not move in C3b-1:* uniques 1, 2, 3 and 5 were untouched by that
-  slice; #5 has since retired on the deterministic evidence above, while #2/#3
-  remain stranded and 7/8 remain Stage 3. The byte-exact resume and replacement-PeerConnection
+  slice; #5 has since retired on the deterministic evidence above and #2 moved
+  in C3b-4, while #3 remains stranded and 7/8 remain Stage 3. The byte-exact resume and replacement-PeerConnection
   assertions were preserved unchanged — the act was inserted into that scene, not
   in place of any of it.
 - *What the diff touches:* test and documentation files only —
@@ -342,8 +343,8 @@ recording:
   this document and `web/e2e/README.md`. No product source, workflow, package,
   dependency, native or ops file changed.
 - *Anti-vacuity, added with it:* one scenario is not one assertion.
-  `mixed-link.mjs` now records a frozen per-act execution ledger — seventeen
-  named acts, checked for membership, order and a **literal** count
+  `mixed-link.mjs` introduced a frozen per-act execution ledger with seventeen
+  named acts (C3b-4 adds the eighteenth), checked for membership, order and a **literal** count
   (`EXPECTED_ACT_COUNT`, never `ACTS.length`) — alongside a literal
   `EXPECTED_SCENARIO_COUNT`. A `1/1` scenario count would otherwise be reported
   by a run edited down to its first assertion. `e2e/go-server.test.mjs` pins that
@@ -404,8 +405,44 @@ is now a hosted migration rather than only a locally green one.
 **C3b-2 did not migrate another `lan-transfer.mjs` unique.** Its U1 assertion
 pins the initiator-only, one-shot same-PC ICE restart, and U3a pins the shared
 empty stored-receive save options. Both are adjacent deterministic resilience
-contracts. They do not move rows 2 or 3: desktop picker cancellation and real
-Chromium SCTP max-message-size negotiation remain stranded.
+contracts. They did not move rows 2 or 3; row 2 moved later in C3b-4, while real
+Chromium SCTP max-message-size negotiation remains stranded.
+
+**C3b-4 — desktop picker cancellation, inside the existing hosted journey.**
+Unique #2 now reuses the 5 MiB transfer that already proves exact bytes,
+replacement PeerConnections and resume; it does not add a second browser
+scenario or another large payload. On the receiver, the existing save stub is
+wrapped so its first call throws a real `DOMException` named `AbortError`. The
+runner then proves one retry hint with non-empty `role="status"` text, no bytes,
+no opened sink, no new terminal failure, exactly one picker call after a short
+no-auto-reopen window, the same request heading and manifest, and the same link,
+SAS, composer and attachment control. Only a second explicit click may make the
+picker count two and begin durable writes; the unchanged progressbar/resume tail
+then proves the final name, size, byte pattern and replacement transport.
+
+The shared `.savehint.retry` selector lives in `e2e/dom-contracts.mjs` and is
+pinned against rendered `ReceiveActions` markup in its ordinary Vitest test.
+`e2e/go-server.test.mjs` independently freezes the new eighteenth act, its
+position before progress/resume, the real AbortError injection, the first/second
+picker counts, the non-terminal same-consent evidence, and the exact-byte tail.
+No product source or timing constant changed.
+
+The classified cancellation deliberately produces one console error. The runner
+marks both tabs' error-array lengths immediately before the first click and,
+after proving retry state, consumes only one exact receiver entry containing the
+fixed product prefix, `SaveCancelledError`, and `showSaveFilePicker` source. A
+duplicate, a different error/name/source, an entry on the sender, or the same
+text outside that marked window remains for the unchanged final console sweep to
+fail. There is no global ignore expression for picker errors.
+
+The old `NotAllowedError` second act was not carried into Chromium. It was an
+artificial exception injected by the old runner, not evidence about a real
+browser permission prompt. Its product rule is deterministic and remains
+covered directly: `src/lib/filesink.test.ts` distinguishes `AbortError` from
+non-cancellation failures, and `src/lib/mixed-file-session.test.ts` proves a
+non-cancellation save failure rejects the transfer rather than claiming the user
+cancelled it. That half is retired on those exact tests; this migration does not
+claim real-browser permission-denial coverage.
 
 **Stage 3 — identity and bounded relay failure.** Uniques 7 and 8 are last
 because both need setup the other stages do not: multi-page device identity needs
@@ -415,7 +452,7 @@ TURN host and a probe budget that actually elapses.
 
 **Stage 4 — delete `lan-transfer.mjs` and its `test:e2e` npm script.** Only after
 the hosted `main` is green with stages 1–3 landed. Deleting earlier would drop the
-uniques still stranded in it — five after #6 moved and #4/#5 retired with the
+uniques still stranded in it — four after #2/#6 moved and #4/#5 retired with the
 deterministic evidence recorded above; keeping it after is worse
 than useless — a script that cannot exit zero teaches everyone to ignore a red
 run.
