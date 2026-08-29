@@ -82,9 +82,8 @@ separate job rather than another step in `test` because it needs a Go toolchain
 that Node-only job does not have, and because `test` already spends most of a
 15-minute budget on the five browser lanes the table above assigns to it
 (accessibility scan, page shell, code room, device discovery, Device Inbox
-entry). `web.yml`'s own comment beside the `mixed-link-e2e` job still says
-"four"; it predates `test:device-inbox-entry` and is the stale copy of this
-count, not this table.
+entry). `web.yml`'s comment beside the `mixed-link-e2e` job now records the same
+five-lane count.
 
 Getting it hosted required fixing what made it un-hostable: it used to demand
 that a human had already started a server on `:8098`. `mixed-link.mjs` now
@@ -156,9 +155,9 @@ per-file SHA-256 integrity, consent state machines, live-state accessibility sca
 and teardown are all driven by those two — on the unified `link/1` surface that
 replaced the fork, and `code-room.mjs` runs in hosted CI on every push.
 
-The audit originally listed **eight** current unique assertions as stranded. Two
-of those rows have since changed status, so the live count is **six stranded, one
-migrated, one retired**:
+The audit originally listed **eight** current unique assertions as stranded.
+Three of those rows have since changed status, so the live count is **five
+stranded, one hosted migration, two retired**:
 
 | # | Unique assertion | Status |
 |---|---|---|
@@ -166,8 +165,8 @@ migrated, one retired**:
 | 2 | Desktop save-picker cancellation | stranded |
 | 3 | SCTP negotiated max-message-size boundary (RFC 8841 default, 64 KiB) | stranded |
 | 4 | Response race (responder accepts while the initiator is still taking ownership) | **retired** — see below |
-| 5 | Pre-open PeerConnection failure (`failed` before the DataChannel opens) | stranded |
-| 6 | Live `role="progressbar"` accessibility during an in-flight transfer | **migrated** (C3b-1) |
+| 5 | Pre-open PeerConnection failure (`failed` before the DataChannel opens) | **retired** — see below |
+| 6 | Live `role="progressbar"` accessibility during an in-flight transfer | **hosted migration** (C3b-1, exact-main `129e4cd`) |
 | 7 | Multi-page device identity and focus (two pages of one browser plus a third device) | stranded |
 | 8 | Bounded relay-pool failure (credentials issued from the pool, then discarded) | stranded |
 
@@ -209,6 +208,20 @@ pinned by deterministic tests that run in `npm test` on every push:
   order and cannot be replayed twice into the codecs.
 
 Ordering is the whole property, and those tests assert order directly.
+
+**Row 5 is also retired with executable evidence, not counted as a migration.**
+The old browser scenario forced `onconnectionstatechange("failed")` while the
+removed receive-side constructor still had a not-yet-initialized callback in
+scope; its unique regression was the resulting TDZ `ReferenceError`, not a
+browser-specific ICE behavior. The unified implementation closes that window in
+two deterministic layers that run in `npm test`: `src/lib/peer-link.test.ts`
+fires the terminal callback synchronously before the transport promise resolves
+and proves a clean failed manager with no current link, while
+`src/lib/webrtc.test.ts` now drives an initial `connectLink` to `failed` before
+either DataChannel opens and proves the named rejection, caller notification,
+closed PeerConnection, and that a late open dispatch cannot turn the rejected
+setup into success. The old receive constructor and its control no longer exist,
+so reproducing their artificial browser hook would add no current-path fact.
 
 The second half of the reason is about the scenario's *mechanism*, and it is the
 half that makes this retirement rather than a deferral. That scenario did not
@@ -318,8 +331,9 @@ recording:
   the transfer is still live: if two axe passes ever ran long enough to let the
   file finish, every wait below it would time out blaming something else, and the
   scene would have degraded silently into a plain uninterrupted transfer.
-- *What did not move:* uniques 1, 2, 3 and 5 are untouched and remain stranded;
-  7 and 8 remain Stage 3. The byte-exact resume and replacement-PeerConnection
+- *What did not move in C3b-1:* uniques 1, 2, 3 and 5 were untouched by that
+  slice; #5 has since retired on the deterministic evidence above, while #2/#3
+  remain stranded and 7/8 remain Stage 3. The byte-exact resume and replacement-PeerConnection
   assertions were preserved unchanged — the act was inserted into that scene, not
   in place of any of it.
 - *What the diff touches:* test and documentation files only —
@@ -349,7 +363,7 @@ recording:
   branch instead, guarding on the warning before both of its consent clicks and
   failing rather than adapting if it is raised.
 
-**Verification status: green locally; not yet observed in hosted CI.** Recorded
+**Verification status: green locally and hosted on exact-main `129e4cd`.** Recorded
 by the author on 2026-08-30, on a local macOS worktree against a self-started Go
 server (`127.0.0.1:8124`) and a headless Chrome:
 
@@ -384,11 +398,14 @@ reset — still the two durable chunks it started from. Both axe passes fit insi
 the *first* 1000ms sleep, so the runway left for the forced close is the full
 ~25 writes × 20ms ≈ 500ms, which is the budget this scene was already proven at.
 
-What is **not** claimed here: this has not run in hosted CI, and no independent
-acceptance pass has been recorded against it. Unique #6 is therefore **migrated
-and green locally**; the table above still says "migrated" rather than "hosted"
-for exactly that reason, and the first hosted `mixed-link-e2e` run on `main` is
-what changes it.
+The subsequent `mixed-link-e2e` run on exact-main `129e4cd` passed, so unique #6
+is now a hosted migration rather than only a locally green one.
+
+**C3b-2 did not migrate another `lan-transfer.mjs` unique.** Its U1 assertion
+pins the initiator-only, one-shot same-PC ICE restart, and U3a pins the shared
+empty stored-receive save options. Both are adjacent deterministic resilience
+contracts. They do not move rows 2 or 3: desktop picker cancellation and real
+Chromium SCTP max-message-size negotiation remain stranded.
 
 **Stage 3 — identity and bounded relay failure.** Uniques 7 and 8 are last
 because both need setup the other stages do not: multi-page device identity needs
@@ -398,8 +415,8 @@ TURN host and a probe budget that actually elapses.
 
 **Stage 4 — delete `lan-transfer.mjs` and its `test:e2e` npm script.** Only after
 the hosted `main` is green with stages 1–3 landed. Deleting earlier would drop the
-uniques still stranded in it — six as of C3b-1, since #6 has moved and #4 is
-retired with the deterministic evidence recorded above; keeping it after is worse
+uniques still stranded in it — five after #6 moved and #4/#5 retired with the
+deterministic evidence recorded above; keeping it after is worse
 than useless — a script that cannot exit zero teaches everyone to ignore a red
 run.
 
