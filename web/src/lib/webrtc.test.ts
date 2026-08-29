@@ -69,6 +69,8 @@ class FakePC {
   connectionState = "new";
   channel: FakeDataChannel | null = null;
   channels: FakeDataChannel[] = [];
+  offerOptions: (RTCOfferOptions | undefined)[] = [];
+  localDescriptions: RTCSessionDescriptionInit[] = [];
   /** The RTCConfiguration this peer connection was constructed with, so a test
    *  can prove which ICE path it is actually exercising (relay-only vs. LAN). */
   constructor(readonly config?: RtcConfig) { instances.push(this); }
@@ -78,9 +80,14 @@ class FakePC {
     this.channel ??= ch;
     return ch;
   }
-  async createOffer() { return { type: "offer", sdp: "offer" }; }
+  async createOffer(options?: RTCOfferOptions) {
+    this.offerOptions.push(options);
+    return { type: "offer", sdp: options?.iceRestart ? "restart-offer" : "offer" };
+  }
   async createAnswer() { return { type: "answer", sdp: "answer" }; }
-  async setLocalDescription() {}
+  async setLocalDescription(description: RTCSessionDescriptionInit) {
+    this.localDescriptions.push(description);
+  }
   async setRemoteDescription(desc: { type: string }) {
     if (desc.type === "offer" && this.ondatachannel) {
       for (const label of FakePC.inboundLabels) {
@@ -241,6 +248,69 @@ describe("webrtc commit-then-reveal handshake", () => {
 
     openAll();
     const [ic, rc] = await Promise.all([iP, rP]);
+    ic.close();
+    rc.close();
+  });
+
+  it("lets only the initiator send one same-PC ICE-restart offer when disconnected", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const iKey = generateKeyPair();
+    const rKey = generateKeyPair();
+    const rP = connectLink({
+      signaling: hub.R, peerId: "I", selfKey: rKey.publicKey,
+      role: "responder", onPeerKey: () => {},
+    });
+    const iP = connectLink({
+      signaling: hub.I, peerId: "R", selfKey: iKey.publicKey,
+      role: "initiator", onPeerKey: () => {},
+    });
+    await flush();
+    openAll();
+    const [ic, rc] = await Promise.all([iP, rP]);
+    const responderPC = instances[0];
+    const initiatorPC = instances[1];
+    expect(initiatorPC.offerOptions).toEqual([undefined]); // the initial offer
+    expect(responderPC.offerOptions).toEqual([]);
+    const setLocal = vi.spyOn(initiatorPC, "setLocalDescription");
+    const sendSignal = vi.spyOn(hub.I, "sendSignal");
+
+    initiatorPC.connectionState = "disconnected";
+    initiatorPC.onconnectionstatechange?.();
+    await flush();
+
+    // The restart is negotiated on the existing connection. Building a third
+    // PC would be transport replacement, not tryIceRestart().
+    expect(instances).toHaveLength(2);
+    expect(initiatorPC.offerOptions).toEqual([undefined, { iceRestart: true }]);
+    const restartOffer = { type: "offer", sdp: "restart-offer" };
+    expect(setLocal).toHaveBeenCalledOnce();
+    expect(setLocal).toHaveBeenCalledWith(restartOffer);
+    expect(initiatorPC.localDescriptions.at(-1)).toEqual(restartOffer);
+    expect(hub.sent.I.filter((m) => m.sdp?.sdp === "restart-offer")).toEqual([
+      expect.objectContaining({
+        link: true,
+        sdp: restartOffer,
+      }),
+    ]);
+    const restartSend = sendSignal.mock.calls.findIndex(([, data]) =>
+      (data as InboundSignal).sdp?.sdp === "restart-offer");
+    expect(restartSend).toBeGreaterThanOrEqual(0);
+    expect(setLocal.mock.invocationCallOrder[0]).toBeLessThan(
+      sendSignal.mock.invocationCallOrder[restartSend],
+    );
+
+    // A repeated state notification cannot start an offer loop, and the
+    // responder never drives renegotiation even if it disconnects too.
+    initiatorPC.onconnectionstatechange?.();
+    responderPC.connectionState = "disconnected";
+    responderPC.onconnectionstatechange?.();
+    await flush();
+    expect(initiatorPC.offerOptions).toEqual([undefined, { iceRestart: true }]);
+    expect(responderPC.offerOptions).toEqual([]);
+    expect(setLocal).toHaveBeenCalledOnce();
+    expect(hub.sent.I.filter((m) => m.sdp?.sdp === "restart-offer")).toHaveLength(1);
+
     ic.close();
     rc.close();
   });
