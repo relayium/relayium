@@ -619,12 +619,12 @@ describe("the runners this lifecycle serves", () => {
 });
 
 /**
- * `mixed-link.mjs`'s own inventory: one scenario, eighteen acts.
+ * `mixed-link.mjs`'s own inventory: one scenario, nineteen acts.
  *
  * `page-shell-contract.test.mjs` guards its runner from silently dropping a
  * scenario, and the same failure exists here one level down and is worse. That
  * suite has four scenarios, so counting them is a real check. This one has a
- * single `mixedScenario` that performs eighteen distinct acts against one live
+ * single `mixedScenario` that performs nineteen distinct acts against one live
  * link — so `1/1` would be reported by a run that had been edited down to its
  * first assertion, and by a run whose 5 MiB resume act quietly stopped
  * executing. The literal that actually protects it is the ACT count.
@@ -642,6 +642,7 @@ describe("mixed-link's scenario inventory and act ledger", () => {
     "advertised-link-1",
     "peer-card-one-action",
     "one-link-one-sas",
+    "sctp-default-64k-boundary",
     "chooser-hidden",
     "workspace-header",
     "text-consent",
@@ -680,7 +681,7 @@ describe("mixed-link's scenario inventory and act ledger", () => {
 
   it("checks both counts against fixed literals, not against array lengths", () => {
     expect(src).toMatch(/const EXPECTED_SCENARIO_COUNT = 1;/);
-    expect(src).toMatch(/const EXPECTED_ACT_COUNT = 18;/);
+    expect(src).toMatch(/const EXPECTED_ACT_COUNT = 19;/);
     expect(src).toMatch(/ran !== EXPECTED_SCENARIO_COUNT/);
     expect(src).toMatch(/ledger\.length !== EXPECTED_ACT_COUNT/);
     // The comparisons this guard exists to forbid: an array and its own length
@@ -722,6 +723,89 @@ describe("mixed-link's scenario inventory and act ledger", () => {
     // Counting occurrences of the bare name is deliberately NOT done here: the
     // prose above it names the function several times, so that check would be
     // a comment-edit tripwire rather than a contract.
+  });
+});
+
+/**
+ * Hosted migration of lan-transfer unique #3: Chromium, rather than a mock,
+ * must apply RFC 8841's 65,536-byte default when the remote SDP omits the
+ * max-message-size attribute. These source guards freeze the expensive real-
+ * browser proof's subjects, boundaries and order without pretending to prove
+ * Chromium behavior themselves.
+ */
+describe("mixed-link negotiates and preserves the absent-advertisement SCTP default", () => {
+  const src = read("e2e/mixed-link.mjs");
+
+  it("strips a real nonzero advertisement on both tabs without conflating the text limit", () => {
+    expect(src).toContain("const SCTP_DEFAULT_MAX_MESSAGE_BYTES = 65_536;");
+    expect(src, "the transport contract drifted onto the plaintext product limit")
+      .not.toContain("TEXT_MAX_BYTES");
+    expect(src).toContain("RTCPeerConnection.prototype.setRemoteDescription = function (description)");
+    const normalizedEscapes = src.replaceAll("\\\\", "\\");
+    expect(normalizedEscapes).toContain("/^a=max-message-size:([1-9]\\d*)\\r?\\n/gm");
+    expect(src).toContain("window.__e2eMaxMessageSizeRemovals++");
+    const installed = src.match(/newTab\([^\n]+OMIT_REMOTE_MAX_MESSAGE_SIZE\)/g) ?? [];
+    expect(installed, "the absent-advertisement seam is not installed on exactly both product tabs")
+      .toHaveLength(2);
+  });
+
+  it("uses a real channel to accept 65536 and reject 65537 after proven SDP removals", () => {
+    expect(src).toContain("negotiated: left.sctp?.maxMessageSize ?? null");
+    expect(src).toContain("const fitted = attempt(${SCTP_DEFAULT_MAX_MESSAGE_BYTES});");
+    expect(src).toContain("const oversized = attempt(${SCTP_DEFAULT_MAX_MESSAGE_BYTES + 1});");
+    expect(src).toContain("sctpProbe.removals < 1");
+    expect(src).toContain('sctpProbe.fitted !== "sent"');
+    expect(src).toContain('sctpProbe.afterFitted !== "open"');
+    expect(src).toContain("sctpProbe.fittedReceived !== SCTP_DEFAULT_MAX_MESSAGE_BYTES");
+    expect(src).toContain("reject(new Error('65,536-byte probe was not delivered')), 3_000");
+    expect(src).toContain('(sctpProbe.oversized === "sent" && sctpProbe.afterOversized === "open")');
+  });
+
+  it("resets the probe before the product link and proves both initial product PCs", () => {
+    const probe = src.indexOf("const sctpProbe =");
+    const reset = src.indexOf("window.__e2ePeerConnections.length = 0", probe);
+    const open = src.indexOf("document.querySelector('${OPEN_WORKSPACE}').click()", reset);
+    const initial = src.indexOf("const initialProductCaps =", open);
+    const capAct = src.indexOf('act("sctp-default-64k-boundary"', initial);
+    for (const [name, at] of [["real probe", probe], ["tracker reset", reset],
+      ["product link open", open], ["initial product caps", initial], ["cap act", capAct]]) {
+      expect(at, `${name} anchor is missing; the order check would be vacuous`).toBeGreaterThan(-1);
+    }
+    expect(reset).toBeGreaterThan(probe);
+    expect(open).toBeGreaterThan(reset);
+    expect(initial).toBeGreaterThan(open);
+    expect(capAct).toBeGreaterThan(initial);
+    expect(src).toContain("window.__e2eMaxMessageSizeRemovals = 0");
+    expect(src).toContain("trackerBeforeProductLink.a.pcs !== 0");
+    expect(src).toContain("trackerBeforeProductLink.b.pcs !== 2");
+    expect(src).toContain('for (const [who, tab] of [["a", a], ["b", b]])');
+    expect(src).toContain("initialProductCaps[who].sizes.length !== 1");
+    expect(src).toContain("initialProductCaps[who].sizes[0] !== SCTP_DEFAULT_MAX_MESSAGE_BYTES");
+  });
+
+  it("checks every tracked initial and replacement PC without filtering nulls", () => {
+    const canonicalCapMap = "window.__e2ePeerConnections.map((pc) => pc.sctp?.maxMessageSize ?? null)";
+    const escapedCapMap = canonicalCapMap.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const chainedFilter = new RegExp(`${escapedCapMap}\\s*\\.filter\\s*\\(`);
+    const unfiltered = src.split(canonicalCapMap).length - 1;
+    expect(unfiltered, "initial, receiver-resume and sender-resume cap arrays are not all present")
+      .toBe(3);
+    expect(src).toContain("resumed.messageSizes.length !== resumed.peerConnections");
+    expect(src).toContain("!resumed.messageSizes.every((size) => size === SCTP_DEFAULT_MAX_MESSAGE_BYTES)");
+    expect(src).toContain("senderCapState.messageSizes.length !== senderCapState.peerConnections");
+    expect(src).toContain("!senderCapState.messageSizes.every((size) => size === SCTP_DEFAULT_MAX_MESSAGE_BYTES)");
+    expect(src, "a null or closed PC is being hidden from an initial or resumed SCTP cap proof")
+      .not.toMatch(chainedFilter);
+    const representativeMutation = src.replace(
+      `sizes: ${canonicalCapMap}`,
+      `sizes: ${canonicalCapMap}.filter((size) => size !== null)`,
+    );
+    expect(representativeMutation, "the chained-filter guard does not recognize the initial-cap mutation")
+      .not.toBe(src);
+    expect(representativeMutation).toMatch(chainedFilter);
+    expect(src).toMatch(/resumed\.bytes !== RESUME_BYTES/);
+    expect(src).toMatch(/resumed\.mismatch !== -1/);
+    expect(src).toMatch(/senderPcs <= pcCounts\.a \|\| resumed\.peerConnections <= pcCounts\.b/);
   });
 });
 

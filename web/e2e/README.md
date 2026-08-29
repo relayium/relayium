@@ -167,14 +167,14 @@ cd server && RELAYIUM_ADDR=:8099 go run .
 这些那两套都在跑，跑在替代了老分叉的统一 `link/1` 界面上，而且 `code-room.mjs` 每次
 推送都在托管 CI 里跑。
 
-审计当初认定搁浅的有**八条**。其中四条已经改了状态，所以现在是**四条搁浅、一条已托管
+审计当初认定搁浅的有**八条**。其中五条已经改了状态，所以现在是**三条搁浅、两条已托管
 迁移、一条本地已迁移待托管 CI、两条已退役**：
 
 | # | 独有断言 | 状态 |
 |---|---|---|
 | 1 | 移动端无 picker 回退（没有 `showSaveFilePicker`） | 搁浅 |
-| 2 | 桌面端另存为对话框被取消 | **本地已迁移，待托管 CI**（C3b-4） |
-| 3 | SCTP 协商出来的单条消息上限边界（RFC 8841 默认值 64 KiB） | 搁浅 |
+| 2 | 桌面端另存为对话框被取消 | **已托管迁移**（C3b-4，exact-main `daadc94a`） |
+| 3 | SCTP 协商出来的单条消息上限边界（RFC 8841 默认值 64 KiB） | **本地已迁移，待托管 CI**（C3b-5） |
 | 4 | 应答竞态（发起方还在接管通道时，应答方已经接受） | **已退役**，见下 |
 | 5 | 数据通道打开前 PeerConnection 就 `failed` | **已退役**，见下 |
 | 6 | 传输进行中 `role="progressbar"` 的活场景无障碍 | **已托管迁移**（C3b-1，exact-main `129e4cd`） |
@@ -191,7 +191,8 @@ cd server && RELAYIUM_ADDR=:8099 go run .
 对不上：64 KiB 明文封出来是 65 557 字节的帧，塞不进一条协商成 65 536 的通道。
 `lan-transfer.mjs` 的 `smallMessageCapScenario` 独有的是传输那一半——它改写 SDP，在真
 Chromium 上强制协商出 64 KiB，然后证明旧的 192 KiB 分块帧会被拒、装得下的那个会被收。
-分片本身的算术已经有确定性用例（`src/lib/transfer-fragmentation.test.ts`）；搁浅的是协商。
+分片本身的算术已经有确定性用例（`src/lib/transfer-fragmentation.test.ts`）；C3b-5 已把原先
+搁浅的协商搬进现有真 Chromium mixed 旅程，细节见下。
 
 **第 4 条是退役，不是迁移，证据如下（精确到用例名）。** `messageDefaultRaceScenario`
 把那次线上故障强制复现：A 的 `getStats()` 路径采样被挂住时，B 自动接受并立刻发出第一条
@@ -298,7 +299,7 @@ promise。这招当年管用，是因为路径采样正好卡在"通道已开"�
   `web/src/lib/ReceiveActions.test.ts`、`web/src/lib/workspace-orchestration.test.ts`、
   本文件和 `docs/TESTING.md`。产品源码、workflow、依赖、原生和 ops 一个都没动。
 - *顺手加的反空转机制*：一幕不等于一条断言。`mixed-link.mjs` 当时加了一份**冻结的逐 act
-  执行台账**——C3b-1 是十七个具名 act，C3b-4 加入第十八个；成员、顺序和一个**字面量**计数（`EXPECTED_ACT_COUNT`，
+  执行台账**——C3b-1 是十七个具名 act，C3b-4 加入第十八个，C3b-5 加入第十九个；成员、顺序和一个**字面量**计数（`EXPECTED_ACT_COUNT`，
   绝不是 `ACTS.length`）三样都查——外加一个字面量 `EXPECTED_SCENARIO_COUNT`。否则一个被
   改到只剩第一条断言的 run 照样会报 `1/1`。`e2e/go-server.test.mjs` 钉住这个形状，也钉住
   那次活扫描确实落在"接受"和"强制掐断"之间。
@@ -368,18 +369,40 @@ progress/resume 之前、真实 AbortError 注入、第一次/第二次 picker �
 或同一句落在窗口之外，都继续留给未放宽的最终 console sweep 判红；没有全局忽略 picker
 错误的正则。
 
+之后 exact-main `daadc94a` 的 `mixed-link-e2e` 已通过，所以第 2 条现在是已托管覆盖，不再是
+本地迁移待 CI。
+
 旧脚本的 `NotAllowedError` 第二幕没有搬进 Chromium。它本来就是旧 runner 人工抛的异常，
 并不证明真实浏览器权限弹窗；对应产品规则已有直接确定性证据：`src/lib/filesink.test.ts`
 区分 `AbortError` 与非取消失败，`src/lib/mixed-file-session.test.ts` 证明非取消的保存失败会拒绝
 传输、不会冒充用户取消。这半按上述精确测试退役；本次迁移不声称覆盖真实浏览器权限拒绝。
+
+**C3b-5 —— 对端不通告 SCTP 上限时的 RFC 8841 边界，复用同一条 mixed 旅程。** 两个现有
+标签页都在 `setRemoteDescription` 入口删除非零 `a=max-message-size` 行，让真 Chromium 自己
+得出默认值，而不是给应用塞一个 mock 数。旅程先在接收页跑一个很小的真 DataChannel probe：
+证明删掉了一条真实的非零通告，`pc.sctp.maxMessageSize` 精确等于 65,536，65,536 字节发送后通道
+仍开着，而 65,537 字节不能保持为一次成功且仍开的发送。随后明确核对并清空 probe 的两个
+PeerConnection 和删除计数，再打开产品链路，避免 probe 冒充产品或 replacement 证据。
+
+产品旅程接着独立证明两页最初各自唯一的产品 PC 都是 65,536；原有 5 MiB 精确字节、强制
+断线、续传和 replacement 尾巴全部在这个上限下照跑。结束时两页都读取**未过滤**的全部
+tracked PC 上限数组，数组长度必须等于 PC 数，而且每一项都必须是 65,536；null/关闭状态
+不能被藏掉。这里完全不碰 `TEXT_MAX_BYTES`——它是明文产品上限，不是 SCTP 传输上限。旧
+runner 的 262,144→65,536 动态分片算术仍由 `transfer-fragmentation.test.ts` 直接覆盖；本次
+浏览器迁移证明的是缺省协商和受限 replacement 旅程，没有增加第二套 runtime。
+
+**当前状态：本地实现并验证，等待 main 的托管 `mixed-link-e2e`。** 在那次 exact hosted
+通过前，第 3 条只能记作本地迁移，不能写成托管覆盖。作者本地记录为：focused 四文件
+Vitest 194/194、`svelte-check` / TypeScript 0 错误 0 警告、production build 成功、真
+Chromium 自起服务旅程 19/19 act 按序通过。
 
 **阶段三：身份，以及有界的中继失败。** 第 7、8 条放到最后，因为两者都需要前面用不到的
 搭台：多页设备身份要在一个浏览器的两页之外再加一个独立上下文；有界中继池失败要那份
 池形状的 `/api/ice` 响应、一个连不上的 TURN 主机，以及一个真的会走完的探测预算。
 
 **阶段四：删掉 `lan-transfer.mjs` 和它的 `test:e2e` npm 脚本。** 只在托管 `main` 带着
-阶段一到三全绿之后。删早了会丢掉仍然搁浅在里面的那几条——第 6 条搬走且第 4、5 条按上面
-记录的确定性证据退役后还剩四条；而留着比没用更糟——一个永远退不出 0 的
+阶段一到三全绿之后。删早了会丢掉仍然搁浅在里面的那几条——第 2、3、6 条搬走且第 4、5 条按上面
+记录的确定性证据退役后还剩三条；而留着比没用更糟——一个永远退不出 0 的
 脚本，教会所有人忽略一次红。
 
 两件这次迁移**不许**做的事：不许把删掉的控件加回来，不许加降级开关。真正只属于老路的
@@ -584,36 +607,41 @@ cd web    && node e2e/mixed-link.mjs --url http://localhost:8098
 8. **文件同意可以拒绝**，而链路**和会话**都活下来——拒绝一批文件不等于断开一条链路。
 9. **两条通道同时可用**：打字打到一半时附件控件仍然可用、发送键仍然可按；正文**逐字节
    一致**（比 UTF-8 十六进制，含 tab、空行、CJK、阿拉伯语和星平面 emoji）。
-10. **传输进行中的活进度条**（2026-08-29 / Phase 3D C3b-1，从 `lan-transfer.mjs`
+10. **真 Chromium 的 SCTP 缺省上限**（2026-08-30 / C3b-5，从 `lan-transfer.mjs`
+    搬来的独有断言第 3 条）：先删除远端 SDP 的非零 `a=max-message-size` 通告并证明真的删过，
+    再用原生 DataChannel 精确探测 65,536 可发、65,537 不能保持成功且开放；probe 清零后，
+    两页的初始产品 PC 和续传后的全部 replacement PC 都必须精确报告 65,536。它不等于
+    `TEXT_MAX_BYTES`，后者是明文产品上限。
+11. **传输进行中的活进度条**（2026-08-29 / Phase 3D C3b-1，从 `lan-transfer.mjs`
     搬来的独有断言第 6 条）：在 5 MiB 那次传输的**中途**——接收方已经落了两个 durable
     chunk、强制掐断还没发生——先证明主体在（发送与接收两侧各一条 `.progress-bar`、
     `role="progressbar"`、`aria-labelledby` 指到卡片自己那个标题 id
     `xfer-label-{send,recv}` 且解析得出非空名字、`0 ≤ aria-valuenow ≤ 100`、卡片还没
     进终局），然后才以 `XFER.card` 为 context 扫一次 axe。顺序不能反：一个 context
     什么都没匹配到的 `axe.run` 报的是零违规，看起来和"干净"一模一样。
-11. **真断线后按字节续传**：强制换掉 PeerConnection（并断言真的换了），5 MiB 文件按
+12. **真断线后按字节续传**：强制换掉 PeerConnection（并断言真的换了），5 MiB 文件按
     durable checkpoint 续完、逐字节校验、不重新同意、SAS 不变；会话被传输中断关掉但
     **记录还在**，而且重开是一颗显式的 `.restart`，不是自动重连。
-12. **320/390px、中英文与深色**：三种组合下头部和附件行都不溢出、SAS 和断开按钮都在
+13. **320/390px、中英文与深色**：三种组合下头部和附件行都不溢出、SAS 和断开按钮都在
     视口里、断开按钮留在行尾、粘性头部有不透明背景，每一格都跑一次 axe。
     `--screenshots` 会把每一格存成 PNG，但每条几何规矩下面都有真断言钉着。运行时维护
     语言目前都为 LTR；若恢复 RTL 语言，必须先恢复逻辑属性镜像的真实运行时门禁。
-13. **一次活过了自己那条链路的待决同意**：挂着不答就断链，再连回同一个对端——reveal
+14. **一次活过了自己那条链路的待决同意**：挂着不答就断链，再连回同一个对端——reveal
     去重键（peer+lane，不含世代）算出来是同一个，所以新链路的第一条边必须念它**自己**
     那串新码。顺带钉住：断开之后统一草稿框和附件不许留在屏幕上。
-14. **显式断开收干净**：一次点击关掉两条通道，两个标签页的头部、队列和输入框都消失，
+15. **显式断开收干净**：一次点击关掉两条通道，两个标签页的头部、队列和输入框都消失，
     对端也跟着收——然后那个对端重新可选，而且回来的仍然是那一个动作。
 
 最后和默认那一套一样：两页都不许有 console 错误。
 
 ### 一幕不等于一条断言：冻结的逐 act 执行台账
 
-上面这十四条被拆成**十八个具名 act**（一条编号里含多个 act 的地方，是因为它们各自
+上面这十五条被拆成**十九个具名 act**（一条编号里含多个 act 的地方，是因为它们各自
 能单独失效）。每个 act 在自己的断言全部通过之后调一次 `act(name, message)`——它同时
 负责打印那行 ✓ 和记台账，所以"报告成功"和"记录为执行过"是同一句话，拆不开。
 
 跑完 `runScenarios()` 三样一起查：成员、**顺序**，以及一个字面量
-`EXPECTED_ACT_COUNT = 18`。这里必须是字面量，不能写 `ACTS.length`——数组和它自己的长度
+`EXPECTED_ACT_COUNT = 19`。这里必须是字面量，不能写 `ACTS.length`——数组和它自己的长度
 在有人删掉一项之后仍然彼此同意，于是一次少了一幕的运行会干干净净地报 `16/16`。同样的
 道理，`EXPECTED_SCENARIO_COUNT = 1` 单独存在，但它保护不了什么：这一套只有一幕，一个
 被改到只剩第一条断言的 `mixedScenario` 照样报 `1/1`。真正起作用的是 act 那个数。

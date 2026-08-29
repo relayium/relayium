@@ -156,15 +156,15 @@ and teardown are all driven by those two — on the unified `link/1` surface tha
 replaced the fork, and `code-room.mjs` runs in hosted CI on every push.
 
 The audit originally listed **eight** current unique assertions as stranded.
-Four of those rows have since changed status, so the live count is **four
-stranded, one hosted migration, one local migration awaiting hosted CI, and two
+Five of those rows have since changed status, so the live count is **three
+stranded, two hosted migrations, one local migration awaiting hosted CI, and two
 retired**:
 
 | # | Unique assertion | Status |
 |---|---|---|
 | 1 | Mobile no-picker fallback (no `showSaveFilePicker`) | stranded |
-| 2 | Desktop save-picker cancellation | **migrated locally; awaiting hosted CI** (C3b-4) |
-| 3 | SCTP negotiated max-message-size boundary (RFC 8841 default, 64 KiB) | stranded |
+| 2 | Desktop save-picker cancellation | **hosted migration** (C3b-4, exact-main `daadc94a`) |
+| 3 | SCTP negotiated max-message-size boundary (RFC 8841 default, 64 KiB) | **migrated locally; awaiting hosted CI** (C3b-5) |
 | 4 | Response race (responder accepts while the initiator is still taking ownership) | **retired** — see below |
 | 5 | Pre-open PeerConnection failure (`failed` before the DataChannel opens) | **retired** — see below |
 | 6 | Live `role="progressbar"` accessibility during an in-flight transfer | **hosted migration** (C3b-1, exact-main `129e4cd`) |
@@ -187,7 +187,8 @@ fit a channel that negotiated 65 536. What `lan-transfer.mjs`'s
 SDP to force a real 64 KiB negotiation in a real Chromium and proves the old
 192 KiB chunk frame is refused while a fitted one is accepted. The fragmentation
 arithmetic behind it is already deterministic
-(`src/lib/transfer-fragmentation.test.ts`); what is stranded is the negotiation.
+(`src/lib/transfer-fragmentation.test.ts`); C3b-5 moves the previously stranded
+negotiation into the existing real-Chromium mixed journey, as recorded below.
 
 **Row 4 is retired rather than migrated, and here is the exact evidence.**
 `messageDefaultRaceScenario` forced the reported LAN failure: B auto-accepts and
@@ -344,7 +345,7 @@ recording:
   dependency, native or ops file changed.
 - *Anti-vacuity, added with it:* one scenario is not one assertion.
   `mixed-link.mjs` introduced a frozen per-act execution ledger with seventeen
-  named acts (C3b-4 adds the eighteenth), checked for membership, order and a **literal** count
+  named acts (C3b-4 adds the eighteenth and C3b-5 the nineteenth), checked for membership, order and a **literal** count
   (`EXPECTED_ACT_COUNT`, never `ACTS.length`) — alongside a literal
   `EXPECTED_SCENARIO_COUNT`. A `1/1` scenario count would otherwise be reported
   by a run edited down to its first assertion. `e2e/go-server.test.mjs` pins that
@@ -435,6 +436,9 @@ duplicate, a different error/name/source, an entry on the sender, or the same
 text outside that marked window remains for the unchanged final console sweep to
 fail. There is no global ignore expression for picker errors.
 
+The subsequent `mixed-link-e2e` run on exact-main `daadc94a` passed, so unique
+#2 is hosted coverage rather than a local migration awaiting CI.
+
 The old `NotAllowedError` second act was not carried into Chromium. It was an
 artificial exception injected by the old runner, not evidence about a real
 browser permission prompt. Its product rule is deterministic and remains
@@ -444,6 +448,36 @@ non-cancellation save failure rejects the transfer rather than claiming the user
 cancelled it. That half is retired on those exact tests; this migration does not
 claim real-browser permission-denial coverage.
 
+**C3b-5 — absent SCTP advertisement and the RFC 8841 boundary, inside the same
+hosted journey.** Unique #3 now installs a narrow `setRemoteDescription` seam on
+both existing tabs which removes every nonzero `a=max-message-size` line before
+Chromium consumes the remote SDP. A small same-tab raw DataChannel probe first
+proves that a real nonzero advertisement was removed, Chromium reports
+`pc.sctp.maxMessageSize === 65_536`, a 65,536-byte send remains open, and a
+65,537-byte send cannot remain a successful open send. The probe's two PCs and
+removal counter are then explicitly checked and reset before the product link is
+opened, so they cannot satisfy the product or replacement-PC assertions.
+
+The existing product journey then proves both initial product PCs independently
+negotiated exactly 65,536. Its unchanged 5 MiB byte-exact transfer, forced gap,
+resume and replacement proof run under that cap; at the end, unfiltered arrays
+cover every tracked PC on both tabs and require every entry to remain exactly
+65,536. Null or closed SCTP state is not filtered away. This is deliberately
+separate from `TEXT_MAX_BYTES`: the latter is a plaintext product limit and is
+neither imported nor asserted by this transport contract. The old runner's
+dynamic 262,144-to-65,536 arithmetic remains directly covered by
+`src/lib/transfer-fragmentation.test.ts`; this browser migration claims the real
+absent-advertisement negotiation and the capped replacement journey, not a
+second runtime implementation. No product source, workflow, package or timing
+constant changed.
+
+**Verification status: implemented and green locally; awaiting the hosted
+`mixed-link-e2e` lane on main.** Until that exact hosted run passes, row 3 is a
+local migration rather than hosted coverage. The author run recorded 194/194 in
+the focused four-file Vitest set, zero `svelte-check`/TypeScript diagnostics, a
+successful production build, and the real self-started Chromium journey at
+19/19 acts.
+
 **Stage 3 — identity and bounded relay failure.** Uniques 7 and 8 are last
 because both need setup the other stages do not: multi-page device identity needs
 a third independent context alongside two pages of one browser, and bounded
@@ -452,7 +486,7 @@ TURN host and a probe budget that actually elapses.
 
 **Stage 4 — delete `lan-transfer.mjs` and its `test:e2e` npm script.** Only after
 the hosted `main` is green with stages 1–3 landed. Deleting earlier would drop the
-uniques still stranded in it — four after #2/#6 moved and #4/#5 retired with the
+uniques still stranded in it — three after #2/#3/#6 moved and #4/#5 retired with the
 deterministic evidence recorded above; keeping it after is worse
 than useless — a script that cannot exit zero teaches everyone to ignore a red
 run.

@@ -123,16 +123,43 @@ const ATTACH_FILE = ".msgpanel .attach-file";
 const HEAD = ".workspace-head";
 const HEAD_SAS = ".workspace-head .sas code";
 const TEXT_CONSENT = ".msgpanel .req";
+const SCTP_DEFAULT_MAX_MESSAGE_BYTES = 65_536;
 const EXPECTED_PICKER_CANCEL_ERROR =
   "relayium mixed file picker error SaveCancelledError: save picker cancelled by the user (showSaveFilePicker)";
+
+/**
+ * Make the remote endpoint advertise no SCTP message-size extension. RFC 8841
+ * assigns 65,536 bytes when the attribute is absent; this asks Chromium itself
+ * to apply that default instead of handing the app a mocked number.
+ *
+ * Only the description passed into the WebRTC engine changes. The signalling
+ * object (and its commit/reveal or resume authentication) stays byte-for-byte
+ * untouched.
+ */
+const OMIT_REMOTE_MAX_MESSAGE_SIZE = `
+  window.__e2eMaxMessageSizeRemovals = 0;
+  (() => {
+    const realSetRemoteDescription = RTCPeerConnection.prototype.setRemoteDescription;
+    RTCPeerConnection.prototype.setRemoteDescription = function (description) {
+      if (description?.sdp) {
+        const sdp = description.sdp.replace(/^a=max-message-size:([1-9]\\d*)\\r?\\n/gm, () => {
+          window.__e2eMaxMessageSizeRemovals++;
+          return '';
+        });
+        description = { type: description.type, sdp };
+      }
+      return realSetRemoteDescription.call(this, description);
+    };
+  })();
+`;
 
 /**
  * Every act this scenario performs, frozen, in run order.
  *
  * One scenario is not one assertion. `mixedScenario` is a single function that
- * performs eighteen distinct acts against one live link, and counting
+ * performs nineteen distinct acts against one live link, and counting
  * *scenarios* — the shape `page-shell.mjs` uses, where there are four of them —
- * would report `1/1` for a run that silently stopped asserting seventeen of these.
+ * would report `1/1` for a run that silently stopped asserting eighteen of these.
  * That is precisely the vacuous-count failure `page-shell-contract.test.mjs`
  * exists to forbid, reappearing one level down.
  *
@@ -151,6 +178,7 @@ const ACTS = Object.freeze([
   "advertised-link-1",
   "peer-card-one-action",
   "one-link-one-sas",
+  "sctp-default-64k-boundary",
   "chooser-hidden",
   "workspace-header",
   "text-consent",
@@ -167,7 +195,7 @@ const ACTS = Object.freeze([
   "fresh-link-new-sas",
   "explicit-disconnect",
 ]);
-const EXPECTED_ACT_COUNT = 18;
+const EXPECTED_ACT_COUNT = 19;
 
 /**
  * 记下 live region 说过的**每一句**话。
@@ -464,8 +492,8 @@ async function mixedScenario(browser, base) {
   // This scenario is about the unified workspace's verification presentation,
   // which only exists with advanced verification ON. It is off by default, so
   // both tabs opt in before boot.
-  const a = await newTab(browser, base + "/", VERIFY_ON + OBSERVE_CAPS + TRACK_ANNOUNCEMENTS +TRACK_PEER_CONNECTIONS);
-  const b = await newTab(browser, base + "/", VERIFY_ON + OBSERVE_CAPS + TRACK_ANNOUNCEMENTS +SAVE_STUB + TRACK_PEER_CONNECTIONS);
+  const a = await newTab(browser, base + "/", VERIFY_ON + OBSERVE_CAPS + TRACK_ANNOUNCEMENTS +TRACK_PEER_CONNECTIONS + OMIT_REMOTE_MAX_MESSAGE_SIZE);
+  const b = await newTab(browser, base + "/", VERIFY_ON + OBSERVE_CAPS + TRACK_ANNOUNCEMENTS +SAVE_STUB + TRACK_PEER_CONNECTIONS + OMIT_REMOTE_MAX_MESSAGE_SIZE);
   await setWideViewport(a, 390, 844);
   await setWideViewport(b, 390, 844);
 
@@ -505,6 +533,76 @@ async function mixedScenario(browser, base) {
   await screenshot(a, "peer-card-one-action");
   act("peer-card-one-action", "a link-capable LAN peer offered exactly one action and no file/folder/message fork");
 
+  // A small real-Chromium boundary probe, in an existing tab rather than a
+  // second full journey. The exact-limit send goes first; an oversize send is
+  // allowed either to throw or to close the channel, but never to remain a
+  // successful open send. These PCs are discarded from the product tracker
+  // immediately afterwards so they cannot fake the resume replacement count.
+  const sctpProbe = await b.evaluate(`(async () => {
+    const left = new RTCPeerConnection();
+    const right = new RTCPeerConnection();
+    left.onicecandidate = (event) => event.candidate && right.addIceCandidate(event.candidate);
+    right.onicecandidate = (event) => event.candidate && left.addIceCandidate(event.candidate);
+    let remoteChannel;
+    let resolveReceived;
+    const received = new Promise((resolve) => { resolveReceived = resolve; });
+    right.ondatachannel = (event) => {
+      remoteChannel = event.channel;
+      remoteChannel.onmessage = (message) => resolveReceived(message.data?.byteLength ?? message.data?.size ?? null);
+    };
+    const channel = left.createDataChannel('sctp-default-boundary');
+    const opened = new Promise((resolve) => { channel.onopen = resolve; });
+    await left.setLocalDescription(await left.createOffer());
+    await right.setRemoteDescription(left.localDescription);
+    await right.setLocalDescription(await right.createAnswer());
+    await left.setRemoteDescription(right.localDescription);
+    await opened;
+    const attempt = (bytes) => {
+      try { channel.send(new Uint8Array(bytes)); return 'sent'; }
+      catch (error) { return error.name || 'threw'; }
+    };
+    const fitted = attempt(${SCTP_DEFAULT_MAX_MESSAGE_BYTES});
+    const afterFitted = channel.readyState;
+    const fittedReceived = await Promise.race([
+      received,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('65,536-byte probe was not delivered')), 3_000)),
+    ]);
+    const oversized = attempt(${SCTP_DEFAULT_MAX_MESSAGE_BYTES + 1});
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const result = {
+      negotiated: left.sctp?.maxMessageSize ?? null,
+      removals: window.__e2eMaxMessageSizeRemovals,
+      fitted,
+      afterFitted,
+      fittedReceived,
+      oversized,
+      afterOversized: channel.readyState,
+      remoteState: remoteChannel?.readyState ?? null,
+    };
+    left.close();
+    right.close();
+    return result;
+  })()`);
+  if (sctpProbe.negotiated !== SCTP_DEFAULT_MAX_MESSAGE_BYTES || sctpProbe.removals < 1 ||
+      sctpProbe.fitted !== "sent" || sctpProbe.afterFitted !== "open" ||
+      sctpProbe.fittedReceived !== SCTP_DEFAULT_MAX_MESSAGE_BYTES ||
+      (sctpProbe.oversized === "sent" && sctpProbe.afterOversized === "open")) {
+    throw new Error(`real Chromium did not enforce the absent-advertisement SCTP boundary: ${JSON.stringify(sctpProbe)}`);
+  }
+  const trackerBeforeProductLink = {
+    a: await a.evaluate(`({ pcs: window.__e2ePeerConnections.length, removals: window.__e2eMaxMessageSizeRemovals })`),
+    b: await b.evaluate(`(() => {
+      const before = { pcs: window.__e2ePeerConnections.length, removals: window.__e2eMaxMessageSizeRemovals };
+      window.__e2ePeerConnections.length = 0;
+      window.__e2eMaxMessageSizeRemovals = 0;
+      return before;
+    })()`),
+  };
+  if (trackerBeforeProductLink.a.pcs !== 0 || trackerBeforeProductLink.a.removals !== 0 ||
+      trackerBeforeProductLink.b.pcs !== 2 || trackerBeforeProductLink.b.removals < 1) {
+    throw new Error(`the SCTP probe was not isolated from the product tracker: ${JSON.stringify(trackerBeforeProductLink)}`);
+  }
+
   // 先确认两边的 live region 观察器都装上了，再划线、再点开第一条链路。这两句不是
   // 等待时间，是等待一个事实：漏掉它们，一台负载重的机器就能在仪表盘出现之前把第一条
   // 链路的码念完，于是下面那条"这条链路念过它自己的码"会以空数组失败——而链路和 SAS
@@ -519,6 +617,19 @@ async function mixedScenario(browser, base) {
   const sasB = await oneSas(b, "tab B", "on a freshly opened workspace");
   if (sasA !== sasB) throw new Error(`link SAS mismatch: ${sasA} vs ${sasB}`);
   act("one-link-one-sas", `one action opened one link with one SAS on both tabs (${sasA})`);
+
+  const initialProductCaps = {};
+  for (const [who, tab] of [["a", a], ["b", b]]) {
+    initialProductCaps[who] = await tab.evaluate(`({
+      removals: window.__e2eMaxMessageSizeRemovals,
+      sizes: window.__e2ePeerConnections.map((pc) => pc.sctp?.maxMessageSize ?? null),
+    })`);
+    if (initialProductCaps[who].sizes.length !== 1 ||
+        initialProductCaps[who].sizes[0] !== SCTP_DEFAULT_MAX_MESSAGE_BYTES) {
+      throw new Error(`tab ${who.toUpperCase()} did not build one product PC at the RFC default SCTP limit: ${JSON.stringify(initialProductCaps[who])}`);
+    }
+  }
+  act("sctp-default-64k-boundary", `real Chromium applied the absent-advertisement default of ${SCTP_DEFAULT_MAX_MESSAGE_BYTES} bytes, rejected ${SCTP_DEFAULT_MAX_MESSAGE_BYTES + 1}, and both product PCs negotiated the same cap`);
 
   // 工作区一活起来，选择器和提示就整个收走。
   for (const [who, tab] of [["tab A", a], ["tab B", b]]) {
@@ -1125,6 +1236,7 @@ async function mixedScenario(browser, base) {
       mismatch,
       requests: document.querySelectorAll('${RECEIVE.card}').length,
       peerConnections: window.__e2ePeerConnections.length,
+      messageSizes: window.__e2ePeerConnections.map((pc) => pc.sctp?.maxMessageSize ?? null),
       // 会话被传输中断关掉了（它没有前向恢复点），但**记录还在**，而且重开是一次
       // 显式动作而不是自动重连——自动重开会在对方那边再弹一次同意提示。
       transcript: document.querySelectorAll('.msg-body').length,
@@ -1132,12 +1244,20 @@ async function mixedScenario(browser, base) {
       attach: document.querySelectorAll('${ATTACH_FILE}').length,
     };
   })()`);
-  const senderPcs = await a.evaluate("window.__e2ePeerConnections.length");
+  const senderCapState = await a.evaluate(`({
+    peerConnections: window.__e2ePeerConnections.length,
+    messageSizes: window.__e2ePeerConnections.map((pc) => pc.sctp?.maxMessageSize ?? null),
+  })`);
+  const senderPcs = senderCapState.peerConnections;
   if (
     resumed.bytes !== RESUME_BYTES || resumed.opens !== 1 || resumed.pickerCalls !== 2 ||
     resumed.name !== "resume-on-the-same-link.bin" || !resumed.closed ||
     resumed.mismatch !== -1 || resumed.requests !== 0 ||
-    resumed.transcript !== 1 || resumed.restarts !== 1 || resumed.attach !== 1
+    resumed.transcript !== 1 || resumed.restarts !== 1 || resumed.attach !== 1 ||
+    resumed.messageSizes.length !== resumed.peerConnections ||
+    !resumed.messageSizes.every((size) => size === SCTP_DEFAULT_MAX_MESSAGE_BYTES) ||
+    senderCapState.messageSizes.length !== senderCapState.peerConnections ||
+    !senderCapState.messageSizes.every((size) => size === SCTP_DEFAULT_MAX_MESSAGE_BYTES)
   ) {
     throw new Error(`byte-resume contract failed: ${JSON.stringify({ ...resumed, before: pcCounts })}`);
   }
