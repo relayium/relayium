@@ -123,14 +123,16 @@ const ATTACH_FILE = ".msgpanel .attach-file";
 const HEAD = ".workspace-head";
 const HEAD_SAS = ".workspace-head .sas code";
 const TEXT_CONSENT = ".msgpanel .req";
+const EXPECTED_PICKER_CANCEL_ERROR =
+  "relayium mixed file picker error SaveCancelledError: save picker cancelled by the user (showSaveFilePicker)";
 
 /**
  * Every act this scenario performs, frozen, in run order.
  *
  * One scenario is not one assertion. `mixedScenario` is a single function that
- * performs seventeen distinct acts against one live link, and counting
+ * performs eighteen distinct acts against one live link, and counting
  * *scenarios* — the shape `page-shell.mjs` uses, where there are four of them —
- * would report `1/1` for a run that silently stopped asserting sixteen of these.
+ * would report `1/1` for a run that silently stopped asserting seventeen of these.
  * That is precisely the vacuous-count failure `page-shell-contract.test.mjs`
  * exists to forbid, reappearing one level down.
  *
@@ -157,6 +159,7 @@ const ACTS = Object.freeze([
   "queued-batch",
   "declined-batch",
   "byte-identical-text",
+  "picker-cancel-retry",
   "live-progressbar",
   "byte-resume",
   "narrow-locale-theme",
@@ -164,7 +167,7 @@ const ACTS = Object.freeze([
   "fresh-link-new-sas",
   "explicit-disconnect",
 ]);
-const EXPECTED_ACT_COUNT = 17;
+const EXPECTED_ACT_COUNT = 18;
 
 /**
  * 记下 live region 说过的**每一句**话。
@@ -810,7 +813,16 @@ async function mixedScenario(browser, base) {
     window.__e2e.closed = false;
     window.__e2e.name = '';
     window.__e2e.opens = 0;
+    window.__e2e.pickerCalls = 0;
     window.__e2e.writeDelayMs = ${SCAN_WRITE_DELAY_MS};
+    const saveAfterFirstAttempt = window.showSaveFilePicker;
+    window.showSaveFilePicker = async (...args) => {
+      window.__e2e.pickerCalls++;
+      if (window.__e2e.pickerCalls === 1) {
+        throw new DOMException('e2e: user cancelled Save As', 'AbortError');
+      }
+      return saveAfterFirstAttempt(...args);
+    };
     return true;
   })()`);
   await a.evaluate(pickFiles(`
@@ -819,6 +831,17 @@ async function mixedScenario(browser, base) {
     dt.items.add(new File([body], 'resume-on-the-same-link.bin'));
   `));
   await b.waitFor(`!!document.querySelector('${RECEIVE.card}')`, "the resumable file consent card", 40_000);
+  const consentBeforeCancel = await b.evaluate(`(() => ({
+    head: (document.querySelector('${RECEIVE.card} ${RECEIVE.head}')?.textContent ?? '').trim(),
+    files: [...document.querySelectorAll('${RECEIVE.card} ${RECEIVE.fileList} ${RECEIVE.fileName}')]
+      .map((node) => node.textContent.trim()),
+    badTransfers: document.querySelectorAll('${XFER.bad}').length,
+  }))()`);
+  const senderBeforeCancel = await a.evaluate(`({
+    statuses: [...document.querySelectorAll('${XFER.status}')].map((node) => node.textContent.trim()),
+    badTransfers: document.querySelectorAll('${XFER.bad}').length,
+  })`);
+  const pickerErrorWindow = { a: a.errors.length, b: b.errors.length };
   // One 5 MiB file: far below the large-batch threshold, so the row is the
   // ordinary one and its primary button accepts. Under `RECEIVE.warning` the
   // very same button declines, which is why the guard comes first and refuses
@@ -831,10 +854,108 @@ async function mixedScenario(browser, base) {
     return true;
   })()`);
   await b.waitFor(
+    `!!document.querySelector('${RECEIVE.card} ${RECEIVE.retryHint}')`,
+    "the same consent card to become retryable after the cancelled picker",
+    20_000,
+  );
+  // Give an accidental automatic retry time to happen. The picker must remain
+  // at one call until the second explicit click below supplies a new gesture.
+  const afterPickerCancel = await b.evaluate(`(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const request = document.querySelector('${RECEIVE.card}');
+    const retry = request?.querySelector('${RECEIVE.retryHint}');
+    return {
+      pickerCalls: window.__e2e.pickerCalls,
+      opens: window.__e2e.opens,
+      bytes: window.__e2e.bytes,
+      closed: window.__e2e.closed,
+      requests: document.querySelectorAll('${RECEIVE.card}').length,
+      retryHints: request?.querySelectorAll('${RECEIVE.retryHint}').length ?? 0,
+      retryText: (retry?.textContent ?? '').trim(),
+      retryRole: retry?.getAttribute('role'),
+      canAccept: !!request?.querySelector('${RECEIVE.primary}'),
+      head: (request?.querySelector('${RECEIVE.head}')?.textContent ?? '').trim(),
+      files: [...(request?.querySelectorAll('${RECEIVE.fileList} ${RECEIVE.fileName}') ?? [])]
+        .map((node) => node.textContent.trim()),
+      badTransfers: document.querySelectorAll('${XFER.bad}').length,
+      composers: document.querySelectorAll('.msgpanel textarea').length,
+      attachments: document.querySelectorAll('${ATTACH_FILE}').length,
+    };
+  })()`);
+  if (
+    afterPickerCancel.pickerCalls !== 1 || afterPickerCancel.opens !== 0 ||
+    afterPickerCancel.bytes !== 0 || afterPickerCancel.closed ||
+    afterPickerCancel.requests !== 1 || afterPickerCancel.retryHints !== 1 ||
+    !afterPickerCancel.retryText || afterPickerCancel.retryRole !== "status" ||
+    !afterPickerCancel.canAccept || afterPickerCancel.composers !== 1 ||
+    afterPickerCancel.attachments !== 1 ||
+    afterPickerCancel.head !== consentBeforeCancel.head ||
+    JSON.stringify(afterPickerCancel.files) !== JSON.stringify(consentBeforeCancel.files) ||
+    afterPickerCancel.badTransfers !== consentBeforeCancel.badTransfers
+  ) {
+    throw new Error(`picker cancellation did not preserve one retryable incoming consent: ${JSON.stringify({ consentBeforeCancel, afterPickerCancel })}`);
+  }
+  const senderAfterCancel = await a.evaluate(`({
+    statuses: [...document.querySelectorAll('${XFER.status}')].map((node) => node.textContent.trim()),
+    badTransfers: document.querySelectorAll('${XFER.bad}').length,
+    composers: document.querySelectorAll('.msgpanel textarea').length,
+    attachments: document.querySelectorAll('${ATTACH_FILE}').length,
+  })`);
+  if (JSON.stringify(senderAfterCancel.statuses) !== JSON.stringify(senderBeforeCancel.statuses) ||
+      senderAfterCancel.badTransfers !== senderBeforeCancel.badTransfers ||
+      senderAfterCancel.composers !== 1 || senderAfterCancel.attachments !== 1) {
+    throw new Error(`picker cancellation changed the sender waiting on the same consent or killed its workspace: ${JSON.stringify({ senderBeforeCancel, senderAfterCancel })}`);
+  }
+  for (const [who, tab] of [["tab A", a], ["tab B", b]]) {
+    const retrySas = await oneSas(tab, who, "after cancelling the save picker");
+    if (retrySas !== sasA) throw new Error(`${who} changed the link SAS after picker cancellation: ${retrySas} vs ${sasA}`);
+  }
+  // Product code deliberately logs the classified cancellation. Consume only
+  // the one exact entry caused inside this act's marked window; anything before
+  // the mark, after this point, duplicated, or differently classified remains a
+  // real journey failure in the final console sweep.
+  const pickerWindowErrors = {
+    a: a.errors.slice(pickerErrorWindow.a),
+    b: b.errors.slice(pickerErrorWindow.b),
+  };
+  const pickerErrorLines = pickerWindowErrors.b[0]?.split("\n") ?? [];
+  const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\/$/, "");
+  const builtAssetFrame = new RegExp(
+    `^    at (?:async )?[A-Za-z_$][A-Za-z0-9_$]* \\(${escapedBase}/assets/index-[A-Za-z0-9_-]+\\.js:\\d+:\\d+\\)$`,
+  );
+  if (pickerWindowErrors.a.length !== 0 || pickerWindowErrors.b.length !== 1 ||
+      pickerErrorLines.length !== 3 || pickerErrorLines[0] !== EXPECTED_PICKER_CANCEL_ERROR ||
+      !pickerErrorLines.slice(1).every((line) => builtAssetFrame.test(line))) {
+    throw new Error(`picker cancellation logged an unexpected error set: ${JSON.stringify(pickerWindowErrors)}`);
+  }
+  b.errors.splice(pickerErrorWindow.b, 1);
+
+  // This second click is the only event allowed to reopen the picker.
+  await b.evaluate(`(() => {
+    if (document.querySelector('${RECEIVE.card} ${RECEIVE.warning}')) {
+      throw new Error('the memory warning inverted the retry consent row; ${RECEIVE.primary} is now decline');
+    }
+    document.querySelector('${RECEIVE.card} ${RECEIVE.primary}').click();
+    return true;
+  })()`);
+  await b.waitFor(
     "window.__e2e.bytes >= 393216 && !window.__e2e.closed",
     "at least two durable chunks before the forced transport gap",
     40_000,
   );
+  const retriedPicker = await b.evaluate(`({
+    pickerCalls: window.__e2e.pickerCalls,
+    opens: window.__e2e.opens,
+    name: window.__e2e.name,
+    bytes: window.__e2e.bytes,
+    requests: document.querySelectorAll('${RECEIVE.card}').length,
+  })`);
+  if (retriedPicker.pickerCalls !== 2 || retriedPicker.opens !== 1 ||
+      retriedPicker.name !== "resume-on-the-same-link.bin" ||
+      retriedPicker.bytes < 393216 || retriedPicker.requests !== 0) {
+    throw new Error(`the explicit retry did not open one fresh picker and start the same transfer: ${JSON.stringify(retriedPicker)}`);
+  }
+  act("picker-cancel-retry", "a real AbortError kept one incoming consent, link, SAS and composer alive; only a second explicit click reopened the picker");
 
   // ── 八之一、传输**进行中**的进度条：读屏能拿到的名字和百分比 ───────────────
   //
@@ -998,6 +1119,8 @@ async function mixedScenario(browser, base) {
     return {
       bytes: window.__e2e.bytes,
       opens: window.__e2e.opens,
+      pickerCalls: window.__e2e.pickerCalls,
+      name: window.__e2e.name,
       closed: window.__e2e.closed,
       mismatch,
       requests: document.querySelectorAll('${RECEIVE.card}').length,
@@ -1011,7 +1134,8 @@ async function mixedScenario(browser, base) {
   })()`);
   const senderPcs = await a.evaluate("window.__e2ePeerConnections.length");
   if (
-    resumed.bytes !== RESUME_BYTES || resumed.opens !== 1 || !resumed.closed ||
+    resumed.bytes !== RESUME_BYTES || resumed.opens !== 1 || resumed.pickerCalls !== 2 ||
+    resumed.name !== "resume-on-the-same-link.bin" || !resumed.closed ||
     resumed.mismatch !== -1 || resumed.requests !== 0 ||
     resumed.transcript !== 1 || resumed.restarts !== 1 || resumed.attach !== 1
   ) {

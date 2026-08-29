@@ -182,7 +182,7 @@ describe("ReceiveActions 实时接收的内存提示", () => {
   // 张脸：这次传输其实还活着，界面必须说出来。
   it("重问一次：换成「你取消了，还能再来」，接收按钮照旧可用", async () => {
     await mountActions({ canStream: true, files: flat(SMALL), retry: true });
-    const hint = target.querySelector(".savehint");
+    const hint = target.querySelector(RECEIVE.retryHint);
     expect(hint?.textContent!.trim()).toBe(t().recvSaveRetry);
     // 活动区域一直在（见组件注释），所以这次文案替换才播报得出来。
     expect(hint?.getAttribute("role")).toBe("status");
@@ -363,6 +363,7 @@ describe("the receive selectors the browser runner clicks", () => {
     expect(RECEIVE.card).toBe(".request");
     expect(RECEIVE.primary).toBe(".btn-primary");
     expect(RECEIVE.ghost).toBe(".btn-ghost");
+    expect(RECEIVE.retryHint).toBe(".savehint.retry");
     // The retired names must not come back: their meaning is false in the
     // warning branch, which is exactly the branch a careless reader skips.
     expect(RECEIVE).not.toHaveProperty("accept");

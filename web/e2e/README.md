@@ -167,13 +167,13 @@ cd server && RELAYIUM_ADDR=:8099 go run .
 这些那两套都在跑，跑在替代了老分叉的统一 `link/1` 界面上，而且 `code-room.mjs` 每次
 推送都在托管 CI 里跑。
 
-审计当初认定搁浅的有**八条**。其中三条已经改了状态，所以现在是**五条搁浅、一条已托管
-迁移、两条已退役**：
+审计当初认定搁浅的有**八条**。其中四条已经改了状态，所以现在是**四条搁浅、一条已托管
+迁移、一条本地已迁移待托管 CI、两条已退役**：
 
 | # | 独有断言 | 状态 |
 |---|---|---|
 | 1 | 移动端无 picker 回退（没有 `showSaveFilePicker`） | 搁浅 |
-| 2 | 桌面端另存为对话框被取消 | 搁浅 |
+| 2 | 桌面端另存为对话框被取消 | **本地已迁移，待托管 CI**（C3b-4） |
 | 3 | SCTP 协商出来的单条消息上限边界（RFC 8841 默认值 64 KiB） | 搁浅 |
 | 4 | 应答竞态（发起方还在接管通道时，应答方已经接受） | **已退役**，见下 |
 | 5 | 数据通道打开前 PeerConnection 就 `failed` | **已退役**，见下 |
@@ -290,15 +290,15 @@ promise。这招当年管用，是因为路径采样正好卡在"通道已开"�
   要是哪天两次 axe 真的跑到把文件跑完，下面每一条等待都会以别的名义超时，而这一幕会悄悄
   退化成一次没被打断的普通传输。
 - *C3b-1 当时没搬什么*：第 1、2、3、5 条都没被那一刀改动；第 5 条后来按上面的确定性
-  证据退役，第 2、3 条仍然搁浅，第 7、8 条仍归阶段三。逐字节续传和
+  证据退役，第 2 条后来在 C3b-4 搬走；第 3 条仍然搁浅，第 7、8 条仍归阶段三。逐字节续传和
   "真的换了 PeerConnection"那两组断言原样保留——这一 act 是**插进**那一幕的，不是替掉它
   的任何一部分。
 - *这次改动碰了哪些文件*：只有测试和文档——`web/e2e/mixed-link.mjs`、
   `web/e2e/dom-contracts.mjs`、`web/e2e/go-server.test.mjs`、
   `web/src/lib/ReceiveActions.test.ts`、`web/src/lib/workspace-orchestration.test.ts`、
   本文件和 `docs/TESTING.md`。产品源码、workflow、依赖、原生和 ops 一个都没动。
-- *顺手加的反空转机制*：一幕不等于一条断言。`mixed-link.mjs` 现在记一份**冻结的逐 act
-  执行台账**——十七个具名 act，成员、顺序和一个**字面量**计数（`EXPECTED_ACT_COUNT`，
+- *顺手加的反空转机制*：一幕不等于一条断言。`mixed-link.mjs` 当时加了一份**冻结的逐 act
+  执行台账**——C3b-1 是十七个具名 act，C3b-4 加入第十八个；成员、顺序和一个**字面量**计数（`EXPECTED_ACT_COUNT`，
   绝不是 `ACTS.length`）三样都查——外加一个字面量 `EXPECTED_SCENARIO_COUNT`。否则一个被
   改到只剩第一条断言的 run 照样会报 `1/1`。`e2e/go-server.test.mjs` 钉住这个形状，也钉住
   那次活扫描确实落在"接受"和"强制掐断"之间。
@@ -346,8 +346,32 @@ the wrong lane count"）。
 
 **C3b-2 没有迁移另一条 `lan-transfer.mjs` 独有断言。** U1 钉的是仅发起方、只发一次、
 同一 PeerConnection 上的 ICE restart；U3a 钉的是 stored receive 共用的空保存参数。二者是
-相邻的确定性韧性补强，不改变第 2、3 条的状态：桌面 picker 取消和真 Chromium 的 SCTP
-max-message-size 协商仍然搁浅。
+相邻的确定性韧性补强；它们当时没有改变第 2、3 条。第 2 条后来由 C3b-4 搬走，真 Chromium
+的 SCTP max-message-size 协商仍然搁浅。
+
+**C3b-4 —— 桌面 picker 取消，复用现有托管旅程。** 第 2 条现在插进原有 5 MiB 传输，
+没有另起第二套浏览器场景，也没有再发一份大文件。接收侧先包一层已有保存桩，让第一次调用
+抛真正的、名字为 `AbortError` 的 `DOMException`；runner 随即证明：只有一个带非空
+`role="status"` 文案的 retry hint，没有写入字节、没有打开 sink、没有新增终局失败，短暂等待
+后 picker 仍只调用一次，request 标题和清单没换，link、SAS、composer、附件控件也都还活着。
+只有第二次明确 click 才能把 picker 计数推进到二并开始 durable writes；后面原封不动的
+progressbar / resume 尾巴继续证明最终名称、大小、逐字节内容和替换 PeerConnection。
+
+`.savehint.retry` 只写在 `e2e/dom-contracts.mjs`，普通 Vitest 用渲染出来的
+`ReceiveActions` 钉住它；`e2e/go-server.test.mjs` 则独立冻结第十八个 act、它必须在
+progress/resume 之前、真实 AbortError 注入、第一次/第二次 picker 计数、非终局同一 consent
+证据和后续精确字节证据。产品源码和节流常量都没改。
+
+这次被分类的取消会刻意打一条 console error。runner 在第一次 click 前同时记下两页 error
+数组长度，证明 retry 状态后只消费接收页窗口内**恰好一条**完整匹配固定产品前缀、
+`SaveCancelledError` 和 `showSaveFilePicker` 来源的记录。重复、异名、异来源、出现在发送页，
+或同一句落在窗口之外，都继续留给未放宽的最终 console sweep 判红；没有全局忽略 picker
+错误的正则。
+
+旧脚本的 `NotAllowedError` 第二幕没有搬进 Chromium。它本来就是旧 runner 人工抛的异常，
+并不证明真实浏览器权限弹窗；对应产品规则已有直接确定性证据：`src/lib/filesink.test.ts`
+区分 `AbortError` 与非取消失败，`src/lib/mixed-file-session.test.ts` 证明非取消的保存失败会拒绝
+传输、不会冒充用户取消。这半按上述精确测试退役；本次迁移不声称覆盖真实浏览器权限拒绝。
 
 **阶段三：身份，以及有界的中继失败。** 第 7、8 条放到最后，因为两者都需要前面用不到的
 搭台：多页设备身份要在一个浏览器的两页之外再加一个独立上下文；有界中继池失败要那份
@@ -355,7 +379,7 @@ max-message-size 协商仍然搁浅。
 
 **阶段四：删掉 `lan-transfer.mjs` 和它的 `test:e2e` npm 脚本。** 只在托管 `main` 带着
 阶段一到三全绿之后。删早了会丢掉仍然搁浅在里面的那几条——第 6 条搬走且第 4、5 条按上面
-记录的确定性证据退役后还剩五条；而留着比没用更糟——一个永远退不出 0 的
+记录的确定性证据退役后还剩四条；而留着比没用更糟——一个永远退不出 0 的
 脚本，教会所有人忽略一次红。
 
 两件这次迁移**不许**做的事：不许把删掉的控件加回来，不许加降级开关。真正只属于老路的
@@ -584,12 +608,12 @@ cd web    && node e2e/mixed-link.mjs --url http://localhost:8098
 
 ### 一幕不等于一条断言：冻结的逐 act 执行台账
 
-上面这十四条被拆成**十七个具名 act**（一条编号里含两个 act 的地方，是因为它们各自
+上面这十四条被拆成**十八个具名 act**（一条编号里含多个 act 的地方，是因为它们各自
 能单独失效）。每个 act 在自己的断言全部通过之后调一次 `act(name, message)`——它同时
 负责打印那行 ✓ 和记台账，所以"报告成功"和"记录为执行过"是同一句话，拆不开。
 
 跑完 `runScenarios()` 三样一起查：成员、**顺序**，以及一个字面量
-`EXPECTED_ACT_COUNT = 17`。这里必须是字面量，不能写 `ACTS.length`——数组和它自己的长度
+`EXPECTED_ACT_COUNT = 18`。这里必须是字面量，不能写 `ACTS.length`——数组和它自己的长度
 在有人删掉一项之后仍然彼此同意，于是一次少了一幕的运行会干干净净地报 `16/16`。同样的
 道理，`EXPECTED_SCENARIO_COUNT = 1` 单独存在，但它保护不了什么：这一套只有一幕，一个
 被改到只剩第一条断言的 `mixedScenario` 照样报 `1/1`。真正起作用的是 act 那个数。
