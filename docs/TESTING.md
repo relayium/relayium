@@ -63,7 +63,7 @@ matter; take them in order.
 
 ### It is not a CI gate
 
-`.github/workflows/web.yml` runs six hosted browser lanes, and `lan-transfer.mjs`
+`.github/workflows/web.yml` runs seven hosted browser lanes, and `lan-transfer.mjs`
 is not one of them:
 
 | Lane | Script | Job |
@@ -74,6 +74,19 @@ is not one of them:
 | Device-discovery findability journey | `test:device-discovery` | `test` |
 | Device Inbox entry journey | `test:device-inbox-entry` | `test` |
 | Device Inbox: browser → server → CLI → disk | `test:device-inbox` | `device-inbox-e2e` |
+| LAN room, unified `link/1` workspace, real Go server | `test:e2e:mixed` | `mixed-link-e2e` |
+
+The last row is new as of 2026-08-29 (Phase 3D C3a). It is a separate job rather
+than another step in `test` because it needs a Go toolchain that Node-only job
+does not have, and because `test` already spends most of a 15-minute budget on
+four browser lanes.
+
+Getting it hosted required fixing what made it un-hostable: it used to demand
+that a human had already started a server on `:8098`. `mixed-link.mjs` now
+builds and starts its own, on its own port, over its own temporary database, and
+tears the whole thing down — see `web/e2e/go-server.mjs`, the lifecycle it now
+shares with `test:device-inbox`. An explicit `--url` still targets a server you
+started yourself; without one, nothing external is required.
 
 `test:e2e` (`lan-transfer.mjs`) appears in none of them. As of 2026-08-29
 (Phase 3D C2) the `/apps` hierarchy contract, along with the auth-landing and
@@ -195,8 +208,12 @@ chunked AES-GCM, ACK flow control, checkpoint resume, consent), not about the
 retired fork. They come off `STRIP_LINK_CAP` and onto the unified `link/1`
 workspace — `.open-workspace`, then the workspace's own composer and
 `.attach-file` / `.attach-folder`. `mixed-link.mjs` already drives exactly that
-surface. It is currently local-only, so this stage also adds it to hosted CI;
-migrating uniques into a suite nobody runs would move the problem, not fix it.
+surface. Migrating uniques into a suite nobody runs would move the problem
+rather than fix it, so hosting `mixed-link` came first and is **done** (C3a,
+2026-08-29): the `mixed-link-e2e` job above runs its existing single scenario on
+every push and pull request. Moving the six uniques onto it is C3b, and it
+starts from a baseline that is green and hosted rather than from a suite whose
+own queued-batch assertion had been stale for weeks.
 
 **Stage 3 — identity and bounded relay failure.** Uniques 7 and 8 are last
 because both need setup the other stages do not: multi-page device identity needs
@@ -646,7 +663,7 @@ and two live CLI processes.
 >
 > The consent state machines and the one-SAS-per-link rule are still asserted, by
 > `web/e2e/mixed-link.mjs` and `web/e2e/code-room.mjs` on the unified `link/1`
-> surface, and the latter runs in hosted CI. What is genuinely uncovered until the
+> surface, and **both** run in hosted CI as of 2026-08-29. What is genuinely uncovered until the
 > §1a migration lands is the response race (unique #4) — a responder accepting
 > while the initiator is still taking ownership of its channel. Deterministic
 > coverage of the surrounding logic remains in `src/lib/verify-gates.test.ts` and
