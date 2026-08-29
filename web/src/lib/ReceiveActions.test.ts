@@ -11,6 +11,11 @@ import { mount, unmount, flushSync } from "svelte";
 import ReceiveActions from "./ReceiveActions.svelte";
 import { loadLang, messages } from "./i18n.svelte";
 import { LARGE_DOWNLOAD_WARN_BYTES } from "./filesink";
+// The strings `web/e2e/mixed-link.mjs` clicks in a real browser. Import, do not
+// retype — see the last describe block for why the primary/ghost pair in
+// particular cannot be left to two private copies, and why they are not named
+// for what they do.
+import { RECEIVE } from "../../e2e/dom-contracts.mjs";
 
 let target: HTMLDivElement;
 let app: unknown;
@@ -270,5 +275,97 @@ describe("ReceiveActions × 带目录层级的单文件", () => {
     });
     expect(target.querySelector(".memwarn"), "带路径的单文件必须按 ZIP 估算").not.toBeNull();
     expect(byText(t().accept), "提示状态下接收按钮不该存在").toBeUndefined();
+  });
+});
+
+/**
+ * The SAME strings `web/e2e/mixed-link.mjs` clicks in a real browser, asserted
+ * against the markup this component actually renders.
+ *
+ * Same reasoning as `QueuedBatches.test.ts`, and the same accident waiting to
+ * happen: the browser runner needs a Go server and a headless Chrome, so it is
+ * not what fails first when this markup moves. This file runs on every push.
+ *
+ * The part that makes it worth writing down rather than assuming is the
+ * **inversion**. `RECEIVE.primary` is `.btn-primary` — which accepts, but only
+ * in the ordinary branch. Under the large-batch memory warning the two swap:
+ * `.btn-primary` becomes *decline*, and the only way forward is an explicit
+ * `.btn-ghost` "receive anyway". A runner that treated the primary button as
+ * "accept" on a batch that started raising the warning would therefore decline
+ * it, silently, and every assertion downstream would describe a transfer that
+ * was never accepted.
+ *
+ * That is also why the shared constants are named `primary`/`ghost` rather than
+ * `accept`/`decline`: no shared identifier may claim a semantic role that half
+ * the branches contradict. The semantics are what these tests establish, per
+ * branch, in both directions.
+ */
+describe("the receive selectors the browser runner clicks", () => {
+  const el = (selector: string) => target.querySelector(selector);
+
+  it("ordinary branch: the primary button accepts and the ghost one declines", async () => {
+    await mountActions({ canStream: true, files: flat(SMALL) });
+
+    expect(el(RECEIVE.warning), "a small flat batch must not raise the warning").toBeNull();
+    expect(el(RECEIVE.saveHint), "the save hint is what RECEIVE.saveHint names").not.toBeNull();
+
+    const primary = el(RECEIVE.primary) as HTMLButtonElement | null;
+    const ghost = el(RECEIVE.ghost) as HTMLButtonElement | null;
+    expect(primary?.textContent?.trim()).toBe(t().accept);
+    expect(ghost?.textContent?.trim()).toBe(t().decline);
+
+    primary!.click();
+    flushSync();
+    expect(onAccept, "on the ordinary row RECEIVE.primary must accept").toHaveBeenCalledTimes(1);
+    expect(onReject).not.toHaveBeenCalled();
+  });
+
+  it("ordinary branch: RECEIVE.ghost rejects rather than accepting", async () => {
+    await mountActions({ canStream: true, files: flat(SMALL) });
+
+    (el(RECEIVE.ghost) as HTMLButtonElement).click();
+    flushSync();
+    expect(onReject, "on the ordinary row RECEIVE.ghost must decline").toHaveBeenCalledTimes(1);
+    expect(onAccept).not.toHaveBeenCalled();
+  });
+
+  it("warning branch: the two invert, so RECEIVE.primary is the DECLINE button", async () => {
+    await mountActions({ canStream: false, files: folder(BIG) });
+
+    expect(el(RECEIVE.warning), "this batch is what RECEIVE.warning is for").not.toBeNull();
+    // The property the inversion exists to protect: there is no plain accept.
+    expect(byText(t().accept), "no direct accept may exist under the warning").toBeUndefined();
+
+    (el(RECEIVE.primary) as HTMLButtonElement).click();
+    flushSync();
+    expect(onReject, "under the warning, RECEIVE.primary is decline").toHaveBeenCalledTimes(1);
+    expect(
+      onAccept,
+      "if this ever starts accepting, mixed-link.mjs's warning guard is the only thing left",
+    ).not.toHaveBeenCalled();
+  });
+
+  it("warning branch: RECEIVE.ghost is the explicit 'receive anyway'", async () => {
+    await mountActions({ canStream: false, files: folder(BIG) });
+
+    const ghost = el(RECEIVE.ghost) as HTMLButtonElement;
+    expect(ghost.textContent?.trim()).toBe(t().recvMemWarnAccept);
+    ghost.click();
+    flushSync();
+    expect(onAccept).toHaveBeenCalledTimes(1);
+  });
+
+  it("names the card the runner scopes all of these to", async () => {
+    // The component renders the actions; `App.svelte` renders the card around
+    // them. The runner queries `RECEIVE.card RECEIVE.primary`, so a change to
+    // either half breaks a real click — and this pins the half that is a plain
+    // string here, so the other half is the only place left to look.
+    expect(RECEIVE.card).toBe(".request");
+    expect(RECEIVE.primary).toBe(".btn-primary");
+    expect(RECEIVE.ghost).toBe(".btn-ghost");
+    // The retired names must not come back: their meaning is false in the
+    // warning branch, which is exactly the branch a careless reader skips.
+    expect(RECEIVE).not.toHaveProperty("accept");
+    expect(RECEIVE).not.toHaveProperty("decline");
   });
 });

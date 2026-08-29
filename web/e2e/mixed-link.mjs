@@ -49,7 +49,7 @@ import {
   OBSERVE_CAPS, SAVE_STUB, VERIFY_ON, argFlag, argPresent, fail, launchBrowser, newTab, ok,
   requireServer, setWideViewport, withWatchdog,
 } from "./harness.mjs";
-import { QUEUED } from "./dom-contracts.mjs";
+import { QUEUED, RECEIVE, XFER } from "./dom-contracts.mjs";
 // 统一链路的同意态同样是静态扫描器到不了的地方，而且这里的规矩更紧：一条链路只有
 // 一个 SAS，两条通道各自同意。哪一格长出了新的违规，都要在这里当场红。
 import { scanLiveState } from "./a11y-core.mjs";
@@ -123,6 +123,49 @@ const ATTACH_FILE = ".msgpanel .attach-file";
 const HEAD = ".workspace-head";
 const HEAD_SAS = ".workspace-head .sas code";
 const TEXT_CONSENT = ".msgpanel .req";
+
+/**
+ * Every act this scenario performs, frozen, in run order.
+ *
+ * One scenario is not one assertion. `mixedScenario` is a single function that
+ * performs seventeen distinct acts against one live link, and counting
+ * *scenarios* — the shape `page-shell.mjs` uses, where there are four of them —
+ * would report `1/1` for a run that silently stopped asserting sixteen of these.
+ * That is precisely the vacuous-count failure `page-shell-contract.test.mjs`
+ * exists to forbid, reappearing one level down.
+ *
+ * So the count is per act, and it is recorded by the acts themselves: `act()` is
+ * called at the END of each one, after its assertions, so an act that threw or
+ * was edited into a no-op never lands in the ledger. `main()` then compares the
+ * ledger against this list AND against a literal count, in order — an act that
+ * is deleted, reordered, or quietly skipped is three different failures here,
+ * and none of them can pass.
+ *
+ * `EXPECTED_ACT_COUNT` is a literal and must stay one. Comparing against
+ * `ACTS.length` would let a deleted entry agree with itself: the array shrinks,
+ * its own length shrinks with it, and the run reports a clean `16/16`.
+ */
+const ACTS = Object.freeze([
+  "advertised-link-1",
+  "peer-card-one-action",
+  "one-link-one-sas",
+  "chooser-hidden",
+  "workspace-header",
+  "text-consent",
+  "file-consent-40",
+  "sticky-sas",
+  "queued-batch",
+  "declined-batch",
+  "byte-identical-text",
+  "live-progressbar",
+  "byte-resume",
+  "narrow-locale-theme",
+  "pending-consent-outlives-link",
+  "fresh-link-new-sas",
+  "explicit-disconnect",
+]);
+const EXPECTED_ACT_COUNT = 17;
+
 /**
  * 记下 live region 说过的**每一句**话。
  *
@@ -242,8 +285,8 @@ async function oneSas(tab, who, where) {
       heads: heads.length,
       sasTotal: all.length,
       sasOutsideHead: all.filter((el) => !heads.some((h) => h.contains(el))).length,
-      laneSas: document.querySelectorAll('.msgpanel .sas, .request .sas').length,
-      xferCodes: document.querySelectorAll('.xfer .status code').length,
+      laneSas: document.querySelectorAll('.msgpanel .sas, ${RECEIVE.card} .sas').length,
+      xferCodes: document.querySelectorAll('${XFER.laneCode}').length,
       paths: document.querySelectorAll('.path').length,
       pathsOutsideHead: [...document.querySelectorAll('.path')]
         .filter((el) => !heads.some((h) => h.contains(el))).length,
@@ -392,6 +435,27 @@ const setTheme = async (tab, value) => {
 /** `base` is a parameter now, not a module constant: it is whichever server this
  *  run is talking to — the one it started, or the one `--url` named. */
 async function mixedScenario(browser, base) {
+  /**
+   * The execution ledger for this run. Empty until an act finishes.
+   *
+   * `act()` replaces the bare `ok()` at each act boundary rather than sitting
+   * beside it, so "reported success" and "recorded as performed" are the same
+   * statement and cannot drift apart. Sub-steps inside an act (the three
+   * viewport variants, the console-error sweep) stay plain `ok()`: they are
+   * assertions, not acts, and the ledger is about the acts.
+   */
+  const ledger = [];
+  const act = (name, message) => {
+    // A typo here would otherwise register an act nobody can account for, and
+    // the ordered comparison in `main()` would blame the act AFTER it.
+    if (!ACTS.includes(name)) {
+      throw new Error(`act ${JSON.stringify(name)} is not one of the frozen ACTS`);
+    }
+    if (ledger.includes(name)) throw new Error(`act ${JSON.stringify(name)} was recorded twice`);
+    ledger.push(name);
+    ok(message);
+  };
+
   // A 发起，B 收（另存为被桩掉）。两边都装上只读的 caps 探针：跑任何断言之前先确认
   // 这个默认产物在这个 LAN 房间里真的通告了 link/1。
   // This scenario is about the unified workspace's verification presentation,
@@ -418,7 +482,7 @@ async function mixedScenario(browser, base) {
       );
     }
   }
-  ok("both tabs advertised link/1 from the default build and discovered each other");
+  act("advertised-link-1", "both tabs advertised link/1 from the default build and discovered each other");
 
   // ── 一、默认 LAN 卡片只有**一个**动作，它打开的就是整个工作区 ─────────────
   const card = await a.evaluate(`(() => {
@@ -436,7 +500,7 @@ async function mixedScenario(browser, base) {
     throw new Error(`the default LAN peer card is not a single workspace action: ${JSON.stringify(card)}`);
   }
   await screenshot(a, "peer-card-one-action");
-  ok("a link-capable LAN peer offered exactly one action and no file/folder/message fork");
+  act("peer-card-one-action", "a link-capable LAN peer offered exactly one action and no file/folder/message fork");
 
   // 先确认两边的 live region 观察器都装上了，再划线、再点开第一条链路。这两句不是
   // 等待时间，是等待一个事实：漏掉它们，一台负载重的机器就能在仪表盘出现之前把第一条
@@ -451,13 +515,13 @@ async function mixedScenario(browser, base) {
   const sasA = await oneSas(a, "tab A", "on a freshly opened workspace");
   const sasB = await oneSas(b, "tab B", "on a freshly opened workspace");
   if (sasA !== sasB) throw new Error(`link SAS mismatch: ${sasA} vs ${sasB}`);
-  ok(`one action opened one link with one SAS on both tabs (${sasA})`);
+  act("one-link-one-sas", `one action opened one link with one SAS on both tabs (${sasA})`);
 
   // 工作区一活起来，选择器和提示就整个收走。
   for (const [who, tab] of [["tab A", a], ["tab B", b]]) {
     await chooserHidden(tab, who, "right after the workspace opened");
   }
-  ok("the chooser, the old peer actions and the availability hint all went away");
+  act("chooser-hidden", "the chooser, the old peer actions and the availability hint all went away");
 
   // 头部说清楚"和谁、什么状态、走哪条路"，并且带着显式断开。
   const headContract = await b.evaluate(`(() => {
@@ -478,7 +542,7 @@ async function mixedScenario(browser, base) {
     throw new Error(`workspace header contract failed: ${JSON.stringify(headContract)}`);
   }
   await b.waitFor(`document.querySelectorAll('${HEAD} .path').length === 1`, "the header's single path badge", 20_000);
-  ok("the header named the peer, the link state, one path and one explicit disconnect");
+  act("workspace-header", "the header named the peer, the link state, one path and one explicit disconnect");
 
   await scanLiveState(a, "mixed workspace header (one authenticated link)");
 
@@ -509,7 +573,7 @@ async function mixedScenario(browser, base) {
   await consent.tab.evaluate("(() => { document.querySelector('.msgpanel .act button.btn-primary').click(); return true; })()");
   await a.waitFor("!!document.querySelector('.msgpanel textarea')", "tab A's composer (session open)", 40_000);
   await b.waitFor("!!document.querySelector('.msgpanel textarea')", "tab B's composer (session open)");
-  ok(`${consent.who} completed the text consent without autofocus; both tabs got a composer`);
+  act("text-consent", `${consent.who} completed the text consent without autofocus; both tabs got a composer`);
 
   // ── 三、40 个文件，从统一工作区的附件控件里选 ─────────────────────────────
   // 既是"这条链路还能开第二条通道"的动作，也顺手把长内容列表铺出来，好在下面检查
@@ -523,10 +587,10 @@ async function mixedScenario(browser, base) {
       ));
     }
   `));
-  await b.waitFor("!!document.querySelector('.request')", "tab B's file consent card", 45_000);
+  await b.waitFor(`!!document.querySelector('${RECEIVE.card}')`, "tab B's file consent card", 45_000);
   await oneSas(b, "tab B", "while a 40-file batch awaits consent");
 
-  const fileEdge = await mobileDecisionVisible(b, "tab B", ".request", "a 40-file consent card");
+  const fileEdge = await mobileDecisionVisible(b, "tab B", RECEIVE.card, "a 40-file consent card");
   // 同一条链路的又一条边：码已经念过一次，而且一直挂在钉住的头部里，所以这里不该
   // 再念一遍。这正是那条"每条链路只念一次"的规矩，在真浏览器里验它。
   if (!fileEdge.announcement) throw new Error("the file consent edge announced nothing at all");
@@ -535,7 +599,7 @@ async function mixedScenario(browser, base) {
   }
   await screenshot(b, "mobile-file-consent");
   await scanLiveState(b, "mixed file consent card (390px)");
-  ok("a 40-file batch chosen from the workspace stayed decidable at 390px without re-reading the code");
+  act("file-consent-40", "a 40-file batch chosen from the workspace stayed decidable at 390px without re-reading the code");
 
   // ── 四、粘性：长列表滚下去，唯一的 SAS 不能滚出验证语境 ───────────────────
   // 只滚固定的一段，不滚到页面最底下：滚出粘性头部的包含块之后它本来就该松开，那时
@@ -566,7 +630,7 @@ async function mixedScenario(browser, base) {
   }
   await screenshot(b, "sticky-header-scrolled");
   await b.evaluate("scrollTo(0, 0); true");
-  ok("the sole SAS stayed pinned after scrolling a long file manifest");
+  act("sticky-sas", "the sole SAS stayed pinned after scrolling a long file manifest");
 
   // ── 五、传输中再选文件 → 可见、可取消的队列，而不是被禁用的控件 ───────────
   // pickFiles 自己就会在附件控件是 disabled 的时候抛错，所以"排队而不是禁用"这条
@@ -621,18 +685,27 @@ async function mixedScenario(browser, base) {
   await oneSas(a, "tab A", "while a batch is queued");
   await a.evaluate(`(() => { document.querySelector('${QUEUED.card} ${QUEUED.cancel}').click(); return true; })()`);
   await a.waitFor(`!document.querySelector('${QUEUED.card}')`, "the cancelled queue entry to disappear");
-  ok("a second selection queued visibly as one batch of two named files, kept both the picker and the composer usable, and cancelled by id");
+  act("queued-batch", "a second selection queued visibly as one batch of two named files, kept both the picker and the composer usable, and cancelled by id");
 
   // ── 六、文件同意可以拒绝，而链路和会话都活下来 ────────────────────────────
+  // On the ordinary row the ghost button declines. This batch is 40 one-byte
+  // files, so `RECEIVE.warning` cannot be raised and the row cannot be the
+  // inverted one — see the note on RECEIVE, where the two buttons are named for
+  // their presentation precisely because their meaning is branch-dependent.
+  // Asserting the absence of the warning is what makes "ghost = decline" a fact
+  // here rather than an assumption that can go stale silently.
   await b.evaluate(`(() => {
-    const reject = document.querySelector('.request .btn-ghost');
-    if (!reject) throw new Error('no decline action on the consent card');
+    if (document.querySelector('${RECEIVE.card} ${RECEIVE.warning}')) {
+      throw new Error('the memory warning inverted the consent row; ${RECEIVE.ghost} is now "receive anyway"');
+    }
+    const reject = document.querySelector('${RECEIVE.card} ${RECEIVE.ghost}');
+    if (!reject) throw new Error('no ghost action on the consent card');
     reject.click();
     return true;
   })()`);
-  await b.waitFor("!document.querySelector('.request')", "the rejected file request to close");
+  await b.waitFor(`!document.querySelector('${RECEIVE.card}')`, "the rejected file request to close");
   await a.waitFor(
-    "!!document.querySelector('.xfer') && !document.querySelector('.xfer .progress-bar')",
+    `!!document.querySelector('${XFER.card}') && !document.querySelector('${XFER.progressBar}')`,
     "tab A's batch to reach a terminal state after the rejection",
     40_000,
   );
@@ -646,7 +719,7 @@ async function mixedScenario(browser, base) {
     }
     await oneSas(tab, who, "after a rejected file batch");
   }
-  ok("declining a file batch ended the batch and left the one link and its conversation open");
+  act("declined-batch", "declining a file batch ended the batch and left the one link and its conversation open");
 
   // ── 七、正文逐字节一致，同时文件能力仍然可用 ──────────────────────────────
   // 三步，不是一步：`disabled` 是从 draft 派生出来的，而 Svelte 的更新是批处理的 ——
@@ -687,17 +760,57 @@ async function mixedScenario(browser, base) {
     if (code !== sasA) throw new Error(`${who} changed the link SAS mid-session: ${code} vs ${sasA}`);
   }
   await scanLiveState(b, "mixed workspace with both lanes live");
-  ok(`text was exchanged byte-identically while the file control stayed usable, still under one SAS (${sasA})`);
+  act("byte-identical-text", `text was exchanged byte-identically while the file control stayed usable, still under one SAS (${sasA})`);
 
   // ── 八、真传输断线后从 durable checkpoint 续传，不重新同意 ─────────────────
   const RESUME_BYTES = 5 * 1024 * 1024 + 73;
+  /**
+   * How long the receiver's stubbed sink sleeps per 192 KiB write — which is
+   * what holds this transfer open, because the ACK credit window backpressures
+   * the sender behind it.
+   *
+   * There are TWO of these, and the scene switches between them, because the
+   * scene contains two pieces of work with budgets an order of magnitude apart.
+   *
+   * The arithmetic they share: `RESUME_BYTES` is ~27 chunks of `CHUNK_SIZE`
+   * (192 KiB), and the gap opens after only two of them, so ~25 writes remain
+   * for everything from the accept to the forced close.
+   *
+   * `SCAN_WRITE_DELAY_MS` covers act 八之一 only. That act injects axe (a
+   * ~500 KB source string over CDP) and runs it, on two tabs — seconds of work.
+   * At 20ms the remaining window is ~500ms, so the transfer would simply finish
+   * first and the act would fail reporting a terminal card rather than an
+   * accessibility result: a broken act wearing the costume of a real
+   * regression. At 1000ms the window is ~25s for work that takes a few seconds.
+   *
+   * `RESUME_WRITE_DELAY_MS` is the value this scene ran at before act 八之一
+   * existed, and it is restored the moment the last scan returns — deliberately
+   * BEFORE the `pcCounts` read and the forced close, so nothing after the scan
+   * pays the scan's throttle. Leaving the sink at 1000ms for the remaining
+   * writes is what turned this scenario from ~10s into ~31s; it bought nothing,
+   * because the forced close is one CDP round trip and 20ms per write is the
+   * budget that was already proven sufficient for it.
+   *
+   * Measured, five consecutive runs: at the reset the receiver had written
+   * exactly 393,216 bytes — still the two chunks it started from. Both axe
+   * passes fit inside the FIRST 1000ms sleep, so all ~25 remaining writes were
+   * being charged 1000ms apiece for nothing, and the runway the forced close
+   * actually gets back is the full ~25 × 20ms ≈ 500ms.
+   *
+   * So the two numbers are not interchangeable and neither may be raised to the
+   * other: lower `SCAN_WRITE_DELAY_MS` and the scan becomes timing-dependent,
+   * raise `RESUME_WRITE_DELAY_MS` and the whole hosted job pays for it.
+   * `go-server.test.mjs` pins both values and the order of the switch.
+   */
+  const SCAN_WRITE_DELAY_MS = 1000;
+  const RESUME_WRITE_DELAY_MS = 20;
   await b.evaluate(`(() => {
     window.__e2e.chunks = [];
     window.__e2e.bytes = 0;
     window.__e2e.closed = false;
     window.__e2e.name = '';
     window.__e2e.opens = 0;
-    window.__e2e.writeDelayMs = 20;
+    window.__e2e.writeDelayMs = ${SCAN_WRITE_DELAY_MS};
     return true;
   })()`);
   await a.evaluate(pickFiles(`
@@ -705,13 +818,142 @@ async function mixedScenario(browser, base) {
     for (let i = 0; i < body.length; i++) body[i] = (i * 31 + 7) % 251;
     dt.items.add(new File([body], 'resume-on-the-same-link.bin'));
   `));
-  await b.waitFor("!!document.querySelector('.request')", "the resumable file consent card", 40_000);
-  await b.evaluate("(() => { document.querySelector('.request .btn-primary').click(); return true; })()");
+  await b.waitFor(`!!document.querySelector('${RECEIVE.card}')`, "the resumable file consent card", 40_000);
+  // One 5 MiB file: far below the large-batch threshold, so the row is the
+  // ordinary one and its primary button accepts. Under `RECEIVE.warning` the
+  // very same button declines, which is why the guard comes first and refuses
+  // rather than adapting.
+  await b.evaluate(`(() => {
+    if (document.querySelector('${RECEIVE.card} ${RECEIVE.warning}')) {
+      throw new Error('the memory warning inverted the consent row; ${RECEIVE.primary} is now decline');
+    }
+    document.querySelector('${RECEIVE.card} ${RECEIVE.primary}').click();
+    return true;
+  })()`);
   await b.waitFor(
     "window.__e2e.bytes >= 393216 && !window.__e2e.closed",
     "at least two durable chunks before the forced transport gap",
     40_000,
   );
+
+  // ── 八之一、传输**进行中**的进度条：读屏能拿到的名字和百分比 ───────────────
+  //
+  // Stranded unique #6, migrated here (Phase 3D C3b-1). It was the last live
+  // `role="progressbar"` assertion in the repository, and it sat in
+  // `lan-transfer.mjs`'s non-executing tail — written, and proving nothing.
+  //
+  // This is the only moment in the whole suite at which the assertion can be
+  // made. The receiver is throttled by `SCAN_WRITE_DELAY_MS` (see its own note —
+  // that number exists for this act, and is dropped back to
+  // `RESUME_WRITE_DELAY_MS` the moment the act ends), at least two durable
+  // chunks are on disk, and the forced transport gap has not been opened yet, so
+  // a genuinely in-flight transfer is on both screens. Every other state this
+  // scenario visits has already reached a terminal one, and the progress bar
+  // renders only inside `{#if !xf.done}` (see XFER) — scanning any of them for
+  // an in-flight progress bar would scan an element that is not there and pass
+  // for that reason alone.
+  //
+  // So the subject is PROVED first and scanned second. A scoped `axe.run` over a
+  // context that matches nothing reports zero violations, which is exactly the
+  // shape of a clean result; without the existence proof this act would keep
+  // printing "axe clean" long after the thing it is named for stopped rendering.
+  for (const [who, tab, dir] of [["tab A", a, "send"], ["tab B", b, "recv"]]) {
+    const live = await tab.evaluate(`(() => {
+      // The card is found by DIRECTION, not by taking the first one on the page.
+      // A page can legitimately hold a send card and a recv card at once, and
+      // "the first .xfer" would then silently assert the wrong direction — and,
+      // once one of the two finished, assert a terminal card while reporting the
+      // name of the live one.
+      const labelId = 'xfer-label-${dir}';
+      const heading = document.getElementById(labelId);
+      const card = heading ? heading.closest('${XFER.card}') : null;
+      if (!card) {
+        throw new Error(
+          'no ${dir} transfer card on ${who}: nothing on the page is headed by ' + labelId +
+          '. The transfer never started, or the per-direction heading id moved.',
+        );
+      }
+      const bar = card.querySelector('${XFER.bar}');
+      if (!bar) {
+        throw new Error(
+          'no in-flight progress bar in the ${dir} card on ${who}: the transfer is already ' +
+          'terminal, or the bar left its {#if !xf.done} branch. Either way this act has no ' +
+          'live subject left to scan.',
+        );
+      }
+      const labelledBy = bar.getAttribute('aria-labelledby');
+      const namedBy = labelledBy ? document.getElementById(labelledBy) : null;
+      return {
+        // In flight, not finished. The whole value of scanning HERE rather than
+        // anywhere else in this scenario is that this stays false.
+        terminal: card.matches('${XFER.ok}, ${XFER.bad}'),
+        // One bar per card. Two would mean two progressbars claiming one name.
+        bars: card.querySelectorAll('${XFER.bar}').length,
+        role: bar.getAttribute('role'),
+        labelledBy,
+        // The accessible name axe's aria-progressbar-name rule resolves. An
+        // aria-labelledby pointing at nothing reads exactly like a bare bar in
+        // an axe report, so resolve it here and say which of the two broke.
+        name: (namedBy?.textContent ?? '').trim(),
+        valueNow: bar.getAttribute('aria-valuenow'),
+        valueMin: bar.getAttribute('aria-valuemin'),
+        valueMax: bar.getAttribute('aria-valuemax'),
+        // What the card says is moving — the same node the name resolves to, read
+        // through the shared selector so a rename breaks here and not in axe.
+        label: (card.querySelector('${XFER.label}')?.textContent ?? '').trim(),
+      };
+    })()`);
+    const pct = Number(live.valueNow);
+    if (
+      live.bars !== 1 || live.terminal || live.role !== "progressbar" ||
+      live.labelledBy !== `xfer-label-${dir}` || !live.name || !live.label ||
+      live.valueMin !== "0" || live.valueMax !== "100" ||
+      !Number.isInteger(pct) || pct < 0 || pct > 100
+    ) {
+      throw new Error(
+        `${who} had no usable in-flight progressbar (want one ${dir} bar named by ` +
+        `xfer-label-${dir}, 0 ≤ aria-valuenow ≤ 100): ${JSON.stringify(live)}`,
+      );
+    }
+    // Scoped to the card, not the page: this act is about the transfer surface
+    // that only exists mid-flight, and a document-wide scan would pass on the
+    // strength of the rest of the workspace even after the bar lost its name.
+    await scanLiveState(tab, `${who}: live ${dir} progressbar mid-transfer`, { context: XFER.card });
+  }
+  act("live-progressbar", "an in-flight transfer showed one named progressbar per direction, axe clean while the bytes were moving");
+
+  /**
+   * The scan is over, so the scan's throttle goes away — here, and not one step
+   * later.
+   *
+   * Everything below is the resume scene: read the PeerConnection counts, kill
+   * both transports, wait for the rebuilt ones to carry the remaining bytes. All
+   * of it ran at `RESUME_WRITE_DELAY_MS` before act 八之一 existed, and none of
+   * it is faster for being throttled — the receiving sink's sleep is pure
+   * wall-clock the whole scenario pays. Measured: restoring it here takes the
+   * whole run from ~31s back to ~12s.
+   *
+   * The transfer must still be live at this point, and that is asserted rather
+   * than assumed: if the two axe passes ever ran long enough to let the file
+   * finish, every wait below would time out describing something else (the
+   * sender "never entering resume"), and the scene would have silently degraded
+   * into a plain uninterrupted transfer.
+   */
+  const beforeReset = await b.evaluate(`(() => {
+    if (window.__e2e.closed) return { closed: true, bytes: window.__e2e.bytes };
+    window.__e2e.writeDelayMs = ${RESUME_WRITE_DELAY_MS};
+    return { closed: false, bytes: window.__e2e.bytes };
+  })()`);
+  if (beforeReset.closed) {
+    throw new Error(
+      `the ${RESUME_BYTES}-byte transfer finished during the live progressbar scans ` +
+      `(${beforeReset.bytes} bytes written) — the forced transport gap below has nothing ` +
+      `left to interrupt. Raise SCAN_WRITE_DELAY_MS or shorten the scan.`,
+    );
+  }
+  ok(`the receiver's throttle went back to ${RESUME_WRITE_DELAY_MS}ms with `
+    + `${beforeReset.bytes}/${RESUME_BYTES} bytes written`);
+
   const pcCounts = {
     a: await a.evaluate("window.__e2ePeerConnections.length"),
     b: await b.evaluate("window.__e2ePeerConnections.length"),
@@ -726,12 +968,12 @@ async function mixedScenario(browser, base) {
     b.evaluate("(() => { const pc = window.__e2ePeerConnections.at(-1); pc.close(); pc.onconnectionstatechange?.(); return true; })()"),
   ]);
   await a.waitFor(
-    "document.querySelector('.xfer .status')?.textContent.includes('resume')",
+    `document.querySelector('${XFER.status}')?.textContent.includes('resume')`,
     "the sender to visibly enter resume",
     20_000,
   );
   await b.waitFor(
-    "document.querySelector('.xfer .status')?.textContent.includes('resume')",
+    `document.querySelector('${XFER.status}')?.textContent.includes('resume')`,
     "the receiver to visibly enter resume",
     20_000,
   );
@@ -741,7 +983,7 @@ async function mixedScenario(browser, base) {
     90_000,
   );
   await a.waitFor(
-    "!!document.querySelector('.xfer.ok') && !document.querySelector('.xfer .progress-bar')",
+    `!!document.querySelector('${XFER.ok}') && !document.querySelector('${XFER.progressBar}')`,
     "the resumed sender to complete",
     40_000,
   );
@@ -758,7 +1000,7 @@ async function mixedScenario(browser, base) {
       opens: window.__e2e.opens,
       closed: window.__e2e.closed,
       mismatch,
-      requests: document.querySelectorAll('.request').length,
+      requests: document.querySelectorAll('${RECEIVE.card}').length,
       peerConnections: window.__e2ePeerConnections.length,
       // 会话被传输中断关掉了（它没有前向恢复点），但**记录还在**，而且重开是一次
       // 显式动作而不是自动重连——自动重开会在对方那边再弹一次同意提示。
@@ -790,7 +1032,7 @@ async function mixedScenario(browser, base) {
     if (code !== sasA) throw new Error(`${who} changed SAS while resuming: ${code} vs ${sasA}`);
     await chooserHidden(tab, who, "after a byte-level file resume");
   }
-  ok(`a ${RESUME_BYTES}-byte file resumed exactly on rebuilt PeerConnections `
+  act("byte-resume", `a ${RESUME_BYTES}-byte file resumed exactly on rebuilt PeerConnections `
     + `(A ${pcCounts.a}→${senderPcs}, B ${pcCounts.b}→${resumed.peerConnections}), `
     + "keeping the transcript, the attachments and the SAS, and offering one explicit restart");
 
@@ -851,7 +1093,7 @@ async function mixedScenario(browser, base) {
   if (painted.light.bg === painted.dark.bg || painted.light.fg === painted.dark.fg) {
     throw new Error(`the header painted identically in light and dark: ${JSON.stringify(painted)}`);
   }
-  ok(`dark mode really repainted the header (bg ${painted.light.bg} → ${painted.dark.bg})`);
+  act("narrow-locale-theme", `dark mode really repainted the header (bg ${painted.light.bg} → ${painted.dark.bg})`);
   await setLocale(b, "en");
   await setTheme(b, "system");
   await setWideViewport(b, 390, 844);
@@ -865,7 +1107,7 @@ async function mixedScenario(browser, base) {
   //
   // 所以这里刻意把请求**挂着不答**就断链：那是唯一能让旧键还留在手上的时刻。
   await a.evaluate(pickOne("outlives-its-link.txt"));
-  await b.waitFor("!!document.querySelector('.request')", "a second consent card on the same link", 40_000);
+  await b.waitFor(`!!document.querySelector('${RECEIVE.card}')`, "a second consent card on the same link", 40_000);
   const sameLinkEdge = await b.evaluate(announcementOf);
   if (!sameLinkEdge || sameLinkEdge.includes(sasB)) {
     throw new Error(`a later edge on the SAME link re-read the code: ${JSON.stringify(sameLinkEdge)}`);
@@ -882,7 +1124,7 @@ async function mixedScenario(browser, base) {
   // （"leaves no timer or retry behind after an honoured leave" 及其邻居），
   // 不再靠在真浏览器里干等 90 秒来证明。
   await b.waitFor(`!document.querySelector('${HEAD}')`, "the announced departure to tear the held link down", 30_000);
-  await b.waitFor("!document.querySelector('.request')", "the pending consent to die with its link");
+  await b.waitFor(`!document.querySelector('${RECEIVE.card}')`, "the pending consent to die with its link");
 
   // 断开之后选择器立刻回来，而且回来的是同一个单动作卡片。
   await a.waitFor(`document.querySelectorAll('${OPEN_WORKSPACE}').length === 1`, "tab A's chooser to come back", 20_000);
@@ -898,7 +1140,7 @@ async function mixedScenario(browser, base) {
     || afterDisconnect.queued !== 0 || afterDisconnect.sas !== 0) {
     throw new Error(`tab A kept unified workspace state after Disconnect: ${JSON.stringify(afterDisconnect)}`);
   }
-  ok("Disconnect restored the one-action chooser and left no unified composer or attachment behind");
+  act("pending-consent-outlives-link", "Disconnect restored the one-action chooser and left no unified composer or attachment behind");
 
   // 同一个对端、同一条通道 → 第二条链路会算出**同一个** reveal 键。
   //
@@ -924,7 +1166,7 @@ async function mixedScenario(browser, base) {
       `generation) suppressed it: ${JSON.stringify(freshSpoken)} lacks ${sas2}`,
     );
   }
-  ok(`a fresh link to the same peer announced its own code (${sasB} → ${sas2}), same reveal key`);
+  act("fresh-link-new-sas", `a fresh link to the same peer announced its own code (${sasB} → ${sas2}), same reveal key`);
 
   await relinked.tab.evaluate("(() => { document.querySelector('.msgpanel .act button.btn-ghost').click(); return true; })()");
   await relinked.tab.waitFor(`!document.querySelector('${TEXT_CONSENT}')`, "the fresh link's text consent to close");
@@ -958,7 +1200,7 @@ async function mixedScenario(browser, base) {
   }
   await screenshot(a, "after-disconnect");
   await scanLiveState(a, "chooser restored after an explicit disconnect");
-  ok("one disconnect closed both lanes on both tabs and left the peer selectable again");
+  act("explicit-disconnect", "one disconnect closed both lanes on both tabs and left the peer selectable again");
 
   const errs = [...a.errors, ...b.errors].filter((e) => !/401|Failed to load resource/.test(e));
   if (errs.length) throw new Error(`console errors during the mixed link:\n    ${errs.join("\n    ")}`);
@@ -966,6 +1208,51 @@ async function mixedScenario(browser, base) {
 
   await browser.send("Target.closeTarget", { targetId: a.targetId });
   await browser.send("Target.closeTarget", { targetId: b.targetId });
+  return ledger;
+}
+
+/**
+ * The runner inventory. One scenario — and that number is exactly why the act
+ * ledger above exists.
+ *
+ * `page-shell.mjs` can count scenarios because it has four independent ones. A
+ * count of `1/1` here would survive `mixedScenario` being edited down to its
+ * first assertion, so the literal that actually protects this suite is
+ * `EXPECTED_ACT_COUNT`, and `runScenarios` checks both.
+ *
+ * Fixed literals, not `SCENARIOS.length` / `ACTS.length`: an array and its own
+ * length always agree, including after somebody deletes an entry from it.
+ */
+const EXPECTED_SCENARIO_COUNT = 1;
+const SCENARIOS = [mixedScenario];
+
+async function runScenarios(browser, base) {
+  let ran = 0;
+  const ledgers = [];
+  for (const scenario of SCENARIOS) {
+    // No catch here, deliberately: a swallowed scenario that still reached
+    // `ran++` is the failure this counter exists to make impossible.
+    ledgers.push(await scenario(browser, base));
+    ran++;
+  }
+  if (ran !== EXPECTED_SCENARIO_COUNT) {
+    throw new Error(`ran ${ran}/${EXPECTED_SCENARIO_COUNT} mixed-link scenarios — expected exactly ${EXPECTED_SCENARIO_COUNT}`);
+  }
+  for (const ledger of ledgers) {
+    // Order as well as membership: an act that moved is an act whose
+    // preconditions moved with it, and the resume/progressbar pair in
+    // particular only mean anything in the order they are written.
+    const drift = ACTS.findIndex((name, i) => ledger[i] !== name);
+    if (ledger.length !== EXPECTED_ACT_COUNT || drift !== -1) {
+      throw new Error(
+        `performed ${ledger.length}/${EXPECTED_ACT_COUNT} mixed-link acts` +
+        (drift === -1 ? "" : `, first divergence at #${drift + 1}: expected ${JSON.stringify(ACTS[drift])}, got ${JSON.stringify(ledger[drift])}`) +
+        `\n    performed: ${JSON.stringify(ledger)}` +
+        `\n    expected:  ${JSON.stringify([...ACTS])}`,
+      );
+    }
+    console.log(`\n${ledger.length}/${EXPECTED_ACT_COUNT} mixed-link acts performed, in order`);
+  }
 }
 
 async function main() {
@@ -995,7 +1282,7 @@ async function main() {
 
     session = await launchBrowser({ debugPort: DEBUG_PORT, keep: KEEP });
     console.log(`\nMixed link E2E against ${base}${target ? " (--url)" : " (self-started)"}`);
-    await mixedScenario(session.browser, base);
+    await runScenarios(session.browser, base);
     console.log("\n\x1b[32mMixed link E2E passed\x1b[0m\n");
   } catch (err) {
     fail("Mixed link E2E", err);

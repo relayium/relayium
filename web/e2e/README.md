@@ -17,6 +17,32 @@
 TypeError。现在同一份选择器由每次推送都跑的 `QueuedBatches.test.ts` 对着真渲染的组件
 钉着，DOM 一漂移，先红的是便宜的那条道次。
 
+现在这个模块里有三组（2026-08-29 / Phase 3D C3b-1 加了后两组）：
+
+| 常量 | 覆盖的界面 | 每次推送钉着它的用例 |
+|---|---|---|
+| `QUEUED` | 传输中再选文件排出来的队列卡 | `src/lib/QueuedBatches.test.ts` |
+| `RECEIVE` | 收文件的同意卡（含 `ReceiveActions` 那一行两颗按钮） | `src/lib/ReceiveActions.test.ts` |
+| `XFER` | 传输卡，以及它进行中才渲染的 `role="progressbar"` | `src/lib/workspace-orchestration.test.ts` |
+
+`RECEIVE` 里有一条必须读的注意事项：大批次内存提示一起来，主按钮和幽灵按钮的**含义
+互换**——`.btn-primary` 变成"拒绝"，唯一能往下走的是一个明确的"仍要接收"幽灵按钮。
+
+所以那两颗按钮的常量按**呈现角色**命名（`RECEIVE.primary` / `RECEIVE.ghost`），不按
+语义命名。早先它们叫 `accept` / `decline`，而那正是一个共享标识符**不能**做的事：在提示
+分支里 `RECEIVE.accept` 就是拒绝键，于是这个名字会在每个读者的编辑器里、恰好在他判断
+"这一下点得安不安全"的那一刻，写着与事实相反的话。`primary` / `ghost` 只说分支之外仍然
+为真的那部分——哪颗是哪颗——把"它到底干什么"逼回到调用点去确定。
+
+`mixed-link.mjs` 因此在它两次同意点击之前都先查 `RECEIVE.warning` 在不在，查到就当场
+报错而不是改点另一颗；两个分支的真实语义都由 `ReceiveActions.test.ts` 对着真渲染的标记
+双向钉住。
+
+`XFER.progressBar` 的**不存在**同样是有意义的，而且两个方向的含义相反：它只在
+`{#if !xf.done}` 里渲染，所以"卡片在、进度条不在"是 runner 证明批次进了终局的方式，
+"卡片在、进度条也在"是 runner 证明传输真的在进行中的方式——后者是活场景无障碍扫描唯一
+能断言到东西的时刻。
+
 四套都跑**默认产物**（`npm run build`）。它们的区别不是构建，是**对端和房间**：
 
 - `lan-transfer.mjs` —— 老对端在场时那条一次一模式的老路，`npm run test:e2e`。
@@ -49,8 +75,14 @@ TypeError。现在同一份选择器由每次推送都跑的 `QueuedBatches.test
 | Device Inbox：浏览器 → 服务器 → CLI → 落盘 | `test:device-inbox` | `device-inbox-e2e` |
 | LAN 房间里的统一 `link/1` 工作区（真 Go 服务器） | `test:e2e:mixed` | `mixed-link-e2e` |
 
-最后一行是 2026-08-29（Phase 3D C3a）新加的。**只剩 `lan-transfer.mjs` 还只在本地跑**
+最后一行是 2026-08-29（Phase 3D C3a）新加的，**已经并入 `main`**（`a703c56f`
+"Test unified mixed-link path in hosted CI"）。**只剩 `lan-transfer.mjs` 还只在本地跑**
 （而且跑不到底，见下）。
+
+`test` 作业自己带**五**条浏览器道次（a11y 扫描、页面外壳、配对码房间、设备发现、
+Device Inbox 入口），所以 `mixed-link` 才单开一个作业——它另外还要 Go 工具链。
+`web.yml` 里 `mixed-link-e2e` 旁边那句注释仍写着"四条"，那是加 `test:device-inbox-entry`
+之前的旧数字，以上表为准。
 
 把 `mixed-link` 托管起来，先要修掉它托管不了的原因：它以前要求人先手工起一台服务器。
 现在它自己起（`go-server.mjs`，和 `test:device-inbox` 共用的那套生命周期），所以它
@@ -136,20 +168,66 @@ cd server && RELAYIUM_ADDR=:8099 go run .
 这些那两套都在跑，跑在替代了老分叉的统一 `link/1` 界面上，而且 `code-room.mjs` 每次
 推送都在托管 CI 里跑。
 
-审计认定**真正搁浅的只有八条**当前独有断言，别处没有：
+审计当初认定搁浅的有**八条**。其中两条已经改了状态，所以现在是**六条搁浅、一条已迁移、
+一条已退役**：
 
-| # | 搁浅的独有断言 |
-|---|---|
-| 1 | 移动端无 picker 回退（没有 `showSaveFilePicker`） |
-| 2 | 桌面端另存为对话框被取消 |
-| 3 | 64 KiB 单条消息长度上限边界 |
-| 4 | 应答竞态（发起方还在接管通道时，应答方已经接受） |
-| 5 | 数据通道打开前 PeerConnection 就 `failed` |
-| 6 | 传输进行中 `role="progressbar"` 的活场景无障碍 |
-| 7 | 多页设备身份与焦点（一个浏览器的两页 + 第三台独立设备） |
-| 8 | 有界的中继池失败（池里发了凭据然后被丢掉） |
+| # | 独有断言 | 状态 |
+|---|---|---|
+| 1 | 移动端无 picker 回退（没有 `showSaveFilePicker`） | 搁浅 |
+| 2 | 桌面端另存为对话框被取消 | 搁浅 |
+| 3 | SCTP 协商出来的单条消息上限边界（RFC 8841 默认值 64 KiB） | 搁浅 |
+| 4 | 应答竞态（发起方还在接管通道时，应答方已经接受） | **已退役**，见下 |
+| 5 | 数据通道打开前 PeerConnection 就 `failed` | 搁浅 |
+| 6 | 传输进行中 `role="progressbar"` 的活场景无障碍 | **已迁移**（C3b-1） |
+| 7 | 多页设备身份与焦点（一个浏览器的两页 + 第三台独立设备） | 搁浅 |
+| 8 | 有界的中继池失败（池里发了凭据然后被丢掉） | 搁浅 |
 
-这八条才是真实的回归暴露面，也正是下面的迁移必须搬过去的东西。尾巴里的其余部分可以
+**第 3 条写的是 SCTP，这不是抠字眼。** 这个产品里有两个互不相干的 64 KiB，点错名字就会
+把修复引到错误的模块去。这一条是**传输层**的限制：按 RFC 8841 协商出来的
+`a=max-message-size`，从 `RTCPeerConnection.sctp.maxMessageSize` 读，对端什么都不通告时
+默认就是 65 536——所以一个 Android WebView 对端能把桌面发送方整个拽下来，文件流也因此
+必须分片（`src/lib/wire-limit.ts` 的 `CONSERVATIVE_MAX_MESSAGE_BYTES`）。它**不是**
+`TEXT_MAX_BYTES`，那是产品自己给单条消息定的 64 KiB 上限（`src/lib/text-wire.ts`），
+存在的意义是"再大就算文件"，而不是把用户当成一整块的东西悄悄切开。两者在边界上连数值都
+对不上：64 KiB 明文封出来是 65 557 字节的帧，塞不进一条协商成 65 536 的通道。
+`lan-transfer.mjs` 的 `smallMessageCapScenario` 独有的是传输那一半——它改写 SDP，在真
+Chromium 上强制协商出 64 KiB，然后证明旧的 192 KiB 分块帧会被拒、装得下的那个会被收。
+分片本身的算术已经有确定性用例（`src/lib/transfer-fragmentation.test.ts`）；搁浅的是协商。
+
+**第 4 条是退役，不是迁移，证据如下（精确到用例名）。** `messageDefaultRaceScenario`
+把那次线上故障强制复现：A 的 `getStats()` 路径采样被挂住时，B 自动接受并立刻发出第一条
+消息，两个帧都落在"通道已开、A 的 lane 还没挂上处理器"的窗口里。这个窗口现在在结构上
+已经关掉了——传输层会把挂上之前到达的帧捕获下来，挂上之后再按序回放——而且这件事由每次
+推送都在 `npm test` 里跑的确定性用例钉着：
+
+- `src/lib/mixed-session.test.ts` —— "replays a text request captured before lane
+  attachment"（REQUEST 在 `attach` 之前到达，回放后状态是 `incomingRequest`）、
+  "fails quickly instead of replaying into a declined lane capture sink"、
+  "re-attaches both lanes to a replaced transport before replaying its capture"
+  （换传输时两条 lane 都先接管，才回放第一个被捕获的帧）。
+- `src/lib/peer-link.test.ts` —— "holds an inbound offer and replays the frames
+  that chased it, in order"，以及那条断言 `{ file: [1, 2], text: [9] }` 按序落到替换
+  通道上、且同一帧不会被回放两次进 codec 的用例。
+
+**顺序**就是这条规矩的全部内容，而上面这些用例直接断言顺序。
+
+理由的另一半在于那一幕的**手法**，而这一半才是"退役"而非"缓办"的依据。它不是去等那次
+竞态，是**造**出来的：把 `RTCPeerConnection.prototype.getStats` 换成一个由用例手动放行的
+promise。这招当年管用，是因为路径采样正好卡在"通道已开"和"lane 已挂上"之间。现在不是了。
+`src/lib/mixed-session.svelte.ts` 的 `onLinkChange` 里，发布链路（`publishedLink = link`）、
+两条 lane 都挂上（`file.attach(link)`、`text.attach(link)`，紧跟着一句"任一通道没有
+`onmessage` 就抛"）、把捕获到的帧全部回放——这些**全是同步的**——之后才调用
+`observePath(link)`，而它只是把 `conn.path()` 采样发出去就返回，并不等它。`conn.path()`
+就是 `pc.getStats().then(classifyPath)`（`src/lib/webrtc-core.ts`），所以现在挂住
+`getStats`，挂住的是一个早已被它本该领先的那次挂载超过去的诊断调用。注入点还在，它背后
+那个窗口没了。
+
+把话说准：统一工作区**是可以**为这条写一幕的。`link/1` 没有任何东西挡着，也**不**需要
+把删掉的对端卡片消息控件加回来。没了的是那根**杠杆**——再没有一个能按需撑开这个间隙的
+钩子，于是迁过来的那一幕只能去赌计时，而当年那次 `getStats` 挂起正是为了不赌计时才写的。
+加上上面那些每次推送都跑、且直接断言这条性质的确定性用例，所以这是退役，不是丢失。
+
+剩下这六条才是真实的回归暴露面，也正是下面的迁移必须搬过去的东西。尾巴里的其余部分可以
 **退役而不是移植**——已经有托管套件在断言它们了。
 
 ### 迁移方向（分阶段）
@@ -176,17 +254,96 @@ cd server && RELAYIUM_ADDR=:8099 go run .
 同意），不是那条退休的分叉。它们从 `STRIP_LINK_CAP` 上摘下来，改走统一 `link/1` 工作区：
 `.open-workspace`，然后是工作区自带的草稿框和 `.attach-file` / `.attach-folder`。
 `mixed-link.mjs` 驱动的就是这套界面。把独有断言搬进一套没人跑的套件是挪问题，不是解决
-问题，所以"把 `mixed-link` 托管起来"先做，而且**已经做完**（C3a，2026-08-29）：
-`mixed-link-e2e` 作业每次推送和 PR 都跑它现有的那一幕。搬那六条是 C3b，它的起点因此
-是一条绿的、托管着的基线，而不是一套自己的排队断言已经陈旧了好几周的套件。
+问题，所以"把 `mixed-link` 托管起来"先做，而且**已经并入 `main`**（C3a，2026-08-29，
+`a703c56f`）：`mixed-link-e2e` 作业每次推送和 PR 都跑它现有的那一幕。把剩下的搬过去
+是 C3b，它的起点因此是一条绿的、托管着的基线，而不是一套自己的排队断言已经陈旧了好几周
+的套件。
+
+**C3b-1 —— 活进度条，只做文件那条通道。** C3b 的第一刀只搬**第 6 条，别的一条都不动**。
+它在每个值得记录的意义上都是一条"只涉及文件"的条目：
+
+- *搬了什么*：活的 `role="progressbar"` 断言，进到 `mixed-link.mjs` 现有那一幕 5 MiB
+  续传里，成为新的 `live-progressbar` act。它跑在唯一存在"传输进行中"这个状态的窗口里
+  ——接收方已经落了两个 durable chunk 之后、强制掐断两条 PeerConnection **之前**。
+  先证明主体确实在（每个方向一条进度条、`role="progressbar"`、`aria-labelledby` 指到卡片
+  自己那个标题 id `xfer-label-{send,recv}`、`0 ≤ aria-valuenow ≤ 100`、卡片还没进终局），
+  然后才用 `scanLiveState` 以 `XFER.card` 为 context 扫。一个 context 什么都没匹配到的
+  `axe.run` 报的是零违规——所以少了这一步存在性证明，这一 act 会永远打印"axe clean"。
+- *这个窗口是怎么撑开的，以及它什么时候合上*：接收侧桩 sink 每写一个 192 KiB 分块要
+  睡一觉，而这个睡眠现在有**两个**值，因为这一幕里有两件预算差一个数量级的活。
+  `SCAN_WRITE_DELAY_MS`（1000ms）只服务上面这一 act：等到两个分块之后还剩约 25 次写，
+  按旧的 20ms 只给出约 500ms——够那一次强制掐断（一个 CDP 往返），远不够在两个标签页上
+  注入并跑完 axe，传输会先跑完，这一 act 就会以"卡片已进终局"失败，而不是给出一个无障碍
+  结论。**扫完立刻**换回 `RESUME_WRITE_DELAY_MS`（20ms，也就是这一 act 出现之前这一幕
+  一直在跑的那个值），换回的位置刻意排在读 PeerConnection 计数和强制掐断**之前**：剩下
+  约 25 次写按 1000ms 睡就是纯粹的墙钟时间，谁也没有因此更安全。第一版把 1000ms 一路留到
+  底，把这一幕从约 10 秒拖成了约 31 秒——一次绿跑里完全看不出来的回归，所以换回的**顺序**
+  由 `go-server.test.mjs` 钉着，不是靠一行注释。换回那一步还顺手断言传输此刻确实还活着：
+  要是哪天两次 axe 真的跑到把文件跑完，下面每一条等待都会以别的名义超时，而这一幕会悄悄
+  退化成一次没被打断的普通传输。
+- *没搬什么*：第 1、2、3、5 条一个字没动，仍然搁浅；第 7、8 条仍归阶段三。逐字节续传和
+  "真的换了 PeerConnection"那两组断言原样保留——这一 act 是**插进**那一幕的，不是替掉它
+  的任何一部分。
+- *这次改动碰了哪些文件*：只有测试和文档——`web/e2e/mixed-link.mjs`、
+  `web/e2e/dom-contracts.mjs`、`web/e2e/go-server.test.mjs`、
+  `web/src/lib/ReceiveActions.test.ts`、`web/src/lib/workspace-orchestration.test.ts`、
+  本文件和 `docs/TESTING.md`。产品源码、workflow、依赖、原生和 ops 一个都没动。
+- *顺手加的反空转机制*：一幕不等于一条断言。`mixed-link.mjs` 现在记一份**冻结的逐 act
+  执行台账**——十七个具名 act，成员、顺序和一个**字面量**计数（`EXPECTED_ACT_COUNT`，
+  绝不是 `ACTS.length`）三样都查——外加一个字面量 `EXPECTED_SCENARIO_COUNT`。否则一个被
+  改到只剩第一条断言的 run 照样会报 `1/1`。`e2e/go-server.test.mjs` 钉住这个形状，也钉住
+  那次活扫描确实落在"接受"和"强制掐断"之间。
+- *共享选择器*：同意卡和传输卡现在和 `QUEUED` 一样，只在 `e2e/dom-contracts.mjs` 里写一遍
+  （`RECEIVE`、`XFER`），由 `ReceiveActions.test.ts` 对着真渲染出来的标记、
+  `workspace-orchestration.test.ts` 对着 `App.svelte` 真实的分支结构各钉一遍——这两条每次
+  推送都跑，浏览器道次不是。`RECEIVE` 还记下了那张卡片唯一的坑：大批次内存提示一起来，
+  两颗按钮的含义**互换**，`.btn-primary` 变成"拒绝"——所以它们按呈现角色叫
+  `primary` / `ghost`，不叫 `accept` / `decline`，runner 也在它两次同意点击之前都先查
+  这个提示在不在。
+
+**验证状态：本地已跑绿；尚未在托管 CI 里观察到。** 2026-08-30 由作者在本地 macOS
+worktree 上记录，服务器是这套用例自起的 Go 服务器（`127.0.0.1:8124`），浏览器是无头
+Chrome：
+
+| 命令 | 结果 |
+|---|---|
+| `npm run check` | 548 个文件，**0 错误 0 警告**，0 个有问题的文件 |
+| `npx vitest run`（全量） | **4370 通过**，3 跳过，0 失败（233 个文件） |
+| `npx vitest run`（这一刀碰的四个文件） | **176 通过**——`e2e/go-server.test.mjs` 79 条，`ReceiveActions` / `workspace-orchestration` / `QueuedBatches` 合计 97 条 |
+| `npm run build` | 成功；写出 12 个按路由的 SPA 外壳 |
+| `npm run test:e2e:mixed` | **17/17 act 按序执行**，连跑五次——12.05s、11.24s、12.41s、13.01s、12.69s（换回节流之前是约 31s） |
+
+之前记为"没跑过"的那次对抗性变异现在跑过了，而且跑的正是要紧的那一个：把 `XFER.bar`
+指向一个不存在的类名——也就是"进度条在传输中不再渲染"的形状——真浏览器那一跑**在这一
+act 上**红，报的是
+
+> no in-flight progress bar in the send card on tab A: the transfer is already
+> terminal, or the bar left its `{#if !xf.done}` branch. Either way this act has
+> no live subject left to scan.
+
+而不是一句空洞的"axe clean"。另外三个便宜的源码变异也照样跑了，每一个都被一条指着自己
+原因的消息抓住：删掉那次节流换回（"nothing restores the throttle after the scan"）、
+把 `RECEIVE.primary` 改回 `accept`（`go-server.test.mjs` 与 `ReceiveActions.test.ts`
+一共红四条）、把 `web.yml` 的道次数改回"四"（"the mixed-link job's stated reason names
+the wrong lane count"）。
+
+有一个数值值得留下来，因为它正是"换回节流"而不是"调低 `SCAN_WRITE_DELAY_MS`"的依据：
+五次跑到换回那一刻，接收方写下的字节数都恰好是 **393,216 / 5,242,953**，也就是它起步时
+那两个 durable chunk 一个没多。两次 axe 都塞进了**第一次** 1000ms 睡眠里，所以留给强制
+掐断的跑道仍是完整的约 25 次写 × 20ms ≈ 500ms——正是这一幕原本就验过的预算。
+
+这里**不**主张的事：它没有在托管 CI 里跑过，也没有任何独立验收记录在案。所以第 6 条现在
+是**已迁移、本地已绿**；上表仍写"已迁移"而不是"已托管"就是这个原因，改写它的是 `main`
+上第一次真正跑绿的 `mixed-link-e2e`。
 
 **阶段三：身份，以及有界的中继失败。** 第 7、8 条放到最后，因为两者都需要前面用不到的
 搭台：多页设备身份要在一个浏览器的两页之外再加一个独立上下文；有界中继池失败要那份
 池形状的 `/api/ice` 响应、一个连不上的 TURN 主机，以及一个真的会走完的探测预算。
 
 **阶段四：删掉 `lan-transfer.mjs` 和它的 `test:e2e` npm 脚本。** 只在托管 `main` 带着
-阶段一到三全绿之后。删早了会丢掉那八条；而留着比没用更糟——一个永远退不出 0 的脚本，
-教会所有人忽略一次红。
+阶段一到三全绿之后。删早了会丢掉仍然搁浅在里面的那几条——C3b-1 之后是六条，因为第 6 条
+已经搬走、第 4 条已按上面记录的确定性证据退役；而留着比没用更糟——一个永远退不出 0 的
+脚本，教会所有人忽略一次红。
 
 两件这次迁移**不许**做的事：不许把删掉的控件加回来，不许加降级开关。真正只属于老路的
 那部分，缩成了一条关于"不存在"的断言——不通告 `link/1` 的对端拿不到任何控件，并且被
@@ -390,20 +547,44 @@ cd web    && node e2e/mixed-link.mjs --url http://localhost:8098
 8. **文件同意可以拒绝**，而链路**和会话**都活下来——拒绝一批文件不等于断开一条链路。
 9. **两条通道同时可用**：打字打到一半时附件控件仍然可用、发送键仍然可按；正文**逐字节
    一致**（比 UTF-8 十六进制，含 tab、空行、CJK、阿拉伯语和星平面 emoji）。
-10. **真断线后按字节续传**：强制换掉 PeerConnection（并断言真的换了），5 MiB 文件按
+10. **传输进行中的活进度条**（2026-08-29 / Phase 3D C3b-1，从 `lan-transfer.mjs`
+    搬来的独有断言第 6 条）：在 5 MiB 那次传输的**中途**——接收方已经落了两个 durable
+    chunk、强制掐断还没发生——先证明主体在（发送与接收两侧各一条 `.progress-bar`、
+    `role="progressbar"`、`aria-labelledby` 指到卡片自己那个标题 id
+    `xfer-label-{send,recv}` 且解析得出非空名字、`0 ≤ aria-valuenow ≤ 100`、卡片还没
+    进终局），然后才以 `XFER.card` 为 context 扫一次 axe。顺序不能反：一个 context
+    什么都没匹配到的 `axe.run` 报的是零违规，看起来和"干净"一模一样。
+11. **真断线后按字节续传**：强制换掉 PeerConnection（并断言真的换了），5 MiB 文件按
     durable checkpoint 续完、逐字节校验、不重新同意、SAS 不变；会话被传输中断关掉但
     **记录还在**，而且重开是一颗显式的 `.restart`，不是自动重连。
-11. **320/390px、中英文与深色**：三种组合下头部和附件行都不溢出、SAS 和断开按钮都在
+12. **320/390px、中英文与深色**：三种组合下头部和附件行都不溢出、SAS 和断开按钮都在
     视口里、断开按钮留在行尾、粘性头部有不透明背景，每一格都跑一次 axe。
     `--screenshots` 会把每一格存成 PNG，但每条几何规矩下面都有真断言钉着。运行时维护
     语言目前都为 LTR；若恢复 RTL 语言，必须先恢复逻辑属性镜像的真实运行时门禁。
-12. **一次活过了自己那条链路的待决同意**：挂着不答就断链，再连回同一个对端——reveal
+13. **一次活过了自己那条链路的待决同意**：挂着不答就断链，再连回同一个对端——reveal
     去重键（peer+lane，不含世代）算出来是同一个，所以新链路的第一条边必须念它**自己**
     那串新码。顺带钉住：断开之后统一草稿框和附件不许留在屏幕上。
-13. **显式断开收干净**：一次点击关掉两条通道，两个标签页的头部、队列和输入框都消失，
+14. **显式断开收干净**：一次点击关掉两条通道，两个标签页的头部、队列和输入框都消失，
     对端也跟着收——然后那个对端重新可选，而且回来的仍然是那一个动作。
 
 最后和默认那一套一样：两页都不许有 console 错误。
+
+### 一幕不等于一条断言：冻结的逐 act 执行台账
+
+上面这十四条被拆成**十七个具名 act**（一条编号里含两个 act 的地方，是因为它们各自
+能单独失效）。每个 act 在自己的断言全部通过之后调一次 `act(name, message)`——它同时
+负责打印那行 ✓ 和记台账，所以"报告成功"和"记录为执行过"是同一句话，拆不开。
+
+跑完 `runScenarios()` 三样一起查：成员、**顺序**，以及一个字面量
+`EXPECTED_ACT_COUNT = 17`。这里必须是字面量，不能写 `ACTS.length`——数组和它自己的长度
+在有人删掉一项之后仍然彼此同意，于是一次少了一幕的运行会干干净净地报 `16/16`。同样的
+道理，`EXPECTED_SCENARIO_COUNT = 1` 单独存在，但它保护不了什么：这一套只有一幕，一个
+被改到只剩第一条断言的 `mixedScenario` 照样报 `1/1`。真正起作用的是 act 那个数。
+
+`e2e/go-server.test.mjs` 对着这个 runner 的**源码**钉住整个形状（每次推送都跑）：
+冻结的 act 名单与顺序、两个字面量计数、`ran++` 和场景调用之间没有 `catch`、活进度条那
+一扫确实落在"接受"和"强制掐断"之间，以及这个 runner 手里不再有任何一份 `.request` /
+`.xfer` / `.progress-bar` 的私抄。
 
 ---
 
@@ -495,9 +676,13 @@ readySelector 而不是固定 sleep——固定 sleep 在快机器上浪费时�
 - `lan-transfer.mjs`：文件同意卡（accept 之前）、传输进行中（`role="progressbar"`
   唯一活着的时候）、掉线续传完成后的终态、消息会话（`role="log"` + 输入框）。
   **这四格挂在该脚本的尾巴上，眼下随尾巴一起不执行**（见上面的"现状"）——所以这四个
-  真场景的无障碍覆盖目前是空的，迁移完成前不要把它算进任何"已覆盖"的口径。
+  真场景的无障碍覆盖目前是空的，迁移完成前不要把它算进任何"已覆盖"的口径。其中
+  "传输进行中"那一格已经在 C3b-1 搬进 `mixed-link.mjs`（下一条），并且**本地跑绿过、
+  也做过删主体的对抗性变异**（见上面的验证状态表）；剩下的三格仍然是空的。
 - `mixed-link.mjs`（CI，`mixed-link-e2e` 作业）：统一工作区头部、390px 下的 40 文件
-  同意卡、文本通道同意后两条通道都活着的状态。
+  同意卡、文本通道同意后两条通道都活着的状态，以及 **C3b-1 新加的**"5 MiB 传输真的
+  在进行中"那一格——两个方向各扫一次，context 收在 `XFER.card` 上，而且扫之前先证明
+  那条 `role="progressbar"` 确实在。
 - `code-room.mjs`（CI）：配对码房间里的统一工作区（390px）、切换到中文后的同一工作区，
   以及文件同意卡。归档阿拉伯语的 RTL 渲染由静态模板与 axe 目标继续覆盖；运行时恢复
   RTL 语言前，需要另行补回工作区逻辑属性镜像门禁。
