@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mount, unmount, flushSync } from "svelte";
 
 import ReceiveActions from "./ReceiveActions.svelte";
-import { loadLang, messages } from "./i18n.svelte";
+import { loadLang, messages, setLang } from "./i18n.svelte";
 import { LARGE_DOWNLOAD_WARN_BYTES } from "./filesink";
 // The strings `web/e2e/mixed-link.mjs` clicks in a real browser. Import, do not
 // retype — see the last describe block for why the primary/ghost pair in
@@ -80,20 +80,26 @@ const ANDROID_UA =
   "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.0 Mobile Safari/537.36";
 
 let restoreUA: () => void;
+/** `setLang` mutates module state that outlives one test, so the one case that
+ *  renders in zh puts it back rather than leaving the rest of the file to
+ *  depend on the order it happens to run in. */
+let restoreLang: () => Promise<void>;
 
 beforeEach(() => {
   onAccept = vi.fn();
   onReject = vi.fn();
   restorePickers = () => {};
   restoreUA = () => {};
+  restoreLang = async () => {};
 });
 
-afterEach(() => {
+afterEach(async () => {
   if (app) unmount(app as never);
   app = null;
   target?.remove();
   restorePickers();
   restoreUA();
+  await restoreLang();
 });
 
 describe("ReceiveActions 实时接收的内存提示", () => {
@@ -353,6 +359,66 @@ describe("the receive selectors the browser runner clicks", () => {
     ghost.click();
     flushSync();
     expect(onAccept).toHaveBeenCalledTimes(1);
+  });
+
+  // The exact state `mixed-link.mjs`'s mobile act reads immediately before its
+  // accept click, asserted here against real rendered markup on every push.
+  //
+  // The browser act cannot check the strings themselves — it runs in whichever
+  // of the two maintained languages the run booted in, so it matches a
+  // Downloads-promising pattern and refuses the picker sentence. That pairing is
+  // only meaningful while the two sentences are genuinely different and the
+  // download one genuinely says Downloads, which is a copy fact and belongs
+  // here, in the lane that runs without a Go server and a headless Chrome.
+  it("phone branch: one non-retry save hint promising Downloads, and no warning", async () => {
+    restoreUA = stubUA(ANDROID_UA);
+    await mountActions({ canStream: true, files: flat(SMALL) }); // both picker properties present
+
+    expect(el(RECEIVE.warning), "a 1 MiB flat batch must not raise the memory warning").toBeNull();
+    expect(target.querySelectorAll(RECEIVE.saveHint), "exactly one save hint").toHaveLength(1);
+    expect(el(RECEIVE.retryHint), "nothing was cancelled, so this is not the retry variant").toBeNull();
+    expect(el(RECEIVE.saveHint)!.textContent!.trim()).toBe(t().recvSaveHintDownload);
+
+    // The two directions the runner's regex pair asserts, on the actual copy.
+    expect(t().recvSaveHintDownload).toMatch(/downloads/i);
+    expect(t().recvSaveHintPicker).not.toMatch(/downloads/i);
+    expect(t().recvSaveHintDownload, "the phone hint became the picker sentence")
+      .not.toBe(t().recvSaveHintPicker);
+
+    // And the button it then clicks still accepts on this branch.
+    (el(RECEIVE.primary) as HTMLButtonElement).click();
+    flushSync();
+    expect(onAccept).toHaveBeenCalledTimes(1);
+    expect(onReject).not.toHaveBeenCalled();
+  });
+
+  it("phone branch: the same hint in Simplified Chinese, the other maintained language", async () => {
+    restoreUA = stubUA(ANDROID_UA);
+    // Armed BEFORE the switch, not after: `setLang` mutates module state and
+    // `document.documentElement` before its promise settles, so a registration
+    // that waits for it to resolve leaves the whole rest of the file running in
+    // zh if it rejects. Restoring a language that was never switched is free.
+    restoreLang = () => setLang("en");
+    // Mounted under zh from the start: `lang()` is read when the component
+    // renders, so switching afterwards proves nothing about what a zh user sees.
+    await setLang("zh");
+    restorePickers = stubPickers(true);
+    target = document.createElement("div");
+    document.body.appendChild(target);
+    app = mount(ReceiveActions, {
+      target,
+      props: { files: flat(SMALL), total: SMALL, retry: false, onAccept, onReject },
+    });
+    flushSync();
+
+    const hint = el(RECEIVE.saveHint)!.textContent!.trim();
+    expect(hint).toBe(messages.zh.recvSaveHintDownload);
+    // The runner's pattern is `/downloads|下载/i` against `/where to save|选择保存位置/i`.
+    // Both halves have to hold in both languages or the browser assertion is
+    // language-dependent in a way nothing would report.
+    expect(hint).toMatch(/下载/);
+    expect(hint).not.toMatch(/选择保存位置/);
+    expect(messages.zh.recvSaveHintPicker).toMatch(/选择保存位置/);
   });
 
   it("names the card the runner scopes all of these to", async () => {

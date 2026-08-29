@@ -156,20 +156,59 @@ and teardown are all driven by those two — on the unified `link/1` surface tha
 replaced the fork, and `code-room.mjs` runs in hosted CI on every push.
 
 The audit originally listed **eight** current unique assertions as stranded.
-Five of those rows have since changed status, so the live count is **three
-stranded, two hosted migrations, one local migration awaiting hosted CI, and two
-retired**:
+Six of those rows have since changed status, so the live count is **two
+stranded, three hosted migrations, one local migration awaiting hosted CI, and
+two retired**:
 
 | # | Unique assertion | Status |
 |---|---|---|
-| 1 | Mobile no-picker fallback (no `showSaveFilePicker`) | stranded |
+| 1 | Mobile no-picker fallback (the product opens no picker on a phone) | **migrated locally; awaiting hosted CI** (C3b-6) |
 | 2 | Desktop save-picker cancellation | **hosted migration** (C3b-4, exact-main `daadc94a`) |
-| 3 | SCTP negotiated max-message-size boundary (RFC 8841 default, 64 KiB) | **migrated locally; awaiting hosted CI** (C3b-5) |
+| 3 | SCTP negotiated max-message-size boundary (RFC 8841 default, 64 KiB) | **hosted migration** (C3b-5, exact-main `b08457d6`) |
 | 4 | Response race (responder accepts while the initiator is still taking ownership) | **retired** — see below |
 | 5 | Pre-open PeerConnection failure (`failed` before the DataChannel opens) | **retired** — see below |
 | 6 | Live `role="progressbar"` accessibility during an in-flight transfer | **hosted migration** (C3b-1, exact-main `129e4cd`) |
 | 7 | Multi-page device identity and focus (two pages of one browser plus a third device) | stranded |
 | 8 | Bounded relay-pool failure (credentials issued from the pool, then discarded) | stranded |
+
+**Row 1's wording is corrected here, and the correction matters — the retired
+runner was stronger than the audit's phrasing suggested.** The audit named it
+"no `showSaveFilePicker`", which reads as a browser without the API.
+`lan-transfer.mjs`'s `mobileNoPickerScenario` did not arrange that. On exact-main
+its `WORKING_PICKERS` block (lines 317-329) installed a *working*
+`showSaveFilePicker` and a *working* `showDirectoryPicker`, both resolving to
+handles whose `createWritable()` really swallowed and counted bytes, spoofed an
+Android user agent, and then asserted zero picker calls, zero bytes through a
+handle, and a byte-exact Blob delivered by the browser download alone. That is
+already the *proactive* rule — `pickersAllowed()` refusing the File System Access
+branch on a phone **even when both pickers are present and working**, with the
+consent card promising the Downloads directory before the user commits. C3b-6
+**carries that proof forward**; it does not replace a weaker assertion, and
+nothing here should be read as saying the old scenario proved less than it did.
+
+What C3b-6 changes is where that proof lives and how tightly it is instrumented.
+It migrates from the retired local-only runner — which is not wired into hosted
+CI and has not executed for weeks — onto the current unified hosted `link/1`
+journey, so the rule is proved on the pipeline the product actually ships rather
+than on the LAN fork that surface replaced. On top of the migrated core it adds:
+the two picker branches counted apart instead of through one shared counter, so a
+run that opened the directory picker cannot pass as "the save picker was never
+opened"; an explicit runtime usability probe that spends and then clears each
+picker before the act relies on their silence, rather than leaving usability as
+an unchecked property of the stub; a maintained-language rendered-copy contract
+in `ReceiveActions.test.ts` standing behind the runner's language-agnostic hint
+pattern; restoration of all four replaced browser boundaries and the user agent
+by identity, in a `finally` that cannot throw; a name-scoped terminal card
+so this new success cannot satisfy a later act's completion wait; and a
+post-accept wait on the *first decisive* save boundary — one captured download
+**or** any picker call — whose counters are judged before the slower terminal
+and byte-exact checks, so a lifted mobile gate produces a prompt red naming the
+picker branch and the bytes its handle took instead of a 60-second timeout on a
+download that was never coming. The absent-API
+case the audit's wording described, and the same mobile gate at the `filesink`
+layer, both remain deterministically covered by `src/lib/filesink.test.ts`; what
+only a browser can supply is that the live pipeline honours it end to end. See
+below for exactly what this does and does not prove.
 
 **Row 3 says SCTP, and the distinction is not pedantic.** There are two unrelated
 64 KiB numbers in this product and naming the wrong one sends the repair to the
@@ -187,8 +226,9 @@ fit a channel that negotiated 65 536. What `lan-transfer.mjs`'s
 SDP to force a real 64 KiB negotiation in a real Chromium and proves the old
 192 KiB chunk frame is refused while a fitted one is accepted. The fragmentation
 arithmetic behind it is already deterministic
-(`src/lib/transfer-fragmentation.test.ts`); C3b-5 moves the previously stranded
-negotiation into the existing real-Chromium mixed journey, as recorded below.
+(`src/lib/transfer-fragmentation.test.ts`); C3b-5 moved the previously stranded
+negotiation into the existing real-Chromium mixed journey and is now hosted on
+exact-main `b08457d6`, as recorded below.
 
 **Row 4 is retired rather than migrated, and here is the exact evidence.**
 `messageDefaultRaceScenario` forced the reported LAN failure: B auto-accepts and
@@ -334,10 +374,11 @@ recording:
   file finish, every wait below it would time out blaming something else, and the
   scene would have degraded silently into a plain uninterrupted transfer.
 - *What did not move in C3b-1:* uniques 1, 2, 3 and 5 were untouched by that
-  slice; #5 has since retired on the deterministic evidence above and #2 moved
-  in C3b-4, while #3 remains stranded and 7/8 remain Stage 3. The byte-exact resume and replacement-PeerConnection
-  assertions were preserved unchanged — the act was inserted into that scene, not
-  in place of any of it.
+  slice. All four have since changed status: #5 retired on the deterministic
+  evidence above, #2 moved in C3b-4, #3 in C3b-5 and #1 in C3b-6, so 7/8 are the
+  only rows left and both are Stage 3. The byte-exact resume and
+  replacement-PeerConnection assertions were preserved unchanged — the act was
+  inserted into that scene, not in place of any of it.
 - *What the diff touches:* test and documentation files only —
   `web/e2e/mixed-link.mjs`, `web/e2e/dom-contracts.mjs`, `web/e2e/go-server.test.mjs`,
   `web/src/lib/ReceiveActions.test.ts`, `web/src/lib/workspace-orchestration.test.ts`,
@@ -345,7 +386,8 @@ recording:
   dependency, native or ops file changed.
 - *Anti-vacuity, added with it:* one scenario is not one assertion.
   `mixed-link.mjs` introduced a frozen per-act execution ledger with seventeen
-  named acts (C3b-4 adds the eighteenth and C3b-5 the nineteenth), checked for membership, order and a **literal** count
+  named acts (C3b-4 adds the eighteenth, C3b-5 the nineteenth and C3b-6 the
+  twentieth), checked for membership, order and a **literal** count
   (`EXPECTED_ACT_COUNT`, never `ACTS.length`) — alongside a literal
   `EXPECTED_SCENARIO_COUNT`. A `1/1` scenario count would otherwise be reported
   by a run edited down to its first assertion. `e2e/go-server.test.mjs` pins that
@@ -406,8 +448,8 @@ is now a hosted migration rather than only a locally green one.
 **C3b-2 did not migrate another `lan-transfer.mjs` unique.** Its U1 assertion
 pins the initiator-only, one-shot same-PC ICE restart, and U3a pins the shared
 empty stored-receive save options. Both are adjacent deterministic resilience
-contracts. They did not move rows 2 or 3; row 2 moved later in C3b-4, while real
-Chromium SCTP max-message-size negotiation remains stranded.
+contracts. They did not move rows 2 or 3; row 2 moved later in C3b-4 and row 3 in
+C3b-5.
 
 **C3b-4 — desktop picker cancellation, inside the existing hosted journey.**
 Unique #2 now reuses the 5 MiB transfer that already proves exact bytes,
@@ -471,12 +513,147 @@ absent-advertisement negotiation and the capped replacement journey, not a
 second runtime implementation. No product source, workflow, package or timing
 constant changed.
 
-**Verification status: implemented and green locally; awaiting the hosted
-`mixed-link-e2e` lane on main.** Until that exact hosted run passes, row 3 is a
-local migration rather than hosted coverage. The author run recorded 194/194 in
-the focused four-file Vitest set, zero `svelte-check`/TypeScript diagnostics, a
-successful production build, and the real self-started Chromium journey at
-19/19 acts.
+**Verification status: green locally and hosted on exact-main `b08457d6`.** The
+author run recorded 194/194 in the focused four-file Vitest set, zero
+`svelte-check`/TypeScript diagnostics, a successful production build, and the
+real self-started Chromium journey at 19/19 acts. The subsequent `mixed-link-e2e`
+run on exact-main `b08457d6` passed, so unique #3 is hosted coverage rather than
+a local migration awaiting CI.
+
+**C3b-6 — the phone opens no save picker at all, inside the same hosted
+journey.** Unique #1 moves onto the same live `link/1`, between the
+byte-identical text act and the desktop picker act, as the twentieth entry in the
+act ledger — thirteenth in run order, with seven acts after it. For one
+96 KiB deterministic file the receiver tab is given an Android user agent and
+platform through `Emulation.setUserAgentOverride`, and four browser boundaries are
+replaced at once: `showSaveFilePicker`, `showDirectoryPicker`,
+`URL.createObjectURL` and `HTMLAnchorElement.prototype.click`.
+
+**Both pickers installed for it genuinely work, and that is the whole
+anti-vacuity argument.** They resolve to handles whose `createWritable()` really
+accepts bytes and counts them, and the act *proves* that at runtime before it
+relies on their silence — one call each and exactly eight bytes swallowed — then
+resets the counters so the proof cannot later be mistaken for the product opening
+one. "Zero picker calls" over a stub that throws is a statement about the stub; over
+one that would have succeeded and eaten the file it is the only available evidence
+that the product decided **in advance** not to open it. The two picker branches
+are counted apart, because the product has two (flat single file vs. everything
+else) and a single counter would let a run that opened the directory picker pass
+as "the save picker was never opened". A source contract cannot supply this: a
+function nobody calls has an unobservable body.
+
+The user agent lands **before** the batch is sent, because `ReceiveActions`
+resolves its save hint once, when the consent card mounts. Before the accept
+click the runner reads the shared `.savehint` selector and requires exactly one
+hint, not the retry variant, no memory warning, and copy that promises the
+Downloads directory *and* is not the picker sentence the desktop branch renders —
+checked in both directions, in whichever of the two maintained languages the run
+booted in, so a hint asserted only by absence cannot pass on empty text. After the
+click, both picker counters and the handle's own byte counter must still be
+exactly zero; exactly one download must have been captured at the product's own
+two boundaries with the exact name, declared length and byte pattern; its
+uniquely name-scoped transfer card must be successful, carry no in-flight bar and
+carry no cancellation wording; and the same link, SAS, composer, attachment
+control and empty request queue must survive. The payload formula is written once
+and interpolated into both the sending page and the verifying page — two copies
+would make "byte-exact" mean "this file agrees with itself". Bytes are read off
+the captured `Blob` rather than fetched through `blob:`, because production CSP
+does not allow `blob:` in `connect-src` and a fetch would fail on the stub rather
+than on the product.
+
+**Because this adds an earlier successful transfer, the resume act's terminal
+wait had to change.** It waited on `.xfer.ok` anywhere on the page; the mobile
+download now satisfies that immediately, so a resume that never resumed would
+have sailed straight through it and every assertion after it would have described
+the wrong transfer. Both are now scoped by the card whose single-file counter
+names the exact file, and a card that stopped rendering that counter **throws**
+rather than filtering itself out — otherwise a renamed counter would silently
+reduce every name-scoped check to `length === 0`, i.e. to a wait that can only
+time out blaming the product.
+
+Restoration is by **identity**, not by shape: the desktop cancellation act that
+runs immediately afterwards captures `window.showSaveFilePicker` and calls
+through to it, so "a picker is installed" is not the property that matters. The
+`finally` restores all four functions and the original user agent and platform,
+drops the temporary global along with the `Blob` and object-URL references it was
+pinning, and — deliberately — **cannot throw**. A `finally` that throws replaces
+the exception that sent it there, so a failure during setup would have been
+reported as a missing global while the real diagnosis went unprinted, and the
+first fault would have skipped the user-agent restoration and handed the desktop
+acts a phone. Each half is therefore caught, both always run, and a cleanup fault
+is re-raised only *after* the block, where it can only be the whole story. The
+unchanged desktop act then proves its own two picker calls still happen, which is
+the downstream evidence that the restoration was real.
+
+**Be exact about what this is.** It is desktop Chromium wearing a spoofed Android
+user agent, with browser-boundary stubs. It is **not** a real Android device, a
+real system picker or a real Android download manager, and neither the runner nor
+`go-server.test.mjs` may describe it as one — there is a contract that fails if
+they start to. The two reported field failures behind the product rule (a
+built-in browser whose picker opens nothing, and Chrome's folder page where one
+stray Back cancels the whole receive) are **not** reproduced here. What is proved
+is the product's own proactive policy on the unified pipeline: `pickersAllowed()`
+refuses the branch up front, the card says so in advance, and the file still
+arrives byte-exact through the browser download alone. No product source,
+workflow, package, dependency or timing constant changed; the diff is
+`web/e2e/mixed-link.mjs`, `web/e2e/go-server.test.mjs`,
+`web/src/lib/ReceiveActions.test.ts`, this document and `web/e2e/README.md`.
+
+The ordinary Vitest lane carries the half the browser cannot check. The browser
+act matches a Downloads-promising pattern rather than a literal string, because
+it runs in whichever maintained language the run booted in; that pairing is only
+meaningful while the two sentences genuinely differ and the download one genuinely
+says Downloads. `ReceiveActions.test.ts` asserts exactly that against real
+rendered markup, in **both** English and Simplified Chinese, on every push —
+mounted under each language from the start, since `lang()` is read at render time
+and switching afterwards would prove nothing about what a `zh` user sees.
+
+**Verification status: green locally against the final current bytes; awaiting
+the hosted `mixed-link-e2e` lane on main.** Until that exact hosted run passes,
+row 1 is a local migration rather than hosted coverage, and nothing below is
+hosted evidence. Every row was recorded on 2026-08-30 against the tree exactly as
+it now stands — after the review corrections landed and after the mutation pass
+below restored it — on a local macOS worktree and a headless Chrome, on branch
+`test/mixed-link-mobile-download` based on `origin/main` `b08457d6`. The journey
+runner did **not** self-start the server for these runs: an isolated Go test
+server was started separately from this same worktree with
+`RELAYIUM_STATIC=../web/dist RELAYIUM_ADDR=127.0.0.1:8124`, and the runner was
+pointed at that already-running instance. The runner the acts live in is pinned
+by content:
+`web/e2e/mixed-link.mjs` SHA-256
+`b2b78bb2b7f2e44fc0d1669e6036b3a93b5a1e0cb5481334254960fba358cedc`.
+
+| Command | Result |
+|---|---|
+| `node --check` on `e2e/mixed-link.mjs` and `e2e/go-server.test.mjs` | both parse clean |
+| focused `npx vitest run e2e/go-server.test.mjs src/lib/ReceiveActions.test.ts` | **121 passed** |
+| `npm run check` | **0 errors, 0 warnings** |
+| `npx vitest run` (whole Web suite) | **4394 passed**, 3 skipped |
+| `npm run build` | succeeded; 447 generated pages, 12 per-route SPA shells |
+| `node e2e/mixed-link.mjs --url http://127.0.0.1:8124` (against the separately started server above) | **20/20 acts performed, in order**, three consecutive runs — 13.27s, 11.90s and 12.59s wall clock |
+
+**Adversarial mutation testing was performed, and the runtime gate was the first
+mutation taken.** `pickersAllowed()` in `web/src/lib/filesink.ts` was changed so
+the File System Access branch opens unconditionally, the app was rebuilt from
+that mutation, and the journey re-run. It failed in **2.284s** — on the first
+decisive save boundary, ahead of the slower terminal and byte-exact checks — with
+the named diagnostic `saveCalls=1 dirCalls=0 handleBytes=0 downloads=0`. That is
+the whole point of judging the counters early: a lifted mobile gate names the
+picker branch that opened and reports the bytes its handle took, instead of
+producing a 60-second timeout on a download that was never coming.
+`filesink.ts` was then restored to its exact pre-mutation content — SHA-256
+`624e6b344a5627bd3a43c4707aed94e2fdcc4ada7214aa913265e1b589bd8e90` — and the app
+rebuilt from the restored source, which is why the slice's diff is still the five
+test and documentation files named above and no runtime source.
+
+Six further mutations were applied to the test files **one at a time**, each
+reverted before the next: a picker stub that throws instead of working; a
+corrupted `Blob` capture; the old generic `.xfer.ok` terminal wait put back in
+the resume act; the `finally` cleanup omitted; the mobile entry omitted from the
+`ACTS` ledger; and the `act()` call omitted. Each one failed the focused contract
+that exists to catch it, and each file was restored afterwards. Two things this
+does not cover: it is not a claim about the hosted lane, and it does not soften
+the spoofed-Android limitation stated above into a real-device result.
 
 **Stage 3 — identity and bounded relay failure.** Uniques 7 and 8 are last
 because both need setup the other stages do not: multi-page device identity needs
@@ -486,7 +663,7 @@ TURN host and a probe budget that actually elapses.
 
 **Stage 4 — delete `lan-transfer.mjs` and its `test:e2e` npm script.** Only after
 the hosted `main` is green with stages 1–3 landed. Deleting earlier would drop the
-uniques still stranded in it — three after #2/#3/#6 moved and #4/#5 retired with the
+uniques still stranded in it — two after #1/#2/#3/#6 moved and #4/#5 retired with the
 deterministic evidence recorded above; keeping it after is worse
 than useless — a script that cannot exit zero teaches everyone to ignore a red
 run.
