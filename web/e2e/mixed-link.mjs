@@ -157,9 +157,9 @@ const OMIT_REMOTE_MAX_MESSAGE_SIZE = `
  * Every act this scenario performs, frozen, in run order.
  *
  * One scenario is not one assertion. `mixedScenario` is a single function that
- * performs nineteen distinct acts against one live link, and counting
+ * performs twenty distinct acts against one live link, and counting
  * *scenarios* — the shape `page-shell.mjs` uses, where there are four of them —
- * would report `1/1` for a run that silently stopped asserting eighteen of these.
+ * would report `1/1` for a run that silently stopped asserting nineteen of these.
  * That is precisely the vacuous-count failure `page-shell-contract.test.mjs`
  * exists to forbid, reappearing one level down.
  *
@@ -187,6 +187,7 @@ const ACTS = Object.freeze([
   "queued-batch",
   "declined-batch",
   "byte-identical-text",
+  "mobile-no-picker-download",
   "picker-cancel-retry",
   "live-progressbar",
   "byte-resume",
@@ -195,7 +196,7 @@ const ACTS = Object.freeze([
   "fresh-link-new-sas",
   "explicit-disconnect",
 ]);
-const EXPECTED_ACT_COUNT = 19;
+const EXPECTED_ACT_COUNT = 20;
 
 /**
  * 记下 live region 说过的**每一句**话。
@@ -236,6 +237,97 @@ const TRACK_ANNOUNCEMENTS = `
     window.__e2eAnnouncementsReady = true;
   })();
 `;
+/**
+ * The phone boundary, installed on the receiver for exactly one act.
+ *
+ * Four things are replaced and all four are restored by `restore()` below, which
+ * is the only reason this is one script rather than four inline snippets: the
+ * desktop picker-cancellation act that runs immediately afterwards depends on
+ * `window.showSaveFilePicker` being the *same function object* the harness's
+ * `SAVE_STUB` installed at page init — it wraps it and calls through to it. A
+ * restoration that merely installed "a working picker" would leave that act
+ * measuring this stub instead.
+ *
+ * **Both pickers here WORK, and that is the whole anti-vacuity argument.** They
+ * resolve to handles whose `createWritable()` really accepts bytes and counts
+ * them. So "zero picker calls and zero handle bytes, alongside a complete
+ * byte-exact browser download" is a combination no broken-picker fallback can
+ * produce — a fallback would have had to call one first. It is reachable only by
+ * the product deciding, up front, not to open them (`pickersAllowed()` in
+ * `filesink.ts`).
+ *
+ * The download half is captured at the two boundaries the product actually uses
+ * (`filesink.ts`'s `download()`): the object URL is recorded with the Blob it was
+ * minted from, and the `<a download>` click is recorded and swallowed so a
+ * headless browser never starts a real download. The bytes are read off the Blob
+ * itself rather than by fetching `blob:` — production CSP does not allow `blob:`
+ * in `connect-src`, so a fetch would fail on the stub rather than on the product.
+ */
+const MOBILE_PICKER_AND_DOWNLOAD_TRAP = `
+  (() => {
+    const realSave = window.showSaveFilePicker;
+    const realDir = window.showDirectoryPicker;
+    const realCreateObjectURL = URL.createObjectURL;
+    const realAnchorClick = HTMLAnchorElement.prototype.click;
+    const urls = new Map();
+    const state = { saveCalls: 0, dirCalls: 0, handleBytes: 0, downloads: [] };
+    // A handle that would really have taken the file. See the note above.
+    const writable = {
+      write: async (chunk) => { state.handleBytes += chunk.byteLength ?? chunk.size ?? 0; },
+      close: async () => {},
+    };
+    const fileHandle = { createWritable: async () => writable };
+    const dirHandle = {
+      getFileHandle: async () => fileHandle,
+      getDirectoryHandle: async () => dirHandle,
+    };
+    // Counted SEPARATELY: the product has two picker branches (flat single file
+    // vs. everything else), and a single counter would let a run that opened the
+    // directory picker pass as "the save picker was never opened".
+    window.showSaveFilePicker = async () => { state.saveCalls++; return fileHandle; };
+    window.showDirectoryPicker = async () => { state.dirCalls++; return dirHandle; };
+    URL.createObjectURL = function (object) {
+      const url = realCreateObjectURL.call(URL, object);
+      urls.set(url, object);
+      return url;
+    };
+    HTMLAnchorElement.prototype.click = function () {
+      if (!this.download) return realAnchorClick.call(this);
+      state.downloads.push({ name: this.download, blob: urls.get(this.href) ?? null });
+      return undefined;
+    };
+    state.restore = () => {
+      window.showSaveFilePicker = realSave;
+      window.showDirectoryPicker = realDir;
+      URL.createObjectURL = realCreateObjectURL;
+      HTMLAnchorElement.prototype.click = realAnchorClick;
+      // Identity, not shape: the next act wraps the function it gets back and
+      // calls through to it, so "a picker is installed" is not the property.
+      const summary = {
+        save: window.showSaveFilePicker === realSave,
+        dir: window.showDirectoryPicker === realDir,
+        createObjectURL: URL.createObjectURL === realCreateObjectURL,
+        anchorClick: HTMLAnchorElement.prototype.click === realAnchorClick,
+        saveCalls: state.saveCalls,
+        dirCalls: state.dirCalls,
+        handleBytes: state.handleBytes,
+        downloads: state.downloads.length,
+      };
+      // Read once, into plain numbers, and then the state itself GOES — with the
+      // captured Blob and the object-URL map it was pinning. Seven acts run
+      // after this one on the same page; leaving a global behind that still
+      // looks installed is how a later edit comes to read a boundary that is
+      // not there and gets a stale zero instead of a failure.
+      urls.clear();
+      state.downloads.length = 0;
+      delete window.__e2eMobile;
+      return summary;
+    };
+    window.__e2eMobile = state;
+    return true;
+  })()
+`;
+
 const TRACK_PEER_CONNECTIONS = `
   window.__e2ePeerConnections = [];
   window.RTCPeerConnection = new Proxy(window.RTCPeerConnection, {
@@ -276,6 +368,38 @@ const pickFiles = (build) => `(() => {
 const pickOne = (name) => pickFiles(
   `dt.items.add(new File(['x'], ${JSON.stringify(name)}, { type: 'text/plain' }));`,
 );
+
+/**
+ * The transfer cards whose single-file counter names EXACTLY this file.
+ *
+ * Scoping by name became load-bearing the moment this scenario grew a second
+ * successful transfer. `.xfer.ok` anywhere on the page is now satisfiable by the
+ * mobile download's terminal card, so a generic "wait for a successful transfer"
+ * downstream of it would return immediately and every assertion after it would
+ * describe the wrong transfer — a green run over a resume that never happened.
+ *
+ * `.count` is queried relative to the card because `dom-contracts.mjs` names the
+ * document-rooted nodes (`XFER.ok`, `XFER.status`) and the card-relative bar
+ * (`XFER.bar`), and there is no card-relative counter in it. A missing counter
+ * therefore THROWS rather than filtering the card out: a card that stopped
+ * rendering its file name would otherwise silently reduce every name-scoped
+ * check here to `cards.length === 0`, which is a wait that can only time out
+ * blaming the product.
+ */
+const namedTransferCards = (name) => `[...document.querySelectorAll('${XFER.card}')].filter((card) => {
+  const counter = card.querySelector('.count');
+  if (!counter) {
+    throw new Error('a transfer card carries no file counter — every name-scoped check here would be vacuous');
+  }
+  return counter.textContent.trim() === ${JSON.stringify(name)};
+})`;
+
+/** That card, alone, finished successfully, with no in-flight bar left in it. */
+const namedTransferSucceeded = (name) => `(() => {
+  const cards = ${namedTransferCards(name)};
+  return cards.length === 1 && cards[0].matches('${XFER.ok}') &&
+    cards[0].querySelectorAll('${XFER.bar}').length === 0;
+})()`;
 
 const announcementOf = "(document.querySelector('.activity-announcement')?.textContent ?? '')";
 /** 见 TRACK_ANNOUNCEMENTS：只有 `observe()` 之后这句才为真。 */
@@ -876,6 +1000,309 @@ async function mixedScenario(browser, base) {
   await scanLiveState(b, "mixed workspace with both lanes live");
   act("byte-identical-text", `text was exchanged byte-identically while the file control stayed usable, still under one SAS (${sasA})`);
 
+  // ── 七之一、手机上一个选择器都不开，文件走浏览器下载并逐字节到手 ───────────
+  //
+  // Stranded unique #1, migrated here (Phase 3D C3b-6). It runs on the SAME live
+  // link, between the byte-identical text act and the desktop picker act, so what
+  // it proves is the unified `link/1` pipeline's mobile policy — not the retired
+  // LAN fork's, which is where the assertion was written and where it has not
+  // executed for weeks.
+  //
+  // **Be exact about what this is.** This is desktop Chromium wearing
+  // a spoofed Android UA, with browser-boundary stubs. It is
+  // not a real Android device, not a real system picker and not a real
+  // Android download manager. What it does prove is the
+  // product's own *proactive* rule: `pickersAllowed()` refuses the File System
+  // Access branch on a phone before anything can go wrong, and the consent card
+  // says so in advance. The reported field failures — a built-in browser whose
+  // picker opens nothing, and Chrome's folder page where one stray Back cancels
+  // the whole receive — are the reason that rule exists, and neither of them is
+  // reproduced here. See MOBILE_PICKER_AND_DOWNLOAD_TRAP for why "zero picker
+  // calls" is nonetheless not a statement about a broken picker.
+  const MOBILE_NAME = "mobile-download-on-the-same-link.bin";
+  const MOBILE_BYTES = 96 * 1024;
+  /** The payload formula, written ONCE and interpolated into both the sending
+   *  page and the verifying page. Two copies of it is how a "byte-exact"
+   *  assertion quietly becomes an assertion that this file agrees with itself. */
+  const MOBILE_BYTE_AT_I = "(i * 37 + 11) % 251";
+  const ANDROID_UA =
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) " +
+    "Chrome/140.0.7339.0 Mobile Safari/537.36";
+  const ANDROID_PLATFORM = "Linux armv8l";
+  /** The two maintained product languages. The hint must promise the Downloads
+   *  directory in whichever one this run booted in — and must NOT be the picker
+   *  sentence, which is the one it would say if the mobile gate had lifted. */
+  const PROMISES_DOWNLOADS = /downloads|下载/i;
+  const PROMISES_A_PICKER = /where to save|选择保存位置/i;
+
+  const desktopAgent = await b.evaluate("({ userAgent: navigator.userAgent, platform: navigator.platform })");
+  let restored = null;
+  let cleanupFault = null;
+  try {
+    // The UA has to land BEFORE the batch is sent: `ReceiveActions` resolves
+    // `asksWhereToSave()` when the consent card mounts, and nothing re-reads
+    // `navigator` afterwards. Overriding it later would leave a desktop promise
+    // on screen above a mobile code path — which is the accident, not the test.
+    await b.send("Emulation.setUserAgentOverride", {
+      userAgent: ANDROID_UA, platform: ANDROID_PLATFORM,
+    });
+    await b.waitFor(
+      `navigator.userAgent === ${JSON.stringify(ANDROID_UA)} && navigator.platform === ${JSON.stringify(ANDROID_PLATFORM)}`,
+      "tab B to report a phone user agent and platform",
+      20_000,
+    );
+    await b.evaluate(MOBILE_PICKER_AND_DOWNLOAD_TRAP);
+
+    // Prove the pickers are usable BEFORE relying on their silence, then reset
+    // the counters — the same shape the SCTP probe above uses, and for the same
+    // reason. "Zero picker calls" is only evidence about the product while
+    // calling one would have succeeded and swallowed the bytes; over a stub that
+    // throws it is a statement about the stub. Left to a source contract this
+    // would be the one property of this act that no run can observe, because a
+    // function nobody calls has an unobservable body.
+    const pickersWork = await b.evaluate(`(async () => {
+      const state = window.__e2eMobile;
+      const saveHandle = await window.showSaveFilePicker({ suggestedName: 'usability-proof.bin' });
+      const saveWritable = await saveHandle.createWritable();
+      await saveWritable.write(new Uint8Array(3));
+      await saveWritable.close();
+      const dir = await window.showDirectoryPicker();
+      const nested = await dir.getFileHandle('usability-proof.bin', { create: true });
+      const dirWritable = await nested.createWritable();
+      await dirWritable.write(new Uint8Array(5));
+      await dirWritable.close();
+      const proof = {
+        saveCalls: state.saveCalls, dirCalls: state.dirCalls, handleBytes: state.handleBytes,
+      };
+      // Cleared here, so the proof cannot be mistaken for the product opening
+      // one. Everything downstream reads counters that start at zero again.
+      state.saveCalls = 0;
+      state.dirCalls = 0;
+      state.handleBytes = 0;
+      return proof;
+    })()`);
+    if (pickersWork.saveCalls !== 1 || pickersWork.dirCalls !== 1 || pickersWork.handleBytes !== 8) {
+      throw new Error(`the pickers this act proves are never opened are not usable, so their silence proves nothing: ${JSON.stringify(pickersWork)}`);
+    }
+
+    await a.evaluate(pickFiles(`
+      const body = new Uint8Array(${MOBILE_BYTES});
+      for (let i = 0; i < body.length; i++) body[i] = ${MOBILE_BYTE_AT_I};
+      dt.items.add(new File([body], ${JSON.stringify(MOBILE_NAME)}));
+    `));
+    await b.waitFor(`!!document.querySelector('${RECEIVE.card}')`, "the phone's file consent card", 45_000);
+
+    // Before the click, and this is the half the user actually complained about:
+    // "no picker appeared and I had no idea what to choose". The card must say
+    // where the file is going, and on a phone there is exactly one true answer.
+    const mobileConsent = await b.evaluate(`(() => {
+      const card = document.querySelector('${RECEIVE.card}');
+      const hint = card.querySelector('${RECEIVE.saveHint}');
+      const state = window.__e2eMobile;
+      return {
+        hint: (hint?.textContent ?? '').trim(),
+        hints: card.querySelectorAll('${RECEIVE.saveHint}').length,
+        // A retry hint would mean a picker was already opened and cancelled —
+        // the desktop act's state, and the opposite of what this act asserts.
+        retryHints: card.querySelectorAll('${RECEIVE.retryHint}').length,
+        warnings: card.querySelectorAll('${RECEIVE.warning}').length,
+        mobileUa: /Android/.test(navigator.userAgent),
+        saveCalls: state.saveCalls,
+        dirCalls: state.dirCalls,
+        handleBytes: state.handleBytes,
+        downloads: state.downloads.length,
+      };
+    })()`);
+    if (
+      !mobileConsent.mobileUa || mobileConsent.hints !== 1 || !mobileConsent.hint ||
+      mobileConsent.retryHints !== 0 || mobileConsent.warnings !== 0 ||
+      !PROMISES_DOWNLOADS.test(mobileConsent.hint) || PROMISES_A_PICKER.test(mobileConsent.hint) ||
+      mobileConsent.saveCalls !== 0 || mobileConsent.dirCalls !== 0 ||
+      mobileConsent.handleBytes !== 0 || mobileConsent.downloads !== 0
+    ) {
+      throw new Error(`the phone's consent card did not truthfully promise the Downloads directory before the click: ${JSON.stringify(mobileConsent)}`);
+    }
+
+    // 96 KiB, one flat file: far below the large-batch threshold, so this is the
+    // ordinary row and its primary button accepts. Guard first, as everywhere
+    // else — under the warning that very same button declines.
+    await b.evaluate(`(() => {
+      if (document.querySelector('${RECEIVE.card} ${RECEIVE.warning}')) {
+        throw new Error('the memory warning inverted the phone consent row; ${RECEIVE.primary} is now decline');
+      }
+      document.querySelector('${RECEIVE.card} ${RECEIVE.primary}').click();
+      return true;
+    })()`);
+    // The FIRST decisive boundary event, not the successful one. Waiting only
+    // for the download makes this act unreadable in exactly the case it exists
+    // to catch: with the mobile gate removed the product opens a picker, the
+    // download is never minted, and the run spends the full 60 seconds before
+    // reporting a missing download — a symptom two steps downstream of the
+    // cause. Verified by temporarily bypassing `pickersAllowed()`: the act did
+    // fail, correctly, but only after 60 seconds of "timed out waiting for the
+    // phone's browser download".
+    //
+    // So both outcomes are polled together and whichever lands first decides.
+    // A picker call is decisive the instant it is counted, and on the broken
+    // path it is counted strictly before the download that will never arrive —
+    // which turns that 60-second timeout into a near-immediate red naming the
+    // picker, its branch, and the bytes the handle took.
+    //
+    // Order matters below: the counters are read and judged BEFORE the terminal
+    // card wait and before the byte-exact assertions. Reaching those first
+    // would spend another 40-second budget on a card that a picker-driven run
+    // may well still complete — reporting "no download" or nothing at all,
+    // rather than "a picker was opened".
+    await b.waitFor(
+      "window.__e2eMobile.downloads.length === 1 || window.__e2eMobile.saveCalls > 0 || window.__e2eMobile.dirCalls > 0",
+      "the phone's first save decision: a browser download, or a picker it must never open",
+      60_000,
+    );
+    const decision = await b.evaluate(`(() => {
+      const state = window.__e2eMobile;
+      return {
+        saveCalls: state.saveCalls,
+        dirCalls: state.dirCalls,
+        handleBytes: state.handleBytes,
+        downloads: state.downloads.length,
+      };
+    })()`);
+    // Both branches and the handle's own byte counter, in the message: which
+    // picker opened, and whether the file went into it, is the whole diagnosis.
+    if (decision.saveCalls !== 0 || decision.dirCalls !== 0) {
+      throw new Error(`the phone opened a save picker instead of downloading, so the mobile no-picker gate is gone: ${JSON.stringify(decision)}`);
+    }
+    await b.waitFor(
+      namedTransferSucceeded(MOBILE_NAME),
+      "the phone's own receive card to finish successfully",
+      40_000,
+    );
+
+    const mobile = await b.evaluate(`(async () => {
+      const state = window.__e2eMobile;
+      const got = state.downloads[0];
+      const blob = got?.blob ?? null;
+      const bytes = blob ? new Uint8Array(await blob.arrayBuffer()) : null;
+      let mismatch = -1;
+      if (bytes) {
+        for (let i = 0; i < bytes.length; i++) {
+          if (bytes[i] !== ${MOBILE_BYTE_AT_I}) { mismatch = i; break; }
+        }
+      }
+      const cards = ${namedTransferCards(MOBILE_NAME)};
+      const card = cards[0] ?? null;
+      // Relative to the card for the same reason as the counter: the shared
+      // constant is document-rooted, and this act is about THIS transfer.
+      const status = card ? card.querySelector('.status') : null;
+      if (card && !status) throw new Error('the named transfer card has no status line to read');
+      return {
+        downloads: state.downloads.length,
+        // Zero, after a click that would have opened one on a desktop. Both
+        // branches counted apart, and the handle's own byte counter with them:
+        // a picker that was opened and written to cannot hide behind a Blob.
+        saveCalls: state.saveCalls,
+        dirCalls: state.dirCalls,
+        handleBytes: state.handleBytes,
+        name: got?.name ?? null,
+        hasBlob: !!blob,
+        declaredBytes: blob ? blob.size : -1,
+        readBytes: bytes ? bytes.length : -1,
+        mismatch,
+        namedCards: cards.length,
+        ok: card ? card.matches('${XFER.ok}') : false,
+        bad: card ? card.matches('${XFER.bad}') : false,
+        bars: card ? card.querySelectorAll('${XFER.bar}').length : -1,
+        status: (status?.textContent ?? '').trim(),
+        // The link, the conversation and the file lane all outlive it.
+        heads: document.querySelectorAll('${HEAD}').length,
+        composers: document.querySelectorAll('.msgpanel textarea').length,
+        attachments: document.querySelectorAll('${ATTACH_FILE}').length,
+        requests: document.querySelectorAll('${RECEIVE.card}').length,
+      };
+    })()`);
+    // "No save location chosen — cancelled" / "未选择保存位置，已取消" is the exact
+    // string a phone must never reach: it is what the product says when the
+    // picker branch was entered and abandoned, and reporting a successful
+    // receive as a cancellation is the field failure this whole policy exists to
+    // prevent.
+    //
+    // Scoped to the two maintained runtime languages, English and Simplified
+    // Chinese, because those are the only ones a run can boot in — the rest live
+    // under `src/lib/i18n/archive/` and are not rendered by the product, so
+    // matching their cancellation words would assert against copy that no longer
+    // ships. Restoring a locale means adding its word here, next to
+    // PROMISES_DOWNLOADS and PROMISES_A_PICKER, which are scoped the same way.
+    const CANCEL_WORDS = /cancel|取消/i;
+    if (
+      mobile.saveCalls !== 0 || mobile.dirCalls !== 0 || mobile.handleBytes !== 0 ||
+      mobile.downloads !== 1 || mobile.name !== MOBILE_NAME || !mobile.hasBlob ||
+      mobile.declaredBytes !== MOBILE_BYTES || mobile.readBytes !== MOBILE_BYTES ||
+      mobile.mismatch !== -1 || mobile.namedCards !== 1 || !mobile.ok || mobile.bad ||
+      mobile.bars !== 0 || !mobile.status || CANCEL_WORDS.test(mobile.status) ||
+      mobile.heads !== 1 || mobile.composers !== 1 || mobile.attachments !== 1 ||
+      mobile.requests !== 0
+    ) {
+      throw new Error(`the phone did not receive ${MOBILE_BYTES} exact bytes through the browser download alone: ${JSON.stringify(mobile)}`);
+    }
+    for (const [who, tab] of [["tab A", a], ["tab B", b]]) {
+      const code = await oneSas(tab, who, "after a phone received a file with no picker");
+      if (code !== sasA) throw new Error(`${who} changed the link SAS over the mobile download: ${code} vs ${sasA}`);
+    }
+    await screenshot(b, "mobile-no-picker-download");
+  } finally {
+    // Finally, and in this order: the desktop act that follows wraps the very
+    // function objects this act replaced. A failure above must not leave a phone
+    // UA and four stubbed browser boundaries behind for it to "prove" things on.
+    //
+    // Two restorations, and NEITHER may throw out of this block. A `finally`
+    // that throws REPLACES the exception that sent it here — so if the act
+    // failed while setting up, before the boundary existed, the run would report
+    // `window.__e2eMobile is undefined` and the setup failure that is the actual
+    // diagnosis would never be printed. Worse, the first fault would skip the
+    // second restoration and hand the desktop acts a phone UA. So each is
+    // caught, both always run, and a fault is re-raised below where it can only
+    // be the whole story.
+    try {
+      // Conditional, because "the boundary was never installed" is the state a
+      // setup failure leaves behind, and it is not a second failure.
+      restored = await b.evaluate("(window.__e2eMobile ? window.__e2eMobile.restore() : null)");
+    } catch (err) {
+      cleanupFault = err;
+    }
+    try {
+      await b.send("Emulation.setUserAgentOverride", {
+        userAgent: desktopAgent.userAgent, platform: desktopAgent.platform,
+      });
+    } catch (err) {
+      cleanupFault ??= err;
+    }
+  }
+  // Outside the `finally`, so a real failure above propagates instead of being
+  // masked by a restoration complaint about the state that failure left behind.
+  // Reached only when the act itself succeeded, which is the only case in which
+  // a cleanup fault is the most interesting thing that happened.
+  if (cleanupFault) throw cleanupFault;
+  if (!restored) {
+    throw new Error("the phone boundary vanished before it could be restored, so the desktop acts that follow would run on a phone");
+  }
+  const desktopAgain = await b.evaluate(`({
+    userAgent: navigator.userAgent,
+    platform: navigator.platform,
+    looksMobile: /Android|Mobile/i.test(navigator.userAgent),
+  })`);
+  if (
+    !restored.save || !restored.dir || !restored.createObjectURL || !restored.anchorClick ||
+    restored.saveCalls !== 0 || restored.dirCalls !== 0 || restored.handleBytes !== 0 ||
+    restored.downloads !== 1 ||
+    desktopAgain.userAgent !== desktopAgent.userAgent ||
+    desktopAgain.platform !== desktopAgent.platform || desktopAgain.looksMobile
+  ) {
+    throw new Error(`the phone boundary was not exactly restored for the desktop acts that follow: ${JSON.stringify({ restored, desktopAgent, desktopAgain })}`);
+  }
+  act("mobile-no-picker-download",
+    `a spoofed phone with two working pickers opened neither and still received ${MOBILE_BYTES} exact bytes `
+    + "through the browser download, after being told in advance that it would");
+
   // ── 八、真传输断线后从 durable checkpoint 续传，不重新同意 ─────────────────
   const RESUME_BYTES = 5 * 1024 * 1024 + 73;
   /**
@@ -1214,9 +1641,14 @@ async function mixedScenario(browser, base) {
     "the resumed destination to close at the exact declared size",
     90_000,
   );
+  // Name-scoped, not "some successful transfer somewhere on the page". This
+  // scenario now completes a 96 KiB mobile download BEFORE this point, so the
+  // generic form is satisfiable by a card belonging to a different transfer —
+  // and a resume that never resumed would have sailed straight through it. See
+  // `namedTransferCards`.
   await a.waitFor(
-    `!!document.querySelector('${XFER.ok}') && !document.querySelector('${XFER.progressBar}')`,
-    "the resumed sender to complete",
+    namedTransferSucceeded("resume-on-the-same-link.bin"),
+    "the resumed sender's own card to complete",
     40_000,
   );
   const resumed = await b.evaluate(`(() => {

@@ -619,12 +619,12 @@ describe("the runners this lifecycle serves", () => {
 });
 
 /**
- * `mixed-link.mjs`'s own inventory: one scenario, nineteen acts.
+ * `mixed-link.mjs`'s own inventory: one scenario, twenty acts.
  *
  * `page-shell-contract.test.mjs` guards its runner from silently dropping a
  * scenario, and the same failure exists here one level down and is worse. That
  * suite has four scenarios, so counting them is a real check. This one has a
- * single `mixedScenario` that performs nineteen distinct acts against one live
+ * single `mixedScenario` that performs twenty distinct acts against one live
  * link — so `1/1` would be reported by a run that had been edited down to its
  * first assertion, and by a run whose 5 MiB resume act quietly stopped
  * executing. The literal that actually protects it is the ACT count.
@@ -651,6 +651,7 @@ describe("mixed-link's scenario inventory and act ledger", () => {
     "queued-batch",
     "declined-batch",
     "byte-identical-text",
+    "mobile-no-picker-download",
     "picker-cancel-retry",
     "live-progressbar",
     "byte-resume",
@@ -681,7 +682,7 @@ describe("mixed-link's scenario inventory and act ledger", () => {
 
   it("checks both counts against fixed literals, not against array lengths", () => {
     expect(src).toMatch(/const EXPECTED_SCENARIO_COUNT = 1;/);
-    expect(src).toMatch(/const EXPECTED_ACT_COUNT = 19;/);
+    expect(src).toMatch(/const EXPECTED_ACT_COUNT = 20;/);
     expect(src).toMatch(/ran !== EXPECTED_SCENARIO_COUNT/);
     expect(src).toMatch(/ledger\.length !== EXPECTED_ACT_COUNT/);
     // The comparisons this guard exists to forbid: an array and its own length
@@ -1000,6 +1001,271 @@ describe("mixed-link retries a cancelled desktop save picker on the same consent
 });
 
 /**
+ * Hosted migration of lan-transfer unique #1: on a phone the product opens **no**
+ * save picker at all, and says so before the user commits.
+ *
+ * The expensive browser run is what proves the behaviour. What cannot be read
+ * off its output, and is therefore frozen here, is the shape that makes the
+ * green meaningful:
+ *
+ *   - the pickers installed for it must be USABLE. "Zero picker calls" over a
+ *     picker that throws is a statement about the stub, not about the product;
+ *     over one that would have succeeded and swallowed the bytes it is the only
+ *     evidence that the product decided in advance not to open it;
+ *   - the two picker branches must be counted apart, with the handle's own byte
+ *     counter beside them;
+ *   - the phone UA must land before the batch is sent, because `ReceiveActions`
+ *     resolves the save hint once, at mount;
+ *   - and every boundary must be restored — by identity, not by shape — before
+ *     the desktop cancellation act, which wraps those same function objects.
+ *
+ * This is a spoofed Android UA on desktop Chromium with browser-boundary stubs.
+ * It is not a real Android system picker or download manager, and neither this
+ * file nor the runner may describe it as one.
+ */
+describe("mixed-link proves the phone opens no save picker at all", () => {
+  const src = read("e2e/mixed-link.mjs");
+
+  it("installs pickers that would have worked, counted apart, with a handle byte counter", () => {
+    expect(src).toContain("window.showSaveFilePicker = async () => { state.saveCalls++; return fileHandle; };");
+    expect(src).toContain("window.showDirectoryPicker = async () => { state.dirCalls++; return dirHandle; };");
+    // The handle really accepts bytes. A stub that threw would make the whole
+    // act a statement about the stub.
+    expect(src).toContain("state.handleBytes += chunk.byteLength ?? chunk.size ?? 0;");
+    expect(src).toContain("const fileHandle = { createWritable: async () => writable };");
+    expect(src, "the directory branch lost its usable handle")
+      .toContain("getFileHandle: async () => fileHandle,");
+    // And that usability is PROVEN at runtime, then cleared — a function nobody
+    // calls has an unobservable body, so this is the one property of the act
+    // that a source contract alone cannot make real.
+    expect(src).toContain("const pickersWork = await b.evaluate(");
+    expect(src).toContain("pickersWork.saveCalls !== 1 || pickersWork.dirCalls !== 1 || pickersWork.handleBytes !== 8");
+    expect(src, "the usability proof does not reset the counters it spends")
+      .toMatch(/state\.saveCalls = 0;\n\s*state\.dirCalls = 0;\n\s*state\.handleBytes = 0;/);
+    // Both counters and the handle's bytes are asserted to be exactly zero
+    // AFTER the accept click, not merely before it.
+    expect(src).toContain("mobile.saveCalls !== 0 || mobile.dirCalls !== 0 || mobile.handleBytes !== 0");
+    expect(src, "the two picker branches were merged into one counter")
+      .toContain("mobileConsent.saveCalls !== 0 || mobileConsent.dirCalls !== 0");
+  });
+
+  it("captures the download at the product's own two boundaries and swallows it", () => {
+    expect(src).toContain("URL.createObjectURL = function (object) {");
+    expect(src).toContain("urls.set(url, object);");
+    expect(src).toContain("HTMLAnchorElement.prototype.click = function () {");
+    expect(src).toContain("if (!this.download) return realAnchorClick.call(this);");
+    expect(src).toContain("state.downloads.push({ name: this.download, blob: urls.get(this.href) ?? null });");
+    // Exactly one download, with the exact name, the declared length and the
+    // exact byte pattern — read off the Blob, never fetched through `blob:`.
+    expect(src).toContain("mobile.downloads !== 1 || mobile.name !== MOBILE_NAME || !mobile.hasBlob");
+    expect(src).toContain("mobile.declaredBytes !== MOBILE_BYTES || mobile.readBytes !== MOBILE_BYTES");
+    expect(src).toContain("mobile.mismatch !== -1");
+    expect(src, "the 96 KiB payload size drifted").toContain("const MOBILE_BYTES = 96 * 1024;");
+    // One formula, interpolated into the sending page and the verifying page.
+    // Two copies would make "byte-exact" mean "this file agrees with itself".
+    expect(src).toContain('const MOBILE_BYTE_AT_I = "(i * 37 + 11) % 251";');
+    expect(src.match(/\$\{MOBILE_BYTE_AT_I\}/g), "the payload formula is no longer written once")
+      .toHaveLength(2);
+    expect(src, "the byte pattern was retyped instead of interpolated")
+      .not.toMatch(/!==\s*\(i \* 37 \+ 11\) % 251/);
+  });
+
+  it("applies the phone UA before the batch, since the hint resolves once at mount", () => {
+    const override = src.indexOf('await b.send("Emulation.setUserAgentOverride", {');
+    const uaLanded = src.indexOf("tab B to report a phone user agent and platform");
+    const trap = src.indexOf("await b.evaluate(MOBILE_PICKER_AND_DOWNLOAD_TRAP);");
+    const usable = src.indexOf("const pickersWork = await b.evaluate(");
+    const send = src.indexOf("dt.items.add(new File([body], ${JSON.stringify(MOBILE_NAME)}));");
+    const consent = src.indexOf("const mobileConsent = await b.evaluate(");
+    for (const [name, at] of [["UA override", override], ["UA readiness wait", uaLanded],
+      ["boundary install", trap], ["picker usability proof", usable],
+      ["mobile batch send", send], ["pre-click consent read", consent]]) {
+      expect(at, `${name} anchor is missing; every order check here would be vacuous`).toBeGreaterThan(-1);
+    }
+    expect(uaLanded).toBeGreaterThan(override);
+    expect(trap).toBeGreaterThan(uaLanded);
+    // Spent and cleared before the product batch exists, so the proof can never
+    // be counted as the product opening a picker.
+    expect(usable).toBeGreaterThan(trap);
+    expect(send).toBeGreaterThan(usable);
+    expect(consent).toBeGreaterThan(send);
+    expect(src).toContain('const ANDROID_PLATFORM = "Linux armv8l";');
+    expect(src).toContain("Android 14; Pixel 8");
+  });
+
+  it("requires a truthful Downloads promise, and no warning, before the accept click", () => {
+    const consent = src.indexOf("const mobileConsent = await b.evaluate(");
+    const click = src.indexOf("the memory warning inverted the phone consent row");
+    const download = src.indexOf('"window.__e2eMobile.downloads.length === 1 || ');
+    expect(click, "the phone's guarded accept click is gone").toBeGreaterThan(-1);
+    expect(download, "the phone's save-boundary wait is gone").toBeGreaterThan(-1);
+    expect(consent, "the pre-click consent read no longer precedes the click").toBeLessThan(click);
+    expect(download).toBeGreaterThan(click);
+    // The hint is read through the shared selector, is the only one on the card,
+    // is not the retry variant, and is checked in both directions: it must
+    // promise Downloads and must NOT be the picker sentence the desktop branch
+    // renders — a hint asserted only by absence would pass on empty text.
+    expect(src).toContain("const PROMISES_DOWNLOADS = /downloads|下载/i;");
+    expect(src).toContain("const PROMISES_A_PICKER = /where to save|选择保存位置/i;");
+    expect(src).toContain("!PROMISES_DOWNLOADS.test(mobileConsent.hint) || PROMISES_A_PICKER.test(mobileConsent.hint)");
+    expect(src).toContain("mobileConsent.hints !== 1 || !mobileConsent.hint");
+    expect(src).toContain("mobileConsent.retryHints !== 0 || mobileConsent.warnings !== 0");
+    expect(src, "the phone UA is not re-proved at the moment the card is on screen")
+      .toContain("mobileUa: /Android/.test(navigator.userAgent),");
+  });
+
+  /**
+   * The act must be readable when it FAILS, which is the only time anyone reads
+   * it. Bypassing `pickersAllowed()` in the runtime and rebuilding did make it
+   * go red — correctly — but only after 60 seconds, and the red said "timed out
+   * waiting for the phone's browser download". That is a symptom two steps
+   * downstream of the cause: the download never came because a picker opened
+   * instead, and the run never said so.
+   *
+   * So the wait after the accept click polls BOTH outcomes, and the counters are
+   * judged before anything slower runs. Frozen here because none of it is
+   * observable from a green run: a wait on the download alone, or a picker
+   * verdict pushed behind the 40-second terminal wait, passes every existing
+   * check in this file and silently restores the 60-second blind timeout.
+   */
+  it("waits for the first decisive save boundary, so a lifted gate fails fast and named", () => {
+    const click = src.indexOf("the memory warning inverted the phone consent row");
+    const wait = src.indexOf('"window.__e2eMobile.downloads.length === 1 || window.__e2eMobile.saveCalls > 0 || window.__e2eMobile.dirCalls > 0",');
+    const decision = src.indexOf("const decision = await b.evaluate(");
+    const verdict = src.indexOf("if (decision.saveCalls !== 0 || decision.dirCalls !== 0) {");
+    const terminal = src.indexOf("namedTransferSucceeded(MOBILE_NAME),");
+    const exact = src.indexOf("const mobile = await b.evaluate(");
+    for (const [name, at] of [["accept click", click], ["combined boundary wait", wait],
+      ["counter read", decision], ["picker verdict", verdict],
+      ["terminal card wait", terminal], ["byte-exact read", exact]]) {
+      expect(at, `${name} anchor is missing; every order check here would be vacuous`).toBeGreaterThan(-1);
+    }
+    // Immediately after the click, and both outcomes in one expression. The
+    // download disjunct alone is the 60-second blind timeout; the picker
+    // disjuncts are decisive the instant the product calls one.
+    expect(wait, "the save-boundary wait no longer follows the accept click").toBeGreaterThan(click);
+    expect(decision, "the counters are no longer read as soon as the wait resolves").toBeGreaterThan(wait);
+    expect(verdict, "the picker verdict no longer follows the counter read").toBeGreaterThan(decision);
+    // The verdict comes FIRST. Behind it the terminal wait costs another 40
+    // seconds and the byte assertions describe a download that never existed.
+    expect(terminal, "the terminal card wait now runs before the picker verdict").toBeGreaterThan(verdict);
+    expect(exact, "the byte-exact assertions now run before the picker verdict").toBeGreaterThan(terminal);
+    // The named failure carries both picker branches and the handle's own byte
+    // counter, so the red says which picker opened and whether the file went
+    // into it — not merely that something did not arrive.
+    expect(src, "the fast picker diagnostic lost its name").toContain(
+      "the phone opened a save picker instead of downloading, so the mobile no-picker gate is gone: ${JSON.stringify(decision)}",
+    );
+    const read = src.slice(decision, verdict);
+    for (const field of ["saveCalls: state.saveCalls,", "dirCalls: state.dirCalls,",
+      "handleBytes: state.handleBytes,", "downloads: state.downloads.length,"]) {
+      expect(read, `the fast diagnostic no longer reports ${field}`).toContain(field);
+    }
+  });
+
+  it("scopes the terminal card to this file and forbids a cancellation status", () => {
+    expect(src).toContain('act("mobile-no-picker-download"');
+    expect(src).toContain("mobile.namedCards !== 1 || !mobile.ok || mobile.bad");
+    expect(src).toContain("mobile.bars !== 0 || !mobile.status || CANCEL_WORDS.test(mobile.status)");
+    // Scoped to the two maintained runtime languages, like the hint patterns
+    // above it. The archived locales under `src/lib/i18n/archive/` are not
+    // rendered by the product, so their cancellation words would be asserting
+    // against copy that no longer ships.
+    expect(src).toContain("const CANCEL_WORDS = /cancel|取消/i;");
+    // The link, the SAS, the conversation and the file lane all outlive it.
+    expect(src).toContain("mobile.heads !== 1 || mobile.composers !== 1 || mobile.attachments !== 1");
+    expect(src).toContain("mobile.requests !== 0");
+    expect(src).toContain('oneSas(tab, who, "after a phone received a file with no picker")');
+    // A missing counter throws instead of filtering the card away — otherwise a
+    // renamed counter silently reduces every name-scoped check to `length === 0`.
+    expect(src).toContain("a transfer card carries no file counter");
+  });
+
+  it("replaces the generic resume terminal wait so the mobile success cannot satisfy it", () => {
+    expect(src).toContain('namedTransferSucceeded("resume-on-the-same-link.bin")');
+    expect(
+      src,
+      "the resume completion wait is generic again; the earlier mobile success now satisfies it",
+    ).not.toMatch(/!!document\.querySelector\('\$\{XFER\.ok\}'\) && !document\.querySelector\('\$\{XFER\.progressBar\}'\)/);
+    // Still the same resume evidence behind it.
+    expect(src).toMatch(/resumed\.bytes !== RESUME_BYTES/);
+    expect(src).toContain('resumed.name !== "resume-on-the-same-link.bin"');
+  });
+
+  it("restores every boundary by identity in a finally, and proves it afterwards", () => {
+    const finallyAt = src.indexOf('restored = await b.evaluate("(window.__e2eMobile ? window.__e2eMobile.restore() : null)");');
+    const proof = src.indexOf("const desktopAgain = await b.evaluate(");
+    const actAt = src.indexOf('act("mobile-no-picker-download"');
+    const desktopAct = src.indexOf('act("picker-cancel-retry"');
+    for (const [name, at] of [["restore call", finallyAt], ["restoration proof", proof],
+      ["the mobile act", actAt], ["the desktop act", desktopAct]]) {
+      expect(at, `${name} anchor is missing; the restoration checks would be vacuous`).toBeGreaterThan(-1);
+    }
+    expect(src, "the restoration is no longer in a finally").toMatch(/\}\s*finally\s*\{\n\s*\/\/ Finally, and in this order/);
+    expect(proof, "the restoration is proved before it happens").toBeGreaterThan(finallyAt);
+    expect(actAt, "the act is recorded before the restoration is proved").toBeGreaterThan(proof);
+    expect(desktopAct, "the desktop picker act no longer follows the mobile one").toBeGreaterThan(actAt);
+    // Identity of the exact function objects, because the desktop act wraps them
+    // and calls through: "a picker is installed" is not the property.
+    expect(src).toContain("save: window.showSaveFilePicker === realSave,");
+    expect(src).toContain("dir: window.showDirectoryPicker === realDir,");
+    expect(src).toContain("createObjectURL: URL.createObjectURL === realCreateObjectURL,");
+    expect(src).toContain("anchorClick: HTMLAnchorElement.prototype.click === realAnchorClick,");
+    expect(src).toContain("!restored.save || !restored.dir || !restored.createObjectURL || !restored.anchorClick");
+    // The counters survive restoration, so a restore that also reset them (and
+    // with it the whole zero-picker claim) fails here.
+    expect(src).toContain("restored.saveCalls !== 0 || restored.dirCalls !== 0 || restored.handleBytes !== 0");
+    expect(src).toContain("restored.downloads !== 1");
+    // And the UA really went back — the desktop acts after it are only about a
+    // desktop because this says so.
+    expect(src).toContain("desktopAgain.userAgent !== desktopAgent.userAgent");
+    expect(src).toContain("desktopAgain.platform !== desktopAgent.platform || desktopAgain.looksMobile");
+    expect(src).toContain("looksMobile: /Android|Mobile/i.test(navigator.userAgent),");
+  });
+
+  it("cannot let its own cleanup mask the failure that triggered it, or skip half of itself", () => {
+    // A `finally` that throws REPLACES the exception that sent it there. If the
+    // act fails during setup — before the boundary exists — an unguarded
+    // `window.__e2eMobile.restore()` reports a missing global and the setup
+    // failure is never printed. And the first fault would skip the UA
+    // restoration behind it, handing the desktop acts a phone.
+    expect(src, "the restore call is unconditional again; a setup failure would be reported as a missing global")
+      .toContain("(window.__e2eMobile ? window.__e2eMobile.restore() : null)");
+    expect(src, "a cleanup fault is no longer captured instead of thrown from the finally")
+      .toMatch(/\} catch \(err\) \{\n\s*cleanupFault = err;\n\s*\}/);
+    expect(src, "the UA restoration is no longer independent of the boundary restoration")
+      .toMatch(/\} catch \(err\) \{\n\s*cleanupFault \?\?= err;\n\s*\}/);
+    // Re-raised only after the finally, i.e. only when the act itself succeeded.
+    const raise = src.indexOf("if (cleanupFault) throw cleanupFault;");
+    const finallyAt = src.indexOf('restored = await b.evaluate("(window.__e2eMobile ? window.__e2eMobile.restore() : null)");');
+    expect(raise, "a cleanup fault is now swallowed entirely").toBeGreaterThan(finallyAt);
+    // And "restored nothing" is its own named failure rather than a TypeError on
+    // the next line down.
+    expect(src).toContain("the phone boundary vanished before it could be restored");
+
+    // The state itself goes with the restoration: seven acts run after this
+    // one on the same page, and a global that still looks installed is how a
+    // later edit reads a boundary that is not there and gets a stale zero.
+    expect(src).toContain("urls.clear();");
+    expect(src).toContain("state.downloads.length = 0;");
+    expect(src).toContain("delete window.__e2eMobile;");
+    // Read into plain numbers BEFORE the state is dropped, or the restoration
+    // proof below it would assert against an emptied array.
+    const summary = src.indexOf("const summary = {");
+    const drop = src.indexOf("delete window.__e2eMobile;");
+    expect(summary, "the restoration summary is no longer captured before the drop").toBeGreaterThan(-1);
+    expect(drop).toBeGreaterThan(summary);
+  });
+
+  it("says what this is: a spoofed UA on desktop Chromium, not a real phone", () => {
+    expect(src).toContain("a spoofed Android UA");
+    expect(src).toContain("not a real Android device, not a real system picker and not a real");
+    expect(src, "the runner started claiming real Android system coverage")
+      .not.toMatch(/on a real (Android )?(phone|device)/i);
+  });
+});
+
+/**
  * The selectors this runner shares with the ordinary Vitest lane.
  *
  * `dom-contracts.mjs` exists because a selector written twice is not a contract
@@ -1057,10 +1323,10 @@ describe("mixed-link owns no private copy of a shared selector", () => {
     // names `RECEIVE.warning` too, so counting the identifier would make this a
     // comment-edit tripwire instead of a contract.
     const guards = src.match(/querySelector\('\$\{RECEIVE\.card\} \$\{RECEIVE\.warning\}'\)/g);
-    expect(guards, "a consent click is no longer guarded by the warning check").toHaveLength(3);
+    expect(guards, "a consent click is no longer guarded by the warning check").toHaveLength(4);
     // One guard per click, and no unguarded click left over.
     const clicks = src.match(/querySelector\('\$\{RECEIVE\.card\} \$\{RECEIVE\.(primary|ghost)\}'\)/g);
-    expect(clicks, "the guarded consent clicks changed count").toHaveLength(3);
+    expect(clicks, "the guarded consent clicks changed count").toHaveLength(4);
   });
 });
 
