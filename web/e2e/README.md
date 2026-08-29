@@ -4,11 +4,14 @@
 `vite preview` 生命周期）。共用而不是各抄一份：两份迟早会漂移，而漂移的那一份会安静地
 变成一个测不出东西的假绿。
 
-三套都跑**默认产物**（`npm run build`）。它们的区别不是构建，是**对端和房间**：
+四套都跑**默认产物**（`npm run build`）。它们的区别不是构建，是**对端和房间**：
 
 - `lan-transfer.mjs` —— 老对端在场时那条一次一模式的老路，`npm run test:e2e`。
   每个标签页都套了测试侧的降级过滤器（见下）。**⚠️ 截至 2026-08-29 这一套跑不到底**，
   原因和迁移方向见下面那一节；在迁移完成之前，它的尾巴一条信号都不产出。
+- `page-shell.mjs` —— auth 落地页、`/apps`、`/pricing` 和不安全上下文单列兜底这四条
+  **页面**契约（不是传输契约），`npm run test:e2e:page-shell`，**在 CI 里跑**。
+  2026-08-29（Phase 3D C2）从 `lan-transfer.mjs` 搬出来单独成套，见下面专门一节。
 - `mixed-link.mjs` —— 两个新版本浏览器在 LAN 房间里的统一链路（`link/1`），
   `npm run test:e2e:mixed`，**单独跑**（它要自己的服务器端口）。
 - `code-room.mjs` —— 同一条统一链路，但在**配对码房间**里，
@@ -18,18 +21,20 @@
 
 ## CI 里真正跑的浏览器道次
 
-`.github/workflows/web.yml` 一共起五条真浏览器道次，`test:e2e` **不在其中**：
+`.github/workflows/web.yml` 一共起六条真浏览器道次，`test:e2e` **不在其中**：
 
 | 道次 | 脚本 | 作业 |
 |---|---|---|
 | 已构建产物的无障碍扫描 | `test:a11y` | `test` |
+| 页面外壳契约（auth 落地页、`/apps`、`/pricing`、不安全上下文布局） | `test:e2e:page-shell` | `test` |
 | 配对码房间里的统一工作区 | `test:e2e:code-room` | `test` |
 | 设备发现可发现性走查 | `test:device-discovery` | `test` |
 | Device Inbox 入口走查 | `test:device-inbox-entry` | `test` |
 | Device Inbox：浏览器 → 服务器 → CLI → 落盘 | `test:device-inbox` | `device-inbox-e2e` |
 
-`mixed-link.mjs` 和 `lan-transfer.mjs` 都只在本地跑。也就是说这份 README 里最长的
-两节所描述的东西，没有任何一次推送或 PR 会替你执行。
+`mixed-link.mjs` 和 `lan-transfer.mjs` 仍然只在本地跑。`page-shell.mjs` 不在此列——
+它托管在 CI 里，是这份 README 里唯一一套既描述了断言、又有推送/PR 真的替你执行它的
+脚本（`a11y-scan.mjs`、`code-room.mjs` 之外）。
 
 ## 这套 harness 覆盖不到的两件事
 
@@ -86,17 +91,21 @@ cd server && RELAYIUM_ADDR=:8099 go run .
 
 于是今天这一套的实际情况是：
 
-- **跑到了、而且过了**：`authLandingScenario`、`appsHierarchyScenario`、
-  `pricingHierarchyScenario`。三幕都是单标签页的页面契约（`/magic-link`、`/apps`、
-  `/pricing`），一张对端卡片都不开，所以删控件碰不到它们。
-- **没有跑**：从 `mobileRelayFallbackScenario` 起的全部尾巴。它是 `main()` 顺序里第一个
-  去驱动已删控件的场景（`lan-transfer.mjs:1950` 取 `.file-pick-input`，现在拿到 `null`），
-  运行到这里就过不去了。主传输那一幕，以及它后面的 small-message-cap、transfer-boundary、
-  unsupported-layout、early-failure、mobile-no-picker、desktop-picker-cancel、resume、
-  四幕消息、multi-page-device、caps-suppressed，全都在这个点的下游，眼下一条信号都不产出。
+- **跑到了、而且过了——现在这个文件里一幕都没有了**。以前跑得过的那三幕
+  （`authLandingScenario`、`appsHierarchyScenario`、`pricingHierarchyScenario`）连同
+  `unsupportedLayoutScenario`（当前单列布局契约；它从来不依赖任何被删的东西，只是因为
+  排序原因才轮不到它跑）一起，在 2026-08-29（Phase 3D C2）整体搬进了
+  `web/e2e/page-shell.mjs`，细节见下面专门一节。
+- **没有跑**：现在是**全部**，从 `mobileRelayFallbackScenario` 起——它现在是 `main()`
+  的第一幕。它去驱动已删控件（`lan-transfer.mjs:1420` 取 `.file-pick-input`，现在拿到
+  `null`），运行到这里就过不去了。主传输那一幕，以及它后面的 small-message-cap、
+  transfer-boundary、early-failure、mobile-no-picker、desktop-picker-cancel、resume、
+  四幕消息、multi-page-device、caps-suppressed，全都在这个点的下游，眼下一条信号都不
+  产出。
 
 所以下面第 1–5 条**描述的是这个脚本的设计意图，不是当前的覆盖**。它们全部位于尾巴里，
-现在一条都没有执行。
+现在一条都没有执行。搬出去的那四幕不再是"设计意图"——它们是 `page-shell.mjs` 里
+每次推送都在跑的真实覆盖。
 
 ### 真正丢掉的东西，比尾巴的长度小得多
 
@@ -131,10 +140,16 @@ cd server && RELAYIUM_ADDR=:8099 go run .
 
 分四阶段，顺序是刻意的：任何一刻的覆盖都不低于今天。每一阶段落地并绿了，才开始下一阶段。
 
-**阶段一：新起一套托管的页面外壳套件。** 现在还能过的那三幕考的是页面契约，不是传输
-契约，本来就不该长在一套传输套件里。把 auth、`/apps`、`/pricing`、当前布局契约和路由
-隔离搬进一套新套件，并加进 `.github/workflows/web.yml`。光这一步就把 `/apps` 层级契约
-从"只在本地"变成托管——这是它第一次由"有人记得跑"以外的东西来保证。
+**阶段一：新起一套托管的页面外壳套件——已完成，2026-08-29（Phase 3D C2）。** 以前
+能过的那三幕考的是页面契约，不是传输契约，本来就不该长在一套传输套件里。它们连同
+`unsupportedLayoutScenario`（当前单列布局契约，同样不依赖任何被删控件，只是排序上轮
+不到）一起搬进了 `web/e2e/page-shell.mjs`：一套只对 `vite preview`、不接真 Go 服务器
+的新套件，`/api/plans` 由 a11y 扫描已经在用的那份进程内夹具同源应答。已加进
+`.github/workflows/web.yml`（`test:e2e:page-shell`）。`page-shell-contract.test.mjs`
+守着这个 runner 本身不会悄悄漏掉一幕：钉的是一个写死的 `EXPECTED_SCENARIO_COUNT`
+（不是拿数组自己会跟着缩水的 `.length` 去比），并且钉住新 CI 步骤没有 `if:` 或
+`continue-on-error`。光这一步就把 `/apps` 层级契约从"只在本地"变成托管——这是它第一次
+由"有人记得跑"以外的东西来保证。
 
 **阶段二：传输类独有断言并入 `mixed-link.mjs`，并把 `mixed-link` 托管起来。**
 上表第 1–6 条考的是真管道（commit-reveal、分块 AES-GCM、ACK 流控、checkpoint 续传、
@@ -449,6 +464,57 @@ readySelector 而不是固定 sleep——固定 sleep 在快机器上浪费时�
 这几格不是摆设——它们上线当天就抓到了静态扫描看不见的四类真问题：进度条没有可访问名、
 `<ol role="log">` 顶掉列表语义让 40 个 `<li>` 变成孤儿、消息面板把 `opacity` 叠在本来
 就是次要色的 `--text` 上（掉到 3.3:1）、以及 40 文件同意清单滚得动却聚不上焦点。
+
+## `page-shell.mjs` — 托管的页面外壳契约（不是传输契约）
+
+`npm run test:e2e:page-shell`（CI 的 web / test 作业里跑，紧跟 a11y 扫描）
+
+```bash
+cd web && npm run build && npm run test:e2e:page-shell
+```
+
+四幕，全部单标签页，2026-08-29（Phase 3D C2）从 `lan-transfer.mjs` 搬过来——它们从来
+不碰对端卡片、信令或分块传输，测的是页面本身：
+
+1. `authLandingScenario` —— `/magic-link`、`/verify-email`、`/reset-password`：标题
+   文字与字号、共享的 `.ui-card`、`canonical` 为空、零条 `hreflang` 备用链接、
+   `robots: "noindex, nofollow"`、label 与输入框的对应关系、中性（非报错）输入框边框、
+   320px 移动端不溢出且触摸目标 ≥44px（中英文各一遍）。然后导航回 `/`，断言**路由
+   隔离**：`canonical`/`og:url` 恢复、3 条 `hreflang`、`robots` 以 `index, follow`
+   开头——私密 auth 路由被压制的 SEO head 不能泄漏进公开路由，也不能在离开后残留。
+2. `appsHierarchyScenario` —— `/apps` 的卡片模型从 `AppsPage.svelte` 和
+   `native-releases.json` **推导**（`appsCardModel`），不是抄一份卡片 id 清单：标题
+   层级计数、可用/未来卡片 id、CTA 链接、未来卡片零控件、明暗两个主题下对比度/不透明度
+   ≥4.5:1（连同一条钉住的 EXERCISED/NOT-EXERCISED 披露）、390px 下中英文都不溢出、
+   真 Tab 键在 `.cmd` 上留下的键盘焦点环。
+3. `pricingHierarchyScenario` —— 第一档的位置、价格/标题字号、价格先于长解释出现的
+   DOM 顺序、账户控件存在、390px 下 44px 循环切换目标与 `dir="ltr"` 的价格隔离
+   （中英文各一遍）。
+4. `unsupportedLayoutScenario` —— **当前布局契约**。加载前把 `isSecureContext` 强制
+   设为 `false`，断言单列兜底：`.lan-workspace` 不是 `grid`，没有 `two-col`/紧凑英雄区
+   类，不支持横幅存在，`.peers` 不存在，零横向溢出。
+
+**不需要 Go 服务器，只对 `vite preview`。** 四幕里没有一条断言依赖真实的 `/api/*`
+响应内容：`authLandingScenario` 的三个组件自己的 `onMount` 都不发请求；
+`appsHierarchyScenario` 读的是打包进产物的 `native-releases.json`，不是运行时请求；
+`pricingHierarchyScenario` 需要 `/api/plans` 解析成功才会渲染卡片，用
+`a11y-fixtures.mjs` 已经导出的 `PRICING_ROUTES`（和 `PricingPage.test.ts` 同一份档位
+表）在页面自己的进程里同源应答；`unsupportedLayoutScenario` 完全不碰任何 API 调用。
+`Nav.svelte`→`Account.svelte` 触发的匿名会话探测（`GET /api/me`）在四条路由上都会打，
+但 `refreshSession()` 把任何非 2xx 都当"未登录"处理，不抛异常，所以不需要专门为它
+搭一份夹具。
+
+`/api/plans` 因此换了口径：以前 `pricingHierarchyScenario` 打的是真 Go 服务器，现在
+量的是这份手工维护的夹具表，和 `server/account/settings.go` 的真实档位定义有第二处
+需要人工同步的地方——但这一幕从来只验证**几何**（第一档在折叠线以上、价格/标题字号、
+卡片顺序），从不验证金额，所以这不是一次覆盖回归。
+
+反悄悄丢场景：`main()` 按一个写死的 `EXPECTED_SCENARIO_COUNT = 4` 校验跑过的幕数，
+而不是拿 `SCENARIOS.length` 自证——删掉数组里一项会让两者一起缩水，那样"3/3"照样
+打印成功。`page-shell-contract.test.mjs` 是这条防线的源码层护栏：钉住四个函数名都还在
+`SCENARIOS` 里、钉住比较的是这个写死常量、钉住计数循环里没有把某一幕的异常吞掉的
+`catch`、也钉住 `.github/workflows/web.yml` 里那一步没有 `if:` 或
+`continue-on-error: true`。
 
 ## `code-room.mjs` — 配对码房间里的同一套统一工作区
 

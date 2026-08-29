@@ -151,6 +151,13 @@ jobs:
       # Fails on any axe violation not claimed by e2e/a11y-allowlist.json (empty);
       # `incomplete` results are printed and never fail.
       - run: npm run test:a11y
+      # The auth-landing/apps/pricing page-shell contracts plus the insecure-context
+      # single-column fallback, moved off `lan-transfer.mjs` (which needs a real Go
+      # server and a peer, neither of which any of these four scenarios use). Cheapest
+      # new lane in this job — vite-preview only, single tabs, no rendezvous fixture —
+      # placed here so a page-shell regression fails fast before the heavier
+      # real-signalling journeys below spend their minutes.
+      - run: npm run test:e2e:page-shell
       # Two real tabs in one real pairing-code room, driving the freshly built
       # dist through a controlled rendezvous/ICE fixture. It is the ONLY gate
       # that executes the promoted routing decision — a code-room peer that
