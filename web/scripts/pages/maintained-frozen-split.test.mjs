@@ -24,7 +24,8 @@ import { resolve } from "node:path";
 import { buildAllPages } from "../gen-pages.mjs";
 import {
   LANGS, MAINTAINED_LANGS, FROZEN_LANGS, isMaintained, isFrozen,
-  BCP47, archiveNotice, ARCHIVE_STYLE, ctaHref, urlPath, landingUrl,
+  BCP47, archiveNotice, ARCHIVE_COPY, ARCHIVE_STYLE, ctaHref, urlPath, landingUrl,
+  PRICING_URL, pricingLabel,
 } from "./shared.mjs";
 
 const pages = buildAllPages();
@@ -110,6 +111,21 @@ describe("the archived-translation notice, per template family", () => {
     expect(aside[2]).toMatch(/<a href="\/[^"]*" lang="en" hreflang="en"><bdi>English<\/bdi><\/a>/);
     expect(aside[2]).toMatch(/<a href="\/zh\/[^"]*" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文<\/bdi><\/a>/);
 
+    // The pricing pointer, per family rather than per locale: what silently
+    // loses it is a template that stopped calling archiveNotice for one of its
+    // page kinds, and that is invisible to a locale-indexed check.
+    const pricing = /<p class="[^"]*\barchived-pricing\b[^"]*">([\s\S]*?)<\/p>/.exec(aside[2]);
+    expect(pricing, `${frozenPath} states no pricing pointer`).toBeTruthy();
+    // Sentence, link, sentence — not a bare link, and not a sentence with the
+    // link stripped out of it. Both degraded forms render without error.
+    expect(pricing[1], `${lang} pricing pointer has no prose`).toMatch(/^[^<]{20,}/);
+    expect(pricing[1], `${lang} pricing pointer misses the maintained target`)
+      .toContain(`<a href="${PRICING_URL}">`);
+    // In this locale's own words, using the label its own footer already uses.
+    expect(pricing[1], `${lang} pricing pointer is not localized`)
+      .toContain(`>${pricingLabel(lang)}</a>`);
+    expect(pricing[1], `${lang} pricing pointer ends mid-sentence`).toMatch(/<\/a>[^<]+$/);
+
     // …and the stylesheet that draws it, emitted only where it is used.
     expect(html).toContain(ARCHIVE_STYLE.trim().split("\n")[0]);
   });
@@ -163,6 +179,31 @@ describe("archiveNotice itself", () => {
     expect(() => archiveNotice("ja", { en: "/x/" })).toThrow(/both maintained twins/);
     expect(() => archiveNotice("ja", { zh: "/zh/x/" })).toThrow(/both maintained twins/);
     expect(() => archiveNotice("ja", undefined)).toThrow(/both maintained twins/);
+  });
+
+  it("refuses to render a notice whose pricing pointer is missing", () => {
+    // Registry drift, fail-closed. A locale added to ARCHIVE_COPY with a label,
+    // a body and a lead but no `pricing` entry would otherwise ship a notice
+    // that says "details may differ" over a page quoting a retired free tier —
+    // a half-disclosure on 50 pages that no template author would ever see.
+    const { pricing, ...withoutPricing } = ARCHIVE_COPY.ja;
+    const spliced = { ...ARCHIVE_COPY, ja: withoutPricing };
+    // Mutate the module's own table rather than a copy: archiveNotice reads
+    // ARCHIVE_COPY directly, so a guard applied to a clone proves nothing.
+    ARCHIVE_COPY.ja = withoutPricing;
+    try {
+      expect(() => archiveNotice("ja", { en: "/x/", zh: "/zh/x/" })).toThrow(/pricing pointer/);
+      for (const half of [{ before: "x" }, { after: "y" }, {}]) {
+        ARCHIVE_COPY.ja = { ...withoutPricing, pricing: half };
+        expect(() => archiveNotice("ja", { en: "/x/", zh: "/zh/x/" }), JSON.stringify(half))
+          .toThrow(/pricing pointer/);
+      }
+    } finally {
+      ARCHIVE_COPY.ja = { ...withoutPricing, pricing };
+    }
+    expect(Object.keys(spliced).sort()).toEqual([...FROZEN_LANGS].sort());
+    expect(archiveNotice("ja", { en: "/x/", zh: "/zh/x/" }), "the table must be restored")
+      .toContain(`<a href="${PRICING_URL}">`);
   });
 
   it("has copy for every frozen language and for no other", () => {
@@ -291,7 +332,11 @@ describe("the twin URLs the notice links are the ones that are served", () => {
   it("resolves every notice link to a generated page or an English SPA route", () => {
     const served = new Set([
       ...pages.map((p) => "/" + p.path.replace(/index\.html$/, "")),
-      "/", "/apps", "/cross-network", "/offline-transfer",
+      // The English SPA routes, which are served but never generated. PRICING_URL
+      // rather than the literal "/pricing": the notice's pricing pointer is the
+      // third destination in the aside, and a constant that moved without this
+      // set moving with it is exactly the dead link this test exists to catch.
+      "/", "/apps", "/cross-network", "/offline-transfer", PRICING_URL,
     ]);
     const dead = [];
     for (const p of pages) {

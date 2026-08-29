@@ -30,9 +30,12 @@ end-to-end encrypted connection with one verification step, a composer visible b
 file and folder controls under it, so files and messages travel together without reconnecting
 between them. Across networks that same one connection is carried by the encrypted relay, which
 forwards only ciphertext, and it runs under a bounded lifetime derived from the relay credential —
-the workspace warns before that boundary and ends the link truthfully at it. Peers that do not
-announce this exact capability keep the existing separate file and message flows: the native
-clients, the CLI, and older browsers, on either network.
+the workspace warns before that boundary and ends the link truthfully at it. A browser peer that
+does not announce this exact capability — an older Relayium Web build — is shown a notice saying so
+and offered no transfer controls, rather than a quietly degraded path: the separate file and message
+flows the Web client used to fall back to have been removed. The released macOS client and the CLI
+are not that fallback; they are current clients connecting over their own supported protocol
+surfaces — see **Delivery status** below for what each one ships today.
 
 The same protocol also carries **ephemeral text**. When both devices are online, a message session
 opens an independent end-to-end encrypted connection — with its own optional verification code to compare — and carries a link,

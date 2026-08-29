@@ -99,7 +99,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最終更新: <bdi>2026-08-06</bdi></p>
-      <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links">最新版：<a href="/guides/run-relayium-as-an-always-on-service/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/run-relayium-as-an-always-on-service/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
+      <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links archived-pricing">このページに記載されている料金プランや利用上限は古くなっている可能性があります。現在の内容は<a href="/pricing">料金</a>のページでご確認ください。</p><p class="archived-links">最新版：<a href="/guides/run-relayium-as-an-always-on-service/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/run-relayium-as-an-always-on-service/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">relayium serve --once は1回の受信を処理して終了します——たまに1回だけ pull する用途には十分です。しかし、あるマシンを常駐の受け皿にしたい場合——毎晩バックアップが届くホームサーバー、CI がビルド成果物をプッシュするビルドマシン、スマートフォンからいつでも写真を送れる NAS——には、毎回手動で起動するのではなく、serve をずっと動かし続けたいはずです。</p>
       <p class="lead">本ガイドでは、長時間稼働するリスナーの起動、誰にプッシュを許可するかの承認、端末の前に誰もいない場合のためのピア事前承認、systemd 下での実行、そして sync --delete を使う送信側に削除をミラーさせる方法を扱います。</p>
       <h2>始める前に</h2>

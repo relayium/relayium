@@ -8,6 +8,8 @@ matrix that no headless check can stand in for: **[TESTING-accessibility.md](TES
 **Execution status key:**
 - `[AUTOMATED]` — actually executed in CI / this session; output captured.
 - `[MANUAL]` — requires two real browsers/devices and a real network; cannot run headless.
+- `[NOT RUN]` — written, but not currently executing anywhere. Not coverage. See §1a
+  for the one live instance of this: the tail of `web/e2e/lan-transfer.mjs`.
 
 ---
 
@@ -50,6 +52,206 @@ dist/assets/index-DMwganuR.js   476.09 kB │ gzip: 169.44 kB
 
 server/relayium-server: Mach-O 64-bit executable arm64  (go build OK)
 ```
+
+---
+
+## 1a. `web/e2e/lan-transfer.mjs` — local only, and currently red
+
+`npm run test:e2e` is the broadest headless suite in the repository, it is **not
+a CI gate**, and as of 2026-08-29 it **cannot exit zero**. Both halves of that
+matter; take them in order.
+
+### It is not a CI gate
+
+`.github/workflows/web.yml` runs five hosted browser lanes, and this is not one
+of them:
+
+| Lane | Script | Job |
+|---|---|---|
+| Accessibility scan of the built `dist` | `test:a11y` | `test` |
+| Pairing-code room, unified workspace | `test:e2e:code-room` | `test` |
+| Device-discovery findability journey | `test:device-discovery` | `test` |
+| Device Inbox entry journey | `test:device-inbox-entry` | `test` |
+| Device Inbox: browser → server → CLI → disk | `test:device-inbox` | `device-inbox-e2e` |
+
+`test:e2e` appears in none of them. Nothing in `lan-transfer.mjs` — including the
+`/apps` hierarchy contract — is executed by a push or a pull request. It runs only
+when someone runs it locally against a freshly built `dist`:
+
+```bash
+cd web && npm run build && npm run test:e2e
+# Today: the first three scenarios print "ok", then the run stops in the tail.
+```
+
+### Why it stops in the tail
+
+Commit `d175f863` ("Remove legacy Mac and Web transfer paths", 2026-08-27) deleted
+the legacy per-peer transfer controls from `web/src/App.svelte`: the `.pa-files`
+label wrapping a hidden `.file-pick-input`, and the file / folder / message fork
+beside it. A peer card now renders exactly **one** control — `.open-workspace` —
+and only for a peer that routes `link/1`. A peer that does not gets
+`<p class="pa-unsupported">`: a sentence, not a disabled button.
+
+`lan-transfer.mjs` is built on the opposite premise. `main()` calls
+`setDefaultInit(STRIP_LINK_CAP)` before opening the first tab, so **every** tab in
+the suite presents as a legacy `text/1`-only peer — and the scenarios then drive
+the fork that such a peer used to be given. That fork no longer exists, so those
+scenarios address elements the component does not render.
+
+What that leaves:
+
+- **Executed and passing** — `authLandingScenario`, `appsHierarchyScenario` and
+  `pricingHierarchyScenario`. All three are single-tab page contracts (`/magic-link`,
+  `/apps`, `/pricing`); none opens a peer card, so the removal does not reach them.
+- **Not executed** — everything from `mobileRelayFallbackScenario` onward. It is the
+  first scenario in `main()`'s order to drive a removed control
+  (`web/e2e/lan-transfer.mjs:1950` picks up `.file-pick-input`, which now resolves
+  to `null`), and the run does not get past it. The main LAN transfer act and every
+  scenario after it — small-message-cap, transfer-boundary, unsupported-layout,
+  early-failure, mobile-no-picker, desktop-picker-cancel, resume, the four message
+  scenarios, multi-page-device and caps-suppressed — are downstream of that point
+  and currently produce no signal at all.
+
+So the suite today proves three page contracts and nothing else. Do not extend an
+`[AUTOMATED — LOCAL]` reading onto the tail: the honest status is three scenarios
+`[AUTOMATED — LOCAL]`, the remainder `[NOT RUN]`.
+
+### What is actually lost — smaller than the tail's length suggests
+
+This script has been described as the **only** regression net for the realtime
+pipeline. That was true once and is not true now, and repeating it would overstate
+the damage and misdirect the repair. A coverage audit against `mixed-link.mjs` and
+`code-room.mjs` found **substantial duplication**: the handshake-to-disk path,
+byte-exact resume across a forced PeerConnection replacement, one-SAS-per-link,
+per-file SHA-256 integrity, consent state machines, live-state accessibility scans
+and teardown are all driven by those two — on the unified `link/1` surface that
+replaced the fork, and `code-room.mjs` runs in hosted CI on every push.
+
+What the audit found genuinely stranded is **exactly eight** current unique
+assertions, held nowhere else:
+
+| # | Stranded unique assertion |
+|---|---|
+| 1 | Mobile no-picker fallback (no `showSaveFilePicker`) |
+| 2 | Desktop save-picker cancellation |
+| 3 | 64 KiB max-message-size boundary |
+| 4 | Response race (responder accepts while the initiator is still taking ownership) |
+| 5 | Pre-open PeerConnection failure (`failed` before the DataChannel opens) |
+| 6 | Live `role="progressbar"` accessibility during an in-flight transfer |
+| 7 | Multi-page device identity and focus (two pages of one browser plus a third device) |
+| 8 | Bounded relay-pool failure (credentials issued from the pool, then discarded) |
+
+Those eight are the actual regression exposure, and they are what the migration
+below has to carry across. Everything else in the tail can be retired rather than
+ported, because a hosted suite already asserts it.
+
+Note what does still hold for the part that runs: it is only as recent as the last
+person who ran it. A change to `AppsPage.svelte` or `native-releases.json` can merge
+green without `appsHierarchyScenario` having executed at all.
+
+### The migration direction for the stranded tail
+
+The repair is **not** to restore the deleted controls, and not to add a test-only
+switch that re-renders them. The legacy fork was removed from the product
+deliberately; a path back to it that only tests can reach would assert behaviour no
+user can ever get, which is worse than asserting nothing.
+
+The migration is staged, and the stages are ordered so that coverage is never
+lower than it is today. Each stage lands and goes green before the next begins.
+
+**Stage 1 — a hosted page-shell suite.** The three scenarios that still pass are
+page contracts, not transfer contracts, and they do not belong in a transfer
+suite at all. They move into a new hosted suite covering auth, `/apps`,
+`/pricing`, the current layout contract and route isolation, and that suite is
+added to `.github/workflows/web.yml`. This stage alone converts the `/apps`
+hierarchy contract from local-only to hosted — the first time it is enforced by
+anything other than someone remembering to run it.
+
+**Stage 2 — the transfer uniques move into `mixed-link.mjs`, and `mixed-link`
+becomes hosted.** Uniques 1–6 above are about the real pipeline (commit-reveal,
+chunked AES-GCM, ACK flow control, checkpoint resume, consent), not about the
+retired fork. They come off `STRIP_LINK_CAP` and onto the unified `link/1`
+workspace — `.open-workspace`, then the workspace's own composer and
+`.attach-file` / `.attach-folder`. `mixed-link.mjs` already drives exactly that
+surface. It is currently local-only, so this stage also adds it to hosted CI;
+migrating uniques into a suite nobody runs would move the problem, not fix it.
+
+**Stage 3 — identity and bounded relay failure.** Uniques 7 and 8 are last
+because both need setup the other stages do not: multi-page device identity needs
+a third independent context alongside two pages of one browser, and bounded
+relay-pool failure needs the pool-shaped `/api/ice` response plus an unreachable
+TURN host and a probe budget that actually elapses.
+
+**Stage 4 — delete `lan-transfer.mjs` and its `test:e2e` npm script.** Only after
+the hosted `main` is green with stages 1–3 landed. Deleting earlier would drop the
+eight uniques; keeping it after is worse than useless — a script that cannot exit
+zero teaches everyone to ignore a red run.
+
+Two things this migration must not do. It must not restore the deleted controls,
+and it must not add a downgrade switch. What remains genuinely legacy-specific is
+one claim, and it is a claim about *absence*: a peer that does not announce
+`link/1` is offered no control and is told so.
+
+Be precise about what guards that claim today, because the two halves have very
+different status:
+
+- **Currently running** — `web/src/lib/link-only-surface.test.ts` (added by the
+  same commit that removed the fork). It is a deterministic Vitest source-level
+  guard: no legacy session module imported anywhere in production source, and no
+  fallback transport reaching the workspace router. It runs on every push, in the
+  `npm test` step of the `test` job.
+- **Written but not executing** — `capsSuppressedScenario` was designed to assert
+  the observer-side shape in a real browser (a peer that never announces caps is
+  offered no control, and the old peer sees no spurious card). It is the **last**
+  scenario in `main()`, so it sits deepest in the non-executing tail described
+  above and does not run today, locally or in CI.
+
+So the source-level half is guarded and the rendered half is not. That gap is
+narrow — the source guard makes it structurally hard for a legacy transport to
+come back — but it is a gap, and unique #7 and the browser-side unsupported-peer
+shape are both waiting on the stage-3 migration. Nothing there needs a legacy
+transfer to be performed, because there is no longer a legacy transfer to perform.
+
+Each migrated assertion must be run and shown green before this document may call
+it automated again. An assertion edited until it stops throwing, with no recorded
+green run behind it, is precisely the measures-nothing case this section exists to
+prevent.
+
+### The conditional coverage inside `appsHierarchyScenario`
+
+This subsection describes one of the three scenarios that **does** still execute,
+so what follows is live, not aspirational — subject to the local-only caveat above.
+
+The `/apps` assertions are **derived** from `src/lib/AppsPage.svelte` and
+`native-releases.json` (see `appsCardModel`), not pinned to a card list. They
+previously hard-coded three "in development" cards (iOS, Android, Windows) and
+the counts 6 / 3 / 8; all three cards were removed on 2026-08-28 and the
+literals became a stale second copy of a decision owned elsewhere.
+
+One consequence has to be stated rather than assumed. The card contrast/opacity
+check originally ran over `.future-card` only. **The release model currently
+declares no in-development card, so that group is empty** — and a contrast check
+over an empty list passes without measuring anything. The scenario therefore:
+
+- runs the same contrast/opacity probe over the **available** cards, which are
+  never empty, in both light and dark themes;
+- prints an explicit disclosure line — `in-development card contrast/opacity NOT
+  EXERCISED: the release model declares no in-development card` — instead of a
+  silent tick; and
+- **pins that disclosure**, failing if the reported branch disagrees with what
+  the browser actually measured. Deleting the future-card check outright, or
+  reporting it as exercised while measuring zero cards, is a red run.
+
+**Revisit trigger:** when a card is next added to `AppsPage.svelte` with an
+`available:` expression that is not `true` — i.e. the first time the
+in-development group is non-empty again — the disclosure flips to `EXERCISED` on
+its own and the future-card contrast assertion resumes with no edit here. At
+that point re-run `npm run test:e2e` and delete this subsection's "currently
+empty" framing — the run still stops later in the tail until that migration
+lands, but `appsHierarchyScenario` reports before it gets there. A new
+`available:` expression the model cannot resolve fails loudly (`unrecognised
+availability`) by design; teach `AVAILABILITY` what it means rather than widening
+the regex.
 
 ---
 
@@ -406,16 +608,27 @@ Phase 1 of the messaging feature (spec:
 `docs/protocol/relayium-text-v1.md`).
 
 Gates 1–3 and 5–9 are browser-side; gate 4 needs two builds; gate 10 needs two
-machines with the CLI. The browser scenarios that *can* be automated already are —
-`web/e2e/lan-transfer.mjs` covers **both** verification paths: the default
-(`messageDefaultScenario`, advanced verification OFF) asserts the recipient lands
-straight in the composer with no accept/reject card ever rendering, no SAS on
-either side, and the initiator reaching its composer too; the opt-in path
-(`messageScenario`, advanced verification ON) asserts the explicit accept/reject
-gate and matching SAS on both tabs. It also covers byte-exact multibyte content,
-literal rendering of script-like content, and the suppressed-caps case. What
-remains here is what a headless harness cannot reach: two real devices, an older
-build, OS notifications, a screen reader, and two live CLI processes.
+machines with the CLI. What remains in this section is what a headless harness
+cannot reach: two real devices, an older build, OS notifications, a screen reader,
+and two live CLI processes.
+
+> **⚠️ The automated half of the messaging gates is not currently running.**
+> `web/e2e/lan-transfer.mjs` was *written* to cover both verification paths — the
+> default (`messageDefaultScenario`, advanced verification OFF: recipient lands
+> straight in the composer, no accept/reject card, no SAS on either side) and the
+> opt-in path (`messageScenario`, advanced verification ON: explicit accept/reject
+> gate and matching SAS on both tabs), plus byte-exact multibyte content, literal
+> rendering of script-like content and the suppressed-caps case. All four message
+> scenarios sit in that script's **non-executing tail** (§1a), so none of them runs
+> today, locally or in CI. Do not count them as coverage.
+>
+> The consent state machines and the one-SAS-per-link rule are still asserted, by
+> `web/e2e/mixed-link.mjs` and `web/e2e/code-room.mjs` on the unified `link/1`
+> surface, and the latter runs in hosted CI. What is genuinely uncovered until the
+> §1a migration lands is the response race (unique #4) — a responder accepting
+> while the initiator is still taking ownership of its channel. Deterministic
+> coverage of the surrounding logic remains in `src/lib/verify-gates.test.ts` and
+> `src/lib/MessagePanel.test.ts`.
 
 Prerequisites: `cd web && npm run build`, then
 `cd server && RELAYIUM_ADDR=:8099 go run .`, and two devices on the same LAN
