@@ -748,8 +748,8 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
          // main-actor isolated, and a default argument is evaluated in the
          // caller's isolation — which is an error under the Swift 6 language
          // mode. Nothing in the closure touches this object.
-         relayMeasure: @escaping RelayNegotiator.Measure = { pool, publish in
-             await RelayProbe.measureAll(pool, publish: publish)
+         relayMeasure: @escaping RelayNegotiator.Measure = { pool, sink in
+             await RelayProbe.measureAll(pool, sink: sink)
          },
          relayChoiceDeadline: TimeInterval = RelaySelection.choiceDeadline,
          assemble: @escaping Assemble) {

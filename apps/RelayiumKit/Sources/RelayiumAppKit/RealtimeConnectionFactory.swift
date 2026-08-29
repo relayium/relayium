@@ -193,8 +193,8 @@ public enum RealtimeConnectionFactory {
                                                           code: code, name: deviceName),
                        peerTimeout: peerTimeout,
                        choiceDeadline: relayChoiceDeadline,
-                       measure: { pool, publish in
-                           await RelayProbe.measureAll(pool, publish: publish)
+                       measure: { pool, sink in
+                           await RelayProbe.measureAll(pool, sink: sink)
                        },
                        mode: mode,
                        build: liveConnection)

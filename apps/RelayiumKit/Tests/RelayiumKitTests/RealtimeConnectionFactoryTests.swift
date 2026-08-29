@@ -273,6 +273,50 @@ final class RealtimeConnectionFactoryTests: XCTestCase {
         XCTAssertEqual(record.peerId, "other-2")
     }
 
+    /// **The whole gate, end to end, against the production shape.**
+    ///
+    /// A near relay that answers and a second advertised relay that allocates
+    /// nothing and stays silent for the full nine seconds — the exact state the
+    /// quarantined `us-chi` entry put every pairing in. `make` must build on the
+    /// near relay well inside a second rather than spend its five-second choice
+    /// deadline waiting for a probe that is never going to speak.
+    ///
+    /// The measurement is `RelayProbe.measureAll`'s own shape, including the
+    /// `ProbeStartBarrier` acknowledged from inside each child, so what this
+    /// pins is the wiring — sink through negotiator through gate — and not just
+    /// the rule.
+    func testASilentAdvertisedRelayDoesNotCostTheChoiceDeadline() async throws {
+        let silent = RelayEntry(id: "silent",
+                                iceServers: [ICEServerConfig(urls: ["turn:silent.example:3478"])])
+        let began = Date()
+        let (_, record) = try await runMake(
+            pool: [Self.near, silent],
+            choiceDeadline: 5.0,
+            measure: { pool, sink in
+                let barrier = ProbeStartBarrier(expected: pool.count,
+                                                onAllStarted: { sink.allProbesStarted() })
+                await withTaskGroup(of: Void.self) { group in
+                    for (index, entry) in pool.enumerated() {
+                        group.addTask {
+                            barrier.acknowledge(index)
+                            if entry.id == "near" { sink(entry.id, 40) }
+                            else { try? await Task.sleep(nanoseconds: 9_000_000_000) }
+                        }
+                    }
+                }
+            },
+            drive: { ch in
+                self.joinPeer(ch)
+                ch.fireText(#"{"type":"signal","from":"other-2","data":{"relayRtt":{"near":55}}}"#)
+            })
+
+        XCTAssertEqual(record.servers?.map(\.urls), [["turn:near.example:3478"]],
+                       "the relay that answered, not the advertised fallback")
+        XCTAssertEqual(record.relayOnly, true)
+        XCTAssertLessThan(Date().timeIntervalSince(began), 2.0,
+                          "a silent advertised relay must not hold the connection for the deadline")
+    }
+
     /// The other half of the same ordering: with no pool there is nothing to
     /// choose, so the advertised servers go through and the transport policy
     /// must NOT be forced to relay — a LAN room has no relay to gather.

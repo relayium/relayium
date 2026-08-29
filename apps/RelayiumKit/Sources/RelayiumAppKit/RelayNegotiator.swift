@@ -47,12 +47,72 @@ import RelayiumKit
 public final class RelayNegotiator: @unchecked Sendable {
     private let signaling: SignalingClient
     private let pool: [RelayEntry]
-    /// Runs the pool's probes and calls `publish` once per relay that answers,
-    /// as it answers. Streaming, not returning a finished map: see `start`.
+    /// `pool`'s ids, which is what the dominance rule iterates. Derived once
+    /// rather than per evaluation; the pool is fixed for the session.
+    private let poolIDs: [String]
+    /// Runs the pool's probes and reports through `publish` once per relay that
+    /// answers, as it answers. Streaming, not returning a finished map: see
+    /// `start`.
+    ///
+    /// ## The second thing the sink carries, and why it has to exist
+    ///
+    /// `settledLocked` retires a probe that is still running once it has been
+    /// running longer than the current pick's worse leg — the browser does
+    /// exactly that, and it is what stops one silently dropping relay from
+    /// holding a choice the room already has for the whole probe timeout.
+    /// Elapsed time is a valid LOWER bound on what a probe will report only when
+    /// it is measured from an anchor at or after that probe's own start, and
+    /// neither of the obvious candidates is one:
+    ///
+    /// - `start()` runs BEFORE `measure` is even called, so elapsed from there
+    ///   over-estimates every probe's round trip — the unsafe direction, which
+    ///   retires relays that can still win.
+    /// - The first result would be the natural anchor, as it is in the browser,
+    ///   but only if every probe had begun timing before it. In `measureRelays`
+    ///   (`web/src/lib/ice.ts`) that is a fact about the language: every probe's
+    ///   clock starts in the one synchronous job that `pool.map` runs in, and
+    ///   nothing can be published until that job ends. A Swift task group has no
+    ///   equivalent guarantee — `group.addTask` children are merely enqueued on
+    ///   the global concurrent executor, so under load a later child can still
+    ///   be waiting for a thread while an earlier one publishes.
+    ///
+    /// So the fact is reported rather than inferred. `RelayProbeSink` carries a
+    /// second, one-shot edge — `allProbesStarted()` — and the contract a
+    /// measurement must honour to use it is exactly:
+    ///
+    /// > every probe has taken the monotonic instant it will later measure its
+    /// > own round trip from, on the same clock this negotiator's `now` reads,
+    /// > and none of them has suspended since.
+    ///
+    /// `RelayProbe.measureAll` implements it with `ProbeStartBarrier`. Hoisting
+    /// a timestamp ahead of `addTask` would NOT: executor delay between that
+    /// timestamp and the probe's real start lands in elapsed, over-stating the
+    /// bound in the unsafe direction, which is the same guess with a tidier
+    /// call site.
+    ///
+    /// **Not calling it is always safe.** A measurement that never fires the
+    /// edge leaves the anchor nil, `elapsedMs` nil, and the rule reduced to its
+    /// timing-free half — which is the behaviour every caller had before the
+    /// edge existed, and is why the fakes in this package's tests did not have
+    /// to change.
     public typealias Measure =
-        (_ pool: [RelayEntry], _ publish: @escaping @Sendable (String, Int) -> Void) async -> Void
+        (_ pool: [RelayEntry], _ publish: RelayProbeSink) async -> Void
 
     private let measure: Measure
+    /// Monotonic, and injectable so the dominance rule can be exercised at
+    /// millisecond scale. `systemUptime` rather than a wall clock — the same
+    /// choice, for the same reason, as `WebRTCLinkTransport`: elapsed time is
+    /// used here as a LOWER bound on an unfinished probe's round trip, so the
+    /// unsafe direction is a clock that runs FAST, and a wall clock stepped
+    /// FORWARD (NTP, the user setting the date, a VM resuming) would retire a
+    /// relay that could still win. A monotonic clock cannot do that; if it
+    /// stalls — the machine sleeping mid-probe — elapsed under-counts, the bound
+    /// gets weaker, and the room waits longer than it strictly had to.
+    ///
+    /// It must be the SAME clock `RelayProbe` times its round trips on, or the
+    /// two quantities being compared are not in the same domain. Both default to
+    /// `systemUptime`; see `RelayProbe.measureAll`.
+    private let now: () -> TimeInterval
 
     private let lock = NSLock()
     private var mine: [String: Int] = [:]
@@ -71,7 +131,27 @@ public final class RelayNegotiator: @unchecked Sendable {
     /// `Task` that reads it back in `finishMeasurement` can hop to a different
     /// thread — same reasoning as everywhere else in this file that a field
     /// crosses the async boundary.
-    private var measurementStartedAt: Date?
+    private var measurementStartedAt: TimeInterval?
+    /// **The instant every probe in the pool is known to have started**, or nil
+    /// until `Measure` says so.
+    ///
+    /// The anchor `RelayChoice.dominates` needs, and deliberately NOT
+    /// `measurementStartedAt`: that one is taken before `measure` is even
+    /// entered, so everything between it and a probe's real start — task
+    /// creation, executor queueing, `RTCPeerConnectionFactory` construction —
+    /// would be counted as round-trip time the probe has already spent. Elapsed
+    /// is a LOWER bound, so over-counting it retires relays that can still win.
+    ///
+    /// An anchor taken at or AFTER the last start is the safe error: elapsed
+    /// under-states every pending probe's true running time, so the bound is
+    /// weaker than it could be and the room waits slightly longer. What it costs
+    /// is the barrier call itself.
+    ///
+    /// Nil therefore means "no sound bound yet", and the rule falls back to its
+    /// timing-free half rather than to zero. `record` may well have run several
+    /// times by then — an early publication is buffered into `mine` and
+    /// broadcast exactly as before; only the CLOCK half of the rule waits.
+    private var probeAnchor: TimeInterval?
     /// Milliseconds from `measurementStartedAt` to `finishMeasurement` —
     /// latched once and never recomputed, so a caller that asks after the
     /// fact gets the same answer `wake()` already acted on. Nil until our own
@@ -80,13 +160,29 @@ public final class RelayNegotiator: @unchecked Sendable {
     // Each waiter is a "fire" closure rather than a raw continuation: see
     // `waitForChoice` for why a plain `withCheckedContinuation` here would
     // deadlock the whole call in the (very common) case nobody ever wakes it.
-    private var waiters: [() -> Void] = []
+    private var waiters: [ResumeOnce] = []
+    /// The early exit's wake-up.
+    ///
+    /// Necessary because the clock half of the rule turns true with TIME rather
+    /// than with an event: a room whose peer has spoken and whose fast relay has
+    /// answered gets no further callback until the silent probe's timeout, and
+    /// waiting for that is the whole defect. Separate from `waitForChoice`'s own
+    /// deadline `Task` because they mean opposite things — one gives up, the
+    /// other stops waiting for an answer it already has.
+    private var dominanceTask: Task<Void, Never>?
+    /// `dominanceTask`'s invalidation token. A wake-up that was already in
+    /// flight when the pick moved underneath it must be able to recognise that,
+    /// whether or not `cancel()` also stopped it in time.
+    private var dominanceToken = 0
 
     public init(signaling: SignalingClient,
                 pool: [RelayEntry],
+                now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
                 measure: @escaping Measure) {
         self.signaling = signaling
         self.pool = pool
+        self.poolIDs = pool.map(\.id)
+        self.now = now
         self.measure = measure
     }
 
@@ -102,13 +198,45 @@ public final class RelayNegotiator: @unchecked Sendable {
     /// on the wire, and in the peer's hands, inside the budget.
     public func start() {
         lock.lock()
-        measurementStartedAt = Date()
+        measurementStartedAt = now()
         lock.unlock()
+        // An empty pool has no probe to start, so nothing will ever fire the
+        // all-started edge and `probeAnchor` stays nil for the whole session.
+        // That costs nothing: `waitForChoice` refuses an empty pool outright and
+        // `pick` has nothing to return, so there is no choice for an elapsed
+        // bound to protect.
         guard !pool.isEmpty else { finishMeasurement(); return }
+        let sink = RelayProbeSink(onResult: { [self] id, ms in record(id, ms) },
+                                  onAllStarted: { [self] in probesStarted() })
         Task { [self] in
-            await measure(pool) { id, ms in self.record(id, ms) }
+            await measure(pool, sink)
             finishMeasurement()
         }
+    }
+
+    /// Every probe has taken its own start instant and none has suspended since
+    /// — so from here, elapsed time is a lower bound on what any of them will
+    /// report. See `probeAnchor` and the `Measure` contract.
+    ///
+    /// Called synchronously from inside whichever probe acknowledged last, which
+    /// is the point: the anchor is that instant, not the instant some later
+    /// event happened to notice it. Nothing here suspends and nothing calls back
+    /// into `measure`, so it cannot deadlock the group it is called from — it
+    /// takes this object's lock, releases it, and at most resumes continuations
+    /// parked in `waitForChoice`.
+    ///
+    /// First call wins. A `Measure` that fires the edge twice is honouring the
+    /// contract on the first one; a later instant is also at-or-after every
+    /// start, so it would be sound too, but it would be needlessly weaker and
+    /// would move a scheduled wake-up that is already correct.
+    private func probesStarted() {
+        lock.lock()
+        if probeAnchor == nil { probeAnchor = now() }
+        lock.unlock()
+        // The bound is live from this instant, and the maps may already have
+        // been sitting on a choice that only lacked one. Re-evaluate, wake, and
+        // arm — `wake` does all three.
+        wake()
     }
 
     /// `mine` will not grow again. Recorded because it is half of the condition
@@ -119,7 +247,7 @@ public final class RelayNegotiator: @unchecked Sendable {
         lock.lock()
         measurementFinished = true
         if measurementElapsedMs == nil, let startedAt = measurementStartedAt {
-            measurementElapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+            measurementElapsedMs = milliseconds(now() - startedAt)
         }
         lock.unlock()
         wake()
@@ -192,6 +320,12 @@ public final class RelayNegotiator: @unchecked Sendable {
         if contributors.remove(peerId) != nil, contributors.isEmpty {
             theirs = [:]
         }
+        // Re-derived, not abandoned. A departure that emptied `theirs` unmade
+        // the pick, and the early exit armed against that pick's worse leg is
+        // now measuring a room that no longer exists — so it must not be allowed
+        // to fire. A departure that left another contributor changed nothing,
+        // and re-arming lands on the same instant it already held.
+        armDominanceLocked()
         lock.unlock()
     }
 
@@ -277,7 +411,11 @@ public final class RelayNegotiator: @unchecked Sendable {
             // Re-check inside the lock: the answer may have arrived between
             // settledChoice() above and here.
             if settledLocked() { lock.unlock(); once.fire(); return }
-            waiters.append(once.fire)
+            waiters.append(once)
+            // Now that somebody is actually parked, schedule the instant the
+            // clock alone would settle this. Nothing else would: `record`,
+            // `handleSignal` and `probesStarted` may all have run already.
+            armDominanceLocked()
             lock.unlock()
             Task {
                 try? await Task.sleep(nanoseconds: UInt64(max(0, deadline) * 1_000_000_000))
@@ -329,11 +467,114 @@ public final class RelayNegotiator: @unchecked Sendable {
         return entryLocked()
     }
 
-    /// A choice exists and our own measurement is done, so waiting longer can
-    /// only change it if the PEER sends more — and waiting on the peer is what
-    /// the deadline is for.
+    /// A choice exists and our own measurement can no longer change it, so
+    /// waiting longer can only help if the PEER sends more — and waiting on the
+    /// peer is what the deadline is for.
+    ///
+    /// "Our own measurement has finished" is the sufficient condition, not the
+    /// necessary one. What actually matters is that no probe still running can
+    /// beat the pick, and `RelayChoice.dominates` answers that directly: a relay
+    /// every one of us has already measured, or one the PEER has measured and
+    /// found worse than the pick's worse leg, cannot turn the choice.
+    ///
+    /// Elapsed time is the third way a probe stops mattering and the one that
+    /// actually retires a silently dropping relay: it is available from the
+    /// instant `Measure` reports every probe started, and nil before that. See
+    /// `probeAnchor`.
     private func settledLocked() -> Bool {
-        measurementFinished && chosenIDLocked() != nil
+        guard let id = chosenIDLocked() else { return false }
+        return measurementFinished
+            || RelayChoice.dominates(selectedID: id,
+                                     mine: mine,
+                                     theirs: theirs,
+                                     poolIDs: poolIDs,
+                                     elapsedMs: elapsedMsLocked())
+    }
+
+    /// How long every probe has been running for AT LEAST, or nil while no
+    /// sound anchor exists. **Call with the lock held.**
+    private func elapsedMsLocked() -> Int? {
+        guard let anchor = probeAnchor else { return nil }
+        return milliseconds(now() - anchor)
+    }
+
+    /// Seconds to whole milliseconds, TRUNCATED, clamped, and never trapping.
+    ///
+    /// Truncation matches what `RelayProbe` does to its own round trip, which is
+    /// what makes the comparison in `RelayChoice.dominates` sound: elapsed is
+    /// never larger than the probe's real running time, and truncation is
+    /// monotone, so the truncated elapsed is never larger than the value the
+    /// probe will eventually report. Rounding one side and truncating the other
+    /// would be out by up to a millisecond in the unsafe direction.
+    ///
+    /// The clamp is not decoration: `Int(_: Double)` traps on NaN and on
+    /// anything outside `Int`'s range, `now` is injectable, and this runs under
+    /// the lock on the path every waiter goes through.
+    private func milliseconds(_ seconds: TimeInterval) -> Int {
+        let ms = seconds * 1000
+        guard ms.isFinite else { return 0 }
+        return Int(min(max(ms, 0), 1_000_000_000))
+    }
+
+    /// Stop the early exit and make any wake-up already in flight
+    /// unrecognisable. **Call with the lock held.**
+    ///
+    /// The token is what actually invalidates; `cancel()` only stops the sleep
+    /// early. That split is deliberate — cancelling a `Task.sleep` resumes it
+    /// through its executor rather than inline on this thread, so the cancelled
+    /// wake-up reaches `dominanceDeadlineElapsed` and this lock afterwards, not
+    /// re-entrantly underneath the caller that is holding it.
+    private func abandonDominanceLocked() {
+        dominanceTask?.cancel()
+        dominanceTask = nil
+        dominanceToken &+= 1
+    }
+
+    /// Schedule the instant at which the clock alone settles the choice, if it
+    /// has not already and could still. **Call with the lock held.**
+    ///
+    /// Superseded on every re-derivation, because the deadline is a function of
+    /// the pick's worse leg and that moves when the pick does. Armed only while
+    /// somebody is parked: with no waiter there is nothing for the wake-up to
+    /// release, and `waitForChoice` arms its own on the way in.
+    private func armDominanceLocked() {
+        abandonDominanceLocked()
+        // A waiter whose own deadline already resumed it is not somebody to
+        // wake; leaving it in the list would keep this wake-up re-arming itself
+        // for as long as measurement runs, against a room nobody is in.
+        waiters.removeAll { !$0.isPending }
+        guard !measurementFinished, !waiters.isEmpty,
+              let anchor = probeAnchor,
+              let id = chosenIDLocked(),
+              let myLeg = mine[id], let peerLeg = theirs[id] else { return }
+        let target = TimeInterval(RelayChoice.dominanceElapsedMs(worstLegMs: max(myLeg, peerLeg)))
+        let delay = target / 1000 - (now() - anchor)
+        // Unreachable while `settledLocked()` is false for a clock reason — the
+        // rule and this deadline are the same inequality — but `now` is
+        // injectable. Written as "not positive" rather than "at most zero" so a
+        // NaN delay stops here too: a wake-up that re-arms itself on NaN forever
+        // is the one failure mode a timer this file owns could spin on.
+        guard delay > 0, delay.isFinite else { return }
+        let token = dominanceToken
+        let nanoseconds = UInt64(min(delay, 3600) * 1_000_000_000)
+        dominanceTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            // Weak on purpose: a negotiator whose session ended mid-sleep has
+            // nobody left to wake, and a strong capture would keep it — and the
+            // socket it holds — alive for the remainder of the delay.
+            self?.dominanceDeadlineElapsed(token)
+        }
+    }
+
+    /// The early exit's wake-up fired. Re-evaluates rather than assumes: the
+    /// deadline was computed against a pick that may since have moved, and
+    /// `wake` re-arms on the new one if it has.
+    private func dominanceDeadlineElapsed(_ token: Int) {
+        lock.lock()
+        guard token == dominanceToken else { lock.unlock(); return }
+        dominanceTask = nil
+        lock.unlock()
+        wake()
     }
 
     private func entryLocked() -> RelayEntry? {
@@ -362,15 +603,111 @@ public final class RelayNegotiator: @unchecked Sendable {
     /// Wakes the parked waiters, but only for a choice that can no longer
     /// change from our side. A choice that is merely *available* is not a
     /// reason to stop waiting — see `waitForChoice` for what latching on one
-    /// costs. Called from `record`, `handleSignal` and `finishMeasurement`,
-    /// which is every place either half of the condition can become true.
+    /// costs. Called from `record`, `handleSignal`, `probesStarted`,
+    /// `finishMeasurement` and the early exit's own wake-up, which is every
+    /// place any part of the condition can become true.
+    ///
+    /// The `else` branch is not housekeeping. Once the maps stop moving, the
+    /// only thing left that can settle the choice is the CLOCK, and no clock
+    /// calls back — so every path that leaves the room unsettled has to leave a
+    /// wake-up armed behind it.
     private func wake() {
         lock.lock()
-        guard settledLocked() else { lock.unlock(); return }
+        guard settledLocked() else {
+            armDominanceLocked()
+            lock.unlock()
+            return
+        }
+        abandonDominanceLocked()
         let pending = waiters
         waiters = []
         lock.unlock()
-        for fire in pending { fire() }
+        for waiter in pending { waiter.fire() }
+    }
+}
+
+/// The channel a `RelayNegotiator.Measure` reports through: one call per relay
+/// that answers, plus the one-shot edge that says every probe has started.
+///
+/// A single value rather than two closure parameters, and that is load-bearing
+/// in two directions. It keeps `publish(id, ms)` spelled exactly as it always
+/// was at every call site — `callAsFunction` — so a measurement that has no
+/// opinion about start times needs no edit and keeps its previous behaviour
+/// exactly. And it keeps the two halves of the contract in one place, where the
+/// rule that relates them can be stated once: `allProbesStarted()` is only ever
+/// legal AFTER every probe has taken the instant it will later report a round
+/// trip from. See `RelayNegotiator.Measure`.
+public struct RelayProbeSink: Sendable {
+    private let onResult: @Sendable (String, Int) -> Void
+    private let onAllStarted: @Sendable () -> Void
+
+    public init(onResult: @escaping @Sendable (String, Int) -> Void,
+                onAllStarted: @escaping @Sendable () -> Void = {}) {
+        self.onResult = onResult
+        self.onAllStarted = onAllStarted
+    }
+
+    /// One relay answered, in `rttMs`. Called concurrently, once per probe.
+    public func callAsFunction(_ id: String, _ rttMs: Int) { onResult(id, rttMs) }
+
+    /// Every probe in the pool has taken its own monotonic start instant and
+    /// none of them has suspended since. One-shot by contract; the negotiator
+    /// keeps the first anchor if it is called again.
+    public func allProbesStarted() { onAllStarted() }
+}
+
+/// Fires `onAllStarted` exactly once, when every expected probe has
+/// acknowledged its own start.
+///
+/// Counting acknowledgements would not do. A probe that acknowledged twice while
+/// another had not started at all would reach the count with the barrier's whole
+/// claim false — and the anchor taken there would precede a probe's start, which
+/// is the one error the elapsed bound cannot survive. So this tracks WHICH
+/// entries have acknowledged, by index, and a duplicate is a no-op rather than
+/// progress.
+///
+/// Separate from `RelayProbe` on purpose: that type is deliberately untested
+/// because it is a stopwatch around a live TURN allocation, and this is the one
+/// piece of it that is a rule. Rules belong where a test can reach them.
+final class ProbeStartBarrier: @unchecked Sendable {
+    private let lock = NSLock()
+    private var outstanding: Set<Int>
+    private var fired = false
+    private var onAllStarted: (@Sendable () -> Void)?
+
+    /// An `expected` of zero is already satisfied and fires immediately — the
+    /// empty pool, which `RelayNegotiator.start` never reaches `measure` for
+    /// anyway. Anything less is treated the same way rather than trapping.
+    init(expected: Int, onAllStarted: @escaping @Sendable () -> Void) {
+        self.outstanding = Set(0..<max(0, expected))
+        self.onAllStarted = onAllStarted
+        if outstanding.isEmpty { fire() }
+    }
+
+    /// Probe `index` has taken its start instant. Idempotent per index, safe to
+    /// call from any thread, and safe to call after the barrier has already
+    /// fired — a late acknowledgement from a probe the barrier had counted is
+    /// simply nothing new.
+    func acknowledge(_ index: Int) {
+        lock.lock()
+        outstanding.remove(index)
+        let complete = outstanding.isEmpty
+        lock.unlock()
+        if complete { fire() }
+    }
+
+    /// Runs the callback OUTSIDE the lock, exactly once, and drops it — so the
+    /// barrier cannot hold what it captured for the rest of the pool's life, and
+    /// so a callback that reaches back into the negotiator cannot deadlock
+    /// against a probe acknowledging on another thread.
+    private func fire() {
+        lock.lock()
+        guard !fired else { lock.unlock(); return }
+        fired = true
+        let callback = onAllStarted
+        onAllStarted = nil
+        lock.unlock()
+        callback?()
     }
 }
 
@@ -383,6 +720,14 @@ private final class ResumeOnce: @unchecked Sendable {
 
     init(_ continuation: CheckedContinuation<Void, Never>) {
         self.continuation = continuation
+    }
+
+    /// Whether anybody is still parked on this. False once either racer has
+    /// fired, which is what lets `armDominanceLocked` tell a live waiter from a
+    /// spent one.
+    var isPending: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return continuation != nil
     }
 
     func fire() {
