@@ -170,6 +170,40 @@ afterEach(() => {
 });
 
 describe("webrtc commit-then-reveal handshake", () => {
+  it("rejects an initial link that fails before either channel opens", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const onPeerKey = vi.fn();
+    const onStateChange = vi.fn();
+    const succeeded = vi.fn();
+    const p = connectLink({
+      signaling: hub.I, peerId: "R", selfKey: generateKeyPair().publicKey,
+      role: "initiator", onPeerKey, onStateChange,
+    });
+    void p.then(succeeded, () => {});
+    const rejected = expect(p).rejects.toThrow(/^relayium: link connection failed$/);
+
+    const pc = instances[0];
+    expect(pc.channels).toHaveLength(LINK_CHANNEL_LABELS.length);
+    expect(pc.channels.every((channel) => channel.readyState === "connecting")).toBe(true);
+    pc.connectionState = "failed";
+    pc.onconnectionstatechange?.();
+
+    await rejected;
+    expect(onStateChange).toHaveBeenCalledWith("failed");
+    expect(pc.connectionState).toBe("closed");
+    expect(onPeerKey).not.toHaveBeenCalled();
+    expect(succeeded).not.toHaveBeenCalled();
+
+    // Even a stale open dispatch after terminal cleanup cannot turn the already
+    // rejected setup into a successful link.
+    openAll();
+    await flush();
+    expect(succeeded).not.toHaveBeenCalled();
+    expect(onPeerKey).not.toHaveBeenCalled();
+    expect(pc.connectionState).toBe("closed");
+  });
+
   it("cancels an in-progress connection and closes its peer connection", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
