@@ -42,22 +42,32 @@
  * account is created by this script, and the whole tree is removed at the end.
  * It never touches production and holds no production data.
  */
-import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { argFlag, argPresent, launchBrowser, newTab, ok, fail, sleep, withWatchdog } from "./harness.mjs";
-
-const here = fileURLToPath(new URL(".", import.meta.url));
-const webDir = resolve(here, "..");
-const serverDir = resolve(here, "../../server");
+import { join } from "node:path";
+import { portFromArgv, startGoServer } from "./go-server.mjs";
+import { argPresent, launchBrowser, newTab, ok, fail, sleep, withWatchdog } from "./harness.mjs";
 
 // Its own debug port, like every other script here: each one only pkills the
 // browser on its own port, so two scripts never shoot each other.
 const DEBUG_PORT = 9447;
-const PORT = Number(argFlag("--port", "8123"));
-const BASE = `http://127.0.0.1:${PORT}`;
+const DEFAULT_PORT = 8123;
+/**
+ * The port and the base URL are settled inside the run, not at module load.
+ *
+ * `Number(argFlag("--port", "8123"))` made `NaN` out of a `--port` with nothing
+ * after it, and `http://127.0.0.1:NaN` out of `BASE`; what failed next was a
+ * socket, naming neither the flag nor this suite. `portFromArgv` names both, and
+ * it is the parser `mixed-link.mjs` uses, so a bad port flag now reads the same
+ * way in either consumer of this lifecycle. Doing it below — inside the
+ * watchdog's `try`, before `main()` — keeps that decision in front of the
+ * temporary root and the Go build, and routes it through `fail` instead of a
+ * bare Node stack. Assigned exactly once; everything that reads them is a
+ * function called from `main()`.
+ */
+let PORT = 0;
+let BASE = "";
 const GLOBAL_TIMEOUT_MS = 10 * 60_000;
 const KEEP = argPresent("--keep");
 
@@ -68,11 +78,11 @@ const FILE_NAME = "quarterly report (final).txt";
 const FILE_BODY = "device inbox end to end — 端到端 — \0ÿ binary-ish tail";
 
 let tmp = "";
-let serverProc = null;
-const cleanups = [];
+let server = null;
 
-function run(cmd, args, opts = {}) {
-  const r = spawnSync(cmd, args, { encoding: "utf8", timeout: 300_000, ...opts });
+/** Run the real CLI. (`go build` moved to `go-server.mjs` with the lifecycle.) */
+function run(cmd, args) {
+  const r = spawnSync(cmd, args, { encoding: "utf8", timeout: 300_000 });
   if (r.status !== 0) {
     throw new Error(`${cmd} ${args.join(" ")} failed (${r.status})\n${r.stdout ?? ""}\n${r.stderr ?? ""}`);
   }
@@ -117,58 +127,35 @@ async function until(what, check, timeoutMs = 60_000, everyMs = 250) {
 
 // ── the server and the CLI ────────────────────────────────────────────────
 
+/**
+ * The build/spawn/readiness/teardown half is `go-server.mjs`, shared with
+ * `mixed-link.mjs`. It also owns the guards this copy never had: a refusal on a
+ * missing or stale `dist`, a refusal to adopt a listener already on this port,
+ * and a total strip of inherited `RELAYIUM_*` configuration — the old copy
+ * blanked three variables by name, which is a list that goes stale every time
+ * the server gains a credential.
+ *
+ * Everything below the lifecycle is unchanged: same port, same temporary root
+ * (this suite keeps its CLI config and receive directory in the same tree and
+ * removes it itself), same real CLI built from the same module.
+ */
 async function startServer() {
-  const bin = join(tmp, "relayium-server");
-  const cli = join(tmp, "relayium");
-  run("go", ["build", "-o", bin, "."], { cwd: serverDir });
-  run("go", ["build", "-o", cli, "./cmd/relayium"], { cwd: serverDir });
-  ok("built the server and the CLI from source");
-
-  const blobs = join(tmp, "blobs");
-  mkdirSync(blobs, { recursive: true });
-  const logPath = join(tmp, "server.log");
-  const logs = [];
-  serverProc = spawn(bin, [], {
-    cwd: tmp,
+  server = await startGoServer({
+    port: PORT,
+    root: tmp,
+    keep: KEEP,
+    report: ok,
+    extraBinaries: [{ name: "relayium", pkg: "./cmd/relayium" }],
     env: {
-      ...process.env,
-      RELAYIUM_ADDR: `127.0.0.1:${PORT}`,
-      RELAYIUM_DB: join(tmp, "relayium.db"),
-      RELAYIUM_BLOB_DIR: blobs,
-      RELAYIUM_BASE_URL: BASE,
       // This run reads the verification link out of the server log (see
       // createAccount). The server redacts credential links by default now, so
       // the plaintext-link transport has to be asked for explicitly. It is
       // accepted only because BASE is a literal loopback address and no SMTP is
       // configured here.
       RELAYIUM_MAIL_TRANSPORT: "dev-log-links",
-      RELAYIUM_STATIC: join(webDir, "dist"),
-      // No env file from the developer's own checkout may leak in.
-      RELAYIUM_ENV_FILE: join(tmp, "no-such.env"),
-      RELAYIUM_TURN_SECRET: "",
-      RELAYIUM_NODE_TOKEN: "",
-      RELAYIUM_RELEASE_CHECK: "0",
     },
-    stdio: ["ignore", "pipe", "pipe"],
   });
-  const capture = (chunk) => {
-    logs.push(String(chunk));
-    if (logs.length > 400) logs.shift();
-  };
-  serverProc.stdout.on("data", capture);
-  serverProc.stderr.on("data", capture);
-  cleanups.push(() => {
-    writeFileSync(logPath, logs.join(""));
-    serverProc?.kill("SIGTERM");
-  });
-
-  await until(
-    `the server to answer /healthz (log: ${logPath})`,
-    async () => (await fetch(`${BASE}/healthz`).then((r) => r.text()).catch(() => "")).trim() === "ok",
-    60_000,
-  );
-  ok(`server up on ${BASE}`);
-  return { cli, serverLog: () => logs.join("") };
+  return { cli: server.binaries.relayium, serverLog: server.log };
 }
 
 /** Create an account and return its session cookie.
@@ -476,14 +463,18 @@ async function main() {
 
 await withWatchdog("device-inbox e2e", GLOBAL_TIMEOUT_MS, async () => {
   try {
+    // Before the temporary root and before the build: a malformed `--port` is
+    // decided by arithmetic and should cost exactly one line of output.
+    PORT = portFromArgv(process.argv.slice(2), { dflt: DEFAULT_PORT });
+    BASE = `http://127.0.0.1:${PORT}`;
     await main();
     console.log("\n  device inbox: browser → central → CLI → disk, verified end to end\n");
   } catch (err) {
     fail("device-inbox e2e", err);
   } finally {
-    for (const c of cleanups.reverse()) {
-      try { c(); } catch { /* best effort */ }
-    }
+    // Writes the captured server log into `tmp` and terminates the child, so
+    // this has to happen before the tree is removed. Idempotent.
+    try { await server?.stop(); } catch { /* best effort */ }
     await sleep(300);
     if (tmp && !KEEP) {
       try { rmSync(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); }
@@ -491,8 +482,8 @@ await withWatchdog("device-inbox e2e", GLOBAL_TIMEOUT_MS, async () => {
     } else if (tmp) {
       console.log(`  kept: ${tmp}`);
     }
-    if (!existsSync(join(webDir, "dist", "index.html"))) {
-      console.error("  note: web/dist is missing — run `npm run build` first");
-    }
+    // No missing-dist note here any more: `startGoServer` refuses a missing or
+    // stale bundle BEFORE it builds anything, so this run cannot reach its own
+    // end with that as the explanation.
   }
 });

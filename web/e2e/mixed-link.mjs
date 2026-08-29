@@ -3,22 +3,35 @@
  * 端到端：两个真标签页之间跑一条真的 **统一链路**（`link/1`），走的是默认产物的
  * 默认 LAN UI。
  *
- *   cd web    && npm run build
+ *   cd web && npm run build && npm run test:e2e:mixed
+ *
+ * **服务器由它自己起。** 默认会用 `go-server.mjs` 从 `./server` 构建一个真服务器，
+ * 起在一个自己的端口上，跑完连临时数据库一起收掉。以前这里要求人先手工在 :8098 起
+ * 一个——于是这套用例"有人记得起服务器"才跑得起来，也就永远进不了托管 CI。
+ *
+ * 想打一个已经跑着的服务器仍然可以，显式给 `--url`：
+ *
  *   cd server && RELAYIUM_STATIC=../web/dist RELAYIUM_ADDR=:8098 go run .
- *   cd web    && npm run test:e2e:mixed                       # 默认 --url :8098
+ *   cd web    && node e2e/mixed-link.mjs --url http://localhost:8098
+ *
+ * 自起模式**不会**去接管别人已经占着的端口：那个服务器有它自己的库、自己的 dist、
+ * 可能还有开发者的真配置，对着它跑绿什么也证明不了。
  *
  * 它仍然和 `npm run test:e2e` 分开跑，因为它要一个自己的服务器端口和一整套自己的
  * 场景，不是因为这条协议还藏着。
  *
- * link/1 的作用域由**房间**决定，不由构建旗标决定：默认产物在无配对码的 LAN 房间
- * （就是这里开的 `/`）通告并路由它，在配对码房间既不通告也不接受。脚本一上来先读
- * 页面真正发出去的名册通告确认这一点。不做这件事的话，"服务器指着旧 dist" 会伪装
- * 成 "链路建不起来" —— 一条看起来像回归的假红。
+ * link/1 的作用域由**能力**决定，不由房间、也不由构建旗标决定：默认产物在**每一个**
+ * 房间里都通告并路由它（`linkRoomActive()`，DECISION-LOG 2026-08-10 取代了更早的
+ * LAN-only 作用域），配对码房间那一侧由 `code-room.mjs` 覆盖。这里开的是无配对码的
+ * LAN 房间（`/`），脚本一上来先读页面**真正发出去的**名册通告确认这个产物确实在通告
+ * link/1。不做这件事的话，"服务器指着旧 dist" 会伪装成 "链路建不起来" —— 一条看起来
+ * 像回归的假红。
  *
  * 这里跑的就是**默认的 LAN 界面**：一个能说 link/1 的对端只提供**一个**主动作
  * （`.open-workspace`），它打开的工作区自己带着草稿框和附件控件（`.attach-file`）。
- * 老的"文件 / 文件夹 / 消息"三选一只属于说不了这条协议的对端和所有配对码房间，
- * 那条路由 `lan-transfer.mjs` 覆盖。
+ * 老的"文件 / 文件夹 / 消息"三选一**已经不存在了**（`d175f863` 连同 `.pa-files` /
+ * `.file-pick-input` 一起删的），哪个房间里都走不到：说不了这条协议的对端拿到的是
+ * `.pa-unsupported` 那一句话，一个控件都没有。
  *
  * 覆盖的是单元测试碰不到的那一段：真 caps → 真 link 请求/应答 → 真 commit-reveal →
  * 一条 PeerConnection 上的两条 DataChannel → 文件与消息两条通道各自的同意状态机 →
@@ -26,22 +39,69 @@
  *
  * 只桩掉一样东西，和 lan-transfer 一样：操作系统的"另存为"对话框。
  *
- * 用法：node e2e/mixed-link.mjs [--url http://localhost:8098] [--keep] [--screenshots [dir]]
+ * 用法：node e2e/mixed-link.mjs [--url http://localhost:8098] [--port 8124] [--keep]
+ *                              [--screenshots [dir]]
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { portFromArgv, startGoServer } from "./go-server.mjs";
 import {
   OBSERVE_CAPS, SAVE_STUB, VERIFY_ON, argFlag, argPresent, fail, launchBrowser, newTab, ok,
   requireServer, setWideViewport, withWatchdog,
 } from "./harness.mjs";
+import { QUEUED } from "./dom-contracts.mjs";
 // 统一链路的同意态同样是静态扫描器到不了的地方，而且这里的规矩更紧：一条链路只有
 // 一个 SAS，两条通道各自同意。哪一格长出了新的违规，都要在这里当场红。
 import { scanLiveState } from "./a11y-core.mjs";
 
-const BASE = argFlag("--url", "http://localhost:8098");
+/**
+ * `--url` 点名的那台服务器，或者没给这个开关时的 `null`。
+ *
+ * 解析在 `main()` 的 try 里，而且排在构建、浏览器、自起服务器**全部**前面。
+ * 以前这里是 `argPresent("--url") ? argFlag("--url", "") : null`，于是三种写法都会
+ * 悄悄换掉调用者点名的目标：`--url` 后面什么都没有给 `undefined`、`--url ""` 给
+ * `""`，两个都是 falsy，这套用例转头去"自起"一台本地服务器——跑绿了，可绿的不是
+ * 你要打的那台；`--url --keep` 则把下一个开关当成地址吞下去。现在三种都当场报错，
+ * 报的是这套用例自己的名字。
+ *
+ * 合法的值一个字都不改：一个显式地址是手工快路的全部意义。
+ */
+function manualUrlFromArgv(argv) {
+  const i = argv.indexOf("--url");
+  if (i < 0) return null;
+  const value = argv[i + 1];
+  const refuse = (why) => {
+    throw new Error(
+      // 和 `--port` 那条报错同一个形状（`… — got X`）：两个开关坏掉的时候读起来
+      // 应该是一回事，`go-server.test.mjs` 也就能对着同一个形状钉住它们。
+      `--url ${why} — got ${value === undefined ? "undefined" : JSON.stringify(value)}. ` +
+      "Give it a running server's address (e.g. --url http://localhost:8098), or drop --url " +
+      "entirely and let this suite start its own. Treating it as absent is the worst option " +
+      "available: the run would silently target a server nobody named, and pass.",
+    );
+  };
+  if (value === undefined || value.trim() === "") refuse("has no address after it");
+  if (value.startsWith("-")) refuse("is followed by the next switch rather than an address");
+  return value;
+}
+/** 自起端口。刻意不用文档里手工那台的 8098，也不用 device-inbox 的 8123：默认跑法
+ *  不该和一台开发者可能正开着的服务器抢端口。 */
+const DEFAULT_SELF_PORT = 8124;
+/**
+ * `--port` 同样在 `main()` 的 try 里解析。
+ *
+ * 两个理由。一，把这个开关直接 `Number(...)` 一下，对 `--port`（后面什么都没有）
+ * 和 `--port --keep` 都给 `NaN`，而 `listen(NaN)` 抛的是一条 `RangeError`：它确实
+ * 在 Go 构建之前就红了，但既没说 `--port`，也没说这是哪套用例；现在这两种写法都在
+ * 同一个位置报出它们各自那个值。二，给了 `--url` 的手工跑法根本用不到端口，不该被
+ * 一个用不上的开关挡下——而一个模块加载期的抛出还会绕开 `fail`，打出的是一条 Node
+ * 裸栈，不是这套用例的名字。
+ */
+const selfPort = () => portFromArgv(process.argv.slice(2), { dflt: DEFAULT_SELF_PORT });
 // 和 lan-transfer 的 9444 分开：两套用例各自 pkill 自己那一个端口的残留浏览器，
 // 谁也别顺手打死对方。
 const DEBUG_PORT = 9445;
+const KEEP = argPresent("--keep");
 const GLOBAL_TIMEOUT_MS = 12 * 60_000;
 
 // `--screenshots` 可以不带值（用默认目录），也可以带一个目录名；跟在它后面的另一个
@@ -74,9 +134,18 @@ const TEXT_CONSENT = ".msgpanel .req";
  *
  * 所以这里记全序列，断言"这条链路念过它自己的码"，同时另外单独断言"同一条链路上后来
  * 的边不再念一遍"。
+ *
+ * **安装是异步的，所以它必须自己举手。** live region 要等 App 挂载出来才存在，这里靠
+ * 50ms 轮询等它；在它出现之前，这份记录是空的，而且**看起来**和"什么都没念过"一模一样。
+ * 一台被别的 E2E 压满的机器上，第一条链路可以在观察器装上之前就把码念完——那正是
+ * 2026-08-29 那次并发跑挂在 `this link never announced its code ... []` 的原因：链路和
+ * SAS 都是真的对上了，只有仪表盘迟到了。所以旗子在 `observe()` **之后**才落下，而调用方
+ * 在划任何一条 mark、点开任何一条链路之前必须先等这面旗子。旗子为真 ⇒ 不存在"已经念过
+ * 但没记下"的窗口。
  */
 const TRACK_ANNOUNCEMENTS = `
   window.__e2eAnnouncements = [];
+  window.__e2eAnnouncementsReady = false;
   (function install() {
     const el = document.querySelector('.activity-announcement');
     if (!el) { setTimeout(install, 50); return; }
@@ -88,6 +157,9 @@ const TRACK_ANNOUNCEMENTS = `
     };
     push();
     new MutationObserver(push).observe(el, { childList: true, characterData: true, subtree: true });
+    // 最后一行，而且只能是最后一行：这面旗子的全部含义就是"观察器已经在听了"。
+    // 把它挪到 observe() 之前，等它就再次变成等一个空承诺。
+    window.__e2eAnnouncementsReady = true;
   })();
 `;
 const TRACK_PEER_CONNECTIONS = `
@@ -132,8 +204,26 @@ const pickOne = (name) => pickFiles(
 );
 
 const announcementOf = "(document.querySelector('.activity-announcement')?.textContent ?? '')";
-/** 这个标签页到目前为止说过多少句——拿来给"从这一刻起"的断言划一条线。 */
-const announcedCount = (tab) => tab.evaluate("window.__e2eAnnouncements.length");
+/** 见 TRACK_ANNOUNCEMENTS：只有 `observe()` 之后这句才为真。 */
+const ANNOUNCEMENTS_READY = "window.__e2eAnnouncementsReady === true";
+/** 在这一步之前拿到的任何"念过什么"都不作数——它记的是仪表盘的年纪，不是产品的行为。 */
+const announcementsReady = (tab, who) => tab.waitFor(
+  ANNOUNCEMENTS_READY, `the live-region observer on ${who} to be installed`, 30_000,
+);
+/**
+ * 这个标签页到目前为止说过多少句——拿来给"从这一刻起"的断言划一条线。
+ *
+ * 划线本身就要求观察器已经在听：一条在观察器装上之前划下的线，会把它之前的所有话
+ * 一起算成"没说过"。所以这里不是等，是直接判死——等是调用方的事（`announcementsReady`），
+ * 而一个漏掉了等待的调用点应该当场以它自己的名字报错，而不是在几十秒后伪装成一条
+ * "产品从没念过码"的断言失败。
+ */
+const announcedCount = (tab) => tab.evaluate(`(() => {
+  if (!(${ANNOUNCEMENTS_READY})) {
+    throw new Error('announcement mark taken before the live-region observer was installed');
+  }
+  return window.__e2eAnnouncements.length;
+})()`);
 const announcedSince = (tab, mark) => tab.evaluate(`window.__e2eAnnouncements.slice(${mark})`);
 
 /**
@@ -299,14 +389,16 @@ const setTheme = async (tab, value) => {
   );
 };
 
-async function mixedScenario(browser) {
+/** `base` is a parameter now, not a module constant: it is whichever server this
+ *  run is talking to — the one it started, or the one `--url` named. */
+async function mixedScenario(browser, base) {
   // A 发起，B 收（另存为被桩掉）。两边都装上只读的 caps 探针：跑任何断言之前先确认
   // 这个默认产物在这个 LAN 房间里真的通告了 link/1。
   // This scenario is about the unified workspace's verification presentation,
   // which only exists with advanced verification ON. It is off by default, so
   // both tabs opt in before boot.
-  const a = await newTab(browser, BASE + "/", VERIFY_ON + OBSERVE_CAPS + TRACK_ANNOUNCEMENTS +TRACK_PEER_CONNECTIONS);
-  const b = await newTab(browser, BASE + "/", VERIFY_ON + OBSERVE_CAPS + TRACK_ANNOUNCEMENTS +SAVE_STUB + TRACK_PEER_CONNECTIONS);
+  const a = await newTab(browser, base + "/", VERIFY_ON + OBSERVE_CAPS + TRACK_ANNOUNCEMENTS +TRACK_PEER_CONNECTIONS);
+  const b = await newTab(browser, base + "/", VERIFY_ON + OBSERVE_CAPS + TRACK_ANNOUNCEMENTS +SAVE_STUB + TRACK_PEER_CONNECTIONS);
   await setWideViewport(a, 390, 844);
   await setWideViewport(b, 390, 844);
 
@@ -320,9 +412,9 @@ async function mixedScenario(browser) {
     if (!advertised.includes("link/1")) {
       throw new Error(
         `tab ${who} advertised ${JSON.stringify(advertised)} — no link/1 in the code-less LAN room.\n` +
-        `    Either the server is holding a stale dist, or the build stopped advertising it:\n` +
-        `      cd web    && npm run build\n` +
-        `      cd server && RELAYIUM_STATIC=../web/dist RELAYIUM_ADDR=:8098 go run .`,
+        `    A self-started run refuses a stale dist before it spawns, so on the default path this\n` +
+        `    means the build stopped advertising it. Against --url it can still be a stale dist:\n` +
+        `      cd web && npm run build`,
       );
     }
   }
@@ -346,6 +438,11 @@ async function mixedScenario(browser) {
   await screenshot(a, "peer-card-one-action");
   ok("a link-capable LAN peer offered exactly one action and no file/folder/message fork");
 
+  // 先确认两边的 live region 观察器都装上了，再划线、再点开第一条链路。这两句不是
+  // 等待时间，是等待一个事实：漏掉它们，一台负载重的机器就能在仪表盘出现之前把第一条
+  // 链路的码念完，于是下面那条"这条链路念过它自己的码"会以空数组失败——而链路和 SAS
+  // 其实完全正常。见 TRACK_ANNOUNCEMENTS。
+  for (const [who, tab] of [["tab A", a], ["tab B", b]]) await announcementsReady(tab, who);
   const firstLinkMark = { a: await announcedCount(a), b: await announcedCount(b) };
   await a.evaluate(`(() => { document.querySelector('${OPEN_WORKSPACE}').click(); return true; })()`);
   await a.waitFor(`!!document.querySelector('${HEAD_SAS}')`, "tab A's unified workspace header", 45_000);
@@ -478,14 +575,29 @@ async function mixedScenario(browser) {
     dt.items.add(new File(['queued-one'], 'queued-one.txt', { type: 'text/plain' }));
     dt.items.add(new File(['queued-two'], 'queued-two.txt', { type: 'text/plain' }));
   `));
-  await a.waitFor("!!document.querySelector('.queued')", "tab A's visible outbound queue", 20_000);
+  //
+  // 这里的两个数**不是**一回事，早先那版把它们混成了一个 `li` 计数：一次选择是一个
+  // 批次（`.batch`），批次里有 N 个文件行（`.file-list li`）。`QueuedBatches` 改成
+  // 组合 `PendingFiles` 之后，两个文件的一次选择渲染出 1 + 2 = 3 个 `li`，于是
+  // "rows !== 1" 红了，而 `.fname`（名字已经搬去 `.file-name`）返回空数组、
+  // `names[0].includes` 直接抛 TypeError —— 一条什么也没说清楚的失败。
+  //
+  // 选择器现在只有一份，在 `dom-contracts.mjs` 里，`QueuedBatches.test.ts` 对着真
+  // 渲染出来的组件钉着同一份。DOM 再漂移，先红的是每次推送都跑的那条单测。
+  await a.waitFor(`!!document.querySelector('${QUEUED.card}')`, "tab A's visible outbound queue", 20_000);
   const queue = await a.evaluate(`(() => {
-    const card = document.querySelector('.queued');
+    const card = document.querySelector('${QUEUED.card}');
+    const batches = [...card.querySelectorAll('${QUEUED.batch}')];
     const input = document.querySelector('${ATTACH_FILE}');
     return {
-      rows: card.querySelectorAll('li').length,
-      cancels: card.querySelectorAll('.queued-cancel').length,
-      names: [...card.querySelectorAll('.fname')].map((el) => el.textContent.trim()),
+      // 一次选择 = 一个批次。
+      batches: batches.length,
+      // 批次里的文件行，按批次分开数——摊平成一个总数就又回到了那个混淆。
+      fileRows: batches.map((b) => b.querySelectorAll('${QUEUED.fileRow}').length),
+      cancels: card.querySelectorAll('${QUEUED.cancel}').length,
+      names: batches.flatMap(
+        (b) => [...b.querySelectorAll('${QUEUED.fileName}')].map((el) => el.textContent.trim()),
+      ),
       // 关键：选了新文件之后，附件控件仍然是可用的 —— 排队正是为了不禁用它。
       pickerDisabled: !!input.disabled,
       // 文本仍然可用：两条通道互不阻塞。
@@ -493,14 +605,23 @@ async function mixedScenario(browser) {
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
     };
   })()`);
-  if (queue.rows !== 1 || queue.cancels !== 1 || queue.pickerDisabled || queue.composer !== 1
-    || queue.overflow !== 0 || !queue.names[0].includes("queued-one")) {
-    throw new Error(`queued-batch contract failed: ${JSON.stringify(queue)}`);
+  // `.some` 而不是 `names[0].includes`：名字选择器万一再漂走，这里要报的是"名字读不到"
+  // 这件事本身，不是一个 TypeError。
+  const queuedNames = ["queued-one.txt", "queued-two.txt"];
+  if (
+    queue.batches !== 1 || queue.fileRows.length !== 1 || queue.fileRows[0] !== 2 ||
+    queue.cancels !== 1 || queue.pickerDisabled || queue.composer !== 1 || queue.overflow !== 0 ||
+    !queuedNames.every((want) => queue.names.some((got) => got.includes(want)))
+  ) {
+    throw new Error(
+      "queued-batch contract failed — expected 1 batch of 2 named file rows with 1 cancel: " +
+      JSON.stringify(queue),
+    );
   }
   await oneSas(a, "tab A", "while a batch is queued");
-  await a.evaluate("(() => { document.querySelector('.queued .queued-cancel').click(); return true; })()");
-  await a.waitFor("!document.querySelector('.queued')", "the cancelled queue entry to disappear");
-  ok("a second selection queued visibly, kept both the picker and the composer usable, and cancelled by id");
+  await a.evaluate(`(() => { document.querySelector('${QUEUED.card} ${QUEUED.cancel}').click(); return true; })()`);
+  await a.waitFor(`!document.querySelector('${QUEUED.card}')`, "the cancelled queue entry to disappear");
+  ok("a second selection queued visibly as one batch of two named files, kept both the picker and the composer usable, and cancelled by id");
 
   // ── 六、文件同意可以拒绝，而链路和会话都活下来 ────────────────────────────
   await b.evaluate(`(() => {
@@ -770,7 +891,7 @@ async function mixedScenario(browser) {
     // 统一草稿框不许活过一次显式断开：它是为上一条链路、上一个对端打的字。
     composers: document.querySelectorAll('.msgpanel textarea').length,
     attach: document.querySelectorAll('${ATTACH_FILE}').length,
-    queued: document.querySelectorAll('.queued').length,
+    queued: document.querySelectorAll('${QUEUED.card}').length,
     sas: document.querySelectorAll('.sas').length,
   })`);
   if (afterDisconnect.heads !== 0 || afterDisconnect.composers !== 0 || afterDisconnect.attach !== 0
@@ -780,6 +901,11 @@ async function mixedScenario(browser) {
   ok("Disconnect restored the one-action chooser and left no unified composer or attachment behind");
 
   // 同一个对端、同一条通道 → 第二条链路会算出**同一个** reveal 键。
+  //
+  // 这里是新链路，不是新页面：两个标签页从头到尾没导航过，观察器早就在听，所以这两句
+  // 会在第一次轮询就返回。留着它们是因为这条规矩属于"划线之前"，不属于"页面加载之后"
+  // ——哪天这一幕改成重开页面或刷新，缺的那句等待必须在这里就被挡住。
+  for (const [who, tab] of [["tab A", a], ["tab B", b]]) await announcementsReady(tab, who);
   const relinkMark = { a: await announcedCount(a), b: await announcedCount(b) };
   await a.evaluate(`(() => { document.querySelector('${OPEN_WORKSPACE}').click(); return true; })()`);
   await a.waitFor(`!!document.querySelector('${HEAD_SAS}')`, "a fresh link to the same peer", 60_000);
@@ -814,7 +940,7 @@ async function mixedScenario(browser) {
     const after = await tab.evaluate(`({
       sas: document.querySelectorAll('.sas').length,
       heads: document.querySelectorAll('${HEAD}').length,
-      queued: document.querySelectorAll('.queued').length,
+      queued: document.querySelectorAll('${QUEUED.card}').length,
       composers: document.querySelectorAll('.msgpanel textarea').length,
       attach: document.querySelectorAll('${ATTACH_FILE}').length,
       // 选择器回来了，而且回来的仍然是那一个动作。
@@ -843,20 +969,41 @@ async function mixedScenario(browser) {
 }
 
 async function main() {
-  await requireServer(
-    BASE,
-    "start it with: cd web && npm run build, then " +
-    "cd server && RELAYIUM_STATIC=../web/dist RELAYIUM_ADDR=:8098 go run .",
-  );
-  const session = await launchBrowser({ debugPort: DEBUG_PORT, keep: argPresent("--keep") });
+  // 两条路，只有第一条要求外面有东西：`--url` 是显式的"打那台正在跑的"，其余一切
+  // 都由这次运行自己拥有——自己构建、自己起、自己收。
+  let server = null;
+  let session = null;
+  // 启动失败也要走 `fail`：它以前在 try 外面，于是"服务器起不来"会变成一个顶层未捕获
+  // 拒绝，红是红了，但打印的是一条 Node 的栈，不是这套用例的名字。
   try {
-    console.log(`\nMixed link E2E against ${BASE}`);
-    await mixedScenario(session.browser);
+    let base;
+    // 目标先定下来，排在构建、浏览器和自起之前：坏掉的 `--url` 必须在这里红，而不是
+    // 掉进自起那条路，去打一台调用者根本没有点名的服务器。
+    const target = manualUrlFromArgv(process.argv.slice(2));
+    if (target) {
+      base = target;
+      await requireServer(
+        base,
+        "start it with: cd web && npm run build, then " +
+        "cd server && RELAYIUM_STATIC=../web/dist RELAYIUM_ADDR=:8098 go run . " +
+        "(or drop --url and let this script start its own)",
+      );
+    } else {
+      server = await startGoServer({ port: selfPort(), keep: KEEP, report: ok, label: "the mixed-link server" });
+      base = server.base;
+    }
+
+    session = await launchBrowser({ debugPort: DEBUG_PORT, keep: KEEP });
+    console.log(`\nMixed link E2E against ${base}${target ? " (--url)" : " (self-started)"}`);
+    await mixedScenario(session.browser, base);
     console.log("\n\x1b[32mMixed link E2E passed\x1b[0m\n");
   } catch (err) {
     fail("Mixed link E2E", err);
   } finally {
-    await session.close();
+    // 先浏览器后服务器，而且无论上面怎么结束都要收：一个活下来的服务器会占住端口，
+    // 让**下一次**运行以一条指向完全无关原因的冲突收场。
+    try { await session?.close(); } catch { /* best effort */ }
+    try { await server?.stop(); } catch { /* best effort */ }
   }
 }
 

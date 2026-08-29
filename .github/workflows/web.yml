@@ -238,6 +238,46 @@ jobs:
       - run: npm run build
       - run: npm run test:device-inbox
 
+  # Two real tabs on one real unified link (`link/1`) in the code-less LAN room,
+  # against a real Go server this job's own runner starts, builds and tears down.
+  #
+  # Its own job rather than another step in `test`, deliberately. That job is
+  # Node-only and already spends most of a 15-minute budget on four browser
+  # lanes; this one needs a Go toolchain it does not have, and a scenario that
+  # drives a 40-file consent card, a 5MB byte-level resume across a rebuilt
+  # PeerConnection and two teardowns. Sharing the budget would make an ordinary
+  # slow runner look like a product regression in whichever lane happened to be
+  # last.
+  #
+  # This lane is why the queued-batch assertion was stale for weeks: nothing
+  # hosted ran `mixed-link.mjs`, so its only signal came from somebody choosing
+  # to run it by hand. Starting the server is now the script's own job — no
+  # step here starts one — because a suite that needs a human to set up its
+  # world is a suite that runs when a human remembers.
+  mixed-link-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - run: npm ci
+      # The server serves web/dist, and the runner REFUSES a missing or stale
+      # bundle before it spawns anything — so this build is a hard prerequisite,
+      # not an optimization.
+      - run: npm run build
+      - run: npm run test:e2e:mixed
+
   windows-temporary-downloader:
     runs-on: windows-latest
     timeout-minutes: 10

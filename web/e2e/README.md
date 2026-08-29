@@ -1,8 +1,21 @@
 # 端到端测试
 
-三个脚本，共用 `harness.mjs`（CDP 客户端、标签页把手、浏览器生命周期、另存为桩、
-`vite preview` 生命周期）。共用而不是各抄一份：两份迟早会漂移，而漂移的那一份会安静地
-变成一个测不出东西的假绿。
+四个脚本，共用三份东西：
+
+- `harness.mjs` —— CDP 客户端、标签页把手、浏览器生命周期、另存为桩、`vite preview`
+  生命周期。
+- `go-server.mjs` —— 一台真 Go 服务器的完整生命周期：先拒绝一个不成立的端口，再拒绝
+  缺失/陈旧的 dist、拒绝接管别人占着的端口，然后构建、剥掉继承来的全部 `RELAYIUM_*`
+  配置、按墙钟等就绪、有界地终止并收掉临时目录。`mixed-link.mjs` 和 `device-inbox.mjs`
+  用它。
+- `dom-contracts.mjs` —— 真浏览器运行器和普通 Vitest 单测**共用**的选择器。
+
+共用而不是各抄一份：两份迟早会漂移，而漂移的那一份会安静地变成一个测不出东西的假绿。
+`dom-contracts.mjs` 就是被这件事逼出来的——`QueuedBatches` 换成组合 `PendingFiles`
+之后，`mixed-link.mjs` 手里那份 `.fname` 和裸 `li` 计数当场过时，而因为当时没有任何
+托管道次跑它，几周之后才有人手工跑出来，报的还是一个 `undefined.includes` 的
+TypeError。现在同一份选择器由每次推送都跑的 `QueuedBatches.test.ts` 对着真渲染的组件
+钉着，DOM 一漂移，先红的是便宜的那条道次。
 
 四套都跑**默认产物**（`npm run build`）。它们的区别不是构建，是**对端和房间**：
 
@@ -13,7 +26,10 @@
   **页面**契约（不是传输契约），`npm run test:e2e:page-shell`，**在 CI 里跑**。
   2026-08-29（Phase 3D C2）从 `lan-transfer.mjs` 搬出来单独成套，见下面专门一节。
 - `mixed-link.mjs` —— 两个新版本浏览器在 LAN 房间里的统一链路（`link/1`），
-  `npm run test:e2e:mixed`，**单独跑**（它要自己的服务器端口）。
+  `npm run test:e2e:mixed`，**在 CI 里跑**（`.github/workflows/web.yml` 的
+  `mixed-link-e2e` 作业，2026-08-29 / Phase 3D C3a 新加）。它**自己起服务器**：
+  从 `./server` 构建一个真的，起在自己的端口、自己的临时库上，跑完全收掉。
+  它仍然和 `test:e2e` 分开的作业跑，因为它要 Go 工具链和自己的端口。
 - `code-room.mjs` —— 同一条统一链路，但在**配对码房间**里，
   `npm run test:e2e:code-room`，**在 CI 里跑**（`.github/workflows/web.yml` 的 test
   作业，紧跟 `npm run build` 和 a11y 扫描）。它不需要 Go 服务器：会合与 ICE 由一份
@@ -21,7 +37,7 @@
 
 ## CI 里真正跑的浏览器道次
 
-`.github/workflows/web.yml` 一共起六条真浏览器道次，`test:e2e` **不在其中**：
+`.github/workflows/web.yml` 一共起七条真浏览器道次，`test:e2e` **不在其中**：
 
 | 道次 | 脚本 | 作业 |
 |---|---|---|
@@ -31,10 +47,14 @@
 | 设备发现可发现性走查 | `test:device-discovery` | `test` |
 | Device Inbox 入口走查 | `test:device-inbox-entry` | `test` |
 | Device Inbox：浏览器 → 服务器 → CLI → 落盘 | `test:device-inbox` | `device-inbox-e2e` |
+| LAN 房间里的统一 `link/1` 工作区（真 Go 服务器） | `test:e2e:mixed` | `mixed-link-e2e` |
 
-`mixed-link.mjs` 和 `lan-transfer.mjs` 仍然只在本地跑。`page-shell.mjs` 不在此列——
-它托管在 CI 里，是这份 README 里唯一一套既描述了断言、又有推送/PR 真的替你执行它的
-脚本（`a11y-scan.mjs`、`code-room.mjs` 之外）。
+最后一行是 2026-08-29（Phase 3D C3a）新加的。**只剩 `lan-transfer.mjs` 还只在本地跑**
+（而且跑不到底，见下）。
+
+把 `mixed-link` 托管起来，先要修掉它托管不了的原因：它以前要求人先手工起一台服务器。
+现在它自己起（`go-server.mjs`，和 `test:device-inbox` 共用的那套生命周期），所以它
+不再依赖"有人记得起服务器"。
 
 ## 这套 harness 覆盖不到的两件事
 
@@ -155,8 +175,10 @@ cd server && RELAYIUM_ADDR=:8099 go run .
 上表第 1–6 条考的是真管道（commit-reveal、分块 AES-GCM、ACK 流控、checkpoint 续传、
 同意），不是那条退休的分叉。它们从 `STRIP_LINK_CAP` 上摘下来，改走统一 `link/1` 工作区：
 `.open-workspace`，然后是工作区自带的草稿框和 `.attach-file` / `.attach-folder`。
-`mixed-link.mjs` 驱动的就是这套界面。它现在只在本地跑，所以这一阶段同时要把它加进
-托管 CI——把独有断言搬进一套没人跑的套件，是挪问题，不是解决问题。
+`mixed-link.mjs` 驱动的就是这套界面。把独有断言搬进一套没人跑的套件是挪问题，不是解决
+问题，所以"把 `mixed-link` 托管起来"先做，而且**已经做完**（C3a，2026-08-29）：
+`mixed-link-e2e` 作业每次推送和 PR 都跑它现有的那一幕。搬那六条是 C3b，它的起点因此
+是一条绿的、托管着的基线，而不是一套自己的排队断言已经陈旧了好几周的套件。
 
 **阶段三：身份，以及有界的中继失败。** 第 7、8 条放到最后，因为两者都需要前面用不到的
 搭台：多页设备身份要在一个浏览器的两页之外再加一个独立上下文；有界中继池失败要那份
@@ -261,22 +283,44 @@ Web/原生/CLI 对端会发出的东西。
 
 ## `mixed-link.mjs` — 一条真的统一链路（`link/1`）
 
-`npm run test:e2e:mixed`
+`npm run test:e2e:mixed`（CI 的 `mixed-link-e2e` 作业里跑）
 
-跑的是**普通的默认产物**，不需要任何专门构建：
+跑的是**普通的默认产物**，不需要任何专门构建，也不需要你先起服务器：
 
 ```bash
-# 1) 普通构建
-cd web && npm run build
+cd web && npm run build && npm run test:e2e:mixed
+#   自起端口：--port 8124（默认；刻意避开手工那台的 8098 和 device-inbox 的 8123）
+#   留证据：  --screenshots [目录]（默认 web/e2e-screenshots，已 gitignore）
+#   调试：    --keep 保留 Chrome 的临时 profile，以及自起服务器的临时目录
+```
 
-# 2) 起服务器（端口和上面那套分开，两个脚本各自 pkill 自己那个调试端口）
+服务器由 `go-server.mjs` 从 `./server` 构建、起在一个自己的临时数据库上，跑完（成功、
+失败、看门狗超时都一样）连临时目录一起收掉。五条它会**当场拒绝**而不是慢慢超时的情况：
+
+- `--port` 给的不是一个 1–65535 的整数。这一条排在最前面，因为 Node 对"没有端口"的两种
+  写法反应并不一样：`listen(undefined)` 会绑一个内核随便挑的空闲端口，所以程序里直接
+  `startGoServer({ port: undefined })` 那种调用能骗过"这个端口没人占"，花掉一次完整的
+  Go 构建，最后由子进程拿着 `RELAYIUM_ADDR=127.0.0.1:undefined` 去死——报的是服务器，
+  不是那个缺掉的值；而命令行上的 `--port`（后面什么都没有）经 `Number()` 变成 `NaN`，
+  `listen(NaN)` 直接抛 `RangeError`：红得是早，可既没说 `--port`，也没说这是哪套用例。
+  现在两种都在最前面被同一条检查拦下，报的是那个值本身。
+- `web/dist/index.html` 不存在，或者比 `web/src` 里任何一个源文件旧。旧 dist 是这套
+  用例最会骗人的一种失败——每一页都加载得出来，然后在某一幕深处对着这份 checkout 里
+  已经没有的代码红掉。
+- 那个端口上已经有人在听。它**不接管**：那台服务器有它自己的库、自己的 dist、可能
+  还有开发者的真配置，对着它跑绿什么也证明不了。
+- 子进程还没应答 `/healthz` 就退出了。报的是"退出了"，并给出抓下来的日志路径，
+  而不是等满整个就绪预算再报一个指向错误方向的超时。
+- 给了 `--url` 却没给地址：后面什么都没有、`--url ""`、或者后面跟着的是下一个开关。
+  前两种以前都是 falsy，于是这套用例转头去自起一台本地服务器——绿是绿了，绿的不是你
+  点名的那台；第三种把开关当成地址吞下去。三种现在都在构建和浏览器之前，以
+  `Mixed link E2E` 的名义报出来。
+
+要打一台**你自己起着**的服务器，显式给 `--url`（这条手工快路保留）：
+
+```bash
 cd server && RELAYIUM_STATIC=../web/dist RELAYIUM_ADDR=:8098 go run .
-
-# 3) 跑
-cd web && npm run test:e2e:mixed
-#   换端口：--url http://localhost:1234
-#   留证据：--screenshots [目录]（默认 web/e2e-screenshots，已 gitignore）
-#   调试：  --keep 保留 Chrome 的临时 profile
+cd web    && node e2e/mixed-link.mjs --url http://localhost:8098
 ```
 
 ### 作用域在哪：能力，不是房间，更不是构建旗标
@@ -452,8 +496,8 @@ readySelector 而不是固定 sleep——固定 sleep 在快机器上浪费时�
   唯一活着的时候）、掉线续传完成后的终态、消息会话（`role="log"` + 输入框）。
   **这四格挂在该脚本的尾巴上，眼下随尾巴一起不执行**（见上面的"现状"）——所以这四个
   真场景的无障碍覆盖目前是空的，迁移完成前不要把它算进任何"已覆盖"的口径。
-- `mixed-link.mjs`（本地 opt-in，CI 不跑）：统一工作区头部、390px 下的 40 文件同意卡、
-  文本通道同意后两条通道都活着的状态。
+- `mixed-link.mjs`（CI，`mixed-link-e2e` 作业）：统一工作区头部、390px 下的 40 文件
+  同意卡、文本通道同意后两条通道都活着的状态。
 - `code-room.mjs`（CI）：配对码房间里的统一工作区（390px）、切换到中文后的同一工作区，
   以及文件同意卡。归档阿拉伯语的 RTL 渲染由静态模板与 axe 目标继续覆盖；运行时恢复
   RTL 语言前，需要另行补回工作区逻辑属性镜像门禁。
