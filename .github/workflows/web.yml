@@ -242,7 +242,7 @@ jobs:
   # against a real Go server this job's own runner starts, builds and tears down.
   #
   # Its own job rather than another step in `test`, deliberately. That job is
-  # Node-only and already spends most of a 15-minute budget on four browser
+  # Node-only and already spends most of a 15-minute budget on five browser
   # lanes; this one needs a Go toolchain it does not have, and a scenario that
   # drives a 40-file consent card, a 5MB byte-level resume across a rebuilt
   # PeerConnection and two teardowns. Sharing the budget would make an ordinary

@@ -76,10 +76,15 @@ is not one of them:
 | Device Inbox: browser → server → CLI → disk | `test:device-inbox` | `device-inbox-e2e` |
 | LAN room, unified `link/1` workspace, real Go server | `test:e2e:mixed` | `mixed-link-e2e` |
 
-The last row is new as of 2026-08-29 (Phase 3D C3a). It is a separate job rather
-than another step in `test` because it needs a Go toolchain that Node-only job
-does not have, and because `test` already spends most of a 15-minute budget on
-four browser lanes.
+The last row is new as of 2026-08-29 and is **merged**: Phase 3D C3a landed on
+`main` as `a703c56f` ("Test unified mixed-link path in hosted CI"). It is a
+separate job rather than another step in `test` because it needs a Go toolchain
+that Node-only job does not have, and because `test` already spends most of a
+15-minute budget on the five browser lanes the table above assigns to it
+(accessibility scan, page shell, code room, device discovery, Device Inbox
+entry). `web.yml`'s own comment beside the `mixed-link-e2e` job still says
+"four"; it predates `test:device-inbox-entry` and is the stale copy of this
+count, not this table.
 
 Getting it hosted required fixing what made it un-hostable: it used to demand
 that a human had already started a server on `:8098`. `mixed-link.mjs` now
@@ -151,23 +156,88 @@ per-file SHA-256 integrity, consent state machines, live-state accessibility sca
 and teardown are all driven by those two — on the unified `link/1` surface that
 replaced the fork, and `code-room.mjs` runs in hosted CI on every push.
 
-What the audit found genuinely stranded is **exactly eight** current unique
-assertions, held nowhere else:
+The audit originally listed **eight** current unique assertions as stranded. Two
+of those rows have since changed status, so the live count is **six stranded, one
+migrated, one retired**:
 
-| # | Stranded unique assertion |
-|---|---|
-| 1 | Mobile no-picker fallback (no `showSaveFilePicker`) |
-| 2 | Desktop save-picker cancellation |
-| 3 | 64 KiB max-message-size boundary |
-| 4 | Response race (responder accepts while the initiator is still taking ownership) |
-| 5 | Pre-open PeerConnection failure (`failed` before the DataChannel opens) |
-| 6 | Live `role="progressbar"` accessibility during an in-flight transfer |
-| 7 | Multi-page device identity and focus (two pages of one browser plus a third device) |
-| 8 | Bounded relay-pool failure (credentials issued from the pool, then discarded) |
+| # | Unique assertion | Status |
+|---|---|---|
+| 1 | Mobile no-picker fallback (no `showSaveFilePicker`) | stranded |
+| 2 | Desktop save-picker cancellation | stranded |
+| 3 | SCTP negotiated max-message-size boundary (RFC 8841 default, 64 KiB) | stranded |
+| 4 | Response race (responder accepts while the initiator is still taking ownership) | **retired** — see below |
+| 5 | Pre-open PeerConnection failure (`failed` before the DataChannel opens) | stranded |
+| 6 | Live `role="progressbar"` accessibility during an in-flight transfer | **migrated** (C3b-1) |
+| 7 | Multi-page device identity and focus (two pages of one browser plus a third device) | stranded |
+| 8 | Bounded relay-pool failure (credentials issued from the pool, then discarded) | stranded |
 
-Those eight are the actual regression exposure, and they are what the migration
-below has to carry across. Everything else in the tail can be retired rather than
-ported, because a hosted suite already asserts it.
+**Row 3 says SCTP, and the distinction is not pedantic.** There are two unrelated
+64 KiB numbers in this product and naming the wrong one sends the repair to the
+wrong module. This row is the *transport* limit: `a=max-message-size` as
+negotiated per RFC 8841, read off `RTCPeerConnection.sctp.maxMessageSize`, whose
+default when a peer advertises nothing is 65 536 — which is why an Android WebView
+peer drags a desktop sender down to it and why the file stream must fragment
+(`src/lib/wire-limit.ts`, `CONSERVATIVE_MAX_MESSAGE_BYTES`). It is **not**
+`TEXT_MAX_BYTES`, the product's own 64 KiB cap on one text message
+(`src/lib/text-wire.ts`), which exists so that anything larger is treated as a
+file rather than silently split. The two even disagree numerically at the
+boundary: 64 KiB of plaintext seals into a 65 557-byte frame, which does *not*
+fit a channel that negotiated 65 536. What `lan-transfer.mjs`'s
+`smallMessageCapScenario` uniquely holds is the transport half — it rewrites the
+SDP to force a real 64 KiB negotiation in a real Chromium and proves the old
+192 KiB chunk frame is refused while a fitted one is accepted. The fragmentation
+arithmetic behind it is already deterministic
+(`src/lib/transfer-fragmentation.test.ts`); what is stranded is the negotiation.
+
+**Row 4 is retired rather than migrated, and here is the exact evidence.**
+`messageDefaultRaceScenario` forced the reported LAN failure: B auto-accepts and
+sends its first message while A's `getStats()` path sample is still held, so both
+frames arrive on an open DataChannel before A's lane has attached a handler. That
+window is now closed by construction — the transport captures frames that arrive
+before attachment and replays them into the lane afterwards — and the closure is
+pinned by deterministic tests that run in `npm test` on every push:
+
+- `src/lib/mixed-session.test.ts` — "replays a text request captured before lane
+  attachment" (a REQUEST delivered before `attach`, replayed, status
+  `incomingRequest`); "fails quickly instead of replaying into a declined lane
+  capture sink"; "re-attaches both lanes to a replaced transport before replaying
+  its capture" (both lanes own the new transport before a single captured frame
+  replays).
+- `src/lib/peer-link.test.ts` — "holds an inbound offer and replays the frames
+  that chased it, in order", and the capture-replay case at `peer-link.test.ts`
+  asserting `{ file: [1, 2], text: [9] }` arrive on the replacement channels in
+  order and cannot be replayed twice into the codecs.
+
+Ordering is the whole property, and those tests assert order directly.
+
+The second half of the reason is about the scenario's *mechanism*, and it is the
+half that makes this retirement rather than a deferral. That scenario did not
+wait for the race; it manufactured it, by replacing
+`RTCPeerConnection.prototype.getStats` with a promise the test released by hand.
+That worked because the path sample was the last thing standing between an open
+DataChannel and an attached lane. It no longer is. In
+`src/lib/mixed-session.svelte.ts`, `onLinkChange` publishes the link
+(`publishedLink = link`), attaches **both** lanes (`file.attach(link)`,
+`text.attach(link)`, followed by a throw if either channel ended up without an
+`onmessage`), and replays every captured frame — all synchronously — and only
+*then* calls `observePath(link)`, which fires the `conn.path()` sample and
+returns without awaiting it. `conn.path()` is `pc.getStats().then(classifyPath)`
+(`src/lib/webrtc-core.ts`), so holding `getStats` now suspends a diagnostic that
+has already been overtaken by the attachment it used to precede. The injection
+point still exists; the window behind it does not.
+
+To be exact about what is and is not being claimed: the unified workspace could
+host an act for this. Nothing about `link/1` prevents writing one, and it would
+not require restoring the deleted per-card message control. What is gone is the
+lever — there is no longer a hook that opens the gap on demand, so a migrated act
+would be racing a timer, which is what the original scenario's `getStats` hold
+was written to avoid. Combined with the deterministic tests above, which assert
+the property directly and run on every push, that makes this retired rather than
+lost.
+
+The remaining six are the actual regression exposure, and they are what the
+migration below has to carry across. Everything else in the tail can be retired
+rather than ported, because a hosted suite already asserts it.
 
 That staleness risk is closed as of Stage 1 below: `appsHierarchyScenario` now
 runs in hosted CI on every push and pull request, so a change to
@@ -209,11 +279,116 @@ retired fork. They come off `STRIP_LINK_CAP` and onto the unified `link/1`
 workspace — `.open-workspace`, then the workspace's own composer and
 `.attach-file` / `.attach-folder`. `mixed-link.mjs` already drives exactly that
 surface. Migrating uniques into a suite nobody runs would move the problem
-rather than fix it, so hosting `mixed-link` came first and is **done** (C3a,
-2026-08-29): the `mixed-link-e2e` job above runs its existing single scenario on
-every push and pull request. Moving the six uniques onto it is C3b, and it
-starts from a baseline that is green and hosted rather than from a suite whose
-own queued-batch assertion had been stale for weeks.
+rather than fix it, so hosting `mixed-link` came first and is **merged** (C3a,
+2026-08-29, `a703c56f`): the `mixed-link-e2e` job above runs its existing single
+scenario on every push and pull request. Moving the remaining uniques onto it is
+C3b, and it starts from a baseline that is green and hosted rather than from a
+suite whose own queued-batch assertion had been stale for weeks.
+
+**C3b-1 — the live progressbar, file lane only.** The first C3b slice migrates
+**unique #6 and nothing else**. It is a file-lane entry in every sense worth
+recording:
+
+- *What moved:* the live `role="progressbar"` assertion, into `mixed-link.mjs`'s
+  existing 5 MiB resume act as a new `live-progressbar` act. It runs in the one
+  window where an in-flight transfer exists — after the receiver has taken two
+  durable chunks and **before** the forced transport gap closes both
+  PeerConnections. The subject is proved to exist (one bar per direction,
+  `role="progressbar"`, `aria-labelledby` resolving to the card's own heading id
+  `xfer-label-{send,recv}`, `0 ≤ aria-valuenow ≤ 100`, card not yet terminal) and
+  only then scanned with `scanLiveState` scoped to `XFER.card`. A scoped `axe.run`
+  over a context matching nothing reports zero violations, so without the
+  existence proof this act would print "axe clean" forever.
+- *How that window is held open, and when it closes again:* the receiver's
+  stubbed sink sleeps per 192 KiB write, and that sleep now has **two** values,
+  because this scene contains two pieces of work with budgets an order of
+  magnitude apart. `SCAN_WRITE_DELAY_MS` (1000ms) serves the act above only:
+  ~25 writes remain after the two-chunk wait, so the previous 20ms left ~500ms —
+  enough for the forced close, which is one CDP round trip, and not enough to
+  inject and run axe on two tabs. The transfer would have finished first and the
+  act would have failed reporting a terminal card instead of an accessibility
+  result. **The moment the last scan returns**, the sink goes back to
+  `RESUME_WRITE_DELAY_MS` (20ms — the value this scene ran at before the act
+  existed), and it does so deliberately *before* the PeerConnection counts are
+  read and before the forced close: the ~25 remaining writes at 1000ms are pure
+  wall clock and buy nothing. Leaving the scan throttle on to the end of the
+  scene is what took this scenario from ~10s to ~31s — a regression completely
+  invisible in a green run, which is why the **order** of that switch is pinned
+  by `go-server.test.mjs` rather than left to a comment. The switch also asserts
+  the transfer is still live: if two axe passes ever ran long enough to let the
+  file finish, every wait below it would time out blaming something else, and the
+  scene would have degraded silently into a plain uninterrupted transfer.
+- *What did not move:* uniques 1, 2, 3 and 5 are untouched and remain stranded;
+  7 and 8 remain Stage 3. The byte-exact resume and replacement-PeerConnection
+  assertions were preserved unchanged — the act was inserted into that scene, not
+  in place of any of it.
+- *What the diff touches:* test and documentation files only —
+  `web/e2e/mixed-link.mjs`, `web/e2e/dom-contracts.mjs`, `web/e2e/go-server.test.mjs`,
+  `web/src/lib/ReceiveActions.test.ts`, `web/src/lib/workspace-orchestration.test.ts`,
+  this document and `web/e2e/README.md`. No product source, workflow, package,
+  dependency, native or ops file changed.
+- *Anti-vacuity, added with it:* one scenario is not one assertion.
+  `mixed-link.mjs` now records a frozen per-act execution ledger — seventeen
+  named acts, checked for membership, order and a **literal** count
+  (`EXPECTED_ACT_COUNT`, never `ACTS.length`) — alongside a literal
+  `EXPECTED_SCENARIO_COUNT`. A `1/1` scenario count would otherwise be reported
+  by a run edited down to its first assertion. `e2e/go-server.test.mjs` pins that
+  shape, and pins that the live scan sits between the accept and the forced
+  close.
+- *Shared selectors:* the consent card and the transfer card are now written once
+  in `e2e/dom-contracts.mjs` (`RECEIVE`, `XFER`) beside `QUEUED`, and asserted
+  against real rendered markup by `ReceiveActions.test.ts` and against
+  `App.svelte`'s actual branch structure by `workspace-orchestration.test.ts` —
+  both of which run on every push, unlike the browser lane. `RECEIVE` records the
+  one trap in that card: under the large-batch memory warning the two buttons'
+  **meanings invert**, so `.btn-primary` becomes *decline*. That is why those two
+  constants are named for their presentation role — `RECEIVE.primary` and
+  `RECEIVE.ghost` — and not `accept`/`decline`: a shared identifier must not
+  claim a semantic role that half its branches contradict, least of all at the
+  moment a reader is deciding whether a click is safe. The runner establishes the
+  branch instead, guarding on the warning before both of its consent clicks and
+  failing rather than adapting if it is raised.
+
+**Verification status: green locally; not yet observed in hosted CI.** Recorded
+by the author on 2026-08-30, on a local macOS worktree against a self-started Go
+server (`127.0.0.1:8124`) and a headless Chrome:
+
+| Command | Result |
+|---|---|
+| `npm run check` | 548 files, **0 errors, 0 warnings**, 0 files with problems |
+| `npx vitest run` (whole suite) | **4370 passed**, 3 skipped, 0 failed (233 files) |
+| `npx vitest run` (the four files this slice touches) | **176 passed** — 79 in `e2e/go-server.test.mjs`, 97 across `ReceiveActions` / `workspace-orchestration` / `QueuedBatches` |
+| `npm run build` | succeeded; 12 per-route SPA shells written |
+| `npm run test:e2e:mixed` | **17/17 acts performed, in order**, five consecutive runs — 12.05s, 11.24s, 12.41s, 13.01s, 12.69s wall clock (was ~31s before the throttle was restored) |
+
+The adversarial mutation this note previously recorded as un-run has now been
+run, and it is the one that mattered: pointing `XFER.bar` at a class that does
+not exist — the shape of "the bar stopped rendering during flight" — fails the
+real browser run **at the act**, with
+
+> no in-flight progress bar in the send card on tab A: the transfer is already
+> terminal, or the bar left its `{#if !xf.done}` branch. Either way this act has
+> no live subject left to scan.
+
+and not with a vacuous "axe clean". Three cheaper source mutations were run the
+same way and each was caught with a message naming its own cause: deleting the
+throttle reset ("nothing restores the throttle after the scan"), renaming
+`RECEIVE.primary` back to `accept` (four failures across `go-server.test.mjs` and
+`ReceiveActions.test.ts`), and reverting the `web.yml` lane count to "four" ("the
+mixed-link job's stated reason names the wrong lane count").
+
+One measurement worth keeping, because it is what justifies restoring the
+throttle rather than lowering `SCAN_WRITE_DELAY_MS`: on all five runs the
+receiver had written exactly **393,216 of 5,242,953 bytes** at the moment of the
+reset — still the two durable chunks it started from. Both axe passes fit inside
+the *first* 1000ms sleep, so the runway left for the forced close is the full
+~25 writes × 20ms ≈ 500ms, which is the budget this scene was already proven at.
+
+What is **not** claimed here: this has not run in hosted CI, and no independent
+acceptance pass has been recorded against it. Unique #6 is therefore **migrated
+and green locally**; the table above still says "migrated" rather than "hosted"
+for exactly that reason, and the first hosted `mixed-link-e2e` run on `main` is
+what changes it.
 
 **Stage 3 — identity and bounded relay failure.** Uniques 7 and 8 are last
 because both need setup the other stages do not: multi-page device identity needs
@@ -223,8 +398,10 @@ TURN host and a probe budget that actually elapses.
 
 **Stage 4 — delete `lan-transfer.mjs` and its `test:e2e` npm script.** Only after
 the hosted `main` is green with stages 1–3 landed. Deleting earlier would drop the
-eight uniques; keeping it after is worse than useless — a script that cannot exit
-zero teaches everyone to ignore a red run.
+uniques still stranded in it — six as of C3b-1, since #6 has moved and #4 is
+retired with the deterministic evidence recorded above; keeping it after is worse
+than useless — a script that cannot exit zero teaches everyone to ignore a red
+run.
 
 Two things this migration must not do. It must not restore the deleted controls,
 and it must not add a downgrade switch. What remains genuinely legacy-specific is
@@ -343,7 +520,13 @@ to avoid a local port conflict; the port is the only difference).
    ```bash
    shasum -a 256 testfile.bin
    ```
-7. On **device A**, drag `testfile.bin` onto device B's card, or click the card and pick it.
+7. On **device A**, either drag `testfile.bin` onto device B's card, or press the
+   card's **one** action — **Open workspace** (`.open-workspace`) — and attach the
+   file from inside the workspace that opens. The per-card file / folder / message
+   picker this step used to describe was removed by `d175f863` (2026-08-27); a
+   `link/1`-capable card now offers that single action and nothing else, and the
+   attachment control (`.attach-file`) lives in the workspace. A peer that cannot
+   route `link/1` gets a sentence (`.pa-unsupported`), not a disabled button.
    You may select up to 10 files at once (see §3a).
 8. **Device B shows an accept card** ("X 想发送 N 个文件 … 校验码 NNNNNN") with a SAS code.
    Compare it against the SAS shown in device A's send panel — they must match. If they differ,
@@ -365,7 +548,9 @@ to avoid a local port conflict; the port is the only difference).
 
 ## 3a. Multi-file batch `[MANUAL]`
 
-1. On **device A**, drag 2–10 files onto device B's card (or click and multi-select).
+1. On **device A**, drag 2–10 files onto device B's card, or open the workspace
+   from the card's single **Open workspace** action and multi-select from its
+   attachment control (see §3 step 7 — there is no per-card picker any more).
 2. Device B's accept card lists every file and the combined size. Click **接收**.
 3. For >1 file device B picks a **destination folder**; all files stream into it.
 4. Each file is integrity-checked independently; the panel shows `文件 i/N` and overall progress.
@@ -663,10 +848,19 @@ and two live CLI processes.
 >
 > The consent state machines and the one-SAS-per-link rule are still asserted, by
 > `web/e2e/mixed-link.mjs` and `web/e2e/code-room.mjs` on the unified `link/1`
-> surface, and **both** run in hosted CI as of 2026-08-29. What is genuinely uncovered until the
-> §1a migration lands is the response race (unique #4) — a responder accepting
-> while the initiator is still taking ownership of its channel. Deterministic
-> coverage of the surrounding logic remains in `src/lib/verify-gates.test.ts` and
+> surface, and **both** run in hosted CI as of 2026-08-29.
+>
+> The response race (unique #4) — a responder accepting while the initiator is
+> still taking ownership of its channel — was previously described here as
+> "genuinely uncovered". That is **no longer accurate**, and it is now recorded as
+> retired in §1a with its evidence: the pre-attachment capture-and-replay path is
+> pinned in order by `src/lib/mixed-session.test.ts` ("replays a text request
+> captured before lane attachment", "fails quickly instead of replaying into a
+> declined lane capture sink", "re-attaches both lanes to a replaced transport
+> before replaying its capture") and `src/lib/peer-link.test.ts` ("holds an
+> inbound offer and replays the frames that chased it, in order"). All of those
+> run in `npm test` on every push. Deterministic coverage of the surrounding
+> consent logic remains in `src/lib/verify-gates.test.ts` and
 > `src/lib/MessagePanel.test.ts`.
 
 Prerequisites: `cd web && npm run build`, then
@@ -689,7 +883,10 @@ Run this on the **default** setup: advanced verification OFF on both devices (th
 is the shipped default — do not turn it on here).
 
 1. Open `/` on both devices; wait until each shows the other on the radar.
-2. On device A press **💬 Send a message** on B's card.
+2. On device A press B's card's single action, **Open workspace**
+   (`.open-workspace`). The separate **💬 Send a message** control this step used
+   to name was removed with the rest of the per-card fork by `d175f863`; the
+   composer is inside the workspace the action opens.
 
    **Expect:** the composer opens directly on **both** devices. B is shown **no
    Accept/Decline card** — there is nothing to approve — and **neither** side
@@ -734,7 +931,8 @@ Everything here is observable in the UI. Note that the composer only exists once
 session is **open** — there is deliberately no way to type before the peer accepts,
 so this gate checks the absence of a composer rather than trying to send early.
 
-1. From A, press the message control on B's card. **Do not accept on B yet.**
+1. From A, press **Open workspace** on B's card — the card's only action; the
+   text lane opens with the workspace. **Do not accept on B yet.**
 2. Inspect **B**: the card names the peer ("… wants to send you a message"), shows a
    6-digit code with the compare-on-both-devices prompt, and offers **Accept** and
    **Decline**.
@@ -762,26 +960,56 @@ before this branch, `npm run build`, and serve it on a second port), and this
 branch's build to the other.
 
 **Expect, in this order of importance:**
-1. The **new** device offers **no** message control for the old peer — it never
-   announced `text/1`.
+1. The **new** device offers the old peer **no action at all** — not a disabled
+   message control, which is what this step used to describe. A peer that routes
+   neither `link/1` nor `text/1` gets `<p class="pa-unsupported">`: a sentence,
+   and no button.
 2. The **old** device shows **no** spurious card of any kind: no failed receive, no
    0% transfer, no error banner. Check its DevTools console: no exceptions.
-3. A **file** transfer between the two still completes byte-exactly in both
-   directions, and a mid-transfer resume still works.
+3. There is **nothing on the new device to start a transfer with**, and that is
+   the expected result rather than a defect. The card carries no control, the
+   drag affordance is withheld (`ondragover` adds `.drag` only for a routing
+   peer), and a drop that lands anyway is refused with the same unsupported
+   message instead of being handed to the router. The pointer shortcut on the
+   card body is attached only when the peer routes `link/1`.
 
-Point 3 is the one that would matter most if it broke, because the file path is
-what people already depend on.
+This step used to end with "a file transfer between the two still completes
+byte-exactly in both directions, and a mid-transfer resume still works." That is
+**no longer a property this build has**, and asking a tester to confirm it would
+send them looking for a control that was deliberately deleted. Current behavior
+is `link/1`-only: the compatibility route to a peer that cannot route it was
+removed with the per-card fork (`d175f863`), not left disabled. So what point 1
+and point 2 check — one honest sentence on the new device, and silence on the old
+one — is the whole of this gate now. Byte-exact transfer and mid-transfer resume
+are still gated, on the surface that actually has them: `web/e2e/mixed-link.mjs`'s
+`byte-resume` act, in hosted CI.
 
-### 5. Mutual exclusion
+### 5. Mutual exclusion — **retired, and it must not be run**
 
-1. Start a large file transfer from A to B and accept it on B.
-2. While it is running, on A press the message control for B (if enabled) and on B
-   try the same toward A.
+This gate used to read: start a large file transfer, then confirm the message
+control is *disabled* and an inbound message offer is refused as **busy**.
 
-**Expect:** the message control is disabled while a transfer is in flight, and any
-inbound message offer is refused as **busy** rather than opening a session. At no
-point are **two different 6-digit codes** on screen at once — that is the specific
-confusion the exclusion exists to prevent.
+That is now the description of a bug. Mutual exclusion was deliberately lifted
+when both streams moved onto one handshake and one SAS: a unified `link/1`
+workspace runs the file lane and the text lane **concurrently**, on one
+PeerConnection, and being able to type while a file is moving is the substance of
+what the unified workspace is for. A tester following the old steps would find
+the composer and the attachment control both live, and would file it.
+
+There is no manual replacement step here, deliberately — inventing one would mean
+writing a gate nobody has run. The property that replaced this one is already
+asserted automatically, on the real surface, and by name:
+`web/e2e/mixed-link.mjs`'s `byte-identical-text` act fails if the attachment
+control or the send button is disabled while the other lane is in use
+("text and file intent were not simultaneously available"), and its `queued-batch`
+act fails if choosing files mid-transfer disables the picker instead of queueing.
+
+The half of the old gate that was never about exclusion — **at no point are two
+different 6-digit codes on screen at once** — survives, and is stronger now,
+because one link owns exactly one SAS. It is checked on every state this scenario
+visits by `oneSas`, which counts every `.sas` on the page and requires the count
+to be one, with zero outside the workspace header. There is nothing left for a
+human to do here.
 
 ### 6. Ephemerality
 

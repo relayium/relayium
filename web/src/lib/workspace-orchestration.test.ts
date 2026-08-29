@@ -1420,3 +1420,96 @@ describe("the relay choice is committed by the link path and only by it", () => 
     expect(all).not.toContain("const rtcConfig = (): RtcConfig");
   });
 });
+
+/**
+ * The live transfer card — the subject of stranded unique #6, migrated into
+ * `web/e2e/mixed-link.mjs` as the `live-progressbar` act (Phase 3D C3b-1).
+ *
+ * That act can only assert anything during the few seconds a real 5 MiB
+ * transfer is in flight, and it costs a Go build, a real server and a headless
+ * Chrome to reach them. What it depends on, though, is a handful of statements
+ * in this file, and each of them fails in a way that is expensive to read from
+ * there:
+ *
+ *   - the bar renders ONLY inside `{#if !xf.done}`. Both directions of that
+ *     matter. A bar that stopped being removed on completion makes
+ *     `!progress-bar` — how three separate waits in that runner prove a batch
+ *     reached a terminal state — hang until its timeout and report "the resumed
+ *     sender never completed". A bar that stopped rendering during flight makes
+ *     the live scan report "no live subject" instead of an accessibility
+ *     result. Same markup, opposite failures, neither one legible as this.
+ *   - it carries `role="progressbar"` with a real `aria-labelledby`, and the id
+ *     it names is the heading's own. axe's `aria-progressbar-name` (named in
+ *     `e2e/a11y-core.mjs`'s EXTRA_RULES) is the rule that judges it, and a
+ *     dangling id fails it identically to no name at all.
+ *   - the id is per direction, so one page holding a send card and a recv card
+ *     holds two distinct names rather than one duplicated one.
+ *
+ * A source contract, like the blocks above: these are statements about which
+ * branch a node lives in and which id it points at, and a rendered snapshot of
+ * one state cannot show either.
+ */
+describe("the in-flight transfer bar the live accessibility act scans", () => {
+  const OPEN_TAG = '<section class="ui-card xfer"';
+
+  /**
+   * The `{#each [send, recv]}` body — one transfer card, one direction.
+   *
+   * A function rather than a module constant, and called inside each `it()`:
+   * the same idiom as `page-shell-contract.test.mjs`'s `mainBody()`. A failed
+   * `expect` at collection time reports as a suite-level error rather than as
+   * the named test that was actually checking for it.
+   */
+  const xferCard = (): string => {
+    const at = surface.indexOf(OPEN_TAG);
+    expect(at, "the transfer card is no longer a `ui-card xfer` section").toBeGreaterThan(-1);
+    const end = surface.indexOf("</section>", at);
+    expect(end).toBeGreaterThan(at);
+    return strip(surface.slice(at, end));
+  };
+
+  it("keeps the card class and the terminal classes the runner waits on", () => {
+    const at = surface.indexOf(OPEN_TAG);
+    expect(at, "the transfer card is no longer a `ui-card xfer` section").toBeGreaterThan(-1);
+    const open = strip(surface.slice(at, surface.indexOf(">", at)));
+    // XFER.card / XFER.ok / XFER.bad in `e2e/dom-contracts.mjs`.
+    expect(open).toContain("class:ok={xf.done && xf.ok}");
+    expect(open).toContain("class:bad={xf.done && !xf.ok}");
+  });
+
+  it("renders the bar only while the transfer is not done", () => {
+    const xfer = xferCard();
+    // The guard, and the fact that the bar is INSIDE it rather than beside it.
+    const guard = xfer.indexOf("{#if !xf.done}");
+    expect(guard, "the progress bar's `{#if !xf.done}` guard is gone").toBeGreaterThan(-1);
+    const bar = xfer.indexOf('class="progress-bar"');
+    expect(bar, "the progress bar is gone from the transfer card").toBeGreaterThan(-1);
+    expect(bar, "the progress bar escaped its `{#if !xf.done}` guard").toBeGreaterThan(guard);
+    expect(xfer.indexOf("{/if}", bar), "the guard no longer closes after the bar").toBeGreaterThan(bar);
+    // And exactly one of them: two bars in one card would be two progressbars
+    // claiming a single accessible name.
+    expect(xfer.match(/class="progress-bar"/g)).toHaveLength(1);
+  });
+
+  it("names that bar with the card's own heading, per direction", () => {
+    const xfer = xferCard();
+    // The heading declares the id…
+    expect(xfer).toContain('id={`xfer-label-${xf.dir}`}');
+    // …and the bar points at exactly that expression. Written as two separate
+    // literals these drift into a dangling reference, which axe reports as an
+    // unnamed progressbar rather than as a broken id.
+    expect(xfer).toContain('aria-labelledby={`xfer-label-${xf.dir}`}');
+    expect(xfer).toContain('role="progressbar"');
+    // The bounds `mixed-link.mjs` asserts aria-valuenow against.
+    expect(xfer).toContain('aria-valuemin="0"');
+    expect(xfer).toContain('aria-valuemax="100"');
+    expect(xfer).toContain("aria-valuenow={pct(xf)}");
+  });
+
+  it("keeps the card's own code suppressed on a mixed link", () => {
+    // XFER.laneCode: on a unified link the header owns the one SAS, so the
+    // runner's `oneSas` requires zero `<code>` inside `.xfer .status`. The
+    // `!mixed` term is what makes that count zero rather than one per card.
+    expect(xferCard()).toContain("{#if shownSas && !xf.done && !mixed}");
+  });
+});

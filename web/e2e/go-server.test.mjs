@@ -591,6 +591,300 @@ describe("the runners this lifecycle serves", () => {
     expect(body).not.toMatch(/continue-on-error/);
     // The build must come BEFORE the suite: the runner refuses a missing bundle.
     expect(body.indexOf("npm run build")).toBeLessThan(body.indexOf("npm run test:e2e:mixed"));
+
+    // The job's own comment states a FACT about the `test` job — how many
+    // browser lanes it already carries — and that fact is the entire stated
+    // reason this job is separate. It said "four" for as long as there have
+    // been five, because a stale comment is invisible to every other check in
+    // this file. So count the lanes and hold the sentence to the count.
+    const testJob = yml.split(/^  test:$/m)[1].split(/^  \S/m)[0];
+    const lanes = [
+      "npm run test:a11y",
+      "npm run test:e2e:page-shell",
+      "npm run test:e2e:code-room",
+      "npm run test:device-discovery",
+      "npm run test:device-inbox-entry",
+    ];
+    for (const lane of lanes) {
+      expect(testJob, `the test job no longer runs ${lane}`).toContain(`- run: ${lane}`);
+    }
+    // Written as a literal, not as `lanes.length`: an array and its own length
+    // agree after somebody deletes an entry, which is the same vacuity the act
+    // ledger below exists to forbid.
+    expect(lanes).toHaveLength(5);
+    const comment = yml.split(/^  mixed-link-e2e:$/m)[0];
+    expect(comment, "the mixed-link job's stated reason names the wrong lane count")
+      .toMatch(/most of a 15-minute budget on five browser/);
+  });
+});
+
+/**
+ * `mixed-link.mjs`'s own inventory: one scenario, seventeen acts.
+ *
+ * `page-shell-contract.test.mjs` guards its runner from silently dropping a
+ * scenario, and the same failure exists here one level down and is worse. That
+ * suite has four scenarios, so counting them is a real check. This one has a
+ * single `mixedScenario` that performs seventeen distinct acts against one live
+ * link — so `1/1` would be reported by a run that had been edited down to its
+ * first assertion, and by a run whose 5 MiB resume act quietly stopped
+ * executing. The literal that actually protects it is the ACT count.
+ *
+ * These are source-shape assertions, deliberately: the run they protect costs a
+ * Go build, a real server and a headless Chrome, and is the one place in this
+ * repository where a silently-skipped assertion is most expensive to notice.
+ */
+describe("mixed-link's scenario inventory and act ledger", () => {
+  const src = read("e2e/mixed-link.mjs");
+
+  /** The frozen act list, retyped rather than imported — on purpose. An
+   *  assertion that reads the array it is checking agrees with itself. */
+  const ACT_NAMES = [
+    "advertised-link-1",
+    "peer-card-one-action",
+    "one-link-one-sas",
+    "chooser-hidden",
+    "workspace-header",
+    "text-consent",
+    "file-consent-40",
+    "sticky-sas",
+    "queued-batch",
+    "declined-batch",
+    "byte-identical-text",
+    "live-progressbar",
+    "byte-resume",
+    "narrow-locale-theme",
+    "pending-consent-outlives-link",
+    "fresh-link-new-sas",
+    "explicit-disconnect",
+  ];
+
+  it("declares exactly those acts, in that order, as one frozen literal", () => {
+    const match = src.match(/const ACTS = Object\.freeze\(\[([^\]]*)\]\);/);
+    expect(match, "ACTS is no longer a frozen array literal").not.toBeNull();
+    const listed = match[1].split(",").map((s) => s.trim().replace(/^"|"$/g, "")).filter(Boolean);
+    expect(listed).toEqual(ACT_NAMES);
+  });
+
+  it("records every one of them from an act() call, exactly once", () => {
+    for (const name of ACT_NAMES) {
+      const calls = src.match(new RegExp(`\\bact\\("${name}"`, "g")) ?? [];
+      expect(calls, `${name} is declared but never recorded by an act() call`).toHaveLength(1);
+    }
+    // And nothing records an act the frozen list does not name: `act()` throws
+    // on an unknown name at runtime, but a run that never reaches it would not
+    // find out, and this is free.
+    const recorded = [...src.matchAll(/\bact\("([a-z0-9-]+)"/g)].map((m) => m[1]);
+    expect(recorded).toEqual(ACT_NAMES);
+  });
+
+  it("checks both counts against fixed literals, not against array lengths", () => {
+    expect(src).toMatch(/const EXPECTED_SCENARIO_COUNT = 1;/);
+    expect(src).toMatch(/const EXPECTED_ACT_COUNT = 17;/);
+    expect(src).toMatch(/ran !== EXPECTED_SCENARIO_COUNT/);
+    expect(src).toMatch(/ledger\.length !== EXPECTED_ACT_COUNT/);
+    // The comparisons this guard exists to forbid: an array and its own length
+    // still agree after somebody deletes an entry from it, so either of these
+    // would report a clean run over a shrunken inventory.
+    expect(src, "the scenario check fell back to the mutable array length").not.toMatch(
+      /ran !== SCENARIOS\.length/,
+    );
+    expect(src, "the act check fell back to the mutable array length").not.toMatch(
+      /ledger\.length !== ACTS\.length/,
+    );
+  });
+
+  it("counts scenarios with no catch between the call and the counter", () => {
+    const start = src.indexOf("async function runScenarios(");
+    expect(start, "runScenarios is no longer greppable").toBeGreaterThan(-1);
+    const loopStart = src.indexOf("for (const scenario of SCENARIOS)", start);
+    expect(loopStart, "the run-all loop is no longer a plain for-of").toBeGreaterThan(-1);
+    const loopEnd = src.indexOf("\n  }", loopStart);
+    expect(loopEnd).toBeGreaterThan(loopStart);
+    // Statements only. The rule this checks is about what the loop DOES, and
+    // the comment inside it legitimately names the very thing it forbids —
+    // reading that comment as a violation is the same trap
+    // `workspace-orchestration.test.ts`'s `code()` helper exists for.
+    const loopBody = src.slice(loopStart, loopEnd)
+      .split("\n").filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join("\n");
+    expect(loopBody, "the run-all loop swallows a scenario's error before ran++").not.toMatch(/catch/);
+    expect(loopBody).toMatch(/ran\+\+/);
+  });
+
+  it("runs the inventory rather than calling the scenario directly", () => {
+    // `await mixedScenario(...)` straight from main() — which is what this file
+    // did before C3b-1 — bypasses both counts entirely, so the check is not
+    // "runScenarios exists" but "nothing calls the scenario around it".
+    expect(src).toMatch(/await runScenarios\(session\.browser, base\);/);
+    expect(src).toMatch(/const SCENARIOS = \[mixedScenario\];/);
+    expect(src, "main() calls the scenario directly, around the inventory")
+      .not.toMatch(/await mixedScenario\(/);
+    // Counting occurrences of the bare name is deliberately NOT done here: the
+    // prose above it names the function several times, so that check would be
+    // a comment-edit tripwire rather than a contract.
+  });
+});
+
+/**
+ * The live-progressbar act, and the one thing about it that cannot be checked
+ * from its own output: WHERE it runs.
+ *
+ * Stranded unique #6 is "live `role=\"progressbar\"` accessibility during an
+ * in-flight transfer". There is exactly one window in this scenario in which
+ * that state exists — after the receiver has taken two durable chunks of the
+ * 5 MiB file and before the forced transport gap closes both PeerConnections.
+ * Moved after the close, every assertion in it still passes on a terminal card
+ * that has no progress bar at all, because a scoped `axe.run` over a context
+ * matching nothing reports zero violations. That is a green run asserting
+ * nothing, which is the exact failure the whole §1a migration exists to avoid.
+ */
+describe("mixed-link scans the progressbar while it is live", () => {
+  const src = read("e2e/mixed-link.mjs");
+
+  it("proves the subject exists before scanning it", () => {
+    const proof = src.indexOf("no in-flight progress bar in the ${dir} card");
+    const scan = src.indexOf('await scanLiveState(tab, `${who}: live ${dir} progressbar mid-transfer`');
+    expect(proof, "the in-flight progress bar existence proof is gone").toBeGreaterThan(-1);
+    expect(scan, "the live progressbar scan is gone").toBeGreaterThan(-1);
+    expect(scan, "the scan no longer follows the existence proof").toBeGreaterThan(proof);
+    // Scoped to the card. A document-wide scan here would keep passing on the
+    // strength of the rest of the workspace after the bar lost its name.
+    expect(src).toMatch(/\{ context: XFER\.card \}/);
+  });
+
+  it("runs it inside the transfer gap, before the forced PeerConnection close", () => {
+    const accepted = src.indexOf("at least two durable chunks before the forced transport gap");
+    const scan = src.indexOf('await scanLiveState(tab, `${who}: live ${dir} progressbar mid-transfer`');
+    const close = src.indexOf("window.__e2ePeerConnections.at(-1); pc.close()");
+    expect(accepted).toBeGreaterThan(-1);
+    expect(close, "the forced transport gap is gone").toBeGreaterThan(-1);
+    expect(scan, "the live scan runs before the transfer has started moving bytes")
+      .toBeGreaterThan(accepted);
+    expect(scan, "the live scan drifted past the forced close — its subject is terminal by then")
+      .toBeLessThan(close);
+  });
+
+  it("holds the transfer open long enough for two axe passes to fit in that gap", () => {
+    // The window is ~25 remaining 192 KiB writes × this delay. At the 20ms the
+    // rest of this scene runs at it is ~500ms — enough for the forced close,
+    // which is one CDP round trip, and not remotely enough to inject and run axe
+    // on two tabs. The transfer would finish first and the act would fail
+    // reporting a terminal card instead of an accessibility result.
+    const match = src.match(/const SCAN_WRITE_DELAY_MS = (\d+);/);
+    expect(match, "the scan-window throttle is no longer a named constant").not.toBeNull();
+    expect(
+      Number(match[1]),
+      "the scan throttle was lowered; the live-progressbar act becomes timing-dependent below ~500ms",
+    ).toBeGreaterThanOrEqual(500);
+    // And it is what the stub is actually set to — a constant nothing reads
+    // would leave the window at the sink's own default of 0.
+    expect(src).toMatch(/window\.__e2e\.writeDelayMs = \$\{SCAN_WRITE_DELAY_MS\};/);
+  });
+
+  it("drops the throttle back before the pc counts and the forced close", () => {
+    // The scan throttle is paid per remaining 192 KiB write, so leaving it on
+    // for the ~25 writes after the scan costs ~20s of pure wall clock and buys
+    // nothing: the forced close is one CDP round trip, and the resume scene was
+    // already proven at 20ms before this act existed. That regression — a
+    // scenario going from ~10s to ~31s — is invisible in a green run, which is
+    // why the ORDER is pinned here rather than left to a comment.
+    const resume = src.match(/const RESUME_WRITE_DELAY_MS = (\d+);/);
+    expect(resume, "the post-scan throttle is no longer a named constant").not.toBeNull();
+    expect(
+      Number(resume[1]),
+      "the post-scan throttle is not the value the resume scene was proven at",
+    ).toBe(20);
+
+    const scan = src.indexOf('await scanLiveState(tab, `${who}: live ${dir} progressbar mid-transfer`');
+    const reset = src.indexOf("window.__e2e.writeDelayMs = ${RESUME_WRITE_DELAY_MS};");
+    const counts = src.indexOf("const pcCounts = {");
+    const close = src.indexOf("window.__e2ePeerConnections.at(-1); pc.close()");
+    // Anchor first. Every ordering assertion below compares against `scan`, and
+    // a missing anchor is -1, which every `toBeGreaterThan` would then pass
+    // against vacuously — the same shape of green-proving-nothing this whole
+    // describe block exists to forbid.
+    expect(scan, "the live progressbar scan is gone; every order check below is vacuous")
+      .toBeGreaterThan(-1);
+    expect(reset, "nothing restores the throttle after the scan").toBeGreaterThan(-1);
+    expect(counts, "the PeerConnection count read is gone").toBeGreaterThan(-1);
+    expect(reset, "the throttle is restored before the scan it exists for").toBeGreaterThan(scan);
+    expect(reset, "the pc counts are read while the scan throttle is still on").toBeLessThan(counts);
+    expect(reset, "the forced close happens while the scan throttle is still on").toBeLessThan(close);
+    // Restoring it is not allowed to become a no-op on a transfer that already
+    // finished: that would silently turn the resume scene into a plain
+    // uninterrupted transfer, and every wait after it would blame something else.
+    expect(src).toContain("finished during the live progressbar scans");
+  });
+
+  it("keeps the byte-exact resume and replacement-PeerConnection assertions behind it", () => {
+    // The act was inserted into this scene, not in place of any of it.
+    expect(src).toMatch(/const RESUME_BYTES = 5 \* 1024 \* 1024 \+ 73;/);
+    expect(src).toMatch(/resumed\.bytes !== RESUME_BYTES/);
+    expect(src).toMatch(/resumed\.mismatch !== -1/);
+    expect(src).toMatch(/senderPcs <= pcCounts\.a \|\| resumed\.peerConnections <= pcCounts\.b/);
+    expect(src).toContain("no replacement PeerConnection was built");
+  });
+});
+
+/**
+ * The selectors this runner shares with the ordinary Vitest lane.
+ *
+ * `dom-contracts.mjs` exists because a selector written twice is not a contract
+ * (see its own header, and `QueuedBatches.test.ts`). A private copy reappearing
+ * in this runner is how that lesson gets unlearned — silently, and discovered
+ * only the next time somebody spends a Go build and a real Chrome on it.
+ */
+describe("mixed-link owns no private copy of a shared selector", () => {
+  const src = read("e2e/mixed-link.mjs");
+
+  it("imports all three contracts rather than retyping them", () => {
+    expect(src).toMatch(/import \{ QUEUED, RECEIVE, XFER \} from "\.\/dom-contracts\.mjs";/);
+  });
+
+  for (const [what, pattern] of [
+    ["the consent card", /['"]\.request/],
+    ["the transfer card", /['"]\.xfer/],
+    ["the progress bar", /progress-bar/],
+  ]) {
+    it(`carries no literal for ${what}`, () => {
+      expect(src, `${what} is written as a literal here instead of read from dom-contracts.mjs`)
+        .not.toMatch(pattern);
+    });
+  }
+
+  it("the shared module still names the nodes both lanes query", () => {
+    const contracts = read("e2e/dom-contracts.mjs");
+    for (const name of ["QUEUED", "RECEIVE", "XFER"]) {
+      expect(contracts).toMatch(new RegExp(`export const ${name} = \\{`));
+    }
+    // The receive pair whose meaning INVERTS under the memory warning. Both
+    // branches are asserted against real rendered markup in
+    // `src/lib/ReceiveActions.test.ts`; what is pinned here is that the runner
+    // is told about the inversion at all.
+    expect(contracts).toContain("warning:");
+    expect(contracts, "the primary/ghost inversion is no longer documented")
+      .toMatch(/swapped|swap|invert/);
+    // Named for presentation, never for semantics. `accept`/`decline` are the
+    // retired names, and they are retired because under the warning branch each
+    // one states the opposite of what the button does — a shared identifier that
+    // lies to every reader deciding whether a click is safe.
+    expect(contracts, "the consent buttons are named by presentation role")
+      .toMatch(/primary: "\.btn-primary"/);
+    expect(contracts).toMatch(/ghost: "\.btn-ghost"/);
+    expect(contracts, "a consent selector reclaimed a semantic name that inverts")
+      .not.toMatch(/^\s*(accept|decline):/m);
+    // And that the runner guards on the warning before BOTH consent clicks it
+    // makes — the ghost click in the rejected-batch act, and the primary click
+    // that starts the 5 MiB resume. Either one silently doing the opposite would
+    // leave every assertion after it describing a transfer that never happened.
+    //
+    // The GUARD EXPRESSION, not the bare name: the prose beside each guard
+    // names `RECEIVE.warning` too, so counting the identifier would make this a
+    // comment-edit tripwire instead of a contract.
+    const guards = src.match(/querySelector\('\$\{RECEIVE\.card\} \$\{RECEIVE\.warning\}'\)/g);
+    expect(guards, "a consent click is no longer guarded by the warning check").toHaveLength(2);
+    // One guard per click, and no unguarded click left over.
+    const clicks = src.match(/querySelector\('\$\{RECEIVE\.card\} \$\{RECEIVE\.(primary|ghost)\}'\)/g);
+    expect(clicks, "the guarded consent clicks changed count").toHaveLength(2);
   });
 });
 
