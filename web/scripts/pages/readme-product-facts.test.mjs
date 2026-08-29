@@ -31,18 +31,46 @@ describe("README product facts", () => {
     expect(prose).toContain("on a LAN and in a pairing-code");
     expect(prose).toContain("(cross-network) room alike");
     expect(prose).toContain("**one shared workspace**");
-    // The capability gate is the real boundary and has to stay stated: an exact
-    // `peerSupportsLink()` match, so these three keep the legacy surfaces.
-    expect(prose).toContain("Peers that do not announce this exact capability keep the existing separate file and message flows");
-    expect(prose).toMatch(/the native\s+clients, the CLI, and older browsers/);
+    // The capability gate is still the real boundary — an exact
+    // `peerSupportsLink()` match — but what happens on the far side of it
+    // changed. Until 2026-08-27 a peer that failed the gate got the legacy
+    // file-or-message fork; d175f863 removed that fork from the Web client
+    // outright (web/src/App.svelte), so a failing peer now gets a statement and
+    // no controls at all. This assertion required the old sentence verbatim,
+    // which made the README's correction a red build: the same defect shape as
+    // the CLI guard below. State what the product does, not the prose it used.
+    expect(prose).toContain("does not announce this exact capability");
+    expect(prose, "the unsupported-peer notice is no longer stated").toMatch(
+      /is shown a notice saying so and offered no transfer controls/,
+    );
     // Relayed links are bounded — the half a "one workspace everywhere" rewrite
     // is most likely to drop (web/src/lib/relay-deadline.ts).
     expect(prose).toContain("bounded lifetime derived from the relay credential");
-    // The retired sentences, verbatim from the diff that removed them.
+    // The retired sentences, verbatim from the diffs that removed them.
     expect(prose).not.toContain("Pairing-code (cross-network) rooms and the native clients keep the existing separate file and message flows");
     expect(prose).not.toContain("On a LAN, two up-to-date browsers do not choose between the two at all");
     expect(prose).not.toContain("shared LAN workspace");
     expect(prose).not.toMatch(/pairing-code[^.]{0,60}keep(?:s)? the (?:existing )?(?:separate|older)/i);
+  });
+
+  // The removed Web fallback has two ways of coming back in prose, and they fail
+  // differently. Claiming any peer "keeps" the separate flows resurrects a path
+  // that no longer exists; naming the shipped macOS client or the CLI as that
+  // path additionally misdescribes two current clients as a legacy remnant —
+  // they speak their own supported surfaces and always did.
+  it("never restores the retired Web fallback claim", () => {
+    expect(prose, "the retired fallback claim came back").not.toMatch(
+      /keep(?:s)? the existing separate file and message flows/i,
+    );
+    // The clients must be stated as NOT that fallback. Anchored on the denial
+    // and the surface claim rather than the sentence around them, so the
+    // paragraph can be rewritten without this turning into a prose lock.
+    expect(prose, "macOS/CLI are no longer distinguished from the removed fallback").toMatch(
+      /macOS client and the CLI\b[^.]{0,40}\bare not that fallback/i,
+    );
+    expect(prose).toMatch(/their own supported protocol surfaces/);
+    // …and never re-listed as the thing that inherited the legacy flows.
+    expect(prose).not.toMatch(/the native\s+clients, the CLI, and older browsers/);
   });
 
   it("distinguishes LAN, browser TURN, and CLI content paths", () => {
