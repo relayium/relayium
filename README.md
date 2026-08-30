@@ -51,9 +51,9 @@ and anything larger is a file.
 
 The production web app and CLI are live, and the CLI and node binaries are still
 in **pre-1.0 versioning** (`v0.x`). The macOS app is on its own track and is at
-**1.3.8**: a universal, Developer ID-signed, Apple-notarized and stapled
+**1.3.9**: a universal, Developer ID-signed, Apple-notarized and stapled
 build, published as a direct download from its own GitHub Release,
-[`macos-v1.3.8`](https://github.com/relayium/relayium/releases/tag/macos-v1.3.8).
+[`macos-v1.3.9`](https://github.com/relayium/relayium/releases/tag/macos-v1.3.9).
 A separately versioned Mac App Store release is also public, currently
 [1.3.8](https://apps.apple.com/app/id6801142976); the two channels ship the same
 product behaviour on independent version lines. There is no Relayium app for
@@ -270,7 +270,7 @@ pairing code requires sign-in; joining with that code does not.
 | --- | --- | --- |
 | **Web** | [Live at relayium.com](https://relayium.com/) | LAN and cross-network file/text transfer, encrypted stored links, accounts, and usage controls. |
 | **CLI and nodes** | [Published on GitHub](https://github.com/relayium/relayium/releases) | Pairing-code transfer, encrypted links, direct transfer, folder sync, self-hosting, and relay/storage nodes. |
-| **macOS** | [1.3.8 direct download](https://github.com/relayium/relayium/releases/tag/macos-v1.3.8) and [1.3.8 on the Mac App Store](https://apps.apple.com/app/id6801142976) | The independently versioned channels share product behavior but use Developer ID/Sparkle and Mac App Store/StoreKit delivery respectively. |
+| **macOS** | [1.3.9 direct download](https://github.com/relayium/relayium/releases/tag/macos-v1.3.9) and [1.3.8 on the Mac App Store](https://apps.apple.com/app/id6801142976) | The independently versioned channels share product behavior but use Developer ID/Sparkle and Mac App Store/StoreKit delivery respectively. |
 | **iPhone, iPad, Android, Windows, Linux** | The web app, plus the CLI on Windows and Linux | Relayium publishes no app for these platforms. The browser is the client and is not a fallback there — it carries the same end-to-end encrypted transfer, with nothing to install. |
 
 Relayium currently maintains English and Simplified Chinese; the seven earlier
