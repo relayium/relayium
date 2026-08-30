@@ -1,12 +1,18 @@
 /**
- * 两个端到端脚本共用的那一层：CDP 客户端、标签页把手、浏览器生命周期、保存对话框桩。
+ * 所有端到端脚本共用的那一层：CDP 客户端、标签页把手、浏览器生命周期、保存对话框桩。
  *
- * 它是从 lan-transfer.mjs 里原样搬出来的，没有改行为——搬出来的唯一理由是
- * mixed-link.mjs 需要一模一样的东西：**同一个** CDP 客户端、**同一套**超时语义、
+ * 它当初是从已删除的 `lan-transfer.mjs` 里原样搬出来的，没有改行为——搬出来的唯一
+ * 理由是别的脚本需要一模一样的东西：**同一个** CDP 客户端、**同一套**超时语义、
  * **同一个** evaluate 看门狗。抄一份的话，两份迟早会漂移，而漂移的那一份会安静地
  * 变成一个测不出东西的假绿。
  *
  * 这里不放任何场景断言：场景归各自的脚本，共用的只有"怎么开一个真浏览器"。
+ *
+ * 没有"整轮共用的默认 init 脚本"这回事。以前有一个 `setDefaultInit`，它只服务
+ * `lan-transfer.mjs` 那条降级路径——把 `link/1` 从每一帧 caps 里掐掉的
+ * `STRIP_LINK_CAP`。那个 runner 在阶段四删掉之后，这两样都跟着删了：留一个全局
+ * 可写的、能悄悄改掉每个标签页启动状态的开关，只会让下一个场景在不知情的情况下
+ * 继承别人的前提。每个标签页要什么自己传什么（`newTab` 的 `initScript`）。
  */
 import { spawn } from "node:child_process";
 import { accessSync, constants, mkdtempSync, rmSync, statSync } from "node:fs";
@@ -258,22 +264,6 @@ export async function activateTab(browser, tab) {
   await tab.waitFor("document.visibilityState === 'visible'", "this tab to become the visible one");
 }
 
-let defaultInit = "";
-
-/**
- * An init script every tab this run opens gets, before its own.
- *
- * Exists for one job: `lan-transfer.mjs` is the legacy/downgrade regression, and
- * it has ~30 `newTab` call sites. Threading the same script through all of them
- * would guarantee that the next scenario someone adds quietly forgets it — and a
- * forgotten downgrade looks exactly like a passing test.
- *
- * Set it once at the top of a run, before the first tab.
- */
-export function setDefaultInit(source) {
-  defaultInit = source ?? "";
-}
-
 /** 一个标签页的把手：evaluate / 等条件 / 收集 console 错误。
  *  `lanSeed` decides which installation this page belongs to; by default a fresh
  *  one, i.e. its own device. */
@@ -326,10 +316,10 @@ export async function newTab(browser, url, initScript, { lanSeed = distinctLanSe
   await send("Page.enable");
   await send("DOM.enable");
   // The seed goes first and unconditionally: a tab with no init script of its
-  // own still has to be an independent device. The run-wide default follows it,
-  // so a scenario's own script is layered on top of (not instead of) it.
+  // own still has to be an independent device. The scenario's own script is
+  // layered on top of it, never instead of it.
   await send("Page.addScriptToEvaluateOnNewDocument", {
-    source: [lanSeedScript(lanSeed), defaultInit, initScript].filter(Boolean).join("\n"),
+    source: [lanSeedScript(lanSeed), initScript].filter(Boolean).join("\n"),
   });
   await send("Page.navigate", { url });
 
@@ -524,52 +514,6 @@ export const OBSERVE_CAPS = `
           if (e && e.type === "signal" && e.data && Array.isArray(e.data.caps)
               && Object.keys(e.data).length === 1) {
             window.__advertisedCaps = e.data.caps.slice();
-          }
-        } catch { /* 不是 JSON，照发 */ }
-      }
-      return realSend.call(this, data);
-    };
-  })();
-`;
-
-/**
- * Make every tab in a run look like a peer that does not speak `link/1`.
- *
- * This is how `lan-transfer.mjs` stays a REAL downgrade regression now that a
- * default build advertises the unified link on LAN. It is deliberately a
- * test-only wire filter, not a product switch: the page runs the ordinary
- * shipped bundle, with the ordinary shipped policy, and only what leaves the
- * socket is rewritten — exactly what an older Web/native/CLI peer would have
- * put there. A runtime flag inside the product would be a shipped way to
- * downgrade the protocol, reachable by whoever can set it.
- *
- * It strips `link/1` and its coupled `preupload/1` capability from EVERY signal
- * frame carrying a caps list: the roster hello and the caps confirmation
- * piggybacked on the SDP offer/answer. Halving that would simulate an
- * inconsistent peer, not an old one: production advertises preupload only with
- * the unified link that can hand its keys over.
- *
- * The counters are the point, not bookkeeping. `sawLink` proves the build under
- * test really did announce `link/1` before the filter removed it — without it, a
- * change that stopped advertising the capability altogether would leave every
- * legacy assertion below passing, for the wrong reason.
- */
-export const STRIP_LINK_CAP = `
-  window.__legacyPeer = { capsFrames: 0, sawLink: 0, hello: null };
-  (() => {
-    const realSend = WebSocket.prototype.send;
-    WebSocket.prototype.send = function (data) {
-      if (typeof data === "string") {
-        try {
-          const e = JSON.parse(data);
-          if (e && e.type === "signal" && e.data && Array.isArray(e.data.caps)) {
-            const announced = e.data.caps.slice();
-            window.__legacyPeer.capsFrames++;
-            if (announced.includes("link/1")) window.__legacyPeer.sawLink++;
-            e.data.caps = announced.filter((c) => c !== "link/1" && c !== "preupload/1");
-            // 只有名册那一帧（data 里只有 caps）算"这个对端自称支持什么"。
-            if (Object.keys(e.data).length === 1) window.__legacyPeer.hello = e.data.caps.slice();
-            return realSend.call(this, JSON.stringify(e));
           }
         } catch { /* 不是 JSON，照发 */ }
       }

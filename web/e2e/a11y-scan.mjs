@@ -40,8 +40,9 @@ import {
 const { RED, YEL, DIM, OFF } = colors;
 const here = fileURLToPath(new URL(".", import.meta.url));
 
-// 和 lan-transfer(9444) / mixed-link(9445) 各用各的端口：每个脚本只 pkill 自己那一个
-// 端口的残留浏览器，谁也别顺手打死对方。
+// 清理只认自己配置的那个调试端口：每个脚本只 pkill 自己端口上的残留浏览器，所以
+// 同端口的脚本绝不能并发。9446 是有意和 share-target.mjs 共用的（两者不并发），
+// mixed-link 独占 9445。9444 是已删除的 `lan-transfer.mjs` 用过的号，留空。
 const DEBUG_PORT = 9446;
 const PREVIEW_PORT = Number(argFlag("--preview-port", "4183"));
 const GLOBAL_TIMEOUT_MS = 8 * 60_000;

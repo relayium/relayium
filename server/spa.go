@@ -62,7 +62,9 @@ func buildCSP(nonce string, spaScriptHashes []string) string {
 	// any kind works. Production has never hit it only because nginx serves the
 	// SPA shell itself and this header never reaches those responses; anything
 	// served by Go directly (local runs, a nginx-less deploy) was fully broken.
-	// A regression test (TestSecurityHeaders) and e2e/lan-transfer.mjs both cover it.
+	// A regression test (TestSecurityHeaders) covers it directly; the real-browser
+	// lane that loads this Go-served SPA (e2e/mixed-link.mjs) could not connect at all
+	// without it.
 	//
 	// It is the narrow token, NOT 'unsafe-eval': it permits WebAssembly
 	// compilation and nothing else — eval()/new Function() stay blocked.

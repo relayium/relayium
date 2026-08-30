@@ -38,8 +38,10 @@ import { codeRoomProbeScript, withTimelines } from "./code-room-probe.mjs";
 // 当场红——配对码房间是这套 UI 现在的**第二**条真实路径，不是一个副本。
 import { scanLiveState } from "./a11y-core.mjs";
 
-// 和 lan-transfer(9444) / mixed-link(9445) / a11y(9446) 各用各的端口：每个脚本只
-// pkill 自己那一个端口的残留浏览器，谁也别顺手打死对方。
+// 每个脚本只 pkill 自己配置的那个调试端口上的残留浏览器，所以同端口的脚本绝不能
+// 并发。9447 是有意共用的：本脚本、device-discovery、device-inbox 都串行执行。
+// mixed-link 独占 9445，a11y 和 share-target 共用 9446。9444 是已删除的
+// `lan-transfer.mjs` 用过的号，留空。
 const DEBUG_PORT = 9447;
 const PREVIEW_PORT = Number(argFlag("--port", "4184"));
 const GLOBAL_TIMEOUT_MS = 10 * 60_000;

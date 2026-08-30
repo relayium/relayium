@@ -17,8 +17,8 @@
  * 自起模式**不会**去接管别人已经占着的端口：那个服务器有它自己的库、自己的 dist、
  * 可能还有开发者的真配置，对着它跑绿什么也证明不了。
  *
- * 它仍然和 `npm run test:e2e` 分开跑，因为它要一个自己的服务器端口和一整套自己的
- * 场景，不是因为这条协议还藏着。
+ * 它在 CI 里单开一个 `mixed-link-e2e` 作业，因为它要 Go 工具链、一个自己的服务器
+ * 端口和一整套自己的场景，不是因为这条协议还藏着。
  *
  * link/1 的作用域由**能力**决定，不由房间、也不由构建旗标决定：默认产物在**每一个**
  * 房间里都通告并路由它（`linkRoomActive()`，DECISION-LOG 2026-08-10 取代了更早的
@@ -37,7 +37,7 @@
  * 一条 PeerConnection 上的两条 DataChannel → 文件与消息两条通道各自的同意状态机 →
  * 统一工作区的呈现规矩（一条链路一个 SAS）→ 显式断开。
  *
- * 只桩掉一样东西，和 lan-transfer 一样：操作系统的"另存为"对话框。
+ * 只桩掉一样东西：操作系统的"另存为"对话框。
  *
  * 用法：node e2e/mixed-link.mjs [--url http://localhost:8098] [--port 8124] [--keep]
  *                              [--screenshots [dir]]
@@ -98,8 +98,9 @@ const DEFAULT_SELF_PORT = 8124;
  * 裸栈，不是这套用例的名字。
  */
 const selfPort = () => portFromArgv(process.argv.slice(2), { dflt: DEFAULT_SELF_PORT });
-// 和 lan-transfer 的 9444 分开：两套用例各自 pkill 自己那一个端口的残留浏览器，
-// 谁也别顺手打死对方。
+// 这套用例独占 9445：清理残留浏览器时只按下面这个配置端口匹配，不碰任何别的端口上
+// 的进程。9444 是已删除的 `lan-transfer.mjs` 用过的号，不复用——一个还认得旧号的
+// 本地残留进程不该被这套用例收走。
 const DEBUG_PORT = 9445;
 const KEEP = argPresent("--keep");
 const GLOBAL_TIMEOUT_MS = 12 * 60_000;

@@ -13,7 +13,6 @@
     "gen:vectors": "node scripts/check-wire-vectors.mjs --write",
     "test:vectors": "node scripts/check-wire-vectors.mjs",
     "test": "vitest",
-    "test:e2e": "node e2e/lan-transfer.mjs",
     "test:e2e:mixed": "node e2e/mixed-link.mjs",
     "test:e2e:code-room": "node e2e/code-room.mjs",
     "test:e2e:share-target": "node e2e/share-target.mjs",

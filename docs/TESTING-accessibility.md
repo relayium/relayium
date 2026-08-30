@@ -13,13 +13,45 @@
 | Command | Scope |
 |---|---|
 | `npm test` | Unit contracts: token contrast maths, landmark structure, dialog naming, role placement, focusability, i18n completeness for every accessible name. |
-| `npm run test:a11y` | axe-core 4.12.1 in real headless Chrome over the **built** site: 14 targets covering all six static template types (two representative pages are RTL), the SPA in light/desktop and dark/mobile, four SPA routes, and the account dialog. Runs in CI right after `npm run build`. |
-| `npm run test:e2e` | The same axe engine at four states only two real peers can reach: file consent card, live transfer (`role="progressbar"`), post-drop-resume completion, message session (`role="log"`). |
-| `npm run test:e2e:mixed` | Default build, `link/1` in the LAN room: unified workspace header, 40-file consent card at 390px, both lanes live after text consent. Separate command because it needs its own server port. |
+| `npm run test:a11y` | axe-core 4.13.0 in real headless Chrome over the **built** site: 14 targets covering all six static template types (two representative pages are RTL), the SPA in light/desktop and dark/mobile, four SPA routes, and the account dialog. Runs in CI right after `npm run build`. |
+| `npm run test:e2e:mixed` | The same axe engine at the states only two real peers can reach, on the default build's unified `link/1` workspace in the LAN room: workspace header, text consent card and 40-file consent card at 390px, both lanes live after text consent, the **live** `role="progressbar"` inside an in-flight transfer card, the workspace at each viewport variant, and the chooser restored after an explicit disconnect. Separate command because it needs a Go toolchain and its own server port. |
+| `npm run test:e2e:code-room` | The same engine in a **pairing-code** room: unified workspace at 390px in English and in Chinese, the file consent card at 390px, and the pre-link send confirmation. |
+| `npm run test:e2e:page-shell` | Page-shell contrast, focus order and touch geometry on the auth landing, `/apps`, `/pricing` and the insecure-context fallback. |
 
 Scope of the rule set: **WCAG 2.0 / 2.1 / 2.2, levels A and AA**, plus ten
 named best-practice rules. The allowlist (`web/e2e/a11y-allowlist.json`) is
 empty and should stay that way; see `web/e2e/README.md` for its policy.
+
+### One row was removed from that table, and it was overstating coverage
+
+This table used to carry a fifth command, the LAN runner `lan-transfer.mjs`, and
+credited it with four live states: the file consent card, an in-flight transfer's
+`role="progressbar"`, post-drop-resume completion, and a message session's
+`role="log"`. That row was listed under `[AUTOMATED]`, and it should not have
+been. The script stopped being able to reach any of those states when the legacy
+per-peer transfer controls were removed from the product in `d175f863`
+(2026-08-27); from then until its deletion it could not exit zero, and it was
+never a CI gate. Every state it claimed was therefore claimed by a run that was
+not happening — the exact failure mode the status key at the top of
+[TESTING.md](TESTING.md) exists to make visible.
+
+What is true after the correction, state by state:
+
+- **File consent card** — really automated, twice: `mixed-link.mjs` scans it at
+  390px with a 40-file manifest, and `code-room.mjs` scans it again in a
+  pairing-code room. Both run in hosted CI.
+- **Live `role="progressbar"`** — really automated, in `mixed-link.mjs`. It is
+  scanned in the one window where the subject exists: after two durable chunks
+  have landed and before the forced transport gap closes the connections. The
+  bar is proved present before axe is pointed at it, because a scoped `axe.run`
+  over a context that matches nothing reports zero violations for ever.
+- **Message session** — the workspace is scanned with **both lanes live** after
+  text consent, so the message surface is inside the scanned document. What is
+  *not* separately asserted is a message-session-only scope.
+- **Post-drop-resume completion** — **not** scanned by any runner today. The
+  resume itself is proved byte-exact in `mixed-link.mjs`; its terminal card is
+  not put through axe. This is a real gap, and it is stated here rather than
+  inherited from a row that was never running.
 
 ## 2. What automation cannot decide
 

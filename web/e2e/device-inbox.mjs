@@ -49,8 +49,9 @@ import { join } from "node:path";
 import { portFromArgv, startGoServer } from "./go-server.mjs";
 import { argPresent, launchBrowser, newTab, ok, fail, sleep, withWatchdog } from "./harness.mjs";
 
-// Its own debug port, like every other script here: each one only pkills the
-// browser on its own port, so two scripts never shoot each other.
+// A runner only pkills the browser on the debug port it is configured with, so
+// scripts sharing a port must never run concurrently. 9447 is shared on purpose
+// with code-room and device-discovery, which are serialized against this one.
 const DEBUG_PORT = 9447;
 const DEFAULT_PORT = 8123;
 /**

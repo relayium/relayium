@@ -4,7 +4,8 @@
  *
  *   cd web && npm run build && npm run test:e2e:page-shell
  *
- * 这四个场景以前都挂在 `lan-transfer.mjs` 里，靠它的真服务器/真信令跑起来——但它们
+ * 这四个场景以前都挂在 `lan-transfer.mjs`（2026-08-30 阶段四已删除）里，靠它的真
+ * 服务器/真信令跑起来——但它们
  * 一个都不碰对端、信令或分块传输，测的是**页壳契约**：私密邮件落地页的头信息隔离、
  * `/apps` 的层级/对比度/焦点、`/pricing` 的层级/触摸几何、以及不安全上下文下的单列
  * 兜底布局。没有任何一个断言依赖真的 `/api/*` 响应内容：
@@ -38,9 +39,10 @@ import {
   argFlag, fail, launchBrowser, newTab, ok, setWideViewport, startPreview, withWatchdog,
 } from "./harness.mjs";
 
-// 各脚本各占一个端口：lan-transfer 9444 / mixed-link 9445 / a11y 9446 /
-// code-room+device-discovery 9447（不并发，共用无妨）/ device-inbox-entry 9448。
-// 这一份是下一个空位。
+// 清理只认自己配置的那个调试端口，所以同端口的脚本绝不能并发：mixed-link 9445 /
+// a11y+share-target 9446 / code-room+device-discovery+device-inbox 9447
+//（都不并发，共用无妨）/ device-inbox-entry 9448。这一份是下一个空位。
+// 9444 由已删除的 `lan-transfer.mjs` 用过，不回收。
 const DEBUG_PORT = 9449;
 const PREVIEW_PORT = Number(argFlag("--preview-port", "4186"));
 const GLOBAL_TIMEOUT_MS = 5 * 60_000;

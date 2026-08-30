@@ -1,6 +1,6 @@
 # 端到端测试
 
-四个脚本，共用三份东西：
+三个脚本，共用三份东西：
 
 - `harness.mjs` —— CDP 客户端、标签页把手、浏览器生命周期、另存为桩、`vite preview`
   生命周期。
@@ -43,11 +43,13 @@ TypeError。现在同一份选择器由每次推送都跑的 `QueuedBatches.test
 "卡片在、进度条也在"是 runner 证明传输真的在进行中的方式——后者是活场景无障碍扫描唯一
 能断言到东西的时刻。
 
-四套都跑**默认产物**（`npm run build`）。它们的区别不是构建，是**对端和房间**：
+三套都跑**默认产物**（`npm run build`）。它们的区别不是构建，是**对端和房间**：
 
-- `lan-transfer.mjs` —— 老对端在场时那条一次一模式的老路，`npm run test:e2e`。
-  每个标签页都套了测试侧的降级过滤器（见下）。**⚠️ 截至 2026-08-29 这一套跑不到底**，
-  原因和迁移方向见下面那一节；在迁移完成之前，它的尾巴一条信号都不产出。
+（曾经还有第四套 `lan-transfer.mjs`——老对端在场时那条一次一模式的老路，`test:e2e`。
+它在 2026-08-30 的阶段四里被删掉了：`d175f863` 拿走它依赖的老控件之后它就退不出 0，
+而它独有的断言当时已经全部搬到托管道次上或按确定性证据退役。下面"迁移方向（分阶段）"
+一节完整记着这件事的账，因为托管道次里好几条断言的来历只有对着它才说得清。）
+
 - `page-shell.mjs` —— auth 落地页、`/apps`、`/pricing` 和不安全上下文单列兜底这四条
   **页面**契约（不是传输契约），`npm run test:e2e:page-shell`，**在 CI 里跑**。
   2026-08-29（Phase 3D C2）从 `lan-transfer.mjs` 搬出来单独成套，见下面专门一节。
@@ -55,7 +57,7 @@ TypeError。现在同一份选择器由每次推送都跑的 `QueuedBatches.test
   `npm run test:e2e:mixed`，**在 CI 里跑**（`.github/workflows/web.yml` 的
   `mixed-link-e2e` 作业，2026-08-29 / Phase 3D C3a 新加）。它**自己起服务器**：
   从 `./server` 构建一个真的，起在自己的端口、自己的临时库上，跑完全收掉。
-  它仍然和 `test:e2e` 分开的作业跑，因为它要 Go 工具链和自己的端口。
+  它在 CI 里单开一个作业，因为它要 Go 工具链和自己的端口。
   现在是**四幕**，各自拥有自己的标签页和自己那份冻结 act 台账：二十幕的统一链路旅程、
   多页设备身份（一个浏览器的两页 + 第三台设备）、有界的中继池失败（两页，外加一份
   只答 `/api/ice` 的池形状应答），以及"不支持的对端"（两页，其中一页的名册 hello 在
@@ -67,7 +69,7 @@ TypeError。现在同一份选择器由每次推送都跑的 `QueuedBatches.test
 
 ## CI 里真正跑的浏览器道次
 
-`.github/workflows/web.yml` 一共起七条真浏览器道次，`test:e2e` **不在其中**：
+`.github/workflows/web.yml` 一共起七条真浏览器道次：
 
 | 道次 | 脚本 | 作业 |
 |---|---|---|
@@ -80,8 +82,8 @@ TypeError。现在同一份选择器由每次推送都跑的 `QueuedBatches.test
 | LAN 房间里的统一 `link/1` 工作区（真 Go 服务器） | `test:e2e:mixed` | `mixed-link-e2e` |
 
 最后一行是 2026-08-29（Phase 3D C3a）新加的，**已经并入 `main`**（`a703c56f`
-"Test unified mixed-link path in hosted CI"）。**只剩 `lan-transfer.mjs` 还只在本地跑**
-（而且跑不到底，见下）。
+"Test unified mixed-link path in hosted CI"）。这张表在阶段四之后一行没变——被删掉的
+那个 runner 从来就不在里面。
 
 `test` 作业自己带**五**条浏览器道次（a11y 扫描、页面外壳、配对码房间、设备发现、
 Device Inbox 入口），所以 `mixed-link` 才单开一个作业——它另外还要 Go 工具链。
@@ -112,27 +114,17 @@ Device Inbox 入口），所以 `mixed-link` 才单开一个作业——它另�
   办法按需让一份 TURN 凭据在中途过期，而"信令掉了但 DataChannel 还活着"同样只能用
   注入的时钟和手动触发的终局回调来构造。
 
-## `lan-transfer.mjs` — 两个真标签页之间的一次真传输（降级路径）
+## `lan-transfer.mjs` — 已删除的那条降级路径，以及它的账
 
-`npm run test:e2e`
+**这个文件和它的 `test:e2e` npm 脚本已经不存在了**，连同 `harness.mjs` 里只为它
+存在的两样东西：整轮共用的 `setDefaultInit` 钩子，和它用来装的 `STRIP_LINK_CAP`
+线上过滤器。删除发生在下面"迁移方向（分阶段）"的**阶段四**。
 
-跑之前要有两件东西：
+这一节保留下来，用过去时写，因为删掉它会让下面那本迁移台账无处落脚：现在跑在托管
+CI 里的好几条断言，是按"它从哪一幕搬过来"来记述的，抹掉出处等于抹掉它们为什么长成
+这样。
 
-```bash
-# 1) 构建产物（服务器直接吐 web/dist，测的就是它——别拿旧 dist 测出一个假绿）
-cd web && npm run build
-
-# 2) 本地服务器（同时兜 SPA、/ws 信令和 /api/ice）
-cd server && RELAYIUM_ADDR=:8099 go run .
-```
-
-然后 `cd web && npm run test:e2e`（换端口用 `node e2e/lan-transfer.mjs --url http://localhost:1234`；
-调试时加 `--keep` 保留 Chrome 的临时 profile）。
-
-### ⚠️ 现状：这一套跑不到底（2026-08-29）
-
-先说结论，因为下面那份"它测的是什么"读起来像是这些断言每天都在跑，而它们**一条都
-没在跑**。
+### ⚠️ 它为什么退不出 0（2026-08-27 起，直到被删）
 
 `d175f863`（"Remove legacy Mac and Web transfer paths"，2026-08-27）把 `App.svelte`
 里对端卡片上的老控件删了：包着隐藏 `.file-pick-input` 的 `.pa-files` 标签，以及它旁边
@@ -140,27 +132,29 @@ cd server && RELAYIUM_ADDR=:8099 go run .
 `.open-workspace`，而且只发给能路由 `link/1` 的对端；路由不了的对端拿到的是
 `<p class="pa-unsupported">`——一句话，不是一个灰掉的按钮。
 
-这个脚本的前提正好相反。`main()` 在开出第一个标签页之前调 `setDefaultInit(STRIP_LINK_CAP)`，
-于是**每一个**标签页都以只通告 `text/1` 的老对端身份出现，然后各幕去驱动这种对端过去
-才有的那条分叉。分叉没了，那些选择器指向的节点也就不再渲染。
+这个脚本的前提正好相反。它的 `main()` 在开出第一个标签页之前调
+`setDefaultInit(STRIP_LINK_CAP)`，于是**每一个**标签页都以只通告 `text/1` 的老对端
+身份出现，然后各幕去驱动这种对端过去才有的那条分叉。分叉没了，那些选择器指向的节点
+也就不再渲染。
 
-于是今天这一套的实际情况是：
+于是从 `d175f863` 到删除为止，它的实际情况是：
 
-- **跑到了、而且过了——现在这个文件里一幕都没有了**。以前跑得过的那三幕
+- **搬走了、并且真的在跑**。以前跑得过的那三幕
   （`authLandingScenario`、`appsHierarchyScenario`、`pricingHierarchyScenario`）连同
   `unsupportedLayoutScenario`（当前单列布局契约；它从来不依赖任何被删的东西，只是因为
   排序原因才轮不到它跑）一起，在 2026-08-29（Phase 3D C2）整体搬进了
-  `web/e2e/page-shell.mjs`，细节见下面专门一节。
-- **没有跑**：现在是**全部**，从 `mobileRelayFallbackScenario` 起——它现在是 `main()`
-  的第一幕。它去驱动已删控件（`lan-transfer.mjs:1420` 取 `.file-pick-input`，现在拿到
-  `null`），运行到这里就过不去了。主传输那一幕，以及它后面的 small-message-cap、
-  transfer-boundary、early-failure、mobile-no-picker、desktop-picker-cancel、resume、
-  四幕消息、multi-page-device、caps-suppressed，全都在这个点的下游，眼下一条信号都不
-  产出。
+  `web/e2e/page-shell.mjs`，细节见下面专门一节。那四幕现在每次推送都在托管 CI 里跑。
+- **一条信号都没有**：从 `mobileRelayFallbackScenario` 起的全部。它去驱动已删控件
+  （取 `.file-pick-input`，拿到 `null`），运行到这里就过不去了。主传输那一幕，以及
+  它后面的 small-message-cap、transfer-boundary、early-failure、mobile-no-picker、
+  desktop-picker-cancel、resume、四幕消息、multi-page-device、caps-suppressed，全都
+  在这个点的下游。
 
-所以下面第 1–5 条**描述的是这个脚本的设计意图，不是当前的覆盖**。它们全部位于尾巴里，
-现在一条都没有执行。搬出去的那四幕不再是"设计意图"——它们是 `page-shell.mjs` 里
-每次推送都在跑的真实覆盖。
+一个永远退不出 0 的脚本比没有脚本更糟：它教会每一个人忽略一次红。这就是阶段四的
+全部论证；它等的从来不是"还有没有人在用"，而是"它独有的每一条断言有没有落到一个
+真的会执行的地方"。
+
+下面那份"它测的是什么"因此写的是**当年的设计意图，不是任何时候的覆盖**。
 
 ### 真正丢掉的东西，比尾巴的长度小得多
 
@@ -185,9 +179,9 @@ cd server && RELAYIUM_ADDR=:8099 go run .
 | 7 | 多页设备身份与焦点（一个浏览器的两页 + 第三台独立设备） | **已托管迁移**（C3b-7，exact-main `c7b83dc4`） |
 | 8 | 有界的中继池失败（池里发了凭据然后被丢掉） | **已托管迁移**（C3b-8，exact-main `74ac85db`） |
 
-"零条搁浅"说的是这张迁移清单，不是 `lan-transfer.mjs`——那个文件还在，也还是跑不起来。
-删它是下面的阶段四；它当初等的那件事——C3b-9 迁过来的那条"渲染出来的不支持对端"形状
-——现在已经托管：`mixed-link-e2e` 在托管 PR 道次 **33290134608** 上把四幕清单跑绿，
+"零条搁浅"说的是这张迁移清单，不是 `lan-transfer.mjs`——那个文件当时还在，也还是跑不
+起来。删它是下面的阶段四，现已完成；它当初等的那件事——C3b-9 迁过来的那条"渲染出来的
+不支持对端"形状——现在已经托管：`mixed-link-e2e` 在托管 PR 道次 **33290134608** 上把四幕清单跑绿，
 那份源码合入后就是 exact main **`9d815c84`**；合入后的那份字节本身也跑绿了一次，在
 exact-main Web 道次 **33290357209** 的 `mixed-link-e2e` job **99200800583** 上，该 job
 结论为 `success`。同一个提交上的 Web workflow 整体仍是红的——红的是另一个 `test` job
@@ -196,7 +190,8 @@ exact-main Web 道次 **33290357209** 的 `mixed-link-e2e` job **99200800583** �
 
 **第 1 条的措辞在这里被更正，而这条更正很重要——退役 runner 比审计那句话强。** 审计
 当年写的是"没有 `showSaveFilePicker`"，读起来像"一个没有这套 API 的浏览器"。
-`lan-transfer.mjs` 的 `mobileNoPickerScenario` 布置的**不是**那个条件：在 exact-main 上，
+`lan-transfer.mjs` 的 `mobileNoPickerScenario` 布置的**不是**那个条件：在还带着这个
+文件的那份 exact-main 上，
 它的 `WORKING_PICKERS`（第 317-329 行）装的是**能用**的 `showSaveFilePicker` 和**能用**的
 `showDirectoryPicker`，两者返回的句柄 `createWritable()` 真的收字节、真的计数；它还伪造了
 安卓 UA，然后断言 picker 调用数为零、经由句柄的字节数为零、并且文件只靠浏览器下载逐字节
@@ -226,7 +221,7 @@ picker 从没打开过"；一次显式的运行时可用性探针，先各花一
 存在的意义是"再大就算文件"，而不是把用户当成一整块的东西悄悄切开。两者在边界上连数值都
 对不上：64 KiB 明文封出来是 65 557 字节的帧，塞不进一条协商成 65 536 的通道。
 `lan-transfer.mjs` 的 `smallMessageCapScenario` 独有的是传输那一半——它改写 SDP，在真
-Chromium 上强制协商出 64 KiB，然后证明旧的 192 KiB 分块帧会被拒、装得下的那个会被收。
+Chromium 上强制协商出 64 KiB，然后证明旧的 192 KiB 分块帧被拒、装得下的那个被收。
 分片本身的算术已经有确定性用例（`src/lib/transfer-fragmentation.test.ts`）；C3b-5 已把原先
 搁浅的协商搬进现有真 Chromium mixed 旅程，并已在 exact-main `b08457d6` 托管通过，细节见下。
 
@@ -294,8 +289,10 @@ promise。这招当年管用，是因为路径采样正好卡在"通道已开"�
 `continue-on-error`。光这一步就把 `/apps` 层级契约从"只在本地"变成托管——这是它第一次
 由"有人记得跑"以外的东西来保证。
 
-这条道次目前在 exact main `9d815c84` 上是**红的**（托管 Web 道次 33290357209 的
-`test` job），红在一个亚像素触摸目标比较上，不是任何产品几何；修法已写，待托管 CI。
+这条道次在 exact main `9d815c84` 上曾经是**红的**（托管 Web 道次 33290357209 的
+`test` job），红在一个亚像素触摸目标比较上，不是任何产品几何；修法已合入 `main`
+（`47d648fc`，PR #96，merge `3e9db59a`），并且在 `3e9db59a` 上**已托管跑绿**：Web
+道次 33292324851 的 `test` job 99206014409 报 `test:e2e:page-shell` **4/4**。
 详见下面 `page-shell.mjs` 一节里的"44px 触摸地板"。
 
 **阶段二：传输类独有断言并入 `mixed-link.mjs`，并把 `mixed-link` 托管起来。**
@@ -737,7 +734,8 @@ body 是池形状：顶层只有 STUN，唯一的中继在 `relays` 里，它那
 
 *这次改动碰了哪些文件*：四个，全是测试与文档——`web/e2e/mixed-link.mjs`、
 `web/e2e/go-server.test.mjs`、本文件和 `docs/TESTING.md`。产品源码、workflow、依赖包、
-原生和 ops 一个都没动，`lan-transfer.mjs` 也刻意留着。
+原生和 ops 一个都没动，`lan-transfer.mjs` 当时也刻意留着。（阶段四此后已删掉它；这一
+段记的是 C3b-8 那次改了什么，不是现在的树。）
 
 **当前状态：已在 exact-main `74ac85db83a636f747581cc35b580749d7cf0344` 托管通过。**
 源码经 PR #94 合入，合入门 run `33287525259` 所有 24 条选中道次通过（另有六条按设计
@@ -869,8 +867,9 @@ locale 的句子——包括维护中的那两门——都没有被写进 runner
 
 *这次改动碰了哪些文件*：四个，全是测试与文档——`web/e2e/mixed-link.mjs`、
 `web/e2e/go-server.test.mjs`、`docs/TESTING.md` 和本文件。产品源码、workflow、依赖包、
-服务端、原生和 ops 一个都没动；`lan-transfer.mjs` 和它那条 npm 脚本也刻意留着，要等这一幕
-托管之后才轮到。
+服务端、原生和 ops 一个都没动；`lan-transfer.mjs` 和它那条 npm 脚本当时也刻意留着，
+要等这一幕托管之后才轮到。（阶段四此后已把两者一并删掉；这一段记的是 C3b-9 那次改了
+什么，不是现在的树。）
 
 **当前状态：已在 exact main `9d815c84` 托管通过，并且是在合入后的那份字节上通过的。**
 `mixed-link-e2e` 道次在托管 PR 道次 33290134608 上把这一幕跑绿——**20/20、5/5、4/4、
@@ -944,17 +943,43 @@ locale 的句子——包括维护中的那两门——都没有被写进 runner
 C3b-7 搬走后，这一阶段只剩第 8 条。它放到最后，因为它需要前面用不到的搭台：那份池形状
 的 `/api/ice` 响应、一个连不上的 TURN 主机，以及一个真的会走完的探测预算。
 
-**阶段四：删掉 `lan-transfer.mjs` 和它的 `test:e2e` npm 脚本。** 只在托管 `main` 带着
-阶段一到三**以及**那条渲染出来的"不支持对端"形状全绿之后——按 C3b-9 之后的状态，也就是
-只在**第四幕**在 `main` 上跑过 `mixed-link-e2e` 之后。阶段一到三已经在 `74ac85db` 越过
-这条线；C3b-9 先在托管 PR 道次 33290134608 上越过、合入后即 exact main `9d815c84`，随后
-按这条线的字面意思也越过了——**第四幕**确实在 `main` 上跑过 `mixed-link-e2e`，就在 Web
-道次 33290357209 的 job 99200800583 里，20/20 + 5/5 + 4/4 + 5/5，并打印
-`Mixed link E2E passed`。这条结论只到"那个 job 通过"为止；包着它的那次 Web 道次是红的，
-原因见下。删早了会丢掉那条当时还在等托管跑的断言；第 1、2、3、6、7、8 条
-搬走且第 4、5 条按上面记录的确定性证据退役后，已经没有搁浅的了。而留着比没用更糟——一个
-永远退不出 0 的脚本，教会所有人忽略一次红。阶段四现在**已解锁但尚未做**，是单独一件活，
-本文件不声称它已经做了。
+**阶段四：删掉 `lan-transfer.mjs` 和它的 `test:e2e` npm 脚本——本地已完成，待审阅与
+托管 CI。** 这条线是：只在托管 `main` 带着阶段一到三**以及**那条渲染出来的"不支持对端"
+形状全绿之后——按 C3b-9 之后的状态，也就是只在**第四幕**在 `main` 上跑过 `mixed-link-e2e`
+之后。阶段一到三已经在 `74ac85db` 越过这条线；C3b-9 先在托管 PR 道次 33290134608 上
+越过、合入后即 exact main `9d815c84`，随后按这条线的字面意思也越过了——**第四幕**确实在
+`main` 上跑过 `mixed-link-e2e`，就在 Web 道次 33290357209 的 job 99200800583 里，
+20/20 + 5/5 + 4/4 + 5/5，并打印 `Mixed link E2E passed`。这条前置结论只到"那个 job
+通过"为止；包着它的那次 Web 道次是红的，原因见下。删早了会丢掉那条当时还在等托管跑的
+断言；第 1、2、3、6、7、8 条搬走且第 4、5 条按上面记录的确定性证据退役后，已经没有
+搁浅的了。而留着比没用更糟——一个永远退不出 0 的脚本，教会所有人忽略一次红。
+
+**阶段四这次改动做了什么。** 删掉 `web/e2e/lan-transfer.mjs`，从 `web/package.json`
+里拿掉 `test:e2e` 这一条，并删掉 `harness.mjs` 里只有它一个调用方的两样东西：整轮共用
+的 `setDefaultInit` 钩子，以及它专门用来装的 `STRIP_LINK_CAP` 线上过滤器。`newTab` 的
+**每标签页** `initScript` 一点没动，现有各套 runner 的行为也一点没变——LAN 种子仍然
+第一个、无条件注入，场景自己的脚本叠在它上面。除此之外全是文档、指向被删文件的注释，
+以及一块新契约。
+
+那块新契约在 `e2e/go-server.test.mjs` 里，叫"the retired lan-transfer runner stays
+deleted"。**删除是这个仓库里唯一一种没有任何其它门看得见的改动**：删掉一个文件不会让
+任何东西变红，一页还在教人跑一条已经不存在的命令同样不会——读者跑了、拿到
+`Missing script`，然后合理地判断是仓库坏了，而不是这一页过期了。它钉住：文件确实不在
+（同时断言替代它的那几套 runner 都在，所以把整个 `e2e/` 清空不能冒充一次成功的阶段四）；
+npm 条目不在，而现存的 `test:e2e:*` 脚本都还在；两个孤儿标识符在**代码里**不在——注释
+里仍然可以点它们的名，这正是 harness 头部能写下"别把它们加回来"的原因；`newTab` 那条
+每标签页组合还在；以及四份**当前**测试文档不再把那条退休命令递给读者。
+
+最后这条规则刻意是关于"哪些文件"，不是关于这个字符串是否绝迹。有日期的 spec、plan 和
+报告是历史，被显式归类为**允许**保留它的档案：`docs/optimization-requirements-2026-07.md`、
+`docs/frontend-optimization-report.md`、
+`docs/superpowers/specs/2026-07-24-native-macos-ios-design.md` 和
+`docs/superpowers/plans/2026-07-30-ephemeral-text-transfer-phase1.md`。其中至少一份被断言
+**仍然**带着那条命令，所以整块契约不会因为有人把全仓所有痕迹擦干净而通过；把一份有日期的
+记录改成今天的样子，等于让它对自己的过去说谎。
+
+**验证状态：只有本地。** 这一阶段的作者证据记在交付检查点里，不在这里冒充托管结论。
+本节不声称阶段四那个提交上跑过任何托管道次——写下这句话时还没有。
 
 **exact main `9d815c84` 上有一个托管 job 是红的，但不是这一个。** 上面那条
 `mixed-link-e2e` 结果是解锁阶段四的那一条——而它就是这里点名的这次道次**里面**的一个
@@ -965,11 +990,19 @@ job。`9d815c84` 上的 Web 道次 **33290357209** 同时装着 `mixed-link-e2e`
 Chromium 把一个 CSS 44px 的 CTA 量成 `43.999969482421875`，而那一幕当时拿原始高度去比
 一个裸 `< 44`。同一份源码在 PR #95 的同一个 job 上是绿的，因为亏的那点是
 `getBoundingClientRect()` 里 2⁻¹⁵ px 的 float32 尾数，不是一个矮下去的按钮。
-**状态：修法已写，待托管 CI**——44px 仍然是写死的要求，三处触摸测量统一走一个
-`undersizedTouchTarget()`，容差是具名的 `TOUCH_TARGET_EPSILON_PX = 1 / 1024`，
-而这条论证本身由 `apps-hierarchy-contract.test.mjs` 钉住。详见下面 `page-shell.mjs`
-一节里的"44px 触摸地板"。在托管 Web 道次跑绿之前，那个修法是**本地**结论——和
-33290134608 之前的 C3b-9 一模一样。
+**状态：修法已合入 `main`，提交 `47d648fc`（"Stabilize touch target geometry check"，
+PR #96，merge commit `3e9db59a`），并且在那个 merge 提交上已托管跑绿。**44px 仍然是
+写死的要求，三处触摸测量统一走一个 `undersizedTouchTarget()`，容差是具名的
+`TOUCH_TARGET_EPSILON_PX = 1 / 1024`，而这条论证本身由
+`apps-hierarchy-contract.test.mjs` 钉住。详见下面 `page-shell.mjs` 一节里的
+"44px 触摸地板"。在 exact main `3e9db59a` 上，Web 道次 **33292324851** 是绿的：它的
+`test` job **99206014409** 报 `npm run check` **0 errors、0 warnings**、
+**4,458 通过 / 6 跳过**、`test:e2e:page-shell` **4/4**；它的 `mixed-link-e2e` job
+**99206014430** 报 **20/20、5/5、4/4、5/5**。同一提交上的原生–Web 配对道次
+**33292324848**、兼容性道次 **33292324861**、仓库卫生道次 **33292324867** 同样是绿的。
+所以那个修法现在是**托管**结论——和 C3b-9 在 33290134608 上转正是同一回事。上面的阶段四
+仍然不依赖它：阶段四写下的前置条件是 `mixed-link-e2e` 那个 job，而它在 `9d815c84`
+上就已经通过了。
 
 两件这次迁移**不许**做的事：不许把删掉的控件加回来，不许加降级开关。真正只属于老路的
 那部分，缩成了一条关于"不存在"的断言——不通告 `link/1` 的对端拿不到任何控件，并且被
@@ -999,15 +1032,16 @@ job，这句话不声称相反的事。这里以前写的是"浏览器侧的'不
 每一条断言迁移完都要真跑一次、绿了，才可以在文档里重新称它是自动化覆盖。改到不抛异常
 为止、背后没有一次记录在案的绿色运行，正是这一节要防的那种"什么也没测出来的断言"。
 
-### 它测的是什么（设计意图；见上，尾巴当前未执行）
+### 它当年打算测什么（设计意图的存档；这个 runner 已删除）
 
 vitest 那些测试**一行都覆盖不到实时传输管道**：收发两条管道原本长在 App.svelte 里、
 现在在 `mixed-file-session.svelte.ts` / `mixed-text-session.svelte.ts` 那条统一
 `link/1` 链路里，两者都需要两个真实的浏览器上下文、一条真 WebSocket 信令和一个真
 RTCPeerConnection 才跑得起来。这个脚本**当年**是它们唯一的回归网；`mixed-link.mjs` 和
 `code-room.mjs` 出现之后已经不是了（见上面那份重复/独有的拆分）。下面五条按原样保留，
-但读的时候要带上两个限定：**它们现在一条都没在跑**，而且其中大部分在那两套里有等价
-断言；当年真正搁浅的是上表那八条，而那八条现在也全部改了状态（见上表）。
+但读的时候要带上两个限定：**它们从 2026-08-27 起就一条都没在跑，脚本本身也已删除**，
+而且其中大部分在那两套里有等价断言；当年真正搁浅的是上表那八条，而那八条现在也全部
+改了状态（见上表）。
 
 1. **握手到落盘的全链路**：两个标签页进同一个 LAN 房间 → 互相发现 → 塞进一个 3MB 文件
    → commit-reveal → DataChannel → 分块 AES-GCM → 流控 ACK → 逐文件完整性校验 → 落盘。
@@ -1024,12 +1058,13 @@ RTCPeerConnection 才跑得起来。这个脚本**当年**是它们唯一的回�
    RTCPeerConnection。这一窗口出过真 bug（掉线处理函数当时还在 TDZ 里，抛
    ReferenceError 而不是失败卡片），所以用例直接断言"没有 ReferenceError"。
 
-### 只桩掉一样东西
+### 它当年只桩掉一样东西
 
 `showSaveFilePicker`（操作系统的另存为对话框，无头浏览器开不出来）被换成一个把字节
 攒进内存的假句柄。除此之外全是真的：真服务器、真信令、真 WebRTC、真加密。
+`mixed-link.mjs` 至今沿用同一条纪律。
 
-### 已知的环境坑
+### 当年那几个环境坑（前两条对现存 runner 仍然成立）
 
 - **必须关掉 mDNS 候选隐藏**（`--disable-features=WebRtcHideLocalIpsWithMdns`）。
   Chrome 默认把本机 IP 藏成 `.local` 候选，无头环境里没有解析器，两个标签页于是永远
@@ -1038,16 +1073,21 @@ RTCPeerConnection 才跑得起来。这个脚本**当年**是它们唯一的回�
   WASM，缺这个 token 浏览器拒绝编译它，应用连信令都连不上。有 Go 单测钉着。
 - 脚本启动时会先 `pkill` 掉上一轮残留的浏览器：它们的标签页还挂着 WebSocket，攒够
   几个就会撞上服务器的**每 IP 并发 /ws 上限**，新标签页静默连不上——那种失败看起来
-  和真回归一模一样。两个脚本用不同的 `--remote-debugging-port`（9444 / 9445），
-  所以谁也不会顺手打死对方的浏览器。
+  和真回归一模一样。每个脚本用不同的 `--remote-debugging-port`，所以谁也不会顺手打死
+  对方的浏览器；被删的这个占的是 9444，那个号不再回收。
 
-### 它为什么是**降级**回归，以及那个过滤器
+### 它当年为什么是**降级**回归，以及那个已随它删除的过滤器
 
 默认产物在无配对码的 LAN 房间里是会通告 `link/1` 的。所以这套用例在开出第一个标签页
 之前调一次 `setDefaultInit(STRIP_LINK_CAP)`：**每一个**标签页（包括以后新加的场景）
 都被套上一个测试侧的线上过滤器，把离开 socket 的每一帧里的 `link/1` 及与它耦合的
 `preupload/1` 抹掉——名册那一帧和 SDP 上捎带的那一份都抹，正是一个老版本
 Web/原生/CLI 对端会发出的东西。
+
+**这两样东西现在都不在 `harness.mjs` 里了**，随阶段四一起删除，理由见那一节：一个
+全局可写、能悄悄改掉每个标签页启动状态的开关，在唯一的调用方消失之后只会让下一个
+场景在不知情的情况下继承别人的前提。下面这几段记的是它当年怎么工作，不是现在还有
+什么可用。
 
 页面本身是原封不动的发行构建、原封不动的策略。**产品里没有降级开关**：放一个进去，
 等于给所有能碰到它的人发了一条把协议降级的路。
@@ -1064,9 +1104,11 @@ Web/原生/CLI 对端会发出的东西。
 `.pa-unsupported` 那句话。所以"降级回归"这个身份对传输类场景已经不成立了——不是选择器
 改个名的事。这正是上面"迁移方向"里说的：传输类的几幕摘掉 `STRIP_LINK_CAP` 走统一工作区，
 而只属于老路的部分退化成"没有控件、并且说清楚"这一条关于不存在的断言。
-`STRIP_LINK_CAP` 这个机制本身留着——不是因为 `capsSuppressedScenario` 眼下在用它（那一幕
-也不执行），而是因为迁移后的那条"不存在"断言仍然需要一个真的老对端才能制造出来。在那之前，
-守着这条不变式的是源码级的 `src/lib/link-only-surface.test.ts`，不是这个过滤器。
+这段话当年的结论是"`STRIP_LINK_CAP` 这个机制本身留着"，因为迁移后的那条"不存在"断言
+仍然需要一个真的老对端才能制造出来。C3b-9 之后这个理由消失了：`mixed-link.mjs` 的
+`unsupportedPeerScenario` 用**掐掉一页的名册 hello**来造那个对端，不需要这个过滤器，
+所以阶段四把过滤器和它的安装钩子一起删了。守着这条不变式的仍然是源码级的
+`src/lib/link-only-surface.test.ts`，加上那一幕的托管断言。
 **产品里依旧没有降级开关**，这条纪律不因为要修绿而松动。
 
 ---
@@ -1148,8 +1190,8 @@ cd web    && node e2e/mixed-link.mjs --url http://localhost:8098
 活着的时候整个收走。老的"文件 / 文件夹 / 消息"三选一**已经不存在了**：`d175f863` 把它
 连同 `.pa-files` / `.file-pick-input` 一起删了，说不了这条协议的对端现在拿到的是
 `.pa-unsupported` 那一句话，一个控件都没有。（这里以前写着"那条路由 `lan-transfer.mjs`
-的降级套件覆盖"——两半都已过期：那条路由没了，而那套降级套件也不再执行。）配对码房间
-走的是和这里同一套界面，由 `code-room.mjs` 覆盖。
+的降级套件覆盖"——两半都已作废：那条路由没了，那套降级套件先是不再执行，随后在阶段四
+被删除。）配对码房间走的是和这里同一套界面，由 `code-room.mjs` 覆盖。
 
 两边的工作区都会为一条新链路**自动开一次**文本通道（否则只有点了按钮的那一边有草稿
 框，另一边连一个能点的东西都没有）。两个请求撞在一起时协议按 `link.role` 收敛成一个
@@ -1357,15 +1399,15 @@ readySelector 而不是固定 sleep——固定 sleep 在快机器上浪费时�
 
 静态扫描器没有对端也没有信令服务器，所以它永远到不了同意态、进行中的进度条和消息记录
 ——而那恰好是这个产品里最需要读屏的三个地方：用户正在那里做信任决策。所以
-`scanLiveState()`（`a11y-core.mjs` 导出）被挂进了三套真 E2E——但三套里只有
-`code-room.mjs` 那一套在 CI 里跑，所以下面这三行的执行状态各不相同，逐条标在后面：
+`scanLiveState()`（`a11y-core.mjs` 导出）被挂进了两套真 E2E，**两套都在 CI 里跑**：
 
-- `lan-transfer.mjs`：文件同意卡（accept 之前）、传输进行中（`role="progressbar"`
-  唯一活着的时候）、掉线续传完成后的终态、消息会话（`role="log"` + 输入框）。
-  **这四格挂在该脚本的尾巴上，眼下随尾巴一起不执行**（见上面的"现状"）——所以这四个
-  真场景的无障碍覆盖目前是空的，迁移完成前不要把它算进任何"已覆盖"的口径。其中
-  "传输进行中"那一格已经在 C3b-1 搬进 `mixed-link.mjs`（下一条），并且**本地跑绿过、
-  也做过删主体的对抗性变异**（见上面的验证状态表）；剩下的三格仍然是空的。
+（这里以前还有第三行：已删除的 `lan-transfer.mjs`，记着文件同意卡、传输进行中的
+`role="progressbar"`、掉线续传完成后的终态、消息会话四格。那四格从来没有执行过——它们
+挂在那个脚本退不出 0 的尾巴上，却被当成覆盖写在了 `docs/TESTING-accessibility.md` 的
+`[AUTOMATED]` 表里。现在的口径见 `docs/TESTING-accessibility.md` 第 1 节里那段更正：
+同意卡与进行中的进度条现在真的自动化了，消息面在"两条通道都活着"那一格里被整篇扫到，而**掉线续传完成
+后的终态至今没有任何 runner 扫过**——这是一个真的空缺，写在这里而不是从一行没在跑的
+记录里继承过来。）
 - `mixed-link.mjs`（CI，`mixed-link-e2e` 作业）：统一工作区头部、390px 下的 40 文件
   同意卡、文本通道同意后两条通道都活着的状态，以及 **C3b-1 新加的**"5 MiB 传输真的
   在进行中"那一格——两个方向各扫一次，context 收在 `XFER.card` 上，而且扫之前先证明
@@ -1434,8 +1476,12 @@ cd web && npm run build && npm run test:e2e:page-shell
 
 ### 44px 触摸地板，以及它容忍的那一个渲染器偏差
 
-**状态：修法在 `test/page-shell-touch-rounding`（起点 exact main `9d815c84`）上写好、
-本地跑绿，待托管 CI。本小节没有任何一句是托管结论。**
+**状态：修法已合入 `main`，提交 `47d648fc`（"Stabilize touch target geometry check"，
+PR #96，merge commit `3e9db59a`），起点是 exact main `9d815c84`，合入前本地跑绿，
+合入后在 merge 提交上托管跑绿。**在 exact main `3e9db59a` 上，Web 道次 **33292324851**
+的 `test` job **99206014409** 报 `test:e2e:page-shell` **4/4**、`npm run check`
+**0 errors、0 warnings**、**4,458 通过 / 6 跳过**；同一道次的 `mixed-link-e2e` job
+**99206014430** 报 **20/20、5/5、4/4、5/5**，道次整体结论为绿。
 
 托管 Web 道次 **33290357209**（exact main `9d815c84`）的 `test` job 挂在
 `appsHierarchyScenario`：Linux Chromium 把 `/apps` 的 CTA——一个高度只由全局

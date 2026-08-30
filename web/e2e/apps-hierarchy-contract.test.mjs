@@ -13,9 +13,10 @@ import { describe, expect, it } from "vitest";
  * 本身也跟着变。
  *
  * 这套用例读的是 `page-shell.mjs` 的源码，不是它的运行结果——这里要守的恰恰是
- * "那一幕的形状"，不是它某一次的输出。这个场景在 2026-08-29 从 `lan-transfer.mjs`
- * 移到了这里（Phase 3D C2）；这份契约的 `SOURCE` 跟着移，否则它会一直验着一份
- * 不再执行的死代码，而真正跑在 CI 里的那一份反倒没人守。
+ * "那一幕的形状"，不是它某一次的输出。这个场景在 2026-08-29 从当时的
+ * `lan-transfer.mjs` 移到了这里（Phase 3D C2），那个 runner 随后在阶段四被删除；
+ * 这份契约的 `SOURCE` 当时跟着移，否则它会一直验着一份不再执行的死代码，而真正跑在
+ * CI 里的那一份反倒没人守。
  *
  * 刻意**不**做的事：不复制当前的卡片 id、也不复制当前的张数。那正是这一幕原本
  * 犯过的错——三张退休的卡片和 6 / 3 / 8 这组字面量在源码里当了几个月的第二份
@@ -29,7 +30,7 @@ const SOURCE = readFileSync(resolve(process.cwd(), "e2e/page-shell.mjs"), "utf8"
 /** 取一个顶层函数的函数体，好让下面的断言不会被文件里别处的同名文字满足。 */
 function topLevelFunction(name) {
   const start = SOURCE.indexOf(`function ${name}(`);
-  expect(start, `${name} 在 lan-transfer.mjs 里找不到了`).toBeGreaterThan(-1);
+  expect(start, `${name} 在 page-shell.mjs 里找不到了`).toBeGreaterThan(-1);
   const rest = SOURCE.slice(start + 1);
   const end = rest.search(/\n(?:async )?function \w+\(/);
   return end === -1 ? rest : rest.slice(0, end);

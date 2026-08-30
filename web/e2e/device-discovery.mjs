@@ -28,7 +28,9 @@ import { apiFixtureScript } from "./a11y-fixtures.mjs";
 import { argFlag, fail, launchBrowser, newTab, ok, sleep, withWatchdog } from "./harness.mjs";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
-// 各脚本各占一个端口：lan-transfer 9444 / mixed-link 9445 / a11y 9446。
+// 清理只认自己配置的那个调试端口，所以同端口的脚本绝不能并发：9447 是有意共用的，
+// 本脚本、code-room 和 device-inbox 都串行执行。mixed-link 独占 9445，a11y 和
+// share-target 共用 9446。9444 由已删除的 `lan-transfer.mjs` 用过，不回收。
 const DEBUG_PORT = 9447;
 const PREVIEW_PORT = Number(argFlag("--preview-port", "4184"));
 const GLOBAL_TIMEOUT_MS = 5 * 60_000;

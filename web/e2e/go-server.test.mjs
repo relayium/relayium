@@ -15,7 +15,9 @@
  * does execute is executed only far enough to reject its own arguments.
  */
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync,
+} from "node:fs";
 import { createServer } from "node:http";
 import { createServer as createTcpServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -2780,5 +2782,186 @@ describe("mixed-link's live-region observer announces when it is ready", () => {
     // And it must still be doing it without buying time: a sleep here would hide
     // the same race instead of removing it.
     expect(src).not.toMatch(/await sleep\([^)]*\);\s*const (first|relink)/);
+  });
+});
+
+/**
+ * Stage 4: the retired LAN runner is gone, and nothing quietly grows it back.
+ *
+ * `lan-transfer.mjs` was deleted together with its `test:e2e` npm entry and the
+ * two harness APIs that existed only to serve it (`setDefaultInit` and
+ * `STRIP_LINK_CAP`). Every assertion it uniquely held had already moved onto a
+ * hosted lane or been retired with deterministic evidence; the migration ledger
+ * for that is in `docs/TESTING.md` §1a and `web/e2e/README.md`.
+ *
+ * Deletion is the one kind of change no other gate in this repository notices.
+ * A deleted file makes nothing red, and neither does a doc paragraph left
+ * telling the next reader to run a command that no longer exists — they will run
+ * it, get `npm ERR! Missing script`, and reasonably conclude the repository is
+ * broken rather than that the page is stale. Both failure modes are cheap to
+ * cause and expensive to spot, so they are pinned here.
+ *
+ * The doc rule is deliberately about *which files*, not about the string being
+ * globally extinct. Dated specs, plans and reports are history: they record what
+ * was true when they were written, and rewriting them would make the record lie
+ * about its own past. So they are listed as archives and are explicitly ALLOWED
+ * to keep the retired command — and one of them is asserted to still contain it,
+ * so that this whole block cannot pass merely because somebody scrubbed every
+ * mention everywhere.
+ */
+describe("the retired lan-transfer runner stays deleted", () => {
+  const REPO = join(WEB_DIR, "..");
+  const readRepo = (rel) => readFileSync(join(REPO, rel), "utf8");
+
+  /** Block comments and whole-line `//` comments removed, so the negative
+   *  identifier checks below read code rather than prose. Same technique as
+   *  `apps-hierarchy-contract.test.mjs`, and for the same reason: the sentence
+   *  explaining why a name is forbidden has to be allowed to contain it. */
+  const codeOnly = (src) => src
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("//"))
+    .join("\n");
+
+  /**
+   * The retired command *as a reader would run it*, matched only when it is not
+   * one of the live `test:e2e:*` scripts.
+   *
+   * It is the `npm run ` prefix that makes this a rule about instructions rather
+   * than about vocabulary. A current doc has to be able to say "the `test:e2e`
+   * entry was removed" — that sentence is the correction — while never handing
+   * anyone a command line that ends in `Missing script`.
+   */
+  const RETIRED_COMMAND = /npm run test:e2e(?![:\w-])/;
+
+  /**
+   * Docs that describe how to test this repository TODAY. A reader follows
+   * these, so a stale command in one of them is an instruction, not a memory.
+   */
+  const CURRENT_DOCS = [
+    "docs/TESTING.md",
+    "docs/TESTING-accessibility.md",
+    "web/README.md",
+    "web/e2e/README.md",
+  ];
+
+  /**
+   * Dated records of what was true when they were written. They may — and do —
+   * still name the retired runner and its command. Editing them would forge the
+   * history they exist to hold.
+   */
+  const HISTORICAL_ARCHIVES = [
+    "docs/optimization-requirements-2026-07.md",
+    "docs/frontend-optimization-report.md",
+    "docs/superpowers/specs/2026-07-24-native-macos-ios-design.md",
+    "docs/superpowers/plans/2026-07-30-ephemeral-text-transfer-phase1.md",
+  ];
+
+  it("the runner file itself is gone", () => {
+    expect(existsSync(join(WEB_DIR, "e2e", "lan-transfer.mjs")),
+      "web/e2e/lan-transfer.mjs is back").toBe(false);
+    // Anti-vacuity: this directory still holds the runners that replaced it, so
+    // a wiped `e2e/` cannot report itself as a successful Stage 4.
+    for (const kept of ["mixed-link.mjs", "code-room.mjs", "page-shell.mjs", "harness.mjs"]) {
+      expect(existsSync(join(WEB_DIR, "e2e", kept)), `e2e/${kept} is missing`).toBe(true);
+    }
+  });
+
+  it("no npm script runs it, and the live e2e scripts are untouched", () => {
+    const pkg = JSON.parse(read("package.json"));
+    expect(Object.keys(pkg.scripts), "the retired test:e2e entry is back")
+      .not.toContain("test:e2e");
+    for (const [name, cmd] of Object.entries(pkg.scripts)) {
+      expect(cmd, `${name} still shells out to the deleted runner`).not.toContain("lan-transfer");
+    }
+    // Written as literals rather than as "every key starting test:e2e", because
+    // an empty scripts block satisfies the negative assertion above perfectly.
+    for (const kept of ["test:e2e:mixed", "test:e2e:code-room", "test:e2e:page-shell", "test:a11y"]) {
+      expect(pkg.scripts[kept], `${kept} disappeared with it`).toBeTruthy();
+    }
+  });
+
+  it("the harness keeps no run-wide init hook and no downgrade filter", () => {
+    const src = read("e2e/harness.mjs");
+    // Checked against CODE, not against the file's text. The header comment
+    // names both identifiers in order to tell the next reader not to bring them
+    // back, and a bare substring check would make writing that sentence illegal
+    // — which is the opposite of what this contract wants.
+    const code = codeOnly(src);
+    // These two existed for one caller. With that caller gone they are a global
+    // mutable switch over every tab's boot state, which is exactly how a later
+    // scenario inherits a premise nobody wrote down.
+    for (const orphan of ["setDefaultInit", "defaultInit", "STRIP_LINK_CAP"]) {
+      expect(code, `harness.mjs still carries ${orphan}`)
+        .not.toMatch(new RegExp(`\\b${orphan}\\b`));
+    }
+    // Per-tab init is the behavior that had to SURVIVE the removal: the lan seed
+    // first and unconditionally, the scenario's own script layered on top.
+    expect(src).toMatch(/source: \[lanSeedScript\(lanSeed\), initScript\]\.filter\(Boolean\)/);
+    expect(src).toMatch(
+      /export async function newTab\(browser, url, initScript, \{ lanSeed = distinctLanSeed\(\) \} = \{\}\)/,
+    );
+  });
+
+  it("no runner imports the orphaned harness APIs", () => {
+    // `.test.mjs` files are excluded on purpose: this contract file names the
+    // orphaned identifiers in order to forbid them, and would otherwise fail
+    // itself for saying the words it exists to say.
+    const runners = readdirSync(join(WEB_DIR, "e2e"))
+      .filter((n) => n.endsWith(".mjs") && !n.endsWith(".test.mjs"));
+    // A floor, not a count: the exact number of runners is not this contract's
+    // business, but "the glob matched nothing" must not read as "all clean".
+    expect(runners.length, "no runners left to check").toBeGreaterThan(5);
+    for (const runner of runners) {
+      const raw = read(join("e2e", runner));
+      const code = codeOnly(raw);
+      // A *mention* of the retired runner is fine and often correct — several
+      // migration notes name where an assertion came from, and those notes are
+      // comments. A live reference in code is not.
+      for (const orphan of ["setDefaultInit", "STRIP_LINK_CAP"]) {
+        expect(code, `${runner} still references ${orphan}`)
+          .not.toMatch(new RegExp(`\\b${orphan}\\b`));
+      }
+      expect(code, `${runner} still imports the deleted runner`).not.toContain("lan-transfer.mjs");
+      // Read straight off the raw import specifier list as well. `codeOnly` is a
+      // regex, not a parser: a template literal containing `/*` could in
+      // principle swallow real code and turn a negative check green. The import
+      // list is the one place the orphans would actually have to appear, and it
+      // is greppable without stripping anything.
+      const imported = raw.match(/import\s*\{([^}]*)\}\s*from\s*"\.\/harness\.mjs"/)?.[1] ?? "";
+      for (const orphan of ["setDefaultInit", "STRIP_LINK_CAP"]) {
+        expect(imported, `${runner} imports ${orphan} from the harness`).not.toContain(orphan);
+      }
+    }
+  });
+
+  it("no current testing doc tells a reader to run the retired command", () => {
+    for (const doc of CURRENT_DOCS) {
+      const body = readRepo(doc);
+      expect(body.match(RETIRED_COMMAND), `${doc} still names the retired test:e2e command`).toBeNull();
+      // Naming the deleted runner in a migration note is history and is fine.
+      // Handing the reader a command line that invokes it is not.
+      expect(body, `${doc} still tells a reader to invoke the deleted runner`)
+        .not.toContain("node e2e/lan-transfer.mjs");
+    }
+  });
+
+  it("classifies the dated archives as history rather than scrubbing them", () => {
+    for (const archive of HISTORICAL_ARCHIVES) {
+      expect(existsSync(join(REPO, archive)), `${archive} is listed as an archive but does not exist`)
+        .toBe(true);
+      // Listed because it records the retired runner. An entry that no longer
+      // mentions it is not an archive of anything — it is a stale allowlist row
+      // widening the exemption for free.
+      expect(readRepo(archive), `${archive} no longer records the retired runner at all`)
+        .toContain("lan-transfer.mjs");
+    }
+    // The load-bearing half. If every mention had been rewritten out of the
+    // repository, the current-docs assertion above would pass for the wrong
+    // reason — and the record of why the runner existed would be gone with it.
+    const preserved = HISTORICAL_ARCHIVES.filter((a) => RETIRED_COMMAND.test(readRepo(a)));
+    expect(preserved.length,
+      "no dated archive still records the retired command — the history was scrubbed, not classified")
+      .toBeGreaterThan(0);
   });
 });
