@@ -156,19 +156,19 @@ and teardown are all driven by those two — on the unified `link/1` surface tha
 replaced the fork, and `code-room.mjs` runs in hosted CI on every push.
 
 The audit originally listed **eight** current unique assertions as stranded.
-Six of those rows have since changed status, so the live count is **two
-stranded, three hosted migrations, one local migration awaiting hosted CI, and
+Seven of those rows have since changed status, so the live count is **one
+stranded, four hosted migrations, one local migration awaiting hosted CI, and
 two retired**:
 
 | # | Unique assertion | Status |
 |---|---|---|
-| 1 | Mobile no-picker fallback (the product opens no picker on a phone) | **migrated locally; awaiting hosted CI** (C3b-6) |
+| 1 | Mobile no-picker fallback (the product opens no picker on a phone) | **hosted migration** (C3b-6, exact-main `122cb2fd`) |
 | 2 | Desktop save-picker cancellation | **hosted migration** (C3b-4, exact-main `daadc94a`) |
 | 3 | SCTP negotiated max-message-size boundary (RFC 8841 default, 64 KiB) | **hosted migration** (C3b-5, exact-main `b08457d6`) |
 | 4 | Response race (responder accepts while the initiator is still taking ownership) | **retired** — see below |
 | 5 | Pre-open PeerConnection failure (`failed` before the DataChannel opens) | **retired** — see below |
 | 6 | Live `role="progressbar"` accessibility during an in-flight transfer | **hosted migration** (C3b-1, exact-main `129e4cd`) |
-| 7 | Multi-page device identity and focus (two pages of one browser plus a third device) | stranded |
+| 7 | Multi-page device identity and focus (two pages of one browser plus a third device) | **migrated locally; awaiting hosted CI** (C3b-7) |
 | 8 | Bounded relay-pool failure (credentials issued from the pool, then discarded) | stranded |
 
 **Row 1's wording is corrected here, and the correction matters — the retired
@@ -335,8 +335,9 @@ workspace — `.open-workspace`, then the workspace's own composer and
 `.attach-file` / `.attach-folder`. `mixed-link.mjs` already drives exactly that
 surface. Migrating uniques into a suite nobody runs would move the problem
 rather than fix it, so hosting `mixed-link` came first and is **merged** (C3a,
-2026-08-29, `a703c56f`): the `mixed-link-e2e` job above runs its existing single
-scenario on every push and pull request. Moving the remaining uniques onto it is
+2026-08-29, `a703c56f`): the `mixed-link-e2e` job above runs the suite on every
+push and pull request — its one scenario at the time, and its two since C3b-7.
+Moving the remaining uniques onto it is
 C3b, and it starts from a baseline that is green and hosted rather than from a
 suite whose own queued-batch assertion had been stale for weeks.
 
@@ -375,10 +376,10 @@ recording:
   scene would have degraded silently into a plain uninterrupted transfer.
 - *What did not move in C3b-1:* uniques 1, 2, 3 and 5 were untouched by that
   slice. All four have since changed status: #5 retired on the deterministic
-  evidence above, #2 moved in C3b-4, #3 in C3b-5 and #1 in C3b-6, so 7/8 are the
-  only rows left and both are Stage 3. The byte-exact resume and
-  replacement-PeerConnection assertions were preserved unchanged — the act was
-  inserted into that scene, not in place of any of it.
+  evidence above, #2 moved in C3b-4, #3 in C3b-5 and #1 in C3b-6; #7 then moved
+  in C3b-7, so **#8 is the only row left** and it is the remainder of Stage 3.
+  The byte-exact resume and replacement-PeerConnection assertions were preserved
+  unchanged — the act was inserted into that scene, not in place of any of it.
 - *What the diff touches:* test and documentation files only —
   `web/e2e/mixed-link.mjs`, `web/e2e/dom-contracts.mjs`, `web/e2e/go-server.test.mjs`,
   `web/src/lib/ReceiveActions.test.ts`, `web/src/lib/workspace-orchestration.test.ts`,
@@ -392,7 +393,13 @@ recording:
   `EXPECTED_SCENARIO_COUNT`. A `1/1` scenario count would otherwise be reported
   by a run edited down to its first assertion. `e2e/go-server.test.mjs` pins that
   shape, and pins that the live scan sits between the accept and the forced
-  close.
+  close. C3b-7 adds a **second** scenario rather than a twenty-first act, so
+  there are now two frozen lists and two literal counts — `ACTS`/
+  `EXPECTED_ACT_COUNT` (20) and `MULTIPAGE_ACTS`/`EXPECTED_MULTIPAGE_ACT_COUNT`
+  (5) — with `EXPECTED_SCENARIO_COUNT` at 2. They are kept apart deliberately: a
+  single flat list of twenty-five would report the same failure for "the
+  multi-page journey never started" as for "one act was deleted", and those need
+  different repairs.
 - *Shared selectors:* the consent card and the transfer card are now written once
   in `e2e/dom-contracts.mjs` (`RECEIVE`, `XFER`) beside `QUEUED`, and asserted
   against real rendered markup by `ReceiveActions.test.ts` and against
@@ -608,10 +615,12 @@ rendered markup, in **both** English and Simplified Chinese, on every push —
 mounted under each language from the start, since `lang()` is read at render time
 and switching afterwards would prove nothing about what a `zh` user sees.
 
-**Verification status: green locally against the final current bytes; awaiting
-the hosted `mixed-link-e2e` lane on main.** Until that exact hosted run passes,
-row 1 is a local migration rather than hosted coverage, and nothing below is
-hosted evidence. Every row was recorded on 2026-08-30 against the tree exactly as
+**Verification status: green locally, and hosted on exact-main `122cb2fd`.** The
+`mixed-link-e2e` lane ran on exact-main `122cb2fd` — the commit that merged this
+slice — and passed, so row 1 is hosted coverage rather than a local migration
+awaiting CI. The author's local evidence, recorded before that merge, follows and
+is unchanged; it remains the record of what was run by hand, not a hosted claim.
+Every row was recorded on 2026-08-30 against the tree exactly as
 it now stands — after the review corrections landed and after the mutation pass
 below restored it — on a local macOS worktree and a headless Chrome, on branch
 `test/mixed-link-mobile-download` based on `origin/main` `b08457d6`. The journey
@@ -655,15 +664,197 @@ that exists to catch it, and each file was restored afterwards. Two things this
 does not cover: it is not a claim about the hosted lane, and it does not soften
 the spoofed-Android limitation stated above into a real-device result.
 
-**Stage 3 — identity and bounded relay failure.** Uniques 7 and 8 are last
-because both need setup the other stages do not: multi-page device identity needs
-a third independent context alongside two pages of one browser, and bounded
-relay-pool failure needs the pool-shaped `/api/ice` response plus an unreachable
-TURN host and a probe budget that actually elapses.
+**C3b-7 — two pages of one browser are one device, as a second scenario on the
+same hosted runner.** Unique #7 is the first migration that could not reuse the
+existing journey's tabs, so it is the first to arrive as a *second scenario*
+rather than as more acts. It needs three pages with deliberately chosen
+installation identities — two sharing one LAN seed, a third holding its own — and
+it needs advanced verification **off**, because the property under test is where
+a request arrives and a consent gate would turn every arrival assertion into an
+assertion about a human clicking Accept. Neither is compatible with the twenty-act
+journey, which owns two tabs and opts into verification before boot. The existing
+journey is therefore untouched: the diff adds a scenario beside it and preserves
+all twenty acts in order.
+
+It is driven entirely through the current `link/1` surface. The defect was
+originally found on a per-peer-card message control that no longer exists, and
+the migration rule for this whole tail is that a proof must not be written
+against a surface no user can reach — so the request is opened with the product's
+single `.open-workspace` action and arrival is proved by the workspace's own
+rendered composer. `go-server.test.mjs` fails if `.peer-actions button` or the
+other retired selectors reappear here.
+
+Its five acts, in frozen order:
+
+1. *`multipage-one-device`* — the independently seeded third device sees the
+   two-page browser exactly **once**, and neither page lists its own sibling.
+   Both are exact roster comparisons, not membership tests: a page that offered
+   its sibling *alongside* the other device would satisfy `includes` and is the
+   other half of the reported defect.
+2. *`multipage-focus-handover`* — focus decides the representative in **both**
+   directions (A2, then back to A1), so an implementation of "whichever page
+   joined last wins" cannot pass. It additionally requires that the handover
+   moved **nobody**: the departure ledger is read before and after and must stay
+   empty. A product that re-represented the device by dropping the old page and
+   rejoining would satisfy every roster assertion above while dropping live links
+   on every tab switch — and `current-page.ts` states the invariant directly
+   ("losing focus does not send an inactive frame"), so this is pinning a real
+   product rule rather than an incidental one.
+3. *`multipage-request-follows-focus`* — the workspace opened from the third
+   device reaches the **focused** page and the opener, while a latch armed on the
+   background page **before** the request stays at exactly zero. Latched, not
+   sampled: a card that appeared and vanished is the same defect as one that
+   stayed, and a single read afterwards misses precisely that case. The latch
+   also counts a control the background page certainly does have, and that
+   counter must be **non-zero** — every other counter is asserted to be zero, and
+   zero is equally what an unarmed latch or a stale selector reports.
+4. *`multipage-fallback-on-close`* — the represented page is really closed
+   (`Target.closeTarget`), the third device must observe **exactly** that page's
+   physical departure, and the roster must fall back to the surviving sibling as
+   exactly one entry. `includes` alone would also pass if the survivor had been
+   reported gone too, which is how "the device fell back" and "the device vanished
+   and something else appeared" get confused. The departure ledger is narrowed to
+   this scenario's own three page ids — not to soften the claim but to make it
+   possible, since the preceding scenario closes its tabs immediately before this
+   one opens its own and a straggling `left` frame would otherwise land in the
+   ledger.
+5. *`multipage-sibling-reachable`* — a roster that fell back is not yet a device
+   that works. The workspace the close left behind is answered through the
+   product's own control, B must **regain exactly one enabled action** for the
+   surviving page, and a **second** workspace is then opened through it and must
+   reach that page and open the opener's own composer.
+
+   The surviving page is made current (`activateTab`) before any of that, and
+   that step is not cosmetic — see the product defect below, which is what this
+   act turned out to be for.
+
+   `returnToChooser` answers whichever single control the header is offering.
+   `WorkspaceHeader.svelte` renders exactly one per state — `.wh-restart` for a
+   terminal link, `.wh-disconnect` for one still reading as live, including the
+   `interrupted` hold `mixed-session.svelte.ts` keeps while a lane still wants
+   the transport back — and which of the two a page-close leaves on screen is a
+   race this scenario has no business pinning, so both are enumerated. It is one
+   answer, under bounds `go-server.test.mjs` pins directly: **one** deadline
+   shared by both of its waits rather than a literal on each; **no sleeps**,
+   because a pause "to let it settle" passes on a build where the chooser never
+   returns; a refusal to succeed by doing nothing (an unanswerable head, or a
+   page with neither head nor chooser, is an explicit error); and every refusal
+   **reports what was on screen**, including the `.pa-unsupported` count that
+   named the real defect.
+
+**The product defect this journey found, and the fix.** Act 5 failed on two real
+acceptance runs, and the first diagnosis was wrong. It attributed the failure to
+an asynchronous `.wh-disconnect` → `.wh-restart` header transition and grew
+`returnToChooser` into a loop that kept answering controls; the second run failed
+anyway. A third run carrying a temporary diagnostic — since removed, the tree
+restored exactly to `ef8d6f` — settled it. After A1 closes and B answers
+Disconnect, B's raw roster is exactly `[A2]`, the workspace head is **absent**,
+the open-workspace count is **zero**, and one `.pa-unsupported` card says A2 is
+too old to talk to. No header transition was involved at any point.
+
+The cause is one-sided capability pruning. `retainPeers` drops a peer's
+announcement when that peer leaves the roster, and two pages of one browser are
+**one** roster entry — so while A1 represented the installation, B pruned A2's
+`link/1` hello. A2's own roster never changed through any of it, so
+`CapsAnnouncer` still counts B greeted and its roster path can never send again.
+Neither side is waiting for anything; the surviving page is simply unreachable
+for the life of the tab. Any user with two tabs of Relayium open hits this the
+moment the represented one closes.
+
+The fix is in the product, and it is one behaviour: on a genuine
+`watchCurrentPage` transition the page keeps sending `sendActivate` and now also
+re-states its capability hello once to every present non-self roster peer
+(`CapsAnnouncer.refreshPresent`). That is the right moment because it is exactly
+the transition after which this page is the one a peer is being offered.
+
+It deliberately owes nothing afterwards — no greeted state touched, no pending
+entry created or cleared, no timer armed, no attempt spent from the bounded
+budget a genuinely new peer is still owed — and it is never called from the
+receive path, so answering a hello with a hello remains structurally impossible.
+Nothing about admission moved: `peerSupportsLink` is still an exact `link/1`
+match behind `linkRoomActive()`, an unannounced peer is still unsupported, and an
+old or non-announcing peer behaves exactly as before. `caps-vectors.test.ts` pins
+the announcer's side (including the end-to-end prune-then-refresh sequence) and
+`go-server.test.mjs` pins the wiring in `App.svelte`.
+
+**What this does not prove.** It is three pages of one headless Chromium with
+per-page seed overrides, not three real devices, and the seed override is the
+only reason two tabs of one profile count as one installation. It asserts the
+server's grouping, representative election and fallback as observed from a third
+page; it does not exercise a real network partition, a real backgrounded mobile
+tab, or the recovery window's timing. The raw `welcome`/`peers`/`left` frames are
+read — deliberately, because two pages of one browser carry the same device name
+and the DOM genuinely cannot tell them apart — but they are used only to name the
+pages and to know when the server has settled. Every claim about a request
+*arriving* is made against rendered product UI, and a contract fails if a
+signalling-frame read is ever substituted for it.
+
+*What the diff touches:* **product source as well as tests and documentation**,
+which earlier revisions of this section wrongly claimed it did not. Seven files:
+`web/src/App.svelte` and `web/src/lib/peer-caps.svelte.ts` (the fix),
+`web/src/lib/caps-vectors.test.ts`, `web/e2e/go-server.test.mjs` and
+`web/e2e/mixed-link.mjs` (the coverage), and this document plus
+`web/e2e/README.md`. No workflow, package, dependency, native or ops file
+changed.
+
+**Verification status: locally verified end to end, including the real browser
+journey; not yet run in hosted CI.** Row 7 therefore stays a local migration
+awaiting hosted CI, and nothing below is an exact-main or hosted claim.
+
+The three pre-fix runs are recorded above, with the defect they found. Two facts
+from them belong here. Run 1 reached **20/20** mixed-link acts and multi-page acts
+**1 through 4** before act 5 timed out, so everything above act 5 was already
+proved against a scenario body this change does not alter. And the speculative
+`.wh-disconnect` → `.wh-restart` answering loop written into `returnToChooser`
+between runs 1 and 2 — along with its four-bound prose and its source contracts —
+was **removed** once run 3 disproved that diagnosis, not kept "just in case".
+
+Codex then independently verified the final restored seven-file source:
+
+| Command | Result |
+|---|---|
+| `node --check` on `e2e/mixed-link.mjs` and `e2e/go-server.test.mjs` | **pass** — both parse clean. Worth running by hand: no gate parses `e2e/mixed-link.mjs` (`tsconfig.node.json` includes only `scripts/**/*.mjs`, and `go-server.test.mjs` reads it as *text*; `go-server.test.mjs` itself is parsed, since Vitest imports it). |
+| focused `npx vitest run src/lib/caps-vectors.test.ts e2e/go-server.test.mjs` | **pass** — **150/150**, including the seven new `refreshPresent` vectors and the six new `App.svelte` / `peer-caps` wiring contracts |
+| `node e2e/mixed-link.mjs` (self-started server) | **pass** — **20/20 mixed-link acts then 5/5 multi-page device identity acts**, three consecutive runs on the final source — 15.1s, 14.4s, 13.8s |
+| `npx vitest run` (whole Web suite) | **pass** — 233 files, 4428 tests, 2 files / 3 tests skipped (recorded on this same tree before the mutation pass below) |
+| `npm run check` | **pass** — 548 files, 0 errors, 0 warnings (same tree) |
+| `npm run build` | **pass** (same tree) |
+
+The contracts were checked against deliberate mutations, so they are known not to
+pass vacuously. An earlier pass covered four: dropping the `refreshPresent` call
+from `App.svelte`'s current-page callback; making `refreshPresent` mark peers
+greeted (which fails both the source contract and the unit case proving a
+refresh-then-greet peer still gets its bounded retries); reintroducing a `for (;;)`
+answering loop in `returnToChooser`; and giving one of its waits a literal
+`30_000` instead of the shared budget.
+
+Codex then ran an independent pass on the final source, and took one mutation all
+the way into a real browser rather than stopping at the contracts:
+
+- Deleting the `refreshPresent` call from `App.svelte` failed **three** focused
+  source contracts; rebuilt from that mutation, the real journey failed **act 5**
+  with `head=false chooser=0 unsupported=1` — the exact signature of the pruning
+  defect this fix closes, reproduced from the fix's absence rather than argued
+  from it. Restoring `App.svelte` returned exact SHA `a5ca3fd1`.
+- Replacing `refreshPresent` with a body that cleared `greeted` and set
+  `rosterChanged` failed **three** unit and source contracts. Restoring
+  `peer-caps.svelte.ts` returned exact SHA `4d53ceeb`.
+- Deleting the `multipage-sibling-reachable` act failed **two** ledger contracts.
+  Restoring `mixed-link.mjs` returned exact SHA `43ea22da`.
+
+Every mutation was reverted to its exact pre-mutation content, which is why this
+slice's diff is still the seven files named above. What none of it covers: the
+hosted lane. `mixed-link-e2e` has not run this scenario on `main`, so row 7 is
+not hosted coverage yet.
+
+**Stage 3 — bounded relay failure.** Unique #7 moved in C3b-7, so #8 is what
+remains of this stage. It is last because it needs setup the other stages do not:
+the pool-shaped `/api/ice` response plus an unreachable TURN host and a probe
+budget that actually elapses.
 
 **Stage 4 — delete `lan-transfer.mjs` and its `test:e2e` npm script.** Only after
 the hosted `main` is green with stages 1–3 landed. Deleting earlier would drop the
-uniques still stranded in it — two after #1/#2/#3/#6 moved and #4/#5 retired with the
+uniques still stranded in it — one after #1/#2/#3/#6/#7 moved and #4/#5 retired with the
 deterministic evidence recorded above; keeping it after is worse
 than useless — a script that cannot exit zero teaches everyone to ignore a red
 run.
@@ -689,8 +880,8 @@ different status:
 
 So the source-level half is guarded and the rendered half is not. That gap is
 narrow — the source guard makes it structurally hard for a legacy transport to
-come back — but it is a gap, and unique #7 and the browser-side unsupported-peer
-shape are both waiting on the stage-3 migration. Nothing there needs a legacy
+come back — but it is a gap, and the browser-side unsupported-peer shape is
+waiting on the stage-3 migration alongside unique #8. Nothing there needs a legacy
 transfer to be performed, because there is no longer a legacy transfer to perform.
 
 Each migrated assertion must be run and shown green before this document may call

@@ -46,8 +46,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { portFromArgv, startGoServer } from "./go-server.mjs";
 import {
-  OBSERVE_CAPS, SAVE_STUB, VERIFY_ON, argFlag, argPresent, fail, launchBrowser, newTab, ok,
-  requireServer, setWideViewport, withWatchdog,
+  OBSERVE_CAPS, SAVE_STUB, VERIFY_DEFAULT, VERIFY_ON, activateTab, argFlag, argPresent,
+  distinctLanSeed, fail, launchBrowser, newTab, ok, requireServer, setWideViewport, withWatchdog,
 } from "./harness.mjs";
 import { QUEUED, RECEIVE, XFER } from "./dom-contracts.mjs";
 // 统一链路的同意态同样是静态扫描器到不了的地方，而且这里的规矩更紧：一条链路只有
@@ -197,6 +197,29 @@ const ACTS = Object.freeze([
   "explicit-disconnect",
 ]);
 const EXPECTED_ACT_COUNT = 20;
+
+/**
+ * The second scenario's own frozen ledger, in run order.
+ *
+ * Kept as a SEPARATE list rather than appended to `ACTS`, because the two
+ * scenarios are independent runs against independent tabs: a single flat list
+ * would make "act #21 is missing" indistinguishable from "the second scenario
+ * never started", and `runScenarios` could no longer say which journey diverged.
+ * Every entry is prefixed `multipage-` so the two inventories cannot be confused
+ * for one another by a source contract that greps `act(` calls file-wide.
+ *
+ * `EXPECTED_MULTIPAGE_ACT_COUNT` is a literal for exactly the reason
+ * `EXPECTED_ACT_COUNT` is: comparing a list against its own `.length` still
+ * agrees with itself after somebody deletes an entry from it.
+ */
+const MULTIPAGE_ACTS = Object.freeze([
+  "multipage-one-device",
+  "multipage-focus-handover",
+  "multipage-request-follows-focus",
+  "multipage-fallback-on-close",
+  "multipage-sibling-reachable",
+]);
+const EXPECTED_MULTIPAGE_ACT_COUNT = 5;
 
 /**
  * 记下 live region 说过的**每一句**话。
@@ -587,29 +610,38 @@ const setTheme = async (tab, value) => {
   );
 };
 
-/** `base` is a parameter now, not a module constant: it is whichever server this
- *  run is talking to — the one it started, or the one `--url` named. */
-async function mixedScenario(browser, base) {
-  /**
-   * The execution ledger for this run. Empty until an act finishes.
-   *
-   * `act()` replaces the bare `ok()` at each act boundary rather than sitting
-   * beside it, so "reported success" and "recorded as performed" are the same
-   * statement and cannot drift apart. Sub-steps inside an act (the three
-   * viewport variants, the console-error sweep) stay plain `ok()`: they are
-   * assertions, not acts, and the ledger is about the acts.
-   */
+/**
+ * A scenario's execution ledger. Empty until an act finishes.
+ *
+ * `act()` replaces the bare `ok()` at each act boundary rather than sitting
+ * beside it, so "reported success" and "recorded as performed" are the same
+ * statement and cannot drift apart. Sub-steps inside an act (the three viewport
+ * variants, the console-error sweep) stay plain `ok()`: they are assertions, not
+ * acts, and the ledger is about the acts.
+ *
+ * Shared by both scenarios on purpose. Two hand-written copies of this would be
+ * two places for the duplicate/unknown-name guards to drift, and the second copy
+ * is exactly the one that would be written without them.
+ */
+function newLedger(acts) {
   const ledger = [];
   const act = (name, message) => {
     // A typo here would otherwise register an act nobody can account for, and
-    // the ordered comparison in `main()` would blame the act AFTER it.
-    if (!ACTS.includes(name)) {
-      throw new Error(`act ${JSON.stringify(name)} is not one of the frozen ACTS`);
+    // the ordered comparison in `runScenarios()` would blame the act AFTER it.
+    if (!acts.includes(name)) {
+      throw new Error(`act ${JSON.stringify(name)} is not one of this scenario's frozen acts`);
     }
     if (ledger.includes(name)) throw new Error(`act ${JSON.stringify(name)} was recorded twice`);
     ledger.push(name);
     ok(message);
   };
+  return { ledger, act };
+}
+
+/** `base` is a parameter now, not a module constant: it is whichever server this
+ *  run is talking to — the one it started, or the one `--url` named. */
+async function mixedScenario(browser, base) {
+  const { ledger, act } = newLedger(ACTS);
 
   // A 发起，B 收（另存为被桩掉）。两边都装上只读的 caps 探针：跑任何断言之前先确认
   // 这个默认产物在这个 LAN 房间里真的通告了 link/1。
@@ -1888,46 +1920,522 @@ async function mixedScenario(browser, base) {
 }
 
 /**
- * The runner inventory. One scenario — and that number is exactly why the act
- * ledger above exists.
+ * Read-only probe of what the SERVER told this page: its own peer id from the
+ * welcome frame, the ids in the latest roster, and every physical departure.
+ *
+ * Deliberately observing real frames rather than application state, and it is
+ * the one place this scenario is allowed to. The defect it covers is about
+ * *identity* — which page of a browser a peer is offered, and which one a
+ * request reaches — and two pages of one browser carry the same device name, so
+ * the DOM alone genuinely cannot tell them apart. It also lets the scenario wait
+ * on an observable condition (the roster the server actually sent) instead of
+ * sleeping and hoping a handover has landed.
+ *
+ * What it is NOT is a shortcut for the product behaviour underneath. Every
+ * assertion about a request arriving is made against rendered product UI, driven
+ * by the product's own `.open-workspace` control; the frames here are only used
+ * to name the pages and to know when the server has finished changing its mind.
+ * `go-server.test.mjs` fails if a signal-frame read is ever substituted for the
+ * composer proof.
+ *
+ * Installed as an init script, i.e. before the app's own socket exists: a
+ * `welcome` observed after the app has already joined is a `welcome` that was
+ * missed, and a missed one is indistinguishable from a page that never joined.
+ */
+const OBSERVE_ROSTER = `
+  window.__selfId = "";
+  window.__roster = null;
+  window.__leftPeers = [];
+  (() => {
+    const Real = window.WebSocket;
+    window.WebSocket = function (...a) {
+      const ws = new Real(...a);
+      ws.addEventListener("message", (ev) => {
+        try {
+          const e = JSON.parse(ev.data);
+          if (e && e.type === "welcome") window.__selfId = e.name;
+          if (e && e.type === "peers") window.__roster = e.peers.map((p) => p.id);
+          if (e && e.type === "left") window.__leftPeers.push(e.peer);
+        } catch { /* not a frame we read */ }
+      });
+      return ws;
+    };
+    window.WebSocket.prototype = Real.prototype;
+  })();
+`;
+
+/**
+ * The background page's latch, armed BEFORE the request is sent.
+ *
+ * A card that appeared and then vanished is the same defect as one that stayed —
+ * the user was looking at another page either way — so a single read after the
+ * fact would miss precisely the transient case. Hence a MutationObserver that
+ * counts, rather than a final `querySelector`.
+ *
+ * `chooser` is the anti-vacuity half and is not optional. Every other counter
+ * here is asserted to be **zero**, and zero is also what a latch that was never
+ * installed, or whose selectors no longer match anything, reports. `chooser`
+ * counts a control the background page certainly does have, so a run can only
+ * reach "composer 0, chooser > 0" by the observer genuinely looking at a live
+ * DOM with working selectors and finding no request there.
+ *
+ * `look` is exposed so the scenario can take one final, timing-independent
+ * sample after the foreground assertions have passed, rather than trusting that
+ * a mutation happened to fire last.
+ */
+const ARM_BACKGROUND_LATCH = `(() => {
+  window.__e2eBackground = { panel: 0, composer: 0, request: 0, head: 0, chooser: 0, ticks: 0 };
+  const look = () => {
+    const seen = window.__e2eBackground;
+    seen.ticks++;
+    if (document.querySelector('.msgpanel')) seen.panel++;
+    if (document.querySelector('.msgpanel textarea')) seen.composer++;
+    if (document.querySelector('${TEXT_CONSENT}')) seen.request++;
+    if (document.querySelector('${HEAD}')) seen.head++;
+    if (document.querySelector('${OPEN_WORKSPACE}')) seen.chooser++;
+  };
+  window.__e2eBackgroundLook = look;
+  new MutationObserver(look).observe(document.body, { childList: true, subtree: true });
+  look();
+  return true;
+})()`;
+
+/** The chooser is BACK — not merely somewhere on the page.
+ *
+ *  Both halves are load-bearing. The workspace head has to be gone, because the
+ *  head and a chooser button can be mounted in the same frame while the
+ *  workspace is still holding the screen; and the count has to be exactly one,
+ *  because "a chooser exists" would also be satisfied by a roster that grew a
+ *  duplicate entry for the device this scenario has just proved is one device. */
+const CHOOSER_ONLY =
+  `!document.querySelector('${HEAD}') && document.querySelectorAll('${OPEN_WORKSPACE}').length === 1`;
+
+/** Every control the workspace head can offer, in the order to prefer them.
+ *
+ *  `WorkspaceHeader.svelte` renders exactly one of these at a time, off its
+ *  `terminal` derivation: a named `endReason` or a plain `failed` status gets
+ *  `.wh-restart`, which answers the explanation and tears nothing down
+ *  (`restartWorkspace` → `dismissLinkEnd`); anything still live — including the
+ *  `interrupted` hold that a page-close leaves behind — gets `.wh-disconnect`,
+ *  which ends the link (`disconnectWorkspace` → `workspace.disconnect`).
+ *
+ *  BOTH are enumerated because which one a page-close leaves on screen is a
+ *  product race this scenario has no business pinning — not because a recovery
+ *  is expected to answer them in sequence. Restart is listed first so that a
+ *  read which somehow observes both takes the one belonging to a link that no
+ *  longer exists.
+ *
+ *  Frozen, and shared with the source contract in `go-server.test.mjs`: a third
+ *  control appearing in that header is a product change this helper has to be
+ *  taught, not one it may walk past. */
+const HEAD_CONTROLS = Object.freeze([
+  Object.freeze({ action: "restart", selector: `${HEAD} .wh-restart` }),
+  Object.freeze({ action: "disconnect", selector: `${HEAD} .wh-disconnect` }),
+]);
+
+/** The budget for the whole recovery: finding the control, and the chooser
+ *  coming back after it is answered. One deadline shared by both waits rather
+ *  than a literal on each, so what this helper can cost is the number written
+ *  here and not a multiple of it. */
+const CHOOSER_RECOVERY_BUDGET_MS = 40_000;
+
+/**
+ * What the page is actually showing — read while the tab is still alive, for a
+ * failure message.
+ *
+ * `unsupported` is here because of what two real acceptance runs turned out to
+ * be. B ended up with **no** head, **no** chooser and one `.pa-unsupported`
+ * line: the product had decided the surviving sibling was too old to talk to,
+ * because its capability hello had been pruned along with the roster entry the
+ * closed page owned. A bare "chooser never came" timeout cannot tell that apart
+ * from a dozen unrelated faults, and the first diagnosis made from one was
+ * wrong.
+ */
+const HEAD_STATE = `(() => {
+  const selectors = ${JSON.stringify(HEAD_CONTROLS.map((c) => c.selector))};
+  return {
+    head: !!document.querySelector('${HEAD}'),
+    chooser: document.querySelectorAll('${OPEN_WORKSPACE}').length,
+    unsupported: document.querySelectorAll('.pa-unsupported').length,
+    controls: ${JSON.stringify(HEAD_CONTROLS.map((c) => c.action))}
+      .filter((_, i) => !!document.querySelector(selectors[i])),
+  };
+})()`;
+
+/**
+ * Answer the one control the workspace head is offering, and get the one-action
+ * chooser back — entirely through the product's own controls.
+ *
+ * A page-close leaves the surviving side holding a link whose peer is gone, and
+ * the header it renders for that is not one settled state: `.wh-disconnect`
+ * while `mixed-session.svelte.ts` still holds the link `interrupted`,
+ * `.wh-restart` once it has settled terminally. Both are legitimate starting
+ * points, so both are enumerated and whichever is on screen is answered.
+ *
+ * It is deliberately ONE answer, not a loop. An earlier revision of this helper
+ * kept clicking, on a theory that Disconnect was asynchronously followed by a
+ * terminal `.wh-restart` card the first click could not have reached. A run with
+ * a diagnostic disproved that: after Disconnect the head is simply gone, and
+ * what was missing was the chooser's action, because the peer read as
+ * unsupported. Machinery built for a transition that does not happen is not free
+ * — it is a second place for this journey to hang, and prose asserting a product
+ * behaviour nobody observed.
+ *
+ * The bounds that do matter are kept:
+ *
+ *  - **one deadline** for the whole recovery, shared by both waits rather than
+ *    restarted per wait;
+ *  - **no sleeps** — every wait is a condition on real product DOM, because a
+ *    pause "to let it settle" passes on a build where the chooser never returns;
+ *  - **it refuses to succeed by doing nothing** — a head with no control, or a
+ *    page with neither head nor chooser, is an explicit error rather than a
+ *    return that hands the caller a click on a control that is not there;
+ *  - **the failing state is reported**, not just the timeout.
+ */
+async function returnToChooser(tab, who) {
+  const deadline = Date.now() + CHOOSER_RECOVERY_BUDGET_MS;
+  const left = () => Math.max(1, deadline - Date.now());
+  const onScreen = async () => {
+    try { return JSON.stringify(await tab.evaluate(HEAD_STATE)); }
+    catch { return "unavailable"; } // the tab is gone; the timeout is the honest part
+  };
+
+  const anyControl = HEAD_CONTROLS.map((c) => `!!document.querySelector('${c.selector}')`).join(" || ");
+  try {
+    await tab.waitFor(
+      `(${CHOOSER_ONLY}) || (${anyControl})`,
+      `${who}'s one-action chooser, or one workspace control to answer`,
+      left(),
+    );
+  } catch (err) {
+    throw new Error(`${err.message}; nothing answered yet; on screen: ${await onScreen()}`);
+  }
+
+  const took = await tab.evaluate(`(() => {
+    if (!document.querySelector('${HEAD}')) {
+      return document.querySelectorAll('${OPEN_WORKSPACE}').length === 1 ? 'chooser' : 'nothing';
+    }
+    for (const control of ${JSON.stringify(HEAD_CONTROLS.map(({ action, selector }) => ({ action, selector })))}) {
+      const el = document.querySelector(control.selector);
+      if (el) { el.click(); return control.action; }
+    }
+    return 'nothing';
+  })()`);
+
+  if (took === "chooser") return "already-chooser";
+  if (took === "nothing") {
+    throw new Error(
+      `${who} showed neither the chooser nor an answerable workspace head; on screen: ${await onScreen()}`,
+    );
+  }
+  // The two generated lists disagreeing would mean a click this helper cannot
+  // account for. Unreachable while they are generated from one frozen roster,
+  // which is the point of asserting it rather than assuming it.
+  if (!HEAD_CONTROLS.some((c) => c.action === took)) {
+    throw new Error(`${who} answered an unknown workspace control ${JSON.stringify(took)}`);
+  }
+
+  try {
+    await tab.waitFor(CHOOSER_ONLY, `${who}'s one-action chooser after "${took}"`, left());
+  } catch (err) {
+    throw new Error(`${err.message}; answered: ${took}; on screen: ${await onScreen()}`);
+  }
+  return took;
+}
+
+/**
+ * Two pages of one browser are ONE device, and a request lands on the page the
+ * user is actually looking at.
+ *
+ * This is the reported defect: several identically named pages of one phone were
+ * offered as separate devices, so the other device could pick one, and the
+ * request would land on a page nobody was looking at — one side sat on "waiting
+ * for the other device to accept…" forever while another page of the same
+ * browser was perfectly able to start its own session.
+ *
+ * It is a second, independent scenario rather than more acts on the first one
+ * because it needs three tabs with deliberately chosen installation identities,
+ * and because it must run with advanced verification OFF: the property under
+ * test is *where the request arrives*, and a consent gate would turn every
+ * arrival assertion into an assertion about a human clicking Accept.
+ *
+ * It is driven entirely through the current `link/1` surface — the single
+ * `.open-workspace` action and the workspace's own composer. The legacy
+ * per-peer-card message control this defect was originally found on no longer
+ * exists in the product, and asserting against a control no user can reach would
+ * be worse than asserting nothing. `go-server.test.mjs` fails if one reappears
+ * here.
+ *
+ * Asserts, in order:
+ *  1. an independently seeded device sees the two-page browser exactly ONCE, and
+ *     neither page lists its own sibling as a target;
+ *  2. focus decides the representative, in BOTH directions, and doing so is not
+ *     a departure — no page physically leaves the room to make it happen;
+ *  3. the request opened from the other device reaches the focused page and the
+ *     opener, and the background page never renders one, not even briefly;
+ *  4. closing the represented page reports exactly that page as gone and falls
+ *     back to the live sibling — one entry, never a duplicate, never the dead id;
+ *  5. the device is still genuinely usable afterwards: B regains exactly one
+ *     enabled action for the surviving page, and a second workspace opened
+ *     through that control reaches it. This is where the roster's fallback stops
+ *     being cosmetic — the surviving page's capability hello was pruned along
+ *     with the roster entry its sibling owned, and until becoming the current
+ *     page re-stated it, B rendered the survivor as a peer too old to talk to.
+ */
+async function multiPageDeviceScenario(browser, base) {
+  const { ledger, act } = newLedger(MULTIPAGE_ACTS);
+
+  // One installation, two pages — and the shared seed is the ONLY thing making
+  // them one device. `newTab` hands every other tab in this file its own seed,
+  // so a scenario that forgot to pass this would quietly be testing three
+  // independent devices and every grouping assertion below would be vacuous.
+  // B's seed is passed explicitly rather than left to the default for the same
+  // reason in reverse: "distinct" is load-bearing here, not incidental.
+  const installation = distinctLanSeed();
+  const otherDevice = distinctLanSeed();
+  if (installation === otherDevice) {
+    throw new Error(`the two-page browser and the third device were given the same seed ${installation}`);
+  }
+  const boot = VERIFY_DEFAULT + OBSERVE_ROSTER;
+  const a1 = await newTab(browser, base + "/", boot, { lanSeed: installation });
+  const a2 = await newTab(browser, base + "/", boot, { lanSeed: installation });
+  const b = await newTab(browser, base + "/", boot, { lanSeed: otherDevice });
+  for (const tab of [a1, a2, b]) await setWideViewport(tab);
+
+  const joined = "!!window.__selfId && Array.isArray(window.__roster)";
+  for (const [who, tab] of [["A1", a1], ["A2", a2], ["B", b]]) {
+    await tab.waitFor(joined, `page ${who} to join the LAN room`, 30_000);
+  }
+  const ids = {
+    a1: await a1.evaluate("window.__selfId"),
+    a2: await a2.evaluate("window.__selfId"),
+    b: await b.evaluate("window.__selfId"),
+  };
+  // Three distinct connections. If the server ever handed two of them the same
+  // peer id, every roster assertion below would be comparing a name to itself.
+  if (new Set(Object.values(ids)).size !== 3) {
+    throw new Error(`the three pages were not given three distinct peer ids: ${JSON.stringify(ids)}`);
+  }
+
+  // Departures, restricted to the three pages this scenario owns.
+  //
+  // NOT a softening of the exactness below — it is what makes it possible. This
+  // is the second scenario in the run, and the first one closes its own two tabs
+  // immediately before this one opens its three. The server's `left` frames for
+  // those can legitimately land after B's observer is already listening, so an
+  // unrestricted ledger would carry a straggler that has nothing to do with the
+  // property under test. Scoped this way, "exactly one page left, and it is the
+  // one that was closed" stays an exact claim about the subject.
+  const owned = JSON.stringify([ids.a1, ids.a2, ids.b]);
+  const departuresOfOurs = () => b.evaluate(`window.__leftPeers.filter((id) => ${owned}.includes(id))`);
+
+  // ── 1. Grouping, from both sides ─────────────────────────────────────────
+  const rosterIs = (id) => `JSON.stringify(window.__roster) === ${JSON.stringify(JSON.stringify([id]))}`;
+  await b.waitFor("window.__roster.length === 1", "device B to see the two pages as ONE device", 30_000);
+  for (const [who, tab] of [["A1", a1], ["A2", a2]]) {
+    // Exact, not "includes B": a page that listed its own sibling alongside B
+    // would satisfy a membership check and is the other half of this defect.
+    await tab.waitFor(rosterIs(ids.b), `page ${who} to see only the other device (never its own sibling)`, 30_000);
+  }
+  const bSees = await b.evaluate("window.__roster");
+  if (bSees.length !== 1 || (bSees[0] !== ids.a1 && bSees[0] !== ids.a2)) {
+    throw new Error(`B was offered ${JSON.stringify(bSees)}, want exactly one of A's two pages`);
+  }
+  act("multipage-one-device", "two pages of one browser were advertised as a single device, and never to each other");
+
+  // ── 2. Focus decides the representative, both ways, without a departure ───
+  // Both directions, so a one-way "whichever joined last wins" cannot pass. The
+  // departure ledger is read on both sides of the handover: re-representing a
+  // device must be a change of which page speaks for it, NOT the old page
+  // leaving the room and the new one arriving. A product that achieved the
+  // roster shape by dropping and rejoining would satisfy every assertion above
+  // and would drop live links every time the user switched tabs.
+  const leftBeforeHandover = await departuresOfOurs();
+  if (leftBeforeHandover.length !== 0) {
+    throw new Error(`a page left the room before the handover even started: ${JSON.stringify(leftBeforeHandover)}`);
+  }
+  await activateTab(browser, a2);
+  await b.waitFor(rosterIs(ids.a2), "the device to be represented by the page the user switched to (A2)", 30_000);
+  await activateTab(browser, a1);
+  await b.waitFor(rosterIs(ids.a1), "the representative to hand back to A1 on focus", 30_000);
+  const leftAfterHandover = await departuresOfOurs();
+  if (leftAfterHandover.length !== 0) {
+    throw new Error(
+      `moving the representative reported ${leftAfterHandover.length} physical departure(s) ` +
+      `${JSON.stringify(leftAfterHandover)} — a focus change must not present as a device leaving`,
+    );
+  }
+  act("multipage-focus-handover", "focus moved the device's representative in both directions, always as one entry and with nobody leaving");
+
+  // ── 3. The request follows focus, and no other page of that browser sees it ─
+  // A1 is the focused page after the handover above. The latch goes on A2 BEFORE
+  // the request is sent, so a card that appeared and vanished still fails.
+  await a2.evaluate(ARM_BACKGROUND_LATCH);
+  await b.waitFor(
+    `document.querySelectorAll('${OPEN_WORKSPACE}').length === 1` +
+    ` && !document.querySelector('${OPEN_WORKSPACE}').disabled`,
+    "B's single workspace action for the A device",
+    30_000,
+  );
+  await b.evaluate(`(() => { document.querySelector('${OPEN_WORKSPACE}').click(); return true; })()`);
+
+  // Verification is off (VERIFY_DEFAULT), so the receiving page auto-accepts the
+  // text session (`autoAcceptsIncomingText`) and both sides land in the
+  // composer. A request routed to the background page would leave B waiting here
+  // instead — which is exactly the reported failure.
+  await a1.waitFor("!!document.querySelector('.msgpanel textarea')", "the FOCUSED page (A1) to receive the request", 40_000);
+  await b.waitFor("!!document.querySelector('.msgpanel textarea')", "B's composer (the request was accepted, not left waiting)", 40_000);
+  const background = await a2.evaluate("(() => { window.__e2eBackgroundLook(); return window.__e2eBackground; })()");
+  if (!(background.ticks > 0) || !(background.chooser > 0)) {
+    throw new Error(
+      `the background latch on A2 never observed a live DOM, so its zeroes mean nothing: ` +
+      `${JSON.stringify(background)}`,
+    );
+  }
+  if (background.panel !== 0 || background.composer !== 0 || background.request !== 0 || background.head !== 0) {
+    throw new Error(`the background page rendered a request: ${JSON.stringify(background)}`);
+  }
+  act("multipage-request-follows-focus", "the request reached the page the user was looking at, and no other page of that browser");
+
+  // ── 4. The represented page goes away mid-session ────────────────────────
+  await browser.send("Target.closeTarget", { targetId: a1.targetId });
+  await b.waitFor(
+    `window.__leftPeers.includes(${JSON.stringify(ids.a1)})`,
+    "the server's physical-leave event for the closed page",
+    30_000,
+  );
+  // Exactly that page, and only it. `includes` alone would also pass if the
+  // surviving sibling had been reported gone too — which is how "the device fell
+  // back" and "the device disappeared and something else took its place" get
+  // confused. This is the assertion a fabricated or over-broad leave fails.
+  const departed = await departuresOfOurs();
+  if (JSON.stringify(departed) !== JSON.stringify([ids.a1])) {
+    throw new Error(
+      `B saw departures ${JSON.stringify(departed)}; want exactly the page that was closed ` +
+      `${JSON.stringify([ids.a1])}`,
+    );
+  }
+  await b.waitFor(rosterIs(ids.a2), "the device to fall back to its surviving page, still as one entry", 30_000);
+  // Read back exactly, after the wait: the wait proves it arrived, this proves
+  // it is still the whole roster and not one entry beside a stale dead id.
+  const afterClose = await b.evaluate("window.__roster");
+  if (JSON.stringify(afterClose) !== JSON.stringify([ids.a2])) {
+    throw new Error(`B's roster settled on ${JSON.stringify(afterClose)}; want exactly ${JSON.stringify([ids.a2])}`);
+  }
+  act("multipage-fallback-on-close", "closing the represented page reported exactly that page gone and handed the device to its sibling");
+
+  // ── 5. Still reachable: a second workspace, through the product's control ──
+  //
+  // The activation is not cosmetic and is not merely "give A2 the focus it
+  // needs to receive". It is the product path this act exists to prove. B pruned
+  // A2's capability hello while A1 represented the installation (`retainPeers`
+  // is per-roster, and the two pages are ONE roster entry), and A2's own roster
+  // never changed, so nothing in `CapsAnnouncer`'s roster path would ever send
+  // it again — B would show A2 as a peer it has no announcement for, i.e. "too
+  // old", with no action on the card, permanently. Becoming the current page
+  // re-states it (`refreshPresent`, sent alongside `sendActivate`). Two real
+  // runs failed here before that existed, and the chooser assertion below is the
+  // one that catches it: the head goes away on Disconnect either way, but the
+  // action only comes back if B knows what A2 speaks.
+  await activateTab(browser, a2);
+  // B is still holding the workspace its now-closed peer was on. That reads as
+  // interrupted (`.wh-disconnect`) or as ended (`.wh-restart`) depending on how
+  // far the link has settled, which is a race this scenario has no business
+  // pinning — so the chooser is recovered through whichever control the product
+  // is actually offering, under one bounded deadline, and the act records which.
+  const answered = await returnToChooser(b, "B");
+  // Exactly ONE action, on a page with no workspace head left, and enabled.
+  // This is the capability assertion in product terms: a B that had lost A2's
+  // hello reaches this line with zero actions and a `.pa-unsupported` line where
+  // the button should be. Restated at the call site rather than left to
+  // `returnToChooser` alone, because regaining the action for the SURVIVING page
+  // is what this act is for, not an incidental step towards the click below.
+  await b.waitFor(
+    `(${CHOOSER_ONLY}) && !document.querySelector('${OPEN_WORKSPACE}').disabled`,
+    "B to be offered exactly one enabled action for the surviving page",
+    30_000,
+  );
+  await b.evaluate(`(() => { document.querySelector('${OPEN_WORKSPACE}').click(); return true; })()`);
+  try {
+    await a2.waitFor("!!document.querySelector('.msgpanel textarea')", "the surviving page to receive the next request", 40_000);
+    await b.waitFor("!!document.querySelector('.msgpanel textarea')", "B's composer on the second workspace", 40_000);
+  } catch (err) {
+    // The failure this scenario exists to catch looks identical to a timeout
+    // from a dozen unrelated causes, so the diagnosis is captured while the
+    // pages are still alive rather than reconstructed from a bare timeout.
+    const snapshot = (tab) => tab.evaluate(`({
+      roster: window.__roster,
+      left: window.__leftPeers,
+      head: !!document.querySelector('${HEAD}'),
+      chooser: document.querySelectorAll('${OPEN_WORKSPACE}').length,
+      unsupported: document.querySelectorAll('.pa-unsupported').length,
+      panel: document.querySelector('.msgpanel')?.textContent ?? '',
+    })`);
+    throw new Error(`${err.message}; diagnostics=${JSON.stringify({ b: await snapshot(b), a2: await snapshot(a2) })}`);
+  }
+  act("multipage-sibling-reachable", `closing the represented page left the device usable: a second workspace opened after "${answered}" and reached the sibling`);
+
+  const errs = [...a2.errors, ...b.errors].filter((e) => !/401|Failed to load resource/.test(e));
+  if (errs.length) throw new Error(`console errors during the multi-page scenario:\n    ${errs.join("\n    ")}`);
+  ok("no console errors on either surviving tab");
+
+  await browser.send("Target.closeTarget", { targetId: a2.targetId });
+  await browser.send("Target.closeTarget", { targetId: b.targetId });
+  return ledger;
+}
+
+/**
+ * The runner inventory. Two scenarios, each with its own frozen act ledger.
  *
  * `page-shell.mjs` can count scenarios because it has four independent ones. A
- * count of `1/1` here would survive `mixedScenario` being edited down to its
- * first assertion, so the literal that actually protects this suite is
- * `EXPECTED_ACT_COUNT`, and `runScenarios` checks both.
+ * count of `1/1` would survive `mixedScenario` being edited down to its first
+ * assertion, so the literals that actually protect this suite are the per-act
+ * counts, and `runScenarios` checks the scenario count and both of them.
  *
- * Fixed literals, not `SCENARIOS.length` / `ACTS.length`: an array and its own
- * length always agree, including after somebody deletes an entry from it.
+ * Each entry carries the list its ledger is compared against AND the fixed
+ * literal that list's length must equal. Never `SCENARIOS.length` /
+ * `acts.length`: an array and its own length always agree, including after
+ * somebody deletes an entry from it.
  */
-const EXPECTED_SCENARIO_COUNT = 1;
-const SCENARIOS = [mixedScenario];
+const EXPECTED_SCENARIO_COUNT = 2;
+const SCENARIOS = [
+  { label: "mixed link", run: mixedScenario, acts: ACTS, expectedActs: EXPECTED_ACT_COUNT },
+  {
+    label: "multi-page device identity",
+    run: multiPageDeviceScenario,
+    acts: MULTIPAGE_ACTS,
+    expectedActs: EXPECTED_MULTIPAGE_ACT_COUNT,
+  },
+];
 
 async function runScenarios(browser, base) {
   let ran = 0;
-  const ledgers = [];
+  const results = [];
   for (const scenario of SCENARIOS) {
     // No catch here, deliberately: a swallowed scenario that still reached
     // `ran++` is the failure this counter exists to make impossible.
-    ledgers.push(await scenario(browser, base));
+    results.push({ scenario, ledger: await scenario.run(browser, base) });
     ran++;
   }
   if (ran !== EXPECTED_SCENARIO_COUNT) {
     throw new Error(`ran ${ran}/${EXPECTED_SCENARIO_COUNT} mixed-link scenarios — expected exactly ${EXPECTED_SCENARIO_COUNT}`);
   }
-  for (const ledger of ledgers) {
+  for (const { scenario, ledger } of results) {
     // Order as well as membership: an act that moved is an act whose
-    // preconditions moved with it, and the resume/progressbar pair in
-    // particular only mean anything in the order they are written.
-    const drift = ACTS.findIndex((name, i) => ledger[i] !== name);
-    if (ledger.length !== EXPECTED_ACT_COUNT || drift !== -1) {
+    // preconditions moved with it — the resume/progressbar pair, and the
+    // multi-page focus handover that has to happen before the page it elected is
+    // closed, only mean anything in the order they are written.
+    const expected = scenario.acts;
+    const drift = expected.findIndex((name, i) => ledger[i] !== name);
+    if (ledger.length !== scenario.expectedActs || drift !== -1) {
       throw new Error(
-        `performed ${ledger.length}/${EXPECTED_ACT_COUNT} mixed-link acts` +
-        (drift === -1 ? "" : `, first divergence at #${drift + 1}: expected ${JSON.stringify(ACTS[drift])}, got ${JSON.stringify(ledger[drift])}`) +
+        `performed ${ledger.length}/${scenario.expectedActs} ${scenario.label} acts` +
+        (drift === -1 ? "" : `, first divergence at #${drift + 1}: expected ${JSON.stringify(expected[drift])}, got ${JSON.stringify(ledger[drift])}`) +
         `\n    performed: ${JSON.stringify(ledger)}` +
-        `\n    expected:  ${JSON.stringify([...ACTS])}`,
+        `\n    expected:  ${JSON.stringify([...expected])}`,
       );
     }
-    console.log(`\n${ledger.length}/${EXPECTED_ACT_COUNT} mixed-link acts performed, in order`);
+    console.log(`\n${ledger.length}/${scenario.expectedActs} ${scenario.label} acts performed, in order`);
   }
 }
 
