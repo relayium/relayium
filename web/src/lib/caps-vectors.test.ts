@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   CAP_LINK, CAP_TEXT, CapsAnnouncer, LINK_CAPS_ANNOUNCE_ATTEMPTS, LINK_CAPS_RETRY_INTERVAL_MS,
   advertisedCaps, capsSignal, peerCapsKnown, peerSupportsLink, recordPeerCaps, resetPeerCaps,
+  retainPeers,
 } from "./peer-caps.svelte";
 import { linkRole } from "./peer-link.svelte";
 import { clearRoom } from "./room.svelte";
@@ -272,5 +273,161 @@ describe("CapsAnnouncer", () => {
     announcer.stop();
     announcer.rosterChanged(["p1"]);
     expect(sent).toEqual([]);
+  });
+
+  /**
+   * `refreshPresent` — the page became the one the user is looking at.
+   *
+   * The defect it repairs is not on this side of the wire, which is why no
+   * assertion above catches it. `#greeted` records who this page has TOLD; it
+   * cannot record that the listener threw the announcement away. The other side
+   * prunes caps per roster (`retainPeers`), and two pages of one browser are ONE
+   * roster entry — so while the sibling represents the installation, this page's
+   * hello is pruned over there. When the sibling closes and this page becomes
+   * the representative, the other device holds a peer it has no announcement
+   * for and renders "too old" with no action. This page's own roster never
+   * changed through any of it, so `rosterChanged` has nothing new to greet and
+   * the hello is never sent again by any existing path.
+   */
+  describe("refreshPresent", () => {
+    it("tells every present peer again, even ones long since greeted and answered", () => {
+      const { sent, announcer } = rig();
+      announcer.rosterChanged(["p1", "p2"]);
+      announcer.didHearFrom("p1");
+      announcer.didHearFrom("p2");
+      sent.length = 0;
+
+      announcer.refreshPresent(["p1", "p2"]);
+      // Sorted, so the frame order is something a vector can pin.
+      expect(sent).toEqual([
+        { to: "p1", caps: [...advertisedCaps()] },
+        { to: "p2", caps: [...advertisedCaps()] },
+      ]);
+    });
+
+    it("sends the current announcement verbatim, exactly like every other path", () => {
+      const { sent, announcer } = rig();
+      announcer.refreshPresent(["p1"]);
+      expect(sent).toEqual([{ to: "p1", caps: cap.hello.web.caps }]);
+    });
+
+    it("owes nothing afterwards: no greeted change, no pending, no timer", () => {
+      const { sent, announcer, tick, armed } = rig();
+      announcer.rosterChanged(["p1"]);
+      announcer.didHearFrom("p1"); // retired: nothing is owed, nothing is armed
+      expect(armed()).toBe(false);
+      sent.length = 0;
+
+      announcer.refreshPresent(["p1"]);
+      expect(sent.length, "exactly one frame, once").toBe(1);
+      // No timer. A refresh that armed one would turn every tab switch into a
+      // fresh three-frame burst against a peer that has already answered.
+      expect(armed(), "the refresh armed the retry timer").toBe(false);
+      expect(announcer.owed("p1"), "the refresh created a pending obligation").toBe(0);
+      tick();
+      expect(sent.length, "the refresh left something behind to retry").toBe(1);
+    });
+
+    it("does not spend the bounded budget a genuinely new peer is still owed", () => {
+      // The other half of "owes nothing": a page switched to twice must not eat
+      // the retries that exist for a peer which has never answered at all.
+      const { sent, announcer, tick } = rig();
+      announcer.rosterChanged(["p1"]);
+      expect(announcer.owed("p1")).toBe(LINK_CAPS_ANNOUNCE_ATTEMPTS - 1);
+
+      announcer.refreshPresent(["p1"]);
+      announcer.refreshPresent(["p1"]);
+      expect(announcer.owed("p1"), "a refresh consumed a retry attempt")
+        .toBe(LINK_CAPS_ANNOUNCE_ATTEMPTS - 1);
+
+      const beforeTicks = sent.length;
+      for (let i = 0; i < LINK_CAPS_ANNOUNCE_ATTEMPTS + 3; i++) tick();
+      expect(sent.length - beforeTicks, "the bounded retries did not all survive the refreshes")
+        .toBe(LINK_CAPS_ANNOUNCE_ATTEMPTS - 1);
+    });
+
+    it("does not re-greet, so the roster's own greeting stays one-shot", () => {
+      const { sent, announcer } = rig();
+      announcer.rosterChanged(["p1"]);
+      announcer.refreshPresent(["p1"]);
+      sent.length = 0;
+      // If the refresh had cleared `#greeted`, this roster event would greet p1
+      // all over again — a second full retry burst on every tab switch.
+      announcer.rosterChanged(["p1"]);
+      expect(sent).toEqual([]);
+    });
+
+    it("does not mark anyone greeted, so a peer refreshed first is still greeted properly", () => {
+      // The other direction, and the one that actually costs something. A
+      // refresh can reach a peer this announcer has not greeted yet — the page
+      // was switched to before the roster event landed. Marking it greeted there
+      // would make the roster event a no-op, and the peer would get ONE
+      // unacknowledged frame instead of the bounded retries it is owed. That is
+      // the original lost-hello failure, reintroduced by the repair for it.
+      const { sent, announcer, tick } = rig();
+      announcer.refreshPresent(["p1"]);
+      expect(sent.length).toBe(1);
+
+      announcer.rosterChanged(["p1"]);
+      expect(sent.length, "the roster event did not greet a peer that had only been refreshed").toBe(2);
+      expect(announcer.owed("p1")).toBe(LINK_CAPS_ANNOUNCE_ATTEMPTS - 1);
+      for (let i = 0; i < LINK_CAPS_ANNOUNCE_ATTEMPTS + 3; i++) tick();
+      expect(sent.length, "the bounded retries were skipped").toBe(1 + LINK_CAPS_ANNOUNCE_ATTEMPTS);
+    });
+
+    it("says nothing to a peer that is not present, and nothing at all when stopped", () => {
+      const { sent, announcer } = rig();
+      announcer.rosterChanged(["p1"]);
+      sent.length = 0;
+      announcer.refreshPresent([]);
+      expect(sent, "a refresh with an empty roster is not a broadcast").toEqual([]);
+
+      announcer.stop();
+      announcer.refreshPresent(["p1"]);
+      expect(sent, "a stopped announcer still spoke").toEqual([]);
+    });
+
+    it("is never the answer to a hello", () => {
+      // The structural property that keeps two clients from talking past each
+      // other forever: hearing from a peer RETIRES, it never sends. Stated here
+      // because `refreshPresent` is the first send path that is not driven by
+      // the roster, and wiring it into the receive path would be the ping-pong.
+      const { sent, announcer } = rig();
+      announcer.rosterChanged(["p1"]);
+      sent.length = 0;
+      announcer.didHearFrom("p1");
+      expect(sent).toEqual([]);
+    });
+
+    it("makes the pruned-sibling peer reachable again, end to end", () => {
+      // The whole defect, in the two objects that actually decide it. The other
+      // device's view is `recordPeerCaps`/`retainPeers`; this page's view is the
+      // announcer. Neither alone shows the deadlock.
+      const { sent, announcer } = rig();
+      const other = "b";
+      announcer.rosterChanged([other]);
+      // The other device hears this page and, at this point, can reach it.
+      for (const frame of sent) recordPeerCaps("a2", { caps: frame.caps });
+      announcer.didHearFrom(other);
+      expect(peerSupportsLink("a2")).toBe(true);
+
+      // …then its roster settles on the SIBLING, and this page's caps are pruned.
+      retainPeers(["a1"]);
+      expect(peerSupportsLink("a2"), "the prune is the precondition, not the bug").toBe(false);
+
+      // The sibling closes. The other device's roster falls back to this page,
+      // and this page's roster is unchanged — so nothing re-greets.
+      sent.length = 0;
+      announcer.rosterChanged([other]);
+      expect(sent, "the roster path cannot fix this: nothing about it changed").toEqual([]);
+      retainPeers(["a2"]);
+      expect(peerCapsKnown("a2"), "the other device has no announcement to show a card for").toBe(false);
+
+      // Becoming the current page is what breaks it.
+      announcer.refreshPresent([other]);
+      expect(sent.length).toBe(1);
+      for (const frame of sent) recordPeerCaps("a2", { caps: frame.caps });
+      expect(peerSupportsLink("a2")).toBe(true);
+    });
   });
 });

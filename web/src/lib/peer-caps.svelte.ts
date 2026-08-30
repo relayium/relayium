@@ -265,10 +265,12 @@ export interface CapsAnnouncerTimers {
  * ## One-way, by construction
  *
  * Announcing is driven ONLY by the roster gaining a peer this page has not
- * greeted, and by the bounded retry tick. Hearing from a peer never produces an
- * announcement — `didHearFrom` only RETIRES what is owed. That is what keeps two
- * clients from answering each other's hellos forever, and it is structural
- * rather than a rule somebody has to remember.
+ * greeted, by the bounded retry tick, and by this page becoming the current one
+ * (`refreshPresent`, which the user drives and which owes nothing afterwards).
+ * Hearing from a peer never produces an announcement — `didHearFrom` only
+ * RETIRES what is owed. That is what keeps two clients from answering each
+ * other's hellos forever, and it is structural rather than a rule somebody has
+ * to remember.
  *
  * ## Retirement
  *
@@ -316,6 +318,48 @@ export class CapsAnnouncer {
   didHearFrom(peerId: string): void {
     this.#pending.delete(peerId);
     if (this.#pending.size === 0) this.#disarm();
+  }
+
+  /**
+   * Say it once more to everyone present, without changing anything this
+   * announcer owes.
+   *
+   * ## The failure it repairs
+   *
+   * `#greeted` is this page's memory of who it has told. What it cannot know is
+   * that the LISTENER may have thrown the announcement away. `retainPeers`
+   * prunes a peer's caps the moment that peer leaves the roster — and two pages
+   * of one browser are one roster entry, so while page A1 represents the
+   * installation, A2 is not in the other device's roster and its hello is
+   * pruned. Close A1 and the roster falls back to A2: the other device now shows
+   * a peer it has no announcement for, i.e. "this device is too old", with no
+   * action on the card. A2's OWN roster never changed through any of it, so
+   * `rosterChanged` sees nothing new, `#greeted` still contains that peer, and
+   * the hello is never sent again. Neither side is waiting for anything; the
+   * device is simply unreachable for the life of the page.
+   *
+   * Becoming the current page is exactly the moment to fix that, and it is why
+   * this is driven from `watchCurrentPage` rather than from a timer: it is the
+   * transition after which this page is the one a peer is being offered.
+   *
+   * ## What it deliberately does NOT do
+   *
+   * It sends, and that is all. It does not mark anyone greeted, does not clear
+   * or create an entry in `#pending`, does not arm or restart the retry timer,
+   * and does not spend an attempt from the bounded budget a genuinely new peer
+   * is owed — a page that is switched to twice must not consume the retries that
+   * exist for a peer which has never answered. And it is never called from the
+   * receive path: answering a hello with a hello is the ping-pong `didHearFrom`
+   * exists to prevent, and this changes nothing about that.
+   *
+   * One frame per present peer per transition, which is the same cost as the
+   * `sendActivate` it travels with.
+   */
+  refreshPresent(peerIds: readonly string[]): void {
+    if (this.#stopped || !linkRoomActive()) return;
+    // Sorted, for the same reason the retry tick is: a run's frame order is
+    // then something a vector can pin.
+    for (const id of [...peerIds].sort()) this.#send(id, capsSignal());
   }
 
   /** A new socket: new peer ids, and a roster nobody has been greeted in. */

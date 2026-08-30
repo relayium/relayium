@@ -619,15 +619,19 @@ describe("the runners this lifecycle serves", () => {
 });
 
 /**
- * `mixed-link.mjs`'s own inventory: one scenario, twenty acts.
+ * `mixed-link.mjs`'s own inventory: two scenarios, twenty acts and five acts.
  *
  * `page-shell-contract.test.mjs` guards its runner from silently dropping a
  * scenario, and the same failure exists here one level down and is worse. That
- * suite has four scenarios, so counting them is a real check. This one has a
- * single `mixedScenario` that performs twenty distinct acts against one live
- * link — so `1/1` would be reported by a run that had been edited down to its
- * first assertion, and by a run whose 5 MiB resume act quietly stopped
- * executing. The literal that actually protects it is the ACT count.
+ * suite has four scenarios, so counting them is a real check. Here the twenty
+ * acts of `mixedScenario` all run against one live link — so `2/2` would be
+ * reported by a run that had been edited down to its first assertion, and by a
+ * run whose 5 MiB resume act quietly stopped executing. The literals that
+ * actually protect it are the two ACT counts, one per scenario.
+ *
+ * The counts are kept apart deliberately. A single flat list of twenty-five
+ * would report the same failure for "the multi-page journey never started" as
+ * for "act #21 was deleted", and those need different repairs.
  *
  * These are source-shape assertions, deliberately: the run they protect costs a
  * Go build, a real server and a headless Chrome, and is the one place in this
@@ -661,39 +665,63 @@ describe("mixed-link's scenario inventory and act ledger", () => {
     "explicit-disconnect",
   ];
 
-  it("declares exactly those acts, in that order, as one frozen literal", () => {
-    const match = src.match(/const ACTS = Object\.freeze\(\[([^\]]*)\]\);/);
-    expect(match, "ACTS is no longer a frozen array literal").not.toBeNull();
-    const listed = match[1].split(",").map((s) => s.trim().replace(/^"|"$/g, "")).filter(Boolean);
-    expect(listed).toEqual(ACT_NAMES);
-  });
+  /** The second scenario's frozen list, retyped for the same reason. */
+  const MULTIPAGE_ACT_NAMES = [
+    "multipage-one-device",
+    "multipage-focus-handover",
+    "multipage-request-follows-focus",
+    "multipage-fallback-on-close",
+    "multipage-sibling-reachable",
+  ];
+
+  for (const [name, expected] of [["ACTS", ACT_NAMES], ["MULTIPAGE_ACTS", MULTIPAGE_ACT_NAMES]]) {
+    it(`declares exactly ${name}'s acts, in that order, as one frozen literal`, () => {
+      const match = src.match(new RegExp(`const ${name} = Object\\.freeze\\(\\[([^\\]]*)\\]\\);`));
+      expect(match, `${name} is no longer a frozen array literal`).not.toBeNull();
+      const listed = match[1].split(",").map((s) => s.trim().replace(/^"|"$/g, "")).filter(Boolean);
+      expect(listed).toEqual(expected);
+    });
+  }
 
   it("records every one of them from an act() call, exactly once", () => {
-    for (const name of ACT_NAMES) {
+    for (const name of [...ACT_NAMES, ...MULTIPAGE_ACT_NAMES]) {
       const calls = src.match(new RegExp(`\\bact\\("${name}"`, "g")) ?? [];
       expect(calls, `${name} is declared but never recorded by an act() call`).toHaveLength(1);
     }
-    // And nothing records an act the frozen list does not name: `act()` throws
-    // on an unknown name at runtime, but a run that never reaches it would not
-    // find out, and this is free.
+    // And nothing records an act neither frozen list names: `act()` throws on an
+    // unknown name at runtime, but a run that never reaches it would not find
+    // out, and this is free. Order matters across the concatenation too — the
+    // multi-page acts must all sit after the mixed ones, i.e. in their own
+    // scenario, not interleaved into the first one's body.
     const recorded = [...src.matchAll(/\bact\("([a-z0-9-]+)"/g)].map((m) => m[1]);
-    expect(recorded).toEqual(ACT_NAMES);
+    expect(recorded).toEqual([...ACT_NAMES, ...MULTIPAGE_ACT_NAMES]);
   });
 
-  it("checks both counts against fixed literals, not against array lengths", () => {
-    expect(src).toMatch(/const EXPECTED_SCENARIO_COUNT = 1;/);
+  it("checks all three counts against fixed literals, not against array lengths", () => {
+    expect(src).toMatch(/const EXPECTED_SCENARIO_COUNT = 2;/);
     expect(src).toMatch(/const EXPECTED_ACT_COUNT = 20;/);
+    expect(src).toMatch(/const EXPECTED_MULTIPAGE_ACT_COUNT = 5;/);
     expect(src).toMatch(/ran !== EXPECTED_SCENARIO_COUNT/);
-    expect(src).toMatch(/ledger\.length !== EXPECTED_ACT_COUNT/);
+    expect(src).toMatch(/ledger\.length !== scenario\.expectedActs/);
+    // Each inventory entry must carry the LITERAL count, never the list's own
+    // length. This is the same trap one indirection further along: an entry
+    // written `expectedActs: ACTS.length` restores exactly the vacuous
+    // comparison the literals exist to prevent.
+    expect(src).toMatch(/expectedActs: EXPECTED_ACT_COUNT/);
+    expect(src).toMatch(/expectedActs: EXPECTED_MULTIPAGE_ACT_COUNT/);
+    expect(src, "an inventory entry took its expected act count from a mutable array length")
+      .not.toMatch(/expectedActs:\s*[A-Za-z_$][\w$.]*\.length/);
     // The comparisons this guard exists to forbid: an array and its own length
-    // still agree after somebody deletes an entry from it, so either of these
+    // still agree after somebody deletes an entry from it, so any of these
     // would report a clean run over a shrunken inventory.
     expect(src, "the scenario check fell back to the mutable array length").not.toMatch(
       /ran !== SCENARIOS\.length/,
     );
-    expect(src, "the act check fell back to the mutable array length").not.toMatch(
-      /ledger\.length !== ACTS\.length/,
-    );
+    for (const list of ["ACTS", "MULTIPAGE_ACTS", "scenario\\.acts", "expected"]) {
+      expect(src, `the act check fell back to ${list.replace("\\", "")}'s mutable length`).not.toMatch(
+        new RegExp(`ledger\\.length !== ${list}\\.length`),
+      );
+    }
   });
 
   it("counts scenarios with no catch between the call and the counter", () => {
@@ -713,14 +741,20 @@ describe("mixed-link's scenario inventory and act ledger", () => {
     expect(loopBody).toMatch(/ran\+\+/);
   });
 
-  it("runs the inventory rather than calling the scenario directly", () => {
+  it("runs the inventory rather than calling either scenario directly", () => {
     // `await mixedScenario(...)` straight from main() — which is what this file
-    // did before C3b-1 — bypasses both counts entirely, so the check is not
-    // "runScenarios exists" but "nothing calls the scenario around it".
+    // did before C3b-1 — bypasses every count, so the check is not "runScenarios
+    // exists" but "nothing calls a scenario around it".
     expect(src).toMatch(/await runScenarios\(session\.browser, base\);/);
-    expect(src).toMatch(/const SCENARIOS = \[mixedScenario\];/);
-    expect(src, "main() calls the scenario directly, around the inventory")
-      .not.toMatch(/await mixedScenario\(/);
+    // Both scenarios are listed, each beside the list and literal its ledger is
+    // judged against. A scenario present in the file but absent from here runs
+    // nowhere, and the scenario count would agree with its own absence.
+    expect(src).toMatch(/run: mixedScenario,\s*acts: ACTS,\s*expectedActs: EXPECTED_ACT_COUNT/);
+    expect(src).toMatch(/run: multiPageDeviceScenario,\s*\n\s*acts: MULTIPAGE_ACTS,\s*\n\s*expectedActs: EXPECTED_MULTIPAGE_ACT_COUNT/);
+    for (const fn of ["mixedScenario", "multiPageDeviceScenario"]) {
+      expect(src, `main() calls ${fn} directly, around the inventory`)
+        .not.toMatch(new RegExp(`await ${fn}\\(`));
+    }
     // Counting occurrences of the bare name is deliberately NOT done here: the
     // prose above it names the function several times, so that check would be
     // a comment-edit tripwire rather than a contract.
@@ -1331,6 +1365,516 @@ describe("mixed-link owns no private copy of a shared selector", () => {
 });
 
 /**
+ * Migration of `lan-transfer.mjs` unique #7: two pages of one browser are one
+ * device, and a request lands on the page the user is looking at.
+ *
+ * These are source-shape guards over an expensive real-browser proof, and they
+ * are written against the failure modes that would leave the journey **green
+ * while proving nothing**: seeds that make the two pages separate devices, a
+ * one-way focus check, a background latch that was never armed, an `includes`
+ * where an exact comparison is the whole point, and — the one this migration
+ * exists to prevent — quietly reverting to the retired per-card control or to
+ * reading raw signalling frames instead of rendered product UI.
+ *
+ * They do not claim to prove any of the browser behaviour themselves. What they
+ * freeze is the shape of the proof, so a later edit cannot narrow it silently.
+ */
+describe("mixed-link proves two pages of one browser are one device", () => {
+  const src = read("e2e/mixed-link.mjs");
+  const from = src.indexOf("async function multiPageDeviceScenario(");
+  const to = src.indexOf("\n}\n", from);
+  const body = src.slice(from, to === -1 ? undefined : to);
+
+  it("has a greppable scenario body for every check below to be scoped to", () => {
+    // Without this the slice above could silently become "" and every
+    // `not.toContain` beneath it would pass over an empty string.
+    expect(from, "multiPageDeviceScenario is no longer greppable").toBeGreaterThan(-1);
+    expect(to, "its body has no closing brace at column 0").toBeGreaterThan(from);
+    expect(body.length, "the scenario body sliced out empty").toBeGreaterThan(2_000);
+  });
+
+  it("gives the two pages one explicit shared seed and the third device another", () => {
+    // The single load-bearing fact of the whole scenario. `newTab` defaults to a
+    // fresh seed per tab, so two pages that did not explicitly share one are two
+    // independent devices — and then "B sees one entry" is trivially true, "no
+    // sibling in the roster" is trivially true, and the entire journey is green
+    // and vacuous. B's distinct seed is required to be explicit for the mirror
+    // reason: a B that accidentally shared the installation would be grouped in
+    // with A and could never be the independent observer.
+    expect(body).toMatch(/const installation = distinctLanSeed\(\);/);
+    expect(body).toMatch(/const otherDevice = distinctLanSeed\(\);/);
+    const seeded = [...body.matchAll(/newTab\(browser, base \+ "\/", boot, \{ lanSeed: (\w+) \}\)/g)]
+      .map((m) => m[1]);
+    expect(seeded, "the three pages are not all explicitly seeded").toEqual([
+      "installation", "installation", "otherDevice",
+    ]);
+    // A `newTab` here that takes the default seed is the exact regression above.
+    expect(body, "a page in this scenario was opened without an explicit seed")
+      .not.toMatch(/newTab\(browser, base \+ "\/", boot\)/);
+    expect(body).toMatch(/installation === otherDevice/);
+    // Three connections must also be three distinct peer ids, or every roster
+    // comparison below is comparing a name against itself.
+    expect(body).toMatch(/new Set\(Object\.values\(ids\)\)\.size !== 3/);
+  });
+
+  it("boots the roster observer before the app, with verification off", () => {
+    // Init script, not an after-the-fact evaluate: a `welcome` frame observed
+    // after the app has already joined is a `welcome` that was missed, and a
+    // missed one reads exactly like a page that never joined.
+    expect(body).toMatch(/const boot = VERIFY_DEFAULT \+ OBSERVE_ROSTER;/);
+    expect(src).toMatch(/const OBSERVE_ROSTER = `/);
+    for (const frame of ["welcome", "peers", "left"]) {
+      expect(src, `the roster observer stopped reading the ${frame} frame`)
+        .toContain(`e.type === "${frame}"`);
+    }
+    // Verification OFF is what makes an arrival assertion an assertion about
+    // routing rather than about a human clicking Accept. VERIFY_ON here would
+    // hang every composer wait on a consent gate.
+    expect(body, "this scenario opted into the verification gate it cannot answer")
+      .not.toContain("VERIFY_ON");
+  });
+
+  it("asserts exact rosters on both sides, never mere membership", () => {
+    // `includes(b)` would also pass for a page that listed its own sibling
+    // alongside B, which is the other half of the reported defect.
+    expect(body).toMatch(/const rosterIs = \(id\) => `JSON\.stringify\(window\.__roster\) ===/);
+    expect(body).toMatch(/rosterIs\(ids\.b\)/);
+    expect(body).toMatch(/bSees\.length !== 1 \|\| \(bSees\[0\] !== ids\.a1 && bSees\[0\] !== ids\.a2\)/);
+    expect(body, "a roster check softened into a membership test")
+      .not.toMatch(/window\.__roster\.includes\(/);
+  });
+
+  it("activates A2 and then A1, and requires the reverse direction to land", () => {
+    // A one-way check passes on "whichever page joined last represents the
+    // device", which is not the rule. The second activation is the one that
+    // fails on that implementation, so its presence AND its ordering are pinned.
+    const toA2 = body.indexOf("await activateTab(browser, a2);");
+    const seesA2 = body.indexOf("rosterIs(ids.a2)", toA2);
+    const toA1 = body.indexOf("await activateTab(browser, a1);", seesA2);
+    const seesA1 = body.indexOf("rosterIs(ids.a1)", toA1);
+    for (const [what, at] of [["activate A2", toA2], ["B sees A2", seesA2],
+      ["the reverse activation back to A1", toA1], ["B sees A1 again", seesA1]]) {
+      expect(at, `${what} is missing; the handover check would be one-way`).toBeGreaterThan(-1);
+    }
+    expect(seesA2).toBeGreaterThan(toA2);
+    expect(toA1).toBeGreaterThan(seesA2);
+    expect(seesA1).toBeGreaterThan(toA1);
+    // A real activation, not a stubbed visibility flag — `activateTab` drives
+    // Chrome's own target activation, which is what the app's current-page logic
+    // actually reads.
+    expect(body, "focus was simulated instead of actually moved")
+      .not.toMatch(/visibilityState\s*=|dispatchEvent\(new Event\('visibilitychange'/);
+  });
+
+  it("requires the handover to move nobody, before and after", () => {
+    // A product that re-represented the device by dropping the old page and
+    // rejoining would satisfy every roster assertion above, and would drop live
+    // links every time the user switched tabs. Read on both sides, so a `left`
+    // that was already there cannot absorb one the handover caused.
+    expect(body).toMatch(/const leftBeforeHandover = await departuresOfOurs\(\);/);
+    expect(body).toMatch(/leftBeforeHandover\.length !== 0/);
+    expect(body).toMatch(/const leftAfterHandover = await departuresOfOurs\(\);/);
+    expect(body).toMatch(/leftAfterHandover\.length !== 0/);
+    // The departure ledger is narrowed to this scenario's own three pages, and
+    // to nothing else. It has to be — the previous scenario closes its tabs
+    // immediately before this one opens its own, so an unrestricted ledger
+    // carries stragglers. Narrowing it to a SET OF IDS keeps every assertion
+    // exact; narrowing it any other way (a count, a slice, "the last one") would
+    // quietly turn the exact comparisons below into membership tests.
+    expect(body).toMatch(/const owned = JSON\.stringify\(\[ids\.a1, ids\.a2, ids\.b\]\);/);
+    expect(body).toMatch(
+      /const departuresOfOurs = \(\) => b\.evaluate\(`window\.__leftPeers\.filter\(\(id\) => \$\{owned\}\.includes\(id\)\)`\);/,
+    );
+    const before = body.indexOf("const leftBeforeHandover");
+    const after = body.indexOf("const leftAfterHandover");
+    expect(before).toBeLessThan(body.indexOf("await activateTab(browser, a2);"));
+    expect(after).toBeGreaterThan(body.indexOf("await activateTab(browser, a1);"));
+  });
+
+  it("arms the background latch before the request and demands it saw a live DOM", () => {
+    const armed = body.indexOf("await a2.evaluate(ARM_BACKGROUND_LATCH);");
+    const clicked = body.indexOf("OPEN_WORKSPACE}').click()", armed);
+    expect(armed, "the background latch is never armed").toBeGreaterThan(-1);
+    expect(clicked, "no request is opened after the latch is armed").toBeGreaterThan(armed);
+
+    // Latched, not sampled: a card that appeared and vanished is the same defect
+    // as one that stayed, and a single read afterwards misses exactly that case.
+    expect(src).toMatch(/const ARM_BACKGROUND_LATCH = `\(\(\) => \{/);
+    expect(src).toContain("new MutationObserver(look).observe(document.body, { childList: true, subtree: true })");
+
+    // The anti-vacuity half. Every other counter is asserted to be zero, and
+    // zero is also what an unarmed latch, or one whose selectors match nothing,
+    // reports. `chooser` counts a control the background page certainly has.
+    expect(body).toMatch(/!\(background\.ticks > 0\) \|\| !\(background\.chooser > 0\)/);
+    expect(body).toMatch(
+      /background\.panel !== 0 \|\| background\.composer !== 0 \|\| background\.request !== 0 \|\| background\.head !== 0/,
+    );
+    // A final timing-independent sample, rather than trusting that a mutation
+    // happened to fire last.
+    expect(body).toContain("window.__e2eBackgroundLook(); return window.__e2eBackground;");
+  });
+
+  it("proves arrival from rendered product UI, not from signalling frames", () => {
+    // The shortcut this migration must not take. "B sent a request frame" is not
+    // "the focused page received it"; the whole reported defect is a request
+    // that was signalled correctly and rendered on the wrong page.
+    expect(body).toMatch(
+      /await a1\.waitFor\("!!document\.querySelector\('\.msgpanel textarea'\)", "the FOCUSED page \(A1\)/,
+    );
+    expect(body).toMatch(/await b\.waitFor\("!!document\.querySelector\('\.msgpanel textarea'\)"/);
+    for (const raw of ["__signalFrames", "__advertisedCaps", "RTCPeerConnection"]) {
+      expect(body, `${raw} is being read as a stand-in for a rendered arrival`)
+        .not.toContain(raw);
+    }
+    // And the observer itself must not grow a frame recorder that a later edit
+    // could assert against instead of the DOM.
+    expect(src.slice(src.indexOf("const OBSERVE_ROSTER = `"), src.indexOf("const ARM_BACKGROUND_LATCH")))
+      .not.toContain("__signalFrames");
+  });
+
+  it("drives the current link/1 surface and never the retired per-card control", () => {
+    // The migration rule for the whole stranded tail: do not restore the deleted
+    // controls, and do not assert against a surface no user can reach. The
+    // legacy scenario clicked `.peer-actions button`; the current product offers
+    // exactly one action, `.open-workspace`.
+    const opens = body.match(/document\.querySelector\('\$\{OPEN_WORKSPACE\}'\)\.click\(\)/g) ?? [];
+    expect(opens, "the two workspaces are no longer opened through the product's own control")
+      .toHaveLength(2);
+    for (const legacy of [".peer-actions button", ".file-pick-input", "MSG_OPEN_BTN", "STRIP_LINK_CAP"]) {
+      expect(body, `${legacy} is a retired control this scenario must not reach for`)
+        .not.toContain(legacy);
+    }
+  });
+
+  it("names exactly the closed page as gone, and exactly the sibling as the fallback", () => {
+    // `includes(a1)` alone also passes when the SURVIVING page was reported gone
+    // too, which is how "the device fell back" and "the device vanished and
+    // something else appeared" get confused. The exact comparison is what a
+    // fabricated or over-broad departure fails.
+    expect(body).toMatch(/window\.__leftPeers\.includes\(\$\{JSON\.stringify\(ids\.a1\)\}\)/);
+    expect(body).toMatch(
+      /JSON\.stringify\(departed\) !== JSON\.stringify\(\[ids\.a1\]\)/,
+    );
+    // The fallback is read back exactly AFTER its wait: the wait proves the
+    // roster arrived, the read proves it is the whole roster and not one live
+    // entry sitting beside a stale dead id.
+    const waited = body.indexOf("rosterIs(ids.a2), \"the device to fall back");
+    const readBack = body.indexOf("const afterClose = await b.evaluate(\"window.__roster\")");
+    expect(waited, "the fallback wait is gone").toBeGreaterThan(-1);
+    expect(readBack, "the fallback is never read back exactly").toBeGreaterThan(waited);
+    expect(body).toMatch(/JSON\.stringify\(afterClose\) !== JSON\.stringify\(\[ids\.a2\]\)/);
+    // And the close itself is a real target close, not a simulated one.
+    expect(body).toMatch(/Target\.closeTarget", \{ targetId: a1\.targetId \}/);
+  });
+
+  // The chooser-recovery helper, from its shared constants through the end of
+  // the function. The constants are part of the contract — `HEAD_CONTROLS` is
+  // what makes "answer whatever the product is offering" enumerable instead of
+  // hand-written — so the slice starts at them rather than at the `async
+  // function` line.
+  const helperFrom = src.indexOf("const CHOOSER_ONLY =");
+  const helperFn = src.indexOf("async function returnToChooser(");
+  const helper = src.slice(helperFrom, from);
+
+  it("answers whichever single control the header offers, and never nothing", () => {
+    // A page-close leaves B holding a workspace whose peer is gone, and which of
+    // the two headers it renders depends on how far the link has settled:
+    // `.wh-disconnect` while `mixed-session.svelte.ts` still holds it
+    // `interrupted`, `.wh-restart` once it is terminal. Both are legitimate
+    // starting points, so the helper answers whichever is on screen — and must
+    // never "succeed" by finding neither and doing nothing.
+    expect(helperFrom, "the helper's shared constants are gone").toBeGreaterThan(-1);
+    expect(helperFn, "returnToChooser is gone").toBeGreaterThan(helperFrom);
+    expect(src).toMatch(/async function returnToChooser\(tab, who\)/);
+
+    // Both controls, and reached through ONE frozen roster rather than two
+    // hand-written branches: a third control appearing in `WorkspaceHeader`
+    // then has one place to be taught, instead of being silently walked past.
+    expect(helper).toMatch(/const HEAD_CONTROLS = Object\.freeze\(\[/);
+    expect(helper).toMatch(/action: "restart", selector: `\$\{HEAD\} \.wh-restart`/);
+    expect(helper).toMatch(/action: "disconnect", selector: `\$\{HEAD\} \.wh-disconnect`/);
+
+    // "The chooser came back" is head-gone AND exactly one action, not merely a
+    // chooser button existing somewhere beside a workspace that still holds the
+    // screen.
+    expect(helper).toMatch(/!document\.querySelector\('\$\{HEAD\}'\) && document\.querySelectorAll\('\$\{OPEN_WORKSPACE\}'\)\.length === 1/);
+
+    // Both refusals, explicit: nothing answerable on screen, and an action the
+    // frozen roster does not contain.
+    expect(helper).toMatch(/if \(took === "nothing"\)/);
+    expect(helper).toContain("showed neither the chooser nor an answerable workspace head");
+    expect(helper).toMatch(/if \(!HEAD_CONTROLS\.some\(\(c\) => c\.action === took\)\)/);
+    expect(helper).toContain("answered an unknown workspace control");
+
+    expect(body).toMatch(/const answered = await returnToChooser\(b, "B"\);/);
+  });
+
+  it("stays one answer, not a retry loop built for a transition nobody observed", () => {
+    // The correction this revision carries. An earlier version of this helper
+    // clicked repeatedly, on the theory that Disconnect was asynchronously
+    // followed by a terminal `.wh-restart` card. A third acceptance run with a
+    // diagnostic disproved it: after Disconnect the head is simply GONE, and
+    // what was missing was the chooser's action, because B had pruned the
+    // surviving page's capability hello. Recovery machinery for a transition
+    // that does not happen is a second place for this journey to hang, so its
+    // absence is pinned rather than left to be re-added by the next timeout.
+    expect(helper, "the recovery grew an unbounded answering loop again")
+      .not.toMatch(/for \(;;\)|while \(true\)/);
+    expect(helper, "the helper is accumulating an ordered trace of clicks again")
+      .not.toMatch(/taken\.push\(/);
+    // One click, taken once, from one evaluate.
+    const clicks = helper.match(/el\.click\(\)/g) ?? [];
+    expect(clicks, "the helper clicks a workspace control more than once").toHaveLength(1);
+  });
+
+  it("bounds it with one deadline, reports the failing state, and never sleeps", () => {
+    // ONE deadline shared by both waits — finding the control, then the chooser
+    // coming back — rather than a literal on each. Two literals is how a
+    // "bounded" helper quietly becomes 2 × 30s.
+    expect(helper).toMatch(/const CHOOSER_RECOVERY_BUDGET_MS = /);
+    expect(helper).toMatch(/const deadline = Date\.now\(\) \+ CHOOSER_RECOVERY_BUDGET_MS;/);
+    expect(helper).toMatch(/const left = \(\) => Math\.max\(1, deadline - Date\.now\(\)\);/);
+    // BOTH waits spend it — the search for a control, and the chooser coming
+    // back after one is answered. A literal on either is the bound doubling.
+    const waits = helper.match(/await tab\.waitFor\(/g) ?? [];
+    expect(waits.length, "the helper's wait count changed; re-check both spend the budget").toBe(2);
+    const budgeted = helper.match(/\bleft\(\)[,)]/g) ?? [];
+    expect(budgeted.length, "a wait in the helper is not spending the shared budget").toBe(2);
+    expect(helper, "a wait inside the recovery was given its own literal timeout")
+      .not.toMatch(/waitFor\([\s\S]*?\d_?\d*_000/);
+
+    // Every refusal says what was on screen, from a read taken while the tab is
+    // still alive. This is what turned two identical-looking timeouts into an
+    // actual diagnosis, so `unsupported` — the counter that named the real
+    // defect — is part of the contract, not incidental detail.
+    expect(helper).toMatch(/const HEAD_STATE = `\(\(\) => \{/);
+    expect(helper).toMatch(/unsupported: document\.querySelectorAll\('\.pa-unsupported'\)\.length/);
+    expect(helper).toMatch(/const onScreen = async \(\) => \{/);
+    const reported = helper.match(/on screen: \$\{await onScreen\(\)\}/g) ?? [];
+    expect(reported.length, "a refusal path that does not report what was on screen")
+      .toBeGreaterThanOrEqual(3);
+
+    // And no arbitrary sleep anywhere in it. A pause "to let it settle" passes
+    // on a build where the chooser never returns, which is the whole failure
+    // this helper exists to catch.
+    for (const stall of ["setTimeout", "sleep(", "delay(", "new Promise"]) {
+      expect(helper, `${stall} is an arbitrary wait, not a product condition`)
+        .not.toContain(stall);
+    }
+  });
+
+  it("ends by proving the surviving page is genuinely usable, on both sides", () => {
+    // "The roster fell back" is not "the device still works". The second
+    // workspace has to reach the sibling AND open the opener's own composer, or
+    // the fallback is cosmetic.
+    const second = body.indexOf("const answered = await returnToChooser");
+    const regained = body.indexOf(
+      "B to be offered exactly one enabled action for the surviving page", second,
+    );
+    const a2Composer = body.indexOf("the surviving page to receive the next request", regained);
+    const bComposer = body.indexOf("B's composer on the second workspace", a2Composer);
+    // Regaining the action is asserted at the CALL SITE, after the recovery and
+    // before the click. It is the product-visible form of the defect this
+    // revision fixes — a B still missing the survivor's capability hello reaches
+    // this point with zero actions and a `.pa-unsupported` line — so it must not
+    // be left implicit inside `returnToChooser`, where a later edit could soften
+    // it without this act noticing.
+    expect(regained, "the act no longer requires B to regain exactly one enabled action")
+      .toBeGreaterThan(second);
+    expect(body).toMatch(
+      /`\(\$\{CHOOSER_ONLY\}\) && !document\.querySelector\('\$\{OPEN_WORKSPACE\}'\)\.disabled`/,
+    );
+    expect(a2Composer, "the second link never has to reach the sibling").toBeGreaterThan(regained);
+    expect(bComposer, "the opener's own composer is not proved on the second link").toBeGreaterThan(a2Composer);
+    // A timeout here looks like a dozen unrelated faults, so the diagnosis is
+    // captured while the pages are still alive — including the counter that
+    // named the real defect the first two runs failed on.
+    expect(body).toContain("diagnostics=");
+    expect(body).toMatch(/unsupported: document\.querySelectorAll\('\.pa-unsupported'\)\.length/);
+    expect(body).toMatch(/const errs = \[\.\.\.a2\.errors, \.\.\.b\.errors\]/);
+  });
+
+  it("makes the surviving page current before requiring it to be reachable", () => {
+    // Not a cosmetic focus step. B pruned A2's capability hello while A1
+    // represented the installation, and A2's own roster never changed — so the
+    // ONLY thing that re-states it is A2 becoming the current page
+    // (`refreshPresent`, sent beside `sendActivate`). Move this activation after
+    // the recovery, or drop it, and act 5 goes back to failing the way two real
+    // runs did.
+    const closed = body.indexOf("Target.closeTarget\", { targetId: a1.targetId }");
+    const activated = body.indexOf("await activateTab(browser, a2);", closed);
+    const recovered = body.indexOf("const answered = await returnToChooser", activated);
+    expect(closed, "the represented page is never closed").toBeGreaterThan(-1);
+    expect(activated, "the surviving page is never made current after the close")
+      .toBeGreaterThan(closed);
+    expect(recovered, "the recovery no longer follows that activation").toBeGreaterThan(activated);
+  });
+
+  it("performs its five acts in the frozen order, each after its own assertions", () => {
+    // Membership and count are pinned by the inventory suite; what is pinned
+    // here is that the calls sit in the scenario in that order, so an act moved
+    // above the assertions it reports cannot pass.
+    const order = [
+      "multipage-one-device",
+      "multipage-focus-handover",
+      "multipage-request-follows-focus",
+      "multipage-fallback-on-close",
+      "multipage-sibling-reachable",
+    ];
+    const at = order.map((name) => body.indexOf(`act("${name}"`));
+    at.forEach((i, n) => expect(i, `${order[n]} is not recorded inside this scenario`).toBeGreaterThan(-1));
+    expect([...at].sort((x, y) => x - y), "the multi-page acts were reordered").toEqual(at);
+    // Anchored to the work each one reports: the handover act must come after
+    // both activations, and the fallback act after the close.
+    expect(at[1]).toBeGreaterThan(body.indexOf("await activateTab(browser, a1);"));
+    expect(at[3]).toBeGreaterThan(body.indexOf("Target.closeTarget\", { targetId: a1.targetId }"));
+    // And the ledger is returned, or the runner has nothing to compare.
+    expect(body).toMatch(/return ledger;/);
+    expect(body).toMatch(/const \{ ledger, act \} = newLedger\(MULTIPAGE_ACTS\);/);
+  });
+
+  it("keeps the twenty-act journey intact beside it", () => {
+    // This slice adds a scenario; it does not edit the one that was already
+    // hosted. Both ledgers are built by the same factory, so the duplicate and
+    // unknown-name guards cannot exist in one and be forgotten in the other.
+    expect(src).toMatch(/const \{ ledger, act \} = newLedger\(ACTS\);/);
+    expect(src).toMatch(/function newLedger\(acts\)/);
+    expect(src).toMatch(/is not one of this scenario's frozen acts/);
+    expect(src).toMatch(/was recorded twice/);
+  });
+});
+
+/**
+ * The product fix that journey is the acceptance case for: a page that becomes
+ * the current one re-states what it speaks.
+ *
+ * ## The defect, confirmed rather than guessed
+ *
+ * Two real acceptance runs of the multi-page journey failed at act 5, and the
+ * first diagnosis — an asynchronous `.wh-disconnect` → `.wh-restart` header
+ * transition the helper had not modelled — was **wrong**. A third run carrying a
+ * temporary diagnostic settled it: after A1 closes and B answers Disconnect, B's
+ * raw roster is exactly `[A2]`, the workspace head is absent, the open-workspace
+ * count is **zero**, and one `.pa-unsupported` card says A2 is too old to talk
+ * to.
+ *
+ * The cause is one-sided pruning. `retainPeers` drops a peer's announcement when
+ * that peer leaves the roster, and two pages of one browser are ONE roster
+ * entry — so while A1 represented the installation, B pruned A2's hello. A2's
+ * own roster never changed through any of it, so `CapsAnnouncer` still counts B
+ * greeted and its roster path can never send again. Neither side is waiting for
+ * anything, and the device is unreachable for the life of the page.
+ *
+ * ## Why the contract is here
+ *
+ * `caps-vectors.test.ts` pins the announcer's behaviour, and `mixed-link.mjs`
+ * proves the journey in a real browser at the cost of a Go build and a headless
+ * Chrome. What neither covers cheaply is the WIRING: that the one product
+ * transition which re-states the hello still does so, alongside the activation
+ * it travels with, and still does not do any of the things that would turn a
+ * repair into a broadcast storm or a ping-pong.
+ */
+describe("becoming the current page re-states this build's capabilities", () => {
+  const app = read("src/App.svelte");
+  const caps = read("src/lib/peer-caps.svelte.ts");
+  const currentPage = read("src/lib/current-page.ts");
+
+  it("does both things on a current-page transition, from one callback", () => {
+    // `sendActivate` makes this page the one a peer is OFFERED; the hello is
+    // what lets the peer act on the offer. Splitting them, or keeping only the
+    // first, is exactly the state the diagnostic found: B is pointed at A2 and
+    // has no announcement to render an action from.
+    const m = app.match(/onMount\(\(\) => watchCurrentPage\(\(\) => \{([\s\S]*?)\n  \}\)\);/);
+    expect(m, "the current-page watch is no longer a single greppable callback").not.toBeNull();
+    const cb = m[1];
+    expect(cb).toMatch(/signaling\.sendActivate\(\);/);
+    expect(cb).toMatch(/capsAnnouncer\.refreshPresent\(otherPeerIds\(\)\);/);
+    // One socket guard for both, so a page cannot activate without announcing.
+    expect(cb).toMatch(/if \(!signaling\) return;/);
+  });
+
+  it("announces to the roster minus self, through the same expression the roster path uses", () => {
+    // Two hand-written filters are two chances to disagree about who "everyone
+    // else" is — and announcing to `selfId` is a frame the server bounces and a
+    // hello this page would record about itself.
+    expect(app).toMatch(
+      /const otherPeerIds = \(\) => peers\.filter\(\(p\) => p\.id !== selfId\)\.map\(\(p\) => p\.id\);/,
+    );
+    expect(app).toMatch(/capsAnnouncer\.rosterChanged\(otherPeerIds\(\)\);/);
+    const uses = app.match(/otherPeerIds\(\)/g) ?? [];
+    expect(uses.length, "the two announcement paths no longer share one roster expression")
+      .toBe(2);
+  });
+
+  it("fires on a genuine transition only, and never on initial mount", () => {
+    // The edge lives in `current-page.ts` and is what keeps this from being a
+    // second join-time broadcast: the join frame already carries the state, and
+    // focus/visibility events arrive in bursts.
+    expect(currentPage).toMatch(/let announced = isCurrentPage\(doc\);/);
+    expect(currentPage).toMatch(/if \(announced\) return;\n\s*announced = true;\n\s*onBecomeCurrent\(\);/);
+    // A page that starts current must not call back before an event arrives.
+    const watch = currentPage.slice(currentPage.indexOf("export function watchCurrentPage("));
+    const calls = watch.match(/onBecomeCurrent\(\)/g) ?? [];
+    expect(calls.length, "watchCurrentPage gained a second call site for its callback").toBe(1);
+    expect(watch, "watchCurrentPage now announces at startup as well as on the edge")
+      .not.toMatch(/return \(\) => \{[\s\S]*onBecomeCurrent\(\)/);
+  });
+
+  it("never answers a hello with a hello", () => {
+    // The structural rule that keeps two clients from talking past each other
+    // for the life of the room. The receive path may only RETIRE.
+    const receive = app.slice(app.indexOf("if (recordPeerCaps(from, data)) {"));
+    const branch = receive.slice(0, receive.indexOf("return;"));
+    expect(branch).toMatch(/capsAnnouncer\.didHearFrom\(from\);/);
+    expect(branch, "the caps receive path now sends an announcement back")
+      .not.toContain("refreshPresent");
+    // And there is exactly ONE caller in the whole app: the current-page edge.
+    const callers = app.match(/refreshPresent\(/g) ?? [];
+    expect(callers.length, "refreshPresent gained a second call site").toBe(1);
+  });
+
+  it("sends once and owes nothing: no greeted, pending, budget or timer touched", () => {
+    // The announcer's whole value is that it is bounded and retires. A refresh
+    // that re-greeted would restart a full retry burst on every tab switch; one
+    // that consumed `#pending` would eat the attempts a peer which has never
+    // answered is still owed; one that armed the timer would put periodic work
+    // back into a settled, idle tab.
+    const at = caps.indexOf("  refreshPresent(peerIds: readonly string[]): void {");
+    expect(at, "refreshPresent is gone or no longer greppable").toBeGreaterThan(-1);
+    const end = caps.indexOf("\n  }\n", at);
+    expect(end, "refreshPresent has no closing brace").toBeGreaterThan(at);
+    const method = caps.slice(at, end);
+
+    expect(method).toMatch(/if \(this\.#stopped \|\| !linkRoomActive\(\)\) return;/);
+    expect(method).toMatch(/for \(const id of \[\.\.\.peerIds\]\.sort\(\)\) this\.#send\(id, capsSignal\(\)\);/);
+    for (const forbidden of ["#greeted", "#pending", "#arm", "#disarm", "#announce", "#handle", "#timers"]) {
+      expect(method, `refreshPresent touches ${forbidden}, so it does not merely send`)
+        .not.toContain(forbidden);
+    }
+    // Exactly one send statement: "once to each present peer", not a burst.
+    const sends = method.match(/this\.#send\(/g) ?? [];
+    expect(sends.length, "refreshPresent sends more than once per peer").toBe(1);
+  });
+
+  it("leaves the fail-closed link/1 admission exactly as it was", () => {
+    // The repair is about re-DELIVERING an announcement, never about relaxing
+    // what counts as one. A peer that has not announced this precise version is
+    // still unsupported, and an unannounced peer is still never probed.
+    expect(caps).toMatch(
+      /export function peerSupportsLink\(peerId: string\): boolean \{\n\s*if \(!linkRoomActive\(\)\) return false;\n\s*return \(announced\[peerId\] \?\? \[\]\)\.includes\(CAP_LINK\);\n\}/,
+    );
+    expect(caps).toMatch(
+      /export function advertisedCaps\(\): readonly string\[\] \{\n\s*return linkRoomActive\(\) \? \[CAP_LINK, CAP_PREUPLOAD\] : \[\];\n\}/,
+    );
+    // And an old or non-announcing peer is unchanged: still pruned per roster,
+    // still two-valued, still never inferred from `text/1`.
+    expect(caps).toMatch(/export function retainPeers\(ids: string\[\]\): void \{/);
+    expect(caps, "refreshPresent must not have grown a default announcement for silent peers")
+      .not.toMatch(/announced\[peerId\] \?\? \[CAP_LINK/);
+  });
+});
+
+/**
  * The announcement-capture handshake in `mixed-link.mjs`.
  *
  * Why a contract lives here at all: the SAS assertion it protects only fails
@@ -1484,12 +2028,23 @@ describe("mixed-link's live-region observer announces when it is ready", () => {
    */
   it("waits for that flag before every mark, and marks before opening every link", () => {
     const src = read(MIXED);
-    const waits = indices(src, "await announcementsReady(tab, who);");
-    const marks = indices(src, "await announcedCount(");
-    const opens = indices(src, "OPEN_WORKSPACE}').click()");
+    // Scoped to `mixedScenario`'s body, because the handshake is a rule about
+    // reading the live region and that is the only scenario that reads it. The
+    // scoping is not a loophole: the guard immediately below fails if the
+    // multi-page scenario ever starts asserting on announcements, at which point
+    // its own link opens have to come back under this state machine.
+    const from = src.indexOf("async function mixedScenario(");
+    const to = src.indexOf("\n}\n", from);
+    expect(from, "mixedScenario is no longer greppable").toBeGreaterThan(-1);
+    expect(to, "mixedScenario's body has no closing brace at column 0").toBeGreaterThan(from);
+    const inScenario = (i) => i >= from && i < to;
+
+    const waits = indices(src, "await announcementsReady(tab, who);").filter(inScenario);
+    const marks = indices(src, "await announcedCount(").filter(inScenario);
+    const opens = indices(src, "OPEN_WORKSPACE}').click()").filter(inScenario);
     expect(waits.length, "no readiness wait left in mixed-link").toBeGreaterThanOrEqual(2);
     expect(marks.length).toBeGreaterThanOrEqual(2);
-    expect(opens.length, "mixed-link no longer opens two links").toBeGreaterThanOrEqual(2);
+    expect(opens.length, "mixedScenario no longer opens two links").toBeGreaterThanOrEqual(2);
 
     // The backstop for the call site someone adds later without a wait: taking a
     // mark is itself guarded, so a missed wait fails as its own sentence instead
@@ -1521,6 +2076,22 @@ describe("mixed-link's live-region observer announces when it is ready", () => {
       // says nothing about a page this scenario may later reload.
       ready = false;
       marked = false;
+    }
+  });
+
+  it("justifies that scoping: the multi-page scenario reads no announcements", () => {
+    // The paired half of the scoping above. Restricting the state machine to
+    // `mixedScenario` is only honest while the other scenario genuinely has no
+    // announcement machinery in it; the moment one appears, its link opens are
+    // subject to the same handshake and this fails until the scoping is widened.
+    const src = read(MIXED);
+    const from = src.indexOf("async function multiPageDeviceScenario(");
+    const to = src.indexOf("\n}\n", from);
+    expect(from, "multiPageDeviceScenario is no longer greppable").toBeGreaterThan(-1);
+    expect(to).toBeGreaterThan(from);
+    const body = src.slice(from, to);
+    for (const helper of ["announcementsReady", "announcedCount", "announcedSince", "TRACK_ANNOUNCEMENTS"]) {
+      expect(body, `${helper} is used outside the state machine that orders it`).not.toContain(helper);
     }
   });
 

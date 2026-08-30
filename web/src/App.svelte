@@ -646,9 +646,14 @@
   // the repeat, the retirement on an answer, and the timer that stops when
   // nothing is owed.
   const capsAnnouncer = new CapsAnnouncer((peerId, signal) => signaling?.sendSignal(peerId, signal));
+  /** Everyone in the room except this page. One expression, because the roster
+   *  change and the current-page refresh below must not be able to disagree
+   *  about who "the other peers" are — and because announcing to `selfId` would
+   *  be a frame the server bounces and a hello this page recorded about itself. */
+  const otherPeerIds = () => peers.filter((p) => p.id !== selfId).map((p) => p.id);
   function broadcastCaps() {
     if (!signaling) return;
-    capsAnnouncer.rosterChanged(peers.filter((p) => p.id !== selfId).map((p) => p.id));
+    capsAnnouncer.rosterChanged(otherPeerIds());
   }
   // Begin this room's measurement. The pool must already be assigned: `reset`
   // closes the gate against it. Measuring starts HERE, at room join, and it is
@@ -1680,7 +1685,24 @@
   // transition (see watchCurrentPage) — every announcement spends a frame from
   // this connection's server-side budget. The join frame carries the initial
   // state, so nothing is sent at startup.
-  onMount(() => watchCurrentPage(() => { if (signaling) signaling.sendActivate(); }));
+  //
+  // The capability hello rides with it, for a reason that is the same defect one
+  // layer up. `sendActivate` makes this page the one a peer is OFFERED; whether
+  // that peer can act on the offer depends on it still holding this page's
+  // announcement — and it may not. Peer caps are pruned per roster
+  // (`retainPeers`), and two pages of one browser are one roster entry, so while
+  // the sibling represented the device this page's hello was thrown away on the
+  // other side. Nothing re-sends it: this page's own roster never changed, so
+  // `CapsAnnouncer` still counts that peer greeted. The other device is then
+  // handed a peer it has no announcement for and shows "this device is too old",
+  // with no action to take — permanently. `refreshPresent` says it once more and
+  // owes nothing afterwards: no retry budget spent, no timer armed, no greeted
+  // state touched (see peer-caps.svelte.ts).
+  onMount(() => watchCurrentPage(() => {
+    if (!signaling) return;
+    signaling.sendActivate();
+    capsAnnouncer.refreshPresent(otherPeerIds());
+  }));
 
   onMount(() => {
     // Guard tab/logo navigation and tab-close while a transfer is live: navigating
