@@ -280,10 +280,15 @@ export function readMacAppStoreRelease({ repoRoot }) {
  * Every Mac App Store claim in a document: a Markdown link whose target is the
  * canonical product page.
  *
- * The link is what makes the claim identifiable. Once both channels sit at the
- * same version — 1.3.8 on each since 2026-08-26 — the version literal alone
- * carries no information about which channel a sentence is talking about, and
- * the href is the only part of the prose that does.
+ * The link is what makes the claim identifiable, and it is the only thing that
+ * works in every state. Whenever the two channels sit at the same version — as
+ * they did from 2026-08-26, when the App Store record caught up to the direct
+ * download at 1.3.8 — the version literal alone carries no information about
+ * which channel a sentence is talking about, and the href is the only part of
+ * the prose that does. When they are apart, which is the ordinary state of two
+ * independent release lines, the href still identifies the claim exactly. So
+ * this is not a rule that expires the next time the numbers diverge; the
+ * numbers are simply not what it reads.
  */
 function appStoreClaimPattern(url) {
   return new RegExp(`\\[[^\\]\\n]*\\]\\(${quoteRegExp(url)}\\)`, "g");
@@ -373,12 +378,18 @@ export async function syncCliReleaseHistory({ repoRoot, tagTable } = {}) {
  *     human edits it when the App Store side actually moves.
  *
  * What this pattern CANNOT do is the reason `bumpReleaseDocs` no longer applies
- * it to whole documents. The published App Store version is 1.3.8 and so is the
- * published Developer ID version; from 2026-08-26 the two channels name the same
- * number, and no amount of look-around can tell "1.3.8 on the Mac App Store"
- * from "1.3.8 direct download" — they differ by which product the sentence links
- * to, not by how the digits are spelled. `appStoreClaimPattern` carves those
- * links out and this pattern runs on what is left.
+ * it to whole documents. The two macOS channels are versioned independently, so
+ * they may name the same number: they did from 2026-08-26, when the App Store
+ * record caught up to the direct download at 1.3.8. In that state no amount of
+ * look-around can tell "1.3.8 on the Mac App Store" from "1.3.8 direct
+ * download" — they differ by which product the sentence links to, not by how the
+ * digits are spelled. `appStoreClaimPattern` carves those links out and this
+ * pattern runs on what is left.
+ *
+ * A later divergence does not retire that scoping. The channels come apart again
+ * as soon as direct 1.3.9 publishes against a still-public 1.3.8 App Store, and
+ * they collide again the next time a submitted build goes live. The carve-out is
+ * unconditional precisely so nothing has to notice which state is current.
  */
 function releaseVersionPattern(version, { global = true } = {}) {
   const escaped = version.replace(/\./g, "\\.");
@@ -494,12 +505,21 @@ function assertAppStoreClaims(doc, text, release) {
  * ── The Mac App Store claim, which must NOT move ────────────────────────────
  * Until 2026-08-26 this was safe by accident. The App Store literal in these
  * documents was 1.3.1 while the Developer ID release was 1.3.8, so a bump keyed
- * on 1.3.8 could not reach it however blunt it was. Both channels are at 1.3.8
- * now. Every occurrence of `from` in these documents is ambiguous, and a bump to
- * 1.3.9 would rewrite "1.3.8 on the Mac App Store" into a public claim about a
- * build Apple has never reviewed — the same class of untrue distribution claim
- * the surface guards exist to prevent, produced by the tool that assembles the
- * release.
+ * on 1.3.8 could not reach it however blunt it was. On 2026-08-26 the App Store
+ * record caught up and both channels read 1.3.8. Every occurrence of `from` in
+ * these documents was then ambiguous, and the 1.3.9 bump would have rewritten
+ * "1.3.8 on the Mac App Store" into a public claim about a build Apple had never
+ * reviewed — the same class of untrue distribution claim the surface guards
+ * exist to prevent, produced by the tool that assembles the release.
+ *
+ * The channels come apart again the moment direct 1.3.9 publishes against a
+ * still-public 1.3.8 App Store — which is the state the release run staged — and
+ * that is the ordinary condition of two independent release lines rather than a
+ * reason to relax anything. The next Apple release collides them again with no
+ * commit here to mark it, so none of the scoping below consults whether the two
+ * versions currently agree. `macos-release-candidate.test.mjs` synthesizes the
+ * collision instead of waiting for it, after release run 33305160556 failed on a
+ * test that had asserted the momentary equality rather than this behaviour.
  *
  * So the bump is scoped: `web/mac-app-store-release.json` says which version the
  * App Store is at, the claims that link the product page are carved out of the

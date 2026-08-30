@@ -51,20 +51,63 @@ const { macos } = JSON.parse(
 const PUBLISHED = macos.version;
 /** A version that is not published anywhere, which is what it moves TO. */
 const NEXT = "9.9.9";
+/** And the one after that, for the cases that bump twice. Not published either,
+ *  and not `NEXT`'s prefix or suffix. */
+const LATER = "9.9.10";
 
 /**
  * The OTHER published macOS channel, which a Developer ID bump must never move.
  *
- * As of 2026-08-26 the two channels are at the SAME version — 1.3.8 on both —
- * and that is precisely why this file grew the cases below. While the App Store
- * literal was a stale 1.3.1 the version pattern could not reach it by accident;
- * now every occurrence of `PUBLISHED` in the READMEs is ambiguous, and a blind
- * rewrite turns "the App Store is at 1.3.8", which is true, into "the App Store
- * is at 1.3.9", which is a public claim about a build Apple has never reviewed.
+ * The two channels are versioned independently, so whether they currently name
+ * the SAME number is a fact about today, not a property of the tool. Three
+ * states have already occurred:
+ *
+ *   * Apart by accident. The App Store literal sat at a stale 1.3.1 while the
+ *     direct download reached 1.3.8, so a bump keyed on 1.3.8 could not reach
+ *     the App Store sentence however blunt it was. Nothing was protecting it.
+ *   * Together, on 2026-08-26, when the App Store record caught up to 1.3.8.
+ *     Every occurrence of the published version in the READMEs became
+ *     ambiguous, only the App Store LINK distinguished them, and a blind
+ *     rewrite would have turned "the App Store is at 1.3.8", which is true,
+ *     into "the App Store is at 1.3.9", a public claim about a build Apple has
+ *     never reviewed. That is the collision these cases exist for.
+ *   * Apart again, legitimately, the moment direct 1.3.9 publishes while Apple
+ *     still serves 1.3.8 — the state release run 33305160556 staged, and the
+ *     ordinary state of two independent release lines. Not a defect, and not
+ *     the end of the guard.
+ *
+ * So nothing below may assert which of those states is live. An earlier version
+ * of this file opened the protection case by requiring `APP_STORE.version` to
+ * equal `PUBLISHED`, and release run 33305160556 failed on exactly that line
+ * after staging direct 1.3.9 against a still-public 1.3.8 App Store: the guard
+ * was working, and the test asserted the transient premise instead of the
+ * behaviour. The collision is SYNTHESIZED below rather than waited for, so the
+ * protection is proven in every state the repository can be in.
  */
 const APP_STORE = JSON.parse(
   await readFile(resolve(process.cwd(), "mac-app-store-release.json"), "utf8"),
 );
+
+/** The two documents that state the App Store version as a literal, and are
+ *  therefore the ones a Developer ID bump could falsify. */
+const CLAIM_DOCS = ["README.md", "apps/README.md"];
+
+const quoteRegExp = (literal) => literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Every Mac App Store claim in a document: a Markdown link to the product page.
+ *
+ * The LINK identifies the claim, not the version literal — which is the whole
+ * reason the protection keeps working through a collision, and the reason these
+ * cases can compare claims before and after a bump without knowing whether the
+ * two channels currently agree.
+ */
+const APP_STORE_CLAIM = new RegExp(
+  `\\[([^\\]\\n]*)\\]\\(${quoteRegExp(APP_STORE.url)}\\)`,
+  "g",
+);
+
+const appStoreClaims = (text) => text.match(APP_STORE_CLAIM) ?? [];
 
 /** A throwaway copy of the release documents and the App Store record they are
  *  checked against, so the real ones are never written by a test run. */
@@ -83,6 +126,50 @@ async function stagedDocs({ appStore = APP_STORE } = {}) {
     );
   }
   return root;
+}
+
+/**
+ * A staged copy in which the Mac App Store channel sits at `version` — the
+ * record and the claims that quote it moved together, which is the only
+ * self-consistent state `bumpReleaseDocs` accepts.
+ *
+ * Only the link TEXT is rewritten; the product URL is rebuilt from the record,
+ * so this can never manufacture a claim the protection would fail to recognize
+ * and then congratulate itself for protecting. Asking for the version the
+ * record already names is a deliberate no-op, so a caller may use this to reach
+ * a state the live repository happens to already be in.
+ */
+async function stagedDocsWithAppStoreAt(version) {
+  const root = await stagedDocs({ appStore: { ...APP_STORE, version } });
+  for (const doc of CLAIM_DOCS) {
+    const path = resolve(root, doc);
+    const before = await readFile(path, "utf8");
+    const after = before.replace(
+      APP_STORE_CLAIM,
+      (_claim, label) => `[${label.replaceAll(APP_STORE.version, version)}](${APP_STORE.url})`,
+    );
+    const claims = appStoreClaims(after);
+    // The restaging is proven, not assumed. A helper that silently found no
+    // claims would hand every case below a tree with nothing to protect, and
+    // they would all pass.
+    expect(claims.length, `${doc} carries no App Store claim to restage`).toBeGreaterThan(0);
+    for (const claim of claims) {
+      expect(claim, `${doc}'s restaged App Store claim does not name ${version}`)
+        .toContain(version);
+    }
+    await writeFile(path, after, "utf8");
+  }
+  return root;
+}
+
+/** Read one document out of a staged tree. */
+const stagedDoc = (root, doc) => readFile(resolve(root, doc), "utf8");
+
+/** The App Store claims of both claim documents, keyed by document. */
+async function claimsByDoc(root) {
+  const claims = {};
+  for (const doc of CLAIM_DOCS) claims[doc] = appStoreClaims(await stagedDoc(root, doc));
+  return claims;
 }
 
 const macTags = (text) => new Set([...text.matchAll(/macos-v[0-9]+(?:\.[0-9]+){1,2}/g)].map((m) => m[0]));
@@ -128,45 +215,125 @@ describe("bumping the documents that name the published macOS release", () => {
   });
 
   it("does not rewrite the independently versioned Mac App Store claim", async () => {
-    // THE regression this file exists to hold, and the reason it is no longer
-    // theoretical. The App Store literal used to be 1.3.1 while the direct
-    // download was 1.3.8, so the version pattern could not reach it however
-    // blunt it was. Both channels are at 1.3.8 now, which means every occurrence
-    // of `PUBLISHED` in these documents is ambiguous and only the App Store LINK
-    // distinguishes the one sentence that must not move.
+    // THE regression this file exists to hold, driven against the REPOSITORY'S
+    // OWN documents and records in whatever state they are in today. Whether
+    // the App Store version currently equals the published direct version is
+    // not asserted and must not be: both are real states of two independent
+    // release lines, and the claim has to survive either. The collision itself
+    // is synthesized by the case below, which is what carries the guarantee
+    // when the channels happen to be apart.
     //
     // Every claim is compared, in both documents, before and after. A bump that
     // moved one of the root README's two would still leave the other correct and
     // read as green under a containment check.
-    expect(APP_STORE.version, "the collision this test is about no longer holds")
-      .toBe(PUBLISHED);
     const root = await stagedDocs();
-    const claims = (text) =>
-      [...text.matchAll(new RegExp(`\\[[^\\]]*\\]\\(${APP_STORE.url.replace(/[.?*+^$[\]\\(){}|/-]/g, "\\$&")}\\)`, "g"))]
-        .map((m) => m[0]);
 
     const before = {};
-    for (const doc of ["README.md", "apps/README.md"]) {
-      before[doc] = claims(await readFile(resolve(repoRoot, doc), "utf8"));
+    for (const doc of CLAIM_DOCS) {
+      before[doc] = appStoreClaims(await readFile(resolve(repoRoot, doc), "utf8"));
       expect(before[doc].length, `${doc} carries no App Store claim to protect`)
         .toBeGreaterThan(0);
       for (const claim of before[doc]) {
-        expect(claim, `${doc}'s App Store claim does not name a version`)
+        expect(claim, `${doc}'s App Store claim does not name the record's version`)
           .toContain(APP_STORE.version);
       }
     }
 
     await bumpReleaseDocs({ repoRoot: root, from: PUBLISHED, to: NEXT });
 
-    for (const doc of ["README.md", "apps/README.md"]) {
-      const after = await readFile(resolve(root, doc), "utf8");
-      expect(claims(after), `${doc}'s App Store claim followed the Developer ID bump`)
+    const after = await claimsByDoc(root);
+    for (const doc of CLAIM_DOCS) {
+      expect(after[doc], `${doc}'s App Store claim followed the Developer ID bump`)
         .toEqual(before[doc]);
-      expect(after, `${doc} lost the App Store product link`).toContain(APP_STORE.url);
-      // And the direct claim really did move, so the assertion above is not
+      const text = await stagedDoc(root, doc);
+      expect(text, `${doc} lost the App Store product link`).toContain(APP_STORE.url);
+      // Still the record's version, stated positively rather than only as an
+      // equality against `before` — a bump that rewrote the App Store version in
+      // BOTH documents identically would satisfy the comparison above.
+      for (const claim of after[doc]) {
+        expect(claim, `${doc}'s App Store claim drifted off the record`)
+          .toContain(APP_STORE.version);
+      }
+      // And the direct claim really did move, so the assertions above are not
       // passing because the bump did nothing at all.
-      expect(after, `${doc} did not move the Developer ID claim`)
+      expect(text, `${doc} did not move the Developer ID claim`)
         .toContain(`macos-v${NEXT}`);
+    }
+  });
+
+  it("protects the App Store claim when the two channels collide again", async () => {
+    // The 2026-08-26 state, synthesized rather than waited for.
+    //
+    // On that day the App Store record caught up to the direct download and
+    // both channels read 1.3.8. Every occurrence of the published version in
+    // these documents was then ambiguous: only the App Store LINK told "1.3.8
+    // on the Mac App Store", which is true, from "1.3.8 direct download", which
+    // a bump has to move. The channels diverge again as soon as direct 1.3.9
+    // publishes against a still-public 1.3.8 App Store, and from then on the
+    // case above cannot reach that state on its own — and a guard that only
+    // fires while two independently versioned numbers happen to coincide is
+    // exactly the guard nobody can trust on the day they next do.
+    //
+    // Asking for `PUBLISHED` puts the App Store at the direct version whatever
+    // the live records say, so this is a true collision in every state.
+    const root = await stagedDocsWithAppStoreAt(PUBLISHED);
+
+    const before = await claimsByDoc(root);
+    for (const doc of CLAIM_DOCS) {
+      expect(before[doc].length, `${doc} carries no collided App Store claim`)
+        .toBeGreaterThan(0);
+      for (const claim of before[doc]) {
+        expect(claim, `${doc}'s claim is not at the collided version`).toContain(PUBLISHED);
+      }
+    }
+
+    await bumpReleaseDocs({ repoRoot: root, from: PUBLISHED, to: NEXT });
+
+    const after = await claimsByDoc(root);
+    for (const doc of CLAIM_DOCS) {
+      expect(after[doc], `${doc}'s App Store claim followed the Developer ID bump`)
+        .toEqual(before[doc]);
+      const text = await stagedDoc(root, doc);
+      // The version the bump was keyed on is still standing inside the link,
+      // and it is standing there BECAUSE of the link: this is the one state in
+      // which nothing else in the sentence could have saved it.
+      for (const claim of after[doc]) {
+        expect(claim, `${doc}'s App Store claim left the collided version`)
+          .toContain(PUBLISHED);
+      }
+      expect(text, `${doc} did not move the Developer ID claim`).toContain(`macos-v${NEXT}`);
+      expect(text, `${doc} left a superseded direct download tag`)
+        .not.toContain(`macos-v${PUBLISHED}`);
+    }
+  });
+
+  it("holds the App Store claim still across two consecutive divergent bumps", async () => {
+    // Divergence is the ordinary state, and a release does not stop at one.
+    // With the App Store record left exactly where the repository has it, the
+    // first bump may or may not collide with it — that depends on the day —
+    // but the second one provably cannot, because `NEXT` is a version no
+    // channel has ever published. Running both proves the protection is not a
+    // one-shot property of a freshly staged tree: the claim has to survive a
+    // document that a previous bump already rewrote around it.
+    //
+    // This is also the case that keeps the suite honest after direct 1.3.9 is
+    // published while the App Store stays at 1.3.8. Nothing in it depends on
+    // which version either channel names.
+    const root = await stagedDocs();
+
+    const before = await claimsByDoc(root);
+    await bumpReleaseDocs({ repoRoot: root, from: PUBLISHED, to: NEXT });
+    expect(await claimsByDoc(root), "the first bump moved an App Store claim").toEqual(before);
+
+    await bumpReleaseDocs({ repoRoot: root, from: NEXT, to: LATER });
+    expect(await claimsByDoc(root), "the second bump moved an App Store claim").toEqual(before);
+
+    // And both bumps really landed, so the two comparisons above are not
+    // passing against a document nothing ever rewrote.
+    for (const doc of CLAIM_DOCS) {
+      const text = await stagedDoc(root, doc);
+      expect(text, `${doc} did not reach the second version`).toContain(`macos-v${LATER}`);
+      expect(text, `${doc} kept the intermediate tag`).not.toContain(`macos-v${NEXT}`);
     }
   });
 
@@ -263,20 +430,13 @@ describe("bumping the documents that name the published macOS release", () => {
     // on to a version the direct channel is not at, nothing in the documents is
     // ambiguous any more and an ordinary bump has to keep working — including
     // the protected link, which simply does not match `from`.
-    const root = await stagedDocs({ appStore: { ...APP_STORE, version: "1.4.0" } });
-    for (const doc of ["README.md", "apps/README.md"]) {
-      const text = await readFile(resolve(root, doc), "utf8");
-      await writeFile(resolve(root, doc), text.replaceAll(
-        `[${APP_STORE.version}](${APP_STORE.url})`,
-        `[1.4.0](${APP_STORE.url})`,
-      ).replaceAll(
-        `[${APP_STORE.version} on the Mac App Store](${APP_STORE.url})`,
-        `[1.4.0 on the Mac App Store](${APP_STORE.url})`,
-      ), "utf8");
-    }
+    //
+    // `1.4.0` is ahead of both channels in every state, so the divergence here
+    // is deterministic rather than a reading of today's records.
+    const root = await stagedDocsWithAppStoreAt("1.4.0");
     await bumpReleaseDocs({ repoRoot: root, from: PUBLISHED, to: NEXT });
-    for (const doc of ["README.md", "apps/README.md"]) {
-      const after = await readFile(resolve(root, doc), "utf8");
+    for (const doc of CLAIM_DOCS) {
+      const after = await stagedDoc(root, doc);
       expect(after, `${doc} did not move the Developer ID claim`).toContain(`macos-v${NEXT}`);
       expect(after, `${doc} moved the App Store claim`).toContain(`[1.4.0](${APP_STORE.url})`);
     }
