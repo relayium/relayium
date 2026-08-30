@@ -52,7 +52,7 @@ function lastmods(sitemapXml) {
 // nine. That was invisible while the nine locales moved together and became a
 // false statement the moment they stopped: the 2026-08-14 freeze left the seven
 // archived privacy translations at 2026-08-13, and the maintained pair moved to
-// 2026-08-28, so /ja/privacy/ was telling crawlers it had been revised on a day
+// 2026-08-30, so /ja/privacy/ was telling crawlers it had been revised on a day
 // its prose did not change.
 describe("localized legal URLs are dated from their own locale", () => {
   const dated = lastmods(buildSitemap([privacy], { home: false }));
@@ -70,7 +70,7 @@ describe("localized legal URLs are dated from their own locale", () => {
     // These are the two dates that must actually appear, and the split between
     // them is the whole point of the fix.
     for (const lang of MAINTAINED_LANGS) {
-      expect(dated.get(`https://relayium.com${urlPath("privacy", lang)}`), lang).toBe("2026-08-28");
+      expect(dated.get(`https://relayium.com${urlPath("privacy", lang)}`), lang).toBe("2026-08-30");
     }
     for (const lang of FROZEN_LANGS) {
       expect(dated.get(`https://relayium.com${urlPath("privacy", lang)}`), lang).toBe("2026-08-13");

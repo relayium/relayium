@@ -255,7 +255,7 @@ describe("maintained copy describes one native app, because there is one", () =>
     // frozen translation whose prose did not change must not silently claim it
     // was reviewed on a day nobody reviewed it.
     for (const lang of MAINTAINED_LANGS)
-      expect(privacy.langs[lang].updated, `${lang} last-updated`).toBe("2026-08-28");
+      expect(privacy.langs[lang].updated, `${lang} last-updated`).toBe("2026-08-30");
     for (const lang of FROZEN_LANGS)
       expect(privacy.langs[lang].updated, `${lang} last-updated`).toBe("2026-08-13");
   });
