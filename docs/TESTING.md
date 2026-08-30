@@ -155,10 +155,9 @@ per-file SHA-256 integrity, consent state machines, live-state accessibility sca
 and teardown are all driven by those two — on the unified `link/1` surface that
 replaced the fork, and `code-room.mjs` runs in hosted CI on every push.
 
-The audit originally listed **eight** current unique assertions as stranded.
-Seven of those rows have since changed status, so the live count is **one
-stranded, four hosted migrations, one local migration awaiting hosted CI, and
-two retired**:
+The audit originally listed **eight** current unique assertions as stranded. All
+eight rows have since changed status, so the live count is **none stranded, five
+hosted migrations, one local migration awaiting hosted CI, and two retired**:
 
 | # | Unique assertion | Status |
 |---|---|---|
@@ -168,8 +167,13 @@ two retired**:
 | 4 | Response race (responder accepts while the initiator is still taking ownership) | **retired** — see below |
 | 5 | Pre-open PeerConnection failure (`failed` before the DataChannel opens) | **retired** — see below |
 | 6 | Live `role="progressbar"` accessibility during an in-flight transfer | **hosted migration** (C3b-1, exact-main `129e4cd`) |
-| 7 | Multi-page device identity and focus (two pages of one browser plus a third device) | **migrated locally; awaiting hosted CI** (C3b-7) |
-| 8 | Bounded relay-pool failure (credentials issued from the pool, then discarded) | stranded |
+| 7 | Multi-page device identity and focus (two pages of one browser plus a third device) | **hosted migration** (C3b-7, exact-main `c7b83dc4`) |
+| 8 | Bounded relay-pool failure (credentials issued from the pool, then discarded) | **migrated locally; awaiting hosted CI** (C3b-8) |
+
+"None stranded" is a statement about the migration inventory, not about
+`lan-transfer.mjs`, which still exists and still cannot run. Deleting it is
+Stage 4 below, and it waits until all three current scenarios are green on
+hosted `main`.
 
 **Row 1's wording is corrected here, and the correction matters — the retired
 runner was stronger than the audit's phrasing suggested.** The audit named it
@@ -393,13 +397,14 @@ recording:
   `EXPECTED_SCENARIO_COUNT`. A `1/1` scenario count would otherwise be reported
   by a run edited down to its first assertion. `e2e/go-server.test.mjs` pins that
   shape, and pins that the live scan sits between the accept and the forced
-  close. C3b-7 adds a **second** scenario rather than a twenty-first act, so
-  there are now two frozen lists and two literal counts — `ACTS`/
-  `EXPECTED_ACT_COUNT` (20) and `MULTIPAGE_ACTS`/`EXPECTED_MULTIPAGE_ACT_COUNT`
-  (5) — with `EXPECTED_SCENARIO_COUNT` at 2. They are kept apart deliberately: a
-  single flat list of twenty-five would report the same failure for "the
-  multi-page journey never started" as for "one act was deleted", and those need
-  different repairs.
+  close. C3b-7 adds a **second** scenario rather than a twenty-first act, and
+  C3b-8 a **third**, so there are now three frozen lists and three literal
+  counts — `ACTS`/`EXPECTED_ACT_COUNT` (20),
+  `MULTIPAGE_ACTS`/`EXPECTED_MULTIPAGE_ACT_COUNT` (5) and
+  `RELAY_ACTS`/`EXPECTED_RELAY_ACT_COUNT` (4) — with `EXPECTED_SCENARIO_COUNT`
+  at 3. They are kept apart deliberately: a single flat list of twenty-nine would
+  report the same failure for "one journey never started" as for "one act was
+  deleted", and those need different repairs.
 - *Shared selectors:* the consent card and the transfer card are now written once
   in `e2e/dom-contracts.mjs` (`RECEIVE`, `XFER`) beside `QUEUED`, and asserted
   against real rendered markup by `ReceiveActions.test.ts` and against
@@ -797,9 +802,14 @@ which earlier revisions of this section wrongly claimed it did not. Seven files:
 `web/e2e/README.md`. No workflow, package, dependency, native or ops file
 changed.
 
-**Verification status: locally verified end to end, including the real browser
-journey; not yet run in hosted CI.** Row 7 therefore stays a local migration
-awaiting hosted CI, and nothing below is an exact-main or hosted claim.
+**Verification status: green locally, and hosted on exact-main
+`c7b83dc413b44713771c54495ef8c7e95d28a209`.** The source merged through PR #93;
+its merge-gate run `33285623243` passed every selected lane including
+`mixed-link-e2e`, and exact-main Web run `33285787562` passed all five jobs,
+including the 25-act mixed-link runner. Row 7 is therefore hosted coverage
+rather than a local migration awaiting CI. The author's local evidence, recorded
+before that merge, follows unchanged; it remains the record of what was run by
+hand, not a hosted claim.
 
 The three pre-fix runs are recorded above, with the defect they found. Two facts
 from them belong here. Run 1 reached **20/20** mixed-link acts and multi-page acts
@@ -843,21 +853,160 @@ the way into a real browser rather than stopping at the contracts:
   Restoring `mixed-link.mjs` returned exact SHA `43ea22da`.
 
 Every mutation was reverted to its exact pre-mutation content, which is why this
-slice's diff is still the seven files named above. What none of it covers: the
-hosted lane. `mixed-link-e2e` has not run this scenario on `main`, so row 7 is
-not hosted coverage yet.
+slice's diff is still the seven files named above. That pass predates the merge;
+the hosted evidence that closed row 7 is the PR and exact-main runs recorded in
+the verification-status paragraph above.
 
-**Stage 3 — bounded relay failure.** Unique #7 moved in C3b-7, so #8 is what
-remains of this stage. It is last because it needs setup the other stages do not:
-the pool-shaped `/api/ice` response plus an unreachable TURN host and a probe
-budget that actually elapses.
+**C3b-8 — an unmeasurable relay pool is still used, and the connection it cannot
+complete still ends.** Unique #8 is the last row, and like #7 it arrives as its
+own scenario rather than as more acts: it needs an `/api/ice` answer installed on
+both tabs *before boot*, and the twenty-act journey's entire point is a link that
+works. A tab cannot have both. The existing twenty and five acts are untouched;
+the diff adds a third scenario beside them.
+
+The field failure it covers: a cross-network transfer sat at "establishing an
+encrypted connection", 0%, and reported a connection failure ~30s later, with
+clean server logs. The cause was not the timeout. The app used the relay pool
+only when `measureRelay` had picked a winner; when the probe timed out — routine
+on a phone, where a radio waking from idle plus TURN long-term credentials' two
+Allocate round trips eat the budget — it fell back to reading the **legacy
+top-level `iceServers`** for a relay. A "only my own nodes" user, and any
+node-pool deployment, has no top-level TURN at all, so the transport policy fell
+back to `all`, the freshly-issued pool credentials were dropped on the floor, and
+both peers were left with host/srflx candidates that cannot cross CGNAT.
+
+The setup is the scenario, so it is stated exactly. Both pages boot with a
+`fetch` that answers **only** `/api/ice`, with a pool-shaped body: STUN alone at
+the top level, and one relay inside `relays` whose single TURN URL is
+`192.0.2.1` — RFC 5737 TEST-NET-1, reserved for documentation and advertised by
+nobody, so the Allocate genuinely never completes. A hostname would not do: an
+unresolvable name fails in milliseconds on some resolvers and hangs on others,
+and neither is "a relay that is up and unreachable". The issued credentials are
+deliberately **not** of the TURN REST `<unix-expiry>:<token>` form, because
+`relayDeadline` reads an expiry out of that shape and arms a client-side terminal
+bound on it — a REST-shaped username would let the link end on a *credential
+clock* while this scenario reported a bounded end to an *impossible transport*.
+
+Its four acts, in frozen order:
+
+1. *`relay-pool-only-ice`* — both pages really asked for and ran on that answer
+   (a page that never fetched it would run on an empty ICE list and satisfy "no
+   relay was selected" for a reason that has nothing to do with the defect), the
+   answer still carries **no top-level relay**, and page A is offered exactly one
+   enabled `.open-workspace` action. The runner refuses to start on an answer
+   with a legacy top-level TURN rather than trusting its own constant to stay a
+   `stun:` URL: one added there would relay the link even on a build that threw
+   the pool away, i.e. pass while broken.
+2. *`relay-probe-spent-its-budget`* — the probe genuinely ran and genuinely
+   finished. Waited on an observable product fact, never slept through:
+   `measureRelay` closes its connection in a `finally`, so "every connection this
+   page has built is closed" is the page's own statement that measurement is
+   over, while a sleep of the same length passes just as happily on a build that
+   never probed. Each captured configuration is then checked to *be* a probe of
+   this pool — relay-only, that one relay, those credentials — rather than merely
+   counted. The captures are then cleared and **the clearing is read back**,
+   because everything below rests on the array being empty at the moment of the
+   click.
+3. *`relay-only-link-attempt`* — the product's own control opens the workspace,
+   and the connection it builds must keep the black-hole relay **with the exact
+   credentials that were issued**, under `iceTransportPolicy: "relay"`. Each of
+   those three passes alone while the product is still broken: no relay at all is
+   the reported failure; a relay URL with the credentials dropped allocates
+   nothing; a relay present under policy `all` spends ~20s on candidates that
+   cannot work before falling back to it. The act also requires the top-level
+   **STUN** to be in that configuration, which proves two further things without
+   a second observer — `chooseRtcConfig` builds the no-selection fallback by
+   *merging* the top-level list with the pool, so the STUN marker is present in
+   the product's configuration and in no probe's, and a *selected* relay would
+   have used that relay's list alone with no STUN in it. That is how "this
+   capture belongs to the attempt, not to a probe" and "the black-hole relay was
+   never selected" are both settled.
+4. *`relay-bounded-named-failure`* — the link cannot come up, and what it must
+   not do is stay at "connecting" for ever or silently unmount and hand back the
+   chooser with the failure reported nowhere. A **live** workspace header is
+   proved first, and its sentence read, because a workspace that never appeared
+   and one that failed both render zero `.wh-disconnect`. The terminal read-back
+   is then made in product terms: the header is still there, it offers exactly
+   one `.wh-restart` and no `.wh-disconnect`, it no longer claims a path, and its
+   sentence has actually **changed** from the connecting one — which is the
+   locale-independent part, since "it says something" is satisfied by a header
+   still saying "connecting".
+
+Everything after the click spends **one** deadline, `RELAY_FAILURE_BUDGET_MS`,
+and that budget is deliberately larger than the product's own worst-case terminal
+bound (`SETUP_DEADLINE_MS` is 90s in `webrtc.ts`; the link request and the
+authentication step are 30s each). The runner's bound has to be the outer one, or
+a red run cannot distinguish "the product never terminated" — the whole defect —
+from "the runner ran out of patience first". The elapsed time is reported in the
+act line, so a run that passed at 119s is visibly different from one that passed
+at 35s.
+
+**What this does not prove.** It is desktop Chromium against a reserved address,
+not a phone and not a real cross-network path or NAT. The legacy scenario spoofed
+an Android user agent and that has deliberately **not** been carried over: the UA
+changed nothing about the code under test — `chooseRtcConfig` never reads it — so
+keeping it would have dressed a desktop result up as a mobile one. The mobile
+pressure that makes the probe time out in the field is replaced by a relay that
+cannot answer at all, which is the same input to the same decision. There is also
+no console-error sweep in this scenario, deliberately: it asks Chromium to
+allocate against an address nothing answers, and asserting silence would be
+asserting on the browser's logging rather than on the product.
+
+*What the diff touches:* four files, all tests and documentation —
+`web/e2e/mixed-link.mjs`, `web/e2e/go-server.test.mjs`, this document and
+`web/e2e/README.md`. No product source, workflow, package, dependency, native or
+ops file changed, and `lan-transfer.mjs` is deliberately left in place.
+
+**Verification status: independently validated locally — including the real
+browser journey, the whole Web suite, `npm run check` and the production build —
+but not yet run in hosted CI.** Row 8 stays a local migration awaiting hosted CI
+until `mixed-link-e2e` has run the third scenario on `main`, so nothing in this
+section is an exact-main or hosted claim. What was run, on the final source:
+
+| Command | Result |
+|---|---|
+| `node --check` on `e2e/mixed-link.mjs` and `e2e/go-server.test.mjs` | **pass** — both parse clean. Worth running by hand: no gate parses `e2e/mixed-link.mjs` (`go-server.test.mjs` reads it as *text*). |
+| focused `npx vitest run e2e/go-server.test.mjs` | **pass** — **136/136**, including this scenario's new contracts |
+| `node e2e/mixed-link.mjs` (self-started server) | **pass** — **20/20 mixed-link acts, then 5/5 multi-page device identity acts, then 4/4 bounded relay-failure acts**. The probe was captured **once**, and the black-hole link reached its named `Connection failed` terminal card in **30.9s** — a bound the product met itself, far inside the runner's 120s `RELAY_FAILURE_BUDGET_MS` rather than at it. |
+| `npx vitest run` (whole Web suite) | **pass** — 233 files, 4441 tests, 2 files / 3 tests skipped |
+| `npm run check` | **pass** — 0 errors, 0 warnings |
+| `npm run build` | **pass** — 447 generated pages, 12 per-route SPA shells |
+
+The contracts were then checked against deliberate mutations, applied one at a
+time and each restored before the next, so they are known not to pass vacuously:
+
+- Deleting the top-level **STUN marker** check from the link-attempt act failed
+  **one** contract — that check is what separates the product's merged fallback
+  configuration from a probe's, and from a *selected* relay's.
+- Changing `POOL_STUN` from a `stun:` URL to a `turn:` one failed **one**: the
+  pool answer would have grown a legacy top-level relay, the exact shape that
+  relays the link even on a build that throws the pool away.
+- Replacing one of the shared `left()` budgets with a literal `120000` failed
+  **one**. One deadline is the claim; a literal per wait is how a bounded
+  failure quietly becomes 3 × 120s.
+- Deleting the observable closed-probe wait failed **one**. Waiting on a product
+  fact rather than sleeping is what makes "the probe really ran and really
+  finished" mean anything.
+- Deleting the final act, `relay-bounded-named-failure`, failed **two**.
+
+Every mutation was restored, and the restored files hash back to the reviewed
+source — SHA-256 prefixes `7da4db13` for `e2e/mixed-link.mjs` and `97cd90f7` for
+`e2e/go-server.test.mjs` — which is why this slice's diff is still the four files
+named above.
+
+**Stage 3 — bounded relay failure: migrated locally in C3b-8, awaiting hosted
+CI.** Unique #7 moved in C3b-7 and #8 was what remained of this stage. It came
+last because it needed setup the other stages did not: the pool-shaped
+`/api/ice` response, an unreachable TURN host, and a probe budget that actually
+elapses.
 
 **Stage 4 — delete `lan-transfer.mjs` and its `test:e2e` npm script.** Only after
-the hosted `main` is green with stages 1–3 landed. Deleting earlier would drop the
-uniques still stranded in it — one after #1/#2/#3/#6/#7 moved and #4/#5 retired with the
-deterministic evidence recorded above; keeping it after is worse
-than useless — a script that cannot exit zero teaches everyone to ignore a red
-run.
+hosted `main` is green with stages 1–3 landed, which as of C3b-8 means only after
+the third scenario has passed `mixed-link-e2e` on `main`. Deleting earlier would
+drop the unique still awaiting that run — none remains stranded now that
+#1/#2/#3/#6/#7/#8 have moved and #4/#5 were retired with the deterministic
+evidence recorded above; keeping it after is worse than useless — a script that
+cannot exit zero teaches everyone to ignore a red run.
 
 Two things this migration must not do. It must not restore the deleted controls,
 and it must not add a downgrade switch. What remains genuinely legacy-specific is
@@ -880,9 +1029,12 @@ different status:
 
 So the source-level half is guarded and the rendered half is not. That gap is
 narrow — the source guard makes it structurally hard for a legacy transport to
-come back — but it is a gap, and the browser-side unsupported-peer shape is
-waiting on the stage-3 migration alongside unique #8. Nothing there needs a legacy
-transfer to be performed, because there is no longer a legacy transfer to perform.
+come back — but it is a gap, and it is now the **only** thing left in this tail
+that has not been migrated. It used to be described as waiting on stage 3
+alongside unique #8; #8 moved in C3b-8, so the browser-side unsupported-peer
+shape is what remains, and it is a separate piece of work rather than part of any
+numbered row above. Nothing there needs a legacy transfer to be performed,
+because there is no longer a legacy transfer to perform.
 
 Each migrated assertion must be run and shown green before this document may call
 it automated again. An assertion edited until it stops throwing, with no recorded

@@ -674,7 +674,17 @@ describe("mixed-link's scenario inventory and act ledger", () => {
     "multipage-sibling-reachable",
   ];
 
-  for (const [name, expected] of [["ACTS", ACT_NAMES], ["MULTIPAGE_ACTS", MULTIPAGE_ACT_NAMES]]) {
+  /** The third scenario's frozen list, retyped for the same reason. */
+  const RELAY_ACT_NAMES = [
+    "relay-pool-only-ice",
+    "relay-probe-spent-its-budget",
+    "relay-only-link-attempt",
+    "relay-bounded-named-failure",
+  ];
+
+  for (const [name, expected] of [
+    ["ACTS", ACT_NAMES], ["MULTIPAGE_ACTS", MULTIPAGE_ACT_NAMES], ["RELAY_ACTS", RELAY_ACT_NAMES],
+  ]) {
     it(`declares exactly ${name}'s acts, in that order, as one frozen literal`, () => {
       const match = src.match(new RegExp(`const ${name} = Object\\.freeze\\(\\[([^\\]]*)\\]\\);`));
       expect(match, `${name} is no longer a frozen array literal`).not.toBeNull();
@@ -684,23 +694,24 @@ describe("mixed-link's scenario inventory and act ledger", () => {
   }
 
   it("records every one of them from an act() call, exactly once", () => {
-    for (const name of [...ACT_NAMES, ...MULTIPAGE_ACT_NAMES]) {
+    for (const name of [...ACT_NAMES, ...MULTIPAGE_ACT_NAMES, ...RELAY_ACT_NAMES]) {
       const calls = src.match(new RegExp(`\\bact\\("${name}"`, "g")) ?? [];
       expect(calls, `${name} is declared but never recorded by an act() call`).toHaveLength(1);
     }
-    // And nothing records an act neither frozen list names: `act()` throws on an
-    // unknown name at runtime, but a run that never reaches it would not find
-    // out, and this is free. Order matters across the concatenation too — the
-    // multi-page acts must all sit after the mixed ones, i.e. in their own
-    // scenario, not interleaved into the first one's body.
+    // And nothing records an act none of the three frozen lists names: `act()`
+    // throws on an unknown name at runtime, but a run that never reaches it
+    // would not find out, and this is free. Order matters across the
+    // concatenation too — each scenario's acts must sit together and after the
+    // previous scenario's, i.e. in their own body, not interleaved into another.
     const recorded = [...src.matchAll(/\bact\("([a-z0-9-]+)"/g)].map((m) => m[1]);
-    expect(recorded).toEqual([...ACT_NAMES, ...MULTIPAGE_ACT_NAMES]);
+    expect(recorded).toEqual([...ACT_NAMES, ...MULTIPAGE_ACT_NAMES, ...RELAY_ACT_NAMES]);
   });
 
-  it("checks all three counts against fixed literals, not against array lengths", () => {
-    expect(src).toMatch(/const EXPECTED_SCENARIO_COUNT = 2;/);
+  it("checks all four counts against fixed literals, not against array lengths", () => {
+    expect(src).toMatch(/const EXPECTED_SCENARIO_COUNT = 3;/);
     expect(src).toMatch(/const EXPECTED_ACT_COUNT = 20;/);
     expect(src).toMatch(/const EXPECTED_MULTIPAGE_ACT_COUNT = 5;/);
+    expect(src).toMatch(/const EXPECTED_RELAY_ACT_COUNT = 4;/);
     expect(src).toMatch(/ran !== EXPECTED_SCENARIO_COUNT/);
     expect(src).toMatch(/ledger\.length !== scenario\.expectedActs/);
     // Each inventory entry must carry the LITERAL count, never the list's own
@@ -709,6 +720,7 @@ describe("mixed-link's scenario inventory and act ledger", () => {
     // comparison the literals exist to prevent.
     expect(src).toMatch(/expectedActs: EXPECTED_ACT_COUNT/);
     expect(src).toMatch(/expectedActs: EXPECTED_MULTIPAGE_ACT_COUNT/);
+    expect(src).toMatch(/expectedActs: EXPECTED_RELAY_ACT_COUNT/);
     expect(src, "an inventory entry took its expected act count from a mutable array length")
       .not.toMatch(/expectedActs:\s*[A-Za-z_$][\w$.]*\.length/);
     // The comparisons this guard exists to forbid: an array and its own length
@@ -717,7 +729,7 @@ describe("mixed-link's scenario inventory and act ledger", () => {
     expect(src, "the scenario check fell back to the mutable array length").not.toMatch(
       /ran !== SCENARIOS\.length/,
     );
-    for (const list of ["ACTS", "MULTIPAGE_ACTS", "scenario\\.acts", "expected"]) {
+    for (const list of ["ACTS", "MULTIPAGE_ACTS", "RELAY_ACTS", "scenario\\.acts", "expected"]) {
       expect(src, `the act check fell back to ${list.replace("\\", "")}'s mutable length`).not.toMatch(
         new RegExp(`ledger\\.length !== ${list}\\.length`),
       );
@@ -741,17 +753,18 @@ describe("mixed-link's scenario inventory and act ledger", () => {
     expect(loopBody).toMatch(/ran\+\+/);
   });
 
-  it("runs the inventory rather than calling either scenario directly", () => {
+  it("runs the inventory rather than calling any scenario directly", () => {
     // `await mixedScenario(...)` straight from main() — which is what this file
     // did before C3b-1 — bypasses every count, so the check is not "runScenarios
     // exists" but "nothing calls a scenario around it".
     expect(src).toMatch(/await runScenarios\(session\.browser, base\);/);
-    // Both scenarios are listed, each beside the list and literal its ledger is
-    // judged against. A scenario present in the file but absent from here runs
-    // nowhere, and the scenario count would agree with its own absence.
+    // All three scenarios are listed, each beside the list and literal its
+    // ledger is judged against. A scenario present in the file but absent from
+    // here runs nowhere, and the scenario count would agree with its own absence.
     expect(src).toMatch(/run: mixedScenario,\s*acts: ACTS,\s*expectedActs: EXPECTED_ACT_COUNT/);
     expect(src).toMatch(/run: multiPageDeviceScenario,\s*\n\s*acts: MULTIPAGE_ACTS,\s*\n\s*expectedActs: EXPECTED_MULTIPAGE_ACT_COUNT/);
-    for (const fn of ["mixedScenario", "multiPageDeviceScenario"]) {
+    expect(src).toMatch(/run: relayFailureScenario,\s*\n\s*acts: RELAY_ACTS,\s*\n\s*expectedActs: EXPECTED_RELAY_ACT_COUNT/);
+    for (const fn of ["mixedScenario", "multiPageDeviceScenario", "relayFailureScenario"]) {
       expect(src, `main() calls ${fn} directly, around the inventory`)
         .not.toMatch(new RegExp(`await ${fn}\\(`));
     }
@@ -1745,6 +1758,256 @@ describe("mixed-link proves two pages of one browser are one device", () => {
 });
 
 /**
+ * Migration of `lan-transfer.mjs` unique #8: a relay pool nobody can measure is
+ * still used, and the connection it cannot complete ends inside a bound.
+ *
+ * Source-shape guards over an expensive real-browser proof, written against the
+ * ways this particular journey could stay **green while proving nothing**: a
+ * probe that never ran (so "no relay was selected" is true for the wrong
+ * reason), a configuration read off a probe connection rather than off the
+ * product's link attempt, a relay assertion that checks a URL and forgets the
+ * transport policy or the credentials, a terminal assertion whose subject was
+ * never on screen, a wait with no bound, and — the standing rule for this whole
+ * stranded tail — reverting to the retired per-card controls or asserting
+ * success from raw signalling instead of rendered product UI.
+ *
+ * They prove none of the browser behaviour themselves. What they freeze is the
+ * shape of the proof, so a later edit cannot narrow it silently.
+ */
+describe("mixed-link proves an unmeasurable relay pool is still used, and still ends", () => {
+  const src = read("e2e/mixed-link.mjs");
+  const from = src.indexOf("async function relayFailureScenario(");
+  const to = src.indexOf("\n}\n", from);
+  const body = src.slice(from, to === -1 ? undefined : to);
+  /** Statements only. Several rules below name the very thing they forbid in the
+   *  prose beside them, and reading a comment as a violation is the trap
+   *  `workspace-orchestration.test.ts`'s `code()` helper exists for. */
+  const code = body.split("\n").filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join("\n");
+
+  it("has a greppable scenario body for every check below to be scoped to", () => {
+    // Without this the slice could silently become "" and every `not.toContain`
+    // beneath it would pass over an empty string.
+    expect(from, "relayFailureScenario is no longer greppable").toBeGreaterThan(-1);
+    expect(to, "its body has no closing brace at column 0").toBeGreaterThan(from);
+    expect(body.length, "the scenario body sliced out empty").toBeGreaterThan(2_000);
+  });
+
+  it("serves a pool-only answer whose single relay is a documentation black hole", () => {
+    // The setup is the scenario. A relay that answers would make the probe
+    // succeed and select it, and every assertion here would then describe the
+    // measured path rather than the unmeasured one.
+    expect(src).toMatch(/const BLACK_HOLE_TURN = "turn:192\.0\.2\.\d+:\d+";/);
+    expect(src).toMatch(/const POOL_STUN = "stun:192\.0\.2\.\d+:\d+";/);
+    expect(src, "the pool answer grew a legacy top-level relay, which would mask the whole defect")
+      .not.toMatch(/const POOL_STUN = "turns?:/);
+    // The runner refuses to run on an answer that carries one, rather than
+    // trusting the constant above to stay a `stun:` URL.
+    expect(code).toMatch(/const topLevelRelays = \[POOL_STUN\]\.filter/);
+    expect(code).toMatch(/topLevelRelays\.length !== 0/);
+    // Pool-shaped: the credentials live inside `relays`, which is the
+    // deployment the defect was reported on.
+    expect(src).toMatch(/const POOL_ONLY_ICE = `/);
+    expect(src).toMatch(/relays: \[\{/);
+    expect(src).toMatch(/url\.startsWith\("\/api\/ice"\)/);
+    // Only that one endpoint is answered; the page still loads the real product
+    // from the real server.
+    expect(src).toMatch(/return realFetch\.call\(window, input, init\);/);
+  });
+
+  it("keeps the issued credentials out of the TURN REST expiry shape", () => {
+    // `relayDeadline` reads `<unix-expiry>:<token>` out of a TURN username and
+    // arms a client-side terminal bound on it. A REST-shaped username here would
+    // let the link end on a CREDENTIAL CLOCK while this scenario reported that
+    // it had proved a bounded end to an impossible TRANSPORT — a different
+    // product rule, silently standing in for the one under test.
+    expect(src).toMatch(/const POOL_TURN_USERNAME = "(?!\d+:)[^"]+";/);
+    expect(src).toMatch(/const POOL_TURN_CREDENTIAL = "[^"]+";/);
+  });
+
+  it("captures configurations without breaking the constructor it wraps", () => {
+    // A `Proxy` construct trap, like `TRACK_PEER_CONNECTIONS`. A plain function
+    // replacement breaks `instanceof` and the static members, and the product is
+    // entitled to both.
+    expect(src).toMatch(/const CAPTURE_RTC_CONFIGS = `/);
+    expect(src).toMatch(/window\.RTCPeerConnection = new Proxy\(window\.RTCPeerConnection, \{/);
+    expect(src).toMatch(/construct\(Target, args, NewTarget\) \{/);
+    expect(src).toMatch(/Reflect\.construct\(Target, args, NewTarget\)/);
+    // Config and connection pushed together, after a successful construction, or
+    // the two arrays drift apart the first time a constructor throws.
+    const capture = src.slice(src.indexOf("const CAPTURE_RTC_CONFIGS = `"), src.indexOf("const iceUrlsIn"));
+    const pushedConfig = capture.indexOf("window.__rtcConfigs.push(");
+    const pushedPc = capture.indexOf("window.__rtcPeerConnections.push(");
+    const constructed = capture.indexOf("const pc = Reflect.construct(");
+    expect(constructed, "the connection is no longer constructed before it is recorded").toBeGreaterThan(-1);
+    expect(pushedConfig).toBeGreaterThan(constructed);
+    expect(pushedPc).toBeGreaterThan(pushedConfig);
+    expect(src, "the scenario boots without the capture it reads every assertion from")
+      .toMatch(/const boot = VERIFY_DEFAULT \+ POOL_ONLY_ICE \+ CAPTURE_RTC_CONFIGS;/);
+    // Verification OFF: the property is the transport, and a consent gate would
+    // put a human decision in front of every state this measures.
+    expect(code, "this scenario opted into a verification gate it cannot answer").not.toContain("VERIFY_ON");
+  });
+
+  it("requires the probe to have really run and really finished", () => {
+    // "No relay was selected" is trivially true on a page that never probed, and
+    // then every downstream assertion describes a page that was never in the
+    // state the defect needs.
+    expect(code).toMatch(/window\.__rtcPeerConnections\.length > 0 &&/);
+    expect(code).toMatch(/pc\.signalingState === 'closed'/);
+    expect(code).toMatch(/probes\.length === 0/);
+    expect(code).toContain("the relay probe never ran");
+    // Waited on an observable product fact, never slept through: a pause of the
+    // same length passes just as happily on a build that never probed.
+    for (const stall of ["setTimeout", "sleep(", "delay("]) {
+      expect(code, `${stall} is an arbitrary wait, not a product condition`).not.toContain(stall);
+    }
+    // Each probe is checked to BE a probe of this pool — relay-only, that one
+    // relay, those credentials — rather than merely counted.
+    expect(code).toMatch(/JSON\.stringify\(urls\) !== JSON\.stringify\(\[BLACK_HOLE_TURN\]\)/);
+    expect(code).toMatch(/cfg\.iceTransportPolicy !== "relay"/);
+  });
+
+  it("clears the probe captures, reads the clearing back, and only then clicks", () => {
+    // The whole "this configuration belongs to the product attempt" claim rests
+    // on the array being empty at the moment of the click. A clear that silently
+    // did nothing would leave a probe capture sitting in index 0.
+    const cleared = code.indexOf("window.__rtcConfigs.length = 0;");
+    const readBack = code.indexOf("cleared.configs !== 0 || cleared.pcs !== 0");
+    const clicked = code.indexOf("${OPEN_WORKSPACE}').click()");
+    expect(cleared, "the probe captures are never cleared").toBeGreaterThan(-1);
+    expect(readBack, "the clearing is never read back").toBeGreaterThan(cleared);
+    expect(clicked, "the workspace is never opened after the clear").toBeGreaterThan(readBack);
+    // And the attempt is read from index 0 of an array that was proven empty,
+    // rather than from a `find`/`filter` that could quietly pick a probe.
+    expect(code).toMatch(/const attempt = await a\.evaluate\("window\.__rtcConfigs\[0\]"\);/);
+  });
+
+  it("asserts the relay, its credentials AND the relay-only policy", () => {
+    // The reported failure in three parts, each of which passes alone while the
+    // product is still broken: a configuration with no relay at all; a relay URL
+    // whose credentials were dropped, which allocates nothing; and a relay that
+    // is present under policy "all", which spends ~20s on candidates that cannot
+    // work before falling back to it.
+    expect(code).toMatch(/relayed\.length === 0/);
+    expect(code).toContain("pool relay credentials were issued and then discarded");
+    expect(code).toMatch(/urls\.includes\(BLACK_HOLE_TURN\)/);
+    expect(code).toMatch(/s\.username === POOL_TURN_USERNAME && s\.credential === POOL_TURN_CREDENTIAL/);
+    expect(code).toMatch(/attempt\.iceTransportPolicy !== "relay"/);
+    // The marker that makes the capture provably the PRODUCT's: the no-selection
+    // fallback merges the top-level list with the pool, so the top-level STUN is
+    // in the product configuration and in no probe configuration. Dropping this
+    // check is how a leaked probe capture, or a genuinely selected relay, would
+    // satisfy every line above.
+    expect(code).toMatch(/urls\.includes\(POOL_STUN\)/);
+    expect(code).toContain("that is the shape of a ");
+  });
+
+  it("proves a live rendered subject before requiring a terminal one", () => {
+    // A workspace that never appeared and a workspace that failed both render
+    // zero `.wh-disconnect`. Without the live wait first, the terminal assertion
+    // has no subject and its "failure" is indistinguishable from a click that
+    // did nothing at all.
+    const live = code.indexOf(".wh-disconnect') && !document.querySelector('${HEAD} .wh-restart')");
+    const liveState = code.indexOf("const liveState = await a.evaluate(");
+    const terminal = code.indexOf("!!document.querySelector('${HEAD} .wh-restart')", live + 1);
+    expect(live, "the live workspace header is never proved").toBeGreaterThan(-1);
+    expect(liveState, "the connecting sentence is never read").toBeGreaterThan(live);
+    expect(terminal, "the terminal card is never waited for, or not after the live one")
+      .toBeGreaterThan(liveState);
+    // The terminal read-back, in product terms: the header is still THERE (a
+    // terminal state nobody can read is the other half of this defect), it
+    // offers exactly the one control a terminal card should, it no longer claims
+    // a path, and — the locale-independent part — its sentence has actually
+    // CHANGED from the connecting one. "It says something" is satisfied by a
+    // header still saying "connecting", which is the reported symptom.
+    expect(code).toMatch(/!ended\.head \|\| ended\.restart !== 1 \|\| ended\.disconnect !== 0 \|\| ended\.paths !== 0 \|\|/);
+    // The same claim from the other side: a workspace that unmounted itself
+    // would hand the device chooser back with the failure reported nowhere.
+    expect(code).toMatch(/ended\.chooser !== 0/);
+    expect(code).toMatch(/!ended\.state \|\| ended\.state === liveState/);
+  });
+
+  it("bounds the whole attempt with one shared deadline and no literal waits", () => {
+    // One deadline from the click onwards, spent by every wait after it. A
+    // literal on each is how a "bounded" failure quietly becomes 3 × 120s — and
+    // the budget is deliberately LARGER than the product's own worst-case
+    // terminal bound, or a red run cannot tell "the product never terminated"
+    // from "the runner ran out of patience".
+    expect(src).toMatch(/const RELAY_FAILURE_BUDGET_MS = \d[\d_]*;/);
+    expect(code).toMatch(/const deadline = Date\.now\(\) \+ RELAY_FAILURE_BUDGET_MS;/);
+    expect(code).toMatch(/const left = \(\) => Math\.max\(1, deadline - Date\.now\(\)\);/);
+    // Every wait in the scenario is bounded by a NAMED budget: the setup one
+    // before the click, the shared deadline after it. None may fall back to
+    // `waitFor`'s implicit default or carry a literal of its own.
+    const waits = code.match(/await \w+\.waitFor\(/g) ?? [];
+    const budgeted = code.match(/(RELAY_SETUP_BUDGET_MS|left\(\)),?\s*\)/g) ?? [];
+    expect(waits.length, "the scenario's wait count changed; re-check every one still spends a named budget")
+      .toBe(budgeted.length);
+    expect(waits.length).toBeGreaterThanOrEqual(6);
+    // Scoped to one statement (`[^;]`), so this reads each wait's own argument
+    // list rather than sweeping from the first `waitFor(` to a digit anywhere
+    // below it.
+    expect(code, "a wait in this scenario was given its own literal timeout")
+      .not.toMatch(/waitFor\([^;]*?,\s*\d[\d_]*\s*\)/);
+    // The click starts the clock, and the elapsed time is reported, so a run
+    // that passed at 119s is visibly different from one that passed at 35s.
+    expect(code).toMatch(/const startedAt = Date\.now\(\);/);
+    expect(code).toMatch(/const endedAfterMs = Date\.now\(\) - startedAt;/);
+  });
+
+  it("drives the current link/1 surface, never the retired controls or raw signalling", () => {
+    // The migration rule for this whole tail. The legacy scenario picked up
+    // `.file-pick-input` — deleted by `d175f863` — and read the transfer card's
+    // status glyph. The current product offers exactly one action and reports a
+    // link's end in its workspace header.
+    expect(code).toMatch(/document\.querySelector\('\$\{OPEN_WORKSPACE\}'\)\.click\(\)/);
+    for (const legacy of [".file-pick-input", ".pa-files", "peer-actions button", "STRIP_LINK_CAP", "MSG_OPEN_BTN"]) {
+      expect(code, `${legacy} is a retired control this scenario must not reach for`)
+        .not.toContain(legacy);
+    }
+    // No signalling-frame shortcut. "The offer went out" is not "the link ended
+    // in a card the user can read", and the raw-frame observer belongs to the
+    // multi-page scenario, which needs it to tell two same-named pages apart.
+    for (const raw of ["OBSERVE_ROSTER", "__roster", "__selfId", "__leftPeers", "__signalFrames"]) {
+      expect(code, `${raw} is being read as a stand-in for a rendered outcome`).not.toContain(raw);
+    }
+  });
+
+  it("performs its four acts in the frozen order, each after its own assertions", () => {
+    const order = [
+      "relay-pool-only-ice",
+      "relay-probe-spent-its-budget",
+      "relay-only-link-attempt",
+      "relay-bounded-named-failure",
+    ];
+    const at = order.map((name) => code.indexOf(`act("${name}"`));
+    at.forEach((i, n) => expect(i, `${order[n]} is not recorded inside this scenario`).toBeGreaterThan(-1));
+    expect([...at].sort((x, y) => x - y), "the relay acts were reordered").toEqual(at);
+    // Anchored to the work each one reports: the attempt act after the click,
+    // the failure act after the terminal wait.
+    expect(at[2]).toBeGreaterThan(code.indexOf("${OPEN_WORKSPACE}').click()"));
+    expect(at[3]).toBeGreaterThan(code.indexOf("const endedAfterMs ="));
+    // Nothing in the body may swallow a failure and still record an act: a
+    // caught error that let the run continue is exactly the vacuity the ledger
+    // exists to make impossible, one level below `runScenarios`' own no-catch
+    // loop.
+    expect(code, "the relay scenario swallows an error around its acts").not.toMatch(/\bcatch\b/);
+    expect(body).toMatch(/return ledger;/);
+    expect(body).toMatch(/const \{ ledger, act \} = newLedger\(RELAY_ACTS\);/);
+  });
+
+  it("keeps both earlier scenarios intact beside it", () => {
+    // This slice adds a third scenario; it edits neither of the two already
+    // hosted. All three ledgers come from the same factory, so the duplicate and
+    // unknown-name guards cannot exist in two of them and be forgotten in one.
+    expect(src).toMatch(/const \{ ledger, act \} = newLedger\(ACTS\);/);
+    expect(src).toMatch(/const \{ ledger, act \} = newLedger\(MULTIPAGE_ACTS\);/);
+    expect(src).toMatch(/const EXPECTED_ACT_COUNT = 20;/);
+    expect(src).toMatch(/const EXPECTED_MULTIPAGE_ACT_COUNT = 5;/);
+  });
+});
+
+/**
  * The product fix that journey is the acceptance case for: a page that becomes
  * the current one re-states what it speaks.
  *
@@ -2079,19 +2342,22 @@ describe("mixed-link's live-region observer announces when it is ready", () => {
     }
   });
 
-  it("justifies that scoping: the multi-page scenario reads no announcements", () => {
+  it("justifies that scoping: no other scenario reads announcements", () => {
     // The paired half of the scoping above. Restricting the state machine to
-    // `mixedScenario` is only honest while the other scenario genuinely has no
+    // `mixedScenario` is only honest while every other scenario genuinely has no
     // announcement machinery in it; the moment one appears, its link opens are
     // subject to the same handshake and this fails until the scoping is widened.
     const src = read(MIXED);
-    const from = src.indexOf("async function multiPageDeviceScenario(");
-    const to = src.indexOf("\n}\n", from);
-    expect(from, "multiPageDeviceScenario is no longer greppable").toBeGreaterThan(-1);
-    expect(to).toBeGreaterThan(from);
-    const body = src.slice(from, to);
-    for (const helper of ["announcementsReady", "announcedCount", "announcedSince", "TRACK_ANNOUNCEMENTS"]) {
-      expect(body, `${helper} is used outside the state machine that orders it`).not.toContain(helper);
+    for (const fn of ["multiPageDeviceScenario", "relayFailureScenario"]) {
+      const from = src.indexOf(`async function ${fn}(`);
+      const to = src.indexOf("\n}\n", from);
+      expect(from, `${fn} is no longer greppable`).toBeGreaterThan(-1);
+      expect(to).toBeGreaterThan(from);
+      const body = src.slice(from, to);
+      for (const helper of ["announcementsReady", "announcedCount", "announcedSince", "TRACK_ANNOUNCEMENTS"]) {
+        expect(body, `${helper} is used in ${fn}, outside the state machine that orders it`)
+          .not.toContain(helper);
+      }
     }
   });
 
