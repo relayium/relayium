@@ -49,6 +49,40 @@ const FORCE_UNSUPPORTED =
   "Object.defineProperty(window, 'isSecureContext', { get: () => false });";
 
 /**
+ * 触摸目标地板：44 CSS px。这是**要求**，不是这里量出来的观察值——产品侧的出处是
+ * `app.css` 的 `@media (pointer: coarse) { .btn { min-block-size: 44px } }`，
+ * `/pricing` 的 `.toggle-btn` 和三张 auth 卡的 `.auth-action` 各自复制了同一个值。
+ * 下面三处测量全都对着这一个常量比，不许再抄第二份字面量。
+ */
+const MIN_TOUCH_TARGET_PX = 44;
+
+/**
+ * 几何容差，唯一用途是吸收渲染器把一个 CSS 44px 报成 44 以下时那点浮点尾数。
+ *
+ * 为什么需要它：托管 Web 道次 33290357209（exact main `9d815c84`）红在 `/apps` 的
+ * CTA 上——Linux Chromium 把一个 CSS 44px 的按钮量成了 43.999969482421875，比 44
+ * 少 2⁻¹⁵ px ≈ 0.000031px。那不是一个矮下去的按钮，是 `getBoundingClientRect()`
+ * 在合成路径上过了一趟 float32。同一份源码在 PR #95 的同一条道次上是绿的，所以裸
+ * `< 44` 比的其实是"这台 runner 这一次的浮点尾数"，不是产品几何。
+ *
+ * 为什么是 1/1024，而不是"松一点算了"：这个界必须严到**不可能**掩盖一个真的矮下去
+ * 的目标。Chromium 自己的布局量子是 LayoutUnit = 1/64 px，任何在布局层面真的没到
+ * 44px 的元素至少亏这么多。1/1024 比观察到的那次偏差宽 32 倍（够吸收尾数），却比
+ * 布局能表达的最小亏空还小 16 倍（接不住任何一个真的矮下去的按钮）。放宽到 1/64
+ * 或更大就越过了这条论证，`apps-hierarchy-contract.test.mjs` 会因此判红。
+ */
+const TOUCH_TARGET_EPSILON_PX = 1 / 1024;
+
+/**
+ * 唯一一处触摸目标比较。非有限值算**不合格**而不是悄悄通过：空选择器会让
+ * `Math.min(...[])` 返回 `Infinity`，而 `Infinity >= 44` 恰好为真——"一个都没量到"
+ * 于是长得和"全都够大"一模一样。这里让它红。
+ */
+function undersizedTouchTarget(px) {
+  return !Number.isFinite(px) || px < MIN_TOUCH_TARGET_PX - TOUCH_TARGET_EPSILON_PX;
+}
+
+/**
  * 不安全上下文（`isSecureContext === false`）下的"当前布局"契约：没有 WebRTC，
  * 页面必须掉进单列兜底，而不是留着 grid/two-col 的残影或悄悄漏出 `.peers`。
  */
@@ -154,7 +188,7 @@ async function authLandingScenario(browser, base) {
   }
   const bad = mobile.filter((m) =>
     m.pageOverflow !== 0 || m.cardLeft < -.5 || m.cardRight > 320.5 ||
-    m.actionHeight < 44 || m.h1s !== 1 || m.dir !== "ltr"
+    undersizedTouchTarget(m.actionHeight) || m.h1s !== 1 || m.dir !== "ltr"
   );
   if (bad.length) throw new Error(`mobile auth landing contract failed: ${JSON.stringify(bad)}`);
 
@@ -458,7 +492,7 @@ async function appsHierarchyScenario(browser, base) {
     })()`));
   }
   const bad = mobile.filter((m) =>
-    m.pageOverflow !== 0 || m.elementOverflow || m.minAction < 44 || m.futureControls !== 0 ||
+    m.pageOverflow !== 0 || m.elementOverflow || undersizedTouchTarget(m.minAction) || m.futureControls !== 0 ||
     m.command.dir !== "ltr" || m.command.tabIndex !== 0 || m.command.scrollLeft !== 0 || m.command.codeStartsAt < 0 ||
     m.dir !== "ltr"
   );
@@ -545,15 +579,20 @@ async function pricingHierarchyScenario(browser, base) {
         pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
         cardOverflows: [...document.querySelectorAll('.tier')].map((el) => el.scrollWidth - el.clientWidth),
         controlOverflows: [...document.querySelectorAll('.toggle-btn, .tier .btn')].map((el) => el.scrollWidth - el.clientWidth),
-        cycleTargets: [...document.querySelectorAll('.toggle-btn')].map((el) => Math.round(el.getBoundingClientRect().height)),
+        cycleTargets: [...document.querySelectorAll('.toggle-btn')].map((el) => el.getBoundingClientRect().height),
         priceIsolates: [...document.querySelectorAll('.tier-price bdi')].map((el) => el.getAttribute('dir')),
       };
     })()`));
   }
+  // `cycleTargets` 以前是 `Math.round(height)`，那等于一条 ±0.5px 的隐形容差——
+  // 比这里真正需要的浮点尾数宽了五百倍，足以放过一个 43.5px 的按钮。现在量原始
+  // 高度，走和另外两处同一个 `undersizedTouchTarget`。空数组单独拦：`.some()` 在
+  // 空数组上恒为 false，"一个挡位都没量到"不许长得像"挡位都够大"。
   const bad = mobile.filter((m) =>
     m.firstTierY >= 1000 || m.pageOverflow !== 0 ||
     m.cardOverflows.some((n) => n > 1) || m.controlOverflows.some((n) => n > 1) ||
-    m.cycleTargets.some((n) => n < 44) || m.priceIsolates.some((dir) => dir !== "ltr") ||
+    !m.cycleTargets.length || m.cycleTargets.some(undersizedTouchTarget) ||
+    m.priceIsolates.some((dir) => dir !== "ltr") ||
     m.dir !== "ltr"
   );
   if (bad.length) throw new Error(`mobile pricing hierarchy contract failed: ${JSON.stringify(bad)}`);
