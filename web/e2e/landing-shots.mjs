@@ -52,8 +52,8 @@ const SHOT_H = 1800;
 
 const PEERS_SEEN = "document.querySelectorAll('.pname').length > 0";
 // 当前的统一工作区流程：名册里先出现「和 X 开一个共享工作区」，进去之后才有附件选择器。
-// lan-transfer.mjs 走的是有旧版对端在场时的降级路径，那条路上 .file-pick-input 一开始
-// 就在——照抄它会拍出一个真实用户看不到的界面。
+// 别照抄已删除的 `lan-transfer.mjs`：它走的是有旧版对端在场时的降级路径，那条路上
+// .file-pick-input 一开始就在，照抄会拍出一个真实用户看不到的界面。
 // 按钮文案随语言变，所以按结构定位：对端卡片里那个唯一的主按钮。
 const OPEN_WS = `document.querySelector('.peers .open-workspace')`;
 const PICKER = "!!document.querySelector('.file-pick-input.attach-file')";
@@ -62,7 +62,7 @@ const SAS_SHOWN = "/\\d{6}/.test(document.body.textContent || '')";
 // 而它在 DOM 里就排在后面，用裸的 .btn-primary 会在某些时刻选错。
 const ACCEPT_BTN = `document.querySelector('.lan-task button.btn-primary:not(.send)')`;
 
-/** 发一个可预测的字节序列——和 lan-transfer.mjs 用的是同一个公式。
+/** 发一个可预测的字节序列（`(i * 7 + 11) % 251`）。
  *  工作区里附加文件本身就发起了请求，不需要再点 Send（那个按钮是发文本的）。 */
 const sendPayload = (tab, name, bytes) => tab.evaluate(`(() => {
   const input = document.querySelector('.file-pick-input.attach-file');

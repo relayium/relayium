@@ -56,8 +56,11 @@ const macRelease = JSON.parse(
   readFileSync(resolve(here, "..", "native-releases.json"), "utf8"),
 ).macos;
 const macDownloadable = macRelease.available === true && !!macRelease.downloadUrl;
-// One debug port per script: lan-transfer 9444 / mixed-link 9445 / a11y 9446 /
-// device-discovery 9447.
+// A runner cleans up only the debug port it is configured with, so scripts that
+// share a port must never run concurrently. This script owns 9448 by itself, as
+// mixed-link owns 9445; 9446 is shared by a11y and share-target, and 9447 by
+// code-room, device-discovery and device-inbox — all of them serialized. 9444
+// belonged to the deleted `lan-transfer.mjs` and is not reused.
 const DEBUG_PORT = 9448;
 const PREVIEW_PORT = Number(argFlag("--preview-port", "4185"));
 const GLOBAL_TIMEOUT_MS = 5 * 60_000;

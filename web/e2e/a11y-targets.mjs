@@ -99,9 +99,9 @@ export const TARGETS = [
     note: "同一块界面的深色令牌与窄屏布局" },
 
   // ── 两个动态决策态 ─────────────────────────────────────────────────────
-  // 真正的"同意/验证"决策态需要两个 peer 和一台信令服务器，那是后续挂到
-  // lan-transfer / mixed-link 上的事。这里取的是账户弹窗的两种会话：登出态的
-  // 登录表单，和已登录免费用户展开的内联档位。它同时是三处 role="dialog" 之一。
+  // 真正的"同意/验证"决策态需要两个 peer 和一台信令服务器，那是 mixed-link /
+  // code-room 上的事。这里取的是账户弹窗的两种会话：登出态的登录表单，和已登录
+  // 免费用户展开的内联档位。它同时是三处 role="dialog" 之一。
   // 账户按钮只在 cross / offline / pricing / me 四条路由上渲染（Nav.svelte），
   // 所以这两格挂在 /cross-network 上而不是首页。
   { id: "spa/cross-network/account-modal", url: "/cross-network", ready: ".crosspage",

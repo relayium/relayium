@@ -387,7 +387,7 @@ code {
 /* State, and only state, gets the accent. Always written compounded with
    .ui-card so these short words can never match anything on their own; the
    names match what App.svelte's transfer card already emits (and what
-   web/e2e/lan-transfer.mjs selects on: `.xfer.bad`). */
+   web/e2e/dom-contracts.mjs's `XFER` selects on: `.xfer.bad`). */
 .ui-card.active { border-color: var(--accent-border); }
 .ui-card.ok { border-color: var(--ok); }
 .ui-card.bad { border-color: var(--danger-border); }
@@ -442,8 +442,8 @@ code {
 .ui-card-sub { margin: 0; font-size: var(--fs-xs); color: var(--text); line-height: 1.5; }
 
 /* ── Short verification code (SAS) ───────────────────────────────────────────
-   Global rather than `ui-`-prefixed because MessagePanel.test.ts and
-   web/e2e/lan-transfer.mjs select on `.sas` / `.sas code`; App.svelte and
+   Global rather than `ui-`-prefixed because MessagePanel.test.ts and the
+   real-browser runners select on `.sas` / `.sas code`; App.svelte and
    MessagePanel.svelte are its only users in the repo. Accent-tinted in both
    places now — comparing this code IS the security step, and in the message
    panel it used to render as plain body text. */

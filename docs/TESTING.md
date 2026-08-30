@@ -8,8 +8,10 @@ matrix that no headless check can stand in for: **[TESTING-accessibility.md](TES
 **Execution status key:**
 - `[AUTOMATED]` — actually executed in CI / this session; output captured.
 - `[MANUAL]` — requires two real browsers/devices and a real network; cannot run headless.
-- `[NOT RUN]` — written, but not currently executing anywhere. Not coverage. See §1a
-  for the one live instance of this: the tail of `web/e2e/lan-transfer.mjs`.
+- `[NOT RUN]` — written, but not currently executing anywhere. Not coverage.
+  There is no live instance of this in the browser suites today: the long-standing
+  one, the tail of `web/e2e/lan-transfer.mjs`, was deleted in §1a Stage 4 rather
+  than left sitting in the tree looking like coverage.
 
 ---
 
@@ -55,16 +57,21 @@ server/relayium-server: Mach-O 64-bit executable arm64  (go build OK)
 
 ---
 
-## 1a. `web/e2e/lan-transfer.mjs` — local only, and currently red
+## 1a. The retired LAN runner — deleted, and where its coverage lives now
 
-`npm run test:e2e` is the broadest headless suite in the repository, it is **not
-a CI gate**, and as of 2026-08-29 it **cannot exit zero**. Both halves of that
-matter; take them in order.
+`web/e2e/lan-transfer.mjs` and its `test:e2e` npm entry **no longer exist**. They
+were deleted in Stage 4 below, together with the two `harness.mjs` APIs that had
+no other caller (`setDefaultInit` and the `STRIP_LINK_CAP` wire filter). This
+section is kept, in the past tense, because deleting the record would leave the
+migration ledger underneath it unexplained — every hosted assertion between here
+and Stage 4 is described relative to the scenario it came from.
 
-### It is not a CI gate
+Two facts about the retired runner, in the order that matters.
+
+### It was never a CI gate
 
 `.github/workflows/web.yml` runs seven hosted browser lanes, and `lan-transfer.mjs`
-is not one of them:
+was not one of them:
 
 | Lane | Script | Job |
 |---|---|---|
@@ -76,13 +83,16 @@ is not one of them:
 | Device Inbox: browser → server → CLI → disk | `test:device-inbox` | `device-inbox-e2e` |
 | LAN room, unified `link/1` workspace, real Go server | `test:e2e:mixed` | `mixed-link-e2e` |
 
+That table is the current one, and it is unchanged by the deletion: nothing was
+removed from CI, because the deleted script was never in it.
+
 The last row is new as of 2026-08-29 and is **merged**: Phase 3D C3a landed on
 `main` as `a703c56f` ("Test unified mixed-link path in hosted CI"). It is a
 separate job rather than another step in `test` because it needs a Go toolchain
 that Node-only job does not have, and because `test` already spends most of a
 15-minute budget on the five browser lanes the table above assigns to it
 (accessibility scan, page shell, code room, device discovery, Device Inbox
-entry). `web.yml`'s comment beside the `mixed-link-e2e` job now records the same
+entry). `web.yml`'s comment beside the `mixed-link-e2e` job records the same
 five-lane count.
 
 Getting it hosted required fixing what made it un-hostable: it used to demand
@@ -92,22 +102,13 @@ tears the whole thing down — see `web/e2e/go-server.mjs`, the lifecycle it now
 shares with `test:device-inbox`. An explicit `--url` still targets a server you
 started yourself; without one, nothing external is required.
 
-`test:e2e` (`lan-transfer.mjs`) appears in none of them. As of 2026-08-29
-(Phase 3D C2) the `/apps` hierarchy contract, along with the auth-landing and
-`/pricing` page contracts and the insecure-context layout contract, moved out of
-`lan-transfer.mjs` into `web/e2e/page-shell.mjs` — the `test:e2e:page-shell` row
-above — so those four **are** now executed by every push and pull request.
-Nothing else in `lan-transfer.mjs` is:
+As of 2026-08-29 (Phase 3D C2) the `/apps` hierarchy contract, along with the
+auth-landing and `/pricing` page contracts and the insecure-context layout
+contract, moved out of `lan-transfer.mjs` into `web/e2e/page-shell.mjs` — the
+`test:e2e:page-shell` row above — so those four **are** executed by every push
+and pull request.
 
-```bash
-cd web && npm run build && npm run test:e2e
-# Today: the run fails immediately. mobileRelayFallbackScenario — now main()'s
-# first call, since the four page contracts that used to run ahead of it moved
-# out — drives the same removed .file-pick-input control described below, so no
-# scenario prints "ok" before the run dies.
-```
-
-### Why it stops in the tail
+### Why it could not be run at all, which is why it went
 
 Commit `d175f863` ("Remove legacy Mac and Web transfer paths", 2026-08-27) deleted
 the legacy per-peer transfer controls from `web/src/App.svelte`: the `.pa-files`
@@ -116,32 +117,24 @@ beside it. A peer card now renders exactly **one** control — `.open-workspace`
 and only for a peer that routes `link/1`. A peer that does not gets
 `<p class="pa-unsupported">`: a sentence, not a disabled button.
 
-`lan-transfer.mjs` is built on the opposite premise. `main()` calls
+`lan-transfer.mjs` was built on the opposite premise. Its `main()` called
 `setDefaultInit(STRIP_LINK_CAP)` before opening the first tab, so **every** tab in
-the suite presents as a legacy `text/1`-only peer — and the scenarios then drive
+the suite presented as a legacy `text/1`-only peer — and the scenarios then drove
 the fork that such a peer used to be given. That fork no longer exists, so those
-scenarios address elements the component does not render.
+scenarios addressed elements the component does not render. From 2026-08-27 until
+the deletion the runner exited non-zero on its first scenario
+(`mobileRelayFallbackScenario`, which picked up a `.file-pick-input` that no
+longer resolved to an element), so nothing after that point produced any signal: the main LAN transfer
+act, small-message-cap, transfer-boundary, early-failure, mobile-no-picker,
+desktop-picker-cancel, resume, the four message scenarios, multi-page-device and
+caps-suppressed were all downstream of a run that had already died.
 
-What that leaves, now that the four single-tab page contracts have moved to
-`web/e2e/page-shell.mjs` (see Stage 1 below):
+A script that cannot exit zero is worse than no script: it teaches every reader to
+ignore a red run. That is the whole argument for Stage 4, and it is why the
+prerequisite was never "is anyone still using it" but "has every assertion it
+uniquely held landed somewhere that actually executes".
 
-- **Executed and passing — nowhere in this file anymore.** The three that used to
-  pass here (`authLandingScenario`, `appsHierarchyScenario`,
-  `pricingHierarchyScenario`) moved out entirely, and `unsupportedLayoutScenario`
-  moved with them (it never depended on anything removed; it only ever failed to
-  run here because of ordering, not content — see Stage 1). None of the four is
-  in `lan-transfer.mjs` any longer, executed or not.
-- **Not executed** — everything, starting from `mobileRelayFallbackScenario`,
-  which is now `main()`'s first call. It drives a removed control
-  (`web/e2e/lan-transfer.mjs:1420` picks up `.file-pick-input`, which now resolves
-  to `null`), and the run does not get past it. The main LAN transfer act and every
-  scenario after it — small-message-cap, transfer-boundary, early-failure,
-  mobile-no-picker, desktop-picker-cancel, resume, the four message scenarios,
-  multi-page-device and caps-suppressed — are downstream of that point and
-  currently produce no signal at all.
-
-So `lan-transfer.mjs` itself proves nothing today: `[NOT RUN]` end to end. The
-four page contracts it used to carry are `[AUTOMATED]` in their new home,
+The four page contracts it used to carry are `[AUTOMATED]` in their new home,
 `web/e2e/page-shell.mjs`, executed on every push and pull request.
 
 ### What is actually lost — smaller than the tail's length suggests
@@ -170,10 +163,10 @@ hosted migrations and two retired**:
 | 7 | Multi-page device identity and focus (two pages of one browser plus a third device) | **hosted migration** (C3b-7, exact-main `c7b83dc4`) |
 | 8 | Bounded relay-pool failure (credentials issued from the pool, then discarded) | **hosted migration** (C3b-8, exact-main `74ac85db`) |
 
-"None stranded" is a statement about the migration inventory, not about
-`lan-transfer.mjs`, which still exists and still cannot run. Deleting it is
-Stage 4 below, and the assertion it was waiting on — the rendered
-unsupported-peer shape migrated in C3b-9 — is now hosted: `mixed-link-e2e` ran
+"None stranded" was a statement about the migration inventory rather than about
+`lan-transfer.mjs`, which at the time still existed and still could not run.
+Deleting it is Stage 4 below, now done; the assertion it was waiting on — the
+rendered unsupported-peer shape migrated in C3b-9 — is hosted: `mixed-link-e2e` ran
 the four-scenario ledger green on hosted PR run **33290134608**, which merged as
 exact main **`9d815c84`**, and the merged bytes ran it green again in the
 `mixed-link-e2e` job **99200800583** of exact-main Web run **33290357209**. That
@@ -184,7 +177,8 @@ recorded under Stage 4 — nothing here claims the exact-main Web run was green.
 **Row 1's wording is corrected here, and the correction matters — the retired
 runner was stronger than the audit's phrasing suggested.** The audit named it
 "no `showSaveFilePicker`", which reads as a browser without the API.
-`lan-transfer.mjs`'s `mobileNoPickerScenario` did not arrange that. On exact-main
+`lan-transfer.mjs`'s `mobileNoPickerScenario` did not arrange that. On the
+exact-main revision that still carried the file,
 its `WORKING_PICKERS` block (lines 317-329) installed a *working*
 `showSaveFilePicker` and a *working* `showDirectoryPicker`, both resolving to
 handles whose `createWritable()` really swallowed and counted bytes, spoofed an
@@ -232,9 +226,9 @@ peer drags a desktop sender down to it and why the file stream must fragment
 file rather than silently split. The two even disagree numerically at the
 boundary: 64 KiB of plaintext seals into a 65 557-byte frame, which does *not*
 fit a channel that negotiated 65 536. What `lan-transfer.mjs`'s
-`smallMessageCapScenario` uniquely holds is the transport half — it rewrites the
-SDP to force a real 64 KiB negotiation in a real Chromium and proves the old
-192 KiB chunk frame is refused while a fitted one is accepted. The fragmentation
+`smallMessageCapScenario` uniquely held was the transport half — it rewrote the
+SDP to force a real 64 KiB negotiation in a real Chromium and proved the old
+192 KiB chunk frame was refused while a fitted one was accepted. The fragmentation
 arithmetic behind it is already deterministic
 (`src/lib/transfer-fragmentation.test.ts`); C3b-5 moved the previously stranded
 negotiation into the existing real-Chromium mixed journey and is now hosted on
@@ -337,10 +331,12 @@ runner itself against silently dropping a scenario: it asserts a fixed
 `/apps` hierarchy contract from local-only to hosted — the first time it is
 enforced by anything other than someone remembering to run it.
 
-This lane is currently **red on exact main `9d815c84`** (the `test` job of hosted
-Web run 33290357209), on a sub-pixel touch-target comparison rather than on any
-product geometry; the repair is authored and awaiting hosted CI. See "The 44px
-touch floor, and the one renderer delta it tolerates" below.
+This lane was **red on exact main `9d815c84`** (the `test` job of hosted Web run
+33290357209), on a sub-pixel touch-target comparison rather than on any product
+geometry. The repair merged into `main` as `47d648fc` (PR #96, merge commit
+`3e9db59a`), and on that merge commit the lane is **green**: the `test` job
+99206014409 of hosted Web run 33292324851 reported `test:e2e:page-shell` **4/4**.
+See "The 44px touch floor, and the one renderer delta it tolerates" below.
 
 **Stage 2 — the transfer uniques move into `mixed-link.mjs`, and `mixed-link`
 becomes hosted.** Uniques 1–6 above are about the real pipeline (commit-reveal,
@@ -970,7 +966,9 @@ asserting on the browser's logging rather than on the product.
 *What the diff touches:* four files, all tests and documentation —
 `web/e2e/mixed-link.mjs`, `web/e2e/go-server.test.mjs`, this document and
 `web/e2e/README.md`. No product source, workflow, package, dependency, native or
-ops file changed, and `lan-transfer.mjs` is deliberately left in place.
+ops file changed, and `lan-transfer.mjs` was deliberately left in place by that
+diff. (Stage 4 has since deleted it; this paragraph records what C3b-8 touched,
+not the current tree.)
 
 **Verification status: hosted and green on exact main
 `74ac85db83a636f747581cc35b580749d7cf0344`.** The source merged through PR #94;
@@ -1149,8 +1147,10 @@ and nothing about any locale outside the two maintained ones.
 *What the diff touches:* four files, all tests and documentation —
 `web/e2e/mixed-link.mjs`, `web/e2e/go-server.test.mjs`, this document and
 `web/e2e/README.md`. No product source, workflow, package, dependency, server,
-native or ops file changed, and `lan-transfer.mjs` and its npm script are
-deliberately left in place until this scenario is hosted.
+native or ops file changed, and `lan-transfer.mjs` and its npm script were
+deliberately left in place by that diff, until this scenario was hosted. (It has
+since been hosted, and Stage 4 has since deleted both; this paragraph records what
+C3b-9 touched, not the current tree.)
 
 **Verification status: hosted on exact main `9d815c84`, and proved on the merged
 bytes.** The `mixed-link-e2e` lane ran this scenario green on hosted PR run
@@ -1260,21 +1260,58 @@ Unique #7 moved in C3b-7 and #8 was what remained of this stage. It came last
 because it needed setup the other stages did not: the pool-shaped `/api/ice`
 response, an unreachable TURN host, and a probe budget that actually elapses.
 
-**Stage 4 — delete `lan-transfer.mjs` and its `test:e2e` npm script.** Only after
-hosted `main` is green with stages 1–3 landed *and* with the rendered
-unsupported-peer shape, which as of C3b-9 means only after the **fourth**
-scenario has passed `mixed-link-e2e` on `main`. Stages 1–3 cleared that bar at
-`74ac85db`; C3b-9 cleared it on hosted PR run 33290134608, merged as exact main
-`9d815c84`, and then cleared it in the literal sense the bar is written in — the
-**fourth** scenario passed `mixed-link-e2e` *on `main`*, in job 99200800583 of
-Web run 33290357209, 20/20 + 5/5 + 4/4 + 5/5 with `Mixed link E2E passed`. That
-job passing is the whole of the claim; the Web run around it is red for the
-separate reason below. Deleting earlier would have dropped the one assertion still
-awaiting that run — none remains stranded now that #1/#2/#3/#6/#7/#8 have moved
+**Stage 4 — delete `lan-transfer.mjs` and its `test:e2e` npm script: done
+locally, awaiting review and hosted CI.** The bar was: hosted `main` green with
+stages 1–3 landed *and* with the rendered unsupported-peer shape, which as of
+C3b-9 means only after the **fourth** scenario has passed `mixed-link-e2e` on
+`main`. Stages 1–3 cleared that bar at `74ac85db`; C3b-9 cleared it on hosted PR
+run 33290134608, merged as exact main `9d815c84`, and then cleared it in the
+literal sense the bar is written in — the **fourth** scenario passed
+`mixed-link-e2e` *on `main`*, in job 99200800583 of Web run 33290357209,
+20/20 + 5/5 + 4/4 + 5/5 with `Mixed link E2E passed`. That job passing is the
+whole of the prerequisite claim; the Web run around it is red for the separate
+reason below. Deleting earlier would have dropped the one assertion still
+awaiting that run — none remained stranded once #1/#2/#3/#6/#7/#8 had moved
 and #4/#5 were retired with the deterministic evidence recorded above; keeping it
 after is worse than useless — a script that cannot exit zero teaches everyone to
-ignore a red run. Stage 4 is now unblocked and is separately scoped work: it has
-not been done, and this document does not claim it has.
+ignore a red run.
+
+**What the Stage 4 diff does.** It deletes `web/e2e/lan-transfer.mjs`, removes the
+`test:e2e` entry from `web/package.json`, and removes the two `harness.mjs` APIs
+that had no other caller: the run-wide `setDefaultInit` hook and the
+`STRIP_LINK_CAP` wire filter it existed to install. `newTab`'s per-tab
+`initScript` is unchanged, and so is every current runner's behaviour — the LAN
+seed still goes first and unconditionally, with a scenario's own script layered on
+top. Everything else in the diff is documentation, comments that pointed at the
+deleted file, and one new contract block.
+
+`web/e2e/go-server.test.mjs` gains that block — "the retired lan-transfer runner
+stays deleted" — because **deletion is the one change no other gate here
+notices**. A deleted file makes nothing red, and neither does a page still handing
+a reader the retired command; they run it, get `Missing script`, and
+reasonably conclude the repository is broken rather than that the page is stale.
+The block pins: the file's absence (with the runners that replaced it asserted
+present, so a wiped `e2e/` cannot report itself as a successful Stage 4); the
+absence of the npm entry alongside the continued presence of the live `test:e2e:*`
+scripts; the absence of the two orphan harness identifiers **in code** — comments
+may still name them, which is how the harness header can tell the next reader not
+to bring them back; the surviving per-tab `newTab` composition; and the four
+current testing docs, which must not name the retired command.
+
+That last rule is deliberately about *which files*, not about the string being
+extinct. Dated specs, plans and reports are history and are explicitly classified
+as archives that **may** keep it — `docs/optimization-requirements-2026-07.md`,
+`docs/frontend-optimization-report.md`,
+`docs/superpowers/specs/2026-07-24-native-macos-ios-design.md` and
+`docs/superpowers/plans/2026-07-30-ephemeral-text-transfer-phase1.md`. One of them
+is asserted to still contain it, so the whole block cannot pass because somebody
+scrubbed every mention everywhere; rewriting a dated record to match today would
+make it lie about its own past.
+
+**Verification status: local only.** The author's evidence for this stage is
+recorded in the delivery checkpoint, not here as a hosted claim. Nothing in this
+section asserts a hosted run on the Stage 4 commit, because at the time of writing
+no such run exists.
 
 **One hosted job on exact main `9d815c84` is red, and it is not this one.** The
 `mixed-link-e2e` result above is what unblocks Stage 4 — and it is a job *inside*
@@ -1287,12 +1324,21 @@ mobile touch-target assertion: Linux Chromium measured a CSS 44px CTA as
 `43.999969482421875` and the scenario compared a raw height against a bare `< 44`.
 The same job passed on PR #95, because the shortfall is 2⁻¹⁵ px of float32 in
 `getBoundingClientRect()`, not a button that got shorter. **Status: repair
-authored, awaiting hosted CI** — the fix keeps 44px as the declared requirement,
-routes all three touch measurements through one `undersizedTouchTarget()`
-comparison with a named `TOUCH_TARGET_EPSILON_PX = 1 / 1024`, and pins that
-argument in `apps-hierarchy-contract.test.mjs`. See "The 44px touch floor" under
-Stage 1 below. Until a hosted Web run is green, that repair is a **local** claim,
-exactly like C3b-9 was before run 33290134608.
+merged into `main` as `47d648fc` ("Stabilize touch target geometry check", PR
+#96, merge commit `3e9db59a`), and hosted green on that merge commit.** The fix
+keeps 44px as the declared requirement, routes all three touch measurements
+through one `undersizedTouchTarget()` comparison with a named
+`TOUCH_TARGET_EPSILON_PX = 1 / 1024`, and pins that argument in
+`apps-hierarchy-contract.test.mjs`. See "The 44px touch floor" under Stage 1
+below. On exact main `3e9db59a`, Web run **33292324851** is green: its `test` job
+**99206014409** reported `npm run check` at **0 errors, 0 warnings**, **4,458
+passed / 6 skipped**, and `test:e2e:page-shell` **4/4**; its `mixed-link-e2e` job
+**99206014430** reported **20/20, 5/5, 4/4 and 5/5**. The native-Web pairing run
+**33292324848**, the compatibility run **33292324861** and the repository-hygiene
+run **33292324867** on that same commit are green as well. So the repair is a
+**hosted** claim now, exactly as C3b-9 became one on run 33290134608 — and Stage 4
+above still does not depend on it, because the prerequisite Stage 4 was written
+against is the `mixed-link-e2e` job, which had already passed on `9d815c84`.
 
 Two things this migration must not do. It must not restore the deleted controls,
 and it must not add a downgrade switch. What remains genuinely legacy-specific is
@@ -1373,9 +1419,14 @@ the regex.
 
 ### The 44px touch floor, and the one renderer delta it tolerates
 
-**Status: repair authored on `test/page-shell-touch-rounding` from exact main
-`9d815c84`, green locally, awaiting hosted CI.** Nothing in this subsection is a
-hosted claim yet.
+**Status: repair merged into `main` as `47d648fc` ("Stabilize touch target
+geometry check", PR #96, merge commit `3e9db59a`), from exact main `9d815c84`,
+green locally before the merge and hosted green on the merge commit.** On exact
+main `3e9db59a`, the `test` job **99206014409** of Web run **33292324851**
+reported `test:e2e:page-shell` **4/4**, with `npm run check` at **0 errors, 0
+warnings** and **4,458 passed / 6 skipped**; that run's `mixed-link-e2e` job
+**99206014430** reported **20/20, 5/5, 4/4 and 5/5**, and the run's conclusion is
+green.
 
 The `test` job of hosted Web run **33290357209**, on exact main `9d815c84`,
 failed `test:e2e:page-shell` inside `appsHierarchyScenario`: Linux Chromium
@@ -1799,15 +1850,17 @@ machines with the CLI. What remains in this section is what a headless harness
 cannot reach: two real devices, an older build, OS notifications, a screen reader,
 and two live CLI processes.
 
-> **⚠️ The automated half of the messaging gates is not currently running.**
-> `web/e2e/lan-transfer.mjs` was *written* to cover both verification paths — the
-> default (`messageDefaultScenario`, advanced verification OFF: recipient lands
-> straight in the composer, no accept/reject card, no SAS on either side) and the
-> opt-in path (`messageScenario`, advanced verification ON: explicit accept/reject
-> gate and matching SAS on both tabs), plus byte-exact multibyte content, literal
-> rendering of script-like content and the suppressed-caps case. All four message
-> scenarios sit in that script's **non-executing tail** (§1a), so none of them runs
-> today, locally or in CI. Do not count them as coverage.
+> **⚠️ Four written message scenarios never became coverage, and no longer
+> exist.** `web/e2e/lan-transfer.mjs` was *written* to cover both verification
+> paths — the default (`messageDefaultScenario`, advanced verification OFF:
+> recipient lands straight in the composer, no accept/reject card, no SAS on
+> either side) and the opt-in path (`messageScenario`, advanced verification ON:
+> explicit accept/reject gate and matching SAS on both tabs), plus byte-exact
+> multibyte content, literal rendering of script-like content and the
+> suppressed-caps case. All four sat in that script's non-executing tail and
+> never ran, locally or in CI. The script was deleted in §1a Stage 4, so they are
+> not merely uncounted now — they are gone. Nothing that follows should be read
+> as claiming a message-lane browser gate exists.
 >
 > The consent state machines and the one-SAS-per-link rule are still asserted, by
 > `web/e2e/mixed-link.mjs` and `web/e2e/code-room.mjs` on the unified `link/1`
@@ -1951,12 +2004,13 @@ are still gated, on the surface that actually has them: `web/e2e/mixed-link.mjs`
 `mixed-link.mjs`'s fourth scenario (C3b-9 above) asserts the same three things
 against a real Chromium — one non-interactive statement, no control, no drag
 affordance, a refused drop answered with that same sentence, and a quiet
-suppressed peer with no console error. It is **local only** until
-`mixed-link-e2e` has run it on hosted `main`, so until then this manual step is
-the only executed evidence for the shape, and it stays here afterwards for the
-one thing the automated scenario deliberately does not claim: that a genuinely
-older *build* renders this way, rather than a current build whose hello was
-suppressed on the wire.
+suppressed peer with no console error. It has now **run on hosted `main`**:
+exact-main `9d815c84`, Web run `33290357209`, `mixed-link-e2e` job
+`99200800583`, success, four ledgers 20/20 + 5/5 + 4/4 + 5/5. So the hosted
+scenario, not this page, is the standing executed evidence for the shape — and
+the manual step stays here anyway for the one thing the automated scenario
+deliberately does not claim: that a genuinely older *build* renders this way,
+rather than a current build whose hello was suppressed on the wire.
 
 ### 5. Mutual exclusion — **retired, and it must not be run**
 

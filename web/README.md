@@ -32,14 +32,16 @@ Cross-language wire vectors, which the Swift clients read as fixtures:
 | `npm run test:vectors` | Re-run the generators twice and fail if the tracked bytes moved. Restores what it found, so it never edits your tree. CI runs this form. |
 | `npm run gen:vectors` | The writing form. Run it and commit the result with the change that moved the wire. |
 
-Browser-driven checks. Each drives real Chrome and needs a running server, so
-none of them is part of `npm test`:
+Browser-driven checks. Each drives a real Chrome against the built `dist/`, so
+none of them is part of `npm test`. Most start whatever server they need
+themselves — a real Go server, or `vite preview` — and say so below when they do
+not:
 
 | Command | What it does |
 | --- | --- |
-| `npm run test:e2e` | Same-network transfer between two real browser contexts. |
-| `npm run test:e2e:mixed` | Mixed stored-link flow. |
-| `npm run test:e2e:code-room` | Cross-network pairing-code room. |
+| `npm run test:e2e:mixed` | The unified `link/1` workspace in the LAN room, against a Go server it builds and starts itself. |
+| `npm run test:e2e:code-room` | The same unified workspace in a pairing-code room. |
+| `npm run test:e2e:page-shell` | Auth-landing, `/apps`, `/pricing` and insecure-context page-shell contracts. `vite preview` only. |
 | `npm run test:e2e:share-target` | PWA share-target entry. |
 | `npm run test:device-inbox` | Device Inbox delivery, end to end. |
 | `npm run test:device-inbox-entry` | The `/device-inbox` entry points. |
