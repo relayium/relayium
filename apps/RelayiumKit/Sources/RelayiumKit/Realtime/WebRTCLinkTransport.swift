@@ -123,15 +123,15 @@ final class RTCLinkLane: LinkLaneChannel {
 ///
 /// ## What this slice is NOT, and what remains gated
 ///
-/// This is establishment only. It is a reusable driver a later checkpoint
-/// integrates; it is not wired to anything today and claims nothing about the
-/// workflows above it. Still open, and each one a separate piece of work:
+/// This is establishment only, and it claims nothing about the workflows above
+/// it — but it is no longer a driver waiting to be integrated, and the header
+/// said so long after it stopped being true. `LinkSessionFactory`'s
+/// `liveInitialTransport` is the one place a `link/1` establishment is
+/// constructed, `LinkAdmission`'s lifecycle callbacks are wired through
+/// `LinkRoomSession`, and `LINK_BUILD_SUPPORT` is true for macOS and iOS. A
+/// defect in this file reaches shipped builds; it does not wait for a later
+/// checkpoint. Still open, and each one a separate piece of work:
 ///
-///  - **Admission/factory integration.** Nothing constructs this class. The
-///    Nearby UI, the session factory and `LinkAdmission`'s lifecycle callbacks
-///    (`didBeginEstablishing`/`didOpen`/`didFail`) are still unwired, and
-///    `LINK_BUILD_SUPPORT` remains false so no peer is ever told this build
-///    speaks `link/1`.
 ///  - **Recovery.** This driver ignores the `resume` generation outright, and
 ///    must: it derives its own session keys and constructs the link's one
 ///    `LinkCodecs`, so answering a rebuild here would mean a second identity.
@@ -727,7 +727,7 @@ public final class WebRTCLinkTransport: NSObject {
 
     private func collectLocked(_ channel: RTCDataChannel, at now: TimeInterval) {
         guard !closed else {
-            channel.close()
+            releaseUncollectedLocked(channel)
             return
         }
         channel.delegate = self
@@ -738,6 +738,21 @@ public final class WebRTCLinkTransport: NSObject {
         // already passed.
         guard !closed else { return }
         apply(step)
+    }
+
+    /// Give back a channel that was claimed but never collected.
+    ///
+    /// `didOpen` claims the delegate on WebRTC's signalling thread and only
+    /// then queues the collection, so in between the channel is owned by this
+    /// transport and absent from `delegatedChannels` — the one list teardown
+    /// walks. A transport that closed or expired inside that window would
+    /// otherwise leave the channel holding an owner that has already told its
+    /// client it is gone, with nothing left that would ever close it. Both are
+    /// undone here, in that order, for the same reason teardown clears delegates
+    /// before it closes anything.
+    private func releaseUncollectedLocked(_ channel: RTCDataChannel) {
+        channel.delegate = nil
+        channel.close()
     }
 
     private func apply(_ step: LinkEstablishment.Step) {
@@ -919,11 +934,57 @@ extension WebRTCLinkTransport: RTCPeerConnectionDelegate {
         queue.later { [weak self] in self?.localCandidateLocked(candidate) }
     }
 
+    /// The responder's lanes arrive here, and the ORDER of the two statements
+    /// below is the whole content of this method: CLAIM the delegate, then
+    /// queue the collection — both before returning.
+    ///
+    /// `RTCDataChannel` registers its native observer while the Objective-C
+    /// wrapper is constructed, so by the time this callback runs the SCTP data
+    /// that arrived behind DCEP is already queued against a live observer. That
+    /// adapter reads the WEAK `delegate` when each callback runs and sends to
+    /// `nil` silently when nobody has claimed it yet. `OnDataChannel` builds the
+    /// wrapper and invokes this method synchronously on the signalling thread —
+    /// so the delegate has to be owned before this returns, or the peer's first
+    /// frame is dropped by libwebrtc before Relayium is ever told about it. A
+    /// lost frame on a link lane is worse than a lost message: it is a receiver
+    /// sequence that can never be proven again.
+    ///
+    /// Claiming SECOND would not be a safer order, it would be a different bug.
+    /// `SctpDataChannel`'s observer adapter POSTS every state and message
+    /// callback onto this same signalling thread, which is the thread currently
+    /// inside this method, so none of them can re-enter while it runs: the
+    /// earliest a frame can arrive is after this returns, by which point the
+    /// collection is on `queue` and the frame lands behind it whichever
+    /// statement came first. What queuing first would additionally allow is the
+    /// opposite race — `queue` running the closed-or-expired release below
+    /// BEFORE this thread reaches the claim, after which the claim writes the
+    /// delegate back onto a channel that has already been given back, leaving a
+    /// transport that has told its client it is gone owning a channel absent
+    /// from `delegatedChannels` that nothing will ever clear or close. Claiming
+    /// first is what orders that release strictly after the claim it undoes.
+    ///
+    /// Only OWNERSHIP is synchronous. Collection, the establishment barrier and
+    /// every state transition this channel can cause are still queue items, so
+    /// no libwebrtc thread ever runs Relayium's state machine here.
     public func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {
+        dataChannel.delegate = self
         queue.later { [weak self] in
-            guard let self, !self.closed else { return }
+            guard let self else {
+                // Claimed by a transport that has since gone. Its `deinit` tore
+                // down through `delegatedChannels`, which this channel never
+                // reached, so nothing else is going to close it.
+                dataChannel.close()
+                return
+            }
+            guard !self.closed else {
+                self.releaseUncollectedLocked(dataChannel)
+                return
+            }
             let now = self.now()
-            guard !self.expiredLocked(at: now) else { return }
+            guard !self.expiredLocked(at: now) else {
+                self.releaseUncollectedLocked(dataChannel)
+                return
+            }
             self.collectLocked(dataChannel, at: now)
         }
     }

@@ -741,6 +741,23 @@ public final class RealtimeConnection: NSObject {
         onClose?()
     }
 
+    /// Give back a channel that was claimed but never collected.
+    ///
+    /// `peerConnection(_:didOpen:)` claims the delegate on WebRTC's signalling
+    /// thread and only then queues the assignment to `channel`, so in between
+    /// the channel is owned by this connection and is not yet `channel` — the
+    /// one reference `closeLocked` and `deinit` clear and drop. A connection
+    /// that closed inside that window would otherwise leave the channel holding
+    /// an owner that has already fired `onClose`, with nothing left that would
+    /// ever clear or close it. Both are undone here, in that order, for the
+    /// same reason `closeLocked` clears the delegate before dropping `channel`:
+    /// a delegate still installed while the channel tears down is a callback
+    /// into a connection whose client has already been told it ended.
+    private func releaseUncollectedLocked(_ channel: RTCDataChannel) {
+        channel.delegate = nil
+        channel.close()
+    }
+
     /// Give the slot back, but only if it is still ours. A connection that
     /// closes after a newer one has claimed the socket must leave that newer
     /// handler alone — clearing it strands the new session, which then waits
@@ -825,10 +842,54 @@ extension RealtimeConnection: RTCPeerConnectionDelegate {
 
     public func peerConnection(_ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {}
 
+    /// The responder's channel arrives here, and the ORDER of the two
+    /// statements below is the whole content of this method: CLAIM the
+    /// delegate, then queue the mutable state — both before returning.
+    ///
+    /// `RTCDataChannel` registers its native observer while the Objective-C
+    /// wrapper is constructed, so by the time this callback runs the SCTP data
+    /// that arrived behind DCEP is already queued against a live observer. That
+    /// adapter reads the WEAK `delegate` when each callback runs and sends to
+    /// `nil` silently when nobody has claimed it yet. `OnDataChannel` builds the
+    /// wrapper and invokes this method synchronously on the signalling thread —
+    /// so the delegate has to be owned before this returns, or the peer's first
+    /// frame is dropped by libwebrtc before Relayium is ever told about it. On
+    /// this connection that frame is the one carrying the manifest or the first
+    /// ciphertext of an AEAD sequence: losing it is not a delay, it is a
+    /// receiver that can never be brought back into step.
+    ///
+    /// Claiming SECOND would not be a safer order, it would be a different bug.
+    /// `SctpDataChannel`'s observer adapter POSTS every state and message
+    /// callback onto this same signalling thread, which is the thread currently
+    /// inside this method, so none of them can re-enter while it runs: the
+    /// earliest a frame can arrive is after this returns, by which point the
+    /// collection is on `queue` and the frame lands behind it whichever
+    /// statement came first. What queuing first would additionally allow is the
+    /// opposite race — `queue` running the closed release below BEFORE this
+    /// thread reaches the claim, after which the claim writes the delegate back
+    /// onto a channel that has already been given back, leaving a connection
+    /// that has told its client it is gone owning a channel that `closeLocked`
+    /// and `deinit` have both already walked past. Claiming first is what
+    /// orders that release strictly after the claim it undoes.
+    ///
+    /// Only OWNERSHIP is synchronous. The `channel` assignment and the open
+    /// signal it enables are still queue items, so no WebRTC-internal thread
+    /// ever touches this connection's mutable state here.
     public func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {
+        dataChannel.delegate = self
         queue.async { [weak self] in
-            guard let self, !self.closed else { return }
-            dataChannel.delegate = self
+            guard let self else {
+                // Claimed for a connection that has since gone. Its `deinit`
+                // tore down through `channel`, which this one never reached, so
+                // nothing else is going to close it. The delegate it was given
+                // is weak and died with the connection; only the close is left.
+                dataChannel.close()
+                return
+            }
+            guard !self.closed else {
+                self.releaseUncollectedLocked(dataChannel)
+                return
+            }
             self.channel = dataChannel
             self.maybeSignalOpen()
         }

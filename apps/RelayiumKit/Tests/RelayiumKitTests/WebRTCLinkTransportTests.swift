@@ -65,6 +65,7 @@ final class WebRTCLinkTransportTests: XCTestCase {
     private func harness(
         role: Role = .initiator,
         deadlines: LinkDeadlines = LinkDeadlines(),
+        capture: LinkFrameCapture = LinkFrameCapture(),
         clock: TestClock? = nil,
         now: (() -> TimeInterval)? = nil
     ) -> (FakeWebSocketChannel, SignalingClient, WebRTCLinkTransport) {
@@ -76,6 +77,7 @@ final class WebRTCLinkTransportTests: XCTestCase {
             peerId: peer,
             role: role,
             iceServers: [],
+            capture: capture,
             deadlines: deadlines,
             now: now
                 ?? clock.map { clock in { clock.now } }
@@ -93,6 +95,31 @@ final class WebRTCLinkTransportTests: XCTestCase {
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
         return try XCTUnwrap(RTCPeerConnectionFactory().peerConnection(
             with: RTCConfiguration(), constraints: constraints, delegate: nil))
+    }
+
+    /// A real `RTCDataChannel` on the file lane's exact label.
+    ///
+    /// Real rather than faked because the thing under test is what the
+    /// Objective-C wrapper does with its weak `delegate`, which no substitute
+    /// has. It never negotiates — `readyState` stays `connecting` — and that is
+    /// all these tests need it to do. One label, because the lane a claimed
+    /// channel ends up on is what `capture.file` is read against below.
+    private func newLinkChannel(on pc: RTCPeerConnection) throws -> RTCDataChannel {
+        let config = RTCDataChannelConfiguration()
+        config.isOrdered = true
+        return try XCTUnwrap(pc.dataChannel(forLabel: LINK_FILE_CHANNEL, configuration: config))
+    }
+
+    /// True exactly once, from any thread.
+    private final class OneShot {
+        private let lock = NSLock()
+        private var fired = false
+        func fire() -> Bool {
+            lock.withLock {
+                defer { fired = true }
+                return !fired
+            }
+        }
     }
 
     private func candidate(_ address: String = "10.0.0.1") -> RTCIceCandidate {
@@ -320,6 +347,156 @@ final class WebRTCLinkTransportTests: XCTestCase {
         }
         transport.close()
         drain(transport)
+    }
+
+    // MARK: - claiming a channel the peer opened
+
+    /// The delegate must be OWNED by the time this callback returns.
+    ///
+    /// `RTCDataChannel` registers its native observer while the Objective-C
+    /// wrapper is built, and that adapter reads the weak `delegate` when each
+    /// callback runs — sending to `nil`, silently, if nobody has claimed it. So
+    /// a claim made one queue hop later is a window in which libwebrtc drops the
+    /// peer's first frame before Relayium is told anything happened.
+    ///
+    /// Made an assertion rather than a race by parking the queue: the injected
+    /// clock is read inside the item `didOpen` queues and BEFORE `collectLocked`
+    /// — the only other place a delegate is ever assigned — so holding it there
+    /// pins the one instant where "the callback has returned and the collection
+    /// has not run" is true. A transport that claimed on the queue instead owns
+    /// nothing at that instant.
+    func testTheChannelDelegateIsClaimedBeforeDidOpenReturns() throws {
+        let pc = try newPeerConnection()
+        defer { pc.close() }
+        let channel = try newLinkChannel(on: pc)
+
+        let parked = DispatchSemaphore(value: 0)
+        let resume = DispatchSemaphore(value: 0)
+        let firstReading = OneShot()
+        let (_, _, transport) = harness(role: .responder, now: {
+            if firstReading.fire() {
+                parked.signal()
+                resume.wait()
+            }
+            return 0
+        })
+        // Flushed, not just closed: teardown runs on the queue this test parks.
+        defer { resume.signal(); transport.close(); drain(transport) }
+        XCTAssertNil(channel.delegate, "nothing owns it before the callback")
+
+        transport.peerConnection(pc, didOpen: channel)
+
+        XCTAssertEqual(parked.wait(timeout: .now() + 5), .success,
+                       "the queued collection must have reached the clock")
+        XCTAssertTrue(channel.delegate === transport,
+                      "didOpen must not return without having taken the delegate itself")
+    }
+
+    /// A frame arriving the instant the callback returns must not overtake the
+    /// collection that gives its label a lane.
+    ///
+    /// This is the real boundary, and the reason the claim is safe to make
+    /// synchronously. `SctpDataChannel`'s observer adapter posts every message
+    /// callback onto the signalling thread that is running `didOpen`, so the
+    /// earliest a frame can be delivered is after that method returns — which is
+    /// exactly what this does, from the same thread, with nothing in between. By
+    /// then the collection is already on the transport queue and the frame
+    /// queues behind it. A frame that arrived before its lane existed would not
+    /// be delayed, it would be discarded: `LinkEstablishment.inbound` ignores a
+    /// label it holds no channel for, so the capture would come back empty.
+    func testAFrameArrivingAsSoonAsDidOpenReturnsQueuesBehindTheCollection() throws {
+        let capture = LinkFrameCapture()
+        let (_, _, transport) = harness(role: .responder, capture: capture)
+        defer { transport.close(); drain(transport) }
+        let pc = try newPeerConnection()
+        defer { pc.close() }
+        let channel = try newLinkChannel(on: pc)
+        let frame: [UInt8] = [0x01, 0x02, 0x03, 0x04]
+
+        transport.peerConnection(pc, didOpen: channel)
+        transport.dataChannel(channel,
+                              didReceiveMessageWith: RTCDataBuffer(data: Data(frame),
+                                                                   isBinary: true))
+        drain(transport)
+
+        XCTAssertEqual(capture.take().file, [frame],
+                       "the collection didOpen queued must already own this label")
+    }
+
+    /// A channel claimed for a transport that has already ended is given back.
+    ///
+    /// Between the synchronous claim and the collection it queued, the channel
+    /// is owned by this transport and absent from `delegatedChannels` — the one
+    /// list teardown walks. Nothing else would ever clear its delegate or close
+    /// it.
+    ///
+    /// `didOpen` is invoked from inside `onClose`, which runs ON the transport
+    /// queue: the claim is therefore synchronous while the queue is occupied,
+    /// and the item it queues is ordered strictly after this callback returns.
+    /// The interleaving is pinned by construction rather than won by a race.
+    func testAChannelClaimedForAClosedTransportIsGivenBackRatherThanEscapingTeardown() throws {
+        let (_, _, transport) = harness(role: .responder)
+        let pc = try newPeerConnection()
+        defer { pc.close() }
+        let channel = try newLinkChannel(on: pc)
+
+        var ownerAtClaim: AnyObject?
+        transport.onClose = {
+            transport.peerConnection(pc, didOpen: channel)
+            ownerAtClaim = channel.delegate
+        }
+        transport.close()
+        // Twice, and the second one is load-bearing: the first flush may be
+        // queued behind the close that fires `onClose`, so the item `didOpen`
+        // queues from inside that callback can land behind it. Only the second
+        // flush is ordered after that item has actually run.
+        drain(transport)
+        drain(transport)
+
+        XCTAssertTrue(ownerAtClaim === transport,
+                      "the claim is unconditional — didOpen cannot read the queue's state")
+        XCTAssertNil(channel.delegate,
+                     "and a transport that has already ended must give the channel back")
+        XCTAssertTrue(channel.readyState == .closing || channel.readyState == .closed,
+                      "closed too, or it survives the transport that owned it")
+    }
+
+    /// The same for the other terminal path, which reaches it differently: the
+    /// transport is live when the claim is made and only the boundary check
+    /// inside the queued item discovers that its deadline is gone. The failure
+    /// it raises tears down through `delegatedChannels`, which this channel has
+    /// not reached — so the release has to happen on this path too, or an
+    /// expired establishment leaves an open channel behind with a delegate
+    /// pointing at it.
+    func testAChannelClaimedForAnExpiredTransportIsGivenBackRatherThanEscapingTeardown() throws {
+        let clock = TestClock()
+        let (_, _, transport) = harness(role: .responder,
+                                        deadlines: LinkDeadlines(setupHardCap: 600,
+                                                                 noProgress: 100,
+                                                                 keyReveal: 600),
+                                        clock: clock)
+        let failed = expectation(description: "failed closed")
+        var reported: LinkTransportError?
+        transport.onError = { reported = $0 as? LinkTransportError }
+        transport.onClose = { failed.fulfill() }
+        let pc = try newPeerConnection()
+        defer { pc.close() }
+        let channel = try newLinkChannel(on: pc)
+
+        transport.start()
+        drain(transport)
+        clock.now = 200
+
+        transport.peerConnection(pc, didOpen: channel)
+        wait(for: [failed], timeout: 5)
+        drain(transport)
+
+        XCTAssertEqual(reported, .establishmentTimeout(.noProgress),
+                       "the collection is what discovers the crossed deadline")
+        XCTAssertNil(channel.delegate,
+                     "an expired establishment must not keep a channel it never collected")
+        XCTAssertTrue(channel.readyState == .closing || channel.readyState == .closed,
+                      "and must not leave it open")
     }
 
     // MARK: - deadlines
