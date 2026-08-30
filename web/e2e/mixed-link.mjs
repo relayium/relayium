@@ -222,6 +222,27 @@ const MULTIPAGE_ACTS = Object.freeze([
 const EXPECTED_MULTIPAGE_ACT_COUNT = 5;
 
 /**
+ * The third scenario's own frozen ledger, in run order.
+ *
+ * Separate for the same reason `MULTIPAGE_ACTS` is: this journey owns its own
+ * two tabs, its own stubbed `/api/ice` answer and its own peer connections, so
+ * "act #26 is missing" and "the relay journey never started" must not be the
+ * same message. Every entry is prefixed `relay-` so a source contract that greps
+ * `act(` file-wide can still tell the three inventories apart.
+ *
+ * `EXPECTED_RELAY_ACT_COUNT` is a literal for the same reason the other two are:
+ * a list compared against its own `.length` agrees with itself after somebody
+ * deletes an entry from it.
+ */
+const RELAY_ACTS = Object.freeze([
+  "relay-pool-only-ice",
+  "relay-probe-spent-its-budget",
+  "relay-only-link-attempt",
+  "relay-bounded-named-failure",
+]);
+const EXPECTED_RELAY_ACT_COUNT = 4;
+
+/**
  * 记下 live region 说过的**每一句**话。
  *
  * 光读"此刻 live region 里是什么"是不够的：一条链路只念一次码（见
@@ -2385,19 +2406,394 @@ async function multiPageDeviceScenario(browser, base) {
 }
 
 /**
- * The runner inventory. Two scenarios, each with its own frozen act ledger.
+ * RFC 5737 TEST-NET-1. Reserved for documentation, advertised by nobody, and
+ * therefore a black hole from any network this suite can run on — which is the
+ * property the whole scenario is built on: the TURN Allocate never completes, so
+ * `measureRelay` really spends its budget and really returns nothing.
+ *
+ * A hostname would not do. DNS for an unresolvable name fails in milliseconds on
+ * some resolvers and hangs on others, and neither is "a relay that is up and
+ * unreachable". A reserved literal address is the one shape whose behaviour is
+ * the same on a developer's laptop and in a hosted runner.
+ */
+const BLACK_HOLE_TURN = "turn:192.0.2.1:3478";
+/**
+ * The pool answer's ONLY top-level entry, and deliberately not a relay.
+ *
+ * This is the reported deployment: "only my own nodes", or any node-pool
+ * deployment, where every TURN credential arrives inside `relays` and the
+ * top-level list carries STUN alone. The defect was that the app threw the pool
+ * away when measurement produced no winner and fell back to reading the
+ * top-level list — which, here, has nothing to relay through.
+ *
+ * It doubles as the marker that tells a PRODUCT configuration apart from a PROBE
+ * one further down, so it must stay a `stun:` URL: see `relay-only-link-attempt`.
+ */
+const POOL_STUN = "stun:192.0.2.2:3478";
+const POOL_RELAY_ID = "pool-a";
+/**
+ * The credentials the pool issues, and the exact strings the product must still
+ * be holding when it builds the link.
+ *
+ * Deliberately NOT of the TURN REST `<unix-expiry>:<token>` form. `relayDeadline`
+ * reads an expiry out of that shape and arms a client-side terminal bound on it —
+ * so a REST-shaped username here would let the link end on a *credential clock*
+ * while this scenario claimed it had proved a bounded end to an *impossible
+ * transport*. Two different product rules, one of which would be silently
+ * standing in for the other.
+ */
+const POOL_TURN_USERNAME = "pool-user";
+const POOL_TURN_CREDENTIAL = "pool-secret";
+
+/**
+ * The pool-shaped `/api/ice` answer, installed before any application code runs.
+ *
+ * Only this one endpoint is answered; every other request goes to the real
+ * `fetch`, so the page still loads the real product from the real server. The
+ * counter is not decoration: an app that never asked for `/api/ice` would run on
+ * an empty ICE list and satisfy "no relay was selected" for a reason that has
+ * nothing to do with the defect, so the scenario refuses to start until both
+ * pages have actually read this answer.
+ */
+const POOL_ONLY_ICE = `
+  window.__iceServed = 0;
+  (() => {
+    const body = JSON.stringify({
+      iceServers: [{ urls: ${JSON.stringify(POOL_STUN)} }],
+      relays: [{
+        id: ${JSON.stringify(POOL_RELAY_ID)},
+        region: "documentation",
+        iceServers: [{
+          urls: [${JSON.stringify(BLACK_HOLE_TURN)}],
+          username: ${JSON.stringify(POOL_TURN_USERNAME)},
+          credential: ${JSON.stringify(POOL_TURN_CREDENTIAL)},
+        }],
+      }],
+    });
+    const realFetch = window.fetch;
+    window.fetch = function (input, init) {
+      const url = typeof input === "string" ? input : input?.url ?? "";
+      if (url.startsWith("/api/ice")) {
+        window.__iceServed++;
+        return Promise.resolve(new Response(body, {
+          status: 200, headers: { "Content-Type": "application/json" },
+        }));
+      }
+      return realFetch.call(window, input, init);
+    };
+  })();
+`;
+
+/**
+ * Every `RTCConfiguration` this page hands to the WebRTC engine, in order.
+ *
+ * A `Proxy` construct trap rather than a wrapper function, exactly like
+ * `TRACK_PEER_CONNECTIONS`: a plain function replacement breaks `instanceof` and
+ * the static members, and the product is entitled to both.
+ *
+ * The configuration and the connection are pushed TOGETHER and only after a
+ * successful construction, so the two arrays stay index-aligned — a config
+ * recorded for a constructor that threw would leave every later "the nth
+ * connection was built from the nth config" read off by one.
+ */
+const CAPTURE_RTC_CONFIGS = `
+  window.__rtcConfigs = [];
+  window.__rtcPeerConnections = [];
+  window.RTCPeerConnection = new Proxy(window.RTCPeerConnection, {
+    construct(Target, args, NewTarget) {
+      const pc = Reflect.construct(Target, args, NewTarget);
+      window.__rtcConfigs.push(JSON.parse(JSON.stringify(args[0] ?? {})));
+      window.__rtcPeerConnections.push(pc);
+      return pc;
+    },
+  });
+`;
+
+/** Every ICE URL in one captured configuration, flattened. `urls` is `string |
+ *  string[]` per the spec and both shapes are in production use. */
+const iceUrlsIn = (cfg) => (cfg.iceServers ?? [])
+  .flatMap((server) => (Array.isArray(server.urls) ? server.urls : [server.urls]));
+
+/**
+ * Joining, discovery, and the relay probe spending its own 9-second budget.
+ *
+ * Generous because none of it is the property under test: this is the setup that
+ * has to be real before the measurement below can mean anything.
+ */
+const RELAY_SETUP_BUDGET_MS = 60_000;
+/**
+ * The ONE bound on the impossible connection, shared by every wait from the
+ * click to the terminal card.
+ *
+ * Deliberately LARGER than the product's own worst-case terminal bound
+ * (`SETUP_DEADLINE_MS` is 90s in `webrtc.ts`; the link request and the
+ * authentication step are 30s each). The runner's budget has to be the outer
+ * one, or a red run cannot distinguish "the product never terminated" — the
+ * whole defect — from "the runner ran out of patience first".
+ *
+ * One deadline, not a literal per wait: three literals is how a "bounded" wait
+ * quietly becomes 3 × 120s.
+ */
+const RELAY_FAILURE_BUDGET_MS = 120_000;
+
+/**
+ * Migration of `lan-transfer.mjs` unique #8: a relay pool that cannot be
+ * measured must still be USED, and the connection it cannot complete must end.
+ *
+ * The field failure this covers: a cross-network transfer sat at "establishing
+ * an encrypted connection", 0%, and reported a connection failure ~30s later,
+ * with clean server logs. The cause was not the timeout. The app only used the
+ * relay pool when `measureRelay` had picked a winner; when the probe timed out —
+ * routine on a phone, where a radio waking from idle plus TURN long-term
+ * credentials' two Allocate round trips eat the budget — it fell back to reading
+ * the LEGACY top-level `iceServers` for a relay. A "only my own nodes" user, and
+ * any node-pool deployment, has no top-level TURN at all: policy fell back to
+ * "all", the freshly-issued pool credentials were dropped on the floor, and both
+ * peers were left with host/srflx candidates that cannot cross CGNAT.
+ *
+ * Everything here is real except the one HTTP answer: a real pool-shaped
+ * `/api/ice` body, a real `RTCPeerConnection` trying to allocate against a
+ * reserved documentation address (so the probe genuinely times out rather than
+ * being stubbed to), the product's own `.open-workspace` control, and the
+ * product's own rendered workspace header.
+ *
+ * It is a third scenario rather than more acts on the first journey for the same
+ * reason the multi-page one is: it needs an `/api/ice` answer installed before
+ * boot on both tabs, and the twenty-act journey's entire point is a link that
+ * WORKS. A tab cannot have both.
+ *
+ * What it does NOT claim: this is not a phone, not a real cross-network path,
+ * and not a real NAT. The legacy scenario spoofed an Android UA, and that has
+ * deliberately not been carried over — the UA changed nothing about the code
+ * under test (`chooseRtcConfig` never reads it), so keeping it would have
+ * dressed a desktop Chromium result up as a mobile one. The mobile pressure that
+ * makes the probe time out in the field is replaced here by a relay that cannot
+ * answer at all, which is the same input to the same decision.
+ */
+async function relayFailureScenario(browser, base) {
+  const { ledger, act } = newLedger(RELAY_ACTS);
+
+  // Verification OFF: this journey is about the transport, and a consent gate
+  // would put a human decision in front of every state it measures.
+  const boot = VERIFY_DEFAULT + POOL_ONLY_ICE + CAPTURE_RTC_CONFIGS;
+  const a = await newTab(browser, base + "/", boot);
+  const b = await newTab(browser, base + "/", boot);
+  for (const tab of [a, b]) await setWideViewport(tab);
+
+  // ── 1. Both pages really read a POOL-ONLY answer ─────────────────────────
+  //
+  // The stub is served by this file, so "the answer has the right shape" is not
+  // by itself evidence. Two things here are: that the product asked for it and
+  // is running on it, and that the shape still withholds the legacy top-level
+  // relay. The second is what keeps the scenario honest — a top-level `turn:`
+  // added here would relay the link even on a build that threw the pool away,
+  // and every assertion below would pass over the very defect it exists for.
+  const topLevelRelays = [POOL_STUN].filter((u) => u.startsWith("turn:") || u.startsWith("turns:"));
+  if (topLevelRelays.length !== 0) {
+    throw new Error(
+      `this scenario's /api/ice answer carries a top-level relay ${JSON.stringify(topLevelRelays)} — ` +
+      "the reported failure is a POOL-ONLY deployment, and a legacy top-level TURN would let a build " +
+      "that discards the pool relay anyway, i.e. pass while broken",
+    );
+  }
+  for (const [who, tab] of [["A", a], ["B", b]]) {
+    await tab.waitFor(
+      "window.__iceServed > 0", `page ${who} to read this scenario's pool-only /api/ice answer`, RELAY_SETUP_BUDGET_MS,
+    );
+  }
+  const peersSeen = "document.querySelectorAll('.pname').length > 0";
+  for (const [who, tab] of [["A", a], ["B", b]]) {
+    await tab.waitFor(peersSeen, `page ${who} to see the other page on the radar`, RELAY_SETUP_BUDGET_MS);
+  }
+  // Exactly one enabled action, i.e. a live `link/1` peer. Without this the
+  // click below could fail for a reason — a peer that never announced — that has
+  // nothing to do with relays, and the diagnosis would be spent on the wrong
+  // module entirely.
+  await a.waitFor(
+    `document.querySelectorAll('${OPEN_WORKSPACE}').length === 1` +
+    ` && !document.querySelector('${OPEN_WORKSPACE}').disabled`,
+    "page A's single workspace action for the other page",
+    RELAY_SETUP_BUDGET_MS,
+  );
+  const served = { a: await a.evaluate("window.__iceServed"), b: await b.evaluate("window.__iceServed") };
+  act("relay-pool-only-ice", `both pages ran on a pool-only /api/ice answer with no top-level relay (served ${served.a}/${served.b})`);
+
+  // ── 2. The probe genuinely ran, against the black hole, to exhaustion ─────
+  //
+  // Waited on an observable fact rather than slept through. `measureRelay`
+  // closes its connection in a `finally`, so "every connection this page has
+  // built is closed" is the page's own statement that the measurement is over —
+  // and a sleep of the same length would pass just as happily on a build that
+  // never probed at all, which is the precondition this act exists to establish.
+  await a.waitFor(
+    "window.__rtcPeerConnections.length > 0 && " +
+    "window.__rtcPeerConnections.every((pc) => pc.signalingState === 'closed')",
+    "page A's relay probe to spend its whole budget against the black-hole relay and close",
+    RELAY_SETUP_BUDGET_MS,
+  );
+  const probes = await a.evaluate("window.__rtcConfigs");
+  if (probes.length === 0) {
+    throw new Error("page A built no peer connection at all — the relay probe never ran, so nothing below would mean anything");
+  }
+  // Every one of them is the probe's own shape: relay-only, against exactly the
+  // pool entry, with the credentials this answer issued — and with NO STUN,
+  // which is what makes a probe configuration distinguishable from the product
+  // one in the act after this.
+  for (const [i, cfg] of probes.entries()) {
+    const urls = iceUrlsIn(cfg);
+    const creds = (cfg.iceServers ?? []).map((s) => `${s.username ?? ""}/${s.credential ?? ""}`);
+    if (JSON.stringify(urls) !== JSON.stringify([BLACK_HOLE_TURN]) ||
+        cfg.iceTransportPolicy !== "relay" ||
+        JSON.stringify(creds) !== JSON.stringify([`${POOL_TURN_USERNAME}/${POOL_TURN_CREDENTIAL}`])) {
+      throw new Error(
+        `page A's connection #${i + 1} before the link is not a relay probe of this pool: ${JSON.stringify(cfg)}`,
+      );
+    }
+  }
+  // From here on only the product's own link attempt counts. Cleared, and the
+  // clearing READ BACK: an assertion further down that a configuration "came
+  // from the attempt" is worth nothing if a probe capture was still sitting in
+  // the array when the click happened.
+  const cleared = await a.evaluate(`(() => {
+    window.__rtcConfigs.length = 0;
+    window.__rtcPeerConnections.length = 0;
+    return { configs: window.__rtcConfigs.length, pcs: window.__rtcPeerConnections.length };
+  })()`);
+  if (cleared.configs !== 0 || cleared.pcs !== 0) {
+    throw new Error(`the probe captures did not clear: ${JSON.stringify(cleared)}`);
+  }
+  act("relay-probe-spent-its-budget", `page A really probed the black-hole relay ${probes.length} time(s), measured nothing, and its captures were cleared before the link`);
+
+  // ── 3. The link attempt KEEPS the pool credentials, relay-only ───────────
+  //
+  // One deadline from the click onwards, shared by this act and the terminal one
+  // below: the claim is that an impossible connection ends within a bound, and
+  // three separate literals would be three separate bounds.
+  await a.evaluate(`(() => { document.querySelector('${OPEN_WORKSPACE}').click(); return true; })()`);
+  const deadline = Date.now() + RELAY_FAILURE_BUDGET_MS;
+  const left = () => Math.max(1, deadline - Date.now());
+  const startedAt = Date.now();
+
+  // The live subject, before anything terminal is asserted about it. A workspace
+  // that never appeared and a workspace that failed both render zero
+  // `.wh-disconnect`, and only one of them is this product behaving.
+  await a.waitFor(
+    `!!document.querySelector('${HEAD} .wh-disconnect') && !document.querySelector('${HEAD} .wh-restart')`,
+    "page A's LIVE workspace header — the subject the bounded failure below has to terminate",
+    left(),
+  );
+  const liveState = await a.evaluate(`(document.querySelector('${HEAD} .wh-state')?.textContent ?? '').trim()`);
+  if (!liveState) throw new Error("page A's live workspace header states nothing at all, so a later change of state would prove nothing");
+
+  await a.waitFor("window.__rtcConfigs.length > 0", "page A to build the product link's own peer connection", left());
+  const attempt = await a.evaluate("window.__rtcConfigs[0]");
+  const urls = iceUrlsIn(attempt);
+  const relayed = (attempt.iceServers ?? []).filter((s) => {
+    const list = Array.isArray(s.urls) ? s.urls : [s.urls];
+    return list.some((u) => u.startsWith("turn:") || u.startsWith("turns:"));
+  });
+  if (relayed.length === 0) {
+    throw new Error(
+      `page A built its link connection with NO relay: ${JSON.stringify(attempt)} — this is the reported ` +
+      "failure: pool relay credentials were issued and then discarded, so a cross-network link sits at 0% " +
+      "until the connect timeout",
+    );
+  }
+  if (!urls.includes(BLACK_HOLE_TURN)) {
+    throw new Error(`page A's link connection relays through something this pool never issued: ${JSON.stringify(attempt)}`);
+  }
+  // The exact credentials, not merely a `turn:` URL. A URL with the credentials
+  // stripped allocates nothing, and would satisfy a URL-only check while
+  // relaying exactly as little as no relay at all.
+  const held = relayed.every((s) => s.username === POOL_TURN_USERNAME && s.credential === POOL_TURN_CREDENTIAL);
+  if (!held) {
+    throw new Error(`page A kept the pool relay URL but not its credentials: ${JSON.stringify(attempt)}`);
+  }
+  // The STUN marker. `chooseRtcConfig` builds the no-selection fallback by
+  // MERGING the top-level list with the pool, so the top-level STUN is present
+  // in the product's configuration and in no probe configuration — which proves
+  // two things at once that would otherwise need a second observer: this capture
+  // belongs to the product attempt rather than to a probe that leaked past the
+  // clear, and the black-hole relay was never *selected* (a selection uses that
+  // one relay's list alone, with no STUN in it).
+  if (!urls.includes(POOL_STUN)) {
+    throw new Error(
+      `page A's link configuration carries no top-level STUN: ${JSON.stringify(attempt)} — that is the shape of a ` +
+      "relay PROBE or of a selected relay, not of the unmeasured-pool fallback this scenario is about",
+    );
+  }
+  if (attempt.iceTransportPolicy !== "relay") {
+    throw new Error(
+      `the relay was present but the policy was ${JSON.stringify(attempt.iceTransportPolicy ?? "all")}, want "relay": ` +
+      `${JSON.stringify(attempt)} — "all" is the fallback that spends ~20s on candidates that cannot work`,
+    );
+  }
+  act("relay-only-link-attempt", `an unmeasurable pool still relayed: the link kept ${BLACK_HOLE_TURN} with its issued credentials, policy ${attempt.iceTransportPolicy}`);
+
+  // ── 4. And it ENDS, with a sentence, inside that same deadline ───────────
+  //
+  // The relay is a black hole, so this link cannot come up. What it must not do
+  // is stay at "connecting" for ever — the reported field symptom — or silently
+  // unmount and hand back the chooser with the failure reported nowhere.
+  await a.waitFor(
+    `!!document.querySelector('${HEAD} .wh-restart')`,
+    "the impossible link to reach a terminal card instead of hanging at connecting",
+    left(),
+  );
+  const endedAfterMs = Date.now() - startedAt;
+  const ended = await a.evaluate(`(() => {
+    const head = document.querySelector('${HEAD}');
+    if (!head) return { head: false };
+    return {
+      head: true,
+      state: (head.querySelector('.wh-state')?.textContent ?? '').trim(),
+      restart: head.querySelectorAll('.wh-restart').length,
+      disconnect: head.querySelectorAll('.wh-disconnect').length,
+      paths: head.querySelectorAll('.path').length,
+      chooser: document.querySelectorAll('${OPEN_WORKSPACE}').length,
+    };
+  })()`);
+  // The header is still THERE — a terminal state nobody can read is the other
+  // half of this defect, and the chooser count is the same claim from the other
+  // side: a workspace that unmounted itself would hand the device list back with
+  // the failure reported nowhere. It offers exactly the one control a terminal
+  // card should, it no longer claims a path, and its sentence has actually
+  // CHANGED from the live one. The last of those is what makes this
+  // locale-independent: "it says something" is satisfied by a header still
+  // saying "connecting", which is the reported symptom itself.
+  if (!ended.head || ended.restart !== 1 || ended.disconnect !== 0 || ended.paths !== 0 ||
+      ended.chooser !== 0 || !ended.state || ended.state === liveState) {
+    throw new Error(
+      `the unreachable-relay link did not end in a named terminal card: ${JSON.stringify(ended)} ` +
+      `(it still reads ${JSON.stringify(liveState)}, the state it was in while connecting)`,
+    );
+  }
+  act("relay-bounded-named-failure", `the unreachable relay produced a named terminal card ("${ended.state}") after ${(endedAfterMs / 1000).toFixed(1)}s, not an endless connecting`);
+
+  // No console-error sweep here, and that is deliberate rather than an omission:
+  // this scenario asks Chromium to allocate against an address nothing answers,
+  // and the network errors it logs for that are Chromium being honest. Asserting
+  // silence would be asserting on the browser's logging, not on the product.
+
+  await browser.send("Target.closeTarget", { targetId: a.targetId });
+  await browser.send("Target.closeTarget", { targetId: b.targetId });
+  return ledger;
+}
+
+/**
+ * The runner inventory. Three scenarios, each with its own frozen act ledger.
  *
  * `page-shell.mjs` can count scenarios because it has four independent ones. A
  * count of `1/1` would survive `mixedScenario` being edited down to its first
  * assertion, so the literals that actually protect this suite are the per-act
- * counts, and `runScenarios` checks the scenario count and both of them.
+ * counts, and `runScenarios` checks the scenario count and all three of them.
  *
  * Each entry carries the list its ledger is compared against AND the fixed
  * literal that list's length must equal. Never `SCENARIOS.length` /
  * `acts.length`: an array and its own length always agree, including after
  * somebody deletes an entry from it.
  */
-const EXPECTED_SCENARIO_COUNT = 2;
+const EXPECTED_SCENARIO_COUNT = 3;
 const SCENARIOS = [
   { label: "mixed link", run: mixedScenario, acts: ACTS, expectedActs: EXPECTED_ACT_COUNT },
   {
@@ -2405,6 +2801,12 @@ const SCENARIOS = [
     run: multiPageDeviceScenario,
     acts: MULTIPAGE_ACTS,
     expectedActs: EXPECTED_MULTIPAGE_ACT_COUNT,
+  },
+  {
+    label: "bounded relay-pool failure",
+    run: relayFailureScenario,
+    acts: RELAY_ACTS,
+    expectedActs: EXPECTED_RELAY_ACT_COUNT,
   },
 ];
 
