@@ -41,7 +41,67 @@ Build numbers consumed so far, none of which may be rebuilt or re-uploaded:
 The published minimum is macOS 13.0, and the published build does not remove
 compatibility with older Relayium clients.
 
-There is no submission in flight. Nothing below authorizes preparing one.
+There is no submission in flight, and no build above `26` has been uploaded. The
+repository source is *prepared* at `1.3.9` (build `27`), which is a state of the
+source tree and nothing more: build `27` has not been archived, uploaded, or
+consumed, and preparing a version is not submitting one. Nothing in this
+document authorizes archiving, uploading, adding for review, or releasing it.
+
+#### Prepared next version — `1.3.9` (build `27`), NOT submitted
+
+**`1.3.8` (build `26`) is what Apple is serving.** The Xcode project in this
+branch builds `1.3.9` (build `27`); that is the only thing that has moved.
+`web/mac-app-store-release.json` still reads `1.3.8` and must keep reading
+`1.3.8` until Apple actually publishes a later build, so the root `README.md`,
+`apps/README.md` and the nine `/releases` pages correctly continue to name
+`1.3.8` as the published App Store version. Do not "synchronize" them to
+`1.3.9`; they are describing what Apple is serving, not what this branch builds.
+
+`1.3.9` is a connection-reliability repair, prepared from product source on
+`work/macos-1.3.9-release`, based on
+`934cf18de1e9850685c24fb1c20370dd5e463365` or its version-only descendant. It
+carries the responder-side DataChannel delegate fix: when this Mac was the side
+being contacted, the first inbound message could arrive before the receiving
+channel had a delegate and be dropped, so an occasional cross-network
+connection never started and had to be retried. The channel is now claimed
+before anything can arrive on it, on both data-channel transports the Mac uses:
+the unified link transport and the compatibility transport it falls back to for
+peers that do not advertise it. The change alters no wire byte, protocol
+generation, or compatibility route, and it changes no subscription product,
+price, entitlement, purchase transition, or provider configuration. The minimum
+remains macOS 13.0, and build `27` satisfies the strictly-above-`26` floor
+recorded above.
+
+The copy below is drafted for that build and has **not** been submitted,
+uploaded, reviewed, approved, or published. English and Simplified Chinese are
+Relayium's maintained languages; no other locale is drafted here.
+
+What's New for `1.3.9` (drafted, English):
+
+> Fixes an occasional cross-network connection failure. When your Mac was the
+> side being contacted, the very first message could arrive before the
+> receiving channel was ready and be missed, so the transfer had to be retried.
+> The channel is now ready before that first message can arrive.
+
+What's New for `1.3.9` (drafted, Simplified Chinese):
+
+> 修复了跨网络传输偶发的连接失败。当这台 Mac 是被联系的一方时，第一条消息可能
+> 在接收通道就绪之前到达而被漏掉，导致传输需要重试。现在通道会在第一条消息到达
+> 之前就准备好。
+
+What to Test for `1.3.9` (drafted, English):
+
+> Connect a browser and this Mac over a cross-network transfer and confirm the
+> connection succeeds on the first attempt, with no retry. Test both roles: once
+> with the browser starting the transfer and the Mac joining, and once with the
+> Mac starting it and the browser joining. In each role send text and then a
+> file, and confirm both arrive complete.
+
+What to Test for `1.3.9` (drafted, Simplified Chinese):
+
+> 用浏览器与这台 Mac 建立跨网络传输，确认首次尝试即可连接成功，无需重试。两种
+> 发起方向都要测试：一次由浏览器发起、Mac 加入，一次由 Mac 发起、浏览器加入。
+> 每个方向都先发送文本再发送文件，确认都能完整送达。
 
 #### Delivered submission copy, retained as history
 
