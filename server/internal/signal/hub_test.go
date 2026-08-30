@@ -201,6 +201,34 @@ func TestJoinLimitedEnforcesCapacity(t *testing.T) {
 	}
 }
 
+func TestJoinDeviceLimitedObservedReturnsAtomicAdmissionCount(t *testing.T) {
+	h := syncHub()
+	a, b := &fakeConn{}, &fakeConn{}
+	admitted, peers := h.JoinDeviceLimitedObserved("t:atomic", "a", "A", a, 2, "", "", false)
+	if !admitted || peers != 1 {
+		t.Fatalf("first join = (%v,%d), want (true,1)", admitted, peers)
+	}
+	admitted, peers = h.JoinDeviceLimitedObserved("t:atomic", "b", "B", b, 2, "", "", false)
+	if !admitted || peers != 2 {
+		t.Fatalf("second join = (%v,%d), want (true,2)", admitted, peers)
+	}
+
+	// Leaving immediately can change a later PeerCount, but it cannot rewrite
+	// the admission-time value already returned to the observer.
+	h.Leave("t:atomic", "b")
+	if got := h.PeerCount("t:atomic"); got != 1 {
+		t.Fatalf("post-leave PeerCount = %d, want 1", got)
+	}
+	if peers != 2 {
+		t.Fatalf("captured admission count changed to %d, want 2", peers)
+	}
+
+	admitted, peers = h.JoinDeviceLimitedObserved("t:atomic", "c", "C", &fakeConn{}, 1, "", "", false)
+	if admitted || peers != 0 {
+		t.Fatalf("refused join = (%v,%d), want (false,0)", admitted, peers)
+	}
+}
+
 func TestJoinLimitedGlobalRoomCap(t *testing.T) {
 	h := NewHub()
 	for i := 0; i < maxRooms; i++ {

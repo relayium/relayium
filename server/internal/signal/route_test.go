@@ -10,6 +10,31 @@ func TestRoomForCode(t *testing.T) {
 	}
 }
 
+func TestRoomForResolvedUsesOpaqueGeneration(t *testing.T) {
+	validateCalls := 0
+	room, max, lan, ok := RoomForResolved("424242", func(string) bool {
+		validateCalls++
+		return true
+	}, func(code string) (string, bool) {
+		if code != "424242" {
+			t.Fatalf("resolver code = %q", code)
+		}
+		return pairRoomForGeneration(code, "opaque"), true
+	})
+	if !ok || lan || max != 2 || room != "c:424242:opaque" {
+		t.Fatalf("resolved room = (%q,%d,%v,%v)", room, max, lan, ok)
+	}
+	if validateCalls != 0 {
+		t.Fatalf("legacy validator called %d times despite authoritative resolver", validateCalls)
+	}
+}
+
+func TestRoomForResolvedRejectsUnknownCode(t *testing.T) {
+	if _, _, _, ok := RoomForResolved("424242", nil, func(string) (string, bool) { return "", false }); ok {
+		t.Fatal("resolver-refused code was admitted")
+	}
+}
+
 func TestRoomForCodeRejected(t *testing.T) {
 	no := func(string) bool { return false }
 	if _, _, _, valid := RoomFor("424242", no); valid {

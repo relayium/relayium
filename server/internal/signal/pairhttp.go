@@ -108,7 +108,7 @@ type PairAdmission func(r *http.Request, userID string) string
 // be stale by the time the button is clicked, and a CLI or bearer client never
 // asks one. A refusal allocates nothing; a code taken out of a 10^6 space and
 // handed to nobody collides with real mints for its whole TTL.
-func PairHandler(reg *PairRegistry, rl *RateLimiter, ipx *IPExtractor, currentUser func(*http.Request) (string, bool), admit PairAdmission) http.HandlerFunc {
+func PairHandler(reg *PairRegistry, rl *RateLimiter, ipx *IPExtractor, currentUser func(*http.Request) (string, bool), admit PairAdmission, afterMint ...func()) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ip := ipx.IP(r)
 		if !rl.Allow(ip) {
@@ -136,6 +136,17 @@ func PairHandler(reg *PairRegistry, rl *RateLimiter, ipx *IPExtractor, currentUs
 			// 也不要把空串当成码发出去——那会让前端显示一个谁也加入不了的"码"。
 			http.Error(w, "could not mint a pairing code, try again", http.StatusServiceUnavailable)
 			return
+		}
+		// The optional observer runs only after MintFor succeeded and is
+		// panic-contained: aggregate accounting must never fail or crash an
+		// otherwise successful product action. Production's callback is a bounded
+		// non-blocking queue write, so this adds no per-request goroutine.
+		if len(afterMint) > 0 && afterMint[0] != nil {
+			observe := afterMint[0]
+			func() {
+				defer func() { _ = recover() }()
+				observe()
+			}()
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"code": code, "expiresAt": exp})

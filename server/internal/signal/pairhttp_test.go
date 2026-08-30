@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -40,6 +41,61 @@ func TestPairHandlerMints(t *testing.T) {
 	}
 	if !reg.Validate(body.Code) {
 		t.Fatal("minted code should validate in the registry")
+	}
+}
+
+func waitAtomic(t *testing.T, value *atomic.Int32, want int32) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for value.Load() != want {
+		if time.Now().After(deadline) {
+			t.Fatalf("observer calls = %d, want %d", value.Load(), want)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestPairHandlerPostSuccessObserverIsIsolated(t *testing.T) {
+	now := func() int64 { return 1000 }
+	reg := NewPairRegistry(300, now)
+	var calls atomic.Int32
+	h := PairHandler(reg, NewRateLimiter(5, time.Minute, now), NewIPExtractor(nil), alwaysAuthed, nil, func() {
+		calls.Add(1)
+		panic("observer failure must be contained")
+	})
+	rec := httptest.NewRecorder()
+	h(rec, httptest.NewRequest(http.MethodPost, "/api/pair", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("successful mint became status %d", rec.Code)
+	}
+	waitAtomic(t, &calls, 1)
+}
+
+func TestPairHandlerObserverSkipsRejectedAndFailedMints(t *testing.T) {
+	now := func() int64 { return 1000 }
+	var calls atomic.Int32
+	observer := func() { calls.Add(1) }
+
+	rejected := PairHandler(NewPairRegistry(300, now), NewRateLimiter(5, time.Minute, now), NewIPExtractor(nil), alwaysAuthed, blocked("traffic_exhausted"), observer)
+	rec := httptest.NewRecorder()
+	rejected(rec, httptest.NewRequest(http.MethodPost, "/api/pair", nil))
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("rejected status = %d", rec.Code)
+	}
+
+	failedReg := NewPairRegistry(300, now)
+	failedReg.draw = func() string { return "515151" }
+	failedReg.codes["515151"] = codeEntry{exp: 1300, owner: "existing"}
+	failed := PairHandler(failedReg, NewRateLimiter(5, time.Minute, now), NewIPExtractor(nil), alwaysAuthed, nil, observer)
+	rec = httptest.NewRecorder()
+	failed(rec, httptest.NewRequest(http.MethodPost, "/api/pair", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("failed mint status = %d, want 503", rec.Code)
+	}
+
+	time.Sleep(20 * time.Millisecond)
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("observer ran %d times for rejected/failed mints", got)
 	}
 }
 

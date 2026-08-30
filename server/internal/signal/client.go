@@ -196,11 +196,13 @@ func ServeWSObserved(h *Hub, idgen func() string, observe RoomJoinObserver) func
 					if lan {
 						device, active = e.DeviceID, e.Active
 					}
-					if h.JoinDeviceLimited(room, id, e.Name, conn, maxPeers, clientIP, device, active) {
+					if admitted, peers := h.JoinDeviceLimitedObserved(room, id, e.Name, conn, maxPeers, clientIP, device, active); admitted {
 						joined = true
 						cancelJoin() // joined in time — stop the join deadline
 						if observe != nil {
-							observe(room, h.PeerCount(room))
+							// peers is the admission-time snapshot captured under the
+							// insertion lock. The callback itself is outside that lock.
+							observe(room, peers)
 						}
 					} else {
 						return // room full — close the connection

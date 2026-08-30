@@ -81,3 +81,34 @@ describe("legal content", () => {
     });
   }
 });
+
+describe("maintained privacy copy discloses the activation aggregate exactly", () => {
+  const flattened = (value) => {
+    if (typeof value === "string") return [value];
+    if (Array.isArray(value)) return value.flatMap(flattened);
+    if (value && typeof value === "object") return Object.values(value).flatMap(flattened);
+    return [];
+  };
+
+  for (const lang of MAINTAINED_LANGS) {
+    it(`${lang} calls it identifier-free best-effort lower-bound actions, not people or conversion`, () => {
+      const text = flattened(privacy.langs[lang]).join("\n");
+      if (lang === "en") {
+        expect(text).toMatch(/first-party, identifier-free monthly aggregate action counts/);
+        expect(text).toMatch(/successful code mints.*first admitted socket.*first transition to two admitted peers/s);
+        expect(text).toMatch(/only UTC month.*three fixed stages.*nonnegative count/s);
+        expect(text).toMatch(/best-effort lower-bound action counts, not unique users, a cohort, or an exact conversion rate/);
+        expect(text).toMatch(/same-month action totals and is not cohort conversion/);
+        expect(text).toMatch(/database does not store it against your account and contains no field linking it to an account/);
+      } else {
+        expect(text).toMatch(/第一方、无标识符的跨网络配对月度聚合动作数/);
+        expect(text).toMatch(/成功铸码.*首次接纳连接.*首次变为两个已接纳端/s);
+        expect(text).toMatch(/只包含 UTC 月份.*三个固定阶段之一.*非负整数计数/s);
+        expect(text).toMatch(/尽力写入的动作数下界，不是独立用户数、同期群或精确转化率/);
+        expect(text).toMatch(/同月动作总数相除，并不是同期群转化/);
+        expect(text).toMatch(/数据库不按账号保存这些聚合，也不含将其连接到账号的字段/);
+      }
+      expect(text).toMatch(/third-party analytics SDK|第三方分析 SDK/);
+    });
+  }
+});

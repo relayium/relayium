@@ -15,11 +15,11 @@ import (
 
 // Pair-room Stored Objects (code-first pairing, Phase 2).
 //
-// A pairing code used to be pure rendezvous: two peers met in room "c:<code>"
-// and every byte went over the live link. Pre-upload adds a second thing a code
-// can name — ciphertext the SENDER uploaded while the room was still waiting for
-// someone to join — so that the wait, which was going to be idle anyway, is
-// spent moving bytes.
+// A pairing code used to be pure rendezvous: two peers met in a per-mint opaque
+// room generation and every byte went over the live link. Pre-upload adds a
+// second thing a code can name — ciphertext the SENDER uploaded while the room
+// was still waiting for someone to join — so that the wait, which was going to
+// be idle anyway, is spent moving bytes.
 //
 // This file owns that object's whole lifecycle. It is a third StoredFile purpose
 // alongside `share` and `device_task`, and like `device_task` it exists only to
@@ -916,7 +916,7 @@ func (s *Service) resolveJoinedRoom(ctx context.Context, j observedJoin) (PairRo
 		return room, false, err
 	}
 	if j.roomID == "" && room.CreatedAt > j.observedAt {
-		log.Printf("pair room: code %s was reissued before its observed join could be recorded; the original room keeps the join deadline", j.code)
+		logPairJoinGenerationMismatch()
 		return PairRoom{}, false, nil
 	}
 	return room, true, nil
@@ -939,7 +939,7 @@ func (s *Service) flushHeldJoin(ctx context.Context, room PairRoom) bool {
 	}
 	j.roomID = room.ID
 	if err := s.markPairRoomJoined(ctx, j); err != nil {
-		log.Printf("pair room %s: landing its queued join before reusing code %s: %v", room.ID, room.Code, err)
+		logPairJoinFlushFailure()
 	}
 	return true
 }
@@ -956,9 +956,21 @@ func (s *Service) flushHeldJoin(ctx context.Context, room PairRoom) bool {
 func (s *Service) RetryPairRoomJoins(ctx context.Context) {
 	for _, j := range s.pairJoins.pendingJoins() {
 		if err := s.markPairRoomJoined(ctx, j); err != nil {
-			log.Printf("pair room: retrying the join of code %s: %v", j.code, err)
+			logPairJoinRetryFailure()
 		}
 	}
+}
+
+func logPairJoinGenerationMismatch() {
+	log.Print("pair room: stale join observation ignored after code reuse")
+}
+
+func logPairJoinFlushFailure() {
+	log.Print("pair room: queued join write failed before code reuse")
+}
+
+func logPairJoinRetryFailure() {
+	log.Print("pair room: queued join retry failed")
 }
 
 // RunPairJoinRetries drains the observed-join queue on a ticker until ctx ends.

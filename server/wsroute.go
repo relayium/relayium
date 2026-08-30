@@ -70,13 +70,14 @@ type wsRoute struct {
 	guessBreaker *signal.GuessBreaker
 	ipx          *signal.IPExtractor
 	validate     func(string) bool
+	resolvePair  func(string) (string, bool)
 	globalConns  *signal.GlobalConnLimiter
 	ipConns      *signal.IPConnLimiter
 	// handle takes the resolved room plus whether it is the code-less LAN room:
 	// installation presence (device grouping / activation) is honoured there
 	// only, so the two-participant pairing-code room keeps its exact semantics.
-	handle       func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, ip string, lan bool)
-	lanMaxPeers  int
+	handle      func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, ip string, lan bool)
+	lanMaxPeers int
 }
 
 func (rt wsRoute) handler() http.HandlerFunc {
@@ -103,7 +104,7 @@ func (rt wsRoute) handler() http.HandlerFunc {
 			http.Error(w, "invalid or expired pairing code", http.StatusForbidden)
 			return
 		}
-		room, maxPeers, lan, ok := signal.RoomFor(code, rt.validate)
+		room, maxPeers, lan, ok := signal.RoomForResolved(code, rt.validate, rt.resolvePair)
 		if !ok {
 			// Invalid/expired code = a guess. Feed the global breaker; when it is
 			// open, shed with 429 and a throttled WARN. Valid codes are unaffected:

@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -169,6 +171,20 @@ CREATE TABLE IF NOT EXISTS usage_monthly (
   PRIMARY KEY (user_id, period)
 );
 CREATE INDEX IF NOT EXISTS idx_usage_monthly_period ON usage_monthly(period);
+-- Privacy-preserving activation funnel: one aggregate row per UTC month and
+-- server-owned stage. Exactly these three columns are intentional. In
+-- particular there is no event row, timestamp, account, code, room, device,
+-- session, network or content field that could turn this into user tracking.
+CREATE TABLE IF NOT EXISTS activation_funnel_monthly (
+  period TEXT NOT NULL CHECK (
+    length(period) = 6 AND period NOT GLOB '*[^0-9]*' AND
+    CAST(substr(period, 1, 4) AS INTEGER) BETWEEN 1 AND 9999 AND
+    CAST(substr(period, 5, 2) AS INTEGER) BETWEEN 1 AND 12
+  ),
+  stage TEXT NOT NULL CHECK (stage IN ('code_minted','room_opened','room_paired')),
+  count INTEGER NOT NULL CHECK (count >= 0),
+  PRIMARY KEY (period, stage)
+) STRICT, WITHOUT ROWID;
 -- unbilled_meter is the OUTBOX for bytes that are owed and could not be metered
 -- at the moment they became known.
 --
@@ -344,6 +360,13 @@ CREATE INDEX IF NOT EXISTS idx_admin_audit_at ON admin_audit(at DESC);
 //     rows so no path violates it.
 var connPragmas = []string{"busy_timeout(5000)", "foreign_keys(1)"}
 
+// sqliteOpenMu serializes this process's schema bootstrap. SQLite serializes
+// the writes themselves, but two independent connections compiling the long
+// idempotent bootstrap concurrently can still receive SQLITE_SCHEMA when the
+// other connection creates a table between prepare and step. Opening stores is
+// a startup/test operation, not a request path, so serialization is harmless.
+var sqliteOpenMu sync.Mutex
+
 // withPragmas appends _pragma query params to a modernc sqlite DSN.
 func withPragmas(dsn string, pragmas ...string) string {
 	sep := "?"
@@ -358,6 +381,9 @@ func withPragmas(dsn string, pragmas ...string) string {
 }
 
 func OpenSQLite(dsn string) (*SQLiteStore, error) {
+	sqliteOpenMu.Lock()
+	defer sqliteOpenMu.Unlock()
+
 	// _txlock=immediate makes every read-write transaction on this (write) pool
 	// begin with BEGIN IMMEDIATE, taking the write lock up front. A DEFERRED
 	// transaction that SELECTs then upgrades to a write can hit
@@ -373,6 +399,10 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 	}
 	db.SetMaxOpenConns(1) // SQLite + :memory: safety; fine for our write volume
 	if _, err := db.ExecContext(context.Background(), schema); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := validateActivationFunnelSchema(db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -1799,6 +1829,81 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		s.rdb = rdb
 	}
 	return s, nil
+}
+
+// validateActivationFunnelSchema prevents CREATE TABLE IF NOT EXISTS from
+// silently accepting a pre-created same-name table with wider or weaker
+// privacy semantics. It runs on every startup, before the store is returned.
+func validateActivationFunnelSchema(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(activation_funnel_monthly)`)
+	if err != nil {
+		return fmt.Errorf("activation funnel schema: %w", err)
+	}
+	type column struct {
+		name, typ   string
+		notNull, pk int
+	}
+	var columns []column
+	for rows.Next() {
+		var cid int
+		var c column
+		var defaultValue any
+		if err := rows.Scan(&cid, &c.name, &c.typ, &c.notNull, &defaultValue, &c.pk); err != nil {
+			rows.Close()
+			return fmt.Errorf("activation funnel schema: %w", err)
+		}
+		if defaultValue != nil {
+			rows.Close()
+			return errors.New("activation funnel schema: unexpected column default")
+		}
+		columns = append(columns, c)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("activation funnel schema: %w", err)
+	}
+	want := []column{{"period", "TEXT", 1, 1}, {"stage", "TEXT", 1, 2}, {"count", "INTEGER", 1, 0}}
+	if len(columns) != len(want) {
+		return errors.New("activation funnel schema: column mismatch")
+	}
+	for i := range want {
+		if columns[i] != want[i] {
+			return errors.New("activation funnel schema: column mismatch")
+		}
+	}
+
+	var schemaName, name, tableType string
+	var ncol, withoutRowID, strict int
+	if err := db.QueryRow(`SELECT schema, name, type, ncol, wr, strict FROM pragma_table_list WHERE name = 'activation_funnel_monthly'`).
+		Scan(&schemaName, &name, &tableType, &ncol, &withoutRowID, &strict); err != nil {
+		return fmt.Errorf("activation funnel schema: %w", err)
+	}
+	if schemaName != "main" || name != "activation_funnel_monthly" || tableType != "table" || ncol != 3 || withoutRowID != 1 || strict != 1 {
+		return errors.New("activation funnel schema: table options mismatch")
+	}
+
+	var ddl string
+	if err := db.QueryRow(`SELECT sql FROM sqlite_master WHERE type='table' AND name='activation_funnel_monthly'`).Scan(&ddl); err != nil {
+		return fmt.Errorf("activation funnel schema: %w", err)
+	}
+	compact := strings.Join(strings.Fields(strings.ToLower(ddl)), " ")
+	for _, required := range []string{
+		"length(period) = 6",
+		"period not glob '*[^0-9]*'",
+		"cast(substr(period, 1, 4) as integer) between 1 and 9999",
+		"between 1 and 12",
+		"stage in ('code_minted','room_opened','room_paired')",
+		"check (count >= 0)",
+		"primary key (period, stage)",
+		"strict, without rowid",
+	} {
+		if !strings.Contains(compact, required) {
+			return errors.New("activation funnel schema: constraint mismatch")
+		}
+	}
+	if _, err := db.Exec(`SELECT rowid FROM activation_funnel_monthly LIMIT 0`); err == nil {
+		return errors.New("activation funnel schema: rowid unexpectedly available")
+	}
+	return nil
 }
 
 // backfillCanonicalEmail populates canonical_email for any row that still lacks
@@ -4576,6 +4681,81 @@ func (s *SQLiteStore) AdminMetrics(ctx context.Context, period string, now int64
 		return AdminMetrics{}, err
 	}
 	return m, nil
+}
+
+// validActivationPeriod accepts exactly a UTC calendar month in YYYYMM form.
+// Keep this check in Go as well as in the table constraint so invalid input
+// fails before SQL and callers get the same answer for reads and writes.
+func validActivationPeriod(period string) bool {
+	if len(period) != 6 {
+		return false
+	}
+	for i := range period {
+		if period[i] < '0' || period[i] > '9' {
+			return false
+		}
+	}
+	year, yearErr := strconv.Atoi(period[:4])
+	month, monthErr := strconv.Atoi(period[4:])
+	return yearErr == nil && monthErr == nil && year >= 1 && year <= 9999 && month >= 1 && month <= 12
+}
+
+// IncrementActivationFunnel atomically increments one monthly aggregate. The
+// CASE expression saturates at SQLite's signed INTEGER maximum instead of
+// overflowing into a negative value. No identifier or exact timestamp is
+// accepted by this boundary.
+func (s *SQLiteStore) IncrementActivationFunnel(ctx context.Context, period string, stage ActivationStage) error {
+	if !validActivationPeriod(period) {
+		return errors.New("activation funnel: invalid period")
+	}
+	if !stage.Valid() {
+		return errors.New("activation funnel: invalid stage")
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO activation_funnel_monthly(period, stage, count)
+		VALUES (?, ?, 1)
+		ON CONFLICT(period, stage) DO UPDATE SET count =
+		  CASE WHEN count < 9223372036854775807 THEN count + 1 ELSE count END`,
+		period, string(stage))
+	return err
+}
+
+// ActivationFunnel reads one UTC month's raw action counts. Missing stages are
+// zero; a row with an unknown stage fails closed even though the schema should
+// make one impossible.
+func (s *SQLiteStore) ActivationFunnel(ctx context.Context, period string) (ActivationFunnelCounts, error) {
+	if !validActivationPeriod(period) {
+		return ActivationFunnelCounts{}, errors.New("activation funnel: invalid period")
+	}
+	rows, err := s.reader().QueryContext(ctx, `
+		SELECT stage, count FROM activation_funnel_monthly WHERE period = ?`, period)
+	if err != nil {
+		return ActivationFunnelCounts{}, err
+	}
+	defer rows.Close()
+
+	var out ActivationFunnelCounts
+	for rows.Next() {
+		var stage ActivationStage
+		var count int64
+		if err := rows.Scan(&stage, &count); err != nil {
+			return ActivationFunnelCounts{}, err
+		}
+		switch stage {
+		case ActivationCodeMinted:
+			out.CodeMinted = count
+		case ActivationRoomOpened:
+			out.RoomOpened = count
+		case ActivationRoomPaired:
+			out.RoomPaired = count
+		default:
+			return ActivationFunnelCounts{}, errors.New("activation funnel: unknown stored stage")
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return ActivationFunnelCounts{}, err
+	}
+	return out, nil
 }
 
 func b2i(b bool) int {

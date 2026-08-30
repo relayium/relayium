@@ -28,6 +28,99 @@ import (
 
 const lanMaxPeers = 50 // LAN room peer cap (H4); tunable.
 
+const (
+	activationQueueCapacity = 256
+	activationWriteTimeout  = 2 * time.Second
+)
+
+// activationIncrementer is deliberately narrower than account.Store. The
+// aggregate is additive SQLite capability, not a requirement imposed on every
+// account-store fake or future backend implementation.
+type activationIncrementer interface {
+	IncrementActivationFunnel(context.Context, string, account.ActivationStage) error
+}
+
+type activationWrite struct {
+	period string
+	stage  account.ActivationStage
+}
+
+// activationRecorder separates a product action from aggregate persistence.
+// Record is a non-blocking bounded enqueue; one worker performs short bounded
+// database calls. A full queue or write failure loses only an aggregate count,
+// never the pairing action that produced it.
+type activationRecorder struct {
+	store  activationIncrementer
+	now    func() time.Time
+	logf   func(string, ...any)
+	writes chan activationWrite
+}
+
+func newActivationRecorder(ctx context.Context, store activationIncrementer, now func() time.Time, logf func(string, ...any), capacity int) *activationRecorder {
+	if capacity < 1 {
+		capacity = 1
+	}
+	r := &activationRecorder{store: store, now: now, logf: logf, writes: make(chan activationWrite, capacity)}
+	go r.run(ctx)
+	return r
+}
+
+func (r *activationRecorder) Record(stage account.ActivationStage) {
+	if r == nil || r.store == nil || !stage.Valid() {
+		if r != nil && r.logf != nil {
+			r.logf("activation funnel: invalid stage rejected")
+		}
+		return
+	}
+	write := activationWrite{period: r.now().UTC().Format("200601"), stage: stage}
+	select {
+	case r.writes <- write:
+	default:
+		if r.logf != nil {
+			r.logf("activation funnel: stage=%s queue full", stage)
+		}
+	}
+}
+
+func (r *activationRecorder) run(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case write := <-r.writes:
+			writeCtx, cancel := context.WithTimeout(ctx, activationWriteTimeout)
+			err := r.store.IncrementActivationFunnel(writeCtx, write.period, write.stage)
+			cancel()
+			if err != nil && r.logf != nil {
+				// Deliberately omit the database error. It can carry paths or SQL;
+				// the fixed stage plus generic failure is enough for operations.
+				r.logf("activation funnel: stage=%s write failed", write.stage)
+			}
+		}
+	}
+}
+
+type activationHooks struct {
+	recorder *activationRecorder
+}
+
+func logPairLifecycleWriteFailure() {
+	log.Print("pairing-code lifecycle write failed; queued for retry")
+}
+
+func (h activationHooks) afterMint() {
+	h.recorder.Record(account.ActivationCodeMinted)
+}
+
+func (h activationHooks) admitted(activity signal.PairActivity) {
+	if activity.Opened {
+		h.recorder.Record(account.ActivationRoomOpened)
+	}
+	if activity.Paired {
+		h.recorder.Record(account.ActivationRoomPaired)
+	}
+}
+
 // releaseRepo is the GitHub repo the admin release check polls for the
 // newest release tag. Same repo cmd/relayium-node/update.go:23 uses for its
 // own updateRepo constant.
@@ -435,6 +528,11 @@ func main() {
 	// (real client IPs showing as the proxy address) is diagnosable from the boot log.
 	log.Printf("client-IP: X-Forwarded-For trusted from loopback + %d configured proxy CIDR(s)", len(trustedNets))
 
+	// Short external codes resolve to fresh opaque, in-memory room generations.
+	// The registry exists before the WebSocket observer is built, so that
+	// observer can never encounter an uninitialized resolver.
+	pairReg := signal.NewPairRegistry(signal.CodeTTLSeconds, func() int64 { return time.Now().Unix() })
+	go pairReg.Run(context.Background(), time.Minute)
 	hub := signal.NewHub()
 	// Pre-upload lifecycle hook. A pairing code whose sender staged files while
 	// waiting has ciphertext bound to it with a five-minute join deadline, and the
@@ -448,17 +546,21 @@ func main() {
 	// observer runs on the connection's read goroutine, so the actual work is
 	// handed to a goroutine: a database write must never delay a peer's join.
 	var pairJoined atomic.Pointer[func(code string)]
+	var pairActivity atomic.Pointer[func(activity signal.PairActivity)]
 	handle := signal.ServeWSObserved(hub, newID, func(room string, peers int) {
-		if peers < 2 {
-			return // the minter's own connection; nobody has joined yet
-		}
-		// The prefix alone is not proof. A LAN room's name is the client's IP
-		// address, and an IPv6 address can legitimately begin "c:" (e.g. "c::1"),
-		// so the remainder has to actually be a pairing code before this is
-		// treated as one. Cheap, and it keeps every LAN join off the database.
-		code, isPair := strings.CutPrefix(room, signal.PairRoomPrefix)
-		if !isPair || !signal.ValidCodeFormat(code) {
+		// The registry verifies both the six digits and this mint's opaque room
+		// generation. An old socket left in a reused code's prior room is inert.
+		code, activity, current := pairReg.ObserveAdmittedRoom(room, peers)
+		if !current {
 			return
+		}
+		if fn := pairActivity.Load(); fn != nil {
+			// Non-blocking bounded enqueue only; no database operation runs on
+			// the WebSocket connection's join goroutine.
+			(*fn)(activity)
+		}
+		if peers < 2 {
+			return // the first admitted socket is not a pair-room lifecycle join
 		}
 		if fn := pairJoined.Load(); fn != nil {
 			go (*fn)(code)
@@ -503,8 +605,6 @@ func main() {
 	// Pure in-memory — works even if the DB is unavailable.
 	// TTL 是 signal.CodeTTLSeconds（5 分钟），理由写在那个常量上；导出成常量是因为
 	// CLI 的报错文案要照着说「有效 5 分钟」，行为和文案必须取自同一个来源。
-	pairReg := signal.NewPairRegistry(signal.CodeTTLSeconds, func() int64 { return time.Now().Unix() })
-	go pairReg.Run(context.Background(), time.Minute)
 	// div lowers the per-instance thresholds below for a round-robin multi-instance
 	// deployment; 1 (the default, and correct for a single instance or an IP-hash
 	// LB) leaves them unchanged. See account.PerInstanceThreshold / spec §7.5.
@@ -669,6 +769,7 @@ func main() {
 		guessBreaker: guessBreaker,
 		ipx:          ipx,
 		validate:     pairReg.Validate,
+		resolvePair:  pairReg.RoomFor,
 		globalConns:  globalConns,
 		ipConns:      ipConns,
 		handle:       handle,
@@ -733,6 +834,10 @@ func main() {
 			BillingHoldSecret:    *billingHoldSecret,
 			ReleaseCheck:         *releaseCheck,
 		})
+		activation := newActivationRecorder(context.Background(), store, time.Now, log.Printf, activationQueueCapacity)
+		activationHook := activationHooks{recorder: activation}
+		observeActivity := activationHook.admitted
+		pairActivity.Store(&observeActivity)
 		if *stripeSecretKey != "" {
 			if err := acct.ValidateStripeCatalog(context.Background()); err != nil {
 				log.Fatalf("Stripe catalog preflight: %v", err)
@@ -786,7 +891,7 @@ func main() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			if err := acct.MarkPairRoomJoined(ctx, code); err != nil {
-				log.Printf("pairing code %s was joined but the lifecycle write failed (queued for retry): %v", code, err)
+				logPairLifecycleWriteFailure()
 			}
 		}
 		pairJoined.Store(&markJoined)
@@ -846,7 +951,7 @@ func main() {
 		// than only on the choose screen because this is the authoritative place —
 		// the Web preflight can be stale by the time the button is clicked, and a
 		// CLI/bearer client never asks it. It fails OPEN on a read error.
-		mux.Handle("POST /api/pair", acct.CSRFGuard(signal.PairHandler(pairReg, pairLimiter, ipx, pairUser(acct), acct.PairMintRefusal)))
+		mux.Handle("POST /api/pair", acct.CSRFGuard(signal.PairHandler(pairReg, pairLimiter, ipx, pairUser(acct), acct.PairMintRefusal, activationHook.afterMint)))
 		// Relay-node register/heartbeat: bearer-authenticated (not cookie/CSRF),
 		// so mounted directly on the root mux like /api/pair above. No-op when
 		// NodeToken is unset.

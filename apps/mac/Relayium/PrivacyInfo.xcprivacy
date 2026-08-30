@@ -154,9 +154,9 @@
 		     totals because that is what enforces the quotas included in the plan
 		     and what the billing and account records rest on — a subscription is a
 		     fixed plan price, not a per-byte charge — and the app reads them back
-		     through `AccountClient.fetchUsage`. That purpose is App Functionality,
-		     and it is not tap-or-screen analytics — which is why Product
-		     Interaction stays absent. -->
+		     through `AccountClient.fetchUsage`. That account-linked metering remains
+		     Other Usage Data for App Functionality; the separate identifier-free
+		     activation aggregate is declared below as Product Interaction. -->
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypeOtherUsageData</string>
@@ -167,6 +167,29 @@
 			<key>NSPrivacyCollectedDataTypePurposes</key>
 			<array>
 				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<!-- First-party, identifier-free activation aggregates. The server counts
+		     three cross-network pairing actions by UTC month: a successful code
+		     mint, the first admitted socket for that live code, and the first
+		     transition to two admitted peers. It keeps only month, one closed stage
+		     and a nonnegative count; there is no event row, exact timestamp, account,
+		     user, IP, code, room, device, session, token, platform, locale or content
+		     field. Writes are bounded best-effort, so the result is a monthly lower
+		     bound used to evaluate whether this product flow works, not a user or
+		     cohort history. Apple classifies retained information about interaction
+		     with a feature as Product Interaction and evaluation of feature
+		     effectiveness as Analytics even when identifiers are absent. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeProductInteraction</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
 			</array>
 		</dict>
 	</array>
