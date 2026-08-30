@@ -44,6 +44,14 @@ final class WebRTCLinkTransportSourceTests: XCTestCase {
         haystack.components(separatedBy: needle).count - 1
     }
 
+    /// The non-empty, non-comment lines of a fragment, trimmed.
+    private func statements(in fragment: Substring) -> [String] {
+        fragment
+            .split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("//") }
+    }
+
     // MARK: - two lanes, opened before the offer
 
     /// One negotiation must carry both lanes. Opening the text lane after the
@@ -277,6 +285,48 @@ final class WebRTCLinkTransportSourceTests: XCTestCase {
                       "the plan decides whether this signal is ours at all")
         XCTAssertEqual(occurrences(of: "policy.plan(", in: source), 1,
                        "and it is computed once, not once to arm and once to act")
+    }
+
+    // MARK: - claiming a channel the peer opened
+
+    /// `didOpen` runs on a libwebrtc thread, and exactly two things happen
+    /// there, in this order: the delegate is CLAIMED, and then the collection is
+    /// QUEUED.
+    ///
+    /// Both halves are load-bearing and neither is visible from outside. The
+    /// claim has to be synchronous because `RTCDataChannel`'s adapter reads its
+    /// weak `delegate` when each callback runs and drops the frame when it is
+    /// nil — a claim one queue hop later loses the peer's first frame, and no
+    /// test without two negotiating endpoints can watch libwebrtc read that
+    /// pointer. The claim has to come FIRST because the item it queues is the
+    /// one that gives a closed or expired transport its chance to hand the
+    /// channel back: queued ahead of the claim, that release can run on `queue`
+    /// while this thread has not assigned yet, and the assignment then lands on
+    /// an already-released channel that nothing else will ever clear or close.
+    /// No frame is at risk in either order — the adapter posts its callbacks
+    /// onto the very thread running this method, so the earliest one arrives
+    /// after it returns — which is exactly why the release race is what decides
+    /// the order. And nothing else may appear here: this is the thread the rest
+    /// of the file exists to keep out of Relayium's state machine.
+    func testDidOpenClaimsTheChannelAndThenQueuesTheCollection() throws {
+        let source = try self.code()
+        let opened = try XCTUnwrap(source.range(of: "didOpen dataChannel: RTCDataChannel) {"))
+        let tail = String(source[opened.upperBound...])
+        // Up to the method's own closing brace — the first one at member indent.
+        let end = try XCTUnwrap(tail.range(of: "\n    }"))
+        let body = String(tail[tail.startIndex..<end.lowerBound])
+
+        let queued = try XCTUnwrap(body.range(of: "queue.later { [weak self] in"),
+                                   "collection stays a queue item")
+        let closureEnd = try XCTUnwrap(body.range(of: "\n        }",
+                                                 range: queued.upperBound..<body.endIndex),
+                                       "the queued block must close at member indent")
+
+        XCTAssertEqual(statements(in: body[body.startIndex..<queued.lowerBound]),
+                       ["dataChannel.delegate = self"],
+                       "the claim is synchronous, and it is all that precedes the collection")
+        XCTAssertEqual(statements(in: body[closureEnd.upperBound...]), [],
+                       "and nothing at all follows it off the queue")
     }
 
     // MARK: - queue discipline
