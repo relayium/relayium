@@ -172,8 +172,14 @@ hosted migrations and two retired**:
 
 "None stranded" is a statement about the migration inventory, not about
 `lan-transfer.mjs`, which still exists and still cannot run. Deleting it is
-Stage 4 below, and it now waits on one thing only: the rendered unsupported-peer
-shape migrated in C3b-9, which is green locally and not yet on hosted `main`.
+Stage 4 below, and the assertion it was waiting on — the rendered
+unsupported-peer shape migrated in C3b-9 — is now hosted: `mixed-link-e2e` ran
+the four-scenario ledger green on hosted PR run **33290134608**, which merged as
+exact main **`9d815c84`**, and the merged bytes ran it green again in the
+`mixed-link-e2e` job **99200800583** of exact-main Web run **33290357209**. That
+job's conclusion is `success`. The Web workflow on that commit is red anyway,
+because its separate `test` job failed the page-shell touch-target assertion
+recorded under Stage 4 — nothing here claims the exact-main Web run was green.
 
 **Row 1's wording is corrected here, and the correction matters — the retired
 runner was stronger than the audit's phrasing suggested.** The audit named it
@@ -331,6 +337,11 @@ runner itself against silently dropping a scenario: it asserts a fixed
 `/apps` hierarchy contract from local-only to hosted — the first time it is
 enforced by anything other than someone remembering to run it.
 
+This lane is currently **red on exact main `9d815c84`** (the `test` job of hosted
+Web run 33290357209), on a sub-pixel touch-target comparison rather than on any
+product geometry; the repair is authored and awaiting hosted CI. See "The 44px
+touch floor, and the one renderer delta it tolerates" below.
+
 **Stage 2 — the transfer uniques move into `mixed-link.mjs`, and `mixed-link`
 becomes hosted.** Uniques 1–6 above are about the real pipeline (commit-reveal,
 chunked AES-GCM, ACK flow control, checkpoint resume, consent), not about the
@@ -381,8 +392,10 @@ recording:
 - *What did not move in C3b-1:* uniques 1, 2, 3 and 5 were untouched by that
   slice. All four have since changed status: #5 retired on the deterministic
   evidence above, #2 moved in C3b-4, #3 in C3b-5 and #1 in C3b-6; #7 then moved
-  in C3b-7 and #8 in C3b-8, so **no numbered row is left**; what remains before
-  Stage 4 is the separately scoped rendered unsupported-peer shape (C3b-9).
+  in C3b-7 and #8 in C3b-8, so **no numbered row is left**; the separately scoped
+  rendered unsupported-peer shape (C3b-9) was what remained before Stage 4, and
+  it is hosted as of PR run 33290134608 and, on the merged bytes, the exact-main
+  `mixed-link-e2e` job 99200800583 inside Web run 33290357209 at `9d815c84`.
   The byte-exact resume and replacement-PeerConnection assertions were preserved
   unchanged — the act was inserted into that scene, not in place of any of it.
 - *What the diff touches:* test and documentation files only —
@@ -1001,10 +1014,19 @@ named above.
 
 ### C3b-9 — the peer this build cannot reach, and what it is told
 
-**Status: migrated locally, awaiting hosted CI.** This is the rendered half of
-the one genuinely legacy-specific claim (discussed under "Two things this
-migration must not do", below), and the last thing standing between hosted `main`
-and Stage 4. It is the runner's **fourth** scenario,
+**Status: hosted, and hosted on the merged bytes. `mixed-link-e2e` ran the
+four-scenario ledger — 20/20 mixed link acts, then 5/5 multi-page device
+identity acts, then 4/4 bounded relay-failure acts, then 5/5 unsupported-peer
+acts — green on hosted PR run 33290134608, which merged as exact main
+`9d815c84`; the same four ledgers then ran green on that exact main, in the
+`mixed-link-e2e` job 99200800583 of Web run 33290357209, which logged
+`Mixed link E2E passed` and completed `success`.** The rest of that Web run is
+not part of this claim: the workflow is red on `9d815c84` because a separate
+`test` job failed the page-shell assertion, and this document nowhere calls the
+exact-main Web run green. This is the rendered half
+of the one genuinely legacy-specific claim (discussed under "Two things this
+migration must not do", below), and it was the last thing standing between
+hosted `main` and Stage 4. It is the runner's **fourth** scenario,
 `unsupportedPeerScenario`, with its own two tabs and its own frozen five-act
 ledger; the twenty, five and four acts of the first three scenarios are untouched
 and the inventory now checks a literal `EXPECTED_SCENARIO_COUNT = 4`.
@@ -1130,13 +1152,19 @@ and nothing about any locale outside the two maintained ones.
 native or ops file changed, and `lan-transfer.mjs` and its npm script are
 deliberately left in place until this scenario is hosted.
 
-**Verification status: independently validated locally — including the real
-browser journey, the whole Web suite, `npm run check` and the production build —
-but not yet run in hosted CI.** The rendered unsupported-peer shape therefore
-stays a **local** migration awaiting hosted CI, and nothing in this section is an
-exact-main or hosted claim. Every gate below was run by the reviewer on the
-reviewed source, replacing the author-side shim record this section used to
-carry:
+**Verification status: hosted on exact main `9d815c84`, and proved on the merged
+bytes.** The `mixed-link-e2e` lane ran this scenario green on hosted PR run
+33290134608 — **20/20, 5/5, 4/4 and 5/5** ordered acts — and that source merged
+as exact main `9d815c84`, where the `mixed-link-e2e` job 99200800583 of Web run
+33290357209 ran the same four ledgers green again (**20/20, 5/5, 4/4, 5/5**,
+`Mixed link E2E passed`, job conclusion `success`). So the rendered
+unsupported-peer shape is a **hosted** migration twice over: once on the reviewed
+source, once on the bytes that are actually on `main`. The Web run holding that
+job is itself red — in a separate `test` job, for the unrelated page-shell reason
+recorded under Stage 4 below — and no claim in this section rests on it. The
+table below is the earlier **local** record kept unchanged: it says what the
+reviewer ran by hand on the reviewed source before the merge, not what CI
+concluded.
 
 | Gate | Result |
 |---|---|
@@ -1236,11 +1264,35 @@ response, an unreachable TURN host, and a probe budget that actually elapses.
 hosted `main` is green with stages 1–3 landed *and* with the rendered
 unsupported-peer shape, which as of C3b-9 means only after the **fourth**
 scenario has passed `mixed-link-e2e` on `main`. Stages 1–3 cleared that bar at
-`74ac85db`; C3b-9 has not. Deleting earlier would drop the one assertion still
+`74ac85db`; C3b-9 cleared it on hosted PR run 33290134608, merged as exact main
+`9d815c84`, and then cleared it in the literal sense the bar is written in — the
+**fourth** scenario passed `mixed-link-e2e` *on `main`*, in job 99200800583 of
+Web run 33290357209, 20/20 + 5/5 + 4/4 + 5/5 with `Mixed link E2E passed`. That
+job passing is the whole of the claim; the Web run around it is red for the
+separate reason below. Deleting earlier would have dropped the one assertion still
 awaiting that run — none remains stranded now that #1/#2/#3/#6/#7/#8 have moved
 and #4/#5 were retired with the deterministic evidence recorded above; keeping it
 after is worse than useless — a script that cannot exit zero teaches everyone to
-ignore a red run.
+ignore a red run. Stage 4 is now unblocked and is separately scoped work: it has
+not been done, and this document does not claim it has.
+
+**One hosted job on exact main `9d815c84` is red, and it is not this one.** The
+`mixed-link-e2e` result above is what unblocks Stage 4 — and it is a job *inside*
+the run named here. Web run **33290357209** on `9d815c84` holds both
+`mixed-link-e2e` (job 99200800583, `success`) and the `test` job (99200800702)
+that failed; the workflow's overall conclusion is `failure` for that second job
+alone, which is why this document reports the run at job granularity and never
+calls it green. The `test` job failed in `test:e2e:page-shell`, on the `/apps`
+mobile touch-target assertion: Linux Chromium measured a CSS 44px CTA as
+`43.999969482421875` and the scenario compared a raw height against a bare `< 44`.
+The same job passed on PR #95, because the shortfall is 2⁻¹⁵ px of float32 in
+`getBoundingClientRect()`, not a button that got shorter. **Status: repair
+authored, awaiting hosted CI** — the fix keeps 44px as the declared requirement,
+routes all three touch measurements through one `undersizedTouchTarget()`
+comparison with a named `TOUCH_TARGET_EPSILON_PX = 1 / 1024`, and pins that
+argument in `apps-hierarchy-contract.test.mjs`. See "The 44px touch floor" under
+Stage 1 below. Until a hosted Web run is green, that repair is a **local** claim,
+exactly like C3b-9 was before run 33290134608.
 
 Two things this migration must not do. It must not restore the deleted controls,
 and it must not add a downgrade switch. What remains genuinely legacy-specific is
@@ -1255,7 +1307,7 @@ different status:
   guard: no legacy session module imported anywhere in production source, and no
   fallback transport reaching the workspace router. It runs on every push, in the
   `npm test` step of the `test` job.
-- **Migrated in C3b-9, green locally, not yet hosted** — `capsSuppressedScenario`
+- **Migrated in C3b-9, hosted on exact main `9d815c84`** — `capsSuppressedScenario`
   was designed to assert the observer-side shape in a real browser (a peer that
   never announces caps is offered no control, and the old peer sees no spurious
   card). It is the **last** scenario in `main()`, so it sits deepest in the
@@ -1266,9 +1318,13 @@ different status:
   rather than a rename of it.
 
 So the source-level half has been guarded all along and the rendered half is now
-covered too, locally. Until `mixed-link-e2e` runs that fourth scenario on hosted
-`main`, this document must keep calling the rendered half a **local** migration:
-the gap is narrower than it was, not closed. It used to be described as waiting
+covered too — and hosted, which is what closes the gap rather than narrowing it.
+`mixed-link-e2e` ran that fourth scenario on hosted PR run 33290134608, it merged
+as exact main `9d815c84`, and the merged bytes ran it green again in job
+99200800583 of exact-main Web run 33290357209, so this document may now call the
+rendered half a **hosted** migration — on the source that was reviewed and on the
+source that is on `main`. That Web run is red overall, in a separate `test` job,
+and this sentence does not claim otherwise. It used to be described as waiting
 on stage 3 alongside unique #8; #8 moved in C3b-8 and this shape moved in C3b-9,
 and it remains a separate piece of work rather than part of any numbered row
 above. Nothing in it needs a legacy transfer to be performed, because there is no
@@ -1314,6 +1370,67 @@ that point delete this subsection's "currently empty" framing. A new
 `available:` expression the model cannot resolve fails loudly (`unrecognised
 availability`) by design; teach `AVAILABILITY` what it means rather than widening
 the regex.
+
+### The 44px touch floor, and the one renderer delta it tolerates
+
+**Status: repair authored on `test/page-shell-touch-rounding` from exact main
+`9d815c84`, green locally, awaiting hosted CI.** Nothing in this subsection is a
+hosted claim yet.
+
+The `test` job of hosted Web run **33290357209**, on exact main `9d815c84`,
+failed `test:e2e:page-shell` inside `appsHierarchyScenario`: Linux Chromium
+measured the
+`/apps` CTA — a button whose only height rule is the global
+`@media (pointer: coarse) { .btn { min-block-size: 44px } }` — as
+`43.999969482421875`, and the scenario compared that raw height against a bare
+`< 44`. The same source passed the same job on PR #95, and the `mixed-link-e2e`
+job of that very exact-main run passed; this is one job's assertion, not the
+commit. The shortfall is
+2⁻¹⁵ px ≈ 0.000031px: `getBoundingClientRect()` returning a value that has been
+through float32 on the compositor path. A bare `< 44` was therefore asserting on
+that runner's floating-point mantissa, not on product geometry, and it will keep
+flipping colour on a source tree nobody changed.
+
+There are two ways to make that run green and only one of them is a repair.
+Lowering the target, or widening the tolerance until nothing can fail, both work
+immediately and both silently retire the assertion. So the repair is written as
+an argument that a test can check:
+
+- **44px stays the declared requirement.** `MIN_TOUCH_TARGET_PX = 44` in
+  `web/e2e/page-shell.mjs` is the single source; no site compares against a
+  literal.
+- **The tolerance is named and bounded by something other than convenience.**
+  `TOUCH_TARGET_EPSILON_PX = 1 / 1024` is 32× the observed delta — wide enough
+  to absorb the mantissa — and strictly **less** than Chromium's own LayoutUnit,
+  1/64 px. Anything genuinely short at the layout level is short by at least one
+  LayoutUnit, so a tolerance below that quantum cannot buy a real shortfall. The
+  effective floor is 43.9990234375px.
+- **One comparison, and it fails closed.** `undersizedTouchTarget()` is the only
+  place the floor is compared. It rejects non-finite input, because an empty
+  selector makes `Math.min(...[])` return `Infinity` and `Infinity >= 44` is
+  true — "measured nothing" would otherwise be indistinguishable from "all large
+  enough". All three touch measurements route through it: the auth landing's
+  `.auth-action`, `/apps`'s `.cta`, and `/pricing`'s `.toggle-btn`.
+- **`/pricing` lost an undeclared ±0.5px tolerance in the same change.** Its
+  `cycleTargets` used to be `Math.round(height)`, which is 512× wider than the
+  delta that justified any tolerance at all and would pass a genuinely 43.5px
+  control. It now measures the raw height and shares the one comparison, and a
+  run that measures zero controls is red rather than vacuously green.
+
+`web/e2e/apps-hierarchy-contract.test.mjs` pins that argument as source
+contracts, so the two easy non-repairs are red: it reads the two constants'
+**values** out of `page-shell.mjs` and asserts `44` exactly and
+`observed delta < epsilon < 1/64`; it asserts the fail-closed guard and all three
+call sites; and, after excising the comparison function and the comments, it
+asserts no second comparison against the floor or a fresh `44` literal survives
+anywhere in the file. A constant written in a form it cannot evaluate fails
+rather than being skipped.
+
+**Revisit trigger:** if a hosted run ever reports a measurement outside this
+bound — short by more than 1/1024px but less than one LayoutUnit — the float32
+explanation no longer covers it. Investigate the renderer before touching either
+number; widening the epsilon past 1/64 is the one change these contracts exist to
+prevent.
 
 ---
 

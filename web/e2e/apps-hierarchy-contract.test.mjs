@@ -37,6 +37,89 @@ function topLevelFunction(name) {
 
 const CARD_MODEL = topLevelFunction("appsCardModel");
 const SCENARIO = topLevelFunction("appsHierarchyScenario");
+const TOUCH_COMPARISON = topLevelFunction("undersizedTouchTarget");
+
+/**
+ * 从 `page-shell.mjs` 里读出一个数值常量的**值**，而不是它的写法。只认两种形式：
+ * 一个十进制字面量，或者 `A / B` 这样的比。别的形式一律判红而不是跳过——这套门
+ * 要核对的是那个数落在哪个区间，一个它读不懂的表达式必须是失败，不是沉默通过。
+ */
+function numericConstant(name) {
+  const matched = SOURCE.match(new RegExp(`const ${name} = ([^;]+);`));
+  expect(matched, `${name} 不在 page-shell.mjs 里了`).not.toBeNull();
+  const expr = matched[1].trim();
+  const ratio = expr.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
+  const value = ratio ? Number(ratio[1]) / Number(ratio[2]) : Number(expr);
+  expect(Number.isFinite(value), `${name} 的值 \`${expr}\` 不是这套契约能核对的数`).toBe(true);
+  return value;
+}
+
+/**
+ * 去掉块注释和整行行注释。下面"不许有第二处比较"那一条只该看**代码**：解释这条
+ * 容差为什么存在，本来就得把 `< 44` 和 `Infinity >= 44` 这两个反例写进散文里。
+ */
+function withoutComments(text) {
+  return text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+}
+
+/** Chromium 的 LayoutUnit：布局能表达的最小长度。真矮下去的元素至少亏这么多。 */
+const LAYOUT_UNIT_PX = 1 / 64;
+/** 这次红色里 Linux Chromium 对一个 CSS 44px 实际报出来的数。 */
+const OBSERVED_RENDERER_DELTA_PX = 44 - 43.999969482421875;
+
+/**
+ * 44px 触摸地板：一个**要求**，配一条只吸收渲染器浮点尾数的容差。
+ *
+ * 为什么要有这一组：托管 Web 道次 33290357209（exact main `9d815c84`）红在 `/apps`
+ * 的 CTA 上——Linux Chromium 把一个 CSS 44px 量成 43.999969482421875，而当时的比较
+ * 是裸 `< 44`。这种红有两个"能让它变绿"的方向，只有一个是修：把 44 降下来、或者把
+ * 容差放宽到"反正不会红"，都能让道次立刻变绿，也都会让这条门从此拦不住一个真的矮
+ * 下去的按钮——而且不会有任何东西提醒你它已经不拦了。
+ *
+ * 所以下面守的是**那条论证**本身，不是它今天算出来的数：目标仍然是 44、容差仍然严
+ * 格小于 Chromium 自己的布局量子 1/64 px、三处测量一处都不许绕过那唯一的比较函数。
+ */
+describe("the 44px touch floor is a requirement, not a number that moves to fit the runner", () => {
+  it("keeps 44 as the one declared target", () => {
+    // 降 target 是这次红最省事的"修法"，也是唯一一个把要求本身改掉的修法。
+    expect(numericConstant("MIN_TOUCH_TARGET_PX")).toBe(44);
+  });
+
+  it("keeps the geometry tolerance inside the bound that justifies it", () => {
+    const epsilon = numericConstant("TOUCH_TARGET_EPSILON_PX");
+    // 下界：必须真的能吸收观察到的那次 2⁻¹⁵ px 偏差，否则这次修等于没修。
+    expect(epsilon).toBeGreaterThan(OBSERVED_RENDERER_DELTA_PX);
+    // 上界：必须严格小于 LayoutUnit。到了 1/64 就能接住一个布局层面真的没到 44px
+    // 的目标，那正是这条容差不许买的东西。
+    expect(epsilon).toBeLessThan(LAYOUT_UNIT_PX);
+  });
+
+  it("fails closed on a measurement that never arrived", () => {
+    // 空选择器让 `Math.min(...[])` 返回 Infinity，而 `Infinity >= 44` 为真：
+    // "一个都没量到"会长得和"全都够大"一样。非有限值必须算不合格。
+    expect(TOUCH_COMPARISON).toMatch(/Number\.isFinite/);
+    expect(TOUCH_COMPARISON).toMatch(/MIN_TOUCH_TARGET_PX\s*-\s*TOUCH_TARGET_EPSILON_PX/);
+  });
+
+  it("routes all three measurements through that one comparison", () => {
+    expect(SOURCE, "auth 落地页的动作按钮不再走统一比较").toMatch(/undersizedTouchTarget\(m\.actionHeight\)/);
+    expect(SCENARIO, "/apps 的 CTA 不再走统一比较").toMatch(/undersizedTouchTarget\(m\.minAction\)/);
+    expect(SOURCE, "/pricing 的挡位切换不再走统一比较").toMatch(/m\.cycleTargets\.some\(undersizedTouchTarget\)/);
+    // 量到零个挡位不许静静通过：`.some()` 在空数组上恒为 false。
+    expect(SOURCE).toMatch(/!m\.cycleTargets\.length/);
+  });
+
+  it("leaves no second comparison to bypass it with", () => {
+    // 把比较函数的函数体挖掉、再把注释去掉之后，剩下的**代码**里不许再有任何一处
+    // 拿测量值和地板比：既不许 `< MIN_TOUCH_TARGET_PX`（那会绕过容差），也不许把
+    // 44 重新抄成字面量（那会绕过常量）。散文里提到它们不算——这里禁的是比较。
+    const rest = withoutComments(SOURCE.replace(TOUCH_COMPARISON, ""));
+    expect(rest, "地板被第二处比较绕过去了").not.toMatch(/[<>]=?\s*MIN_TOUCH_TARGET_PX|MIN_TOUCH_TARGET_PX\s*[<>]/);
+    expect(rest, "44 又被抄成了一份字面量比较").not.toMatch(/[<>]=?\s*44\b/);
+    // 以及那条 ±0.5px 的隐形容差不许回来:round 一下再比 44,等于把容差放宽 512 倍。
+    expect(SOURCE, "四舍五入回来了:那是一条没写下来的 ±0.5px 容差").not.toMatch(/Math\.round\([^\n]*getBoundingClientRect\(\)\.height/);
+  });
+});
 
 describe("the /apps card model is derived, not pinned", () => {
   it("reads both sources that own the answer", () => {
