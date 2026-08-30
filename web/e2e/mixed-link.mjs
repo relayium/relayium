@@ -243,6 +243,28 @@ const RELAY_ACTS = Object.freeze([
 const EXPECTED_RELAY_ACT_COUNT = 4;
 
 /**
+ * The fourth scenario's own frozen ledger, in run order.
+ *
+ * Separate for exactly the reason the other three are: this journey owns its own
+ * two tabs, its own wire filter and its own peer that never announced, so "act
+ * #30 is missing" and "the unsupported-peer journey never started" must not be
+ * the same message. Every entry is prefixed `unsupported-` so a source contract
+ * that greps `act(` file-wide can still tell the four inventories apart.
+ *
+ * `EXPECTED_UNSUPPORTED_ACT_COUNT` is a literal for the same reason the other
+ * three are: a list compared against its own `.length` agrees with itself after
+ * somebody deletes an entry from it.
+ */
+const UNSUPPORTED_ACTS = Object.freeze([
+  "unsupported-caps-suppressed-on-the-wire",
+  "unsupported-one-noninteractive-statement",
+  "unsupported-no-control-no-affordance",
+  "unsupported-drop-refused-with-that-sentence",
+  "unsupported-quiet-suppressed-tab",
+]);
+const EXPECTED_UNSUPPORTED_ACT_COUNT = 5;
+
+/**
  * 记下 live region 说过的**每一句**话。
  *
  * 光读"此刻 live region 里是什么"是不够的：一条链路只念一次码（见
@@ -640,7 +662,7 @@ const setTheme = async (tab, value) => {
  * variants, the console-error sweep) stay plain `ok()`: they are assertions, not
  * acts, and the ledger is about the acts.
  *
- * Shared by both scenarios on purpose. Two hand-written copies of this would be
+ * Shared by every scenario on purpose. Two hand-written copies of this would be
  * two places for the duplicate/unknown-name guards to drift, and the second copy
  * is exactly the one that would be written without them.
  */
@@ -2781,19 +2803,645 @@ async function relayFailureScenario(browser, base) {
 }
 
 /**
- * The runner inventory. Three scenarios, each with its own frozen act ledger.
+ * The maintained product languages, and the only two this scenario reads.
+ *
+ * `i18n/types.ts` maintains exactly `en` and `zh`; `FROZEN_LANGS` (ja, ko, de,
+ * fr, ar, es, pt) are archived translations, and the supported-language policy
+ * forbids treating their copy as an ordinary acceptance requirement. Asserting
+ * on one of them here would make this scenario go red for a locale nobody is
+ * keeping current — a false regression about a real policy.
+ *
+ * Nothing below matches a sentence from ANY locale, maintained ones included.
+ * The statement is judged structurally (what element it is, what it is not) and
+ * comparatively (it is present in both maintained languages, it CHANGES between
+ * them, and it is the same sentence the product uses to refuse a drop aimed at
+ * that peer). A copy edit in `en.ts` or `zh.ts` must not turn this red, and a
+ * build that hard-coded one language must not turn it green.
+ */
+const MAINTAINED_LANGS = Object.freeze(["en", "zh"]);
+
+/** One rendered peer entry. The `li`, not `.pcard`: the drag/drop handlers and
+ *  the `.unreachable` state both live on the list item. */
+const PEER_CARD = "li.peer";
+/** The one statement an unreachable peer's card carries INSTEAD of an action. */
+const UNSUPPORTED_STATEMENT = ".pa-unsupported";
+/** The transient notice `flash()` renders. Not an activity card and not a
+ *  control — `role="status"`, fixed at the top of the viewport, self-clearing —
+ *  which is why it is read as a *reason*, never counted as activity. */
+const NOTICE = ".toast";
+
+/**
+ * Make ONE tab look like a peer that never told the room what it speaks.
+ *
+ * This is the wire filter, not a product switch. The page runs the ordinary
+ * shipped bundle with the ordinary shipped policy; only what leaves the socket
+ * is rewritten, which is exactly what an older Web peer, a native client or the
+ * CLI would have put there. A runtime flag inside the product would be a shipped
+ * way to downgrade the protocol, reachable by whoever can set it — see
+ * `link-only-surface.test.ts`, which exists to keep that from coming back.
+ *
+ * It drops the ROSTER hello and only that frame: `data` carrying nothing but
+ * `caps` is the announcement `peer-caps.svelte.ts` routes on, and it is the same
+ * shape `OBSERVE_CAPS` recognises. Dropping it entirely — rather than emptying
+ * its list — reproduces the peer this product actually has to handle: one that
+ * never announced at all, so `peerCapsKnown` is false and there is no third
+ * state to hide in.
+ *
+ * The three counters are the anti-vacuity argument, and none of them is
+ * bookkeeping:
+ *
+ *   - `sawLink` proves this BUILD announced `link/1` before the filter removed
+ *     it. Without it, a build that stopped advertising the capability at all
+ *     would leave every assertion below passing for a reason that has nothing to
+ *     do with an unsupported peer.
+ *   - `suppressed` proves the filter actually fired. A filter whose predicate
+ *     stopped matching suppresses nothing, and a page that announced normally
+ *     would then be asserted about as though it had not.
+ *   - `otherCapsFrames` proves nothing ELSE carried a capability list onto the
+ *     wire behind the hello's back. A second frame announcing `link/1` would
+ *     make this peer reachable again while `suppressed` still counted up.
+ */
+const SUPPRESS_CAPS_HELLO = `
+  window.__unsupportedPeer = { capsFrames: 0, sawLink: 0, suppressed: 0, otherCapsFrames: 0 };
+  (() => {
+    const realSend = WebSocket.prototype.send;
+    WebSocket.prototype.send = function (data) {
+      if (typeof data === "string") {
+        try {
+          const frame = JSON.parse(data);
+          if (frame && frame.type === "signal" && frame.data && Array.isArray(frame.data.caps)) {
+            const seen = window.__unsupportedPeer;
+            seen.capsFrames++;
+            if (frame.data.caps.includes("link/1")) seen.sawLink++;
+            if (Object.keys(frame.data).length === 1) {
+              seen.suppressed++;
+              return; // an old peer never puts this frame on the wire at all
+            }
+            seen.otherCapsFrames++;
+          }
+        } catch { /* not JSON — send it untouched */ }
+      }
+      return realSend.call(this, data);
+    };
+  })();
+`;
+
+/**
+ * What this page's ONE peer card is, read in a single pass.
+ *
+ * One pass rather than a read per property because these are claims about the
+ * same rendered frame: "exactly one statement" and "zero controls" taken two
+ * round trips apart could each be true of a different frame, and the pair is the
+ * whole point — a card with no controls and no statement is *silence*, which is
+ * the failure the statement exists to prevent.
+ *
+ * `pageStatements` is deliberately document-rooted while `statements` is scoped
+ * to the card. "Exactly one statement on this card" and "exactly one on the
+ * page" are different claims, and a second card quietly appearing (a stale
+ * roster entry, a duplicated device) would satisfy the first while the page said
+ * the same thing twice.
+ */
+const CARD_SHAPE = `(() => {
+  const cards = [...document.querySelectorAll('${PEER_CARD}')];
+  const card = cards.length === 1 ? cards[0] : null;
+  const statement = card ? card.querySelector('${UNSUPPORTED_STATEMENT}') : null;
+  const pcard = card ? card.querySelector('.pcard') : null;
+  const paint = card ? getComputedStyle(card) : null;
+  return {
+    cards: cards.length,
+    unreachable: !!(card && card.classList.contains('unreachable')),
+    solo: !!(card && card.closest('ul') && card.closest('ul').classList.contains('solo')),
+    name: ((card && card.querySelector('.pname')) ? card.querySelector('.pname').textContent : '').trim(),
+    statements: card ? card.querySelectorAll('${UNSUPPORTED_STATEMENT}').length : 0,
+    pageStatements: document.querySelectorAll('${UNSUPPORTED_STATEMENT}').length,
+    tag: statement ? statement.tagName : '',
+    text: (statement ? statement.textContent : '').trim(),
+    role: statement ? statement.getAttribute('role') : null,
+    tabindex: statement ? statement.getAttribute('tabindex') : null,
+    ariaDisabled: statement ? statement.getAttribute('aria-disabled') : null,
+    statementCursor: statement ? getComputedStyle(statement).cursor : '',
+    controls: card
+      ? card.querySelectorAll('button, a[href], input, select, textarea, label, summary, [role="button"], [role="link"], [tabindex], [contenteditable]').length
+      : 0,
+    refusing: card ? card.querySelectorAll('[disabled], [aria-disabled]').length : 0,
+    openWorkspace: document.querySelectorAll('${OPEN_WORKSPACE}').length,
+    border: paint ? paint.borderTopStyle : '',
+    borderColor: paint ? paint.borderTopColor : '',
+    background: paint ? paint.backgroundColor : '',
+    cursor: pcard ? getComputedStyle(pcard).cursor : '',
+    lang: document.documentElement.lang,
+  };
+})()`;
+
+/**
+ * Every surface that would mean something is HAPPENING, counted at once.
+ *
+ * The shared contracts rather than private literals for the three
+ * `dom-contracts.mjs` owns, so a card that moves takes this sweep with it
+ * instead of silently reducing it to a count of zero nodes that no longer exist.
+ *
+ * `peers` and `statements` ride along as the anti-vacuity half: every other
+ * field here is asserted to be zero, and zero is equally what a page that
+ * unmounted its whole roster reports.
+ */
+const IDLE_SHAPE = `(() => ({
+  head: document.querySelectorAll('${HEAD}').length,
+  panel: document.querySelectorAll('.msgpanel').length,
+  consent: document.querySelectorAll('${RECEIVE.card}').length,
+  xfer: document.querySelectorAll('${XFER.card}').length,
+  queued: document.querySelectorAll('${QUEUED.card}').length,
+  sas: document.querySelectorAll('.sas').length,
+  live: (document.querySelector('.activity-announcement')
+    ? document.querySelector('.activity-announcement').textContent : '').trim(),
+  peers: document.querySelectorAll('${PEER_CARD}').length,
+  statements: document.querySelectorAll('${UNSUPPORTED_STATEMENT}').length,
+}))()`;
+
+/**
+ * A real file drag over one card, and what the card decides to advertise.
+ *
+ * A genuine `DataTransfer` carrying a real `File`, not a bare event: `hasFiles`
+ * gates every window-level handler on `types` containing `"Files"`, so an event
+ * without one is refused by the page for a reason that has nothing to do with
+ * the peer. The affordance under test is `.drag` — the highlight `ondragover`
+ * adds — and the product withholds it from a peer that will refuse the drop,
+ * because a target that lights up and then rejects what lands on it is an
+ * invitation taken back after the user has already acted on it.
+ *
+ * `dragleave` is dispatched unconditionally so this probe leaves no highlight
+ * behind on the card it just proved DOES take one.
+ */
+const dragOver = (selector) => `(() => {
+  const el = document.querySelector(${JSON.stringify(selector)});
+  if (!el) throw new Error('no ' + ${JSON.stringify(selector)} + ' to drag over');
+  const dt = new DataTransfer();
+  dt.items.add(new File(['x'], 'refused.txt', { type: 'text/plain' }));
+  const before = el.classList.contains('drag');
+  el.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+  const during = el.classList.contains('drag');
+  el.dispatchEvent(new DragEvent('dragleave', { bubbles: true, cancelable: true, dataTransfer: dt }));
+  return { before, during, after: el.classList.contains('drag'), types: [...dt.types] };
+})()`;
+
+/**
+ * A real file drop that lands on the card anyway, and how the product answers.
+ *
+ * `refused` is `dispatchEvent` returning false, i.e. the page called
+ * `preventDefault`. That distinction is the whole assertion: a drop the page
+ * ignores is left to the browser, while a drop the page CONSUMES and then does
+ * nothing with is the file vanishing with no transfer and no sentence anywhere.
+ * The product must take it and say why.
+ */
+const dropOn = (selector) => `(() => {
+  const el = document.querySelector(${JSON.stringify(selector)});
+  if (!el) throw new Error('no ' + ${JSON.stringify(selector)} + ' to drop on');
+  const dt = new DataTransfer();
+  dt.items.add(new File(['x'], 'refused.txt', { type: 'text/plain' }));
+  const delivered = el.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+  return { refused: !delivered, drag: el.classList.contains('drag'), files: dt.files.length };
+})()`;
+
+/** Every click that reaches this page from now on, and whether it landed on the
+ *  peer card. Capture phase on `window`, so a handler calling `stopPropagation`
+ *  cannot hide the fact that the click happened. */
+const COUNT_CLICKS = `(() => {
+  window.__e2eClicks = { total: 0, onCard: 0 };
+  window.addEventListener('click', (e) => {
+    window.__e2eClicks.total++;
+    if (e.target instanceof Element && e.target.closest('${PEER_CARD}')) window.__e2eClicks.onCard++;
+  }, true);
+  return true;
+})()`;
+
+/**
+ * Where a real pointer has to go to land on this element — measured, and proven
+ * to land there.
+ *
+ * `elementFromPoint` is not decoration. Every assertion downstream of a pointer
+ * probe is of the form "and nothing happened", and a pointer that landed on a
+ * fixed overlay, on a rail above the card, or outside the viewport entirely
+ * produces exactly that answer while measuring nothing at all. So the point is
+ * required to hit the card before it is used, and a miss fails as its own
+ * sentence rather than as a silent pass.
+ */
+async function pointerCentre(tab, selector, who) {
+  const at = await tab.evaluate(`(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) throw new Error('no ' + ${JSON.stringify(selector)} + ' to aim a pointer at');
+    el.scrollIntoView({ block: 'center', behavior: 'instant' });
+    const box = el.getBoundingClientRect();
+    const x = Math.round(box.left + box.width / 2);
+    const y = Math.round(box.top + box.height / 2);
+    const hit = document.elementFromPoint(x, y);
+    return { x, y, w: Math.round(box.width), h: Math.round(box.height), inside: !!(hit && el.contains(hit)) };
+  })()`);
+  if (at.w <= 0 || at.h <= 0) {
+    throw new Error(`${who}'s ${selector} has no box (${at.w}x${at.h}) — a pointer probe against it would measure nothing`);
+  }
+  if (!at.inside) {
+    throw new Error(
+      `a pointer at ${who}'s ${selector} centre (${at.x},${at.y}) lands outside that card — ` +
+      "every \"nothing happened\" below would then be about whatever is covering it, not about the peer",
+    );
+  }
+  return at;
+}
+
+/** Move the real pointer. `Input.dispatchMouseEvent`, not a synthesised
+ *  `MouseEvent`: hit testing, `:hover` and the click below all have to be the
+ *  browser's, or this measures a dispatch rather than a product. */
+const movePointer = (tab, x, y) =>
+  tab.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none", buttons: 0 });
+
+/** One real left click at a point already proven to hit the card. */
+async function clickAt(tab, x, y) {
+  await tab.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", buttons: 1, clickCount: 1 });
+  await tab.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", buttons: 0, clickCount: 1 });
+}
+
+/**
+ * Joining, the roster settling, and the reachable control appearing on the
+ * suppressed side. Generous, because none of it is the property under test:
+ * this is the setup that has to be real before an absence can mean anything.
+ */
+const UNSUPPORTED_SETUP_BUDGET_MS = 60_000;
+/** The browser agreeing that the pointer is over the card. Small: it is one
+ *  synchronous hit test behind one CDP round trip, and a long budget here would
+ *  turn "the probe never worked" into a slow pass-shaped wait. */
+const UNSUPPORTED_POINTER_BUDGET_MS = 10_000;
+/**
+ * The refusal notice, from the drop that provoked it.
+ *
+ * Deliberately SHORTER than the notice's own 3.5s self-clear (`flash()`). A
+ * budget past that point could expire on a notice that had already come and
+ * gone, and the run would report "the product said nothing" about a product
+ * that said it and then tidied up.
+ */
+const UNSUPPORTED_REFUSAL_BUDGET_MS = 3_000;
+
+/**
+ * The last shape stranded in `lan-transfer.mjs`: what a peer this build cannot
+ * reach is TOLD, and what it is not offered.
+ *
+ * ## What it covers, and why the old scenario is not enough
+ *
+ * `capsSuppressedScenario` asserted one thing — that no message control was
+ * offered to a peer that never announced `text/1` — and it has not executed for
+ * weeks: it is the last scenario in a runner whose first scenario drives a
+ * control `d175f863` deleted. Its assertion is also no longer the product rule.
+ * There is no per-peer message control to withhold any more, and withholding is
+ * only half of what this product now does: a peer that does not announce exactly
+ * `link/1` gets an explicit, non-interactive `<p class="pa-unsupported">` saying
+ * so. "No control" and "no control, and told why" are different products, and
+ * only the second one is this one.
+ *
+ * So this is a migration in name and a stronger assertion in fact. It proves the
+ * absence the old scenario proved, plus the presence that replaced the silence,
+ * plus the four ways a card can still be misleading with no control on it at
+ * all: a click handler with nothing behind it, a drag highlight for a drop that
+ * will be refused, the accent paint that means "you are about to act on this",
+ * and a pointer cursor promising a press.
+ *
+ * ## Why it is a fourth scenario rather than more acts on the first journey
+ *
+ * The same reason the multi-page and relay journeys are their own: it needs a
+ * wire filter installed before boot on one tab, and the twenty-act journey's
+ * entire point is a link that WORKS. A tab cannot be both.
+ *
+ * ## The differential, which is what keeps every absence honest
+ *
+ * Two tabs, one filter. The suppressed tab still RECEIVES normally, so it sees
+ * the fresh tab as an ordinary reachable peer and renders the ordinary single
+ * action for it. Every "the fresh tab has none of this" below therefore has a
+ * live positive control one tab away, in the same browser, in the same room, on
+ * the same build: the control exists, the drag highlight is taken, the accent
+ * paint is applied — just not for a peer that cannot be reached. An absence with
+ * no positive control beside it is indistinguishable from a page that failed to
+ * render, and that is the failure mode this scenario is most at risk of.
+ *
+ * ## What it does NOT claim
+ *
+ * It is two tabs of one headless Chromium, not two devices and not two product
+ * versions: the peer is "old" only in the sense that its hello never reaches the
+ * room. It says nothing about what a real legacy client would render on ITS
+ * screen, nothing about the `LanPathRail` or radar drawn beside the card, and
+ * nothing about any locale outside the two maintained ones.
+ */
+async function unsupportedPeerScenario(browser, base) {
+  const { ledger, act } = newLedger(UNSUPPORTED_ACTS);
+
+  // Verification OFF on both tabs: no consent is ever asked for here, and the
+  // opt-in gate would only add a decision in front of a page that is supposed to
+  // stay completely idle. VERIFY_DEFAULT rather than nothing — the profile is
+  // shared, and the first journey in this run turns the preference ON.
+  const suppressed = await newTab(browser, base + "/", VERIFY_DEFAULT + SUPPRESS_CAPS_HELLO);
+  const fresh = await newTab(browser, base + "/", VERIFY_DEFAULT);
+  for (const tab of [suppressed, fresh]) await setWideViewport(tab);
+
+  // ── 1. One hello suppressed, and both peers still on each other's radar ───
+  //
+  // Mutual visibility FIRST, because it is what separates this scenario from a
+  // much less interesting one. A peer that vanished from the roster also has no
+  // control and no card, and would satisfy every absence below while proving
+  // nothing about capability at all. Exactly one card on each side, waited for
+  // rather than read once: the previous scenario's tabs close immediately before
+  // these open, and the server's `left` frames for them can legitimately still
+  // be in flight.
+  const oneCard = `document.querySelectorAll('${PEER_CARD}').length === 1` +
+    ` && document.querySelectorAll('.pname').length === 1`;
+  for (const [who, tab] of [["the suppressed tab", suppressed], ["the fresh tab", fresh]]) {
+    await tab.waitFor(oneCard, `${who} to see exactly one other device`, UNSUPPORTED_SETUP_BUDGET_MS);
+  }
+  const wire = await suppressed.evaluate("window.__unsupportedPeer");
+  if (!(wire.sawLink > 0)) {
+    throw new Error(
+      `this build never announced link/1 before the filter (${JSON.stringify(wire)}) — ` +
+      "every \"no control was offered\" below would then be passing because the product advertises nothing, " +
+      "not because this peer is old",
+    );
+  }
+  if (!(wire.suppressed > 0)) {
+    throw new Error(`the caps hello was never actually suppressed (${JSON.stringify(wire)}); this scenario would prove nothing`);
+  }
+  if (wire.otherCapsFrames !== 0 || wire.capsFrames !== wire.suppressed) {
+    throw new Error(
+      `${wire.otherCapsFrames} capability frame(s) reached the wire behind the hello's back ` +
+      `(${JSON.stringify(wire)}) — this peer would be reachable for a reason the suppression counter cannot see`,
+    );
+  }
+  // Only ONE of the two tabs is old. Without this the filter could have been
+  // installed run-wide and "neither tab offers a control" would be a statement
+  // about the harness rather than about capability routing.
+  const freshFilter = await fresh.evaluate("typeof window.__unsupportedPeer");
+  if (freshFilter !== "undefined") {
+    throw new Error(`the fresh tab carries the suppression filter too (${freshFilter}) — then neither peer is the current product`);
+  }
+  // The positive control, and the proof that the product still routes what it
+  // announces: the suppressed tab RECEIVES normally, so the fresh tab is an
+  // ordinary reachable peer to it, with the ordinary single enabled action.
+  await suppressed.waitFor(
+    `document.querySelectorAll('${OPEN_WORKSPACE}').length === 1` +
+    ` && !document.querySelector('${OPEN_WORKSPACE}').disabled`,
+    "the suppressed tab's single enabled action for the fresh tab — the live control every absence below is measured against",
+    UNSUPPORTED_SETUP_BUDGET_MS,
+  );
+  const reachable = await suppressed.evaluate(CARD_SHAPE);
+  if (reachable.unreachable || reachable.statements !== 0 || reachable.pageStatements !== 0) {
+    throw new Error(`the suppressed tab does not see the fresh tab as reachable: ${JSON.stringify(reachable)}`);
+  }
+  // Armed HERE, before anything is asserted about the suppressed tab staying
+  // quiet, and after its roster has settled so `chooser` has something to count.
+  // A card that appeared and then vanished is the same defect as one that
+  // stayed, so this is a MutationObserver rather than a read at the end.
+  await suppressed.evaluate(ARM_BACKGROUND_LATCH);
+  act("unsupported-caps-suppressed-on-the-wire", `one tab suppressed ${wire.suppressed} real caps hello(s) after announcing link/1 ${wire.sawLink} time(s), and both peers still see exactly one another`);
+
+  // ── 2. Exactly one statement, non-interactive, in both maintained languages ─
+  //
+  // The unsupported state is this card's INITIAL state — `peerCapsKnown` is
+  // false the moment the roster names a peer — so there is no window in which it
+  // was ever offered an action and no timing to wait out. What is asserted is
+  // the shape of the sentence, in each maintained language, plus the fact that
+  // it is a sentence at all rather than a label borrowed from the card.
+  const said = new Map();
+  for (const code of MAINTAINED_LANGS) {
+    await setLocale(fresh, code);
+    const shape = await fresh.evaluate(CARD_SHAPE);
+    if (shape.cards !== 1 || !shape.unreachable) {
+      throw new Error(`the fresh tab's peer is not the single unreachable card this scenario is about: ${JSON.stringify(shape)}`);
+    }
+    if (shape.statements !== 1 || shape.pageStatements !== 1) {
+      throw new Error(
+        `the fresh tab renders ${shape.statements} statement(s) on the card and ${shape.pageStatements} on the page in ` +
+        `${code}, want exactly one of each: ${JSON.stringify(shape)} — zero is the silence this statement replaced, ` +
+        "and two is the page saying the same thing twice",
+      );
+    }
+    // A `<p>`, and none of the three things that would make it read as a
+    // control to assistive technology: a role, a focus stop, or a refusing
+    // state. `aria-disabled` in particular is the near-miss — it says "a
+    // control, currently not available", i.e. "not now", when the truth is "not
+    // this device", and those are different answers to "should I wait?".
+    if (shape.tag !== "P" || shape.role !== null || shape.tabindex !== null || shape.ariaDisabled !== null) {
+      throw new Error(`the ${code} unsupported statement is not a plain non-interactive sentence: ${JSON.stringify(shape)}`);
+    }
+    if (shape.statementCursor === "pointer") {
+      throw new Error(`the ${code} unsupported statement is painted as pressable (cursor ${shape.statementCursor})`);
+    }
+    // A sentence, not a token. The floor is deliberately low enough that no
+    // maintained translation can trip it and high enough that a label, a glyph
+    // or an empty interpolation cannot pass as an explanation.
+    if (shape.text.length < 12) {
+      throw new Error(`the ${code} unsupported statement is ${JSON.stringify(shape.text)}, which is not an explanation`);
+    }
+    if (!shape.name || shape.text === shape.name) {
+      throw new Error(`the ${code} statement is just the device name (${JSON.stringify(shape)}) — it names no state at all`);
+    }
+    if (shape.lang !== code) throw new Error(`asked for ${code}, page reports ${shape.lang}`);
+    said.set(code, shape.text);
+  }
+  // Localized, not a hard-coded string. Two maintained languages rendering the
+  // same bytes is the one shape that would satisfy every check above while the
+  // product had stopped translating this sentence at all.
+  const spoken = [...said.values()];
+  if (new Set(spoken).size !== spoken.length) {
+    throw new Error(`the unsupported statement did not change between ${MAINTAINED_LANGS.join(" and ")}: ${JSON.stringify([...said])}`);
+  }
+  act("unsupported-one-noninteractive-statement", `one non-interactive <p> stated this peer's terminal state in ${MAINTAINED_LANGS.length} maintained languages, and the sentence changed with the language`);
+
+  // ── 3. No control, no handler, no affordance, no activity ────────────────
+  const rest = await fresh.evaluate(CARD_SHAPE);
+  if (rest.controls !== 0 || rest.refusing !== 0 || rest.openWorkspace !== 0) {
+    throw new Error(
+      `the fresh tab offers ${rest.controls} control(s) and ${rest.refusing} refusing element(s) to a peer it cannot reach: ` +
+      `${JSON.stringify(rest)} — a greyed-out control here says "not now", and the truth is "not this device"`,
+    );
+  }
+  // The paint. Both rules that would advertise an action are checked, because
+  // this is the SOLO roster and the accent fill they share is the same one: a
+  // single peer normally reads as one prominent send target, and leaving that on
+  // an unreachable card paints it permanently in its own "you are about to act
+  // on this" state. The reachable card one tab away has both.
+  if (!rest.solo || !reachable.solo) {
+    throw new Error(`the paint comparison needs both cards in the solo roster: fresh ${rest.solo}, suppressed ${reachable.solo}`);
+  }
+  if (rest.background === reachable.background || rest.border === reachable.border) {
+    throw new Error(
+      `the unreachable card is painted like the reachable one (${JSON.stringify(rest)} vs ${JSON.stringify(reachable)}) — ` +
+      "the solo accent is the same treatment hover applies, so wearing it permanently advertises a press",
+    );
+  }
+  if (rest.cursor === "pointer" || reachable.cursor !== "pointer") {
+    throw new Error(
+      `the cursor does not distinguish the two cards (fresh ${JSON.stringify(rest.cursor)}, ` +
+      `suppressed ${JSON.stringify(reachable.cursor)}) — either the unreachable card promises a press, or the probe is measuring nothing`,
+    );
+  }
+  // A REAL click, at a point proven to hit the card, counted independently of
+  // the product. "Nothing happened" is only worth something once the click is
+  // known to have happened: `onCard` is the browser's own account of where it
+  // landed, and it is why this is a mouse event rather than `element.click()`.
+  await fresh.evaluate(COUNT_CLICKS);
+  const at = await pointerCentre(fresh, PEER_CARD, "the fresh tab");
+  await movePointer(fresh, at.x, at.y);
+  await fresh.waitFor(
+    `!!document.querySelector('${PEER_CARD}') && document.querySelector('${PEER_CARD}').matches(':hover')`,
+    "the browser to agree the pointer is over the unreachable card",
+    UNSUPPORTED_POINTER_BUDGET_MS,
+  );
+  const hovered = await fresh.evaluate(CARD_SHAPE);
+  if (hovered.background !== rest.background || hovered.borderColor !== rest.borderColor) {
+    throw new Error(
+      `hovering the unreachable card lit it up (${JSON.stringify(hovered)} vs ${JSON.stringify(rest)}) — ` +
+      "a card that looks pressable and answers nothing reads as a failure the user caused",
+    );
+  }
+  await clickAt(fresh, at.x, at.y);
+  const clicks = await fresh.evaluate("window.__e2eClicks");
+  if (clicks.total !== 1 || clicks.onCard !== 1) {
+    throw new Error(`the click probe did not land on the card exactly once: ${JSON.stringify(clicks)}`);
+  }
+  const afterClick = await fresh.evaluate(IDLE_SHAPE);
+  if (afterClick.peers !== 1 || afterClick.statements !== 1) {
+    throw new Error(`the fresh tab lost the subject of this scenario: ${JSON.stringify(afterClick)}`);
+  }
+  if (afterClick.head || afterClick.panel || afterClick.consent || afterClick.xfer ||
+      afterClick.queued || afterClick.sas || afterClick.live) {
+    throw new Error(
+      `clicking a peer this build cannot reach produced ${JSON.stringify(afterClick)} — the card has no action, ` +
+      "so a click that reaches one is a workspace opening onto a link that can never come up",
+    );
+  }
+  // The drag highlight, POSITIVE one tab away first and negative here second.
+  // The order is the order of the drags themselves, not merely of the reads: the
+  // reachable card is dragged over and checked before the unreachable card is
+  // dragged at all, so the refusal below is credited only once the probe has been
+  // seen to move a real card's class. Dispatching both and then judging them
+  // would end at the same two facts, but it would take the negative measurement
+  // with a probe not yet known to work — and a probe that quietly stopped
+  // matching looks, at that moment, exactly like a product that refuses.
+  const reachableDrag = await suppressed.evaluate(dragOver(PEER_CARD));
+  if (!reachableDrag.during || reachableDrag.after) {
+    throw new Error(
+      `the drag probe did not work on a card that HAS the affordance (${JSON.stringify(reachableDrag)}) — ` +
+      "the unreachable card's refusal below would then be the probe failing, not the product deciding",
+    );
+  }
+  const freshDrag = await fresh.evaluate(dragOver(PEER_CARD));
+  if (freshDrag.before || freshDrag.during || freshDrag.after) {
+    throw new Error(
+      `the unreachable card took a drag highlight (${JSON.stringify(freshDrag)}) — highlighting a target and then ` +
+      "rejecting what lands on it is an invitation taken back after the user has already acted on it",
+    );
+  }
+  act("unsupported-no-control-no-affordance", `no control, no click handler, no drag highlight and no accent paint for a peer that announced nothing (a real click landed on the card and opened ${afterClick.head} workspaces)`);
+
+  // ── 4. A drop that lands anyway is refused, with THAT sentence ───────────
+  //
+  // The truthfulness anchor, and the reason it is worth a fourth act. Everything
+  // above proves the statement is *rendered* and *inert*; none of it proves the
+  // statement is TRUE. The product refuses a drop aimed at this peer with the
+  // same message key it renders on the card, so a drop that lands anyway makes
+  // the claim and the enforcement the same fact — checked without a single
+  // locale string being written into this file.
+  //
+  // Last among the fresh tab's interactions on purpose: the notice is a fixed
+  // overlay, and provoking one before the pointer probes could put it between a
+  // pointer and the card it is supposed to hit.
+  const drop = await fresh.evaluate(dropOn(PEER_CARD));
+  if (drop.files !== 1) throw new Error(`the drop probe carried ${drop.files} file(s), so the page never saw a file drag`);
+  if (!drop.refused) {
+    throw new Error(
+      "a file dropped on an unreachable peer was not refused — the page either started a transfer the router will " +
+      "drop, or consumed the drop and did nothing, which is the file vanishing with nothing said anywhere",
+    );
+  }
+  if (drop.drag) throw new Error("the refused drop left a highlight behind on the card");
+  await fresh.waitFor(
+    `!!document.querySelector('${NOTICE}') && document.querySelector('${NOTICE}').textContent.trim().length > 0`,
+    "the refused drop to be answered with a reason",
+    UNSUPPORTED_REFUSAL_BUDGET_MS,
+  );
+  // Both reads guarded, and the notice's emptiness reported rather than thrown.
+  // It self-clears after 3.5s: a bare `.textContent` on a node that had just gone
+  // would fail as a TypeError inside `evaluate`, which reads as a broken runner
+  // rather than as "the product's answer did not survive long enough to compare".
+  const refusal = await fresh.evaluate(`(() => ({
+    notice: (document.querySelector('${NOTICE}') || { textContent: '' }).textContent.trim(),
+    statement: (document.querySelector('${UNSUPPORTED_STATEMENT}') || { textContent: '' }).textContent.trim(),
+  }))()`);
+  if (!refusal.notice || !refusal.statement || refusal.notice !== refusal.statement) {
+    throw new Error(
+      `the refusal said ${JSON.stringify(refusal.notice)} while the card says ${JSON.stringify(refusal.statement)} — ` +
+      "the rendered claim and the enforced rule have to be one fact, or the card is stating something the product " +
+      "does not act on",
+    );
+  }
+  // The SECOND reading of the same absence, and the answer to the one race this
+  // scenario has. A click or a drop that did start something asynchronous would
+  // have had every round trip since the first read to render it; that first read
+  // alone could have been taken before the product got there. Neither read is a
+  // timed wait — what separates them is the drag work and a real drop, not a
+  // budget somebody chose.
+  const afterDrop = await fresh.evaluate(IDLE_SHAPE);
+  if (afterDrop.peers !== 1 || afterDrop.statements !== 1) {
+    throw new Error(`the fresh tab lost the subject of this scenario after the drop: ${JSON.stringify(afterDrop)}`);
+  }
+  if (afterDrop.head || afterDrop.panel || afterDrop.consent || afterDrop.xfer ||
+      afterDrop.queued || afterDrop.sas || afterDrop.live) {
+    throw new Error(`the refused drop still produced activity: ${JSON.stringify(afterDrop)}`);
+  }
+  act("unsupported-drop-refused-with-that-sentence", `a real file drop on the unreachable card was consumed and answered with the card's own sentence, and nothing started on either read`);
+
+  // ── 5. And the suppressed tab was never disturbed ────────────────────────
+  //
+  // The other half of the old scenario, kept: an old peer must not be shown a
+  // "receive failed" card, a phantom session, or anything else invented by a
+  // page that could not reach it. `chooser` is the anti-vacuity field the latch
+  // was built with — the suppressed tab certainly HAS that control, so
+  // "everything else zero, chooser non-zero" can only be reached by an observer
+  // genuinely watching a live DOM with selectors that still match.
+  const watched = await suppressed.evaluate("(() => { window.__e2eBackgroundLook(); return window.__e2eBackground; })()");
+  if (!(watched.ticks > 0) || !(watched.chooser > 0)) {
+    throw new Error(`the suppressed tab's latch saw nothing at all (${JSON.stringify(watched)}); its zeros below would be vacuous`);
+  }
+  if (watched.panel || watched.composer || watched.request || watched.head) {
+    throw new Error(`the suppressed tab was shown activity it never asked for: ${JSON.stringify(watched)}`);
+  }
+  const quiet = await suppressed.evaluate(IDLE_SHAPE);
+  if (quiet.peers !== 1 || quiet.statements !== 0) {
+    throw new Error(`the suppressed tab no longer sees exactly one reachable peer: ${JSON.stringify(quiet)}`);
+  }
+  if (quiet.head || quiet.panel || quiet.consent || quiet.xfer || quiet.queued || quiet.sas || quiet.live) {
+    throw new Error(`the suppressed tab ended with activity on screen: ${JSON.stringify(quiet)}`);
+  }
+  // Both tabs. The 401 is the anonymous account probe every page makes, and the
+  // resource line is its console echo; everything else is a real complaint.
+  const errs = [...suppressed.errors, ...fresh.errors].filter((e) => !/401|Failed to load resource/.test(e));
+  if (errs.length) {
+    throw new Error(`console errors during the unsupported-peer scenario:\n    ${errs.join("\n    ")}`);
+  }
+  act("unsupported-quiet-suppressed-tab", `the suppressed tab logged no error and showed no spurious card across ${watched.ticks} observed mutations, while still offering its own ${watched.chooser} live action(s)`);
+
+  await browser.send("Target.closeTarget", { targetId: suppressed.targetId });
+  await browser.send("Target.closeTarget", { targetId: fresh.targetId });
+  return ledger;
+}
+
+/**
+ * The runner inventory. Four scenarios, each with its own frozen act ledger.
  *
  * `page-shell.mjs` can count scenarios because it has four independent ones. A
  * count of `1/1` would survive `mixedScenario` being edited down to its first
  * assertion, so the literals that actually protect this suite are the per-act
- * counts, and `runScenarios` checks the scenario count and all three of them.
+ * counts, and `runScenarios` checks the scenario count and all four of them.
  *
  * Each entry carries the list its ledger is compared against AND the fixed
  * literal that list's length must equal. Never `SCENARIOS.length` /
  * `acts.length`: an array and its own length always agree, including after
  * somebody deletes an entry from it.
  */
-const EXPECTED_SCENARIO_COUNT = 3;
+const EXPECTED_SCENARIO_COUNT = 4;
 const SCENARIOS = [
   { label: "mixed link", run: mixedScenario, acts: ACTS, expectedActs: EXPECTED_ACT_COUNT },
   {
@@ -2807,6 +3455,12 @@ const SCENARIOS = [
     run: relayFailureScenario,
     acts: RELAY_ACTS,
     expectedActs: EXPECTED_RELAY_ACT_COUNT,
+  },
+  {
+    label: "unsupported peer",
+    run: unsupportedPeerScenario,
+    acts: UNSUPPORTED_ACTS,
+    expectedActs: EXPECTED_UNSUPPORTED_ACT_COUNT,
   },
 ];
 

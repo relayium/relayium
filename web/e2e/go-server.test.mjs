@@ -682,8 +682,18 @@ describe("mixed-link's scenario inventory and act ledger", () => {
     "relay-bounded-named-failure",
   ];
 
+  /** The fourth scenario's frozen list, retyped for the same reason. */
+  const UNSUPPORTED_ACT_NAMES = [
+    "unsupported-caps-suppressed-on-the-wire",
+    "unsupported-one-noninteractive-statement",
+    "unsupported-no-control-no-affordance",
+    "unsupported-drop-refused-with-that-sentence",
+    "unsupported-quiet-suppressed-tab",
+  ];
+
   for (const [name, expected] of [
     ["ACTS", ACT_NAMES], ["MULTIPAGE_ACTS", MULTIPAGE_ACT_NAMES], ["RELAY_ACTS", RELAY_ACT_NAMES],
+    ["UNSUPPORTED_ACTS", UNSUPPORTED_ACT_NAMES],
   ]) {
     it(`declares exactly ${name}'s acts, in that order, as one frozen literal`, () => {
       const match = src.match(new RegExp(`const ${name} = Object\\.freeze\\(\\[([^\\]]*)\\]\\);`));
@@ -694,24 +704,25 @@ describe("mixed-link's scenario inventory and act ledger", () => {
   }
 
   it("records every one of them from an act() call, exactly once", () => {
-    for (const name of [...ACT_NAMES, ...MULTIPAGE_ACT_NAMES, ...RELAY_ACT_NAMES]) {
+    for (const name of [...ACT_NAMES, ...MULTIPAGE_ACT_NAMES, ...RELAY_ACT_NAMES, ...UNSUPPORTED_ACT_NAMES]) {
       const calls = src.match(new RegExp(`\\bact\\("${name}"`, "g")) ?? [];
       expect(calls, `${name} is declared but never recorded by an act() call`).toHaveLength(1);
     }
-    // And nothing records an act none of the three frozen lists names: `act()`
+    // And nothing records an act none of the four frozen lists names: `act()`
     // throws on an unknown name at runtime, but a run that never reaches it
     // would not find out, and this is free. Order matters across the
     // concatenation too — each scenario's acts must sit together and after the
     // previous scenario's, i.e. in their own body, not interleaved into another.
     const recorded = [...src.matchAll(/\bact\("([a-z0-9-]+)"/g)].map((m) => m[1]);
-    expect(recorded).toEqual([...ACT_NAMES, ...MULTIPAGE_ACT_NAMES, ...RELAY_ACT_NAMES]);
+    expect(recorded).toEqual([...ACT_NAMES, ...MULTIPAGE_ACT_NAMES, ...RELAY_ACT_NAMES, ...UNSUPPORTED_ACT_NAMES]);
   });
 
-  it("checks all four counts against fixed literals, not against array lengths", () => {
-    expect(src).toMatch(/const EXPECTED_SCENARIO_COUNT = 3;/);
+  it("checks all five counts against fixed literals, not against array lengths", () => {
+    expect(src).toMatch(/const EXPECTED_SCENARIO_COUNT = 4;/);
     expect(src).toMatch(/const EXPECTED_ACT_COUNT = 20;/);
     expect(src).toMatch(/const EXPECTED_MULTIPAGE_ACT_COUNT = 5;/);
     expect(src).toMatch(/const EXPECTED_RELAY_ACT_COUNT = 4;/);
+    expect(src).toMatch(/const EXPECTED_UNSUPPORTED_ACT_COUNT = 5;/);
     expect(src).toMatch(/ran !== EXPECTED_SCENARIO_COUNT/);
     expect(src).toMatch(/ledger\.length !== scenario\.expectedActs/);
     // Each inventory entry must carry the LITERAL count, never the list's own
@@ -721,6 +732,7 @@ describe("mixed-link's scenario inventory and act ledger", () => {
     expect(src).toMatch(/expectedActs: EXPECTED_ACT_COUNT/);
     expect(src).toMatch(/expectedActs: EXPECTED_MULTIPAGE_ACT_COUNT/);
     expect(src).toMatch(/expectedActs: EXPECTED_RELAY_ACT_COUNT/);
+    expect(src).toMatch(/expectedActs: EXPECTED_UNSUPPORTED_ACT_COUNT/);
     expect(src, "an inventory entry took its expected act count from a mutable array length")
       .not.toMatch(/expectedActs:\s*[A-Za-z_$][\w$.]*\.length/);
     // The comparisons this guard exists to forbid: an array and its own length
@@ -729,7 +741,7 @@ describe("mixed-link's scenario inventory and act ledger", () => {
     expect(src, "the scenario check fell back to the mutable array length").not.toMatch(
       /ran !== SCENARIOS\.length/,
     );
-    for (const list of ["ACTS", "MULTIPAGE_ACTS", "RELAY_ACTS", "scenario\\.acts", "expected"]) {
+    for (const list of ["ACTS", "MULTIPAGE_ACTS", "RELAY_ACTS", "UNSUPPORTED_ACTS", "scenario\\.acts", "expected"]) {
       expect(src, `the act check fell back to ${list.replace("\\", "")}'s mutable length`).not.toMatch(
         new RegExp(`ledger\\.length !== ${list}\\.length`),
       );
@@ -758,13 +770,14 @@ describe("mixed-link's scenario inventory and act ledger", () => {
     // did before C3b-1 — bypasses every count, so the check is not "runScenarios
     // exists" but "nothing calls a scenario around it".
     expect(src).toMatch(/await runScenarios\(session\.browser, base\);/);
-    // All three scenarios are listed, each beside the list and literal its
+    // All four scenarios are listed, each beside the list and literal its
     // ledger is judged against. A scenario present in the file but absent from
     // here runs nowhere, and the scenario count would agree with its own absence.
     expect(src).toMatch(/run: mixedScenario,\s*acts: ACTS,\s*expectedActs: EXPECTED_ACT_COUNT/);
     expect(src).toMatch(/run: multiPageDeviceScenario,\s*\n\s*acts: MULTIPAGE_ACTS,\s*\n\s*expectedActs: EXPECTED_MULTIPAGE_ACT_COUNT/);
     expect(src).toMatch(/run: relayFailureScenario,\s*\n\s*acts: RELAY_ACTS,\s*\n\s*expectedActs: EXPECTED_RELAY_ACT_COUNT/);
-    for (const fn of ["mixedScenario", "multiPageDeviceScenario", "relayFailureScenario"]) {
+    expect(src).toMatch(/run: unsupportedPeerScenario,\s*\n\s*acts: UNSUPPORTED_ACTS,\s*\n\s*expectedActs: EXPECTED_UNSUPPORTED_ACT_COUNT/);
+    for (const fn of ["mixedScenario", "multiPageDeviceScenario", "relayFailureScenario", "unsupportedPeerScenario"]) {
       expect(src, `main() calls ${fn} directly, around the inventory`)
         .not.toMatch(new RegExp(`await ${fn}\\(`));
     }
@@ -2007,6 +2020,402 @@ describe("mixed-link proves an unmeasurable relay pool is still used, and still 
   });
 });
 
+
+/**
+ * Migration of the last shape stranded in `lan-transfer.mjs`: what a peer this
+ * build cannot reach is TOLD, and what it is not offered.
+ *
+ * The retired `capsSuppressedScenario` checked one thing — no message control
+ * for a peer that never announced — and that is no longer the product rule.
+ * There is no per-peer message control to withhold, and withholding is only half
+ * of what this product does: a peer that does not announce exactly `link/1` gets
+ * an explicit, non-interactive `<p class="pa-unsupported">` saying so.
+ *
+ * These are source-shape guards over an expensive real-browser proof. They do
+ * not claim to prove any of the rendering themselves; what they freeze is the
+ * shape of the proof, written against the failure modes that would leave the
+ * journey **green while proving nothing**: a suppression that suppressed
+ * nothing, an absence measured by waiting rather than against a live positive
+ * control, a "no controls" result with no statement beside it (which is the
+ * silence the statement replaced), a subject that had already unmounted, a
+ * swallowed scenario, and the two shortcuts this whole tail exists to prevent —
+ * reaching for a retired control or reading raw signalling frames instead of
+ * rendered product UI.
+ */
+describe("mixed-link proves an unannounced peer is told so, and offered nothing", () => {
+  const src = read("e2e/mixed-link.mjs");
+  /** Everything this slice added: its constants, its probes and its scenario.
+   *  Wider than the function body on purpose — the wire filter, the drag/drop
+   *  probes and the pointer helpers are where a legacy selector or an arbitrary
+   *  wait would hide if the checks below only looked inside the body. */
+  const regionFrom = src.indexOf("const MAINTAINED_LANGS = Object.freeze(");
+  const from = src.indexOf("async function unsupportedPeerScenario(");
+  const to = src.indexOf("\n}\n", from);
+  const region = src.slice(regionFrom, to === -1 ? undefined : to);
+  const body = src.slice(from, to === -1 ? undefined : to);
+  /** Statements only, for both slices. Several rules below name the very thing
+   *  they forbid in the prose beside them, and reading a comment as a violation
+   *  is the trap `workspace-orchestration.test.ts`'s `code()` helper exists
+   *  for. */
+  const strip = (text) => text.split("\n").filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join("\n");
+  const code = strip(body);
+  const regionCode = strip(region);
+
+  it("has a greppable scenario body for every check below to be scoped to", () => {
+    // Without this the slices could silently become "" and every `not.toContain`
+    // beneath them would pass over an empty string.
+    expect(regionFrom, "the scenario's constants are no longer greppable").toBeGreaterThan(-1);
+    expect(from, "unsupportedPeerScenario is no longer greppable").toBeGreaterThan(regionFrom);
+    expect(to, "its body has no closing brace at column 0").toBeGreaterThan(from);
+    expect(body.length, "the scenario body sliced out empty").toBeGreaterThan(2_000);
+    expect(region.length).toBeGreaterThan(body.length);
+  });
+
+  it("suppresses a REAL announcement, and refuses to run if it suppressed nothing", () => {
+    // The three ways this scenario could be vacuous, each closed by its own
+    // counter rather than by trusting the filter's predicate to keep matching.
+    expect(src).toMatch(/const SUPPRESS_CAPS_HELLO = `/);
+    expect(src).toMatch(/window\.__unsupportedPeer = \{ capsFrames: 0, sawLink: 0, suppressed: 0, otherCapsFrames: 0 \};/);
+    // Only the ROSTER hello is dropped — `data` carrying nothing but `caps`,
+    // the same shape `OBSERVE_CAPS` recognises as this build's announcement.
+    expect(src).toMatch(/Object\.keys\(frame\.data\)\.length === 1/);
+    expect(src).toMatch(/seen\.suppressed\+\+;/);
+    // 1. the build really announced link/1 before the filter removed it. Without
+    //    this, a product that stopped advertising the capability would leave
+    //    every "no control was offered" below passing for the wrong reason.
+    expect(code).toMatch(/!\(wire\.sawLink > 0\)/);
+    expect(code).toContain("this build never announced link/1 before the filter");
+    // 2. the filter actually fired.
+    expect(code).toMatch(/!\(wire\.suppressed > 0\)/);
+    expect(code).toContain("the caps hello was never actually suppressed");
+    // 3. nothing else carried a capability list onto the wire behind it.
+    expect(code).toMatch(/wire\.otherCapsFrames !== 0 \|\| wire\.capsFrames !== wire\.suppressed/);
+    // And exactly ONE tab is the old peer. A filter installed run-wide would
+    // make "neither tab offers a control" a statement about the harness.
+    expect(code).toMatch(/const freshFilter = await fresh\.evaluate\("typeof window\.__unsupportedPeer"\);/);
+    expect(code).toMatch(/freshFilter !== "undefined"/);
+    // The filter is a test-side wire rewrite, never a product switch: a runtime
+    // flag inside the product would ship a way to downgrade the protocol.
+    expect(regionCode, "the scenario reached for a product-side downgrade switch")
+      .not.toMatch(/localStorage\.setItem|__e2eDowngrade|LINK_BUILD_SUPPORT/);
+  });
+
+  it("keeps both peers on each other's radar, and proves the live control beside the absence", () => {
+    // Mutual visibility is what separates this scenario from a much less
+    // interesting one: a peer that vanished from the roster also has no control
+    // and no card, and would satisfy every absence here while proving nothing
+    // about capability at all.
+    expect(code).toMatch(/const oneCard = `document\.querySelectorAll\('\$\{PEER_CARD\}'\)\.length === 1`/);
+    expect(code).toMatch(/document\.querySelectorAll\('\.pname'\)\.length === 1/);
+    expect(code).toMatch(/\["the suppressed tab", suppressed\], \["the fresh tab", fresh\]/);
+    // The positive control: the suppressed tab still RECEIVES normally, so the
+    // fresh tab is an ordinary reachable peer to it, with the ordinary single
+    // enabled action. Every absence below is measured against this.
+    expect(code).toMatch(/document\.querySelectorAll\('\$\{OPEN_WORKSPACE\}'\)\.length === 1`/);
+    expect(code).toMatch(/const reachable = await suppressed\.evaluate\(CARD_SHAPE\);/);
+    expect(code).toMatch(/reachable\.unreachable \|\| reachable\.statements !== 0 \|\| reachable\.pageStatements !== 0/);
+  });
+
+  it("reads the statement and the controls from ONE pass, so neither can stand alone", () => {
+    // The failure this exists for: a card with no controls AND no statement is
+    // the silence the statement replaced, and it satisfies "zero controls"
+    // perfectly. The two facts are read from the same rendered frame rather than
+    // two round trips apart, where each could be true of a different one.
+    const shape = src.slice(src.indexOf("const CARD_SHAPE = `"), src.indexOf("const IDLE_SHAPE = `"));
+    expect(shape.length, "CARD_SHAPE is no longer greppable").toBeGreaterThan(500);
+    expect(shape).toMatch(/statements: card \? card\.querySelectorAll\('\$\{UNSUPPORTED_STATEMENT\}'\)\.length : 0,/);
+    expect(shape).toMatch(/pageStatements: document\.querySelectorAll\('\$\{UNSUPPORTED_STATEMENT\}'\)\.length,/);
+    expect(shape).toMatch(/controls: card/);
+    expect(shape).toMatch(/refusing: card \? card\.querySelectorAll\('\[disabled\], \[aria-disabled\]'\)\.length : 0,/);
+    // Exactly one, on the card AND on the page: two cards saying it would
+    // satisfy the first while the page said the same thing twice.
+    expect(code).toMatch(/shape\.statements !== 1 \|\| shape\.pageStatements !== 1/);
+    // Non-interactive in the three ways that matter to assistive technology.
+    // `aria-disabled` is the near-miss: it says "a control, currently not
+    // available", i.e. "not now", when the truth is "not this device".
+    expect(code).toMatch(/shape\.tag !== "P" \|\| shape\.role !== null \|\| shape\.tabindex !== null \|\| shape\.ariaDisabled !== null/);
+    expect(code).toMatch(/shape\.statementCursor === "pointer"/);
+    // And the controls check names the statement's own act as its predecessor,
+    // so a run cannot reach "no controls" without having proved the sentence.
+    const stated = code.indexOf('act("unsupported-one-noninteractive-statement"');
+    const controlled = code.indexOf('act("unsupported-no-control-no-affordance"');
+    expect(stated, "the statement act is missing").toBeGreaterThan(-1);
+    expect(controlled, "the no-control act is not recorded after the statement act").toBeGreaterThan(stated);
+    expect(code).toMatch(/rest\.controls !== 0 \|\| rest\.refusing !== 0 \|\| rest\.openWorkspace !== 0/);
+  });
+
+  it("asserts across the maintained languages only, and never against locale copy", () => {
+    // `i18n/types.ts` maintains exactly these two. The frozen locales are
+    // archived translations, and the supported-language policy forbids treating
+    // their copy as an ordinary acceptance requirement — asserting on one would
+    // make this go red for a locale nobody is keeping current.
+    expect(src).toMatch(/const MAINTAINED_LANGS = Object\.freeze\(\["en", "zh"\]\);/);
+    expect(code).toMatch(/for \(const code of MAINTAINED_LANGS\) \{/);
+    expect(code).toMatch(/await setLocale\(fresh, code\);/);
+    for (const frozen of ["ja", "ko", "de", "fr", "ar", "es", "pt"]) {
+      expect(regionCode, `${frozen} is an archived locale this scenario must not assert on`)
+        .not.toMatch(new RegExp(`["']${frozen}["']`));
+    }
+    // Structural and comparative, never literal copy: a copy edit in `en.ts` or
+    // `zh.ts` must not turn this red, and a build that hard-coded one language
+    // must not turn it green. So the sentence is never compared to a string.
+    for (const read of ["shape\\.text", "refusal\\.notice", "refusal\\.statement"]) {
+      expect(regionCode, `the statement is compared against a locale literal via ${read.replace("\\", "")}`)
+        .not.toMatch(new RegExp(`${read}\\s*(===|!==|\\.includes\\()\\s*["']`));
+    }
+    // What replaces the literal: it is present in both, and it CHANGES between
+    // them. Two maintained languages rendering the same bytes is the one shape
+    // that satisfies every structural check while the product has stopped
+    // translating this sentence at all.
+    expect(code).toMatch(/new Set\(spoken\)\.size !== spoken\.length/);
+    expect(code).toMatch(/shape\.text\.length < 12/);
+    expect(code).toMatch(/!shape\.name \|\| shape\.text === shape\.name/);
+    expect(code).toMatch(/shape\.lang !== code/);
+  });
+
+  it("measures every absence against a live positive control, never against elapsed time", () => {
+    // The retired scenario sampled for 8 seconds and concluded absence from
+    // silence. A sampled window proves only that the runner was patient: it
+    // passes identically on a page that failed to render, on a roster that lost
+    // the peer, and on a probe whose selectors stopped matching. Every absence
+    // here is paired with something that IS there, on the same build.
+    for (const stall of ["setTimeout", "sleep(", "delay(", "Date.now()"]) {
+      expect(code, `${stall} is an arbitrary wait, not a product condition`).not.toContain(stall);
+    }
+    // 1. the click really landed, counted by the browser rather than inferred.
+    expect(src).toMatch(/const COUNT_CLICKS = `/);
+    expect(src).toMatch(/window\.addEventListener\('click', \(e\) => \{/);
+    expect(src).toContain("e.target.closest('${PEER_CARD}')");
+    expect(code).toMatch(/clicks\.total !== 1 \|\| clicks\.onCard !== 1/);
+    // 2. it landed on the CARD, not on an overlay in front of it.
+    expect(src).toMatch(/const hit = document\.elementFromPoint\(x, y\);/);
+    expect(src).toMatch(/inside: !!\(hit && el\.contains\(hit\)\)/);
+    expect(src).toContain("lands outside that card");
+    // 3. a real pointer, so hit testing and `:hover` are the browser's own.
+    expect(src).toMatch(/tab\.send\("Input\.dispatchMouseEvent", \{ type: "mouseMoved"/);
+    expect(src).toMatch(/type: "mousePressed", x, y, button: "left"/);
+    expect(regionCode, "a synthesised click would measure a dispatch, not a product")
+      .not.toMatch(/\.click\(\)/);
+    expect(code).toMatch(/matches\(':hover'\)`,/);
+    // 4. the drag probe is proven able to move a card's class BEFORE the
+    //    unreachable card is dragged at all. All four positions are pinned, not
+    //    just the two assertions: a runner that dispatches both drags up front
+    //    and only judges them in this order still takes the negative measurement
+    //    with a probe nothing has yet shown to work, and a probe whose selector
+    //    quietly stopped matching is, at that moment, indistinguishable from a
+    //    product that refuses. The order these four have to be in is
+    //    dispatch positive → validate positive → dispatch negative → judge it.
+    const positiveDispatch = code.indexOf("const reachableDrag = await suppressed.evaluate(dragOver(PEER_CARD));");
+    const positiveCheck = code.indexOf("!reachableDrag.during || reachableDrag.after");
+    const negativeDispatch = code.indexOf("const freshDrag = await fresh.evaluate(dragOver(PEER_CARD));");
+    const negativeCheck = code.indexOf("freshDrag.before || freshDrag.during || freshDrag.after");
+    expect(positiveDispatch, "the drag probe has no positive control").toBeGreaterThan(-1);
+    expect(positiveCheck, "the positive control is dispatched but never validated")
+      .toBeGreaterThan(positiveDispatch);
+    expect(negativeDispatch, "the unreachable card is dragged before the positive control is validated")
+      .toBeGreaterThan(positiveCheck);
+    expect(negativeCheck, "the unreachable card's refusal is not judged after its own drag")
+      .toBeGreaterThan(negativeDispatch);
+    // A real file drag: `hasFiles` gates every window-level handler on `types`
+    // containing "Files", so an event without one is refused for a reason that
+    // has nothing to do with the peer.
+    expect(src).toMatch(/dt\.items\.add\(new File\(\['x'\], 'refused\.txt'/);
+    expect(src).toMatch(/new DragEvent\('dragover', \{ bubbles: true, cancelable: true, dataTransfer: dt \}\)/);
+    // 5. the quiet suppressed tab is watched by the same latch whose `chooser`
+    //    field is its own anti-vacuity half.
+    expect(code).toMatch(/await suppressed\.evaluate\(ARM_BACKGROUND_LATCH\);/);
+    //    Sampled once more at the end, in the SAME round trip as the read, so
+    //    the final counts cannot be the ones a mutation happened to fire last.
+    expect(code).toMatch(/window\.__e2eBackgroundLook\(\); return window\.__e2eBackground;/);
+    expect(code).toMatch(/!\(watched\.ticks > 0\) \|\| !\(watched\.chooser > 0\)/);
+    expect(code).toMatch(/watched\.panel \|\| watched\.composer \|\| watched\.request \|\| watched\.head/);
+  });
+
+  it("keeps a live rendered subject under every claim it makes", () => {
+    // "Nothing happened" is worth nothing if the page it is read from lost the
+    // peer, the card or the statement first — that page reports every zero this
+    // scenario wants, for the one reason it must never accept.
+    expect(src).toMatch(/const IDLE_SHAPE = `/);
+    expect(src).toMatch(/peers: document\.querySelectorAll\('\$\{PEER_CARD\}'\)\.length,/);
+    expect(src).toMatch(/statements: document\.querySelectorAll\('\$\{UNSUPPORTED_STATEMENT\}'\)\.length,/);
+    expect(code).toMatch(/afterClick\.peers !== 1 \|\| afterClick\.statements !== 1/);
+    expect(code).toMatch(/afterDrop\.peers !== 1 \|\| afterDrop\.statements !== 1/);
+    expect(code).toMatch(/quiet\.peers !== 1 \|\| quiet\.statements !== 0/);
+    // Read twice, either side of the drag and drop work, so a click or drop that
+    // DID start something asynchronous has had every round trip since to render
+    // it. One read alone could have been taken before the product got there.
+    const first = code.indexOf("const afterClick = await fresh.evaluate(IDLE_SHAPE);");
+    const second = code.indexOf("const afterDrop = await fresh.evaluate(IDLE_SHAPE);");
+    expect(first, "the idle sweep never runs").toBeGreaterThan(-1);
+    expect(second, "the idle sweep is taken only once").toBeGreaterThan(first);
+    // The shared contracts, not private literals, for the three cards
+    // `dom-contracts.mjs` owns — so a card that moves takes this sweep with it
+    // instead of silently reducing it to a count of nodes that no longer exist.
+    expect(src).toMatch(/consent: document\.querySelectorAll\('\$\{RECEIVE\.card\}'\)\.length,/);
+    expect(src).toMatch(/xfer: document\.querySelectorAll\('\$\{XFER\.card\}'\)\.length,/);
+    expect(src).toMatch(/queued: document\.querySelectorAll\('\$\{QUEUED\.card\}'\)\.length,/);
+  });
+
+  it("proves the statement is TRUE, not merely rendered", () => {
+    // Everything else proves the sentence is present and inert. This is the only
+    // check that the sentence is a fact: the product refuses a drop aimed at
+    // this peer with the same message key it renders on the card, so a drop that
+    // lands anyway makes the claim and the enforcement one thing — established
+    // without a single locale string being written into the runner.
+    expect(code).toMatch(/const drop = await fresh\.evaluate\(dropOn\(PEER_CARD\)\);/);
+    expect(code).toMatch(/refusal\.notice !== refusal\.statement/);
+    // `refused` is `dispatchEvent` returning false, i.e. the page called
+    // `preventDefault`. A drop the page ignores is left to the browser; a drop
+    // the page CONSUMES and does nothing with is the file vanishing silently.
+    expect(src).toMatch(/const delivered = el\.dispatchEvent\(new DragEvent\('drop'/);
+    expect(src).toMatch(/return \{ refused: !delivered/);
+    expect(code).toMatch(/!drop\.refused/);
+    expect(code).toMatch(/drop\.files !== 1/);
+    // Provoked LAST among the fresh tab's interactions: the notice is a fixed
+    // overlay, and one raised earlier could sit between a pointer and the card.
+    expect(code.indexOf("dropOn(PEER_CARD)")).toBeGreaterThan(code.indexOf("await clickAt(fresh"));
+    expect(code.indexOf("dropOn(PEER_CARD)")).toBeGreaterThan(code.indexOf("dragOver(PEER_CARD)"));
+    // And the wait for it is deliberately shorter than the notice's own 3.5s
+    // self-clear, or a run could "time out" on a notice that had already come
+    // and gone and report that the product said nothing.
+    expect(src).toMatch(/const UNSUPPORTED_REFUSAL_BUDGET_MS = 3_000;/);
+  });
+
+  it("withholds every affordance a card can carry with no control on it", () => {
+    // Four ways a card is still misleading with zero controls: a click handler
+    // with nothing behind it, a drag highlight for a drop that will be refused,
+    // the accent fill that means "you are about to act on this", and a pointer
+    // cursor promising a press. The first two are checked above; these are the
+    // paint, and both are differential against the reachable card one tab away.
+    expect(code).toMatch(/rest\.background === reachable\.background \|\| rest\.border === reachable\.border/);
+    expect(code).toMatch(/rest\.cursor === "pointer" \|\| reachable\.cursor !== "pointer"/);
+    // Both cards must be in the SOLO roster for that comparison to mean what it
+    // says: the accent fill is the solo rule, and comparing a solo card against
+    // a non-solo one would find a difference that has nothing to do with reach.
+    expect(code).toMatch(/!rest\.solo \|\| !reachable\.solo/);
+    // Hover changes nothing on it either, sampled only once the browser agrees
+    // the pointer is over the card.
+    expect(code).toMatch(/hovered\.background !== rest\.background \|\| hovered\.borderColor !== rest\.borderColor/);
+  });
+
+  it("reads the missing click handler off the product, not only off the browser", () => {
+    // The one claim in this scenario the live journey cannot make on its own.
+    // The browser proves a real click on the unreachable card CHANGES NOTHING;
+    // it cannot distinguish that from a handler that ran and returned early. The
+    // act beside it says there is no handler, and `App.svelte`'s own comment
+    // says the absence is deliberate — "a handler here would be a listener whose
+    // whole body is a guard that returns — and the card would still be, to every
+    // pointer and every inspector, a thing that handles clicks". So the shape is
+    // read off the product source: the attribute itself is the conditional, and
+    // its else-branch is `undefined`, which is Svelte for "attach nothing".
+    const app = read("src/App.svelte");
+    const card = app.indexOf('class="pcard"');
+    expect(card, "the .pcard element is no longer greppable in App.svelte").toBeGreaterThan(-1);
+    const handler = app.indexOf("onclick=", card);
+    expect(handler, "the .pcard element carries no onclick binding at all").toBeGreaterThan(card);
+    // Conditional at the BINDING. A handler attached unconditionally and guarded
+    // inside its body would satisfy the journey's no-effect proof exactly.
+    expect(app.slice(handler, handler + 40), "the .pcard onclick is not gated on unifiedPeer")
+      .toMatch(/^onclick=\{unifiedPeer \? /);
+    const otherwise = app.indexOf("} : undefined}", handler);
+    expect(otherwise, "the .pcard onclick has no undefined branch for a peer this build cannot reach")
+      .toBeGreaterThan(handler);
+    // ...and that branch belongs to THIS element. Without this, an `undefined`
+    // ternary on some later element would satisfy the check above.
+    expect(app.slice(handler, otherwise), "the undefined branch read here belongs to a later element")
+      .not.toMatch(/<\/?\w/);
+    // The visual half of the same decision, in the same file: the card that
+    // answers nothing also stops looking pressable.
+    expect(app, "the unreachable card no longer withdraws the pointer cursor")
+      .toMatch(/\.peer\.unreachable \.pcard \{[^}]*cursor: default;/);
+    // Retained, not replaced. The source shape says no listener is attached; the
+    // journey still proves a real click lands on that card and opens nothing, so
+    // a product that reattaches the handler behind a different name is caught by
+    // the browser even while this contract is being edited to match it.
+    expect(code).toMatch(/clicks\.total !== 1 \|\| clicks\.onCard !== 1/);
+    expect(code).toMatch(/afterClick\.head \|\| afterClick\.panel/);
+  });
+
+  it("drives the current link/1 surface, never the retired controls or raw signalling", () => {
+    // The migration rule for this whole tail. The retired scenario drove
+    // `MSG_OPEN_BTN` on the peer card; `d175f863` deleted that control along
+    // with `.pa-files` and `.file-pick-input`, and the current product answers
+    // an unreachable peer with a sentence and nothing else.
+    for (const legacy of [".file-pick-input", ".pa-files", "peer-actions button", "STRIP_LINK_CAP", "MSG_OPEN_BTN", ".attach-file"]) {
+      expect(regionCode, `${legacy} is a retired control this scenario must not reach for`)
+        .not.toContain(legacy);
+    }
+    // No signalling-frame shortcut. "The hello was suppressed" is a statement
+    // about the wire and it is made from the wire; every statement about what
+    // the user SEES is made from rendered product UI, and the raw roster
+    // observer belongs to the multi-page scenario, which needs it to tell two
+    // same-named pages apart.
+    for (const raw of ["OBSERVE_ROSTER", "OBSERVE_CAPS", "__roster", "__selfId", "__leftPeers"]) {
+      expect(regionCode, `${raw} is being read as a stand-in for a rendered outcome`).not.toContain(raw);
+    }
+  });
+
+  it("bounds every wait with a named budget, and none with a literal", () => {
+    expect(src).toMatch(/const UNSUPPORTED_SETUP_BUDGET_MS = \d[\d_]*;/);
+    expect(src).toMatch(/const UNSUPPORTED_POINTER_BUDGET_MS = \d[\d_]*;/);
+    const waits = code.match(/await \w+\.waitFor\(/g) ?? [];
+    const budgeted = code.match(/(UNSUPPORTED_SETUP_BUDGET_MS|UNSUPPORTED_POINTER_BUDGET_MS|UNSUPPORTED_REFUSAL_BUDGET_MS),?\s*\)/g) ?? [];
+    expect(waits.length, "the scenario's wait count changed; re-check every one still spends a named budget")
+      .toBe(budgeted.length);
+    expect(waits.length).toBeGreaterThanOrEqual(4);
+    // Scoped to one statement (`[^;]`), so this reads each wait's own argument
+    // list rather than sweeping from the first `waitFor(` to a digit anywhere
+    // below it.
+    expect(code, "a wait in this scenario was given its own literal timeout")
+      .not.toMatch(/waitFor\([^;]*?,\s*\d[\d_]*\s*\)/);
+  });
+
+  it("performs its five acts in the frozen order, each after its own assertions", () => {
+    const order = [
+      "unsupported-caps-suppressed-on-the-wire",
+      "unsupported-one-noninteractive-statement",
+      "unsupported-no-control-no-affordance",
+      "unsupported-drop-refused-with-that-sentence",
+      "unsupported-quiet-suppressed-tab",
+    ];
+    const at = order.map((name) => code.indexOf(`act("${name}"`));
+    at.forEach((i, n) => expect(i, `${order[n]} is not recorded inside this scenario`).toBeGreaterThan(-1));
+    expect([...at].sort((x, y) => x - y), "the unsupported-peer acts were reordered").toEqual(at);
+    // Anchored to the work each one reports.
+    expect(at[0]).toBeGreaterThan(code.indexOf("const wire = await suppressed.evaluate("));
+    expect(at[1]).toBeGreaterThan(code.indexOf("new Set(spoken).size"));
+    expect(at[2]).toBeGreaterThan(code.indexOf("freshDrag.before ||"));
+    expect(at[3]).toBeGreaterThan(code.indexOf("refusal.notice !== refusal.statement"));
+    expect(at[4]).toBeGreaterThan(code.indexOf("const errs = ["));
+    // Nothing in the body may swallow a failure and still record an act: a
+    // caught error that let the run continue is exactly the vacuity the ledger
+    // exists to make impossible, one level below `runScenarios`' own no-catch
+    // loop.
+    expect(code, "the unsupported-peer scenario swallows an error around its acts").not.toMatch(/\bcatch\b/);
+    expect(body).toMatch(/return ledger;/);
+    expect(body).toMatch(/const \{ ledger, act \} = newLedger\(UNSUPPORTED_ACTS\);/);
+    // Verification OFF, and explicitly rather than by omission: the profile is
+    // shared, and the first journey in this run turns the preference ON.
+    expect(code).toMatch(/VERIFY_DEFAULT \+ SUPPRESS_CAPS_HELLO/);
+    expect(code, "this scenario opted into a verification gate nothing here answers").not.toContain("VERIFY_ON");
+    // Both tabs are swept for console errors — the half of the retired scenario
+    // that was about the OLD peer's own screen.
+    expect(code).toMatch(/\[\.\.\.suppressed\.errors, \.\.\.fresh\.errors\]/);
+  });
+
+  it("keeps all three earlier scenarios intact beside it", () => {
+    // This slice adds a fourth scenario; it edits none of the three already
+    // hosted. All four ledgers come from the same factory, so the duplicate and
+    // unknown-name guards cannot exist in three of them and be forgotten in one.
+    expect(src).toMatch(/const \{ ledger, act \} = newLedger\(ACTS\);/);
+    expect(src).toMatch(/const \{ ledger, act \} = newLedger\(MULTIPAGE_ACTS\);/);
+    expect(src).toMatch(/const \{ ledger, act \} = newLedger\(RELAY_ACTS\);/);
+    expect(src).toMatch(/const EXPECTED_ACT_COUNT = 20;/);
+    expect(src).toMatch(/const EXPECTED_MULTIPAGE_ACT_COUNT = 5;/);
+    expect(src).toMatch(/const EXPECTED_RELAY_ACT_COUNT = 4;/);
+  });
+});
+
 /**
  * The product fix that journey is the acceptance case for: a page that becomes
  * the current one re-states what it speaks.
@@ -2348,7 +2757,7 @@ describe("mixed-link's live-region observer announces when it is ready", () => {
     // announcement machinery in it; the moment one appears, its link opens are
     // subject to the same handshake and this fails until the scoping is widened.
     const src = read(MIXED);
-    for (const fn of ["multiPageDeviceScenario", "relayFailureScenario"]) {
+    for (const fn of ["multiPageDeviceScenario", "relayFailureScenario", "unsupportedPeerScenario"]) {
       const from = src.indexOf(`async function ${fn}(`);
       const to = src.indexOf("\n}\n", from);
       expect(from, `${fn} is no longer greppable`).toBeGreaterThan(-1);
