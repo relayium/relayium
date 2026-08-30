@@ -156,8 +156,8 @@ and teardown are all driven by those two — on the unified `link/1` surface tha
 replaced the fork, and `code-room.mjs` runs in hosted CI on every push.
 
 The audit originally listed **eight** current unique assertions as stranded. All
-eight rows have since changed status, so the live count is **none stranded, five
-hosted migrations, one local migration awaiting hosted CI, and two retired**:
+eight rows have since changed status, so the live count is **none stranded, six
+hosted migrations and two retired**:
 
 | # | Unique assertion | Status |
 |---|---|---|
@@ -168,12 +168,12 @@ hosted migrations, one local migration awaiting hosted CI, and two retired**:
 | 5 | Pre-open PeerConnection failure (`failed` before the DataChannel opens) | **retired** — see below |
 | 6 | Live `role="progressbar"` accessibility during an in-flight transfer | **hosted migration** (C3b-1, exact-main `129e4cd`) |
 | 7 | Multi-page device identity and focus (two pages of one browser plus a third device) | **hosted migration** (C3b-7, exact-main `c7b83dc4`) |
-| 8 | Bounded relay-pool failure (credentials issued from the pool, then discarded) | **migrated locally; awaiting hosted CI** (C3b-8) |
+| 8 | Bounded relay-pool failure (credentials issued from the pool, then discarded) | **hosted migration** (C3b-8, exact-main `74ac85db`) |
 
 "None stranded" is a statement about the migration inventory, not about
 `lan-transfer.mjs`, which still exists and still cannot run. Deleting it is
-Stage 4 below, and it waits until all three current scenarios are green on
-hosted `main`.
+Stage 4 below, and it now waits on one thing only: the rendered unsupported-peer
+shape migrated in C3b-9, which is green locally and not yet on hosted `main`.
 
 **Row 1's wording is corrected here, and the correction matters — the retired
 runner was stronger than the audit's phrasing suggested.** The audit named it
@@ -381,7 +381,8 @@ recording:
 - *What did not move in C3b-1:* uniques 1, 2, 3 and 5 were untouched by that
   slice. All four have since changed status: #5 retired on the deterministic
   evidence above, #2 moved in C3b-4, #3 in C3b-5 and #1 in C3b-6; #7 then moved
-  in C3b-7, so **#8 is the only row left** and it is the remainder of Stage 3.
+  in C3b-7 and #8 in C3b-8, so **no numbered row is left**; what remains before
+  Stage 4 is the separately scoped rendered unsupported-peer shape (C3b-9).
   The byte-exact resume and replacement-PeerConnection assertions were preserved
   unchanged — the act was inserted into that scene, not in place of any of it.
 - *What the diff touches:* test and documentation files only —
@@ -397,14 +398,15 @@ recording:
   `EXPECTED_SCENARIO_COUNT`. A `1/1` scenario count would otherwise be reported
   by a run edited down to its first assertion. `e2e/go-server.test.mjs` pins that
   shape, and pins that the live scan sits between the accept and the forced
-  close. C3b-7 adds a **second** scenario rather than a twenty-first act, and
-  C3b-8 a **third**, so there are now three frozen lists and three literal
-  counts — `ACTS`/`EXPECTED_ACT_COUNT` (20),
-  `MULTIPAGE_ACTS`/`EXPECTED_MULTIPAGE_ACT_COUNT` (5) and
-  `RELAY_ACTS`/`EXPECTED_RELAY_ACT_COUNT` (4) — with `EXPECTED_SCENARIO_COUNT`
-  at 3. They are kept apart deliberately: a single flat list of twenty-nine would
-  report the same failure for "one journey never started" as for "one act was
-  deleted", and those need different repairs.
+  close. C3b-7 adds a **second** scenario rather than a twenty-first act, C3b-8 a
+  **third** and C3b-9 a **fourth**, so there are now four frozen lists and four
+  literal counts — `ACTS`/`EXPECTED_ACT_COUNT` (20),
+  `MULTIPAGE_ACTS`/`EXPECTED_MULTIPAGE_ACT_COUNT` (5),
+  `RELAY_ACTS`/`EXPECTED_RELAY_ACT_COUNT` (4) and
+  `UNSUPPORTED_ACTS`/`EXPECTED_UNSUPPORTED_ACT_COUNT` (5) — with
+  `EXPECTED_SCENARIO_COUNT` at 4. They are kept apart deliberately: a single flat
+  list of thirty-four would report the same failure for "one journey never
+  started" as for "one act was deleted", and those need different repairs.
 - *Shared selectors:* the consent card and the transfer card are now written once
   in `e2e/dom-contracts.mjs` (`RECEIVE`, `XFER`) beside `QUEUED`, and asserted
   against real rendered markup by `ReceiveActions.test.ts` and against
@@ -957,11 +959,14 @@ asserting on the browser's logging rather than on the product.
 `web/e2e/README.md`. No product source, workflow, package, dependency, native or
 ops file changed, and `lan-transfer.mjs` is deliberately left in place.
 
-**Verification status: independently validated locally — including the real
-browser journey, the whole Web suite, `npm run check` and the production build —
-but not yet run in hosted CI.** Row 8 stays a local migration awaiting hosted CI
-until `mixed-link-e2e` has run the third scenario on `main`, so nothing in this
-section is an exact-main or hosted claim. What was run, on the final source:
+**Verification status: hosted and green on exact main
+`74ac85db83a636f747581cc35b580749d7cf0344`.** The source merged through PR #94;
+its merge-gate run `33287525259` passed all 24 selected jobs — six intentionally
+skipped — including `mixed-link-e2e`, and exact-main Web run `33287720721` passed
+all five jobs, repeating the same 29 ordered acts and the same 30.9s terminal
+result. Row 8 is therefore hosted coverage rather than a local migration awaiting
+CI. The author's local evidence, recorded before the merge, is kept below as-is:
+it says what was run by hand, not what CI concluded.
 
 | Command | Result |
 |---|---|
@@ -994,19 +999,248 @@ source — SHA-256 prefixes `7da4db13` for `e2e/mixed-link.mjs` and `97cd90f7` f
 `e2e/go-server.test.mjs` — which is why this slice's diff is still the four files
 named above.
 
-**Stage 3 — bounded relay failure: migrated locally in C3b-8, awaiting hosted
-CI.** Unique #7 moved in C3b-7 and #8 was what remained of this stage. It came
-last because it needed setup the other stages did not: the pool-shaped
-`/api/ice` response, an unreachable TURN host, and a probe budget that actually
-elapses.
+### C3b-9 — the peer this build cannot reach, and what it is told
+
+**Status: migrated locally, awaiting hosted CI.** This is the rendered half of
+the one genuinely legacy-specific claim (discussed under "Two things this
+migration must not do", below), and the last thing standing between hosted `main`
+and Stage 4. It is the runner's **fourth** scenario,
+`unsupportedPeerScenario`, with its own two tabs and its own frozen five-act
+ledger; the twenty, five and four acts of the first three scenarios are untouched
+and the inventory now checks a literal `EXPECTED_SCENARIO_COUNT = 4`.
+
+**It is a migration in name and a stronger assertion in fact.** The retired
+`capsSuppressedScenario` asserted one thing — that no message control was offered
+to a peer that never announced `text/1` — and that is no longer the product rule.
+There is no per-peer message control to withhold, and withholding is only half of
+what this product does. A peer that does not announce exactly `link/1` gets an
+explicit, non-interactive `<p class="pa-unsupported">` saying so, in the user's
+language. "No control" and "no control, and told why" are different products, and
+only the second one is this one. So the migrated scenario keeps the absence the
+old one proved, and adds the presence that replaced the silence plus the four
+ways a card can still mislead with no control on it at all.
+
+**Why a fourth scenario rather than more acts on the first journey.** The same
+reason the multi-page and relay journeys are their own: it needs a wire filter
+installed before boot on one tab, and the twenty-act journey's entire point is a
+link that *works*. A tab cannot be both.
+
+**The instrument, stated precisely.** One tab boots with `SUPPRESS_CAPS_HELLO`,
+a test-side rewrite of `WebSocket.prototype.send` that drops the roster hello —
+the frame whose `data` carries nothing but `caps`, which is exactly what
+`peer-caps.svelte.ts` routes on. The frame is dropped rather than emptied,
+because that reproduces the peer production actually has to handle: one that
+never announced at all, so `peerCapsKnown` is false and there is no third state
+to hide in. It is a wire filter, never a product switch — a runtime downgrade
+flag inside the product would be a shipped way to downgrade the protocol,
+reachable by whoever can set it, and `src/lib/link-only-surface.test.ts` exists
+to keep that from coming back.
+
+**The differential is what makes every absence honest.** The suppressed tab still
+*receives* normally, so it sees the fresh tab as an ordinary reachable peer and
+renders the ordinary single action for it. Every "the fresh tab has none of this"
+therefore has a live positive control one tab away, in the same browser, in the
+same room, on the same build: the control exists there, the drag highlight is
+taken there, the accent paint is applied there — just not for a peer that cannot
+be reached. An absence with no positive control beside it is indistinguishable
+from a page that failed to render, and that is the failure mode this scenario is
+most at risk of. It is also why the retired scenario's approach — sampling for
+eight seconds and concluding absence from silence — was **not** carried over: a
+sampled window proves only that the runner was patient. It passes identically on
+a page that never rendered, on a roster that lost the peer, and on a probe whose
+selectors stopped matching.
+
+Five acts, frozen order:
+
+1. *`unsupported-caps-suppressed-on-the-wire`* — one tab's real announcement was
+   suppressed, and both peers still see exactly one another. Three counters close
+   the three ways this could be vacuous: `sawLink` proves the build *did*
+   announce `link/1` before the filter removed it (without it, a product that
+   stopped advertising the capability would leave every absence below passing for
+   the wrong reason); `suppressed` proves the filter actually fired; and
+   `otherCapsFrames` proves nothing else carried a capability list onto the wire
+   behind the hello's back. The fresh tab is separately checked *not* to carry
+   the filter, so "neither tab offers a control" cannot be a statement about the
+   harness. Mutual visibility comes first, because a peer that vanished from the
+   roster also has no control and no card.
+2. *`unsupported-one-noninteractive-statement`* — exactly one statement on the
+   card *and* exactly one on the page, in **each maintained language**. It is a
+   `<p>` with no `role`, no `tabindex` and no `aria-disabled`; that last one is
+   the near-miss, because it says "a control, currently not available" — "not
+   now" — when the truth is "not this device", and those are different answers to
+   "should I wait?". The sentence must also change between `en` and `zh`: two
+   maintained languages rendering the same bytes is the one shape that satisfies
+   every structural check while the product has stopped translating it.
+3. *`unsupported-no-control-no-affordance`* — zero controls and zero refusing
+   elements in the card, zero `.open-workspace` on the page, and then the three
+   affordances a card can still carry with no control on it: a **real** left
+   click (`Input.dispatchMouseEvent`, at a point `elementFromPoint` proves lands
+   inside the card, counted by a capture-phase listener so "nothing happened" is
+   only credited once the click is known to have happened) opens nothing; the
+   drag highlight `ondragover` adds is withheld; and neither the solo accent fill
+   nor a pointer cursor is applied. The drag probe's positive control is
+   *dispatched and validated* on the reachable card before the unreachable card
+   is dragged at all — not merely read first — so the refusal is credited only
+   once the probe has been seen to move a real card's class.
+   The click half is proved twice, on purpose. The browser proves a real click
+   changes nothing, which cannot on its own distinguish "no handler" from "a
+   handler that ran and returned"; a source-shape contract over the real
+   `src/App.svelte` closes that gap by requiring the `.pcard` `onclick` to be
+   conditional on `unifiedPeer` and to be `undefined` for a peer this build
+   cannot reach. The browser proof is retained beside it rather than replaced:
+   the source says no listener is attached, the journey says nothing happens when
+   one is pressed anyway.
+4. *`unsupported-drop-refused-with-that-sentence`* — the truthfulness anchor, and
+   the only check that the sentence is a *fact* rather than merely rendered and
+   inert. A real file drop that lands on the card anyway must be **consumed**
+   (`dispatchEvent` returning false, i.e. the page called `preventDefault`) and
+   answered, and the notice it produces must be byte-identical to the sentence
+   already on the card. A drop the page ignores is left to the browser; a drop
+   the page consumes and does nothing with is the file vanishing with nothing
+   said anywhere. Because the comparison is statement-to-notice, it establishes
+   the claim and the enforcement are one fact **without a single locale string
+   being written into the runner**.
+5. *`unsupported-quiet-suppressed-tab`* — the other half of the retired scenario,
+   kept: the old peer must not be shown a "receive failed" card, a phantom
+   session, or anything else invented by a page that could not reach it. Watched
+   by `ARM_BACKGROUND_LATCH`, whose `chooser` field is its own anti-vacuity half
+   — the suppressed tab certainly *has* that control, so "everything else zero,
+   chooser non-zero" can only be reached by an observer genuinely watching a live
+   DOM with selectors that still match. Both tabs are then swept for console
+   errors.
+
+**Language policy, applied rather than mentioned.** The runner freezes
+`MAINTAINED_LANGS = ["en", "zh"]` — exactly what `i18n/types.ts` maintains — and
+a source contract fails if any `FROZEN_LANGS` code (ja, ko, de, fr, ar, es, pt)
+appears anywhere in the scenario's region. Asserting on an archived translation
+would make this go red for a locale nobody is keeping current, which is a false
+regression about a real policy. No sentence from *any* locale, maintained ones
+included, is written into the runner: a copy edit in `en.ts` or `zh.ts` must not
+turn this red, and a build that hard-coded one language must not turn it green.
+
+**What this does not prove.** Two tabs of one headless Chromium, not two devices
+and not two product versions: the peer is "old" only in the sense that its hello
+never reaches the room. It says nothing about what a real legacy client renders
+on *its* screen, nothing about the `LanPathRail` or radar drawn beside the card,
+and nothing about any locale outside the two maintained ones.
+
+*What the diff touches:* four files, all tests and documentation —
+`web/e2e/mixed-link.mjs`, `web/e2e/go-server.test.mjs`, this document and
+`web/e2e/README.md`. No product source, workflow, package, dependency, server,
+native or ops file changed, and `lan-transfer.mjs` and its npm script are
+deliberately left in place until this scenario is hosted.
+
+**Verification status: independently validated locally — including the real
+browser journey, the whole Web suite, `npm run check` and the production build —
+but not yet run in hosted CI.** The rendered unsupported-peer shape therefore
+stays a **local** migration awaiting hosted CI, and nothing in this section is an
+exact-main or hosted claim. Every gate below was run by the reviewer on the
+reviewed source, replacing the author-side shim record this section used to
+carry:
+
+| Gate | Result |
+|---|---|
+| `node --check` on `e2e/mixed-link.mjs` and `e2e/go-server.test.mjs` | **pass** — both parse clean. Worth running by hand: no gate parses `e2e/mixed-link.mjs` (`go-server.test.mjs` reads it as *text*). |
+| focused Vitest over `e2e/go-server.test.mjs` | **pass — 150/150** at acceptance, including this scenario's source contracts and the updated inventory contracts |
+| the real-browser runner, against a locally built Go server, all four scenarios | **pass — 20/20, 5/5, 4/4 and 5/5** ordered acts in real headless Chromium |
+| the full Web suite | **pass — 4,455 passed, three skipped** (the three are the suite's own expected skips) |
+| `npm run check` | **pass — zero errors, zero warnings** |
+| `npm run build` | **pass — 447 pages and 12 shells** |
+
+The 150 is the count *at acceptance*. The narrow post-acceptance revision
+recorded at the end of this section adds one contract, so the focused suite reads
+**151/151** on the current source; the browser, full-suite, check and build
+figures above were taken before that revision and belong to it unchanged, since
+the revision touches only test and documentation files.
+
+Seven independent mutations were then applied by the reviewer, one at a time and
+each restored to the exact reviewed hashes before the next, so the contracts are
+known not to pass vacuously:
+
+- Deleting the real `sawLink` anti-vacuity check failed **one** — that guard is
+  the only thing separating "this peer is old" from "this product advertises
+  nothing".
+- Weakening the exactly-one rendered statement failed **one**.
+- Deleting the zero-control gate failed **one**.
+- Deleting the real-click landing check failed **one** — without it, "nothing
+  happened" is satisfied by a click that never arrived.
+- Deleting the notice-to-statement truthfulness equality failed **one**: the
+  sentence would then be proved rendered and inert, but never proved true.
+- Narrowing the maintained languages to one failed **one**.
+- Bypassing the unsupported scenario, or its last act, failed **two**.
+
+Seven mutations, 1/1/1/1/1/1/2, each one reverted to the exact reviewed hashes
+before the next and none committed.
+
+The author's own pre-acceptance checks, kept here because they say what was run
+by hand before any gate existed in this worktree, were a `node --check` on both
+files and twelve one-at-a-time mutations executed by a standalone Node `expect`
+shim rather than by Vitest — **91/91** contract blocks sliced out of the real
+file and run against the real `e2e/mixed-link.mjs`. That was a genuine execution
+of the assertions, not a parse, but it was never the gate; the table above is:
+
+- Removing the `sawLink` guard failed **one** — that guard is the only thing
+  separating "this peer is old" from "this product advertises nothing".
+- Adding an archived locale to `MAINTAINED_LANGS` failed **one**.
+- Replacing a named budget with a literal `10_000` failed **one**.
+- Deleting the final act failed **two**.
+- Replacing the drag probe's positive control with an eight-second wait failed
+  **one** — that is the retired scenario's own approach, rejected by name.
+- Weakening "exactly one statement" to "at most one" failed **one**: a card with
+  no controls *and* no statement is the silence the statement replaced.
+- Removing the second rendered-subject re-read failed **one**.
+- Wrapping the drop probe in a `try`/`catch` failed **two**.
+- Reintroducing `.file-pick-input` as a constant failed **one**.
+- Pinning the statement to an English locale literal failed **one**.
+- Dropping the "the click landed on the card exactly once" check failed **one** —
+  without it, "nothing happened" is satisfied by a click that never arrived.
+- Dropping the notice/statement equality failed **one**: the sentence would then
+  be proved rendered and inert, but never proved true.
+
+Twelve shim mutations, applied one at a time and each restored before the next.
+At acceptance both files hashed back to the reviewed source — SHA-256 prefixes
+`fcf50699` for `e2e/mixed-link.mjs` and `964636a7` for `e2e/go-server.test.mjs`.
+
+**Post-acceptance revision, and what it changed.** Acceptance raised two findings
+about *claims*, not about behaviour, and both are closed inside the same
+four-file scope:
+
+1. The drag probe's positive control was **dispatched second** while the prose
+   said it ran first. Both drags were in flight before either was judged, so the
+   negative measurement was taken with a probe nothing had yet shown to work.
+   The reachable card is now dragged over and validated before the unreachable
+   card is dragged at all, and the source contract pins all four positions —
+   dispatch positive, validate positive, dispatch negative, judge negative —
+   rather than only the two assertions.
+2. The act and this document said there is **no click handler**, while the live
+   test proved only that a real click has no effect. Those are different claims,
+   and a handler whose whole body is a guard that returns satisfies the second
+   one exactly. The new `App.svelte` source-shape contract described under act 3
+   makes the first claim from the product source; the browser's no-effect proof
+   is retained beside it.
+
+The revision also rejoins one error sentence that was split mid-phrase across a
+string concatenation. The message it produces is byte-identical.
+
+Revalidation after the revision: `node --check` **pass** on both files, focused
+Vitest **151/151**. The current source hashes are SHA-256 prefixes `f094520f` for
+`e2e/mixed-link.mjs` and `e2cadf0a` for `e2e/go-server.test.mjs`; the reviewer
+revalidates from there. The diff is still the four files named above.
+
+**Stage 3 — bounded relay failure: hosted on exact main `74ac85db` (C3b-8).**
+Unique #7 moved in C3b-7 and #8 was what remained of this stage. It came last
+because it needed setup the other stages did not: the pool-shaped `/api/ice`
+response, an unreachable TURN host, and a probe budget that actually elapses.
 
 **Stage 4 — delete `lan-transfer.mjs` and its `test:e2e` npm script.** Only after
-hosted `main` is green with stages 1–3 landed, which as of C3b-8 means only after
-the third scenario has passed `mixed-link-e2e` on `main`. Deleting earlier would
-drop the unique still awaiting that run — none remains stranded now that
-#1/#2/#3/#6/#7/#8 have moved and #4/#5 were retired with the deterministic
-evidence recorded above; keeping it after is worse than useless — a script that
-cannot exit zero teaches everyone to ignore a red run.
+hosted `main` is green with stages 1–3 landed *and* with the rendered
+unsupported-peer shape, which as of C3b-9 means only after the **fourth**
+scenario has passed `mixed-link-e2e` on `main`. Stages 1–3 cleared that bar at
+`74ac85db`; C3b-9 has not. Deleting earlier would drop the one assertion still
+awaiting that run — none remains stranded now that #1/#2/#3/#6/#7/#8 have moved
+and #4/#5 were retired with the deterministic evidence recorded above; keeping it
+after is worse than useless — a script that cannot exit zero teaches everyone to
+ignore a red run.
 
 Two things this migration must not do. It must not restore the deleted controls,
 and it must not add a downgrade switch. What remains genuinely legacy-specific is
@@ -1021,20 +1255,24 @@ different status:
   guard: no legacy session module imported anywhere in production source, and no
   fallback transport reaching the workspace router. It runs on every push, in the
   `npm test` step of the `test` job.
-- **Written but not executing** — `capsSuppressedScenario` was designed to assert
-  the observer-side shape in a real browser (a peer that never announces caps is
-  offered no control, and the old peer sees no spurious card). It is the **last**
-  scenario in `main()`, so it sits deepest in the non-executing tail described
-  above and does not run today, locally or in CI.
+- **Migrated in C3b-9, green locally, not yet hosted** — `capsSuppressedScenario`
+  was designed to assert the observer-side shape in a real browser (a peer that
+  never announces caps is offered no control, and the old peer sees no spurious
+  card). It is the **last** scenario in `main()`, so it sits deepest in the
+  non-executing tail described above and has not run for weeks, locally or in
+  CI. Its shape now lives in `mixed-link.mjs` as the runner's **fourth**
+  scenario, `unsupportedPeerScenario` — see the C3b-9 section above, which also
+  records why the migrated assertion is materially stronger than the retired one
+  rather than a rename of it.
 
-So the source-level half is guarded and the rendered half is not. That gap is
-narrow — the source guard makes it structurally hard for a legacy transport to
-come back — but it is a gap, and it is now the **only** thing left in this tail
-that has not been migrated. It used to be described as waiting on stage 3
-alongside unique #8; #8 moved in C3b-8, so the browser-side unsupported-peer
-shape is what remains, and it is a separate piece of work rather than part of any
-numbered row above. Nothing there needs a legacy transfer to be performed,
-because there is no longer a legacy transfer to perform.
+So the source-level half has been guarded all along and the rendered half is now
+covered too, locally. Until `mixed-link-e2e` runs that fourth scenario on hosted
+`main`, this document must keep calling the rendered half a **local** migration:
+the gap is narrower than it was, not closed. It used to be described as waiting
+on stage 3 alongside unique #8; #8 moved in C3b-8 and this shape moved in C3b-9,
+and it remains a separate piece of work rather than part of any numbered row
+above. Nothing in it needs a legacy transfer to be performed, because there is no
+longer a legacy transfer to perform.
 
 Each migrated assertion must be run and shown green before this document may call
 it automated again. An assertion edited until it stops throwing, with no recorded
@@ -1591,6 +1829,17 @@ and point 2 check — one honest sentence on the new device, and silence on the 
 one — is the whole of this gate now. Byte-exact transfer and mid-transfer resume
 are still gated, on the surface that actually has them: `web/e2e/mixed-link.mjs`'s
 `byte-resume` act, in hosted CI.
+
+**Points 1-3 are now automated too, and this manual step is kept anyway.**
+`mixed-link.mjs`'s fourth scenario (C3b-9 above) asserts the same three things
+against a real Chromium — one non-interactive statement, no control, no drag
+affordance, a refused drop answered with that same sentence, and a quiet
+suppressed peer with no console error. It is **local only** until
+`mixed-link-e2e` has run it on hosted `main`, so until then this manual step is
+the only executed evidence for the shape, and it stays here afterwards for the
+one thing the automated scenario deliberately does not claim: that a genuinely
+older *build* renders this way, rather than a current build whose hello was
+suppressed on the wire.
 
 ### 5. Mutual exclusion — **retired, and it must not be run**
 
