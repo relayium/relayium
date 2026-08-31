@@ -528,6 +528,14 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 		s.CSRFGuard(s.RequireStepUp(AuditPlanUpsert, s.handleAdminUpsertPlan)))
 	mux.Handle("POST /admin/users/plan",
 		s.CSRFGuard(s.RequireStepUp(AuditUserPlan, s.handleAdminSetUserPlan)))
+	// The time-bounded membership grant. Same guard pair as the permanent
+	// assignment above, and a separate route rather than an extra field on it:
+	// the two have different financial semantics (one rewrites the provider
+	// projection and is refused on a payment-bound account, the other overlays it
+	// and is allowed there), so they must not share a form an operator could send
+	// half of.
+	mux.Handle("POST /admin/users/grant",
+		s.CSRFGuard(s.RequireStepUp(AuditUserPlanGrant, s.handleAdminGrantUserPlan)))
 	mux.Handle("POST /admin/nodes/token",
 		s.CSRFGuard(s.RequireStepUp(AuditTokenMint, s.handleAdminMintToken)))
 	mux.Handle("POST /admin/nodes/{id}/delete",
@@ -920,7 +928,7 @@ func (s *Service) buildAdminUsersData(r *http.Request, data adminHomeData) (admi
 	if page < totalPages {
 		data.NextHref = adminListHref(search, sortBy, dir, period, page+1)
 	}
-	var plans, activePlans []planView
+	var plans, activePlans, grantablePlans []planView
 	if rows, err := s.Store().ListPlans(r.Context()); err != nil {
 		log.Printf("admin: ListPlans failed: %v", err)
 	} else {
@@ -928,6 +936,9 @@ func (s *Service) buildAdminUsersData(r *http.Request, data adminHomeData) (admi
 		for _, plan := range plans {
 			if plan.Active {
 				activePlans = append(activePlans, plan)
+				if plan.ID != freePlanID {
+					grantablePlans = append(grantablePlans, plan)
+				}
 			}
 		}
 	}
@@ -940,6 +951,9 @@ func (s *Service) buildAdminUsersData(r *http.Request, data adminHomeData) (admi
 	data.Users, data.Total, data.Page, data.TotalPages = rows, total, page, totalPages
 	data.Search, data.Sort, data.Dir, data.Period, data.Months = search, sortBy, dir, period, months
 	data.SortHref, data.Plans, data.ActivePlans = sortHref, plans, activePlans
+	data.GrantablePlans, data.Now = grantablePlans, s.Now().Unix()
+	data.GrantModeFromNow, data.GrantModeExtend = AdminGrantModeFromNow, AdminGrantModeExtend
+	data.GrantMinDays, data.GrantMaxDays = adminGrantMinDays, adminGrantMaxDays
 	data.AppleProducts = appleProductViews(products)
 	data.AppleProductCycles, data.AppleProductKeyMaxLen = appleProductCycles, appleProductKeyMaxLen
 	data.ApplePurchaseGate = s.applePurchaseGatePanel(r.Context())
@@ -1293,6 +1307,85 @@ func (s *Service) handleAdminSetUserPlan(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/admin/users", http.StatusFound)
+}
+
+// handleAdminGrantUserPlan records a TIME-BOUNDED administrator membership
+// grant: an entitlement overlay that raises the account's effective tier until
+// an exact instant and then stops, revealing whatever the provider record says
+// at that moment (or Free). See admin_grant.go for the model and the precedence
+// rule; GrantAdminPlan for what the write does and does not touch.
+//
+// It is deliberately NOT handleAdminSetUserPlan with a duration. That one
+// rewrites the provider projection and must therefore refuse any account bound
+// to a payment channel — the refusal that produced the 409 above. This one adds
+// a separate, expiring overlay and leaves every authority, attempt, source row
+// and provider identifier exactly as it found them, so a coexisting provider is
+// something the operator is WARNED about on the confirmation page rather than
+// blocked by.
+//
+// Validation order is the load-bearing part: mode, duration and tier are all
+// settled before any store write is attempted, so a duration of 0, -1, 1.5,
+// 1001 or one that overflows int64 is refused with nothing mutated. The store
+// re-checks each of them inside its own transaction anyway (a tier can be
+// retired, or a deletion requested, between the confirmation page and this POST).
+func (s *Service) handleAdminGrantUserPlan(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	userID := strings.TrimSpace(r.FormValue("user_id"))
+	planID := strings.TrimSpace(r.FormValue("plan_id"))
+	if userID == "" || planID == "" {
+		http.Error(w, "user_id and plan_id required", http.StatusBadRequest)
+		return
+	}
+	mode := strings.TrimSpace(r.FormValue("grant_mode"))
+	if !validAdminGrantMode(mode) {
+		http.Error(w, ErrAdminGrantMode.Error(), http.StatusBadRequest)
+		return
+	}
+	days, err := parseAdminGrantDays(r.FormValue("grant_days"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	p, ok, err := s.Store().GetPlan(r.Context(), planID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	// Same rule as the permanent assignment: only an ACTIVE tier may be granted.
+	// Plus one this action adds — the free tier is not a membership. Granting it
+	// could never outrank anything (see the precedence rule), so accepting it
+	// would record a comp that reads as live and grants nothing.
+	if !ok || !p.Active || p.ID == freePlanID {
+		http.Error(w, "unknown, inactive, or non-paid plan", http.StatusBadRequest)
+		return
+	}
+	if _, err := s.Store().GrantAdminPlan(r.Context(), userID, planID, mode, days, s.confirmNow(r.Context())); err != nil {
+		switch {
+		case errors.Is(err, ErrNotFound):
+			http.Error(w, "no such user", http.StatusNotFound)
+		case errors.Is(err, ErrAdminGrantUnsafeAccount):
+			// The account is mid-teardown. Not a server fault and not something a
+			// retry can fix, so it gets the same actionable-409 treatment the plan
+			// route's billing conflict got, for the same reason.
+			http.Error(w, "grant refused: this account is pending deletion, or is frozen by an open account-deletion billing hold. Entitlement is not granted to an account whose billing is being torn down. Resolve or cancel the deletion, then grant again.", http.StatusConflict)
+		case errors.Is(err, ErrAdminGrantPlan), errors.Is(err, ErrAdminGrantMode),
+			errors.Is(err, ErrAdminGrantDuration), errors.Is(err, ErrAdminGrantOverflow):
+			// Reachable when the tier is retired (or the request is malformed)
+			// between the checks above and the transaction.
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		default:
+			http.Error(w, "server error", http.StatusInternalServerError)
+		}
 		return
 	}
 	http.Redirect(w, r, "/admin/users", http.StatusFound)

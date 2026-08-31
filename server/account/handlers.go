@@ -692,7 +692,15 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, u User) {
 			"onlyOwnNodes":  u.OnlyOwnNodes,
 			// Billing (phase-2): plan + subscription state and whether a Stripe
 			// customer exists yet (gates the "Manage billing" button in the UI).
-			"planId":             u.PlanID,
+			//
+			// planId is the EFFECTIVE tier, so a live administrator grant is what
+			// the client shows and what enforcement applies. The subscription
+			// fields beside it are NOT touched by a grant and keep describing the
+			// provider: a granted free account still reports no subscription and no
+			// entitlementProvider, which is the truth — it is comped, not
+			// subscribed — and a paying account keeps the management controls its
+			// provider actually owns.
+			"planId":             s.effectivePlanID(r.Context(), u),
 			"subscriptionStatus": u.SubscriptionStatus,
 			"subscriptionEnd":    u.SubscriptionEnd,
 			// hasBilling keeps its ORIGINAL meaning — "this account has a Stripe
@@ -769,7 +777,11 @@ func (s *Service) handleMeUsage(w http.ResponseWriter, r *http.Request, u User) 
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	plan, ok, err := s.store.GetPlan(ctx, u.PlanID)
+	// The EFFECTIVE tier, so the plan card names the same tier the caps above
+	// were computed from (monthlyTrafficCap resolves it the same way). Showing
+	// the provider tier next to a granted tier's quota would be the misleading
+	// half of both answers.
+	plan, ok, err := s.store.GetPlan(ctx, s.effectivePlanID(ctx, u))
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return

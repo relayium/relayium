@@ -3,10 +3,32 @@ package account
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
 )
+
+// confirmNoticeFor returns the banner an action's confirmation page must carry
+// when the danger is a fact about the TARGET rather than about the submitted
+// values. "" for every action that has none.
+//
+// It is separate from beforeImageFor because the two answer different questions.
+// beforeImageFor answers "what would change" — and the whole point of the
+// membership grant's warning is that the provider state it names is NOT
+// changing: it stays exactly as authoritative, and as capable of charging, as it
+// was. A field diff is the wrong shape for that; a banner above the diff is the
+// right one.
+func (s *Service) confirmNoticeFor(ctx context.Context, action string, form url.Values) (string, error) {
+	if action != AuditUserPlanGrant {
+		return "", nil
+	}
+	userID := strings.TrimSpace(form.Get("user_id"))
+	if userID == "" {
+		return "", nil
+	}
+	return s.providerCoexistenceNotice(ctx, userID)
+}
 
 // beforeImageFor 返回某个高危动作的前后镜像，供确认页展示 diff、供审计记录变更。
 //
@@ -67,6 +89,105 @@ func (s *Service) beforeImageFor(ctx context.Context, action, pathID string, for
 	case AuditUserPlan:
 		return map[string]any{}, map[string]any{"plan": form.Get("plan_id")},
 			"user:" + form.Get("user_id"), nil
+
+	// The time-bounded membership grant. Unlike every other action here, its
+	// "after" image is not simply the submitted form echoed back: the value that
+	// matters most — the exact instant entitlement ends — is DERIVED from the
+	// duration, the mode and the grant already on the account, all read against a
+	// clock.
+	//
+	// That makes this the one action whose image is NOT the same on both of the
+	// two occasions this function runs, and the difference is deliberate:
+	//
+	//   - At CONFIRMATION (confirmApplyInstant reports true) the instant is frozen
+	//     and the write is imminent, so the image names the exact expiry, computed
+	//     from the same adminGrantExpiry the write itself calls, at the same
+	//     instant. That is what makes the audit's claim and the stored column the
+	//     same number by construction.
+	//   - On the confirmation PAGE the clock reading is speculative — the operator
+	//     has not confirmed yet, and the write will use a later instant. Printing
+	//     an exact expiry there would promise a timestamp the write then
+	//     contradicts by however long the operator took, so the page states the
+	//     ARITHMETIC instead (adminGrantExpiryPromise), which is true whenever
+	//     they confirm.
+	//
+	// The alternative — freezing the page's instant and writing it — was rejected
+	// twice over: it silently shortens the N whole days the operator asked for,
+	// and for extend it anchors on a grant that may have lapsed while they were
+	// reaching for their second factor.
+	//
+	// adminGrantExpiry is called on BOTH paths regardless, so an expiry that
+	// cannot be computed at all (an overflow) is refused on the page rather than
+	// surviving to the confirmation as a promise nothing can keep.
+	//
+	// The refusals are deliberately in front of the store read. A duration or a
+	// mode the console cannot accept is rejected before anything is looked up,
+	// let alone written, so an out-of-range value can never reach a mutation.
+	case AuditUserPlanGrant:
+		userID := strings.TrimSpace(form.Get("user_id"))
+		planID := strings.TrimSpace(form.Get("plan_id"))
+		mode := strings.TrimSpace(form.Get("grant_mode"))
+		if userID == "" || planID == "" {
+			return nil, nil, "", fmt.Errorf("%w: user_id and plan_id required", errConfirmBadRequest)
+		}
+		if !validAdminGrantMode(mode) {
+			return nil, nil, "", fmt.Errorf("%w: %v", errConfirmBadRequest, ErrAdminGrantMode)
+		}
+		days, err := parseAdminGrantDays(form.Get("grant_days"))
+		if err != nil {
+			return nil, nil, "", fmt.Errorf("%w: %v", errConfirmBadRequest, err)
+		}
+		now, applying := s.confirmApplyInstant(ctx)
+		cur, _, err := s.store.AdminPlanGrant(ctx, userID)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		expires, err := adminGrantExpiry(mode, days, now, cur)
+		if err != nil {
+			return nil, nil, "", fmt.Errorf("%w: %v", errConfirmBadRequest, err)
+		}
+		// The exact instant only once it is the instant that will actually be
+		// written; until then, the rule that produces it.
+		expiresField := adminGrantExpiryPromise(mode, days)
+		if applying {
+			expiresField = adminGrantExpiryLabel(expires)
+		}
+		notice, err := s.providerCoexistenceNotice(ctx, userID)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		// The "before" half reports only a grant that is STILL IN FORCE. A lapsed
+		// grant is not the state this change is replacing — extend does not
+		// resurrect it — and showing one as the current value would read as
+		// "entitlement is being shortened" when nothing is in effect at all.
+		beforePlan, beforeExpiry := "—", "—"
+		if cur.Active(now) {
+			beforePlan, beforeExpiry = cur.PlanID, adminGrantExpiryLabel(cur.ExpiresAt)
+		}
+		before = map[string]any{
+			"grant_plan":       beforePlan,
+			"grant_expires_at": beforeExpiry,
+			// Empty rather than absent: diffFields renders a key missing from
+			// "before" with a nil old value, and an account with no provider state
+			// at all then shows a spurious row. With "" the row appears only when
+			// there is genuinely something to warn about.
+			//
+			// The field is named *_unchanged because it rides in a table whose
+			// every other row means "this value is being changed". The provider
+			// state is the one thing on this page that is NOT — and a row an
+			// operator could read as "the grant is doing something to Apple" would
+			// be worse than no row at all. The audit needs the fact recorded ("was
+			// there payment authority when this grant was made?"), so it stays,
+			// with a name that cannot be misread.
+			"provider_state_unchanged": "",
+		}
+		return before, map[string]any{
+			"grant_plan":               planID,
+			"grant_mode":               adminGrantModeLabel(mode),
+			"grant_days":               days,
+			"grant_expires_at":         expiresField,
+			"provider_state_unchanged": notice,
+		}, "user:" + userID, nil
 
 	case AuditTokenMint:
 		return map[string]any{}, map[string]any{"name": form.Get("name")},

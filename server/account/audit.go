@@ -15,6 +15,17 @@ const (
 	AuditVersionPolicy = "version-policy.update"
 	AuditPlanUpsert    = "plan.upsert"
 	AuditUserPlan      = "user.plan"
+	// AuditUserPlanGrant records a TIME-BOUNDED administrator membership grant
+	// (admin_grant.go). Its own action rather than a variant of user.plan, for
+	// the reason that separates the two operations rather than for symmetry:
+	// user.plan REWRITES the provider projection and is refused outright on any
+	// account bound to a payment channel, while this one leaves every provider
+	// row untouched and is therefore ALLOWED on such an account. An incident
+	// review asking "did an operator ever put paid entitlement on this account
+	// while Apple still had authority over it" must be able to answer from the
+	// action name — collapsing the two would make the answer depend on reading a
+	// changes field to work out which mechanism had been used.
+	AuditUserPlanGrant = "user.plan.grant"
 	AuditNodeDelete    = "node.delete"
 	AuditNodeLimits    = "node.limits"
 	AuditNodeLabel     = "node.label"
@@ -123,7 +134,7 @@ const (
 // unfilterable, not wrong.
 var auditActions = []string{
 	AuditLoginOK, AuditLoginFail, AuditLogout, AuditSettings, AuditVersionPolicy,
-	AuditPlanUpsert, AuditUserPlan, AuditNodeDelete, AuditNodeLimits,
+	AuditPlanUpsert, AuditUserPlan, AuditUserPlanGrant, AuditNodeDelete, AuditNodeLimits,
 	AuditNodeLabel, AuditNodeDraining, AuditNodeRestore, AuditNodeRemove, AuditNodeDeregister,
 	AuditTokenMint, AuditTokenRevoke, AuditPasskeyDelete, AuditAppleProduct,
 	AuditApplePurchases, AuditAppleLegacyRelease,

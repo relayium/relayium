@@ -73,6 +73,23 @@ type User struct {
 	// 符即视为过期作废，用户直接拿当前档的整月上限——这也让存量用户（三列全为
 	// 零值）天然走满额分支，无需回填。
 	QuotaAccruedPeriod string
+	// AdminGrantPlanID / AdminGrantGrantedAt / AdminGrantExpiresAt carry the
+	// time-bounded administrator entitlement OVERLAY (admin_grant.go). They are
+	// NOT part of the provider projection above and never move it: PlanID and
+	// PlanSource keep describing what Stripe/Apple (or the legacy permanent comp)
+	// say, and the overlay is applied on top at read time by
+	// Service.effectivePlanID. '' / 0 — every account that has never been granted
+	// — means "no overlay", and reads exactly as it did before the columns existed.
+	//
+	// Populated by GetUserByID only. Every other user read in this package loads a
+	// subset of columns for a purpose that has nothing to do with entitlement
+	// (webhook dispatch, register dedupe, the Stripe reconcile sweep), so these
+	// three are zero there; any future code that needs the overlay from one of
+	// those paths must add the columns to that SELECT first, exactly as
+	// GetUserByStripeCustomer's comment already requires for the quota columns.
+	AdminGrantPlanID    string
+	AdminGrantGrantedAt int64
+	AdminGrantExpiresAt int64
 }
 
 // Plan is an admin-configurable billing tier: per-account storage + monthly
@@ -1342,6 +1359,27 @@ type AdminUserRow struct {
 	// ('' default/free, 'admin' manual comp, 'stripe' webhook-assigned).
 	SubscriptionStatus string
 	PlanSource         string
+	// AdminGrantPlanID / AdminGrantExpiresAt mirror the time-bounded
+	// administrator entitlement overlay (admin_grant.go). '' / 0 = never granted.
+	// The row carries the RAW columns, expired or not: whether a grant is still
+	// in force is decided against the render clock, and an expired grant is
+	// something the console must be able to show rather than hide.
+	AdminGrantPlanID    string
+	AdminGrantExpiresAt int64
+	// HasBillingAuthority reports that a billing_authorities row exists for this
+	// account. It is exactly that and NOTHING MORE — in particular it is not
+	// "has an active subscription". The production incident behind the plan
+	// route's 409 was an account projecting free while holding an Apple authority
+	// at epoch 1 with one still-dispatched attempt; a console that reported that
+	// as a live subscription would have told the operator the opposite of the
+	// truth. Live paid access is read from SubscriptionStatus/PlanSource, which
+	// come from the projection, never from this flag.
+	HasBillingAuthority bool
+	// BillingAuthorityProvider names the bound channel ('apple'|'stripe'), so the
+	// warning can say WHICH provider still has authority. '' when there is none.
+	// Deliberately no account token, customer id or subscription id: this row is
+	// rendered on a page, and none of those belong there.
+	BillingAuthorityProvider string
 }
 
 // AdminUserQuery 参数化后台用户列表查询。
@@ -1596,6 +1634,15 @@ type Store interface {
 	// SetUserPlanAdmin assigns a user's billing tier from the admin console,
 	// recording plan_source='admin' so a later Stripe webhook won't override it.
 	SetUserPlanAdmin(ctx context.Context, userID, planID string, now int64) error
+	// GrantAdminPlan records a TIME-BOUNDED administrator entitlement overlay
+	// (admin_grant.go) and returns what was written. It is not SetUserPlanAdmin
+	// with a clock: it writes only the three overlay columns and never moves the
+	// provider projection, so it is allowed on an account that holds a provider
+	// authority — which SetUserPlanAdmin must refuse.
+	GrantAdminPlan(ctx context.Context, userID, planID, mode string, days, now int64) (AdminGrant, error)
+	// AdminPlanGrant reads the overlay recorded for a user, expired or not. ok is
+	// false when there is none (or no such user).
+	AdminPlanGrant(ctx context.Context, userID string) (AdminGrant, bool, error)
 	// SetUserStripeCustomer binds a user to their Stripe customer id.
 	SetUserStripeCustomer(ctx context.Context, userID, customerID string) error
 	// SetUserStripeCustomerIfEmpty binds a customer id only if the user has none

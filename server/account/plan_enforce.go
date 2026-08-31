@@ -19,6 +19,12 @@ func freePlanFallback() Plan { return defaultPlans()[0] }
 // Free with a nil error (a user with a bogus plan_id is legitimately Free); a
 // real store error is propagated so the over* gates can fail OPEN rather than
 // silently enforcing the Free cap against a paid user during a DB blip.
+//
+// The tier it resolves is the EFFECTIVE one: effectivePlanID applies a live
+// administrator grant on top of the provider projection, and stops applying it
+// the instant the grant expires — the same lazy, clock-driven reconciliation
+// LapseAppleSubscription already performs just above, and for the same reason.
+// Neither needs a sweep to be correct.
 func (s *Service) planForUser(ctx context.Context, userID string) (Plan, error) {
 	if lapser, ok := s.Store().(interface {
 		LapseAppleSubscription(context.Context, string, int64) error
@@ -34,7 +40,7 @@ func (s *Service) planForUser(ctx context.Context, userID string) (Plan, error) 
 		}
 		return freePlanFallback(), err
 	}
-	p, ok, err := s.Store().GetPlan(ctx, u.PlanID)
+	p, ok, err := s.Store().GetPlan(ctx, s.effectivePlanID(ctx, u))
 	if err != nil {
 		return freePlanFallback(), err
 	}
@@ -90,7 +96,18 @@ func (s *Service) monthlyTrafficCap(ctx context.Context, userID string) (int64, 
 		}
 		return 0, err
 	}
-	plan, ok, err := s.Store().GetPlan(ctx, u.PlanID)
+	// The EFFECTIVE tier, for the same reason planForUser uses it: a live
+	// administrator grant must raise this month's traffic ceiling too, or the
+	// account would hold a granted tier everywhere except the one cap users
+	// actually run into.
+	//
+	// The quota SEGMENTATION below is deliberately left alone. A grant writes no
+	// quota columns and cuts no segment (see GrantAdminPlan), so an account that
+	// has not changed tier this month gets the granted tier's full nominal
+	// allowance, and one that has keeps whatever it had already accrued. Both are
+	// the conservative reading: the grant never retroactively enlarges a segment
+	// that has already been metered.
+	plan, ok, err := s.Store().GetPlan(ctx, s.effectivePlanID(ctx, u))
 	if err != nil {
 		return 0, err
 	}

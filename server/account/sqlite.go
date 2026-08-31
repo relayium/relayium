@@ -1508,6 +1508,29 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		`CREATE INDEX IF NOT EXISTS idx_apple_notifications_terminal_age
 		   ON apple_notifications(updated_at)
 		   WHERE state IN ('applied', 'ignored', 'unsupported')`,
+		// Time-bounded administrator membership grants (2026-08). The overlay is
+		// three columns on the users row and NOT a change to the projection — see
+		// admin_grant.go for why it is stored this way rather than written into
+		// plan_id/plan_source like the legacy permanent comp.
+		//
+		// ADDITIVE and defaulted in BOTH directions, which is what makes the
+		// deployment safe to roll and to roll back:
+		//   - forward: '' / 0 on every existing row means "never granted", which
+		//     is byte-for-byte the behaviour these accounts had before the columns
+		//     existed. No backfill, so there is no ALTER-vs-backfill crash window.
+		//   - backward: an older binary's explicit column lists never name these
+		//     columns and its INSERTs take the defaults, so it keeps running against
+		//     a migrated database. It simply cannot SEE a grant, and therefore reads
+		//     the account as whatever the provider projection says. A rollback can
+		//     only ever withdraw granted entitlement, never strand an unexpirable one.
+		//   - mixed fleet: an instance on either binary agrees about every provider
+		//     fact, because none of them lives here. They can differ only about an
+		//     overlay the older binary has never heard of, and only in the
+		//     conservative direction.
+		// A hard account purge deletes the users row, and with it the grant.
+		`ALTER TABLE users ADD COLUMN admin_grant_plan_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE users ADD COLUMN admin_grant_granted_at INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE users ADD COLUMN admin_grant_expires_at INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -2350,11 +2373,13 @@ func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (User, error) 
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, email, display_name, created_at, email_verified, only_own_nodes, deleted_at, purge_after, plan_id,
 		        stripe_customer_id, stripe_subscription_id, subscription_status, subscription_end, plan_source, scheduled_plan_id, scheduled_cycle, billing_cycle,
-		        plan_started_at, quota_accrued_bytes, quota_accrued_period
+		        plan_started_at, quota_accrued_bytes, quota_accrued_period,
+		        `+adminGrantCols+`
 		   FROM users WHERE id = ?`, id,
 	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &strict, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
 		&u.StripeCustomerID, &u.StripeSubscriptionID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID, &u.ScheduledCycle, &u.BillingCycle,
-		&u.PlanStartedAt, &u.QuotaAccruedBytes, &u.QuotaAccruedPeriod)
+		&u.PlanStartedAt, &u.QuotaAccruedBytes, &u.QuotaAccruedPeriod,
+		&u.AdminGrantPlanID, &u.AdminGrantGrantedAt, &u.AdminGrantExpiresAt)
 	if err == sql.ErrNoRows {
 		return User{}, ErrNotFound
 	}
@@ -4554,8 +4579,15 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context, q AdminUserQuery) ([]A
 		          WHERE um.user_id = u.id AND um.period = ?) AS download_bytes,
 		       (SELECT COALESCE(SUM(sf.size),0) FROM stored_files sf
 		          WHERE sf.user_id = u.id AND sf.expires_at > ?) AS storage_bytes,
-		       u.plan_id, u.subscription_status, u.plan_source
-		FROM users u`+where+`
+		       u.plan_id, u.subscription_status, u.plan_source,
+		       u.admin_grant_plan_id, u.admin_grant_expires_at,
+		       -- The bound payment channel, if any. A LEFT JOIN rather than a
+		       -- correlated EXISTS + second lookup so provider and presence can
+		       -- never disagree; billing_authorities holds at most one row per
+		       -- user, so this cannot multiply the result set.
+		       COALESCE(ba.provider, '')
+		FROM users u
+		LEFT JOIN billing_authorities ba ON ba.user_id = u.id`+where+`
 		ORDER BY `+orderCol+` `+dir+`, u.id ASC
 		LIMIT ? OFFSET ?`, listArgs...)
 	if err != nil {
@@ -4570,9 +4602,12 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context, q AdminUserQuery) ([]A
 		if err := rows.Scan(&row.ID, &row.Email, &row.DisplayName, &row.CreatedAt,
 			&row.DeviceCount, &row.RelayedBytes,
 			&row.UploadBytes, &row.DownloadBytes, &row.StorageBytes, &row.PlanID,
-			&row.SubscriptionStatus, &row.PlanSource); err != nil {
+			&row.SubscriptionStatus, &row.PlanSource,
+			&row.AdminGrantPlanID, &row.AdminGrantExpiresAt,
+			&row.BillingAuthorityProvider); err != nil {
 			return nil, 0, err
 		}
+		row.HasBillingAuthority = row.BillingAuthorityProvider != ""
 		index[row.ID] = len(out)
 		out = append(out, row)
 	}

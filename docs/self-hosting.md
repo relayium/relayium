@@ -183,14 +183,40 @@ verification link back out of the log to stand in for a user clicking it.
 Setting `RELAYIUM_ADMIN_PASS` turns on an admin console at `/admin`. It is
 **not** a read-only viewer: alongside the user list and a read-only audit
 log, it can edit site-wide settings, create/edit billing plans, change a
-user's plan, mint and revoke node bearer tokens, delete/restore/relabel
-nodes, and control feature/version rollouts (target a track, pause, resume,
-roll back, or force an emergency release). The higher-risk of these actions
-(settings, plan edits, user-plan changes, token minting, node deletion,
+user's plan, grant a user a time-bounded paid membership, mint and revoke
+node bearer tokens, delete/restore/relabel nodes, and control
+feature/version rollouts (target a track, pause, resume, roll back, or force
+an emergency release). The higher-risk of these actions (settings, plan
+edits, user-plan changes, membership grants, token minting, node deletion,
 emergency rollout) render a confirmation page showing exactly what will
 change before applying it, and re-check a second factor if one is
 configured — but a leaked admin password alone is enough to reach and use
 every route above.
+
+A **timed membership grant** is deliberately a different thing from changing
+a user's plan, and the difference matters if you self-host with billing on:
+
+- Changing a user's plan rewrites the account's billing projection, so it is
+  refused outright on any account already bound to Stripe or the App Store —
+  a manual comp must never mask a channel that can still charge someone.
+- A grant is an *entitlement overlay* instead: it raises the account's
+  effective tier for a whole number of days (1–1000, either from now or
+  extending an existing unexpired grant) and then simply stops. It writes no
+  provider state at all, so it *is* allowed on a payment-bound account; the
+  confirmation page warns you when provider state coexists, and the console
+  never reports a payment authority as an active subscription. Provider
+  events keep reconciling underneath, and when the grant expires the account
+  falls back to whatever the provider record says at that moment, or to Free.
+- The duration is counted from the moment you **confirm**, not from the
+  moment the confirmation page was drawn, so a grant always hands over the
+  full number of days you asked for however long you take over the second
+  factor. That is why the page previews the rule ("30 whole days from
+  successful confirmation") rather than a fixed timestamp; the exact expiry
+  instant is computed once at confirmation and written to the audit log.
+- A grant can only ever raise the effective tier, never lower it, so
+  granting a smaller tier to a paying subscriber does nothing. There is no
+  separate revoke: to cut a grant short, grant again with "from now" and a
+  short duration, which replaces the old expiry.
 
 Because of that blast radius, treat `/admin` credentials like production
 secrets:

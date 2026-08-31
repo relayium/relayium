@@ -52,6 +52,28 @@ type adminHomeData struct {
 	Nodes                 []adminNodeView
 	Plans                 []planView
 	ActivePlans           []planView // subset of Plans with Active==true; used for the per-user plan dropdown
+	// GrantablePlans is ActivePlans minus the free tier: exactly the set a
+	// time-bounded membership grant may name. Filtered here rather than in the
+	// template so the dropdown cannot offer a tier handleAdminGrantUserPlan would
+	// then refuse — the same "the form cannot offer a value the write would
+	// reject" rule the Apple product cycles follow.
+	GrantablePlans []planView
+	// Now is the render clock, in unix seconds. The users table needs it to tell
+	// a grant that is still in force from one that has lapsed; that is a decision
+	// about time, and a template func has no request clock to make it with.
+	Now int64
+	// GrantModeFromNow / GrantModeExtend / GrantMinDays / GrantMaxDays feed the
+	// grant form its wire values and its numeric bounds FROM THE CONSTANTS the
+	// parser enforces, rather than from literals typed into the template. Same
+	// rule as AppleProductCycles and AppleProductKeyMaxLen below: a form that
+	// offers a value the write would refuse is a control that silently stops
+	// working, and a `max` attribute that disagrees with the server's ceiling is
+	// worse than none — it invites an operator to type a number the console will
+	// then reject.
+	GrantModeFromNow string
+	GrantModeExtend  string
+	GrantMinDays     int64
+	GrantMaxDays     int64
 	// AppleProducts is the App Store product catalog, EVERY raw row in a stable
 	// order — including the ones no purchase can currently resolve. The tier
 	// dropdown on each row is fed from Plans (all tiers), not ActivePlans: a row
@@ -217,6 +239,14 @@ type confirmPageData struct {
 	// leaves the English map behind with it. Set together with Track by
 	// confirmBlastFor.
 	TrackNotice string
+	// Notice is a free-text warning banner about the TARGET rather than about
+	// the submitted values — currently only the membership grant's
+	// provider-coexistence summary (see confirmNoticeFor). It is prose composed
+	// from live account state, so unlike TrackNotice it cannot be a discriminator
+	// selecting a literal in this file. Rendered as TEXT, never as HTML: it is
+	// built from provider names and counters, and the template must be the thing
+	// that guarantees a stray character can never become markup. "" = no banner.
+	Notice string
 	// Changes is the field-level diff (diffFields' output) — the actual
 	// anti-misclick mechanism: naming exactly what would change, not just
 	// that "something" would.
@@ -557,6 +587,16 @@ button:hover{filter:brightness(1.07)}
 </div>
 {{end}}
 
+{{/* 目标账号自身的风险横幅（目前只有限时会员授权用到）。它和上面的轨道横幅
+     刻意分开：那一段说的是"这次操作会改动什么"，这一段说的恰恰相反 ——
+     这里列出的支付渠道状态**不会**被这次授权改动，它照旧有效、照旧可能扣款。 */}}
+{{if .Notice}}
+<div class="blast">
+<p class="t">{{t $.Lang "⚠ 该账号已存在支付渠道状态，本次授权不会改动它"}}</p>
+<p class="who">{{.Notice}}</p>
+</div>
+{{end}}
+
 {{if .Changes}}
 <table>
 <thead><tr><th>{{t $.Lang "字段"}}</th><th>{{t $.Lang "原值"}}</th><th>{{t $.Lang "新值"}}</th></tr></thead>
@@ -730,6 +770,11 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 .plan-row input[type=number]{width:70px}
 .plan-row button{background:var(--a);color:#fff;border:0;cursor:pointer;font-size:12px}
 .plan-row label{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted)}
+.plan-row select{font:inherit;padding:5px 7px;border:1px solid var(--bd);border-radius:6px;background:var(--card);color:var(--fg);font-size:12px}
+/* 支付渠道授权提示。红字而不是灰字：它出现在"能不能给这个账号发限时会员"这个
+   决定的正上方，而它要说的恰恰是"这里还有一条可能在扣款的通道"。 */
+td .warn{color:#e5484d;font-size:12px;margin-top:4px;max-width:280px}
+td .off{color:var(--muted);opacity:.7}
 .danger{background:#e5484d}
 /* App Store 商品目录。行内表单沿用 .plan-row 的排布；这里只加"状态"这一列的
    配色 —— 它是操作员真正据以行动的那一列，绿/灰/红三档必须一眼分得开：
@@ -1336,8 +1381,11 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <th><a href="{{index .SortHref "storage"}}">{{t $.Lang "当前存储占用"}}</a></th>
 <th>{{t $.Lang "套餐"}}</th>
 <th>{{t $.Lang "订阅来源"}}</th>
+<th>{{t $.Lang "限时会员授权"}}</th>
 </tr></thead><tbody>
 {{$plans := .ActivePlans}}
+{{$grantable := .GrantablePlans}}
+{{$now := .Now}}
 {{range .Users}}<tr>
 <td>{{.Email}}</td><td>{{.DisplayName}}</td><td>{{ts .CreatedAt}}</td>
 <td>{{range $i, $m := .Methods}}{{if $i}}, {{end}}{{$m}}{{end}}</td>
@@ -1353,7 +1401,35 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <button type="submit">{{t $.Lang "分配"}}</button>
 </form>
 </td>
-<td>{{if eq .PlanSource "admin"}}{{.PlanID}} · admin{{else if eq .PlanSource "stripe"}}{{.PlanID}} · stripe/{{.SubscriptionStatus}}{{else}}—{{end}}</td>
+<td>{{if eq .PlanSource "admin"}}{{.PlanID}} · admin{{else if eq .PlanSource "stripe"}}{{.PlanID}} · stripe/{{.SubscriptionStatus}}{{else}}—{{end}}
+{{/* An authority row says this account is BOUND to a payment channel. It does
+     NOT say anything is currently billing — the account that produced the plan
+     route's 409 projected free while holding an Apple authority and one
+     dispatched attempt. So the badge names the authority and explicitly refuses
+     to translate it into "subscribed"; the subscription state above is the only
+     place that claim is ever made, and it comes from the projection. */}}
+{{if .HasBillingAuthority}}<div class="warn">{{t $.Lang "⚠ 存在支付渠道授权："}}{{.BillingAuthorityProvider}}{{t $.Lang "（仅代表账号已绑定该渠道，不代表当前有生效订阅）"}}</div>{{end}}</td>
+<td>
+{{/* The time-bounded entitlement overlay. It is its own column, next to but
+     never merged with the subscription source, because the two answer different
+     questions: that one is "who is paying", this one is "what did an operator
+     hand out, and until when". A grant whose instant has passed is shown as
+     expired rather than hidden — an operator investigating why an account lost
+     access needs to see that a comp ran out, not an empty cell. */}}
+{{if .AdminGrantPlanID}}{{if gt .AdminGrantExpiresAt $now}}<div><strong>{{.AdminGrantPlanID}}</strong> · {{t $.Lang "到期"}} {{ts .AdminGrantExpiresAt}} UTC</div>{{else}}<div class="off">{{.AdminGrantPlanID}} · {{t $.Lang "已过期"}} {{ts .AdminGrantExpiresAt}} UTC</div>{{end}}{{else}}—{{end}}
+<form method="post" action="/admin/users/grant" class="plan-row">
+<input type="hidden" name="user_id" value="{{.ID}}">
+<select name="plan_id" aria-label="{{t $.Lang "授权套餐"}}">
+{{range $grantable}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+</select>
+<input type="number" name="grant_days" min="{{$.GrantMinDays}}" max="{{$.GrantMaxDays}}" step="1" value="30" required aria-label="{{t $.Lang "天数（1-1000）"}}">
+<select name="grant_mode" aria-label="{{t $.Lang "授权方式"}}">
+<option value="{{$.GrantModeFromNow}}">{{t $.Lang "从现在起（替换现有授权）"}}</option>
+<option value="{{$.GrantModeExtend}}">{{t $.Lang "在现有未过期授权上顺延"}}</option>
+</select>
+<button type="submit">{{t $.Lang "授权"}}</button>
+</form>
+</td>
 </tr>{{end}}
 </tbody></table>
 
