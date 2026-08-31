@@ -54,38 +54,51 @@ func TestSyncDeleteGatedByAllowDelete(t *testing.T) {
 	pusherDir := t.TempDir()
 	pusher, _ := secure.LoadOrCreateIdentity(pusherDir)
 
-	// --- allowDelete=true: the extra file on the receiver is removed. ---
+	// The mirrored source is a DIRECTORY root: that is the shape --delete can
+	// prune within. A single-file source scopes only that file and deletes
+	// nothing anywhere (see internal/xfer/delete_scope_test.go).
+	srcDir := t.TempDir()
+	os.MkdirAll(filepath.Join(srcDir, "site"), 0o755)
+	os.WriteFile(filepath.Join(srcDir, "site", "a.txt"), []byte("aaa"), 0o644)
+	srcRoot := filepath.Join(srcDir, "site")
+
+	// --- allowDelete=true: the extra file inside the mirrored root is removed. ---
 	serverDir := t.TempDir()
 	recvDir := t.TempDir()
-	srcDir := t.TempDir()
-	os.WriteFile(filepath.Join(srcDir, "a.txt"), []byte("aaa"), 0o644)
-	// Extra file on the receiver, not present in the source.
-	os.WriteFile(filepath.Join(recvDir, "extra.txt"), []byte("stale"), 0o644)
+	// Extra file inside the mirrored root, not present in the source.
+	os.MkdirAll(filepath.Join(recvDir, "site"), 0o755)
+	os.WriteFile(filepath.Join(recvDir, "site", "extra.txt"), []byte("stale"), 0o644)
+	// A sibling the receiving host owns, outside every mirrored root.
+	os.WriteFile(filepath.Join(recvDir, "untouched.txt"), []byte("mine"), 0o644)
 
 	port, done := daemonServe(t, serverDir, recvDir, map[string]bool{pusher.Fingerprint: true}, nil, true)
 	var o, e bytes.Buffer
-	rc := Run([]string{"sync", "--delete", "--config-dir", pusherDir, filepath.Join(srcDir, "a.txt"), daemonTarget(port)}, &o, &e)
+	rc := Run([]string{"sync", "--delete", "--config-dir", pusherDir, srcRoot, daemonTarget(port)}, &o, &e)
 	if rc != 0 {
 		t.Fatalf("sync --delete rc=%d: %s", rc, e.String())
 	}
 	waitCode(t, done)
-	if _, err := os.Stat(filepath.Join(recvDir, "extra.txt")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(recvDir, "site", "extra.txt")); !os.IsNotExist(err) {
 		t.Fatal("extra.txt should have been deleted (allow-delete=true)")
+	}
+	if _, err := os.Stat(filepath.Join(recvDir, "untouched.txt")); err != nil {
+		t.Fatal("a file outside the mirrored root must survive --delete")
 	}
 
 	// --- allowDelete=false: the extra file on the receiver remains, and a warning is printed. ---
 	serverDir2 := t.TempDir()
 	recvDir2 := t.TempDir()
-	os.WriteFile(filepath.Join(recvDir2, "extra.txt"), []byte("stale"), 0o644)
+	os.MkdirAll(filepath.Join(recvDir2, "site"), 0o755)
+	os.WriteFile(filepath.Join(recvDir2, "site", "extra.txt"), []byte("stale"), 0o644)
 
 	port2, done2 := daemonServe(t, serverDir2, recvDir2, map[string]bool{pusher.Fingerprint: true}, nil, false)
 	var o2, e2 bytes.Buffer
-	rc = Run([]string{"sync", "--delete", "--config-dir", pusherDir, filepath.Join(srcDir, "a.txt"), daemonTarget(port2)}, &o2, &e2)
+	rc = Run([]string{"sync", "--delete", "--config-dir", pusherDir, srcRoot, daemonTarget(port2)}, &o2, &e2)
 	if rc != 0 {
 		t.Fatalf("sync --delete (denied) rc=%d: %s", rc, e2.String())
 	}
 	waitCode(t, done2)
-	if _, err := os.Stat(filepath.Join(recvDir2, "extra.txt")); err != nil {
+	if _, err := os.Stat(filepath.Join(recvDir2, "site", "extra.txt")); err != nil {
 		t.Fatal("extra.txt must remain (allow-delete=false)")
 	}
 	// I-1: the denied delete must also be surfaced to the sender over the

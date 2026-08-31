@@ -1,11 +1,14 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"net"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -42,6 +45,7 @@ func (c *idleConn) Read(p []byte) (int, error) {
 
 type serveFlags struct {
 	dir         string
+	bind        string
 	port        int
 	once        bool
 	noResume    bool
@@ -49,11 +53,58 @@ type serveFlags struct {
 	configDir   string
 }
 
+const serveUsage = `relayium serve — listen for direct pushes from another machine
+
+usage:
+  relayium serve [--dir D] [--bind ADDR] [--port N] [--once]
+                 [--allow-delete] [--no-resume] [--config-dir D]
+
+Direct server-to-server transfer: the sender reaches this listener over a pinned
+TLS 1.3 connection and writes into --dir. No relay, no SSH, no Relayium account.
+Trust is this host's authorized_fingerprints file and nothing else — being logged
+into a Relayium account grants no one filesystem access here, and logging in does
+not authorize a pusher.
+
+flags:
+  --dir D          directory to receive files into (default "."). It must
+                   already exist and be writable; serve never creates it.
+  --bind ADDR      address to listen on. Empty (the default) listens on
+                   all interfaces, including public ones, and relies on your
+                   firewall — pass --bind 127.0.0.1, or a private address, to
+                   limit the listener itself.
+  --port N         TCP port (default 9031).
+  --once           handle a single transfer, then exit.
+  --allow-delete   honor a sender's "sync --delete" mirror request. Without it,
+                   nothing on this host is ever deleted. With it, deletion is
+                   still confined to the top-level directories the sender's
+                   manifest actually contains — never the rest of --dir.
+  --no-resume      disable resuming partial files.
+  --config-dir D   identity/trust directory (default ~/.config/relayium).
+                   Use the SAME value with "relayium authorize": a fingerprint
+                   added there takes effect on the next connection, with
+                   no restart of this listener.
+
+In a terminal, serve asks you to approve each new pusher on its first push and
+remembers it. With no terminal (systemd, a pipe), an unknown pusher is rejected:
+pre-authorize it with "relayium authorize <fingerprint>" — the pusher prints its
+own fingerprint with "relayium id".
+`
+
+// serveValueFlags are the serve flags whose value is a separate token, so the
+// help pre-scan does not read `--dir -h` as a question. Keep it in step with the
+// FlagSet below; TestValueFlagArgumentIsNotAHelpRequest exercises every entry.
+var serveValueFlags = []string{"dir", "bind", "port", "config-dir"}
+
 func runServe(args []string, stdout, stderr io.Writer) int {
+	if wantsHelp(args, serveValueFlags...) {
+		fmt.Fprint(stdout, serveUsage)
+		return 0
+	}
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var f serveFlags
 	fs.StringVar(&f.dir, "dir", ".", "directory to receive files into")
+	fs.StringVar(&f.bind, "bind", "", "address to listen on (empty: all interfaces)")
 	fs.IntVar(&f.port, "port", defaultDaemonPort, "TCP port to listen on")
 	fs.BoolVar(&f.once, "once", false, "handle a single transfer then exit")
 	fs.BoolVar(&f.noResume, "no-resume", false, "disable resuming partial files")
@@ -61,6 +112,15 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&f.configDir, "config-dir", "", "identity/trust directory")
 	if err := parseArgs(fs, args); err != nil {
 		return 2
+	}
+
+	// Check --dir BEFORE binding the port. A listener that accepts a connection,
+	// completes a handshake and only then discovers it cannot write is a worse
+	// failure than not starting: the operator sees a running service, and the
+	// sender sees a transfer die mid-flight.
+	if err := checkReceiveDir(f.dir); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
 	}
 
 	cfgDir, err := resolveConfigDir(f.configDir)
@@ -94,12 +154,13 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 		if h.approve != nil {
 			fmt.Fprintf(stderr, "no authorized peers yet — you'll be asked to approve each new peer on its first push.\n")
 		} else {
-			fmt.Fprintf(stderr, "warning: no authorized peers and no terminal to approve on; all pushes will be rejected.\n"+
-				"  pre-authorize with `relayium authorize <fingerprint>` (peer prints it with `relayium id`).\n")
+			fmt.Fprintf(stderr, "warning: no authorized peers and no terminal to approve on; pushes will be rejected until one is authorized.\n"+
+				"  run `relayium authorize --config-dir %s <fingerprint>` (peer prints it with `relayium id`);\n"+
+				"  this listener picks it up on the next connection — no restart needed.\n", cfgDir)
 		}
 	}
 
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", f.port))
+	ln, err := net.Listen("tcp", serveListenAddr(f.bind, f.port))
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -107,8 +168,71 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	defer ln.Close()
 	fmt.Fprintf(stderr, "relayium serve: listening on %s, receiving into %s (fingerprint %s)\n",
 		ln.Addr(), f.dir, id.Fingerprint)
+	if f.bind == "" {
+		fmt.Fprintf(stderr, "note: listening on all interfaces. Restrict it with --bind or a firewall rule.\n")
+	}
 
 	return serveLoop(ln, h, f.once)
+}
+
+// serveListenAddr builds the listen address. An empty bind keeps the historical
+// ":port" form (every interface); JoinHostPort is what makes a literal IPv6
+// address come out as "[::1]:9031" rather than an unparseable "::1:9031".
+func serveListenAddr(bind string, port int) string {
+	return net.JoinHostPort(bind, strconv.Itoa(port))
+}
+
+// checkReceiveDir verifies --dir is an existing, writable, real directory.
+//
+// Deliberately NOT the Device Inbox's resolveReceiveDir: that one creates the
+// directory (an enrolment-time opt-in) and returns inbox-specific state. serve
+// takes a path an operator already prepared; silently creating a mistyped one
+// would put received files somewhere nobody looks.
+//
+// Lstat, not Stat: a symlink that happens to point at a directory would satisfy
+// Stat, and then every received file lands wherever the link points — a target
+// anyone who can rewrite the link chooses, after the operator approved the path
+// they typed. Refuse it here and name the fix, rather than resolve it silently.
+//
+// The probe must create, close AND remove cleanly. A close that fails is a
+// deferred write error (the data reaches the filesystem on Close, not Write),
+// and a probe that cannot be removed means serve would litter the directory on
+// every start. Both are reasons this directory is not usable, so neither may be
+// swallowed — a successful startup claim has to mean all three worked.
+func checkReceiveDir(dir string) error {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return fmt.Errorf("receive directory %s: %w", dir, err)
+	}
+	fi, err := os.Lstat(abs)
+	if errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("receive directory %s does not exist — create it first: mkdir -p %s", abs, abs)
+	}
+	if err != nil {
+		return fmt.Errorf("receive directory %s: %w", abs, err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("--dir %s is a symlink — pass the real directory instead, "+
+			"so nothing can redirect received files by rewriting the link", abs)
+	}
+	if !fi.IsDir() {
+		return fmt.Errorf("--dir %s is not a directory — pass a directory to receive into", abs)
+	}
+	// Probe by actually creating a file: mode bits alone miss ownership, ACLs, a
+	// read-only mount, and every other reason the write would fail later.
+	probe, err := os.CreateTemp(abs, ".relayium-serve-check-*")
+	if err != nil {
+		return fmt.Errorf("receive directory %s is not writable: %w", abs, err)
+	}
+	name := probe.Name()
+	if cerr := probe.Close(); cerr != nil {
+		_ = os.Remove(name) // best effort: the write already failed, don't also litter
+		return fmt.Errorf("receive directory %s is not writable: %w", abs, cerr)
+	}
+	if err := os.Remove(name); err != nil {
+		return fmt.Errorf("receive directory %s: could not clean up the write probe: %w", abs, err)
+	}
+	return nil
 }
 
 // maxConcurrentServe bounds how many pushes serve handles at once, so a flood of
@@ -168,9 +292,39 @@ func serveLoop(ln net.Listener, h *serveHandler, once bool) int {
 // authorize reports whether fp may push, consulting and updating the shared
 // allow-list under lock. The lock also serializes interactive approval so
 // concurrent connections don't race the map or double-prompt.
+//
+// On a miss it re-reads authorized_fingerprints from this serve's own --config-dir
+// before deciding. The file has a second writer — `relayium authorize
+// --config-dir <the same dir> <fp>` — and the documented systemd workflow is
+// exactly that: authorize a new pusher on a listener that is already running.
+// Without this reload the in-memory set is whatever existed at startup, and the
+// operator's authorize appears to do nothing until the service is restarted.
+//
+// The reload only ever ADDS. Dropping fingerprints that vanished from the file
+// would be revocation, which is a separate decision (a live transfer would also
+// race it); an operator revoking access still restarts the listener.
 func (h *serveHandler) authorize(fp, remote string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.allow == nil {
+		h.allow = map[string]bool{}
+	}
+	if h.allow[fp] {
+		return true
+	}
+	// Fail closed: if the allow-list can't be read or parsed we do not know who
+	// is authorized, so nobody is. Say so locally (the operator must fix the
+	// file) without echoing any of its contents.
+	reloaded, err := trust.LoadAuthorized(h.cfgDir)
+	if err != nil {
+		fmt.Fprintf(h.stderr, "rejected peer %s from %s: cannot read %s: %v\n"+
+			"  fix or remove that file — until it can be read, every peer is rejected.\n",
+			fp, remote, trust.AuthorizedPath(h.cfgDir), err)
+		return false
+	}
+	for known := range reloaded {
+		h.allow[known] = true
+	}
 	if h.allow[fp] {
 		return true
 	}
@@ -229,7 +383,11 @@ func (h *serveHandler) serve(conn net.Conn) (ok bool) {
 		fmt.Fprintf(h.stderr, "receive from %s (%s): %v\n", fp, remote, err)
 		return false
 	}
-	if rep.DeleteDenied {
+	if rep.DeleteRefusedReason != "" {
+		fmt.Fprintf(h.stderr, "warning: refused the sender's --delete because %s; nothing was deleted\n", rep.DeleteRefusedReason)
+	} else if rep.DeletePartial != "" {
+		fmt.Fprintf(h.stderr, "warning: the mirror delete did not finish: %s\n", rep.DeletePartial)
+	} else if rep.DeleteDenied {
 		fmt.Fprintf(h.stderr, "warning: sender requested --delete but this listener isn't started with --allow-delete; nothing was deleted\n")
 	}
 	if len(rep.Failed) > 0 {

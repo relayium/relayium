@@ -3,6 +3,7 @@ package xfer
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -10,9 +11,21 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 )
+
+// refuse reports a structural refusal to an already-authorized sender as a
+// MsgError frame, and returns the same error for the receiver's own console.
+// The frame is best-effort: the local error stands even if the peer is gone.
+//
+// Only call this AFTER the transport has authorized the peer. An unauthorized
+// connection is closed without a word — it learns nothing about this host.
+func refuse(w io.Writer, code string, err error) error {
+	_ = WriteJSON(w, MsgError, WireError{Code: code, Msg: err.Error()})
+	return err
+}
 
 type RecvOpts struct {
 	NoResume    bool
@@ -35,6 +48,14 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 		return Report{}, err
 	}
 	if err := validateManifest(destDir, m); err != nil {
+		// The manifest cap is a structural refusal the sender can act on (split
+		// the batch), and by this point the peer is already authorized by the
+		// transport, so telling it why is safe. Every other validation failure
+		// stays silent: those messages quote manifest content and only a
+		// malformed or hostile manifest reaches them.
+		if errors.Is(err, errManifestTooLarge) {
+			return Report{}, refuse(rw, ErrCodeManifestTooLarge, err)
+		}
 		return Report{}, err
 	}
 	// A one-shot receive must never silently replace files already owned by the
@@ -47,7 +68,10 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 				return Report{}, err
 			}
 			if _, err := os.Lstat(dest); err == nil {
-				return Report{}, fmt.Errorf("destination already exists: %s", f.Path)
+				// The relative manifest path is the sender's own name for the
+				// file, so it is safe to echo; the absolute receive path is not.
+				return Report{}, refuse(rw, ErrCodeDestinationExists,
+					fmt.Errorf("destination already exists: %s (use `sync` to replace, or remove it on the receiver)", f.Path))
 			} else if !os.IsNotExist(err) {
 				return Report{}, err
 			}
@@ -138,13 +162,26 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 		// entire destination. The sync client already refuses --delete with an
 		// empty source, but a malicious/buggy peer can send Delete=true with a
 		// zero-file manifest straight to an --allow-delete listener, so enforce the
-		// same guard on the receiver. (A non-empty manifest deleting other files is
-		// ordinary mirror semantics the operator opted into with --allow-delete.)
+		// same guard on the receiver.
 		rep.DeleteDenied = true
+		rep.DeleteRefusedReason = "the manifest contains no files"
 	} else if hello.Delete && opts.AllowDelete {
 		// Best-effort mirror delete; a failure here doesn't undo the files that
-		// already landed, so it does not fail the transfer.
-		_, _ = deleteExtras(destDir, m)
+		// already landed, so it does not fail the transfer. It is scoped to the
+		// manifest's own top-level roots (see deleteExtras) and refuses outright
+		// when no such scope can be derived.
+		//
+		// Refused and half-done are different outcomes and must not be reported
+		// as the same thing: an operator who reads "nothing was deleted" after
+		// files were in fact removed would be misled about their own data.
+		if n, err := deleteExtras(destDir, m); err != nil {
+			if n == 0 {
+				rep.DeleteDenied = true
+				rep.DeleteRefusedReason = err.Error()
+			} else {
+				rep.DeletePartial = fmt.Sprintf("removed %d stale file(s), then stopped: %v", n, err)
+			}
+		}
 	} else if hello.Delete {
 		rep.DeleteDenied = true
 	}
@@ -177,9 +214,14 @@ func installStaged(staged, dest string, allowReplace bool) error {
 const maxManifestFiles = 1000
 const maxManifestPathBytes = 4096
 
+// errManifestTooLarge marks the one validation failure the receiver reports back
+// to an authorized sender: it is structural, actionable (split the batch) and
+// says nothing about the manifest's contents or the receiver's filesystem.
+var errManifestTooLarge = errors.New("manifest contains too many files")
+
 func validateManifest(destDir string, m Manifest) error {
 	if len(m.Files) > maxManifestFiles {
-		return fmt.Errorf("manifest contains too many files: %d", len(m.Files))
+		return fmt.Errorf("%w: %d (this receiver accepts at most %d per transfer)", errManifestTooLarge, len(m.Files), maxManifestFiles)
 	}
 	seen := make(map[string]struct{}, len(m.Files))
 	var total int64
@@ -195,10 +237,7 @@ func validateManifest(destDir string, m Manifest) error {
 		if err != nil {
 			return err
 		}
-		key := filepath.Clean(p)
-		if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
-			key = strings.ToLower(key)
-		}
+		key := destKey(p)
 		if _, ok := seen[key]; ok {
 			return fmt.Errorf("duplicate destination in manifest: %q", f.Path)
 		}
@@ -207,33 +246,144 @@ func validateManifest(destDir string, m Manifest) error {
 	return nil
 }
 
-// deleteExtras removes regular files under destDir whose relative path is not in
-// the manifest, then prunes directories left empty. It stays within destDir
-// (the same guarantee safeJoin gives the write path). Returns files removed.
-func deleteExtras(destDir string, m Manifest) (int, error) {
-	want := make(map[string]bool, len(m.Files))
-	for _, f := range m.Files {
-		want[filepath.Clean(filepath.FromSlash(f.Path))] = true
+// manifestRel maps a manifest path onto the destDir-relative path safeJoin would
+// actually write it to, so the delete scope and the write path can never
+// disagree. It mirrors safeJoin's normalisation ("../x" clamps to "x"), and
+// reports false for anything that names no file under destDir at all.
+func manifestRel(p string) (string, bool) {
+	clean := filepath.Clean(string(filepath.Separator) + filepath.FromSlash(p))
+	rel := strings.TrimPrefix(clean, string(filepath.Separator))
+	if rel == "" || rel == "." {
+		return "", false
 	}
-	var files []string
-	err := filepath.WalkDir(destDir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	return rel, true
+}
+
+// foldDestPaths reports whether this platform's filesystem treats "Site" and
+// "site" as the same name. runtime.GOOS is a compile-time constant, so this is
+// too — it is the single place the fold decision is made.
+const foldDestPaths = runtime.GOOS == "darwin" || runtime.GOOS == "windows"
+
+// destKey canonicalises a destination path into the key every comparison in the
+// mirror uses: the manifest's duplicate check, the set of files to keep, and the
+// paths WalkDir reports off disk.
+//
+// They MUST agree. The manifest says "Site/index.html" and the directory on a
+// case-insensitive filesystem is "site/", so a raw string compare finds the
+// wanted file missing from the want set and deletes the very file the transfer
+// just wrote. Case-folding on one side only is worse than not folding at all.
+func destKey(path string) string { return destKeyFold(path, foldDestPaths) }
+
+// destKeyFold is destKey with the platform decision passed in, so both branches
+// are executable in a test on any OS — the case-insensitive branch is the one
+// that can lose data, and it must not be reachable only on a Mac.
+func destKeyFold(path string, fold bool) string {
+	key := filepath.Clean(path)
+	if fold {
+		key = strings.ToLower(key)
+	}
+	return key
+}
+
+// deleteScope is the bounded region of destDir a mirror-delete may touch: the
+// top-level roots the accepted manifest actually represents, never the whole
+// receive directory.
+//
+// `sync ./a ./b host` sends "a/..." and "b/...", so it may prune stale files
+// inside a/ and b/ — and must leave every unrelated sibling under --dir alone,
+// including another source's tree. A single-file root ("notes.txt") scopes only
+// that one file, which the manifest keeps by definition, so it deletes nothing.
+type deleteScope struct {
+	dirRoots []string        // destDir-relative top-level directories in scope
+	want     map[string]bool // destDir-relative paths the manifest keeps
+}
+
+// deleteScopeFor derives the scope from validated manifest paths, fail-closed:
+// an unusable path, an empty scope, or a root claimed as both a file and a
+// directory returns an error and no deletion happens at all.
+//
+// The root maps are keyed by destKey for the same reason want is: on a
+// case-insensitive filesystem "Site/a" and "site/b" name ONE directory, so
+// keying them raw would walk it twice (the second pass removing files the first
+// already did, turning a clean mirror into a reported partial delete) and would
+// miss a "Notes" file colliding with a "notes/" directory. The value keeps the
+// first-seen spelling, because that is what gets joined onto a real path.
+func deleteScopeFor(m Manifest) (deleteScope, error) {
+	sc := deleteScope{want: make(map[string]bool, len(m.Files))}
+	fileRoots := make(map[string]bool)
+	dirRoots := make(map[string]string) // canonical key -> on-disk spelling
+	for _, f := range m.Files {
+		rel, ok := manifestRel(f.Path)
+		if !ok {
+			return deleteScope{}, fmt.Errorf("the manifest contains a path that names no destination file (%q)", f.Path)
 		}
-		if d.IsDir() || !d.Type().IsRegular() {
-			return nil
+		sc.want[destKey(rel)] = true
+		root, rest, nested := strings.Cut(rel, string(filepath.Separator))
+		if root == "" {
+			return deleteScope{}, fmt.Errorf("the manifest contains a path with no top-level name (%q)", f.Path)
 		}
-		rel, err := filepath.Rel(destDir, p)
-		if err != nil {
-			return err
+		if nested && rest != "" {
+			if _, dup := dirRoots[destKey(root)]; !dup {
+				dirRoots[destKey(root)] = root
+			}
+		} else {
+			fileRoots[destKey(root)] = true
 		}
-		if !want[rel] {
-			files = append(files, p)
+	}
+	for key, root := range dirRoots {
+		if fileRoots[key] {
+			// The same name cannot be both a file and a directory on disk, so
+			// the scope is ambiguous. Refuse rather than guess.
+			return deleteScope{}, fmt.Errorf("the manifest claims %q as both a file and a directory", root)
 		}
-		return nil
-	})
+		sc.dirRoots = append(sc.dirRoots, root)
+	}
+	if len(fileRoots) == 0 && len(dirRoots) == 0 {
+		return deleteScope{}, errors.New("the manifest yields no top-level root to mirror")
+	}
+	sort.Strings(sc.dirRoots) // deterministic order for tests and logs
+	return sc, nil
+}
+
+// deleteExtras removes regular files that are inside one of the manifest's
+// top-level directory roots but absent from the manifest, then prunes
+// directories left empty inside those same roots. Everything else under destDir
+// — an unrelated sibling tree, a root the manifest does not name, destDir itself
+// — is out of scope and untouched. Returns files removed.
+func deleteExtras(destDir string, m Manifest) (int, error) {
+	sc, err := deleteScopeFor(m)
 	if err != nil {
 		return 0, err
+	}
+	var files []string
+	for _, root := range sc.dirRoots {
+		rootDir, err := safeJoin(destDir, filepath.ToSlash(root))
+		if err != nil {
+			return 0, err
+		}
+		if fi, err := os.Lstat(rootDir); err != nil || !fi.IsDir() {
+			// Absent (nothing to prune) or not a directory (not ours to mirror).
+			continue
+		}
+		err = filepath.WalkDir(rootDir, func(p string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() || !d.Type().IsRegular() {
+				return nil
+			}
+			rel, err := filepath.Rel(destDir, p)
+			if err != nil {
+				return err
+			}
+			if !sc.want[destKey(rel)] {
+				files = append(files, p)
+			}
+			return nil
+		})
+		if err != nil {
+			return 0, err
+		}
 	}
 	n := 0
 	for _, p := range files {
@@ -242,11 +392,18 @@ func deleteExtras(destDir string, m Manifest) (int, error) {
 		}
 		n++
 	}
-	pruneEmptyDirs(destDir)
+	for _, root := range sc.dirRoots {
+		rootDir, err := safeJoin(destDir, filepath.ToSlash(root))
+		if err != nil {
+			return n, err
+		}
+		pruneEmptyDirs(rootDir)
+	}
 	return n, nil
 }
 
-// pruneEmptyDirs removes empty subdirectories under root (root itself is kept).
+// pruneEmptyDirs removes empty subdirectories under root (root itself is kept,
+// so a mirrored root survives even when the transfer emptied it).
 func pruneEmptyDirs(root string) {
 	var dirs []string
 	filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {

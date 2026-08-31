@@ -119,13 +119,21 @@ Four direct modes — three that move files, one that moves text:
 - **`push` / `pull` over your own SSH** — `relayium push ./photos user@host:backups/` (bytes travel over SSH; no Relayium account).
 - **`text` — ephemeral encrypted messages** — run `relayium text` with no code on one machine to mint a code (with your account, as `send` does); it prints the exact `relayium text 483920` command the other machine runs, then waits in the live session for it. Both machines must be online at the same time: this is not a mailbox. One line per message interactively; pipe stdin (`pbpaste | relayium text 483920`) to send multiline content or exact bytes. End-to-end encrypted over a pinned-TLS direct connection of its own, exactly like a file transfer; Relayium stores no message body or server-side history, though either endpoint can retain text. Verification is opt-in: add `--verify` to stop and compare the SAS (that needs a terminal to answer, so a piped `--verify` run refuses rather than pretending it was confirmed); `--yes` is still accepted and means the same as the default. One message is at most 65,536 bytes of UTF-8 — anything larger is a file. CLI to CLI: exactly as with file transfers, the terminal and the browser are separate transports and don't pair with each other.
 - **`send` / `receive` by pairing code** — `relayium send ./file.zip` mints a code with your account (after `relayium login`) and prints what the other end runs: `relayium receive 483920`. Codes are 6 digits and last 5 minutes; the receiver needs no account. Cross-network and direct peer-to-peer — a small rendezvous handshake introduces the two ends, the file goes straight between them, no relay. Sending to someone with a browser instead? Use `relayium up` for a download link.
-- **`serve` + `push relayium://` daemon direct** — `relayium serve --dir ~/inbox` then `relayium push ./file relayium://host` (server-to-server over pinned TLS; no relay, no SSH, no code — the listener approves each new pusher on its first push and remembers it).
+- **`serve` + `push relayium://` daemon direct** — `relayium serve --dir ~/inbox` then `relayium push ./file relayium://host` (server-to-server over pinned TLS; no relay, no SSH, no code — the listener approves each new pusher on its first push and remembers it). This is the direct route between two servers you control, and it needs no Relayium account on either side: a listener accepts a pusher only when that pusher's fingerprint is in the listener's own `authorized_fingerprints` file. Being logged in grants nobody filesystem access, and the two decisions are independent. For a non-interactive listener, pre-authorize with `relayium authorize <fingerprint>` using the *same* `--config-dir` the listener runs with; a running listener honors it on the next connection without a restart. `serve` listens on every interface unless you pass `--bind ADDR`, so firewall the port or bind it narrowly, and it requires `--dir` to be an existing writable directory before it binds.
+
+The CLI's **Device Inbox is the receive side only** — it accepts files your account sends to that machine, and there is no CLI command that sends into an inbox (you send to one from the Web or a native app). To move files between two of your own servers, use `serve` with `push`/`sync` above.
 
 Keep a folder mirrored with **`sync`** — direct too, over SSH or daemon-direct, incremental (only changed files transfer), optionally `--delete` to mirror and `--watch` to re-sync in real time:
 
 ```sh
 relayium sync ./site relayium://host --delete --watch
 ```
+
+`--delete` is deliberately hard to turn into data loss. The receiving listener must have been started with
+`--allow-delete` or nothing is deleted and the sender is told so; deletion is then confined to the top-level
+directories that transfer actually sends, so mirroring `./site` can prune stale files inside `site/` and can
+never touch a sibling folder, an unrelated file, or another source's tree under the listener's `--dir`. An
+empty source refuses outright on both ends.
 
 Full docs at [relayium.com/cli](https://relayium.com/cli); prebuilt binaries on the [releases page](https://github.com/relayium/relayium/releases).
 

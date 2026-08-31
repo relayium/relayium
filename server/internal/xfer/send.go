@@ -20,6 +20,12 @@ type Report struct {
 	Skipped      int // sync mode: files the receiver already had, not sent
 	Failed       []string
 	DeleteDenied bool // sender asked for --delete but this listener isn't --allow-delete
+	// DeleteRefusedReason explains a mirror-delete the receiver was permitted to
+	// run but refused anyway (empty manifest, or no derivable top-level scope);
+	// nothing was deleted. DeletePartial is the opposite outcome: deletion began
+	// and then failed. Both are receiver-local and not carried on the wire.
+	DeleteRefusedReason string
+	DeletePartial       string
 }
 
 // Send transmits the manifest's files over rw (a duplex stream, typically the
@@ -32,8 +38,11 @@ func Send(rw io.ReadWriter, m Manifest, srcs []string, opts SendOpts) (Report, e
 		return Report{}, err
 	}
 
+	// The receiver may refuse here (manifest cap, one-shot collision) with a
+	// MsgError frame instead of the resume state, so check the frame type before
+	// decoding rather than mistaking a refusal for an empty resume.
 	var rs ResumeState
-	if _, err := ReadJSON(rw, &rs); err != nil {
+	if err := readExpect(rw, &rs); err != nil {
 		return Report{}, err
 	}
 	offsets := make([]int64, len(m.Files))
@@ -60,9 +69,9 @@ func Send(rw io.ReadWriter, m Manifest, srcs []string, opts SendOpts) (Report, e
 		rep.Bytes += f.Size
 	}
 
-	// Read the final result.
+	// Read the final result (a late refusal still arrives as MsgError).
 	var res Result
-	if _, err := ReadJSON(rw, &res); err != nil {
+	if err := readExpect(rw, &res); err != nil {
 		return rep, err
 	}
 	rep.Failed = res.Failed

@@ -3,6 +3,7 @@ package xfer
 import (
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 )
@@ -65,6 +66,62 @@ type Result struct {
 	OK           bool
 	Failed       []string
 	DeleteDenied bool // sync mode: Hello.Delete was set but the receiver isn't --allow-delete
+}
+
+// Stable MsgError codes. New codes may be added; existing ones never change
+// meaning, so a sender can branch on them without pinning a wire version.
+const (
+	ErrCodeManifestTooLarge  = "manifest_too_large"
+	ErrCodeDestinationExists = "destination_exists"
+)
+
+// WireError is the payload of a MsgError frame: why the receiver refused a
+// transfer it had already authorized at the transport layer. It replaces a bare
+// connection close, which told the sender only "something went wrong".
+//
+// MsgError has existed since WireVersion 1, so sending one needs no version
+// bump: a receiver that never sends one is still conformant, and a sender that
+// ignores the type still fails (it just fails less informatively).
+//
+// Msg is written to the sender's console. It may name a relative manifest path
+// — the sender's own words for its own file — but must never carry an absolute
+// receive/config path, identity material, or allow-list contents.
+type WireError struct {
+	Code string
+	Msg  string
+}
+
+// RemoteError is a WireError as seen by the sender.
+type RemoteError struct {
+	Code string
+	Msg  string
+}
+
+func (e *RemoteError) Error() string {
+	if e.Msg == "" {
+		return "receiver refused the transfer: " + e.Code
+	}
+	return "receiver refused the transfer: " + e.Msg
+}
+
+// readExpect reads one frame into v, translating a MsgError frame into a
+// *RemoteError instead of silently decoding a refusal as the awaited message.
+//
+// It stays deliberately lenient about every OTHER type, exactly as ReadJSON is,
+// so nothing that interoperated before is rejected now.
+func readExpect(r io.Reader, v any) error {
+	t, payload, err := ReadFrame(r)
+	if err != nil {
+		return err
+	}
+	if t == MsgError {
+		var we WireError
+		if err := json.Unmarshal(payload, &we); err != nil {
+			return errors.New("receiver refused the transfer (unreadable error frame)")
+		}
+		return &RemoteError{Code: we.Code, Msg: we.Msg}
+	}
+	return json.Unmarshal(payload, v)
 }
 
 // WriteFrame writes [type:1][len:uint32-BE][payload].

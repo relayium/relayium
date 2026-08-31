@@ -13,9 +13,26 @@ import (
 
 const usage = `relayium — file and text transfer
 
+server to server, direct (no relay, no Relayium account):
+  relayium serve [--dir D] [--bind ADDR] [--port N] [--once] [--allow-delete]
+                                             listen for direct pushes from another machine
+                                             (in a terminal, approve each new peer on its
+                                              first push; otherwise pre-authorize it)
+  relayium push <src...> relayium://host[:port]
+                                             push straight to that listener over pinned TLS
+  relayium sync <src...> relayium://host[:port] [--delete] [--watch]
+                                             mirror a folder onto that listener, incrementally
+  relayium id                                print this host's fingerprint
+  relayium authorize <fingerprint>           pre-authorize a pusher (for non-interactive serve)
+
+  These need no Relayium account and never touch our servers. Logging in
+  grants NO filesystem access to anyone: a listener accepts a pusher only when
+  its fingerprint is in that listener's own authorized_fingerprints file, which
+  is a separate decision from any account. Use the same --config-dir for
+  serve and authorize; see "relayium serve -h".
+
 usage:
   relayium push <src...> [user@]host:dest    push files to a server you can ssh into
-  relayium push <src...> relayium://host[:port]  push straight to a listening peer (daemon direct)
   relayium sync <src...> <dest> [--delete] [--watch]   incremental one-way folder mirror
   relayium pull [user@]host:src <dest>       pull files from such a server
   relayium send <src...> [code]              send to a peer over a pairing code (cross-network)
@@ -24,10 +41,8 @@ usage:
   relayium text [code] [--verify]            ephemeral encrypted messages with a peer
                                              (both ends run this; omit the code to mint one,
                                               which requires login; pipe stdin for exact multiline)
-  relayium serve [--dir D] [--port N] [--once]   listen for daemon-direct pushes
-                                             (in a terminal, approve each new peer on first push)
-  relayium id                                print this host's fingerprint
-  relayium authorize <fingerprint>          pre-authorize a pusher (for non-interactive serve)
+  relayium serve / id / authorize            direct server-to-server listener; see the
+                                             section above and "relayium serve -h"
   relayium login [--server URL] [--config-dir D] [--device-name LABEL]
                                              log in to the cloud (device code flow)
                                              (the label names this machine in My Devices;
@@ -38,7 +53,11 @@ usage:
   relayium up <path...> [--burn] [--ttl D] [--max-downloads N]
                                              encrypt client-side and upload to the cloud
   relayium down <link-or-code> [destDir]    fetch and decrypt a cloud claim (no login needed)
-  relayium inbox <subcommand>               receive files sent to this device from your account
+  relayium inbox <subcommand>               RECEIVE SIDE ONLY: accept files your account
+                                             sends to this device. There is no CLI sender for
+                                             it — you send TO an inbox from the Web or the app.
+                                             To move files between two servers, use serve +
+                                             push/sync above instead.
                                              (enable --dir, run, status, pause, resume, disable,
                                               service; see relayium inbox --help)
   relayium update [--check] [--force]       upgrade to the latest release in place
@@ -121,7 +140,44 @@ type sshFlags struct {
 	configDir string
 }
 
+const pushUsage = `relayium push — copy files to another machine
+
+usage:
+  relayium push <src...> relayium://host[:port]   direct to a listening peer (no SSH, no account)
+  relayium push <src...> [user@]host:dest         over SSH to a server you can log into
+
+A relayium:// destination is the direct server-to-server path: the receiver runs
+"relayium serve --dir D", this pushes straight into that directory over a pinned
+TLS 1.3 connection. No relay, no SSH, no Relayium account — the listener accepts
+this host only once its fingerprint ("relayium id") is authorized there. The
+listener's own fingerprint is pinned on first contact and a later change is
+refused, not trusted.
+
+Any other destination is the SSH path and behaves like scp with resume: it uses
+relayium on the remote when it is installed, and a plain tar stream when it is not.
+
+flags:
+  -i <file>        ssh identity file (SSH destinations)
+  -p <port>        ssh port (SSH destinations)
+  --no-resume      disable resuming partial files
+  --config-dir D   identity/trust directory for relayium:// destinations
+                   (default ~/.config/relayium)
+
+An existing file on the receiver is never overwritten by push; use
+"relayium sync" for the explicit replace/mirror operation.
+`
+
+// stdValueFlags are the shared ssh/daemon flags of parseFlagsStd whose value is
+// a separate token (--no-resume is bool, so it is correctly absent). Keep it in
+// step with parseFlagsStd; TestValueFlagArgumentIsNotAHelpRequest exercises
+// every entry through the real command.
+var stdValueFlags = []string{"i", "p", "config-dir"}
+
 func runPush(args []string, stdout, stderr io.Writer) int {
+	if wantsHelp(args, stdValueFlags...) {
+		fmt.Fprint(stdout, pushUsage)
+		return 0
+	}
 	f, rest, err := parseFlagsStd(args)
 	if err != nil {
 		fmt.Fprintln(stderr, err)

@@ -108,8 +108,13 @@ func LoadAuthorized(dir string) (map[string]bool, error) {
 func AuthorizedPath(dir string) string { return filepath.Join(dir, authorizedFile) }
 
 // AddAuthorized appends fp to dir/authorized_fingerprints (creating it and dir),
-// unless it is already present. It is safe to call on a running serve to grow
-// the allow-list. The fingerprint is normalised to lowercase.
+// unless it is already present. The fingerprint is normalised to lowercase.
+//
+// A running `relayium serve` using the SAME dir re-reads this file whenever it
+// meets a fingerprint it doesn't know, so a peer authorized here is accepted on
+// its next connection without restarting the listener. Removing a line is not
+// symmetric: serve's reload only adds, so revoking access still means
+// restarting it.
 func AddAuthorized(dir, fp string) error {
 	fp = strings.ToLower(strings.TrimSpace(fp))
 	if fp == "" {

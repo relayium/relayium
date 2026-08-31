@@ -135,7 +135,7 @@ Accept and remember this peer? [y/N] y</code></pre>
       <h2>أتمِتها (أو شغّلها دون طرفية)</h2>
       <p>بما أن البصمة المعتمَدة تُحفَظ، لا تحتاج الدفعات اللاحقة إلى مُطالبة — لذا يدخل relayium push مباشرةً في cron أو سكربت نشر أو CI لمزامنة مُشفَّرة، مفحوصة السلامة، قابلة للاستئناف من خادم إلى خادم. حين يعمل serve دون طرفية (خدمة systemd، أنبوب) لا يستطيع المُطالبة، فيرفض المُرسِلين المجهولين؛ فوّض لهم مسبقًا بدلًا من ذلك. احصل على البصمة من relayium id لدى المُرسِل، أو انسخها من سطر «rejected unauthorized peer …» في سجل serve، ثم:</p>
       <pre><code># على المُستقبِل: فوِّض مُرسِلًا مسبقًا دون مُطالبة
-relayium authorize 74318e3b...</code></pre>
+relayium authorize --config-dir /etc/relayium 74318e3b...</code></pre>
       <ul><li>تقيم ملفات الهوية والثقة في ~/.config/relayium/ (تُتجاوَز بـ --config-dir، مثلًا /etc/relayium لخدمة).</li><li>authorize خاملة التكرار (idempotent) — تشغيلها مجددًا للبصمة نفسها لا يفعل شيئًا.</li></ul>
       <h2>شغّل المُستمِع تحت systemd</h2>
       <p>لصندوق وارد دائم التشغيل، شغّل serve كخدمة systemd. وجِّه --config-dir إلى موقع ثابت مثل /etc/relayium كي تبقى الهوية مستقرة عبر إعادات التشغيل، ودع systemd يُبقيها حيّة:</p>
@@ -162,7 +162,7 @@ relayium id
 # 74318e3b…
 
 # على المُستقبِل
-relayium authorize 74318e3b…</code></pre><p>لم تكن لدى serve طرفية يسأل عليها، كوحدة systemd أو أنبوب، فتُرفَض البصمة المجهولة بدل الوثوق بها. اعتمِدها مسبقًا: البصمة في سطر الرفض هي نفسها التي يطبعها relayium id على المُرسِل، وauthorize لا يتغير أثره بتكراره.</p></dd><dt>«fingerprint mismatch for receiver.example.com:9031».</dt><dd><pre><code>grep receiver.example.com ~/.config/relayium/known_hosts</code></pre><p>قدّم المُستمِع مفتاحًا مختلفًا عن المفتاح المثبّت عند أول اتصال. إن كنت قد بدّلت ذلك المفتاح عن قصد، فاحذف سطر known_hosts المطابق وأعِد الدفع. وإن لم تفعل، فاترك السطر كما هو واعرف سبب تغيّر المفتاح قبل أن ترسل أي شيء.</p></dd><dt>تموت وحدة systemd عند الإقلاع بخطأ عن أذونات غير آمنة.</dt><dd><pre><code>systemctl status relayium-serve
+relayium authorize --config-dir /etc/relayium 74318e3b…</code></pre><p>لم تكن لدى serve طرفية يسأل عليها، كوحدة systemd أو أنبوب، فتُرفَض البصمة المجهولة بدل الوثوق بها. اعتمِدها مسبقًا: البصمة في سطر الرفض هي نفسها التي يطبعها relayium id على المُرسِل، وauthorize لا يتغير أثره بتكراره.</p></dd><dt>«fingerprint mismatch for receiver.example.com:9031».</dt><dd><pre><code>grep receiver.example.com ~/.config/relayium/known_hosts</code></pre><p>قدّم المُستمِع مفتاحًا مختلفًا عن المفتاح المثبّت عند أول اتصال. إن كنت قد بدّلت ذلك المفتاح عن قصد، فاحذف سطر known_hosts المطابق وأعِد الدفع. وإن لم تفعل، فاترك السطر كما هو واعرف سبب تغيّر المفتاح قبل أن ترسل أي شيء.</p></dd><dt>تموت وحدة systemd عند الإقلاع بخطأ عن أذونات غير آمنة.</dt><dd><pre><code>systemctl status relayium-serve
 # secure: /etc/relayium/id.key has insecure permissions 0644; run: chmod 600 /etc/relayium/id.key
 ls -l /etc/relayium/id.key</code></pre><p>يرفض relayium تحميل مفتاح خاص يستطيع أحد غير مالكه قراءته، وهي القاعدة نفسها التي يطبّقها ssh. نفّذ chmod 600 على المسار الذي يسمّيه الخطأ، وتأكّد من أن مالكه هو مستخدم الخدمة، ثم أعِد تشغيل الوحدة.</p></dd></dl></div>
       <h2>الأسئلة الشائعة</h2>

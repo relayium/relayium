@@ -55,8 +55,11 @@ relayium serve: listening on [::]:9031, receiving into /home/you/inbox (fingerpr
         ],
       },
       bullets: [
-        "The listener processes connections one at a time and lands files under --dir.",
+        "serve handles connections concurrently, up to 64 at once, and lands files under --dir.",
+        "--dir must already exist and be writable by the user serve runs as. serve checks that before it binds the port, so a mistyped path fails immediately instead of becoming a listener that cannot write.",
         "The default port is 9031; change it with --port and open it on your firewall.",
+        "With no --bind, serve listens on every interface, including public ones, and relies on your firewall. Pass --bind 10.0.0.5 (or --bind 127.0.0.1 behind a tunnel) to limit the listener itself.",
+        "Being logged in to a Relayium account has nothing to do with this. An account grants no one filesystem access to this host: a push is accepted only when the pusher's fingerprint is in this listener's own authorized_fingerprints.",
       ],
     },
     {
@@ -121,11 +124,15 @@ Accept and remember this peer? [y/N] y`,
       ],
       code: [
         `# on the RECEIVER: pre-authorize a sender without a prompt
-relayium authorize 74318e3b...`,
+relayium authorize --config-dir /etc/relayium 74318e3b...`,
       ],
       bullets: [
         "Identity and trust files live in ~/.config/relayium/ (override with --config-dir, e.g. /etc/relayium for a service).",
+        "Give authorize the same --config-dir the listener runs with, or it writes a file the listener never reads. A service started with --config-dir /etc/relayium is served by relayium authorize --config-dir /etc/relayium <fingerprint>; a bare authorize would write ~/.config/relayium/authorized_fingerprints instead, and the push would keep being rejected.",
+        "A running listener picks up a newly authorized fingerprint on its next connection — you do not restart it. Revocation is not symmetric: to withdraw access, remove the line and restart the listener.",
         "authorize is idempotent — running it again for the same fingerprint is a no-op.",
+        "To mirror a folder rather than copy into it, use relayium sync with the same relayium:// destination. push never overwrites — a name that already exists on the receiver is refused, and the refusal names the path — while sync sends only what changed and can mirror deletions.",
+        "sync --delete removes files the source dropped, but only when the listener was started with --allow-delete; otherwise nothing is deleted and the sender is told so. Deletion is confined to the top-level directories that transfer actually sends: mirroring ./site touches only site/ under the receiver's --dir, a sibling folder or unrelated file is never removed, empty directories are pruned only inside those same roots, and two sources mirrored at once cannot delete each other's files. A single-file source scopes only that file, so it deletes nothing; an empty or unresolvable source refuses the delete outright on both ends, because it would otherwise mean \"delete everything\".",
       ],
     },
     {
@@ -149,7 +156,10 @@ WantedBy=multi-user.target`,
       ],
       bullets: [
         "systemctl enable --now relayium-serve to start it and bring it up on boot.",
+        "Create /srv/inbox first and make it writable by the service user. serve validates the directory before it binds, so the unit fails at startup with a clear message rather than accepting a transfer it cannot land.",
+        "Authorize new pushers against the SAME directory: relayium authorize --config-dir /etc/relayium <fingerprint>. No systemctl restart is needed — the running listener reads the file again on the next unknown fingerprint.",
         "Keep /etc/relayium/id.key readable only by the service user — relayium refuses to load a key with loose permissions.",
+        "Add --bind to the ExecStart line if the unit should listen on one address only.",
       ],
     },
     {
@@ -178,9 +188,9 @@ relayium id
 # 74318e3b…
 
 # on the RECEIVER
-relayium authorize 74318e3b…`,
+relayium authorize --config-dir /etc/relayium 74318e3b…`,
             ],
-            fix: "serve had no terminal to ask on — a systemd unit or a pipe — so an unknown fingerprint is refused rather than trusted. Pre-authorize it: the fingerprint in the rejection line is exactly the one relayium id prints on the sender, and authorize is idempotent.",
+            fix: "serve had no terminal to ask on — a systemd unit or a pipe — so an unknown fingerprint is refused rather than trusted. Pre-authorize it and push again: the listener re-reads its allow-list whenever it meets a fingerprint it does not know, so this takes effect on the next connection, with no restart. The fingerprint in the rejection line is exactly the one relayium id prints on the sender, and authorize is idempotent. If it still fails, add the listener's own --config-dir to the authorize command — writing the fingerprint into a different directory than the one serve reads is the usual cause.",
           },
           {
             symptom: "\"fingerprint mismatch for receiver.example.com:9031\".",
@@ -224,6 +234,18 @@ ls -l /etc/relayium/id.key`,
       {
         q: "Is there any relay fallback?",
         a: "No. Daemon direct assumes a reachable listener address; if the connection can't be made, it fails. Nothing is ever proxied through Relayium — that's the point of this mode.",
+      },
+      {
+        q: "Do I need a Relayium account, and does logging in give another machine access?",
+        a: "No, and no. Daemon direct never contacts Relayium, so no account is involved on either side. Logging in also grants nobody filesystem access: a listener accepts a pusher only when that pusher's fingerprint is in its own authorized_fingerprints file. Account login and listener authorization are separate decisions, and neither implies the other.",
+      },
+      {
+        q: "Should I use Device Inbox for this instead?",
+        a: "No — the CLI's Inbox is the receiving side only. It accepts files your account sends to that machine, and there is no CLI command that sends into an inbox; you send to one from the Web app or a native app. To move files between two servers you control, serve plus push or sync is the direct path, and it needs no account at all.",
+      },
+      {
+        q: "Can a push delete files on the receiver?",
+        a: "A plain push never deletes and never overwrites — a collision is refused with the offending path named. sync --delete can remove files, but only if the listener was started with --allow-delete, and only inside the top-level directories that transfer actually sends. Anything else under the receiver's --dir is out of scope, and an empty or unresolvable source refuses the delete outright.",
       },
     ],
   },
@@ -285,8 +307,11 @@ relayium serve: listening on [::]:9031, receiving into /home/you/inbox (fingerpr
         ],
       },
       bullets: [
-        "监听端依次处理连接，并把文件落到 --dir 指定的目录下。",
+        "serve 会并发处理连接，最多同时 64 个，并把文件落到 --dir 指定的目录下。",
+        "--dir 必须是已经存在、并且 serve 所属用户可写的目录。serve 会在绑定端口之前先检查这一点，所以路径写错会立刻失败，而不会变成一个跑起来却写不进去的监听端。",
         "默认端口是 9031；可用 --port 修改，并在防火墙上开放该端口。",
+        "不加 --bind 时，serve 会监听所有网络接口（包括公网接口），安全完全依赖你的防火墙。加上 --bind 10.0.0.5（在隧道后面则用 --bind 127.0.0.1）可以直接把监听端本身限制在某个地址上。",
+        "这一切和有没有登录 Relayium 账号无关。账号不会给任何人这台主机的文件访问权限：只有当推送方的指纹在本监听端自己的 authorized_fingerprints 中时，推送才会被接受。",
       ],
     },
     {
@@ -351,11 +376,15 @@ Accept and remember this peer? [y/N] y`,
       ],
       code: [
         `# 在接收方：无需提示，预先授权一个发送方
-relayium authorize 74318e3b...`,
+relayium authorize --config-dir /etc/relayium 74318e3b...`,
       ],
       bullets: [
         "身份和信任文件存放在 ~/.config/relayium/ 中（可用 --config-dir 覆盖，例如作为服务时用 /etc/relayium）。",
+        "给 authorize 传监听端运行时所用的同一个 --config-dir，否则它写进去的文件，监听端根本不会去读。以 --config-dir /etc/relayium 启动的服务，对应的是 relayium authorize --config-dir /etc/relayium <指纹>；不带参数的 authorize 写的是 ~/.config/relayium/authorized_fingerprints，推送仍然会被一直拒绝。",
+        "正在运行的监听端会在下一次连接时认出新授权的指纹——不需要重启它。撤销则不对称：要收回授权，请删掉那一行并重启监听端。",
         "authorize 是幂等的——对同一个指纹再次运行它不会有任何效果。",
+        "如果你要的不是往里拷贝，而是镜像一个目录，请对同一个 relayium:// 目标使用 relayium sync。push 从不覆盖——接收方已存在的同名文件会被拒绝，并且拒绝信息里会指出是哪个路径；sync 则只发送有变化的部分，还可以把删除一并镜像过去。",
+        "sync --delete 会删除源端已经不存在的文件，但前提是监听端以 --allow-delete 启动；否则什么都不会删，并且会告知发送方。删除被限制在本次传输实际发送的那些顶层目录之内：镜像 ./site 只会动接收方 --dir 下的 site/，同级目录和无关文件永远不会被删除，空目录也只在这些根之内才会被清理，一次镜像多个源时各源之间也删不到对方。源是单个文件时作用范围就只有那一个文件，因此什么都不会删；源为空或无法解析时，两端都会直接拒绝删除，因为那等于「把所有东西都删掉」。",
       ],
     },
     {
@@ -379,7 +408,10 @@ WantedBy=multi-user.target`,
       ],
       bullets: [
         "用 systemctl enable --now relayium-serve 启动它，并让它开机自启。",
+        "先建好 /srv/inbox，并让服务用户可写。serve 会在绑定端口之前校验这个目录，所以配置有问题时单元会在启动时带着明确报错失败，而不会接下一个自己根本落不了盘的传输。",
+        "授权新的推送方时要用同一个目录：relayium authorize --config-dir /etc/relayium <指纹>。不需要 systemctl restart——正在运行的监听端遇到不认识的指纹时会重新读取这个文件。",
         "让 /etc/relayium/id.key 只对服务用户可读——权限过于宽松时 relayium 会拒绝加载该密钥。",
+        "如果这个单元只应该监听某一个地址，在 ExecStart 那一行加上 --bind。",
       ],
     },
     {
@@ -408,9 +440,9 @@ relayium id
 # 74318e3b…
 
 # 在接收方
-relayium authorize 74318e3b…`,
+relayium authorize --config-dir /etc/relayium 74318e3b…`,
             ],
-            fix: "serve 当时没有终端可问——比如跑在 systemd 下或接了管道——所以对未知指纹选择拒绝而不是信任。预先授权即可：拒绝那行里的指纹，正是发送方 relayium id 打印出来的那个，而 authorize 是幂等的。",
+            fix: "serve 当时没有终端可问——比如跑在 systemd 下或接了管道——所以对未知指纹选择拒绝而不是信任。预先授权后再推一次即可：监听端每次遇到不认识的指纹时都会重新读取允许列表，所以这会在下一次连接时生效，无需重启。拒绝那行里的指纹，正是发送方 relayium id 打印出来的那个，而 authorize 是幂等的。如果还是失败，请给 authorize 也加上监听端自己的 --config-dir——把指纹写进了 serve 并不会读的另一个目录，是最常见的原因。",
           },
           {
             symptom: "“fingerprint mismatch for receiver.example.com:9031”。",
@@ -454,6 +486,18 @@ ls -l /etc/relayium/id.key`,
       {
         q: "有没有中继回退？",
         a: "没有。daemon 直连假定监听端地址是可达的；如果无法建立连接，就会失败。任何数据都绝不会经由 Relayium 代理——这正是这个模式的意义所在。",
+      },
+      {
+        q: "需要 Relayium 账号吗？登录之后别的机器就能访问我了吗？",
+        a: "都不需要、也不会。daemon 直连全程不会联系 Relayium，所以两端都不涉及账号。登录同样不会给任何人文件访问权限：只有当推送方的指纹在监听端自己的 authorized_fingerprints 文件里时，监听端才会接受它。账号登录和监听端授权是两件独立的事，谁都不蕴含谁。",
+      },
+      {
+        q: "这种场景该改用「设备收件箱」吗？",
+        a: "不该——CLI 上的收件箱只有接收这一侧。它接收的是你的账号发给这台机器的文件，而 CLI 并没有向收件箱发送的命令；要发给某个收件箱，请用网页版或原生 App。要在你自己掌控的两台服务器之间搬文件，serve 加 push 或 sync 才是直连的那条路，而且完全不需要账号。",
+      },
+      {
+        q: "推送会删掉接收方的文件吗？",
+        a: "普通的 push 既不会删除也不会覆盖——遇到同名冲突会拒绝，并指出是哪个路径。sync --delete 确实可以删除文件，但前提是监听端以 --allow-delete 启动，而且只在本次传输实际发送的那些顶层目录之内删除。接收方 --dir 下的其他任何东西都不在范围内；源为空或无法解析时，删除会被直接拒绝。",
       },
     ],
   },
@@ -581,7 +625,7 @@ Accept and remember this peer? [y/N] y`,
       ],
       code: [
         `# 受信側で: プロンプトなしに送信側を事前承認する
-relayium authorize 74318e3b...`,
+relayium authorize --config-dir /etc/relayium 74318e3b...`,
       ],
       bullets: [
         "アイデンティティと信頼のファイルは ~/.config/relayium/ にあります（サービスとして使う場合など、--config-dir で /etc/relayium などに上書きできます）。",
@@ -638,7 +682,7 @@ relayium id
 # 74318e3b…
 
 # 受信側で
-relayium authorize 74318e3b…`,
+relayium authorize --config-dir /etc/relayium 74318e3b…`,
             ],
             fix: "serve に尋ねる相手の端末が無かった（systemd ユニットやパイプ）ため、未知のフィンガープリントは信頼されずに拒否されます。事前に承認してください。拒否行のフィンガープリントは送信側の relayium id が表示するものとまったく同じで、authorize は何度実行しても同じ結果です。",
           },
@@ -811,7 +855,7 @@ Accept and remember this peer? [y/N] y`,
       ],
       code: [
         `# 받는 쪽에서: 프롬프트 없이 보내는 쪽을 미리 승인
-relayium authorize 74318e3b...`,
+relayium authorize --config-dir /etc/relayium 74318e3b...`,
       ],
       bullets: [
         "신원 및 신뢰 파일은 ~/.config/relayium/에 있습니다(서비스로 쓸 때는 --config-dir로 /etc/relayium 같은 곳으로 재정의할 수 있습니다).",
@@ -868,7 +912,7 @@ relayium id
 # 74318e3b…
 
 # 받는 쪽에서
-relayium authorize 74318e3b…`,
+relayium authorize --config-dir /etc/relayium 74318e3b…`,
             ],
             fix: "serve에게 물어볼 터미널이 없었기 때문입니다 — systemd 유닛이나 파이프 — 그래서 알 수 없는 지문은 신뢰 대신 거부됩니다. 미리 승인하세요. 거부 줄에 있는 지문은 보내는 쪽의 relayium id 가 출력하는 것과 똑같고, authorize는 몇 번 실행해도 같습니다.",
           },
@@ -1041,7 +1085,7 @@ Accept and remember this peer? [y/N] y`,
       ],
       code: [
         `# auf dem EMPFÄNGER: einen Sender ohne Abfrage vorab genehmigen
-relayium authorize 74318e3b...`,
+relayium authorize --config-dir /etc/relayium 74318e3b...`,
       ],
       bullets: [
         "Identitäts- und Vertrauensdateien liegen in ~/.config/relayium/ (mit --config-dir überschreibbar, z. B. /etc/relayium für einen Dienst).",
@@ -1098,7 +1142,7 @@ relayium id
 # 74318e3b…
 
 # auf dem EMPFÄNGER
-relayium authorize 74318e3b…`,
+relayium authorize --config-dir /etc/relayium 74318e3b…`,
             ],
             fix: "serve hatte kein Terminal zum Nachfragen — eine systemd-Unit oder eine Pipe — also wird ein unbekannter Fingerabdruck abgelehnt statt vertraut. Autorisier ihn vorab: Der Fingerabdruck in der Ablehnungszeile ist genau der, den relayium id auf dem Sender ausgibt, und authorize ist idempotent.",
           },
@@ -1271,7 +1315,7 @@ Accept and remember this peer? [y/N] y`,
       ],
       code: [
         `# sur le RÉCEPTEUR : autoriser un émetteur à l'avance, sans invite
-relayium authorize 74318e3b...`,
+relayium authorize --config-dir /etc/relayium 74318e3b...`,
       ],
       bullets: [
         "Les fichiers d'identité et de confiance se trouvent dans ~/.config/relayium/ (à surcharger avec --config-dir, par exemple /etc/relayium pour un service).",
@@ -1328,7 +1372,7 @@ relayium id
 # 74318e3b…
 
 # sur le RÉCEPTEUR
-relayium authorize 74318e3b…`,
+relayium authorize --config-dir /etc/relayium 74318e3b…`,
             ],
             fix: "serve n'avait aucun terminal à qui demander — une unité systemd, un tube — donc une empreinte inconnue est refusée plutôt qu'acceptée. Autorisez-la à l'avance : l'empreinte de la ligne de refus est exactement celle qu'affiche relayium id sur l'émetteur, et authorize est idempotent.",
           },
@@ -1501,7 +1545,7 @@ Accept and remember this peer? [y/N] y`,
       ],
       code: [
         `# على المُستقبِل: فوِّض مُرسِلًا مسبقًا دون مُطالبة
-relayium authorize 74318e3b...`,
+relayium authorize --config-dir /etc/relayium 74318e3b...`,
       ],
       bullets: [
         "تقيم ملفات الهوية والثقة في ~/.config/relayium/ (تُتجاوَز بـ --config-dir، مثلًا /etc/relayium لخدمة).",
@@ -1558,7 +1602,7 @@ relayium id
 # 74318e3b…
 
 # على المُستقبِل
-relayium authorize 74318e3b…`,
+relayium authorize --config-dir /etc/relayium 74318e3b…`,
             ],
             fix: "لم تكن لدى serve طرفية يسأل عليها، كوحدة systemd أو أنبوب، فتُرفَض البصمة المجهولة بدل الوثوق بها. اعتمِدها مسبقًا: البصمة في سطر الرفض هي نفسها التي يطبعها relayium id على المُرسِل، وauthorize لا يتغير أثره بتكراره.",
           },
@@ -1731,7 +1775,7 @@ Accept and remember this peer? [y/N] y`,
       ],
       code: [
         `# en el RECEPTOR: autoriza a un emisor de antemano, sin aviso
-relayium authorize 74318e3b...`,
+relayium authorize --config-dir /etc/relayium 74318e3b...`,
       ],
       bullets: [
         "Los archivos de identidad y confianza viven en ~/.config/relayium/ (se anulan con --config-dir, p. ej. /etc/relayium para un servicio).",
@@ -1788,7 +1832,7 @@ relayium id
 # 74318e3b…
 
 # en el RECEPTOR
-relayium authorize 74318e3b…`,
+relayium authorize --config-dir /etc/relayium 74318e3b…`,
             ],
             fix: "serve no tenía ningún terminal al que preguntar —una unidad de systemd, una tubería—, así que una huella desconocida se rechaza en lugar de aceptarse. Autorízala de antemano: la huella de la línea de rechazo es exactamente la que imprime relayium id en el emisor, y authorize es idempotente.",
           },
@@ -1961,7 +2005,7 @@ Accept and remember this peer? [y/N] y`,
       ],
       code: [
         `# no RECEPTOR: pré-autorize um emissor sem prompt
-relayium authorize 74318e3b...`,
+relayium authorize --config-dir /etc/relayium 74318e3b...`,
       ],
       bullets: [
         "Os arquivos de identidade e confiança ficam em ~/.config/relayium/ (substitua com --config-dir, por exemplo /etc/relayium para um serviço).",
@@ -2018,7 +2062,7 @@ relayium id
 # 74318e3b…
 
 # no RECEPTOR
-relayium authorize 74318e3b…`,
+relayium authorize --config-dir /etc/relayium 74318e3b…`,
             ],
             fix: "O serve não tinha nenhum terminal a quem perguntar — uma unidade do systemd, um pipe — então uma impressão digital desconhecida é recusada em vez de aceita. Autorize-a de antemão: a impressão digital da linha de recusa é exatamente a que relayium id imprime no emissor, e o authorize é idempotente.",
           },

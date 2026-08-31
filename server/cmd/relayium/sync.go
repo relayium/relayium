@@ -14,10 +14,51 @@ import (
 	"github.com/relayium/relayium/internal/xfer"
 )
 
+const syncUsage = `relayium sync — one-way incremental folder mirror
+
+usage:
+  relayium sync <src...> relayium://host[:port] [--delete] [--watch]   direct, no SSH/account
+  relayium sync <src...> [user@]host:dest [--delete] [--watch]         over SSH
+
+A relayium:// destination is the direct server-to-server path: the receiver runs
+"relayium serve --dir D" and this mirrors into that directory over a pinned TLS
+1.3 connection. No relay, no SSH, no Relayium account — the listener accepts this
+host only once its fingerprint ("relayium id") is authorized there.
+
+Only files that changed are sent; unchanged ones (same size and mtime) are
+skipped, and a partial file resumes.
+
+flags:
+  --delete         also delete files on the receiver that are gone from the
+                   source. The receiver must be started with --allow-delete or
+                   it is ignored and reported. Deletion is confined to the
+                   top-level directories this run actually sends — a sibling
+                   folder under the receiver's --dir is never touched — and an
+                   empty source refuses outright rather than mirroring nothing
+                   onto everything.
+  --watch          keep running and re-sync on change (debounced).
+  -i <file>        ssh identity file (SSH destinations)
+  -p <port>        ssh port (SSH destinations)
+  --config-dir D   identity/trust directory for relayium:// destinations
+                   (default ~/.config/relayium)
+
+Both destinations require relayium on the receiver: sync speaks the native
+protocol and has no tar fallback.
+`
+
+// syncValueFlags are the sync flags whose value is a separate token (--delete
+// and --watch are bool, so they are correctly absent). Keep it in step with the
+// FlagSet below; TestValueFlagArgumentIsNotAHelpRequest exercises every entry.
+var syncValueFlags = []string{"i", "p", "config-dir"}
+
 // runSync implements `relayium sync <src...> <dest> [--delete] [--watch]`: a
 // one-way incremental mirror over the same transports as push. It always uses
 // the native protocol (no tar fallback).
 func runSync(args []string, stdout, stderr io.Writer) int {
+	if wantsHelp(args, syncValueFlags...) {
+		fmt.Fprint(stdout, syncUsage)
+		return 0
+	}
 	fs := flag.NewFlagSet("sync", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var identity, configDir string

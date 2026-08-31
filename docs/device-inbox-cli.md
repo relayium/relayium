@@ -36,6 +36,47 @@ Relayium never sees the plaintext, the file names, the directory structure, the
 content key or this device's private key. The content key is sealed to a public
 key this machine published; only this machine holds the other half.
 
+### What it is not: server-to-server transfer
+
+`relayium inbox` is the **receive side only**. There is no CLI command that sends
+into an inbox — the sending half is the Web app or a native app, as stated above —
+so an inbox cannot be one end of a machine-to-machine pipeline.
+
+If what you want is one server handing files to another server, that is a
+different route entirely, and it needs no Relayium account on either side:
+
+```sh
+# on the RECEIVING server
+relayium serve --dir /srv/inbox --bind 10.0.0.5
+
+# on the SENDING server
+relayium push ./build.tar.zst relayium://10.0.0.5
+relayium sync ./site relayium://10.0.0.5 --delete --watch
+```
+
+The two trust models are separate and neither implies the other:
+
+- **Inbox** is account-scoped. Files come from *your own account*, and enrolment
+  is what authorizes them; the credential lives on this machine.
+- **`serve`** is fingerprint-scoped. It accepts a pusher only when that pusher's
+  fingerprint is in the listener's own `authorized_fingerprints` file. Logging in
+  to a Relayium account grants **no** filesystem access to that host, and
+  authorizing a pusher says nothing about any account.
+
+Authorize a pusher on a non-interactive listener with the *same* `--config-dir`
+the listener was started with — `relayium authorize --config-dir /etc/relayium
+<fingerprint>` for a service started with `--config-dir /etc/relayium`. The
+running listener re-reads its allow-list when it meets a fingerprint it does not
+know, so this takes effect on the next connection with no restart. Revocation is
+not symmetric: remove the line and restart the listener.
+
+`relayium serve --dir` must already exist and be writable, and is validated
+before the port is bound. With no `--bind`, `serve` listens on every interface
+and relies on your firewall. `sync --delete` deletes on the receiver only when
+that listener was started with `--allow-delete`, and even then only inside the
+top-level directories the transfer actually sends — never the rest of `--dir`.
+See [relayium.com/guides/server-to-server-transfers](https://relayium.com/guides/server-to-server-transfers).
+
 ## The commands
 
 ```text

@@ -135,7 +135,7 @@ Accept and remember this peer? [y/N] y</code></pre>
       <h2>자동화하기(또는 터미널 없이 실행하기)</h2>
       <p>승인된 핑거프린트는 기억되므로 이후의 푸시에는 확인이 필요 없습니다. 따라서 relayium push는 cron, 배포 스크립트, CI에 곧바로 연결되어 암호화되고 무결성이 검증되며 재개 가능한 서버 간 동기화를 제공합니다. serve가 터미널 없이 실행될 때(systemd 서비스, 파이프 등)는 프롬프트를 띄울 수 없으므로 알 수 없는 푸시하는 쪽을 거부합니다. 대신 미리 승인해 두세요. 핑거프린트는 푸시하는 쪽에서 relayium id로 얻거나, serve 로그의 “rejected unauthorized peer …” 줄에서 복사한 뒤 다음을 실행하세요:</p>
       <pre><code># 받는 쪽에서: 프롬프트 없이 보내는 쪽을 미리 승인
-relayium authorize 74318e3b...</code></pre>
+relayium authorize --config-dir /etc/relayium 74318e3b...</code></pre>
       <ul><li>신원 및 신뢰 파일은 ~/.config/relayium/에 있습니다(서비스로 쓸 때는 --config-dir로 /etc/relayium 같은 곳으로 재정의할 수 있습니다).</li><li>authorize는 멱등적입니다. 같은 핑거프린트에 대해 다시 실행해도 아무 효과가 없습니다.</li></ul>
       <h2>systemd에서 리스너 실행하기</h2>
       <p>항상 켜져 있는 수신함을 만들려면 serve를 systemd 서비스로 실행하세요. --config-dir을 /etc/relayium 같은 고정된 위치로 지정해 재시작 간에도 신원이 안정적으로 유지되게 하고, 살아 있게 하는 것은 systemd에 맡기세요:</p>
@@ -162,7 +162,7 @@ relayium id
 # 74318e3b…
 
 # 받는 쪽에서
-relayium authorize 74318e3b…</code></pre><p>serve에게 물어볼 터미널이 없었기 때문입니다 — systemd 유닛이나 파이프 — 그래서 알 수 없는 지문은 신뢰 대신 거부됩니다. 미리 승인하세요. 거부 줄에 있는 지문은 보내는 쪽의 relayium id 가 출력하는 것과 똑같고, authorize는 몇 번 실행해도 같습니다.</p></dd><dt>“fingerprint mismatch for receiver.example.com:9031”.</dt><dd><pre><code>grep receiver.example.com ~/.config/relayium/known_hosts</code></pre><p>리스너가 첫 접촉 때 고정한 것과 다른 키를 제시했습니다. 일부러 그 키를 교체했다면 해당 known_hosts 줄을 지우고 다시 푸시하세요. 그렇지 않다면 그 줄은 그대로 두고, 키가 왜 바뀌었는지 알아내기 전에는 아무것도 보내지 마세요.</p></dd><dt>systemd 유닛이 시작하자마자 권한 오류로 죽습니다.</dt><dd><pre><code>systemctl status relayium-serve
+relayium authorize --config-dir /etc/relayium 74318e3b…</code></pre><p>serve에게 물어볼 터미널이 없었기 때문입니다 — systemd 유닛이나 파이프 — 그래서 알 수 없는 지문은 신뢰 대신 거부됩니다. 미리 승인하세요. 거부 줄에 있는 지문은 보내는 쪽의 relayium id 가 출력하는 것과 똑같고, authorize는 몇 번 실행해도 같습니다.</p></dd><dt>“fingerprint mismatch for receiver.example.com:9031”.</dt><dd><pre><code>grep receiver.example.com ~/.config/relayium/known_hosts</code></pre><p>리스너가 첫 접촉 때 고정한 것과 다른 키를 제시했습니다. 일부러 그 키를 교체했다면 해당 known_hosts 줄을 지우고 다시 푸시하세요. 그렇지 않다면 그 줄은 그대로 두고, 키가 왜 바뀌었는지 알아내기 전에는 아무것도 보내지 마세요.</p></dd><dt>systemd 유닛이 시작하자마자 권한 오류로 죽습니다.</dt><dd><pre><code>systemctl status relayium-serve
 # secure: /etc/relayium/id.key has insecure permissions 0644; run: chmod 600 /etc/relayium/id.key
 ls -l /etc/relayium/id.key</code></pre><p>relayium은 소유자 외의 누구라도 읽을 수 있는 개인 키를 읽어들이길 거부합니다. ssh와 같은 규칙입니다. 오류가 알려 준 경로에 chmod 600을 적용하고, 그 파일의 소유자가 서비스 사용자인지 확인한 뒤 유닛을 재시작하세요.</p></dd></dl></div>
       <h2>자주 묻는 질문</h2>

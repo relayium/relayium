@@ -135,7 +135,7 @@ Accept and remember this peer? [y/N] y</code></pre>
       <h2>自動化する（またはターミナルなしで実行する）</h2>
       <p>承認済みのフィンガープリントは記憶されるため、以降のプッシュにはプロンプトが不要になります。そのため relayium push は cron、デプロイスクリプト、CI にそのまま組み込め、暗号化・整合性チェック済み・再開可能なサーバー間同期を実現します。serve がターミナルなしで動作している場合（systemd サービスやパイプなど）はプロンプトを出せないため、未知のプッシュ側を拒否します。その場合は事前に承認してください。フィンガープリントはプッシュ側で relayium id を実行して取得するか、serve のログにある「rejected unauthorized peer …」の行からコピーし、次のように実行します：</p>
       <pre><code># 受信側で: プロンプトなしに送信側を事前承認する
-relayium authorize 74318e3b...</code></pre>
+relayium authorize --config-dir /etc/relayium 74318e3b...</code></pre>
       <ul><li>アイデンティティと信頼のファイルは ~/.config/relayium/ にあります（サービスとして使う場合など、--config-dir で /etc/relayium などに上書きできます）。</li><li>authorize は冪等です。同じフィンガープリントに対して再度実行しても何も起こりません。</li></ul>
       <h2>systemd でリスナーを実行する</h2>
       <p>常時稼働の受信箱にするには、serve を systemd サービスとして実行します。--config-dir を /etc/relayium のような固定の場所に向けて、再起動をまたいでアイデンティティを安定させ、生存は systemd に任せます：</p>
@@ -162,7 +162,7 @@ relayium id
 # 74318e3b…
 
 # 受信側で
-relayium authorize 74318e3b…</code></pre><p>serve に尋ねる相手の端末が無かった（systemd ユニットやパイプ）ため、未知のフィンガープリントは信頼されずに拒否されます。事前に承認してください。拒否行のフィンガープリントは送信側の relayium id が表示するものとまったく同じで、authorize は何度実行しても同じ結果です。</p></dd><dt>「fingerprint mismatch for receiver.example.com:9031」。</dt><dd><pre><code>grep receiver.example.com ~/.config/relayium/known_hosts</code></pre><p>リスナーが、初回接触でピン留めした鍵とは別の鍵を提示しました。意図して鍵を更新したのなら、該当する known_hosts の行を削除してからプッシュし直します。そうでないなら行はそのままにして、鍵が変わった理由が分かるまで何も送らないでください。</p></dd><dt>systemd ユニットが起動時にパーミッション不備のエラーで落ちる。</dt><dd><pre><code>systemctl status relayium-serve
+relayium authorize --config-dir /etc/relayium 74318e3b…</code></pre><p>serve に尋ねる相手の端末が無かった（systemd ユニットやパイプ）ため、未知のフィンガープリントは信頼されずに拒否されます。事前に承認してください。拒否行のフィンガープリントは送信側の relayium id が表示するものとまったく同じで、authorize は何度実行しても同じ結果です。</p></dd><dt>「fingerprint mismatch for receiver.example.com:9031」。</dt><dd><pre><code>grep receiver.example.com ~/.config/relayium/known_hosts</code></pre><p>リスナーが、初回接触でピン留めした鍵とは別の鍵を提示しました。意図して鍵を更新したのなら、該当する known_hosts の行を削除してからプッシュし直します。そうでないなら行はそのままにして、鍵が変わった理由が分かるまで何も送らないでください。</p></dd><dt>systemd ユニットが起動時にパーミッション不備のエラーで落ちる。</dt><dd><pre><code>systemctl status relayium-serve
 # secure: /etc/relayium/id.key has insecure permissions 0644; run: chmod 600 /etc/relayium/id.key
 ls -l /etc/relayium/id.key</code></pre><p>relayium は所有者以外にも読める秘密鍵の読み込みを拒否します。ssh と同じ規則です。エラーが示すパスに chmod 600 を実行し、所有者がサービス用ユーザーであることを確かめて、ユニットを再起動してください。</p></dd></dl></div>
       <h2>よくある質問</h2>

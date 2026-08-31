@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -80,7 +81,13 @@ func pushDaemon(target string, srcs []string, configDir string, noResume bool, s
 	rep, err := xfer.Send(tconn, m, paths, xfer.SendOpts{Progress: progressFn(stderr)})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
-		fmt.Fprintf(stderr, "hint: if the peer refused the connection, it may not have authorized this host.\n  run `relayium id` on this machine and add it on the peer.\n")
+		// The authorization hint is a guess for the silent case — an unauthorized
+		// peer is closed on without a word. When the receiver actually told us why
+		// it refused, repeating the guess would only mislead.
+		var remote *xfer.RemoteError
+		if !errors.As(err, &remote) {
+			fmt.Fprintf(stderr, "hint: if the peer refused the connection, it may not have authorized this host.\n  run `relayium id` on this machine and add it on the peer.\n")
+		}
 		return 1
 	}
 	return reportExit(rep, stderr)

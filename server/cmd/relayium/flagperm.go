@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"strings"
 )
 
 // boolFlag is the (unexported) interface the flag package uses to recognise a
@@ -84,6 +85,64 @@ func permuteFlags(fs *flag.FlagSet, args []string) ([]string, error) {
 		flags = append(flags, args[i])
 	}
 	return append(append(flags, "--"), operands...), nil
+}
+
+// wantsHelp reports whether args ask for help, so a subcommand can print its own
+// usage on stdout and exit 0.
+//
+// Left to the flag package, `relayium push -h` prints "flag: help requested" to
+// stderr and exits 2 — a diagnostic for a program, not an answer for a person
+// who asked a question. This runs BEFORE permuteFlags, so it changes nothing
+// about how a real flag list is reordered.
+//
+// valueFlags names the subcommand's flags that take a SEPARATE value token, so
+// the scan can skip that token. Without it `--config-dir -h` prints help for a
+// person who was actually (if oddly) naming a directory "-h", and the parse that
+// would have told them so never runs. The caller passes its own flag names
+// because this scan happens before the FlagSet is built; bool flags are left out
+// deliberately — they claim no token, so `--delete -h` is still help.
+//
+// "--" ends the scan: after it, "-h" is an operand (a file may be named that).
+// "--flag=value" carries its own value, so it never skips the next token. An
+// unknown flag skips nothing either — the same choice permuteFlags makes, so a
+// wrong flag reaches Parse and gets named instead of quietly eating an operand.
+// Only the dashed spellings count; a bare "help" could be a filename.
+func wantsHelp(args []string, valueFlags ...string) bool {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			return false
+		}
+		if a == "-h" || a == "-help" || a == "--help" {
+			return true
+		}
+		if takesValue(a, valueFlags) && i+1 < len(args) {
+			i++ // the next token is this flag's value, not a request for help
+		}
+	}
+	return false
+}
+
+// takesValue reports whether arg is one of names written in a form that puts its
+// value in the FOLLOWING token ("--config-dir dir", "-p 2222") rather than in
+// the same one ("--config-dir=dir").
+func takesValue(arg string, names []string) bool {
+	if len(arg) < 2 || arg[0] != '-' {
+		return false
+	}
+	name := arg[1:]
+	if name[0] == '-' {
+		name = name[1:]
+	}
+	if name == "" || strings.ContainsRune(name, '=') {
+		return false
+	}
+	for _, n := range names {
+		if name == n {
+			return true
+		}
+	}
+	return false
 }
 
 // parseArgs is permuteFlags + Parse: the one entry point every subcommand uses

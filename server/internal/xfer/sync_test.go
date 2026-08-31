@@ -83,11 +83,18 @@ func TestSyncRoundTripSkipsUnchanged(t *testing.T) {
 	}
 }
 
+// deleteExtras removes what is stale INSIDE the manifest's own top-level roots.
+// This used to assert that a manifest of one top-level file ("keep.txt") also
+// swept "old/gone.txt" — i.e. the whole receive directory. That is the
+// data-loss bug: a mirror of one root must not delete a sibling it never sent.
+// The scoped equivalent is asserted here, and the boundary itself in
+// delete_scope_test.go.
 func TestDeleteExtrasRemovesFilesNotInManifest(t *testing.T) {
 	dst := t.TempDir()
-	writeFileMtime(t, filepath.Join(dst, "keep.txt"), "k", 1000)
-	writeFileMtime(t, filepath.Join(dst, "old", "gone.txt"), "g", 1000)
-	m := Manifest{Files: []FileEntry{{Path: "keep.txt", Size: 1, ModTime: 1000}}}
+	writeFileMtime(t, filepath.Join(dst, "site", "keep.txt"), "k", 1000)
+	writeFileMtime(t, filepath.Join(dst, "site", "old", "gone.txt"), "g", 1000)
+	writeFileMtime(t, filepath.Join(dst, "sibling.txt"), "s", 1000)
+	m := Manifest{Files: []FileEntry{{Path: "site/keep.txt", Size: 1, ModTime: 1000}}}
 
 	n, err := deleteExtras(dst, m)
 	if err != nil {
@@ -96,14 +103,17 @@ func TestDeleteExtrasRemovesFilesNotInManifest(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("deleted %d, want 1", n)
 	}
-	if _, err := os.Stat(filepath.Join(dst, "keep.txt")); err != nil {
+	if _, err := os.Stat(filepath.Join(dst, "site", "keep.txt")); err != nil {
 		t.Fatal("keep.txt must remain")
 	}
-	if _, err := os.Stat(filepath.Join(dst, "old", "gone.txt")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dst, "site", "old", "gone.txt")); !os.IsNotExist(err) {
 		t.Fatal("gone.txt must be deleted")
 	}
-	if _, err := os.Stat(filepath.Join(dst, "old")); !os.IsNotExist(err) {
-		t.Fatal("emptied dir should be pruned")
+	if _, err := os.Stat(filepath.Join(dst, "site", "old")); !os.IsNotExist(err) {
+		t.Fatal("emptied dir inside the root should be pruned")
+	}
+	if _, err := os.Stat(filepath.Join(dst, "sibling.txt")); err != nil {
+		t.Fatal("a file outside the manifest's roots must not be deleted")
 	}
 }
 
@@ -146,14 +156,16 @@ func TestReceiveDeleteDeniedWhenNotAllowed(t *testing.T) {
 }
 
 // TestReceiveDeletesExtrasWhenAllowed is the companion happy path: AllowDelete
-// true honors the sender's request and clears DeleteDenied.
+// true honors the sender's request and clears DeleteDenied. The source is a
+// directory root, because that is the only shape a mirror can delete within —
+// a single-file source scopes just that file (see delete_scope_test.go).
 func TestReceiveDeletesExtrasWhenAllowed(t *testing.T) {
 	src := t.TempDir()
 	dst := t.TempDir()
-	writeFileMtime(t, filepath.Join(src, "a.txt"), "hello", 1000)
-	writeFileMtime(t, filepath.Join(dst, "extra.txt"), "stale", 1000)
+	writeFileMtime(t, filepath.Join(src, "d", "a.txt"), "hello", 1000)
+	writeFileMtime(t, filepath.Join(dst, "d", "extra.txt"), "stale", 1000)
 
-	m, srcs, err := BuildManifest([]string{filepath.Join(src, "a.txt")})
+	m, srcs, err := BuildManifest([]string{filepath.Join(src, "d")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +189,7 @@ func TestReceiveDeletesExtrasWhenAllowed(t *testing.T) {
 	if rep.DeleteDenied {
 		t.Fatal("rep.DeleteDenied should be false when AllowDelete is true")
 	}
-	if _, err := os.Stat(filepath.Join(dst, "extra.txt")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dst, "d", "extra.txt")); !os.IsNotExist(err) {
 		t.Fatal("extra.txt should have been deleted")
 	}
 }

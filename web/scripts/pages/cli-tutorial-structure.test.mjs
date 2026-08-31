@@ -297,7 +297,9 @@ function daemonIdentities(doc) {
     received: one(new RegExp(`bytes from (${FP})…`)),
     prompt: one(new RegExp(`^\\s+fingerprint: (${FP})…`, "m")),
     id: one(new RegExp(`relayium id\\n#\\s*(${FP})…`)),
-    authorize: [...t.matchAll(new RegExp(`relayium authorize (${FP})`, "g"))].map((m) => m[1]),
+    // The runnable form carries the listener's own --config-dir (guarded
+    // separately below), so the fingerprint is not the next token.
+    authorize: [...t.matchAll(new RegExp(`relayium authorize (?:--config-dir \\S+ )?(${FP})`, "g"))].map((m) => m[1]),
   };
 }
 
@@ -664,6 +666,64 @@ describe("the daemon-direct walkthrough keeps its two machines apart", () => {
       }),
     );
     expect([...seen]).toHaveLength(1);
+  });
+});
+
+// ── A pasted `authorize` has to write the directory the service reads ───────
+// The guide's prose says to give `authorize` the same `--config-dir` the
+// listener runs with, but its two runnable blocks used to show a bare
+// `relayium authorize <fp>`. A reader pastes the command, not the paragraph:
+// the bare form writes ~/.config/relayium/authorized_fingerprints while a
+// service started with --config-dir /etc/relayium keeps reading its own file,
+// so the push goes on being rejected with the fingerprint apparently added.
+// The prefix is asserted literally — the flag alone is not enough, because a
+// different directory is the same failure.
+const AUTHORIZE_LINE = /^\s*relayium\s+authorize\b.*$/gm;
+const AUTHORIZE_SAFE = /^relayium authorize --config-dir \/etc\/relayium [0-9a-f]{8}/;
+
+function authorizeCommandComplaints(at, doc) {
+  const bad = [];
+  const lines = (codeText(doc).match(AUTHORIZE_LINE) || []).map((l) => l.trim());
+  // Both blocks, every locale: the pre-authorize step and the troubleshooting
+  // recovery. A count check keeps a locale from quietly losing one of them.
+  if (lines.length !== 2) bad.push(`${at}: expected 2 runnable authorize commands, found ${lines.length}`);
+  for (const line of lines) {
+    if (!AUTHORIZE_SAFE.test(line)) {
+      bad.push(`${at}: authorize command does not write the service's trust directory — ${JSON.stringify(line)}`);
+    }
+  }
+  return bad;
+}
+
+describe("the runnable authorize command targets the listener's own config dir", () => {
+  it("shows --config-dir /etc/relayium in both server-to-server blocks, in all nine locales", () => {
+    const bad = [];
+    for (const lang of LANGS)
+      bad.push(...authorizeCommandComplaints(`cli-server-to-server[${lang}]`, cliServerToServer.langs[lang]));
+    expect(bad).toEqual([]);
+  });
+
+  it("fails when a locale falls back to a bare authorize", () => {
+    // Mutation proof: the guard is only worth its line count if it has been
+    // watched to fail on exactly the regression it exists for.
+    const mutated = JSON.parse(
+      JSON.stringify(cliServerToServer.langs.en).replaceAll("relayium authorize --config-dir /etc/relayium ", "relayium authorize "),
+    );
+    expect(authorizeCommandComplaints("mutated", mutated)).not.toEqual([]);
+  });
+
+  it("fails when a locale points authorize at some other directory", () => {
+    const mutated = JSON.parse(
+      JSON.stringify(cliServerToServer.langs.en).replaceAll("--config-dir /etc/relayium", "--config-dir /tmp/relayium"),
+    );
+    expect(authorizeCommandComplaints("mutated", mutated)).not.toEqual([]);
+  });
+
+  it("fails when a locale drops one of the two blocks", () => {
+    const mutated = JSON.parse(JSON.stringify(cliServerToServer.langs.en));
+    const first = mutated.sections.find((s) => (s.code || []).some((c) => c.includes("relayium authorize")));
+    first.code = first.code.filter((c) => !c.includes("relayium authorize"));
+    expect(authorizeCommandComplaints("mutated", mutated)).not.toEqual([]);
   });
 });
 
