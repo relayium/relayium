@@ -18,7 +18,7 @@ appex="$app/Contents/PlugIns/RelayiumShare.appex"
 
 # The app's set, in file order. Every entry is traced to a call site and a
 # retained server column in the manifest's own comments.
-app_types=(
+app_linked_functionality_types=(
   NSPrivacyCollectedDataTypeName
   NSPrivacyCollectedDataTypeEmailAddress
   NSPrivacyCollectedDataTypePurchaseHistory
@@ -26,6 +26,8 @@ app_types=(
   NSPrivacyCollectedDataTypeDeviceID
   NSPrivacyCollectedDataTypeOtherUsageData
 )
+app_product_interaction_index="${#app_linked_functionality_types[@]}"
+app_type_count="$((app_product_interaction_index + 1))"
 
 fail() { echo "::error::$channel: $*"; exit 1; }
 
@@ -40,12 +42,13 @@ for manifest in "$app/Contents/Resources/PrivacyInfo.xcprivacy" \
   [ "$(get "$manifest" NSPrivacyTrackingDomains)" = 0 ] || fail "built manifest names a tracking domain: $manifest"
 done
 
-# The app: exactly these types, each linked, none tracking, all App Functionality.
+# The app: exactly the six established linked/App Functionality entries followed
+# by one identifier-free Product Interaction/Analytics entry. All are nontracking.
 m="$app/Contents/Resources/PrivacyInfo.xcprivacy"
-[ "$(get "$m" NSPrivacyCollectedDataTypes)" = "${#app_types[@]}" ] \
-  || fail "the app's manifest does not declare exactly ${#app_types[@]} collected data types"
-for i in "${!app_types[@]}"; do
-  want="${app_types[$i]}"
+[ "$(get "$m" NSPrivacyCollectedDataTypes)" = "$app_type_count" ] \
+  || fail "the app's manifest does not declare exactly $app_type_count collected data types"
+for i in "${!app_linked_functionality_types[@]}"; do
+  want="${app_linked_functionality_types[$i]}"
   [ "$(get "$m" "NSPrivacyCollectedDataTypes.$i.NSPrivacyCollectedDataType")" = "$want" ] \
     || fail "the app's collected data type $i is not $want"
   [ "$(get "$m" "NSPrivacyCollectedDataTypes.$i.NSPrivacyCollectedDataTypeLinked")" = true ] \
@@ -56,6 +59,19 @@ for i in "${!app_types[@]}"; do
     = NSPrivacyCollectedDataTypePurposeAppFunctionality ] \
     || fail "$want is declared for a purpose other than App Functionality"
 done
+i="$app_product_interaction_index"
+want=NSPrivacyCollectedDataTypeProductInteraction
+[ "$(get "$m" "NSPrivacyCollectedDataTypes.$i.NSPrivacyCollectedDataType")" = "$want" ] \
+  || fail "the app's collected data type $i is not $want"
+[ "$(get "$m" "NSPrivacyCollectedDataTypes.$i.NSPrivacyCollectedDataTypeLinked")" = false ] \
+  || fail "$want is incorrectly declared as linked to the user"
+[ "$(get "$m" "NSPrivacyCollectedDataTypes.$i.NSPrivacyCollectedDataTypeTracking")" = false ] \
+  || fail "$want is declared as used for tracking"
+[ "$(get "$m" "NSPrivacyCollectedDataTypes.$i.NSPrivacyCollectedDataTypePurposes")" = 1 ] \
+  || fail "$want does not declare exactly one purpose"
+[ "$(get "$m" "NSPrivacyCollectedDataTypes.$i.NSPrivacyCollectedDataTypePurposes.0")" \
+  = NSPrivacyCollectedDataTypePurposeAnalytics ] \
+  || fail "$want is not declared for Analytics"
 [ "$(get "$m" NSPrivacyAccessedAPITypes)" = 3 ] \
   || fail "the app's manifest does not declare its three required-reason APIs"
 

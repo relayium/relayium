@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -119,6 +120,57 @@ func TestServeWSObservedReportsTheSecondParticipant(t *testing.T) {
 	code, ok := strings.CutPrefix(got[1].room, PairRoomPrefix)
 	if !ok || code != "424242" {
 		t.Fatalf("room %q did not yield its code", got[1].room)
+	}
+}
+
+func TestServeWSObservedCallsObserverOutsideHubLock(t *testing.T) {
+	hub := NewHub()
+	observed := make(chan int, 1)
+	handle := ServeWSObserved(hub, func() string { return "outside-lock" }, func(room string, peers int) {
+		// PeerCount takes the hub mutex. If the observer is invoked while the
+		// admission lock is held, this synchronous call deadlocks.
+		observed <- hub.PeerCount(room)
+	})
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		handle(r.Context(), c, "lock-room", 2, "127.0.0.1", false)
+		_ = c.Close(websocket.StatusNormalClosure, "")
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := joinWS(t, srv, "peer")
+	defer c.CloseNow()
+	select {
+	case peers := <-observed:
+		if peers != 1 {
+			t.Fatalf("PeerCount in observer = %d, want 1", peers)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("observer blocked while reacquiring hub lock")
+	}
+}
+
+func TestServeWSObservedConsumesAdmissionTimePeerSnapshot(t *testing.T) {
+	source, err := os.ReadFile("client.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(source)
+	for _, required := range []string{
+		"if admitted, peers := h.JoinDeviceLimitedObserved(",
+		"observe(room, peers)",
+	} {
+		if !strings.Contains(text, required) {
+			t.Errorf("ServeWSObserved wiring lacks %q", required)
+		}
+	}
+	if strings.Contains(text, "observe(room, h.PeerCount(room))") {
+		t.Fatal("ServeWSObserved re-reads PeerCount after admission instead of consuming the locked snapshot")
 	}
 }
 

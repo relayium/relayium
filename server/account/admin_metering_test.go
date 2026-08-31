@@ -1,8 +1,12 @@
 package account
 
 import (
+	"bytes"
 	"context"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestAdminListUsersPeriodColumns(t *testing.T) {
@@ -71,5 +75,82 @@ func TestAdminMetricsPerPeriod(t *testing.T) {
 	}
 	if m.ActiveStoredFiles != 1 || m.ActiveStoredBytes != 900 {
 		t.Fatalf("storage want 1/900, got %d/%d", m.ActiveStoredFiles, m.ActiveStoredBytes)
+	}
+}
+
+func TestAdminActivationFunnelUsesSelectedMonthAndTruthfulRatios(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	for i := 0; i < 4; i++ {
+		if err := store.IncrementActivationFunnel(ctx, "202608", ActivationCodeMinted); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 3; i++ {
+		_ = store.IncrementActivationFunnel(ctx, "202608", ActivationRoomOpened)
+	}
+	_ = store.IncrementActivationFunnel(ctx, "202608", ActivationRoomPaired)
+	_ = store.IncrementActivationFunnel(ctx, "202607", ActivationCodeMinted)
+
+	svc := NewService(store, nil, Config{})
+	svc.SetNow(func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) })
+	req := httptest.NewRequest("GET", "/admin?period=202608", nil)
+	data, err := svc.buildAdminOverviewData(req, adminHomeData{Section: adminSectionOverview, Lang: "en"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data.Activation != (ActivationFunnelCounts{CodeMinted: 4, RoomOpened: 3, RoomPaired: 1}) {
+		t.Fatalf("activation = %+v", data.Activation)
+	}
+	if data.ActivationOpenRatio != "75.0%" || !data.ActivationOpenRatioOK || data.ActivationPairRatio != "33.3%" || !data.ActivationPairRatioOK {
+		t.Fatalf("ratios = %q/%v, %q/%v", data.ActivationOpenRatio, data.ActivationOpenRatioOK, data.ActivationPairRatio, data.ActivationPairRatioOK)
+	}
+
+	var rendered bytes.Buffer
+	if err := adminUsersTmpl.Execute(&rendered, data); err != nil {
+		t.Fatal(err)
+	}
+	html := rendered.String()
+	for _, want := range []string{
+		"Successful code mints · actions", "First admitted sockets · actions",
+		"First two-peer transitions · actions", "75.0%", "33.3%",
+		"not unique users", "not cohort conversion", "best-effort lower-bound",
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("admin funnel lacks %q", want)
+		}
+	}
+}
+
+func TestAdminActivationRatiosRequireDenominators(t *testing.T) {
+	data := adminHomeData{Section: adminSectionOverview, Lang: "en", Period: "202608", Months: []string{"202608"}}
+	var rendered bytes.Buffer
+	if err := adminUsersTmpl.Execute(&rendered, data); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(rendered.String(), "actions / mint actions") || strings.Contains(rendered.String(), "actions / opened actions") {
+		t.Fatal("ratio rendered without a positive denominator")
+	}
+}
+
+type noActivationStore struct{ Store }
+
+func TestAdminActivationCapabilityFailureIsNotRenderedAsZero(t *testing.T) {
+	base := newTestStore(t)
+	svc := NewService(noActivationStore{Store: base}, nil, Config{})
+	svc.SetNow(func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) })
+	data, err := svc.buildAdminOverviewData(httptest.NewRequest("GET", "/admin", nil), adminHomeData{Section: adminSectionOverview, Lang: "en"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !data.ActivationErr {
+		t.Fatal("missing aggregate capability was rendered as a healthy zero")
+	}
+	var rendered bytes.Buffer
+	if err := adminUsersTmpl.Execute(&rendered, data); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rendered.String(), "zero is not being assumed") {
+		t.Fatal("missing capability has no explicit error message")
 	}
 }

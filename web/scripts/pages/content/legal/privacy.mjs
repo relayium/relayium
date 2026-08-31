@@ -4,7 +4,7 @@ const en = {
   description:
     "How Relayium handles files and ephemeral text: content is end-to-end encrypted, live message bodies are never stored by Relayium, and stored download links keep files zero-knowledge encrypted.",
   updatedLabel: "Last updated",
-  updated: "2026-08-28",
+  updated: "2026-08-30",
   otherDocLabel: "Terms of Service",
   lead: [
     "Relayium is built so that your files and ephemeral text stay yours. Local browser sessions are direct; cross-network browser sessions may carry end-to-end encrypted ciphertext through TURN; CLI text is direct-only; and stored download links hold only zero-knowledge encrypted file ciphertext.",
@@ -63,9 +63,9 @@ const en = {
       ],
       bullets: [
         "What is recorded: byte volumes, stored-object sizes, and the times they were measured, linked to your account.",
-        "What is not: your file contents, file names, and message bodies stay encrypted and unreadable to us, and we do not record which screens you open or which features you use.",
-        "This is metering, not analytics. Our apps and website carry no advertising or third-party analytics SDK, and these counters are never used to track you across other apps or websites.",
-        "You can see your own current totals at any time on your account page, in the app or on the web.",
+        "What is not: your file contents, file names, and message bodies stay encrypted and unreadable to us. Separately from account metering, we retain three first-party, identifier-free monthly aggregate action counts for cross-network pairing: successful code mints, the first admitted socket for a live code, and the first transition to two admitted peers. Each aggregate contains only UTC month, one of those three fixed stages, and a nonnegative count—never an identifier, event row, exact timestamp, or content metadata.",
+        "Those three product-interaction totals are bounded, best-effort lower-bound action counts, not unique users, a cohort, or an exact conversion rate. Any displayed ratio divides same-month action totals and is not cohort conversion. Our apps and website carry no advertising or third-party analytics SDK, and neither the aggregate nor the account meters are used to track you across other apps or websites.",
+        "You can see your account-linked usage totals at any time on your account page, in the app or on the web. The identifier-free aggregate appears only in the administrator overview; the database does not store it against your account and contains no field linking it to an account.",
       ],
     },
     {
@@ -143,7 +143,7 @@ const zh = {
   description:
     "Relayium 如何处理文件与临时文本：内容采用端到端加密，Relayium 不存储实时消息正文，暂存下载链接中的文件保持零知识加密。",
   updatedLabel: "最后更新",
-  updated: "2026-08-28",
+  updated: "2026-08-30",
   otherDocLabel: "服务条款",
   lead: [
     "Relayium 的设计宗旨是让你的文件与临时文本始终属于你。浏览器局域网会话直接连接；跨网络浏览器会话可能通过 TURN 传输端到端加密的密文；CLI 文本仅直连；暂存下载链接只保存零知识加密的文件密文。",
@@ -195,9 +195,9 @@ const zh = {
       ],
       bullets: [
         "会记录的：字节量、暂存对象大小，以及测量发生的时间，并与你的账号关联。",
-        "不会记录的：你的文件内容、文件名与消息正文始终加密，我们无法读取；我们也不记录你打开了哪些界面、使用了哪些功能。",
-        "这是计量，不是分析统计。我们的 App 与网站不含任何广告或第三方分析 SDK，这些计数也绝不会用于跨其他 App 或网站追踪你。",
-        "你随时可以在 App 或网页的账号页面查看自己当前的用量。",
+        "不会记录的：你的文件内容、文件名与消息正文始终加密，我们无法读取。除账号用量计量外，我们还保存三项第一方、无标识符的跨网络配对月度聚合动作数：成功铸码、某个有效码首次接纳连接，以及首次变为两个已接纳端。每项聚合只包含 UTC 月份、上述三个固定阶段之一和非负整数计数，绝不包含标识符、事件明细、精确时间戳或内容元数据。",
+        "这三项产品交互总数是有界、尽力写入的动作数下界，不是独立用户数、同期群或精确转化率。页面上的比率只用同月动作总数相除，并不是同期群转化。我们的 App 与网站不含任何广告或第三方分析 SDK；这些聚合与账号用量计数都绝不会用于跨其他 App 或网站追踪你。",
+        "你随时可以在 App 或网页的账号页面查看与自己账号关联的用量。无标识符聚合只显示在管理员总览中；数据库不按账号保存这些聚合，也不含将其连接到账号的字段。",
       ],
     },
     {

@@ -1365,6 +1365,37 @@ type AdminMetrics struct {
 	RelayBytes        int64 // 选定月中继合计
 }
 
+// ActivationStage is the closed vocabulary persisted by the aggregate
+// activation funnel. It deliberately lives at the account/storage boundary:
+// callers may select one of these server-owned milestones, but no client or
+// arbitrary event name can reach the database.
+type ActivationStage string
+
+const (
+	ActivationCodeMinted ActivationStage = "code_minted"
+	ActivationRoomOpened ActivationStage = "room_opened"
+	ActivationRoomPaired ActivationStage = "room_paired"
+)
+
+// Valid reports whether stage is one of the three server-owned funnel actions.
+func (stage ActivationStage) Valid() bool {
+	switch stage {
+	case ActivationCodeMinted, ActivationRoomOpened, ActivationRoomPaired:
+		return true
+	default:
+		return false
+	}
+}
+
+// ActivationFunnelCounts is one UTC month's three best-effort lower-bound raw
+// action counts. These are not unique users and do not form a cohort: a code
+// can be minted near a month boundary and reach a later milestone in the next.
+type ActivationFunnelCounts struct {
+	CodeMinted int64
+	RoomOpened int64
+	RoomPaired int64
+}
+
 // AdminCredential is one registered admin passkey. CredJSON holds the full
 // webauthn.Credential record (public key, sign counter, flags, transports,
 // attestation) as JSON: the library requires the whole record be preserved and

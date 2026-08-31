@@ -220,6 +220,14 @@ sizes, quota bookkeeping — and exactly what that's billed against, see
 account of the metering and billing paths, so the privacy claim above is something you can verify
 rather than take on faith.
 
+The server also keeps three first-party, identifier-free monthly aggregate action totals for the
+cross-network pairing path: successful code mints, the first admitted socket for each live code, and
+the first transition to two admitted peers. They are bounded, best-effort lower-bound counts—not
+unique users, a cohort, or an exact conversion rate. Any displayed ratio is division of same-month
+action totals, not cohort conversion. Persistence contains only UTC month, one of those three fixed
+stages, and a nonnegative integer count. The full implementation and privacy contract is
+documented in [`docs/activation-funnel.md`](docs/activation-funnel.md).
+
 > ⚠️ Relayium is pre-1.0 and has **not** had an independent security audit.
 > Don't rely on it for high-stakes threats yet. Issues and review are very
 > welcome.

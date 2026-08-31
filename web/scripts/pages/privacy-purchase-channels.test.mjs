@@ -59,6 +59,28 @@ describe("the privacy policy covers every generated language exactly once", () =
   });
 });
 
+describe("maintained copy truthfully discloses identifier-free activation aggregates", () => {
+  it("pins the three server-owned actions and the deliberately weak semantics", () => {
+    const en = textOf("en");
+    const zh = textOf("zh");
+    expect(en).toMatch(/successful code mints.*first admitted socket.*first transition to two admitted peers/s);
+    expect(en).toMatch(/best-effort lower-bound action counts, not unique users, a cohort, or an exact conversion rate/);
+    expect(en).toMatch(/same-month action totals and is not cohort conversion/);
+    expect(en).toMatch(/database does not store it against your account and contains no field linking it to an account/);
+    expect(zh).toMatch(/成功铸码.*首次接纳连接.*首次变为两个已接纳端/s);
+    expect(zh).toMatch(/尽力写入的动作数下界，不是独立用户数、同期群或精确转化率/);
+    expect(zh).toMatch(/同月动作总数相除，并不是同期群转化/);
+    expect(zh).toMatch(/数据库不按账号保存这些聚合，也不含将其连接到账号的字段/);
+  });
+
+  it("does not rewrite the seven frozen translations", () => {
+    for (const lang of FROZEN_LANGS) {
+      expect(privacy.langs[lang].updated).toBe("2026-08-13");
+      expect(textOf(lang)).not.toMatch(/best-effort lower-bound|尽力写入的动作数下界/);
+    }
+  });
+});
+
 describe("maintained copy names the macOS app as the only in-app purchase channel", () => {
   it("english says macOS, and says it in both places the claim appears", () => {
     const en = privacy.langs.en;
@@ -233,7 +255,7 @@ describe("maintained copy describes one native app, because there is one", () =>
     // frozen translation whose prose did not change must not silently claim it
     // was reviewed on a day nobody reviewed it.
     for (const lang of MAINTAINED_LANGS)
-      expect(privacy.langs[lang].updated, `${lang} last-updated`).toBe("2026-08-28");
+      expect(privacy.langs[lang].updated, `${lang} last-updated`).toBe("2026-08-30");
     for (const lang of FROZEN_LANGS)
       expect(privacy.langs[lang].updated, `${lang} last-updated`).toBe("2026-08-13");
   });

@@ -820,12 +820,37 @@ func adminSelectedPeriod(r *http.Request, now int64) (string, []string) {
 	return period, months
 }
 
+type activationFunnelReader interface {
+	ActivationFunnel(context.Context, string) (ActivationFunnelCounts, error)
+}
+
+func activationRatio(numerator, denominator int64) (string, bool) {
+	if denominator <= 0 {
+		return "", false
+	}
+	return strconv.FormatFloat(float64(numerator)*100/float64(denominator), 'f', 1, 64) + "%", true
+}
+
 func (s *Service) buildAdminOverviewData(r *http.Request, data adminHomeData) (adminHomeData, error) {
 	now := s.Now().Unix()
 	period, months := adminSelectedPeriod(r, now)
 	metrics, err := s.Store().AdminMetrics(r.Context(), period, now)
 	if err != nil {
 		return adminHomeData{}, err
+	}
+	if reader, ok := s.Store().(activationFunnelReader); ok {
+		activation, activationErr := reader.ActivationFunnel(r.Context(), period)
+		if activationErr != nil {
+			data.ActivationErr = true
+			log.Printf("admin: activation funnel read failed")
+		} else {
+			data.Activation = activation
+			data.ActivationOpenRatio, data.ActivationOpenRatioOK = activationRatio(activation.RoomOpened, activation.CodeMinted)
+			data.ActivationPairRatio, data.ActivationPairRatioOK = activationRatio(activation.RoomPaired, activation.RoomOpened)
+		}
+	} else {
+		data.ActivationErr = true
+		log.Printf("admin: activation funnel unavailable")
 	}
 	centralStored, err := s.Store().CentralStoredBytes(r.Context())
 	if err != nil {

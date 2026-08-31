@@ -41,12 +41,13 @@ describe("legal pages describe temporary text accurately", () => {
       // byte counters kept per account for a quota, and not analytics.
       const metering = sectionBlob(privacy, lang, 5);
 
-      // The maintained pair moved on 2026-08-28, when this reconciliation
-      // narrowed "Our native apps" to the one native app that exists. The seven
-      // frozen translations are archived at the 2026-08-14 language freeze and
-      // keep the date their prose was last actually true for.
+      // The maintained pair moved again on 2026-08-30 when it disclosed the
+      // identifier-free activation aggregate; its earlier native-app correction
+      // remains in the same maintained copy. The seven frozen translations are
+      // archived at the 2026-08-14 language freeze and keep the date their prose
+      // was last actually true for.
       expect(privacy.langs[lang].updated).toBe(
-        MAINTAINED_LANGS.includes(lang) ? "2026-08-28" : "2026-08-13",
+        MAINTAINED_LANGS.includes(lang) ? "2026-08-30" : "2026-08-13",
       );
       expect(all).toMatch(TEXT_WORD[lang]);
       expect(all).toMatch(ONLINE_WORD[lang]);

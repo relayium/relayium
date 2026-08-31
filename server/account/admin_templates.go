@@ -27,23 +27,31 @@ type adminHomeData struct {
 	// Section is the route-owned page rendered by the shared template.
 	Section string
 	// Lang selects the console language for this request (admin_i18n.go).
-	Lang        string
-	Metrics     AdminMetrics
-	Users       []AdminUserRow
-	Total       int64
-	Page        int
-	TotalPages  int
-	Search      string
-	Sort        string
-	Dir         string
-	Period      string            // 选定月 'YYYYMM'
-	Months      []string          // 最近 12 个月（下拉，最新在前）
-	PrevHref    string            // empty = no previous page
-	NextHref    string            // empty = no next page
-	SortHref    map[string]string // column key ("created"/"email"/"relayed"/"upload"/"download"/"storage") -> sort link on click
-	Nodes       []adminNodeView
-	Plans       []planView
-	ActivePlans []planView // subset of Plans with Active==true; used for the per-user plan dropdown
+	Lang       string
+	Metrics    AdminMetrics
+	Activation ActivationFunnelCounts
+	// ActivationErr distinguishes an unavailable/failed aggregate read from a
+	// real month whose three action counts are all zero.
+	ActivationErr         bool
+	ActivationOpenRatio   string
+	ActivationOpenRatioOK bool
+	ActivationPairRatio   string
+	ActivationPairRatioOK bool
+	Users                 []AdminUserRow
+	Total                 int64
+	Page                  int
+	TotalPages            int
+	Search                string
+	Sort                  string
+	Dir                   string
+	Period                string            // 选定月 'YYYYMM'
+	Months                []string          // 最近 12 个月（下拉，最新在前）
+	PrevHref              string            // empty = no previous page
+	NextHref              string            // empty = no next page
+	SortHref              map[string]string // column key ("created"/"email"/"relayed"/"upload"/"download"/"storage") -> sort link on click
+	Nodes                 []adminNodeView
+	Plans                 []planView
+	ActivePlans           []planView // subset of Plans with Active==true; used for the per-user plan dropdown
 	// AppleProducts is the App Store product catalog, EVERY raw row in a stable
 	// order — including the ones no purchase can currently resolve. The tier
 	// dropdown on each row is fed from Plans (all tiers), not ActivePlans: a row
@@ -693,6 +701,7 @@ button:hover{filter:brightness(1.07)}
 .cards{display:flex;flex-wrap:wrap;gap:12px;margin:0 0 28px}
 .card{border:1px solid var(--bd);border-radius:12px;padding:14px 18px;min-width:150px;background:var(--card)}
 .card .n{font-size:22px;font-weight:600;color:var(--a)}.card .l{color:var(--muted);font-size:12px;margin-top:4px}
+.funnel{margin:0 0 28px}.funnel .top{margin-bottom:12px}.funnel-note{color:var(--muted);font-size:12px;max-width:820px;margin:8px 0}.funnel-ratios{font-size:13px;margin:10px 0}.funnel-ratios span{display:inline-block;margin-right:18px}
 .settings{margin:0 0 28px}.settings h2{margin-bottom:12px}
 .settings .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;max-width:520px}
 .settings label{display:flex;flex-direction:column;font-size:13px;gap:4px;color:var(--muted)}
@@ -832,6 +841,32 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <div class="card"><div class="n">{{bytes .Metrics.DownloadBytes}}</div><div class="l">{{t $.Lang "下载 ·"}} {{period .Period}}</div></div>
 <div class="card"><div class="n">{{bytes .Metrics.RelayBytes}}</div><div class="l">{{t $.Lang "中继 ·"}} {{period .Period}}</div></div>
 <div class="card"><div class="n">{{bytes .CentralStoredBytes}}</div><div class="l">{{t $.Lang "中央本地存储"}}{{if .Settings.DisableCentralFallback}}{{t $.Lang "（已关闭兜底）"}}{{end}}</div></div>
+</section>
+<section class="funnel" aria-labelledby="activation-funnel-title">
+<div class="top">
+<h2 id="activation-funnel-title">{{if eq $.Lang "en"}}Cross-network activation actions{{else}}跨网络激活动作{{end}}</h2>
+<form method="get" action="/admin" class="search">
+<label>{{if eq $.Lang "en"}}UTC month{{else}}UTC 月份{{end}}
+<select name="period" onchange="this.form.submit()">
+{{$sel := .Period}}{{range .Months}}<option value="{{.}}"{{if eq . $sel}} selected{{end}}>{{period .}}</option>{{end}}
+</select></label>
+<noscript><button type="submit">{{if eq $.Lang "en"}}Switch{{else}}切换{{end}}</button></noscript>
+</form>
+</div>
+{{if .ActivationErr}}
+<p class="err">{{if eq $.Lang "en"}}Activation aggregates are unavailable; zero is not being assumed.{{else}}激活聚合暂不可用；页面没有把读取失败当作零。{{end}}</p>
+{{else}}
+<div class="cards">
+<div class="card"><div class="n">{{.Activation.CodeMinted}}</div><div class="l">{{if eq $.Lang "en"}}Successful code mints · actions{{else}}成功铸码 · 动作数{{end}}</div></div>
+<div class="card"><div class="n">{{.Activation.RoomOpened}}</div><div class="l">{{if eq $.Lang "en"}}First admitted sockets · actions{{else}}首次接纳连接 · 动作数{{end}}</div></div>
+<div class="card"><div class="n">{{.Activation.RoomPaired}}</div><div class="l">{{if eq $.Lang "en"}}First two-peer transitions · actions{{else}}首次双端成对 · 动作数{{end}}</div></div>
+</div>
+<p class="funnel-ratios">
+{{if .ActivationOpenRatioOK}}<span>{{if eq $.Lang "en"}}Opened actions / mint actions:{{else}}首次接纳动作 / 铸码动作：{{end}} {{.ActivationOpenRatio}}</span>{{end}}
+{{if .ActivationPairRatioOK}}<span>{{if eq $.Lang "en"}}Paired actions / opened actions:{{else}}成对动作 / 首次接纳动作：{{end}} {{.ActivationPairRatio}}</span>{{end}}
+</p>
+<p class="funnel-note">{{if eq $.Lang "en"}}These are first-party, identifier-free, best-effort lower-bound monthly action totals—not unique users, a cohort, or an exact conversion rate. Ratios divide same-month raw action totals only, are not cohort conversion, and are shown only when their denominator is nonzero; milestones may cross a UTC month boundary. The database stores only UTC month, one of three fixed stages, and a nonnegative integer count—no account, user, IP, code, room, device, session, token, user agent, referrer, platform, locale, exact timestamp, or content metadata.{{else}}这些是第一方、无标识符、尽力写入的每月动作数下界，不是独立用户数、同期群或精确转化率。比率只用同月原始动作总数相除，不是同期群转化，并且仅在分母非零时显示；里程碑可能跨越 UTC 月份。数据库只保存 UTC 月份、三个固定阶段之一和非负整数计数，不保存账户、用户、IP、配对码、房间、设备、会话、令牌、用户代理、来源页、平台、语言、精确时间或内容元数据。{{end}}</p>
+{{end}}
 </section>
 {{end}}
 

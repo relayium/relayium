@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -41,6 +45,98 @@ func joinStatus(t *testing.T, h http.HandlerFunc, ip, code string) int {
 	w := httptest.NewRecorder()
 	h(w, r)
 	return w.Code
+}
+
+func TestWSRouteUsesResolvedGenerationRoom(t *testing.T) {
+	now := func() int64 { return 1000 }
+	route := newTestRoute("", now)
+	called := ""
+	route.resolvePair = func(code string) (string, bool) {
+		called = code
+		return "c:" + code + ":opaque", true
+	}
+	req := httptest.NewRequest(http.MethodGet, "/ws?code=424242", nil)
+	req.RemoteAddr = "198.51.100.8:1"
+	rec := httptest.NewRecorder()
+	route.handler()(rec, req)
+	if called != "424242" {
+		t.Fatalf("resolver called with %q", called)
+	}
+	if rec.Code == http.StatusForbidden {
+		t.Fatal("resolved generation was rejected as an invalid code")
+	}
+}
+
+func TestWSRouteKeepsOldSocketOutOfReissuedCodeGeneration(t *testing.T) {
+	const code = "424242"
+	oldRoom := "c:" + code + ":old-generation"
+	newRoom := "c:" + code + ":new-generation"
+
+	// This mutable resolver models the deterministic expiry/re-mint transition
+	// proved against PairRegistry itself in pair_activity_test.go. Here the real
+	// HTTP upgrade and signaling join prove wsRoute preserves that generation.
+	var roomMu sync.RWMutex
+	currentRoom := oldRoom
+	now := func() int64 { return 1000 }
+	route := newTestRoute(code, now)
+	route.resolvePair = func(got string) (string, bool) {
+		roomMu.RLock()
+		defer roomMu.RUnlock()
+		return currentRoom, got == code
+	}
+	hub := signal.NewHub()
+	var ids atomic.Int64
+	route.handle = signal.ServeWS(hub, func() string { return fmt.Sprintf("peer-%d", ids.Add(1)) })
+	srv := httptest.NewServer(http.HandlerFunc(route.handler()))
+	defer srv.Close()
+
+	join := func(name string) *websocket.Conn {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/ws?code="+code, nil)
+		if err != nil {
+			t.Fatalf("dial %s: %v", name, err)
+		}
+		payload, err := json.Marshal(map[string]string{"type": "join", "name": name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := conn.Write(ctx, websocket.MessageText, payload); err != nil {
+			t.Fatalf("join %s: %v", name, err)
+		}
+		if _, _, err := conn.Read(ctx); err != nil {
+			t.Fatalf("welcome %s: %v", name, err)
+		}
+		return conn
+	}
+
+	oldSocket := join("old-socket")
+	defer oldSocket.CloseNow()
+	if got := hub.PeerCount(oldRoom); got != 1 {
+		t.Fatalf("old generation peers = %d, want 1", got)
+	}
+
+	// The external digits are reissued after expiry, but PairRegistry now maps
+	// them to a fresh opaque generation. The already-upgraded old socket stays.
+	roomMu.Lock()
+	currentRoom = newRoom
+	roomMu.Unlock()
+	newSocket := join("new-socket")
+	defer newSocket.CloseNow()
+	if oldRoom == newRoom || hub.PeerCount(oldRoom) != 1 || hub.PeerCount(newRoom) != 1 {
+		t.Fatalf("generations shared a room: old=%d new=%d", hub.PeerCount(oldRoom), hub.PeerCount(newRoom))
+	}
+
+	// The old socket also consumes none of the new generation's two-peer cap.
+	newPeer := join("new-peer")
+	defer newPeer.CloseNow()
+	if got := hub.PeerCount(newRoom); got != 2 {
+		t.Fatalf("new generation peers = %d, want 2", got)
+	}
+	if got := hub.PeerCount(oldRoom); got != 1 {
+		t.Fatalf("old generation changed to %d peers", got)
+	}
 }
 
 // The per-IP join budget is the primary online brute-force bound on a 1e6 code

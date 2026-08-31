@@ -110,6 +110,16 @@ func (h *Hub) JoinLimited(room, id, name string, c Conn, max int, clientIP strin
 // The transport-level caps (per-IP and global concurrent connections) are
 // unaffected and remain the bound on how many sockets one address may hold.
 func (h *Hub) JoinDeviceLimited(room, id, name string, c Conn, max int, clientIP, deviceID string, active bool) bool {
+	admitted, _ := h.JoinDeviceLimitedObserved(room, id, name, c, max, clientIP, deviceID, active)
+	return admitted
+}
+
+// JoinDeviceLimitedObserved is JoinDeviceLimited plus the connection count at
+// the exact successful-admission instant. The count is captured under the same
+// hub lock that inserts the peer; reading PeerCount afterwards is racy because
+// that peer can leave before the second lock acquisition. Welcome and roster
+// delivery remain outside the lock, as does every caller's observer callback.
+func (h *Hub) JoinDeviceLimitedObserved(room, id, name string, c Conn, max int, clientIP, deviceID string, active bool) (admitted bool, peers int) {
 	if !ValidDeviceID(deviceID) {
 		deviceID = ""
 	}
@@ -117,13 +127,13 @@ func (h *Hub) JoinDeviceLimited(room, id, name string, c Conn, max int, clientIP
 	if h.rooms[room] == nil {
 		if len(h.rooms) >= maxRooms {
 			h.mu.Unlock()
-			return false // global room cap: refuse to create a new room
+			return false, 0 // global room cap: refuse to create a new room
 		}
 		h.rooms[room] = make(map[string]*peer)
 	}
 	if max > 0 && h.logicalDeviceCount(room) >= max && !h.hasDevice(room, deviceID) {
 		h.mu.Unlock()
-		return false
+		return false, 0
 	}
 	h.seq++
 	p := &peer{id: id, name: name, conn: c, deviceID: deviceID, joinSeq: h.seq}
@@ -131,11 +141,12 @@ func (h *Hub) JoinDeviceLimited(room, id, name string, c Conn, max int, clientIP
 		p.activeSeq = h.seq
 	}
 	h.rooms[room][id] = p
+	peers = len(h.rooms[room])
 	h.mu.Unlock()
 
 	c.Send(Envelope{Type: TypeWelcome, Name: id, IP: clientIP})
 	h.scheduleRoster(room)
-	return true
+	return true, peers
 }
 
 // PeerCount is how many connections the room currently holds.

@@ -12,23 +12,28 @@ import (
 
 // codeEntry is a live pairing code's expiry plus the userID that minted it.
 type codeEntry struct {
-	exp   int64
-	owner string // userID that owns (and is billed for) this cross-network transfer
+	exp    int64
+	owner  string // userID that owns (and is billed for) this cross-network transfer
+	room   string // opaque per-mint room generation; never persisted or logged
+	opened bool   // first admitted socket observed for this live code
+	paired bool   // first transition to two admitted sockets observed for this live code
 }
 
-// PairRegistry mints short pairing codes for realtime rendezvous. Codes
-// are in-memory only and short-lived; a code becomes a 2-peer signaling room
-// "c:<code>". Each code is owned by the logged-in user that minted it. now is
+// PairRegistry mints short pairing codes for realtime rendezvous. Codes are
+// in-memory only and short-lived; every mint receives a new opaque 2-peer room
+// generation. Each code is owned by the logged-in user that minted it. now is
 // injected for tests.
 type PairRegistry struct {
-	mu    sync.Mutex
-	codes map[string]codeEntry
-	ttl   int64
-	now   func() int64
+	mu       sync.Mutex
+	codes    map[string]codeEntry
+	ttl      int64
+	now      func() int64
+	draw     func() string
+	drawRoom func() string
 }
 
 func NewPairRegistry(ttlSeconds int64, now func() int64) *PairRegistry {
-	return &PairRegistry{codes: make(map[string]codeEntry), ttl: ttlSeconds, now: now}
+	return &PairRegistry{codes: make(map[string]codeEntry), ttl: ttlSeconds, now: now, draw: randCode, drawRoom: randRoomGeneration}
 }
 
 // MintFor returns a fresh code not colliding with a live one, bound to owner,
@@ -44,15 +49,68 @@ func (p *PairRegistry) MintFor(owner string) (string, int64) {
 	// 所有人都铸不出码也验不了码——服务不是变慢而是停摆。
 	// 撞满 maxMintAttempts 次就放弃并返回失败，让调用方回一个 5xx。
 	for i := 0; i < maxMintAttempts; i++ {
-		code := randCode()
+		code := p.draw()
 		if e, ok := p.codes[code]; ok && e.exp > now {
 			continue // collide with a still-live code; try again
 		}
 		exp := now + p.ttl
-		p.codes[code] = codeEntry{exp: exp, owner: owner}
+		p.codes[code] = codeEntry{exp: exp, owner: owner, room: pairRoomForGeneration(code, p.drawRoom())}
 		return code, exp
 	}
 	return "", 0
+}
+
+// PairActivity reports which server-authoritative milestones became true for a
+// live code during one admitted-room observation. It deliberately carries only
+// fixed booleans: the registry owns the ephemeral per-code once flags, while it
+// knows nothing about persistence, accounts, analytics stages or UTC periods.
+type PairActivity struct {
+	Opened bool
+	Paired bool
+}
+
+// ObserveAdmittedRoom records an admission that the signaling hub accepted.
+// Each milestone is returned at most once for this live code, so reconnects and
+// duplicate observer calls do not inflate aggregates. If the first observation
+// already sees two peers, Opened and Paired are returned together to backfill
+// the missing earlier observation. Unknown and expired codes return no activity.
+func (p *PairRegistry) ObserveAdmittedRoom(room string, peers int) (code string, activity PairActivity, current bool) {
+	if peers < 1 {
+		return "", PairActivity{}, false
+	}
+	code, shaped := codeFromGeneratedPairRoom(room)
+	if !shaped {
+		return "", PairActivity{}, false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	e, ok := p.codes[code]
+	if !ok || e.exp <= p.now() || e.room != room {
+		return "", PairActivity{}, false
+	}
+	if !e.opened {
+		e.opened = true
+		activity.Opened = true
+	}
+	if peers >= 2 && !e.paired {
+		e.paired = true
+		activity.Paired = true
+	}
+	p.codes[code] = e
+	return code, activity, true
+}
+
+// RoomFor resolves a live external six-digit code to this mint's opaque room
+// generation. Reissuing the same digits after expiry therefore never puts old
+// and new sockets into one Hub room.
+func (p *PairRegistry) RoomFor(code string) (string, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	e, ok := p.codes[code]
+	if !ok || e.exp <= p.now() {
+		return "", false
+	}
+	return e.room, true
 }
 
 // 铸码时容忍的碰撞次数。10 次全撞意味着码空间已被活码填满到 ~100%，那是配置事故
@@ -338,6 +396,14 @@ func randCode() string {
 		b[i] = CodeAlphabet[k.Int64()]
 	}
 	return string(b)
+}
+
+func randRoomGeneration() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Sprintf("signal: crypto/rand room generation: %v", err))
+	}
+	return fmt.Sprintf("%x", b)
 }
 
 // CodeFormatNote is the one phrase every first-party CLI surface uses to say
