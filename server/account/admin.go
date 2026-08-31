@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"log"
 	"math"
 	"net/http"
@@ -1277,6 +1278,20 @@ func (s *Service) handleAdminSetUserPlan(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if err := s.Store().SetUserPlanAdmin(r.Context(), userID, planID, s.Now().Unix()); err != nil {
+		// SetUserPlanAdmin refuses this write when the account is already bound
+		// to a money-moving channel, or is frozen by an open account-deletion
+		// billing hold. That refusal is the financial invariant working, not a
+		// server fault: an admin comp must never mask or outrank a provider
+		// that can still charge the customer. Reporting it as a generic 500
+		// told the operator nothing and read as "the console is broken", so
+		// they retried a write that can never succeed. Answer 409 with the
+		// operator's actual next step instead. Both causes are named because
+		// the store returns one sentinel for them and the console cannot tell
+		// which applies from here.
+		if errors.Is(err, ErrBillingAuthorityConflict) {
+			http.Error(w, "plan unchanged: this account is bound to a payment provider (App Store or Stripe), or is frozen by a pending account-deletion billing hold. An admin plan assignment is refused so it cannot override a channel that may still charge the customer. Reconcile the provider subscription — or wait for the deletion hold to close — then assign the plan again.", http.StatusConflict)
+			return
+		}
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
