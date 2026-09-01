@@ -2045,6 +2045,6 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
 export default {
   slug: "guides/receive-files-from-the-command-line",
   published: "2026-07-09",
-  updated: "2026-08-06",
+  updated: "2026-09-01",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

@@ -2052,6 +2052,6 @@ downloads/report.pdf
 export default {
   slug: "guides/push-to-cloud-pull-on-another-computer",
   published: "2026-07-12",
-  updated: "2026-08-05",
+  updated: "2026-09-01",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

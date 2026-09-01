@@ -7,8 +7,11 @@
 // 断言全部走**键**（cli-page-data.ts 的常量 + Record 化的 i18n），不走下标：下标
 // 配对能悄无声息地把 push/pull 的说明挂到 Cloud 上，而类型系统一个字都不会说。
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { mount, unmount } from "svelte";
 import CliPage from "./CliPage.svelte";
+import ModeSection from "./cli/ModeSection.svelte";
 import { loadLang, setLang, type Lang } from "./i18n.svelte";
 import {
   SECTIONS,
@@ -17,6 +20,8 @@ import {
   GUIDES,
   GUIDE_GROUPS,
   FLAG_ROWS,
+  MODE_GUIDE,
+  GUIDE_SLUG,
   TRUST_FILES,
   FAQ_KEYS,
   COMPARE_COLUMNS,
@@ -198,6 +203,149 @@ describe("模式区块", () => {
         }
       }
     }
+  });
+});
+
+// ── 模式 → 指南 ─────────────────────────────────────────────────────────────
+//
+// 每个模式区块结尾恰好一条通往它自己那篇教程的链接。之前只有 Device Inbox 有一条
+// 手写的，其余六个都在最后一个命令块处断掉：读者刚知道 sync 存在，接下来只能一路
+// 滚过剩下的模式、再从九篇里挑对一篇。写在页面标记里的链接就是会被一行一行漏掉，
+// 所以配对是**数据**（MODE_GUIDE），由 ModeSection 统一渲染。
+describe("模式 → 指南", () => {
+  it("就是被采纳的那张映射表，七个模式一个不多一个不少", () => {
+    expect(Object.keys(MODE_GUIDE).sort()).toEqual([...CLI_MODES.map((m) => m.key)].sort());
+    expect(MODE_GUIDE).toEqual({
+      cloud: "cloudAsync",
+      inbox: "deviceInboxServer",
+      text: "terminal",
+      sendReceive: "sendToSomeone",
+      pushPull: "backupSsh",
+      serve: "serverToServer",
+      sync: "syncLargeFolder",
+    });
+    // 映射的右边必须是真存在的指南键，否则 href 会渲染成 /undefined/。
+    for (const key of Object.values(MODE_GUIDE)) {
+      expect(GUIDES.map((g) => g.key), `${key} 不是一篇真指南`).toContain(key);
+    }
+  });
+
+  it("每个模式区块里恰好一条指南链接，指向映射表说的那一篇", async () => {
+    const target = await render();
+    for (const mode of CLI_MODES) {
+      const section = target.querySelector(`#${mode.id}`) as HTMLElement;
+      const links = [...section.querySelectorAll("a[data-mode-guide]")] as HTMLAnchorElement[];
+      // 两条 = 又回到"这一行还要再选一次"，零条 = 这一行没有出口。
+      expect(links, `${mode.name} 的指南链接不是恰好一条`).toHaveLength(1);
+      const guide = MODE_GUIDE[mode.key];
+      expect(links[0].getAttribute("data-mode-guide")).toBe(guide);
+      // 结尾斜杠：文章页是目录，少一个斜杠每个读者都多花一次跳转。
+      expect(links[0].getAttribute("href")).toBe(`/${GUIDE_SLUG[guide]}/`);
+      expect(links[0].textContent).toContain(en.cliPage.guides[guide]);
+    }
+    // 七行，七条，页面上再没有第八条。
+    expect(target.querySelectorAll("#modes a[data-mode-guide]")).toHaveLength(CLI_MODES.length);
+  });
+
+  it("中文页链进中文文章，仍然带斜杠，标题也是中文的", async () => {
+    const target = await render("zh");
+    for (const mode of CLI_MODES) {
+      const guide = MODE_GUIDE[mode.key];
+      const link = target.querySelector(
+        `#${mode.id} a[data-mode-guide="${guide}"]`,
+      ) as HTMLAnchorElement;
+      expect(link, `zh ${mode.name} 没有指南链接`).toBeTruthy();
+      expect(link.getAttribute("href")).toBe(`/zh/${GUIDE_SLUG[guide]}/`);
+      expect(link.textContent).toContain(zh.cliPage.guides[guide]);
+    }
+  });
+
+  it("是原生链接：能被键盘聚焦，不靠 click 处理器", async () => {
+    const target = await render();
+    // 指南是静态文章页而不是 SPA 路由，所以正确的行为就是浏览器自己的导航——
+    // 中键、"在新标签页打开"、回车都因此免费拿到。加一个 preventDefault 的
+    // onclick 会把这三样一起弄坏。
+    const links = [...target.querySelectorAll("#modes a[data-mode-guide]")] as HTMLAnchorElement[];
+    for (const a of links) {
+      expect(a.tagName).toBe("A");
+      expect(a.getAttribute("href")?.startsWith("/")).toBe(true);
+      expect(a.getAttribute("tabindex")).toBeNull(); // 天然可聚焦，不需要也不该加
+      expect(a.hasAttribute("target")).toBe(false);
+    }
+    // 七个可及名字互不相同：读屏用户的元素列表里不能是七条"指南"。
+    const names = links.map((a) => a.textContent?.replace(/\s+/g, " ").trim());
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("设备收件箱只剩这一条指南链接，不再有手写的第二条", async () => {
+    const target = await render();
+    const section = target.querySelector("#device-inbox") as HTMLElement;
+    const toGuide = [...section.querySelectorAll("a")].filter((a) =>
+      a.getAttribute("href")?.includes("guides/device-inbox-server"),
+    );
+    // 同一行里两条指向同一篇文章的链接，是读屏用户要读两遍才知道它们一样。
+    expect(toGuide).toHaveLength(1);
+    expect(toGuide[0].getAttribute("data-mode-guide")).toBe("deviceInboxServer");
+  });
+
+  it("那条手写链接的文案键也一并删了，没留下没人读的 cliPage.inbox.docs", () => {
+    // 统一链接把这个键变成死的。留着的代价不是体积，而是下一个人：一个还在
+    // Messages 上、两个维护语言都翻译了、却没有任何渲染路径的键，读起来像是
+    // "某处漏渲染了"，于是被重新接上——正是这一批要去掉的那条重复链接。
+    for (const [name, table] of Object.entries(locales)) {
+      expect(Object.keys(table.cliPage.inbox), `${name} 仍留着 cliPage.inbox.docs`).not.toContain(
+        "docs",
+      );
+    }
+    // 类型侧同样：types.ts 上还留着 `docs: string` 的话，上面两条只是恰好没填。
+    // @ts-expect-error cliPage.inbox.docs 已从 Messages 上移除
+    expect(en.cliPage.inbox.docs).toBeUndefined();
+  });
+});
+
+// ── 行末箭头的方向 ──────────────────────────────────────────────────────────
+//
+// 箭头是装饰性的（aria-hidden），但装饰画错方向仍然是错的：它指的是"链接去的
+// 那边"，而在从右向左的文字里，那边在读者的左手边。动态 /cli 目前只有 en/zh，
+// 两个都是 LTR——可 ModeSection 收的是 `lang: string`，dir() 也照样能回答 "ar"，
+// 静态 /cli 外壳和归档的阿拉伯语页面此刻就在渲染 dir="rtl"。所以这里直接按组件
+// 测，而不是等某个语言回来的那天才发现新加的这一行是反的。
+describe("模式行末箭头", () => {
+  const rows: ReturnType<typeof mount>[] = [];
+
+  const row = (lang: string) => {
+    const target = document.createElement("div");
+    document.body.appendChild(target);
+    rows.push(mount(ModeSection, { target, props: { cli: en.cliPage, lang, mode: CLI_MODES[0] } }));
+    return target.querySelector(".arrow") as HTMLElement;
+  };
+
+  afterEach(() => {
+    while (rows.length) unmount(rows.pop()!);
+  });
+
+  it("从左向右的语言里不翻转", () => {
+    for (const lang of ["en", "zh"]) {
+      const arrow = row(lang);
+      expect(arrow, `${lang} 没有箭头`).toBeTruthy();
+      expect(arrow.classList.contains("flip"), lang).toBe(false);
+    }
+  });
+
+  it("阿拉伯语里翻转，箭头指向行进方向", () => {
+    const arrow = row("ar");
+    expect(arrow).toBeTruthy();
+    expect(arrow.classList.contains("flip")).toBe(true);
+    // 仍然是同一个字形、仍然对读屏隐藏：翻转是视觉的，不是换一个可被朗读的符号。
+    expect(arrow.textContent).toBe("→");
+    expect(arrow.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("翻转规则来自 dir()，不是本组件自己列的一张 RTL 语言表", () => {
+    // 一张抄一份的语言表会和 i18n.svelte.ts 那张分叉，而分叉的那天没人会发现。
+    const src = readFileSync(resolve(process.cwd(), "src/lib/cli/ModeSection.svelte"), "utf8");
+    expect(src).toContain('dir(lang) === "rtl"');
+    expect(src).not.toMatch(/\bRTL\s*=|\["ar"\]|'ar'/);
   });
 });
 
@@ -415,6 +563,41 @@ describe("产品事实", () => {
     expect(text).toMatch(/uploaded/i);
     expect(text).toMatch(/wrote the file to disk|saved/i);
   });
+
+  // "链接丢了文件就找不回来了"读起来像"文件已经不在了"，而它不成立：密文一直留在
+  // Relayium 上，直到留存到期为止；链接带走的是**唯一能解密它的那把密钥**。这个差别
+  // 决定两件事——读者要不要另外再留一份，以及已经丢了链接的人该不该来找支持恢复。
+  // 谁都恢复不了，原因是密钥，不是存储。维护中的英文/中文文案与真正渲染出来的页面
+  // 必须说同一件事（getting-started 指南、/cli 爬虫外壳也一样），所以正反两面都断言：
+  // 只删掉那句过头话而不补上留存的事实，就会变成第二种误导。
+  for (const [code, m] of Object.entries(locales) as ["en" | "zh", Messages][]) {
+    it(`${code}: 云端丢的是密钥，不是"文件没了"`, async () => {
+      const notes = m.cliPage.modes.cloud.notes.join(" ");
+      expect(notes, `${code} 又把丢链接说成丢文件`).not.toMatch(
+        code === "en"
+          ? /los(?:ing|es|t) the link loses the file/i
+          : /链接丢了[，,]?\s*文件就(?:找不回来|丢|没)/,
+      );
+      expect(notes).toMatch(
+        code === "en" ? /stays stored until its retention expires/i : /加密副本会一直存到留存到期/,
+      );
+      expect(notes).toMatch(
+        code === "en" ? /only key that can decrypt it/i : /能解密它的唯一密钥/,
+      );
+
+      // 渲染出来的那一节要和文案源一致：文案改对了但没进页面，读者读到的还是旧话。
+      const target = await render(code);
+      const text = target.querySelector("#cloud")!.textContent ?? "";
+      expect(text, `${code} 的 #cloud 没渲染出留存事实`).toMatch(
+        code === "en" ? /stays stored until its retention expires/i : /加密副本会一直存到留存到期/,
+      );
+      expect(text).not.toMatch(
+        code === "en"
+          ? /los(?:ing|es|t) the link loses the file/i
+          : /链接丢了[，,]?\s*文件就(?:找不回来|丢|没)/,
+      );
+    });
+  }
 
   it("不再有跨模式的通用续传 / SHA-256 承诺", async () => {
     const target = await render();

@@ -1108,7 +1108,6 @@ export interface Messages {
       steps: { label: string; body: string }[]; // iterated
       cta: string; // link text → the Device Inbox page
       ctaHint: string; // the account gating, stated truthfully
-      docs: string; // link text → the full CLI receiver guide
     };
   };
   crossnet: {

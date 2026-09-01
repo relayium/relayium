@@ -161,9 +161,12 @@ export type TrustFileKey = (typeof TRUST_FILES)[number]["key"];
 //
 // The nine CLI guides, and all nine of them. The authority is
 // web/scripts/pages/content/cli-articles.mjs (CLI_ARTICLES), which reads the
-// slugs off the article documents themselves; cli-page.guides.test.ts asserts
-// this list is exactly that set, so a renamed or added article cannot leave the
-// hub page linking at a 404 or quietly dropping a guide.
+// slugs off the article documents themselves; scripts/pages/cli-shell.test.mjs
+// asserts this list is exactly that set, so a renamed or added article cannot
+// leave the hub page linking at a 404 or quietly dropping a guide. That lock
+// lives out in scripts/ rather than beside this file because it has to import
+// both sides, and tsconfig.app.json only takes src/ — pulling a .mjs in from a
+// test here would drag the generator into the type-check program.
 //
 // The trailing slash is not cosmetic: the static article pages are directories,
 // and /guides/x redirects to /guides/x/ — a link without it spends a redirect
@@ -194,6 +197,39 @@ export type GuideKey = (typeof GUIDES)[number]["key"];
 /** Guide href, always with the trailing slash the static pages live at. */
 export const guidePath = (slug: string, lang: string) =>
   lang === "en" ? `/${slug}/` : `/${lang}/${slug}/`;
+
+/** Guide slug by key, so a lookup names the guide instead of scanning a list. */
+export const GUIDE_SLUG = Object.fromEntries(GUIDES.map((g) => [g.key, g.slug])) as Record<
+  GuideKey,
+  string
+>;
+
+// ── One guide per mode ───────────────────────────────────────────────────────
+//
+// The mode rows teach the commands; the guides are the walkthrough. Before this
+// map, six of the seven rows ended at their last command block, and the only way
+// from "I now know `sync` exists" to the sync walkthrough was to scroll past the
+// remaining modes to the guide list and pick the right one out of nine. The
+// seventh, Device Inbox, had a hand-placed link, which is exactly how the other
+// six came to be missing — a link that lives in the page's markup is a link that
+// can be forgotten one row at a time.
+//
+// So the pairing is data, `Record<ModeKey, GuideKey>` is the type, and
+// ModeSection renders it: a new mode without a guide, or a renamed guide key, is
+// a compile error rather than a row that quietly has no way forward.
+//
+// It is deliberately one guide per mode and not "the guides that mention this
+// mode". Three guides mention `sync`; a row that offers three links has asked
+// the reader to choose again, which is the thing the row just finished doing.
+export const MODE_GUIDE = {
+  cloud: "cloudAsync",
+  inbox: "deviceInboxServer",
+  text: "terminal",
+  sendReceive: "sendToSomeone",
+  pushPull: "backupSsh",
+  serve: "serverToServer",
+  sync: "syncLargeFolder",
+} as const satisfies Record<ModeKey, GuideKey>;
 
 // ── FAQ ──────────────────────────────────────────────────────────────────────
 export const FAQ_KEYS = ["account", "offline", "resume", "verification"] as const;

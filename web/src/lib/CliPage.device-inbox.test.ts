@@ -148,7 +148,11 @@ describe("维护中语言的收件箱文案", () => {
           expect(text, `${code}.inbox.steps[${i}].${field} 首尾有多余空白`).toBe(text.trim());
         }
       }
-      for (const key of ["stepsLabel", "cta", "ctaHint", "docs"] as const) {
+      // `docs` is deliberately not in this list: the hand-placed "full receiver
+      // reference" link it named is gone, replaced by the keyed guide link
+      // ModeSection now renders at the end of every mode row, and the key was
+      // removed with it. CliPage.structure.test.ts asserts it stays removed.
+      for (const key of ["stepsLabel", "cta", "ctaHint"] as const) {
         expect(inbox[key], `${code}.inbox.${key} 是空的`).toBeTruthy();
       }
     });

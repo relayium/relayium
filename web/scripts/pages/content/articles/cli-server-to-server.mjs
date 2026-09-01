@@ -2122,6 +2122,6 @@ ls -l /etc/relayium/id.key`,
 export default {
   slug: "guides/server-to-server-transfers",
   published: "2026-07-08",
-  updated: "2026-08-05",
+  updated: "2026-09-01",
   langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

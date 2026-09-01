@@ -108,6 +108,31 @@ describe("the crawlable /cli shell", () => {
     expect(body).not.toMatch(/relayium down[^.]{0,80}resumes? on the next run/i);
   });
 
+  // The shell said "losing the link loses the file", which reads as "the file is
+  // gone". It is not: Relayium keeps the ciphertext until its retention expires,
+  // and what the link carried was the only key that opens it. For a non-rendering
+  // reader this shell IS the page, so the overstatement reached exactly the
+  // audience that cannot check it against the rendered copy — and the rendered
+  // copy, the maintained getting-started guide and this shell now have to agree.
+  // Both halves are asserted: deleting the false clause without stating that the
+  // ciphertext stays stored is a second, quieter misstatement.
+  it("says the lost link costs the key, not the stored file", () => {
+    const cloud = cli.why.items.find((i) => i.title === "Cloud");
+    expect(cloud, "the shell has no Cloud item").toBeTruthy();
+    expect(cloud.desc, "the overstatement came back").not.toMatch(
+      /los(?:ing|es|t) the link loses the file/i,
+    );
+    expect(cloud.desc).toMatch(/stays stored until its retention expires/i);
+    expect(cloud.desc).toMatch(/only key that can decrypt it/i);
+    // And through the shell the crawler actually receives.
+    expect(body).not.toMatch(/los(?:ing|es|t) the link loses the file/i);
+    expect(body).toMatch(/stays stored until its retention expires/i);
+    // The zero-knowledge half must survive the correction: retention is not a
+    // hint that Relayium could read it while it is stored.
+    expect(cloud.desc).toMatch(/#k= fragment/);
+    expect(cloud.desc).toMatch(/never reaches the server/i);
+  });
+
   it("gives --server its real scope, text included", () => {
     const answer = cli.faq.items.find((f) => f.q === "Can I point it at my own server?").a;
     for (const cmd of ["login", "up", "down", "send", "receive", "text"])

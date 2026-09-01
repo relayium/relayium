@@ -78,8 +78,13 @@ const REVISED = {
   "guides-self-host": "2026-08-06",
   "guides-own-node": "2026-08-06",
   "guides-always-on-service": "2026-08-06",
-  "guides-receive-from-cli": "2026-08-06",
-  "howto-automate-server-backups": "2026-08-06",
+  // These two were rewritten again in the CLI-page batch — the receiver guide
+  // for the CLI's receive-side truth, the cron guide for off-host copy wording
+  // and a scheduled push that no longer repeats into one destination. Their date
+  // moved with that rewrite; the six above were not touched by it.
+  // cli-mode-chooser.test.mjs pins the whole rewritten set.
+  "guides-receive-from-cli": "2026-09-01",
+  "howto-automate-server-backups": "2026-09-01",
 };
 
 const sections = (doc) => doc.sections || [];
