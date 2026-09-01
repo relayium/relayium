@@ -18,9 +18,13 @@
 #     needs compatibility evidence from the jobs that CONSUME the artifacts. A
 #     bot must not be the thing that "resolves" that. It also touches the lanes
 #     that sign the CLI, notarize the macOS app and create an immutable release.
-#   * `swift` — deferred item 5. Bumping the crypto and transport packages under
-#     the native apps only means something with the vector tests and a real
-#     build behind it, and the iOS lane is paused.
+#   * `swift` — item 5, whose trigger has been reached. Bumping the crypto and
+#     transport packages under the native apps only means something with the
+#     vector tests and a real build behind it. iOS development has since
+#     resumed, which does not by itself supply that evidence: whether the lane
+#     can now produce it, and therefore whether to configure `swift` at all, is
+#     a separately scoped evaluation that has not run. Unconfigured until it
+#     does.
 #   * `docker` and everything else — no subject in this repository.
 #
 # ## Why grouped minor+patch, but never grouped majors

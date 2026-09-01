@@ -31,7 +31,8 @@ lives in `web/src/lib/device-send.ts`, `web/src/lib/device-seal.ts` and
 `web/src/lib/device-inbox.ts`, and it drives the §24-§28 surface. Its UI is not
 specified here — this document specifies the wire and the receiver, not the
 sender's presentation. The iOS clients (Phase 3) are not specified here and are
-not implemented, and iOS development is paused.
+not implemented: iOS 0.3.0 development has resumed, but Phase 3 remains
+unimplemented.
 
 The product requirements this specification was written from are not published in
 this repository, so nothing here cites them. Where an earlier revision pointed at

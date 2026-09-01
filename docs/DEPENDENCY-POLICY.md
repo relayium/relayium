@@ -86,7 +86,9 @@ pull request, visible on its own, under the same cap.
 Every one of those pull requests is a **reviewed** pull request. Nothing
 auto-merges: auto-merge is a repository/workflow setting rather than a key in
 that file, and it is deliberately not enabled anywhere. `swift` and
-`github-actions` are deliberately **unconfigured** — see deferred items 5 and 1.
+`github-actions` are both deliberately **unconfigured**, for different reasons:
+`github-actions` stays deferred (item 1), while `swift`'s trigger has been
+reached and whether to configure it at all is pending its own task (item 5).
 `scripts/test/dependabot-policy-test.mjs` asserts this shape, in the
 `dependabot-policy` job of `.github/workflows/repo-hygiene.yml`.
 
@@ -285,16 +287,21 @@ Recorded so it is not reconstructed later. Each item states its revisit trigger.
 
    Remaining scope, tracked as its own work: `github-actions` (item 1) and
    `swift` (item 5). *Trigger:* those items' own triggers. Status: `completed`
-   for Go and npm on 2026-08-23; the other two ecosystems are separately
+   for Go and npm on 2026-08-23; `swift` has since reached item 5's trigger
+   without that evaluation having run, and `github-actions` remains separately
    deferred below.
-5. **Swift update automation stays deferred while iOS is paused.** The Swift
-   packages here are the crypto and transport under the native apps; bumping
-   either requires the vector tests and a real build to mean anything, and the
-   iOS lane is not currently in a state to provide that evidence. Manual, exact,
-   reviewed bumps remain the policy, and `.github/dependabot.yml` deliberately
-   contains no `swift` entry — the `dependabot-policy` gate fails if one is
-   added, so this stays a decision rather than a drift. *Trigger:* iOS work
-   resuming. Status: `deferred`.
+5. **Swift update automation is still not enabled; whether to enable it is now
+   pending its own task.** The Swift packages here are the crypto and transport
+   under the native apps; bumping either requires the vector tests and a real
+   build to mean anything. Manual, exact, reviewed bumps remain the **current**
+   policy, and `.github/dependabot.yml` deliberately contains no `swift` entry —
+   the `dependabot-policy` gate fails if one is added, so this stays a decision
+   rather than a drift. This item's trigger has fired: iOS 0.3.0 development has
+   resumed. That does not by itself enable anything. Whether the iOS lane can now
+   supply the build evidence an automated bump would need, and therefore whether
+   to configure `swift` at all, is a separate scoped task and is not answered
+   here. *Trigger:* reached — iOS work resumed; the evaluation task is the next
+   step. Status: `trigger reached`.
 6. **Evaluate scheduled Swift/Actions vulnerability coverage that needs no
    secrets.** Layer 2 for the npm graph has an obvious shape; for SwiftPM and for
    GitHub Actions it does not, and the candidates must be assessed for whether
@@ -315,8 +322,13 @@ Recorded so it is not reconstructed later. Each item states its revisit trigger.
    remains open there is only whether that coverage should become a centralized
    check over *every* workflow, should a future lane install outside it.
    These change how existing lanes fail and must be proven against a real macOS
-   build, which this offline gate cannot do. *Trigger:* the next macOS or iOS
-   build-lane change, or iOS work resuming. Status: `recorded`.
+   build, which this offline gate cannot do. *Trigger:* reached on its iOS half —
+   iOS `0.3.0` development resumed on 2026-09-01; the build-lane-change half
+   stands unchanged. Reaching a trigger evaluates nothing. Whether the
+   `xcodebuild` invocations can take `-onlyUsePackageVersionsFromResolvedFile`,
+   and whether the after-the-build unchanged-file check is workable, is a
+   separate scoped task that has not run; no lane, flag or check is changed
+   here. Status: `trigger reached`.
 8. **Decide whether `govulncheck` and `npm audit` move to a scheduled lane.**
    Both block a pull request today (see layer 2). Moving them to a scheduled,
    reporting-first lane is the architecture this document argues for, but it

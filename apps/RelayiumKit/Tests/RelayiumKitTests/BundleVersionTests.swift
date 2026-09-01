@@ -65,7 +65,13 @@ final class BundleVersionTests: XCTestCase {
 
     /// iOS: the app and its Share extension, both Debug and Release.
     func testTheIOSAppAndItsExtensionShipOneVersion() throws {
-        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "1.2.10", occurrences: 4)
-        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "2", occurrences: 4)
+        // `0.3.0 (5)`, the restart baseline. `1.2.10 (2)` was a never-delivered
+        // candidate that deliberately matched the then-current macOS numbers,
+        // so it is not a floor this line has to clear: the separate iOS App
+        // Store record's last upload was `0.1.0` build 4, and 5 is the next
+        // build above it. Builds are what App Store Connect requires to be
+        // strictly monotonic per record; the marketing version is not.
+        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.3.0", occurrences: 4)
+        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "5", occurrences: 4)
     }
 }

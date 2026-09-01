@@ -4,28 +4,24 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
-	<!-- The same nine languages the macOS app declares, and for the same
+	<!-- The same two languages the macOS app declares, and for the same
 	     reason: the catalogs live in the RelayiumAppKit package bundle rather
 	     than in this one, so without this list iOS treats the app as
-	     English-only. It would render correct Arabic words — the package
-	     bundle answers for them — while leaving the app's user-interface
-	     layout direction left to right, because
-	     UIApplication.userInterfaceLayoutDirection is decided from the APP
-	     bundle's localizations and is what SwiftUI's \.layoutDirection
-	     follows. Every Arabic screen would then read correctly and be laid out
-	     backwards. Keep in step with AppLanguage; LocalizationIntegrityTests
-	     asserts the two agree. -->
+	     English-only. The list is what iOS decides the app is a candidate for,
+	     and it is also what UIApplication.userInterfaceLayoutDirection — and so
+	     SwiftUI's \.layoutDirection — is resolved from, which is why the APP
+	     bundle needs its own copy of a list the package already ships.
+
+	     Exactly the shipped set, in both directions. A language declared here
+	     with no catalog behind it tells the device Relayium speaks it and then
+	     renders English; the seven frozen locales now live in
+	     apps/RelayiumKit/LocalizationArchive/ and must not reappear here. Keep
+	     in step with AppLanguage; LocalizationIntegrityTests asserts the two
+	     agree. -->
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>en</string>
 		<string>zh-Hans</string>
-		<string>ja</string>
-		<string>ko</string>
-		<string>de</string>
-		<string>fr</string>
-		<string>ar</string>
-		<string>es</string>
-		<string>pt</string>
 	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>

@@ -539,34 +539,46 @@ final class LocalizationIntegrityTests: XCTestCase {
         }
     }
 
-    /// **The iOS app still declares nine, and that is a KNOWN, PENDING mismatch.**
+    /// **The iOS app declares exactly the two shipped languages too.**
     ///
-    /// Not an oversight and not an assertion that nine is correct. iOS product
-    /// development is paused and every file under `apps/ios` is read-only for
-    /// the task that contracted the Mac, so its `Info.plist` still names seven
-    /// localizations the shared package can no longer render. That build is
-    /// unshipped, so nothing reaches a user from it.
+    /// This assertion used to pin nine as a known, pending mismatch: the task
+    /// that contracted the Mac could not touch `apps/ios/**`, so the iOS plists
+    /// went on naming seven localizations the shared package can no longer
+    /// render, and the literal was kept — rather than deleted — so that the
+    /// mismatch would fail the day iOS resumed. iOS resumed at `0.3.0` and the
+    /// plist was corrected, so this is now the checklist item discharged: the
+    /// literal is gone and the same `AppLanguage`-derived assertion the Mac
+    /// bundles get applies here.
     ///
-    /// This test pins the mismatch as a literal rather than deleting it, for two
-    /// reasons. Removing the assertion would leave nothing to notice when iOS
-    /// resumes. Rewriting it to expect two would silently pass over an
-    /// `Info.plist` nobody had touched — a green test claiming a contraction
-    /// that never happened on that target.
-    ///
-    /// **When iOS resumes, this test is the checklist item.** It fails the
-    /// moment somebody corrects the plist, and the fix is to replace the literal
-    /// with `Set(AppLanguage.allCases.map(\.lproj))` — the same assertion the Mac
-    /// bundles get above.
-    func testTheIOSAppStillDeclaresNineAsAPendingResumeMismatch() throws {
+    /// Derived rather than written out, for the reason the Mac test gives: a
+    /// literal cannot notice a language being added to `AppLanguage` without a
+    /// catalog, and this bundle's list is what iOS resolves the app's candidate
+    /// languages and its user-interface layout direction from.
+    func testTheIOSAppDeclaresExactlyTheShippedLocalizations() throws {
         let declared = try declaredLocalizations(at: "ios/Relayium/Info.plist")
-        XCTAssertEqual(Set(declared),
-                       ["en", "zh-Hans", "ja", "ko", "de", "fr", "ar", "es", "pt"],
-                       "apps/ios/Relayium/Info.plist changed. If iOS product development "
-                       + "has resumed and this was contracted deliberately, replace this "
-                       + "literal with Set(AppLanguage.allCases.map(\\.lproj)). If not, "
-                       + "an iOS file was edited under a Mac-only lease.")
-        XCTAssertGreaterThan(Set(declared).count, AppLanguage.allCases.count,
-                             "iOS no longer over-declares; see this test's documentation")
+        XCTAssertEqual(Set(declared), Set(AppLanguage.allCases.map(\.lproj)),
+                       "apps/ios/Relayium/Info.plist declares \(declared)")
+        XCTAssertEqual(declared.count, 2, "apps/ios/Relayium/Info.plist declares \(declared)")
+        for frozen in Self.frozenLprojs {
+            XCTAssertFalse(declared.contains(frozen),
+                           "apps/ios/Relayium/Info.plist still declares the frozen locale \(frozen)")
+        }
+    }
+
+    /// And the iOS project's `knownRegions`, for the reason the Mac one has its
+    /// own test: `knownRegions` is what a variant group resolves against and
+    /// what Xcode offers when a file is localized, so a frozen locale left there
+    /// is an invitation for a re-adopted `.lproj` that no plist assertion above
+    /// would see until it shipped.
+    func testTheIOSProjectKnownRegionsCarryNoFrozenLocale() throws {
+        let pbxproj = try RepoRoot.text("apps/ios/Relayium.xcodeproj/project.pbxproj")
+        let regions = try XCTUnwrap(knownRegions(in: pbxproj),
+                                    "no knownRegions block in the iOS project")
+        XCTAssertEqual(regions, ["en", "Base", "zh-Hans"], "knownRegions: \(regions)")
+        for frozen in Self.frozenLprojs {
+            XCTAssertFalse(regions.contains(frozen),
+                           "knownRegions still lists the frozen locale \(frozen)")
+        }
     }
 
     // MARK: - resolution

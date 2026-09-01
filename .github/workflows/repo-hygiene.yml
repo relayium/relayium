@@ -434,12 +434,14 @@ jobs:
       # block appears — majors then stop opening pull requests entirely and the
       # queue looks healthier than it is — or when `github-actions` or `swift` is
       # added, both of which docs/DEPENDENCY-POLICY.md deliberately leaves
-      # unconfigured (deferred items 1 and 5: the `upload-artifact` major
-      # divergence must not be "resolved" by a bot, and Swift bumps mean nothing
-      # without the vector tests and a real build the paused iOS lane cannot
-      # supply). The same is true of the cap growing, the two ecosystems drifting
-      # onto one weekday, a group widening to swallow majors, and of
-      # `target-branch`, `reviewers`, `registries` or
+      # unconfigured (item 1, still deferred: the `upload-artifact` major
+      # divergence must not be "resolved" by a bot; item 5, trigger reached with
+      # its evaluation not yet run: iOS 0.3.0 development has resumed, but
+      # whether that lane can supply the vector tests and real build an
+      # automated Swift bump would need is a separate task, so manual exact
+      # bumps stay the current policy). The same is true of the cap growing,
+      # the two ecosystems drifting onto one weekday, a group widening to
+      # swallow majors, and of `target-branch`, `reviewers`, `registries` or
       # `insecure-external-code-execution` appearing.
       #
       # The script is offline and reads one tracked file. It has no YAML

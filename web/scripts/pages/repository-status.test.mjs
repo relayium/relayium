@@ -38,8 +38,13 @@ describe("public repository status", () => {
 
     // iOS left the Delivery-status table on 2026-08-28. The row used to say
     // "Internal development and TestFlight", which is a development commitment,
-    // and development is paused — so a status table that kept listing it as a
-    // platform Relayium delivers on was making a promise nobody intends to keep.
+    // and there was nothing to deliver — so a status table that kept listing it
+    // as a platform Relayium delivers on was making a promise nobody had earned.
+    //
+    // Development resumed at 0.3.0 on 2026-09-01 and the row still does not come
+    // back: this table is what a reader can GET, and the answer is still nothing.
+    // The two facts move independently, which is why the prose below asserts the
+    // development state and the never-released state separately.
     //
     // Both halves are needed. Deleting the row alone would leave a reader who
     // had heard of the iOS build with no answer at all, and this project's
@@ -49,7 +54,7 @@ describe("public repository status", () => {
     expect(statusRows.iOS, "iOS is back in the delivery-status table").toBeUndefined();
     const delivery = readme.split("## Delivery status")[1]?.split("\n## ")[0] ?? "";
     expect(delivery, "the delivery section no longer explains what apps/ios is")
-      .toMatch(/`apps\/ios\/`[^.]*\*\*paused\*\*/);
+      .toMatch(/`apps\/ios\/`[^.]*\*\*resumed\*\*/);
     expect(delivery).toMatch(/never been publicly released/i);
     expect(delivery).toMatch(/no App Store listing/i);
     // …and the platforms that have no app must still be told what to use.
@@ -81,7 +86,9 @@ describe("public repository status", () => {
       .toEqual(new Set([`macos-v${macos.version}`]));
     expect(readme).not.toMatch(/realtime and nearby transfer[^.]*still to be built/);
     // No iOS product promise anywhere in the README, in either tense. The
-    // repository ships no iOS app and is not building one.
+    // repository is building an iOS app again and still ships none, so the
+    // sentence to keep out is the one that reads as a product rather than the
+    // one that reports development state.
     expect(readme, "the README still promises an iOS app")
       .not.toMatch(/\bthe iOS app (?:is|will be|runs|now)\b/i);
     expect(readme).not.toContain("status-M0%20MVP");

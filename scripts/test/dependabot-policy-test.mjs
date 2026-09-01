@@ -17,7 +17,8 @@
 //
 //   1. Exactly two ecosystems — `gomod` at /server and `npm` at /web. Every
 //      other ecosystem, `github-actions` and `swift` above all, is named as
-//      deliberately unconfigured (deferred items 1 and 5) rather than tolerated.
+//      deliberately unconfigured (item 1 deferred; item 5 trigger reached, its
+//      evaluation not yet run) rather than tolerated.
 //   2. Weekly, staggered. Different weekdays AND different explicit HH:MM times,
 //      both off-hour, both in Asia/Dubai — so the two ecosystems never land in
 //      one batch and never open mid-workday.
@@ -288,7 +289,7 @@ function policyFailures(text) {
     if (ecosystem !== null && !EXPECTED.some((e) => e.ecosystem === ecosystem)) {
       say(
         `${where}: package-ecosystem "${ecosystem}" is deliberately unconfigured; see the`
-        + " deferred items in docs/DEPENDENCY-POLICY.md",
+        + " ecosystem policy items in docs/DEPENDENCY-POLICY.md",
       );
     }
     if (ecosystem !== null && directory !== null) {

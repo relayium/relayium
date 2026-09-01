@@ -9,7 +9,11 @@ Nothing in this document authorizes creating paid products, changing production
 configuration, uploading a build, adding testers, submitting for review, or
 releasing a version.
 
-## App record and candidate
+## App record
+
+Relayium's iOS App Store record is **separate from the macOS one**. It has its
+own Apple ID, its own bundle IDs and its own build-number sequence; nothing
+about a macOS version, build number or release constrains it.
 
 | Field | Value |
 | --- | --- |
@@ -18,25 +22,62 @@ releasing a version.
 | Bundle ID | `com.relayium.app` |
 | Share extension bundle | `com.relayium.app.share` |
 | Team | `7PVYUG4YQS` |
-| Candidate version | `1.2.10` |
-| Candidate build | `2` |
 
-App Store Connect was inspected read-only on 2026-08-13 and contained no iOS
-TestFlight builds. Build `2` is the first candidate after the retained build
-`1` acceptance archive and is strictly monotonic in the project source.
+## Development baseline
 
-A local signed archive and non-uploading App Store export of historical build
-`1` passed with the intended distribution identities and profiles. The retained
-historical artifacts are:
+| Field | Value |
+| --- | --- |
+| Marketing version in the project source | `0.3.0` |
+| Build in the project source | `5` |
 
-- archive: `/tmp/Relayium-iOS-subscriptions-e4dd73d7.xcarchive`;
-- IPA: `/tmp/Relayium-iOS-subscriptions-e4dd73d7-export/Relayium.ipa`;
-- IPA SHA-256:
-  `45be4bbf6ac8f14482276804e42a624af6c9ba185159b621e403996378df8bbc`.
+`0.3.0 (5)` is the **development baseline** of the iOS line restarted on
+2026-09-01. It is what `apps/ios/Relayium.xcodeproj` builds; it is not an
+uploaded build, not a TestFlight candidate and not a release.
 
-These artifacts are historical acceptance evidence, not the `1.2.10 (2)`
-candidate and not permission to upload. The current candidate requires a new
-exact-source archive and checksum before delivery.
+### What the version history actually is
+
+- `1.2.10 (2)` was a **never-delivered native candidate** from 2026-08-18 that
+  deliberately synchronized the then-current macOS and iOS marketing versions.
+  It was never uploaded to this record. **It is not the iOS release floor**, and
+  a later iOS marketing version does not have to exceed it. App Store Connect
+  requires the *build* number to increase within a record; the marketing version
+  is not constrained that way.
+- Historical `0.1.0` **build 4 was uploaded** to this record, after build 3 was
+  rejected by a purpose-string check. Build `5` is therefore the next build
+  above the highest one this record is known to have accepted.
+- A local signed archive and non-uploading App Store export of historical
+  build `1` passed with the intended distribution identities and profiles. The
+  retained historical artifacts are:
+  - archive: `/tmp/Relayium-iOS-subscriptions-e4dd73d7.xcarchive`;
+  - IPA: `/tmp/Relayium-iOS-subscriptions-e4dd73d7-export/Relayium.ipa`;
+  - IPA SHA-256:
+    `45be4bbf6ac8f14482276804e42a624af6c9ba185159b621e403996378df8bbc`.
+
+  These are historical acceptance evidence for a build that is several versions
+  behind. They are not the `0.3.0 (5)` baseline and not permission to upload.
+
+### A fresh App Store Connect read-back is required before any archive or upload
+
+**Nothing in this document reports current App Store Connect state.** The last
+read-only inspection recorded here was 2026-08-13, and the build history above
+is reconstructed from this project's own records rather than from a current
+query. Build `5` has **not** been verified against the record remotely, and the
+claim that it is the next free build number is therefore a local expectation,
+not an observed fact.
+
+Before archiving or uploading, re-inspect the record read-only and confirm, at
+minimum:
+
+1. the highest build number the record has accepted for every marketing version,
+   including builds in `Invalid`, `Processing` or expired-TestFlight states,
+   which still consume a number;
+2. that the intended `(marketing version, build)` pair is free and increases the
+   build number within the record;
+3. the current App Store and TestFlight status of the app.
+
+If the read-back contradicts the baseline above, correct the project source and
+this document before building — do not upload against these numbers and do not
+record a remote fact this file has not observed.
 
 ## Subscription activation boundary
 
@@ -74,13 +115,16 @@ screen receives `unknown_bundle`, and a charged transaction cannot be accepted.
 
 ## TestFlight acceptance
 
-Upload only the exact candidate whose hosted Go, Swift, iOS Release build and UI
-gates are green. France availability is owner-confirmed. Relayium implements
-industry-standard encryption outside Apple's operating system, so complete the
-French ANSSI declaration workflow truthfully and attach an Apple-approved
-encryption declaration to this build. Confirm in App Store Connect whether the
-macOS declaration can be assigned to the separate iOS app record; do not assume
-cross-app reuse and do not answer “No” merely to clear the form.
+There is no candidate yet. `0.3.0 (5)` is a development baseline, and promoting
+it to a candidate requires the App Store Connect read-back above plus a new
+exact-source archive and checksum. Upload only the exact candidate whose hosted
+Go, Swift, iOS Release build and UI gates are green. France availability is
+owner-confirmed. Relayium implements industry-standard encryption outside
+Apple's operating system, so complete the French ANSSI declaration workflow
+truthfully and attach an Apple-approved encryption declaration to this build.
+Confirm in App Store Connect whether the macOS declaration can be assigned to
+the separate iOS app record; do not assume cross-app reuse and do not answer
+“No” merely to clear the form.
 
 Internal TestFlight acceptance must cover:
 

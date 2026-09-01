@@ -2095,29 +2095,20 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(counts["NSExtensionActivationSupportsAttachmentsWithMaxCount"] as? Int,
                        SHARED_DRAFT_MAX_FILES,
                        "no aggregate bound: three per-type maxima can be satisfied at once")
-        // **A KNOWN, PENDING iOS/shared-package mismatch — pinned, not fixed.**
-        //
         // The extension has its own bundle, so it needs its own localization
-        // list. This one still names nine, while the shared package now ships
-        // exactly `en` and `zh-Hans`: the Mac two-language contraction moved the
-        // other seven catalogs to `apps/RelayiumKit/LocalizationArchive/` and could not
-        // touch `apps/ios/**`, which is read-only while iOS product development
-        // is paused. That build is unshipped, so nothing reaches a user from it.
+        // list, and it is the same one the package ships.
         //
-        // Asserted as a LITERAL rather than against `AppLanguage`. Deriving it
-        // would fail here for a reason that is not this extension's fault and
-        // would block Mac truth; deleting it would leave nothing to notice when
-        // iOS resumes. When it does, replace this literal with
-        // `AppLanguage.allCases.map(\.lproj).sorted()` — the assertion the Mac
-        // appex already gets in `MacSurfaceGuardTests`.
+        // This used to be a literal nine, pinning a known mismatch: the Mac
+        // two-language contraction moved the other seven catalogs to
+        // `apps/RelayiumKit/LocalizationArchive/` and could not touch
+        // `apps/ios/**`, so the list was kept as evidence rather than deleted.
+        // iOS resumed at `0.3.0` and the plist was corrected, so it now derives
+        // from `AppLanguage` — the assertion the Mac appex already gets in
+        // `MacSurfaceGuardTests`.
         XCTAssertEqual((plist["CFBundleLocalizations"] as? [String])?.sorted(),
-                       ["ar", "de", "en", "es", "fr", "ja", "ko", "pt", "zh-Hans"],
-                       "apps/ios/RelayiumShare/Info.plist changed. If iOS resumed and this "
-                       + "was contracted deliberately, switch this to AppLanguage; if not, "
-                       + "an iOS file was edited under a Mac-only lease.")
-        XCTAssertGreaterThan((plist["CFBundleLocalizations"] as? [String])?.count ?? 0,
-                             AppLanguage.allCases.count,
-                             "iOS no longer over-declares; see the note above")
+                       AppLanguage.allCases.map(\.lproj).sorted(),
+                       "apps/ios/RelayiumShare/Info.plist no longer declares exactly the "
+                       + "shipped languages")
     }
 
     /// The extension declares a non-empty `CFBundleDisplayName`, and it is the
@@ -2697,10 +2688,15 @@ final class IOSSurfaceGuardTests: XCTestCase {
     ///
     /// The row used to be required to say "internal development and TestFlight"
     /// plus the foreground/background/push limits — a precise description of a
-    /// build's capabilities. Development is paused, and the app has never been
-    /// released, so listing it in a table of what Relayium delivers made a
-    /// commitment nobody intends to keep, however carefully each clause was
-    /// worded. Precision about an unshipped product is not honesty about it.
+    /// build's capabilities. The app has never been released, so listing it in
+    /// a table of what Relayium delivers made a commitment nobody had yet
+    /// earned, however carefully each clause was worded. Precision about an
+    /// unshipped product is not honesty about it.
+    ///
+    /// **Development resuming at 0.3.0 does not put the row back.** The table
+    /// is about what a reader can get, not about what is being built, and the
+    /// two facts moved independently: development resumed, and nothing has
+    /// shipped. That is exactly the substitution this guard exists to refuse.
     ///
     /// So the requirement moves rather than disappearing, which is the same
     /// discipline `MacSurfaceGuardTests` applies to the macOS status sentence:
@@ -2716,8 +2712,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let delivery = readme.components(separatedBy: "## Delivery status")
             .dropFirst().first?.components(separatedBy: "\n## ").first ?? ""
         let flat = flattenedText(delivery)
-        XCTAssertTrue(flat.contains("`apps/ios/` exists in this repository and its development is **paused**"),
-                      "the delivery section no longer says iOS development is paused")
+        XCTAssertTrue(flat.contains("`apps/ios/` exists in this repository and its development has **resumed**, at version `0.3.0`"),
+                      "the delivery section no longer says what state iOS development is in")
         XCTAssertTrue(flat.contains("It has never been publicly released"),
                       "the delivery section no longer says iOS was never released")
         XCTAssertTrue(delivery.lowercased().contains("no app store listing"),
@@ -3253,15 +3249,15 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertNil(plist["NSPhotoLibraryUsageDescription"])
         XCTAssertNil(plist["NSPhotoLibraryAddUsageDescription"])
         XCTAssertNil(plist["UIBackgroundModes"])
-        // The same known, pending mismatch as the appex above: the iOS app still
-        // declares nine while the shared package ships two. Kept as a literal so
-        // it fails when iOS resumes and its plist is corrected, rather than
-        // failing now for a Mac change it does not own. See
+        // The containing app's list, derived from `AppLanguage` for the same
+        // reason the appex's is above. Order asserted as well as membership,
+        // because this bundle's list is what iOS resolves the app's candidate
+        // languages and its user-interface layout direction from. See
         // `testTheExtensionActivatesOnlyForFilesImagesAndMovies`.
         XCTAssertEqual(plist["CFBundleLocalizations"] as? [String],
-                       ["en", "zh-Hans", "ja", "ko", "de", "fr", "ar", "es", "pt"],
-                       "apps/ios/Relayium/Info.plist changed under a Mac-only lease, or "
-                       + "iOS resumed and this should now derive from AppLanguage")
+                       AppLanguage.allCases.map(\.lproj),
+                       "apps/ios/Relayium/Info.plist no longer declares exactly the "
+                       + "shipped languages, in AppLanguage order")
     }
 
     // MARK: - R3-E: the Direct tab

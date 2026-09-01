@@ -4,27 +4,22 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
-	<!-- The same nine languages the app declares, and for the same reason: the
+	<!-- The same two languages the app declares, and for the same reason: the
 	     catalogs live in the RelayiumShareKit package bundle rather than in this
-	     one, so without this list iOS treats the extension as English-only. It
-	     would render correct Arabic words — the package bundle answers for them —
-	     while laying the sheet out left to right, because
+	     one, so without this list iOS treats the extension as English-only, and
 	     UIApplication.userInterfaceLayoutDirection is decided from the BUNDLE's
-	     localizations. Every Arabic screen would then read correctly and be laid
-	     out backwards. An extension has its own bundle, so it needs its own copy
-	     of this list; keep in step with AppLanguage and with the app's
-	     Info.plist. -->
+	     localizations rather than from the package's. An extension has its own
+	     bundle, so it needs its own copy of this list; keep in step with
+	     AppLanguage and with the app's Info.plist.
+
+	     Exactly the shipped set, in both directions. The seven frozen locales
+	     now live in apps/RelayiumKit/LocalizationArchive/, and an entry here
+	     with no catalog behind it would claim a language this sheet then
+	     renders in English. -->
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>en</string>
 		<string>zh-Hans</string>
-		<string>ja</string>
-		<string>ko</string>
-		<string>de</string>
-		<string>fr</string>
-		<string>ar</string>
-		<string>es</string>
-		<string>pt</string>
 	</array>
 	<!-- Required, and required by `installd` rather than by any build step. An
 	     appex without a non-empty `CFBundleDisplayName` is refused at INSTALL
@@ -39,8 +34,8 @@
 	     belongs in the sheet is the app the files are going to.
 
 	     Not localized, and not a `$(...)` substitution. A brand name is the same
-	     in all nine languages this bundle declares, so an `InfoPlist.strings`
-	     per language would be nine copies of one word — and the catalogs this
+	     in both languages this bundle declares, so an `InfoPlist.strings` per
+	     language would be two copies of one word — and the catalogs this
 	     extension uses live in the RelayiumShareKit package bundle, not here,
 	     so a key looked up in THIS bundle would find nothing to vary anyway. -->
 	<key>CFBundleDisplayName</key>
