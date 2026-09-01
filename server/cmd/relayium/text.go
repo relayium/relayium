@@ -24,13 +24,21 @@ type textFlags struct {
 	yes       bool // legacy explicit "do not prompt me"; also overrides --verify
 }
 
-func parseTextFlags(args []string) (textFlags, []string, error) {
-	var f textFlags
+// textFlagSet declares `text`'s flags, binding them into f. Separate from
+// parseTextFlags so the help pre-scan reads its value-flag names off the same
+// declaration (see wantsHelpFS).
+func textFlagSet(f *textFlags) *flag.FlagSet {
 	fs := flag.NewFlagSet("text", flag.ContinueOnError)
 	fs.StringVar(&f.server, "server", defaultServer, "Relayium server base URL (self-host)")
 	fs.StringVar(&f.advertise, "advertise", "", "host:port to advertise as a direct endpoint")
 	fs.BoolVar(&f.verify, "verify", false, "require SAS confirmation before the session opens")
 	fs.BoolVar(&f.yes, "yes", false, "never prompt for SAS confirmation (the default; overrides --verify)")
+	return fs
+}
+
+func parseTextFlags(args []string) (textFlags, []string, error) {
+	var f textFlags
+	fs := textFlagSet(&f)
 	// parseArgs is permuteFlags + Parse, the one entry point every subcommand
 	// uses, so trailing flags work here too.
 	if err := parseArgs(fs, args); err != nil {
@@ -88,6 +96,10 @@ var (
 const textSessionTimeout = 10 * time.Minute
 
 func runText(args []string, stdout, stderr io.Writer) int {
+	if wantsHelpFS(textFlagSet(&textFlags{}), args) {
+		fmt.Fprint(stdout, textUsage)
+		return 0
+	}
 	f, rest, err := parseTextFlags(args)
 	if err != nil {
 		fmt.Fprintln(stderr, err)

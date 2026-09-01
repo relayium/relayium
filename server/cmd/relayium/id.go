@@ -15,6 +15,10 @@ func runID(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	var configDir string
 	fs.StringVar(&configDir, "config-dir", "", "identity/trust directory")
+	if wantsHelpFS(fs, args) {
+		fmt.Fprint(stdout, idUsage)
+		return 0
+	}
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}

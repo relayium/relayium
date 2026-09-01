@@ -24,6 +24,10 @@ func runUpdate(args []string, stdout, stderr io.Writer) int {
 	var check, force bool
 	fs.BoolVar(&check, "check", false, "only report whether an update is available; install nothing")
 	fs.BoolVar(&force, "force", false, "reinstall even if already on the latest version")
+	if wantsHelpFS(fs, args) {
+		fmt.Fprint(stdout, updateUsage)
+		return 0
+	}
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}

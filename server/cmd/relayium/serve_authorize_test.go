@@ -43,9 +43,13 @@ func TestAuthorizeReloadsAllowListWithoutRestart(t *testing.T) {
 	}
 }
 
-// An unreadable allow-list means we do not know who is authorized, so nobody
-// is. The operator gets a warning naming the file to fix; the file's contents
-// are never echoed.
+// An unreadable allow-list means we cannot learn who is authorized, so a peer
+// we do not already know is denied. With the empty cache this test starts from,
+// every peer is unknown: the read failure denies before the prompt stage, so
+// approve is never consulted. Peers already in the cache short-circuit ahead of
+// the reload and stay allowed — that boundary is covered by
+// TestAuthorizeReloadOnlyAdds, not here. The operator gets a warning naming the
+// file to fix; the file's contents are never echoed.
 func TestAuthorizeFailsClosedOnUnreadableAllowList(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root can read a mode-000 file, so the failure cannot be provoked")

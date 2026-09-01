@@ -90,19 +90,11 @@ pre-authorize it with "relayium authorize <fingerprint>" — the pusher prints i
 own fingerprint with "relayium id".
 `
 
-// serveValueFlags are the serve flags whose value is a separate token, so the
-// help pre-scan does not read `--dir -h` as a question. Keep it in step with the
-// FlagSet below; TestValueFlagArgumentIsNotAHelpRequest exercises every entry.
-var serveValueFlags = []string{"dir", "bind", "port", "config-dir"}
-
-func runServe(args []string, stdout, stderr io.Writer) int {
-	if wantsHelp(args, serveValueFlags...) {
-		fmt.Fprint(stdout, serveUsage)
-		return 0
-	}
+// serveFlagSet declares `serve`'s flags, binding them into f. The help pre-scan
+// reads its value-flag names off this same declaration (see wantsHelpFS), so
+// `--dir -h` names a directory rather than asking a question.
+func serveFlagSet(f *serveFlags) *flag.FlagSet {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	var f serveFlags
 	fs.StringVar(&f.dir, "dir", ".", "directory to receive files into")
 	fs.StringVar(&f.bind, "bind", "", "address to listen on (empty: all interfaces)")
 	fs.IntVar(&f.port, "port", defaultDaemonPort, "TCP port to listen on")
@@ -110,6 +102,17 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	fs.BoolVar(&f.noResume, "no-resume", false, "disable resuming partial files")
 	fs.BoolVar(&f.allowDelete, "allow-delete", false, "honor a sender's --delete (mirror) request")
 	fs.StringVar(&f.configDir, "config-dir", "", "identity/trust directory")
+	return fs
+}
+
+func runServe(args []string, stdout, stderr io.Writer) int {
+	var f serveFlags
+	fs := serveFlagSet(&f)
+	fs.SetOutput(stderr)
+	if wantsHelpFS(fs, args) {
+		fmt.Fprint(stdout, serveUsage)
+		return 0
+	}
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
@@ -240,12 +243,24 @@ func checkReceiveDir(dir string) error {
 const maxConcurrentServe = 64
 
 // serveHandler carries everything one serve invocation needs to authorize and
-// receive pushes. allow is mutated in place as new peers are approved; mu guards
-// it (and serializes interactive approval) across concurrent connections.
+// receive pushes. allow is mutated in place as new peers are approved.
+//
+// It takes TWO locks, and keeping them apart is the point (see authorize):
+//
+//   - mu guards the allow map and nothing else. It is held only for map reads
+//     and merges, never across a disk read or a prompt, so checking an
+//     already-authorized peer stays a memory lookup however slow the disk is
+//     and however long a human takes to answer another connection.
+//   - approveMu serializes the slow path — the reload, the prompt and the
+//     persist — so concurrent unknown peers cannot produce overlapping prompts
+//     or race each other's approval.
+//
+// Lock order is approveMu then mu, never the reverse.
 type serveHandler struct {
 	id          *secure.Identity
 	mu          sync.Mutex
 	allow       map[string]bool
+	approveMu   sync.Mutex
 	dir         string
 	noResume    bool
 	allowDelete bool
@@ -253,8 +268,11 @@ type serveHandler struct {
 	// approve is consulted for an unknown fingerprint; nil (or false) rejects it.
 	// It receives the peer's remote address and fingerprint.
 	approve func(remote, fp string) bool
-	stdout  io.Writer
-	stderr  io.Writer
+	// loadAllow reads the allow-list; nil means trust.LoadAuthorized. A seam for
+	// tests that need to control exactly when a reload starts and finishes.
+	loadAllow func(dir string) (map[string]bool, error)
+	stdout    io.Writer
+	stderr    io.Writer
 }
 
 // serveLoop accepts and handles connections. With once it handles exactly one
@@ -289,45 +307,133 @@ func serveLoop(ln net.Listener, h *serveHandler, once bool) int {
 	}
 }
 
-// authorize reports whether fp may push, consulting and updating the shared
-// allow-list under lock. The lock also serializes interactive approval so
-// concurrent connections don't race the map or double-prompt.
+// authorize reports whether fp may push. It runs three deliberately separate
+// stages, so the overwhelmingly common case costs one map lookup:
 //
-// On a miss it re-reads authorized_fingerprints from this serve's own --config-dir
-// before deciding. The file has a second writer — `relayium authorize
+//  1. a cached check under mu alone — no disk I/O, no prompt, nothing to wait
+//     for;
+//  2. a reload of authorized_fingerprints performed with NO lock held, merged
+//     back into the cache under mu;
+//  3. for a peer still unknown after that reload, the serialized approval path.
+//
+// Stage 1 is what keeps an already-authorized peer from queueing behind another
+// connection's slow disk or a human staring at a prompt: the only lock it needs
+// is mu, and mu is never held across either.
+//
+// Stage 2 exists because the file has a second writer — `relayium authorize
 // --config-dir <the same dir> <fp>` — and the documented systemd workflow is
 // exactly that: authorize a new pusher on a listener that is already running.
-// Without this reload the in-memory set is whatever existed at startup, and the
+// Without the reload the in-memory set is whatever existed at startup, and the
 // operator's authorize appears to do nothing until the service is restarted.
 //
-// The reload only ever ADDS. Dropping fingerprints that vanished from the file
-// would be revocation, which is a separate decision (a live transfer would also
-// race it); an operator revoking access still restarts the listener.
+// Fail closed exactly as far as the stages allow, and no further. A file that
+// cannot be read or parsed means we do not know who is authorized, so no peer
+// this process has not already cached is: stages 2 and 3 deny the connection
+// that provoked the failure and never fall through to the prompt, so a broken
+// file can only ever narrow access.
+//
+// It cannot narrow it below the cache, and that is deliberate rather than an
+// oversight. Stage 1 does no I/O at all, so a peer already in the map — read at
+// startup, merged by an earlier successful reload, or approved interactively
+// since — keeps pushing while the file is unreadable. This is the same
+// add-only boundary as reloadAndMerge's: breaking the file is not a revocation
+// channel, and clearing the cache on a failed read would hand one to anyone who
+// can corrupt or unlink it. Revoking a cached peer means fixing the file and
+// restarting the listener.
 func (h *serveHandler) authorize(fp, remote string) bool {
+	// Stage 1: the fast path. Cached peers stop here.
+	if h.cachedAllows(fp) {
+		return true
+	}
+	// Stage 2: pick up anything `relayium authorize` added since we last looked.
+	allowed, err := h.reloadAndMerge(fp)
+	if err != nil {
+		h.reportUnreadable(fp, remote, err)
+		return false
+	}
+	if allowed {
+		return true
+	}
+	// Stage 3: genuinely unknown — ask, under serialization.
+	return h.approveUnknown(fp, remote)
+}
+
+// cachedAllows answers from memory only. Reading a nil map is legal, so a
+// handler built without an allow map still answers "no" rather than panicking.
+func (h *serveHandler) cachedAllows(fp string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.allow[fp]
+}
+
+// reloadAndMerge re-reads the allow-list and folds it into the cache, reporting
+// whether fp is authorized afterwards.
+//
+// The read and parse happen with NO lock held — that is the whole point, since
+// they are the slow part. mu is taken only to merge the result.
+//
+// The merge only ever ADDS. Dropping fingerprints that vanished from the file
+// would be revocation, which is a separate decision (a live transfer would also
+// race it); an operator revoking access still restarts the listener. Add-only is
+// what also makes the unlocked read safe: this snapshot may already be stale by
+// the time we merge it — another connection may have approved a peer, or the
+// operator may have authorized one, in between — and a merge cannot erase
+// either of those. For the same reason the answer comes from the merged map
+// rather than the snapshot, so a decision is never made on the stale read.
+func (h *serveHandler) reloadAndMerge(fp string) (bool, error) {
+	reloaded, err := h.loadAuthorized()
+	if err != nil {
+		return false, err
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.allow == nil {
 		h.allow = map[string]bool{}
 	}
-	if h.allow[fp] {
-		return true
-	}
-	// Fail closed: if the allow-list can't be read or parsed we do not know who
-	// is authorized, so nobody is. Say so locally (the operator must fix the
-	// file) without echoing any of its contents.
-	reloaded, err := trust.LoadAuthorized(h.cfgDir)
-	if err != nil {
-		fmt.Fprintf(h.stderr, "rejected peer %s from %s: cannot read %s: %v\n"+
-			"  fix or remove that file — until it can be read, every peer is rejected.\n",
-			fp, remote, trust.AuthorizedPath(h.cfgDir), err)
-		return false
-	}
 	for known := range reloaded {
 		h.allow[known] = true
 	}
-	if h.allow[fp] {
+	return h.allow[fp], nil
+}
+
+// loadAuthorized reads the allow-list through the test seam when one is set.
+func (h *serveHandler) loadAuthorized() (map[string]bool, error) {
+	if h.loadAllow != nil {
+		return h.loadAllow(h.cfgDir)
+	}
+	return trust.LoadAuthorized(h.cfgDir)
+}
+
+// approveUnknown runs the slow path for a fingerprint stage 2 did not authorize:
+// ask the operator, remember the answer. approveMu makes it exclusive, so
+// concurrent unknown peers can never overlap prompts. mu is left free the whole
+// time, so cached peers keep passing while a human is being asked.
+func (h *serveHandler) approveUnknown(fp, remote string) bool {
+	h.approveMu.Lock()
+	defer h.approveMu.Unlock()
+
+	// Reaching this line may have taken arbitrarily long — a human at another
+	// connection's prompt. Stage 2's answer is therefore stale, and both of the
+	// re-checks below exist to avoid acting on it.
+	//
+	// The cache may have gained fp from the very approval we queued behind. This
+	// is what collapses a burst of first connections from the SAME peer into one
+	// prompt instead of one prompt each.
+	if h.cachedAllows(fp) {
 		return true
 	}
+	// The file may have gained fp from `relayium authorize` run while we waited.
+	// Re-reading here — still outside mu — means we never prompt for, or reject,
+	// a peer the operator has meanwhile authorized.
+	allowed, err := h.reloadAndMerge(fp)
+	if err != nil {
+		h.reportUnreadable(fp, remote, err)
+		return false
+	}
+	if allowed {
+		return true
+	}
+
 	if h.approve == nil || !h.approve(remote, fp) {
 		fmt.Fprintf(h.stderr, "rejected unauthorized peer %s from %s\n", fp, remote)
 		return false
@@ -337,9 +443,35 @@ func (h *serveHandler) authorize(fp, remote string) bool {
 	if err := trust.AddAuthorized(h.cfgDir, fp); err != nil {
 		fmt.Fprintf(h.stderr, "warning: could not persist fingerprint to %s: %v\n", trust.AuthorizedPath(h.cfgDir), err)
 	}
-	h.allow[fp] = true
+	h.grant(fp)
 	fmt.Fprintf(h.stderr, "authorized %s (added to %s)\n", fp, trust.AuthorizedPath(h.cfgDir))
 	return true
+}
+
+// grant records an approved fingerprint in the cache.
+func (h *serveHandler) grant(fp string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.allow == nil {
+		h.allow = map[string]bool{}
+	}
+	h.allow[fp] = true
+}
+
+// reportUnreadable explains an allow-list that could not be read or parsed. The
+// operator has to fix the file; its contents are never echoed.
+//
+// The wording states the actual boundary (see authorize): the failure denies
+// peers this listener has not already cached, and does NOT revoke the ones it
+// has. Telling an operator that "every peer is rejected" would send them
+// looking for an outage that is not happening — and could read as a promise
+// that corrupting this file locks everyone out, which is not true either.
+func (h *serveHandler) reportUnreadable(fp, remote string, err error) {
+	fmt.Fprintf(h.stderr, "rejected peer %s from %s: cannot read %s: %v\n"+
+		"  fix or remove that file — until it can be read, no peer this listener has not\n"+
+		"  already cached can be authorized. Peers cached at startup or approved since\n"+
+		"  then keep pushing until you restart it.\n",
+		fp, remote, trust.AuthorizedPath(h.cfgDir), err)
 }
 
 // serve runs one pinned-TLS server handshake, authorizes the peer (allow-list
@@ -425,6 +557,10 @@ func runAuthorize(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	var configDir string
 	fs.StringVar(&configDir, "config-dir", "", "identity/trust directory")
+	if wantsHelpFS(fs, args) {
+		fmt.Fprint(stdout, authorizeUsage)
+		return 0
+	}
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}

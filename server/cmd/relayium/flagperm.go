@@ -123,6 +123,32 @@ func wantsHelp(args []string, valueFlags ...string) bool {
 	return false
 }
 
+// wantsHelpFS is wantsHelp with the value-flag list read off the FlagSet the
+// command actually parses with, so the two can never drift apart. The earlier
+// hand-maintained lists were correct only for as long as someone remembered to
+// edit them next to a new flag, and a stale list is silent: `--device-name -h`
+// starts printing usage instead of naming a device "-h".
+//
+// It must be called BEFORE fs.Parse — the FlagSet is only being read for its
+// declared flag names here, exactly as permuteFlags reads it.
+func wantsHelpFS(fs *flag.FlagSet, args []string) bool {
+	return wantsHelp(args, valueFlagNames(fs)...)
+}
+
+// valueFlagNames returns the flags of fs whose value is a SEPARATE token. Bool
+// flags are excluded because they claim no token, which is the same distinction
+// permuteFlags makes.
+func valueFlagNames(fs *flag.FlagSet) []string {
+	var names []string
+	fs.VisitAll(func(f *flag.Flag) {
+		if bf, ok := f.Value.(boolFlag); ok && bf.IsBoolFlag() {
+			return
+		}
+		names = append(names, f.Name)
+	})
+	return names
+}
+
 // takesValue reports whether arg is one of names written in a form that puts its
 // value in the FOLLOWING token ("--config-dir dir", "-p 2222") rather than in
 // the same one ("--config-dir=dir").

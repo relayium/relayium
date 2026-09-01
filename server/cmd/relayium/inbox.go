@@ -73,7 +73,13 @@ func runInbox(args []string, stdout, stderr io.Writer) int {
 		return runInboxPauseResume(args[1:], false, stdout, stderr)
 	case "service":
 		return runInboxService(args[1:], stdout, stderr)
-	case "-h", "--help", "help":
+	case "-h", "-help", "--help":
+		fmt.Fprint(stdout, inboxUsage)
+		return 0
+	case "help":
+		if len(args) > 1 {
+			return helpForInbox(args[1:], stdout, stderr)
+		}
 		fmt.Fprint(stdout, inboxUsage)
 		return 0
 	default:
@@ -132,6 +138,10 @@ func runInboxEnable(args []string, stdout, stderr io.Writer) int {
 	var dir, configDir string
 	fs.StringVar(&dir, "dir", "", "directory to receive files into (required)")
 	inboxConfigDirFlag(fs, &configDir)
+	if wantsHelpFS(fs, args) {
+		fmt.Fprint(stdout, inboxEnableUsage)
+		return 0
+	}
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
@@ -295,6 +305,10 @@ func runInboxRun(args []string, stdout, stderr io.Writer) int {
 	var once bool
 	inboxConfigDirFlag(fs, &configDir)
 	fs.BoolVar(&once, "once", false, "drain the queue once and exit instead of staying resident")
+	if wantsHelpFS(fs, args) {
+		fmt.Fprint(stdout, inboxRunUsage)
+		return 0
+	}
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
@@ -376,6 +390,10 @@ func runInboxDisable(args []string, stdout, stderr io.Writer) int {
 	inboxConfigDirFlag(fs, &configDir)
 	fs.BoolVar(&localOnly, "local-only", false,
 		"stop receiving locally without clearing the server inbox (keeps the private keys)")
+	if wantsHelpFS(fs, args) {
+		fmt.Fprint(stdout, inboxDisableUsage)
+		return 0
+	}
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
@@ -494,6 +512,14 @@ func runInboxPauseResume(args []string, pause bool, stdout, stderr io.Writer) in
 	fs.SetOutput(stderr)
 	var configDir string
 	inboxConfigDirFlag(fs, &configDir)
+	if wantsHelpFS(fs, args) {
+		if pause {
+			fmt.Fprint(stdout, inboxPauseUsage)
+		} else {
+			fmt.Fprint(stdout, inboxResumeUsage)
+		}
+		return 0
+	}
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
@@ -575,6 +601,10 @@ func runInboxStatus(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	var configDir string
 	inboxConfigDirFlag(fs, &configDir)
+	if wantsHelpFS(fs, args) {
+		fmt.Fprint(stdout, inboxStatusUsage)
+		return 0
+	}
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
@@ -707,6 +737,10 @@ func runInboxService(args []string, stdout, stderr io.Writer) int {
 	inboxConfigDirFlag(fs, &configDir)
 	fs.StringVar(&serviceUser, "service-user", "", "account a system-wide unit runs as (default: relayium)")
 	fs.StringVar(&receiveDir, "dir", "", "receive directory to write into the unit (default: the enabled one)")
+	if wantsHelpFS(fs, args) {
+		fmt.Fprint(stdout, inboxServiceUsage)
+		return 0
+	}
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}

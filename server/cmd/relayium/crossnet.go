@@ -158,6 +158,10 @@ func splitSendArgs(args []string) (srcs []string, code string, err error) {
 }
 
 func runSendCross(args []string, stdout, stderr io.Writer) int {
+	if wantsHelpFS(crossFlagSet(&crossFlags{}), args) {
+		fmt.Fprint(stdout, sendUsage)
+		return 0
+	}
 	f, rest, err := parseCrossFlags(args)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -200,6 +204,10 @@ func runSendCross(args []string, stdout, stderr io.Writer) int {
 }
 
 func runReceiveCross(args []string, stdout, stderr io.Writer) int {
+	if wantsHelpFS(crossFlagSet(&crossFlags{}), args) {
+		fmt.Fprint(stdout, receiveUsage)
+		return 0
+	}
 	f, rest, err := parseCrossFlags(args)
 	if err != nil {
 		fmt.Fprintln(stderr, err)

@@ -133,6 +133,7 @@ func TestWantsHelpDoesNotDisturbOrdinaryArgs(t *testing.T) {
 		{[]string{"--helpful", "./src"}, false},
 		{nil, false},
 	}
+	syncValueFlags := valueFlagNames(syncFlagSet(&syncFlags{}))
 	for _, c := range cases {
 		if got := wantsHelp(c.args, syncValueFlags...); got != c.want {
 			t.Errorf("wantsHelp(%v) = %v, want %v", c.args, got, c.want)
@@ -162,6 +163,7 @@ func TestWantsHelpSkipsValueFlagArguments(t *testing.T) {
 		{"dangling value flag at the end", []string{"./src", "--config-dir"}, false},
 		{"value flag at the very end before nothing", []string{"-p"}, false},
 	}
+	syncValueFlags := valueFlagNames(syncFlagSet(&syncFlags{}))
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			if got := wantsHelp(c.args, syncValueFlags...); got != c.want {
@@ -187,9 +189,9 @@ func TestValueFlagArgumentIsNotAHelpRequest(t *testing.T) {
 		flags  []string
 		suffix []string
 	}{
-		{"push", stdValueFlags, nil},
-		{"sync", syncValueFlags, nil},
-		{"serve", serveValueFlags, []string{"--dir", missingDir}},
+		{"push", valueFlagNames(stdFlagSet(&sshFlags{})), nil},
+		{"sync", valueFlagNames(syncFlagSet(&syncFlags{})), nil},
+		{"serve", valueFlagNames(serveFlagSet(&serveFlags{})), []string{"--dir", missingDir}},
 	}
 	for _, c := range cmds {
 		for _, name := range c.flags {
