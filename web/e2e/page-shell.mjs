@@ -616,11 +616,121 @@ async function pricingHierarchyScenario(browser, base) {
   await browser.send("Target.closeTarget", { targetId: tab.targetId });
 }
 
+/**
+ * /cli on a phone. This one is here because it is the ONLY place the defect is
+ * observable: `.cli` sets `overflow-x: clip`, so a document-level
+ * `scrollWidth - clientWidth` — the check every other scenario above uses —
+ * reads 0 on a page whose install band is 95px wider than the viewport. The
+ * reader still cannot see the right-hand side of it; the clip just removed the
+ * scrollbar that would have said so.
+ *
+ * So this scenario measures the BOXES, not the document: `.cli` and the four
+ * grid/flow descendants under it that a wide command block used to stretch.
+ * `document.documentElement` is measured too, but as a floor rather than the
+ * whole claim.
+ *
+ * The two positive halves matter as much as the overflow bound, because both
+ * are ways of "fixing" this that make the page worse:
+ *
+ *  - every command `<pre>` must still be a real horizontal scroll container
+ *    (`scrollWidth > clientWidth` on at least one of them, and scrollable to a
+ *    non-zero offset). Wrapping a shell command instead is a command the reader
+ *    cannot retype.
+ *  - every terminal title must be fully laid out (`scrollWidth <= clientWidth`)
+ *    and every copy button must still clear the 44px touch floor. Ellipsising
+ *    the title or shrinking the button would satisfy an overflow-only check.
+ */
+async function cliMobileScenario(browser, base) {
+  const tab = await newTab(browser, base + "/cli");
+  await tab.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+  await setWideViewport(tab, 390, 844);
+  await tab.waitFor("!!document.querySelector('.cli .term pre')", "the CLI page's command blocks");
+
+  // The containers the install band used to stretch, plus `.cli` itself. Named
+  // rather than derived: a selector that stopped matching would otherwise
+  // silently reduce this to "the document did not overflow", which is exactly
+  // the check that could not see the bug.
+  const CONTAINERS = [".cli", ".layout", ".body", ".install", ".platforms"];
+  const locales = ["zh", "en"];
+  const measured = [];
+  for (const code of locales) {
+    await tab.evaluate(`(() => {
+      const select = document.querySelector('select.lang');
+      select.value = ${JSON.stringify(code)};
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    })()`);
+    await tab.waitFor(`document.documentElement.lang === ${JSON.stringify(code)}`, `${code} CLI locale`);
+    // Prove a <pre> really scrolls rather than merely reporting a wide
+    // scrollWidth: a `white-space: pre` box inside a clipped ancestor reports
+    // the same numbers and cannot be read.
+    await tab.evaluate(`(() => {
+      const pre = [...document.querySelectorAll('.cli .term pre')].find((p) => p.scrollWidth > p.clientWidth);
+      if (pre) pre.scrollLeft = 9999;
+      return true;
+    })()`);
+    measured.push(await tab.evaluate(`(() => {
+      const boxes = ${JSON.stringify(CONTAINERS)}.map((sel) => {
+        const el = document.querySelector(sel);
+        return el
+          ? { sel, overflow: el.scrollWidth - el.clientWidth, scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }
+          : { sel, missing: true };
+      });
+      const pres = [...document.querySelectorAll('.cli .term pre')];
+      const scrolled = pres.filter((p) => p.scrollLeft > 0).length;
+      return {
+        lang: document.documentElement.lang,
+        dir: document.documentElement.dir,
+        pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        boxes,
+        preCount: pres.length,
+        widePres: pres.filter((p) => p.scrollWidth > p.clientWidth).length,
+        scrolledPres: scrolled,
+        titleOverflows: [...document.querySelectorAll('.cli .term .title')]
+          .map((el) => ({ text: el.textContent.trim(), over: el.scrollWidth - el.clientWidth }))
+          .filter((t) => t.over > 1),
+        copyHeights: [...document.querySelectorAll('.cli .term .copy')].map((el) => el.getBoundingClientRect().height),
+        copyWidths: [...document.querySelectorAll('.cli .term .copy')].map((el) => el.getBoundingClientRect().width),
+        // .term sets overflow:hidden to round its corners, so a title bar that
+        // no longer fits would be silently cut off instead of reported by any
+        // of the bounds above. Measured directly, it cannot be.
+        barOverflows: [...document.querySelectorAll('.cli .term .bar')]
+          .map((el) => el.scrollWidth - el.clientWidth).filter((n) => n > 1),
+      };
+    })()`));
+  }
+
+  const bad = measured.filter((m) =>
+    m.pageOverflow !== 0 || m.dir !== "ltr" ||
+    m.boxes.some((b) => b.missing || b.overflow > 1) ||
+    // Vacuity guards: no command blocks, or none of them scrollable, would
+    // satisfy every bound above by rendering nothing worth measuring.
+    m.preCount === 0 || m.widePres === 0 || m.scrolledPres === 0 ||
+    m.titleOverflows.length !== 0 || m.barOverflows.length !== 0 ||
+    !m.copyHeights.length || m.copyHeights.some(undersizedTouchTarget) ||
+    m.copyWidths.some(undersizedTouchTarget)
+  );
+  if (bad.length) throw new Error(`mobile CLI layout contract failed: ${JSON.stringify(bad)}`);
+
+  await tab.evaluate(`(() => {
+    const select = document.querySelector('select.lang');
+    select.value = 'en';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+  await tab.waitFor("document.documentElement.lang === 'en'", "English locale after the CLI sweep");
+
+  const errs = tab.errors.filter((e) => !/401|Failed to load resource/.test(e));
+  if (errs.length) throw new Error(`CLI page logged errors:\n    ${errs.join("\n    ")}`);
+  ok(`CLI page fitted a 390px viewport in both maintained languages with ${measured[0].widePres} scrollable command block(s) and honest copy targets`);
+  await browser.send("Target.closeTarget", { targetId: tab.targetId });
+}
+
 // Fixed, not derived from SCENARIOS.length: a future edit that comments out or
 // otherwise drops an entry below must not still see its own shrunken array
 // length agree with itself and print a false N/N pass.
-const EXPECTED_SCENARIO_COUNT = 4;
-const SCENARIOS = [authLandingScenario, appsHierarchyScenario, pricingHierarchyScenario, unsupportedLayoutScenario];
+const EXPECTED_SCENARIO_COUNT = 5;
+const SCENARIOS = [authLandingScenario, appsHierarchyScenario, pricingHierarchyScenario, cliMobileScenario, unsupportedLayoutScenario];
 
 async function main() {
   const preview = await startPreview({ port: PREVIEW_PORT });

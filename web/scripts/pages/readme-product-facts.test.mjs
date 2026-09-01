@@ -127,13 +127,37 @@ describe("README product facts", () => {
     expect(readme).not.toMatch(/\bstorage\b[^.\n]{0,25}\bper month\b/i);
   });
 
-  it("names `up` as the hosted-storage exception wherever the CLI is called direct", () => {
-    // The honest replacement has to be present, not merely the absence above: a
-    // reader deciding whether `relayium up` costs them anything must be told.
-    expect(prose).toContain("The one CLI mode that is not direct is `relayium up`");
+  // There are TWO hosted CLI surfaces, not one. The 2026-08-28 correction that
+  // stopped the README calling the CLI direct-only replaced that claim with "the
+  // one CLI mode that is not direct is `relayium up`" — and an earlier version of
+  // THIS FILE required that sentence verbatim, so the guard pinned a second,
+  // smaller untruth in place. Device Inbox is hosted and asynchronous too: the
+  // encrypted task sits in Relayium's queue while the target machine is offline,
+  // and its delivery is metered on the same monthly-traffic dimension as a stored
+  // link (docs/billing-transparency.md, `s.overTraffic` in `deviceinbox_task.go`).
+  // So what is pinned here is the shape rather than the sentence: both hosted
+  // surfaces named, the count never collapsed back to one, the pairing modes left
+  // direct, and the direct-mode list still enumerable.
+  it("names both hosted CLI surfaces wherever the CLI is called direct", () => {
+    // Cloud stored links — the cost claim a reader deciding whether `relayium up`
+    // will bill them has to be able to find.
     expect(prose).toMatch(/`relayium up`[^.]{0,200}hosted storage/);
     expect(prose).toMatch(/`relayium up`[^.]{0,400}exactly like a stored download link/);
     expect(prose).not.toMatch(/`relayium up`[^.]{0,400}storage cap and\s+retention window/);
+    // Device Inbox — the other hosted, asynchronous surface, and the CLI's side of
+    // it is receive. Omitting it is what made the previous wording wrong.
+    expect(prose, "Device Inbox is not stated as the second hosted surface").toMatch(
+      /Device Inbox[^.]{0,80}hosted and asynchronous/i,
+    );
+    expect(prose).toMatch(/Device Inbox is the receive side only/i);
+    expect(prose, "the hosted exception was flattened back to a single mode").not.toMatch(
+      /\b(?:the )?(?:one|only) CLI (?:mode|command|surface|feature)\b[^.]{0,60}\bnot direct\b/i,
+    );
+    expect(readme).not.toContain("The one CLI mode that is not direct");
+    // …and the rendezvous handshake is not a third hosted path. `send`, `receive`
+    // and `text` reach our servers for the handshake and nothing else; losing this
+    // turns a correction about `up` into a claim that the pairing modes are hosted.
+    expect(prose).toContain("only for a tiny rendezvous handshake (never the content)");
     // And the direct modes still have to be enumerable, or "not free" replaces
     // one wrong claim with another.
     for (const mode of ["`push`/`pull`", "`sync`", "daemon-direct", "`send`/`receive`", "`text`"]) {

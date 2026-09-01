@@ -64,18 +64,36 @@
 </div>
 
 <style>
+  /* min-inline-size: 0 so this box never reports a floor of its own to a flex
+     or grid parent. `overflow: hidden` here rounds the corners over the bar and
+     the <pre> and nothing more; it must never be what keeps the block inside
+     the page, because a clipped block is one whose right-hand side the reader
+     cannot reach by any means. The <pre> below owns the sideways scroll. */
   .term {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     overflow: hidden;
+    min-inline-size: 0;
     background: var(--code-bg);
     box-shadow: var(--shadow);
   }
+  /* Wrapping is a guard here, not the overflow fix. Measured in a real browser
+     at both 390px and 320px, the current dots + title + button row still fits
+     on one line; what made this block wider than the phone was the <pre>, via
+     an `auto` grid track that floored at its min-content (see InstallBand).
+     The guard is worth its three declarations because .term CLIPS: were a
+     longer title ever to push this row past the block, the end of it would
+     silently disappear rather than overflow visibly — and that title is also
+     the accessible name of the command below it. Wrapped, it takes a second
+     line and stays whole. page-shell.mjs measures this bar's own overflow, so
+     the clip cannot hide a regression here. */
   .bar {
     display: flex;
     align-items: center;
-    gap: var(--space-3);
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
     padding: var(--space-2) var(--space-3);
+    min-inline-size: 0;
     background: var(--surface-2);
     border-bottom: 1px solid var(--border);
   }
@@ -98,10 +116,20 @@
   .dots i:nth-child(3) {
     background: #28c840;
   }
+  /* The other half of that guard. These titles are command names, so their
+     longest unbreakable run can be nearly the whole string — `inbox-server-
+     install.sh` has no space in it at all. min-inline-size: 0 stops this flex
+     item flooring at that run, and overflow-wrap: anywhere gives the run a
+     break point, so a long title wraps rather than widening the block or being
+     cut off by .term's clip. Wrapped, not ellipsised: this title is the <pre>'s
+     accessible name, and an ellipsis would shorten what a screen reader
+     announces for the command as well as what is on screen. */
   .title {
     font-size: var(--fs-xs);
     color: var(--text);
     font-family: var(--mono);
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
   }
   .copy {
     margin-inline-start: auto;
@@ -120,6 +148,14 @@
   .copy:hover {
     color: var(--text-h);
     border-color: var(--accent-border);
+  }
+  /* On a phone this is the only control in the block, and 3px of vertical
+     padding is a ~22px target — half the 44px minimum. The bar has room. */
+  @media (max-width: 720px) {
+    .copy {
+      min-block-size: 44px;
+      min-inline-size: 44px;
+    }
   }
   /* Success flash: the label pops and greens for its brief "Copied ✓" window. */
   /* --ok, not another private green: #2ecc71 was ~2:1 on this bar in light mode,

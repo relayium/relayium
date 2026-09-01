@@ -106,7 +106,7 @@ ol.steps>li>pre{margin:8px 0 0}
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>想自己挑选文件？从发布页下载对应的二进制。</li><li>已安装 Go？克隆仓库后运行：go build -o relayium ./cmd/relayium（在 server 目录下执行）。</li><li>然后运行 relayium --help 查看全部命令，运行 relayium version 检查构建版本。</li></ul>
       <h2>传输文件的三种方式</h2>
-      <p>Relayium 提供三种传输方式。你按对方所在的位置来选，而不用去学三种不同的工具——它们共用同一个传输引擎，支持逐文件断点续传和 SHA-256 校验。</p>
+      <p>Relayium 提供三种传输方式。你按对方所在的位置来选，而不用去学三种不同的工具——它们共用同一个传输引擎，会对自己搬运的每个文件做 SHA-256 校验。它们不共用的是续传：sync 才是那个会在下一次运行时接着传半截文件的模式，而 push、pull、send、receive 根本不续传。</p>
       <ul><li>push / pull——传到一台你已能 SSH 进去的服务器。字节走你的 SSH 连接；无需 Relayium 账号。</li><li>send / receive——跨网络传给另一个人，使用一个由发送方 CLI 生成的简短配对码（用 relayium login 登录一次即可；接收方无需登录）。铸出来的配对码有效期 5 分钟，所以要在这段时间内在接收端把命令跑起来。</li><li>Relayium CLI 的 send/receive 和 text 都只走 P2P 直连：文件或消息字节绝不会通过 TURN 或任何其他 Relayium 服务器中继。两端无法建立直连时，会话会直接失败，不会回退到中继。</li><li>serve + push relayium://（daemon 直连）——直接在你拥有的两台服务器之间传输，通过证书固定的 TLS。无中继、无 SSH、无需配对码。</li></ul>
       <h2>发送临时文本</h2>
       <p>在一台机器运行 relayium text 生成配对码并等待，然后在另一台机器用打印出的配对码加入：</p>
@@ -121,7 +121,7 @@ ol.steps>li>pre{margin:8px 0 0}
   photos/IMG_0414.jpg (1998233 bytes)
 echo $?
 # 0</code></pre></div>
-      <ul><li>如果远程也装了 relayium，push 就会使用原生协议（可续传、逐文件 SHA-256）。</li><li>如果远程没装 relayium，push 会退化为普通的 tar 流，因此在裸机服务器上依然可用——这个兜底只属于 push。</li><li>用这个命令把同样的文件取回来：relayium pull user@your-server:backups/ ./restore——pull 始终需要远程装有 relayium（没有 tar 兜底），请先在远程装好它。</li></ul>
+      <ul><li>如果远程也装了 relayium，push 就会使用原生协议：发送任何字节之前先对整批做冲突预检，每个文件都做 SHA-256 校验并先落到暂存区再安装。它依然不续传——中断之后重跑会被拒绝，因为已经落地的文件现在存在了。需要续传请改用 relayium sync。</li><li>如果远程没装 relayium，push 会退化为普通的 tar 流，因此在裸机服务器上依然可用——这个兜底只属于 push。</li><li>用这个命令把同样的文件取回来：relayium pull user@your-server:backups/ ./restore——pull 始终需要远程装有 relayium（没有 tar 兜底），请先在远程装好它。</li></ul>
       <h2>第一条命令跑不通时</h2>
       <p>第一次运行时出问题，下面四种加起来比其他所有情况都多。它们都不需要靠猜——每一种都有一条命令，输出就能定性。</p>
       <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>安装脚本明明说成功了，却报 “relayium: command not found”。</dt><dd><pre><code>command -v relayium
@@ -132,7 +132,7 @@ relayium text
 relayium text 483920</code></pre><p>两端跑的是不同的命令。发消息就两台都用 relayium text；传文件就一台 relayium send、另一台 relayium receive。这种不匹配会在拨号之前就被拒绝，所以什么都没发出去。</p></dd></dl></div>
       <h2>免费，且从设计上保护隐私</h2>
       <p>上面三种直连方式都不收费。三者之中，唯一需要登录的是 send / receive 模式下的发送方，好让 CLI 生成配对码。CLI 直接连接两端，因此你的文件永远不会上传到中间的服务器——唯一会接触 Relayium 的，是 send / receive 模式下一次很小的会合握手，用来牵线搭桥，绝不是文件本身。云端 up 则不同：它把加密副本存放在你的账号下，所以需要登录，并会占用套餐的每月流量额度、存储上限、留存时长与每日上传额度。</p>
-      <p>每次传输都端到端加密，每个文件到达时都会用 SHA-256 哈希校验，中断的传输会从断点续传而不是从头再来。它可在 macOS、Linux 和 Windows 上运行，整个项目开源、可自托管。</p>
+      <p>每次传输都端到端加密；走原生协议时，一次运行传输的每个文件到达时都会用 SHA-256 哈希校验——零依赖的 tar 兜底路径是例外，它逐文件什么都不校验。续传的范围要窄得多：relayium sync 会在下一次运行时接着传半截文件，relayium down 会在它自己那一次运行内重连并接着下，而 push、pull、send、receive 根本不续传。它可在 macOS、Linux 和 Windows 上运行，整个项目开源、可自托管。</p>
       <h2>常见问题</h2>
       <h3>CLI 要收费吗？</h3>
       <p>CLI 本身免费且开源，直连模式——push、pull、daemon 直连与 send / receive——用起来也不花钱：这些文件与文本字节都不经过 Relayium 中继，因此没有什么可计量。会用到套餐额度的是 up 和 down，它们把加密副本写入、读回你的账号。up 会同时受四项互相独立的限制约束——每月流量额度、同时存放的存储上限、套餐的留存时长上限，以及滚动的每日上传额度；down 读回副本时计入每月流量额度。付费套餐会把这些都调高。</p>

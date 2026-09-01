@@ -1,7 +1,7 @@
 // web/scripts/pages/article-template.mjs — renders one article (one language) to a
 // self-contained static HTML string. No JS, no external CSS: styles are inlined so
 // the page is independent of the Vite asset graph and crawlable with JS disabled.
-import { MAINTAINED_LANGS, DEFAULT_LANG, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, ctaHref, landingUrl, dirAttr, rtlHead, isFrozen, archiveNotice, ARCHIVE_STYLE } from "./shared.mjs";
+import { MAINTAINED_LANGS, DEFAULT_LANG, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, ctaHref, landingUrl, dirAttr, RTL_LANGS, rtlHead, isFrozen, archiveNotice, ARCHIVE_STYLE } from "./shared.mjs";
 
 // Footer link label; matches content/landing.mjs footer.privacy per language.
 const PRIVACY_LABELS = {
@@ -81,13 +81,43 @@ function alternates(slug) {
   return links.join("\n    ");
 }
 
+// Every command block is left-to-right, for the same reason the firstColCode
+// table cell is (see tableHtml): a shell command is code, and code is read
+// left-to-right in every language. Inherited from <html dir="rtl"> the bidi
+// algorithm treats the command as an RTL paragraph containing embedded LTR runs,
+// so neutral characters at the edges — a leading `$`, a trailing `\`, the `|`
+// between two pipeline stages — resolve to the RTL base level and move to the
+// wrong end, and a command split across runs reorders the runs themselves. A
+// reader copying what they see would type something that does not run.
+//
+// The attribute goes on <pre>, not on <code>, because <pre> is the box that
+// carries `overflow-x:auto`: in an RTL context a scrollable box also starts
+// scrolled to its right edge, so a wide command would open mid-line. Setting
+// direction on the container fixes the text order and the scroll origin at once.
+// It is deliberately NOT set on prose, list items or ordinary table cells —
+// those are translated copy and must follow the page.
+//
+// It is emitted only when the document itself is RTL. An LTR document already
+// computes `direction:ltr` on every <pre> by inheritance, so spelling it out
+// there would change ~290 generated files to assert what the browser already
+// does. The invariant this file owns is "a command block never inherits RTL",
+// and on an LTR page that holds with no attribute at all. The flag is threaded
+// from renderArticlePage rather than read from a module global so the two
+// directions stay one rendering path with one branch, not two templates.
+//
+// CommandBlock.svelte pins its own <pre> unconditionally because the SPA renders
+// one document whose direction changes at runtime with the locale switch; here
+// the direction is known at generation time, per file.
+const codeBlockHtml = (text, rtl, attrs = "") =>
+  `<pre${rtl ? ' dir="ltr"' : ""}><code${attrs}>${esc(text)}</code></pre>`;
+
 // widgetHtml renders an interactive command builder that degrades gracefully:
 // with JS off it's a plain <pre> showing the command template (real,
 // crawlable content) plus two labelled inputs; the inline BUILDER_SCRIPT
 // (injected only when a page uses a widget) upgrades it to live-build the
 // `relayium down '<link>' <dir>` command and reveal a Copy button. Only the
 // "downloadBuilder" kind exists today.
-function widgetHtml(w) {
+function widgetHtml(w, rtl) {
   const fallback = `relayium down '<${w.linkToken}>' <${w.destToken}>`;
   return (
     `\n      <div class="builder" data-download-builder>` +
@@ -95,7 +125,7 @@ function widgetHtml(w) {
     `<input data-link type="text" placeholder="${esc(w.linkPlaceholder)}" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" data-token="${esc(w.linkToken)}" /></label>` +
     `<label class="bf"><span>${esc(w.destLabel)}</span>` +
     `<input data-dest type="text" placeholder="${esc(w.destPlaceholder)}" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" /></label>` +
-    `<div class="bcmd"><pre><code data-cmd>${esc(fallback)}</code></pre>` +
+    `<div class="bcmd">${codeBlockHtml(fallback, rtl, " data-cmd")}` +
     `<button type="button" class="bcopy" data-copy data-copied="${esc(w.copied)}" hidden>${esc(w.copy)}</button></div>` +
     `</div>`
   );
@@ -148,8 +178,7 @@ function tableHtml(t) {
 // concept in the output, so a guard can assert that an article really renders a
 // procedure as an <ol> rather than matching a class that a restyle could rename.
 
-const codeHtml = (blocks) =>
-  (blocks || []).map((b) => `<pre><code>${esc(b)}</code></pre>`).join("");
+const codeHtml = (blocks, rtl) => (blocks || []).map((b) => codeBlockHtml(b, rtl)).join("");
 
 // prereqsHtml — "you need these before step 1". An unordered list: the items are
 // conditions to satisfy in any order, not a sequence.
@@ -165,21 +194,21 @@ function prereqsHtml(p) {
 // stepsHtml — the procedure, as a real ordered list. A step may carry its own
 // command block, which lands inside its <li> so the command stays attached to
 // the step that runs it.
-function stepsHtml(steps) {
+function stepsHtml(steps, rtl) {
   const items = steps
-    .map((s) => `<li><p>${esc(s.text)}</p>${codeHtml(s.code)}</li>`)
+    .map((s) => `<li><p>${esc(s.text)}</p>${codeHtml(s.code, rtl)}</li>`)
     .join("");
   return `\n      <ol class="steps" data-block="steps">${items}</ol>`;
 }
 
 // successHtml — what the reader compares their terminal against. Labelled, so
 // it reads as "this is the expected result" rather than as one more code sample.
-function successHtml(s) {
+function successHtml(s, rtl) {
   return (
     `\n      <div class="cbox ok" data-block="success">` +
     `<p class="cbox-t">${esc(s.label)}</p>` +
     (s.body || []).map((p) => `<p>${esc(p)}</p>`).join("") +
-    codeHtml(s.code) +
+    codeHtml(s.code, rtl) +
     `</div>`
   );
 }
@@ -188,9 +217,9 @@ function successHtml(s) {
 // the content: the <dt> is the symptom the reader can see, the <dd> is the check
 // that decides it and the fix that follows. Each item's `code` is the check —
 // something to run, or an exact state to look at.
-function troubleshootHtml(t) {
+function troubleshootHtml(t, rtl) {
   const items = t.items
-    .map((i) => `<dt>${esc(i.symptom)}</dt><dd>${codeHtml(i.code)}<p>${esc(i.fix)}</p></dd>`)
+    .map((i) => `<dt>${esc(i.symptom)}</dt><dd>${codeHtml(i.code, rtl)}<p>${esc(i.fix)}</p></dd>`)
     .join("");
   return (
     `\n      <div class="cbox fix" data-block="troubleshooting">` +
@@ -200,17 +229,17 @@ function troubleshootHtml(t) {
   );
 }
 
-function sectionHtml(s) {
+function sectionHtml(s, rtl) {
   let out = `<h2>${esc(s.heading)}</h2>`;
   if (s.prereqs) out += prereqsHtml(s.prereqs);
   for (const p of s.body || []) out += `\n      <p>${esc(p)}</p>`;
   if (s.table) out += tableHtml(s.table);
-  for (const block of s.code || []) out += `\n      <pre><code>${esc(block)}</code></pre>`;
-  if (s.widget) out += widgetHtml(s.widget);
-  if (s.steps?.length) out += stepsHtml(s.steps);
-  if (s.success) out += successHtml(s.success);
+  for (const block of s.code || []) out += `\n      ${codeBlockHtml(block, rtl)}`;
+  if (s.widget) out += widgetHtml(s.widget, rtl);
+  if (s.steps?.length) out += stepsHtml(s.steps, rtl);
+  if (s.success) out += successHtml(s.success, rtl);
   if (s.bullets?.length) out += `\n      <ul>${s.bullets.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>`;
-  if (s.troubleshooting) out += troubleshootHtml(s.troubleshooting);
+  if (s.troubleshooting) out += troubleshootHtml(s.troubleshooting, rtl);
   return out;
 }
 
@@ -318,6 +347,10 @@ function hasBlocks(doc) {
 
 export function renderArticlePage({ slug, lang, doc, updated, published, related = [] }) {
   const archived = isFrozen(lang);
+  // Same predicate that decides <html dir="rtl">, so a command block can never
+  // disagree with the document it sits in: adding a locale to RTL_LANGS turns
+  // the page and its command blocks at the same time.
+  const rtl = RTL_LANGS.has(lang);
   const dateModified = doc.updated || updated;
   const canonical = absUrl(urlPath(slug, lang));
   const ogImage = SITE.origin + "/og-image.jpg";
@@ -379,7 +412,10 @@ export function renderArticlePage({ slug, lang, doc, updated, published, related
   };
 
   const lead = (doc.lead || []).map((p) => `<p class="lead">${esc(p)}</p>`).join("\n      ");
-  const sections = doc.sections.map(sectionHtml).join("\n      ");
+  // Explicit arrow, not a bare `map(sectionHtml)`: map's second argument is the
+  // index, which would silently arrive as the `rtl` flag and make section 0 LTR
+  // and every later section RTL on the same page.
+  const sections = doc.sections.map((s) => sectionHtml(s, rtl)).join("\n      ");
   const faq = doc.faq
     ? `<h2>${esc(doc.faq.heading)}</h2>\n      ` +
       doc.faq.items.map((it) => `<h3>${esc(it.q)}</h3>\n      <p>${esc(it.a)}</p>`).join("\n      ")

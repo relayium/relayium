@@ -46,12 +46,17 @@ describe("content icon ownership", () => {
     expect(howTo.match(/<Icon name=\{s\.icon\}/g)).toHaveLength(1);
   });
 
-  it("replaces the unreliable CLI network character with the shared glyph", () => {
+  it("keeps the unreliable CLI network character off the page entirely", () => {
     const cli = source("CliPage.svelte");
     const data = source("cli-page-data.ts");
+    // 🖧 was tofu in every font that lacked it, which is why it was swapped for
+    // the shared Icon glyph. The redesign went further than the swap: each mode
+    // row is now titled by the command itself (`serve`, `push / pull`, `sync`),
+    // so the page carries no per-mode picture at all — nothing decorative to
+    // render inconsistently, and nothing to keep in step with the mode list.
     expect(`${cli}\n${data}`).not.toContain("🖧");
-    expect(cli.match(/<Icon name="network" size=\{22\} \/>/g)).toHaveLength(3);
-    expect(data.match(/(?:g|icon): "network"/g)).toHaveLength(2);
+    expect(cli, "the CLI page no longer draws per-mode glyphs").not.toMatch(/<Icon\b/);
+    expect(data, "cli-page-data carries no icon field").not.toMatch(/\b(?:g|icon):\s*"/);
   });
 
   it("draws the Device Inbox hero mark from the shared icon set, not from an emoji", () => {

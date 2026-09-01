@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Relayium CLI로 SSH를 통해 자신의 서버에 파일 백업하기 · Relayium</title>
-    <meta name="description" content="relayium push와 pull로 이미 ssh로 접속하는 서버에 디렉터리를 복사하거나 동기화하세요 — 재개 가능하고 무결성 검사가 되며 무료입니다. 바이트는 내 SSH 연결을 통해 이동하며 Relayium의 서버를 전혀 거치지 않습니다." />
+    <meta name="description" content="relayium push와 pull로 이미 ssh로 접속하는 서버에 디렉터리를 복사하거나 동기화하세요 — 양쪽에 relayium이 있으면 파일별로 무결성 검사가 되며 무료입니다. 바이트는 내 SSH 연결을 통해 이동하며 Relayium의 서버를 전혀 거치지 않습니다." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ko/guides/back-up-a-server-over-ssh/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -13,7 +13,7 @@
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Relayium CLI로 SSH를 통해 자신의 서버에 파일 백업하기" />
-    <meta property="og:description" content="relayium push와 pull로 이미 ssh로 접속하는 서버에 디렉터리를 복사하거나 동기화하세요 — 재개 가능하고 무결성 검사가 되며 무료입니다. 바이트는 내 SSH 연결을 통해 이동하며 Relayium의 서버를 전혀 거치지 않습니다." />
+    <meta property="og:description" content="relayium push와 pull로 이미 ssh로 접속하는 서버에 디렉터리를 복사하거나 동기화하세요 — 양쪽에 relayium이 있으면 파일별로 무결성 검사가 되며 무료입니다. 바이트는 내 SSH 연결을 통해 이동하며 Relayium의 서버를 전혀 거치지 않습니다." />
     <meta property="og:url" content="https://relayium.com/ko/guides/back-up-a-server-over-ssh/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -23,9 +23,9 @@
     <meta property="og:locale" content="ko_KR" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Relayium CLI로 SSH를 통해 자신의 서버에 파일 백업하기" />
-    <meta name="twitter:description" content="relayium push와 pull로 이미 ssh로 접속하는 서버에 디렉터리를 복사하거나 동기화하세요 — 재개 가능하고 무결성 검사가 되며 무료입니다. 바이트는 내 SSH 연결을 통해 이동하며 Relayium의 서버를 전혀 거치지 않습니다." />
+    <meta name="twitter:description" content="relayium push와 pull로 이미 ssh로 접속하는 서버에 디렉터리를 복사하거나 동기화하세요 — 양쪽에 relayium이 있으면 파일별로 무결성 검사가 되며 무료입니다. 바이트는 내 SSH 연결을 통해 이동하며 Relayium의 서버를 전혀 거치지 않습니다." />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI로 SSH를 통해 자신의 서버에 파일 백업하기","description":"relayium push와 pull로 이미 ssh로 접속하는 서버에 디렉터리를 복사하거나 동기화하세요 — 재개 가능하고 무결성 검사가 되며 무료입니다. 바이트는 내 SSH 연결을 통해 이동하며 Relayium의 서버를 전혀 거치지 않습니다.","inLanguage":"ko","datePublished":"2026-07-08","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/back-up-a-server-over-ssh/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"Relayium CLI로 SSH를 통해 자신의 서버에 파일 백업하기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"파일이 Relayium의 서버를 거치나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. push와 pull은 전적으로 내 SSH 연결을 통해 실행됩니다. Relayium의 서버는 전혀 관여하지 않으며 계정도 필요 없습니다."}},{"@type":"Question","name":"서버에 relayium이 설치되어 있어야 하나요?","acceptedAnswer":{"@type":"Answer","text":"방향에 따라 다릅니다. push의 경우 선택 사항입니다. 원격에 relayium이 있으면 네이티브 프로토콜을 사용할 수 있습니다 — 재개 가능한 전송과 파일별 SHA-256 검사입니다. 없으면 push는 SSH를 통한 tar 스트림으로 대체되며, 여전히 동작하지만 각 파일을 항상 전체 전송합니다. pull의 경우 필수입니다. pull은 항상 원격지에 relayium이 있어야 하며(tar 대체 방식 없음), 먼저 원격지에 설치해 두세요."}},{"@type":"Question","name":"어떤 SSH 키와 포트를 사용할지 어떻게 정하나요?","acceptedAnswer":{"@type":"Answer","text":"ssh와 마찬가지로 기존 ~/.ssh/config를 읽으므로, 호스트 별칭, 키, 포트가 자동으로 반영됩니다. 명령마다 -i로 신원 파일을, -p로 포트를 지정해 재정의할 수도 있습니다."}},{"@type":"Question","name":"이게 rsync보다 빠른가요?","acceptedAnswer":{"@type":"Answer","text":"자신의 서버로 push하는 경우라면 SSH를 통한 rsync와 비슷한 수준입니다. 목표는 rsync를 이기는 것이 아니라, 같은 재개와 무결성 보장을 갖춘 채로 크로스 네트워크 전송과 서버 간 전송까지 함께 해내는 하나의 도구를 제공하는 것입니다."}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI로 SSH를 통해 자신의 서버에 파일 백업하기","description":"relayium push와 pull로 이미 ssh로 접속하는 서버에 디렉터리를 복사하거나 동기화하세요 — 양쪽에 relayium이 있으면 파일별로 무결성 검사가 되며 무료입니다. 바이트는 내 SSH 연결을 통해 이동하며 Relayium의 서버를 전혀 거치지 않습니다.","inLanguage":"ko","datePublished":"2026-07-08","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/back-up-a-server-over-ssh/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"Relayium CLI로 SSH를 통해 자신의 서버에 파일 백업하기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"파일이 Relayium의 서버를 거치나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. push와 pull은 전적으로 내 SSH 연결을 통해 실행됩니다. Relayium의 서버는 전혀 관여하지 않으며 계정도 필요 없습니다."}},{"@type":"Question","name":"서버에 relayium이 설치되어 있어야 하나요?","acceptedAnswer":{"@type":"Answer","text":"방향에 따라 다릅니다. push의 경우 선택 사항입니다. 원격에 relayium이 있으면 네이티브 프로토콜을 사용할 수 있습니다 — 보내기 전 충돌 검사와, 전송하는 모든 파일에 대한 파일별 SHA-256 검사입니다. 없으면 push는 SSH를 통한 tar 스트림으로 대체되며, 여전히 동작하지만 파일별로는 아무것도 검증하지 않습니다. pull의 경우 필수입니다. pull은 항상 원격지에 relayium이 있어야 하며(tar 대체 방식 없음), 먼저 원격지에 설치해 두세요."}},{"@type":"Question","name":"어떤 SSH 키와 포트를 사용할지 어떻게 정하나요?","acceptedAnswer":{"@type":"Answer","text":"ssh와 마찬가지로 기존 ~/.ssh/config를 읽으므로, 호스트 별칭, 키, 포트가 자동으로 반영됩니다. 명령마다 -i로 신원 파일을, -p로 포트를 지정해 재정의할 수도 있습니다."}},{"@type":"Question","name":"이게 rsync보다 빠른가요?","acceptedAnswer":{"@type":"Answer","text":"자신의 서버로 push하는 경우라면 SSH를 통한 rsync와 비슷한 수준입니다. 목표는 rsync를 이기는 것이 아니라, 같은 파일별 무결성 검사를 갖춘 채로 크로스 네트워크 전송과 서버 간 전송까지 함께 해내는 하나의 도구를 제공하는 것입니다."}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -101,55 +101,56 @@ ol.steps>li>pre{margin:8px 0 0}
       <p class="updated">마지막 업데이트: <bdi>2026-08-05</bdi></p>
       <aside class="archived" aria-label="보관된 번역"><p class="archived-label">보관된 번역</p><p>이 페이지는 기록으로 보관 중인 한국어 번역입니다. Relayium 제품과 최신 문서는 영어와 중국어 간체로 관리되며, 앱 자체도 더 이상 한국어를 제공하지 않습니다. 여기에 적힌 화면과 세부 사항은 현재 동작과 다를 수 있습니다.</p><p class="archived-links archived-pricing">이 페이지에 적혀 있는 요금제와 사용 한도는 오래된 내용일 수 있습니다. 현재 내용은 <a href="/pricing">요금제</a> 페이지에서 확인하세요.</p><p class="archived-links">최신 버전: <a href="/guides/back-up-a-server-over-ssh/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/back-up-a-server-over-ssh/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">VPS, 홈 서버, NAS, 워크스테이션 등 이미 ssh로 접속할 수 있는 서버가 있다면, 동기화 서비스나 계정을 따로 마련하지 않고도 Relayium CLI로 그곳에 파일을 백업할 수 있습니다. 전송은 기존 SSH 연결을 통해 이루어지므로 바이트는 곧장 내 서버로 가고 Relayium을 거치지 않습니다.</p>
-      <p class="lead">이 가이드는 디렉터리를 push하고 pull하는 방법, 재개와 무결성 검사가 주는 이점, 그리고 cron으로 예약 실행하는 방법을 다룹니다.</p>
+      <p class="lead">이 가이드는 디렉터리를 push하고 pull하는 방법, 무결성 검사가 보장하는 것과 보장하지 않는 것, push가 같은 목적지로 두 번째 실행을 거부하는 이유, 그리고 cron으로 예약 실행하는 방법을 다룹니다.</p>
       <h2>시작하기 전에</h2>
       <p>아래는 모두 relayium CLI이므로, 설치하지 않았다면 먼저 설치하세요. macOS나 Linux에서는 명령어 하나로 사전 빌드된 바이너리가 PATH에 등록됩니다:</p>
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>직접 파일을 고르고 싶거나 Windows인가요? 릴리스 페이지에서 바이너리를 받으세요 — relayium.com/cli 에 모든 설치 방법이 있습니다(Go가 있으면 go build -o relayium ./cmd/relayium 도 가능).</li><li>relayium --version 으로 설치를 확인할 수 있습니다. 이 단계를 건너뛰면 아래 명령은 “command not found”만 출력합니다.</li></ul>
       <h2>디렉터리를 서버로 push하기</h2>
-      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">필요한 것</p><ul><li>이미 쓰고 있는 SSH 접근 권한. ssh user@your-server true 가 조용히 돌아와야 합니다 — push는 바로 그 연결을 재사용하며 자체 설정은 아무것도 만들지 않습니다.</li><li>서버에 쓰기 가능한 대상. 대상 경로의 상위 디렉터리가 존재하고 그 SSH 사용자가 쓸 수 있어야 합니다.</li><li>선택적으로 서버의 relayium. 재개와 파일별 SHA-256을 얻게 해 주는 것이 이것입니다. 없어도 push는 평범한 tar 스트림으로 동작합니다.</li><li>Relayium 계정도, 어느 쪽 데몬도 필요 없습니다. 여기서 Relayium 서버와 통신하는 것은 아무것도 없습니다.</li></ul></div>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">필요한 것</p><ul><li>이미 쓰고 있는 SSH 접근 권한. ssh user@your-server true 가 조용히 돌아와야 합니다 — push는 바로 그 연결을 재사용하며 자체 설정은 아무것도 만들지 않습니다.</li><li>서버에 쓰기 가능한 대상. 대상 경로의 상위 디렉터리가 존재하고 그 SSH 사용자가 쓸 수 있어야 합니다.</li><li>선택적으로 서버의 relayium. 보내기 전 충돌 검사와 파일별 SHA-256을 얻게 해 주는 것이 이것입니다. 없어도 push는 평범한 tar 스트림으로 동작하지만, 그쪽은 아무것도 검증하지 않습니다.</li><li>Relayium 계정도, 어느 쪽 데몬도 필요 없습니다. 여기서 Relayium 서버와 통신하는 것은 아무것도 없습니다.</li></ul></div>
       <p>push는 하나 이상의 소스와 scp 형식의 대상을 받습니다. Relayium은 평소 쓰는 키와 설정으로 SSH를 통해 연결한 뒤, 파일을 대상 디렉터리로 스트리밍합니다:</p>
-      <ol class="steps" data-block="steps"><li><p>push가 재사용할 SSH 접근을 확인합니다. 조용히 돌아오면 키와 호스트 별칭과 포트가 이미 맞다는 뜻입니다.</p><pre><code>ssh user@your-server true</code></pre></li><li><p>어느 프로토콜을 쓰게 될지 확인합니다. 경로가 나오면 네이티브 프로토콜 — 재개와 파일별 SHA-256이고, 아무것도 안 나오면 tar 스트림 대체 방식입니다.</p><pre><code>ssh user@your-server command -v relayium</code></pre></li><li><p>디렉터리를 push합니다. 대상은 scp 형식이고, 끝의 슬래시는 “이 디렉터리 안으로”라는 뜻입니다.</p><pre><code>relayium push ./photos user@your-server:backups/</code></pre></li><li><p>ssh 설정에 그 호스트가 아직 없다면, 이 명령에 한해 키나 포트를 지정합니다.</p><pre><code>relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</code></pre></li><li><p>무엇이 도착했는지 확인합니다. push ./photos 는 목적지 아래에 photos/ 를 재현하므로 폴더 이름이 함께 갑니다.</p><pre><code>ssh user@your-server ls backups/photos</code></pre></li></ol>
+      <ol class="steps" data-block="steps"><li><p>push가 재사용할 SSH 접근을 확인합니다. 조용히 돌아오면 키와 호스트 별칭과 포트가 이미 맞다는 뜻입니다.</p><pre><code>ssh user@your-server true</code></pre></li><li><p>어느 프로토콜을 쓰게 될지 확인합니다. 경로가 나오면 네이티브 프로토콜 — 보내기 전 충돌 검사와 파일별 SHA-256이고, 아무것도 안 나오면 파일별로 아무것도 검사하지 않는 tar 스트림 대체 방식입니다.</p><pre><code>ssh user@your-server command -v relayium</code></pre></li><li><p>디렉터리를 push합니다. 대상은 scp 형식이고, 끝의 슬래시는 “이 디렉터리 안으로”라는 뜻입니다.</p><pre><code>relayium push ./photos user@your-server:backups/</code></pre></li><li><p>ssh 설정에 그 호스트가 아직 없다면, 이 명령에 한해 키나 포트를 지정합니다.</p><pre><code>relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</code></pre></li><li><p>무엇이 도착했는지 확인합니다. push ./photos 는 목적지 아래에 photos/ 를 재현하므로 폴더 이름이 함께 갑니다.</p><pre><code>ssh user@your-server ls backups/photos</code></pre></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">성공했을 때 보이는 것</p><p>네이티브 프로토콜에서는 push가 완료된 파일마다 한 줄을 출력하고 0으로 종료합니다. 아무것도 없는 서버를 상대로는 요약 한 줄만 나오는데, 그것이 tar 대체 방식이며 역시 성공입니다.</p><pre><code>relayium push ./photos user@your-server:backups/
   photos/IMG_0413.jpg (2314518 bytes)
   photos/IMG_0414.jpg (1998233 bytes)
 
 # against a server with no relayium installed, one summary line instead:
 sent 2 file(s) (zero-dependency mode)</code></pre></div>
-      <ul><li>기존 ~/.ssh/config를 그대로 재사용하므로, 이미 설정해 둔 호스트 별칭, 키, 포트가 그대로 작동합니다.</li><li>서버에 relayium이 설치되어 있으면 네이티브 프로토콜을 사용합니다: 파일별 재개와 모든 파일에 대한 SHA-256 검사입니다.</li><li>설치되어 있지 않으면 tar 스트림을 원격으로 파이프하는 방식으로 대체되어, relayium이 없는 순수한 서버에서도 동작합니다.</li></ul>
+      <ul><li>기존 ~/.ssh/config를 그대로 재사용하므로, 이미 설정해 둔 호스트 별칭, 키, 포트가 그대로 작동합니다.</li><li>서버에 relayium이 설치되어 있으면 네이티브 프로토콜을 사용합니다: 바이트를 보내기 전에 배치 전체의 충돌을 검사하고, 전송하는 각 파일을 SHA-256으로 검증한 뒤 자리에 설치합니다.</li><li>설치되어 있지 않으면 tar 스트림을 원격으로 파이프하는 방식으로 대체되어, relayium이 없는 순수한 서버에서도 동작합니다.</li></ul>
       <h2>파일을 pull로 되돌려받기</h2>
       <p>복원은 같은 명령을 반대로 실행하는 것과 같습니다. 원격 소스와 로컬 대상 디렉터리를 지정하세요. 백업을 복구하거나 서버의 출력을 노트북으로 동기화할 때 이렇게 합니다:</p>
       <pre><code>relayium pull user@your-server:backups/ ./restore</code></pre>
       <ul><li>push와 달리 pull은 항상 원격지에 relayium이 이미 설치되어 있어야 합니다 — tar 대체 방식이 없으므로, 설치되어 있지 않다면 먼저 그곳에 설치하세요.</li></ul>
-      <h2>재개와 무결성이 기본으로 내장되어 있다</h2>
-      <p>백업은 대체로 크고, 네트워크는 대체로 끊깁니다. 양쪽에 relayium이 있으면 중단된 전송은 다음 실행 시 전체를 다시 보내는 대신 멈춘 지점에서 재개되고, 각 파일은 SHA-256 해시로 종단간 검증됩니다 — 서버에 도착하는 것은 보낸 것과 바이트 단위로 동일합니다.</p>
-      <p>부분 파일을 재개하는 대신 깔끔하게 전체를 다시 보내고 싶다면 --no-resume을 넘기세요.</p>
-      <ul><li>재개에는 원격에 relayium이 필요합니다(네이티브 프로토콜); tar 대체 방식은 항상 전체를 전송합니다.</li><li>SHA-256 검사는 자동으로 실행되며, 불일치가 있으면 보고되고 해당 파일은 실패로 표시됩니다.</li></ul>
+      <h2>무결성은 기본으로 내장되어 있다 — 재개는 아니다</h2>
+      <p>양쪽에 relayium이 있으면 push가 전송하는 각 파일은 SHA-256 해시로 종단간 검증되고, 자리에 설치되기 전에 스테이징됩니다 — 서버에 도착하는 것은 보낸 것과 바이트 단위로 동일합니다. 여기까지는 사실이고, 대상 쪽에 relayium을 설치할 이유이기도 합니다.</p>
+      <p>push가 하지 않는 것이 재개입니다. 파일은 통과하는 대로 하나씩 설치되므로, 도중에 연결이 끊기면 이미 도착한 파일은 그대로 남습니다. 그리고 그 파일들이 존재하기 때문에 같은 push를 다시 실행해도 충돌 검사에 거부됩니다. 빠진 경로를 따로 push하거나, 이미 일치하는 것은 건너뛰고 부분 파일은 다음 실행에서 이어가는 relayium sync를 쓰세요.</p>
+      <p>--no-resume은 push와 pull에서도 받아들여지지만 거기서는 아무 일도 하지 않습니다. 실제로 효력이 있는 곳은 sync를 받는 serve 수신 측입니다 — 애초에 부분 파일이 존재할 수 있는 곳이 거기뿐이기 때문입니다.</p>
+      <ul><li>push도 pull도 어느 프로토콜에서든 재개하지 않습니다. 중단될 수 있는 디렉터리에는 sync를 쓰세요. tar 대체 방식은 재개도 하지 않고 파일별 검증도 하지 않습니다.</li><li>SHA-256 검사는 자동으로 실행되며, 불일치가 있으면 보고되고 해당 파일은 실패로 표시됩니다.</li></ul>
       <h2>cron으로 예약 실행하기</h2>
-      <p>push는 SSH 키를 사용하는 단일 비대화형 명령이므로, 그대로 cron에 넣어 반복 백업으로 쓸 수 있습니다. 암호 없는 키(또는 agent)를 지정하고, 출력을 로그로 남겨 실패를 확인할 수 있게 하세요:</p>
+      <p>cron에 넣을 것은 push가 아니라 sync입니다. push는 이미 존재하는 목적지를 거부하므로 같은 디렉터리로 매일 밤 push하면 첫 실행만 성공하고 그 뒤로는 매번 거부됩니다. sync는 반복 실행을 위해 만들어진 모드로, 크기와 수정 시각이 그대로인 파일은 건너뛰고 바뀐 것만 보내며, 중단된 실행이 남긴 부분 파일을 이어갑니다. SSH 키를 사용하는 단일 비대화형 명령이므로 그대로 cron에 들어갑니다. 암호 없는 키(또는 agent)를 지정하고, 출력을 로그로 남겨 실패를 확인할 수 있게 하세요:</p>
       <pre><code># 매일 밤 2시에 백업. crontab에 추가하세요(crontab -e)
-0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@your-server:backups/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1</code></pre>
-      <ul><li>재개 기능과 결합하면, 중단된 야간 작업은 다음 날 밤 그대로 이어서 진행됩니다.</li><li>무결성 검사에 실패한 파일이 하나라도 있으면 명령이 0이 아닌 상태로 종료되므로, cron의 실패 시 메일 알림으로 문제를 발견할 수 있습니다.</li></ul>
+0 2 * * * relayium sync -i ~/.ssh/backup_key ~/documents user@your-server:backups/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1</code></pre>
+      <ul><li>중단된 야간 sync는 다음 날 밤 그대로 이어집니다: 이미 일치하는 것은 건너뛰고, 부분 파일은 처음부터가 아니라 이어서 보냅니다.</li><li>무결성 검사에 실패한 파일이 하나라도 있으면 명령이 0이 아닌 상태로 종료되므로, cron의 실패 시 메일 알림으로 문제를 발견할 수 있습니다.</li></ul>
       <h2>백업이 도착하지 않을 때</h2>
       <p>예약된 백업은 본질적으로 조용히 실패합니다. 아무도 터미널을 보고 있지 않기 때문입니다. 아래 네 가지가 거의 전부를 덮고, 각각 지금 바로 실행할 수 있는 명령으로 판정됩니다.</p>
       <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 해결</p><dl><dt>cron 작업이 멈춰 있거나 로그가 비밀번호 입력 프롬프트에서 끝납니다.</dt><dd><pre><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@your-server true
 # Permission denied (publickey).</code></pre><p>BatchMode=yes 는 입력을 요구하지 않고 실패하므로, 조용한 멈춤이 이 한 줄로 바뀝니다. 그 키의 공개키를 서버의 ~/.ssh/authorized_keys 에 추가하거나, 에이전트가 이미 들고 있는 키를 작업에 지정하세요.</p></dd><dt>crontab 줄은 실행되는데 로그가 계속 비어 있습니다.</dt><dd><pre><code>command -v relayium
-# /usr/local/bin/relayium</code></pre><p>cron은 최소한의 PATH로 실행되며 대개 /usr/local/bin이 없습니다. 그래서 relayium이 시작되기도 전에 그 줄이 실패합니다. 방금 확인한 절대 경로를 crontab 항목에 적고, &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1 리다이렉트는 남겨 두어 다음 실패가 보이게 하세요.</p></dd><dt>중단된 전송이 다음 실행에서 처음부터 다시 시작합니다.</dt><dd><pre><code>ssh user@your-server command -v relayium
-# (아무것도 출력되지 않음)</code></pre><p>재개는 네이티브 프로토콜의 기능이고, 원격에 relayium이 없다는 것은 tar 스트림 대체 방식이라는 뜻이며 그쪽은 늘 파일 전체를 다시 보냅니다. 서버에 설치하면 파일별 재개를 얻습니다. 아울러 재개를 일부러 끄는 --no-resume 을 넘기고 있지는 않은지도 확인하세요.</p></dd><dt>“N file(s) failed integrity check”가 나오고 0이 아닌 코드로 종료됩니다.</dt><dd><pre><code>relayium push ./photos user@your-server:backups/
+# /usr/local/bin/relayium</code></pre><p>cron은 최소한의 PATH로 실행되며 대개 /usr/local/bin이 없습니다. 그래서 relayium이 시작되기도 전에 그 줄이 실패합니다. 방금 확인한 절대 경로를 crontab 항목에 적고, &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1 리다이렉트는 남겨 두어 다음 실패가 보이게 하세요.</p></dd><dt>중단된 야간 sync가 다음 실행에서 처음부터 다시 시작합니다.</dt><dd><pre><code>ssh user@your-server command -v relayium
+# (아무것도 출력되지 않음)</code></pre><p>원격에 relayium이 없다는 뜻입니다. sync는 대체 방식이 없어 아예 실행되지 않고, push는 아무것도 검증하지 않는 tar 스트림으로 내려가 늘 파일 전체를 다시 보냅니다. 서버에 설치하세요. 부분 파일을 다음 실행에서 이어가는 것은 sync뿐이며, push와 pull은 어느 프로토콜에서든 재개하지 않습니다. 이미 sync를 쓰고 있다면, 그 수신 측의 재개를 실제로 끄는 --no-resume 을 넘기고 있지는 않은지도 확인하세요.</p></dd><dt>“N file(s) failed integrity check”가 나오고 0이 아닌 코드로 종료됩니다.</dt><dd><pre><code>relayium push ./photos user@your-server:backups/
 # 1 file(s) failed integrity check: [photos/IMG_0413.jpg]
 echo $?
-# 1</code></pre><p>도착 시 계산한 SHA-256이 보낸 값과 달랐으므로 서버의 그 파일은 믿을 수 없습니다. push를 다시 실행하고 종료 코드를 한 번 더 확인하세요. 같은 파일이 계속 실패한다면 그 파일만 따로 push해서 원본 문제인지 회선 문제인지를 갈라내세요.</p></dd></dl></div>
+# 1</code></pre><p>도착 시 계산한 SHA-256이 보낸 값과 달랐고, 네이티브 프로토콜은 각 파일을 먼저 스테이징한 뒤 해시가 맞을 때만 설치합니다 — 그래서 그 경로는 서버에 쓰인 적이 없고, 저쪽에서 지울 것도 없습니다. 같은 배치의 다른 파일들은 이미 자리에 설치되었기 때문에 배치 전체를 다시 실행하면 충돌 검사가 그대로 거부합니다. 그 경로 하나만 다시 push하세요. 그래도 계속 실패한다면 일회성 전송 오류가 아닙니다: 원본 파일(읽는 도중에 무언가가 쓰고 있는지)과 양쪽 저장소를 살펴보세요.</p></dd></dl></div>
       <h2>자주 묻는 질문</h2>
       <h3>파일이 Relayium의 서버를 거치나요?</h3>
       <p>아니요. push와 pull은 전적으로 내 SSH 연결을 통해 실행됩니다. Relayium의 서버는 전혀 관여하지 않으며 계정도 필요 없습니다.</p>
       <h3>서버에 relayium이 설치되어 있어야 하나요?</h3>
-      <p>방향에 따라 다릅니다. push의 경우 선택 사항입니다. 원격에 relayium이 있으면 네이티브 프로토콜을 사용할 수 있습니다 — 재개 가능한 전송과 파일별 SHA-256 검사입니다. 없으면 push는 SSH를 통한 tar 스트림으로 대체되며, 여전히 동작하지만 각 파일을 항상 전체 전송합니다. pull의 경우 필수입니다. pull은 항상 원격지에 relayium이 있어야 하며(tar 대체 방식 없음), 먼저 원격지에 설치해 두세요.</p>
+      <p>방향에 따라 다릅니다. push의 경우 선택 사항입니다. 원격에 relayium이 있으면 네이티브 프로토콜을 사용할 수 있습니다 — 보내기 전 충돌 검사와, 전송하는 모든 파일에 대한 파일별 SHA-256 검사입니다. 없으면 push는 SSH를 통한 tar 스트림으로 대체되며, 여전히 동작하지만 파일별로는 아무것도 검증하지 않습니다. pull의 경우 필수입니다. pull은 항상 원격지에 relayium이 있어야 하며(tar 대체 방식 없음), 먼저 원격지에 설치해 두세요.</p>
       <h3>어떤 SSH 키와 포트를 사용할지 어떻게 정하나요?</h3>
       <p>ssh와 마찬가지로 기존 ~/.ssh/config를 읽으므로, 호스트 별칭, 키, 포트가 자동으로 반영됩니다. 명령마다 -i로 신원 파일을, -p로 포트를 지정해 재정의할 수도 있습니다.</p>
       <h3>이게 rsync보다 빠른가요?</h3>
-      <p>자신의 서버로 push하는 경우라면 SSH를 통한 rsync와 비슷한 수준입니다. 목표는 rsync를 이기는 것이 아니라, 같은 재개와 무결성 보장을 갖춘 채로 크로스 네트워크 전송과 서버 간 전송까지 함께 해내는 하나의 도구를 제공하는 것입니다.</p>
+      <p>자신의 서버로 push하는 경우라면 SSH를 통한 rsync와 비슷한 수준입니다. 목표는 rsync를 이기는 것이 아니라, 같은 파일별 무결성 검사를 갖춘 채로 크로스 네트워크 전송과 서버 간 전송까지 함께 해내는 하나의 도구를 제공하는 것입니다.</p>
       <div class="ctacard">
-        <p>다음 디렉터리를 직접적인 방식으로 백업하세요 — 내 SSH를 통해, 재개 가능하고, 무결성 검사가 되며, 무료입니다.</p>
+        <p>다음 디렉터리를 직접적인 방식으로 백업하세요 — 내 SSH를 통해, 파일별 무결성 검사가 되며, 무료입니다.</p>
         <a class="cta" href="/cli">CLI 받기</a>
       </div>
       <h2>계속 읽기</h2>

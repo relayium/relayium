@@ -19,14 +19,14 @@ const howTo = {
     description:
       "Twelve step-by-step how-tos for moving files, folders and text between phones, computers and servers with Relayium — end-to-end encrypted.",
     intro:
-      "Twelve practical walkthroughs: phone to computer, Mac to Windows, a whole folder, a QR code, a download link that expires, an automated encrypted server backup. On the same network, files and live text need no account.",
+      "Twelve practical walkthroughs: phone to computer, Mac to Windows, a whole folder, a QR code, a download link that expires, a scheduled encrypted off-host server copy. On the same network, files and live text need no account.",
   },
   zh: {
     title: "操作指南 · Relayium",
     description:
       "12 篇分步操作指南：用 Relayium 在手机、电脑和服务器之间传输文件、整个文件夹和文本，全程端到端加密。",
     intro:
-      "12 篇实操教程：手机传电脑、Mac 与 Windows 互传、整个文件夹、扫码传输、会过期的下载链接，以及自动执行的加密服务器备份。在同一网络下，传文件和实时文本都无需登录。",
+      "12 篇实操教程：手机传电脑、Mac 与 Windows 互传、整个文件夹、扫码传输、会过期的下载链接，以及定时执行的加密异地服务器副本。在同一网络下，传文件和实时文本都无需登录。",
   },
   ja: {
     title: "ハウツー · Relayium",

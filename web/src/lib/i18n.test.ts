@@ -8,7 +8,7 @@ import {
 // The completeness checks want every maintained language synchronously, so
 // import the split modules directly and reassemble the full record here. Two
 // entries, because two is the whole maintained set — see i18n/types.ts.
-import { PICK_MODES, FLAG_ROWS, TRUST_FILES, GUIDES } from "./cli-page-data";
+import { CLI_MODES, FLAG_ROWS, TRUST_FILES, GUIDES } from "./cli-page-data";
 import { TEXT_MAX_BYTES } from "./text-wire";
 import zh from "./i18n/zh";
 import en from "./i18n/en";
@@ -524,47 +524,47 @@ describe("language code-splitting", () => {
   });
 });
 
-// /cli 页把 cli-page-data.ts 的常量和这些文案**按下标**配对渲染。类型层面已经用
-// 等长元组钉死了（见 cli-page-data.ts 的 SameLength），这里再加一道运行时兜底：
-// 类型错误只在有人真的跑 `npm run check` 时才会被看见，而 CI 目前只跑发布流程。
-// 错位的表现是静默的——第 i 条解释配到了第 i 个 flag 上，或者干脆渲染出 undefined。
-describe("/cli 页的下标配对数组与代码常量等长", () => {
-  const pairs: [string, readonly unknown[], (m: Messages) => readonly string[]][] = [
-    ["pickWhen ↔ PICK_MODES", PICK_MODES, (m) => m.cliPage.pickWhen],
-    ["flagMeanings ↔ FLAG_ROWS", FLAG_ROWS, (m) => m.cliPage.flagMeanings],
-    ["fileDescs ↔ TRUST_FILES", TRUST_FILES, (m) => m.cliPage.fileDescs],
+// /cli 页曾经把 cli-page-data.ts 的常量和文案**按下标**配对渲染，这里守的是"两边
+// 等长"。现在两边按**键**配对（Record<Key, …>），"漏一条/多一条"已经是编译错误，
+// 而"串位"——按下标配对真正的失败模式，类型系统从来管不住的那个——已经不存在了。
+//
+// 保留的是运行时兜底：类型错误只在有人真的跑 `npm run check` 时才会被看见，而 CI
+// 目前只跑发布流程。所以这里改成按键检查每一格都有非空文案。
+// 结构性断言（键集合完全一致、分类法、复制控件命名）在 CliPage.structure.test.ts。
+describe("/cli 页的键化文案对每个常量都齐备", () => {
+  const tables: [string, readonly { key: string }[], (m: Messages) => Record<string, string>][] = [
+    ["flags ↔ FLAG_ROWS", FLAG_ROWS, (m) => m.cliPage.flags],
+    ["trustFiles ↔ TRUST_FILES", TRUST_FILES, (m) => m.cliPage.trustFiles],
     ["guides ↔ GUIDES", GUIDES, (m) => m.cliPage.guides],
   ];
-  for (const [label, constants, pick] of pairs) {
-    it(`${label}：每种语言都是 ${constants.length} 条`, () => {
+  for (const [label, constants, pick] of tables) {
+    it(`${label}：每种语言都覆盖了全部 ${constants.length} 个键`, () => {
       for (const { code } of LANGS) {
-        expect(pick(messages[code]).length, `${code} 的 ${label} 条数不对`).toBe(constants.length);
+        const table = pick(messages[code]);
+        expect(Object.keys(table).sort(), `${code} 的 ${label} 键集合不一致`).toEqual(
+          constants.map((c) => c.key).sort(),
+        );
+        for (const c of constants) {
+          expect(table[c.key]?.trim().length, `${code} 的 ${label}.${c.key} 是空的`).toBeGreaterThan(0);
+        }
       }
     });
   }
-  it("每一条文案都非空（漏翻会渲染成一个空格）", () => {
-    for (const { code } of LANGS) {
-      for (const [label, , pick] of pairs) {
-        for (const [i, text] of pick(messages[code]).entries()) {
-          expect(text.trim().length, `${code} 的 ${label} 第 ${i} 条是空的`).toBeGreaterThan(0);
-        }
-      }
-    }
-  });
   it("把实时文本作为独立模式，并为传输页提供非空提示", () => {
-    expect(PICK_MODES.some((mode) => mode.title === "text" && mode.cmd === "relayium text [code]")).toBe(true);
+    expect(CLI_MODES.some((mode) => mode.key === "text" && mode.cmd === "relayium text [code]")).toBe(true);
     for (const { code } of LANGS) {
       expect(messages[code].text.availabilityHint.trim().length, `${code} 缺少文本功能提示`).toBeGreaterThan(0);
-      expect(messages[code].cliPage.textIntro, `${code} 的 CLI 文本流程没有说明创建端与加入端`).toContain("relayium text");
-      expect(messages[code].cliPage.cloudIntro, `${code} 的账号说明遗漏 text 创建配对码`).toContain("text");
+      expect(messages[code].cliPage.modes.text.lead, `${code} 的 CLI 文本流程没有说明创建端与加入端`).toContain("relayium text");
+      // 账号门槛：生成配对码要登录，加入不用。
+      expect(messages[code].cliPage.faq.account.a, `${code} 的账号说明遗漏 text 创建配对码`).toContain("text");
     }
   });
   it("--server 的说明与适用命令列都包含 text", () => {
-    const serverFlag = FLAG_ROWS.findIndex((row) => row.flag === "--server <url>");
-    expect(serverFlag).toBeGreaterThanOrEqual(0);
-    expect(FLAG_ROWS[serverFlag].who).toContain("text");
+    const serverFlag = FLAG_ROWS.find((row) => row.flag === "--server <url>");
+    expect(serverFlag, "参数表里没有 --server").toBeTruthy();
+    expect(serverFlag!.who).toContain("text");
     for (const { code } of LANGS) {
-      expect(messages[code].cliPage.flagMeanings[serverFlag], `${code} 的 --server 说明遗漏 text`).toContain("text");
+      expect(messages[code].cliPage.flags.server, `${code} 的 --server 说明遗漏 text`).toBeTruthy();
     }
   });
 });
@@ -596,7 +596,8 @@ describe("平台定位文案覆盖文件与临时文本", () => {
     ["appsPage.cards.cli.desc", (m) => m.appsPage.cards.cli.desc],
     ["cliPage.metaTitle", (m) => m.cliPage.metaTitle],
     ["cliPage.metaDesc", (m) => m.cliPage.metaDesc],
-    ["cliPage.whichIntro", (m) => m.cliPage.whichIntro],
+    // whichIntro 随选择器一起没了；现在承担同样定位职责的是模式小节的引导句。
+    ["cliPage.modesIntro", (m) => m.cliPage.modesIntro],
   ];
   for (const [label, pick] of positioning) {
     it(`${label}：每种语言都提到文本，而不只是文件`, () => {
@@ -606,11 +607,14 @@ describe("平台定位文案覆盖文件与临时文本", () => {
     });
   }
 
-  it("freenote 把 text 列进不经过服务器的模式", () => {
-    // 这一条只能匹配命令名：freenote 列的是子命令（push/pull、send/receive…），
-    // 本来就不该在里面翻译成"文本"。
+  it("text 被当作直连模式说明：只有会合握手经过服务器", () => {
+    // freenote 那一段没了（它把七种模式压成一句话，正是这次改版要拆开的东西）。
+    // 它守的事实换了地方：现在由 text 模式自己的引导句和「模式速览」那一行承担。
+    // 命令名是原样的英文标识符，所以这里匹配它本身，而不是各语言的"文本"。
     for (const { code } of LANGS) {
-      expect(messages[code].cliPage.freenote, `${code} 的 freenote 漏掉了 text`).toContain("text");
+      const m = messages[code];
+      expect(m.cliPage.modes.text.lead, `${code} 的 text 模式没有提到命令名`).toContain("relayium text");
+      expect(m.cliPage.compare.text.path, `${code} 的 text 行没说明字节走直连`).toMatch(/Direct|直连/i);
     }
   });
 

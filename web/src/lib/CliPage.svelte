@@ -3,538 +3,410 @@
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate, PRICING_PATH, DEVICE_INBOX_PATH } from "./router.svelte";
   import CommandBlock from "./CommandBlock.svelte";
-  import Icon from "./Icon.svelte";
-  import { PICK_MODES, FLAG_ROWS, TRUST_FILES, GUIDES } from "./cli-page-data";
+  import ContentsRail from "./cli/ContentsRail.svelte";
+  import InstallBand from "./cli/InstallBand.svelte";
+  import TaskBranches from "./cli/TaskBranches.svelte";
+  import ModeSection from "./cli/ModeSection.svelte";
+  import ModeComparison from "./cli/ModeComparison.svelte";
+  import GuideList from "./cli/GuideList.svelte";
+  import FlagTable from "./cli/FlagTable.svelte";
+  import FaqList from "./cli/FaqList.svelte";
+  import {
+    CLI_REPO,
+    LATEST_RELEASE_URL,
+    CLI_MODES,
+    TRUST_FILES,
+    SECTIONS,
+    COMMANDS,
+    guidePath,
+    copyProps,
+    type SectionKey,
+  } from "./cli-page-data";
+
   const t = $derived<Messages>(messages[lang()]);
-  const repo = "https://github.com/relayium/relayium";
+  const cli = $derived(t.cliPage);
 
-  const installCmd = "curl -fsSL https://relayium.com/install.sh | sh";
-  const buildCmd = `git clone ${repo}.git
-cd relayium/server
-go build -o relayium ./cmd/relayium`;
-  const sshCmd = `# push a folder to a server you can SSH into
-relayium push ./photos user@host:backups/
+  const sectionId = Object.fromEntries(SECTIONS.map((s) => [s.key, s.id])) as Record<
+    SectionKey,
+    string
+  >;
+  const mode = Object.fromEntries(CLI_MODES.map((m) => [m.key, m])) as Record<
+    (typeof CLI_MODES)[number]["key"],
+    (typeof CLI_MODES)[number]
+  >;
 
-# pull it back
-relayium pull user@host:backups/ ./restore
-
-# pick an SSH key / port
-relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@host:backups/`;
-  const codeCmd = `# sender (once per machine: relayium login)
-relayium send ./file.zip
-# prints:  Code: 483920   (valid 5 minutes)
-#          On the other machine:  relayium receive 483920
-
-# receiver — no account needed
-relayium receive 483920 ./downloads`;
-  const daemonListenCmd = `# on the RECEIVER
-relayium serve --dir ~/inbox      # --once to accept one transfer; --port to change 9031`;
-  const daemonPushCmd = `# on the SENDER
-relayium push ./file.zip relayium://receiver.example.com`;
-  const daemonAuthCmd = `# on the RECEIVER, the first push prompts:
-Incoming push from 203.0.113.7:54021
-  fingerprint: 74318e3b…
-Accept and remember this peer? [y/N] y
-
-# no terminal (a systemd service)? pre-authorize instead:
-relayium authorize 74318e3b…`;
-
-  // Literal command names / flags / emoji; all prose comes from t.cliPage.
-  // 与文案按下标配对的那几组常量住在 cli-page-data.ts —— 那里的类型把"两边等长"
-  // 变成了编译期约束（见该文件的 SameLength）。
-  const osBadge = "macOS · Linux · Windows";
-  const syncCmd = "relayium sync ./site relayium://receiver.example.com --delete --watch";
-  const textCmd = `# one machine mints and waits (needs relayium login); the other joins
-relayium text
-#   → Code: 483920   |   On the other machine:  relayium text 483920
-
-# the other machine joins the printed code — one line per message, Ctrl-D to end
-relayium text 483920`;
-  const textPipeCmd = `# exact bytes, including multiline: pipe it — no flag needed
-pbpaste | relayium text 483920
-cat snippet.py | relayium text 483920
-
-# optional: stop to compare the verification code first (needs a terminal)
-relayium text 483920 --verify`;
-  const loginCmd = "relayium login   # opens relayium.com/device — enter the code to bind this machine";
-  // Device Inbox. Every command here exists today (server/cmd/relayium/inbox.go,
-  // update.go); nothing in this section may imply a background daemon the CLI
-  // does not implement or a container image Relayium does not publish.
-  const inboxUpdateCmd = `# on the machine that will RECEIVE
-relayium update --check     # is there a newer release?
-relayium update             # install it in place
-relayium inbox --help       # this build has Device Inbox if this prints`;
-  const inboxLoginCmd = `relayium login --device-name prod-backup-1
-#   → Open https://relayium.com/device and enter code: WDJB-MJHT
-#     This machine will appear in My Devices as: prod-backup-1
-
-# omit --device-name and it registers this host's own name`;
-  const inboxEnableCmd = `# Linux server: download, inspect, then install the always-on service
-curl -fsSLO https://relayium.com/inbox-server-install.sh
-less inbox-server-install.sh
-sudo sh inbox-server-install.sh --dir /srv/relayium-inbox
-
-# creates the directory, uses a low-privilege account, starts now + after reboot`;
-  const inboxServiceCmd = `relayium inbox status   # folder, credential, worker, and server truth
-
-# foreground is for diagnostics or your own container only
-relayium inbox run
-
-# advanced/manual definitions: systemd-user, systemd-system, launchd, container
-relayium inbox service systemd-system`;
-  const upCmd = `relayium up ./report.pdf
-#   → https://relayium.com/d/7fK2p…#k=Xr8s…
-
-# retention (otherwise your account's default applies)
-relayium up ./report.pdf --burn              # one download, then gone
-relayium up ./report.pdf --ttl 7d            # kept 7 days (your plan sets the cap)
-relayium up ./report.pdf --max-downloads 5   # allow 5 downloads`;
-  const downCmd = `# on another machine — no login needed
-relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
-  const guideUrl = (slug: string) => (lang() === "en" ? `/${slug}` : `/${lang()}/${slug}`);
-
-  // Land on the section the link named, not on the top of a long page.
+  // Land on the section the link named, not on the top of a long page — and take
+  // focus with the scroll.
   //
-  // The browser's own fragment handling cannot do this here: the SPA shell's
-  // <body> is empty when the document loads, so `#device-inbox` does not exist
-  // at the moment Chrome looks for it, and it gives up. Verified in a real
-  // browser (e2e/device-discovery.mjs) — before this, My Devices' "set up a
+  // The browser's own fragment handling cannot do the first part on load: the
+  // SPA shell's <body> is empty when the document loads, so `#device-inbox` does
+  // not exist at the moment Chrome looks for it, and it gives up. Verified in a
+  // real browser (e2e/device-discovery.mjs) — before this, My Devices' "set up a
   // device inbox" link dropped the reader at the install instructions, which is
   // the same place they were already lost.
   //
-  // Focus moves with the scroll. Scrolling alone leaves a keyboard or screen
-  // reader user at the document start while the sighted view has jumped: the
-  // next Tab would go to the nav, not into what they asked to read.
+  // It cannot do the second part at all. Scrolling alone leaves a keyboard or
+  // screen-reader user at the document start while the sighted view has jumped:
+  // the next Tab would go to the nav, not into what they asked to read.
+  //
+  // No smooth scrolling: `scrollIntoView` is left at its instant default, so
+  // there is no motion to suppress under prefers-reduced-motion.
+  function focusTarget(target: HTMLElement) {
+    target.setAttribute("tabindex", "-1");
+    target.scrollIntoView({ block: "start" });
+    target.focus({ preventScroll: true });
+  }
+
+  // In-page rail/branch clicks. The href stays a real "#id" so the link works
+  // with no JavaScript and can be copied or opened in a new tab; this handler
+  // only adds the focus move, and keeps the URL in step without pushing a
+  // history entry per anchor click.
+  function focusSection(event: MouseEvent, id: string) {
+    const target = document.getElementById(id);
+    if (!target) return; // let the browser try
+    event.preventDefault();
+    history.replaceState(history.state, "", `#${id}`);
+    focusTarget(target);
+  }
+
   onMount(() => {
     const id = location.hash.slice(1);
     if (!id) return;
     const target = document.getElementById(id);
     if (!target) return;
-    target.setAttribute("tabindex", "-1");
-    target.scrollIntoView({ block: "start" });
-    target.focus({ preventScroll: true });
+    focusTarget(target);
   });
 </script>
 
-<section class="cli page-enter">
+<div class="cli page-enter">
   <header class="hero">
-    <div class="logo" aria-hidden="true">❯</div>
     <h1>Relayium CLI</h1>
-    <p class="sub">{t.cli.subtitle}</p>
-    <ul class="badges">
-      {#each t.cliPage.badges as b (b)}<li>{b}</li>{/each}
-      <li>{osBadge}</li>
-    </ul>
-    <p class="freenote">{t.cliPage.freenote}</p>
+    <p class="support">{cli.heroSupport}</p>
   </header>
 
-  <!-- Install -->
-  <div class="block">
-    <h2>{t.cliPage.installH2}</h2>
-    <p>{t.cliPage.installIntro}</p>
-    <CommandBlock code={installCmd} title="install" />
-    <p class="alt"><a href={`${repo}/releases/latest`}>{t.cliPage.installReleases}</a></p>
-    <p class="alt">{t.cliPage.installBuild}</p>
-    <CommandBlock code={buildCmd} title="build from source" />
-    <p class="alt">{t.cliPage.installHelp}</p>
-  </div>
+  <div class="layout">
+    <ContentsRail
+      labels={cli.sections}
+      ariaLabel={cli.contentsLabel}
+      onNavigate={focusSection}
+    />
 
-  <!-- Which mode -->
-  <div class="block">
-    <h2>{t.cliPage.whichH2}</h2>
-    <p>{t.cliPage.whichIntro}</p>
-    <div class="pick">
-      {#each PICK_MODES as p, i (p.title)}
-        <div class="pick-card">
-          <span class="g" aria-hidden="true">
-            {#if p.g === "network"}<Icon name="network" size={22} />{:else}{p.g}{/if}
-          </span>
-          <h3 id={`pick-title-${i}`}>{p.title}</h3>
-          <p>{t.cliPage.pickWhen[i]}</p>
-          <!-- Scrolls sideways, so it has to be a keyboard stop — otherwise the
-               tail of a long command is readable with a mouse and unreachable
-               without one. Named by the card's own visible heading.
-               svelte-ignore fires because <code> is non-interactive; that rule
-               guards against fake buttons, and this is the opposite case — WCAG
-               2.1.1 requires a scrollable region to be reachable, which is exactly
-               what axe's scrollable-region-focusable check asks for here. -->
-          <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-          <code tabindex="0" role="group" aria-labelledby={`pick-title-${i}`}>{p.cmd}</code>
-        </div>
-      {/each}
-    </div>
-  </div>
+    <!-- A <div>, not a <main>: App.svelte's shell already owns this page's one
+         <main>, so a second one here nested two "main" landmarks — axe's
+         landmark-unique, and a reader with two indistinguishable "skip to the
+         content" targets. This element is layout only (it carries the grid
+         column's `min-inline-size: 0`); every section inside it keeps its own
+         <section>/heading, so nothing that was announced stops being announced. -->
+    <div class="body">
+      <InstallBand {cli} id={sectionId.install} />
 
-  <!-- Cloud (async, account) -->
-  <div class="mode" data-cli-mode="up / down">
-    <div class="mode-head">
-      <span class="g" aria-hidden="true">☁️</span>
-      <h2>{t.cliPage.cloudH2}</h2>
-      <span class="tag">{t.cliPage.cloudTag}</span>
-    </div>
-    <p>{t.cliPage.cloudIntro}</p>
-    <CommandBlock code={loginCmd} title="login" />
-    <p>{t.cliPage.cloudLoginNote}</p>
-    <p>{t.cliPage.cloudBody}</p>
-    <CommandBlock code={upCmd} title="up · from the first machine" />
-    <CommandBlock code={downCmd} title="down · on the second machine" />
-    <p>{t.cliPage.cloudInteropNote}</p>
-    <p>{t.cliPage.cloudPrivacyNote}</p>
-  </div>
+      <TaskBranches {cli} id={sectionId.tasks} onNavigate={focusSection} />
 
-  <!-- Device Inbox remains visually marked because it is the recommended answer
-       to "get this file onto my server" and the only mode whose sending half
-       lives in the browser. The id is the anchor My Devices links back to. -->
-  <div class="mode featured" id="device-inbox" data-cli-mode="inbox">
-    <div class="mode-head">
-      <span class="g" aria-hidden="true">📥</span>
-      <h2>{t.cliPage.inboxH2}</h2>
-      <span class="tag rec">{t.cliPage.inboxTag}</span>
-    </div>
-    <p>{t.cliPage.inboxIntro}</p>
-    <ol class="steps">
-      <li>
-        <strong>{t.cliPage.inboxStep1Label}</strong> {t.cliPage.inboxStep1Body}
-        <CommandBlock code={inboxUpdateCmd} title="receiver · install or update" />
-      </li>
-      <li>
-        <strong>{t.cliPage.inboxStep2Label}</strong> {t.cliPage.inboxStep2Body}
-        <CommandBlock code={inboxLoginCmd} title="receiver · sign in and name it" />
-      </li>
-      <li>
-        <strong>{t.cliPage.inboxStep3Label}</strong> {t.cliPage.inboxStep3Body}
-        <CommandBlock code={inboxEnableCmd} title="receiver · enable, run, check" />
-      </li>
-      <li>
-        <strong>{t.cliPage.inboxStep4Label}</strong> {t.cliPage.inboxStep4Body}
-        <!-- /device-inbox, not /me: the send controls are on the Device Inbox
-             page itself, and My Devices is where a credential is renamed or
-             revoked. Sending someone to /me to send a file would be one more
-             hop to reach the thing this step is describing. -->
-        <p class="cta">
-          <a href={DEVICE_INBOX_PATH} onclick={(e) => { e.preventDefault(); navigate("device-inbox"); }}>
-            {t.cliPage.inboxCta}
-          </a>
-        </p>
-        <p class="alt">{t.cliPage.inboxCtaHint}</p>
-      </li>
-    </ol>
-    <p>{t.cliPage.inboxServiceNote}</p>
-    <CommandBlock code={inboxServiceCmd} title="receiver · keep it running" />
-    <p class="alt">{t.cliPage.inboxNoImageNote}</p>
-    <p>{t.cliPage.inboxQueueNote}</p>
-    <p>{t.cliPage.inboxPrivacyNote}</p>
-    <p class="alt">
-      <a href={guideUrl("guides/device-inbox-server/")}>{t.cliPage.inboxDocs}</a>
-    </p>
-  </div>
+      <section class="band" id={sectionId.modes} aria-labelledby="cli-modes-h">
+        <h2 id="cli-modes-h">{cli.sections.modes}</h2>
+        <ModeComparison {cli} />
+        <p class="lead spaced">{cli.modesIntro}</p>
 
-  <!-- Text (ephemeral messages) -->
-  <div class="mode" data-cli-mode="text">
-    <div class="mode-head">
-      <span class="g" aria-hidden="true">💬</span>
-      <h2>{t.cliPage.textH2}</h2>
-      <span class="tag">{t.cliPage.textTag}</span>
-    </div>
-    <p>{t.cliPage.textIntro}</p>
-    <CommandBlock code={textCmd} title="text · mint and join" />
-    <p>{t.cliPage.textPipeNote}</p>
-    <CommandBlock code={textPipeCmd} title="text · exact bytes" />
-    <p>{t.cliPage.textSasNote}</p>
-    <p>{t.cliPage.textLimitNote}</p>
-  </div>
+        <ModeSection {cli} mode={mode.cloud}>
+          <CommandBlock
+            code={COMMANDS.cloudLogin.code}
+            title={COMMANDS.cloudLogin.name}
+            {...copyProps(cli.copy, COMMANDS.cloudLogin.name)}
+          />
+          <CommandBlock
+            code={COMMANDS.cloudUp.code}
+            title={COMMANDS.cloudUp.name}
+            {...copyProps(cli.copy, COMMANDS.cloudUp.name)}
+          />
+          <CommandBlock
+            code={COMMANDS.cloudDown.code}
+            title={COMMANDS.cloudDown.name}
+            {...copyProps(cli.copy, COMMANDS.cloudDown.name)}
+          />
+        </ModeSection>
 
-  <!-- Mode 2: send / receive -->
-  <div class="mode" data-cli-mode="send / receive">
-    <div class="mode-head">
-      <span class="g" aria-hidden="true">🔗</span>
-      <h2>{t.cliPage.mode2Title}</h2>
-      <span class="tag free">{t.cliPage.mode2Tag}</span>
-    </div>
-    <p>{t.cliPage.mode2Body}</p>
-    <CommandBlock code={codeCmd} title="send / receive" />
-  </div>
+        <ModeSection {cli} mode={mode.inbox} featured>
+          <h4>{cli.inbox.stepsLabel}</h4>
+          <ol class="steps">
+            {#each cli.inbox.steps as step, i (step.label)}
+              <li>
+                <strong>{step.label}</strong>
+                {step.body}
+                {#if i === 0}
+                  <CommandBlock
+                    code={COMMANDS.inboxUpdate.code}
+                    title={COMMANDS.inboxUpdate.name}
+                    {...copyProps(cli.copy, COMMANDS.inboxUpdate.name)}
+                  />
+                {:else if i === 1}
+                  <CommandBlock
+                    code={COMMANDS.inboxLogin.code}
+                    title={COMMANDS.inboxLogin.name}
+                    {...copyProps(cli.copy, COMMANDS.inboxLogin.name)}
+                  />
+                {:else if i === 2}
+                  <CommandBlock
+                    code={COMMANDS.inboxEnable.code}
+                    title={COMMANDS.inboxEnable.name}
+                    {...copyProps(cli.copy, COMMANDS.inboxEnable.name)}
+                  />
+                {:else}
+                  <!-- /device-inbox, not /me: the send controls are on the
+                       Device Inbox page itself, and My Devices is where a
+                       credential is renamed or revoked. Sending someone to /me
+                       to send a file would be one more hop to reach the thing
+                       this step is describing. -->
+                  <p class="cta">
+                    <a
+                      href={DEVICE_INBOX_PATH}
+                      onclick={(e) => {
+                        e.preventDefault();
+                        navigate("device-inbox");
+                      }}
+                    >
+                      {cli.inbox.cta}
+                    </a>
+                  </p>
+                  <p class="hint">{cli.inbox.ctaHint}</p>
+                {/if}
+              </li>
+            {/each}
+          </ol>
+          <CommandBlock
+            code={COMMANDS.inboxService.code}
+            title={COMMANDS.inboxService.name}
+            {...copyProps(cli.copy, COMMANDS.inboxService.name)}
+          />
+          <p class="docs">
+            <a href={guidePath("guides/device-inbox-server", lang())}>{cli.inbox.docs}</a>
+          </p>
+        </ModeSection>
 
-  <!-- Mode 1: push / pull -->
-  <div class="mode" data-cli-mode="push / pull">
-    <div class="mode-head">
-      <span class="g" aria-hidden="true">🔑</span>
-      <h2>{t.cliPage.mode1Title}</h2>
-      <span class="tag free">{t.cliPage.mode1Tag}</span>
-    </div>
-    <p>{t.cliPage.mode1Body}</p>
-    <CommandBlock code={sshCmd} title="push / pull" />
-  </div>
+        <ModeSection {cli} mode={mode.text}>
+          <CommandBlock
+            code={COMMANDS.textPair.code}
+            title={COMMANDS.textPair.name}
+            {...copyProps(cli.copy, COMMANDS.textPair.name)}
+          />
+          <CommandBlock
+            code={COMMANDS.textPipe.code}
+            title={COMMANDS.textPipe.name}
+            {...copyProps(cli.copy, COMMANDS.textPipe.name)}
+          />
+        </ModeSection>
 
-  <!-- Mode 3: daemon direct -->
-  <div class="mode" data-cli-mode="daemon direct">
-    <div class="mode-head">
-      <span class="g" aria-hidden="true"><Icon name="network" size={22} /></span>
-      <h2>{t.cliPage.mode3Title}</h2>
-      <span class="tag free">{t.cliPage.mode3Tag}</span>
-    </div>
-    <p>{t.cliPage.mode3Body}</p>
-    <ol class="steps">
-      <li>
-        <strong>{t.cliPage.step1Label}</strong> {t.cliPage.step1Body}
-        <CommandBlock code={daemonListenCmd} title="receiver · listen" />
-      </li>
-      <li>
-        <strong>{t.cliPage.step2Label}</strong> {t.cliPage.step2Body}
-        <CommandBlock code={daemonPushCmd} title="sender · push" />
-      </li>
-      <li>
-        <strong>{t.cliPage.step3Label}</strong> {t.cliPage.step3Body}
-        <CommandBlock code={daemonAuthCmd} title="receiver · approve" />
-      </li>
-    </ol>
-  </div>
+        <ModeSection {cli} mode={mode.sendReceive}>
+          <CommandBlock
+            code={COMMANDS.sendReceive.code}
+            title={COMMANDS.sendReceive.name}
+            {...copyProps(cli.copy, COMMANDS.sendReceive.name)}
+          />
+        </ModeSection>
 
-  <!-- Sync -->
-  <div class="block" data-cli-mode="sync">
-    <h2>{t.cliPage.syncH2}</h2>
-    <p>{t.cliPage.syncNote}</p>
-    <CommandBlock code={syncCmd} title="sync a folder" />
-  </div>
+        <ModeSection {cli} mode={mode.pushPull}>
+          <CommandBlock
+            code={COMMANDS.pushPull.code}
+            title={COMMANDS.pushPull.name}
+            {...copyProps(cli.copy, COMMANDS.pushPull.name)}
+          />
+        </ModeSection>
 
-  <!-- Guides -->
-  <div class="block">
-    <h2>{t.cliPage.guidesH2}</h2>
-    <div class="guide-cards">
-      {#each GUIDES as g, i (g.slug)}
-        <a class="guide-card" href={guideUrl(g.slug)}>
-          <span class="g" aria-hidden="true">
-            {#if g.icon === "network"}<Icon name="network" size={22} />{:else}{g.icon}{/if}
-          </span>
-          <span class="gt">{t.cliPage.guides[i]}</span>
-          <span class="arr" aria-hidden="true">→</span>
-        </a>
-      {/each}
-    </div>
-  </div>
+        <ModeSection {cli} mode={mode.serve}>
+          <CommandBlock
+            code={COMMANDS.serveListen.code}
+            title={COMMANDS.serveListen.name}
+            {...copyProps(cli.copy, COMMANDS.serveListen.name)}
+          />
+          <CommandBlock
+            code={COMMANDS.servePush.code}
+            title={COMMANDS.servePush.name}
+            {...copyProps(cli.copy, COMMANDS.servePush.name)}
+          />
+          <CommandBlock
+            code={COMMANDS.serveAuthorize.code}
+            title={COMMANDS.serveAuthorize.name}
+            {...copyProps(cli.copy, COMMANDS.serveAuthorize.name)}
+          />
+        </ModeSection>
 
-  <!-- Reference -->
-  <div class="block">
-    <h2>{t.cliPage.refH2}</h2>
+        <ModeSection {cli} mode={mode.sync}>
+          <CommandBlock
+            code={COMMANDS.sync.code}
+            title={COMMANDS.sync.name}
+            {...copyProps(cli.copy, COMMANDS.sync.name)}
+          />
+        </ModeSection>
+      </section>
 
-    <h3>{t.cliPage.flagsH3}</h3>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>{t.cliPage.thFlag}</th><th>{t.cliPage.thApplies}</th><th>{t.cliPage.thMeaning}</th></tr></thead>
-        <tbody>
-          {#each FLAG_ROWS as f, i (f.flag)}
-            <tr><td><code>{f.flag}</code></td><td>{f.who}</td><td>{t.cliPage.flagMeanings[i]}</td></tr>
+      <section class="band" id={sectionId.guides} aria-labelledby="cli-guides-h">
+        <h2 id="cli-guides-h">{cli.sections.guides}</h2>
+        <GuideList {cli} lang={lang()} />
+      </section>
+
+      <section class="band" id={sectionId.reference} aria-labelledby="cli-ref-h">
+        <h2 id="cli-ref-h">{cli.sections.reference}</h2>
+        <FlagTable {cli} />
+        <p class="note">{cli.advertiseNote}</p>
+        <p class="note">{cli.helpNote}</p>
+      </section>
+
+      <section class="band" id={sectionId.security} aria-labelledby="cli-security-h">
+        <h2 id="cli-security-h">{cli.sections.security}</h2>
+        <p class="lead">{cli.securityIntro}</p>
+        <ul class="points">
+          {#each cli.securityPoints as point (point)}
+            <li>{point}</li>
           {/each}
-        </tbody>
-      </table>
+        </ul>
+
+        <h3>{cli.trustH3}</h3>
+        <p class="lead">{cli.trustIntro}</p>
+        <ul class="files">
+          {#each TRUST_FILES as file (file.key)}
+            <li><code dir="ltr">{file.name}</code> — {cli.trustFiles[file.key]}</li>
+          {/each}
+        </ul>
+      </section>
+
+      <section class="band" id={sectionId.faq} aria-labelledby="cli-faq-h">
+        <h2 id="cli-faq-h">{cli.sections.faq}</h2>
+        <FaqList {cli} />
+      </section>
+
+      <footer>
+        <a href={CLI_REPO}>{cli.footerSource}</a>
+        <span class="dot" aria-hidden="true">·</span>
+        <a href={LATEST_RELEASE_URL}>{cli.footerReleases}</a>
+        <span class="dot" aria-hidden="true">·</span>
+        <a
+          href={PRICING_PATH}
+          onclick={(e) => {
+            e.preventDefault();
+            navigate("pricing");
+          }}>{t.pricingPage.navLink}</a
+        >
+        <span class="dot" aria-hidden="true">·</span>
+        <span class="muted">{cli.footerBrowser}</span>
+      </footer>
     </div>
-
-    <h3>{t.cliPage.trustH3}</h3>
-    <p>{t.cliPage.trustIntro}</p>
-    <ul class="files">
-      {#each TRUST_FILES as name, i (name)}
-        <li><code>{name}</code> — {t.cliPage.fileDescs[i]}</li>
-      {/each}
-    </ul>
-
-    <h3>{t.cliPage.integrityH3}</h3>
-    <p>{t.cliPage.integrityNote}</p>
   </div>
-
-  <footer>
-    <a href={repo}>{t.cliPage.footerSource}</a>
-    <span class="dot" aria-hidden="true">·</span>
-    <a href={`${repo}/releases/latest`}>{t.cliPage.footerReleases}</a>
-    <span class="dot" aria-hidden="true">·</span>
-    <a href={PRICING_PATH} onclick={(e) => { e.preventDefault(); navigate("pricing"); }}>{t.pricingPage.navLink}</a>
-    <span class="dot" aria-hidden="true">·</span>
-    <span class="muted">{t.cliPage.footerBrowser}</span>
-  </footer>
-</section>
+</div>
 
 <style>
   .cli {
-    max-width: 1120px;
+    max-width: 1180px;
     margin: 0 auto;
     padding: var(--space-4) 0 var(--space-9);
+    /* Nothing on this page may push the document sideways. Every wide surface
+       here (both tables, every command block, the mobile anchor row) scrolls
+       inside its own box. */
+    overflow-x: clip;
   }
 
-  /* Hero */
+  /* ── Hero ────────────────────────────────────────────────────────────────
+     Compact and install-first: a heading, one supporting line, and then the
+     install band. No eyebrow, no badge row, no gradient mark — the reader came
+     for a command, and each of those pushes it below the fold. */
   .hero {
-    text-align: center;
-    padding: var(--space-6) 0 var(--space-4);
-  }
-  .logo {
-    width: 60px;
-    height: 60px;
-    line-height: 60px;
-    margin: 0 auto var(--space-3);
-    font-size: 30px;
-    font-family: var(--mono);
-    color: #fff;
-    border-radius: 14px;
-    background: var(--grad-accent);
-    box-shadow: 0 12px 36px -10px color-mix(in srgb, var(--accent) 55%, transparent);
+    padding-block: var(--space-6) var(--space-5);
+    border-block-end: 1px solid var(--border);
   }
   .hero h1 {
     font-size: var(--fs-display);
     letter-spacing: -1.2px;
-    margin: 0 0 var(--space-2);
+    line-height: 1.05;
+    color: var(--text-h);
+    margin: 0 0 var(--space-3);
   }
-  .hero .sub {
+  .support {
     color: var(--text);
     font-size: var(--fs-body);
-    max-width: 46ch;
-    margin: 0 auto;
-  }
-  .badges {
-    list-style: none;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: var(--space-2);
-    padding: 0;
-    margin: var(--space-4) 0 0;
-  }
-  .badges li {
-    font-size: var(--fs-xs);
-    color: var(--text);
-    padding: 4px 12px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: var(--surface-2);
-  }
-  .freenote {
-    color: var(--text);
-    font-size: var(--fs-sm);
     line-height: 1.6;
-    max-width: 54ch;
-    margin: var(--space-4) auto 0;
+    margin: 0;
+    max-inline-size: 56ch;
+    text-wrap: pretty;
   }
 
-  /* Generic blocks */
-  .block {
-    margin-top: var(--space-8);
+  /* ── Layout ──────────────────────────────────────────────────────────────
+     One column with a sticky anchor row above the content; at 1024px the rail
+     moves into a gutter beside it. minmax(0, 1fr) rather than 1fr so a wide
+     table inside a grid item cannot stretch the column. */
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
   }
-  .block > h2,
-  .mode-head h2 {
+  @media (min-width: 1024px) {
+    .layout {
+      grid-template-columns: 190px minmax(0, 1fr);
+      column-gap: var(--space-7);
+      align-items: start;
+      padding-block-start: var(--space-6);
+    }
+  }
+
+  .body {
+    min-inline-size: 0;
+  }
+
+  /* Bands, not cards: each section is separated by air and (where it helps) a
+     single hairline. Their internal rhythm varies on purpose — the install band
+     is two columns, task branches are three, guides are grouped lists, the
+     modes are rows — so the page does not read as one repeated tile. */
+  .band {
+    margin-block-start: var(--space-9);
+  }
+  .band > h2 {
     font-size: var(--fs-h2);
     color: var(--text-h);
-    margin: 0 0 var(--space-2);
     letter-spacing: -0.4px;
+    margin: 0 0 var(--space-4);
   }
-  .block p,
-  .mode > p,
+  .band h3 {
+    font-size: var(--fs-h3);
+    color: var(--text-h);
+    margin: var(--space-6) 0 var(--space-2);
+  }
+
+  .lead {
+    color: var(--text);
+    line-height: 1.65;
+    margin: 0 0 var(--space-4);
+    max-inline-size: 68ch;
+  }
+  .spaced {
+    margin-block-start: var(--space-7);
+  }
+  .note {
+    color: var(--text);
+    font-size: var(--fs-sm);
+    line-height: 1.7;
+    margin: var(--space-4) 0 0;
+    max-inline-size: 72ch;
+  }
+
+  h4 {
+    font-size: var(--fs-sm);
+    color: var(--text);
+    font-weight: 600;
+    margin: 0 0 var(--space-3);
+  }
+  .steps {
+    margin: 0 0 var(--space-4);
+    padding-inline-start: 1.3em;
+    max-inline-size: 72ch;
+  }
   .steps li {
     color: var(--text);
     line-height: 1.65;
-    margin-bottom: var(--space-3);
+    margin-block-end: var(--space-4);
   }
-  .alt {
-    font-size: var(--fs-sm);
-    margin-top: var(--space-3);
-  }
-  h3 {
-    font-size: var(--fs-h3);
+  .steps strong {
     color: var(--text-h);
-    margin: var(--space-5) 0 var(--space-2);
+  }
+  .steps :global(.term) {
+    margin-block-start: var(--space-2);
   }
 
-  /* Which-mode picker */
-  .pick {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: var(--space-3);
-    margin-top: var(--space-4);
-  }
-  .pick-card {
-    flex: 1 1 220px;
-    min-width: 200px;
-    max-width: 300px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: var(--space-4);
-    background: var(--surface);
-  }
-  .pick-card .g {
-    display: flex;
-    align-items: center;
-    min-height: 26px;
-    font-size: 22px;
-  }
-  .pick-card h3 {
-    margin: var(--space-2) 0 4px;
-    font-size: var(--fs-body);
-    font-family: var(--mono);
-  }
-  .pick-card p {
-    font-size: var(--fs-sm);
-    margin-bottom: var(--space-2);
-  }
-  .pick-card code {
-    display: block;
-    font-family: var(--mono);
-    font-size: var(--fs-xs);
-    color: var(--text-h);
-    overflow-x: auto;
-    white-space: nowrap;
-  }
-
-  /* Detailed mode cards */
-  .mode {
-    margin-top: var(--space-6);
-    padding: var(--space-5);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface);
-  }
-  .mode-head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    margin-bottom: var(--space-2);
-    flex-wrap: wrap;
-  }
-  .mode-head .g {
-    font-size: 22px;
-  }
-  .mode-head h2 {
-    margin: 0;
-    font-size: var(--fs-h3);
-  }
-  .tag {
-    font-size: var(--fs-xs);
-    color: var(--text);
-    padding: 3px 10px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: var(--surface-2);
-  }
-  /* The status tokens, not a second private green. The literal #1a7f37 that used
-     to live here was 4.43:1 on its own 10% tint — under AA by a hair, and invisible
-     to the token work that already tuned --ok for both themes (it had no dark-mode
-     value at all, so dark got the light green too). */
-  .tag.free {
-    color: var(--ok);
-    border-color: var(--ok-border);
-    background: var(--ok-bg);
-  }
-  /* "Recommended" is the accent, not the success green: it is a suggestion
-     about which mode to pick, not a statement that something is free. */
-  .tag.rec {
-    color: var(--accent-fg);
-    border-color: var(--accent-border);
-    background: var(--social-bg);
-  }
-  /* The featured card is the first thing under the picker and has to read as
-     the answer, not as one of six equals. A left accent rule rather than a
-     tinted fill: the card holds four command blocks, and a background wash
-     behind them fights the code styling in both themes. */
-  .mode.featured {
-    border-color: var(--accent-border);
-    border-inline-start: 3px solid var(--accent);
-  }
   /* The emphasis is on the LINK, not on the paragraph around it. A bolded <p>
      followed by ordinary text is what axe's p-as-heading rule flags, and it is
      right to: a screen-reader user gets a visual hierarchy that is not in the
@@ -544,116 +416,54 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
     margin: var(--space-3) 0 var(--space-2);
   }
   .cta a {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    min-block-size: 44px;
     color: var(--accent-fg);
     text-decoration: none;
     border: 1px solid var(--accent-border);
     border-radius: var(--radius-sm);
-    padding: var(--space-2) var(--space-4);
+    padding-inline: var(--space-4);
     transition: background-color 0.13s;
   }
   .cta a:hover {
     background: var(--social-bg);
   }
   .cta a:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: var(--focus-offset);
   }
   @media (prefers-reduced-motion: reduce) {
     .cta a {
       transition: none;
     }
   }
-
-  .steps {
-    margin: 0;
-    padding-inline-start: 1.3em;
-  }
-  .steps li {
-    margin-bottom: var(--space-4);
-  }
-  .steps li :global(.term) {
-    margin-top: var(--space-2);
-  }
-
-  /* Reference table */
-  .table-wrap {
-    overflow-x: auto;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-  }
-  table {
-    border-collapse: collapse;
-    width: 100%;
+  .hint,
+  .docs {
     font-size: var(--fs-sm);
+    line-height: 1.65;
+    margin: var(--space-2) 0 0;
   }
-  th,
-  td {
-    text-align: start;
-    padding: var(--space-2) var(--space-3);
-    border-bottom: 1px solid var(--border);
-    vertical-align: top;
-  }
-  thead th {
-    color: var(--text-h);
-    background: var(--surface-2);
-    white-space: nowrap;
-  }
-  tbody tr:last-child td {
-    border-bottom: none;
-  }
-  td code {
-    font-family: var(--mono);
-    font-size: var(--fs-xs);
-    color: var(--text-h);
-    white-space: nowrap;
+  .docs {
+    margin-block-start: var(--space-3);
   }
 
+  .points,
   .files {
+    margin: 0;
+    padding-inline-start: 1.15em;
+    max-inline-size: 72ch;
+  }
+  .points li,
+  .files li {
     color: var(--text);
     line-height: 1.7;
-    padding-inline-start: 1.2em;
+    margin-block-end: var(--space-3);
   }
-
-  .guide-cards {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-3);
-    margin-top: var(--space-3);
+  .points li::marker,
+  .files li::marker {
+    color: var(--border);
   }
-  .guide-card {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-4);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface);
-    color: var(--text-h);
-    text-decoration: none;
-    transition: border-color 0.13s;
-  }
-  .guide-card:hover {
-    border-color: var(--accent-border);
-  }
-  .guide-card .g {
-    font-size: 22px;
-  }
-  .guide-card .gt {
-    flex: 1;
-    font-weight: 600;
-    font-size: var(--fs-sm);
-  }
-  .guide-card .arr {
-    color: var(--accent-fg);
-  }
-  @media (max-width: 620px) {
-    .guide-cards {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  /* Inline code (filenames in the trust-files list) + links */
   .files code {
     font-family: var(--mono);
     font-size: 0.9em;
@@ -663,14 +473,15 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
     border-radius: 5px;
     padding: 1px 5px;
   }
+
   a {
     color: var(--accent-fg);
   }
 
   footer {
-    margin-top: var(--space-8);
-    padding-top: var(--space-4);
-    border-top: 1px solid var(--border);
+    margin-block-start: var(--space-8);
+    padding-block-start: var(--space-4);
+    border-block-start: 1px solid var(--border);
     font-size: var(--fs-sm);
     display: flex;
     align-items: center;
@@ -681,5 +492,4 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
   .muted {
     color: var(--text);
   }
-
 </style>

@@ -131,7 +131,7 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete</code></pre>
       <p>pull 是 push 的镜像：不是等别人发东西给你，而是你通过已有的 SSH 权限主动连过去，把文件取回来。</p>
       <pre><code>relayium pull user@host:/path/to/files ./local-dest</code></pre>
       <ol class="steps" data-block="steps"><li><p>先确认远端真的装了 CLI。pull 是在远端执行 relayium 的，而且不像 push 那样有 tar 兜底，二进制缺失会让整条命令失败。</p><pre><code>ssh user@host command -v relayium</code></pre></li><li><p>如果没有，先在远端装上。</p><pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre></li><li><p>用你已有的 SSH 访问把文件拉回来。-i 和 -p 的行为与 ssh 自身一致。</p><pre><code>relayium pull user@host:/path/to/files ./local-dest</code></pre></li></ol>
-      <ul><li>和 push 不同，pull 始终需要远程已经装有 relayium——从裸机服务器 pull 没有 tar 兜底方案。如果远程还没装，先在那边用 curl -fsSL https://relayium.com/install.sh | sh 安装。</li><li>文件会用逐文件 SHA-256 校验，中断后会自动续传（加 --no-resume 可以禁用）。</li><li>-i 和 -p 的行为和 ssh 自己的 -i/-p 一样，用于指定身份文件或端口。</li></ul>
+      <ul><li>和 push 不同，pull 始终需要远程已经装有 relayium——从裸机服务器 pull 没有 tar 兜底方案。如果远程还没装，先在那边用 curl -fsSL https://relayium.com/install.sh | sh 安装。</li><li>每个文件都会做逐文件 SHA-256 校验。pull 不续传：它在移动任何字节之前就会拒绝已存在的目标，所以中断之后要么把缺失的路径再取一次，要么在同一方向上改用 relayium sync。--no-resume 在这里能被接受，但什么也不做。</li><li>-i 和 -p 的行为和 ssh 自己的 -i/-p 一样，用于指定身份文件或端口。</li></ul>
       <h2>出问题时怎么办</h2>
       <p>几乎所有失败的接收都逃不出这五种。你当时跑的是哪条命令，决定了适用哪一条；每一条都有一行可读的输出或一条可跑的命令来判定。</p>
       <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>你输入配对码，会合服务器拒绝了它。</dt><dd><pre><code>relayium receive 483920

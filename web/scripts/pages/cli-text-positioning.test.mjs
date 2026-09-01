@@ -212,10 +212,20 @@ describe("/apps native copy matches what the native apps actually do", () => {
 });
 
 describe("/cli shell covers files and ephemeral text", () => {
-  it("says so in the title, the description and the hero pitch", () => {
+  it("says so in the title and the description", () => {
     expect(cli.title).toMatch(TEXT_WORD.en);
     expect(cli.description).toMatch(TEXT_WORD.en);
-    expect(cli.hero.pitch).toMatch(TEXT_WORD.en);
+  });
+
+  // The hero pitch used to be asserted here too. It is now the product's fixed
+  // supporting line — one sentence, chosen to name the whole shape of the CLI
+  // above the install command — and it does not enumerate payload types. So the
+  // "covers text" invariant moved to where text is actually named: the title,
+  // the description, and the mode list below, all of which a crawler reads.
+  it("keeps the hero pitch as the product's supporting line", () => {
+    expect(cli.hero.pitch).toBe(
+      "Move files between machines — directly, through your devices, or with Relayium Cloud.",
+    );
   });
 
   it("lists text among the modes, with its protocol facts intact", () => {

@@ -1,7 +1,17 @@
 // 显式 .js 后缀：vite-plugin-pwa.ts 会 import 本文件取 LANGS（构建期要按语言清单校验
 // precache 覆盖），于是本文件也进了 tsconfig.node.json 的 nodenext 程序，那里的相对
 // 导入必须带扩展名。这是纯类型导入，打包时整条被抹掉。
-import type { SameLength, PICK_MODES, FLAG_ROWS, TRUST_FILES, GUIDES } from "../cli-page-data.js";
+import type {
+  SectionKey,
+  ModeKey,
+  TaskKey,
+  CompareColumn,
+  FlagKey,
+  TrustFileKey,
+  GuideKey,
+  GuideGroupKey,
+  FaqKey,
+} from "../cli-page-data.js";
 import type { InboxPlatformId } from "../device-inbox-platforms.js";
 
 // Pure i18n types and locale-independent helpers. No message data and no
@@ -990,101 +1000,116 @@ export interface Messages {
     docsCli: string;
     docsMyDevices: string;
   };
-  // /cli docs page body. Command blocks stay literal English (code); only prose
-  // and labels are localised.
+  // /cli docs page body. Commands, flags, file names and slugs stay literal
+  // English — they are code. Only prose and labels are localised.
   //
-  // 四个数组是**按下标**和 cli-page-data.ts 里的常量配对渲染的（第 i 条解释配第 i
-  // 个 flag），所以它们的类型是与那些常量等长的**元组**而不是 string[]：少一条、多
-  // 一条，或者往常量数组里加了一项却忘了补翻译，都会在这里变成编译错误。
-  // 手写"badges 3, pickWhen 5…"那种注释守不住——它自己就曾经漂移过（写着
-  // flagMeanings 8，实际是 15）。badges 例外：它是遍历渲染的，不和任何常量配对。
+  // 这里的每一条都按**键**和 cli-page-data.ts 配对，不再按下标。`Record<Key, …>`
+  // 的意思是「这个集合里的每一个键都必须有文案，且不能有别的键」：漏一个、拼错一
+  // 个、或者往数据里加了一条却忘了补翻译，都是编译错误。
+  //
+  // 换掉按下标配对是有原因的：`SameLength` 只保证两边**一样长**，不保证**对得上**。
+  // 往模式列表中间插一项，之后每一条解释都会静默串位到相邻的模式上——而这一页的
+  // 内容是产品事实（哪种模式需要账号、哪种能续传），串位不是排版问题，是说谎。
   cliPage: {
     metaTitle: string;
     metaDesc: string;
-    badges: string[];
-    freenote: string;
-    installH2: string;
+    /** The one supporting line under the H1. Install is the next thing on
+     *  screen, so this sentence has to name the whole product in one breath. */
+    heroSupport: string;
+
+    // ── Page skeleton ─────────────────────────────────────────────────────
+    /** Accessible name for the contents rail and its mobile anchor row. */
+    contentsLabel: string;
+    /** Rail label and section heading, keyed by SECTIONS. */
+    sections: Record<SectionKey, string>;
+
+    // ── Install ───────────────────────────────────────────────────────────
     installIntro: string;
+    /** "macOS and Linux" — the platforms the shell installer actually covers. */
+    installPosixLabel: string;
+    installWindowsLabel: string;
+    /** Windows is a portable ZIP, and the `| sh` line above is not for it. */
+    installWindowsBody: string;
+    /** Download-button label; the architecture comes from WINDOWS_BUILDS. */
+    installWindowsCta: string;
+    /** `relayium update` cannot replace a running .exe — it prints the zip URL. */
+    installWindowsUpdateNote: string;
     installReleases: string;
     installBuild: string;
     installHelp: string;
-    whichH2: string;
-    whichIntro: string;
-    pickWhen: SameLength<typeof PICK_MODES>;
-    mode1Title: string;
-    mode1Tag: string;
-    mode1Body: string;
-    mode2Title: string;
-    mode2Tag: string;
-    mode2Body: string;
-    mode3Title: string;
-    mode3Tag: string;
-    mode3Body: string;
-    step1Label: string;
-    step1Body: string;
-    step2Label: string;
-    step2Body: string;
-    step3Label: string;
-    step3Body: string;
-    refH2: string;
-    flagsH3: string;
+
+    // ── Choose by task ────────────────────────────────────────────────────
+    tasksIntro: string;
+    /** The three connectivity/ownership branches. Every mode sits in exactly
+     *  one of them; a mode in two is a page that cannot answer "which one". */
+    tasks: Record<TaskKey, { title: string; body: string }>;
+
+    // ── The seven modes ───────────────────────────────────────────────────
+    modesIntro: string;
+    /** `tag` is the one-glance qualifier (account? both ends online?); `lead`
+     *  is the single sentence that defines the mode; `notes` are the
+     *  boundaries that must not be blurred, rendered as separate paragraphs. */
+    modes: Record<ModeKey, { tag: string; lead: string; notes: string[] }>;
+
+    // ── Modes at a glance ─────────────────────────────────────────────────
+    compareIntro: string;
+    /** <caption> — the table's accessible name, not decoration. */
+    compareCaption: string;
+    compareModeHeader: string;
+    compareColumns: Record<CompareColumn, string>;
+    compare: Record<ModeKey, Record<CompareColumn, string>>;
+
+    // ── Guides ────────────────────────────────────────────────────────────
+    guidesIntro: string;
+    guideGroups: Record<GuideGroupKey, string>;
+    guides: Record<GuideKey, string>;
+
+    // ── Command reference ─────────────────────────────────────────────────
+    referenceIntro: string;
     thFlag: string;
     thApplies: string;
     thMeaning: string;
-    flagMeanings: SameLength<typeof FLAG_ROWS>;
+    flags: Record<FlagKey, string>;
+    /** --advertise is advanced and conditional; it is named once, in prose,
+     *  with the condition attached, and never in the table. */
+    advertiseNote: string;
+    helpNote: string;
+
+    // ── Security & integrity ──────────────────────────────────────────────
+    securityIntro: string;
+    securityPoints: string[]; // iterated
     trustH3: string;
     trustIntro: string;
-    fileDescs: SameLength<typeof TRUST_FILES>;
-    integrityH3: string;
-    integrityNote: string;
+    trustFiles: Record<TrustFileKey, string>;
+
+    // ── FAQ ───────────────────────────────────────────────────────────────
+    faq: Record<FaqKey, { q: string; a: string }>;
+
+    // ── Copy controls ─────────────────────────────────────────────────────
+    /** `aria` is a prefix; the command's own code-native name is appended, so
+     *  seventeen buttons that all read "Copy" still have seventeen names. */
+    copy: { label: string; copied: string; aria: string };
+
     footerSource: string;
     footerReleases: string;
     footerBrowser: string;
-    guidesH2: string;
-    guides: SameLength<typeof GUIDES>;
-    syncH2: string;
-    syncNote: string;
-    cloudH2: string;
-    cloudTag: string;
-    cloudIntro: string;
-    cloudBody: string;
-    cloudLoginNote: string;
-    cloudInteropNote: string;
-    cloudPrivacyNote: string;
-    // Device Inbox — the recommended way to get a file from the Web onto a
-    // server or NAS you own. It is the only CLI mode that does not need both
-    // ends online at once, and the only one whose sending half is a browser.
+    // Device Inbox is the only mode with a step sequence and a CTA into the
+    // app, so it keeps keys of its own rather than being flattened into the
+    // uniform mode shape above.
     //
     // Everything here must describe commands that EXIST. No official container
     // image is published (an image is a supply-chain artifact needing its own
     // signing and provenance). Linux servers use the inspectable installer for
     // a resident low-privilege systemd service; `inbox run` remains the explicit
-    // foreground diagnostic/container entrypoint.
-    inboxH2: string;
-    inboxTag: string; // "recommended" badge
-    inboxIntro: string;
-    inboxStep1Label: string; // install/update the CLI on the receiving machine
-    inboxStep1Body: string;
-    inboxStep2Label: string; // relayium login (+ --device-name)
-    inboxStep2Body: string;
-    inboxStep3Label: string; // install the resident receiver, then status
-    inboxStep3Body: string;
-    inboxStep4Label: string; // send from My Devices in the browser
-    inboxStep4Body: string;
-    inboxServiceNote: string; // keeping it running: systemd/launchd/container entrypoint
-    inboxNoImageNote: string; // there is no official Relayium container image
-    inboxQueueNote: string; // offline devices queue; "uploaded" is not "saved"
-    inboxPrivacyNote: string; // sealed to a key only that machine holds
-    inboxCta: string; // link text → My Devices
-    inboxCtaHint: string; // the account gating, stated truthfully
-    inboxDocs: string; // link text → the full CLI receiver document
-    // `relayium text` — ephemeral encrypted messages between two machines.
-    textH2: string;
-    textTag: string;
-    textIntro: string;
-    textPipeNote: string;
-    textSasNote: string;
-    textLimitNote: string;
+    // foreground diagnostic/container entrypoint. And the CLI is the RECEIVE
+    // side only: there is no CLI command that sends into an inbox.
+    inbox: {
+      stepsLabel: string;
+      steps: { label: string; body: string }[]; // iterated
+      cta: string; // link text → the Device Inbox page
+      ctaHint: string; // the account gating, stated truthfully
+      docs: string; // link text → the full CLI receiver guide
+    };
   };
   crossnet: {
     realtimeTitle: string;

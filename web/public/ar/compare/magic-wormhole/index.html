@@ -93,19 +93,19 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>أما send/receive في Relayium فمباشر فقط: يتسابق على اتصال مباشر لبضع ثوانٍ مباشرة بعد المصافحة، وإن لم يجده يفشل النقل تمامًا بدل الرجوع إلى أي مُرحِّل — فخوادم Relayium لا تلمس إطلاقًا بايتات ملفات CLI العابرة للشبكات، بحكم التصميم. هذا نادر عمليًا (تسمح معظم الشبكات المنزلية والمكتبية بمسار مباشر)، لكن إن كنت تنقل ملفات بين جهازين كلاهما خلف NAT صارم على نحو غير معتاد، فمن الأرجح أن يعمل magic-wormhole ببساطة. إن تعذّر إيجاد مسار مباشر وكانت الموثوقية أهم من تجنّب المُرحِّل، فتلك هي الحالة التي تستدعي اللجوء إلى magic-wormhole — أو استخدام push/pull في Relayium أو daemon direct مقابل خادم تستطيع فعلًا الوصول إليه، وهذه لا تعتمد على تلك القفزة المباشرة من الند للند أصلًا.</p>
       <h2>قبل أن تبدأ</h2>
       <p>كل ما يلي هو relayium CLI، فثبّته أولًا إن لم تكن قد فعلت. على macOS وLinux، يُسقط أمر واحد ملفًا ثنائيًا مُسبق البناء في PATH الخاص بك:</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre dir="ltr"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>تفضّل اختيار الملف بنفسك، أو تعمل على Windows؟ احصل على ملف ثنائي من صفحة الإصدارات — يسرد relayium.com/cli كل خيارات التثبيت (أو go build -o relayium ./cmd/relayium إن كان لديك Go).</li><li>يؤكّد relayium --version أنه مثبَّت. تخطَّ هذا وستطبع الأوامر أدناه ‘command not found’ لا غير.</li></ul>
       <h2>SSH و daemon direct: التحدّث إلى خادم تشغّله أصلًا</h2>
       <p>حيث يضيف CLI في Relayium مساحة حقيقية هو خارج حالة رمز الاقتران لمرة واحدة: طريقتان إضافيتان لنقل الملفات تعتمدان على بنية تحتية تملكها أصلًا، وهو ما لا يحاول magic-wormhole تغطيته.</p>
       <p>يعيد relayium push / pull استخدام وصول SSH القائم لديك، فلا شيء جديد لتثق به ولا رمز اقتران لمشاركته. بل يعمل push حتى مقابل خادم لا يوجد فيه relayium مثبَّت إطلاقًا، بالرجوع إلى تدفّق tar عادي عبر اتصال SSH — وهذا الرجوع خاص بـ push فقط؛ أما pull فيحتاج دائمًا إلى relayium على الطرف البعيد، إذ يعمل هناك بصفته المُرسِل.</p>
       <p>يحوّل relayium serve أي جهاز تملكه إلى هدف daemon direct، يمكن الوصول إليه عبر TLS 1.3 مثبَّت بلا SSH وبلا رمز اقتران — تُبنى الثقة عند الاتصال الأول (يُوافَق عليه تفاعليًا، أو يُصرَّح به مسبقًا للاستخدام غير المراقَب) وتبقى مثبَّتة بعد ذلك، وهي الفكرة نفسها مثل مفتاح مضيف SSH.</p>
-      <pre><code>relayium push ./photos user@your-server:backups/</code></pre>
-      <pre><code>relayium serve --dir ~/incoming</code></pre>
-      <pre><code>relayium push ./build relayium://your-server</code></pre>
+      <pre dir="ltr"><code>relayium push ./photos user@your-server:backups/</code></pre>
+      <pre dir="ltr"><code>relayium serve --dir ~/incoming</code></pre>
+      <pre dir="ltr"><code>relayium push ./build relayium://your-server</code></pre>
       <h2>مزامنة المجلدات وخادم قابل للاستضافة الذاتية</h2>
       <p>يرسل magic-wormhole دفعة من الملفات (أو مجلدًا مضغوطًا) ثم يخرج — أرسِلها مجددًا لتحديث الطرف الآخر، بلا أي مفهوم لما ينبغي حذفه. يضيف CLI في Relayium الأمر relayium sync، وهو مرآة تزايدية أحادية الاتجاه فوق أيٍّ من النقلين أعلاه: ينقل فقط ما تغيّر، ويحذف --delete الملفات على الوجهة التي اختفت من المصدر (لا يحترم ذلك daemon إلا إن بُدئ بـ --allow-delete، فعلى المستقبِل أن يوافق صراحةً)، ويبقي --watch على إعادة المزامنة فورًا كلما تغيّرت الملفات، بلا حاجة إلى مهمة cron.</p>
       <p>خادم Relayium قابل أيضًا للاستضافة الذاتية كحاوية Docker واحدة إن أردت تشغيل كل شيء بنفسك بدل الاعتماد على relayium.com؛ وجّه إليه CLI باستخدام --server.</p>
-      <pre><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
+      <pre dir="ltr"><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
       <h2>مقارنة الميزات في لمحة</h2>
       <p>أهمّ الفروق، جنبًا إلى جنب:</p>
       <ul><li>لا مسار مباشر متاح: يحمل مُرحِّل Transit Relay في magic-wormhole التدفّق المُشفَّر فتكتمل عملية النقل؛ أما send/receive في Relayium فمباشر فقط ويفشل في تلك الحالة.</li><li>التحدّث إلى خادم: يعيد Relayium استخدام وصول SSH لديك (push/pull) أو daemon بـ TLS مثبَّت؛ أما magic-wormhole فلا تكامل SSH لديه — ثبّته على الطرفين وشارك رمزًا.</li><li>مزامنة المجلدات: يعكس relayium sync تزايديًا مع --delete و --watch؛ أما magic-wormhole فيرسل دفعة (أو مجلدًا مضغوطًا) ثم يخرج، بلا دلالات مرآة أو حذف.</li><li>التحقق: كلاهما مشفَّر من الطرف إلى الطرف؛ ويعرض send/receive في Relayium إضافةً رمز SAS قصيرًا يقارنه الطرفان قبل بدء النقل.</li><li>الاستضافة الذاتية: خادم Relayium صورة Docker واحدة تستطيع تشغيلها بنفسك، تخدم CLI وتطبيق المتصفح معًا؛ ويمكن لـ send/receive في CLI التوجّه إليه بـ --server.</li><li>الترخيص والتكلفة: كلاهما مجاني ومفتوح المصدر. لا يحتاج magic-wormhole حسابًا إطلاقًا، أما Relayium فيحتاجه لـ send فقط، كي يُصدر رمز الاقتران.</li></ul>

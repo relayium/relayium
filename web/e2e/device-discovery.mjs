@@ -146,7 +146,12 @@ async function checkCliPage(browser, base, view) {
   const order = await tab.evaluate(
     `[...document.querySelectorAll("[data-cli-mode]")].map((e) => e.getAttribute("data-cli-mode"))`,
   );
-  const expected = ["up / down", "inbox", "text", "send / receive", "push / pull", "daemon direct", "sync"];
+  // The accepted connectivity/ownership taxonomy: offline-capable first (Cloud,
+  // Device Inbox), then both-ends-online (text, send / receive), then machines
+  // you administer (push / pull, serve, sync). Each value is the command surface
+  // itself, which is why they are not translated — see the note on the localized
+  // check below.
+  const expected = ["Cloud", "Device Inbox", "text", "send / receive", "push / pull", "serve", "sync"];
   if (JSON.stringify(order) !== JSON.stringify(expected)) {
     throw new Error(`${view.id}: CLI mode order is ${JSON.stringify(order)}, expected ${JSON.stringify(expected)}`);
   }
@@ -158,11 +163,14 @@ async function checkCliPage(browser, base, view) {
     // 页面语言真的跟着 localStorage 走了：<html lang> 换成了中文，而不是回落英文。
     const htmlLang = await tab.evaluate(`document.documentElement.lang`);
     if (htmlLang !== "zh") throw new Error(`chinese: <html lang> is ${htmlLang}, not zh`);
-    // 这一段是翻译出来的，不是写死的英文。取标题的第一行来判：整段里混着
-    // com.relayium.mac 这类不翻译的专有名词，拿整段判会被它们带偏。
-    const heading = await tab.evaluate(`document.querySelector("#device-inbox h2")?.textContent ?? ""`);
-    if (!/[\u4e00-\u9fff]/.test(heading)) {
-      throw new Error(`chinese: the Device Inbox heading is not translated — ${JSON.stringify(heading)}`);
+    // 这一段是翻译出来的，不是写死的英文。
+    //
+    // 查的是**引导句**，不是标题。标题现在是模式名本身（Device Inbox、serve、
+    // push / pull）——那是命令表面，按设计在每种语言里都保持原样：翻译过的模式名
+    // 会把读者引向一条不存在的命令。所以"这一节到底翻没翻"只能由散文来回答。
+    const lead = await tab.evaluate(`document.querySelector("#device-inbox .lead")?.textContent ?? ""`);
+    if (!/[\u4e00-\u9fff]/.test(lead)) {
+      throw new Error(`chinese: the Device Inbox section is not translated — ${JSON.stringify(lead)}`);
     }
     // 命令块必须显式声明 LTR：一条 shell 命令被镜像过来是读不了也复制不对的。
     // 查的是 <pre> 上的 dir **属性**（CommandBlock 打在它上面），不是计算样式——

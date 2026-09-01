@@ -936,7 +936,12 @@ describe("the tutorial blocks reach the page with the right semantics", () => {
       const dl = fix.slice(fix.indexOf("<dl>"), fix.indexOf("</dl>"));
       expect((dl.match(/<dt>/g) || []).length, `${page.path}: dt count`).toBeGreaterThanOrEqual(3);
       expect((dl.match(/<dt>/g) || []).length).toBe((dl.match(/<dd>/g) || []).length);
-      expect(dl, `${page.path}: every check needs a <pre>`).toContain("<pre><code>");
+      // A troubleshooting check is a command, so it renders left-to-right in
+      // every locale — but the attribute that says so is emitted only where it
+      // corrects something, i.e. on the RTL translations. An LTR page inherits
+      // it and keeps a bare <pre>. See article-command-direction.test.mjs.
+      const pre = page.path.startsWith("ar/") ? '<pre dir="ltr"><code>' : "<pre><code>";
+      expect(dl, `${page.path}: every check needs a <pre>`).toContain(pre);
     }
   });
 

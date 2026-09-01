@@ -134,6 +134,8 @@ downloads/report.pdf
       },
       bullets: [
         "If the file was set to burn, has hit its download limit, or has expired, the link is spent and down reports that it's gone.",
+        "A dropped or stalled connection is retried inside the same run: down reconnects up to five attempts and continues with an HTTP Range request from the last complete encrypted frame, so a large download does not start over because a proxy reset it. Against a server that ignores Range — an old one, or a burn/limited file — it restarts the file within that same run instead.",
+        "That recovery does not outlive the command. When the attempts are spent, down deletes what it had written rather than leaving a truncated file that looks complete, and running down again begins from the start. This is not the across-runs resume that relayium sync has.",
       ],
     },
     {
@@ -218,6 +220,10 @@ downloads/report.pdf
       {
         q: "Does it work with the website?",
         a: "Yes. A link from relayium up opens in a browser, and a share link created on relayium.com can be fetched with relayium down on another machine.",
+      },
+      {
+        q: "What happens if a download is interrupted?",
+        a: "Inside one run, down handles it: it reconnects up to five attempts and continues by HTTP Range from the last complete encrypted frame, or restarts the file within that run if the server ignores Range. Once the attempts are spent it removes the partial output instead of leaving a truncated file, so a later relayium down starts from the beginning rather than picking up where the last one stopped. Only relayium sync resumes across separate runs.",
       },
     ],
   },
@@ -360,6 +366,8 @@ downloads/report.pdf
       },
       bullets: [
         "如果该文件设了阅后即焚、已达下载次数上限或已过期，链接就失效了，down 会告知它已不存在。",
+        "连接中断或卡死时，同一次运行内会自动重试：down 最多重连五次，并用 HTTP Range 请求从最后一个完整密文帧继续，所以一个大文件不会因为被代理重置就从头再下。对着忽略 Range 的服务端——老版本，或者阅后即焚／限次的文件——它会在这同一次运行里重头再下。",
+        "这种恢复不会跨越命令本身。尝试用尽后，down 会把已经写下的内容删掉，而不是留下一个看起来完整的截断文件；再跑一次 down 是从头开始的。这和 relayium sync 那种跨运行的续传不是一回事。",
       ],
     },
     {
@@ -444,6 +452,10 @@ downloads/report.pdf
       {
         q: "能和网页端互通吗？",
         a: "能。relayium up 产出的链接能在浏览器里打开；在 relayium.com 上创建的分享链接也能在另一台机器上用 relayium down 取回。",
+      },
+      {
+        q: "下载被中断了会怎样？",
+        a: "在同一次运行内，down 自己会处理：最多重连五次，并用 HTTP Range 从最后一个完整密文帧继续；服务端若忽略 Range，它就在这一次运行里重头再下。尝试用尽后它会删掉半截的输出，而不是留下一个截断文件——所以之后再跑 relayium down 是从头开始的，而不是接着上一次。只有 relayium sync 才会跨运行续传。",
       },
     ],
   },
