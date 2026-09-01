@@ -103,16 +103,19 @@ Prefer the terminal? Install the self-hostable, end-to-end-encrypted CLI in one 
 curl -fsSL https://relayium.com/install.sh | sh
 ```
 
-<!-- CLI-RELEASE-BOUNDARY: remove this whole block in the release PR that publishes the next CLI tag. -->
+<!-- CLI-RELEASE-BOUNDARY: this PR only prepares the release; merging it lets the auto-release workflow publish the v0.24.0 CLI tag; remove this whole block, and its test, immediately after that publication completes. -->
 > ⚠️ **This section describes the CLI *source in this repository*, which is ahead of the installer.**
-> The latest published CLI release is **v0.23.0**. The direct-server safety and help work landed after
-> it — `serve`'s `--bind` and its writable-`--dir` check before the port is bound, the narrowing of an
-> allowed `--delete` to the roots a run actually sends (the `--allow-delete` gate is not itself new; it
-> is already in v0.23.0, where honoring it mirrors the whole served `--dir`), a running listener picking up
-> `relayium authorize` without a restart, and the uniform `-h`/`--help`/`relayium help <command>`
-> contract with the corrected SSH-fallback and `sync --delete` wording — is **not in v0.23.0**. Don't
-> rely on it from the installed binary until the next CLI release; build from `server/cmd/relayium` if
-> you need it now. Run `relayium version` to see which you have.
+> The latest published CLI release is **v0.23.0**, and it remains the latest installable one until the
+> next publication actually finishes. **v0.24.0 is the intended pending release** — the tag meant to
+> carry the direct-server safety and help work that is already merged here, not a version you can
+> install today. That work — `serve`'s `--bind` and its writable-`--dir` check before the port is
+> bound, the narrowing of an allowed `--delete` to the roots a run actually sends (the `--allow-delete`
+> gate is not itself new; it is already in v0.23.0, where honoring it mirrors the whole served
+> `--dir`), a running listener picking up `relayium authorize` without a restart, and the uniform
+> `-h`/`--help`/`relayium help <command>` contract with the corrected SSH-fallback and `sync --delete`
+> wording — is **not in v0.23.0**. Run `relayium version` and believe it rather than this section:
+> until it reports **0.24.0**, don't rely on any of the above from the installed binary. Build from
+> `server/cmd/relayium` if you need it now.
 
 **Free and open source — and direct in the modes below.** In these modes the CLI connects your machines
 directly: file and message bytes never pass through Relayium's servers, and nothing is metered. Among
