@@ -200,6 +200,10 @@ describe("nothing in the docs tells a reader to curl a download link", () => {
       // full, because those pages ARE public in all nine languages.
       ...["en", "zh"].map((l) => `web/src/lib/i18n/${l}.ts`),
       "web/src/lib/CliPage.svelte",
+      // Where /cli's literal commands live since the page was split into
+      // components — including its two curl lines, which is exactly the shape
+      // this test is looking for.
+      "web/src/lib/cli-page-data.ts",
       "web/src/lib/DownloadPage.svelte",
       "web/public/llms.txt",
       "README.md",

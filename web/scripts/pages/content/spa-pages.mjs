@@ -93,66 +93,95 @@ export const pricing = {
   learnHeading: "Learn more",
 };
 
+// The crawlable /cli. It has to carry the same taxonomy and the same product
+// claims as the rendered page, because a non-rendering client sees only this.
+//
+// Three things this shell got wrong until now, all of them claims rather than
+// wording:
+//
+//   * Device Inbox was absent entirely. The one mode whose sender is the Web app
+//     — the answer to "get this file onto my server" — did not exist for any
+//     crawler, so the mode list read as six.
+//   * "Verified and resumable … every file … an interrupted transfer resumes"
+//     was a blanket promise over all modes. Neither half is true across the
+//     board: the zero-dependency tar fallback verifies nothing, and resume is
+//     two different per-mode behaviours rather than one property — `sync`
+//     continues a partial destination on a LATER run, `relayium down` reconnects
+//     and continues by HTTP Range WITHIN one run (and deletes the partial output
+//     when it gives up), and push/pull do neither. The first correction here
+//     over-swung to "resume is a sync feature", which is its own untrue
+//     sentence; see the security item below.
+//   * The --server answer omitted `text`, which takes it too.
+//
+// And the install step said one command downloads a binary "for your OS", with
+// Windows as an aside — which reads as though `curl … | sh` covers Windows.
 export const cli = {
   // title/description mirror cliPage.metaTitle / metaDesc exactly — see the note
   // on `pricing` above.
   title: "Relayium CLI — encrypted file and text transfer from the terminal",
   description:
-    "A single binary for macOS, Linux and Windows: copy files over your own SSH, send by pairing code, push server-to-server, mirror a folder, share ephemeral text, or upload now and pull later. Free and open source.",
+    "A single binary for macOS, Linux and Windows: copy files over your own SSH, send by pairing code, push server-to-server, mirror a folder, share ephemeral text, upload now and pull later, or receive into a Device Inbox. Free and open source.",
   hero: {
     h1: "Relayium CLI",
-    pitch:
-      "Free peer-to-peer, end-to-end encrypted, self-hostable. In push/pull, send/receive, text and daemon-direct, your data goes straight between machines and never touches Relayium's servers — only a tiny rendezvous handshake does, and only for send/receive and text. The exception is cloud up/down, which stores your file end-to-end encrypted so another machine can fetch it later.",
+    pitch: "Move files between machines — directly, through your devices, or with Relayium Cloud.",
     cta: "Install the CLI",
   },
   how: {
     heading: "Install",
     steps: [
-      "One command downloads a prebuilt binary for your OS and puts it on your PATH: curl -fsSL https://relayium.com/install.sh | sh",
-      "Prefer to pick it yourself, or on Windows? Download a prebuilt binary from the releases page.",
+      "macOS and Linux: one command downloads a prebuilt binary and puts it on your PATH — curl -fsSL https://relayium.com/install.sh | sh",
+      "Windows: download the portable ZIP for x64 or ARM64 from the releases page and put relayium.exe anywhere on your PATH. The installer above is a POSIX shell script and does not run on Windows; relayium update also cannot replace a running .exe there, so it prints the download URL instead.",
       "Or build from source with Go.",
-      "Then run relayium --help to see every command.",
+      "Then relayium --help lists every command, and relayium help <command> prints that command's own usage — offline, with no account and no network request.",
     ],
   },
   why: {
-    heading: "Which mode?",
+    heading: "Choose by task",
     items: [
       {
-        title: "push / pull — over your own SSH",
-        desc: "Copy files to (or from) any machine you can already ssh into — a VPS, a home server, a workstation. Bytes travel over your SSH connection and never touch Relayium's servers; you need no account.",
+        title: "Cloud",
+        desc: "Another device can be offline. relayium up encrypts on this machine, uploads only the ciphertext and prints a link; relayium down fetches and decrypts it anywhere, with no account. Uploading requires relayium login and counts against your account's storage cap, traffic allowance, daily quota and retention window. The key travels in the link's #k= fragment and never reaches the server, which stores ciphertext including file names — so losing the link loses the file. It is the same link the website makes. A download recovers inside the run that started it: relayium down reconnects a dropped or stalled connection up to five attempts and continues by HTTP Range from the last complete encrypted frame, and when those attempts are spent it deletes the partial output instead of leaving a truncated file.",
       },
       {
-        title: "send / receive — by pairing code",
-        desc: "Send to another person across networks. After relayium login, run send with no code: the CLI mints a 6-digit pairing code, good for 5 minutes, and prints the command the other end runs — you pass that on out of band. The receiver needs no account. The connection is direct peer-to-peer: only a small rendezvous handshake passes through Relayium — the file bytes never do. Both terminals also print a 6-digit verification code (SAS) derived from their pinned TLS certificate fingerprints — a different value from the pairing code. Comparing it out of band is optional (add --verify to stop for it) and confirms the fingerprints were not substituted and that the rendezvous service did not impersonate either endpoint; it authenticates the endpoints, not every network hop, and only when someone actually compares it.",
+        title: "Device Inbox",
+        desc: "Another device can be offline. Send from a browser or a native app into a folder on a machine you own. In the CLI this is the RECEIVE side only — there is no CLI command that sends into an inbox; to move files between two of your own servers, use serve with push or sync. Both ends must be signed in to the same account, and receiving stays off until someone at that machine picks a folder and turns it on there. If the machine is offline the encrypted task waits in the queue; until that machine reports it wrote the file to disk, the status says the ciphertext is uploaded, never that it arrived. The content key is sealed to a public key that machine published, so Relayium never sees the plaintext, the file names or the folder structure, and an existing file is never overwritten. There is no official Relayium container image.",
       },
       {
-        title: "text — ephemeral messages",
-        desc: "Share a snippet, a link or a command instead of a file. One machine runs relayium text to mint a pairing code — that side needs relayium login — and the other joins with the printed relayium text CODE, which needs no login. Both ends stay online for the session: it is its own end-to-end encrypted peer-to-peer session, Relayium servers keep no message bodies and no server-side history — the machine on the other end can of course copy or keep what it receives — and one message is at most 65,536 bytes of UTF-8. Anything larger is a file.",
+        title: "text",
+        desc: "Both devices are online. Ephemeral encrypted messages between two terminals: one runs relayium text to mint a 6-digit pairing code — that side needs relayium login — and the other joins with the printed relayium text CODE, which needs no account. Both ends stay online for the session; it is its own end-to-end encrypted peer-to-peer session, Relayium servers keep no message bodies and no server-side history, and the machine on the other end can of course copy or keep what it receives. One message is at most 65,536 bytes of UTF-8; anything larger is a file. Verification is opt-in: --verify stops to compare the SAS and needs a terminal to answer.",
       },
       {
-        title: "daemon direct — server to server",
-        desc: "For two hosts you control that already know each other's address: one listens, the other pushes straight to it over pinned TLS 1.3. No relay, no SSH, no code — trust is public-key, set up once.",
+        title: "send / receive",
+        desc: "Both devices are online. Send files to another person across networks. relayium send mints a 6-digit pairing code, good for 5 minutes, and prints the exact command the other end runs; minting needs relayium login and the receiver needs no account. Only a short rendezvous handshake passes through Relayium — the file bytes never do, and if no direct connection can be made the transfer fails rather than being relayed. Both terminals print a 6-digit verification code (SAS) derived from their pinned TLS certificate fingerprints, a different value from the pairing code. Comparing it out of band is optional (--verify stops for it) and confirms the fingerprints were not substituted and that the rendezvous service did not impersonate either endpoint; it authenticates the endpoints, not every network hop, and only when someone actually compares it.",
       },
       {
-        title: "sync — keep a folder mirrored",
-        desc: "Incremental one-way folder mirroring instead of a one-shot copy, with optional --delete and --watch.",
+        title: "push / pull",
+        desc: "A machine you manage. Copy files to, or from, any machine you can already ssh into. The bytes travel over your SSH connection and never touch Relayium's servers, and no account is involved. With relayium installed on the remote, the batch is checked for collisions before any bytes are sent and each file is verified by SHA-256; without it, push falls back to a tar stream piped into the remote's own tar -x -k, which verifies nothing per file, and pull has no fallback at all. Neither push nor pull resumes: they refuse a destination that already exists, so --no-resume is accepted there and does nothing.",
       },
       {
-        title: "up / down — the far end is offline",
-        desc: "Upload now, pull it from another machine later. The file is end-to-end encrypted and the link is the same zero-knowledge link the browser app makes, so the CLI and the web app interoperate.",
+        title: "serve",
+        desc: "A machine you manage. The direct server-to-server listener: one host runs relayium serve, the other pushes straight into its --dir over a pinned TLS 1.3 connection. No relay, no SSH, no pairing code, no account. Trust is that host's authorized_fingerprints file and nothing else — logging in to a Relayium account grants no one filesystem access here. In a terminal it asks you to approve each new pusher once; with no terminal an unknown pusher is rejected, so pre-authorize it with relayium authorize. --bind is empty by default, which listens on every interface including public ones.",
+      },
+      {
+        title: "sync",
+        desc: "A machine you manage. One-way incremental folder mirroring over the same transports as push: files whose size and modification time are unchanged are skipped. The files it does transfer are verified, and a partial file left at the destination by an interrupted run is continued by the next run rather than started over. --delete also removes files gone from the source — over relayium:// only if the listener was started with --allow-delete — and --watch keeps it running with debouncing and backoff. A one-way mirror is a copy of the current state, not a versioned backup.",
       },
     ],
   },
   compare: {
-    heading: "Integrity, resume and trust",
+    heading: "Security & integrity",
     items: [
       {
-        title: "Verified and resumable",
-        body: "Every file is verified end-to-end with SHA-256, and an interrupted transfer resumes from where it stopped on the next run (disable with --no-resume).",
+        title: "Verification is per-mode, not a blanket promise",
+        body: "push and pull verify each file by SHA-256 only when relayium is installed on the remote; the zero-dependency tar fallback verifies nothing per file, so a \"sent\" line is not proof every file landed. send and receive verify each file. sync verifies the files it transfers, but decides what to transfer from size and modification time. Cloud and Device Inbox verify on the receiving side before anything is written, and Device Inbox reports saved only once the file is durably on disk. The SAS that send, receive and text print authenticates the endpoints only if someone actually compares it out of band.",
       },
       {
-        title: "Identity files",
-        body: "Identity and trust live in ~/.config/relayium/ (override with --config-dir, e.g. /etc/relayium for a systemd service): this host's persistent key, the fingerprints of listeners you've pushed to (pinned after first use), and, on a listener, the pushers allowed to connect.",
+        title: "Resume means two different things, and neither covers every mode",
+        body: "sync resumes across runs: it keeps a partial file at the destination and continues it on the next run, a serve listener receiving a sync honours that, and --no-resume turns it off. relayium down resumes within a single run: it reconnects a dropped or stalled download by itself, up to five attempts, and continues by HTTP Range from the last complete encrypted frame; against a server that ignores Range it restarts the file inside that same run, and once the attempts are spent it deletes the partial output rather than leaving a truncated file — so a fresh relayium down starts from the beginning. push and pull do not resume: they refuse a destination that already exists before any bytes are sent, so there is never a partial file to continue from, and --no-resume is accepted there only for compatibility. A copy or a mirror is also not a versioned backup — sync --delete propagates a deletion at the source, and nothing here keeps an earlier version of a file you overwrote.",
+      },
+      {
+        title: "Logging in grants no filesystem access",
+        body: "serve and push relayium:// trust exactly one thing — the fingerprint list on the receiving host — and that decision is separate from any Relayium account. Identity and trust live in ~/.config/relayium/, or wherever --config-dir points: this host's persistent key, the fingerprints of listeners you have pushed to (pinned on first contact and refused if they later change), and, on a listener, the pushers allowed to connect.",
       },
     ],
   },
@@ -160,16 +189,28 @@ export const cli = {
     heading: "Frequently asked questions",
     items: [
       {
-        q: "Does the CLI cost anything?",
-        a: "No. push/pull, send/receive, text, daemon-direct and sync connect the two ends directly, so there is nothing to meter. Sending by pairing code needs an account so the server can mint the code — receiving never does — but it still costs nothing. Only cloud up/down draws on your account's storage and traffic allowance.",
+        q: "Do I need an account?",
+        a: "For most of the CLI, no. push, pull, serve, sync, relayium down, and joining a send or text session with a code someone gave you all need no account. An account is required to upload with relayium up, to mint a pairing code for send or text, and on both ends of Device Inbox. Signing in never grants anyone access to your filesystem.",
+      },
+      {
+        q: "Can the other device be offline?",
+        a: "In two modes. Cloud stores the encrypted file until someone fetches the link, and Device Inbox queues the encrypted task until that device comes back — an offline target is valid there, not a refusal. Everything else moves bytes straight between two machines, so text, send / receive, push / pull, serve and sync all need the far end available at the same time.",
+      },
+      {
+        q: "Which transfers can resume?",
+        a: "Two, and they resume in different senses. sync resumes across runs: it skips files whose size and modification time are unchanged, keeps a partial file at the destination and continues it on the next run; a serve listener receiving a sync honours that, and --no-resume turns it off. relayium down resumes within a single run: it reconnects a dropped or stalled download on its own, up to five attempts, continuing by HTTP Range from the last complete encrypted frame, and deletes the partial output after the last failed attempt — so running it again starts from the beginning. push and pull do not resume: they refuse a destination that already exists before any bytes are sent, and --no-resume is accepted there only for compatibility. The zero-dependency tar fallback resumes nothing.",
+      },
+      {
+        q: "How does verification differ by mode?",
+        a: "push and pull verify each file by SHA-256 and stage it before installing, but only when relayium is installed on the remote; the tar fallback verifies nothing per file. send and receive verify each file and additionally print a 6-digit SAS derived from the pinned TLS fingerprints, which proves something only if someone compares it out of band — --verify stops for that. text has the same optional SAS and no files to verify. sync verifies the files it transfers, but decides what to transfer from size and modification time. Cloud and Device Inbox verify on the receiving side before writing.",
       },
       {
         q: "Which platforms does it run on?",
-        a: "macOS, Linux and Windows — a single static binary, installed by one command or downloaded from the releases page.",
+        a: "macOS, Linux and Windows — a single static binary. macOS and Linux install with one shell command; Windows is a portable ZIP from the releases page, because that installer is a POSIX shell script.",
       },
       {
         q: "Can I point it at my own server?",
-        a: "Yes — --server https://your-domain points login, up, down, send and receive at a self-hosted Relayium instance, so pairing codes are minted by your server too.",
+        a: "Yes — --server https://your-domain points login, up, down, send, receive and text at a self-hosted Relayium instance, so pairing codes are minted by your server too. For up it must be the server you are logged in to; the token is never sent elsewhere.",
       },
     ],
   },

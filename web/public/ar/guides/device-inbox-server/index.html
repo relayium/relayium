@@ -87,7 +87,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="lead">يجب أن يستمر مستقبِل الخادم بعد إغلاق SSH وإعادة التشغيل. ينشئ المثبّت الموصى به المجلد وخدمة systemd فعلية. أما inbox run فللتشخيص في الواجهة أو للحاويات فقط.</p>
       <h2>تثبيت المستقبِل الدائم</h2>
       <p>سجّل الدخول مرة كمشغّل، ثم نزّل النص القصير وافحصه قبل منحه صلاحيات root. ينسخ بيانات الاعتماد دون عرضها، وينشئ حساب relayium مخصصًا، ويسجل مفتاح الاستقبال، ثم يثبت الوحدة المقوّاة ويشغلها الآن وبعد إعادة التشغيل.</p>
-      <pre><code>relayium update
+      <pre dir="ltr"><code>relayium update
 relayium login --device-name prod-backup-1
 
 # Download, inspect, then install the always-on service:
@@ -97,7 +97,7 @@ sudo sh inbox-server-install.sh --dir /srv/relayium-inbox</code></pre>
       <ul><li>المجلد الموصى به هو /srv/relayium-inbox. لا تصل الخدمة المقوّاة إلى /root أو المجلد المنزلي لمستخدم آخر.</li><li>تعود ملكية الملفات والمفتاح الخاص إلى الحساب المخصص محدود الصلاحيات، لا إلى root.</li><li>لا تُنقل حالة استقبال قديمة إلى أرشيف مؤرخ قابل للاستعادة إلا بعد نجاح تشغيل الخدمة الجديدة.</li></ul>
       <h2>فحص الخدمة والسجلات والملفات</h2>
       <p>تفحص الأوامر العملية والسجلات وحالة Relayium المحلية/المركزية والمجلد كلًا على حدة. لا تكفي حالة systemd الخضراء لإثبات صلاحية الحساب والمفتاح والمجلد.</p>
-      <pre><code>sudo systemctl status relayium-inbox.service
+      <pre dir="ltr"><code>sudo systemctl status relayium-inbox.service
 sudo journalctl -u relayium-inbox.service -f
 sudo -u relayium relayium inbox status --config-dir /var/lib/relayium-inbox/config
 ls -la /srv/relayium-inbox</code></pre>
@@ -107,7 +107,7 @@ ls -la /srv/relayium-inbox</code></pre>
       <ul><li>يعيد systemd تشغيل العامل بعد فشل العملية وبعد إعادة تشغيل الخادم.</li><li>يبقى التنزيل الجزئي في مساحة تجهيز خاصة ولا يظهر كملف مكتمل.</li><li>يجعل السجل الدائم التعطل بعد الحفظ متكررًا بأمان: يُبلغ عن الحفظ نفسه دون إنشاء نسخة.</li><li>إذا اختفى المجلد لاحقًا فلا يعيد العامل إنشاءه تحت نقطة تركيب غائبة، بل يبلغ أن الأمر يحتاج إلى تدخل.</li></ul>
       <h2>الإيقاف المؤقت أو الاستئناف أو الإزالة</h2>
       <p>شغّل أوامر الإدارة بالحساب ومجلد الإعداد نفسيهما. يحتفظ pause بالمفاتيح والطابور، ويتابع resume، ويحذف disable الحالة المركزية أولًا ثم المفاتيح الخاصة.</p>
-      <pre><code>sudo -u relayium relayium inbox pause --config-dir /var/lib/relayium-inbox/config
+      <pre dir="ltr"><code>sudo -u relayium relayium inbox pause --config-dir /var/lib/relayium-inbox/config
 sudo -u relayium relayium inbox resume --config-dir /var/lib/relayium-inbox/config
 sudo -u relayium relayium inbox disable --config-dir /var/lib/relayium-inbox/config</code></pre>
       <ul><li>لا تستخدم inbox run داخل نافذة SSH كإعداد دائم؛ سيتوقف عند إغلاقها.</li><li>يوقف systemctl disable --now العملية فقط. استخدم inbox disable لإلغاء صندوق الاستقبال ومفاتيحه أيضًا.</li></ul>

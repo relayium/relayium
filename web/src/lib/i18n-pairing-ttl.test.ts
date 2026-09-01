@@ -254,7 +254,11 @@ const DURATIONS = /(\d+|five|ten|fifteen|thirty|خمس|عشر|ثلاثين)[  ]
 // Every file here states the pairing-code TTL and no other duration, so the
 // rule can be absolute: each match must be the server's number.
 const PAIRING_COPY = [
-  "web/src/lib/CliPage.svelte",
+  // The /cli page's literal commands, including the `send` example that prints
+  // "(valid 5 minutes)". They used to sit inline in CliPage.svelte; they moved
+  // to cli-page-data.ts when the page was split into components, and this list
+  // follows the copy rather than the file that used to hold it.
+  "web/src/lib/cli-page-data.ts",
   // The shipped message tables. Two since the 2026-08-14 language freeze: the
   // seven archived tables under src/lib/i18n/archive/ are not bundled, not
   // loaded and not readable by any user, so a TTL change must not turn them red.
@@ -313,6 +317,9 @@ describe("hand-written pairing-TTL copy outside the catalogue", () => {
 const CLAIM_SOURCES = [
   ...["en", "zh"].map((l) => `web/src/lib/i18n/${l}.ts`),
   "web/src/lib/CliPage.svelte",
+  // Where /cli's literal commands live since the page was split; the `send`
+  // example prints a pairing code, so it is a format-claim surface too.
+  "web/src/lib/cli-page-data.ts",
   "web/public/llms.txt",
   "web/scripts/pages/content/cross-network.mjs",
   "web/scripts/pages/content/spa-pages.mjs",

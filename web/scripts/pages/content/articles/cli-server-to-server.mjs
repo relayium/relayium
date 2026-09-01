@@ -97,7 +97,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "No relay and no fallback: if the listener isn't reachable, the push fails — file bytes never route through anyone else.",
-        "The same transfer engine as the other modes: resumable, with a per-file SHA-256 check.",
+        "The same transfer engine as the other modes: each file is checked with a per-file SHA-256 and staged before it is installed. push does not resume, here or over SSH — it refuses a destination that already exists, so an interrupted run is finished by pushing the missing paths, or by relayium sync, which continues a partial file and which this listener honours unless it was started with --no-resume.",
       ],
     },
     {
@@ -120,7 +120,7 @@ Accept and remember this peer? [y/N] y`,
     {
       heading: "Automate it (or run without a terminal)",
       body: [
-        "Because an approved fingerprint is remembered, later pushes need no prompt — so relayium push drops straight into cron, a deploy script, or CI for encrypted, integrity-checked, resumable server-to-server sync. When serve runs without a terminal (a systemd service, a pipe) it can't prompt, so it rejects unknown pushers; pre-authorize them instead. Get the fingerprint from the pusher's relayium id, or copy it from the \"rejected unauthorized peer …\" line in the serve log, then:",
+        "Because an approved fingerprint is remembered, later pushes need no prompt — so relayium push drops straight into a deploy script or CI for encrypted, integrity-checked server-to-server delivery. For a job that runs on a schedule into the same directory, use relayium sync instead: push refuses a destination that already exists, so a repeated push into one fixed path succeeds once and is refused after that. When serve runs without a terminal (a systemd service, a pipe) it can't prompt, so it rejects unknown pushers; pre-authorize them instead. Get the fingerprint from the pusher's relayium id, or copy it from the \"rejected unauthorized peer …\" line in the serve log, then:",
       ],
       code: [
         `# on the RECEIVER: pre-authorize a sender without a prompt
@@ -349,7 +349,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "没有中继，也没有回退：如果监听端无法到达，推送就会失败——文件字节永远不会经过其他任何人转发。",
-        "使用与其他模式相同的传输引擎：可续传，并对每个文件做 SHA-256 校验。",
+        "使用与其他模式相同的传输引擎：每个文件都做逐文件 SHA-256 校验，并先落到暂存区再安装。push 不续传——无论走这条路还是走 SSH：它会拒绝已存在的目标，所以中断之后要么补传缺失的路径，要么改用 relayium sync（它会接着传半截文件，而这个监听端会遵守，除非它是以 --no-resume 启动的）。",
       ],
     },
     {
@@ -372,7 +372,7 @@ Accept and remember this peer? [y/N] y`,
     {
       heading: "实现自动化（或在没有终端的环境下运行）",
       body: [
-        "由于已批准的指纹会一直保留，后续推送不再需要确认——因此 relayium push 可以直接接入 cron、部署脚本或 CI，实现加密、可校验完整性、可续传的服务器到服务器同步。当 serve 在没有终端的环境下运行（作为 systemd 服务、通过管道）时，它无法弹出提示，因此会拒绝未知的推送方；这时应改为预先授权它们。可以从推送方的 relayium id 获取指纹，或者从 serve 日志中「rejected unauthorized peer …」那一行复制它，然后：",
+        "由于已批准的指纹会一直保留，后续推送不再需要确认——因此 relayium push 可以直接接入部署脚本或 CI，做加密、可校验完整性的服务器到服务器投递。如果是定时往同一个目录跑的任务，请改用 relayium sync：push 会拒绝已存在的目标，所以反复往同一个固定路径 push 只有第一次会成功，之后都会被拒。当 serve 在没有终端的环境下运行（作为 systemd 服务、通过管道）时，它无法弹出提示，因此会拒绝未知的推送方；这时应改为预先授权它们。可以从推送方的 relayium id 获取指纹，或者从 serve 日志中「rejected unauthorized peer …」那一行复制它，然后：",
       ],
       code: [
         `# 在接收方：无需提示，预先授权一个发送方
@@ -598,7 +598,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "リレーもフォールバックもありません。リスナーに到達できなければプッシュは失敗します。ファイルのバイト列が他の誰かを経由することは決してありません。",
-        "他のモードと同じ転送エンジンです。再開可能で、ファイルごとに SHA-256 チェックが行われます。",
+        "他のモードと同じ転送エンジンです。各ファイルはファイルごとの SHA-256 でチェックされ、暫定領域に置かれてから設置されます。push は再開しません。SSH 経由でもこの経路でも同じで、すでに存在する宛先を拒否します。中断されたときは足りないパスを push するか、半端なファイルを続けてくれる relayium sync を使ってください（この待ち受け側は --no-resume 付きで起動されていない限りそれに従います）。",
       ],
     },
     {
@@ -621,7 +621,7 @@ Accept and remember this peer? [y/N] y`,
     {
       heading: "自動化する（またはターミナルなしで実行する）",
       body: [
-        "承認済みのフィンガープリントは記憶されるため、以降のプッシュにはプロンプトが不要になります。そのため relayium push は cron、デプロイスクリプト、CI にそのまま組み込め、暗号化・整合性チェック済み・再開可能なサーバー間同期を実現します。serve がターミナルなしで動作している場合（systemd サービスやパイプなど）はプロンプトを出せないため、未知のプッシュ側を拒否します。その場合は事前に承認してください。フィンガープリントはプッシュ側で relayium id を実行して取得するか、serve のログにある「rejected unauthorized peer …」の行からコピーし、次のように実行します：",
+        "承認済みのフィンガープリントは記憶されるため、以降のプッシュにはプロンプトが不要になります。そのため relayium push はデプロイスクリプトや CI にそのまま組み込め、暗号化・整合性チェック済みのサーバー間配信を実現します。同じディレクトリへ定期実行するジョブでは、代わりに relayium sync を使ってください。push は既存の宛先を拒否するので、固定パスへの繰り返しの push は初回だけ成功し、以降は拒否されます。serve がターミナルなしで動作している場合（systemd サービスやパイプなど）はプロンプトを出せないため、未知のプッシュ側を拒否します。その場合は事前に承認してください。フィンガープリントはプッシュ側で relayium id を実行して取得するか、serve のログにある「rejected unauthorized peer …」の行からコピーし、次のように実行します：",
       ],
       code: [
         `# 受信側で: プロンプトなしに送信側を事前承認する
@@ -828,7 +828,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "릴레이도 폴백도 없습니다. 리스너에 도달할 수 없으면 푸시는 실패합니다. 파일 바이트는 결코 다른 누군가를 거쳐 전달되지 않습니다.",
-        "다른 모드와 동일한 전송 엔진입니다. 재개 가능하며 파일별 SHA-256 검사를 수행합니다.",
+        "다른 모드와 동일한 전송 엔진입니다: 각 파일은 파일별 SHA-256으로 검사되고 스테이징된 뒤 설치됩니다. push는 재개하지 않습니다 — 여기서도 SSH에서도 마찬가지로 이미 존재하는 목적지를 거부합니다. 중단되었다면 빠진 경로를 push하거나, 부분 파일을 이어가는 relayium sync를 쓰세요(이 수신 측은 --no-resume으로 시작되지 않은 한 그것을 존중합니다).",
       ],
     },
     {
@@ -851,7 +851,7 @@ Accept and remember this peer? [y/N] y`,
     {
       heading: "자동화하기(또는 터미널 없이 실행하기)",
       body: [
-        "승인된 핑거프린트는 기억되므로 이후의 푸시에는 확인이 필요 없습니다. 따라서 relayium push는 cron, 배포 스크립트, CI에 곧바로 연결되어 암호화되고 무결성이 검증되며 재개 가능한 서버 간 동기화를 제공합니다. serve가 터미널 없이 실행될 때(systemd 서비스, 파이프 등)는 프롬프트를 띄울 수 없으므로 알 수 없는 푸시하는 쪽을 거부합니다. 대신 미리 승인해 두세요. 핑거프린트는 푸시하는 쪽에서 relayium id로 얻거나, serve 로그의 “rejected unauthorized peer …” 줄에서 복사한 뒤 다음을 실행하세요:",
+        "승인된 핑거프린트는 기억되므로 이후의 푸시에는 확인이 필요 없습니다. 따라서 relayium push는 배포 스크립트나 CI에 곧바로 연결되어 암호화되고 무결성이 검증된 서버 간 전달을 제공합니다. 같은 디렉터리로 예약 실행되는 작업이라면 대신 relayium sync를 쓰세요: push는 이미 존재하는 목적지를 거부하므로, 고정된 한 경로로 반복해서 push하면 한 번만 성공하고 그 뒤로는 거부됩니다. serve가 터미널 없이 실행될 때(systemd 서비스, 파이프 등)는 프롬프트를 띄울 수 없으므로 알 수 없는 푸시하는 쪽을 거부합니다. 대신 미리 승인해 두세요. 핑거프린트는 푸시하는 쪽에서 relayium id로 얻거나, serve 로그의 “rejected unauthorized peer …” 줄에서 복사한 뒤 다음을 실행하세요:",
       ],
       code: [
         `# 받는 쪽에서: 프롬프트 없이 보내는 쪽을 미리 승인
@@ -1058,7 +1058,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "Kein Relay und kein Fallback: Ist der Listener nicht erreichbar, schlägt der Push fehl — die Datei-Bytes laufen nie über irgendjemand anderen.",
-        "Dieselbe Übertragungs-Engine wie die anderen Modi: fortsetzbar, mit einer SHA-256-Prüfung pro Datei.",
+        "Dieselbe Übertragungs-Engine wie die anderen Modi: Jede Datei wird per SHA-256 geprüft und zwischengelagert, bevor sie installiert wird. push setzt nicht fort, weder hier noch über SSH — es verweigert ein Ziel, das schon existiert. Einen abgebrochenen Lauf beendest du, indem du die fehlenden Pfade pushst, oder mit relayium sync, das eine Teildatei weiterführt und das dieser Listener respektiert, sofern er nicht mit --no-resume gestartet wurde.",
       ],
     },
     {
@@ -1081,7 +1081,7 @@ Accept and remember this peer? [y/N] y`,
     {
       heading: "Automatisieren (oder ohne Terminal betreiben)",
       body: [
-        "Weil ein genehmigter Fingerprint gespeichert bleibt, brauchen spätere Pushes keine Abfrage mehr — relayium push lässt sich also direkt in cron, ein Deploy-Skript oder CI einbinden, für verschlüsselte, integritätsgeprüfte, fortsetzbare Server-zu-Server-Synchronisation. Läuft serve ohne Terminal (ein systemd-Dienst, eine Pipe), kann es nicht nachfragen und lehnt daher unbekannte Pusher ab; genehmige sie stattdessen im Voraus. Hol dir den Fingerprint über relayium id auf der Pusher-Seite, oder kopiere ihn aus der Zeile „rejected unauthorized peer …“ im serve-Log, dann:",
+        "Weil ein genehmigter Fingerprint gespeichert bleibt, brauchen spätere Pushes keine Abfrage mehr — relayium push lässt sich also direkt in ein Deploy-Skript oder CI einbinden, für verschlüsselte, integritätsgeprüfte Server-zu-Server-Auslieferung. Für einen Job, der nach Zeitplan in dasselbe Verzeichnis läuft, nimm stattdessen relayium sync: push verweigert ein Ziel, das schon existiert, ein wiederholtes push in einen festen Pfad gelingt also einmal und wird danach abgelehnt. Läuft serve ohne Terminal (ein systemd-Dienst, eine Pipe), kann es nicht nachfragen und lehnt daher unbekannte Pusher ab; genehmige sie stattdessen im Voraus. Hol dir den Fingerprint über relayium id auf der Pusher-Seite, oder kopiere ihn aus der Zeile „rejected unauthorized peer …“ im serve-Log, dann:",
       ],
       code: [
         `# auf dem EMPFÄNGER: einen Sender ohne Abfrage vorab genehmigen
@@ -1288,7 +1288,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "Aucun relais et aucun repli : si le processus à l'écoute n'est pas joignable, l'envoi échoue — les octets du fichier ne transitent jamais par qui que ce soit d'autre.",
-        "Le même moteur de transfert que les autres modes : avec reprise, et une vérification SHA-256 par fichier.",
+        "Le même moteur de transfert que les autres modes : chaque fichier est contrôlé par un SHA-256 par fichier et mis en zone d'attente avant d'être installé. push ne reprend pas, ni ici ni via SSH — il refuse une destination qui existe déjà. Une exécution interrompue se termine en poussant les chemins manquants, ou avec relayium sync, qui poursuit un fichier partiel et que ce processus à l'écoute respecte, sauf s'il a été démarré avec --no-resume.",
       ],
     },
     {
@@ -1311,7 +1311,7 @@ Accept and remember this peer? [y/N] y`,
     {
       heading: "Automatiser (ou exécuter sans terminal)",
       body: [
-        "Comme une empreinte approuvée est mémorisée, les envois suivants ne demandent plus de confirmation — relayium push s'intègre donc directement dans cron, un script de déploiement ou la CI pour une synchronisation serveur à serveur chiffrée, vérifiée en intégrité et avec reprise. Quand serve tourne sans terminal (un service systemd, un pipe), il ne peut pas demander confirmation et rejette donc les émetteurs inconnus ; autorisez-les plutôt à l'avance. Récupérez l'empreinte via relayium id côté émetteur, ou copiez-la depuis la ligne « rejected unauthorized peer … » du journal de serve, puis :",
+        "Comme une empreinte approuvée est mémorisée, les envois suivants ne demandent plus de confirmation — relayium push s'intègre donc directement dans un script de déploiement ou la CI pour une livraison serveur à serveur chiffrée et vérifiée en intégrité. Pour une tâche planifiée qui écrit dans le même répertoire, utilisez plutôt relayium sync : push refuse une destination qui existe déjà, donc un push répété vers un chemin fixe réussit une fois et est refusé ensuite. Quand serve tourne sans terminal (un service systemd, un pipe), il ne peut pas demander confirmation et rejette donc les émetteurs inconnus ; autorisez-les plutôt à l'avance. Récupérez l'empreinte via relayium id côté émetteur, ou copiez-la depuis la ligne « rejected unauthorized peer … » du journal de serve, puis :",
       ],
       code: [
         `# sur le RÉCEPTEUR : autoriser un émetteur à l'avance, sans invite
@@ -1518,7 +1518,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "لا مُرحِّل ولا احتياطي: إن تعذَّر الوصول إلى المُستمِع، تفشل الدفعة — ولا تمر بايتات الملف أبدًا عبر أي طرف آخر.",
-        "المحرك نفسه المُستخدَم في الأوضاع الأخرى: قابل للاستئناف، مع فحص SHA-256 لكل ملف.",
+        "المحرك نفسه المُستخدَم في الأوضاع الأخرى: يُفحَص كل ملف بـ SHA-256 لكل ملف ويوضع في منطقة مؤقتة قبل تثبيته. ولا يستأنف push، لا هنا ولا عبر SSH — فهو يرفض وجهة موجودة سلفًا. وإذا انقطع التشغيل، أكمِله بدفع المسارات الناقصة أو باستخدام relayium sync الذي يُكمل ملفًا جزئيًا ويحترمه هذا المُستمِع ما لم يكن قد بدأ بـ --no-resume.",
       ],
     },
     {
@@ -1541,7 +1541,7 @@ Accept and remember this peer? [y/N] y`,
     {
       heading: "أتمِتها (أو شغّلها دون طرفية)",
       body: [
-        "بما أن البصمة المعتمَدة تُحفَظ، لا تحتاج الدفعات اللاحقة إلى مُطالبة — لذا يدخل relayium push مباشرةً في cron أو سكربت نشر أو CI لمزامنة مُشفَّرة، مفحوصة السلامة، قابلة للاستئناف من خادم إلى خادم. حين يعمل serve دون طرفية (خدمة systemd، أنبوب) لا يستطيع المُطالبة، فيرفض المُرسِلين المجهولين؛ فوّض لهم مسبقًا بدلًا من ذلك. احصل على البصمة من relayium id لدى المُرسِل، أو انسخها من سطر «rejected unauthorized peer …» في سجل serve، ثم:",
+        "بما أن البصمة المعتمَدة تُحفَظ، لا تحتاج الدفعات اللاحقة إلى مُطالبة — لذا يدخل relayium push مباشرةً في سكربت نشر أو CI لتسليم مُشفَّر ومفحوص السلامة من خادم إلى خادم. أما المهمة المُجدوَلة التي تكتب في المجلد نفسه فاستخدم لها relayium sync بدلًا من ذلك: يرفض push وجهة موجودة سلفًا، فالدفع المتكرر إلى مسار ثابت ينجح مرة واحدة ثم يُرفَض بعدها. حين يعمل serve دون طرفية (خدمة systemd، أنبوب) لا يستطيع المُطالبة، فيرفض المُرسِلين المجهولين؛ فوّض لهم مسبقًا بدلًا من ذلك. احصل على البصمة من relayium id لدى المُرسِل، أو انسخها من سطر «rejected unauthorized peer …» في سجل serve، ثم:",
       ],
       code: [
         `# على المُستقبِل: فوِّض مُرسِلًا مسبقًا دون مُطالبة
@@ -1748,7 +1748,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "Sin retransmisor y sin respaldo: si no se puede alcanzar el proceso a la escucha, el push falla; los bytes del archivo nunca se enrutan a través de nadie más.",
-        "El mismo motor de transferencia que los otros modos: reanudable, con una comprobación SHA-256 por archivo.",
+        "El mismo motor de transferencia que los otros modos: cada archivo se comprueba con un SHA-256 por archivo y se coloca en un área temporal antes de instalarlo. push no reanuda, ni aquí ni por SSH: rechaza un destino que ya existe. Una ejecución interrumpida se termina enviando las rutas que faltan, o con relayium sync, que continúa un archivo parcial y que este proceso a la escucha respeta salvo que se haya arrancado con --no-resume.",
       ],
     },
     {
@@ -1771,7 +1771,7 @@ Accept and remember this peer? [y/N] y`,
     {
       heading: "Automatizarlo (o ejecutarlo sin terminal)",
       body: [
-        "Como una huella aprobada se recuerda, los push posteriores no necesitan aviso, así que relayium push encaja directamente en cron, un script de despliegue o CI para una sincronización de servidor a servidor cifrada, con integridad comprobada y reanudable. Cuando serve se ejecuta sin terminal (un servicio de systemd, una tubería) no puede preguntar, así que rechaza a los emisores desconocidos; autorízalos de antemano en su lugar. Obtén la huella con relayium id en el emisor, o cópiala de la línea « rejected unauthorized peer … » del registro de serve, y luego:",
+        "Como una huella aprobada se recuerda, los push posteriores no necesitan aviso, así que relayium push encaja directamente en un script de despliegue o CI para una entrega de servidor a servidor cifrada y con integridad comprobada. Para un trabajo programado que escribe en el mismo directorio, usa relayium sync en su lugar: push rechaza un destino que ya existe, así que un push repetido hacia una ruta fija tiene éxito una vez y se rechaza después. Cuando serve se ejecuta sin terminal (un servicio de systemd, una tubería) no puede preguntar, así que rechaza a los emisores desconocidos; autorízalos de antemano en su lugar. Obtén la huella con relayium id en el emisor, o cópiala de la línea « rejected unauthorized peer … » del registro de serve, y luego:",
       ],
       code: [
         `# en el RECEPTOR: autoriza a un emisor de antemano, sin aviso
@@ -1978,7 +1978,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "Sem retransmissor e sem retorno: se o processo à escuta não for alcançável, o push falha — os bytes do arquivo nunca são roteados por mais ninguém.",
-        "O mesmo motor de transferência dos outros modos: retomável, com uma verificação SHA-256 por arquivo.",
+        "O mesmo motor de transferência dos outros modos: cada arquivo é conferido com um SHA-256 por arquivo e preparado em área temporária antes de ser instalado. O push não retoma, nem aqui nem por SSH — ele recusa um destino que já existe. Uma execução interrompida se conclui enviando os caminhos que faltam, ou com o relayium sync, que continua um arquivo parcial e que este processo à escuta respeita, a menos que tenha sido iniciado com --no-resume.",
       ],
     },
     {
@@ -2001,7 +2001,7 @@ Accept and remember this peer? [y/N] y`,
     {
       heading: "Automatizá-lo (ou executá-lo sem terminal)",
       body: [
-        "Como uma impressão digital aprovada é lembrada, os pushes posteriores não precisam de prompt, então relayium push se encaixa direto em cron, um script de deploy ou CI para uma sincronização de servidor para servidor criptografada, com integridade verificada e retomável. Quando serve roda sem terminal (um serviço do systemd, um pipe) ele não pode perguntar, então rejeita emissores desconhecidos; pré-autorize-os em vez disso. Obtenha a impressão digital com relayium id no emissor, ou copie-a da linha “rejected unauthorized peer …” no log do serve, e então:",
+        "Como uma impressão digital aprovada é lembrada, os pushes posteriores não precisam de prompt, então relayium push se encaixa direto em um script de deploy ou CI para uma entrega de servidor para servidor criptografada e com integridade verificada. Para um trabalho agendado que escreve no mesmo diretório, use o relayium sync no lugar: o push recusa um destino que já existe, então um push repetido para um caminho fixo dá certo uma vez e é recusado depois. Quando serve roda sem terminal (um serviço do systemd, um pipe) ele não pode perguntar, então rejeita emissores desconhecidos; pré-autorize-os em vez disso. Obtenha a impressão digital com relayium id no emissor, ou copie-a da linha “rejected unauthorized peer …” no log do serve, e então:",
       ],
       code: [
         `# no RECEPTOR: pré-autorize um emissor sem prompt

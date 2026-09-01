@@ -122,7 +122,7 @@ learned receiver.example.com:9031 5c1d9f04… (added to known_hosts)
 # on the RECEIVER
 authorized 74318e3b… (added to /home/you/.config/relayium/authorized_fingerprints)
 received 1 file(s), 48213004 bytes from 74318e3b…</code></pre></div>
-      <ul><li>没有中继，也没有回退：如果监听端无法到达，推送就会失败——文件字节永远不会经过其他任何人转发。</li><li>使用与其他模式相同的传输引擎：可续传，并对每个文件做 SHA-256 校验。</li></ul>
+      <ul><li>没有中继，也没有回退：如果监听端无法到达，推送就会失败——文件字节永远不会经过其他任何人转发。</li><li>使用与其他模式相同的传输引擎：每个文件都做逐文件 SHA-256 校验，并先落到暂存区再安装。push 不续传——无论走这条路还是走 SSH：它会拒绝已存在的目标，所以中断之后要么补传缺失的路径，要么改用 relayium sync（它会接着传半截文件，而这个监听端会遵守，除非它是以 --no-resume 启动的）。</li></ul>
       <h2>在首次推送时批准发送方（在接收方）</h2>
       <p>当一台新机器第一次向你的监听端推送时，serve（在终端中）会显示它的来源和指纹，并请你批准它——就像 SSH 首次连接时的提示，只不过是在接收方这一侧：</p>
       <pre><code># 在接收方，当有新的发送方推送时：
@@ -131,7 +131,7 @@ Incoming push from 203.0.113.7:54021
 Accept and remember this peer? [y/N] y</code></pre>
       <ul><li>回答 y，该指纹就会记入 authorized_fingerprints；此后同一台机器的每次推送都会静默通过。</li><li>指纹是一台机器的稳定身份（重启和 IP 变化都不受影响），因此批准对每个推送方来说只是一次性的步骤。</li><li>推送方则在首次连接时获知监听端的密钥（首次使用即信任），并将其固定在 known_hosts 中。</li></ul>
       <h2>实现自动化（或在没有终端的环境下运行）</h2>
-      <p>由于已批准的指纹会一直保留，后续推送不再需要确认——因此 relayium push 可以直接接入 cron、部署脚本或 CI，实现加密、可校验完整性、可续传的服务器到服务器同步。当 serve 在没有终端的环境下运行（作为 systemd 服务、通过管道）时，它无法弹出提示，因此会拒绝未知的推送方；这时应改为预先授权它们。可以从推送方的 relayium id 获取指纹，或者从 serve 日志中「rejected unauthorized peer …」那一行复制它，然后：</p>
+      <p>由于已批准的指纹会一直保留，后续推送不再需要确认——因此 relayium push 可以直接接入部署脚本或 CI，做加密、可校验完整性的服务器到服务器投递。如果是定时往同一个目录跑的任务，请改用 relayium sync：push 会拒绝已存在的目标，所以反复往同一个固定路径 push 只有第一次会成功，之后都会被拒。当 serve 在没有终端的环境下运行（作为 systemd 服务、通过管道）时，它无法弹出提示，因此会拒绝未知的推送方；这时应改为预先授权它们。可以从推送方的 relayium id 获取指纹，或者从 serve 日志中「rejected unauthorized peer …」那一行复制它，然后：</p>
       <pre><code># 在接收方：无需提示，预先授权一个发送方
 relayium authorize --config-dir /etc/relayium 74318e3b...</code></pre>
       <ul><li>身份和信任文件存放在 ~/.config/relayium/ 中（可用 --config-dir 覆盖，例如作为服务时用 /etc/relayium）。</li><li>给 authorize 传监听端运行时所用的同一个 --config-dir，否则它写进去的文件，监听端根本不会去读。以 --config-dir /etc/relayium 启动的服务，对应的是 relayium authorize --config-dir /etc/relayium &lt;指纹&gt;；不带参数的 authorize 写的是 ~/.config/relayium/authorized_fingerprints，推送仍然会被一直拒绝。</li><li>正在运行的监听端会在下一次连接时认出新授权的指纹——不需要重启它。撤销则不对称：要收回授权，请删掉那一行并重启监听端。</li><li>authorize 是幂等的——对同一个指纹再次运行它不会有任何效果。</li><li>如果你要的不是往里拷贝，而是镜像一个目录，请对同一个 relayium:// 目标使用 relayium sync。push 从不覆盖——接收方已存在的同名文件会被拒绝，并且拒绝信息里会指出是哪个路径；sync 则只发送有变化的部分，还可以把删除一并镜像过去。</li><li>sync --delete 会删除源端已经不存在的文件，但前提是监听端以 --allow-delete 启动；否则什么都不会删，并且会告知发送方。删除被限制在本次传输实际发送的那些顶层目录之内：镜像 ./site 只会动接收方 --dir 下的 site/，同级目录和无关文件永远不会被删除，空目录也只在这些根之内才会被清理，一次镜像多个源时各源之间也删不到对方。源是单个文件时作用范围就只有那一个文件，因此什么都不会删；源为空或无法解析时，两端都会直接拒绝删除，因为那等于「把所有东西都删掉」。</li></ul>
@@ -185,7 +185,7 @@ ls -l /etc/relayium/id.key</code></pre><p>relayium 拒绝加载一把除属主�
         <a class="cta" href="/cli">获取 CLI</a>
       </div>
       <h2>继续阅读</h2>
-      <ul class="related"><li><a href="/zh/guides/sync-a-large-folder-between-servers/">在两台服务器之间同步一个大文件夹（可续传、后台运行）</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh/">用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</a></li><li><a href="/zh/compare/rsync/">Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service/">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      <ul class="related"><li><a href="/zh/guides/sync-a-large-folder-between-servers/">在两台服务器之间同步一个大文件夹（可续传、后台运行）</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh/">用 Relayium CLI 通过 SSH 在自己的服务器上留一份异地副本</a></li><li><a href="/zh/compare/rsync/">Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service/">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/">Relayium</a></li></ul>
       </main>
       <footer>
         <a href="/?lang=zh">← Relayium</a>

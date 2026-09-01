@@ -39,7 +39,7 @@ const en = {
     {
       heading: "The three ways it moves files",
       body: [
-        "Relayium moves files three ways. You pick by where the other end is, not by learning three different tools — they share one transfer engine with per-file resume and SHA-256 verification.",
+        "Relayium moves files three ways. You pick by where the other end is, not by learning three different tools — they share one transfer engine, which verifies each file it moves with a SHA-256 hash. What they do not share is resume: sync is the mode that continues a partial file on a later run, and push, pull, send and receive do not resume at all.",
       ],
       bullets: [
         "push / pull — to a server you can already SSH into. Bytes travel over your SSH connection; no Relayium account.",
@@ -99,7 +99,7 @@ echo $?
         ],
       },
       bullets: [
-        "If relayium is installed on the remote too, push uses the native protocol (resumable, per-file SHA-256).",
+        "If relayium is installed on the remote too, push uses the native protocol: the batch is checked for collisions before any bytes are sent, and each file is verified by SHA-256 and staged before it is installed. It still does not resume — a re-run after an interrupted push is refused, because the files that landed now exist. Use relayium sync where you need that.",
         "push falls back to a plain tar stream when relayium isn't on the remote, so it works even against a bare server — that fallback is push-only.",
         "Pull the same files back with: relayium pull user@your-server:backups/ ./restore — pull always needs relayium on the remote (it has no tar fallback), so install it there first.",
       ],
@@ -152,7 +152,7 @@ relayium text 483920`,
       heading: "Free, and private by design",
       body: [
         "There is nothing to pay for the three direct ways above. Of the three, the only sign-in is the sender's in send / receive mode, so its CLI can mint a pairing code. The CLI connects the two ends directly, so your files are never uploaded to a server in the middle — the only thing that ever touches Relayium is a tiny rendezvous handshake in send / receive mode, used to introduce the two ends, never the file itself. Cloud up is the one that works differently: it stores an encrypted copy under your account, so it needs a sign-in and counts against your plan's monthly traffic allowance, its storage cap, its retention ceiling and its daily upload quota.",
-        "Every transfer is encrypted end to end, every file is verified with a SHA-256 hash on arrival, and an interrupted transfer resumes from where it stopped instead of starting over. It runs on macOS, Linux and Windows, and the whole thing is open source and self-hostable.",
+        "Every transfer is encrypted end to end, and on the native protocol every file a run transfers is verified with a SHA-256 hash on arrival — the zero-dependency tar fallback is the exception, and verifies nothing per file. Resume is narrower than the rest: relayium sync continues a partial file on a later run, relayium down reconnects and continues within the run that started it, and push, pull, send and receive do not resume at all. It runs on macOS, Linux and Windows, and the whole thing is open source and self-hostable.",
       ],
     },
   ],
@@ -219,7 +219,7 @@ const zh = {
     {
       heading: "传输文件的三种方式",
       body: [
-        "Relayium 提供三种传输方式。你按对方所在的位置来选，而不用去学三种不同的工具——它们共用同一个传输引擎，支持逐文件断点续传和 SHA-256 校验。",
+        "Relayium 提供三种传输方式。你按对方所在的位置来选，而不用去学三种不同的工具——它们共用同一个传输引擎，会对自己搬运的每个文件做 SHA-256 校验。它们不共用的是续传：sync 才是那个会在下一次运行时接着传半截文件的模式，而 push、pull、send、receive 根本不续传。",
       ],
       bullets: [
         "push / pull——传到一台你已能 SSH 进去的服务器。字节走你的 SSH 连接；无需 Relayium 账号。",
@@ -279,7 +279,7 @@ echo $?
         ],
       },
       bullets: [
-        "如果远程也装了 relayium，push 就会使用原生协议（可续传、逐文件 SHA-256）。",
+        "如果远程也装了 relayium，push 就会使用原生协议：发送任何字节之前先对整批做冲突预检，每个文件都做 SHA-256 校验并先落到暂存区再安装。它依然不续传——中断之后重跑会被拒绝，因为已经落地的文件现在存在了。需要续传请改用 relayium sync。",
         "如果远程没装 relayium，push 会退化为普通的 tar 流，因此在裸机服务器上依然可用——这个兜底只属于 push。",
         "用这个命令把同样的文件取回来：relayium pull user@your-server:backups/ ./restore——pull 始终需要远程装有 relayium（没有 tar 兜底），请先在远程装好它。",
       ],
@@ -332,7 +332,7 @@ relayium text 483920`,
       heading: "免费，且从设计上保护隐私",
       body: [
         "上面三种直连方式都不收费。三者之中，唯一需要登录的是 send / receive 模式下的发送方，好让 CLI 生成配对码。CLI 直接连接两端，因此你的文件永远不会上传到中间的服务器——唯一会接触 Relayium 的，是 send / receive 模式下一次很小的会合握手，用来牵线搭桥，绝不是文件本身。云端 up 则不同：它把加密副本存放在你的账号下，所以需要登录，并会占用套餐的每月流量额度、存储上限、留存时长与每日上传额度。",
-        "每次传输都端到端加密，每个文件到达时都会用 SHA-256 哈希校验，中断的传输会从断点续传而不是从头再来。它可在 macOS、Linux 和 Windows 上运行，整个项目开源、可自托管。",
+        "每次传输都端到端加密；走原生协议时，一次运行传输的每个文件到达时都会用 SHA-256 哈希校验——零依赖的 tar 兜底路径是例外，它逐文件什么都不校验。续传的范围要窄得多：relayium sync 会在下一次运行时接着传半截文件，relayium down 会在它自己那一次运行内重连并接着下，而 push、pull、send、receive 根本不续传。它可在 macOS、Linux 和 Windows 上运行，整个项目开源、可自托管。",
       ],
     },
   ],
@@ -399,7 +399,7 @@ const ja = {
     {
       heading: "ファイルを移動する3つの方法",
       body: [
-        "Relayium には3つの転送方法があります。3つの異なるツールを覚える必要はなく、相手先の場所に応じて選ぶだけです。いずれも同じ転送エンジンを共有し、ファイル単位の再開と SHA-256 検証を備えています。",
+        "Relayium には3つの転送方法があります。3つの異なるツールを覚える必要はなく、相手先の場所に応じて選ぶだけです。いずれも同じ転送エンジンを共有し、運ぶ各ファイルを SHA-256 ハッシュで検証します。共有していないのは再開です。半端なファイルを次回の実行で続けるのは sync で、push、pull、send、receive はまったく再開しません。",
       ],
       bullets: [
         "push / pull：すでに SSH でログインできるサーバーへ。バイトは SSH 接続上を流れます。Relayium アカウントは不要です。",
@@ -459,7 +459,7 @@ echo $?
         ],
       },
       bullets: [
-        "リモートにも relayium がインストールされていれば、push はネイティブプロトコル（再開可能、ファイル単位の SHA-256）を使います。",
+        "リモートにも relayium がインストールされていれば、push はネイティブプロトコルを使います。送信前にバッチ全体の衝突チェックを行い、各ファイルを SHA-256 で検証して暫定領域に置いてから設置します。それでも再開はしません。中断後にやり直すと、すでに届いたファイルが存在するため拒否されます。再開が必要なら relayium sync を使ってください。",
         "リモートに relayium がなければ、push は単純な tar ストリームにフォールバックするため、relayium が入っていない素の状態のサーバーでも動作します。このフォールバックは push だけの機能です。",
         "同じファイルを次のコマンドで取り戻せます：relayium pull user@your-server:backups/ ./restore。pull は常にリモートの relayium を必要とし（tar フォールバックはありません）、先にリモートへインストールしておいてください。",
       ],
@@ -512,7 +512,7 @@ relayium text 483920`,
       heading: "無料、そして設計上プライベート",
       body: [
         "支払うものは何もありません。上記の3つの方法のうちサインインが要るのは send / receive モードの送信側だけで、CLI がペアリングコードを発行できるようにするためです（クラウドの up もファイルを保存するためにアカウントを使います）。CLI は両端を直接つなぐため、ファイルが中間のサーバーにアップロードされることは決してありません。Relayium が触れるのは、send / receive モードでの小さなランデブーハンドシェイクだけで、両端を引き合わせるために使われ、ファイル自体は決して含まれません。",
-        "すべての転送はエンドツーエンドで暗号化され、すべてのファイルは到着時に SHA-256 ハッシュで検証され、中断した転送は最初からやり直すのではなく、止まった所から再開します。macOS、Linux、Windows で動作し、全体がオープンソースでセルフホスト可能です。",
+        "すべての転送はエンドツーエンドで暗号化され、ネイティブプロトコルでは実行が転送した各ファイルが到着時に SHA-256 ハッシュで検証されます（例外は依存なしの tar フォールバックで、ファイル単位では何も検証しません）。再開はそれより狭い話です。relayium sync は半端なファイルを次回の実行で続け、relayium down は始まった実行の中で再接続して続けますが、push、pull、send、receive はまったく再開しません。macOS、Linux、Windows で動作し、全体がオープンソースでセルフホスト可能です。",
       ],
     },
   ],
@@ -579,7 +579,7 @@ const ko = {
     {
       heading: "파일을 옮기는 세 가지 방식",
       body: [
-        "Relayium은 세 가지 방식으로 파일을 옮깁니다. 세 가지 다른 도구를 배울 필요 없이, 상대가 어디에 있는지에 따라 고르기만 하면 됩니다 — 모두 동일한 전송 엔진을 공유하며 파일별 재개와 SHA-256 검증을 갖추고 있습니다.",
+        "Relayium은 세 가지 방식으로 파일을 옮깁니다. 세 가지 다른 도구를 배울 필요 없이, 상대가 어디에 있는지에 따라 고르기만 하면 됩니다 — 모두 동일한 전송 엔진을 공유하며 옮기는 각 파일을 SHA-256 해시로 검증합니다. 공유하지 않는 것은 재개입니다: 부분 파일을 다음 실행에서 이어가는 것은 sync이고, push, pull, send, receive는 전혀 재개하지 않습니다.",
       ],
       bullets: [
         "push / pull — 이미 SSH로 접속 가능한 서버로. 데이터는 SSH 연결을 통해 오가며, Relayium 계정이 필요 없습니다.",
@@ -639,7 +639,7 @@ echo $?
         ],
       },
       bullets: [
-        "원격지에도 relayium이 설치되어 있으면 push는 네이티브 프로토콜(재개 가능, 파일별 SHA-256)을 사용합니다.",
+        "원격지에도 relayium이 설치되어 있으면 push는 네이티브 프로토콜을 사용합니다: 바이트를 보내기 전에 배치의 충돌을 검사하고, 각 파일을 SHA-256으로 검증한 뒤 스테이징했다가 설치합니다. 그래도 재개하지는 않습니다 — 중단된 뒤 다시 실행하면 이미 도착한 파일이 존재하므로 거부됩니다. 그것이 필요하면 relayium sync를 쓰세요.",
         "원격지에 relayium이 없으면 push는 일반 tar 스트림으로 대체되므로, 아무것도 설치되지 않은 서버에서도 동작합니다 — 이 대체 방식은 push에서만 제공됩니다.",
         "다음 명령어로 같은 파일을 다시 가져올 수 있습니다: relayium pull user@your-server:backups/ ./restore — pull은 항상 원격지에 relayium이 있어야 하며(tar 대체 방식 없음), 먼저 원격지에 설치해 두세요.",
       ],
@@ -692,7 +692,7 @@ relayium text 483920`,
       heading: "무료이며, 설계상 프라이버시를 지킵니다",
       body: [
         "지불할 것은 없습니다. 위 세 가지 방식 중 로그인이 필요한 곳은 send / receive 모드의 보내는 쪽뿐이며, CLI가 페어링 코드를 발급할 수 있도록 하기 위해서입니다(클라우드 up도 파일을 저장하기 위해 계정을 사용합니다). CLI는 두 끝을 직접 연결하므로 파일이 중간의 서버에 업로드되는 일은 결코 없습니다. Relayium이 유일하게 관여하는 것은 send / receive 모드에서 두 끝을 소개하는 데 쓰이는 아주 작은 랑데부 핸드셰이크뿐입니다. 파일 자체는 절대 포함되지 않습니다.",
-        "모든 전송은 종단간 암호화되고, 모든 파일은 도착 시 SHA-256 해시로 검증되며, 중단된 전송은 처음부터 다시 시작하는 대신 멈춘 지점에서 재개됩니다. macOS, Linux, Windows에서 동작하며, 전체가 오픈소스이고 자체 호스팅이 가능합니다.",
+        "모든 전송은 종단간 암호화되고, 네이티브 프로토콜에서는 한 번의 실행이 전송한 모든 파일이 도착 시 SHA-256 해시로 검증됩니다 — 의존성 없는 tar 대체 방식만 예외이며 파일별로 아무것도 검증하지 않습니다. 재개는 그보다 좁습니다: relayium sync는 부분 파일을 다음 실행에서 이어가고, relayium down은 시작된 실행 안에서 다시 연결해 이어가지만, push, pull, send, receive는 전혀 재개하지 않습니다. macOS, Linux, Windows에서 동작하며, 전체가 오픈소스이고 자체 호스팅이 가능합니다.",
       ],
     },
   ],
@@ -759,7 +759,7 @@ const de = {
     {
       heading: "Die drei Wege, Dateien zu bewegen",
       body: [
-        "Relayium bewegt Dateien auf drei Arten. Du wählst danach, wo sich die Gegenstelle befindet, nicht indem du drei verschiedene Werkzeuge lernst — sie teilen sich eine Übertragungs-Engine mit dateiweise fortsetzbarer Übertragung und SHA-256-Prüfung.",
+        "Relayium bewegt Dateien auf drei Arten. Du wählst danach, wo sich die Gegenstelle befindet, nicht indem du drei verschiedene Werkzeuge lernst — sie teilen sich eine Übertragungs-Engine, die jede bewegte Datei per SHA-256-Hash prüft. Was sie sich nicht teilen, ist das Fortsetzen: sync ist der Modus, der eine Teildatei in einem späteren Lauf weiterführt, und push, pull, send und receive setzen gar nicht fort.",
       ],
       bullets: [
         "push / pull — zu einem Server, in den du dich bereits per SSH einloggen kannst. Die Bytes laufen über deine SSH-Verbindung; kein Relayium-Konto nötig.",
@@ -819,7 +819,7 @@ echo $?
         ],
       },
       bullets: [
-        "Ist relayium auch auf der Gegenseite installiert, nutzt push das native Protokoll (fortsetzbar, dateiweises SHA-256).",
+        "Ist relayium auch auf der Gegenseite installiert, nutzt push das native Protokoll: Der Stapel wird auf Kollisionen geprüft, bevor ein Byte fließt, und jede Datei wird per SHA-256 verifiziert und zwischengelagert, bevor sie installiert wird. Fortgesetzt wird trotzdem nicht — ein erneuter Lauf nach einem Abbruch wird abgelehnt, weil die gelandeten Dateien nun existieren. Nimm relayium sync, wo du das brauchst.",
         "Ist relayium dort nicht installiert, fällt push auf einen einfachen tar-Stream zurück, sodass es auch auf einem nackten Server funktioniert — dieser Fallback existiert nur bei push.",
         "Hole dieselben Dateien mit folgendem Befehl zurück: relayium pull user@your-server:backups/ ./restore — pull braucht immer relayium auf der Gegenseite (keinen tar-Fallback), installiere es dort also zuerst.",
       ],
@@ -872,7 +872,7 @@ relayium text 483920`,
       heading: "Kostenlos und von Grund auf privat",
       body: [
         "Es gibt nichts zu bezahlen. Von den drei Wegen oben erfordert nur der Absender im send-/receive-Modus eine Anmeldung, damit dessen CLI einen Pairing-Code erzeugen kann (auch Cloud-up nutzt dein Konto, um die Datei zu speichern). Die CLI verbindet die beiden Enden direkt, sodass deine Dateien nie auf einen Server dazwischen hochgeladen werden — das Einzige, was Relayium jemals berührt, ist ein winziger Rendezvous-Handshake im send-/receive-Modus, der die beiden Enden einander vorstellt, niemals die Datei selbst.",
-        "Jede Übertragung ist Ende-zu-Ende verschlüsselt, jede Datei wird bei Ankunft mit einem SHA-256-Hash geprüft, und eine unterbrochene Übertragung wird dort fortgesetzt, wo sie aufgehört hat, statt von vorn zu beginnen. Sie läuft unter macOS, Linux und Windows, und das Ganze ist Open Source und selbst hostbar.",
+        "Jede Übertragung ist Ende-zu-Ende verschlüsselt, und im nativen Protokoll wird jede Datei, die ein Lauf überträgt, bei Ankunft mit einem SHA-256-Hash geprüft — die Ausnahme ist der abhängigkeitsfreie tar-Fallback, der je Datei nichts prüft. Fortsetzen ist enger gefasst: relayium sync führt eine Teildatei in einem späteren Lauf weiter, relayium down verbindet sich innerhalb des laufenden Vorgangs neu und macht dort weiter, und push, pull, send und receive setzen gar nicht fort. Sie läuft unter macOS, Linux und Windows, und das Ganze ist Open Source und selbst hostbar.",
       ],
     },
   ],
@@ -939,7 +939,7 @@ const fr = {
     {
       heading: "Les trois façons de déplacer des fichiers",
       body: [
-        "Relayium déplace les fichiers de trois façons. Vous choisissez selon où se trouve l'autre bout, sans avoir à apprendre trois outils différents — ils partagent un seul moteur de transfert avec reprise par fichier et vérification SHA-256.",
+        "Relayium déplace les fichiers de trois façons. Vous choisissez selon où se trouve l'autre bout, sans avoir à apprendre trois outils différents — ils partagent un seul moteur de transfert, qui vérifie chaque fichier déplacé par une empreinte SHA-256. Ce qu'ils ne partagent pas, c'est la reprise : sync est le mode qui poursuit un fichier partiel lors d'une exécution ultérieure, et push, pull, send et receive ne reprennent pas du tout.",
       ],
       bullets: [
         "push / pull — vers un serveur où vous pouvez déjà vous connecter en SSH. Les octets transitent par votre connexion SSH ; aucun compte Relayium requis.",
@@ -999,7 +999,7 @@ echo $?
         ],
       },
       bullets: [
-        "Si relayium est aussi installé sur la machine distante, push utilise le protocole natif (avec reprise, SHA-256 par fichier).",
+        "Si relayium est aussi installé sur la machine distante, push utilise le protocole natif : le lot est contrôlé pour les collisions avant le moindre octet, et chaque fichier est vérifié par SHA-256 et mis en zone d'attente avant d'être installé. Il ne reprend toujours pas — relancer après une coupure est refusé, car les fichiers arrivés existent désormais. Utilisez relayium sync là où vous en avez besoin.",
         "Sinon, push bascule sur un simple flux tar, ce qui fonctionne donc même sur un serveur nu — ce repli n'existe que pour push.",
         "Récupérez les mêmes fichiers avec : relayium pull user@your-server:backups/ ./restore — pull a toujours besoin de relayium sur la machine distante (aucun repli tar), installez-le donc là-bas au préalable.",
       ],
@@ -1052,7 +1052,7 @@ relayium text 483920`,
       heading: "Gratuit, et privé par conception",
       body: [
         "Il n'y a rien à payer. Parmi les trois méthodes ci-dessus, la seule connexion est celle de l'expéditeur en mode send / receive, pour que sa CLI puisse générer un code d'appairage (le up cloud utilise aussi votre compte, pour stocker le fichier). La CLI connecte les deux extrémités directement, si bien que vos fichiers ne sont jamais téléversés vers un serveur intermédiaire — la seule chose que Relayium touche jamais est une petite poignée de main de rendez-vous en mode send / receive, utilisée pour présenter les deux extrémités l'une à l'autre, jamais le fichier lui-même.",
-        "Chaque transfert est chiffré de bout en bout, chaque fichier est vérifié par une empreinte SHA-256 à l'arrivée, et un transfert interrompu reprend là où il s'était arrêté au lieu de recommencer depuis le début. Cela fonctionne sous macOS, Linux et Windows, et l'ensemble est open source et auto-hébergeable.",
+        "Chaque transfert est chiffré de bout en bout, et sur le protocole natif chaque fichier transféré par une exécution est vérifié par une empreinte SHA-256 à l'arrivée — le repli tar sans dépendance fait exception et ne vérifie rien fichier par fichier. La reprise est plus étroite que le reste : relayium sync poursuit un fichier partiel lors d'une exécution ultérieure, relayium down se reconnecte et poursuit à l'intérieur de l'exécution qui l'a lancé, et push, pull, send et receive ne reprennent pas du tout. Cela fonctionne sous macOS, Linux et Windows, et l'ensemble est open source et auto-hébergeable.",
       ],
     },
   ],
@@ -1119,7 +1119,7 @@ const ar = {
     {
       heading: "الطرق الثلاث التي ينقل بها الملفات",
       body: [
-        "‏Relayium ينقل الملفات بثلاث طرق. تختار حسب موقع الطرف الآخر، لا بتعلّم ثلاث أدوات مختلفة — فجميعها تتشارك محرك نقل واحدًا مع استئناف لكل ملف وتحقق SHA-256.",
+        "‏Relayium ينقل الملفات بثلاث طرق. تختار حسب موقع الطرف الآخر، لا بتعلّم ثلاث أدوات مختلفة — فجميعها تتشارك محرك نقل واحدًا يتحقق من كل ملف ينقله بتجزئة SHA-256. وما لا تتشاركه هو الاستئناف: sync هو الوضع الذي يُكمل ملفًا جزئيًا في تشغيل لاحق، أما push وpull وsend وreceive فلا تستأنف إطلاقًا.",
       ],
       bullets: [
         "‏push / pull — إلى خادم يمكنك بالفعل الدخول إليه عبر SSH. تنتقل البايتات عبر اتصال SSH لديك؛ بدون حساب Relayium.",
@@ -1179,7 +1179,7 @@ echo $?
         ],
       },
       bullets: [
-        "إذا كان relayium مثبّتًا على الطرف البعيد أيضًا، يستخدم push البروتوكول الأصلي (قابل للاستئناف، SHA-256 لكل ملف).",
+        "إذا كان relayium مثبّتًا على الطرف البعيد أيضًا، يستخدم push البروتوكول الأصلي: تُفحَص الدفعة بحثًا عن التعارضات قبل إرسال أي بايت، ويُتحقَّق من كل ملف بـ SHA-256 ويوضع في منطقة مؤقتة قبل تثبيته. ومع ذلك لا يستأنف — فإعادة التشغيل بعد انقطاع تُرفَض لأن الملفات التي وصلت صارت موجودة. استخدم relayium sync حيث تحتاج ذلك.",
         "يتراجع push إلى بث tar بسيط عندما لا يكون relayium على الطرف البعيد، فيعمل حتى مع خادم عارٍ — وهذا التراجع خاص بـ push وحده.",
         "استرجع الملفات نفسها بـ: relayium pull user@your-server:backups/ ./restore — يحتاج pull دائمًا إلى relayium على الطرف البعيد (لا يملك تراجع tar)، فثبّته هناك أولًا.",
       ],
@@ -1232,7 +1232,7 @@ relayium text 483920`,
       heading: "مجاني، وخاص بحكم التصميم",
       body: [
         "لا شيء تدفعه. ومن بين الطرق الثلاث أعلاه، تسجيل الدخول الوحيد هو تسجيل المُرسِل في وضع send / receive، كي تتمكن واجهة CLI لديه من إصدار رمز اقتران (كما يستخدم up السحابي حسابك أيضًا، لتخزين الملف). يصل CLI بين الطرفين مباشرة، فلا تُرفع ملفاتك أبدًا إلى خادم في الوسط — الشيء الوحيد الذي يلمس Relayium على الإطلاق هو مصافحة تعارف صغيرة جدًا في وضع send / receive، تُستخدم للتعريف بين الطرفين، وليست الملف نفسه أبدًا.",
-        "كل عملية نقل مشفّرة من الطرف إلى الطرف، وكل ملف يُتحقق منه بتجزئة SHA-256 عند الوصول، والنقل المنقطع يُستأنف من حيث توقّف بدل البدء من جديد. يعمل على macOS وLinux وWindows، والمشروع كله مفتوح المصدر وقابل للاستضافة الذاتية.",
+        "كل عملية نقل مشفّرة من الطرف إلى الطرف، وعلى البروتوكول الأصلي يُتحقق من كل ملف ينقله التشغيل بتجزئة SHA-256 عند الوصول — والاستثناء هو تراجع tar بلا اعتماديات، فهو لا يتحقق من شيء لكل ملف. أما الاستئناف فأضيق من ذلك: يُكمل relayium sync ملفًا جزئيًا في تشغيل لاحق، ويعيد relayium down الاتصال ويُكمل داخل التشغيل نفسه، بينما لا تستأنف push وpull وsend وreceive إطلاقًا. يعمل على macOS وLinux وWindows، والمشروع كله مفتوح المصدر وقابل للاستضافة الذاتية.",
       ],
     },
   ],
@@ -1299,7 +1299,7 @@ const es = {
     {
       heading: "Las tres formas en que mueve archivos",
       body: [
-        "Relayium mueve archivos de tres maneras. Eliges según dónde esté el otro extremo, no aprendiendo tres herramientas distintas — todas comparten un mismo motor de transferencia con reanudación por archivo y verificación SHA-256.",
+        "Relayium mueve archivos de tres maneras. Eliges según dónde esté el otro extremo, no aprendiendo tres herramientas distintas — todas comparten un mismo motor de transferencia, que verifica cada archivo que mueve con un hash SHA-256. Lo que no comparten es la reanudación: sync es el modo que continúa un archivo parcial en una ejecución posterior, y push, pull, send y receive no reanudan en absoluto.",
       ],
       bullets: [
         "push / pull — a un servidor al que ya puedes entrar por SSH. Los bytes viajan por tu conexión SSH; sin cuenta de Relayium.",
@@ -1359,7 +1359,7 @@ echo $?
         ],
       },
       bullets: [
-        "Si relayium también está instalado en el remoto, push usa el protocolo nativo (reanudable, SHA-256 por archivo).",
+        "Si relayium también está instalado en el remoto, push usa el protocolo nativo: se comprueba el lote en busca de colisiones antes de enviar un solo byte, y cada archivo se verifica por SHA-256 y se coloca en un área temporal antes de instalarlo. Aun así no reanuda: volver a lanzarlo tras una interrupción se rechaza, porque los archivos que llegaron ya existen. Usa relayium sync donde necesites eso.",
         "push recurre a un simple flujo tar cuando relayium no está en el remoto, así que funciona incluso contra un servidor sin nada instalado — esa alternativa es solo para push.",
         "Recupera los mismos archivos con: relayium pull user@your-server:backups/ ./restore — pull siempre necesita relayium en el remoto (no tiene alternativa con tar), así que instálalo allí primero.",
       ],
@@ -1412,7 +1412,7 @@ relayium text 483920`,
       heading: "Gratis, y privado por diseño",
       body: [
         "No hay nada que pagar. De las tres formas de arriba, el único inicio de sesión es el de quien envía en modo send / receive, para que su CLI pueda generar un código de emparejamiento (el up en la nube también usa tu cuenta, para guardar el archivo). La CLI conecta los dos extremos directamente, así que tus archivos nunca se suben a un servidor intermedio — lo único que toca a Relayium en algún momento es un diminuto handshake con el punto de encuentro en el modo send / receive, usado para presentar a los dos extremos, nunca el archivo en sí.",
-        "Cada transferencia está cifrada de extremo a extremo, cada archivo se verifica con un hash SHA-256 al llegar, y una transferencia interrumpida se reanuda desde donde se detuvo en lugar de empezar de nuevo. Funciona en macOS, Linux y Windows, y todo el proyecto es de código abierto y autoalojable.",
+        "Cada transferencia está cifrada de extremo a extremo, y en el protocolo nativo cada archivo que transfiere una ejecución se verifica con un hash SHA-256 al llegar — la excepción es la alternativa con tar sin dependencias, que no verifica nada archivo por archivo. La reanudación es más estrecha que el resto: relayium sync continúa un archivo parcial en una ejecución posterior, relayium down se reconecta y continúa dentro de la ejecución que lo inició, y push, pull, send y receive no reanudan en absoluto. Funciona en macOS, Linux y Windows, y todo el proyecto es de código abierto y autoalojable.",
       ],
     },
   ],
@@ -1479,7 +1479,7 @@ const pt = {
     {
       heading: "As três formas de mover arquivos",
       body: [
-        "O Relayium move arquivos de três formas. Você escolhe pela localização da outra ponta, não aprendendo três ferramentas diferentes — todas compartilham um único motor de transferência com retomada por arquivo e verificação SHA-256.",
+        "O Relayium move arquivos de três formas. Você escolhe pela localização da outra ponta, não aprendendo três ferramentas diferentes — todas compartilham um único motor de transferência, que verifica cada arquivo que move com um hash SHA-256. O que elas não compartilham é a retomada: o sync é o modo que continua um arquivo parcial em uma execução posterior, e push, pull, send e receive não retomam nada.",
       ],
       bullets: [
         "push / pull — para um servidor no qual você já consegue entrar por SSH. Os bytes trafegam pela sua conexão SSH; sem conta do Relayium.",
@@ -1539,7 +1539,7 @@ echo $?
         ],
       },
       bullets: [
-        "Se o relayium também estiver instalado no remoto, o push usa o protocolo nativo (retomável, SHA-256 por arquivo).",
+        "Se o relayium também estiver instalado no remoto, o push usa o protocolo nativo: o lote é checado por colisões antes de qualquer byte sair, e cada arquivo é verificado por SHA-256 e preparado em área temporária antes de ser instalado. Ainda assim ele não retoma — repetir a execução depois de uma interrupção é recusado, porque os arquivos que chegaram agora existem. Use o relayium sync onde você precisar disso.",
         "O push recorre a um simples fluxo tar quando o relayium não está no remoto, então funciona até contra um servidor sem nada instalado — essa alternativa é só do push.",
         "Traga os mesmos arquivos de volta com: relayium pull user@your-server:backups/ ./restore — o pull sempre precisa do relayium no remoto (ele não tem alternativa com tar), então instale-o lá primeiro.",
       ],
@@ -1592,7 +1592,7 @@ relayium text 483920`,
       heading: "Gratuito, e privado por decisão de projeto",
       body: [
         "Não há nada a pagar. Das três formas acima, o único login é o de quem envia no modo send / receive, para que a CLI dele possa gerar um código de emparelhamento (o up na nuvem também usa a sua conta, para guardar o arquivo). A CLI conecta as duas pontas diretamente, então seus arquivos nunca são enviados para um servidor no meio — a única coisa que toca o Relayium em algum momento é um minúsculo handshake de encontro no modo send / receive, usado para apresentar as duas pontas uma à outra, nunca o arquivo em si.",
-        "Cada transferência é criptografada de ponta a ponta, cada arquivo é verificado com um hash SHA-256 na chegada, e uma transferência interrompida é retomada de onde parou em vez de começar do zero. Ela roda no macOS, no Linux e no Windows, e o projeto inteiro é de código aberto e auto-hospedável.",
+        "Cada transferência é criptografada de ponta a ponta, e no protocolo nativo cada arquivo que uma execução transfere é verificado com um hash SHA-256 na chegada — a exceção é a alternativa com tar sem dependências, que não verifica nada arquivo por arquivo. A retomada é mais estreita que o resto: o relayium sync continua um arquivo parcial em uma execução posterior, o relayium down reconecta e continua dentro da execução que o iniciou, e push, pull, send e receive não retomam nada. Ela roda no macOS, no Linux e no Windows, e o projeto inteiro é de código aberto e auto-hospedável.",
       ],
     },
   ],

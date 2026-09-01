@@ -159,6 +159,20 @@ describe("only one main landmark exists in the app", () => {
     expect(root.querySelector("main")).toBeNull();
     expect(root.querySelector("section.pricing-page")).not.toBeNull();
   });
+
+  it("renders /cli's inner column as a plain element, since App already owns <main>", () => {
+    // Same defect as the pricing route, found by axe (landmark-unique) on
+    // spa/cli: `.body` is the grid column that holds the page's bands, not a
+    // second main landmark. The class assertion is the other half — `.body`
+    // carries `min-inline-size: 0`, and page-shell.mjs's CLI mobile scenario
+    // measures that box by class, so dropping it would silently un-measure the
+    // container whose overflow the scenario exists to catch.
+    const root = render(CliPage);
+    expect(root.querySelector("main")).toBeNull();
+    const body = root.querySelector(".body")!;
+    expect(body).not.toBeNull();
+    expect(body.tagName).toBe("DIV");
+  });
 });
 
 describe("dialogs announce what they are", () => {
@@ -384,14 +398,34 @@ describe("scrollable code regions are reachable by keyboard", () => {
     expect(pre.getAttribute("aria-label")).toBeNull();
   });
 
-  it("makes every CLI pick-card command focusable and named by its card heading", () => {
+  // The /cli page's two wide reference tables scroll sideways and contain
+  // nothing focusable of their own, so each has to be its own tab stop:
+  // otherwise the right-hand columns — "where the bytes go", "verification" —
+  // are readable with a mouse and unreachable without one.
+  //
+  // This replaces the old assertion about `.pick-card code`. Those cards are
+  // gone: the picker they belonged to was replaced by task branches whose
+  // commands are links, which are already tab stops and need no tabindex.
+  it("makes every scrollable table on /cli a focus stop named by its caption", () => {
     const root = render(CliPage);
-    const blocks = root.querySelectorAll(".pick-card code");
-    expect(blocks.length).toBeGreaterThan(0);
-    for (const block of blocks) {
-      expect(block.getAttribute("tabindex")).toBe("0");
-      const labelledBy = block.getAttribute("aria-labelledby")!;
-      expect(root.querySelector(`#${labelledBy}`)?.tagName).toBe("H3");
+    const wraps = root.querySelectorAll(".wrap");
+    expect(wraps.length).toBe(2);
+    for (const wrap of wraps) {
+      expect(wrap.getAttribute("tabindex")).toBe("0");
+      const labelledBy = wrap.getAttribute("aria-labelledby")!;
+      // Named by the table's own <caption>, which is in the document — no
+      // invented, untranslated string that could drift from what is rendered.
+      expect(root.querySelector(`#${labelledBy}`)?.tagName).toBe("CAPTION");
+    }
+  });
+
+  it("gives /cli's task-branch commands real links rather than fake focus stops", () => {
+    const root = render(CliPage);
+    const links = root.querySelectorAll("#choose-by-task a");
+    expect(links.length).toBeGreaterThan(0);
+    for (const a of links) {
+      expect(a.getAttribute("tabindex")).toBeNull();
+      expect(a.getAttribute("href")?.startsWith("#")).toBe(true);
     }
   });
 });

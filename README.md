@@ -108,12 +108,15 @@ directly: file and message bytes never pass through Relayium's servers, and noth
 them, only `send`/`receive`/`text` touch our servers at all, and only for a tiny rendezvous handshake
 (never the content).
 
-**The hosted, asynchronous stored-link mode is `relayium up`** (and the `relayium down` that fetches it). It
-uploads a client-side-encrypted copy to Relayium's hosted storage so that a browser can open the link,
-which is the whole point of it — and that means it counts against your account plan's storage cap and
-retention window, exactly like a stored download link created in the browser. Downloading with
-`relayium down` still needs no account. It isn't the only CLI feature that involves our servers: the
-Device Inbox is hosted and asynchronous too, and the CLI is its receive side (see below).
+**Two CLI surfaces are hosted rather than direct, and both are asynchronous.** The first is the stored-link
+pair `relayium up` / `relayium down`: `up` uploads a client-side-encrypted copy to Relayium's hosted storage
+so that a browser can open the link, which is the whole point of it — and that means it counts against your
+account plan's storage cap, monthly traffic allowance, daily upload quota and retention window, exactly like
+a stored download link created in the browser. Downloading with `relayium down` still needs no account.
+The second is **Device Inbox**, which is hosted and asynchronous too: the encrypted task waits in Relayium's
+queue while the target machine is offline, and the CLI is that machine's receive side (see below).
+Neither surface hands Relayium a key — `up` keeps it in the link's `#k=` fragment, and Device Inbox seals
+the content key to a public key the receiving machine published.
 
 Four direct modes — three that move files, one that moves text:
 

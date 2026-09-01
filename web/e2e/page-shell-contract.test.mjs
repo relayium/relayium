@@ -3,12 +3,12 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * `page-shell.mjs` runs a fixed four-scenario inventory in a real browser and
- * fails loud when fewer than four finish. This guard reads its SOURCE, not its
+ * `page-shell.mjs` runs a fixed five-scenario inventory in a real browser and
+ * fails loud when fewer than five finish. This guard reads its SOURCE, not its
  * output, and pins the shape that makes that failure mode possible in the first
  * place:
  *
- *  - all four scenario names are still the ones `SCENARIOS` runs;
+ *  - all five scenario names are still the ones `SCENARIOS` runs;
  *  - the pass/fail check compares against a fixed literal count, not
  *    `SCENARIOS.length` — deleting an entry shrinks the array and its own
  *    length agree with each other, so a length-only check would still print a
@@ -34,6 +34,7 @@ const SCENARIO_NAMES = [
   "authLandingScenario",
   "appsHierarchyScenario",
   "pricingHierarchyScenario",
+  "cliMobileScenario",
   "unsupportedLayoutScenario",
 ];
 
@@ -47,14 +48,14 @@ function mainBody() {
   return SOURCE.slice(start, end);
 }
 
-describe("the four page-shell scenarios are all present and all run", () => {
+describe("the five page-shell scenarios are all present and all run", () => {
   it("names every scenario as a top-level function", () => {
     for (const name of SCENARIO_NAMES) {
       expect(SOURCE, `${name} is no longer defined`).toMatch(new RegExp(`async function ${name}\\(`));
     }
   });
 
-  it("runs all four, and only these four, from one inventory array", () => {
+  it("runs all five, and only these five, from one inventory array", () => {
     const match = SOURCE.match(/const SCENARIOS = \[([^\]]*)\];/);
     expect(match, "SCENARIOS array is no longer declared as a plain literal").not.toBeNull();
     const listed = match[1].split(",").map((s) => s.trim()).filter(Boolean);
@@ -64,7 +65,7 @@ describe("the four page-shell scenarios are all present and all run", () => {
 
 describe("a dropped scenario cannot still report a false pass", () => {
   it("declares a fixed expected count, not a reference to SCENARIOS.length", () => {
-    expect(SOURCE).toMatch(/const EXPECTED_SCENARIO_COUNT = 4;/);
+    expect(SOURCE).toMatch(/const EXPECTED_SCENARIO_COUNT = 5;/);
   });
 
   it("checks the run count against that fixed constant", () => {

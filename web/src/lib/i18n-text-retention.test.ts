@@ -147,7 +147,11 @@ function retentionCopy(m: typeof en): string {
     m.descDefault,
     m.pricingPage.free3,
     m.pricingPage.a1,
-    m.cliPage.textIntro,
+    // /cli's `text` mode. It used to be one paragraph (cliPage.textIntro); the
+    // same facts now live in the mode's lead plus its boundary notes, so both
+    // go into the aggregate rather than only the opening sentence.
+    m.cliPage.modes.text.lead,
+    ...m.cliPage.modes.text.notes,
     m.features.items[1].desc,
     m.compare.rows[3].realtime,
     m.useCases.items[4].desc,

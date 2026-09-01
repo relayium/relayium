@@ -90,23 +90,23 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>إنه مثبَّت سلفًا — لا ملف تنفيذي لجلبه، ولا شيء لإعداده، على كل خادم ستسجّل الدخول إليه عبر SSH فعليًا.</li><li>إنه مُختبَر في الميدان. عقود من الاستخدام، وسلوك مفهوم جيدًا، وكل مسؤول نظام يعرف أعلامه بالفعل.</li><li>لمهمة عابرة حقيقية — انسخ هذا الملف الواحد، الآن — فإن كتابة scp file.txt user@host:path تتطلب حروفًا أقل من تثبيت أي شيء.</li><li>إنه مثالي للسكربتات السريعة العابرة التي لا تريد فيها أي تبعية تتجاوز OpenSSH.</li></ul>
       <h2>قبل أن تبدأ</h2>
       <p>كل ما يلي هو relayium CLI، فثبّته أولًا إن لم تكن قد فعلت. على macOS وLinux، يُسقط أمر واحد ملفًا ثنائيًا مُسبق البناء في PATH الخاص بك:</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre dir="ltr"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>تفضّل اختيار الملف بنفسك، أو تعمل على Windows؟ احصل على ملف ثنائي من صفحة الإصدارات — يسرد relayium.com/cli كل خيارات التثبيت (أو go build -o relayium ./cmd/relayium إن كان لديك Go).</li><li>يؤكّد relayium --version أنه مثبَّت. تخطَّ هذا وستطبع الأوامر أدناه ‘command not found’ لا غير.</li></ul>
       <h2>push / pull: نفس SSH، مع الاستئناف ومجاميع التحقق والتقدّم</h2>
       <p>يتصل relayium push وrelayium pull عبر نفس وصول SSH الذي يستخدمه scp تمامًا — نفس المضيف، ونفس المفتاح، ونفس المنفذ. الفرق هو ما يحدث بمجرد أن يُفتح الاتصال.</p>
       <p>يُتحقَّق من كل ملف من الطرف إلى الطرف عبر تجزئة SHA-256 بعد وصوله، بحيث إن النقل الذي يبدو مكتملًا يطابق فعلًا ما أُرسل، بايتًا ببايت. وإذا انقطع نقلٌ ما — اتصال سقط، أو غطاء حاسوب محمول أُغلق — فإن إعادة تشغيل الأمر نفسه تلتقط من حيث توقفت بدلًا من إعادة إرسال كل شيء، وترى تقدّمًا حقيقيًا لكل ملف طوال الطريق، لا نسخًا صامتًا.</p>
       <p>أكبر فرق عملي هو ما يحدث عندما لا يكون في الطرف البعيد relayium مثبَّتًا. يتحقق push من ذلك تلقائيًا، وإن لم يكن موجودًا، يتراجع إلى بث أرشيف tar بسيط عبر نفس اتصال SSH ليصب في tar -x على الطرف الآخر — فيظل push يعمل مقابل خادم خالٍ تمامًا، دون تثبيت أي شيء أولًا. هذا الحل الاحتياطي خاص بـ push فقط: يحتاج pull دائمًا إلى relayium مثبَّتًا سلفًا في الطرف البعيد، لأن الجهاز البعيد في عملية pull هو الذي يعمل كمُرسِل.</p>
-      <pre><code>relayium push ./photos user@your-server:backups/</code></pre>
-      <pre><code>relayium pull user@your-server:backups/ ./restore</code></pre>
+      <pre dir="ltr"><code>relayium push ./photos user@your-server:backups/</code></pre>
+      <pre dir="ltr"><code>relayium pull user@your-server:backups/ ./restore</code></pre>
       <h2>ما وراء SSH: daemon direct والاقتران عبر الشبكات</h2>
       <p>لا يعمل scp إلا حيث يكون لديك وصول SSH. تضيف واجهة Relayium السطرية طريقتين أخريين لنقل الملفات لا يملك scp ما يعادلهما.</p>
       <p>يحوّل relayium serve جهازًا تملكه إلى هدف daemon direct يمكن الوصول إليه عبر TLS 1.3 مثبَّت — بلا SSH، ولا منفذ 22، تُنشأ الثقة عند أول اتصال (تُوافَق عليها تفاعليًا، أو تُصرَّح مسبقًا بـ relayium authorize للاستخدام دون إشراف) وتظل مثبَّتة بعد ذلك. ادفع إليه مباشرة بعنوان relayium://.</p>
       <p>للإرسال إلى شخص عبر الإنترنت لا تملك تجاهه أي وصول SSH على الإطلاق، يقرن relayium send / receive حاسوبين برمز قصير بدلًا من ذلك — من الند للند مباشرةً، مع رمز تحقق قصير اختياري (SAS) يمكن للطرفين مقارنته أولًا — ويتوقّف --verify من أجله. لا جواب لدى scp لهذه الحالة؛ ستحتاج إلى وصول SSH أولًا.</p>
-      <pre><code>relayium push ./build relayium://your-server</code></pre>
-      <pre><code>relayium send ./report.pdf</code></pre>
+      <pre dir="ltr"><code>relayium push ./build relayium://your-server</code></pre>
+      <pre dir="ltr"><code>relayium send ./report.pdf</code></pre>
       <h2>مزامنة المجلدات: sync مقابل إعادة تشغيل scp -r</h2>
       <p>نسخ مجلد كامل مرارًا وتكرارًا بـ scp -r يعني إعادة إرسال كل شيء في كل مرة، دون أي مفهوم لما تغيّر أو لما ينبغي إزالته. يبني relayium sync مرآة تزايدية أحادية الاتجاه فوق push/pull أو daemon direct: تُنقل الملفات المتغيرة فقط، و--delete يزيل من الوجهة الملفات التي اختفت من المصدر، و--watch يواصل إعادة المزامنة في الوقت الفعلي كلما تغيّرت الملفات محليًا — دون الحاجة إلى مهمة cron.</p>
-      <pre><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
+      <pre dir="ltr"><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
       <h2>مقارنة الميزات في لمحة</h2>
       <p>أهم الفروق، جنبًا إلى جنب:</p>
       <ul><li>التوفّر: scp مثبَّت مسبقًا على كل خادم تقريبًا؛ واجهة Relayium السطرية ملف تنفيذي واحد تثبّته مرة واحدة بأمر واحد.</li><li>الاستئناف: يعيد scp نقلًا منقطعًا من الصفر؛ بينما يستأنف push/pull من حيث توقفا.</li><li>السلامة: لا يتحقق scp من المحتوى بعد الحدث؛ بينما يُفحص كل نقل في Relayium بتجزئة SHA-256 لكل ملف.</li><li>الخوادم الخالية: لا يحتاج scp إلى أي شيء إضافي، ويعمل push بالطريقة نفسها عبر حله الاحتياطي بـ tar عندما لا يكون relayium مثبَّتًا عن بُعد (يحتاج pull إلى relayium في الطرف البعيد، بلا حل احتياطي).</li><li>ما وراء SSH: يعمل scp عبر SSH فقط؛ بينما يقدّم Relayium أيضًا daemon direct (TLS مثبَّت، بلا SSH) ونقلات برمز الاقتران عبر الشبكات (send/receive) لا تحتاج إلى أي وصول SSH على الإطلاق.</li><li>مزامنة المجلدات: يعيد scp -r إرسال كل شيء؛ بينما يزامن relayium sync بشكل تزايدي مع --delete و--watch.</li><li>التكلفة والترخيص: كلاهما مجاني؛ scp يأتي مع OpenSSH، وواجهة Relayium السطرية مرخّصة بـ AGPL-3.0 ومفتوحة المصدر.</li></ul>

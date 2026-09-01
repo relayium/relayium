@@ -32,10 +32,22 @@ const browserTokens = {
   pt: [/X25519/, /chaves públicas/i, /passando/i],
 };
 
+// The `send / receive` mode's whole prose, lead plus boundary notes. It used to
+// be one string (cliPage.mode2Body); reading the mode as a whole rather than one
+// numbered note means moving a sentence between paragraphs cannot silently drop
+// the SAS construction out of what this test checks.
+const sendReceiveCopy = (m) =>
+  [m.cliPage.modes.sendReceive.lead, ...m.cliPage.modes.sendReceive.notes].join("\n");
+
+// Named, not indexed: the crawler shell now lists seven modes, and an index into
+// that array would quietly start checking a different mode the next time the
+// order changes.
+const shellMode = (name) => cli.why.items.find((i) => i.title === name).desc;
+
 describe("public SAS copy", () => {
   it("describes the CLI certificate-fingerprint SAS in every locale", () => {
     for (const [lang, messages] of Object.entries(locales)) {
-      const copy = messages.cliPage.mode2Body;
+      const copy = sendReceiveCopy(messages);
       for (const token of cliTokens[lang]) {
         expect(copy, `${lang}:${token}`).toMatch(token);
       }
@@ -52,7 +64,7 @@ describe("public SAS copy", () => {
   });
 
   it("keeps the crawler CLI copy protocol-specific", () => {
-    const copy = cli.why.items[1].desc;
+    const copy = shellMode("send / receive");
     expect(copy).toMatch(/pinned TLS certificate fingerprints/i);
     expect(copy).toMatch(/rendezvous service/i);
     expect(copy).toMatch(/not every network hop/i);
@@ -67,9 +79,9 @@ describe("public SAS copy", () => {
 
   it("removes the old English path-wide guarantees and shared derivation", () => {
     const copy = [
-      en.cliPage.mode2Body,
+      sendReceiveCopy(en),
       en.features.items[2].desc,
-      cli.why.items[1].desc,
+      shellMode("send / receive"),
       readFileSync(resolve(process.cwd(), "../README.md"), "utf8"),
     ].join("\n");
     expect(copy).not.toMatch(/derived from the session keys/i);

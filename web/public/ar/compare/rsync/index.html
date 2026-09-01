@@ -90,18 +90,18 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>وهو أيضًا في كل مكان: تأتي به معظم أنظمة Linux وmacOS، ويعمل فوق اتصال SSH ربما أعددته أصلًا. لا شيء من ذلك يحاول Relayium sync استبداله.</p>
       <h2>قبل أن تبدأ</h2>
       <p>كل ما يلي هو relayium CLI، فثبّته أولًا إن لم تكن قد فعلت. على macOS وLinux، يُسقط أمر واحد ملفًا ثنائيًا مُسبق البناء في PATH الخاص بك:</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre dir="ltr"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>تفضّل اختيار الملف بنفسك، أو تعمل على Windows؟ احصل على ملف ثنائي من صفحة الإصدارات — يسرد relayium.com/cli كل خيارات التثبيت (أو go build -o relayium ./cmd/relayium إن كان لديك Go).</li><li>يؤكّد relayium --version أنه مثبَّت. تخطَّ هذا وستطبع الأوامر أدناه ‘command not found’ لا غير.</li></ul>
       <h2>ما يفعله Relayium sync بدلًا من ذلك</h2>
       <p>إن ‎relayium sync &lt;src...&gt; &lt;dest&gt; [--delete] [--watch]‎ مرآة تزايدية أحادية الاتجاه: يقارن حجم كل ملف ووقت تعديله، ويتخطّى ما يطابق أصلًا، ويرسل الباقي.</p>
       <p>يعمل عبر نقلين. وجّهه إلى ‎user@host:/dest‎ فيعمل فوق SSH — لكن يجب أن يكون relayium مثبَّتًا أصلًا على الطرف البعيد؛ وخلافًا لـ push، لا يوجد رجوع إلى tar في sync. وجّهه بدلًا من ذلك إلى ‎relayium://host[:port]‎ فيتخطّى SSH كليًا: اتصال TLS 1.3 مثبَّت مباشرة إلى مستمع relayium serve على الجهاز الآخر، مُصادَق عليه ببصمة ذلك الجهاز (يُوافَق عليها مرة، وتُذكَر بعد ذلك). هذا المسار الثاني هو الراحة الحقيقية: لا sshd لإعداده، ولا مفاتيح SSH لإدارتها — فقط جهازان عليهما relayium ومنفذ مفتوح بينهما.</p>
-      <pre><code>relayium sync ./photos user@host:/backup/photos       # عبر SSH</code></pre>
-      <pre><code>relayium sync ./photos relayium://203.0.113.9:9031    # daemon direct، بلا SSH</code></pre>
+      <pre dir="ltr"><code>relayium sync ./photos user@host:/backup/photos       # عبر SSH</code></pre>
+      <pre dir="ltr"><code>relayium sync ./photos relayium://203.0.113.9:9031    # daemon direct، بلا SSH</code></pre>
       <h2>الحذف والمزامنة المستمرة</h2>
       <p>افتراضيًا لا يفعل sync سوى الإضافة والتحديث — ولا يحذف شيئًا من تلقاء نفسه أبدًا. مرّر --delete لعكس عمليات الحذف أيضًا، لكن على المُستقبِل أن يوافق صراحةً: يجب أن يكون يعمل بـ relayium serve --allow-delete. وإن لم يكن كذلك، يُرفَض طلب الحذف ويُبلَّغ به المُرسِل بدل تجاهله بصمت.</p>
       <p>لمجلد يتغيّر باستمرار، يبقي --watch على تشغيل sync بعد المرور الأول ويعيد العكس كلما تغيّر ملف تحت المصدر — لا يملك rsync شيئًا مدمجًا لهذا؛ إذ تلجأ عادةً إلى مهمة cron أو غلاف مثل lsyncd.</p>
-      <pre><code>relayium serve --dir /backup --port 9031 --allow-delete</code></pre>
-      <pre><code>relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch</code></pre>
+      <pre dir="ltr"><code>relayium serve --dir /backup --port 9031 --allow-delete</code></pre>
+      <pre dir="ltr"><code>relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch</code></pre>
       <h2>السلامة والاستئناف وحدوده بصراحة</h2>
       <p>يُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256، والنقل الذي يُقطَع في منتصف ملف يُستأنَف من إزاحة البايت الموجودة أصلًا على القرص بدل البدء من جديد — مفيد للأسباب نفسها التي يفيد لها في rsync.</p>
       <p>ولنكن واضحين بشأن ما لا يفعله الاستئناف: فهو ليس خوارزمية الدلتا في rsync. إن كان ملف موجودًا بالكامل أصلًا لكن بحجم أو طابع زمني مختلف، يعيد sync إرساله كاملًا بدل مقارنة الكتل المتغيّرة داخله. لملف ضخم واحد يتغيّر تغيّرًا طفيفًا ومتكررًا، سينقل النقل بالدلتا في rsync بيانات أقل. كما يتعامل sync مع الملفات العادية فقط — تُتخطّى الروابط الرمزية والملفات الخاصة، فأي شيء يعتمد عليها يحتاج معالجة منفصلة.</p>

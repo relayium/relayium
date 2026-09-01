@@ -44,7 +44,7 @@ All file/line references are relative to `server/` in the
 - **Four separate limits, not one.** Monthly traffic (above) is how much moved.
   **Storage** is a different question — how much ciphertext you are keeping
   live *right now*, checked by `remainingStorage`
-  (`account/plan_enforce.go:191`) against `CurrentStorage`, so deleting a file
+  (`account/plan_enforce.go:208`) against `CurrentStorage`, so deleting a file
   frees storage and refunds no traffic. **Retention** is how long a stored file
   may live, and the **daily upload quota** is a rolling 24-hour window. This
   document describes each separately because the code does; see
@@ -103,7 +103,7 @@ ICE/TURN credentials for a pairing-code transfer. It:
 2. Refuses to mint a TURN credential if the owner's email isn't verified
    (`account/turn.go:112-120`, the "Sybil dampener" comment) or if the owner's
    monthly traffic allowance is already spent (`account/turn.go:122-135`,
-   calling `s.trafficAllowanceSpent` from `account/plan_enforce.go:144`, which
+   calling `s.trafficAllowanceSpent` from `account/plan_enforce.go:181`, which
    treats exactly zero remaining as spent). P2P direct still works in both
    cases; only relay is withheld.
 3. Embeds the owner's user ID and the pairing code into the TURN username as
@@ -169,7 +169,7 @@ migrations that follow it) — not a summary of intent, the actual columns.
 | `users` (`sqlite.go:50`) | id, email, display name, creation time, plan tier, Stripe customer/subscription IDs and status, subscription period end, plan-change bookkeeping. **No card data** — Stripe Checkout is a hosted redirect (`account/stripe.go:311`, `EnsureCustomer`/`CreateCheckoutSession`); Relayium's server never sees a card number. |
 | `devices` (`sqlite.go:92`) | id, owning user, a **name** (nickname), creation and last-seen time, device kind (browser/CLI). This is the persistent paired-device list (settings page), not the realtime signaling room — see below. |
 | `usage_events` (`sqlite.go:105`) | per-TURN-allocation relayed-byte totals: alloc ID, token, user ID, bytes, timestamp, later `node_id` and `billable` (`sqlite.go:448`). |
-| `usage_periods` (`sqlite.go:1704`) | the same relay data bucketed by calendar month (`YYYYMM`), which is what billing/cap queries actually read (`account/plan_enforce.go:63`, `UserRelayedSince`). |
+| `usage_periods` (`sqlite.go:1742`) | the same relay data bucketed by calendar month (`YYYYMM`), which is what billing/cap queries actually read (`account/plan_enforce.go:63`, `UserRelayedSince`). |
 | `usage_monthly` (`sqlite.go:163`) | per-user, per-month upload/download byte totals for **stored transfers** (not relay). |
 | `stored_files` (`sqlite.go:113`) | id, owner, an opaque `blob_key` (pointer to ciphertext on disk), an opaque `enc_manifest` blob (the encrypted filename/size manifest — server can't read it), plaintext **size in bytes**, burn-after-read flag, created/expires timestamps, download count. |
 | `upload_events` (`sqlite.go:126`) | rolling 24h ledger of upload sizes per user, for the daily-quota check. |
@@ -285,7 +285,7 @@ The dimensions actually checked, each fail-closed at write time:
   just size). Exceeding it: `429` "daily quota exceeded".
 - **Monthly traffic cap** — relay bytes (billable rows in `usage_periods`)
   plus stored upload/download bytes (`usage_monthly`), summed by
-  `currentMonthTraffic` (`account/plan_enforce.go:55`) against
+  `currentMonthTraffic` (`account/plan_enforce.go:68`) against
   `monthlyTrafficCap` (`account/plan_enforce.go:78`), which pro-rates a
   mid-month plan change into segments rather than granting a full month's
   cap on every upgrade. Exceeding it: `429` "monthly traffic limit reached"
@@ -298,7 +298,7 @@ The dimensions actually checked, each fail-closed at write time:
   bust it (`account/plan_enforce.go:264-277`, `persistStoredFile`).
   Exceeding it: `413` "storage limit reached."
 - **Global disk cap** — a deployment-wide ceiling across all users
-  (`SettingStorageDiskCap`, `account/plan_enforce.go:229-241`), independent
+  (`SettingStorageDiskCap`, `account/plan_enforce.go:253-265`), independent
   of any one plan. Exceeding it: `507` "server storage is full."
 - **Retention (TTL) and download-count limits** — every stored file gets an
   expiry and/or a max-download count resolved from the request plus admin
@@ -382,7 +382,7 @@ including the admin-audit prune below — see the residual noted at
 | Abandoned chunked-upload session + its partial ciphertext (`upload_sessions`) | 1 hour idle, then the blob is re-read, the bytes it holds are billed, and both go. **Unreachable-node exception:** the row and partial blob are kept for as long as it takes, because the blob is the only exact byte count; it is re-probed hourly and settled when the node answers. **Account-deletion exception:** an explicit deletion request overrides that evidence hold, removes the user-attributed row immediately, and deletes or queues deletion of the partial blob | `ReapPendingUploads` / `recoverUnresolvedUploads` + `upload_sessions.unresolved_at`, `account/uploads_resumable.go`; `PurgeTransientUserData`, `account/sqlite.go` |
 | A pre-upload's session + partial ciphertext when its **pairing room times out** | Not 1 hour — the room's own deadline. Voiding a room reclaims every artifact bound to it in one pass: the finalized objects and the unfinished uploads, blob and row for each, so storage and the account's open-session budget are free immediately. The blob is re-read first and what it really holds is billed. **Same-shaped exception as account deletion, and for the same reason:** if the node cannot be reached the exact size is unknowable, so the known bytes stay billed, the blob is queued for deletion, the row goes anyway, and the unknown residual (at most one append) is written off and logged — a deadline whose promise is deletion outranks holding a customer's ciphertext as billing evidence | `Service.voidPairRoom` / `reclaimRoomUpload` + `Store.ClosePairRoom`, `account/pairroom.go`, `account/sqlite_pairroom.go` |
 | A pre-upload's finalized ciphertext once **somebody has joined that pairing room** | **No timer at all, and that is deliberate** (`account/pairroom.go` invariant 5): a joined transfer is never cut off by a clock, so nothing ages this out — not GC, not a plan retention cap, not a fallback expiry. It leaves in exactly three ways, each of them somebody acting. **(1) The receiver completes it:** it proves it holds the file key, and the authoritative row is deleted in the same transaction that queues the blob's durable delete intent, so the storage is released at commit rather than at the next sweep. **(2) The owning account releases the whole room** from its own list — this is the exit that always exists, because a receiver whose browser hands the bytes to a download rather than writing them itself can never complete. Release first refuses a room with any upload session still bound; otherwise the object rows are deleted, delete intents are queued, and quota is free when the transaction commits. **(3) The account is deleted.** Bytes already uploaded stay billed in all three cases — traffic is metered per committed append, and releasing storage is not a traffic refund. Pre-upload is off by default (`-enable-preupload`), so on a default deployment no such object exists | `Store.CompletePairRoomObject`, `account/pairroom_complete.go`; `Service.releasePairRoom` + `Store.CloseOwnedPairRoom` (`GET /api/pair-rooms`, `DELETE /api/pair-rooms/{id}`), `account/pairroom_owner.go`, `account/sqlite_pairroom.go` |
-| Account + all of the above, on deletion | A grace period after a self-deletion request (`-account-grace-days` / `RELAYIUM_ACCOUNT_GRACE_DAYS`, default 30 days, `main.go:338`), then hard-purged | `ArchiveAndPurgeUser`, `account/sqlite.go:2980` |
+| Account + all of the above, on deletion | A grace period after a self-deletion request (`-account-grace-days` / `RELAYIUM_ACCOUNT_GRACE_DAYS`, default 30 days, `main.go:338`), then hard-purged | `ArchiveAndPurgeUser`, `account/sqlite.go:3005` |
 
 **What "hard-purged" actually does**, read directly from
 `ArchiveAndPurgeUser` (`account/sqlite.go:2980-3184`): the user's monthly

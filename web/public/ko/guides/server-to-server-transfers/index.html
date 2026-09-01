@@ -124,7 +124,7 @@ learned receiver.example.com:9031 5c1d9f04… (added to known_hosts)
 # on the RECEIVER
 authorized 74318e3b… (added to /home/you/.config/relayium/authorized_fingerprints)
 received 1 file(s), 48213004 bytes from 74318e3b…</code></pre></div>
-      <ul><li>릴레이도 폴백도 없습니다. 리스너에 도달할 수 없으면 푸시는 실패합니다. 파일 바이트는 결코 다른 누군가를 거쳐 전달되지 않습니다.</li><li>다른 모드와 동일한 전송 엔진입니다. 재개 가능하며 파일별 SHA-256 검사를 수행합니다.</li></ul>
+      <ul><li>릴레이도 폴백도 없습니다. 리스너에 도달할 수 없으면 푸시는 실패합니다. 파일 바이트는 결코 다른 누군가를 거쳐 전달되지 않습니다.</li><li>다른 모드와 동일한 전송 엔진입니다: 각 파일은 파일별 SHA-256으로 검사되고 스테이징된 뒤 설치됩니다. push는 재개하지 않습니다 — 여기서도 SSH에서도 마찬가지로 이미 존재하는 목적지를 거부합니다. 중단되었다면 빠진 경로를 push하거나, 부분 파일을 이어가는 relayium sync를 쓰세요(이 수신 측은 --no-resume으로 시작되지 않은 한 그것을 존중합니다).</li></ul>
       <h2>첫 푸시 시 보내는 쪽 승인하기(받는 쪽)</h2>
       <p>새 기기가 리스너로 처음 푸시하면, serve는(터미널에서) 그 출처와 핑거프린트를 보여주고 승인할지 물어봅니다. SSH의 첫 연결 프롬프트와 비슷하지만, 받는 쪽에서 이루어진다는 점이 다릅니다:</p>
       <pre><code># 받는 쪽에서, 새 보내는 쪽이 푸시할 때:
@@ -133,7 +133,7 @@ Incoming push from 203.0.113.7:54021
 Accept and remember this peer? [y/N] y</code></pre>
       <ul><li>y라고 답하면 그 핑거프린트가 authorized_fingerprints에 기록됩니다. 이후 같은 기기에서의 모든 푸시는 조용히 통과합니다.</li><li>핑거프린트는 기기의 안정적인 신원이므로(재시작이나 IP 변경에도 유지됩니다), 승인은 푸시하는 쪽마다 한 번만 하면 되는 단계입니다.</li><li>푸시하는 쪽은 첫 연결 시 리스너의 키를 알게 되고(첫 사용 시 신뢰), 이를 known_hosts에 고정합니다.</li></ul>
       <h2>자동화하기(또는 터미널 없이 실행하기)</h2>
-      <p>승인된 핑거프린트는 기억되므로 이후의 푸시에는 확인이 필요 없습니다. 따라서 relayium push는 cron, 배포 스크립트, CI에 곧바로 연결되어 암호화되고 무결성이 검증되며 재개 가능한 서버 간 동기화를 제공합니다. serve가 터미널 없이 실행될 때(systemd 서비스, 파이프 등)는 프롬프트를 띄울 수 없으므로 알 수 없는 푸시하는 쪽을 거부합니다. 대신 미리 승인해 두세요. 핑거프린트는 푸시하는 쪽에서 relayium id로 얻거나, serve 로그의 “rejected unauthorized peer …” 줄에서 복사한 뒤 다음을 실행하세요:</p>
+      <p>승인된 핑거프린트는 기억되므로 이후의 푸시에는 확인이 필요 없습니다. 따라서 relayium push는 배포 스크립트나 CI에 곧바로 연결되어 암호화되고 무결성이 검증된 서버 간 전달을 제공합니다. 같은 디렉터리로 예약 실행되는 작업이라면 대신 relayium sync를 쓰세요: push는 이미 존재하는 목적지를 거부하므로, 고정된 한 경로로 반복해서 push하면 한 번만 성공하고 그 뒤로는 거부됩니다. serve가 터미널 없이 실행될 때(systemd 서비스, 파이프 등)는 프롬프트를 띄울 수 없으므로 알 수 없는 푸시하는 쪽을 거부합니다. 대신 미리 승인해 두세요. 핑거프린트는 푸시하는 쪽에서 relayium id로 얻거나, serve 로그의 “rejected unauthorized peer …” 줄에서 복사한 뒤 다음을 실행하세요:</p>
       <pre><code># 받는 쪽에서: 프롬프트 없이 보내는 쪽을 미리 승인
 relayium authorize --config-dir /etc/relayium 74318e3b...</code></pre>
       <ul><li>신원 및 신뢰 파일은 ~/.config/relayium/에 있습니다(서비스로 쓸 때는 --config-dir로 /etc/relayium 같은 곳으로 재정의할 수 있습니다).</li><li>authorize는 멱등적입니다. 같은 핑거프린트에 대해 다시 실행해도 아무 효과가 없습니다.</li></ul>
