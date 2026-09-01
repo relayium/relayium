@@ -1301,15 +1301,12 @@ final class AppShellUITests: XCTestCase {
     /// and renders the English shell. Those rows asserted translations that no
     /// longer exist anywhere in the build.
     ///
-    /// This app's own `Info.plist` still declares nine localizations, which is a
-    /// separate, known and deliberate mismatch: iOS product development is
-    /// paused, that build is unshipped, and the plist is pinned as a
-    /// pending-resume item in `LocalizationIntegrityTests` and
-    /// `IOSSurfaceGuardTests` rather than corrected here. It is why an Arabic
-    /// launch still mirrors the layout — see
-    /// `testAnArabicLaunchLaysTheShellOutRightToLeft`, which is unchanged and
-    /// still passes: UIKit takes direction from the bundle list, not from the
-    /// package catalogs.
+    /// This app's own `Info.plist` now declares exactly the same two, so the
+    /// bundle and the package agree: `CFBundleLocalizations` is what UIKit reads
+    /// to decide layout direction, and with the seven archived entries gone an
+    /// Arabic preference no longer mirrors the shell. What a device set to one
+    /// of the archived languages actually sees is asserted by
+    /// `testAnArchivedLanguagePreferenceRendersACompleteEnglishLeftToRightShell`.
     func testEveryShippedLanguageRendersItsOwnShell() {
         let shipped = [("en", "Nearby"), ("zh-Hans", "附近设备")]
         for (code, nearby) in shipped {
@@ -1326,26 +1323,59 @@ final class AppShellUITests: XCTestCase {
         }
     }
 
-    /// An Arabic launch lays the shell out right-to-left, not merely in Arabic.
+    /// **An archived language preference renders a complete ENGLISH,
+    /// LEFT-TO-RIGHT shell — in the running app.**
     ///
-    /// Translated strings in a left-to-right layout is the failure mode that
-    /// looks fine in a screenshot review and is wrong for every RTL reader: the
-    /// first destination sits where the last one should. Geometry is what
-    /// distinguishes them, so geometry is what this asserts — by ORDER rather
-    /// than by label, so it cannot pass or fail on a translation changing.
-    func testAnArabicLaunchLaysTheShellOutRightToLeft() {
-        app.terminate()
-        app.launchArguments = ["--relayium-ui-testing",
-                               "-AppleLanguages", "(ar)", "-AppleLocale", "ar"]
-        app.launch()
+    /// This test used to assert the opposite for Arabic: that the tab bar laid
+    /// itself out right-to-left, because translated strings in a left-to-right
+    /// layout is wrong for every RTL reader. Arabic is frozen now, so the
+    /// requirement inverted, and the geometry half is exactly why this still has
+    /// to run against a real launch rather than only through the model seams.
+    ///
+    /// Two failures are possible here and neither is visible from inside the
+    /// package. The app could still ADVERTISE Arabic — `CFBundleLocalizations`
+    /// is what UIKit reads to decide layout direction, so a stale entry would
+    /// mirror the tab bar while the copy came back English, producing an English
+    /// UI laid out right to left. Or a resolver that matched a language whose
+    /// catalog is gone would render raw keys. Both are asserted against, for an
+    /// RTL preference and a non-RTL archived one.
+    ///
+    /// The geometry is asserted by ORDER rather than by label, so it cannot pass
+    /// or fail on a translation changing; the raw-key half reads every tab's own
+    /// words rather than only the one looked up by name, which a lookup BY name
+    /// could never fail on.
+    func testAnArchivedLanguagePreferenceRendersACompleteEnglishLeftToRightShell() {
+        for code in ["ar", "ja"] {
+            app.terminate()
+            app.launchArguments = ["--relayium-ui-testing",
+                                   "-AppleLanguages", "(\(code))", "-AppleLocale", code]
+            app.launch()
 
-        let tabs = app.tabBars.firstMatch
-        XCTAssertTrue(tabs.waitForExistence(timeout: 20))
-        let ordered = tabs.buttons.allElementsBoundByIndex
-        XCTAssertGreaterThanOrEqual(ordered.count, 2,
-                                    "the Arabic shell rendered fewer destinations than it has")
-        XCTAssertGreaterThan(ordered[0].frame.minX, ordered[ordered.count - 1].frame.minX,
-                             "an Arabic launch laid the tab bar out left-to-right")
+            let tabs = app.tabBars.firstMatch
+            XCTAssertTrue(tabs.waitForExistence(timeout: 20),
+                          "\(code) did not produce a shell at all")
+
+            // English words, not the archived translation.
+            XCTAssertTrue(tabs.buttons["Nearby"].waitForExistence(timeout: 15),
+                          "a \(code) launch did not render the English shell")
+
+            // And no destination fell through to its own catalog key. Asked of
+            // EVERY tab, because the lookup above resolves by the English label
+            // and so can never be the one that catches a raw key.
+            let ordered = tabs.buttons.allElementsBoundByIndex
+            XCTAssertGreaterThanOrEqual(ordered.count, 2,
+                                        "the \(code) shell rendered fewer destinations than it has")
+            for tab in ordered {
+                let shown = tab.label.isEmpty ? (tab.value as? String ?? "") : tab.label
+                XCTAssertFalse(shown.hasPrefix("tab.") || shown.hasPrefix("nav."),
+                               "a \(code) launch rendered a raw catalog key: \(shown)")
+            }
+
+            // And laid out left to right: the first destination is the LEADING
+            // one, so under LTR it sits left of the last.
+            XCTAssertLessThan(ordered[0].frame.minX, ordered[ordered.count - 1].frame.minX,
+                              "a \(code) launch mirrored the tab bar to right-to-left")
+        }
     }
 
     /// At the largest accessibility text size every task still reaches its own
