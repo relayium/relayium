@@ -63,13 +63,26 @@ usage:
   relayium update [--check] [--force]       upgrade to the latest release in place
   relayium version                          print the CLI version
 
-flags (after the subcommand):
+flags (after the subcommand; "→" lists every command the flag applies to):
   -i <file>       ssh identity file
+                  → push, pull, sync
   -p <port>       ssh port
-  --no-resume     disable resuming partial files
-  --verify        stop to compare the SAS before sending/opening (send, text)
-  --yes           never prompt for SAS confirmation (text; the default, kept for scripts)
-  --config-dir D  credential/identity directory (supported subcommands; default ~/.config/relayium)
+                  → push, pull, sync
+  --no-resume     turn off resuming partial files. Resume is a "sync" feature:
+                  it is real on a serve listener receiving a sync, and this flag
+                  is accepted but does nothing on push and pull, which refuse a
+                  collision before a partial file could ever be continued.
+                  → push, pull, serve
+  --verify        stop to compare the SAS before sending/opening
+                  → send, receive, text
+  --yes           never prompt for SAS confirmation (this is already the
+                  default; it is kept for scripts)
+                  → text
+  --config-dir D  credential/identity/state directory (default ~/.config/relayium)
+                  → push, sync, serve, id, authorize, login, logout, inbox <any subcommand>
+
+Every other flag belongs to one command; see that command's own help, e.g.
+"relayium serve -h" or "relayium up -h".
 `
 
 // duplex adapts a separate reader and writer into one io.ReadWriter (used to
@@ -119,14 +132,18 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	case "update":
 		return runUpdate(args[1:], stdout, stderr)
 	case "version", "--version", "-version":
-		return runVersion(stdout)
+		return runVersion(args[1:], stdout, stderr)
 	case "__recv":
 		return runRecv(args[1:], stdout, stderr)
 	case "__send":
 		return runSend(args[1:], stdout, stderr)
-	case "-h", "--help", "help":
+	case "-h", "-help", "--help":
 		fmt.Fprint(stdout, usage)
 		return 0
+	case "help":
+		// `relayium help <command>` is the third spelling of the same contract:
+		// it prints that command's usage and runs nothing.
+		return runHelp(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n%s", args[0], usage)
 		return 2
@@ -153,28 +170,113 @@ this host only once its fingerprint ("relayium id") is authorized there. The
 listener's own fingerprint is pinned on first contact and a later change is
 refused, not trusted.
 
-Any other destination is the SSH path and behaves like scp with resume: it uses
-relayium on the remote when it is installed, and a plain tar stream when it is not.
+Any other destination is the SSH path, and what it gives you depends on what is
+installed on the far end. The two are not equivalent:
+
+  relayium installed on the remote — the native Relayium receiver. The whole
+  batch is checked for collisions BEFORE any bytes are sent, so a push onto an
+  existing file is refused with nothing written, and each file is verified by
+  SHA-256 and staged before it is installed, so a file that arrives corrupt is
+  never installed under its real name.
+
+  What this is NOT is a transaction, and re-running is NOT the recovery step.
+  Files are installed one at a time as they pass, so a connection lost partway
+  through leaves the files that already landed in place and the rest missing —
+  and because those files now exist, re-running the SAME push is refused by the
+  collision check above ("destination already exists"). Push does not resume a
+  partial file either: the collision check runs first, so there is never a
+  partial destination to continue from. To finish an interrupted push, either
+  push only the files that are still missing, or use "relayium sync", which is
+  the mode that skips what already matches and does resume.
+
+  relayium NOT installed — the zero-dependency fallback: a tar stream piped into
+  the remote's own "tar -x -k". It does NOT resume and does NOT verify anything
+  per file. Existing receiver files are kept rather than overwritten, but tar
+  extracts members in order, so a collision can happen after other new files
+  from the same batch were already written, leaving the batch partly applied.
+  Whether the collision is reported depends on the remote's tar: GNU tar names
+  it and exits non-zero, bsdtar keeps the file and exits 0. A "sent" line is
+  therefore not proof that every file landed. Install relayium on the remote
+  when you need per-file verification and the up-front collision check.
+
+positional arguments:
+  <src...>   files or directories to push
+  <dest>     relayium://host[:port], or [user@]host:dest for the SSH path
 
 flags:
   -i <file>        ssh identity file (SSH destinations)
   -p <port>        ssh port (SSH destinations)
-  --no-resume      disable resuming partial files
+  --no-resume      accepted, and a no-op for push: resume is a "sync" feature.
+                   Push refuses a collision before it could ever continue a
+                   partial file, and the tar fallback has no resume at all.
   --config-dir D   identity/trust directory for relayium:// destinations
                    (default ~/.config/relayium)
 
-An existing file on the receiver is never overwritten by push; use
-"relayium sync" for the explicit replace/mirror operation.
+No push overwrites a file that is already on the receiver; use "relayium sync"
+for the explicit replace/mirror operation.
 `
 
-// stdValueFlags are the shared ssh/daemon flags of parseFlagsStd whose value is
-// a separate token (--no-resume is bool, so it is correctly absent). Keep it in
-// step with parseFlagsStd; TestValueFlagArgumentIsNotAHelpRequest exercises
-// every entry through the real command.
-var stdValueFlags = []string{"i", "p", "config-dir"}
+const pullUsage = `relayium pull — copy files from a server you can ssh into
+
+usage:
+  relayium pull [user@]host:src <dest>
+
+Pull runs over your own SSH connection: the bytes travel through it and never
+touch Relayium's servers, and no Relayium account is involved. Host-key checking
+(known_hosts) is what authenticates the server, exactly as for any other ssh.
+
+It requires relayium to be INSTALLED ON THE REMOTE, because the remote acts as
+the sender. There is no tar fallback for pull; install relayium there, or fetch
+with scp/rsync. Each file is verified by SHA-256 and staged before it is
+installed locally, and a pull onto a path that already exists is refused before
+any bytes move.
+
+Like push, this is not a transaction and does not resume: files are installed
+one at a time as they pass, so an interrupted pull leaves the files that already
+landed in place, and re-running the same pull is then refused because those
+files exist. Fetch the remainder explicitly, or mirror with "relayium sync".
+
+positional arguments:
+  [user@]host:src   the remote file or directory to fetch
+  <dest>            local directory to write into
+
+flags:
+  -i <file>        ssh identity file
+  -p <port>        ssh port
+  --no-resume      accepted, and a no-op for pull, for the same reason as push:
+                   resume is a "sync" feature.
+  --config-dir D   accepted because pull shares push's flag set, and IGNORED:
+                   pull has no relayium:// path and reads no identity or trust
+                   directory.
+`
+
+// What this side can honestly say about a zero-dependency push. The remote ran
+// its own `tar -x -k`; nothing here saw which members it kept, and neither the
+// tar path nor the native `relayium __recv` path resumes — an ordinary receive
+// refuses a batch whose destination already exists, and a partial file is an
+// existing path. So installing relayium on the remote buys verification and an
+// up-front collision report, not resume; `relayium sync` is the mode that
+// resumes. See push_resume_contract_test.go, which asserts both halves.
+const zeroDepPushNote = "note: zero-dependency mode streamed a tar into the remote's `tar -x -k`. Files" +
+	"\nalready on the receiver were kept, not overwritten, and this side cannot tell" +
+	"\nwhich were skipped, so nothing was verified per file. Install relayium on the" +
+	"\nremote for per-file SHA-256 verification, staging and an up-front collision" +
+	"\nreport. Use `relayium sync` where you need resume, which no push mode does."
+
+// A failed extraction is the case where "just run it again" is actively wrong:
+// whatever landed is now an existing path, so a re-run's `tar -x -k` keeps it
+// and skips the incoming copy — silently, even when the kept file is truncated.
+const zeroDepPushFailureNote = "the remote extraction failed. Files already on the receiver were kept, but part" +
+	"\nof this batch may have been written before it stopped, and this side cannot tell" +
+	"\nhow much. Do not simply re-run: anything that landed, including a truncated file," +
+	"\nis now an existing path that the remote's `tar -x -k` will keep and skip over." +
+	"\nInspect the destination on the receiver, remove or reconcile the partial batch," +
+	"\nthen retry. Install relayium on the remote for per-file SHA-256 verification," +
+	"\nstaging and an up-front collision report. Use `relayium sync` where resume is" +
+	"\nwhat you actually want."
 
 func runPush(args []string, stdout, stderr io.Writer) int {
-	if wantsHelp(args, stdValueFlags...) {
+	if wantsHelpFS(stdFlagSet(&sshFlags{}), args) {
 		fmt.Fprint(stdout, pushUsage)
 		return 0
 	}
@@ -241,7 +343,10 @@ func runPush(args []string, stdout, stderr io.Writer) int {
 		return reportExit(rep, stderr)
 	}
 
-	// Zero-dependency mode: pipe a tar stream into remote `tar -x`.
+	// Zero-dependency mode: pipe a tar stream into the remote's own
+	// `tar -x -k`. Keep-existing is the receiver's only protection here, and
+	// nothing on this side can see which members it skipped, so say what this
+	// mode is instead of implying the guarantees the native path gives.
 	sess, err := sshx.Dial(dest, sshx.RemoteUntarCmd(dest.Path), opts)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -254,13 +359,19 @@ func runPush(args []string, stdout, stderr io.Writer) int {
 	}
 	if err := sess.Close(); err != nil {
 		fmt.Fprintln(stderr, err)
+		fmt.Fprintln(stderr, zeroDepPushFailureNote)
 		return 1
 	}
 	fmt.Fprintf(stdout, "sent %d file(s) (zero-dependency mode)\n", len(m.Files))
+	fmt.Fprintln(stderr, zeroDepPushNote)
 	return 0
 }
 
 func runPull(args []string, stdout, stderr io.Writer) int {
+	if wantsHelpFS(stdFlagSet(&sshFlags{}), args) {
+		fmt.Fprint(stdout, pullUsage)
+		return 0
+	}
 	f, rest, err := parseFlagsStd(args)
 	if err != nil {
 		fmt.Fprintln(stderr, err)

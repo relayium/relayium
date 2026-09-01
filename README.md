@@ -103,20 +103,43 @@ Prefer the terminal? Install the self-hostable, end-to-end-encrypted CLI in one 
 curl -fsSL https://relayium.com/install.sh | sh
 ```
 
+<!-- CLI-RELEASE-BOUNDARY: remove this whole block in the release PR that publishes the next CLI tag. -->
+> ⚠️ **This section describes the CLI *source in this repository*, which is ahead of the installer.**
+> The latest published CLI release is **v0.23.0**. The direct-server safety and help work landed after
+> it — `serve`'s `--bind` and its writable-`--dir` check before the port is bound, the narrowing of an
+> allowed `--delete` to the roots a run actually sends (the `--allow-delete` gate is not itself new; it
+> is already in v0.23.0, where honoring it mirrors the whole served `--dir`), a running listener picking up
+> `relayium authorize` without a restart, and the uniform `-h`/`--help`/`relayium help <command>`
+> contract with the corrected SSH-fallback and `sync --delete` wording — is **not in v0.23.0**. Don't
+> rely on it from the installed binary until the next CLI release; build from `server/cmd/relayium` if
+> you need it now. Run `relayium version` to see which you have.
+
 **Free and open source — and direct in the modes below.** In these modes the CLI connects your machines
 directly: file and message bytes never pass through Relayium's servers, and nothing is metered. Among
 them, only `send`/`receive`/`text` touch our servers at all, and only for a tiny rendezvous handshake
 (never the content).
 
-**The one CLI mode that is not direct is `relayium up`** (and the `relayium down` that fetches it). It
+**The hosted, asynchronous stored-link mode is `relayium up`** (and the `relayium down` that fetches it). It
 uploads a client-side-encrypted copy to Relayium's hosted storage so that a browser can open the link,
 which is the whole point of it — and that means it counts against your account plan's storage cap and
 retention window, exactly like a stored download link created in the browser. Downloading with
-`relayium down` still needs no account.
+`relayium down` still needs no account. It isn't the only CLI feature that involves our servers: the
+Device Inbox is hosted and asynchronous too, and the CLI is its receive side (see below).
 
 Four direct modes — three that move files, one that moves text:
 
 - **`push` / `pull` over your own SSH** — `relayium push ./photos user@host:backups/` (bytes travel over SSH; no Relayium account).
+  What you get depends on what is installed on the far end, and the two are not the same. With **relayium installed on the remote**,
+  the whole push is refused up front if any destination already exists, and each file is verified by SHA-256 and staged before it is
+  installed. It is not a transaction, though, and re-running is not the recovery step: files are installed one at a time as they pass,
+  so a connection lost partway through leaves the files that already landed in place — and re-running the same push is then refused,
+  because those files now exist. Push does not resume a partial file either (the collision check runs first, so there is never one to
+  continue from); `sync` is the mode that skips what already matches and does resume.
+  **Without it**, `push` falls back to a zero-dependency tar stream piped into the remote's own
+  `tar -x -k`: no resume, no per-file verification. Files already on the receiver are kept rather than overwritten, but tar extracts
+  in order, so a collision can happen after other new files from the same batch have already been written — leaving the batch partly
+  applied — and whether that collision is reported at all depends on the remote's tar (GNU tar exits non-zero, bsdtar keeps the file
+  and exits 0). `pull` has no fallback: it needs relayium on the remote, which acts as the sender.
 - **`text` — ephemeral encrypted messages** — run `relayium text` with no code on one machine to mint a code (with your account, as `send` does); it prints the exact `relayium text 483920` command the other machine runs, then waits in the live session for it. Both machines must be online at the same time: this is not a mailbox. One line per message interactively; pipe stdin (`pbpaste | relayium text 483920`) to send multiline content or exact bytes. End-to-end encrypted over a pinned-TLS direct connection of its own, exactly like a file transfer; Relayium stores no message body or server-side history, though either endpoint can retain text. Verification is opt-in: add `--verify` to stop and compare the SAS (that needs a terminal to answer, so a piped `--verify` run refuses rather than pretending it was confirmed); `--yes` is still accepted and means the same as the default. One message is at most 65,536 bytes of UTF-8 — anything larger is a file. CLI to CLI: exactly as with file transfers, the terminal and the browser are separate transports and don't pair with each other.
 - **`send` / `receive` by pairing code** — `relayium send ./file.zip` mints a code with your account (after `relayium login`) and prints what the other end runs: `relayium receive 483920`. Codes are 6 digits and last 5 minutes; the receiver needs no account. Cross-network and direct peer-to-peer — a small rendezvous handshake introduces the two ends, the file goes straight between them, no relay. Sending to someone with a browser instead? Use `relayium up` for a download link.
 - **`serve` + `push relayium://` daemon direct** — `relayium serve --dir ~/inbox` then `relayium push ./file relayium://host` (server-to-server over pinned TLS; no relay, no SSH, no code — the listener approves each new pusher on its first push and remembers it). This is the direct route between two servers you control, and it needs no Relayium account on either side: a listener accepts a pusher only when that pusher's fingerprint is in the listener's own `authorized_fingerprints` file. Being logged in grants nobody filesystem access, and the two decisions are independent. For a non-interactive listener, pre-authorize with `relayium authorize <fingerprint>` using the *same* `--config-dir` the listener runs with; a running listener honors it on the next connection without a restart. `serve` listens on every interface unless you pass `--bind ADDR`, so firewall the port or bind it narrowly, and it requires `--dir` to be an existing writable directory before it binds.
@@ -129,11 +152,14 @@ Keep a folder mirrored with **`sync`** — direct too, over SSH or daemon-direct
 relayium sync ./site relayium://host --delete --watch
 ```
 
-`--delete` is deliberately hard to turn into data loss. The receiving listener must have been started with
-`--allow-delete` or nothing is deleted and the sender is told so; deletion is then confined to the top-level
-directories that transfer actually sends, so mirroring `./site` can prune stale files inside `site/` and can
-never touch a sibling folder, an unrelated file, or another source's tree under the listener's `--dir`. An
-empty source refuses outright on both ends.
+`--delete` is deliberately hard to turn into data loss, and who has to agree to it depends on the destination.
+For a `relayium://` destination the receiving listener is a separate process someone started, so it must have
+been started with `--allow-delete`; without that nothing is deleted and the sender is told so. Over **SSH there
+is no separate listener to consent**: `sync` starts the receiver itself, through your own SSH session, as you —
+there is no `--allow-delete` to set, and passing `--delete` does delete. Either way deletion is confined to the
+top-level directories that transfer actually sends, so mirroring `./site` can prune stale files inside `site/`
+and can never touch a sibling folder, an unrelated file, or another source's tree under the listener's `--dir`.
+An empty source refuses outright on both ends.
 
 Full docs at [relayium.com/cli](https://relayium.com/cli); prebuilt binaries on the [releases page](https://github.com/relayium/relayium/releases).
 

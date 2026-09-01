@@ -62,6 +62,10 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&server, "server", defaultCloudServer, "cloud server base URL")
 	fs.StringVar(&configDir, "config-dir", "", "credential directory (default ~/.config/relayium)")
 	fs.StringVar(&deviceName, "device-name", "", "label for this machine in My Devices (default: this host's name)")
+	if wantsHelpFS(fs, args) {
+		fmt.Fprint(stdout, loginUsage)
+		return 0
+	}
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
@@ -120,6 +124,10 @@ func runLogout(args []string, stdout, stderr io.Writer) int {
 	var configDir string
 	fs.BoolVar(&localOnly, "local-only", false, "clear local credentials without revoking the server token")
 	fs.StringVar(&configDir, "config-dir", "", "credential directory (default ~/.config/relayium)")
+	if wantsHelpFS(fs, args) {
+		fmt.Fprint(stdout, logoutUsage)
+		return 0
+	}
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
@@ -156,6 +164,10 @@ func runLogout(args []string, stdout, stderr io.Writer) int {
 
 // runWhoami reports the locally stored account, if any.
 func runWhoami(args []string, stdout, stderr io.Writer) int {
+	if wantsHelp(args) {
+		fmt.Fprint(stdout, whoamiUsage)
+		return 0
+	}
 	cfgDir, err := resolveConfigDir("")
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -281,6 +293,10 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&ttlArg, "ttl", "", "retention, as a duration (7d, 2h, 90m) or seconds")
 	fs.Int64Var(&maxDownloads, "max-downloads", 0, "max number of downloads allowed")
 	fs.StringVar(&server, "server", "", "override the cloud server (defaults to the logged-in server)")
+	if wantsHelpFS(fs, args) {
+		fmt.Fprint(stdout, upUsage)
+		return 0
+	}
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
@@ -364,6 +380,10 @@ func runDown(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	var server string
 	fs.StringVar(&server, "server", "", "override the cloud server (defaults to the one embedded in the link, else "+defaultCloudServer+")")
+	if wantsHelpFS(fs, args) {
+		fmt.Fprint(stdout, downUsage)
+		return 0
+	}
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}

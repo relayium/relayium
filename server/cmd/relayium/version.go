@@ -17,7 +17,14 @@ var version = "dev"
 // including a test that calls a cloud helper directly — carries it.
 func init() { cloud.SetClientVersion(version) }
 
-func runVersion(stdout io.Writer) int {
+// runVersion prints the version. It takes args only so that `relayium version
+// -h` answers with usage like every other command rather than printing a
+// version string at someone who asked a question.
+func runVersion(args []string, stdout, stderr io.Writer) int {
+	if wantsHelp(args) {
+		fmt.Fprint(stdout, versionUsage)
+		return 0
+	}
 	fmt.Fprintln(stdout, version)
 	return 0
 }

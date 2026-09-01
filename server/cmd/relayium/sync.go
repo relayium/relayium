@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"time"
 
 	"github.com/relayium/relayium/internal/sshx"
 	"github.com/relayium/relayium/internal/xfer"
@@ -28,15 +27,60 @@ host only once its fingerprint ("relayium id") is authorized there.
 Only files that changed are sent; unchanged ones (same size and mtime) are
 skipped, and a partial file resumes.
 
+positional arguments:
+  <src...>   directories or files to mirror
+  <dest>     relayium://host[:port], or [user@]host:dest for the SSH path
+
 flags:
   --delete         also delete files on the receiver that are gone from the
-                   source. The receiver must be started with --allow-delete or
-                   it is ignored and reported. Deletion is confined to the
-                   top-level directories this run actually sends — a sibling
-                   folder under the receiver's --dir is never touched — and an
-                   empty source refuses outright rather than mirroring nothing
-                   onto everything.
-  --watch          keep running and re-sync on change (debounced).
+                   source. WHO HAS TO AGREE differs by destination:
+
+                   relayium://host — the listener is a separate long-running
+                   process someone else started, so it must have been started as
+                   "relayium serve --allow-delete". Without that, the delete is
+                   ignored and reported back to you; nothing is removed.
+
+                   [user@]host:dest — there is no separate listener to consent:
+                   this starts the receiver over your own SSH session, as you.
+                   No --allow-delete is involved, and passing --delete here does
+                   delete.
+
+                   Either way deletion is confined to the top-level directories
+                   this run actually sends — a sibling folder under the
+                   receiver's --dir is never touched — and an empty source
+                   refuses outright rather than mirroring nothing onto
+                   everything.
+  --watch          keep running and re-sync when the sources change. Changes are
+                   debounced and runs never overlap, so a burst of edits becomes
+                   one sync.
+
+                   A failed sync retries on its own with exponential backoff
+                   (1s, doubling, capped at 30s) — including the very first
+                   sync, so a receiver that was down when you started is
+                   picked up without you touching a file again. It keeps
+                   retrying for as long as it runs; that is recovery from a
+                   transient failure, not a promise that the sync will ever
+                   succeed. Every attempt reports its own error, so a
+                   permanent problem stays visible instead of looking like
+                   progress.
+
+                   Sources are checked before it starts watching: a missing,
+                   unreadable or unwatchable source fails immediately instead of
+                   leaving a process that is watching nothing. A file source is
+                   watched together with the directory holding it, because
+                   editors replace a file by renaming a new one over it.
+
+                   The watch set repairs itself while it runs. A new
+                   subdirectory that could not be followed, or a source that is
+                   deleted and recreated, is rebuilt before the next sync counts
+                   as healthy — until then it keeps reporting the problem and
+                   retrying, so it never sits there "synced" while blind to part
+                   of the source.
+
+                   Ctrl-C stops it: no further attempt is started, and it exits
+                   once the attempt already running returns. A sync in flight is
+                   not cut off mid-transfer, so stopping can take as long as the
+                   current transfer does.
   -i <file>        ssh identity file (SSH destinations)
   -p <port>        ssh port (SSH destinations)
   --config-dir D   identity/trust directory for relayium:// destinations
@@ -46,29 +90,17 @@ Both destinations require relayium on the receiver: sync speaks the native
 protocol and has no tar fallback.
 `
 
-// syncValueFlags are the sync flags whose value is a separate token (--delete
-// and --watch are bool, so they are correctly absent). Keep it in step with the
-// FlagSet below; TestValueFlagArgumentIsNotAHelpRequest exercises every entry.
-var syncValueFlags = []string{"i", "p", "config-dir"}
-
 // runSync implements `relayium sync <src...> <dest> [--delete] [--watch]`: a
 // one-way incremental mirror over the same transports as push. It always uses
 // the native protocol (no tar fallback).
 func runSync(args []string, stdout, stderr io.Writer) int {
-	if wantsHelp(args, syncValueFlags...) {
+	var f syncFlags
+	fs := syncFlagSet(&f)
+	fs.SetOutput(stderr)
+	if wantsHelpFS(fs, args) {
 		fmt.Fprint(stdout, syncUsage)
 		return 0
 	}
-	fs := flag.NewFlagSet("sync", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	var identity, configDir string
-	var port int
-	var del, watch bool
-	fs.StringVar(&identity, "i", "", "ssh identity file")
-	fs.IntVar(&port, "p", 0, "ssh port")
-	fs.BoolVar(&del, "delete", false, "delete files on the receiver that are gone from the source")
-	fs.BoolVar(&watch, "watch", false, "keep running and re-sync on change")
-	fs.StringVar(&configDir, "config-dir", "", "identity/trust directory (daemon)")
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
@@ -81,21 +113,24 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 	srcs := rest[:len(rest)-1]
 
 	once := func() int {
-		return syncOnce(dest, srcs, syncFlags{identity: identity, port: port, del: del, configDir: configDir}, stdout, stderr)
+		return syncOnce(dest, srcs, f, stdout, stderr)
 	}
-	if !watch {
+	if !f.watch {
 		return once()
 	}
-	// Watch mode: sync once, then re-sync (debounced) on any change under the sources.
-	if code := once(); code != 0 {
-		fmt.Fprintln(stderr, "initial sync failed; watching for changes anyway")
-	}
+	// Watch mode: WatchAndSync owns the whole loop, including the first sync, so
+	// an initial failure retries on its own timer instead of waiting for a
+	// change that may never come.
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
-	err := xfer.WatchDirs(ctx, srcs, 800*time.Millisecond, func() {
+	err := xfer.WatchAndSync(ctx, srcs, func() error {
 		if code := once(); code != 0 {
-			fmt.Fprintln(stderr, "sync failed; will retry on next change")
+			// syncOnce already printed why; the code is what the retry needs.
+			return fmt.Errorf("exit status %d", code)
 		}
+		return nil
+	}, xfer.WatchOpts{
+		OnNotice: func(err error) { fmt.Fprintln(stderr, "watch:", err) },
 	})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -108,7 +143,21 @@ type syncFlags struct {
 	identity  string
 	port      int
 	del       bool
+	watch     bool
 	configDir string
+}
+
+// syncFlagSet declares `sync`'s flags, binding them into f. The help pre-scan
+// reads its value-flag names off this same declaration (see wantsHelpFS), so a
+// new flag cannot silently change what `--flag -h` means.
+func syncFlagSet(f *syncFlags) *flag.FlagSet {
+	fs := flag.NewFlagSet("sync", flag.ContinueOnError)
+	fs.StringVar(&f.identity, "i", "", "ssh identity file")
+	fs.IntVar(&f.port, "p", 0, "ssh port")
+	fs.BoolVar(&f.del, "delete", false, "delete files on the receiver that are gone from the source")
+	fs.BoolVar(&f.watch, "watch", false, "keep running and re-sync on change, retrying failures")
+	fs.StringVar(&f.configDir, "config-dir", "", "identity/trust directory (daemon)")
+	return fs
 }
 
 // syncOnce runs a single incremental sync of srcs → dest.
