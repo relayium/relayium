@@ -20,10 +20,12 @@ const localeTokens = {
 };
 
 // The SAS pass dated all three 2026-07-31. `send` was then rebuilt as a runnable
-// tutorial (cli-tutorial-structure.test.mjs) and re-dated for it; croc and
-// receive were untouched by that batch and keep the earlier date. Pinning them
-// separately is the point — a single shared date would hide exactly that.
-const REVISED = { send: "2026-08-07", croc: "2026-07-31", receive: "2026-08-06" };
+// tutorial (cli-tutorial-structure.test.mjs) and re-dated for it; `receive` was
+// factually rewritten later still, in the CLI-page batch, and carries that date
+// (cli-mode-chooser.test.mjs). `croc` was touched by neither and keeps the
+// original. Pinning them separately is the point — a single shared date would
+// hide exactly that.
+const REVISED = { send: "2026-08-07", croc: "2026-07-31", receive: "2026-09-01" };
 
 describe("CLI article SAS precision", () => {
   it("keeps all three articles current and structurally complete in nine locales", () => {

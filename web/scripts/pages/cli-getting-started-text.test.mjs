@@ -38,15 +38,27 @@ describe("CLI getting-started guide includes ephemeral text", () => {
     }
   });
 
-  it("records the release date and preserves the three file modes", () => {
-    // Re-dated when the guide became a runnable tutorial — prerequisites, an
-    // ordered procedure, a success signal and troubleshooting, in nine locales.
-    // See cli-tutorial-structure.test.mjs.
-    expect(article.updated).toBe("2026-08-07");
-    const en = article.langs.en.sections.find((item) => item.heading === "The three ways it moves files");
-    expect(en?.bullets.join(" ")).toContain("push / pull");
-    expect(en?.bullets.join(" ")).toContain("send / receive");
-    expect(en?.bullets.join(" ")).toContain("daemon direct");
+  it("records the rewrite date and keeps the chooser on every mode", () => {
+    // 2026-08-07 was the date the guide became a runnable tutorial. It moved
+    // again when the chooser was corrected from three modes to the seven the
+    // product actually has — cli-mode-chooser.test.mjs owns that contract, and
+    // pins the date with the rewrite that earned it.
+    expect(article.updated).toBe("2026-09-01");
+    const en = article.langs.en.sections.find(
+      (item) => item.heading === "The seven ways it moves files and text",
+    );
+    expect(en, "the mode chooser section was renamed or removed").toBeTruthy();
+    const bullets = en.bullets.join(" ");
+    // The three the old section listed are still here — the correction added
+    // modes, it did not swap one incomplete list for another.
+    expect(bullets).toContain("relayium push / relayium pull");
+    expect(bullets).toContain("relayium send / relayium receive");
+    expect(bullets).toContain("daemon direct");
+    // …and the four it never mentioned.
+    expect(bullets).toContain("relayium up / relayium down");
+    expect(bullets).toContain("Device Inbox");
+    expect(bullets).toContain("relayium text");
+    expect(bullets).toContain("relayium sync");
   });
 
   it("keeps the account FAQ aligned with text code minting", () => {

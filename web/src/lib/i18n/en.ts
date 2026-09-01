@@ -811,7 +811,7 @@ const en: Messages = {
         lead: "relayium up encrypts on this machine, uploads only the ciphertext and prints a link; relayium down fetches and decrypts it on any other machine, with no account.",
         notes: [
           "Uploading requires relayium login and counts against your account's storage cap, traffic allowance, daily quota and retention window, exactly like a link created in the browser. --burn, --ttl 7d and --max-downloads 5 set the retention; your plan's cap still applies, and a longer request is shortened rather than refused — you are told when that happens.",
-          "The key travels in the link's #k= fragment, which a browser never sends to a server. Relayium stores ciphertext, file names included, and holds nothing that could open it — so losing the link loses the file.",
+          "The key travels in the link's #k= fragment, which a browser never sends to a server. Relayium stores ciphertext, file names included, and holds nothing that could open it: the encrypted copy stays stored until its retention expires, but losing the link loses the only key that can decrypt it.",
           "It is the same link the website makes: an up link opens in a browser, and a share link created on relayium.com can be fetched with down.",
           "A download recovers inside the run that started it. relayium down reconnects a dropped or stalled connection up to five attempts and continues by HTTP Range from the last complete encrypted frame; against a server that ignores Range it restarts the file within that same run. That recovery is per-invocation only — when the attempts run out the partial output is deleted rather than left truncated, and a fresh relayium down begins from the start.",
         ],
@@ -1047,7 +1047,6 @@ const en: Messages = {
       ],
       cta: "Open Device Inbox →",
       ctaHint: "You need to be signed in to Relayium, on this browser, with the receiving machine signed in to the same account.",
-      docs: "Full receiver reference: commands, where files land, and what happens on a crash →",
     },
   },
   crossnet: {

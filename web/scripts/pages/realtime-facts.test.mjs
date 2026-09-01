@@ -106,7 +106,18 @@ describe("shared browser protocol facts", () => {
 
   it("renders the shared CLI fact in both tutorials and the P2P explainer", () => {
     for (const lang of LANGS) {
-      expect(cliGettingStarted.langs[lang].sections[1].bullets).toContain(cliDirectFacts[lang]);
+      // The chooser carries the fact verbatim, but not necessarily as a bullet
+      // of its own: in the maintained languages it is the tail of the
+      // send / receive bullet, because that section is a one-bullet-per-mode
+      // chooser and a standalone eighth bullet read as an eighth mode. The
+      // frozen chooser still lists it separately, and both satisfy the rule
+      // that matters here — the exact shared sentence reaches the reader.
+      expect(
+        cliGettingStarted.langs[lang].sections[1].bullets.some((b) =>
+          b.includes(cliDirectFacts[lang]),
+        ),
+        `${lang} chooser lost the shared direct-only fact`,
+      ).toBe(true);
       expect(cliGettingStarted.langs[lang].sections[2].bullets).toContain(cliDirectFacts[lang]);
       expect(cliSendToSomeone.langs[lang].sections.some(
         (section) => section.body?.includes(cliDirectFacts[lang]),

@@ -1774,6 +1774,6 @@ $ echo $?
 export default {
   slug: "how-to/automate-server-backups",
   published: "2026-07-09",
-  updated: "2026-08-06",
+  updated: "2026-09-01",
   langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

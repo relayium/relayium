@@ -8,17 +8,28 @@
   // `data-cli-mode` is the mode's own name, and the tests read it: it is how the
   // page proves it presents seven modes, in the accepted order, with none
   // silently dropped when the layout changes.
+  //
+  // The row ends with exactly one guide link, and the row renders it rather than
+  // the page: MODE_GUIDE pairs every mode with its walkthrough, so a row cannot
+  // end at its last command block with no way forward. Its text is the guide's
+  // own localized title (`cli.guides[key]`) — the same string the guide list
+  // below uses — so a second translation of the same title never has to exist,
+  // and the seven links have seven distinct accessible names. Its arrow is
+  // decorative (aria-hidden) and mirrors under a right-to-left `lang`.
   import type { Snippet } from "svelte";
-  import type { Messages } from "../i18n.svelte";
-  import type { ModeKey } from "../cli-page-data";
+  import { dir, type Messages } from "../i18n.svelte";
+  import { GUIDE_SLUG, MODE_GUIDE, guidePath, type ModeKey } from "../cli-page-data";
 
   let {
     cli,
+    lang,
     mode,
     featured = false,
     children,
   }: {
     cli: Messages["cliPage"];
+    /** Current language code — the guide href is localized, /zh/guides/… */
+    lang: string;
     mode: { key: ModeKey; id: string; name: string };
     /** Device Inbox only: it is the one mode whose sending half is elsewhere,
      *  and the one with a call to action into the app. */
@@ -27,6 +38,22 @@
   } = $props();
 
   const copy = $derived(cli.modes[mode.key]);
+  const guide = $derived(MODE_GUIDE[mode.key]);
+  // A plain <a href>, with no click handler: the guides are static article pages
+  // rather than SPA routes, so the browser's own navigation is the correct one —
+  // and it is what makes middle-click, "open in new tab" and Enter work without
+  // this component reimplementing any of them. The trailing slash comes from
+  // guidePath: these pages are directories, and a link without it costs a
+  // redirect.
+  const guideHref = $derived(guidePath(GUIDE_SLUG[guide], lang));
+
+  // The arrow points at the link's destination, which in a right-to-left script
+  // is to the reader's left. `dir()` answers for any tag, not only the two
+  // maintained ones — this component takes `lang: string`, the static /cli
+  // shells and the archived Arabic pages still render dir="rtl", and a locale
+  // coming back is a product decision rather than a rewrite of this row. So the
+  // flip is derived here rather than assumed away, the same way Nav does it.
+  const flip = $derived(dir(lang) === "rtl");
 </script>
 
 <section
@@ -47,6 +74,12 @@
     {/each}
   </ul>
   {@render children?.()}
+  <p class="guide">
+    <a href={guideHref} data-mode-guide={guide}>
+      <span>{cli.guides[guide]}</span>
+      <span class="arrow" class:flip aria-hidden="true">→</span>
+    </a>
+  </p>
 </section>
 
 <style>
@@ -114,5 +147,39 @@
   }
   .mode :global(a) {
     color: var(--accent-fg);
+  }
+
+  /* The way out of the row, in the same place in all seven of them. Sized like
+     the guide list's rows (44px, so it is not a mis-tap target at the end of a
+     long scroll) and marked with the same arrow, because it goes to the same
+     place. */
+  .guide {
+    margin: var(--space-4) 0 0;
+  }
+  .guide a {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-block-size: 44px;
+    font-size: var(--fs-sm);
+    line-height: 1.5;
+    color: var(--accent-fg);
+    text-decoration: none;
+  }
+  .guide a:hover span:first-child {
+    text-decoration: underline;
+  }
+  .guide a:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: var(--focus-offset);
+  }
+  .guide .arrow {
+    flex: 0 0 auto;
+  }
+  /* Mirrored rather than swapped for "←": one glyph keeps the two directions
+     visually identical in weight and width, and a font that renders U+2192 but
+     not U+2190 cannot produce a row with no arrow at all. */
+  .guide .arrow.flip {
+    transform: scaleX(-1);
   }
 </style>

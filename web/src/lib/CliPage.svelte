@@ -18,7 +18,6 @@
     TRUST_FILES,
     SECTIONS,
     COMMANDS,
-    guidePath,
     copyProps,
     type SectionKey,
   } from "./cli-page-data";
@@ -107,7 +106,7 @@
         <ModeComparison {cli} />
         <p class="lead spaced">{cli.modesIntro}</p>
 
-        <ModeSection {cli} mode={mode.cloud}>
+        <ModeSection {cli} lang={lang()} mode={mode.cloud}>
           <CommandBlock
             code={COMMANDS.cloudLogin.code}
             title={COMMANDS.cloudLogin.name}
@@ -125,7 +124,7 @@
           />
         </ModeSection>
 
-        <ModeSection {cli} mode={mode.inbox} featured>
+        <ModeSection {cli} lang={lang()} mode={mode.inbox} featured>
           <h4>{cli.inbox.stepsLabel}</h4>
           <ol class="steps">
             {#each cli.inbox.steps as step, i (step.label)}
@@ -177,12 +176,9 @@
             title={COMMANDS.inboxService.name}
             {...copyProps(cli.copy, COMMANDS.inboxService.name)}
           />
-          <p class="docs">
-            <a href={guidePath("guides/device-inbox-server", lang())}>{cli.inbox.docs}</a>
-          </p>
         </ModeSection>
 
-        <ModeSection {cli} mode={mode.text}>
+        <ModeSection {cli} lang={lang()} mode={mode.text}>
           <CommandBlock
             code={COMMANDS.textPair.code}
             title={COMMANDS.textPair.name}
@@ -195,7 +191,7 @@
           />
         </ModeSection>
 
-        <ModeSection {cli} mode={mode.sendReceive}>
+        <ModeSection {cli} lang={lang()} mode={mode.sendReceive}>
           <CommandBlock
             code={COMMANDS.sendReceive.code}
             title={COMMANDS.sendReceive.name}
@@ -203,7 +199,7 @@
           />
         </ModeSection>
 
-        <ModeSection {cli} mode={mode.pushPull}>
+        <ModeSection {cli} lang={lang()} mode={mode.pushPull}>
           <CommandBlock
             code={COMMANDS.pushPull.code}
             title={COMMANDS.pushPull.name}
@@ -211,7 +207,7 @@
           />
         </ModeSection>
 
-        <ModeSection {cli} mode={mode.serve}>
+        <ModeSection {cli} lang={lang()} mode={mode.serve}>
           <CommandBlock
             code={COMMANDS.serveListen.code}
             title={COMMANDS.serveListen.name}
@@ -229,7 +225,7 @@
           />
         </ModeSection>
 
-        <ModeSection {cli} mode={mode.sync}>
+        <ModeSection {cli} lang={lang()} mode={mode.sync}>
           <CommandBlock
             code={COMMANDS.sync.code}
             title={COMMANDS.sync.name}
@@ -438,14 +434,10 @@
       transition: none;
     }
   }
-  .hint,
-  .docs {
+  .hint {
     font-size: var(--fs-sm);
     line-height: 1.65;
     margin: var(--space-2) 0 0;
-  }
-  .docs {
-    margin-block-start: var(--space-3);
   }
 
   .points,
