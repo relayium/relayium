@@ -8,9 +8,8 @@
      quietly wrong.
 
      Over-declaring is as much a false statement as under-declaring, so nothing
-     here is included "to be safe". Disk space, active keyboard, and the file
-     timestamp APIs beyond the one below are all absent because this app does
-     not call them.
+     here is included "to be safe". Active keyboard, and the file timestamp APIs
+     beyond the one below, are absent because this app does not call them.
 
      Note the Share extension has its OWN manifest, with a shorter list: it
      never reaches the network and never touches user defaults. -->
@@ -111,6 +110,24 @@
 			<key>NSPrivacyAccessedAPITypeReasons</key>
 			<array>
 				<string>35F9.1</string>
+			</array>
+		</dict>
+		<!-- `InboxSpace.freeBytes` calls `statfs` on the receive folder before a
+		     Device Inbox delivery is written, so a transfer that cannot fit is
+		     refused rather than allowed to fill the disk on its way to failing
+		     (`InboxFailure.swift`). That is exactly E174.1: checking whether
+		     there is sufficient disk space to write files.
+
+		     E174.1 attaches a condition, and this call site meets it — the free
+		     byte count is compared against the delivery's size, decides a local
+		     refusal, and is not sent off device, stored, or derived from in any
+		     form that leaves this app's container. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>E174.1</string>
 			</array>
 		</dict>
 	</array>

@@ -118,6 +118,18 @@ get-task-allow	a debuggable distribution build would pass verification
 xcrun nm -u	the AVCapture undefined-symbol readback is gone
 AVCapture	the camera symbol readback is gone
 PrivacyInfo\.xcprivacy	the built privacy manifests are no longer checked
+^readonly APP_REQUIRED_REASON_GRAPH='NSPrivacyAccessedAPICategoryDiskSpace[[:space:]]E174\.1$	the app's pinned graph no longer opens with the Disk Space declaration and its E174.1 reason
+^NSPrivacyAccessedAPICategoryFileTimestamp[[:space:]]DDA9\.1$	the app's pinned graph no longer declares the file-timestamp category
+^NSPrivacyAccessedAPICategorySystemBootTime[[:space:]]35F9\.1$	the app's pinned graph no longer declares the system-boot-time category
+^NSPrivacyAccessedAPICategoryUserDefaults[[:space:]]CA92\.1'$	the app's pinned graph no longer declares the user-defaults category, or is no longer terminated
+^readonly SHARE_REQUIRED_REASON_GRAPH='NSPrivacyAccessedAPICategoryFileTimestamp[[:space:]]DDA9\.1'$	the Share extension's smaller pinned graph is gone; the appex could ship the app's
+^required_reason_graph_of\(\) \{$	nothing reads a built manifest's required-reason graph
+LC_ALL=C sort	the graph is no longer canonically ordered, so entry order in the plist would decide the comparison
+expect_required_reason_graph "\$archive_app_dir/PrivacyInfo\.xcprivacy"	the ARCHIVED app's required-reason graph is no longer verified
+expect_required_reason_graph "\$archive_appex_dir/PrivacyInfo\.xcprivacy"	the ARCHIVED Share extension's required-reason graph is no longer verified
+expect_required_reason_graph "\$app_dir/PrivacyInfo\.xcprivacy"	the EXPORTED app's required-reason graph is no longer verified
+expect_required_reason_graph "\$appex_dir/PrivacyInfo\.xcprivacy"	the EXPORTED Share extension's required-reason graph is no longer verified
+plutil -lint "\$file"	a shipped manifest is accepted without proving it is a valid plist
 NSCameraUsageDescription	the camera purpose declaration is no longer checked
 NSLocalNetworkUsageDescription	the local network purpose declaration is no longer checked
 expect_plist_key_absent "\$appex_info" .*NSCameraUsageDescription	the Share extension could declare a camera purpose string
@@ -281,6 +293,24 @@ mutate 'the Share camera-absence check is removed' \
   sed_mutator '/expect_plist_key_absent "\$appex_info"/d'
 mutate 'the privacy manifest check is removed' \
   sed_mutator "s/PrivacyInfo\.xcprivacy/PrivacyInfo.absent/g"
+mutate 'the pinned app required-reason graph is deleted' \
+  sed_mutator "/^readonly APP_REQUIRED_REASON_GRAPH=/d"
+mutate 'the Disk Space reason code is changed' \
+  sed_mutator 's/E174\.1/E174.2/g'
+mutate 'the Share extension is pinned to the app graph instead of its own' \
+  sed_mutator 's/^readonly SHARE_REQUIRED_REASON_GRAPH=.*$/readonly SHARE_REQUIRED_REASON_GRAPH="$APP_REQUIRED_REASON_GRAPH"/'
+mutate 'nothing reads a built manifest as a graph' \
+  sed_mutator '/^required_reason_graph_of\(\) \{$/d'
+mutate 'the archived bundles stop being checked' \
+  sed_mutator '/expect_required_reason_graph "\$archive_/d'
+mutate 'the exported app stops being checked' \
+  sed_mutator '/expect_required_reason_graph "\$app_dir/d'
+mutate 'the exported Share extension stops being checked' \
+  sed_mutator '/expect_required_reason_graph "\$appex_dir/d'
+mutate 'the graph comparison stops being canonically ordered' \
+  sed_mutator 's/LC_ALL=C sort/cat/'
+mutate 'a shipped manifest is no longer linted' \
+  sed_mutator '/plutil -lint "\$file"/d'
 mutate 'provisioning updates are allowed' \
   append_mutator '  xcodebuild -allowProvisioningUpdates archive'
 mutate 'an upload tool is added' \
@@ -405,6 +435,352 @@ FIXTURE
   else
     ok 'an absent entitlement is reported as absent'
   fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Part 1c — the required-reason graph reader, driven adversarially
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# A privacy manifest is a PUBLIC STATEMENT: it becomes the App Store privacy
+# label, and the app builds, signs and runs identically whether it is accurate,
+# wrong or absent. Nothing at runtime notices. So the check that reads it out of
+# a built bundle is doing all the work, and — unlike the signature and
+# entitlement checks — it needs no signing identity, which means its failure
+# modes can be OBSERVED here rather than left to the operator run.
+#
+# The rules in Part 1 prove the four call sites exist. They cannot prove the
+# comparison behind those call sites actually rejects a wrong manifest, and a
+# graph reader is exactly the kind of code that goes quiet: a set-shaped reader
+# silently collapses a duplicated category, an unordered one makes the answer
+# depend on entry order in the plist, and any reader that returns an empty graph
+# on an unreadable file turns "malformed" into "does not match" — or worse, into
+# a match against an empty expectation.
+#
+# So `required_reason_graph_of` and `expect_required_reason_graph` are LIFTED out
+# of the shipped script — not reimplemented — and driven against manifests built
+# here. The reporting helpers are replaced by counters, so "fails closed" is
+# something this suite watches happen rather than infers from a return value.
+
+eval "$(sed -n '/^plist_value() {/,/^}/p' "$script_under_test")"
+eval "$(sed -n '/^expect_plist_value() {/,/^}/p' "$script_under_test")"
+eval "$(sed -n '/^required_reason_graph_of() {/,/^}/p' "$script_under_test")"
+eval "$(sed -n '/^expect_required_reason_graph() {/,/^}/p' "$script_under_test")"
+eval "$(sed -n "/^readonly APP_REQUIRED_REASON_GRAPH=/,/CA92\.1'\$/p" "$script_under_test")"
+eval "$(sed -n '/^readonly SHARE_REQUIRED_REASON_GRAPH=/p' "$script_under_test")"
+
+lifted_ok=1
+for lifted in plist_value expect_plist_value required_reason_graph_of \
+    expect_required_reason_graph; do
+  if ! declare -f "$lifted" >/dev/null 2>&1; then
+    bad "$lifted can be lifted out of the script" 'the function was not found or did not parse'
+    lifted_ok=0
+  fi
+done
+if [ -z "${APP_REQUIRED_REASON_GRAPH:-}" ] || [ -z "${SHARE_REQUIRED_REASON_GRAPH:-}" ]; then
+  bad 'the pinned required-reason graphs can be lifted out of the script' \
+      'one of the two constants did not parse'
+  lifted_ok=0
+fi
+
+if [ "$lifted_ok" -eq 1 ]; then
+  # The script's reporting helpers, replaced. Only findings are counted: a
+  # `pass_check` is the checker saying nothing is wrong, and "nothing was
+  # raised" is already the assertion. Both are invoked indirectly, through the
+  # lifted functions, which is why each carries an SC2329 exemption.
+  lifted_failures=0
+  # shellcheck disable=SC2329
+  fail_check() { lifted_failures=$((lifted_failures + 1)); }
+  # shellcheck disable=SC2329
+  pass_check() { :; }
+
+  manifests="$work/manifest-fixtures"
+  mkdir -p "$manifests"
+
+  # One `NSPrivacyAccessedAPITypes` entry: a category and its reasons, in the
+  # order given. Reasons are a list rather than a single value so a DUPLICATED
+  # reason can be expressed, which is one of the shapes under test.
+  #
+  # Every caller takes this through `$( )`, which strips the trailing newline,
+  # so two concatenated entries share a line. That is deliberate and harmless:
+  # the consumer is an XML parser, and pinning the whitespace would be pinning
+  # something plutil does not read.
+  api_entry() {
+    local category="$1"; shift
+    local reason
+    printf '\t\t<dict>\n'
+    printf '\t\t\t<key>NSPrivacyAccessedAPIType</key>\n\t\t\t<string>%s</string>\n' "$category"
+    printf '\t\t\t<key>NSPrivacyAccessedAPITypeReasons</key>\n\t\t\t<array>\n'
+    for reason in "$@"; do printf '\t\t\t\t<string>%s</string>\n' "$reason"; done
+    printf '\t\t\t</array>\n\t\t</dict>'
+  }
+
+  # A whole manifest around a body of entries, at a path the CALLER names.
+  #
+  # The name is a parameter rather than a counter for a reason worth keeping:
+  # every call site reaches this through `$( )`, which runs it in a subshell, so
+  # a counter incremented here would not survive the call. Each fixture would
+  # have been written to the same path and silently overwritten by the next —
+  # and the assertions that reuse a fixture later would have been reading
+  # somebody else's manifest.
+  write_manifest() {
+    local path="$manifests/$1.xcprivacy" body="$2"
+    cat >"$path" <<MANIFEST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+$body
+	</array>
+</dict>
+</plist>
+MANIFEST
+    printf '%s' "$path"
+  }
+
+  # The four entries the iOS app really declares, and the one the extension does.
+  disk_space_entry="$(api_entry NSPrivacyAccessedAPICategoryDiskSpace E174.1)"
+  file_timestamp_entry="$(api_entry NSPrivacyAccessedAPICategoryFileTimestamp DDA9.1)"
+  boot_time_entry="$(api_entry NSPrivacyAccessedAPICategorySystemBootTime 35F9.1)"
+  user_defaults_entry="$(api_entry NSPrivacyAccessedAPICategoryUserDefaults CA92.1)"
+  real_app_body="$user_defaults_entry$file_timestamp_entry$boot_time_entry$disk_space_entry"
+
+  # ── the reader accepts what it must accept ─────────────────────────────────
+  #
+  # First, and most importantly: the manifests this repository actually ships
+  # must produce exactly the graphs the script pins. This is the one assertion
+  # that ties the two halves together — `IOSPrivacyManifestTests` derives the
+  # graphs from the source that justifies them, the script states them
+  # independently, and if those two statements ever disagree the operator's run
+  # would fail on a correct build.
+  expect_reader() {
+    local label="$1" file="$2" expected="$3" actual
+    if ! actual="$(required_reason_graph_of "$file")"; then
+      bad "$label" "the reader refused $file"
+      return
+    fi
+    if [ "$actual" = "$expected" ]; then
+      ok "$label"
+    else
+      bad "$label" "read '$actual', expected '$expected'"
+    fi
+  }
+
+  expect_reader "the shipped iOS app manifest reads back as the script's pinned app graph" \
+    "$repo_root/apps/ios/Relayium/PrivacyInfo.xcprivacy" "$APP_REQUIRED_REASON_GRAPH"
+  expect_reader "the shipped Share extension manifest reads back as the script's pinned share graph" \
+    "$repo_root/apps/ios/RelayiumShare/PrivacyInfo.xcprivacy" "$SHARE_REQUIRED_REASON_GRAPH"
+
+  # And a manifest built here from the same four entries, in a DIFFERENT order,
+  # reads back identically — which is what the canonical sort is for. Without
+  # it, a reordering Xcode or a future editor introduced would be reported as a
+  # changed graph.
+  expect_reader 'entry order in the plist does not change the graph' \
+    "$(write_manifest reordered \
+       "$disk_space_entry$boot_time_entry$user_defaults_entry$file_timestamp_entry")" \
+    "$APP_REQUIRED_REASON_GRAPH"
+
+  # ── and rejects every way it must reject ───────────────────────────────────
+
+  expect_reader_differs() {
+    local label="$1" name="$2" body="$3" file actual
+    file="$(write_manifest "$name" "$body")"
+    if ! actual="$(required_reason_graph_of "$file")"; then
+      # A refusal is also a rejection, and an acceptable one: the caller turns
+      # both into a finding. What must never happen is a match.
+      ok "$label"
+      return
+    fi
+    if [ "$actual" = "$APP_REQUIRED_REASON_GRAPH" ]; then
+      bad "$label" 'the mutated manifest read back as the pinned app graph'
+    else
+      ok "$label"
+    fi
+  }
+
+  # 1. A missing category. This is the shape the Disk Space correction was
+  #    about: the app calls `statfs`, and a manifest without E174.1 is an
+  #    upload rejection Apple raises rather than a defect anything local sees.
+  no_disk_space_body="$user_defaults_entry$file_timestamp_entry$boot_time_entry"
+  expect_reader_differs 'a manifest missing the Disk Space entry does not match' \
+    no-disk-space "$no_disk_space_body"
+  expect_reader_differs 'a manifest missing the file-timestamp entry does not match' \
+    no-file-timestamp "$user_defaults_entry$boot_time_entry$disk_space_entry"
+
+  # 2. A wrong reason code under a correct category — the category is right,
+  #    the claim under it is not, and every presence check ever written passes.
+  wrong_reason_body="$no_disk_space_body$(
+    api_entry NSPrivacyAccessedAPICategoryDiskSpace E174.2)"
+  expect_reader_differs 'a Disk Space entry with the wrong reason code does not match' \
+    wrong-reason "$wrong_reason_body"
+  expect_reader_differs 'a Disk Space entry with an extra reason code does not match' \
+    extra-reason "$no_disk_space_body$(
+      api_entry NSPrivacyAccessedAPICategoryDiskSpace E174.1 85F4.1)"
+
+  # 3. An unexpected category — over-declaring, which is a false public
+  #    statement in the direction people assume is safe.
+  over_declared_body="$real_app_body$(
+    api_entry NSPrivacyAccessedAPICategoryActiveKeyboards 3EC4.1)"
+  expect_reader_differs 'a manifest declaring an API the source does not use does not match' \
+    over-declared "$over_declared_body"
+
+  # 4. Duplicates, which are what a set-shaped reader collapses into a graph
+  #    that compares EQUAL to the correct one. Both spellings are covered: the
+  #    same category twice, and the same reason twice inside one entry.
+  duplicate_category_body="$real_app_body$disk_space_entry"
+  expect_reader_differs 'a manifest declaring Disk Space twice does not match' \
+    duplicate-category "$duplicate_category_body"
+  expect_reader_differs 'a manifest repeating a reason inside one entry does not match' \
+    duplicate-reason "$no_disk_space_body$(
+      api_entry NSPrivacyAccessedAPICategoryDiskSpace E174.1 E174.1)"
+  # The same category twice with DIFFERENT reasons — a first-wins reader keeps
+  # the correct one and never sees the second.
+  expect_reader_differs 'a manifest declaring one category twice with different reasons does not match' \
+    duplicate-category-disagreeing "$real_app_body$(
+      api_entry NSPrivacyAccessedAPICategoryDiskSpace E174.2)"
+
+  # 5. An empty list, which is what a manifest stripped of its declarations
+  #    looks like — and what a reader returning "" on failure would produce.
+  expect_reader_differs 'a manifest declaring nothing does not match' declares-nothing ''
+
+  # 6. The extension shipping the APP's manifest. Present, valid, lint-clean
+  #    and wrong: this is the failure a per-bundle presence check cannot see.
+  app_graph_in_share_slot="$(write_manifest app-graph-in-share-slot "$real_app_body")"
+  if [ "$(required_reason_graph_of "$app_graph_in_share_slot")" = "$SHARE_REQUIRED_REASON_GRAPH" ]; then
+    bad 'the app manifest does not read back as the extension graph' 'the two graphs compared equal'
+  else
+    ok 'the app manifest does not read back as the extension graph'
+  fi
+
+  # ── unreadable input is a refusal, never an empty graph ────────────────────
+  #
+  # This is the one that would be silent. A reader that answered "" for a
+  # malformed manifest would compare unequal to the pinned graph and produce the
+  # right verdict for the wrong reason — until the day somebody pinned an empty
+  # expectation, or read the message and looked for a wrong category that was
+  # never there.
+  expect_reader_refuses() {
+    local label="$1" file="$2" actual
+    if actual="$(required_reason_graph_of "$file")"; then
+      bad "$label" "the reader returned '$actual' instead of refusing"
+    else
+      ok "$label"
+    fi
+  }
+
+  no_api_key="$manifests/no-api-key.xcprivacy"
+  cat >"$no_api_key" <<'MANIFEST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+</dict>
+</plist>
+MANIFEST
+  expect_reader_refuses 'a manifest with no NSPrivacyAccessedAPITypes key is refused' "$no_api_key"
+
+  untyped_entry="$manifests/untyped-entry.xcprivacy"
+  cat >"$untyped_entry" <<'MANIFEST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>E174.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
+MANIFEST
+  expect_reader_refuses 'an entry naming no category is refused' "$untyped_entry"
+
+  reasonless_entry="$manifests/reasonless-entry.xcprivacy"
+  cat >"$reasonless_entry" <<'MANIFEST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+		</dict>
+	</array>
+</dict>
+</plist>
+MANIFEST
+  expect_reader_refuses 'an entry declaring no reasons array is refused' "$reasonless_entry"
+
+  not_a_plist="$manifests/not-a-plist.xcprivacy"
+  printf 'this is not a plist\n' >"$not_a_plist"
+  expect_reader_refuses 'a manifest that is not a plist at all is refused' "$not_a_plist"
+
+  expect_reader_refuses 'a manifest that is not there is refused' \
+    "$manifests/does-not-exist.xcprivacy"
+
+  # ── and the caller turns every one of those into a finding ─────────────────
+  #
+  # The reader's return value is not the gate; `expect_required_reason_graph` is.
+  # Each case below is run through it with the script's own reporting helpers
+  # replaced by counters, so the assertion is that a finding was RAISED rather
+  # than that a comparison came out unequal somewhere upstream.
+
+  expect_checker() {
+    local label="$1" file="$2" expected="$3" want_failures="$4" before
+    before="$lifted_failures"
+    expect_required_reason_graph "$file" "$expected" 'fixture' >/dev/null 2>&1
+    local raised=$((lifted_failures - before))
+    if [ "$want_failures" -eq 0 ] && [ "$raised" -eq 0 ]; then
+      ok "$label"
+    elif [ "$want_failures" -ne 0 ] && [ "$raised" -gt 0 ]; then
+      ok "$label"
+    else
+      bad "$label" "it raised $raised finding(s)"
+    fi
+  }
+
+  # The correct manifest raises nothing — a checker that failed everything would
+  # be as useless as one that failed nothing, and would pass every case below.
+  expect_checker 'the shipped app manifest raises no finding against the pinned app graph' \
+    "$repo_root/apps/ios/Relayium/PrivacyInfo.xcprivacy" "$APP_REQUIRED_REASON_GRAPH" 0
+  expect_checker 'the shipped Share manifest raises no finding against the pinned share graph' \
+    "$repo_root/apps/ios/RelayiumShare/PrivacyInfo.xcprivacy" "$SHARE_REQUIRED_REASON_GRAPH" 0
+
+  # Each reuses the fixture its reader case already wrote, by the name that case
+  # gave it — which is only safe because those names are distinct.
+  expect_checker 'a missing Disk Space declaration is a finding' \
+    "$manifests/no-disk-space.xcprivacy" "$APP_REQUIRED_REASON_GRAPH" 1
+  expect_checker 'a wrong Disk Space reason code is a finding' \
+    "$manifests/wrong-reason.xcprivacy" "$APP_REQUIRED_REASON_GRAPH" 1
+  expect_checker 'an over-declared category is a finding' \
+    "$manifests/over-declared.xcprivacy" "$APP_REQUIRED_REASON_GRAPH" 1
+  expect_checker 'a duplicated category is a finding' \
+    "$manifests/duplicate-category.xcprivacy" "$APP_REQUIRED_REASON_GRAPH" 1
+  expect_checker 'an extension shipping the app manifest is a finding' \
+    "$app_graph_in_share_slot" "$SHARE_REQUIRED_REASON_GRAPH" 1
+  expect_checker 'a manifest that is not a valid plist is a finding' \
+    "$not_a_plist" "$APP_REQUIRED_REASON_GRAPH" 1
+  expect_checker 'a manifest that is absent is a finding' \
+    "$manifests/does-not-exist.xcprivacy" "$APP_REQUIRED_REASON_GRAPH" 1
+  expect_checker 'a manifest with no required-reason key at all is a finding' \
+    "$no_api_key" "$APP_REQUIRED_REASON_GRAPH" 1
+
+  unset -f fail_check pass_check
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

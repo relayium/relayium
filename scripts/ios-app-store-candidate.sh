@@ -92,7 +92,12 @@
 #     absences: the extension carries no Sign in with Apple and no associated
 #     domains, which is a boundary this product argues for in
 #     `RelayiumShare.entitlements` and which only a built bundle can confirm;
-#   * a privacy manifest in both bundles;
+#   * a valid, non-tracking privacy manifest in both bundles of BOTH the archive
+#     and the exported payload, each declaring exactly its own pinned
+#     required-reason graph — the app's four categories, the extension's one.
+#     Exact in both directions, since a category the source does not justify is
+#     as false a public statement as a missing one, and the appex silently
+#     shipping the APP's manifest is present, valid and wrong;
 #   * both purpose strings in the app, the camera one localized in `en` and
 #     `zh-Hans` inside the app bundle where iOS actually reads it, and NO camera
 #     declaration and no `.lproj` at all in the extension;
@@ -145,6 +150,40 @@ readonly APP_GROUP='group.com.relayium.app'
 readonly ASSOCIATED_DOMAIN='applinks:relayium.com'
 readonly APPLE_SIGNIN_VALUE='Default'
 readonly WEBRTC_BINARY_RELATIVE='Frameworks/WebRTC.framework/WebRTC'
+
+# ── the required-reason API graph each bundle must declare ───────────────────
+#
+# Apple's required-reason rule covers iOS, and a manifest is the one file in
+# this product that is a PUBLIC STATEMENT rather than an implementation detail:
+# it becomes the App Store privacy label, and the app builds, signs and runs
+# identically whether it is accurate, wrong or absent. Nothing at runtime
+# notices. The first thing that does is an upload rejection or a false label.
+#
+# So the two graphs are pinned here as sorted `category<TAB>reason,reason`
+# lines, and the built bundles are compared against them for EQUALITY.
+# `IOSPrivacyManifestTests` derives the same two sets from the source that
+# justifies each entry; this is the independent statement of what a BUILT bundle
+# is allowed to say, checked where source cannot reach:
+#
+#   DiskSpace / E174.1       `InboxSpace.freeBytes` calls `statfs` on the
+#                            receive folder to refuse a Device Inbox delivery
+#                            before writing it. E174.1 covers checking that
+#                            there is room to write files, and nothing derived
+#                            from the reading leaves the device.
+#   FileTimestamp / DDA9.1   `SharedDraftStore.stale` reads `.modificationDate`
+#                            inside the App Group container.
+#   SystemBootTime / 35F9.1  `WebRTCLinkTransport`'s monotonic deadlines.
+#   UserDefaults / CA92.1    `VerificationPreference` and `SharedDraftInbox`.
+#
+# The Share extension links only `RelayiumShareKit`, so it gets exactly one of
+# them. Its manifest being SMALLER is the point: copying the app's four into the
+# appex would declare APIs that process cannot call, which is a false statement
+# in the direction people assume is safe.
+readonly APP_REQUIRED_REASON_GRAPH='NSPrivacyAccessedAPICategoryDiskSpace	E174.1
+NSPrivacyAccessedAPICategoryFileTimestamp	DDA9.1
+NSPrivacyAccessedAPICategorySystemBootTime	35F9.1
+NSPrivacyAccessedAPICategoryUserDefaults	CA92.1'
+readonly SHARE_REQUIRED_REASON_GRAPH='NSPrivacyAccessedAPICategoryFileTimestamp	DDA9.1'
 
 # The export contract. `destination = export` is what makes this a build rather
 # than a submission: the alternative value is `upload`, and it is the single
@@ -275,6 +314,103 @@ expect_plist_key_absent() {
     return
   fi
   pass_check "$label: $key is absent, as it must be"
+}
+
+# ── the required-reason graph of a BUILT manifest ────────────────────────────
+
+# The graph a manifest actually declares, as sorted `category<TAB>reason,reason`
+# lines: one line per ENTRY rather than per category, and reasons in file order
+# with no deduplication.
+#
+# Both of those are deliberate, and together they are what makes a plain string
+# comparison against the pinned graph fail closed on all four ways this file
+# goes wrong:
+#
+#   * a MISSING category loses a line;
+#   * an UNEXPECTED category gains one;
+#   * a WRONG reason code changes one;
+#   * a DUPLICATED category or reason — which a set-shaped reader would collapse
+#     into a graph comparing equal to the correct one — produces a repeated line
+#     or a repeated reason instead.
+#
+# Every value is read through `plutil`, so a manifest that is not a plist, not a
+# dictionary, or missing the key entirely fails the extraction rather than
+# yielding an empty graph. This function returns NON-ZERO in every one of those
+# cases and prints nothing partial: an unreadable manifest must reach the caller
+# as a finding, never as a graph that happens to compare unequal for the wrong
+# reason.
+#
+# `plutil -extract <array> raw` prints the element COUNT, which is what the two
+# loops below are bounded by. Each count is re-pinned to a canonical nonnegative
+# decimal before it reaches arithmetic, so a value that is not a count cannot be
+# read as one.
+required_reason_graph_of() {
+  local file="$1"
+  local entry_count entry_index reason_count reason_index
+  local category reason reasons lines=''
+
+  entry_count="$(plist_value "$file" "$(plutil_path NSPrivacyAccessedAPITypes)")" || return 1
+  [[ "$entry_count" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
+
+  for (( entry_index = 0; entry_index < entry_count; entry_index++ )); do
+    category="$(plist_value "$file" \
+      "$(plutil_path NSPrivacyAccessedAPITypes "$entry_index" NSPrivacyAccessedAPIType)")" ||
+      return 1
+    [ -n "$category" ] || return 1
+
+    reason_count="$(plist_value "$file" \
+      "$(plutil_path NSPrivacyAccessedAPITypes "$entry_index" NSPrivacyAccessedAPITypeReasons)")" ||
+      return 1
+    [[ "$reason_count" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
+
+    reasons=''
+    for (( reason_index = 0; reason_index < reason_count; reason_index++ )); do
+      reason="$(plist_value "$file" \
+        "$(plutil_path NSPrivacyAccessedAPITypes "$entry_index" \
+                       NSPrivacyAccessedAPITypeReasons "$reason_index")")" || return 1
+      [ -n "$reason" ] || return 1
+      if [ -z "$reasons" ]; then reasons="$reason"; else reasons="$reasons,$reason"; fi
+    done
+
+    lines="$lines$category	$reasons
+"
+  done
+
+  printf '%s' "$lines" | LC_ALL=C sort
+}
+
+# One built bundle's manifest, against the graph it is pinned to. Present, a
+# valid plist, non-tracking, and declaring EXACTLY that graph.
+#
+# Exact rather than "contains", because over-declaring and under-declaring are
+# both false public statements and only one of them is the one people worry
+# about: a category the source does not justify passes every "is it there" check
+# ever written, and reads as caution rather than as the claim it is.
+expect_required_reason_graph() {
+  local file="$1" expected="$2" label="$3" actual
+
+  if [ ! -f "$file" ]; then
+    fail_check "$label: no privacy manifest at $file"
+    return
+  fi
+  if ! plutil -lint "$file" >/dev/null 2>&1; then
+    fail_check "$label: the shipped privacy manifest at $file is not a valid plist"
+    return
+  fi
+  pass_check "$label: privacy manifest present and a valid plist"
+
+  expect_plist_value "$file" "$(plutil_path NSPrivacyTracking)" false "$label"
+
+  if ! actual="$(required_reason_graph_of "$file")"; then
+    fail_check "$label: $file declares no readable NSPrivacyAccessedAPITypes graph"
+    return
+  fi
+  if [ "$actual" != "$expected" ]; then
+    fail_check "$label: the required-reason graph in $file is not the pinned one"
+    printf '  expected:\n%s\n  actual:\n%s\n' "$expected" "$actual" >&2
+    return
+  fi
+  pass_check "$label: required-reason graph is exactly the pinned one"
 }
 
 # `is_within ANCESTOR CANDIDATE` — true when CANDIDATE is ANCESTOR itself or
@@ -892,17 +1028,34 @@ else
   fail_check "could not read the Share extension's entitlements out of $appex_dir"
 fi
 
-# Privacy manifests.
-for manifest_pair in "$app_dir/PrivacyInfo.xcprivacy:app" "$appex_dir/PrivacyInfo.xcprivacy:share"; do
-  manifest_file="${manifest_pair%:*}"
-  manifest_label="${manifest_pair##*:}"
-  if [ ! -f "$manifest_file" ]; then
-    fail_check "$manifest_label: no privacy manifest at $manifest_file"
-    continue
-  fi
-  pass_check "$manifest_label: privacy manifest present"
-  expect_plist_value "$manifest_file" "$(plutil_path NSPrivacyTracking)" false "$manifest_label privacy manifest"
-done
+# Privacy manifests — present, valid, non-tracking, and declaring EXACTLY the
+# required-reason graph the source justifies.
+#
+# Read in FOUR places, because they are four different files and each stage
+# between them can move what the previous one established:
+#
+#   * the archive is what Xcode produced;
+#   * the export re-signs and repackages it, so a resource that survived the
+#     archive is not evidence it survived the export;
+#   * and within each of those, the app's manifest and the extension's are
+#     deliberately different sizes. The appex is a separate bundle Apple reads a
+#     separate file for, and the classic failure is not a missing manifest but
+#     the APP's manifest ending up in the extension — valid, present, lint-clean,
+#     and declaring three APIs that process cannot call.
+#
+# Comparing each against its own pinned graph is what tells those two files
+# apart. A presence check cannot.
+archive_app_dir="$archive_path/Products/Applications/$APP_BUNDLE_NAME"
+archive_appex_dir="$archive_app_dir/PlugIns/$SHARE_BUNDLE_NAME"
+
+expect_required_reason_graph "$archive_app_dir/PrivacyInfo.xcprivacy" \
+  "$APP_REQUIRED_REASON_GRAPH" 'archive app privacy manifest'
+expect_required_reason_graph "$archive_appex_dir/PrivacyInfo.xcprivacy" \
+  "$SHARE_REQUIRED_REASON_GRAPH" 'archive share privacy manifest'
+expect_required_reason_graph "$app_dir/PrivacyInfo.xcprivacy" \
+  "$APP_REQUIRED_REASON_GRAPH" 'app privacy manifest'
+expect_required_reason_graph "$appex_dir/PrivacyInfo.xcprivacy" \
+  "$SHARE_REQUIRED_REASON_GRAPH" 'share privacy manifest'
 
 # Protected-resource declarations. The app declares both purpose strings and
 # localizes the camera one where iOS reads it — the app's OWN bundle, before any
@@ -993,7 +1146,7 @@ fi
 step 'evidence'
 
 ipa_sha256="$(shasum -a 256 "$ipa_path" | awk '{ print $1 }')"
-archive_app_binary="$archive_path/Products/Applications/$APP_BUNDLE_NAME/$SCHEME"
+archive_app_binary="$archive_app_dir/$SCHEME"
 archive_binary_sha256='unavailable'
 if [ -f "$archive_app_binary" ]; then
   archive_binary_sha256="$(shasum -a 256 "$archive_app_binary" | awk '{ print $1 }')"

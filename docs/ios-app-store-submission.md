@@ -229,7 +229,18 @@ against source, because signing, thinning and packaging sit between the two:
   App Group `group.com.relayium.app` — and the extension's one, **including the
   absences**: the extension carries no Sign in with Apple, no associated
   domains and no keychain access group;
-- a privacy manifest in both bundles;
+- a valid, non-tracking privacy manifest in both bundles of **both** the archive
+  and the exported payload — four files, because the export re-signs and
+  repackages what the archive produced — each declaring **exactly** its own
+  required-reason graph and nothing else. The app's four are
+  `NSPrivacyAccessedAPICategoryUserDefaults` `CA92.1`,
+  `NSPrivacyAccessedAPICategoryFileTimestamp` `DDA9.1`,
+  `NSPrivacyAccessedAPICategorySystemBootTime` `35F9.1` and
+  `NSPrivacyAccessedAPICategoryDiskSpace` `E174.1`; the Share extension declares
+  the file-timestamp one alone, because it links only `RelayiumShareKit`. Exact
+  in both directions: a category the source does not justify is as false a
+  public statement as a missing one, and the extension silently shipping the
+  **app's** manifest is present, valid and wrong;
 - `NSCameraUsageDescription` and `NSLocalNetworkUsageDescription` in the built
   app `Info.plist`, the camera string localized in the app bundle's own
   `en.lproj` and `zh-Hans.lproj`, and **no** camera declaration and **no**
@@ -252,9 +263,17 @@ exact `xcodebuild archive` and `xcodebuild -exportArchive` invocations,
 including that neither carries `-allowProvisioningUpdates`. It reaches the
 export by letting the stub create the empty `.xcarchive` the script asked for,
 then fails the export; it never fabricates a signed export and therefore
-deliberately stops before the post-export checks. Everything past the export —
-the signatures, the entitlements, the purpose strings, the symbol readbacks —
-is exercised only by the operator run, and recorded here.
+deliberately stops before the post-export checks.
+
+One post-export check is the exception, and deliberately so: the privacy-manifest
+comparison needs no signature, so the suite lifts the script's own graph reader
+and its checker out of the file and drives them against manifests it builds —
+proving that a missing category, a wrong or extra reason code, an over-declared
+category, a duplicated category or reason, an extension carrying the app's
+manifest, an unreadable manifest and an absent one each raise a finding, and that
+the manifests this repository ships raise none. Everything else past the export —
+the signatures, the entitlements, the purpose strings, the symbol readbacks — is
+exercised only by the operator run, and recorded here.
 
 ## Device Inbox: what this app now does, and what it deliberately does not
 
@@ -275,11 +294,29 @@ inferred from the feature's name:
   it unconditionally (`inbox.iosForegroundOnly`).
 - **No new capability was added to ship it.** The app declares no
   `UIBackgroundModes`, uses no background `URLSession`, registers for no remote
-  notifications and links no notification framework. The entitlements and the
-  privacy manifest are unchanged by this feature. One purpose string has since
-  been added to the app — `NSLocalNetworkUsageDescription` — but it belongs to
-  the peer-to-peer transfer lanes rather than to Device Inbox; see *Local
-  Network access* below.
+  notifications, requests no notification authorization, and schedules and
+  delivers no notification. State it that way rather than as a claim about
+  binary linkage: `RelayiumAppKit` carries `canImport(UserNotifications)`
+  source, so whether the framework is linked into the iOS binary is not settled
+  until an `otool -L` readback of a built product says so. The entitlements are
+  unchanged by this feature. One purpose string has since been added to the
+  app — `NSLocalNetworkUsageDescription` — but it belongs to the peer-to-peer
+  transfer lanes rather than to Device Inbox; see *Local Network access* below.
+
+  The **privacy manifest** did change, and the earlier claim here that it had
+  not was wrong. Device Inbox refuses a delivery that will not fit before
+  writing anything, and `InboxSpace.freeBytes` performs that preflight with
+  `statfs` (`InboxFailure.swift`). Apple's required-reason list places `statfs`
+  under `NSPrivacyAccessedAPICategoryDiskSpace`, so the app's manifest declares
+  reason `E174.1` — checking that there is sufficient disk space to write files.
+  E174.1 permits that use provided nothing derived from the reading is sent off
+  device, and nothing is: the byte count is compared against the delivery's size
+  and the comparison's Bool is all the rest of the app sees. This is a
+  required-reason API declaration, not a data-collection one, so it changes no
+  App Privacy answer. The Share extension does **not** declare it — `InboxSpace`
+  lives in `RelayiumAppKit`, which that target does not link — and neither macOS
+  manifest declares it either, because Apple's required-reason rule names
+  iOS/iPadOS/tvOS/visionOS/watchOS and not macOS.
 - **Received files land in `Documents/Received`** — the same directory a stored
   link's download writes into, published to the Files app by the existing
   `UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace` keys. There is
