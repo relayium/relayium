@@ -79,6 +79,183 @@ If the read-back contradicts the baseline above, correct the project source and
 this document before building — do not upload against these numbers and do not
 record a remote fact this file has not observed.
 
+## Building the candidate: `scripts/ios-app-store-candidate.sh`
+
+The archive, the App Store export, the checksum and the built-candidate
+readbacks this document requires are one command.
+`scripts/ios-app-store-candidate.sh` performs them in order, refuses before
+`xcodebuild archive` when any precondition is unmet, and writes every artifact
+and log under one directory it creates.
+
+**It does not upload, and it reserves no build number.** It runs no `altool`,
+no `notarytool`, no Transporter and no App Store Connect API call; its export
+is `destination = export`, not `upload`. It solicits, stores and transmits no
+App Store Connect credential — no API key, no issuer ID, no app-specific
+password, no session — and takes no option that would carry one.
+
+It does read the keychain, and saying otherwise would be false: `xcodebuild`
+and `codesign` sign the archive and the export with the Apple Distribution
+identity and private key already installed in the operator's login keychain,
+and macOS may prompt for access to it. That is a local read of an
+identity the operator already holds, performed by Apple's own tools on this
+machine. It is not a provider credential this script holds, and signing locally
+mutates nothing in the developer account: `-allowProvisioningUpdates` is absent,
+so no profile or device registration is created or modified either.
+
+The boundary, precisely: nothing about running this script makes a build number
+unavailable, causes anything to appear in App Store Connect, or reaches a
+tester. Uploading the artifact it produces is a separate step under a separate
+authorization, and this document authorizes neither.
+
+It also never deletes: the artifact root must not already exist, so no path an
+operator names is written into, emptied or removed by any outcome — including a
+failure, which preserves everything it had produced up to that point.
+
+### The App Store Connect read-back is an attested input, not a checkbox
+
+The script cannot see App Store Connect and does not pretend to. The operator
+performs the read-only inspection described above and then **attests** to it in
+three values the script cross-checks against each other and against the project:
+
+| Option | What it must be |
+| --- | --- |
+| `--marketing-version` | the marketing version observed for the candidate |
+| `--readback-highest-build` | the highest build number the record shows **consumed**, in any state — including `Invalid`, `Processing` and expired TestFlight builds |
+| `--build` | the next free build, which must equal `--readback-highest-build` + 1 |
+| `--readback-observed-at` | the UTC instant of that inspection, `YYYY-MM-DDTHH:MM:SSZ` |
+
+**These are an operator attestation plus a consistency check — not proof that
+the read-back happened.** Nothing local observes App Store Connect, so somebody
+who guesses a highest build and adds one satisfies the cross-check exactly as
+well as somebody who read the record. Do not read a passing run as evidence that
+the record was inspected.
+
+What the shape does buy is worth having, and it is a different thing: the claim
+has to be stated as a specific number rather than ticked, it is recorded in the
+manifest as the operator's claim, and an off-by-one, a transposition or a number
+carried over from the last candidate is caught here instead of at upload. Both
+numbers must be canonical decimal — `--build` as `[1-9][0-9]*` and
+`--readback-highest-build` as `0` or `[1-9][0-9]*` — so a leading zero is
+refused with exit `2` rather than being read as octal. The cross-check itself
+compares decimal strings and computes `highest + 1` one digit at a time, never
+with shell arithmetic: `$(( ))` is fixed-width and wraps silently, so a
+canonical but very long build number would otherwise compare equal to its
+remainder modulo 2^64. There is no length limit to keep in step with Apple's.
+The timestamp must be in the past and no more than 12 hours old, so a read-back
+from a previous working day cannot authorize today's build number.
+Only the operator's own discipline puts a real observation behind any of it.
+
+Both numbers must additionally equal what `apps/ios/Relayium.xcodeproj` already
+declares for **both** the app and the Share extension. The script never edits
+the project and sets `manageAppVersionAndBuildNumber` to `false`, so the export
+cannot renumber the build either. If the read-back says the project's build is
+already consumed, bump the project in its own reviewed change first — that is a
+source edit with a diff, not something a build script does on the way past.
+
+### Usage
+
+```sh
+scripts/ios-app-store-candidate.sh \
+  --marketing-version 0.3.0 \
+  --build 5 \
+  --readback-highest-build 4 \
+  --readback-observed-at 2026-09-02T11:30:00Z \
+  --artifact-root ~/relayium-candidates/ios-0.3.0-5-<short8-sha>
+```
+
+The values above match the baseline this document records — project `0.3.0 (5)`,
+with build `4` the highest this record is known to have accepted. **They are an
+example of the shape, not a licence to skip the read-back**: supply what the
+record actually shows on the day.
+
+The artifact root must be absolute, must not already exist, must sit outside
+this repository and at least two levels deep, must not be a system or home
+directory, and its name must end with `-<short8 sha>` of the commit being
+built. Keeping candidates under the private workspace
+`test-builds/ios/<version>-<short-sha>/` satisfies all of that.
+
+Beyond the read-back, the script refuses to archive unless:
+
+- the selected Xcode is exactly major 26 and the iphoneos SDK is 26 or newer —
+  Apple's current upload floor, checked separately because what Apple validates
+  is the SDK the binary was linked against;
+- the worktree is clean, `HEAD` is a commit, the branch has an upstream, and
+  `HEAD` equals it — a candidate names a commit somebody else can fetch;
+- both targets declare team `7PVYUG4YQS`, bundle IDs `com.relayium.app` and
+  `com.relayium.app.share`, `CODE_SIGN_STYLE = Manual` for Release, and the
+  exact profiles `Relayium iOS App Store` and
+  `Relayium Share Extension App Store`.
+
+`-allowProvisioningUpdates` is deliberately absent and must stay absent: it
+authorizes Xcode to create or modify provisioning profiles in the developer
+account, which is a provider mutation. A missing or expired profile is meant to
+be a failed archive an operator investigates.
+
+Exit status distinguishes the three outcomes: `2` a refused precondition
+(nothing was built), `3` a failed archive or export (logs preserved), `4` a
+candidate that built but failed verification (everything preserved).
+
+### What it leaves behind
+
+Under the artifact root:
+
+| Path | What it is |
+| --- | --- |
+| `ExportOptions.plist` | generated for this run — `destination = export`, `method = app-store-connect`, team `7PVYUG4YQS`, manual signing, both bundle-to-profile mappings, `manageAppVersionAndBuildNumber = false` |
+| `Relayium.xcarchive` | the signed archive |
+| `export/Relayium.ipa` | the exported App Store IPA |
+| `verify/` | the unpacked payload, both bundles' entitlements, and the `AVCapture` symbol lists |
+| `logs/` | the complete archive and export logs, the `codesign` output, and `-showBuildSettings` for both targets |
+| `candidate-manifest.txt` | the human-readable manifest |
+| `candidate-manifest.plist`, `candidate-manifest.json` | the same facts machine-readably |
+
+The manifest records the full commit, branch and upstream, the marketing
+version and build, the attested read-back values and their age at build time
+(labelled there as the operator's claim rather than an observation), the Xcode
+version and build and the iphoneos SDK, the pinned release graph, and SHA-256
+for the IPA, the archived app binary and the generated export options. It
+contains no credential and no secret.
+
+### What the verification proves
+
+Every check runs against the **archive** and the **exported IPA payload**, not
+against source, because signing, thinning and packaging sit between the two:
+
+- app and Share bundle identifiers, marketing version and build;
+- exactly one `.appex` anywhere in the payload, and it is the Share extension;
+- a distribution signature and team `7PVYUG4YQS` on both bundles, with
+  `get-task-allow` absent;
+- the app's three entitlements — Sign in with Apple, `applinks:relayium.com`,
+  App Group `group.com.relayium.app` — and the extension's one, **including the
+  absences**: the extension carries no Sign in with Apple, no associated
+  domains and no keychain access group;
+- a privacy manifest in both bundles;
+- `NSCameraUsageDescription` and `NSLocalNetworkUsageDescription` in the built
+  app `Info.plist`, the camera string localized in the app bundle's own
+  `en.lproj` and `zh-Hans.lproj`, and **no** camera declaration and **no**
+  `.lproj` at all in the extension;
+- `AVCapture` undefined symbols in the app's own binary and in the embedded
+  `WebRTC.framework` — the readback *Validation outstanding* below owes against
+  a signed candidate rather than an unsigned local build.
+
+### What it is not
+
+It is not a launch, not a submission and not proof of the physical gates. It
+signs and packages; it does not accept a system privacy alert, exercise a
+two-device transfer, or observe App Store Connect.
+
+Its verification half also requires a real signed artifact, which bounds what
+`scripts/test/ios-app-store-candidate-test.sh` can cover. That suite
+mutation-tests every policy rule and executes the refusal ladder, the generated
+export options and — against stubs that compile, link and sign nothing — the
+exact `xcodebuild archive` and `xcodebuild -exportArchive` invocations,
+including that neither carries `-allowProvisioningUpdates`. It reaches the
+export by letting the stub create the empty `.xcarchive` the script asked for,
+then fails the export; it never fabricates a signed export and therefore
+deliberately stops before the post-export checks. Everything past the export —
+the signatures, the entitlements, the purpose strings, the symbol readbacks —
+is exercised only by the operator run, and recorded here.
+
 ## Device Inbox: what this app now does, and what it deliberately does not
 
 `0.3.0` adds the receive half of Device Inbox. The app enrols this device with
@@ -504,6 +681,13 @@ upload time.
    step is exactly the kind of thing that can move a symbol table, so do not
    carry this result forward as if it were the candidate's.
 
+   `scripts/ios-app-store-candidate.sh` re-runs both readbacks itself, against
+   the exported IPA payload, and writes the symbol lists to
+   `verify/avcapture-app.txt` and `verify/avcapture-webrtc.txt` with the counts
+   in the manifest. Copy that run's output into this item when the candidate is
+   built; until then this remains outstanding, because no candidate has been
+   built.
+
 2. **Physical prompt-and-scan evidence.** No automated test may accept a system
    privacy alert, and none does. On a physical device, on the exact candidate,
    observe and record:
@@ -752,8 +936,10 @@ Handoff, only once the owner holds an approved declaration:
 
 There is no candidate yet. `0.3.0 (5)` is a development baseline, and promoting
 it to a candidate requires the App Store Connect read-back above plus a new
-exact-source archive and checksum. Upload only the exact candidate whose hosted
-Go, Swift, iOS Release build and UI gates are green. Every hosted iOS job
+exact-source archive and checksum — which is what
+`scripts/ios-app-store-candidate.sh` produces, and which running that script
+does **not** by itself authorize uploading. Upload only the exact candidate
+whose hosted Go, Swift, iOS Release build and UI gates are green. Every hosted iOS job
 selects exactly Xcode major 26 with an iphoneos SDK of at least 26 before it
 compiles anything, fails closed when no such toolchain is installed, and prints
 the selected versions into its own log. That keeps the runner image's default
