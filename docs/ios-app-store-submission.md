@@ -144,6 +144,273 @@ Before uploading a TestFlight build:
 The server must be ready before TestFlight: otherwise every signed-in Account
 screen receives `unknown_bundle`, and a charged transaction cannot be accepted.
 
+## Protected-resource declaration: an open upload blocker
+
+**Status: open, unresolved in `0.3.0 (5)`.** Nothing below is a fix, and no fix
+may be improvised at upload time.
+
+Apple's protected-resource guidance is explicit that App Review rejects an app
+whose *code* references a protected API without the matching purpose string,
+and that an API reached through a third-party SDK counts as the app's own:
+<https://developer.apple.com/documentation/uikit/requesting-access-to-protected-resources>
+
+What this project actually contains, verified locally on 2026-09-02:
+
+- `apps/ios/Relayium/Info.plist` and `apps/ios/RelayiumShare/Info.plist` declare
+  **no** `NSCameraUsageDescription`.
+- No product Swift source implements a camera feature. The app uses WebRTC
+  **data channels only** — no capture, no call, no QR scanner.
+- The built app nevertheless embeds
+  `Relayium.app/Frameworks/WebRTC.framework/WebRTC`, whose undefined-symbol
+  table references the camera-capture classes `AVCaptureSession`,
+  `AVCaptureDeviceInput`, `AVCaptureVideoDataOutput`,
+  `AVCaptureDeviceDiscoverySession`, `AVCaptureVideoPreviewLayer` and
+  `AVCaptureDeviceRotationCoordinator`, plus capture constants such as
+  `AVCaptureDeviceTypeBuiltInWideAngleCamera`. The app's own binary references
+  none of them. Verified on the latest retained physical run,
+  `.relayium-device-inbox/671dc604/dd/Build/Products/Debug-iphoneos/Relayium.app`:
+
+  ```sh
+  nm -u "<Relayium.app>/Frameworks/WebRTC.framework/WebRTC" \
+    | grep -E 'AVCapture'
+  ```
+
+  That artifact is a **Debug** device build, and no Release artifact has been
+  retained to compare against, so this record does **not** claim the Release
+  binary is byte-identical. Re-run the command above against the signed
+  release candidate before upload and record the result; treat the blocker as
+  present until that recheck says otherwise.
+
+- This is not a hypothetical. **`0.1.0` build 3 was rejected by exactly this
+  check for a missing `NSCameraUsageDescription`**, and build 4 replaced it. The
+  same static condition is present again in the current source.
+
+**Scope: this blocker is about the camera only.** The same framework also
+references `AVAudioSession` symbols, but audio-session linkage alone does not
+establish that `NSMicrophoneUsageDescription` is required — an app may
+configure a session category without ever requesting record permission. That
+observation is **not conclusive** and is deliberately excluded from the claim
+above. If a microphone purpose string is ever asserted to be owed, establish it
+from Apple's own validation or review output, not from symbol linkage.
+
+**Do not add a purpose string the product cannot justify.** A string describing
+a camera feature Relayium does not have is a false statement to Apple and to
+the user, and it would contradict both the App Privacy answers and the shipped
+binary. Only two resolutions are honest, and each requires its own approved
+product/dependency batch outside this document's authority:
+
+1. **Make the reference real.** Re-author an actual camera feature the product
+   wants — a pairing-code/QR scanner is the plausible one — and ship a truthful
+   `NSCameraUsageDescription`, localized in English and Simplified Chinese,
+   describing that specific use.
+2. **Remove the reference.** Ship a WebRTC binary that contains no
+   media-capture APIs — a data-channel-only build or an equivalently scoped
+   dependency — so no purpose string is owed.
+
+**First-upload readback trigger.** The first candidate upload is the first
+place this record can observe Apple's own verdict. Read that upload's
+validation output and any App Review message *for this issue specifically*,
+before triaging anything else, and record the exact wording here. A silent pass
+is also a result worth recording — but it does not retire the requirement,
+because this record has already failed the check once.
+
+## App Store metadata and App Review information
+
+This section is the maintained **draft source** for the external fields. It
+reports no current App Store Connect state: this document has observed none of
+these fields, and the read-back rule above applies to them exactly as it does
+to build numbers. Reconcile every value against a live read-only inspection at
+submission time.
+
+Apple's authoritative list of required and editable properties:
+<https://developer.apple.com/help/app-store-connect/reference/app-information/required-localizable-and-editable-properties>
+
+### Localization scope
+
+Maintain exactly **English (primary) and Simplified Chinese**. That is the
+shipped `CFBundleLocalizations` set and the workspace's supported-language
+policy. Adding a storefront locale the app does not speak advertises support
+that does not exist.
+
+### Fields to draft before submission
+
+| Field | What the draft must be based on |
+| --- | --- |
+| App name, subtitle | The shipped product, not an aspiration. The record's name is `relayium`. |
+| Promotional text, description, keywords | Only behavior `0.3.0` actually ships. The *Device Inbox* section above is the authority on its limits. |
+| Support URL (required), Marketing URL | Public `https://relayium.com` pages only, and the URL must resolve at submission. The site builds `/support/` (English) and `/zh/support/`; confirm the exact address in the deployed site rather than from this list. |
+| Privacy Policy URL | `https://relayium.com/privacy/` — the exact URL Account opens (`AppEnvironment.privacyWebURL`). Terms are `https://relayium.com/terms/`. |
+| Primary category | The bundle declares `public.app-category.utilities`; keep the storefront category consistent with it. |
+| Copyright, version, What's New | The version is **this record's** `0.3.0`; a macOS version never sets it. |
+
+**Honesty constraints on the copy.** Do not describe background receiving, push
+notifications or automatic sync — the receiver is foreground-only and the app
+registers for no notifications. Do not describe Relayium as a backup service.
+Do not put prices in the description; the storefront renders the real StoreKit
+prices, and a hard-coded one goes stale or wrong per storefront.
+
+### Age rating
+
+Required before submission; answer the questionnaire truthfully rather than
+defaulting every question to "none":
+<https://developer.apple.com/help/app-store-connect/manage-app-information/set-an-app-age-rating/>
+
+Relayium transports arbitrary user-supplied content between a user's own
+devices and through user-shared links. Whether that constitutes user-generated
+content for Apple's purposes is a real answer the owner must give, together
+with the moderation reality — Relayium's server sees ciphertext and cannot
+inspect content — not a convenient one.
+
+### App Privacy
+
+A privacy policy URL and complete data-practice answers are required:
+<https://developer.apple.com/help/app-store-connect/manage-app-information/manage-app-privacy/>
+
+The answers must match the binary. The built app's merged privacy manifest
+declares **linked Email Address, User ID and Purchase History, all for App
+Functionality, with tracking false and no tracking domains**. Message and file
+bodies are end-to-end encrypted and decrypted only on the device; the server
+sees ciphertext. If an App Privacy answer and the manifest ever disagree, one
+of them is wrong — fix the disagreement, do not pick the easier form.
+
+### App Review information
+
+Field reference:
+<https://developer.apple.com/documentation/appstoreconnectapi/app-store-review-details>
+
+These are owner-only values. **Never write them into this file, the repository,
+a screenshot, a log or a commit message.** The placeholders stay; the owner
+enters the real values directly in App Store Connect.
+
+| Field | Value |
+| --- | --- |
+| Contact first name, last name, phone, email | `<owner-provided at submission>` |
+| Sign-in required | **Yes.** Account, subscriptions and Device Inbox are all account-gated. |
+| Demo account username, password | `<owner-provided review-only account>` — created for review, not a personal account |
+| Notes | The reviewer-facing text drafted below |
+
+The notes must state, in plain language:
+
+- **A demo account is required**, and which surfaces it unlocks.
+- **Device Inbox needs two devices signed in to the same account.** With one
+  device a reviewer can enrol it and see the empty state, but cannot observe a
+  delivery. Say this explicitly, or the surface reads as broken. Offer a
+  review-only attachment showing the two-device flow (see *Screenshots*).
+- **Receiving is foreground-only.** Relayium must be open on the receiving
+  device; nothing arrives while it is backgrounded, and **no notification is
+  delivered at any point**. This is shipped behavior, not a defect.
+- **Receiving is off by default** and is an explicit per-account opt-in inside
+  the app.
+- Where received files land: *Files ▸ On My iPhone ▸ Relayium ▸ Received*.
+- Subscriptions are sold through StoreKit and validated by Relayium's server; a
+  Sandbox account is not charged.
+
+### TestFlight test information
+
+Distributing to external testers requires a beta app description and a beta
+feedback email before the build can go out:
+<https://developer.apple.com/help/app-store-connect/test-a-beta-version/provide-test-information>
+
+- **Beta app description:** what this build is, plus the same foreground-only,
+  no-notification and account-gated statements as above. A tester who does not
+  know the receiver is foreground-only will file it as a bug.
+- **What to Test:** the exact surfaces this build changes. For a `0.3.0`
+  candidate that is Device Inbox across two devices, the five-destination shell
+  on iPhone and on compact- and full-width iPad, and the subscription screens.
+  "Test the app" is not an acceptable handoff — the same rule the workspace
+  applies to owner candidates.
+- **Beta feedback email:** `<owner-provided>`; not recorded here.
+
+## Screenshots
+
+Specifications and upload rules:
+
+- <https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/>
+- <https://developer.apple.com/help/app-store-connect/manage-app-information/upload-app-previews-and-screenshots>
+
+This record targets iPhone **and** iPad, so both sets are required.
+
+| Set | Accepted portrait sizes, pixels |
+| --- | --- |
+| iPhone 6.9" — the highest-resolution iPhone size | `1320 × 2868`, `1290 × 2796`, or `1260 × 2736` |
+| iPad 13" | `2064 × 2752` or `2048 × 2732` |
+
+Hard rules:
+
+- **One to ten** screenshots per set, per localization.
+- **No alpha channel.** Flatten before upload; an alpha channel is rejected.
+- The pixel size must be exactly one of the accepted values above.
+
+Capture discipline:
+
+- **Capture only from a signed release-candidate build** — the same exact build
+  that will be uploaded. The UI-test fixtures in
+  `apps/ios/Relayium/UITestSubscriptions.swift` are compiled `#if DEBUG` and
+  invent display prices such as `US$4.99`, so a Debug capture can put a price
+  Apple never sold into a public storefront asset. **Never screenshot a
+  `--relayium-ui-testing` launch**, and never retouch a real screen into one.
+- **Real StoreKit products at real prices**, loaded from the authenticated
+  Relayium catalog. That means the subscription products in the *Subscription
+  activation boundary* section must exist first; a subscription screen showing
+  an empty or fixture offer list is not shippable metadata.
+- **Stage neutral content rather than redacting afterwards.** Nothing sensitive
+  or ephemeral may reach a public asset: the account email address, device
+  names, pairing codes, share links or their `#k=` fragments, IP addresses,
+  server hostnames, real file names, or any notification content.
+
+Suggested shot list — each must show what the app really does, in both sets and
+both localizations:
+
+1. **Device Inbox** — a per-device conversation with both directions visible.
+2. **Device Inbox, foreground-only** — the surface stating that limit, so the
+   storefront tells the truth before install rather than after.
+3. **Send** — choosing content for one of the account's own devices.
+4. **LAN Transfer** — a local transfer in progress.
+5. **Cross-network Transfer** — the encrypted cross-network path.
+6. **Account** — sign-in state and the real subscription offers.
+
+Keep the two asset channels separate:
+
+- **Storefront screenshots** are public marketing assets, per localization, and
+  everything above applies to them.
+- **App Review attachments** are private to the review, optional, and never
+  appear on the storefront. They are the right place to demonstrate a
+  two-device Device Inbox delivery a single-device reviewer cannot reproduce.
+  They do not satisfy the storefront requirement.
+
+## France availability and the ANSSI encryption declaration
+
+France availability is owner-confirmed, and Relayium implements
+industry-standard encryption outside Apple's operating system, so the French
+declaration workflow applies and must be completed truthfully rather than
+answered away.
+
+The part of it that reaches this repository is the outcome. If the approved
+declaration comes with an Apple compliance code, that code belongs in
+`apps/ios/Relayium/Info.plist` — and in `apps/ios/RelayiumShare/Info.plist` if
+it applies to the extension — alongside `ITSAppUsesNonExemptEncryption`, as
+`ITSEncryptionExportComplianceCode`.
+
+Those plists are guarded on purpose.
+`IOSDistributionSigningTests.testNeitherBundleDeclaresExportCompliance`
+(`apps/RelayiumKit/Tests/RelayiumKitTests/IOSDistributionSigningTests.swift`)
+asserts that **neither** bundle declares `ITSAppUsesNonExemptEncryption`, so
+that a legal statement is made once per upload by a human in App Store Connect
+instead of silently by a build setting. Adding the key will fail that test —
+by design, not by accident.
+
+Handoff, only once the owner holds an approved declaration:
+
+1. It is a **separately leased batch**. Plist, entitlement and Xcode project
+   paths are not writable under the current Device Inbox lease.
+2. That batch changes both sides in one delivery: the plist keys **and** the
+   guard. Its replacement must assert the exact approved values, not merely
+   drop the assertion.
+3. Record the approval reference and the resulting keys here.
+4. Do not answer the export-compliance question "No" to clear the form, and do
+   not assume the macOS record's declaration transfers to this separate iOS
+   record — confirm that in App Store Connect first.
+
 ## TestFlight acceptance
 
 There is no candidate yet. `0.3.0 (5)` is a development baseline, and promoting
@@ -192,6 +459,21 @@ Internal TestFlight acceptance must cover:
   (Slide Over and a narrow Split View), the sidebar and detail column at full
   width, and the same five destinations in both — plus a stored link opening over
   the surface the user was on and returning to it when dismissed.
+
+The two-device items above have physical harnesses; run them rather than
+improvising an equivalent by hand:
+
+| Harness | Evidence root |
+| --- | --- |
+| `scripts/ios-device-pair-acceptance.sh` | `.relayium-device-pair/<run-tag>/` |
+| `scripts/ios-device-inbox-acceptance.sh` | `.relayium-device-inbox/<run-tag>/` |
+
+Both keep their run directory whatever the outcome, because a pass is evidence
+too. Each run therefore leaves build and per-device logs, `.xcresult` bundles
+and a DerivedData tree, and the roots reach multiple gigabytes. They are
+intentional local physical evidence, are ignored at the repository root by
+`.gitignore`, and must not be committed or cleaned as though they were build
+scratch. Cite the exact run tag when reporting a physical result.
 
 Sandbox purchases do not charge real money. Do not add the build to App Review
 or public release until the owner has accepted these results. Public release
