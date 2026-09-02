@@ -5487,4 +5487,151 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "an unlabelled spinner reads as nothing")
     }
 
+    /// **A signed-out device must SKIP the physical minting role, and the check
+    /// that decides so has to run BEFORE the staged-batch precondition.**
+    ///
+    /// `DirectView.createFiles` renders `PendingFileList` inside its
+    /// `case .allowed = gate` branch. So on a device with no ready account the
+    /// staged row and Create are both absent together, and `gate.createCodeTitle`
+    /// stands in their place — one state, not two independent ones.
+    ///
+    /// A retained physical run failed exactly on that. The iPhone was correct:
+    /// signed out, it drew "Creating a code needs an account". The harness
+    /// waited for `pendingFile.0` one step ABOVE the skip that already existed
+    /// for that condition, spent the budget, and reported a staging failure —
+    /// a red naming the fixture, and two people's hardware spent to produce it.
+    ///
+    /// Guarded as source rather than behavior because the two states are
+    /// mutually exclusive by construction: no run can have an account gate and
+    /// a staged batch at once, so there is no runtime in which the ordering
+    /// below is observable at all.
+    func testTheMintingRoleSkipsAnAccountGatedDeviceBeforeRequiringAStagedBatch() throws {
+        let suite = try RepoRoot.text("apps/ios/RelayiumUITests/DevicePairUITests.swift")
+
+        // 1. The role resolves "can this device mint" before it mints, and no
+        //    longer reaches for the staged row on its own.
+        let minting = try XCTUnwrap(suite.components(
+            separatedBy: "func testPairingCodeFilesAreSentToThePhysicalPeer() throws {")
+            .dropFirst().first?.components(separatedBy: "\n    // MARK:").first,
+            "the pairing-code minting role is gone")
+        guard let precondition = minting.range(of: "requireStagedFixtureUnlessAccountGated("),
+              let mint = minting.range(of: "mintCode(") else {
+            return XCTFail("""
+                the minting role no longer establishes the staged batch and the account \
+                gate together before it mints, so this guard cannot see the ordering it \
+                exists for.
+                """)
+        }
+        XCTAssertTrue(precondition.upperBound < mint.lowerBound, """
+            the minting role mints before it establishes whether this device can mint at \
+            all, so an account-gated device is diagnosed by whichever check runs first \
+            rather than by the one that knows the answer.
+            """)
+        XCTAssertFalse(minting.contains("pendingFile.0"), """
+            the minting role waits on the staged row directly again. That row lives inside \
+            DirectView.createFiles' `case .allowed = gate` branch, so on a signed-out \
+            device it never appears, and the wait becomes a timeout naming the fixture \
+            instead of a skip naming the account.
+            """)
+
+        // 2. The precondition handles BOTH states, in one bounded wait, and
+        //    prefers skipping to failing.
+        let precheck = try XCTUnwrap(suite.components(
+            separatedBy: "private func requireStagedFixtureUnlessAccountGated(")
+            .dropFirst().first?.components(separatedBy: "\n    }").first,
+            "the combined staged-batch/account-gate precondition is gone")
+        XCTAssertTrue(precheck.contains("\"pendingFile.0\""), """
+            the precondition no longer requires the staged batch on a device that CAN \
+            mint, so this lane could mint a legacy code carrying nothing.
+            """)
+        XCTAssertTrue(precheck.contains("DevicePair.createCodeGateTitle"), """
+            the precondition no longer recognises the account gate, which is the whole \
+            repair: it would fail on the absent row again.
+            """)
+        XCTAssertTrue(precheck.contains("DevicePair.establishBudget"), """
+            the precondition waits on a budget other than the one mintCode uses. \
+            AccountSession.restore() is a keychain read plus a network refresh, and a \
+            shorter ceiling expires inside it with NEITHER state on screen.
+            """)
+        XCTAssertFalse(precheck.contains("waitForExistence"), """
+            the precondition waits for one of the two states on its own timer, so the \
+            other cannot answer within it — which is the pre-check shape this replaced.
+            """)
+        let loop = try XCTUnwrap(precheck.components(separatedBy: "while Date() < deadline")
+            .dropFirst().first?.components(separatedBy: "{").first,
+            "the precondition no longer polls both states against one deadline")
+        for state in ["pending", "gate"] {
+            XCTAssertTrue(loop.contains(state), """
+                the precondition's wait no longer observes \(state), so it stops on the \
+                first seconds of a cold launch when neither state exists yet.
+                """)
+        }
+        guard let waited = precheck.range(of: "while Date() < deadline"),
+              let skip = precheck.range(of: "XCTSkip("),
+              let failed = precheck.range(of: "XCTFail(") else {
+            return XCTFail("the precondition lost its wait, its skip or its refusal")
+        }
+        XCTAssertTrue(waited.upperBound < skip.lowerBound, """
+            the precondition decides before it has waited, so a cold launch still \
+            resolving its account is read as one that has none.
+            """)
+        XCTAssertTrue(skip.lowerBound < failed.lowerBound, """
+            the precondition fails before it considers the account gate, which is the \
+            defect it was written to remove.
+            """)
+        XCTAssertTrue(precheck.contains("app.debugDescription"), """
+            the only genuinely unexplained outcome — neither a staged row nor a gate — \
+            no longer reports the screen it saw, which is the one case a reader of the \
+            retained bundle cannot reconstruct.
+            """)
+
+        // 3. Both discovery points say the same actionable thing, once.
+        XCTAssertEqual(suite.components(
+            separatedBy: "private static let createCodeNeedsAnAccount").count - 1, 1, """
+            the manual account step is declared more than once, so the two checks that \
+            can reach it are free to drift into telling the operator different halves \
+            of the same action.
+            """)
+        XCTAssertEqual(suite.components(
+            separatedBy: "XCTSkip(Self.createCodeNeedsAnAccount)").count - 1, 2, """
+            the staged-batch precondition and mintCode are the two places that can \
+            discover this device holds no account, and both must skip with the same \
+            words: which of them speaks first is an accident of the flow.
+            """)
+        // Read as the operator reads it — reflowed. The declaration is a
+        // line-continued literal, so any phrase in it may straddle a break, and
+        // a guard that matched the SOURCE would be pinning where the author
+        // happened to wrap rather than what the skip actually says.
+        let reason = try XCTUnwrap(suite.components(
+            separatedBy: "private static let createCodeNeedsAnAccount = \"\"\"")
+            .dropFirst().first?.components(separatedBy: "\"\"\"").first,
+            "the manual account step is no longer a literal this guard can read")
+        let spoken = reason.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty && $0 != "\\" }
+            .joined(separator: " ")
+        for step in ["Sign in ONCE by hand", "joining a code does not",
+                     "This harness holds no credential"] {
+            XCTAssertTrue(spoken.contains(step), """
+                the account skip no longer tells the operator "\(step)", so a skipped \
+                physical run reports a condition with no stated way out of it.
+                """)
+        }
+
+        // 4. And mintCode still re-reads the gate before it acts. That is what
+        //    makes the precondition safe to resolve a tie in favour of running:
+        //    a gate that is genuinely still up is caught one line later, by the
+        //    check that was always there.
+        let mintBody = try XCTUnwrap(suite.components(separatedBy: "private func mintCode(")
+            .dropFirst().first?.components(separatedBy: "\n    }").first,
+            "mintCode is gone")
+        guard let mintSkip = mintBody.range(of: "XCTSkip(Self.createCodeNeedsAnAccount)"),
+              let tapped = mintBody.range(of: "button.tap()") else {
+            return XCTFail("mintCode no longer skips on the account gate before it taps Create")
+        }
+        XCTAssertTrue(mintSkip.upperBound < tapped.lowerBound, """
+            mintCode taps Create before it reads the account gate, so the precondition's \
+            preference for continuing is no longer backed by a second reading.
+            """)
+    }
+
 }

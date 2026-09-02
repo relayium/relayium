@@ -367,6 +367,21 @@ final class DevicePairUITests: XCTestCase {
 
     // MARK: - the pairing-code (legacy lane) steps both code flows share
 
+    /// **The one manual step this harness cannot take, written once.**
+    ///
+    /// Two checks reach this same conclusion — the staged-batch precondition
+    /// below and `mintCode` itself — and they must say the whole action rather
+    /// than half of it, because which of the two speaks first is an accident of
+    /// the flow and the operator reading a skipped run gets only one of them.
+    private static let createCodeNeedsAnAccount = """
+        This device cannot create a pairing code: it holds no ready account. \
+        Creating a code needs one; joining a code does not. Sign in ONCE by \
+        hand on this device, with a verified address and any plan — the run \
+        passes no --relayium-ui-testing, so the app uses the product's own \
+        keychain and that session persists across runs. This harness holds no \
+        credential and reads none.
+        """
+
     /// Open the Direct tab in one of its two modes.
     ///
     /// The mode picker is above both cards, governs Create AND Join, and a code
@@ -386,6 +401,51 @@ final class DevicePairUITests: XCTestCase {
         scrollUntilHittable(segment, in: app)
         segment.tap()
         return true
+    }
+
+    /// The staged batch a legacy code carries — **or the account gate that
+    /// replaces the entire card it would have appeared in.**
+    ///
+    /// `DirectView.createFiles` renders `PendingFileList` INSIDE its
+    /// `case .allowed = gate` branch, so a device with no ready account draws
+    /// neither the pending row nor Create; it draws
+    /// `DevicePair.createCodeGateTitle`. Asserting the row on its own therefore
+    /// turned the one condition `mintCode` already knows how to skip for into a
+    /// timeout naming a fixture that was never the problem — a signed-out phone
+    /// reported as a staging failure, which is what the retained run shows.
+    ///
+    /// The two states are waited for TOGETHER, for the reason `mintCode` waits
+    /// for both of its: `AccountSession.restore()` is a keychain read followed
+    /// by a network refresh, so for the first seconds of a cold launch NEITHER
+    /// exists, and a fixed pre-check that expired inside that window would
+    /// answer with whichever half it happened to be looking at.
+    ///
+    /// **The staged row wins ties.** On a settled screen the two are mutually
+    /// exclusive, but a restore resolving mid-check can leave a gate readable
+    /// for one snapshot after the account became ready — and skipping a run two
+    /// people's devices are already held for is by far the more expensive of
+    /// the two mistakes. Nothing is lost by preferring to continue: `mintCode`
+    /// re-reads the gate on the very next line and skips there, in these same
+    /// words, if it is genuinely still up.
+    private func requireStagedFixtureUnlessAccountGated(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
+        let pending = app.descendants(matching: .any)["pendingFile.0"]
+        let gate = app.staticTexts[DevicePair.createCodeGateTitle]
+        let deadline = Date().addingTimeInterval(DevicePair.establishBudget)
+        while Date() < deadline, !pending.exists, !gate.exists {
+            Thread.sleep(forTimeInterval: 1)
+        }
+        if pending.exists { return }
+        if gate.exists { throw XCTSkip(Self.createCodeNeedsAnAccount) }
+        XCTFail("""
+            the preselected fixture never became a pending direct send, and this \
+            device is not account-gated either: after \
+            \(Int(DevicePair.establishBudget))s the Direct tab offered neither a \
+            staged row nor "\(DevicePair.createCodeGateTitle)".
+            \(app.debugDescription)
+            """, file: file, line: line)
     }
 
     /// Mint a code through the shipped Create control, and publish the digits
@@ -410,16 +470,7 @@ final class DevicePairUITests: XCTestCase {
         while Date() < deadline, !gate.exists, !button.exists {
             Thread.sleep(forTimeInterval: 1)
         }
-        if gate.exists {
-            throw XCTSkip("""
-                This device cannot create a pairing code: it holds no ready \
-                account. Creating a code needs one; joining a code does not. \
-                Sign in ONCE by hand on this device, with a verified address and \
-                any plan — the run passes no --relayium-ui-testing, so the app \
-                uses the product's own keychain and that session persists across \
-                runs. This harness holds no credential and reads none.
-                """)
-        }
+        if gate.exists { throw XCTSkip(Self.createCodeNeedsAnAccount) }
         XCTAssertTrue(button.exists, """
             the Direct tab offers neither "\(create)" nor the account gate that replaces \
             it, after \(Int(DevicePair.establishBudget))s.
@@ -481,10 +532,9 @@ final class DevicePairUITests: XCTestCase {
         // Staged before the code exists, because on this platform a legacy code
         // carries the batch that was chosen before it was minted. Create is
         // disabled with nothing staged, so this is a precondition of the tap
-        // below and not decoration.
-        XCTAssertTrue(app.descendants(matching: .any)["pendingFile.0"]
-            .waitForExistence(timeout: DevicePair.settleBudget),
-                      "the preselected fixture never became a pending direct send")
+        // below and not decoration — but only on a device that can mint at all,
+        // which is why the account gate is read HERE rather than one step later.
+        try requireStagedFixtureUnlessAccountGated()
 
         guard try mintCode(run, create: DevicePair.createCodeLabel,
                            heading: DevicePair.giveCodeHeading) != nil else { return }
