@@ -151,6 +151,42 @@ extension XCTestCase {
                       file: file, line: line)
     }
 
+    /// The compact shell's tab-bar button for a surface: by identifier when the
+    /// OS exposes it, by the product's own tab order when it does not.
+    ///
+    /// iOS 18's UIKit-backed `TabView` stamps the identifier written inside a
+    /// `tabItem` Label onto the tab bar button of the SELECTED tab only. The
+    /// hosted iPhone 16 Pro (iOS 18.5) runs showed exactly that split:
+    /// `tab-lanTransfer` — the launch tab — resolved in under a second while
+    /// `tab-crossNetworkTransfer` never existed in ten; an iOS 26.5 launch
+    /// stamps all five immediately. So the identifier stays the first choice,
+    /// and the fallback is POSITION in `Shell.browseable` — which is the
+    /// product's `IOSSurface.browseable` order, pinned by
+    /// `IOSShellPlacementTests` and asserted by geometry on both shells — not
+    /// rendered copy. A positional tap that somehow landed on the wrong tab
+    /// still fails loudly, because `open(_:)` accepts nothing short of the
+    /// destination's own navigation title.
+    func compactTabRow(_ surface: Shell.Surface,
+                       in app: XCUIApplication,
+                       timeout: TimeInterval = 10) -> XCUIElement {
+        let bar = app.tabBars.firstMatch
+        let byIdentifier = bar.buttons["tab-\(surface.id)"].firstMatch
+        let index = Shell.browseable.firstIndex { $0.id == surface.id }
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            // The identifier is checked first in every pass, so it wins
+            // whenever the OS exposes it; the positional button is the same
+            // physical control either way, because both derive from the one
+            // browseable order.
+            if byIdentifier.exists { return byIdentifier }
+            if let index, bar.buttons.count > index {
+                return bar.buttons.element(boundBy: index)
+            }
+            _ = byIdentifier.waitForExistence(timeout: 0.5)
+        }
+        return byIdentifier
+    }
+
     /// Open a destination on whichever shell is drawn, and prove the destination
     /// itself rendered.
     ///
@@ -167,7 +203,7 @@ extension XCTestCase {
         let row: XCUIElement
         switch layout {
         case .compact:
-            row = app.tabBars.firstMatch.buttons["tab-\(surface.id)"].firstMatch
+            row = compactTabRow(surface, in: app)
             XCTAssertTrue(row.waitForExistence(timeout: 10),
                           "the tab bar has no \(surface.id) destination", file: file, line: line)
         case .regular:

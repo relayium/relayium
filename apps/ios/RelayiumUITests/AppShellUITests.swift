@@ -1412,7 +1412,10 @@ final class AppShellUITests: XCTestCase {
     private func shellRow(_ surface: Shell.Surface, layout: Shell.Layout) -> XCUIElement {
         switch layout {
         case .compact:
-            return app.tabBars.firstMatch.buttons["tab-\(surface.id)"].firstMatch
+            // Not a bare identifier lookup: iOS 18 stamps a `tabItem` Label's
+            // identifier onto the SELECTED tab's button only, and these two
+            // tests read the labels and frames of rows they never select.
+            return compactTabRow(surface, in: app)
         case .regular:
             return app.descendants(matching: .any)["sidebar-\(surface.id)"].firstMatch
         }

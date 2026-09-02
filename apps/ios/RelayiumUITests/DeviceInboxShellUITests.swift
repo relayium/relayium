@@ -262,8 +262,14 @@ final class DeviceInboxShellUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["inbox-send-files"].firstMatch.exists,
                        "a device that cannot receive still offers to send to it")
 
-        // And back, without leaving the destination.
-        app.navigationBars["Kitchen laptop"].buttons["BackButton"].tap()
+        // And back, without leaving the destination. The system back button's
+        // XCUI identity varies by iOS release — "BackButton" on some, only a
+        // label naming the previous page on others — and this bar has no other
+        // buttons, so its first button IS the back button on every release.
+        let back = app.navigationBars["Kitchen laptop"].buttons.firstMatch
+        XCTAssertTrue(back.waitForExistence(timeout: 15),
+                      "the conversation offers no way back to the Device Inbox")
+        back.tap()
         XCTAssertTrue(app.navigationBars["Device Inbox"].waitForExistence(timeout: 15),
                       "leaving a conversation did not return to the Device Inbox")
     }

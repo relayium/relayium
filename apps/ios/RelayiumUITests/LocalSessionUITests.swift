@@ -267,6 +267,18 @@ final class LocalSessionUITests: XCTestCase {
         for _ in 0..<maxSwipes where !element.isHittable { app.swipeUp() }
         for _ in 0..<4 where !element.isHittable { drag(fraction: 0.22) }
         for _ in 0..<6 where !element.isHittable { drag(fraction: -0.22) }
+        // **`isHittable` is not "a tap lands" under the top chrome on iOS 26.**
+        // A control scrolled up under the status-bar/navigation-bar band still
+        // hit-tests as hittable there, but the synthesized touch is consumed by
+        // system chrome and never reaches it: the roster tap in the Nearby link
+        // acceptance died exactly this way at (201, 56) on iOS 26.5 while the
+        // same coordinates worked on iOS 18.5. So being hittable is necessary
+        // but no longer sufficient — also drag the content back down until the
+        // element clears the navigation bar. At the top of the scroll view this
+        // only rubber-bands, so the loop is safe when there is nowhere lower.
+        let bar = app.navigationBars.firstMatch
+        let chromeFloor = bar.exists ? bar.frame.maxY : 0
+        for _ in 0..<6 where element.frame.minY < chromeFloor { drag(fraction: -0.22) }
         XCTAssertTrue(element.isHittable, "\(element) never became reachable")
     }
 

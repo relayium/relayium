@@ -208,6 +208,12 @@ struct RootView: View {
                     // identifier is the same string on both shells and in both
                     // languages, so a copy change stops being able to break
                     // navigation that has nothing to do with copy.
+                    //
+                    // iOS 18 exposes this identifier on the SELECTED tab's bar
+                    // button only (iOS 26 exposes all of them), so acceptance
+                    // falls back to the `browseable` ORDER for unselected tabs
+                    // — reordering this list moves both halves together, but
+                    // `Shell.browseable` in the UI-test target must follow.
                     .tabItem {
                         Label(title(for: surface), systemImage: surface.symbol)
                             .accessibilityIdentifier("tab-\(surface.rawValue)")

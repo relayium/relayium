@@ -215,7 +215,16 @@ extension XCTestCase {
                                    in app: XCUIApplication,
                                    file: StaticString = #filePath,
                                    line: UInt = #line) -> Bool {
-        let tab = app.tabBars.firstMatch.buttons["tab-\(surface.id)"].firstMatch
+        let bar = app.tabBars.firstMatch
+        let tab = bar.buttons["tab-\(surface.id)"].firstMatch
+        // iOS 18 stamps a `tabItem` Label's identifier onto the SELECTED tab's
+        // button only, and the fleet runs iOS 18 devices — so an identifier
+        // that never appears must not spend the whole deadline. Position in
+        // `Shell.browseable` is the product's own pinned tab order, the
+        // identifier is still preferred within each pass, and the navigation
+        // title below accepts nothing short of the destination itself.
+        let tabByOrder = Shell.browseable.firstIndex { $0.id == surface.id }
+            .map { bar.buttons.element(boundBy: $0) }
         let sidebarRow = app.descendants(matching: .any)["sidebar-\(surface.id)"].firstMatch
         let sidebarToggle = app.buttons["ToggleSidebar"].firstMatch
         var opened = false
@@ -225,6 +234,9 @@ extension XCTestCase {
         while Date() < deadline, !opened {
             if tab.exists {
                 tab.tap()
+                opened = true
+            } else if let tabByOrder, tabByOrder.exists {
+                tabByOrder.tap()
                 opened = true
             } else if sidebarRow.exists {
                 sidebarRow.tap()
