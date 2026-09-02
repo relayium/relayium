@@ -184,7 +184,37 @@ Beyond the read-back, the script refuses to archive unless:
 - both targets declare team `7PVYUG4YQS`, bundle IDs `com.relayium.app` and
   `com.relayium.app.share`, `CODE_SIGN_STYLE = Manual` for Release, and the
   exact profiles `Relayium iOS App Store` and
-  `Relayium Share Extension App Store`.
+  `Relayium Share Extension App Store`;
+- the App Store metadata packet passes its validator, for **this** marketing
+  version — see below.
+
+### The metadata packet is a precondition too
+
+The candidate and the words submitted with it are one delivery. Before the
+artifact root is created, the script runs
+
+```sh
+node scripts/ios-app-store-metadata-validate.mjs \
+  --packet docs/app-store-metadata-ios.json \
+  --expect-version <the candidate's marketing version>
+```
+
+and refuses with exit `2` on any finding. It sits in the ladder between the
+repository-state checks and the project settings, so a rejected packet stops
+the run before `-showBuildSettings`, before the artifact root exists and long
+before `xcodebuild archive` — it leaves nothing behind at all. An accepted
+packet's SHA-256 is recorded in all three manifests, under `metadataPacket` in
+the machine-readable ones, labelled as validated-before-archive and **not**
+entered in App Store Connect.
+
+`--expect-version` is the part that catches the failure a length check cannot:
+a What's New drafted for another marketing version passes every limit Apple
+enforces and is still a false public statement about the build being archived.
+
+The gate needs `node` on `PATH` and refuses without it, because an unvalidated
+packet is not a candidate. `scripts/test/ios-app-store-candidate-test.sh` proves
+both the refusal and its position in the ladder, by mutation and by executing
+the script against a fixture whose packet has been broken one field at a time.
 
 `-allowProvisioningUpdates` is deliberately absent and must stay absent: it
 authorizes Xcode to create or modify provisioning profiles in the developer
@@ -347,6 +377,33 @@ Before uploading a TestFlight build:
 1. Create the iOS subscription group and its monthly/yearly Plus, Pro and Max
    products in App Store Connect. Product identifiers must be unique to
    `com.relayium.app`; do not reuse the `com.relayium.mac.*` identifiers.
+   The six identifiers and their `en-US` and `zh-Hans` display names and
+   descriptions are drafted in `docs/app-store-metadata-ios.json` under
+   `subscriptions`, and the validator refuses a row whose identifier does not
+   match its own plan and cycle, a duplicate, a macOS identifier, or a set that
+   is not exactly six. Three things about that catalogue are worth stating
+   plainly because each is easy to get wrong:
+   - **the record's first subscription group and its products must be submitted
+     together with an app version.** This catalogue is part of the `0.3.0`
+     submission, not a later edit;
+   - **price point and territory availability are an owner decision** and are
+     deliberately absent from the packet. Do not carry the macOS record's prices
+     across as a default; the validator refuses any currency amount or decimal
+     price anywhere in the file;
+   - **each product carries its own review information**, and Apple may require
+     a review screenshot per product. Those are review-only assets and never
+     reach the storefront.
+   **This record has observed nothing in App Store Connect**, so it does not say
+   whether a row exists there. What it says is what it holds: a proposal
+   (`subscriptions.state` is
+   `drafted-in-this-repository-app-store-connect-readback-required`, with
+   `productIdentifiersAreProposedDrafts: true`). The identifiers, the group
+   reference name and every display string are drafts awaiting owner
+   confirmation, live creation and a read-back — and an identifier is permanent
+   once created, so a confirmed draft and a created product are different states
+   and this repository only ever claims the first. The same applies to
+   availability: the excluded territories are this project's record of an owner
+   decision, not an observation of the record's territory settings.
 2. Add exact `(bundle ID, product ID) -> (plan, cycle)` rows to Relayium's
    `apple_products` catalog and read them back as live.
 3. Add `com.relayium.app` and Apple ID `6791918822` to the production verifier's
@@ -790,22 +847,87 @@ shipped `CFBundleLocalizations` set and the workspace's supported-language
 policy. Adding a storefront locale the app does not speak advertises support
 that does not exist.
 
-### Fields to draft before submission
+### The copy itself lives in `docs/app-store-metadata-ios.json`
 
-| Field | What the draft must be based on |
+This section used to be a table telling a future operator what to draft. It is
+now a pointer, because the draft exists: **`docs/app-store-metadata-ios.json`**
+is the copy-ready, machine-validated source for every external field, in both
+locales, and it is what gets pasted into App Store Connect.
+
+| What it carries | Fields |
 | --- | --- |
-| App name, subtitle | The shipped product, not an aspiration. The record's name is `relayium`. |
-| Promotional text, description, keywords | Only behavior `0.3.0` actually ships. The *Device Inbox* section above is the authority on its limits. |
-| Support URL (required), Marketing URL | Public `https://relayium.com` pages only, and the URL must resolve at submission. The site builds `/support/` (English) and `/zh/support/`; confirm the exact address in the deployed site rather than from this list. |
-| Privacy Policy URL | `https://relayium.com/privacy/` — the exact URL Account opens (`AppEnvironment.privacyWebURL`). Terms are `https://relayium.com/terms/`. |
-| Primary category | The bundle declares `public.app-category.utilities`; keep the storefront category consistent with it. |
-| Copyright, version, What's New | The version is **this record's** `0.3.0`; a macOS version never sets it. |
+| Storefront, per locale | name, subtitle, promotional text, description, keywords, What's New, support URL, marketing URL, privacy policy URL |
+| App Review | the reviewer notes verbatim, plus the **names** of the owner-entered fields — never their values |
+| TestFlight | beta app description and What to Test, per locale |
+| Subscriptions | the group, the six product identifiers and their per-locale display names and descriptions, and the review requirements each one carries |
+| Screenshots | the two required sets, their exact accepted sizes, the capture rules and the shot list, with the current captured count |
+| Accessibility | the per-device-family Nutrition Label state and its checklist |
+| Availability | the initially excluded territories and the ANSSI position |
+
+Run `node scripts/ios-app-store-metadata-validate.mjs` to check it; the
+candidate script runs the same command before it archives.
+
+**The values that are pinned, and what they are pinned to.** The record's name
+is `relayium`, and the packet enters exactly that, in both locales. An earlier
+draft of this packet proposed the exact-case `Relayium` instead; that was
+removed, because the App Store name is an owner-controlled field whose change
+has its own review implications, and a metadata paste is not the place to
+rename an app as a side effect. If the owner ever wants the capitalization
+changed, that is their edit in App Store Connect and a separate decision — the
+validator pins the lowercase spelling in both directions until then. The primary
+category stays consistent with the bundle's `public.app-category.utilities`. The
+version is **this record's** `0.3.0`; a macOS version never sets it.
+
+**The URLs, and the one that 404s.** The site builds `/support/` (English) and
+`/zh/support/`, both of which exist in `web/public/`. Privacy is
+`https://relayium.com/privacy/` — the exact URL Account opens
+(`AppEnvironment.privacyWebURL`) — and Terms are `https://relayium.com/terms/`.
+
+> **`https://relayium.com/apps/` is a 404 and must never be used as the
+> marketing URL.** `web/public/apps/` contains only the `macos/` subtree; there
+> is no English `index.html` under it, so the English page does not resolve.
+> (`/zh/apps/` happens to exist, which makes the mistake worse: it looks fine in
+> one locale and 404s in the other.) The marketing URL is
+> `https://relayium.com/` — **the same value in both locales**, per the lease.
+> The support URL stays localized, because Apple renders it per storefront and
+> both `/support/` and `/zh/support/` exist. The validator refuses any `/apps/`
+> URL anywhere in the packet, in any field, not only the marketing one.
+
+**Cross-network Transfer is account-gated in exactly one direction, and the
+blanket sentence is wrong.** `PairingCodeModel.mint(token:)` takes a bearer and
+the server will not mint anonymously, because the account that mints a code owns
+whatever is relayed through it. Joining a code somebody else is showing takes no
+token at all. So:
+
+- **LAN Transfer** needs no account, in either direction;
+- **joining** a six-digit or scanned cross-network code works **signed out**;
+- **showing** a cross-network code requires a **signed-in** account.
+
+An earlier draft of the storefront copy said "LAN Transfer and Cross-network
+Transfer do not [need an account]", which is true of one direction and false of
+the other — and false in the direction a reader acts on, since somebody who
+installs on that promise then cannot show a code. The English and Chinese
+descriptions, the reviewer notes, the TestFlight beta description and What to
+Test all state the two directions separately now, and the validator enforces it
+from both sides: the blanket claim is refused, and so is deleting the accurate
+sentence that would otherwise satisfy the ban by saying nothing.
 
 **Honesty constraints on the copy.** Do not describe background receiving, push
 notifications or automatic sync — the receiver is foreground-only and the app
 registers for no notifications. Do not describe Relayium as a backup service.
 Do not put prices in the description; the storefront renders the real StoreKit
-prices, and a hard-coded one goes stale or wrong per storefront.
+prices, and a hard-coded one goes stale or wrong per storefront. The validator
+enforces all four as vocabulary bans over the storefront copy, and separately
+requires the reviewer-facing text to *state* the same limits rather than avoid
+them.
+
+**Apple's limits, as currently verified and enforced.** Name and subtitle 30
+characters; promotional text 170; description and What's New 4000; keywords
+**100 UTF-8 bytes** for the comma-separated string, with every individual
+keyword longer than two characters; in-app purchase display name 2–30
+characters and its description 45. The byte limit is the one that bites: a
+Simplified Chinese keyword list is legal by every character count and rejected
+by App Store Connect at roughly 34 characters, so it is counted in bytes.
 
 ### Age rating
 
@@ -836,24 +958,36 @@ of them is wrong — fix the disagreement, do not pick the easier form.
 Field reference:
 <https://developer.apple.com/documentation/appstoreconnectapi/app-store-review-details>
 
-These are owner-only values. **Never write them into this file, the repository,
-a screenshot, a log or a commit message.** The placeholders stay; the owner
-enters the real values directly in App Store Connect.
+Contact details and the demo login are **owner-only values that live nowhere in
+this repository**. They are not placeholders to be filled in later and not
+redacted strings: they are entered directly into App Store Connect, and the
+packet records only the *names* of those fields, under
+`appReview.ownerEnteredFields`. The validator refuses an entry that acquires a
+value, and refuses an email address, a telephone number or a credential word
+anywhere in the packet — so the failure mode where a demo password is pasted in
+"temporarily" and survives in Git history is a rejected file rather than a leak.
 
-| Field | Value |
+| Field | Where it lives |
 | --- | --- |
-| Contact first name, last name, phone, email | `<owner-provided at submission>` |
-| Sign-in required | **Yes.** Account, subscriptions and Device Inbox are all account-gated. |
-| Demo account username, password | `<owner-provided review-only account>` — created for review, not a personal account |
-| Notes | The reviewer-facing text drafted below |
+| Contact first name, last name, phone, email | App Store Connect only |
+| Demo account username, password | App Store Connect only — a review-only account, created for review, never a personal one |
+| Beta feedback email | App Store Connect only |
+| Sign-in required | **Yes.** Account, subscriptions and Device Inbox are all account-gated. Recorded in the packet as `appReview.signInRequired`. |
+| Notes | `appReview.notes` in the packet, verbatim and copy-ready |
 
-The notes must state, in plain language:
+The notes are drafted in the packet. They state, in plain language, and the
+validator requires each of these to still be there:
 
 - **A demo account is required**, and which surfaces it unlocks.
 - **Device Inbox needs two devices signed in to the same account.** With one
   device a reviewer can enrol it and see the empty state, but cannot observe a
-  delivery. Say this explicitly, or the surface reads as broken. Offer a
-  review-only attachment showing the two-device flow (see *Screenshots*).
+  delivery. Say this explicitly, or the surface reads as broken. A review-only
+  attachment showing the two-device flow is **owed and not yet produced**
+  (`appReview.attachment.state = "not-produced"`), so the notes say it must be
+  supplied rather than that it is provided. The validator holds the two to each
+  other in both directions: notes claiming an attachment that does not exist
+  fail, and an attachment marked produced while the notes still say it is owed
+  fails too. Update both in the same edit, and only once the attachment exists.
 - **Receiving is foreground-only.** Relayium must be open on the receiving
   device; nothing arrives while it is backgrounded, and **no notification is
   delivered at any point**. This is shipped behavior, not a defect.
@@ -869,15 +1003,22 @@ Distributing to external testers requires a beta app description and a beta
 feedback email before the build can go out:
 <https://developer.apple.com/help/app-store-connect/test-a-beta-version/provide-test-information>
 
+Both texts are drafted in `docs/app-store-metadata-ios.json`, per locale, under
+`testFlight`.
+
 - **Beta app description:** what this build is, plus the same foreground-only,
   no-notification and account-gated statements as above. A tester who does not
-  know the receiver is foreground-only will file it as a bug.
-- **What to Test:** the exact surfaces this build changes. For a `0.3.0`
-  candidate that is Device Inbox across two devices, the five-destination shell
-  on iPhone and on compact- and full-width iPad, and the subscription screens.
-  "Test the app" is not an acceptable handoff — the same rule the workspace
-  applies to owner candidates.
-- **Beta feedback email:** `<owner-provided>`; not recorded here.
+  know the receiver is foreground-only will file it as a bug, so the validator
+  requires the English text to say "foreground" and "no notification" and the
+  Chinese text to say 前台 and 通知.
+- **What to Test:** the exact surfaces this build changes — Device Inbox across
+  two devices, the foreground boundary observed rather than assumed, the
+  five-destination shell on iPhone and on compact- and full-width iPad, the
+  six-digit code and the QR scan, and the subscription screens. "Test the app"
+  is not an acceptable handoff — the same rule the workspace applies to owner
+  candidates.
+- **Beta feedback email:** an owner-entered App Store Connect value. Not
+  recorded here and not in the packet.
 
 ## Screenshots
 
@@ -899,18 +1040,62 @@ Hard rules:
 - **No alpha channel.** Flatten before upload; an alpha channel is rejected.
 - The pixel size must be exactly one of the accepted values above.
 
-Capture discipline:
+**Current state: no screenshot has been captured.** The packet records that as
+`screenshots.state = "not-captured"` with `capturedCount: 0`, and the validator
+refuses a non-zero count while the state says none exist. Two things block a
+capture, and neither is a matter of finding time for it:
 
-- **Capture only from a signed release-candidate build** — the same exact build
-  that will be uploaded. The UI-test fixtures in
+1. the six subscription products do not exist in App Store Connect, so the
+   Account screen cannot render a real offer list;
+2. no neutral demonstration data has been staged, and a public asset may carry
+   none of the values listed below.
+
+### Correction: a signed IPA on the physical fleet was never the requirement
+
+This document previously said to **"capture only from a signed
+release-candidate build — the same exact build that will be uploaded"**. That
+was wrong, and it was wrong in a way that would have held the storefront hostage
+to a signing session and a device fleet for no gain. Signing changes nothing a
+camera can see. What a screenshot must be honest about is the **app's real
+appearance and its real data**, and the configuration that decides both is
+`Release` — not the signature, and not the hardware.
+
+What is actually required:
+
+- **A `Release` configuration build.** The UI-test fixtures in
   `apps/ios/Relayium/UITestSubscriptions.swift` are compiled `#if DEBUG` and
-  invent display prices such as `US$4.99`, so a Debug capture can put a price
-  Apple never sold into a public storefront asset. **Never screenshot a
-  `--relayium-ui-testing` launch**, and never retouch a real screen into one.
+  invent display prices such as a fabricated monthly figure, so a Debug capture
+  can put a price Apple never sold into a public storefront asset. **Never
+  screenshot a `--relayium-ui-testing` launch**, and never retouch a real screen
+  into one.
 - **Real StoreKit products at real prices**, loaded from the authenticated
   Relayium catalog. That means the subscription products in the *Subscription
   activation boundary* section must exist first; a subscription screen showing
   an empty or fixture offer list is not shippable metadata.
+- **Exactly one of the accepted pixel sizes above**, portrait, with no alpha.
+
+What is **permitted** and used to be forbidden: an honest `Release`-configuration
+**simulator** capture at one of those exact sizes.
+
+Be precise about where that permission comes from. It is **this project's own
+decision**, reached from what Apple's screenshot specifications actually
+constrain — pixel dimensions, orientation, count and the absence of an alpha
+channel — none of which mention how the image was produced. Apple does not
+publish a rule saying "simulator captures are acceptable", and this document
+does not quote one. The inference is that a simulator running the real Release
+build against the real catalogue produces the same pixels the same build
+produces on hardware, and that the accepted sizes are device sizes the simulator
+offers directly. If Apple ever states otherwise, that statement wins and this
+paragraph is what gets corrected.
+
+Whether the owner captures on a simulator or on a device is therefore a **method
+choice, not a compliance question**. The packet states this as
+`screenshots.capture`, and the validator pins the parts that are not a choice:
+`requiredConfiguration = "Release"`, `signedIpaRequired = false`,
+`debugBuildsForbidden`, `uiTestFixturesForbidden`, `fabricatedPricesForbidden`
+and `retouchingForbidden` all as stated. Turning any of them back on — including
+restoring the signed-IPA requirement — fails the validator.
+
 - **Stage neutral content rather than redacting afterwards.** Nothing sensitive
   or ephemeral may reach a public asset: the account email address, device
   names, pairing codes, share links or their `#k=` fragments, IP addresses,
@@ -936,14 +1121,86 @@ Keep the two asset channels separate:
   two-device Device Inbox delivery a single-device reviewer cannot reproduce.
   They do not satisfy the storefront requirement.
 
+## Accessibility Nutrition Label
+
+Apple's Accessibility Nutrition Label is a **per-device-family claim** about
+accessibility features a user can rely on to complete the app's common tasks. It
+is not a description of what the framework provides for free, and it is not a
+statement of intent: claiming a feature the app does not actually support is a
+false public statement of exactly the kind this record exists to prevent.
+
+**Current state: `unassessed`, and nothing is claimable.** Every feature on
+both iPhone and iPad is recorded in
+`docs/app-store-metadata-ios.json` as `claimed: false`,
+`assessment: "not-assessed"`, and the validator refuses any packet that claims
+one while the label state is `unassessed`.
+
+### The known blocker
+
+In dark appearance, the label of a `.bordered` button measures approximately
+**2:1** against its fill — well below the 4.5:1 that a Sufficient Contrast claim
+requires. **Sufficient Contrast is therefore not claimable on either device
+family**, and the packet carries that blocker on the feature row itself rather
+than only in prose, so deleting it fails the validator.
+
+Fixing the contrast is a **separate scoped task**. It is not part of the
+metadata batch, and this record does not pretend it has been done.
+
+### Why nothing else is claimable either
+
+Contrast is the only *measured* blocker. Every other feature is unclaimable for
+a different and equally binding reason: the common tasks have not been run with
+the feature switched on, per device family. A feature that has not been
+exercised is `not-assessed`, not "probably fine".
+
+The checklist each feature has to pass, on each of iPhone and iPad, is
+`accessibilityNutritionLabel.checklistPerDeviceFamily` in the packet:
+
+1. sign in and reach the Account screen;
+2. switch Device Inbox receiving on for the account;
+3. send a file to one of the account's own devices;
+4. open a received item and reach it in the Files app;
+5. start and complete a LAN Transfer;
+6. join a Cross-network Transfer by typing the six-digit code, signed out;
+7. signed in, show a cross-network pairing code and read the six digits back;
+8. open the QR scanner and reach a refusal state without becoming stuck;
+9. reach Manage Subscription, Privacy Policy and Terms from Account.
+
+Record the result per feature, per device family, when the runs happen.
+Reconcile the feature list against App Store Connect's own questionnaire at
+submission time rather than trusting this repository's copy of it: the packet's
+list is a draft of Apple's, not Apple's.
+
 ## France availability and the ANSSI encryption declaration
 
-France availability is owner-confirmed, and Relayium implements
-industry-standard encryption outside Apple's operating system, so the French
-declaration workflow applies and must be completed truthfully rather than
-answered away.
+**Correction, 2026-09-03.** This document previously said in two places that
+"France availability is owner-confirmed", and drew the ANSSI declaration as a
+gate on the first upload. Both statements were wrong, and they were wrong in
+the expensive direction: they described an unstarted regulatory workflow as an
+unconditional blocker on a release that does not include France at all.
 
-The part of it that reaches this repository is the outcome. If the approved
+What the owner actually decided:
+
+- **France is excluded from initial availability**, together with **China
+  mainland**. Neither is in the territory set the first release ships to.
+- The ANSSI declaration is therefore a **precondition for ADDING France later**,
+  not a condition on the initial release. It blocks a territory change; it does
+  not block this submission.
+- Nothing here is a judgement that the declaration is optional. Relayium
+  implements industry-standard encryption outside Apple's operating system, so
+  France cannot be added until the declaration workflow has been completed
+  truthfully. It simply is not owed yet.
+
+`docs/app-store-metadata-ios.json` carries the same two facts machine-readably
+(`availability.initialExcludedTerritories`, and
+`availability.anssiDeclaration.blocksInitialRelease = false` with
+`blocksAddingFrance = true`), and
+`scripts/ios-app-store-metadata-validate.mjs` refuses a packet that quietly
+returns France to the initial release or turns ANSSI back into a launch blocker.
+Territory selection itself is an owner action in App Store Connect; no value in
+this repository performs it, and this record has observed none of it.
+
+The part of the declaration that reaches this repository is the outcome. If the approved
 declaration comes with an Apple compliance code, that code belongs in
 `apps/ios/Relayium/Info.plist` — and in `apps/ios/RelayiumShare/Info.plist` if
 it applies to the extension — alongside `ITSAppUsesNonExemptEncryption`, as
@@ -957,7 +1214,8 @@ that a legal statement is made once per upload by a human in App Store Connect
 instead of silently by a build setting. Adding the key will fail that test —
 by design, not by accident.
 
-Handoff, only once the owner holds an approved declaration:
+Handoff, only once the owner holds an approved declaration **and has decided
+to add France**:
 
 1. It is a **separately leased batch**. Plist, entitlement and Xcode project
    paths are not writable under the current Device Inbox lease.
@@ -984,16 +1242,34 @@ Xcode 16.4 and any unvalidated newer preview out of the builds this checklist
 depends on. It covers the toolchain only: it signs, archives and uploads
 nothing, so the App Store Connect read-back above, an exact-source archive and
 TestFlight build availability remain separate gates a green iOS lane does not
-satisfy. France availability is
-owner-confirmed. Relayium implements industry-standard encryption outside
-Apple's operating system, so complete the French ANSSI declaration workflow
-truthfully and attach an Apple-approved encryption declaration to this build.
-Confirm in App Store Connect whether the macOS declaration can be assigned to
-the separate iOS app record; do not assume cross-app reuse and do not answer
-“No” merely to clear the form.
+satisfy.
+
+**France is not part of initial availability**, so no ANSSI declaration is owed
+by this candidate. See *France availability and the ANSSI encryption
+declaration* above: the declaration becomes a precondition when the owner
+decides to add France, and adding France without it is what is forbidden — not
+shipping without France. The export-compliance question in App Store Connect
+must still be answered truthfully for this upload, and must not be answered
+"No" merely to clear the form.
 
 Internal TestFlight acceptance must cover:
 
+- **upgrade from `0.1.0` to `0.3.0`, on a device that already has `0.1.0`
+  installed**, as well as a clean install. This is a candidate acceptance gate
+  and not an optional extra: build 4 of `0.1.0` was uploaded to this record, so
+  a real installed base for it can exist, and everything `0.3.0` adds sits on
+  top of state `0.1.0` wrote. Observe, on the upgraded install rather than on a
+  fresh one:
+  - the app launches, and the existing signed-in session survives — an upgrade
+    that silently signs the user out is a defect, not a migration;
+  - anything `0.1.0` left in `Documents/Received` is still present and still
+    reachable in the Files app;
+  - Device Inbox enrolment starts from its off-by-default state on a device
+    that predates the feature, rather than switching itself on;
+  - the five-destination shell replaces the old one without a stale tab, and a
+    stored link still opens over whichever surface the user was on.
+  A clean install is the easier case and passing it says nothing about the
+  upgrade; run both and record them separately;
 - sign in and display of all six localized StoreKit offers;
 - one Sandbox purchase and immediate Relayium plan refresh;
 - restore after sign-out/sign-in or reinstall;

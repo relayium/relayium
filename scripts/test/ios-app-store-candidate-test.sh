@@ -59,6 +59,10 @@ ok()  { printf 'ok   — %s\n' "$1"; }
 bad() { printf 'FAIL — %s\n     %s\n' "$1" "$2"; failures=$((failures + 1)); }
 
 [ -f "$script_under_test" ] || { printf 'missing %s\n' "$script_under_test" >&2; exit 2; }
+[ -f "$repo_root/scripts/ios-app-store-metadata-validate.mjs" ] ||
+  { printf 'missing the metadata validator\n' >&2; exit 2; }
+[ -f "$repo_root/docs/app-store-metadata-ios.json" ] ||
+  { printf 'missing the metadata packet\n' >&2; exit 2; }
 [ -x "$script_under_test" ] || { printf '%s is not executable\n' "$script_under_test" >&2; exit 2; }
 
 case "$(uname -s)" in
@@ -67,6 +71,7 @@ case "$(uname -s)" in
 esac
 command -v plutil >/dev/null 2>&1 || { printf 'plutil is required\n' >&2; exit 2; }
 command -v git >/dev/null 2>&1 || { printf 'git is required\n' >&2; exit 2; }
+command -v node >/dev/null 2>&1 || { printf 'node is required by the metadata gate\n' >&2; exit 2; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/ios-app-store-candidate-test.XXXXXX")"
 work="$(cd "$work" && pwd -P)"
@@ -140,6 +145,10 @@ com\.apple\.security\.application-groups	the App Group entitlement is no longer 
 shasum -a 256	the candidate is no longer checksummed
 candidate-manifest\.txt	the human-readable evidence manifest is gone
 candidate-manifest\.json	the machine-readable evidence manifest is gone
+metadata_packet="\$repo_root/docs/app-store-metadata-ios\.json"	the App Store metadata packet is no longer located, so nothing is validated
+metadata_validator="\$repo_root/scripts/ios-app-store-metadata-validate\.mjs"	the App Store metadata validator is no longer located
+node "\$metadata_validator"	the App Store metadata packet is never validated; a rejected subtitle, keyword list or claim would reach the submission
+--expect-version "\$marketing_version"	the metadata packet is no longer tied to THIS candidate's marketing version, so a What's New drafted for another version would pass
 RULES
 }
 
@@ -182,6 +191,33 @@ manage_version_is_false() {
   ' "$1"
 }
 
+# The metadata packet has to be validated BEFORE anything is built, and before
+# the artifact root exists — otherwise a rejected packet has already left a
+# directory behind, and in the worst ordering a signed archive as well. Textual
+# presence cannot say that: a validation call that has drifted below the archive
+# reads exactly like one that runs first. So the line NUMBERS are compared, in
+# the order the ladder is meant to run:
+#
+#   validate the packet  ->  create the artifact root  ->  read the project
+#   settings  ->  archive
+#
+# One `xcodebuild` invocation legitimately precedes all of this and is not
+# checked here: the toolchain section's `xcodebuild -version` / `xcrun
+# --show-sdk-version` probe. It compiles nothing, signs nothing, writes nothing
+# and creates no path, so it is not a stage a rejected packet can taint. Every
+# invocation that reads the project or produces an artifact is after the gate.
+metadata_validation_runs_first() {
+  local file="$1" validate root settings archive
+  validate="$(grep -n 'node "$metadata_validator"' "$file" | head -1 | cut -d: -f1)"
+  root="$(grep -n 'mkdir "$artifact_resolved"' "$file" | head -1 | cut -d: -f1)"
+  settings="$(grep -n -- '-showBuildSettings' "$file" | head -1 | cut -d: -f1)"
+  archive="$(grep -n -- '-archivePath "$archive_path"' "$file" | head -1 | cut -d: -f1)"
+  [ -n "$validate" ] && [ -n "$root" ] && [ -n "$settings" ] && [ -n "$archive" ] || return 1
+  [ "$validate" -lt "$root" ] &&
+    [ "$root" -lt "$settings" ] &&
+    [ "$settings" -lt "$archive" ]
+}
+
 # The predicate. Prints one complaint per violated rule and returns non-zero if
 # there was any.
 policy_scan() {
@@ -208,6 +244,11 @@ policy_scan() {
 
   if ! manage_version_is_false "$file"; then
     printf 'forbidden: manageAppVersionAndBuildNumber is not false (the export could renumber the build)\n'
+    complaints=$((complaints + 1))
+  fi
+
+  if ! metadata_validation_runs_first "$file"; then
+    printf 'out of order: the metadata packet is not validated before the artifact root is created, the project settings are read and the archive runs\n'
     complaints=$((complaints + 1))
   fi
 
@@ -325,6 +366,18 @@ mutate 'a validation failure is swallowed' \
   append_mutator 'codesign --verify --strict "$app_dir" || true'
 mutate 'the repository is mutated' \
   append_mutator 'git -C "$repo_root" push origin HEAD'
+mutate 'the metadata packet is never validated' \
+  sed_mutator '/node "\$metadata_validator"/d'
+mutate 'the metadata packet is no longer located' \
+  sed_mutator '/^metadata_packet="\$repo_root/d'
+mutate 'the metadata validator is no longer located' \
+  sed_mutator '/^metadata_validator="\$repo_root/d'
+mutate 'the packet stops being tied to this candidate version' \
+  sed_mutator 's/--expect-version "\$marketing_version"/--expect-version 0.3.0/'
+mutate 'the metadata validation drifts below the project settings' \
+  awk '{ if ($0 ~ /node "\$metadata_validator"/) { held = 1; next } if (held && $0 ~ /-showBuildSettings/) { print "  node \"$metadata_validator\" --packet \"$metadata_packet\" --expect-version \"$marketing_version\""; held = 0 } print }'
+mutate 'the metadata validation drifts below the archive' \
+  awk '{ if ($0 ~ /node "\$metadata_validator"/) next; print } END { print "node \"$metadata_validator\" --packet \"$metadata_packet\" --expect-version \"$marketing_version\"" }'
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Part 1b — the key paths the verification half reads with
@@ -910,8 +963,12 @@ export GIT_COMMITTER_EMAIL='candidate-test@example.invalid'
 # an iOS project directory the script only needs to find, and a bare remote the
 # branch tracks.
 pristine="$work/pristine"
-mkdir -p "$pristine/repo/scripts" "$pristine/repo/apps/ios/Relayium.xcodeproj"
+mkdir -p "$pristine/repo/scripts" "$pristine/repo/docs" "$pristine/repo/apps/ios/Relayium.xcodeproj"
 cp "$script_under_test" "$pristine/repo/scripts/$script_name"
+# The real validator and the real packet, so the executed cases below exercise
+# the actual gate rather than a stand-in that always agrees.
+cp "$repo_root/scripts/ios-app-store-metadata-validate.mjs" "$pristine/repo/scripts/"
+cp "$repo_root/docs/app-store-metadata-ios.json" "$pristine/repo/docs/"
 printf '// fixture\n' >"$pristine/repo/apps/ios/Relayium.xcodeproj/project.pbxproj"
 printf 'fixture\n' >"$pristine/repo/README.md"
 git init -q --initial-branch=main "$pristine/repo" >/dev/null 2>&1
@@ -934,6 +991,22 @@ new_fixture() {
   fixture="$work/case-$case_number"
   cp -R "$pristine" "$fixture"
   mkdir -p "$fixture/out"
+  short_sha="$(git -C "$fixture/repo" rev-parse --short=8 HEAD)"
+}
+
+# Several cases below edit a TRACKED file in the fixture — the metadata packet
+# or its validator. The clean-worktree and upstream checks run BEFORE the gate
+# those cases are aiming at, so an uncommitted edit would be refused one section
+# too early and the case would pass for the wrong reason. This commits the edit
+# and pushes it, then re-reads the short SHA the artifact root has to name.
+commit_fixture() {
+  # `cp -R` copies the pristine remote URL too, which still points into the
+  # pristine tree. Pushing there would advance a remote every later case copies
+  # from, so the very first pushing case would break every one after it.
+  git -C "$fixture/repo" remote set-url origin "$fixture/origin.git" >/dev/null 2>&1
+  git -C "$fixture/repo" add -A >/dev/null 2>&1
+  git -C "$fixture/repo" commit -q -m 'fixture edit' >/dev/null 2>&1
+  git -C "$fixture/repo" push -q origin main >/dev/null 2>&1
   short_sha="$(git -C "$fixture/repo" rev-parse --short=8 HEAD)"
 }
 
@@ -1251,6 +1324,110 @@ if [ -e "$HOME/relayium-ios-candidate-$short_sha" ]; then
   bad 'a refused artifact root is never created' "$HOME/relayium-ios-candidate-$short_sha exists"
 else
   ok 'a refused artifact root is never created'
+fi
+
+# ── the App Store metadata packet ────────────────────────────────────────────
+#
+# The gate sits between the repository-state checks and the project settings, so
+# each case below asserts BOTH the refusal and where in the ladder it happened:
+# `xcodebuild -version` has run by then, `-showBuildSettings` has not, no archive
+# was attempted, and — because the section precedes the artifact root — nothing
+# was created on disk at all.
+
+metadata_stopped_before_the_project() {
+  local label="$1" argv_log="$fixture/xcodebuild-argv.log"
+  if grep -qF -- '-showBuildSettings' "$argv_log" 2>/dev/null; then
+    bad "$label" 'the project settings were read, so the metadata gate ran too late'
+    return
+  fi
+  if grep -qF -e "$(printf '\tarchive')" "$argv_log" 2>/dev/null; then
+    bad "$label" 'an archive was attempted after a rejected metadata packet'
+    return
+  fi
+  if [ -e "$fixture/out/relayium-ios-0.3.0-6-$short_sha" ]; then
+    bad "$label" 'the artifact root was created before the packet was accepted'
+    return
+  fi
+  ok "$label"
+}
+
+# `commit_fixture` steps a case PAST the clean-worktree and upstream checks so it
+# can reach the gate after them. That is only legitimate if it leaves the fixture
+# genuinely clean and genuinely pushed: a helper that left either broken would
+# make every metadata case below refuse one section too early and pass for the
+# wrong reason, silently retiring the gate they exist to test. So the helper's
+# own postcondition is asserted once, directly.
+new_fixture
+rm -f "$fixture/repo/docs/app-store-metadata-ios.json"
+commit_fixture
+if [ -n "$(git -C "$fixture/repo" status --porcelain)" ]; then
+  bad 'commit_fixture leaves the fixture clean' 'the worktree is still dirty'
+elif [ "$(git -C "$fixture/repo" rev-parse HEAD)" != "$(git -C "$fixture/repo" rev-parse '@{upstream}')" ]; then
+  bad 'commit_fixture leaves the fixture clean' 'HEAD does not match its upstream'
+else
+  ok 'commit_fixture leaves the fixture clean and pushed, so the checks it steps past still hold'
+fi
+set_default_args
+expect_refusal 'a missing metadata packet is refused' "$REFUSED" \
+  'App Store metadata packet is missing' "${DEFAULT_ARGS[@]}"
+metadata_stopped_before_the_project 'a missing packet stops before the project is read'
+
+new_fixture
+rm -f "$fixture/repo/scripts/ios-app-store-metadata-validate.mjs"
+commit_fixture
+set_default_args
+expect_refusal 'a missing metadata validator is refused' "$REFUSED" \
+  'App Store metadata validator is missing' "${DEFAULT_ARGS[@]}"
+
+# One real finding, produced the way a careless edit produces it: a subtitle
+# four characters over Apple's limit. The script must refuse on the validator's
+# non-zero status rather than printing the finding and carrying on.
+new_fixture
+packet="$fixture/repo/docs/app-store-metadata-ios.json"
+node -e '
+  const fs = require("fs");
+  const path = process.argv[1];
+  const packet = JSON.parse(fs.readFileSync(path, "utf8"));
+  packet.storefront["en-US"].subtitle = "End-to-end encrypted device transfer";
+  fs.writeFileSync(path, JSON.stringify(packet, null, 2) + "\n");
+' "$packet"
+commit_fixture
+set_default_args
+expect_refusal 'a packet App Store Connect would refuse stops the candidate' "$REFUSED" \
+  'metadata packet is not submittable' "${DEFAULT_ARGS[@]}"
+metadata_stopped_before_the_project 'a rejected packet stops before the project is read'
+if grep -qF "over Apple's limit of 30" "$fixture/stdout.log" "$fixture/stderr.log"; then
+  ok "the validator's own finding reaches the operator"
+else
+  bad "the validator's own finding reaches the operator" \
+      "neither log mentions the length finding"
+fi
+
+# The packet describes a marketing version; the candidate names one. A packet
+# whose What's New was drafted for another version is a false public statement
+# about the build being archived, and only the cross-check catches it.
+new_fixture
+packet="$fixture/repo/docs/app-store-metadata-ios.json"
+node -e '
+  const fs = require("fs");
+  const path = process.argv[1];
+  const packet = JSON.parse(fs.readFileSync(path, "utf8"));
+  packet.record.marketingVersion = "0.4.0";
+  fs.writeFileSync(path, JSON.stringify(packet, null, 2) + "\n");
+' "$packet"
+commit_fixture
+set_default_args
+expect_refusal 'a packet drafted for another version stops the candidate' "$REFUSED" \
+  'metadata packet is not submittable' "${DEFAULT_ARGS[@]}"
+
+new_fixture
+set_default_args
+run_candidate "${DEFAULT_ARGS[@]}" >/dev/null 2>&1
+if grep -qF 'metadata packet sha256' "$fixture/stdout.log"; then
+  ok 'an accepted packet is checksummed into the run'
+else
+  bad 'an accepted packet is checksummed into the run' \
+      "stdout did not report the packet checksum"
 fi
 
 # ── the project must already declare this candidate ──────────────────────────

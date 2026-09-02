@@ -74,7 +74,11 @@
 #     one raised after it (a project setting that disagrees) leaves only this
 #     script's own new directory and the build-settings log that explains why;
 #   * a project whose team, bundle identifiers, Release signing style or
-#     provisioning-profile names differ from the pinned release graph below.
+#     provisioning-profile names differ from the pinned release graph below;
+#   * an App Store metadata packet that App Store Connect would refuse, that
+#     describes another marketing version, or that claims behaviour this build
+#     does not ship — the candidate and the words submitted with it are one
+#     delivery, and only one of them used to be checked.
 #
 # ── what it proves, after it builds ──────────────────────────────────────────
 #
@@ -657,7 +661,55 @@ note "commit $head_sha on $branch_name, matching $upstream_ref"
 project_path="$repo_root/apps/ios/Relayium.xcodeproj"
 [ -d "$project_path" ] || refuse "the iOS project is missing at $project_path"
 
-# ── 5. artifact root ─────────────────────────────────────────────────────────
+# ── 5. the App Store metadata packet ─────────────────────────────────────────
+#
+# `docs/app-store-metadata-ios.json` is the copy-ready source for the external
+# fields — name, subtitle, promotional text, description, keywords, What's New,
+# the three URLs, the reviewer notes, the TestFlight text and the six proposed
+# subscription products — and every one of those is a
+# form field in App Store Connect that nothing here can see. A subtitle one
+# character over Apple's limit, a Chinese keyword list one BYTE over, a
+# marketing URL pointing at the `/apps/` page that 404s in English, a
+# description promising background receiving this build does not do, or a demo
+# password pasted into a tracked file are all invisible to a compile and to a
+# signature.
+#
+# So the packet is validated HERE, before anything is built, and a finding is a
+# refusal rather than a warning. This section sits before the artifact root is
+# created, so a rejected packet leaves nothing behind at all.
+#
+# `--expect-version` additionally ties the packet to THIS candidate: a What's New
+# drafted for another marketing version is a false public statement about the
+# build being archived, and it is exactly the kind of thing that survives a
+# version bump unnoticed.
+#
+# The validator reads one file. It performs no network request, resolves no URL
+# and observes no App Store Connect state, so a pass says the packet is
+# internally consistent and inside Apple's limits — NOT that any of it has been
+# entered, accepted or is live.
+
+step 'App Store metadata packet'
+
+metadata_packet="$repo_root/docs/app-store-metadata-ios.json"
+metadata_validator="$repo_root/scripts/ios-app-store-metadata-validate.mjs"
+
+[ -f "$metadata_packet" ] ||
+  refuse "the App Store metadata packet is missing at $metadata_packet"
+[ -f "$metadata_validator" ] ||
+  refuse "the App Store metadata validator is missing at $metadata_validator"
+command -v node >/dev/null 2>&1 ||
+  refuse 'node is not on PATH; the App Store metadata packet cannot be validated, and an unvalidated packet is not a candidate'
+
+if ! node "$metadata_validator" \
+    --packet "$metadata_packet" \
+    --expect-version "$marketing_version"; then
+  refuse "the App Store metadata packet is not submittable; every finding above is a field App Store Connect would refuse, a value that has drifted, or a claim this build does not support"
+fi
+
+metadata_packet_sha256="$(shasum -a 256 "$metadata_packet" | awk '{ print $1 }')"
+note "metadata packet sha256 $metadata_packet_sha256"
+
+# ── 6. artifact root ─────────────────────────────────────────────────────────
 #
 # Every check below happens before a single byte is written, and the root must
 # not already exist — so no caller path is read, moved, emptied or removed by
@@ -734,7 +786,7 @@ logs_dir="$artifact_root/logs"
 mkdir "$logs_dir"
 note "artifact root $artifact_root"
 
-# ── 6. the project must already declare this candidate ───────────────────────
+# ── 7. the project must already declare this candidate ───────────────────────
 
 step 'project settings'
 
@@ -790,7 +842,7 @@ expect_setting "$share_settings" "$SHARE_TARGET" DEVELOPMENT_TEAM "$EXPECTED_TEA
 expect_setting "$share_settings" "$SHARE_TARGET" CODE_SIGN_STYLE Manual
 expect_setting "$share_settings" "$SHARE_TARGET" PROVISIONING_PROFILE_SPECIFIER "$SHARE_PROFILE"
 
-# ── 7. export options ────────────────────────────────────────────────────────
+# ── 8. export options ────────────────────────────────────────────────────────
 #
 # Generated here, inside the artifact root, rather than committed: a checked-in
 # ExportOptions.plist is a file somebody edits once and nobody reads again, and
@@ -829,7 +881,7 @@ plutil -lint "$export_options" >/dev/null ||
   refuse "the generated export options are not a valid plist: $export_options"
 note "wrote $export_options"
 
-# ── 8. archive ───────────────────────────────────────────────────────────────
+# ── 9. archive ───────────────────────────────────────────────────────────────
 #
 # `-allowProvisioningUpdates` is deliberately absent and must stay absent. It
 # authorizes Xcode to register devices and to create or modify provisioning
@@ -860,7 +912,7 @@ fi
 [ -d "$archive_path" ] ||
   build_failed "xcodebuild archive reported success but produced no archive at $archive_path; log at $archive_log"
 
-# ── 9. export ────────────────────────────────────────────────────────────────
+# ── 10. export ───────────────────────────────────────────────────────────────
 
 step 'export'
 
@@ -879,7 +931,7 @@ ipa_path="$export_dir/$SCHEME.ipa"
 [ -f "$ipa_path" ] ||
   build_failed "the export produced no IPA at $ipa_path; log at $export_log"
 
-# ── 10. verification ─────────────────────────────────────────────────────────
+# ── 11. verification ─────────────────────────────────────────────────────────
 
 step 'verification'
 
@@ -1141,7 +1193,7 @@ else
   fail_check "webrtc: no embedded framework binary at $webrtc_binary"
 fi
 
-# ── 11. evidence ─────────────────────────────────────────────────────────────
+# ── 12. evidence ─────────────────────────────────────────────────────────────
 
 step 'evidence'
 
@@ -1197,6 +1249,8 @@ Artifacts
   ipa                     sha256 $ipa_sha256
   export options          $export_options
   export options          sha256 $export_options_sha256
+  metadata packet         $metadata_packet
+  metadata packet         sha256 $metadata_packet_sha256
   archive log             $archive_log
   export log              $export_log
 
@@ -1232,6 +1286,15 @@ cat >"$manifest_plist" <<MANIFEST_PLIST
 	<string>$(xml_escape "$marketing_version")</string>
 	<key>build</key>
 	<string>$(xml_escape "$build_number")</string>
+	<key>metadataPacket</key>
+	<dict>
+		<key>path</key>
+		<string>$(xml_escape "$metadata_packet")</string>
+		<key>sha256</key>
+		<string>$(xml_escape "$metadata_packet_sha256")</string>
+		<key>validation</key>
+		<string>accepted by scripts/ios-app-store-metadata-validate.mjs before this archive; NOT entered in or read back from App Store Connect</string>
+	</dict>
 	<key>appStoreConnectReadback</key>
 	<dict>
 		<key>observedAt</key>
