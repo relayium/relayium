@@ -684,15 +684,19 @@ public final class RealtimeSessionModel: ObservableObject {
             connection?.accept()
         } catch {
             connection?.reject()
-            writer?.discard()
             teardown()
             state = .failed(ErrorCopy.message(for: error))
         }
     }
 
+    /// Tells the peer, ends the session, and reports the error. Whatever the
+    /// receive left on disk is disposed of by `teardown` → `releaseWriter`
+    /// rather than here, so this path cannot decide that question differently
+    /// from every other ending. It is only ever reached from a live session —
+    /// the frame callbacks refuse to run once the state is terminal — and a
+    /// writer it finds is therefore a partial one.
     private func failReceive(_ error: Error) {
         connection?.reject()
-        writer?.discard()
         teardown()
         state = .failed(ErrorCopy.message(for: error))
     }
@@ -706,8 +710,21 @@ public final class RealtimeSessionModel: ObservableObject {
         state = .idle
     }
 
+    /// **Done** and **Cancel** are the same button at two different moments,
+    /// and this is the single call behind both: end the session and land the
+    /// model back on `.idle`.
+    ///
+    /// It deliberately does not decide the fate of what was received. Removing
+    /// an unfinished receive's debris is `releaseWriter`'s single rule, reached
+    /// through `teardown`, and a finished one is not this call's to touch —
+    /// completion has already let go of its writer.
+    ///
+    /// This used to discard first and tear down afterwards, so Done on the
+    /// completion screen deleted the very transfer it was reporting. Physical
+    /// run `9e8b8189` on a wired iPad pair read the received bytes and matched
+    /// their SHA-256 while completion was on screen; the file was gone from
+    /// `Documents/Received` the moment Done was pressed.
     public func cancel() {
-        writer?.discard()
         teardown()
         state = .idle
     }
@@ -775,6 +792,15 @@ public final class RealtimeSessionModel: ObservableObject {
         c.onDone = { [weak self] ok in
             Task { @MainActor in
                 self?.apply(g) { m in
+                    // A DONE frame describes a transfer in flight, and once the
+                    // session is terminal there is none. A peer that keeps
+                    // sending must not be able to reopen the question: an extra
+                    // frame ran `completedIncomingFiles` past the manifest into
+                    // `failReceive`, which replaced the `.completed` result the
+                    // user was looking at — the files still on disk, but no
+                    // longer named by the state, so Reveal went with them. A
+                    // late DONE(false) is the same move with a better story.
+                    guard m.isBusy else { return }
                     guard ok else {
                         // The DONE hash did not match what arrived. Files that
                         // look complete are worse than none.
@@ -791,6 +817,14 @@ public final class RealtimeSessionModel: ObservableObject {
                     do {
                         guard let writer = m.writer else { throw DownloadDestinationError.incomplete }
                         urls = try writer.finish()
+                        // The writer's job ended with that call, and holding on
+                        // to it afterwards is what every deletion-after-the-fact
+                        // bug on this path needed: a live handle to files that
+                        // are now the user's. Dropping it here means no later
+                        // frame, callback, teardown or session HAS one to
+                        // discard through — the guarantee is structural rather
+                        // than a state check each of those has to remember.
+                        m.writer = nil
                     } catch {
                         m.failReceive(error)
                         return
@@ -806,11 +840,24 @@ public final class RealtimeSessionModel: ObservableObject {
         c.onControl = { [weak self] control in
             Task { @MainActor in
                 self?.apply(g) { m in
+                    // The same rule as DONE, in both of its directions. A late
+                    // REJECT must not turn a receive the user has been shown
+                    // into a failure, and a late COMPLETE must not overwrite
+                    // that `.completed(urls)` with the sender's empty
+                    // `.completed([])` — which is the same loss under a
+                    // friendlier name, because `received`, and the Reveal and
+                    // share affordances built on it, are those URLs.
+                    guard m.isBusy else { return }
                     switch control {
                     case .complete:
                         m.state = .completed([])
                     case .reject:
-                        m.writer?.discard()
+                        // Not a teardown — the failure stays on screen with the
+                        // connection still behind it — so this is the one place
+                        // that releases the writer on its own. The guard above
+                        // is what makes that safe to do unconditionally: a
+                        // writer still held by a LIVE session never finished.
+                        m.releaseWriter()
                         m.state = .failed(
                             ErrorCopy.message(for: RealtimeConnection.ConnectionError.rejected)
                         )
@@ -823,8 +870,11 @@ public final class RealtimeSessionModel: ObservableObject {
         c.onError = { [weak self] err in
             Task { @MainActor in
                 self?.apply(g) { m in
-                    guard m.isBusy else { return m.retireWriterAfterTerminalState() }
-                    m.writer?.discard()
+                    // Every connection eventually errors or closes, and that
+                    // describes the connection, not a transfer that already
+                    // ended. A terminal session keeps the result it reached.
+                    guard m.isBusy else { return }
+                    m.releaseWriter()
                     m.state = .failed(ErrorCopy.message(for: err))
                 }
             }
@@ -832,38 +882,43 @@ public final class RealtimeSessionModel: ObservableObject {
         c.onClose = { [weak self] in
             Task { @MainActor in
                 self?.apply(g) { m in
-                    guard m.isBusy else { return m.retireWriterAfterTerminalState() }
-                    m.writer?.discard()
+                    // Every connection eventually errors or closes, and that
+                    // describes the connection, not a transfer that already
+                    // ended. A terminal session keeps the result it reached.
+                    guard m.isBusy else { return }
+                    m.releaseWriter()
                     m.state = .failed(L10n.t(.sessionPeerDisconnected))
                 }
             }
         }
     }
 
-    /// What a transport callback may do once the session is already terminal:
-    /// let go of the writer, and never discard through it.
-    ///
-    /// Every connection eventually errors or closes, and both callbacks used to
-    /// treat that as the transfer's outcome. For a `.completed` receive it is
-    /// not: `writer.finish()` has already run, the user has been shown the
-    /// files and offered Reveal in Finder, and the bytes are theirs. A late
-    /// `discard()` there deleted them off disk about fifteen seconds after they
-    /// appeared — the connection's death being reported as the transfer's.
-    ///
-    /// Dropping the reference is what makes that unrepeatable rather than
-    /// merely unlikely: no later path can reach a writer that is gone, so the
-    /// completed files cannot be discarded by a callback added after this one.
-    /// `.failed` is left alone; its partial debris is retired by
-    /// `releaseConnectionState`, which is also where the connection goes.
-    private func retireWriterAfterTerminalState() {
-        guard case .completed = state else { return }
-        writer = nil
-    }
-
     /// Every callback goes through here, so the generation check exists once.
     private func apply(_ g: Int, _ body: (RealtimeSessionModel) -> Void) {
         guard g == generation else { return }
         body(self)
+    }
+
+    /// Disposes of a receive that did not finish, and it is the only place that
+    /// removes received bytes.
+    ///
+    /// A writer still held here is, by construction, one whose `finish()` never
+    /// returned — completion drops the reference at the moment it succeeds — so
+    /// what is on disk under it is a partial file bearing a name the user was
+    /// shown, and it goes. There is deliberately no state check: this used to
+    /// ask whether the session was `.completed`, which is a different question
+    /// that happens to give the same answer most of the time. It gives the
+    /// wrong one for a session that completed in the OTHER direction while an
+    /// inbound receive was still partial, and `cancel()` skipped past it
+    /// entirely by discarding before tearing down — which is how Done on the
+    /// completion screen came to delete the transfer it was reporting.
+    ///
+    /// Every ending funnels through here instead of calling `discard()` itself,
+    /// so this decision cannot be made a second time, differently, at a call
+    /// site.
+    private func releaseWriter() {
+        writer?.discard()
+        writer = nil
     }
 
     /// Ends the previous attempt's connection, and nothing else.
@@ -905,16 +960,7 @@ public final class RealtimeSessionModel: ObservableObject {
         cancelAnswerTimeout()
         connection?.close()
         connection = nil
-        // A COMPLETED receive's files belong to the user now — release the
-        // writer without discarding, or retrying would delete what just
-        // arrived. A partial one's files are debris under a name the user was
-        // shown, so those go.
-        if case .completed = state {
-            writer = nil
-        } else {
-            writer?.discard()
-            writer = nil
-        }
+        releaseWriter()
         sasCode = ""
         sasConfirmed = false
         connectionOpened = false
