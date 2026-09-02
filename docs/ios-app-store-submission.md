@@ -149,7 +149,15 @@ screen receives `unknown_bundle`, and a charged transaction cannot be accepted.
 There is no candidate yet. `0.3.0 (5)` is a development baseline, and promoting
 it to a candidate requires the App Store Connect read-back above plus a new
 exact-source archive and checksum. Upload only the exact candidate whose hosted
-Go, Swift, iOS Release build and UI gates are green. France availability is
+Go, Swift, iOS Release build and UI gates are green. Every hosted iOS job
+selects exactly Xcode major 26 with an iphoneos SDK of at least 26 before it
+compiles anything, fails closed when no such toolchain is installed, and prints
+the selected versions into its own log. That keeps the runner image's default
+Xcode 16.4 and any unvalidated newer preview out of the builds this checklist
+depends on. It covers the toolchain only: it signs, archives and uploads
+nothing, so the App Store Connect read-back above, an exact-source archive and
+TestFlight build availability remain separate gates a green iOS lane does not
+satisfy. France availability is
 owner-confirmed. Relayium implements industry-standard encryption outside
 Apple's operating system, so complete the French ANSSI declaration workflow
 truthfully and attach an Apple-approved encryption declaration to this build.

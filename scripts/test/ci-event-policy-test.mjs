@@ -5018,6 +5018,378 @@ function compatEntryPointFailures(world) {
   return out;
 }
 
+// ── 6p. the iOS lane builds with the toolchain Apple will accept ────────────
+//
+// Every other section here is about which lane runs and what it costs. This one
+// is about whether the lane's green means anything, and it exists because a
+// hosted iOS run was green against a toolchain no upload may use: `macos-15`'s
+// default Xcode is 16.4, below Apple's Xcode 26 / iOS 26 SDK upload floor, and
+// nothing in the run says so. `ios.yml`'s own `env:` block carries the full
+// rationale; this section is the part of it that source can hold, asserted by
+// mutation because each shape below leaves a perfectly valid, perfectly green
+// workflow behind.
+//
+// The load-bearing claim is EXACT-MAJOR SELECTION, which is what keeps both the
+// 16.4 default and the announced Xcode 27 PUBLIC PREVIEW out. The explicit-
+// marker refusal is a cheap extra, not a prerelease detector, and nothing here
+// claims otherwise.
+//
+// Nothing here signs, archives or uploads anything, and it must not grow to.
+// App Store Connect read-back and TestFlight availability are separate gates,
+// owned by `docs/ios-app-store-submission.md`.
+
+/** The hosted image whose inventory this gate's Xcode claim is about. */
+const IOS_RUNNER = "macos-15";
+
+/**
+ * The one Xcode major this lane may build with, and the iOS SDK floor.
+ *
+ * The Xcode number is REQUIRED rather than minimum: Apple rejects below 26, and
+ * 27 is currently a public preview, so raising it is a decision made against a
+ * demonstrated upload rather than an image inventory. The SDK number stays a
+ * floor because Apple validates the SDK a binary was LINKED against.
+ */
+const REQUIRED_XCODE_MAJOR = 26;
+const APPLE_MIN_IOS_SDK_MAJOR = 26;
+
+const XCODE_MAJOR_KEY = "RELAYIUM_XCODE_MAJOR";
+const SDK_MIN_KEY = "RELAYIUM_MIN_IOS_SDK_MAJOR";
+const SELECT_KEY = "RELAYIUM_SELECT_XCODE";
+
+/** The one form a job may run the selection in; three copies is the drift. */
+const SELECT_REF = `\${{ env.${SELECT_KEY} }}`;
+const SELECT_REF_RE = new RegExp(`\\$\\{\\{\\s*env\\.${SELECT_KEY}\\s*\\}\\}`);
+
+/** Anything that compiles, tests or drives a simulator with the selected Xcode. */
+const TOOLCHAIN_COMMAND = /\b(xcodebuild|xcrun|swift)\b/;
+
+/** The script's executable lines: comments and blanks carry no behaviour. */
+function scriptLines(script) {
+  return String(script ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("#"));
+}
+
+/**
+ * The local variable a script binds an environment key to, or null.
+ *
+ * Read rather than assumed so the checks below survive a rename: what matters
+ * is that the declared number reaches a comparison, not how the shell variable
+ * is spelled.
+ */
+function localBinding(lines, envKey) {
+  const re = new RegExp(`^([A-Za-z_][A-Za-z0-9_]*)=.*\\$\\{?${envKey}\\b`);
+  for (const line of lines) {
+    const match = line.match(re);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+/**
+ * Does a guard matching `condition` reach a statement matching `body`?
+ *
+ * The pairing is what every script check below is about: a script that tests and
+ * carries on is not a gate, and a bare `exit`/`continue` with no test in front
+ * of it is not this gate. Bounded to the eight lines after the guard and stopped
+ * by the closing `fi` so a later block cannot satisfy an earlier condition.
+ */
+function guardLeadsTo(lines, condition, body) {
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!condition.test(lines[i])) continue;
+    for (let j = i + 1; j < lines.length && j <= i + 8; j += 1) {
+      if (/^fi\b/.test(lines[j])) break;
+      if (body.test(lines[j])) return true;
+    }
+  }
+  return false;
+}
+
+function iosUploadToolchainFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+
+  const doc = world.docs.get(IOS);
+  need(doc !== undefined, `${IOS} is missing or did not parse.`);
+  if (!doc) return out;
+
+  // ── the declared toolchain numbers ───────────────────────────────────────
+  const env = doc.env;
+  need(
+    env !== undefined && env !== null && typeof env === "object",
+    `${IOS} declares no workflow-level \`env:\` block. It is where this lane's required Xcode `
+    + `major, its iOS SDK floor and its one shared selection script live; without it every job `
+    + `falls back to the runner image's default Xcode, which is 16.4 on ${IOS_RUNNER} and produces `
+    + `binaries Apple refuses at upload.`,
+  );
+  if (!env || typeof env !== "object") return out;
+
+  const rawMajor = env[XCODE_MAJOR_KEY];
+  need(
+    Number.isInteger(Number(rawMajor)) && Number(rawMajor) === REQUIRED_XCODE_MAJOR,
+    `${IOS}: \`env.${XCODE_MAJOR_KEY}\` is ${JSON.stringify(rawMajor)}, want exactly `
+    + `${REQUIRED_XCODE_MAJOR}. BOTH directions off this number fail silently: 16 re-admits the `
+    + `${IOS_RUNNER} default, below Apple's upload floor; 27 admits the public preview the image `
+    + `carries, which is outside the major this lane certifies and is not evidence to submit an `
+    + `App Store build on — not, on current guidance, a build TestFlight refuses. Either way it `
+    + `still compiles and the lane stays green, so moving this belongs in the same commit as a `
+    + `demonstrated accepted upload from the new major.`,
+  );
+
+  const rawSdk = env[SDK_MIN_KEY];
+  need(
+    Number.isInteger(Number(rawSdk)) && Number(rawSdk) >= APPLE_MIN_IOS_SDK_MAJOR,
+    `${IOS}: \`env.${SDK_MIN_KEY}\` is ${JSON.stringify(rawSdk)}, want an integer of at least `
+    + `${APPLE_MIN_IOS_SDK_MAJOR}. Lowering it is how the gate stops gating with no line deleted: `
+    + `every step still runs and the comparison still passes.`,
+  );
+
+  // ── the one shared script ────────────────────────────────────────────────
+  const script = env[SELECT_KEY];
+  need(
+    typeof script === "string" && script.trim() !== "",
+    `${IOS}: \`env.${SELECT_KEY}\` is missing or empty. It is the whole mechanism: one selection `
+    + `script the three jobs share, so a toolchain rule cannot be tightened in one job and left `
+    + `behind in another.`,
+  );
+  const lines = scriptLines(script);
+  need(lines.length > 0, `${IOS}: the shared selection script has no executable lines at all.`);
+
+  if (lines.length > 0) {
+    need(
+      /^set\s+-euo\s+pipefail$/.test(lines[0]),
+      `${IOS}: the shared selection script begins with ${JSON.stringify(lines[0])}, want `
+      + `\`set -euo pipefail\`. Without \`-e\` a failed \`xcrun\` leaves an empty version string `
+      + `the script walks on to compare.`,
+    );
+    need(
+      lines.some((line) => /\/Applications\/Xcode\*\.app/.test(line)),
+      `${IOS}: the shared selection script never enumerates \`/Applications/Xcode*.app\`. The `
+      + `image rotates its Xcode point releases without any commit here, so naming one bundle path `
+      + `turns the next refresh into an outage, and naming none takes the 16.4 default.`,
+    );
+    need(
+      lines.some((line) => /DEVELOPER_DIR=.*>>\s*"?\$\{?GITHUB_ENV/.test(line)),
+      `${IOS}: the shared selection script does not export \`DEVELOPER_DIR\` through `
+      + `\`$GITHUB_ENV\`. Selecting a toolchain inside one step's shell changes nothing for the `
+      + `steps after it: they still compile against the image default while the selection step `
+      + `reports a correct version and passes.`,
+    );
+
+    // The explicit-marker refusal, scoped and not overclaimed: it drops a
+    // bundle that ANNOUNCES itself as a seed in its path or version report.
+    // Apple guarantees no such marker, so this catches some prereleases and not
+    // others — the required-major filter below is what keeps the announced
+    // Xcode 27 preview out. Asserted on the glob, not on printed prose, which
+    // contains "beta" too and would survive the rule's deletion.
+    //
+    // Two markers are deliberately absent and must stay absent. A trailing
+    // lowercase build letter is NOT a seed marker: stable Xcode 16.0 shipped as
+    // `16A242d`. Nor is "release candidate": Apple's App Store Connect release
+    // notes permitted Xcode 26.6 with the iOS 26.5 RC SDK for distribution.
+    need(
+      lines.some((line) => /\*beta\*/.test(line)),
+      `${IOS}: the shared selection script carries no \`*beta*\` match, so a toolchain that `
+      + `announces itself as a beta in its path or version report is a candidate like any other.`,
+    );
+    need(
+      guardLeadsTo(lines, /^if\s+!?\s*[^;]*\bprerelease\b/, /^continue\b/),
+      `${IOS}: the shared selection script never REFUSES a candidate carrying an explicit `
+      + `prerelease marker — nothing tests one and drops it from the enumeration. Defining the `
+      + `predicate is not the gate.`,
+    );
+
+    // ── the required major, as a filter inside the enumeration ────────────
+    //
+    // `!=` and `continue` are both load-bearing: a `-lt` guard accepts every
+    // major above the required one — here, the Xcode 27 preview — and one that
+    // exited would turn a merely uninteresting bundle into a lane outage. It
+    // must sit INSIDE the enumeration, before a candidate can win.
+    const xcodeVar = localBinding(lines, XCODE_MAJOR_KEY);
+    need(
+      xcodeVar !== null,
+      `${IOS}: the shared selection script never reads \`${XCODE_MAJOR_KEY}\`, so the declared `
+      + `required major reaches no comparison and the \`env:\` entry above is decoration.`,
+    );
+    const majorRe = new RegExp(`!=\\s+"?\\$\\{?${xcodeVar ?? "required"}\\b`);
+    need(
+      xcodeVar === null || guardLeadsTo(lines, majorRe, /^continue\b/),
+      `${IOS}: the shared selection script never restricts selection to the required Xcode major `
+      + `— no \`!= "$${xcodeVar ?? "required"}"\` test drops a candidate before it can be chosen. `
+      + `Without it the enumeration is newest-wins, which fails BOTH ways: the ${IOS_RUNNER} `
+      + `default when nothing newer is installed, and the Xcode 27 public preview the moment an `
+      + `image refresh lands one. A \`-lt\` floor is not a substitute, which is why this asks for `
+      + `an equality: "at least 26" is exactly the rule that selects 27.`,
+    );
+    need(
+      xcodeVar === null || guardLeadsTo(lines, majorRe, /\bexit\s+[1-9]/),
+      `${IOS}: the shared selection script never re-asserts the SELECTED major after the loop. `
+      + `The filter keeps a wrong major from winning; this exit catches a future edit that lets `
+      + `one through anyway — the difference between dying here and shipping.`,
+    );
+    need(
+      guardLeadsTo(lines, /-z\s+"?\$\{?selected/, /\bexit\s+[1-9]/),
+      `${IOS}: the shared selection script does not fail closed on an empty selection. Filtering `
+      + `to one required major means the enumeration can legitimately end with no candidate, and `
+      + `that has to be a non-zero exit. Walking past it exports an empty \`DEVELOPER_DIR\`, which `
+      + `is not an error downstream: it silently means the runner default, i.e. Xcode 16.4.`,
+    );
+
+    // ── the SDK floor, read and enforced ──────────────────────────────────
+    need(
+      lines.some((line) => /xcrun\s+--sdk\s+iphoneos\s+--show-sdk-version/.test(line)),
+      `${IOS}: the shared selection script never reads the iphoneos SDK version `
+      + `(\`xcrun --sdk iphoneos --show-sdk-version\`). Apple validates the SDK a binary was `
+      + `LINKED against — a different fact from the Xcode version, and it can be older.`,
+    );
+    const sdkVar = localBinding(lines, SDK_MIN_KEY);
+    need(
+      sdkVar !== null,
+      `${IOS}: the shared selection script never reads \`${SDK_MIN_KEY}\`, so the declared iOS `
+      + `SDK minimum reaches no comparison at all.`,
+    );
+    need(
+      sdkVar === null
+        || guardLeadsTo(lines, new RegExp(`-lt\\s+"?\\$\\{?${sdkVar}\\b`), /\bexit\s+[1-9]/),
+      `${IOS}: the shared selection script never compares the iphoneos SDK against `
+      + `\`${SDK_MIN_KEY}\` and exits non-zero. The Xcode check does not stand in for it: an `
+      + `Xcode 26 with its iOS 26 SDK replaced satisfies one and fails the upload on the other.`,
+    );
+  }
+
+  // ── every job runs it, first, and nothing puts the old toolchain back ────
+  const jobs = Object.entries(doc.jobs ?? {});
+  need(jobs.length > 0, `${IOS} declares no jobs, so every per-job check below inspects nothing.`);
+  for (const [name, job] of jobs) {
+    need(
+      job?.["runs-on"] === IOS_RUNNER,
+      `${IOS}/${name}: \`runs-on\` is ${JSON.stringify(job?.["runs-on"])}, want `
+      + `${JSON.stringify(IOS_RUNNER)}. This section is a claim about what that image has `
+      + `installed — an Xcode 26 beside the 16.4 default — and it does not travel to another `
+      + `image on its own. Make that decision here, against the new image's inventory.`,
+    );
+
+    const steps = job?.steps ?? [];
+    const guardIndices = steps
+      .map((step, index) => ({ step, index }))
+      .filter(({ step }) => SELECT_REF_RE.test(String(step?.run ?? "")))
+      .map(({ index }) => index);
+    const guardIndex = guardIndices[0] ?? -1;
+    need(
+      guardIndex !== -1,
+      `${IOS}/${name}: no step runs the shared Xcode selection \`${SELECT_REF}\`. Every job here `
+      + `compiles or drives the app, so a job that skips it builds with ${IOS_RUNNER}'s default `
+      + `Xcode 16.4 while the others report the toolchain is fine — two thirds of the lane `
+      + `standing as evidence for a toolchain the third did not use.`,
+    );
+    if (guardIndex === -1) continue;
+    // One selection per job. Two make "which one governs the build" a matter of
+    // reading order, and the checks below would answer it about the first.
+    need(
+      guardIndices.length === 1,
+      `${IOS}/${name}: ${guardIndices.length} steps run the shared Xcode selection `
+      + `(indices ${guardIndices.join(", ")}). Selection happens once per job; with two, the `
+      + `ordering and shape checks here describe the first while the build inherits whatever `
+      + `the last one exported.`,
+    );
+
+    // ── the selection step is the shared script, whole, and can report red ──
+    //
+    // Containing the reference is not running it. `run: ${{ env.… }} || true`,
+    // a `continue-on-error`, or an `if` that is false all leave a step that
+    // still MATCHES the reference above while the fail-closed exits inside the
+    // script reach nothing: the job goes green, and the build below it compiles
+    // against the image's default Xcode 16.4. The shared script is a whole
+    // command by construction, so the exact form is the check.
+    const guard = steps[guardIndex];
+    const guardRun = String(guard?.run ?? "").trim();
+    need(
+      guardRun === SELECT_REF,
+      `${IOS}/${name}: the Xcode selection step runs ${JSON.stringify(guardRun)}, want exactly `
+      + `\`${SELECT_REF}\`. Anything wrapped around the shared script — \`|| true\`, a trailing `
+      + `\`exit 0\`, a subshell whose status is dropped — swallows the fail-closed exits the `
+      + `script's whole purpose is to reach, and the job stays green on the toolchain it was `
+      + `written to refuse.`,
+    );
+    // Absent or literally `false` — nothing else. GitHub honours the quoted
+    // string `'true'` and an `${{ }}` expression here just as it honours the
+    // boolean, so "not the boolean true" is not the fail-closed reading.
+    for (const [scope, value] of [
+      ["step", guard?.["continue-on-error"]],
+      ["job", job?.["continue-on-error"]],
+    ]) {
+      need(
+        value === undefined || value === false,
+        `${IOS}/${name}: the Xcode selection ${scope} sets `
+        + `\`continue-on-error: ${JSON.stringify(value)}\`. A refused toolchain then reports green `
+        + `and the steps after it still build — with the \`DEVELOPER_DIR\` the selection never got `
+        + `far enough to export. Absent or \`false\`; a quoted \`'true'\` and an \`${"${{ }}"}\` `
+        + `expression are honoured here too.`,
+      );
+    }
+    need(
+      guard?.if === undefined,
+      `${IOS}/${name}: the Xcode selection step carries \`if: ${guard?.if}\`. A skipped step does `
+      + `not report red, it reports nothing, and the build steps below it are not conditional — `
+      + `so the lane goes green having compiled against ${IOS_RUNNER}'s default Xcode 16.4.`,
+    );
+
+    const work = steps
+      .map((step, index) => ({ step, index }))
+      .filter(({ step, index }) => index !== guardIndex
+        && TOOLCHAIN_COMMAND.test(String(step?.run ?? "")));
+    need(
+      work.length > 0,
+      `${IOS}/${name}: no step runs \`xcodebuild\`, \`xcrun\` or \`swift\` at all, so the ordering `
+      + `check below passes by having nothing to order against.`,
+    );
+    for (const { step, index } of work) {
+      need(
+        index > guardIndex,
+        `${IOS}/${name}: the Xcode selection step runs AFTER `
+        + `${JSON.stringify(step?.name ?? step?.uses ?? `step ${index}`)}. \`DEVELOPER_DIR\` `
+        + `exported through \`$GITHUB_ENV\` reaches SUBSEQUENT steps only, so everything above `
+        + `the selection compiles against the image default — silently, because the selection `
+        + `still succeeds afterwards and the job goes green.`,
+      );
+    }
+
+    // Nothing after the gate may put the old toolchain back. A YAML `env:` wins
+    // over the value the selection exported, and a later `xcode-select` is a
+    // second selection that no floor is enforced at.
+    for (const scope of [
+      { where: `${IOS}/${name}`, env: job?.env },
+      ...steps.map((step, index) => ({
+        where: `${IOS}/${name}, step `
+          + `${JSON.stringify(step?.name ?? step?.uses ?? `step ${index}`)}`,
+        env: step?.env,
+      })),
+    ]) {
+      if (!scope.env || typeof scope.env !== "object") continue;
+      for (const key of ["DEVELOPER_DIR", XCODE_MAJOR_KEY, SDK_MIN_KEY]) {
+        need(
+          scope.env[key] === undefined,
+          `${scope.where} overrides \`${key}\` with ${JSON.stringify(scope.env[key])}. A YAML `
+          + `\`env:\` wins over what the selection step exported, so the gate keeps passing while `
+          + `the build it governs uses a different toolchain — or moves a floor to where nobody `
+          + `reads it while the workflow-level number stays reassuringly correct.`,
+        );
+      }
+    }
+    const reselect = steps.find((step, index) => index !== guardIndex
+      && /\bxcode-select\b/.test(String(step?.run ?? "")));
+    need(
+      reselect === undefined,
+      `${IOS}/${name}: step ${JSON.stringify(reselect?.name ?? "")} runs \`xcode-select\`. `
+      + `Selection happens once, in the shared script, where both floors are enforced; a second `
+      + `selection anywhere else is unchecked by construction.`,
+    );
+  }
+
+  return out;
+}
+
 for (const message of triggerFailures(realWorld())) failures.push(message);
 for (const message of platformBoundaryFailures(realWorld())) failures.push(message);
 for (const message of pathMatrixFailures(realWorld())) failures.push(message);
@@ -5029,6 +5401,7 @@ for (const message of concurrencyFailures(realWorld())) failures.push(message);
 for (const message of releaseBoundaryFailures(realWorld())) failures.push(message);
 for (const message of aggregateGateFailures(realWorld())) failures.push(message);
 for (const message of compatEntryPointFailures(realWorld())) failures.push(message);
+for (const message of iosUploadToolchainFailures(realWorld())) failures.push(message);
 
 // ── 7h. the inventory script's own fail-closed proof, actually executed ─────
 //
@@ -5475,6 +5848,57 @@ function withGuardStep(world, mutate) {
     `no step in ${IOS} runs \`swift test\`, so the iOS guard gate this case is about is already `
     + `gone and the case cannot prove anything about it.`,
   );
+}
+
+/**
+ * Mutate the shared iOS selection script, and refuse to be a no-op.
+ *
+ * A mutation that silently stopped applying — the script rewritten, the pattern
+ * no longer matching — would leave the world unbroken and let its case pass
+ * while asserting nothing, which is what section 8 exists to prevent.
+ */
+function withIosScript(world, transform) {
+  const env = world.docs.get(IOS)?.env;
+  if (!env || typeof env !== "object") throw new Error(`${IOS} declares no workflow-level env`);
+  const before = String(env[SELECT_KEY] ?? "");
+  const after = transform(before);
+  if (after === before) {
+    throw new Error(
+      `the mutation left ${IOS}'s \`${SELECT_KEY}\` unchanged, so the case below it would judge `
+      + `the real script. Follow the script's rewrite here.`,
+    );
+  }
+  env[SELECT_KEY] = after;
+  return world;
+}
+
+/** Remove the whole `if … fi` block whose condition matches `re`. */
+function withoutIosScriptBlock(world, re, label) {
+  return withIosScript(world, (script) => {
+    const lines = script.split("\n");
+    const at = lines.findIndex((line) => re.test(line));
+    if (at === -1) throw new Error(`${IOS}'s selection script has no ${label} condition to remove`);
+    const indent = lines[at].length - lines[at].trimStart().length;
+    let end = at + 1;
+    while (end < lines.length
+      && !(lines[end].trim() === "fi" && lines[end].length - lines[end].trimStart().length === indent)) {
+      end += 1;
+    }
+    if (end >= lines.length) throw new Error(`${IOS}'s ${label} block is unterminated`);
+    lines.splice(at, end - at + 1);
+    return lines.join("\n");
+  });
+}
+
+/** Mutate the step list of an iOS job around the index its selection step sits at. */
+function withIosGuard(world, name, mutate) {
+  const job = world.docs.get(IOS)?.jobs?.[name];
+  if (job === undefined) throw new Error(`${IOS} declares no job named ${name}`);
+  const steps = job.steps ?? [];
+  const at = steps.findIndex((step) => SELECT_REF_RE.test(String(step?.run ?? "")));
+  if (at === -1) throw new Error(`${IOS}/${name} already runs no shared Xcode selection step`);
+  mutate(steps, at);
+  return world;
 }
 
 const MUTATIONS = [
@@ -7288,6 +7712,191 @@ const MUTATIONS = [
     },
     expect: /compat\.yml: concurrency\.cancel-in-progress is "true", want/,
   },
+  // ── 6p: the iOS upload toolchain ─────────────────────────────────────────
+  //
+  // Every case below leaves `ios.yml` a valid workflow GitHub would run happily,
+  // and every one puts the lane back to reporting green for a build Apple
+  // refuses at upload.
+  {
+    name: "an iOS job moves off the image this gate's inventory claim is about",
+    mutate: (world) => withNamedJob(world, IOS, "ios-transfer-acceptance", (job) => {
+      job["runs-on"] = "macos-latest";
+    }),
+    expect: /ios\.yml\/ios-transfer-acceptance: `runs-on` is "macos-latest", want "macos-15"/,
+  },
+  {
+    // Down, to the runner image default. The classic direction.
+    name: "the required Xcode major is lowered to the image default's",
+    mutate: (world) => { world.docs.get(IOS).env[XCODE_MAJOR_KEY] = "16"; return world; },
+    expect: /ios\.yml: `env\.RELAYIUM_XCODE_MAJOR` is "16", want exactly 26/,
+  },
+  {
+    // And UP: the direction a floor cannot see, and why this is an equality.
+    // Bumping to the preview `macos-15` carries reads like keeping current,
+    // compiles, passes every job — and is discovered at upload, against a
+    // build number already consumed.
+    name: "the required Xcode major is raised to the preview the image carries",
+    mutate: (world) => { world.docs.get(IOS).env[XCODE_MAJOR_KEY] = "27"; return world; },
+    expect: /ios\.yml: `env\.RELAYIUM_XCODE_MAJOR` is "27", want exactly 26/,
+  },
+  {
+    name: "the iOS SDK floor is lowered below Apple's",
+    mutate: (world) => { world.docs.get(IOS).env[SDK_MIN_KEY] = "18"; return world; },
+    expect: /ios\.yml: `env\.RELAYIUM_MIN_IOS_SDK_MAJOR` is "18", want an integer of at least 26/,
+  },
+  {
+    name: "the shared selection script itself is removed",
+    mutate: (world) => { delete world.docs.get(IOS).env[SELECT_KEY]; return world; },
+    expect: /ios\.yml: `env\.RELAYIUM_SELECT_XCODE` is missing or empty/,
+  },
+  {
+    name: "an iOS job loses the shared Xcode selection step",
+    mutate: (world) => withIosGuard(world, "ios-ui-smoke", (steps, at) => {
+      steps.splice(at, 1);
+    }),
+    expect: /ios\.yml\/ios-ui-smoke: no step runs the shared Xcode selection/,
+  },
+  {
+    // The subtle one: the step is present, runs, prints a correct version and
+    // passes — after the build it governs already compiled against 16.4.
+    name: "the Xcode selection runs after the build it governs",
+    mutate: (world) => withIosGuard(world, "ios-build", (steps, at) => {
+      const [guard] = steps.splice(at, 1);
+      steps.push(guard);
+    }),
+    expect: /ios\.yml\/ios-build: the Xcode selection step runs AFTER/,
+  },
+  {
+    // The three ways to keep a step that still MATCHES the shared reference and
+    // still cannot report red. Each leaves the workflow valid and the lane
+    // green, building against the 16.4 default the script exists to refuse.
+    name: "the Xcode selection swallows its own failure with `|| true`",
+    mutate: (world) => withIosGuard(world, "ios-build", (steps, at) => {
+      steps[at] = { ...steps[at], run: `${steps[at].run} || true` };
+    }),
+    expect: /ios\.yml\/ios-build: the Xcode selection step runs .*want exactly/,
+  },
+  {
+    name: "the Xcode selection is marked `continue-on-error`",
+    mutate: (world) => withIosGuard(world, "ios-ui-smoke", (steps, at) => {
+      steps[at] = { ...steps[at], "continue-on-error": true };
+    }),
+    expect: /ios\.yml\/ios-ui-smoke: the Xcode selection step sets `continue-on-error: true`/,
+  },
+  {
+    // The same bypass spelled as a string, which GitHub honours identically and
+    // a `!== true` predicate reads as safe.
+    name: "the Xcode selection is marked `continue-on-error` as a quoted string",
+    mutate: (world) => withNamedJob(world, IOS, "ios-build", (job) => {
+      job["continue-on-error"] = "true";
+    }),
+    expect: /ios\.yml\/ios-build: the Xcode selection job sets `continue-on-error: "true"`/,
+  },
+  {
+    name: "the Xcode selection is made conditional and skips",
+    mutate: (world) => withIosGuard(world, "ios-build", (steps, at) => {
+      steps[at] = { ...steps[at], if: "false" };
+    }),
+    expect: /ios\.yml\/ios-build: the Xcode selection step carries `if:/,
+  },
+  {
+    // Selection that reaches no later step: the gate passes, the builds below
+    // it use the image default anyway.
+    name: "the shared script stops exporting DEVELOPER_DIR to later steps",
+    mutate: (world) => withIosScript(world, (script) => script.replace(
+      /\n[^\n]*DEVELOPER_DIR=[^\n]*>>[^\n]*GITHUB_ENV[^\n]*\n/,
+      "\n",
+    )),
+    expect: /does not export `DEVELOPER_DIR` through/,
+  },
+  {
+    // Back to newest-wins. Both numbers still declared and read, the enumeration
+    // still runs and prints — and the filter that kept the Xcode 27 preview out
+    // of the running is gone. It reads as a simplification.
+    name: "the shared script goes back to selecting the globally newest Xcode",
+    mutate: (world) => withoutIosScriptBlock(world, /^\s*if \[ "\$major" !=/, "required-major"),
+    expect: /never restricts selection to the required Xcode major/,
+  },
+  {
+    // The likelier near miss: the filter survives as a FLOOR. "At least 26"
+    // reads as safer than "exactly 26" and is the rule that selects the preview.
+    name: "the required-major filter is relaxed back into a floor",
+    mutate: (world) => withIosScript(world, (script) => script.replace(
+      /"\$major" != "\$required_xcode"/,
+      '"$major" -lt "$required_xcode"',
+    )),
+    expect: /never restricts selection to the required Xcode major/,
+  },
+  {
+    // The second place a wrong major dies. Removing it is invisible while the
+    // in-loop filter is intact, which is why it is asserted separately.
+    name: "the shared script stops re-asserting the selected major after the loop",
+    mutate: (world) => withoutIosScriptBlock(
+      world, /^\s*if \[ "\$selected_major" !=/, "selected-major assertion",
+    ),
+    expect: /never re-asserts the SELECTED major after the loop/,
+  },
+  {
+    // "Nothing survived" is a REACHABLE state once selection filters to one
+    // major, and walking past it exports an empty `DEVELOPER_DIR` — not an
+    // error downstream, just a silent return to the runner default.
+    name: "the shared script stops failing closed when no Xcode 26 is installed",
+    mutate: (world) => withoutIosScriptBlock(world, /-z "\$selected" \]; then$/, "empty-selection"),
+    expect: /does not fail closed on an empty selection/,
+  },
+  {
+    // The refusal deleted while the predicate implementing it stays in the file.
+    // Nothing looks incomplete afterwards: it enumerates, filters, selects.
+    name: "the shared script stops refusing explicitly marked prerelease bundles",
+    mutate: (world) => withoutIosScriptBlock(world, /^\s*if prerelease /, "prerelease refusal"),
+    expect: /never REFUSES a candidate carrying an explicit prerelease marker/,
+  },
+  {
+    name: "the shared script drops its beta match",
+    mutate: (world) => withIosScript(world, (script) => script.replace("*beta*|", "")),
+    expect: /carries no `\*beta\*` match/,
+  },
+  {
+    name: "the shared script stops reading the iphoneos SDK version",
+    mutate: (world) => withIosScript(world, (script) => script.replace(
+      /xcrun --sdk iphoneos --show-sdk-version/,
+      "xcodebuild -showsdks",
+    )),
+    expect: /never reads the iphoneos SDK version/,
+  },
+  {
+    name: "the iphoneos SDK comparison is dropped from the shared script",
+    mutate: (world) => withoutIosScriptBlock(world, /-lt\s+"\$min_sdk"/, "iOS SDK floor"),
+    expect: /never compares the iphoneos SDK against `RELAYIUM_MIN_IOS_SDK_MAJOR`/,
+  },
+  {
+    // The override that beats the export: a YAML `env:` wins over `$GITHUB_ENV`,
+    // so the selection step passes while the build uses 16.4.
+    name: "a job pins DEVELOPER_DIR back to the image default",
+    mutate: (world) => withNamedJob(world, IOS, "ios-build", (job) => {
+      job.env = { DEVELOPER_DIR: "/Applications/Xcode.app/Contents/Developer" };
+    }),
+    expect: /ios\.yml\/ios-build overrides `DEVELOPER_DIR`/,
+  },
+  {
+    name: "a step re-selects a toolchain after the gate",
+    mutate: (world) => withNamedJob(world, IOS, "ios-build", (job) => {
+      job.steps.push({
+        name: "Use the fallback toolchain",
+        run: "sudo xcode-select -s /Library/Developer/CommandLineTools\n",
+      });
+    }),
+    expect: /runs `xcode-select`/,
+  },
+  {
+    // The opposite obligation. The step's NAME is prose: rewording it must not
+    // fail anything, or the next person to improve it learns to stop.
+    name: "the Xcode selection step is renamed",
+    mutate: (world) => withIosGuard(world, "ios-build", (steps, at) => {
+      steps[at] = { ...steps[at], name: "Pick the toolchain Apple accepts" };
+    }),
+    refute: /no step runs the shared Xcode selection|Xcode selection step runs AFTER/,
+  },
   // The two cases that used to sit here — `macos.yml`'s unfiltered `swift test`
   // gaining a `--filter`, and a legitimate fast pre-check beside it — moved
   // with their rule to `scripts/test/swift-ci-boundary-test.mjs`, which now
@@ -7310,6 +7919,7 @@ for (const { name, mutate, expect, refute } of MUTATIONS) {
       ...releaseBoundaryFailures(world),
       ...aggregateGateFailures(world),
       ...compatEntryPointFailures(world),
+      ...iosUploadToolchainFailures(world),
     ];
   } catch (err) {
     check(false, `the CI trigger-policy mutation "${name}" threw instead of reporting: ${err.message}`);
