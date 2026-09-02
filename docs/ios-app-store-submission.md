@@ -98,8 +98,11 @@ inferred from the feature's name:
   it unconditionally (`inbox.iosForegroundOnly`).
 - **No new capability was added to ship it.** The app declares no
   `UIBackgroundModes`, uses no background `URLSession`, registers for no remote
-  notifications and links no notification framework. The entitlements, privacy
-  manifest and purpose strings are unchanged by this feature.
+  notifications and links no notification framework. The entitlements and the
+  privacy manifest are unchanged by this feature. One purpose string has since
+  been added to the app — `NSLocalNetworkUsageDescription` — but it belongs to
+  the peer-to-peer transfer lanes rather than to Device Inbox; see *Local
+  Network access* below.
 - **Received files land in `Documents/Received`** — the same directory a stored
   link's download writes into, published to the Files app by the existing
   `UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace` keys. There is
@@ -144,6 +147,105 @@ Before uploading a TestFlight build:
 The server must be ready before TestFlight: otherwise every signed-in Account
 screen receives `unknown_bundle`, and a charged transaction cannot be accepted.
 
+## Local Network access: a resolved functional prerequisite
+
+**Status: declared in source; physical revalidation on iOS/iPadOS 26 is still
+outstanding.** This is a functional and review-relevant prerequisite, not a
+blocker of the same class as the camera item below — the declaration exists, and
+what remains is observing it work on a device.
+
+### What is declared, and why it is owed
+
+`apps/ios/Relayium/Info.plist` declares `NSLocalNetworkUsageDescription`,
+localized in the app bundle's own `en.lproj/InfoPlist.strings` and
+`zh-Hans.lproj/InfoPlist.strings`. The English text in `Info.plist` is the
+fallback and is identical to the English catalog.
+
+The requirement comes from the transfer, not from device discovery, and the
+distinction matters for both App Review answers and support copy:
+
+- **Discovery is a server question.** The nearby roster comes from Relayium's
+  own code-less rendezvous room over the same HTTPS/WebSocket origin as the rest
+  of the app, grouped by the public address the server observes. There is no
+  Bonjour, no mDNS and no subnet scan. `NSBonjourServices`, the multicast
+  entitlement and the wifi-info entitlement are therefore absent and stay
+  absent.
+- **The transfer is not.** Every realtime lane builds its peer connection with
+  `iceTransportPolicy = .all`, so between two devices on one network the
+  selected candidate pair is routinely a unicast socket to the peer's address on
+  that subnet. iOS 14 and later gate that behind Local Network access, and iOS
+  grants it only to an app that has declared why it wants it:
+  <https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy>
+
+### Why the omission was a silent failure rather than a smaller permission set
+
+Retained physical runs `0af36138` and `56e78dbf` recorded both faces of the
+previous state, in which the key was absent:
+
+- on **iOS/iPadOS 26** the system withheld the permission prompt entirely and
+  the local path simply never connected — no alert, no actionable error;
+- on **iPadOS 18** the omission was masked and the same build appeared correct.
+
+A build that passes on an older OS is therefore not evidence for this item.
+
+### The copy, and the bound on it
+
+The purpose string describes files and messages going directly to the device the
+user selected. It deliberately does **not** claim that Relayium scans, browses
+or lists the network, because it does not, and it uses no transport vocabulary
+(`WebRTC`, `ICE`, `STUN`) in a sentence a person has to act on. If the copy is
+revised, keep both bounds: an overclaiming purpose string is its own review
+risk, and `IOSLocalNetworkPermissionTests` enforces the wording bounds,
+the two-language coverage and the fallback match.
+
+### Physical revalidation gate — outstanding
+
+No automated test may accept a system privacy alert, and none does. The
+following must be observed by hand on a **physical iOS/iPadOS 26 device**, on
+the exact candidate, before that candidate is treated as functionally complete:
+
+1. On a device that has not already granted this app Local Network access, the
+   first eligible transfer attempt to a selected nearby device presents the
+   Local Network prompt, and the alert renders the app's own sentence. Reach
+   that state by using a device where the permission has not yet been decided —
+   **do not** uninstall or reinstall the app, clear its data, reset privacy
+   settings, sign out, or change any device setting to force the prompt. If
+   every available device has already decided the permission, record that and
+   leave this item outstanding rather than mutating device or account state.
+2. Allowing it completes a real file transfer and a real text transfer between
+   two devices on the same network.
+3. Denying it at that prompt degrades honestly rather than hanging: the user is
+   told the transfer could not reach the device, and the app remains usable.
+   Denial at the prompt is the observation this item requires; revoking the
+   permission afterwards in *Settings ▸ Privacy & Security ▸ Local Network* is an
+   optional extra check at the owner's discretion, not a prerequisite.
+4. The prompt is presented in Simplified Chinese on a device set to that
+   language, with the translated sentence.
+5. The same build is re-checked on an iPadOS 18 device only as a
+   non-regression; a pass there is not evidence for items 1–4.
+
+Record the run tag and outcome here when it is done. Until then this record
+claims the declaration is correct **in source only**.
+
+### Review-facing answers
+
+- The app requires Local Network access to transfer to a device on the same
+  network; it is requested at the first such transfer, not at launch.
+- It is not used for discovery, advertising, or enumerating other hosts.
+- Refusing it does not disable the app's account and cloud surfaces. Sign-in,
+  the Account and plan screens, and creating, uploading to and downloading from
+  a stored link all run over ordinary HTTPS to Relayium's servers and never
+  address the local network, so they are unaffected by a denial.
+- **Not claimed here:** what the peer-to-peer surfaces do after a denial. Nearby,
+  pairing-code cross-network transfer and Device Inbox all build the same
+  realtime lane, so their behaviour depends on whether that lane can settle on a
+  relayed candidate. `RealtimeConnectionFactory` does select
+  `iceTransportPolicy = .relay` for a cross-network code room once TURN
+  credentials are present, and a relayed pair would not need local-network
+  access — but that fallback has **not** been observed after an actual denial.
+  It is a separate observation owed by item 3 of the physical gate above, not an
+  answer this record may give yet.
+
 ## Protected-resource declaration: an open upload blocker
 
 **Status: open, unresolved in `0.3.0 (5)`.** Nothing below is a fix, and no fix
@@ -157,7 +259,12 @@ and that an API reached through a third-party SDK counts as the app's own:
 What this project actually contains, verified locally on 2026-09-02:
 
 - `apps/ios/Relayium/Info.plist` and `apps/ios/RelayiumShare/Info.plist` declare
-  **no** `NSCameraUsageDescription`.
+  **no** `NSCameraUsageDescription`. The app plist's only purpose string is
+  `NSLocalNetworkUsageDescription`, and its two `InfoPlist.strings` catalogs
+  declare that key alone;
+  `IOSLocalNetworkPermissionTests.testNoCameraPurposeStringHasAppearedWhileThatBlockerIsStillOpen`
+  fails if a camera string appears in any of the four files before this blocker
+  is resolved.
 - No product Swift source implements a camera feature. The app uses WebRTC
   **data channels only** — no capture, no call, no QR scanner.
 - The built app nevertheless embeds
@@ -175,11 +282,15 @@ What this project actually contains, verified locally on 2026-09-02:
     | grep -E 'AVCapture'
   ```
 
-  That artifact is a **Debug** device build, and no Release artifact has been
-  retained to compare against, so this record does **not** claim the Release
-  binary is byte-identical. Re-run the command above against the signed
-  release candidate before upload and record the result; treat the blocker as
-  present until that recheck says otherwise.
+  That artifact is a **Debug** device build. The same check has since been run
+  against an **unsigned local Release** generic-device build of `0.3.0` (Xcode
+  26.6, `iphoneos26.5`, `CODE_SIGNING_ALLOWED=NO`) and reports the **same 15
+  undefined `AVCapture*` symbols**, so the condition is not a Debug artifact.
+  That build is neither signed nor archived and was not retained, so this record
+  still does **not** claim it is byte-identical to a release candidate. Re-run
+  the command above against the signed release candidate before upload and
+  record the result; treat the blocker as present until that recheck says
+  otherwise.
 
 - This is not a hypothetical. **`0.1.0` build 3 was rejected by exactly this
   check for a missing `NSCameraUsageDescription`**, and build 4 replaced it. The
@@ -443,6 +554,12 @@ Internal TestFlight acceptance must cover:
   cannot start an iOS purchase and vice versa;
 - Share extension handoff, Universal Links and the primary text/file workflows
   on a real device;
+- **Local Network access, on a physical iOS/iPadOS 26 device**: the five checks
+  under *Local Network access* above, run on a device that has not already
+  granted this app Local Network access — without uninstalling, clearing app
+  data, resetting privacy settings or signing out to force the prompt. An
+  iPadOS 18 pass does not satisfy this item — that OS masked the omission the
+  declaration fixes;
 - **Device Inbox, on two real devices signed in to one account**: turning
   receiving on, receiving a file and a message from the other device, the
   per-device conversation showing both directions, and sending a file and a

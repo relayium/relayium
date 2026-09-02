@@ -260,12 +260,29 @@ final class AppEnvironmentTests: XCTestCase {
     /// The code-only factories, and why they are separate functions rather than
     /// nil defaults on the existing ones.
     ///
-    /// The macOS factories need a `LanDiscoveryModel` and an `InboundRoom`
-    /// because both nearby paths reach through the one room socket that model
-    /// owns. iOS has no nearby feature, no local-network entitlement and no
-    /// roster — so an iOS app that constructed those two objects to satisfy a
-    /// signature would be claiming a capability it does not have, and would open
-    /// a socket nothing reads.
+    /// The nearby-capable factories need a `LanDiscoveryModel` and an
+    /// `InboundRoom` because both nearby paths reach through the one room socket
+    /// that model owns. A caller with no roster — which iOS was when these
+    /// overloads were written, and which any future code-only host would be —
+    /// would have had to construct those two objects purely to satisfy a
+    /// signature, and would then be holding a live room socket nothing reads.
+    ///
+    /// iOS is no longer that caller: `RelayiumApp` passes a real
+    /// `LanDiscoveryModel` and `InboundRoom`. These overloads therefore have no
+    /// production call site today, and the two tests below are what keeps them
+    /// honest — a refusing model rather than a half-working one — for the next
+    /// host that needs them.
+    ///
+    /// **These were never a permission boundary, and an earlier version of this
+    /// comment said they were.** It read "no local-network entitlement", which
+    /// is true only in the pedantic sense that Local Network is not an
+    /// entitlement at all: it is a user-consented protected resource declared as
+    /// `NSLocalNetworkUsageDescription` in the app's `Info.plist`, which the iOS
+    /// app now does declare, because the transfer connects with
+    /// `iceTransportPolicy = .all` and reaches the peer over the local subnet.
+    /// Nothing about that is expressed here. What these overloads express is the
+    /// absence of a FEATURE — no roster to read, no socket to answer on — and
+    /// `IOSLocalNetworkPermissionTests` owns the declaration itself.
     ///
     /// What the code-only wiring produces instead is a model whose two nearby
     /// entry points refuse. That is the assertion below: not "the closure is

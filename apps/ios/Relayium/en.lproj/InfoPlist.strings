@@ -1,0 +1,25 @@
+/* Relayium — iOS app bundle, English (source of truth for the purpose strings).
+
+   This file exists for the same reason the app bundle carries its own
+   `CFBundleLocalizations`: the product's catalogs live in the RelayiumAppKit
+   package bundle, and iOS never looks there for a purpose string. A system
+   permission alert is drawn by the OS, from THIS bundle, before any Relayium
+   code runs — so a sentence that is only in the package is a sentence the user
+   never sees.
+
+   `Info.plist` holds the same English text as the fallback. That duplication is
+   deliberate and asserted: `IOSLocalNetworkPermissionTests` fails if the two
+   drift, because the fallback is what a device with an unmatched language
+   renders and it must not quietly become a different promise.
+
+   Exactly one key, and it is the only protected resource this build declares.
+   `NSCameraUsageDescription` is NOT here: the camera symbols the embedded
+   WebRTC framework carries are an open upload blocker tracked in
+   `docs/ios-app-store-submission.md`, and a purpose string for a feature the
+   product does not have would be a false statement rather than a fix. */
+
+/* Shown by iOS when a transfer first needs to reach the other device across
+   this network. It describes the transfer — not discovery: the roster comes
+   from Relayium's own server over ordinary internet access, and this app runs
+   no Bonjour query and no subnet scan. */
+"NSLocalNetworkUsageDescription" = "Relayium sends the files and messages you choose directly to the device you select, when that device is on the same network as this one.";

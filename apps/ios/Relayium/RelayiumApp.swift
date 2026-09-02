@@ -18,20 +18,33 @@ import RelayiumKit
 /// text session at a time. **Account** is R3-B's sign-in and usage summary plus
 /// R3-D's device and stored-file management.
 ///
-/// **What R3-E got wrong about Nearby, and this slice corrects.** R3-E deferred
-/// the nearby half on the grounds that it needed "the local-network
-/// entitlement". It does not. `LanDiscoveryModel` is not Bonjour and scans
-/// nothing: it joins Relayium's code-less rendezvous room over the same origin
-/// as everything else in the app, and the server groups that room by the public
-/// IP it observes. So it needs ordinary internet access — and, in exchange, it
+/// **What R3-E got wrong about Nearby, and what R3-F then got wrong in the
+/// other direction.** R3-E deferred the nearby half on the grounds that it
+/// needed "the local-network entitlement". That was wrong about DISCOVERY:
+/// `LanDiscoveryModel` is not Bonjour and scans nothing — it joins Relayium's
+/// code-less rendezvous room over the same origin as everything else in the
+/// app, and the server groups that room by the public IP it observes. So
+/// finding the other device needs ordinary internet access, and in exchange it
 /// can list a stranger sitting behind the same carrier or VPN gateway, which is
 /// why the tab explains what the roster is and never picks a device.
 ///
-/// This slice therefore adds **no** capability: no `NSLocalNetworkUsageDescription`,
-/// no Bonjour service, no multicast entitlement, no background mode, no push and
-/// no notification. A session that arrives while the user is elsewhere brings
-/// the Nearby tab forward in app instead — which is also why residency is
-/// foreground-only and honestly says so.
+/// R3-F then generalised that answer to the whole feature and shipped with no
+/// purpose string at all, which was wrong about the TRANSFER. Every realtime
+/// lane here connects with `iceTransportPolicy = .all`, so the candidate pair
+/// that wins between two devices in one building is a unicast socket to the
+/// peer's address on this subnet — Local Network access on iOS 14 and later.
+/// Without the declaration iOS does not prompt; it just never connects, which
+/// is what retained physical runs `0af36138` and `56e78dbf` recorded on
+/// iOS/iPadOS 26 while iPadOS 18 masked it.
+///
+/// So the app now declares exactly one purpose string,
+/// `NSLocalNetworkUsageDescription`, localized in `en.lproj` and `zh-Hans.lproj`
+/// beside `Info.plist`. Everything else on the old list is still absent and
+/// still for the original reason: no Bonjour service and no multicast
+/// entitlement, because neither the roster nor the transfer uses them, and no
+/// background mode, no push and no notification. A session that arrives while
+/// the user is elsewhere brings the tab forward in app instead — which is also
+/// why residency is foreground-only and honestly says so.
 ///
 /// R3-G adds durable recovery to the STORED half only, and adds no capability
 /// to do it: the selected bytes are copied into this app's own Application

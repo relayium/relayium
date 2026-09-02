@@ -1223,18 +1223,22 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // which allows exactly that one write and still forbids every read.
         //
         // **The nearby half LEFT this list in R3-F, and the reason it was on it
-        // was wrong.** It was banned as needing "a local-network entitlement",
-        // which `LanDiscoveryModel` does not: it is not Bonjour, does not scan,
-        // and joins the hub's code-less room, which the server keys by the
-        // public IP it observes. What it needs is ordinary internet access. So
-        // `LanDiscoveryModel`, `NearbyReceiveModel`, `InboundRoom`, the two
-        // factories and `connectNearby` are now what this slice ships, and what
-        // replaces the ban is the whole R3-F section below — one room socket,
-        // a destination installed before residency, an explicit peer choice and
-        // a single presenting surface. `NSLocalNetworkUsageDescription`,
-        // Bonjour and the multicast entitlement stay banned by
-        // `testTheNearbyTabAddsNoNetworkCapability`, which is the accurate
-        // claim rather than the inherited one.
+        // was half wrong.** It was banned as needing "a local-network
+        // entitlement", which `LanDiscoveryModel` does not: it is not Bonjour,
+        // does not scan, and joins the hub's code-less room, which the server
+        // keys by the public IP it observes. Finding a device needs ordinary
+        // internet access. So `LanDiscoveryModel`, `NearbyReceiveModel`,
+        // `InboundRoom`, the two factories and `connectNearby` are now what this
+        // slice ships, and what replaces the ban is the whole R3-F section
+        // below — one room socket, a destination installed before residency, an
+        // explicit peer choice and a single presenting surface.
+        //
+        // Carrying the bytes was the part that answer did not cover, and R3-F
+        // shipped without the purpose string that half does need. Bonjour, the
+        // multicast entitlement and every discovery API stay banned by
+        // `testTheLocalNetworkDeclarationCoversTheTransferAndNothingElse`, which
+        // now also asserts `NSLocalNetworkUsageDescription` is PRESENT;
+        // `IOSLocalNetworkPermissionTests` owns the localized declaration.
         //
         // `acceptNearby` and `NearbyError` stay: answering an offer is
         // `NearbyReceiveModel`'s, on the socket the offer arrived on, and an
@@ -4351,20 +4355,40 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("L10n.t(.textDiscardLocalContentConfirmBody)"))
     }
 
-    /// **This slice adds no network capability, and the reason matters.**
+    /// **The one network declaration this app owes, and the ones it does not.**
     ///
-    /// `LanDiscoveryModel` is not Bonjour and does not scan: it joins the hub's
-    /// code-less room over the same HTTPS/WebSocket origin the rest of the app
-    /// uses, and the server groups that room by the public IP it observes. So
-    /// none of Apple's local-network machinery is involved, and declaring any
-    /// of it would be a permission prompt for something the app does not do —
-    /// which is worse than a missing capability, because the user is asked to
-    /// grant access that then explains nothing.
-    func testTheNearbyTabAddsNoNetworkCapability() throws {
+    /// This test used to assert the opposite, and it was the assertion that kept
+    /// the bug in place. Its argument was that `LanDiscoveryModel` is not
+    /// Bonjour and does not scan — which is true, and is about DISCOVERY. It
+    /// then applied that to the transfer, which is a different question with a
+    /// different answer: every realtime lane connects with
+    /// `iceTransportPolicy = .all`, so the pair that wins between two devices in
+    /// one building is a unicast socket to the peer's address on this subnet,
+    /// and iOS 14 and later gate exactly that behind Local Network access.
+    ///
+    /// A test that asserts a required declaration is ABSENT does not merely miss
+    /// a defect; it defends one. Retained physical runs `0af36138` and
+    /// `56e78dbf` recorded the shape it was defending — iOS/iPadOS 26 withheld
+    /// the prompt entirely and the local path never connected, while iPadOS 18
+    /// masked the omission.
+    ///
+    /// So the positive half is here, and the whole of the localized declaration
+    /// — two `.lproj` folders, one key each, a real translation, a fallback that
+    /// matches English, and an extension that declares none of it — is
+    /// `IOSLocalNetworkPermissionTests`. What stays banned here is everything the
+    /// app genuinely does not use: Bonjour, multicast, wifi-info and every
+    /// discovery API, because declaring one of those WOULD be a prompt for
+    /// something that does not happen.
+    func testTheLocalNetworkDeclarationCoversTheTransferAndNothingElse() throws {
         let plist = try infoPlist()
-        XCTAssertNil(plist["NSLocalNetworkUsageDescription"],
-                     "the app asks for local-network access it does not use")
-        XCTAssertNil(plist["NSBonjourServices"])
+        let purpose = try XCTUnwrap(plist["NSLocalNetworkUsageDescription"] as? String,
+                                    "the app connects to peers on this subnet with no "
+                                        + "local-network purpose string, so iOS 26 fails "
+                                        + "the transfer without ever prompting")
+        XCTAssertFalse(purpose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                       "the purpose string is present but says nothing")
+        XCTAssertNil(plist["NSBonjourServices"],
+                     "the app declares Bonjour browsing it does not do")
         XCTAssertNil(plist["UIBackgroundModes"])
         XCTAssertNil(plist["NSUserActivityTypes"])
         // Read as a plist, not as text: the file's comment enumerates the

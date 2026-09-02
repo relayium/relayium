@@ -455,11 +455,23 @@ public enum AppEnvironment {
     // **These are not a permission boundary, and R3-E's comment here wrongly
     // implied they were.** `LanDiscoveryModel` is not Bonjour and does not scan:
     // it joins the hub's code-less room over the same origin as everything else,
-    // and the server groups that room by the public IP it observes. Nearby
-    // therefore needs ordinary internet access on every platform — no
-    // local-network prompt and no multicast entitlement — which is why iOS could
-    // take it in R3-F without acquiring a capability. What these code-only
+    // and the server groups that room by the public IP it observes. Building the
+    // ROSTER therefore needs nothing but ordinary internet access on every
+    // platform — no Bonjour, no multicast entitlement, and no local-network
+    // prompt for discovery itself, which is why iOS could take the roster in
+    // R3-F without acquiring a discovery capability. What these code-only
     // factories express is the absence of a FEATURE, not of a permission.
+    //
+    // The TRANSFER that follows is a separate question, and an earlier version
+    // of this comment wrongly generalised the roster sentence over it. Once the
+    // user picks a peer, the realtime lane connects with `iceTransportPolicy =
+    // .all` and between two devices on one network routinely settles on a
+    // unicast socket to the peer's address on that subnet — which iOS 14 and
+    // later do gate behind Local Network access. The iOS app therefore declares
+    // `NSLocalNetworkUsageDescription`, and that declaration is app-wide: it
+    // covers every lane that can reach a peer directly, is not scoped to these
+    // factories, and does not change with which overload a host calls.
+    // `IOSLocalNetworkPermissionTests` owns the declaration itself.
 
     @MainActor
     public static func makeRealtimeModel(baseURL: URL = transferBaseURL,

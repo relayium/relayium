@@ -1300,16 +1300,21 @@ that is the phase a document picker, a share sheet or the app switcher produces,
 which is to say the moment the user is choosing the files they are about to send.
 A finished receive and an already-ended text session are left alone.
 
-**No new capability.** R3-E added no local network, no background mode, no
-notifications, no Associated Domains, no App Group and no StoreKit; the
-entitlement file it left behind claimed only
-`com.apple.developer.applesignin`. It has since gained exactly one more key —
+**No new capability.** R3-E added no background mode, no notifications, no
+Associated Domains, no App Group and no StoreKit; the entitlement file it left
+behind claimed only `com.apple.developer.applesignin`. It also added no
+local-network purpose string, and *that* part of the claim was wrong rather than
+restrained — the Direct session it shipped already connected with
+`iceTransportPolicy = .all` and could settle on the peer's address on the same
+subnet. See "Capabilities" below, which is the corrected account.
+
+The entitlement file has since gained exactly one more key —
 `com.apple.developer.associated-domains`, added by the Universal Link slice
-described under "Capabilities" below — and nothing else. iOS gets the realtime models from
-`AppEnvironment`'s **code-only** factories, which take no `LanDiscoveryModel` and
-no `InboundRoom`; `AppEnvironmentTests` asserts the resulting models refuse every
-nearby entry point rather than half-working, and the macOS nearby factories are
-untouched.
+described under "Capabilities" below — and nothing else. R3-E's iOS build took
+the realtime models from `AppEnvironment`'s **code-only** factories, which take
+no `LanDiscoveryModel` and no `InboundRoom`; `AppEnvironmentTests` asserts those
+models refuse every nearby entry point rather than half-working, and the nearby
+factories are untouched.
 
 **One shared-model fix travelled with this slice.**
 `RealtimeSessionModel.join(code:role:)` now clears the staged outbound selection
@@ -1338,16 +1343,21 @@ accepts one unsolicited file or text session at a time. No account in either
 direction — the code-less room mints nothing and `/api/ice` answers it
 STUN-only.
 
-**It is not Bonjour, not mDNS and not a LAN scan, and R3-E's note in this file
-said otherwise.** That note deferred Nearby on the grounds that it needed the
-local-network entitlement. Source audit corrected it: `LanDiscoveryModel` joins
-the hub's code-less room over the same HTTPS/WebSocket origin as everything
-else, and the server groups that room by the public IP it observes. So it needs
-ordinary internet access on every platform — and in exchange it can list a
-stranger sitting behind the same carrier or VPN gateway. Every product decision
-on the screen follows from that one fact: `nearby.explain` states the grouping
-and the caveat, `nearby.namesDisclaimer` says the names are peer-supplied
-labels, and **nothing is ever preselected**, not even when the room holds
+**Finding a device is not Bonjour, not mDNS and not a LAN scan, and R3-E's note
+in this file said otherwise.** That note deferred Nearby on the grounds that it
+needed the local-network entitlement. Source audit corrected it:
+`LanDiscoveryModel` joins the hub's code-less room over the same HTTPS/WebSocket
+origin as everything else, and the server groups that room by the public IP it
+observes. So the ROSTER needs ordinary internet access on every platform — and
+in exchange it can list a stranger sitting behind the same carrier or VPN
+gateway. What the audit then over-generalised was the transfer, which does need
+Local Network access on iOS; "Capabilities" below records that correction and
+the physical evidence behind it.
+
+Every product decision on the screen follows from the grouping fact above:
+`nearby.explain` states the grouping and the caveat, `nearby.namesDisclaimer`
+says the names are peer-supplied labels, and **nothing is ever preselected**,
+not even when the room holds
 exactly one other entry — which is precisely the case where the only candidate
 might be a stranger. `IOSSurfaceGuardTests` pins the single `discovery.select(`
 call site to the row's own tap handler.
@@ -1405,18 +1415,21 @@ paragraph now names no folder, macOS renders `nearby.savedToDownloads`, and iOS
 renders `nearby.savedToAppFolder`, which points at the Files app. One shared
 sentence would have had to be false on one of the two platforms.
 
-**No new capability, and that is now the accurate claim rather than an
-inherited one.** R3-F added no `NSLocalNetworkUsageDescription`, no
-`NSBonjourServices`, no multicast or wifi-info entitlement, no background mode,
-no push, no notification, no Associated Domains, no App Group, no shared
-keychain group and no StoreKit; the entitlement file it left behind claimed only
-`com.apple.developer.applesignin`. Associated Domains is the one thing on that
-list that has since changed: the Universal Link slice claimed it, for
-`applinks:relayium.com` alone, which is where R3-F's own deep-link deferral was
-discharged — see "Universal Links" below. Nothing else on the list has moved. A
-foreground inbound session navigates in app
-instead of notifying, which is the honest shape for an app that is either in the
-foreground or has no session at all.
+**R3-F claimed to add no capability, and one third of that claim did not
+survive.** R3-F added no `NSBonjourServices`, no multicast or wifi-info
+entitlement, no background mode, no push, no notification, no Associated
+Domains, no App Group, no shared keychain group and no StoreKit; the entitlement
+file it left behind claimed only `com.apple.developer.applesignin`. It also
+omitted `NSLocalNetworkUsageDescription`, and that omission was a defect, not a
+restraint — the transfer it shipped reaches the chosen device over the local
+subnet. The app declares that purpose string now; see "Capabilities" below.
+
+Associated Domains is the one thing on that list that has since changed: the
+Universal Link slice claimed it, for `applinks:relayium.com` alone, which is
+where R3-F's own deep-link deferral was discharged — see "Universal Links"
+below. Nothing else on the list has moved. A foreground inbound session
+navigates in app instead of notifying, which is the honest shape for an app that
+is either in the foreground or has no session at all.
 
 **Not verified by any of this:** a real second device, actual inbound or
 outbound bytes, a roster with more than zero entries on a real network, real-
@@ -1530,25 +1543,60 @@ Sign in with Apple button described above, and
 arrived with Universal Link routing below, plus
 `com.apple.security.application-groups = [group.com.relayium.app]`, which is the
 local handoff shared with the file-staging Share extension. Still absent:
-keychain access group, local network, background modes and push. StoreKit does
-not require an entitlement; its boundary is the adapter linked only into the
-main App Store app, never the extension.
+keychain access group, background modes, push, `NSBonjourServices` and the
+multicast/wifi-info entitlements. Local Network is absent from this file for a
+different reason — it is a user-consented protected resource declared as a
+purpose string in `Info.plist`, not a signed entitlement — and the app does
+declare it; see below. StoreKit does not require an entitlement; its boundary is
+the adapter linked only into the main App Store app, never the extension.
 Each entitlement lands with the functional slice that needs it, and
 `IOSSurfaceGuardTests` fails on any other key appearing in the file — and on the
 associated-domains value being anything other than that one `applinks:` entry.
 
+#### Local Network, and the two ways this file got it wrong
+
 R3-E recorded that its deferral of the nearby half "cost something", on the
-grounds that Nearby would need the local-network entitlement. **That reason was
-wrong, and R3-F is the correction.** `LanDiscoveryModel` is not Bonjour, does
-not scan, and reaches the same origin as the rest of the app; the room is
-grouped by the public IP the server observes. Nearby therefore needed no
-capability at all, and R3-F added none — it added a roster the user reads, and
-copy explaining what that roster is and is not. What R3-E's deferral actually
-cost was a slice's delay, not an entitlement. `IOSSurfaceGuardTests`'
-`testTheNearbyTabAddsNoNetworkCapability` now states the accurate claim by
-name: no `NSLocalNetworkUsageDescription`, no `NSBonjourServices`, no multicast
-or wifi-info entitlement, and no `NWBrowser`/`NWListener`/`NetService`/
-`MultipeerConnectivity` anywhere in the target.
+grounds that Nearby would need the local-network *entitlement*. R3-F replied
+that it needed nothing at all. Both were wrong, in opposite directions, and the
+accurate answer splits the feature in two.
+
+**Discovery is a server question.** `LanDiscoveryModel` is not Bonjour, does not
+scan, and reaches the same origin as the rest of the app; the room is grouped by
+the public IP the server observes. That half genuinely needs no declaration,
+which is why `NSBonjourServices` and the multicast and wifi-info entitlements
+are absent and stay absent — each is for machinery this app does not run.
+
+**The transfer is not.** Once the user picks a device, every realtime lane
+builds its peer connection with `iceTransportPolicy = .all`
+(`RealtimeConnectionFactory.liveConnection`, `LinkWorkspaceModel`), so the
+candidate pair that wins between two devices in one building is a unicast socket
+to the peer's address on this subnet. iOS 14 and later gate that behind Local
+Network access, and iOS grants it only to an app that has declared why it wants
+it. Shipping without the declaration did not save a prompt; it removed the
+prompt and the feature together. Retained physical runs `0af36138` and
+`56e78dbf` recorded both faces of that: iOS/iPadOS 26 withheld the prompt
+entirely and the local path never connected, while iPadOS 18 masked the omission
+and made the build look correct.
+
+So `apps/ios/Relayium/Info.plist` now declares `NSLocalNetworkUsageDescription`,
+localized in the app bundle's own `en.lproj/InfoPlist.strings` and
+`zh-Hans.lproj/InfoPlist.strings` — the app bundle rather than the package,
+because a system permission alert is drawn by the OS before any Relayium code
+runs and iOS never looks in `RelayiumAppKit` for it. The English text in
+`Info.plist` is the fallback and is byte-identical to the English catalog. The
+sentence describes the transfer and only the transfer: it does not say the app
+looks at, scans or lists the network, because it does not.
+
+`IOSLocalNetworkPermissionTests` is the guard on the whole of that — the key is
+present and non-empty, exactly two `.lproj` folders exist and they are
+`AppLanguage`'s, each declares exactly this one key, the Chinese is a real
+translation rather than a copy or a placeholder, the fallback matches English,
+the Share extension declares none of it, and no camera key has appeared. The
+negative half moved to `IOSSurfaceGuardTests`'
+`testTheLocalNetworkDeclarationCoversTheTransferAndNothingElse`: no
+`NSBonjourServices`, no multicast or wifi-info entitlement, no background mode,
+and no `NWBrowser`/`NWListener`/`NetService`/`MultipeerConnectivity` anywhere in
+the target.
 
 ### Universal Links
 

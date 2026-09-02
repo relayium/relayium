@@ -51,6 +51,56 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<!-- The one purpose string this app owes, and the reason it is owed is the
+	     TRANSFER rather than the roster.
+
+	     Two different things wear the word "nearby" here, and only one of them
+	     touches the local network:
+
+	      1. **Finding the other device is a server question.** `LanDiscoveryModel`
+	         joins Relayium's code-less rendezvous room over the same HTTPS/
+	         WebSocket origin as the rest of the app, and the server groups that
+	         room by the public address it observes each device arriving from.
+	         There is no Bonjour, no mDNS query and no subnet scan, which is why
+	         `NSBonjourServices` and the multicast entitlement stay absent —
+	         declaring either would ask for machinery this app genuinely does not
+	         use.
+	      2. **Carrying the bytes is not.** Once the user picks a device, every
+	         realtime lane builds its peer connection with `iceTransportPolicy =
+	         .all` (`RealtimeConnectionFactory.liveConnection`,
+	         `LinkWorkspaceModel`), so the winning candidate pair is routinely a
+	         unicast socket to the peer's address on this very subnet. iOS 14 and
+	         later gate exactly that behind Local Network access, and iOS grants
+	         it only to an app that has declared why it wants it.
+
+	     Which makes the absence of this key a silent product failure rather than
+	     a tidy minimalism. Retained physical runs `0af36138` and `56e78dbf`
+	     recorded both halves of the shape: on iOS/iPadOS 26 the system withheld
+	     the prompt altogether and the local path simply never connected, while
+	     iPadOS 18 masked the omission and made the build look correct. A missing
+	     purpose string is therefore not "one fewer permission"; it is a feature
+	     that fails without ever asking.
+
+	     This value is the ENGLISH FALLBACK. What a person actually reads comes
+	     from `en.lproj/InfoPlist.strings` and `zh-Hans.lproj/InfoPlist.strings`
+	     in this same bundle, which iOS resolves against the user's language
+	     before it draws the alert; `IOSLocalNetworkPermissionTests` asserts the
+	     English file and this string are the same sentence, so the fallback can
+	     never drift into saying something else.
+
+	     The sentence itself describes what the user is agreeing to and nothing
+	     more: files and messages going straight to the device they picked. It
+	     does not say Relayium looks at, scans or lists the network, because it
+	     does not — see (1) — and a purpose string that overstates its reach is
+	     the failure mode Apple's guidance is about.
+
+	     Still not here, and deliberately: `NSCameraUsageDescription`. The camera
+	     symbols the embedded WebRTC framework carries are an open, separately
+	     scoped upload blocker recorded in `docs/ios-app-store-submission.md`;
+	     inventing a purpose string for a feature this product does not have
+	     would be a false statement to Apple and to the user. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Relayium sends the files and messages you choose directly to the device you select, when that device is on the same network as this one.</string>
 	<!-- Present and empty on purpose: an iOS app without a launch-screen
 	     declaration is letterboxed at a legacy size rather than run at the
 	     device's native resolution. Empty means the system's default, which is

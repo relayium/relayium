@@ -1,0 +1,14 @@
+/* Relayium — iOS 应用包，简体中文。品牌名 Relayium 保持原文。
+
+   与 en.lproj 一一对应，键必须完全一致：系统权限弹窗由 iOS 直接从本 bundle
+   取字，Relayium 自己的代码此时还没有运行，所以只写在 RelayiumAppKit 包里的
+   文案用户永远看不到。
+
+   只有一个键。这里没有 NSCameraUsageDescription：内嵌 WebRTC 框架带来的摄像头
+   符号是一个尚未解决的上架阻塞项，记录在 docs/ios-app-store-submission.md；
+   为一个产品并不具备的功能编一句用途说明，那不是修复，而是虚假陈述。 */
+
+/* 传输第一次需要经由本网络直达对方设备时，由 iOS 弹出。说的是「传输」而不是
+   「发现」：设备列表来自 Relayium 自己的服务器，走的是普通互联网访问，本应用
+   不做 Bonjour 查询，也不扫描子网。 */
+"NSLocalNetworkUsageDescription" = "Relayium 会把你选择的文件和消息，直接发送到你选中的那台设备；前提是该设备与本机处于同一网络。";

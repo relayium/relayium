@@ -33,10 +33,17 @@ import RelayiumKit
 /// them would end a live DataChannel, drop a sandbox extension mid-read, or take
 /// this device off the roster, on a tab switch.
 ///
-/// **And it adds no capability.** No local-network usage description, no Bonjour
-/// service, no multicast entitlement, no background mode and no notification: an
-/// inbound session brings this tab forward in app, because the app is in the
-/// foreground or the session does not exist.
+/// **It adds one declaration, and it is about the transfer rather than this
+/// screen.** Reading the roster needs nothing: the list above comes from the
+/// rendezvous room over ordinary internet access, so no Bonjour service and no
+/// multicast entitlement appear anywhere. Connecting to the device the user
+/// picks is the part iOS gates — the session is built with
+/// `iceTransportPolicy = .all` and routinely settles on the peer's address on
+/// this subnet — so `Info.plist` declares `NSLocalNetworkUsageDescription` and
+/// iOS asks once, at the first connection rather than on arriving here. There is
+/// still no background mode and no notification: an inbound session brings this
+/// tab forward in app, because the app is in the foreground or the session does
+/// not exist.
 ///
 /// ## Two products behind one roster, chosen by the peer
 ///
