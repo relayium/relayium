@@ -297,9 +297,15 @@ than the other way round.
 - It is clean-room `AVFoundation`: an `AVCaptureMetadataOutput` restricted to
   `.qr`, an `AVCaptureDeviceInput` on the wide-angle camera and an
   `AVCaptureVideoPreviewLayer`. **Not `VisionKit`** — `DataScannerViewController`
-  requires an A12, and the oldest supported iPad here is the 7th generation
-  (A10), where it would return `isSupported == false` at runtime rather than
-  fail to build.
+  requires an A12, and this app's `IPHONEOS_DEPLOYMENT_TARGET` is 16.0. The
+  oldest hardware that floor admits is the iPad (5th generation), an A9; the
+  iPad (6th generation) and the iPad (7th generation) are A10. `VisionKit`
+  would not fail to build on any of them — it would return
+  `isSupported == false` at runtime, on the devices least able to type six
+  digits quickly. The iPad (7th generation) is the oldest device in this
+  project's own physical fleet, which is why the scan check below names it; it
+  is **not** the platform floor, and lowering the argument to A10 would
+  understate how much hardware `VisionKit` excludes.
 - No photo output, no movie output, no sample-buffer delegate, no
   `AVAudioSession`, and no frame written to disk, logged, or sent anywhere.
   That is what lets the purpose string say nothing is recorded or saved.
@@ -519,8 +525,12 @@ upload time.
       dead control.
    4. The prompt is presented in Simplified Chinese on a device set to that
       language, with the translated sentence.
-   5. On an iPad (7th generation) or equivalent A10 device, the scanner opens
-      and reads a code — the case `VisionKit` would have failed at runtime.
+   5. On the iPad (7th generation) — the oldest device in this project's fleet,
+      an A10 — the scanner opens and reads a code. That is the case `VisionKit`
+      would have failed at runtime. It is the oldest hardware **available** to
+      test on, not the oldest the iOS 16.0 floor supports: that is the iPad
+      (5th generation), an A9, which this fleet does not have. Record this item
+      against the A10 and leave the A9 as untested rather than implied.
 
    Record the run tag and outcome here when done. Until then this record claims
    the declaration is correct **in source and in an unsigned local build only**.
@@ -781,7 +791,12 @@ Internal TestFlight acceptance must cover:
   per-device conversation showing both directions, and sending a file and a
   message back from that conversation. Verify the received bytes appear under
   *Relayium ▸ Received* in the Files app, and compare a digest against the
-  sender's;
+  sender's. `scripts/ios-device-inbox-acceptance.sh` covers **one direction of
+  this item and no more**: one run is one delivery, sender to receiver, and the
+  digest it compares is read out of the receiving device's app container with
+  `devicectl device copy from` rather than seen in the Files app. The reverse
+  direction is a second run started deliberately with the roles exchanged, and
+  the Files app appearance is an operator observation the harness cannot make;
 - **the foreground-only boundary, observed rather than assumed**: send to a
   device whose Relayium is closed, confirm nothing arrives, then open the app and
   confirm it does. Confirm no notification is delivered at any point;
@@ -793,16 +808,30 @@ Internal TestFlight acceptance must cover:
   width, and the same five destinations in both — plus a stored link opening over
   the surface the user was on and returning to it when dismissed.
 
-The two-device items above have physical harnesses; run them rather than
-improvising an equivalent by hand:
+Two of the items above have physical harnesses, and each covers part of its
+item rather than all of it. Run the harness where one exists rather than
+improvising an equivalent by hand, and record the rest as operator observation
+against the same run tag:
 
-| Harness | Evidence root |
-| --- | --- |
-| `scripts/ios-device-pair-acceptance.sh` | `.relayium-device-pair/<run-tag>/` |
-| `scripts/ios-device-inbox-acceptance.sh` | `.relayium-device-inbox/<run-tag>/` |
+| Harness | Covers | Does **not** cover | Evidence root |
+| --- | --- | --- | --- |
+| `scripts/ios-device-pair-acceptance.sh` | the Nearby and pairing-code file and text transfers, in both directions (each flow is re-run with the roles exchanged), the two independently derived short-authentication strings compared equal, and the received bytes hashed against a constant this script holds — once live and once after the receipt is dismissed | the pairing code's expiry, join link or QR handoff; a second batch on one link; a file sent from inside a live Nearby workspace; a legacy `0.1.0` peer | `.relayium-device-pair/<run-tag>/` |
+| `scripts/ios-device-inbox-acceptance.sh` | ONE Device Inbox delivery, sender to receiver: a run-unique message and a deterministic file asserted on both surfaces, and the receiving device's container bytes hashed against a digest this script holds | the reverse direction; background or closed-app receipt; Files app visibility; delivery to an offline device that returns; a Web, macOS or CLI sender | `.relayium-device-inbox/<run-tag>/` |
 
-Both keep their run directory whatever the outcome, because a pass is evidence
-too. Each run therefore leaves build and per-device logs, `.xcresult` bundles
+The three items with **no** harness at all stay operator evidence, and no run
+of either script above may be cited for them:
+
+- the **foreground-only boundary**. The inbox harness deliberately keeps the
+  receiving app on screen for the whole run, so it establishes nothing about a
+  closed app either way;
+- **local history deletion is not a recall**. Nothing in either script deletes
+  a conversation entry mid-delivery;
+- **the adaptive shell** on real hardware. Its regular-width half is executed
+  on a hosted iPad simulator by `ios.yml`'s `ios-ipad-shell` job, which is
+  simulator evidence for the layout and not device evidence for the item.
+
+Both harnesses keep their run directory whatever the outcome, because a pass is
+evidence too. Each run therefore leaves build and per-device logs, `.xcresult` bundles
 and a DerivedData tree, and the roots reach multiple gigabytes. They are
 intentional local physical evidence, are ignored at the repository root by
 `.gitignore`, and must not be committed or cleaned as though they were build

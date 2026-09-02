@@ -1190,18 +1190,54 @@ const SWIFT_TEST_TARGET_DIR = `${SWIFT_PACKAGE_DIR}/Tests/${SWIFT_TEST_TARGET}`;
 // syntax: a bare class name selects the whole class, and `Class/method` selects
 // exactly one case.
 //
-// Four are whole classes because every case in them reads `apps/ios`. The fifth
-// is a single method because its class is not iOS-only:
-// `BundleVersionTests` also carries `testTheMacAppAndItsExtensionShipOneVersion`,
-// which reads `apps/mac` — a tree this workflow deliberately does not trigger
-// on. Selecting the class would run a macOS assertion on an iOS-only change;
-// selecting the method runs the iOS half and nothing else.
+// Six are whole classes because every case in them reads `apps/ios`. The other
+// four are single methods because their classes are not iOS-only:
+//
+//   * `BundleVersionTests` also carries
+//     `testTheMacAppAndItsExtensionShipOneVersion`, which reads `apps/mac` — a
+//     tree this workflow deliberately does not trigger on.
+//   * `LocalizationIntegrityTests` is mostly about the shared catalogs, the
+//     seven frozen ones and plural grammar, plus two `apps/mac` bundle
+//     assertions; exactly two of its cases read `apps/ios`.
+//   * `LocalizationSourceGuardTests`' other two cases drive the detector
+//     against literal fixtures and read no repository file at all.
+//
+// Selecting those classes whole would run macOS and shared-package assertions
+// on an iOS-only change; selecting the methods runs the iOS half and nothing
+// else. The one unavoidable overlap is inside
+// `testNoUserFacingEnglishLiteralsInTheAppOrViewModelLayer`, which is a single
+// sweep over every surface that renders the shared catalogs — `apps/mac` among
+// them — and cannot be narrowed without changing the guard itself.
+//
+// The last five entries were added after two independently reproduced hosted
+// gaps: an `apps/ios/**`-only change — a plist key, an `InfoPlist.strings`
+// sentence, a new view, a `.lproj` — started this workflow and NOTHING read
+// what it changed. `swift-package.yml` owns the unfiltered suite and watches
+// `apps/RelayiumKit/**`, never `apps/ios/**`, so the camera and Local Network
+// declarations, the pairing scanner's structure and the app's localization
+// integrity were guarded only in the direction nobody was editing.
 const IOS_GUARD_SELECTORS = [
   "IOSSurfaceGuardTests",
   "IOSPrivacyManifestTests",
   "IOSDistributionSigningTests",
   "IOSAppIconAssetTests",
+  // The Local Network purpose string, the declared-key SET in both app
+  // catalogs, and the Share extension declaring none of them.
+  "IOSLocalNetworkPermissionTests",
+  // The camera purpose the QR scanner earns, the scanner's own source shape —
+  // AVFoundation rather than A12-only VisionKit, tap-before-request, no photo
+  // or movie output, no logging — and the funnel into `parseAppDeepLink`.
+  "IOSPairingScannerTests",
   "BundleVersionTests/testTheIOSAppAndItsExtensionShipOneVersion",
+  // `apps/ios/Relayium/Info.plist`'s `CFBundleLocalizations`, and the iOS
+  // project's `knownRegions`. Both are how a frozen locale gets re-adopted.
+  "LocalizationIntegrityTests/testTheIOSAppDeclaresExactlyTheShippedLocalizations",
+  "LocalizationIntegrityTests/testTheIOSProjectKnownRegionsCarryNoFrozenLocale",
+  // The regression guard over `apps/ios/Relayium` and `apps/ios/RelayiumShare`
+  // source: a `Text("Try again")` in the newest surface renders English in
+  // every language, because the catalogs live in a package bundle the app
+  // target's literals never resolve against.
+  "LocalizationSourceGuardTests/testNoUserFacingEnglishLiteralsInTheAppOrViewModelLayer",
 ];
 /** The class half of a selector — what has to exist as a file on disk. */
 const selectorClass = (selector) => String(selector).split("/")[0];
@@ -1209,6 +1245,29 @@ const selectorClass = (selector) => String(selector).split("/")[0];
 const selectorMethod = (selector) => String(selector).split("/")[1];
 /** An `apps/ios`-only change, as a path — the case section 6k exists for. */
 const IOS_GUARD_SAMPLE = "apps/ios/Relayium.xcodeproj/project.pbxproj";
+/** The lane that owns the repository's only unfiltered `swift test`. */
+const SWIFT_PACKAGE_LANE = "swift-package.yml";
+
+// ── the two device shapes the UI target has to be executed on ───────────────
+//
+// `AdaptiveShellUITests` is the only class in `RelayiumUITests` that reads the
+// size class, and every one of its cases opens by skipping unless the shell
+// came up regular-width. `ios-ui-smoke` selects an iPhone and runs the whole
+// target, so before `ios-ipad-shell` existed that class skipped on every hosted
+// run since it was written — a green lane over a `NavigationSplitView` no CI
+// run had ever drawn. A skip is not a failure and `xcodebuild` exits 0 for a
+// suite that skipped entirely, so nothing went red and nothing could.
+//
+// Section 6q holds the repair: one job, on an iPad, scoped to that class, which
+// asserts afterwards that its cases RAN.
+const IOS_COMPACT_JOB = "ios-ui-smoke";
+const IOS_REGULAR_WIDTH_JOB = "ios-ipad-shell";
+const IOS_UI_TARGET = "RelayiumUITests";
+const IOS_REGULAR_WIDTH_CLASS = "AdaptiveShellUITests";
+/** The `-only-testing` identifier the iPad job must carry, and only it. */
+const IOS_REGULAR_WIDTH_SELECTOR = `-only-testing:${IOS_UI_TARGET}/${IOS_REGULAR_WIDTH_CLASS}`;
+/** The whole-target selection that belongs to the iPhone job alone. */
+const IOS_WHOLE_UI_TARGET_SELECTOR = `-only-testing:${IOS_UI_TARGET} test`;
 const SHARED_KIT = "apps/RelayiumKit/**";
 const IOS_PROJECT = "-project apps/ios/Relayium.xcodeproj";
 const MACOS_PROJECT = "-project apps/mac/Relayium.xcodeproj";
@@ -1747,6 +1806,16 @@ const RUNNER_BUDGETS = [
         max: 55,
         why: "a PAID macOS runner is held by an iPhone simulator or UI test that never exits",
       },
+      // Declared 40. One class of six cases against one booted iPad simulator,
+      // plus the same UI-test-target build `ios-ui-smoke` pays for. Strictly
+      // less work than that job, so its 55 bounds this from above; 50 is that
+      // number brought down to what this scope actually justifies while still
+      // absorbing a cold build and a slow first boot.
+      "ios-ipad-shell": {
+        max: 50,
+        why: "a PAID macOS runner is held by an iPad simulator that never boots, or by a "
+          + "regular-width UI test waiting on a sidebar that never appeared",
+      },
       "ios-transfer-acceptance": {
         max: 45,
         why: "a PAID macOS runner is held by a transfer peer, local server or built-App session "
@@ -1967,7 +2036,7 @@ const appRoots = (() => {
 /**
  * The Swift test target's own file names, read from disk.
  *
- * Section 6k names five guard SELECTORS that `ios.yml` must execute by
+ * Section 6k names the guard SELECTORS that `ios.yml` must execute by
  * `--filter`. A filter naming a class that does not exist is not a smaller
  * gate, it is a `swift test` invocation matching nothing — so the names are
  * checked against the files that declare them, and carried in the world so
@@ -2020,6 +2089,46 @@ const swiftTestMethods = (() => {
 })();
 
 /**
+ * Every XCTest class the iOS UI-test target declares, read from disk.
+ *
+ * Section 6q requires `ios.yml`'s iPad job to select exactly
+ * `RelayiumUITests/${IOS_REGULAR_WIDTH_CLASS}` with `-only-testing`, and
+ * `xcodebuild` treats an `-only-testing` identifier that resolves to nothing
+ * the same way `swift test` treats an unmatched `--filter`: it runs zero tests
+ * and exits 0. So the class is checked against the file that declares it, and
+ * carried in the world so section 8 can rename it away and require the
+ * complaint.
+ *
+ * The same shallow `class X:` scan the Swift target gets, for the same reason:
+ * this needs the declared names, not a parse.
+ */
+const IOS_UI_TEST_DIR = "apps/ios/RelayiumUITests";
+const iosUITestClasses = (() => {
+  const out = new Set();
+  let names = [];
+  try {
+    names = readdirSync(resolve(repoRoot, IOS_UI_TEST_DIR), { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".swift"))
+      .map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+  for (const name of names) {
+    let text;
+    try {
+      text = readFileSync(resolve(repoRoot, IOS_UI_TEST_DIR, name), "utf8");
+    } catch {
+      continue;
+    }
+    for (const line of text.split("\n")) {
+      const declared = line.match(/\bclass\s+([A-Za-z_][A-Za-z0-9_]*)\s*:/);
+      if (declared) out.add(declared[1]);
+    }
+  }
+  return [...out].sort();
+})();
+
+/**
  * Does the fuzz campaign's discovery script exist?
  *
  * Read from disk rather than assumed, and carried in the world below, so
@@ -2052,6 +2161,7 @@ function realWorld() {
     inventory: fuzzInventoryExists,
     testFiles: [...swiftTestFiles],
     testMethods: [...swiftTestMethods],
+    uiTestClasses: [...iosUITestClasses],
   };
 }
 
@@ -3393,8 +3503,10 @@ function swiftTestFilters(run) {
  *
  * Not derived from anything, because there is nothing to derive it from: 6i
  * budgets JOBS against measured runtime and knows nothing about step keys. The
- * step's real work is a shared-package build plus five file-reading test
- * classes — minutes, not tens of minutes. 40 is chosen far enough above that to
+ * step's real work is a shared-package build plus the file-reading guard cases
+ * `IOS_GUARD_SELECTORS` names — minutes, not tens of minutes, and the five
+ * selectors added for the camera, Local Network, scanner and localization
+ * guards read files exactly as the first five do. 40 is chosen far enough above that to
  * absorb a cold SwiftPM build on a slow runner without ever firing on a healthy
  * run, and far enough below `ios-build`'s own budget that the step still fails
  * first when the run is wedged. Raising it past this is a decision about how
@@ -3425,7 +3537,7 @@ function iosParallelLaneFailures(world) {
   const doc = world.docs.get(IOS);
   if (!doc) return out;
 
-  const wanted = ["ios-build", "ios-ui-smoke", "ios-transfer-acceptance"];
+  const wanted = ["ios-build", "ios-ui-smoke", "ios-ipad-shell", "ios-transfer-acceptance"];
   const names = Object.keys(doc.jobs ?? {});
   need(
     names.length === wanted.length && wanted.every((name) => names.includes(name)),
@@ -3472,6 +3584,13 @@ function iosParallelLaneFailures(world) {
     + `or Go setup work.`,
   );
 
+  const ipad = body(IOS_REGULAR_WIDTH_JOB);
+  need(
+    !ipad.includes("local-transfer-acceptance.sh") && !ipad.includes("actions/setup-go"),
+    `${IOS}/${IOS_REGULAR_WIDTH_JOB} must own the regular-width shell and nothing else; transfer `
+    + `acceptance and Go setup belong to ${IOS}/ios-transfer-acceptance.`,
+  );
+
   const transfer = body("ios-transfer-acceptance");
   for (const marker of [
     "actions/setup-go",
@@ -3484,6 +3603,171 @@ function iosParallelLaneFailures(world) {
       transfer.includes(marker),
       `${IOS}/ios-transfer-acceptance does not contain ${JSON.stringify(marker)}. The split may `
       + `shorten the critical path, but it may not drop a transfer prerequisite or acceptance case.`,
+    );
+  }
+
+  return out;
+}
+
+// ── 6q: the regular-width shell is EXECUTED, not merely selected ────────────
+//
+// Everything below is about one failure and its near misses. `ios-ui-smoke`
+// runs the whole UI target on an iPhone; `AdaptiveShellUITests` skips itself
+// unless the shell is regular width; `xcodebuild` exits 0 for a run in which
+// every selected case skipped. So the sidebar, the detail column and the
+// stored-link presentation over a split view were covered on paper and executed
+// nowhere, for as long as the class had existed.
+//
+// A job that "runs the iPad tests" is not enough to fix that, because the three
+// ways it silently stops running them all leave a green job:
+//
+//   * the destination drifts back to an iPhone — one word in a `startswith`;
+//   * the scope widens to the whole target, which duplicates the iPhone job's
+//     twenty-odd unrelated cases on a second PAID macOS runner AND still lets
+//     the regular-width cases skip inside it;
+//   * the class is renamed, `-only-testing` resolves to nothing, and zero tests
+//     run.
+//
+// Each is asserted here, and section 8 mutates each one.
+
+/**
+ * `ios.yml`'s iPad job: the destination, the scope, the proof it ran, and the
+ * result bundle it leaves behind when it did not.
+ */
+function iosRegularWidthShellFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+  const doc = world.docs.get(IOS);
+  if (!doc) return out;
+
+  const job = doc.jobs?.[IOS_REGULAR_WIDTH_JOB];
+  need(
+    job !== undefined,
+    `${IOS} declares no \`${IOS_REGULAR_WIDTH_JOB}\` job. ${IOS_COMPACT_JOB} selects an iPhone `
+    + `and every ${IOS_REGULAR_WIDTH_CLASS} case skips on a compact shell, so without this job `
+    + `the regular-width ${IOS_UI_TARGET} coverage is selected, skipped and reported green — the `
+    + `state this section exists to end.`,
+  );
+  if (!job) return out;
+
+  const where = `${IOS}/${IOS_REGULAR_WIDTH_JOB}`;
+  const steps = job.steps ?? [];
+  // Every `run:` body in the job, with shell comment lines dropped.
+  //
+  // Every check below is about what the job EXECUTES. A prose line explaining
+  // why this job is not the compact one, or naming the selector it
+  // deliberately does not use, is neither a destination nor a selection —
+  // reading the comments too would make the refusals fire on documentation and
+  // let the requirements be satisfied by it.
+  const code = steps
+    .map((step) => String(step?.run ?? ""))
+    .join("\n")
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .join("\n");
+
+  // ── the destination ──────────────────────────────────────────────────────
+  //
+  // A quoted `iPad` literal in EXECUTED code, paired with the refusal below.
+  // Together they say "the selection names iPad and never iPhone"; the prose
+  // is excluded from both, so a job whose comment says iPad and whose
+  // `startswith` says iPhone — the regression this is written against — fails
+  // the second one.
+  need(
+    /["']iPad["']/.test(code),
+    `${where}: no step selects its simulator by an \`iPad\` name at all. This job's ONLY reason `
+    + `to exist is a regular-width shell, which on this image means a full-screen iPad; a `
+    + `destination chosen any other way is a job that duplicates ${IOS_COMPACT_JOB} at full `
+    + `price.`,
+  );
+  need(
+    !/iPhone/.test(code),
+    `${where}: a step names \`iPhone\`. Selecting one here — or falling back to one when no iPad `
+    + `is available — puts every ${IOS_REGULAR_WIDTH_CLASS} case straight back into the skip it `
+    + `takes on ${IOS_COMPACT_JOB}, at the cost of a second PAID macOS runner and with nothing `
+    + `going red. A missing iPad runtime is a runner-image regression this job must FAIL on.`,
+  );
+
+  // ── the scope ────────────────────────────────────────────────────────────
+  need(
+    code.includes(IOS_REGULAR_WIDTH_SELECTOR),
+    `${where}: no step passes \`${IOS_REGULAR_WIDTH_SELECTOR}\`. That identifier is the whole `
+    + `scope of this job; without it the job either runs something else or runs everything.`,
+  );
+  need(
+    !code.includes(IOS_WHOLE_UI_TARGET_SELECTOR),
+    `${where}: a step passes \`${IOS_WHOLE_UI_TARGET_SELECTOR}\`, the whole UI target. `
+    + `${IOS_COMPACT_JOB} already runs it on an iPhone, and the size class is the only variable `
+    + `that differs — so this re-runs every unrelated case on a second PAID macOS runner for no `
+    + `second answer, and buries the regular-width result among cases that pass either way.`,
+  );
+  const selected = [...code.matchAll(new RegExp(`-only-testing[:=]\\s*${IOS_UI_TARGET}/([A-Za-z0-9_]+)`, "g"))]
+    .map((match) => match[1]);
+  for (const className of selected) {
+    need(
+      className === IOS_REGULAR_WIDTH_CLASS,
+      `${where}: a step selects \`${IOS_UI_TARGET}/${className}\`. This job runs the ONE class `
+      + `that cannot run on ${IOS_COMPACT_JOB}; anything else here is a duplicate paid run of a `
+      + `case that already has a home. Adding a second regular-width-only class is a decision to `
+      + `make in \`IOS_REGULAR_WIDTH_CLASS\`, where the cost is visible.`,
+    );
+  }
+  need(
+    world.uiTestClasses.includes(IOS_REGULAR_WIDTH_CLASS),
+    `${where}: the job selects \`${IOS_UI_TARGET}/${IOS_REGULAR_WIDTH_CLASS}\`, but `
+    + `${IOS_UI_TEST_DIR} declares no such class. \`xcodebuild\` runs zero tests for an `
+    + `\`-only-testing\` identifier that resolves to nothing and exits 0, so this is a job that `
+    + `reports green while executing nothing. Follow the rename here, or decide the class is `
+    + `gone.`,
+  );
+
+  // ── the proof it ran ─────────────────────────────────────────────────────
+  //
+  // The one assertion that separates this job from the state it replaces. Every
+  // check above is about SELECTION; a compact shell on an iPad-shaped
+  // destination would satisfy all of them and skip anyway.
+  need(
+    /skippedTests/.test(code),
+    `${where}: no step reads \`skippedTests\` out of the result bundle. Selection is not `
+    + `execution: ${IOS_REGULAR_WIDTH_CLASS} skips whenever \`waitForShell\` does not report `
+    + `regular width, \`xcodebuild\` exits 0 for an all-skipped run, and this job would then `
+    + `report exactly the green ${IOS_COMPACT_JOB} already reports. Assert the counts.`,
+  );
+  need(
+    /totalTestCount/.test(code),
+    `${where}: no step requires the run to have executed any test at all. An \`-only-testing\` `
+    + `identifier that matches nothing produces a bundle with zero cases and a successful exit; `
+    + `a skip check alone passes that, because zero of zero skipped.`,
+  );
+
+  // ── the diagnosis it leaves behind ───────────────────────────────────────
+  const bundle = code.match(/-resultBundlePath\s+"?([^"\s\\]+)/);
+  need(
+    bundle !== null,
+    `${where}: no step declares \`-resultBundlePath\`. A UI failure on a hosted iPad simulator is `
+    + `not reproducible from a log line, and there is nothing to attach without a bundle.`,
+  );
+  const retain = steps.find((step) => String(step?.uses ?? "").includes("actions/upload-artifact"));
+  need(
+    retain !== undefined,
+    `${where}: nothing uploads the result bundle. ${IOS_COMPACT_JOB} retains its \`.xcresult\` on `
+    + `failure and this job — which drives a device shape no developer's default simulator is — `
+    + `needs it more, not less.`,
+  );
+  if (retain) {
+    need(
+      String(retain.if ?? "").includes("failure()"),
+      `${where}: the result-bundle upload declares \`if: ${JSON.stringify(retain.if)}\`, want a `
+      + `\`failure()\` condition. Uploading on every run pays for an artifact nobody opens; `
+      + `uploading on none leaves the red run undiagnosable.`,
+    );
+    const path = String(retain.with?.path ?? "");
+    need(
+      bundle === null || path.includes(bundle[1].replace("$RUNNER_TEMP", "").replace(/^\/+/, "")),
+      `${where}: the upload's \`path\` is ${JSON.stringify(path)}, which does not name the `
+      + `\`-resultBundlePath\` the test step wrote (${JSON.stringify(bundle?.[1])}). An artifact `
+      + `step pointed at the wrong path retains nothing and, with `
+      + `\`if-no-files-found: error\`, hides the real failure behind its own.`,
     );
   }
 
@@ -3552,6 +3836,59 @@ function iosGuardStepFailures(world) {
     `${where}: ${IOS} runs the iOS guard selectors but does not trigger on ${IOS_GUARD_SAMPLE}, `
     + `so an iOS-only pull request never starts the job that runs them.`,
   );
+
+  // One sample per INPUT CLASS the selectors read, not one sample overall.
+  //
+  // `IOS_GUARD_SAMPLE` is the project file, and it is the path a narrowed
+  // filter is least likely to lose. The guards added for the camera, Local
+  // Network and localization declarations read four other kinds of file, and
+  // each is a tree a future `paths:` edit could drop on its own — an
+  // `apps/ios/**` filter rewritten as `apps/ios/Relayium.xcodeproj/**` and
+  // `apps/ios/Relayium/*.swift` would keep the sample above passing while
+  // taking every plist and `.strings` change out of the lane. Each is checked
+  // against BOTH sides: `ios.yml` must start, and `swift-package.yml` — the
+  // owner of the unfiltered suite, and therefore the reason it is tempting to
+  // believe these run somewhere else — must not.
+  for (const { path, why } of [
+    {
+      path: "apps/ios/Relayium/Info.plist",
+      why: "the Local Network and camera purpose keys, and `CFBundleLocalizations`",
+    },
+    {
+      path: "apps/ios/Relayium/en.lproj/InfoPlist.strings",
+      why: "the English purpose sentences the system alert renders",
+    },
+    {
+      path: "apps/ios/Relayium/zh-Hans.lproj/InfoPlist.strings",
+      why: "the Simplified-Chinese purpose sentences",
+    },
+    {
+      path: "apps/ios/Relayium/PairingScannerView.swift",
+      why: "the scanner's source shape and the localization source guard",
+    },
+    {
+      path: "apps/ios/RelayiumShare/ShareViewController.swift",
+      why: "the extension the guards require to declare NO protected-resource key",
+    },
+  ]) {
+    need(
+      wTriggers(world, IOS, path),
+      `${where}: ${IOS} does not trigger on ${path}, which carries ${why}. The guard selectors `
+      + `above read that file and run NOWHERE ELSE for a change to it: the unfiltered suite lives `
+      + `in ${SWIFT_PACKAGE_LANE}, which watches ${SHARED_KIT} and no \`apps/ios\` tree at all. A `
+      + `change there would compile the app and accept its UI while nothing read the declaration `
+      + `it just edited.`,
+    );
+    need(
+      !wTriggers(world, SWIFT_PACKAGE_LANE, path),
+      `${where}: ${SWIFT_PACKAGE_LANE} triggers on ${path}. That lane owns the whole-suite `
+      + `\`swift test\`, so if it watched \`apps/ios\` these selectors would be a duplicate rather `
+      + `than the only coverage — and the negation in ${IOS}'s own filter, which exists to keep `
+      + `the package's test target out of this heavy lane, would be paying for nothing. Deciding `
+      + `that the package lane should watch the apps is a CI architecture decision; make it `
+      + `deliberately, and re-derive what this step is still for.`,
+    );
+  }
 
   need(
     step["working-directory"] === SWIFT_PACKAGE_DIR,
@@ -3654,7 +3991,7 @@ function iosGuardStepFailures(world) {
     `${where}: the guard step is bounded at `
     + `${JSON.stringify(step["timeout-minutes"])} minutes, above the `
     + `${IOS_GUARD_STEP_CEILING}-minute ceiling this section sets for it. The step's work is a `
-    + `shared-package build and five file-reading test classes; a bound that large no longer `
+    + `shared-package build and ${IOS_GUARD_SELECTORS.length} file-reading guard selectors; a bound that large no longer `
     + `bounds it, and the wedged run it is supposed to cut short would instead be left to the `
     + `carrier job. Either the step grew work that belongs elsewhere, or the number was raised `
     + `to make a slow run pass — both are decisions, and \`IOS_GUARD_STEP_CEILING\` is where to `
@@ -5396,6 +5733,7 @@ for (const message of pathMatrixFailures(realWorld())) failures.push(message);
 for (const message of fuzzCampaignFailures(realWorld())) failures.push(message);
 for (const message of iosParallelLaneFailures(realWorld())) failures.push(message);
 for (const message of iosGuardStepFailures(realWorld())) failures.push(message);
+for (const message of iosRegularWidthShellFailures(realWorld())) failures.push(message);
 for (const message of macosBudgetFailures(realWorld())) failures.push(message);
 for (const message of concurrencyFailures(realWorld())) failures.push(message);
 for (const message of releaseBoundaryFailures(realWorld())) failures.push(message);
@@ -7901,6 +8239,239 @@ const MUTATIONS = [
   // gaining a `--filter`, and a legitimate fast pre-check beside it — moved
   // with their rule to `scripts/test/swift-ci-boundary-test.mjs`, which now
   // owns where that command may live and mutates both shapes there.
+  // ── 6k: the guard selectors an `apps/ios/**`-only change depends on ───────
+  //
+  // The four selectors added for the camera, Local Network, pairing scanner and
+  // localization guards are the ones nothing else can run for an `apps/ios/**`
+  // change, so each is removed here one at a time. Every mutation leaves
+  // `ios.yml` valid, leaves the step present and green, and returns the lane to
+  // compiling a plist change nothing read.
+  {
+    name: "ios.yml drops the Local Network declaration guard from its selectors",
+    mutate: (world) => withGuardStep(world, (step) => {
+      step.run = String(step.run)
+        .split("\n")
+        .filter((line) => !line.includes("IOSLocalNetworkPermissionTests"))
+        .join("\n");
+    }),
+    expect: /does not filter for exactly `RelayiumKitTests\.IOSLocalNetworkPermissionTests`/,
+  },
+  {
+    name: "ios.yml drops the camera/pairing-scanner guard from its selectors",
+    mutate: (world) => withGuardStep(world, (step) => {
+      step.run = String(step.run)
+        .split("\n")
+        .filter((line) => !line.includes("IOSPairingScannerTests"))
+        .join("\n");
+    }),
+    expect: /does not filter for exactly `RelayiumKitTests\.IOSPairingScannerTests`/,
+  },
+  {
+    name: "ios.yml drops the app localization source guard from its selectors",
+    mutate: (world) => withGuardStep(world, (step) => {
+      step.run = String(step.run)
+        .split("\n")
+        .filter((line) => !line.includes("LocalizationSourceGuardTests"))
+        .join("\n");
+    }),
+    expect: /does not filter for exactly `RelayiumKitTests\.LocalizationSourceGuardTests\/testNoUserFacingEnglishLiteralsInTheAppOrViewModelLayer`/,
+  },
+  {
+    // The opposite direction, and the expensive one: the two iOS cases widened
+    // to the whole class drags twenty-odd shared-catalog, plural-grammar and
+    // `apps/mac` bundle assertions onto every `apps/ios/**` change.
+    name: "ios.yml widens the localization integrity selectors to their whole class",
+    mutate: (world) => withGuardStep(world, (step) => {
+      step.run = String(step.run)
+        .replace(/RelayiumKitTests\.LocalizationIntegrityTests\/[A-Za-z0-9_]+/g,
+          "RelayiumKitTests.LocalizationIntegrityTests");
+    }),
+    expect: /filters for "RelayiumKitTests\.LocalizationIntegrityTests", which this policy does not name/,
+  },
+  {
+    // The narrowing that keeps the project-file sample passing and takes every
+    // declaration change out of the lane. It reads as a tightening — two
+    // precise globs instead of one broad one — and it is how the guards added
+    // here stop running without a single selector being touched.
+    name: "ios.yml's filter is narrowed to the project and Swift sources only",
+    mutate: (world) => withPaths(world, IOS, [
+      "apps/ios/Relayium.xcodeproj/**",
+      "apps/ios/Relayium/*.swift",
+      "apps/RelayiumKit/**",
+      "!apps/RelayiumKit/Tests/**",
+      `.github/workflows/${IOS}`,
+    ]),
+    expect: /ios\.yml does not trigger on apps\/ios\/Relayium\/Info\.plist/,
+  },
+  {
+    name: "ios.yml stops watching the Share extension the guards bound",
+    mutate: (world) => withPaths(world, IOS, [
+      "apps/ios/Relayium/**",
+      "apps/ios/Relayium.xcodeproj/**",
+      "apps/RelayiumKit/**",
+      "!apps/RelayiumKit/Tests/**",
+      `.github/workflows/${IOS}`,
+    ]),
+    expect: /ios\.yml does not trigger on apps\/ios\/RelayiumShare\/ShareViewController\.swift/,
+  },
+  {
+    // The other side of the same claim. If the package lane adopted the apps,
+    // "the guards run somewhere else" would become true — and the negation
+    // `ios.yml` carries to keep the package's test target out of this heavy
+    // lane would be paying for nothing.
+    name: "swift-package.yml adopts the iOS app tree",
+    mutate: (world) => withPaths(world, "swift-package.yml", [
+      "apps/RelayiumKit/**", "apps/ios/**", ".github/workflows/swift-package.yml",
+    ]),
+    expect: /swift-package\.yml triggers on apps\/ios\//,
+  },
+  {
+    name: "a newly guarded class is renamed out from under its filter",
+    mutate: (world) => {
+      world.testFiles = world.testFiles.filter((name) => name !== "IOSPairingScannerTests.swift");
+      return world;
+    },
+    expect: /IOSPairingScannerTests\.swift does not exist/,
+  },
+  {
+    name: "a newly guarded localization method is renamed out from under its filter",
+    mutate: (world) => {
+      world.testMethods = world.testMethods.filter(
+        (name) => name !== "LocalizationIntegrityTests/testTheIOSAppDeclaresExactlyTheShippedLocalizations");
+      return world;
+    },
+    expect: /declares no `LocalizationIntegrityTests\.testTheIOSAppDeclaresExactlyTheShippedLocalizations`/,
+  },
+  // ── 6q: the regular-width shell job ──────────────────────────────────────
+  //
+  // Every case below leaves a job that runs, passes and reports green while
+  // executing none of the regular-width cases it exists for.
+  {
+    name: "the iPad regular-width job is deleted",
+    mutate: (world) => {
+      delete world.docs.get(IOS).jobs[IOS_REGULAR_WIDTH_JOB];
+      return world;
+    },
+    expect: /ios\.yml declares no `ios-ipad-shell` job/,
+  },
+  {
+    // The one-word regression. The job keeps its name, its comment and its
+    // scope, boots a compact simulator, and every case skips.
+    name: "the iPad job's destination drifts back to an iPhone",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.run ?? "").includes("xcodebuild"));
+      step.run = String(step.run).replace(/"iPad"/g, '"iPhone"');
+    }),
+    expect: /ios\.yml\/ios-ipad-shell: a step names `iPhone`/,
+  },
+  {
+    // The prefix filter dropped altogether: `startswith("")` is true of every
+    // simulator, so the sorted pick becomes whatever the image lists first.
+    name: "the iPad job stops filtering its destination by name",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.run ?? "").includes("xcodebuild"));
+      step.run = String(step.run).replace(/"iPad"/g, '""');
+    }),
+    expect: /no step selects its simulator by an `iPad` name at all/,
+  },
+  {
+    // "Stronger gate", spelled as a second full paid UI run.
+    name: "the iPad job is widened to the whole UI target",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.run ?? "").includes("xcodebuild"));
+      step.run = String(step.run)
+        .replace("-only-testing:RelayiumUITests/AdaptiveShellUITests test",
+          "-only-testing:RelayiumUITests test");
+    }),
+    expect: /passes `-only-testing:RelayiumUITests test`, the whole UI target/,
+  },
+  {
+    name: "the iPad job adopts a class that already runs on the iPhone job",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.run ?? "").includes("xcodebuild"));
+      step.run = String(step.run)
+        .replace("-only-testing:RelayiumUITests/AdaptiveShellUITests test",
+          "-only-testing:RelayiumUITests/AdaptiveShellUITests \\\n"
+          + "            -only-testing:RelayiumUITests/LocalSessionUITests test");
+    }),
+    expect: /a step selects `RelayiumUITests\/LocalSessionUITests`/,
+  },
+  {
+    // Prose is not selection. Commenting the line out leaves every word this
+    // section looks for present in the file.
+    name: "the iPad job's scope survives only as a comment",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.run ?? "").includes("xcodebuild"));
+      step.run = String(step.run)
+        .split("\n")
+        .map((line) => (line.includes(IOS_REGULAR_WIDTH_SELECTOR) ? `# ${line.trim()}` : line))
+        .join("\n");
+    }),
+    expect: /no step passes `-only-testing:RelayiumUITests\/AdaptiveShellUITests`/,
+  },
+  {
+    // The silent one: `xcodebuild` runs zero tests for an identifier that
+    // resolves to nothing and exits 0.
+    name: "the regular-width class is renamed out from under -only-testing",
+    mutate: (world) => {
+      world.uiTestClasses = world.uiTestClasses.filter((name) => name !== IOS_REGULAR_WIDTH_CLASS);
+      return world;
+    },
+    expect: /apps\/ios\/RelayiumUITests declares no such class/,
+  },
+  {
+    // The check that makes this job different from the state it replaces, read
+    // as "tidying up a step that always passes".
+    name: "the iPad job stops asserting its cases were not skipped",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      job.steps = job.steps.filter((step) => !String(step?.run ?? "").includes("skippedTests"));
+    }),
+    expect: /no step reads `skippedTests` out of the result bundle/,
+  },
+  {
+    // And the half of that proof a skip check alone cannot make: zero of zero
+    // skipped is zero skipped.
+    name: "the iPad job asserts no skips but not that anything ran",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.run ?? "").includes("totalTestCount"));
+      step.run = String(step.run).replace(/totalTestCount/g, "passedTests");
+    }),
+    expect: /no step requires the run to have executed any test at all/,
+  },
+  {
+    name: "the iPad job stops retaining its result bundle",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      job.steps = job.steps.filter((step) => !String(step?.uses ?? "").includes("upload-artifact"));
+    }),
+    expect: /ios\.yml\/ios-ipad-shell: nothing uploads the result bundle/,
+  },
+  {
+    name: "the iPad job's diagnosis upload loses its failure condition",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.uses ?? "").includes("upload-artifact"));
+      delete step.if;
+    }),
+    expect: /the result-bundle upload declares `if: undefined`/,
+  },
+  {
+    name: "the iPad job is serialized behind the build job",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      job.needs = "ios-build";
+    }),
+    expect: /ios\.yml\/ios-ipad-shell declares `needs: "ios-build"`/,
+  },
+  {
+    // The legitimate shape. A prose line inside the run body explaining why
+    // this job is not the compact one names the device it is not, and that is
+    // not a destination — a check that fired here would be rewritten until it
+    // fired on nothing.
+    name: "the iPad job's run body explains, in a comment, which shape it is not",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.run ?? "").includes("xcodebuild"));
+      step.run = `# not an iPhone: every case here skips on a compact shell\n${step.run}`;
+    }),
+    refute: /a step names `iPhone`/,
+  },
 ];
 
 for (const { name, mutate, expect, refute } of MUTATIONS) {
@@ -7914,6 +8485,7 @@ for (const { name, mutate, expect, refute } of MUTATIONS) {
       ...fuzzCampaignFailures(world),
       ...iosParallelLaneFailures(world),
       ...iosGuardStepFailures(world),
+      ...iosRegularWidthShellFailures(world),
       ...macosBudgetFailures(world),
       ...concurrencyFailures(world),
       ...releaseBoundaryFailures(world),

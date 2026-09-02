@@ -322,19 +322,28 @@ final class IOSPairingScannerTests: XCTestCase {
         }
     }
 
-    /// **Clean-room AVFoundation, because the oldest supported iPad has an A10.**
+    /// **Clean-room AVFoundation, because the deployment floor is iOS 16.**
     ///
     /// `VisionKit`'s `DataScannerViewController` is the shorter way to write
-    /// this and it is unavailable on every device without an A12, which
-    /// includes the iPad (7th generation) this project supports. It would not
-    /// fail to build; it would return `isSupported == false` at runtime on the
-    /// hardware least able to type six digits quickly.
+    /// this and it is unavailable on every device without an A12. The floor
+    /// this project declares is `IPHONEOS_DEPLOYMENT_TARGET = 16.0`, and the
+    /// oldest hardware iPadOS 16 admits is the iPad (5th generation), an A9;
+    /// the 6th and 7th generations are A10. `VisionKit` would not fail to
+    /// build on any of them — it would return `isSupported == false` at
+    /// runtime on the hardware least able to type six digits quickly.
+    ///
+    /// `docs/ios-app-store-submission.md` records the physical scan check
+    /// against an iPad (7th generation), an A10. That is the oldest device
+    /// this project can actually test on — a fact about the fleet, not about
+    /// the platform — and it is not the floor. Treating it as one would
+    /// understate how much hardware `VisionKit` excludes, which is the whole
+    /// reason this assertion exists.
     func testTheScannerUsesPlainAVFoundationRatherThanA12OnlyVisionKit() throws {
         let source = try scanner()
         XCTAssertTrue(source.contains("import AVFoundation"))
         for a12Only in ["VisionKit", "DataScannerViewController", "RecognizedItem"] {
             XCTAssertFalse(source.contains(a12Only),
-                           "\(a12Only) needs an A12; the oldest supported iPad has an A10")
+                           "\(a12Only) needs an A12; the iOS 16.0 floor admits A9 hardware")
         }
         // The declared floor, read rather than restated. `AVCaptureMetadataOutput`
         // and everything above are iOS 13 and earlier; the one newer API in the
