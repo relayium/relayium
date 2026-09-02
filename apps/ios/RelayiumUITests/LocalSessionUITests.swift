@@ -277,17 +277,12 @@ final class LocalSessionUITests: XCTestCase {
         middle.press(forDuration: 0.05, thenDragTo: target)
     }
 
-    @discardableResult
-    private func openTask(_ tabName: String, title: String) -> XCUIElement {
-        let tabs = app.tabBars.firstMatch
-        XCTAssertTrue(tabs.waitForExistence(timeout: 20), "the primary tab bar did not render")
-        let tab = tabs.buttons[tabName]
-        XCTAssertTrue(tab.waitForExistence(timeout: 10), "the tab bar has no \(tabName) task")
-        tab.tap()
-        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 10),
-                      "\(tabName) selected but its screen did not render")
-        return tab
-    }
+    // Navigation is `AppShellNavigation`'s, shared with the rest of the target.
+    // This file used to carry its own copy of the helper, addressing tabs by
+    // their rendered English labels — a second list of the same literals that
+    // kept compiling after the shell changed underneath it. One driver, one list
+    // of destinations, and it works on the sidebar shell this suite may be run
+    // on as well.
 
     /// The roster row for the counterpart.
     ///
@@ -334,7 +329,7 @@ final class LocalSessionUITests: XCTestCase {
         // it on.
         launch(harness, verifying: false)
 
-        openTask("Nearby", title: "Nearby")
+        open(Shell.lanTransfer, in: app)
 
         let verify = app.switches[Self.verifyToggleLabel]
         XCTAssertTrue(verify.waitForExistence(timeout: 20),
@@ -395,7 +390,7 @@ final class LocalSessionUITests: XCTestCase {
         launch(harness, verifying: true,
                extraArguments: ["--relayium-ui-testing-preselect-direct-fixture"])
 
-        openTask("Nearby", title: "Nearby")
+        open(Shell.lanTransfer, in: app)
 
         // The preference this launch pinned, read back off the shipped control.
         // Also the pin on `verifyPeersDefaultsKey`: a key the product no longer
@@ -602,7 +597,7 @@ final class LocalSessionUITests: XCTestCase {
         }
         XCTAssertFalse(code.isEmpty, "the counterpart never minted a pairing code")
 
-        openTask("Direct", title: "Direct")
+        open(Shell.crossNetworkTransfer, in: app)
 
         let field = app.textFields["Code"]
         XCTAssertTrue(field.waitForExistence(timeout: 15),

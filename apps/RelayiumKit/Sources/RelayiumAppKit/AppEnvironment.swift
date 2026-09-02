@@ -1227,9 +1227,21 @@ public enum AppEnvironment {
         journalStore: @escaping @Sendable (InboxAccountID) -> InboxJournalStore?,
         messageStore: @escaping @Sendable (InboxAccountID) -> InboxMessageStore?,
         folderStore: InboxFolderStoring,
+        /// How the grant is resolved and opened. Defaulted to the system's, so
+        /// no macOS caller changes; iOS passes `ContainerInboxFolderBookmarking`
+        /// because a plain iOS bookmark's URL answers
+        /// `startAccessingSecurityScopedResource()` with false, which
+        /// `InboxReceiveFolder.open` would report as a permission failure on a
+        /// directory the app owns outright.
+        ///
+        /// It is a PARAMETER rather than a second `InboxReceiveFolder` built
+        /// here, because the caller builds one too — for the status line — and
+        /// two folders over one grant is how the engine and the surface end up
+        /// disagreeing about where a delivery lands.
+        bookmarking: InboxFolderBookmarking = SystemInboxFolderBookmarking(),
         session: URLSession = .shared
     ) -> @Sendable (InboxAccountID, String) async throws -> InboxReceiveEngine {
-        let folder = InboxReceiveFolder(store: folderStore)
+        let folder = InboxReceiveFolder(store: folderStore, bookmarking: bookmarking)
         return { account, bearer in
             guard let journals = journalStore(account) else {
                 throw InboxSupportError.noJournalDirectory
@@ -1262,6 +1274,41 @@ public enum AppEnvironment {
     /// interpret it, so it is a label rather than a protocol value.
     // nonlocalized: a protocol platform token, never displayed as prose
     public static let inboxPlatform = "macos"
+
+    /// What this build reports when it enrols.
+    ///
+    /// Read from the bundle rather than hard-coded, so a version bump cannot
+    /// leave the account's device list claiming the previous release — which is
+    /// a claim a person acts on, because the compatibility of a delivery is read
+    /// off it.
+    ///
+    /// The em dash is the honest answer for a bundle that cannot name its own
+    /// version, and never an empty string: central bounds this to printable
+    /// ASCII and a blank would render as a device with no version at all rather
+    /// than as one whose version is unknown.
+    // nonlocalized: an em dash placeholder for a missing bundle value
+    public static func appVersion(_ bundle: Bundle = .main) -> String {
+        let value = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        guard let value, !value.trimmingCharacters(in: .whitespaces).isEmpty else { return "—" }
+        return value
+    }
+
+    /// What the iOS build calls itself when it enrols.
+    ///
+    /// A separate token from `inboxPlatform`, and it has to be: a person looking
+    /// at their device list is choosing where to send a file, and the one thing
+    /// they need from this string is whether the receiver is the Mac on their
+    /// desk or the phone in their pocket. It is also the token a sender's
+    /// surface uses to explain WHY a device may be unreachable, and the honest
+    /// explanations differ — a Mac receives with its window closed and an iPhone
+    /// does not.
+    ///
+    /// `ios`, covering iPhone, iPad and the Simulator alike. The device NAME
+    /// already distinguishes those (`deviceFamilyName(forModelIdentifier:)`), and
+    /// splitting the platform token by family would make central's device rows
+    /// depend on a distinction nothing on either side acts on.
+    // nonlocalized: a protocol platform token, never displayed as prose
+    public static let iosInboxPlatform = "ios"
 
     /// Assemble the whole resident receiver.
     ///
@@ -1339,6 +1386,111 @@ public enum AppEnvironment {
             refreshNotificationPermission: refreshNotificationPermission,
             openNotificationSettings: openNotificationSettings,
             platform: inboxPlatform, capabilities: capabilities,
+            appVersion: appVersion))
+    }
+
+    /// The whole iOS receiver, assembled once.
+    ///
+    /// The macOS factory above and this one differ in exactly four places, and
+    /// every one of them is a platform fact rather than a preference:
+    ///
+    ///  1. **The folder is the container's, not the user's.** There is no
+    ///     `NSOpenPanel`, no security scope and no bookmark that can go stale, so
+    ///     the two seams `InboxReceiveFolder` was built with are filled by
+    ///     `ContainerInboxFolderStore` and `ContainerInboxFolderBookmarking`
+    ///     rather than the folder logic being branched. Everything else about
+    ///     that type — the write probe, the refusal to enable receiving without
+    ///     a folder, the state vocabulary — is shared and unchanged. The
+    ///     *policy* is still the wrapped `UserDefaults` store's, still
+    ///     account-scoped and still default-off: a fixed destination removes the
+    ///     folder consent, never the receiving one.
+    ///  2. **No notifier and no notification seams.** This app declares no
+    ///     notification capability at all, so the defaults — an `unmeasured`
+    ///     permission that renders nothing, and an "open Settings" that reports
+    ///     it could not — are the honest answers rather than placeholders.
+    ///  3. **`reveal` is dropped, and the default no-op is the point.** There is
+    ///     no `NSWorkspace.activateFileViewerSelecting` here and no reliable way
+    ///     to open the Files app on a directory, so a Reveal control would be a
+    ///     button that does nothing. The iOS surface renders none and names the
+    ///     Files route in words instead — `ReceiveDestinationCopy.savedLocation`,
+    ///     which is the same sentence a stored-link receive already shows.
+    ///  4. **`ios` for the platform token — but the CAPABILITIES are the
+    ///     caller's.** The platform token is a fact about this build and belongs
+    ///     here. `inbox.text.v1` is not: it is a claim that the receiver
+    ///     PRESENTS a text delivery as text, which is a claim about a screen. It
+    ///     lived in `InboxProtocol.capabilities` for one commit and every build
+    ///     that linked the library inherited it — including a headless
+    ///     acceptance host that presents nothing. So it is defaulted here to the
+    ///     base set, which under-claims, and the app that ships the conversation
+    ///     timeline passes it at its one composition site.
+    ///
+    /// The keychain configuration is the iOS one by default (`keychainConfiguration`
+    /// resolves per platform), so the device key history lands under this app's
+    /// own service with no access group.
+    @MainActor
+    public static func makeIOSInboxController(
+        baseURL: URL = transferBaseURL,
+        keychain: KeychainConfiguration = keychainConfiguration,
+        defaults: UserDefaults = .standard,
+        journalSubdirectory: String = "device-inbox",
+        /// Overridden by the acceptance harness so a run receives into a
+        /// directory of its own rather than into the installed container's.
+        /// Production leaves it alone and gets `Documents/Received`, which is
+        /// the SAME directory a stored-link download writes to — one receive
+        /// folder in the Files app, not two.
+        receiveDirectory: @escaping @Sendable () throws -> URL
+            = { try InboxContainerFolder.directory() },
+        /// What the composing app announces. Defaulted to the base set, so a
+        /// build that forgets to pass one under-claims rather than promising a
+        /// surface it does not ship — the same rule the macOS factory records.
+        capabilities: [String] = InboxProtocol.capabilities,
+        appVersion: String,
+        session: URLSession = .shared
+    ) -> InboxController {
+        let folderStore = ContainerInboxFolderStore(
+            base: makeInboxFolderStore(defaults: defaults))
+        let bookmarking = ContainerInboxFolderBookmarking(directory: receiveDirectory)
+        let folder = InboxReceiveFolder(store: folderStore, bookmarking: bookmarking)
+        let keys = makeInboxKeyStore(keychain)
+        // Built from the SAME store and the SAME bookmarking as `folder` above.
+        // Two would be two answers to where a delivery lands — the engine's and
+        // the status line's — and they would agree right up until one of them was
+        // pointed somewhere else, which is exactly what the acceptance override
+        // does.
+        let makeEngine = makeInboxEngineFactory(
+            baseURL: baseURL, keys: keys,
+            journalStore: { account in
+                makeInboxJournalStore(subdirectory: inboxJournalSubdirectory(
+                    base: journalSubdirectory, account: account))
+            },
+            messageStore: { account in
+                makeInboxMessageStore(subdirectory: inboxJournalSubdirectory(
+                    base: journalSubdirectory, account: account))
+            },
+            folderStore: folderStore, bookmarking: bookmarking, session: session)
+        return InboxController(runtime: InboxRuntime(
+            folder: folder, makeEngine: makeEngine, notifier: nil,
+            messageStore: { account in
+                makeInboxMessageStore(subdirectory: inboxJournalSubdirectory(
+                    base: journalSubdirectory, account: account))
+            },
+            sentMessageStore: { account in
+                makeInboxSentMessageStore(subdirectory: inboxJournalSubdirectory(
+                    base: journalSubdirectory, account: account))
+            },
+            conversationStore: { account in
+                makeInboxConversationStore(subdirectory: inboxJournalSubdirectory(
+                    base: journalSubdirectory, account: account))
+            },
+            legacyReceipts: { account in
+                guard let journals = makeInboxJournalStore(subdirectory: inboxJournalSubdirectory(
+                    base: journalSubdirectory, account: account)) else { return [] }
+                return try journals.completedReceipts()
+            },
+            deviceDirectory: { token in
+                try await InboxSenderClient(baseURL: baseURL, token: token, session: session).devices()
+            },
+            platform: iosInboxPlatform, capabilities: capabilities,
             appVersion: appVersion))
     }
 

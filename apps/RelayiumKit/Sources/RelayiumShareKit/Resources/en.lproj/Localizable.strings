@@ -105,6 +105,7 @@
 "tab.send" = "Send";
 "tab.account" = "Account";
 "tab.direct" = "Direct";
+"tab.deviceInbox" = "Inbox";
 
 /* MARK: navigation sidebar */
 "nav.sectionDirect" = "Direct";
@@ -120,6 +121,7 @@
 "nav.storedSendSubtitle" = "Large files, picked up later — sign in; plan limits apply";
 "nav.storedReceive" = "Open a link";
 "nav.deviceInboxSubtitle" = "Files from your own account land in a folder you choose — sign in; works with the window closed";
+"nav.iosDeviceInboxSubtitle" = "Files and messages from your own devices, saved into Relayium — sign in; arrives while Relayium is open";
 "nav.account" = "Account";
 "nav.accountSubtitle" = "Plan, devices and stored files";
 "nav.a11ySections" = "Relayium destinations";
@@ -629,6 +631,26 @@
 "inbox.composeHeading" = "Send to this device";
 "inbox.composeUnavailable" = "This device can't be sent to from this Mac, so its history is shown on its own.";
 "inbox.sentMessageMissing" = "This Mac no longer has the text of this message.";
+
+/* MARK: Device Inbox, as it works on iPhone and iPad */
+"inbox.iosExplain" = "Your other Relayium devices can send files and messages straight to this one. There is no folder to choose: everything that arrives is saved inside Relayium, where the Files app can reach it. Relayium never sees what is inside.";
+"inbox.iosSignedOutBody" = "Device Inbox delivers files and messages sent from your own account, so it needs you signed in on this device.";
+"inbox.iosPolicyExplain" = "Ask every time holds each delivery until you accept it here. Automatically saves it as soon as it arrives. Either way, nothing arrives unless Relayium is open.";
+"inbox.iosForegroundOnly" = "Relayium receives only while it is open on this device. It does not receive in the background, and it sends you no notifications — so a file sent while Relayium is closed arrives the next time you open it.";
+"inbox.iosFolderExplain" = "Files sent to this device are saved in %@, which you can open in the Files app. Existing files are never replaced.";
+"inbox.iosFolderAccessDenied" = "Relayium can't use its own receive folder right now. Try again, and if it keeps happening, restart Relayium.";
+"inbox.iosFolderUnresolvable" = "Relayium's receive folder can't be opened. Something that isn't a folder may be using its name — check Relayium in the Files app.";
+"inbox.iosFolderNotWritable" = "Relayium can't write into its receive folder right now. Check this device has free space, then try again.";
+"inbox.iosBlockedPermission" = "A delivery stopped because Relayium couldn't write into its receive folder. Try again, and if it keeps happening, restart Relayium.";
+"inbox.iosBlockedDirectory" = "A delivery stopped because Relayium's receive folder wasn't available. Try again.";
+"inbox.iosBlockedNameConflict" = "A delivery stopped because of a name it can't safely use. Open Relayium in the Files app, tidy up the Received folder, then try again.";
+"inbox.iosBlockedDecrypt" = "A delivery couldn't be decrypted with this device's key. Ask the sender to send it again.";
+"inbox.iosBlockedInternal" = "A delivery stopped for a reason Relayium couldn't identify, so nothing was saved.";
+"inbox.iosFailedEnrolment" = "Relayium couldn't set this device up to receive. Updating to the latest version may fix it.";
+"inbox.iosFailedKey" = "This device's receiving key is unavailable, so nothing can be decrypted. Unlock this device, reopen Relayium, then try again.";
+"inbox.iosFailedIdentity" = "This device's sign-in is no longer accepted. Sign in again to keep receiving.";
+"inbox.iosConversationsEmpty" = "Nothing has been sent to this device yet. Send something from another device signed in to your account, or open a device below to send to it.";
+"inbox.iosOpenConversation" = "Open the conversation with %@";
 "inbox.sentStateStaged" = "Ready to send from this Mac";
 "inbox.sentStateSending" = "Sending from this Mac";
 "inbox.sentStateCreated" = "Waiting for the other device";

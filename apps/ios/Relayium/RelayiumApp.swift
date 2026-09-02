@@ -1,5 +1,10 @@
 import SwiftUI
 import RelayiumAppKit
+// For `InboxProtocol` alone: the capability set this build announces is the
+// protocol's vocabulary, and the one site that claims a text surface names it
+// directly rather than through a re-export that would hide which module owns the
+// token.
+import RelayiumKit
 
 /// R3-F: the sixth native iOS slice.
 ///
@@ -102,7 +107,28 @@ struct RelayiumApp: App {
     /// work no view is watching. A view-scoped owner would be absent for exactly
     /// those three cases.
     @StateObject private var deliveries: InboxSendModel
-    @StateObject private var sendRoutes: SendRouteSelection
+    /// The RECEIVE half of the Device Inbox, and the first one this app has had.
+    ///
+    /// App-scoped for the sharpest version of the reason every other model here
+    /// is: it holds the generation every claim, key read and journal write is
+    /// scoped to, and a sign-out has to be able to cancel that with no Device
+    /// Inbox screen mounted at all. `InboxSessionBridge` below is what makes
+    /// that true.
+    @StateObject private var inbox: InboxController
+    /// "Who is signed in" → "which generation may receive".
+    ///
+    /// Not a `@StateObject` because nothing renders it, and subscribed in `init`
+    /// rather than from a view's `.onChange` for the reason recorded on the type:
+    /// the state change that must STOP the receive loop — a sign-out, an account
+    /// switch, an account that has become `unavailable` — can land while no
+    /// destination is mounted, and a `.onChange` is absent for exactly that
+    /// interval. The app would go on claiming, decrypting and writing deliveries
+    /// under a credential the server has already revoked.
+    private let inboxSession: InboxSessionBridge
+    /// The files a Device Inbox conversation has staged, and their security
+    /// scope. App-scoped so the scope is released exactly once and an account
+    /// leaving clears the batch with no conversation on screen.
+    @StateObject private var composer: InboxComposerModel
     /// The account's devices and stored objects, app-scoped for a sharper
     /// reason than the others: a revoke can end THIS app's own session, and a
     /// `TabView` tears down off-screen tabs. A view-scoped model would have that
@@ -192,6 +218,12 @@ struct RelayiumApp: App {
     /// be able to select the Nearby tab from outside the view tree, and a
     /// `@State` is reset the moment SwiftUI rebuilds that tree.
     @StateObject private var navigation: AppNavigationModel
+    /// Which surface the shell draws, and which is presented over it. Derived
+    /// from `navigation` and never writing back to it, so there is still exactly
+    /// one authority for where the user is — app-scoped because "where the user
+    /// was before the stored link" has to survive the view rebuild that
+    /// presenting a sheet causes.
+    @StateObject private var shell: IOSShellModel
     /// The link the OS handed this app, parsed and held until the shell has
     /// acted on it. App-scoped because `onOpenURL` can fire before the shell's
     /// subscription exists — a cold launch straight from a link is exactly that
@@ -328,7 +360,96 @@ struct RelayiumApp: App {
             sending?.deviceSendCommitted(accountId: accountId, sourceDraftId: draftId)
         }
         _deliveries = StateObject(wrappedValue: delivering)
-        _sendRoutes = StateObject(wrappedValue: SendRouteSelection())
+
+        // **The Device Inbox's receive half, and the ONE place it is assembled.**
+        //
+        // Everything it touches — the keychain key history, the fixed container
+        // receive folder, the account-scoped journal, message and conversation
+        // stores, the transport — comes from a single factory, so an acceptance
+        // launch substitutes one thing rather than six and cannot half-isolate
+        // itself onto the installed product's stores. That half-wiring is the
+        // failure `WORKFLOW-LEARNINGS` records from the signed-in fixture that
+        // replaced the session's transport and left the account model talking to
+        // production.
+        //
+        // Four isolation seams, each nil outside an acceptance launch and each
+        // folded to nil in Release: the device-key keychain identity, the
+        // defaults domain holding the receiving consent, the receive directory,
+        // and the transport. All four, because isolating one store is not
+        // isolating the app — and the first is the one that matters most, since
+        // an acceptance launch resolving the shipped keychain identity would
+        // overwrite the device keys the installed product needs to decrypt
+        // deliveries already sealed to it.
+        let receiving = AppEnvironment.makeIOSInboxController(
+            keychain: UITestMode.inboxKeychainConfiguration()
+                ?? AppEnvironment.keychainConfiguration,
+            defaults: UITestMode.inboxDefaults() ?? .standard,
+            receiveDirectory: UITestMode.inboxReceiveDirectory()
+                ?? { try InboxContainerFolder.directory() },
+            // **The one site in this app that claims a text surface, and the
+            // claim is about a SCREEN.** `inbox.text.v1` says this receiver
+            // presents a text delivery AS text; `DeviceConversationView`'s
+            // timeline is what makes that true, and it is why the token is
+            // passed here rather than defaulted inside the factory. It lived in
+            // `InboxProtocol.capabilities` for one commit and every build that
+            // linked the library inherited it — including this app, which then
+            // had no message surface at all, and a headless acceptance host that
+            // presents nothing. `InboxSurfaceGuardTests` keeps it to one site.
+            capabilities: InboxProtocol.announcedCapabilities(presentingText: true),
+            appVersion: AppEnvironment.appVersion(),
+            session: UITestMode.makeAccountTransport() ?? .shared)
+        _inbox = StateObject(wrappedValue: receiving)
+        // Subscribed HERE, in init, and not from a `.task` on any view — the
+        // reason recorded on the property and on `InboxSessionBridge`. A
+        // sign-out, an account switch, or an account that has become
+        // `unavailable` must CANCEL the receive loop, and that response can land
+        // while the Device Inbox destination is torn down, which a `TabView`
+        // does freely to anything off screen.
+        let bridge = InboxSessionBridge(controller: receiving)
+        bridge.observe(account.$state, bearer: { account.bearerToken })
+        inboxSession = bridge
+
+        // **The three seams between the two halves, installed here because this
+        // is the one place both models exist.**
+        //
+        // They are closures rather than a reference in either direction: the
+        // send model must not learn what a conversation index is, and the
+        // controller must not learn how a delivery is staged. `weak` on the
+        // controller — the scene owns both for the life of the process and a
+        // cycle here would never break.
+        //
+        // The account travels inside every call and the controller REFUSES a
+        // mismatch. The two models adopt an account from the same session a turn
+        // apart, so during a switch one can still be describing the previous
+        // one, and the cost of trusting that would be one account's sent history
+        // written into another's index.
+        delivering.onSentHistory = { [weak receiving] event, body in
+            receiving?.recordSentHistory(event, messageBody: body)
+        }
+        // Separate from the above ON PURPOSE: a state change may never create a
+        // row. If it could, an update landing after the user deleted the history
+        // would write the entry back — the resurrection the tombstones exist to
+        // prevent, reintroduced one layer above them.
+        delivering.onSentStateChanged = { [weak receiving] accountId, job, state, task in
+            receiving?.updateSentHistory(accountID: accountId, jobID: job,
+                                         state: state, taskID: task)
+        }
+        // A deleted send stops being DESCRIBED. Nothing about the delivery
+        // changes: it keeps running, keeps reporting, keeps its staged bytes,
+        // its content key and its idempotency key. Local history deletion is not
+        // a remote recall and this is the line that keeps it from becoming one.
+        delivering.isSentHistoryDeleted = { [weak receiving] accountId, job in
+            receiving?.isSentHistoryDeleted(accountID: accountId, jobID: job) ?? false
+        }
+
+        // The conversation composer's staged batch, isolated by the SAME session
+        // and observed before any view exists — for the reason `sending.observe`
+        // is installed here: a batch chosen under one account must not survive
+        // into the next, and a `.task` inside the conversation page would be
+        // absent for exactly the switch that matters.
+        let composing = InboxComposerModel()
+        composing.observe(account.$state)
+        _composer = StateObject(wrappedValue: composing)
 
         // The direct half. Built against ONE preference instance, because both
         // models read it through a closure when the SAS lands — a second object
@@ -399,9 +520,33 @@ struct RelayiumApp: App {
         // surface claim released the instant it started, and the tab would go
         // back to the roster with a live connection running behind it.
         presenting.observeSessions(fileModel: files, textModel: texts, link: unified)
-        let routing = AppNavigationModel(selection: .storedReceive)
+        // **Launches on LAN Transfer, not on the stored-link screen.**
+        //
+        // It used to open on `.storedReceive`, which was the first of five tabs.
+        // That destination is no longer browseable — a stored link is something
+        // the OS hands this app, not somewhere a person sets out to go — so
+        // starting there would open the app on a screen whose only content is a
+        // field for a link the user does not have, presented as a sheet over
+        // nothing they chose. `IOSSurface.browseable.first` is the honest
+        // launch surface: the transfer that needs no account at all.
+        //
+        // An acceptance launch may name a different starting destination, and
+        // only that: it chooses the value, and `IOSShellModel` below applies the
+        // SAME rule to it that every later selection goes through. A launch
+        // started on `.storedReceive` therefore reaches the sheet-over-
+        // LAN-Transfer placement the product itself produces, rather than a
+        // placement this line arranged. Nil in every shipped launch.
+        let routing = AppNavigationModel(
+            selection: UITestMode.initialDestination() ?? IOSSurface.browseable[0].route)
         _presence = StateObject(wrappedValue: presenting)
         _navigation = StateObject(wrappedValue: routing)
+        // Built from the SAME selection the model starts on, and subscribed
+        // immediately: a cold launch straight from a Universal Link can deliver
+        // before any view exists, and a shell that adopted the selection later
+        // would start on the wrong background surface.
+        let placement = IOSShellModel(initial: routing.selection)
+        placement.observe(routing.$selection)
+        _shell = StateObject(wrappedValue: placement)
 
         // The authoritative gate for an UNSOLICITED link, on the main actor, and
         // through the SAME `TransferPresence` the legacy admission below uses —
@@ -495,16 +640,22 @@ struct RelayiumApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(download: download, upload: upload, send: send,
-                     deliveries: deliveries, sendRoutes: sendRoutes,
+                     inbox: inbox, deliveries: deliveries,
                      direct: direct, directText: directText,
                      directSelection: directSelection, directModes: directModes,
                      foreground: foreground,
                      discovery: discovery, nearbyReceive: nearbyReceive,
                      residency: residency,
                      link: link, linkSelection: linkSelection,
-                     navigation: navigation, presence: presence,
+                     navigation: navigation, shell: shell, presence: presence,
                      deepLinks: deepLinks, deepLinkRouting: deepLinkRouting)
                 .environmentObject(session)
+                // The conversation composer's staged batch. Injected rather than
+                // passed down through the shell, because the shell renders none
+                // of it and threading it through four initializers would put a
+                // security scope in the signature of views that have nothing to
+                // do with one.
+                .environmentObject(composer)
                 // The preference the two direct models read. Injected rather
                 // than passed, because the two session views render the derived
                 // phrase from it and neither owns the decision.
@@ -548,6 +699,24 @@ struct RelayiumApp: App {
                     // `.inactive` does, is `SendSelectionModel`'s decision, and
                     // `SharedDraftAdoptionTests` drives it.
                     send.phaseChanged(to: lifecycle(phase))
+                    // **The Device Inbox receiver is foreground-only, and this
+                    // is where that is enforced rather than merely stated.**
+                    //
+                    // This app declares no background mode, no push and no
+                    // notification, and this slice adds none. Leaving stops the
+                    // receive loop rather than letting a pass that the system is
+                    // about to suspend look live; returning restarts it, which
+                    // re-publishes the state and re-runs the interrupted
+                    // delivery's recovery through the same path a policy change
+                    // already takes.
+                    //
+                    // `.inactive` is deliberately NOT background — see
+                    // `lifecycle(_:)` and `InboxController.foreground(_:)`. A
+                    // document picker, Control Centre, the app switcher and a
+                    // call banner all produce it while the app is still visible,
+                    // and stopping a delivery the user can see, several times a
+                    // session, would read as the feature being broken.
+                    inbox.foreground(lifecycle(phase) != .background)
                 }
                 // Launch. `onChange` fires on a CHANGE, and the app is already
                 // `.active` when the scene first appears — so without this the

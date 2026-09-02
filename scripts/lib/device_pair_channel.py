@@ -34,7 +34,17 @@ The one thing that travels the OTHER way — launcher to device — is a release
 and its file name is composed here for the same reason the grammar is parsed
 here: both ends compute it and neither trusts the other. See `release_name`.
 
-    python3 device_pair_channel.py extract --log F --tag T --role R --event E
+Two harnesses publish through this one grammar, each under its own marker:
+`RELAYIUM-DEVICE-PAIR` — the pair harness above, and this file's default — and
+`RELAYIUM-DEVICE-INBOX`, emitted by `DeviceInboxAcceptanceUITests` and read by
+`scripts/ios-device-inbox-acceptance.sh`. The marker is part of every match
+because both vocabularies contain READY and both harnesses can share one
+terminal; the per-event refinements are kept per marker because the same event
+name carries a DIFFERENT value in each — the pair READY carries the run tag,
+the inbox READY the literal "1". A marker outside this file's own table is
+refused outright rather than pattern-matched on trust.
+
+    python3 device_pair_channel.py extract --log F --tag T --role R --event E [--marker M]
     python3 device_pair_channel.py release-name --tag T --role R
     python3 device_pair_channel.py self-test
 """
@@ -44,23 +54,44 @@ import re
 import sys
 
 MARKER = "RELAYIUM-DEVICE-PAIR"
+INBOX_MARKER = "RELAYIUM-DEVICE-INBOX"
 
-# The general bounded value set, matching `DevicePairChannel.isEmittable`.
+# The general bounded value set, matching `DevicePairChannel.isEmittable` and
+# `DeviceInboxAcceptanceUITests.Channel.isEmittable` alike.
 VALUE = r"[A-Za-z0-9._-]{1,64}"
 
-# Per-event refinements. An event absent from here is held to VALUE alone.
+# Per-marker, per-event refinements. An event absent from its marker's table is
+# held to VALUE alone; a marker absent from this table is refused outright,
+# because a parser asked to read a vocabulary it does not know would accept any
+# well-shaped token as a fact.
 #
-# Both digit events are held to EXACTLY six, because on current `main` both
-# really are six and nothing else:
+# Both pair digit events are held to EXACTLY six, because on current `main`
+# both really are six and nothing else:
 #
 #   * `signal.CodeLen` is 6 and `signal.CodeAlphabet` is exactly "0123456789";
 #   * `sas()` in `RelayiumKit/Crypto/Sas.swift` ends
 #     `String(format: "%06u", num % 1_000_000)`, so a shorter or longer string
 #     cannot have come from the product's own derivation and must not be
 #     compared as if it had.
+#
+# The inbox events are refined in their own table rather than merged, because
+# the two vocabularies reuse event names with different values: the pair
+# harness's READY carries the run tag, the inbox suite's carries the literal
+# "1". One shared table would have to admit both shapes for both harnesses,
+# which is exactly the widening a refinement exists to refuse.
 EVENT_VALUE = {
-    "PAIRING-CODE": re.compile(r"\A[0-9]{6}\Z"),
-    "SAS": re.compile(r"\A[0-9]{6}\Z"),
+    MARKER: {
+        "PAIRING-CODE": re.compile(r"\A[0-9]{6}\Z"),
+        "SAS": re.compile(r"\A[0-9]{6}\Z"),
+    },
+    INBOX_MARKER: {
+        # The exact values `DeviceInboxAcceptanceUITests.Channel` publishes.
+        "READY": re.compile(r"\A1\Z"),
+        "RECEIVING": re.compile(r"\Aauto\Z"),
+        "FILE": re.compile(r"\A(committed|saved)\Z"),
+        "HOLDING": re.compile(r"\A1\Z"),
+        "DONE": re.compile(r"\A1\Z"),
+    },
 }
 
 TOKEN = re.compile(r"\A[A-Za-z0-9._-]{1,64}\Z")
@@ -102,32 +133,38 @@ def release_name(tag, role):
     return "%s-%s-%s" % (RELEASE_PREFIX, tag, role)
 
 
-def _pattern(tag, role, event):
+def _pattern(tag, role, event, marker=MARKER):
+    if marker not in EVENT_VALUE:
+        raise ChannelError("%r is not a marker this channel reads" % (marker,))
     for name, value in (("tag", tag), ("role", role), ("event", event)):
         if not TOKEN.match(value):
             raise ChannelError(
                 "%s %r is outside the set this channel admits" % (name, value))
     return re.compile(
         r"%s %s %s %s (%s)\s*\Z"
-        % (re.escape(MARKER), re.escape(tag), re.escape(role),
+        % (re.escape(marker), re.escape(tag), re.escape(role),
            re.escape(event), VALUE)
     )
 
 
-def values(lines, tag, role, event):
+def values(lines, tag, role, event, marker=MARKER):
     """Every distinct value published for one (tag, role, event), in order."""
-    pattern = _pattern(tag, role, event)
-    refined = EVENT_VALUE.get(event)
+    pattern = _pattern(tag, role, event, marker)
+    refined = EVENT_VALUE[marker].get(event)
     found = []
     for raw in lines:
         line = raw.rstrip("\r\n")
-        count = line.count(MARKER)
+        # Counted over EVERY marker this file knows, not only the requested
+        # one: no runner can put two markers on one line either, and a pair
+        # line echoed onto the tail of an inbox line would otherwise still
+        # end in a perfectly-shaped match.
+        count = sum(line.count(known) for known in EVENT_VALUE)
         if count == 0:
             continue
         if count > 1:
             raise ChannelError(
-                "a log line carries the channel marker %d times, which the runner "
-                "cannot produce; something is echoing log lines and this parse is "
+                "a log line carries a channel marker %d times, which no runner "
+                "can produce; something is echoing log lines and this parse is "
                 "not trustworthy: %r" % (count, line[:200])
             )
         match = pattern.search(line)
@@ -143,9 +180,9 @@ def values(lines, tag, role, event):
     return found
 
 
-def extract(lines, tag, role, event):
+def extract(lines, tag, role, event, marker=MARKER):
     """The one value published, or a refusal that says which way it failed."""
-    found = values(lines, tag, role, event)
+    found = values(lines, tag, role, event, marker)
     if not found:
         raise ChannelError(
             "%s never published a %s line for run %s" % (role, event, tag))
@@ -254,6 +291,73 @@ def _self_test():
     refuse(["%s %s %s HOLDING 483920" % (MARKER, tag, role)],
            "a HOLDING line answering a request for a different event")
 
+    # ── the Device Inbox vocabulary, behind its own marker ───────────────────
+    #
+    # `DeviceInboxAcceptanceUITests` publishes through this same grammar under
+    # RELAYIUM-DEVICE-INBOX. The marker is part of the match because both
+    # vocabularies contain READY and both harnesses can share one terminal;
+    # the refinements are separate because the SAME event name carries a
+    # different value in each — the pair READY carries the run tag, the inbox
+    # READY the literal "1".
+    inbox = INBOX_MARKER
+
+    def inbox_expect(line, event_name, want, role_name="receiver"):
+        case()
+        got = extract([line], tag, role_name, event_name, marker=inbox)
+        assert got == want, "expected %r, got %r" % (want, got)
+
+    def inbox_refuse(line, event_name, because, role_name="receiver"):
+        case()
+        try:
+            extract([line], tag, role_name, event_name, marker=inbox)
+        except ChannelError:
+            return
+        raise AssertionError("accepted %s" % because)
+
+    inbox_expect("%s %s receiver RECEIVING auto" % (inbox, tag),
+                 "RECEIVING", "auto")
+    inbox_expect("%s %s receiver MESSAGE relayium-inbox-%s" % (inbox, tag, tag),
+                 "MESSAGE", "relayium-inbox-%s" % tag)
+    inbox_expect("%s %s receiver FILE committed" % (inbox, tag),
+                 "FILE", "committed")
+    inbox_expect("%s %s sender FILE saved" % (inbox, tag),
+                 "FILE", "saved", role_name="sender")
+    inbox_expect("%s %s receiver HOLDING 1" % (inbox, tag), "HOLDING", "1")
+    inbox_expect("%s %s receiver DONE 1" % (inbox, tag), "DONE", "1")
+    inbox_expect("%s %s receiver NAME %s" % (inbox, tag, tag), "NAME", tag)
+
+    inbox_refuse("%s %s receiver RECEIVING manual" % (inbox, tag), "RECEIVING",
+                 "a receiving state the suite never publishes")
+    inbox_refuse("%s %s receiver FILE sent" % (inbox, tag), "FILE",
+                 "a file state neither inbox role publishes")
+    inbox_refuse("%s %s receiver READY %s" % (inbox, tag, tag), "READY",
+                 "the pair vocabulary's READY shape under the inbox marker")
+    inbox_refuse("%s %s receiver RECEIVING auto" % (MARKER, tag), "RECEIVING",
+                 "the pair marker answering an inbox question")
+    inbox_refuse("%s %s x %s %s receiver RECEIVING auto"
+                 % (MARKER, tag, inbox, tag),
+                 "RECEIVING", "a line carrying two different markers")
+
+    # The reverse direction: an inbox line never answers a pair question.
+    case()
+    try:
+        extract(["%s %s nearby-resident READY 1" % (inbox, tag)],
+                tag, "nearby-resident", "READY")
+    except ChannelError:
+        pass
+    else:
+        raise AssertionError("an inbox line answered a pair-marker question")
+
+    # A vocabulary this file does not define is refused before it can match.
+    case()
+    try:
+        extract(["irrelevant"], tag, "receiver", "READY",
+                marker="RELAYIUM-DEVICE-VOID")
+    except ChannelError:
+        pass
+    else:
+        raise AssertionError("read a vocabulary this channel does not define")
+
     # A malformed request is refused before it can search for anything —
     # otherwise a tag containing regex metacharacters would be compiled into a
     # pattern that matches something else.
@@ -310,6 +414,8 @@ def main(argv):
     get.add_argument("--tag", required=True)
     get.add_argument("--role", required=True)
     get.add_argument("--event", required=True)
+    # Validated against this file's own marker table, not accepted on trust.
+    get.add_argument("--marker", default=MARKER)
     name = sub.add_parser("release-name")
     name.add_argument("--tag", required=True)
     name.add_argument("--role", required=True)
@@ -328,7 +434,7 @@ def main(argv):
         return 0
     try:
         with open(args.log, "r", encoding="utf-8", errors="replace") as handle:
-            print(extract(handle, args.tag, args.role, args.event))
+            print(extract(handle, args.tag, args.role, args.event, args.marker))
     except ChannelError as error:
         print(str(error), file=sys.stderr)
         return 2

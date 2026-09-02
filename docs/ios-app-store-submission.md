@@ -79,6 +79,37 @@ If the read-back contradicts the baseline above, correct the project source and
 this document before building — do not upload against these numbers and do not
 record a remote fact this file has not observed.
 
+## Device Inbox: what this app now does, and what it deliberately does not
+
+`0.3.0` adds the receive half of Device Inbox. The app enrols this device with
+the account, receives files and messages sent from the account's own other
+devices, and shows a per-device conversation of what has been received and sent.
+The five browseable surfaces are LAN Transfer, Cross-network Transfer, Send,
+Device Inbox and Account. Opening a stored link is no longer one of them: it is
+presented over whichever surface the user was on, reached from a verified
+Universal Link or an Account stored-file row, exactly as before.
+
+Three facts are review-relevant and must be answered truthfully rather than
+inferred from the feature's name:
+
+- **The receiver is foreground-only.** It runs while Relayium is open and stops
+  when the app leaves the foreground. This is enforced in
+  `InboxController.foreground(_:)`, not merely described, and the surface states
+  it unconditionally (`inbox.iosForegroundOnly`).
+- **No new capability was added to ship it.** The app declares no
+  `UIBackgroundModes`, uses no background `URLSession`, registers for no remote
+  notifications and links no notification framework. The entitlements, privacy
+  manifest and purpose strings are unchanged by this feature.
+- **Received files land in `Documents/Received`** — the same directory a stored
+  link's download writes into, published to the Files app by the existing
+  `UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace` keys. There is
+  no folder picker and no new file-system reach. Receiving is off by default and
+  is an explicit per-account consent inside the app.
+
+None of this changes the App Privacy declaration: the message and file bodies
+are end-to-end encrypted, are decrypted only on this device, and are stored
+inside the app's own container. Relayium's server sees ciphertext.
+
 ## Subscription activation boundary
 
 The app owns one process-scoped StoreKit model, loads products only from the
@@ -136,7 +167,23 @@ Internal TestFlight acceptance must cover:
 - the same-account cross-app guard, proving a live macOS Apple subscription
   cannot start an iOS purchase and vice versa;
 - Share extension handoff, Universal Links and the primary text/file workflows
-  on a real device.
+  on a real device;
+- **Device Inbox, on two real devices signed in to one account**: turning
+  receiving on, receiving a file and a message from the other device, the
+  per-device conversation showing both directions, and sending a file and a
+  message back from that conversation. Verify the received bytes appear under
+  *Relayium ▸ Received* in the Files app, and compare a digest against the
+  sender's;
+- **the foreground-only boundary, observed rather than assumed**: send to a
+  device whose Relayium is closed, confirm nothing arrives, then open the app and
+  confirm it does. Confirm no notification is delivered at any point;
+- **local history deletion is not a recall**: delete a conversation entry while a
+  delivery to that device is still running, and confirm the delivery completes on
+  the receiver while the row stays gone on the sender after relaunch;
+- **the adaptive shell**: five tabs on iPhone and on a compact-width iPad
+  (Slide Over and a narrow Split View), the sidebar and detail column at full
+  width, and the same five destinations in both — plus a stored link opening over
+  the surface the user was on and returning to it when dismissed.
 
 Sandbox purchases do not charge real money. Do not add the build to App Review
 or public release until the owner has accepted these results. Public release

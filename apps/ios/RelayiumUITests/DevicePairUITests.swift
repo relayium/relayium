@@ -231,8 +231,8 @@ final class DevicePairUITests: XCTestCase {
         launchForDevicePair(app, verifying: true,
                             freshReceivedFolder: !run.keepsReceivedFolder)
 
-        guard openDevicePairTab(DevicePair.nearbyTab, title: DevicePair.nearbyTitle,
-                                in: app) else { return }
+        guard openDevicePairDestination(DevicePair.nearbySurface, in: app)
+        else { return }
         requireVerificationIsOn()
 
         // The listener really did start. A physical launch passes no
@@ -310,8 +310,8 @@ final class DevicePairUITests: XCTestCase {
         // pending row, the arming and the wire are all production.
         launchForDevicePair(app, verifying: true, stagingFixture: true)
 
-        guard openDevicePairTab(DevicePair.nearbyTab, title: DevicePair.nearbyTitle,
-                                in: app) else { return }
+        guard openDevicePairDestination(DevicePair.nearbySurface, in: app)
+        else { return }
         requireVerificationIsOn()
         emitDevicePair(.ready, value: run.tag, for: run)
 
@@ -373,8 +373,8 @@ final class DevicePairUITests: XCTestCase {
     /// carries no type — which is exactly what the shipped hint says. So both
     /// ends must select the same mode, and neither may infer it.
     private func openPairingTab(mode: String) -> Bool {
-        guard openDevicePairTab(DevicePair.directTab, title: DevicePair.directTitle,
-                                in: app) else { return false }
+        guard openDevicePairDestination(DevicePair.directSurface, in: app)
+        else { return false }
         let segment = app.buttons[mode]
         guard segment.waitForExistence(timeout: DevicePair.settleBudget) else {
             XCTFail("""

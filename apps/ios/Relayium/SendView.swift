@@ -7,6 +7,17 @@ import RelayiumAppKit
 /// Choose files, folders, photos or videos; encrypt them here; upload the
 /// ciphertext to this account; hand the link to the share sheet.
 ///
+/// **One product on this screen, since 0.3.0.** It used to open on a segmented
+/// *As a link / To a device* control, with a device list and a second Send
+/// underneath it. Those are different products — a link publishes a stored
+/// object anybody holding it can open, a device delivery seals the content key
+/// to one device and creates no link at all — and a control whose job was to
+/// swap between them made the distinction something a user could slide past. The
+/// choice is now made by which destination you are on: this one is links, and a
+/// device send starts from that device's conversation in Device Inbox, beside
+/// the history it belongs to. macOS has always worked that way; `SendRoute`'s
+/// own documentation is the argument.
+///
 /// Two layers, in this order: a gate that decides what is DRAWN, and beneath it
 /// `CloudUploadModel`'s existing states, reused verbatim. Nothing about the
 /// account is decided here — the gate is presentation only. Cancelling an
@@ -23,18 +34,13 @@ import RelayiumAppKit
 struct SendView: View {
     @ObservedObject var upload: CloudUploadModel
     @ObservedObject var selection: SendSelectionModel
-    /// The other destination: one of this account's own Macs or command line
-    /// receivers. App-scoped, like everything else here, because a delivery
-    /// outlives this tab in three separate ways — a torn-down tab, a killed
-    /// process, and an account leaving while work nobody is watching runs.
-    @ObservedObject var deliveries: InboxSendModel
-    /// Which of the two kinds of send this screen is offering. App-scoped so
-    /// SwiftUI rebuilding the tab cannot silently reset the user's choice — and
-    /// reset it to the OTHER kind, which is the one distinction on this screen
-    /// that must never be made on the user's behalf.
-    @ObservedObject var routes: SendRouteSelection
-    /// Selects the Account tab. A closure rather than a session read, which is
-    /// what lets `RootView` stay ignorant of the account entirely.
+    /// Selects the Account destination. A closure rather than a session read,
+    /// which is what lets `RootView` stay ignorant of the account entirely.
+    ///
+    /// **No `deliveries` and no `routes` any more.** Device deliveries are not
+    /// this screen's product: the outstanding list moved to the Device Inbox,
+    /// where every device send now starts, and the route chooser went with the
+    /// segmented control. This view holds nothing that could address a device.
     let onOpenAccount: () -> Void
 
     @EnvironmentObject private var session: AccountSession
@@ -184,50 +190,24 @@ struct SendView: View {
         }
     }
 
-    /// The signed-in screen: which kind of send, that send's own surface, and
-    /// every delivery already on its way.
+    /// The signed-in screen: one card, one product.
     ///
-    /// **The device pane is offered only while the link flow is at rest.** A
-    /// live or finished link upload owns the screen whichever route is
-    /// selected, because that transfer is not rendered anywhere else and hiding
-    /// it behind a segmented control would leave bytes moving with nothing on
-    /// screen able to name or cancel them. Outstanding DELIVERIES are the
-    /// opposite case and are rendered under both routes: they survive the app
-    /// being closed, so the route that started one is not where it lives.
+    /// **One untitled card, and the rail is the title.** A card here could only
+    /// be titled "Send files" or "As a link", and the first is already the
+    /// navigation title — the exact repetition the Mac's second audit found and
+    /// removed. What the card needed instead was a statement of where the bytes
+    /// go, which is what the rail is: three stops, no new claim, and a real
+    /// position along them read from `upload.state`.
+    ///
+    /// The outstanding-delivery list that used to sit below this is gone from
+    /// here, and its absence is not a transfer left unwatched: it renders in the
+    /// Device Inbox, which is both where those sends now start and where the
+    /// conversation they belong to is. A device delivery has one place, not two.
     @ViewBuilder
     private var ready: some View {
-        SendRouteChooser(routes: routes)
-        // **One untitled card per route, and the rail is the title.**
-        //
-        // A card here could only be titled "Send files" or "As a link", and
-        // both are already on the screen — the first as the navigation title,
-        // the second as the chosen segment two rows above. That is the exact
-        // repetition the Mac's second audit found and removed. What the card
-        // needed instead was a statement of where the bytes go, which is what
-        // the rail is: three stops, no new claim, and on the link route a real
-        // position along them read from `upload.state`.
-        if routes.route == .device, isChoosingFilesToSend {
-            SectionCard {
-                PathRail(stops: PathRailPresentation.iosDeviceSend())
-                choosing
-                DeviceTargetPicker(deliveries: deliveries, selection: selection,
-                                   onOpenAccount: onOpenAccount)
-            }
-        } else {
-            SectionCard {
-                PathRail(stops: PathRailPresentation.iosStoredSend(upload.state))
-                flow
-            }
-        }
-        DeviceDeliveryList(deliveries: deliveries, onOpenAccount: onOpenAccount)
-    }
-
-    /// Whether the link half is at rest — nothing staged, nothing in flight and
-    /// no result waiting to be read.
-    private var isChoosingFilesToSend: Bool {
-        switch upload.state {
-        case .idle, .picked: return true
-        default: return false
+        SectionCard {
+            PathRail(stops: PathRailPresentation.iosStoredSend(upload.state))
+            flow
         }
     }
 

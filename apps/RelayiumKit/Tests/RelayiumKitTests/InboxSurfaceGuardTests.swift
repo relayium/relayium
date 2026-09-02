@@ -1162,8 +1162,18 @@ final class InboxSurfaceGuardTests: XCTestCase {
     /// and `AppInboxReceiverHost`, which is headless. Both were telling central
     /// they presented messages.
     ///
-    /// So the announcement is an argument, passed at exactly one site, and this
-    /// is what stops a second one appearing in a build with no such screen.
+    /// So the announcement is an argument, passed at exactly one site per
+    /// target, and this is what stops a second one appearing in a build with no
+    /// such screen.
+    ///
+    /// **iOS 0.3.0 changes which side of this iOS is on, and the guard changes
+    /// with it rather than being deleted.** That app now ships
+    /// `DeviceConversationView`, whose timeline renders a received message as
+    /// text, so announcing the token is honest there — and the check that used
+    /// to be "iOS must never name it" is now the same check every other
+    /// claimant gets: exactly one site, and that site is the app scene that
+    /// composes the receiver. The library still announces nothing on anyone's
+    /// behalf, which is the invariant that was actually load-bearing.
     func testOnlyTheBuildThatRendersMessagesAnnouncesTheTextCapability() throws {
         let app = try macSource("RelayiumApp.swift")
         XCTAssertTrue(app.contains(
@@ -1193,24 +1203,32 @@ final class InboxSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(hosts.contains("presentingText: true"),
                        "the headless receiver host claims a message surface it does not have")
 
-        // And iOS, which is the build the shared claim was actually false for.
+        // And iOS, which used to be the build the shared claim was false for and
+        // is now a claimant in its own right — under exactly the same rule.
         let iosRoot = try appsRoot.appendingPathComponent("ios")
         let iosNames = try FileManager.default.subpathsOfDirectory(atPath: iosRoot.path)
             .filter { $0.hasSuffix(".swift") }
         XCTAssertGreaterThanOrEqual(iosNames.count, 10,
                                     "found \(iosNames.count) iOS sources at \(iosRoot.path)")
-        for name in iosNames {
-            let source = try code(iosRoot.appendingPathComponent(name))
-            XCTAssertFalse(source.contains("presentingText: true"),
-                           "iOS/\(name) announces a Device Inbox text surface it does not ship")
-            // Naming the token at all needs a look. iOS ships no Device Inbox
-            // message surface, so the only honest uses here would be a refusal
-            // — and a refusal on this platform is currently expressed by simply
-            // not announcing it.
-            XCTAssertFalse(source.contains("InboxCapability.textV1"),
-                           "iOS/\(name) names the text capability token; iOS has no "
-                           + "Device Inbox message surface, so this needs review")
-        }
+        let iosClaimants = try iosNames.filter {
+            try code(iosRoot.appendingPathComponent($0)).contains("presentingText: true")
+        }.map { ($0 as NSString).lastPathComponent }.sorted()
+        XCTAssertEqual(iosClaimants, ["RelayiumApp.swift"],
+                       "the text claim must be made once, by the app scene that composes "
+                       + "the receiver — not by a view and not by a fixture")
+
+        // **And the screen that makes the claim true is actually there.** This
+        // is the half that a deletion of the old ban would have lost: without
+        // it, the announcement could stay behind after the timeline was removed,
+        // and central would go on offering this device as one that presents
+        // messages. The surface reads the protected body through the store its
+        // direction owns, which is what "presents it as text" means here.
+        let page = try code(iosRoot.appendingPathComponent(
+            "Relayium/DeviceConversationView.swift"))
+        XCTAssertTrue(page.contains("inbox.message(for: entry)"),
+                      "iOS announces a text surface but reads no received message body")
+        XCTAssertTrue(page.contains("Text(message.text)"),
+                      "iOS announces a text surface that never renders the message")
     }
 
     /// Nothing in the Device Inbox deletes a received message on a schedule.

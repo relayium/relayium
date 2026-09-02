@@ -32,6 +32,23 @@ import RelayiumKit
 struct ReceiveView: View {
     @ObservedObject var model: CloudDownloadModel
 
+    /// How to leave, when this screen is PRESENTED rather than browsed to.
+    ///
+    /// Nil is the browsed case and renders no control: a destination the user
+    /// selected is one they leave by selecting another, and a Done button on it
+    /// would be an exit from nowhere. Non-nil is the shell presenting this over
+    /// the surface the user was on, where an explicit dismissal is required —
+    /// a sheet that can only be closed by a swipe is a sheet a VoiceOver user
+    /// cannot leave, and one whose only exit is the gesture leaves no way to say
+    /// where the user goes back to.
+    ///
+    /// It is a closure rather than `@Environment(\.dismiss)` because dismissing
+    /// this sheet is a NAVIGATION event: the shell's selection has to move back
+    /// to the surface underneath, and a bare `dismiss()` would close the sheet
+    /// while `AppNavigationModel` still said `.storedReceive` — leaving the next
+    /// link a no-op change that raises nothing.
+    var onDismiss: (() -> Void)?
+
     /// A failure to resolve the app's own receive folder, which happens before
     /// the model is involved at all and therefore has no state case to live in.
     /// Cleared whenever a new attempt starts, so it cannot outlive its cause.
@@ -56,6 +73,30 @@ struct ReceiveView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .navigationTitle(L10n.t(.downloadHeading))
+            // **In the content layer, not the navigation bar — because of a
+            // measured Dynamic Type failure, not taste.** The system audit of
+            // this screen's PRESENTED form — the only form users now meet,
+            // since `storedReceive` stopped being a tab — rejected a toolbar
+            // Done with "Dynamic Type font sizes are partially unsupported",
+            // and it was right: this platform's toolbar draws its buttons at a
+            // fixed size and discards a `.font` given to the item or to its
+            // label, which three instrumented runs confirmed pixel-identical.
+            // This is the sheet's only explicit exit; a reader at an
+            // accessibility text size would have found every word on the
+            // screen scaled except the one that closes it. A safe-area inset
+            // keeps it above the scrolled content — reachable however far the
+            // page is scrolled, exactly the property the bar gave it — while
+            // letting it scale like every other word on the screen.
+            .safeAreaInset(edge: .top, alignment: .trailing, spacing: 0) {
+                if let onDismiss {
+                    Button(action: onDismiss) {
+                        Text(L10n.t(.commonDone)).font(.body.weight(.semibold))
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, Metrics.tight)
+                    .accessibilityIdentifier("stored-receive-done")
+                }
+            }
         }
     }
 

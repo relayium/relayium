@@ -198,44 +198,62 @@ extension XCTestCase {
 
     /// Open one of the two destinations this harness drives.
     ///
-    /// `RootView` is a plain `TabView` on every size class on this branch, so
-    /// the tab bar is the primary scope. The fallback exists because a tab bar
-    /// is a platform-rendered container whose exposure has changed between
-    /// iPadOS releases, and a harness that can run on any two devices of a
-    /// three-device fleet must not fail on the shell rather than on the product.
-    /// It is a fallback and not a preference: the tab bar is tried first, and a
-    /// run that reaches neither says so rather than proceeding on a screen it
-    /// did not identify.
+    /// Addressed by `IOSSurface.rawValue`, never by rendered copy: since 0.3.0
+    /// `RootView` draws a five-item tab bar in compact width and a sidebar/detail
+    /// split in regular width, and both shells stamp the same stable identifier
+    /// on their rows (`tab-<id>` and `sidebar-<id>`). A full-width iPad in the
+    /// three-device fleet therefore navigates the sidebar, a compact iPhone the
+    /// tab bar, and neither depends on which visible label a locale or copy
+    /// change happens to render. Both shells are waited on together, so a
+    /// regular-width launch does not spend the whole tab-bar timeout before
+    /// finding its sidebar. A run that reaches neither shell says so with the
+    /// full hierarchy rather than proceeding on a screen it did not identify —
+    /// that diagnostic is load-bearing on a physical fleet, where the failure
+    /// artefact is often all the run leaves behind.
     @discardableResult
-    func openDevicePairTab(_ tab: String,
-                           title: String,
-                           in app: XCUIApplication,
-                           file: StaticString = #filePath,
-                           line: UInt = #line) -> Bool {
-        let bar = app.tabBars.firstMatch
+    func openDevicePairDestination(_ surface: Shell.Surface,
+                                   in app: XCUIApplication,
+                                   file: StaticString = #filePath,
+                                   line: UInt = #line) -> Bool {
+        let tab = app.tabBars.firstMatch.buttons["tab-\(surface.id)"].firstMatch
+        let sidebarRow = app.descendants(matching: .any)["sidebar-\(surface.id)"].firstMatch
+        let sidebarToggle = app.buttons["ToggleSidebar"].firstMatch
         var opened = false
-        if bar.waitForExistence(timeout: 30) {
-            let button = bar.buttons[tab]
-            if button.waitForExistence(timeout: 10) {
-                button.tap()
+        // A physical device can take far longer than a simulator to draw its
+        // first shell, so the two shells share one generous deadline.
+        let deadline = Date().addingTimeInterval(30)
+        while Date() < deadline, !opened {
+            if tab.exists {
+                tab.tap()
                 opened = true
+            } else if sidebarRow.exists {
+                sidebarRow.tap()
+                opened = true
+            } else if sidebarToggle.exists {
+                // iPadOS 18 launches the portrait split view with its sidebar
+                // collapsed: no row is on screen and the system "Show Sidebar"
+                // toggle is the only way in. One tap brings the identified rows
+                // out, and the next pass of the loop taps the row itself. The
+                // compact shell never draws this toggle, and the tab bar is
+                // checked first, so this cannot misdrive an iPhone.
+                sidebarToggle.tap()
+                _ = sidebarRow.waitForExistence(timeout: 5)
+            } else {
+                _ = tab.waitForExistence(timeout: 0.5)
             }
         }
-        if !opened {
-            let button = app.buttons[tab].firstMatch
-            guard button.waitForExistence(timeout: 20) else {
-                XCTFail("""
-                    no shell control named "\(tab)" in either the tab bar or the \
-                    view hierarchy.
-                    \(app.debugDescription)
-                    """, file: file, line: line)
-                return false
-            }
-            button.tap()
-        }
-        guard app.navigationBars[title].waitForExistence(timeout: 20) else {
+        guard opened else {
             XCTFail("""
-                \(tab) was selected but its "\(title)" screen did not render.
+                no shell control identified "\(surface.id)" in either the tab \
+                bar or the sidebar.
+                \(app.debugDescription)
+                """, file: file, line: line)
+            return false
+        }
+        guard app.navigationBars[surface.title].waitForExistence(timeout: 20) else {
+            XCTFail("""
+                \(surface.id) was selected but its "\(surface.title)" screen \
+                did not render.
                 \(app.debugDescription)
                 """, file: file, line: line)
             return false
@@ -675,10 +693,13 @@ enum DevicePair {
 
     // MARK: - the shell
 
-    static let nearbyTab = "Nearby"
-    static let nearbyTitle = "Nearby"
-    static let directTab = "Direct"
-    static let directTitle = "Direct"
+    /// The two destinations this harness drives, shared with the simulator
+    /// suites: `Shell.Surface` carries the stable `IOSSurface.rawValue` both
+    /// shells stamp on their rows and the navigation title that proves the
+    /// destination rendered, so the physical harness cannot drift from the
+    /// shell the product actually draws.
+    static let nearbySurface = Shell.lanTransfer
+    static let directSurface = Shell.crossNetworkTransfer
 
     // MARK: - Nearby
 

@@ -54,34 +54,40 @@ final class AppShellUITests: XCTestCase {
         middle.press(forDuration: 0.05, thenDragTo: target)
     }
 
-    @discardableResult
-    private func openTask(_ tabName: String, title: String) -> XCUIElement {
-        let tabs = app.tabBars.firstMatch
-        XCTAssertTrue(tabs.waitForExistence(timeout: 20), "the primary tab bar did not render")
-        let tab = tabs.buttons[tabName]
-        XCTAssertTrue(tab.waitForExistence(timeout: 10), "the tab bar has no \(tabName) task")
-        tab.tap()
-        // SwiftUI may replace the labelled tab accessibility element with its
-        // selected icon after the tap. Holding the old element and waiting on
-        // `selected == true` then observes a stale object even though the real
-        // destination rendered. The navigation bar is the user-visible task
-        // state, so it is the synchronization point and the assertion.
-        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 10),
-                      "\(tabName) selected but its screen did not render")
-        return tab
+    /// Relaunch with the stored-link screen already presented.
+    ///
+    /// **Why the stored-link tests below relaunch at all.** They used to open a
+    /// `Receive` TAB, which was the first of five and the destination the app
+    /// launched on. 0.3.0 removed it: opening a stored link is something the OS
+    /// hands this app — a verified Universal Link, or a stored-file row inside
+    /// Account — rather than somewhere a person sets out to go, so the screen is
+    /// presented over whichever destination the user was on instead of occupying
+    /// a primary tab. The signed-out behaviour these tests own has neither of
+    /// those two routes available, so the launch names the destination and
+    /// `IOSShellModel` applies its ordinary rule to it.
+    ///
+    /// The presentation itself is asserted rather than assumed, through the Done
+    /// control that only the presented form of the screen carries — so a
+    /// regression that drew this as a bare destination again fails here rather
+    /// than passing quietly.
+    private func relaunchOnStoredLink(_ extra: [String] = []) {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-open-stored-link"] + extra
+        app.launch()
+        waitForPresentedStoredReceive(app)
     }
 
+    /// Every browseable destination draws its own screen.
+    ///
+    /// The list is `Shell.browseable`, which is the runtime mirror of
+    /// `IOSSurface.browseable` — one list, so a destination cannot be added to
+    /// the product and left out of the smoke, and the compact and regular shells
+    /// cannot be checked against two different sets.
     func testEveryPrimaryTaskRendersItsOwnScreen() {
-        let destinations = [
-            (tab: "Receive", title: "Receive files"),
-            (tab: "Send", title: "Send files"),
-            (tab: "Direct", title: "Direct"),
-            (tab: "Nearby", title: "Nearby"),
-            (tab: "Account", title: "Account"),
-        ]
-        for destination in destinations {
-            openTask(destination.tab, title: destination.title)
-            if destination.tab == "Nearby" {
+        for surface in Shell.browseable {
+            open(surface, in: app)
+            if surface.id == Shell.lanTransfer.id {
                 XCTAssertTrue(app.staticTexts["Nearby receiving: paused"].exists,
                               "the offline acceptance state is not explained")
                 XCTAssertTrue(app.buttons["Resume receiving"].exists,
@@ -90,15 +96,36 @@ final class AppShellUITests: XCTestCase {
         }
     }
 
+    /// The sixth destination, which is not a row on either shell.
+    ///
+    /// `storedReceive` losing its tab must not mean losing its runtime
+    /// evidence: it is still fully supported, still reachable from a verified
+    /// Universal Link and from Account, and still the screen a downloaded file
+    /// arrives through. This is the smoke's entry for it — presented rather than
+    /// browsed to, with a browseable destination still underneath.
+    func testTheStoredLinkScreenIsPresentedOverABrowseableDestination() {
+        relaunchOnStoredLink()
+
+        XCTAssertTrue(app.textFields["receive.link"].waitForExistence(timeout: 15),
+                      "the presented stored-link screen offers no link field")
+        app.buttons["stored-receive-done"].tap()
+
+        // Dismissing lands on a real destination rather than on nothing: the
+        // background is a browseable surface by construction, and this is the
+        // runtime half of that claim.
+        XCTAssertTrue(app.navigationBars[Shell.lanTransfer.title].waitForExistence(timeout: 15),
+                      "dismissing the stored-link screen left no destination behind it")
+    }
+
     func testAccountRemediesRouteToTheAccountTask() {
-        openTask("Send", title: "Send files")
+        open(Shell.storedSend, in: app)
         let sendRemedy = app.buttons["Go to Account"]
         XCTAssertTrue(sendRemedy.waitForExistence(timeout: 10),
                       "the signed-out Send task offers no account remedy")
         sendRemedy.tap()
         XCTAssertTrue(app.navigationBars["Account"].waitForExistence(timeout: 10))
 
-        openTask("Direct", title: "Direct")
+        open(Shell.crossNetworkTransfer, in: app)
         let directRemedy = app.buttons["Open Account"]
         XCTAssertTrue(directRemedy.waitForExistence(timeout: 10),
                       "the signed-out Direct task offers no account remedy")
@@ -107,7 +134,7 @@ final class AppShellUITests: XCTestCase {
     }
 
     func testDirectModeChoiceStaysInDirect() {
-        openTask("Direct", title: "Direct")
+        open(Shell.crossNetworkTransfer, in: app)
         let textMode = app.segmentedControls.firstMatch.buttons["Text"]
         XCTAssertTrue(textMode.waitForExistence(timeout: 10),
                       "Direct offers no text mode")
@@ -128,7 +155,7 @@ final class AppShellUITests: XCTestCase {
     }
 
     func testDirectLargeFileRouteReachesSend() {
-        openTask("Direct", title: "Direct")
+        open(Shell.crossNetworkTransfer, in: app)
         let route = app.buttons["Open Send"]
         XCTAssertTrue(route.waitForExistence(timeout: 10),
                       "Direct does not offer its large-file route")
@@ -140,7 +167,7 @@ final class AppShellUITests: XCTestCase {
     }
 
     func testAccountSwitchesToACompleteInAppRegistrationForm() {
-        openTask("Account", title: "Account")
+        open(Shell.account, in: app)
         let create = app.buttons["New to Relayium? Create an account"]
         XCTAssertTrue(create.waitForExistence(timeout: 10),
                       "the sign-in form offers no registration path")
@@ -164,7 +191,7 @@ final class AppShellUITests: XCTestCase {
     }
 
     func testMalformedReceiveLinkExplainsHowToRecover() {
-        openTask("Receive", title: "Receive files")
+        relaunchOnStoredLink()
 
         let link = app.textFields["receive.link"]
         XCTAssertTrue(link.waitForExistence(timeout: 10),
@@ -202,7 +229,7 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-signed-in"]
         app.launch()
 
-        openTask("Account", title: "Account")
+        open(Shell.account, in: app)
         XCTAssertTrue(app.staticTexts["person@example.com"].waitForExistence(timeout: 20),
                       "a signed-in launch did not render the account it holds")
         XCTAssertTrue(app.staticTexts["Signed-in devices"].exists,
@@ -254,7 +281,7 @@ final class AppShellUITests: XCTestCase {
             format: "label BEGINSWITH %@", "Delete stored file")).count, 2,
             "a stored object that cannot be linked also cannot be removed")
 
-        openTask("Send", title: "Send files")
+        open(Shell.storedSend, in: app)
         XCTAssertFalse(app.buttons["Go to Account"].exists,
                        "a signed-in Send task still offers the signed-out remedy")
     }
@@ -270,7 +297,7 @@ final class AppShellUITests: XCTestCase {
         ]
         app.launch()
 
-        openTask("Account", title: "Account")
+        open(Shell.account, in: app)
         let monthly = app.buttons["subscription-buy-uitest.subscription.month"]
         for _ in 0..<8 where !monthly.exists { app.swipeUp() }
         XCTAssertTrue(monthly.waitForExistence(timeout: 20),
@@ -316,7 +343,7 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-off-receiving"]
         app.launch()
 
-        openTask("Nearby", title: "Nearby")
+        open(Shell.lanTransfer, in: app)
 
         XCTAssertTrue(app.staticTexts["Nearby receiving: off"].waitForExistence(timeout: 10),
                       "the stopped listener does not report itself as off")
@@ -366,10 +393,41 @@ final class AppShellUITests: XCTestCase {
         element.tap()
     }
 
+    /// Land the system picker on Browse, whichever shape iOS presented it in.
+    ///
+    /// Compact widths present a browsing-mode chooser —
+    /// `DOC.browsingModeTabBar` — and Browse must be selected before any
+    /// location exists to tap. Full-width iPadOS 18 never draws that tab bar:
+    /// the picker opens directly on the Browse view, with the
+    /// `com_apple_DocumentManager_Service.DOCSidebarView` navigation bar
+    /// already on screen. Both are real states of the same real system
+    /// picker, so accept whichever arrives rather than require the compact
+    /// chrome on a shape that never draws it. Nothing downstream weakens: the
+    /// fixture still has to be found, tapped and confirmed through the real
+    /// Open.
+    private func openBrowseInSystemPicker(timeout: TimeInterval = 20) {
+        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
+        let sidebar = app.navigationBars[
+            "com_apple_DocumentManager_Service.DOCSidebarView"]
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if sidebar.exists { return }
+            if browsingTabs.waitForExistence(timeout: 1) {
+                return browsingTabs.buttons["Browse"].tap()
+            }
+        } while Date() < deadline
+        XCTFail("""
+            choosing files did not present the system document browser.
+            \(app.debugDescription)
+            """)
+    }
+
     /// Select the staged document without assuming which directory the system
     /// browser remembered from an earlier import. Files may reopen inside the
     /// app folder, at the app folder's parent, or at the Locations root; all
     /// three are valid system states and expose the same production importer.
+    /// The Locations root names the device it is on — "On My iPhone" or
+    /// "On My iPad" — so match either rather than encode one device idiom.
     private func selectStagedFixture(named stem: String) {
         let fixture = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label BEGINSWITH %@", stem)).firstMatch
@@ -383,7 +441,16 @@ final class AppShellUITests: XCTestCase {
             return tapStagedFixture(named: stem)
         }
 
-        tapInBrowser("On My iPhone")
+        let device = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@ OR label == %@",
+                        "On My iPhone", "On My iPad")).firstMatch
+        guard device.waitForExistence(timeout: 15) else {
+            return XCTFail("""
+                the system document browser offers no on-device location.
+                \(app.debugDescription)
+                """)
+        }
+        device.tap()
         tapInBrowser("Relayium")
         tapStagedFixture(named: stem)
     }
@@ -402,17 +469,14 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-pending-fixture"]
         app.launch()
 
-        openTask("Nearby", title: "Nearby")
+        open(Shell.lanTransfer, in: app)
         let chooser = app.buttons["Choose Files or Folders…"]
         XCTAssertTrue(chooser.waitForExistence(timeout: 10),
                       "Nearby has no file-selection surface")
         scrollUntilHittable(chooser)
         chooser.tap()
 
-        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
-        XCTAssertTrue(browsingTabs.waitForExistence(timeout: 20),
-                      "choosing files did not present the system document browser")
-        browsingTabs.buttons["Browse"].tap()
+        openBrowseInSystemPicker()
         selectStagedFixture(named: "Relayium product brief")
 
         let open = app.buttons["Open"]
@@ -432,7 +496,7 @@ final class AppShellUITests: XCTestCase {
     }
 
     func testRegistrationProblemKeepsTheDraftCorrectable() {
-        openTask("Account", title: "Account")
+        open(Shell.account, in: app)
         app.buttons["New to Relayium? Create an account"].tap()
         XCTAssertTrue(app.staticTexts["Create your Relayium account"]
             .waitForExistence(timeout: 10))
@@ -505,7 +569,7 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = offlineLaunchArguments
             + ["--relayium-ui-testing-signed-in"]
         app.launch()
-        openTask("Account", title: "Account")
+        open(Shell.account, in: app)
 
         let other = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", "Kitchen laptop")).firstMatch
@@ -551,7 +615,7 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = offlineLaunchArguments
             + ["--relayium-ui-testing-signed-in"]
         app.launch()
-        openTask("Account", title: "Account")
+        open(Shell.account, in: app)
 
         // By the delete action itself, not merely by the row's id: a rebuildable
         // row also carries Open, Copy link and Share, and any of them would
@@ -586,7 +650,7 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = offlineLaunchArguments
             + ["--relayium-ui-testing-signed-in"]
         app.launch()
-        openTask("Account", title: "Account")
+        open(Shell.account, in: app)
 
         XCTAssertTrue(app.staticTexts["person@example.com"].waitForExistence(timeout: 20),
                       "the signed-in launch did not render the account it holds")
@@ -610,7 +674,7 @@ final class AppShellUITests: XCTestCase {
 
         // The account-gated task must go back to offering its remedy, not to a
         // half-signed-in surface that would fail on first use.
-        openTask("Send", title: "Send files")
+        open(Shell.storedSend, in: app)
         XCTAssertTrue(app.buttons["Go to Account"].waitForExistence(timeout: 10),
                       "a signed-out Send task no longer offers its account remedy")
     }
@@ -628,7 +692,7 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-text-code"]
         app.launch()
 
-        openTask("Direct", title: "Direct")
+        open(Shell.crossNetworkTransfer, in: app)
         let textMode = app.segmentedControls.firstMatch.buttons["Text"]
         XCTAssertTrue(textMode.waitForExistence(timeout: 10), "Direct offers no text mode")
         textMode.tap()
@@ -665,7 +729,7 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-text-code"]
         app.launch()
 
-        openTask("Direct", title: "Direct")
+        open(Shell.crossNetworkTransfer, in: app)
         app.segmentedControls.firstMatch.buttons["Text"].tap()
         let create = app.buttons["Create a text code"]
         XCTAssertTrue(create.waitForExistence(timeout: 10))
@@ -695,7 +759,7 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-terminal-text"]
         app.launch()
 
-        openTask("Direct", title: "Direct")
+        open(Shell.crossNetworkTransfer, in: app)
         app.segmentedControls.firstMatch.buttons["Text"].tap()
         let create = app.buttons["Create a text code"]
         XCTAssertTrue(create.waitForExistence(timeout: 10))
@@ -766,7 +830,7 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pending-fixture"]
         app.launch()
 
-        openTask("Send", title: "Send files")
+        open(Shell.storedSend, in: app)
         XCTAssertFalse(app.buttons["Go to Account"].exists,
                        "a signed-in Send task still offers the signed-out remedy")
 
@@ -776,10 +840,7 @@ final class AppShellUITests: XCTestCase {
         scrollUntilHittable(chooser)
         chooser.tap()
 
-        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
-        XCTAssertTrue(browsingTabs.waitForExistence(timeout: 20),
-                      "choosing files did not present the system document browser")
-        browsingTabs.buttons["Browse"].tap()
+        openBrowseInSystemPicker()
         selectStagedFixture(named: "Relayium product brief")
         let open = app.buttons["Open"]
         XCTAssertTrue(open.waitForExistence(timeout: 10),
@@ -818,10 +879,11 @@ final class AppShellUITests: XCTestCase {
     func testEditingARefusedLinkClearsTheRefusalWithIt() {
         app.terminate()
         app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-invalid-download-link"]
+            + ["--relayium-ui-testing-invalid-download-link",
+               "--relayium-ui-testing-open-stored-link"]
         app.launch()
 
-        openTask("Receive", title: "Receive files")
+        waitForPresentedStoredReceive(app)
 
         let link = app.textFields["receive.link"]
         XCTAssertTrue(link.waitForExistence(timeout: 10))
@@ -892,7 +954,7 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-preselect-fixture"]
         app.launch()
 
-        openTask("Send", title: "Send files")
+        open(Shell.storedSend, in: app)
         let chooser = app.buttons["Choose Files or Folders…"]
         XCTAssertTrue(chooser.waitForExistence(timeout: 15))
         XCTAssertTrue(app.descendants(matching: .any)["pendingFile.0"].firstMatch
@@ -939,7 +1001,7 @@ final class AppShellUITests: XCTestCase {
                "--relayium-ui-testing-stall-upload"]
         app.launch()
 
-        openTask("Send", title: "Send files")
+        open(Shell.storedSend, in: app)
         let chooser = app.buttons["Choose Files or Folders…"]
         XCTAssertTrue(chooser.waitForExistence(timeout: 15))
         XCTAssertTrue(app.descendants(matching: .any)["pendingFile.0"].firstMatch
@@ -983,7 +1045,7 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-sign-in"]
         app.launch()
 
-        openTask("Account", title: "Account")
+        open(Shell.account, in: app)
         XCTAssertTrue(app.staticTexts["Welcome back"].waitForExistence(timeout: 15),
                       "a signed-out launch did not offer the sign-in form")
 
@@ -1020,7 +1082,7 @@ final class AppShellUITests: XCTestCase {
     /// and must not leave the file surface behind, or the user would be looking
     /// at a pending send that the mode they picked cannot perform.
     func testNearbyTransferTypeChangesWhatIsStaged() {
-        openTask("Nearby", title: "Nearby")
+        open(Shell.lanTransfer, in: app)
 
         let chooser = app.buttons["Choose Files or Folders…"]
         XCTAssertTrue(chooser.waitForExistence(timeout: 15),
@@ -1072,7 +1134,7 @@ final class AppShellUITests: XCTestCase {
                "--relayium-ui-testing-fail-upload"]
         app.launch()
 
-        openTask("Send", title: "Send files")
+        open(Shell.storedSend, in: app)
 
         // The precondition, asserted rather than assumed: Send below is only
         // meaningful against a file this launch actually staged and selected.
@@ -1112,16 +1174,14 @@ final class AppShellUITests: XCTestCase {
                "--relayium-ui-testing-file-code"]
         app.launch()
 
-        openTask("Direct", title: "Direct")
+        open(Shell.crossNetworkTransfer, in: app)
         let chooser = app.buttons["Choose Files or Folders…"]
         XCTAssertTrue(chooser.waitForExistence(timeout: 15),
                       "Direct's file mode stages nothing")
         scrollUntilHittable(chooser)
         chooser.tap()
 
-        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
-        XCTAssertTrue(browsingTabs.waitForExistence(timeout: 20))
-        browsingTabs.buttons["Browse"].tap()
+        openBrowseInSystemPicker()
         selectStagedFixture(named: "Relayium product brief")
         let open = app.buttons["Open"]
         XCTAssertTrue(open.waitForExistence(timeout: 10))
@@ -1159,10 +1219,11 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = offlineLaunchArguments + [
             "--relayium-ui-testing-sign-in",
             "--relayium-ui-testing-valid-download-link",
+            "--relayium-ui-testing-open-stored-link",
         ]
         app.launch()
 
-        openTask("Receive", title: "Receive files")
+        waitForPresentedStoredReceive(app)
         let link = app.textFields["receive.link"]
         XCTAssertTrue(link.waitForExistence(timeout: 15))
         XCTAssertEqual(link.value as? String,
@@ -1207,10 +1268,11 @@ final class AppShellUITests: XCTestCase {
             "--relayium-ui-testing-sign-in",
             "--relayium-ui-testing-valid-download-link",
             "--relayium-ui-testing-fresh-received-folder",
+            "--relayium-ui-testing-open-stored-link",
         ]
         app.launch()
 
-        openTask("Receive", title: "Receive files")
+        waitForPresentedStoredReceive(app)
         let open = app.buttons["Open"]
         XCTAssertTrue(open.waitForExistence(timeout: 15))
         scrollUntilHittable(open)
@@ -1266,9 +1328,10 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = offlineLaunchArguments + [
             "--relayium-ui-testing-sign-in",
             "--relayium-ui-testing-valid-download-link",
+            "--relayium-ui-testing-open-stored-link",
         ]
         app.launch()
-        openTask("Receive", title: "Receive files")
+        waitForPresentedStoredReceive(app)
         let reopen = app.buttons["Open"]
         XCTAssertTrue(reopen.waitForExistence(timeout: 15))
         scrollUntilHittable(reopen)
@@ -1308,18 +1371,50 @@ final class AppShellUITests: XCTestCase {
     /// of the archived languages actually sees is asserted by
     /// `testAnArchivedLanguagePreferenceRendersACompleteEnglishLeftToRightShell`.
     func testEveryShippedLanguageRendersItsOwnShell() {
-        let shipped = [("en", "Nearby"), ("zh-Hans", "附近设备")]
-        for (code, nearby) in shipped {
+        // Two destinations per language, not one: the second is the one this
+        // batch added, so a Device Inbox row shipped with an untranslated or
+        // missing title would be caught here rather than by eye.
+        let shipped = [("en", "Nearby", "Inbox"), ("zh-Hans", "附近设备", "收件箱")]
+        for (code, nearby, inbox) in shipped {
             app.terminate()
             app.launchArguments = ["--relayium-ui-testing",
                                    "-AppleLanguages", "(\(code))",
                                    "-AppleLocale", code]
             app.launch()
-            let tabs = app.tabBars.firstMatch
-            XCTAssertTrue(tabs.waitForExistence(timeout: 20),
-                          "\(code) did not produce a shell at all")
-            XCTAssertTrue(tabs.buttons[nearby].waitForExistence(timeout: 10),
-                          "\(code) rendered a shell that is not in \(code)")
+            let layout = waitForShell(app)
+            // A portrait iPadOS 18 launch collapses the sidebar, and rows that
+            // are off screen have no labels to read.
+            if layout == .regular { revealSidebar(app) }
+
+            // Located by IDENTIFIER and asserted on its LABEL. Looking the row
+            // up by its translated label could only ever fail by not finding it,
+            // which is indistinguishable from a shell that did not render;
+            // reading the label off the row the product built says which words
+            // it actually drew — and it is the same assertion on both shells.
+            for (surface, expected) in [(Shell.lanTransfer, nearby),
+                                        (Shell.deviceInbox, inbox)] {
+                let row = shellRow(surface, layout: layout)
+                XCTAssertTrue(row.waitForExistence(timeout: 15),
+                              "\(code) did not render the \(surface.id) destination")
+                XCTAssertTrue(row.label.contains(expected),
+                              "\(code) rendered \(surface.id) as '\(row.label)' "
+                              + "rather than in \(code)")
+            }
+        }
+    }
+
+    /// The row a destination is selected by, on whichever shell is drawn.
+    ///
+    /// Only the two tests that are ABOUT the shell itself — its copy and its
+    /// layout direction — need the row rather than the destination behind it.
+    /// Everything else goes through `open(_:in:)` and never learns which shell
+    /// it is running on.
+    private func shellRow(_ surface: Shell.Surface, layout: Shell.Layout) -> XCUIElement {
+        switch layout {
+        case .compact:
+            return app.tabBars.firstMatch.buttons["tab-\(surface.id)"].firstMatch
+        case .regular:
+            return app.descendants(matching: .any)["sidebar-\(surface.id)"].firstMatch
         }
     }
 
@@ -1351,30 +1446,57 @@ final class AppShellUITests: XCTestCase {
                                    "-AppleLanguages", "(\(code))", "-AppleLocale", code]
             app.launch()
 
-            let tabs = app.tabBars.firstMatch
-            XCTAssertTrue(tabs.waitForExistence(timeout: 20),
-                          "\(code) did not produce a shell at all")
+            let layout = waitForShell(app)
+            // A portrait iPadOS 18 launch collapses the sidebar; the rows the
+            // assertions below read exist only once it is on screen.
+            if layout == .regular { revealSidebar(app) }
 
             // English words, not the archived translation.
-            XCTAssertTrue(tabs.buttons["Nearby"].waitForExistence(timeout: 15),
+            let first = shellRow(Shell.lanTransfer, layout: layout)
+            XCTAssertTrue(first.waitForExistence(timeout: 15),
+                          "a \(code) launch did not render a shell at all")
+            XCTAssertTrue(first.label.contains("Nearby"),
                           "a \(code) launch did not render the English shell")
 
             // And no destination fell through to its own catalog key. Asked of
-            // EVERY tab, because the lookup above resolves by the English label
-            // and so can never be the one that catches a raw key.
-            let ordered = tabs.buttons.allElementsBoundByIndex
-            XCTAssertGreaterThanOrEqual(ordered.count, 2,
-                                        "the \(code) shell rendered fewer destinations than it has")
-            for tab in ordered {
-                let shown = tab.label.isEmpty ? (tab.value as? String ?? "") : tab.label
+            // EVERY row, because the lookup above resolves one known surface and
+            // so can never be the one that catches a raw key.
+            let ordered = Shell.browseable.map { shellRow($0, layout: layout) }
+            for row in ordered {
+                let shown = row.label.isEmpty ? (row.value as? String ?? "") : row.label
                 XCTAssertFalse(shown.hasPrefix("tab.") || shown.hasPrefix("nav."),
                                "a \(code) launch rendered a raw catalog key: \(shown)")
             }
 
-            // And laid out left to right: the first destination is the LEADING
-            // one, so under LTR it sits left of the last.
-            XCTAssertLessThan(ordered[0].frame.minX, ordered[ordered.count - 1].frame.minX,
-                              "a \(code) launch mirrored the tab bar to right-to-left")
+            // And laid out left to right. The two shells express the same
+            // property along different axes, which is why the geometry is asked
+            // of each in its own terms rather than of a tab bar that a
+            // regular-width launch does not draw.
+            switch layout {
+            case .compact:
+                // The first destination is the LEADING one, so under LTR it sits
+                // left of the last.
+                XCTAssertLessThan(ordered[0].frame.minX,
+                                  ordered[ordered.count - 1].frame.minX,
+                                  "a \(code) launch mirrored the tab bar to right-to-left")
+            case .regular:
+                // The sidebar is the leading column, so under LTR it sits in
+                // the LEFT half of the screen. Asserted against the window's
+                // own midline rather than against the detail column, because a
+                // collapsed launch (portrait iPadOS 18) reveals the sidebar
+                // OVER a full-width detail whose minX matches the sidebar's on
+                // both layout directions; the midline separates the two
+                // directions on the tiled and the overlaid presentation alike.
+                let sidebar = app.descendants(matching: .any)["sidebar"].firstMatch
+                let detail = app.descendants(matching: .any)["destination-lanTransfer"]
+                    .firstMatch
+                XCTAssertTrue(detail.waitForExistence(timeout: 15),
+                              "a \(code) launch drew no detail column")
+                XCTAssertLessThan(sidebar.frame.midX,
+                                  app.windows.firstMatch.frame.midX,
+                                  "a \(code) launch mirrored the split view to "
+                                  + "right-to-left")
+            }
         }
     }
 
@@ -1390,24 +1512,39 @@ final class AppShellUITests: XCTestCase {
         app.terminate()
         app.launchArguments = offlineLaunchArguments
             + ["-UIPreferredContentSizeCategoryName",
-               "UICTContentSizeCategoryAccessibilityXXL"]
+               "UICTContentSizeCategoryAccessibilityXXL",
+               // The stored-link screen is presented rather than browsed to, so
+               // it is reached at launch and dismissed below before the
+               // browseable destinations are visited.
+               "--relayium-ui-testing-open-stored-link"]
         app.launch()
 
-        // Receive's Open, Direct's mode choice and Nearby's chooser are the three
-        // that sit furthest down their own screens.
-        openTask("Receive", title: "Receive files")
-        let open = app.buttons["Open"]
-        XCTAssertTrue(open.waitForExistence(timeout: 15),
-                      "Receive lost its action at the largest text size")
-        scrollUntilHittable(open, maxSwipes: 12)
+        // The stored link's Open, the Device Inbox's account route, Nearby's
+        // chooser and Account's registration path are the four that sit furthest
+        // down their own screens.
+        waitForPresentedStoredReceive(app)
+        let openLink = app.buttons["Open"]
+        XCTAssertTrue(openLink.waitForExistence(timeout: 15),
+                      "the stored-link screen lost its action at the largest text size")
+        scrollUntilHittable(openLink, maxSwipes: 12)
+        app.buttons["stored-receive-done"].tap()
 
-        openTask("Nearby", title: "Nearby")
+        open(Shell.lanTransfer, in: app)
         let chooser = app.buttons["Choose Files or Folders…"]
         XCTAssertTrue(chooser.waitForExistence(timeout: 15),
                       "Nearby lost its file chooser at the largest text size")
         scrollUntilHittable(chooser, maxSwipes: 12)
 
-        openTask("Account", title: "Account")
+        // The destination this batch added, and the one with the most content
+        // above its action: the status card, the foreground-only notice, the
+        // explanation and the folder route all sit before it.
+        open(Shell.deviceInbox, in: app)
+        let inboxAccount = app.buttons["inbox-open-account"]
+        XCTAssertTrue(inboxAccount.waitForExistence(timeout: 15),
+                      "the Device Inbox lost its account route at the largest text size")
+        scrollUntilHittable(inboxAccount, maxSwipes: 12)
+
+        open(Shell.account, in: app)
         let create = app.buttons["New to Relayium? Create an account"]
         XCTAssertTrue(create.waitForExistence(timeout: 15),
                       "Account lost its registration path at the largest text size")
@@ -1421,7 +1558,7 @@ final class AppShellUITests: XCTestCase {
     /// nothing is invisible in review and is the difference between finishing a
     /// paste with one thumb and hunting for a button.
     func testTheKeyboardGoKeyResolvesTheLink() {
-        openTask("Receive", title: "Receive files")
+        relaunchOnStoredLink()
 
         let link = app.textFields["receive.link"]
         XCTAssertTrue(link.waitForExistence(timeout: 15))
@@ -1453,7 +1590,7 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-text-code"]
         app.launch()
 
-        openTask("Direct", title: "Direct")
+        open(Shell.crossNetworkTransfer, in: app)
         app.segmentedControls.firstMatch.buttons["Text"].tap()
         let create = app.buttons["Create a text code"]
         XCTAssertTrue(create.waitForExistence(timeout: 15))
@@ -1501,26 +1638,30 @@ final class AppShellUITests: XCTestCase {
         guard #available(iOS 17.0, *) else {
             throw XCTSkip("the system accessibility audit needs iOS 17")
         }
-        let destinations = [
-            (tab: "Receive", title: "Receive files"),
-            (tab: "Send", title: "Send files"),
-            (tab: "Direct", title: "Direct"),
-            (tab: "Nearby", title: "Nearby"),
-            (tab: "Account", title: "Account"),
-        ]
         var found: [String] = []
-        for destination in destinations {
-            openTask(destination.tab, title: destination.title)
-            // Handled here rather than left to XCTest so a failure names the
-            // surface and the element. The framework's own report is
-            // "Hit area is too small", which is true and unactionable.
+        // Handled here rather than left to XCTest so a failure names the surface
+        // and the element. The framework's own report is "Hit area is too
+        // small", which is true and unactionable.
+        func audit(_ surface: String) throws {
             try app.performAccessibilityAudit(for: Self.auditedTypes) { issue in
-                found.append("\(destination.tab): \(issue.compactDescription) — "
+                found.append("\(surface): \(issue.compactDescription) — "
                              + "label=\(issue.element?.label ?? "") "
                              + "frame=\(issue.element?.frame ?? .zero)")
                 return true
             }
         }
+
+        for surface in Shell.browseable {
+            open(surface, in: app)
+            try audit(surface.id)
+        }
+
+        // And the destination that is presented rather than browsed to. Losing
+        // its tab must not lose its audit: it is the screen a stored link
+        // arrives through, and the sheet form is the only form users now meet.
+        relaunchOnStoredLink()
+        try audit("storedReceive")
+
         XCTAssertTrue(found.isEmpty,
                       "the system accessibility audit rejected what VoiceOver "
                       + "would meet:\n" + found.joined(separator: "\n"))

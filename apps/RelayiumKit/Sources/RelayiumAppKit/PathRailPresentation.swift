@@ -240,6 +240,30 @@ public enum PathRailPresentation {
         ]
     }
 
+    /// The same route as `deviceInbox`, seen from an iPhone or iPad.
+    ///
+    /// One stop differs and it is the destination: `pathThisMac` names the
+    /// wrong machine on a phone, and the glyph beside it draws a laptop. Both
+    /// are read by somebody deciding whether the thing in their hand is where
+    /// their file will land, which is the one question the rail exists to
+    /// answer.
+    ///
+    /// Derived from `deviceInbox` rather than written out, exactly as
+    /// `iosStoredSend` derives from `storedSend`: the origin and the encrypted
+    /// middle are the same route and must stay one statement, so a later change
+    /// to the shared shape reaches both platforms.
+    public static func iosDeviceInbox(language: AppLanguage? = nil) -> [PathStop] {
+        deviceInbox(language: language).map { stop in
+            guard stop.id == 2 else { return stop }
+            return PathStop(id: stop.id,
+                            // nonlocalized: SF Symbol name
+                            symbol: "iphone",
+                            title: L10n.t(.pathThisDevice, language: language),
+                            detail: stop.detail,
+                            progress: stop.progress)
+        }
+    }
+
     // MARK: - Cross-network Transfer
 
     /// **Two ends and an encrypted middle, and no claim about the middle's

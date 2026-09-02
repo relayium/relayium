@@ -1,22 +1,27 @@
 import Combine
 import Foundation
 
-/// The six routing destinations the app can put on screen. macOS maps them to
-/// five browseable sidebar rows plus one hidden deep-link destination through
-/// `MacSurface`; this is the only vocabulary the shell needs to decide what to
-/// render, which keeps the shell itself ignorant of the account (design
+/// The six routing destinations the app can put on screen. Each platform maps
+/// them to five browseable rows plus one hidden deep-link destination —
+/// `MacSurface` for the macOS sidebar, `IOSSurface` for the iOS tab bar and iPad
+/// sidebar. This is the only vocabulary either shell needs to decide what to
+/// render, which keeps the shells themselves ignorant of the account (design
 /// invariant: the shell never reads `session.state`).
 ///
 /// `String`-backed so a destination has a stable, loggable name; `CaseIterable`
 /// so the sidebar and the tests enumerate the same set rather than two lists
 /// that can drift apart.
 ///
-/// **`deviceInbox` is macOS-only, and the iOS tab bar deliberately has no tag for
-/// it.** The enum is shared so the two shells route from one vocabulary rather
-/// than two that can drift, but iOS has no resident receiver to put behind a tab
-/// — `IOSSurfaceGuardTests` therefore refuses any reference to it anywhere under
-/// `apps/ios`, because a `TabView` selection with no matching `.tag` renders
-/// nothing at all.
+/// **`deviceInbox` used to be macOS-only, and is not any more.** The iOS tab bar
+/// had no tag for it because iOS had no receiver to put behind one, and
+/// `IOSSurfaceGuardTests` banned the word from `apps/ios` outright — a `TabView`
+/// handed a selection with no matching `.tag` renders nothing at all. iOS 0.3.0
+/// ships a foreground receiver and a Device Inbox destination, so the ban is
+/// gone and the property it protected is now held positively: every browseable
+/// `IOSSurface` has a tab, the shell binds its selection to
+/// `IOSShellPlacement.backgroundRoute` — which is a browseable surface's route
+/// by construction — and `storedReceive` is presented over that background
+/// rather than selected into a tab that does not exist.
 public enum AppDestination: String, CaseIterable, Hashable, Sendable {
     case nearby, pairingCode, storedSend, storedReceive, deviceInbox, account
 }
