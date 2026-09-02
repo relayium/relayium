@@ -199,6 +199,13 @@ struct DirectView: View {
     @EnvironmentObject private var verification: VerificationPreference
 
     @State private var isChoosingFiles = false
+    /// The pairing scanner sheet. One flag for both modes, because exactly one
+    /// join card is on screen at a time — the mode switch above chooses which.
+    @State private var isScanning = false
+    /// Set by a scan that filled the field, cleared the moment the user edits
+    /// it or leaves the state. It confirms what happened and names the step the
+    /// scan deliberately did not take.
+    @State private var scanFilledCode: String?
     /// A failure to resolve the app's own receive folder. It happens before the
     /// model is involved at all, so it has no state case to live in, and it is
     /// cleared whenever a new attempt starts so it cannot outlive its cause.
@@ -270,6 +277,15 @@ struct DirectView: View {
             // security scope, which is what keeps the start/stop balance out of
             // SwiftUI's hands entirely.
             selection.chooseFiles(result)
+        }
+        // On the `NavigationStack` for the same reason the importer is: which
+        // arm of the mode switch is rendered must not decide whether the sheet
+        // can return.
+        .sheet(isPresented: $isScanning) {
+            PairingScannerView { result in
+                applyScan(result)
+                isScanning = false
+            }
         }
         .confirmationDialog(
             L10n.t(.textDiscardLocalContentConfirmTitle),
@@ -767,6 +783,26 @@ struct DirectView: View {
         // one screen that appears to need signing in.
         return SectionCard(L10n.t(.directReceiveHeading)) {
             PairingCodeInput(text: normalizedCode, label: L10n.t(.commonCode))
+            // **The camera is offered beside the field, never instead of it.**
+            //
+            // Reading the other screen's QR code is the faster way to fill these
+            // six digits and it is the only reason this app declares
+            // `NSCameraUsageDescription`. It is `.bordered` rather than
+            // prominent because Join below is still the task; and it is the tap
+            // that separates app launch from the system camera prompt, which is
+            // why nothing above it touches `AVCaptureDevice`.
+            Button { isScanning = true } label: {
+                Label(L10n.t(.pairingScanCode), systemImage: "qrcode.viewfinder")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            // Derived rather than cleared: it is shown while the field still
+            // holds exactly what the scan put there, so the first digit the
+            // user changes retires it with no state to reset.
+            if let scanFilledCode, code.wrappedValue == scanFilledCode {
+                InlineMessage(.info, L10n.t(.pairingScanFilled))
+            }
             Button(action: action) {
                 Text(L10n.t(.commonJoin)).frame(maxWidth: .infinity)
             }
@@ -784,6 +820,41 @@ struct DirectView: View {
     }
 
     // MARK: - actions
+
+    /// **What a scanned join link is allowed to do, which is fill a field.**
+    ///
+    /// `PairingScanPolicy` has already refused everything that is not a
+    /// `relayium.com` realtime link carrying a complete six-digit code, so what
+    /// arrives here is exactly what the keyboard could have produced. It is then
+    /// treated exactly as if it had been: normalized through the same
+    /// `updateJoinCode` a keystroke goes through, into the same binding, leaving
+    /// Join to the user.
+    ///
+    /// **There is deliberately no `join` on this path.** A QR code is printed by
+    /// anybody and photographed by accident; a scanner that connected would let
+    /// a poster on a wall start a session on a phone that was merely pointed at
+    /// it. The confirmation line beside the field says what was filled in and
+    /// that Join is still owed, so the extra tap reads as the design rather than
+    /// as something that failed to happen.
+    ///
+    /// **The mode hint goes through the same refusal the picker does.**
+    /// `DirectModeSelection.select` re-reads both model states, so a scan
+    /// arriving while a session is live cannot switch modes under it — and the
+    /// code then lands in whichever half is actually on screen, never in the
+    /// other model's invisible field.
+    private func applyScan(_ result: PairingScanResult) {
+        if let mode = result.mode {
+            modes.select(mode,
+                         file: file.state,
+                         text: text.state,
+                         sessionClaimed: presence.owner != nil)
+        }
+        switch modes.mode {
+        case .files: file.updateJoinCode(result.code)
+        case .text:  text.updateJoinCode(result.code)
+        }
+        scanFilledCode = result.code
+    }
 
     /// Receiving files: resolve where they go BEFORE opening a connection.
     ///

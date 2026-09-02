@@ -150,9 +150,11 @@ screen receives `unknown_bundle`, and a charged transaction cannot be accepted.
 ## Local Network access: a resolved functional prerequisite
 
 **Status: declared in source; physical revalidation on iOS/iPadOS 26 is still
-outstanding.** This is a functional and review-relevant prerequisite, not a
-blocker of the same class as the camera item below — the declaration exists, and
-what remains is observing it work on a device.
+outstanding.** This is a functional and review-relevant prerequisite, and the
+declaration exists — what remains is observing it work on a device. The camera
+item below is now in the same posture rather than the blocking one it held
+through `0.3.0 (5)`: both keys are declared and truthful in source, and both owe
+physical prompt evidence on a candidate.
 
 ### What is declared, and why it is owed
 
@@ -246,77 +248,291 @@ claims the declaration is correct **in source only**.
   It is a separate observation owed by item 3 of the physical gate above, not an
   answer this record may give yet.
 
-## Protected-resource declaration: an open upload blocker
+## Protected-resource declaration: resolved in source, validation outstanding
 
-**Status: open, unresolved in `0.3.0 (5)`.** Nothing below is a fix, and no fix
-may be improvised at upload time.
+**Status: the declaration is implemented and truthful in source; it has not yet
+been validated on a built candidate, and the physical prompt-scan evidence is
+still owed.** This is no longer an open upload blocker of the class it was
+through `0.3.0 (5)`, and it is not yet a closed item either.
 
 Apple's protected-resource guidance is explicit that App Review rejects an app
 whose *code* references a protected API without the matching purpose string,
 and that an API reached through a third-party SDK counts as the app's own:
 <https://developer.apple.com/documentation/uikit/requesting-access-to-protected-resources>
 
-What this project actually contains, verified locally on 2026-09-02:
+### What the blocker was
 
-- `apps/ios/Relayium/Info.plist` and `apps/ios/RelayiumShare/Info.plist` declare
-  **no** `NSCameraUsageDescription`. The app plist's only purpose string is
-  `NSLocalNetworkUsageDescription`, and its two `InfoPlist.strings` catalogs
-  declare that key alone;
-  `IOSLocalNetworkPermissionTests.testNoCameraPurposeStringHasAppearedWhileThatBlockerIsStillOpen`
-  fails if a camera string appears in any of the four files before this blocker
-  is resolved.
-- No product Swift source implements a camera feature. The app uses WebRTC
-  **data channels only** — no capture, no call, no QR scanner.
-- The built app nevertheless embeds
+Through `0.3.0 (5)` the condition was a mismatch, and the mismatch pointed the
+wrong way:
+
+- `apps/ios/Relayium/Info.plist` declared **no** `NSCameraUsageDescription`;
+- no product Swift source implemented a camera feature — the app used WebRTC
+  **data channels only**, with no capture, no call and no QR scanner;
+- the built app nevertheless embedded
   `Relayium.app/Frameworks/WebRTC.framework/WebRTC`, whose undefined-symbol
   table references the camera-capture classes `AVCaptureSession`,
   `AVCaptureDeviceInput`, `AVCaptureVideoDataOutput`,
   `AVCaptureDeviceDiscoverySession`, `AVCaptureVideoPreviewLayer` and
   `AVCaptureDeviceRotationCoordinator`, plus capture constants such as
-  `AVCaptureDeviceTypeBuiltInWideAngleCamera`. The app's own binary references
-  none of them. Verified on the latest retained physical run,
-  `.relayium-device-inbox/671dc604/dd/Build/Products/Debug-iphoneos/Relayium.app`:
+  `AVCaptureDeviceTypeBuiltInWideAngleCamera`.
 
-  ```sh
-  nm -u "<Relayium.app>/Frameworks/WebRTC.framework/WebRTC" \
-    | grep -E 'AVCapture'
-  ```
+That is not a hypothetical: **`0.1.0` build 3 was rejected by exactly this check
+for a missing `NSCameraUsageDescription`**, and build 4 replaced it.
 
-  That artifact is a **Debug** device build. The same check has since been run
-  against an **unsigned local Release** generic-device build of `0.3.0` (Xcode
-  26.6, `iphoneos26.5`, `CODE_SIGNING_ALLOWED=NO`) and reports the **same 15
-  undefined `AVCapture*` symbols**, so the condition is not a Debug artifact.
-  That build is neither signed nor archived and was not retained, so this record
-  still does **not** claim it is byte-identical to a release candidate. Re-run
-  the command above against the signed release candidate before upload and
-  record the result; treat the blocker as present until that recheck says
-  otherwise.
+The record named two honest resolutions and refused a third — adding a purpose
+string for a feature that did not exist, which would have been a false statement
+to Apple and to the user and would have contradicted the App Privacy answers.
+Resolution 1 was **make the reference real**; resolution 2 was ship a
+data-channel-only WebRTC binary.
 
-- This is not a hypothetical. **`0.1.0` build 3 was rejected by exactly this
-  check for a missing `NSCameraUsageDescription`**, and build 4 replaced it. The
-  same static condition is present again in the current source.
+### What was done: resolution 1
 
-**Scope: this blocker is about the camera only.** The same framework also
+The product now has a camera feature, and the declaration follows it rather
+than the other way round.
+
+- `apps/ios/Relayium/PairingScannerView.swift` reads the pairing QR code the
+  other device already displays — the same
+  `https://relayium.com/cross-network#c=NNNNNN` link `transferPairingJoinURL`
+  builds — and fills the six-digit Receive field with it.
+- It is clean-room `AVFoundation`: an `AVCaptureMetadataOutput` restricted to
+  `.qr`, an `AVCaptureDeviceInput` on the wide-angle camera and an
+  `AVCaptureVideoPreviewLayer`. **Not `VisionKit`** — `DataScannerViewController`
+  requires an A12, and the oldest supported iPad here is the 7th generation
+  (A10), where it would return `isSupported == false` at runtime rather than
+  fail to build.
+- No photo output, no movie output, no sample-buffer delegate, no
+  `AVAudioSession`, and no frame written to disk, logged, or sent anywhere.
+  That is what lets the purpose string say nothing is recorded or saved.
+- The camera is requested **after an explicit tap**. The app's single
+  `AVCaptureDevice.requestAccess(for: .video)` sits inside
+  `PairingScannerModel.begin()`, reached only from the scanner sheet, which only
+  the "Scan a QR code" control on the Receive card presents. Nothing at launch
+  and nothing on entering the tab touches the camera.
+- **A scan fills a field; it never joins.** The payload goes through
+  `PairingScanPolicy`, which is a funnel into the existing `parseAppDeepLink` —
+  the same gate the Universal Link handler uses — and accepts only a validated
+  `relayium.com` realtime link carrying a complete six-digit code. Download
+  links, custom schemes, foreign hosts, userinfo, non-443 ports, malformed URLs,
+  code-less links and junk are refused without changing what is already typed.
+  A validated mode hint selects the segmented control the user can immediately
+  change. There is no path from the scanner to `join`.
+- Every refusal — denied, restricted, no camera, failed to start — keeps manual
+  six-digit entry and paste usable, and says so in its own sentence. Only
+  `denied` offers Settings, because it is the only one a person can change
+  there.
+- **The camera cannot outlive the sheet that asked for it.** Both asynchronous
+  steps — the system permission alert and the capture-graph build — resume at a
+  point where the screen may be gone, and neither can be cancelled from outside:
+  `AVCaptureDevice.requestAccess` ignores the cancellation of the `.task` that
+  started it. So each step carries the *activation* (`ScannerActivation`, a
+  monotonic id taken in `begin()`) it started under and compares it against the
+  mounted one before it may publish a phase, adopt the delegate, start capture or
+  deliver a result. `end()` clears the mounted activation, which makes dismissal
+  permanent for everything already in flight; `suspend()` records that the scene
+  left the foreground rather than merely acting on it, so an answer that lands
+  behind the app switcher cannot start the camera there; and every start is
+  funnelled through one gate that re-proves all four preconditions. The metadata
+  delegate stamps each decision, under the same lock that takes the one-shot
+  latch, with the activation whose camera read the frame, so a code read
+  microseconds before dismissal is dropped rather than filling the join field
+  afterwards.
+- **Proving a start and performing one happen at two different instants, and
+  the proof is carried between them.** All four preconditions above are
+  main-actor state, and `startRunning` blocks for long enough that it must not
+  run on the main thread — so the gate proves them and then *enqueues* the start
+  on a serial `sessionQueue`. `end()` and `suspend()` also run on the main actor,
+  so both can land entirely inside that gap: the gate passes, the sheet goes
+  away, and the block that was already queued starts a camera nothing is showing.
+  The serial queue orders their `stopRunning` behind it, so the symptom is a
+  camera that turns on off-screen and goes off again a whole `startRunning`
+  later, not one that stays on — which is why every ordering assertion about the
+  gate was true while the defect was live. `CaptureRunPermit` closes it:
+  `startSession` stamps the permit with the exact activation *before* enqueueing,
+  the queued block re-reads it under a lock one statement *before*
+  `startRunning`, and `stopSession` — the single place any stop is scheduled, so
+  dismissal, the app switcher and delivery all reach it — revokes the permit
+  synchronously on the main actor *before* it schedules that stop. The
+  comparison is against the exact activation rather than "some permit exists", so
+  a reopened sheet's permit cannot authorize the previous sheet's queued start.
+  The lock is held for one field access and never across `startRunning`, so the
+  main thread is never blocked behind the camera.
+- **Switching the camera off and being able to say so are also two different
+  instants.** `stopRunning` blocks for the same reason `startRunning` does, so
+  `stopSession` revokes the permit synchronously and then *enqueues* the stop —
+  which means "capture stopped, then the caller was told" was, until this was
+  corrected, only "a stop was scheduled, then the caller was told". The accepted
+  result dismissed the sheet with the `stopRunning` still sitting in the queue
+  behind whatever configure or start was already there, so the camera was
+  switched off *during* the dismissal rather than before it. `stopSession` now
+  takes a completion that is the last statement *inside* the queued block: it
+  runs after the stop has been performed, or after the queue has observed the
+  session was already stopped — the same fact about the camera, and one that must
+  not swallow the result — and hops to the main actor from there. It is a hop and
+  not a `sessionQueue.sync`, because waiting would block the main thread behind
+  `stopRunning`. `handle` commits `hasDelivered` *before* that wait, so no second
+  decision can begin a second delivery and no start can be scheduled underneath
+  it, and the completion re-proves its activation before calling the caller —
+  the hop costs a main-actor turn, and a Cancel or a swipe inside it would
+  otherwise fill the join field from a sheet the user had already dismissed. The
+  residual is the same bounded one named below: a `startRunning` already underway
+  keeps the camera on until it returns, and FIFO puts this stop directly behind
+  it, so the completion runs after the stop rather than after the start.
+- **The one case this cannot cover**, stated rather than implied: if
+  `startRunning` has already *begun* executing when the main actor revokes, the
+  permit was read truthfully and AVFoundation offers no way to abort a start in
+  progress. That window is bounded rather than open-ended, and the revoke order
+  is what bounds it: a recheck that returned true proves the revoke had not
+  landed, which proves the stop following it had not been enqueued, so FIFO puts
+  that stop directly behind the start and the camera is off again as soon as
+  `startRunning` returns. Closing even that would mean holding the lock across
+  the blocking call and taking it on the main actor, trading a bounded window for
+  a hang. The residual is inherent to a blocking, non-cancellable start;
+  everything before the call is covered.
+
+`NSCameraUsageDescription` is declared in `apps/ios/Relayium/Info.plist` as the
+English fallback and localized in that bundle's `en.lproj/InfoPlist.strings` and
+`zh-Hans.lproj/InfoPlist.strings`. It is declared in the **main app only**; the
+Share extension declares none of it and has no `.lproj` folder, because it
+copies what the user shared into the App Group and opens no camera — and iOS
+attributes an extension's prompt to the host app.
+
+### What now enforces it
+
+`IOSLocalNetworkPermissionTests.testNoCameraPurposeStringHasAppearedWhileThatBlockerIsStillOpen`
+was written to be deleted by the batch that resolved this, and this is that
+batch. It is replaced by:
+
+- `IOSLocalNetworkPermissionTests.testTheCameraDeclarationIsTheAppsAloneAndTheExtensionStillDeclaresNothing`
+  and `…testEachCatalogDeclaresExactlyTheDeclaredPurposeKeys`, which pin the
+  declared key set and the app/extension boundary;
+- `IOSPairingScannerTests`, which drives the link gate adversarially against
+  every payload class a printed code can carry, and pins the single
+  tap-gated request, the QR-metadata-only capture graph, the teardown on every
+  exit, the copy bounds in both languages, and the absence of any path from a
+  scan to a session.
+- Two of those, `…testEveryStepThatResumesAfterAnAwaitProvesItStillOwnsTheMountedSheet`
+  and `…testDismissalIsPermanentAndNothingStartsOrDeliversOutsideItsActivation`,
+  are the lifecycle half. They are ORDERING assertions over the extracted body of
+  each function rather than presence ones, because a guard that has drifted below
+  the thing it gates reads exactly like a guard that works. Each was checked by
+  mutation: deleting the post-`requestAccess` proof, moving it below what it
+  gates, restoring the old `guard phase == .running` in `suspend()`, and removing
+  the proof in `handle` each fail the suite with the sentence describing that
+  defect.
+- The enqueue-time/execution-time separation has three guards of its own, because
+  ordering assertions alone cannot see the difference between a permit stamped
+  with an activation and a boolean that says somebody may start:
+  `…testTheQueuedStartIsStampedBeforeItIsEnqueuedAndReprovedBeforeItRuns` states
+  the invariants as a predicate over the scanner's source;
+  `…testRemovingTheExecutionTimeRecheckOrRevokingAfterTheStopIsScheduledFails`
+  feeds that predicate four mutations of the real file — the recheck deleted, the
+  recheck hoisted above `sessionQueue.async` where the gate already ran, the
+  revoke moved inside the enqueued block, and the permit reduced to `granted !=
+  nil` — and requires it to complain about each; and
+  `…testTheRunPermitRefusesAStartInvalidatedBetweenItsEnqueueAndItsExecution`
+  lifts `CaptureRunPermit` out of the iOS target (which this package cannot
+  import), compiles it alone with `swiftc`, and drives the race itself against a
+  suspended serial queue standing in for `sessionQueue`. Two of those mutations
+  were additionally applied to `PairingScannerView.swift` itself and the suite
+  failed with the sentence naming the defect.
+- The stop side has the same pair, because the same class of claim was made about
+  it: `…testTheAcceptedResultIsDeliveredOnlyAfterTheQueueHasStoppedTheSession`
+  states, as a predicate over the source, that the hand-off is committed before
+  the wait, that `onResult` is reached only from inside `stopSession`'s
+  completion, that the completion is the queued block's last act (pinned by its
+  indentation, since textual order cannot say what is nested inside the block),
+  that the completion re-proves its activation, and that neither an
+  already-stopped session nor a `sessionQueue.sync` is allowed to reappear.
+  `…testDeliveringBeforeTheQueuedStopHasRunFails` feeds that predicate six
+  mutations of the real file — the pre-fix `stopSession()` then `onResult(result)`
+  two-liner, the announcement hoisted above the stop, the announcement lifted out
+  of the queued block, the completion's activation re-proof deleted, the
+  `guard session.isRunning else { return }` early return restored so an
+  already-stopped session drops the result, and the queue hop traded for a
+  blocking `sync` — and requires it to complain about each.
+
+### Validation outstanding
+
+Two things this record does **not** yet claim, and neither may be improvised at
+upload time.
+
+1. **Built-candidate symbol and declaration validation.** The unsigned local
+   Release generic-device build of this batch (Xcode 26.6, `iphoneos26.5`,
+   `CODE_SIGNING_ALLOWED=NO`, `BUILD SUCCEEDED`) was inspected for both its
+   *declarations* and its *symbols*. Declarations: the built
+   `Relayium.app/Info.plist` carries both purpose strings verbatim
+   (`NSCameraUsageDescription`, `NSLocalNetworkUsageDescription`), the built
+   `en.lproj` and `zh-Hans.lproj` `InfoPlist.strings` catalogs both reach the
+   bundle carrying the exact localized camera sentence, and the built
+   `RelayiumShare.appex` carries no `NSCameraUsageDescription` and no `*.lproj`
+   directory at all.
+
+   Symbols: the readback **was** re-run for this batch, against
+   `Build/Products/Release-iphoneos/Relayium.app`, with these results:
+
+   ```sh
+   xcrun nm -u "<Relayium.app>/Relayium" | grep -E 'AVCapture'                      # 8 symbols
+   _AVCaptureDeviceTypeBuiltInWideAngleCamera
+   _AVCaptureSessionPreset1280x720
+   _OBJC_CLASS_$_AVCaptureDevice
+   _OBJC_CLASS_$_AVCaptureDeviceInput
+   _OBJC_CLASS_$_AVCaptureMetadataOutput
+   _OBJC_CLASS_$_AVCaptureOutput
+   _OBJC_CLASS_$_AVCaptureSession
+   _OBJC_CLASS_$_AVCaptureVideoPreviewLayer
+
+   xcrun nm -u "<Relayium.app>/Frameworks/WebRTC.framework/WebRTC" | grep -E 'AVCapture'   # 15 symbols
+   ```
+
+   That is the line this batch was meant to change: the app's **own** binary now
+   references capture APIs directly — not only the embedded WebRTC framework —
+   which is precisely why the declaration is owed rather than invented. The
+   eight symbols are exactly the surface `PairingScannerView` uses: a session, a
+   wide-angle device and its input, a metadata output, a preview layer and the
+   720p preset.
+
+   **This is an unsigned local build, not a signed release candidate.** The
+   readback above therefore closes the source-and-local-build question only.
+   Re-run both commands against the signed release candidate before upload and
+   record that output here as well; a signing, thinning or bitcode-stripping
+   step is exactly the kind of thing that can move a symbol table, so do not
+   carry this result forward as if it were the candidate's.
+
+2. **Physical prompt-and-scan evidence.** No automated test may accept a system
+   privacy alert, and none does. On a physical device, on the exact candidate,
+   observe and record:
+
+   1. On a device that has not already decided camera access for this app,
+      tapping "Scan a QR code" on the Receive card presents the camera prompt,
+      and the alert renders the app's own sentence. Reach that state by using a
+      device where the permission has not yet been decided — **do not**
+      uninstall or reinstall the app, clear its data, reset privacy settings, or
+      change any device setting to force the prompt. If every available device
+      has already decided it, record that and leave this item outstanding rather
+      than mutating device or account state.
+   2. Allowing it, then pointing the camera at another device's pairing QR code,
+      fills the six-digit field, applies the mode when the link carries one, and
+      does **not** start a transfer. Pressing Join then completes a real
+      transfer.
+   3. Denying it at that prompt leaves the scanner sheet explaining the denial
+      and the six-digit field typeable and joinable, with no hang and no
+      dead control.
+   4. The prompt is presented in Simplified Chinese on a device set to that
+      language, with the translated sentence.
+   5. On an iPad (7th generation) or equivalent A10 device, the scanner opens
+      and reads a code — the case `VisionKit` would have failed at runtime.
+
+   Record the run tag and outcome here when done. Until then this record claims
+   the declaration is correct **in source and in an unsigned local build only**.
+
+**Scope: this section is about the camera only.** The same framework also
 references `AVAudioSession` symbols, but audio-session linkage alone does not
 establish that `NSMicrophoneUsageDescription` is required — an app may
 configure a session category without ever requesting record permission. That
 observation is **not conclusive** and is deliberately excluded from the claim
-above. If a microphone purpose string is ever asserted to be owed, establish it
-from Apple's own validation or review output, not from symbol linkage.
-
-**Do not add a purpose string the product cannot justify.** A string describing
-a camera feature Relayium does not have is a false statement to Apple and to
-the user, and it would contradict both the App Privacy answers and the shipped
-binary. Only two resolutions are honest, and each requires its own approved
-product/dependency batch outside this document's authority:
-
-1. **Make the reference real.** Re-author an actual camera feature the product
-   wants — a pairing-code/QR scanner is the plausible one — and ship a truthful
-   `NSCameraUsageDescription`, localized in English and Simplified Chinese,
-   describing that specific use.
-2. **Remove the reference.** Ship a WebRTC binary that contains no
-   media-capture APIs — a data-channel-only build or an equivalently scoped
-   dependency — so no purpose string is owed.
+above; the microphone key stays absent. If one is ever asserted to be owed,
+establish it from Apple's own validation or review output, not from symbol
+linkage, and re-author the feature first exactly as this section did.
 
 **First-upload readback trigger.** The first candidate upload is the first
 place this record can observe Apple's own verdict. Read that upload's

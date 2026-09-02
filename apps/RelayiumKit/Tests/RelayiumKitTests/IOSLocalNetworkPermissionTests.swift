@@ -1,8 +1,16 @@
 import XCTest
 @testable import RelayiumAppKit
 
-/// **The one protected resource this iOS build declares, checked as artifacts
+/// **The local-network declaration this iOS build owes, checked as artifacts
 /// rather than as prose.**
+///
+/// It is no longer the app's only protected resource: the pairing QR scanner
+/// added `NSCameraUsageDescription`, and everything specific to that key —
+/// the copy bounds, the feature that earns it, the tap that precedes the
+/// request — lives in `IOSPairingScannerTests`. What stays here is the
+/// local-network key itself plus the two claims that are about the SET rather
+/// than about either member: each catalog declares exactly the declared keys
+/// and nothing else, and the Share extension declares none of them.
 ///
 /// The defect this file exists for was an assertion pointing the wrong way. The
 /// app connects to the device the user picks with `iceTransportPolicy = .all`,
@@ -41,9 +49,14 @@ final class IOSLocalNetworkPermissionTests: XCTestCase {
     private static let appRoot = "apps/ios/Relayium"
     private static let extensionRoot = "apps/ios/RelayiumShare"
     private static let purposeKey = "NSLocalNetworkUsageDescription"
-    /// Deliberately not declared, and deliberately named here. See
-    /// `testNoCameraPurposeStringHasAppearedWhileThatBlockerIsStillOpen`.
+    /// Declared since the pairing QR scanner shipped, and owned by
+    /// `IOSPairingScannerTests`. Named here only so the SET assertions below
+    /// know what belongs in it.
     private static let cameraKey = "NSCameraUsageDescription"
+    /// Exactly the protected resources this app declares. A key added to the
+    /// plist and not to this list fails the catalog check below rather than
+    /// shipping an unlocalized system alert.
+    private static let declaredPurposeKeys = [cameraKey, purposeKey].sorted()
 
     /// A repository plist or `.strings` file, parsed as what it is.
     ///
@@ -88,12 +101,20 @@ final class IOSLocalNetworkPermissionTests: XCTestCase {
             file: file, line: line)
     }
 
-    /// The purpose string a given language actually renders.
+    /// The local-network purpose string a given language actually renders.
     private func purpose(_ language: AppLanguage,
                          file: StaticString = #filePath,
                          line: UInt = #line) throws -> String {
-        try XCTUnwrap(try catalog(lprojName(language))[Self.purposeKey],
-                      "\(language.lproj) declares no \(Self.purposeKey)",
+        try purpose(Self.purposeKey, language, file: file, line: line)
+    }
+
+    /// Any declared purpose string, in a given language.
+    private func purpose(_ key: String,
+                         _ language: AppLanguage,
+                         file: StaticString = #filePath,
+                         line: UInt = #line) throws -> String {
+        try XCTUnwrap(try catalog(lprojName(language))[key],
+                      "\(language.lproj) declares no \(key)",
                       file: file, line: line)
     }
 
@@ -173,26 +194,41 @@ final class IOSLocalNetworkPermissionTests: XCTestCase {
         }
     }
 
-    /// Each catalog declares exactly the one key currently declared — no more.
+    /// Each catalog declares exactly the keys currently declared — no more.
     ///
     /// "No more" is the load-bearing half. A localized purpose string for a key
     /// the `Info.plist` does not declare is invisible: it ships, it is never
     /// read, and it reads in review as coverage for a permission the app has not
     /// actually asked for.
-    func testEachCatalogDeclaresExactlyTheOneDeclaredPurposeKey() throws {
-        let infoKeys = Set(try plist("\(Self.appRoot)/Info.plist").keys)
+    ///
+    /// "No fewer" is what the camera key added: two protected resources now
+    /// draw a system alert, and a language that localizes one but not the other
+    /// renders an English sentence at the exact moment the reader is deciding.
+    func testEachCatalogDeclaresExactlyTheDeclaredPurposeKeys() throws {
+        let infoPlist = try plist("\(Self.appRoot)/Info.plist")
+        let infoKeys = Set(infoPlist.keys)
+        // The plist and this list must be the same set, in both directions: a
+        // third purpose string added to the bundle without being named here
+        // would otherwise ship with no localization check at all.
+        XCTAssertEqual(infoKeys.filter { $0.hasPrefix("NS") && $0.hasSuffix("UsageDescription") }
+                        .sorted(),
+                       Self.declaredPurposeKeys,
+                       "the app declares a purpose string this file does not know about")
         for language in AppLanguage.allCases {
             let catalog = try catalog(lprojName(language))
-            XCTAssertEqual(catalog.keys.sorted(), [Self.purposeKey],
+            XCTAssertEqual(catalog.keys.sorted(), Self.declaredPurposeKeys,
                            "\(language.lproj) declares \(catalog.keys.sorted())")
             for key in catalog.keys {
                 XCTAssertTrue(infoKeys.contains(key),
                               "\(language.lproj) localizes \(key), which Info.plist does not "
                                   + "declare, so nothing ever renders it")
             }
-            XCTAssertFalse(
-                try purpose(language).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                "\(language.lproj) declares the key with no sentence behind it")
+            for key in Self.declaredPurposeKeys {
+                XCTAssertFalse(
+                    try purpose(key, language)
+                        .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                    "\(language.lproj) declares \(key) with no sentence behind it")
+            }
         }
     }
 
@@ -330,31 +366,41 @@ final class IOSLocalNetworkPermissionTests: XCTestCase {
                        "the extension claims \(entitlements.keys.sorted())")
     }
 
-    /// **The camera blocker is still open, and this batch did not paper over
-    /// it.**
+    /// **The camera declaration is the APP's, and only the app's.**
     ///
-    /// The embedded WebRTC framework references `AVCapture*` symbols the app's
-    /// own binary never calls, and `0.1.0` build 3 was rejected for the missing
-    /// `NSCameraUsageDescription`. Adding one now would be the cheapest way to
-    /// make an upload check pass and a false statement to Apple and to the user:
-    /// there is no camera feature. The two honest resolutions — ship a real
-    /// scanner, or ship a data-channel-only framework — are separately scoped in
-    /// `docs/ios-app-store-submission.md`.
+    /// This replaces `testNoCameraPurposeStringHasAppearedWhileThatBlockerIsStillOpen`,
+    /// which existed because the opposite was true: the embedded WebRTC
+    /// framework referenced `AVCapture*` symbols the app's own binary never
+    /// called, `0.1.0` build 3 was rejected for the missing key, and adding one
+    /// then would have been the cheapest way to pass an upload check and a
+    /// false statement to Apple — there was no camera feature to describe. The
+    /// old guard was written to be deleted by the batch that resolved that, and
+    /// this is that batch: `PairingScannerView` is a real feature, so the
+    /// declaration is now owed rather than invented. The copy bounds and the
+    /// feature/request wiring behind it are `IOSPairingScannerTests`.
     ///
-    /// This guard fails if a camera string appears without that decision. It is
-    /// meant to be deleted BY the batch that resolves the blocker, and the
-    /// failure message is where the next author is told which one they are in.
-    func testNoCameraPurposeStringHasAppearedWhileThatBlockerIsStillOpen() throws {
-        for path in ["\(Self.appRoot)/Info.plist", "\(Self.extensionRoot)/Info.plist"] {
-            XCTAssertNil(try plist(path)[Self.cameraKey],
-                         "\(path) declares \(Self.cameraKey). If a real camera feature now "
-                             + "exists, resolve the blocker in "
-                             + "docs/ios-app-store-submission.md and retire this guard; if "
-                             + "it does not, this string is a false statement to Apple.")
-        }
-        for language in AppLanguage.allCases {
-            XCTAssertNil(try catalog(lprojName(language))[Self.cameraKey],
-                         "\(language.lproj) localizes a camera purpose string")
+    /// What is asserted here is the half about the two bundles. The Share
+    /// extension copies what the user shared into the App Group and stops; it
+    /// opens no camera, and because iOS attributes an extension's prompt to the
+    /// host app, a purpose string there would be a prompt the user could not
+    /// explain and nothing would ever trigger.
+    func testTheCameraDeclarationIsTheAppsAloneAndTheExtensionStillDeclaresNothing() throws {
+        let app = try XCTUnwrap(
+            try plist("\(Self.appRoot)/Info.plist")[Self.cameraKey] as? String,
+            "the app scans a pairing QR code with no \(Self.cameraKey), which App Review "
+                + "rejects and which leaves the scanner unable to open the camera at all")
+        XCTAssertFalse(app.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+        XCTAssertNil(try plist("\(Self.extensionRoot)/Info.plist")[Self.cameraKey],
+                     "the share extension asks for camera access it never uses; iOS would "
+                         + "attribute that prompt to the host app")
+        // And the extension has no source that could want one. A capture class
+        // appearing there would be the diff this assertion is about.
+        for symbol in ["AVCaptureSession", "AVCaptureDevice", "AVCaptureMetadataOutput"] {
+            for file in try RepoRoot.swiftFiles(under: Self.extensionRoot) {
+                XCTAssertFalse(try RepoRoot.text(of: file).contains(symbol),
+                               "\(file.lastPathComponent) reaches for \(symbol)")
+            }
         }
     }
 

@@ -51,7 +51,42 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
-	<!-- The one purpose string this app owes, and the reason it is owed is the
+	<!-- **The camera, and the one feature that earns it.**
+
+	     `PairingScannerView` reads the QR join code the other device is already
+	     showing — the same `https://relayium.com/cross-network#c=NNNNNN` link
+	     `transferPairingJoinURL` builds — and fills the six-digit field with it.
+	     It is an `AVCaptureMetadataOutput` restricted to `.qr`: no photo output,
+	     no movie output, no sample-buffer delegate, and nothing written to disk,
+	     which is what lets the sentence below say frames are neither recorded
+	     nor saved.
+
+	     Two properties of the REQUEST are what this string is honest about, and
+	     both are asserted by `IOSPairingScannerTests`:
+
+	      1. **It is asked for after an explicit tap.** The app's single
+	         `AVCaptureDevice.requestAccess` sits behind `PairingScannerModel
+	         .begin()`, which is reached only from the scanner sheet, which only
+	         the Scan control on the Receive card presents. Nothing at launch,
+	         and nothing on entering the tab, touches the camera.
+	      2. **Refusing it costs the scanner and nothing else.** Denied,
+	         restricted, no-camera and failed-to-start each get their own
+	         sentence naming the six-digit field, and that field is rendered and
+	         enabled identically either way.
+
+	     This key was absent through `0.3.0 (5)`, and its absence was correct
+	     then: the embedded WebRTC framework's `AVCapture*` symbols were an
+	     upload blocker precisely because the product had no camera feature, and
+	     a purpose string for a feature that does not exist is a false statement
+	     rather than a fix. `docs/ios-app-store-submission.md` records both
+	     honest resolutions; this is the first of them, and the declaration
+	     follows the feature rather than the other way round.
+
+	     ENGLISH FALLBACK, as below: `en.lproj/InfoPlist.strings` carries the
+	     same sentence and `zh-Hans.lproj/InfoPlist.strings` the translation. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Relayium uses the camera only to read the pairing QR code another device is showing, so you do not have to type its six-digit join code by hand. Nothing is recorded or saved.</string>
+	<!-- The other purpose string this app owes, and the reason it is owed is the
 	     TRANSFER rather than the roster.
 
 	     Two different things wear the word "nearby" here, and only one of them
@@ -94,11 +129,13 @@
 	     does not — see (1) — and a purpose string that overstates its reach is
 	     the failure mode Apple's guidance is about.
 
-	     Still not here, and deliberately: `NSCameraUsageDescription`. The camera
-	     symbols the embedded WebRTC framework carries are an open, separately
-	     scoped upload blocker recorded in `docs/ios-app-store-submission.md`;
-	     inventing a purpose string for a feature this product does not have
-	     would be a false statement to Apple and to the user. -->
+	     Still not here, and deliberately: `NSMicrophoneUsageDescription`. The
+	     same embedded framework references `AVAudioSession` symbols, but
+	     configuring an audio session is not requesting record permission, and
+	     this product records nothing. `docs/ios-app-store-submission.md` records
+	     why that observation is not conclusive either way; a purpose string
+	     invented on the strength of symbol linkage would be the exact false
+	     statement the camera key spent five builds refusing to make. -->
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Relayium sends the files and messages you choose directly to the device you select, when that device is on the same network as this one.</string>
 	<!-- Present and empty on purpose: an iOS app without a launch-screen

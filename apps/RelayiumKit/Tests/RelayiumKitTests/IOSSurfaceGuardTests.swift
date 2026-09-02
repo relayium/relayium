@@ -3607,9 +3607,20 @@ final class IOSSurfaceGuardTests: XCTestCase {
             XCTAssertEqual(view.text.components(separatedBy: wired).count - 1, 1,
                            "the one UIKit join field must carry \(wired), exactly once")
         }
-        // But each MODEL normalizes its own text, so both are wired to it.
-        XCTAssertEqual(view.text.components(separatedBy: "updateJoinCode(").count - 1, 2,
-                       "both models must normalize on every change")
+        // But each MODEL normalizes its own text, so both are wired to it —
+        // and now from BOTH entry paths. The pairing scanner fills the same
+        // field, and the property that matters is not the count but that no
+        // path writes `joinCode` raw: a scanned code that skipped the filter
+        // would be the only six digits in the app that never met it.
+        //
+        // Four: one per model in the binding setter, one per model in
+        // `applyScan`. A fifth is fine; a raw assignment is not, which is what
+        // the second assertion actually pins.
+        XCTAssertEqual(view.text.components(separatedBy: "updateJoinCode(").count - 1, 4,
+                       "both models must normalize on every change, from both the keyboard "
+                           + "and the scanner")
+        XCTAssertFalse(view.text.contains(".joinCode ="),
+                       "a raw write to a join code bypasses normalizedPairingCode")
         XCTAssertTrue(view.text.contains("let normalizedCode = Binding("))
         XCTAssertTrue(view.text.contains("set: { normalize($0) }"))
         XCTAssertTrue(view.text.contains("PairingCodeInput(text: normalizedCode"))
@@ -3867,17 +3878,46 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(app.text.contains("residency.phaseChanged(to: lifecycle(phase))"))
         XCTAssertFalse(app.text.contains("foreground.phaseChanged("),
                        "a second lifecycle path would let the room outlive the session cleanup")
-        // Exactly one observer, at the app scope: a second in a view would fire
-        // only while that view was mounted, which is precisely when it is not.
-        // Three occurrences, all in `RelayiumApp`: twice on the `@Environment`
-        // declaration (the key path and the property name) and once in the
-        // `onChange` that reads it. A fourth would be a second reader.
-        XCTAssertEqual(all.map { $0.text.components(separatedBy: "scenePhase").count - 1 }
-                          .reduce(0, +), 3,
-                       "the scene phase is declared and read in exactly one place")
+        // Exactly one SESSION lifecycle observer, at the app scope: a second in
+        // a view would fire only while that view was mounted, which is
+        // precisely when it is not. Three occurrences in `RelayiumApp`: twice
+        // on the `@Environment` declaration (the key path and the property
+        // name) and once in the `onChange` that reads it.
+        XCTAssertEqual(app.text.components(separatedBy: "scenePhase").count - 1, 3,
+                       "the app-scoped scene phase is declared and read more than once")
         for (name, text) in all where name != "RelayiumApp.swift" {
             XCTAssertFalse(text.contains("phaseChanged("),
                            "\(name) is a second lifecycle observer")
+        }
+
+        // **One view may read it, and only for the camera.**
+        //
+        // `PairingScannerView` is the exception the reasoning above allows
+        // rather than one it forbids: the resource it has to release —  a live
+        // `AVCaptureSession` — exists only while that view is mounted, so a
+        // mounted-only observer is exactly the right scope for it, and an
+        // app-scoped one would have to reach into a sheet it does not own. A
+        // camera left running behind the app switcher is a privacy defect the
+        // user cannot see.
+        //
+        // What it must NOT do is touch the session lifecycle, which the loop
+        // above already forbids by name. This pins the other half: the only
+        // things it drives from the phase are the camera's own suspend/resume.
+        let scannerName = "PairingScannerView.swift"
+        let readers = all.filter { $0.text.contains("scenePhase") }.map(\.name).sorted()
+        XCTAssertEqual(readers, [scannerName, "RelayiumApp.swift"].sorted(),
+                       "the scene phase is read in \(readers)")
+        let scanner = try XCTUnwrap(all.first { $0.name == scannerName })
+        let onChange = try XCTUnwrap(scanner.text
+            .components(separatedBy: ".onChange(of: scenePhase)").dropFirst().first?
+            .components(separatedBy: "\n        }").first)
+        XCTAssertTrue(onChange.contains("model.suspend()")
+                        && onChange.contains("await model.resume()"),
+                      "the scanner's scene-phase observer does something other than "
+                          + "stopping and restarting its own capture session")
+        for session in ["presence.", "foreground.", "residency.", "file.", "text."] {
+            XCTAssertFalse(onChange.contains(session),
+                           "the scanner's scene-phase observer reaches for \(session)")
         }
     }
 

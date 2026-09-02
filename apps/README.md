@@ -1544,11 +1544,14 @@ arrived with Universal Link routing below, plus
 `com.apple.security.application-groups = [group.com.relayium.app]`, which is the
 local handoff shared with the file-staging Share extension. Still absent:
 keychain access group, background modes, push, `NSBonjourServices` and the
-multicast/wifi-info entitlements. Local Network is absent from this file for a
-different reason — it is a user-consented protected resource declared as a
-purpose string in `Info.plist`, not a signed entitlement — and the app does
-declare it; see below. StoreKit does not require an entitlement; its boundary is
-the adapter linked only into the main App Store app, never the extension.
+multicast/wifi-info entitlements. Local Network and the camera are absent from
+this file for a different reason — both are user-consented protected resources
+declared as purpose strings in `Info.plist` rather than as signed entitlements —
+and the app declares both: `NSLocalNetworkUsageDescription` for the transfer,
+see below, and `NSCameraUsageDescription` for the pairing QR scanner, which
+`docs/ios-app-store-submission.md` records in full. StoreKit does not require an
+entitlement; its boundary is the adapter linked only into the main App Store
+app, never the extension.
 Each entitlement lands with the functional slice that needs it, and
 `IOSSurfaceGuardTests` fails on any other key appearing in the file — and on the
 associated-domains value being anything other than that one `applinks:` entry.
@@ -1589,10 +1592,23 @@ looks at, scans or lists the network, because it does not.
 
 `IOSLocalNetworkPermissionTests` is the guard on the whole of that — the key is
 present and non-empty, exactly two `.lproj` folders exist and they are
-`AppLanguage`'s, each declares exactly this one key, the Chinese is a real
-translation rather than a copy or a placeholder, the fallback matches English,
-the Share extension declares none of it, and no camera key has appeared. The
-negative half moved to `IOSSurfaceGuardTests`'
+`AppLanguage`'s, the Chinese is a real translation rather than a copy or a
+placeholder, the fallback matches English, and the Share extension declares none
+of it.
+
+This is no longer the app's only protected resource, so two of that file's
+assertions are now about the SET of declared purpose strings rather than about
+this one key: the pairing QR scanner added `NSCameraUsageDescription`, and each
+catalog must declare exactly the keys `Info.plist` declares — no fewer, which a
+language localizing one permission and not the other would violate at the exact
+moment a reader is deciding, and no more, since a localized string for an
+undeclared key ships and is never read. The guard that asserted no camera key had
+appeared was written to be deleted by the batch that shipped a real camera
+feature, and that batch deleted it. What replaced it, and the copy bound on the
+new key, are `IOSPairingScannerTests` and the camera section of
+`docs/ios-app-store-submission.md`.
+
+The negative half of the local-network claim moved to `IOSSurfaceGuardTests`'
 `testTheLocalNetworkDeclarationCoversTheTransferAndNothingElse`: no
 `NSBonjourServices`, no multicast or wifi-info entitlement, no background mode,
 and no `NWBrowser`/`NWListener`/`NetService`/`MultipeerConnectivity` anywhere in

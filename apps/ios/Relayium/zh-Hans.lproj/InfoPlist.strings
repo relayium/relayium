@@ -4,9 +4,16 @@
    取字，Relayium 自己的代码此时还没有运行，所以只写在 RelayiumAppKit 包里的
    文案用户永远看不到。
 
-   只有一个键。这里没有 NSCameraUsageDescription：内嵌 WebRTC 框架带来的摄像头
-   符号是一个尚未解决的上架阻塞项，记录在 docs/ios-app-store-submission.md；
-   为一个产品并不具备的功能编一句用途说明，那不是修复，而是虚假陈述。 */
+   只有两个键。这里没有 NSMicrophoneUsageDescription：内嵌 WebRTC 框架确实引用了
+   AVAudioSession，但配置音频会话并不等于申请录音权限，本产品也不做任何录制；
+   仅凭符号引用就编一句用途说明，正是摄像头那个键此前五个构建一直拒绝做的虚假
+   陈述。详见 docs/ios-app-store-submission.md。 */
+
+/* 用户第一次在「接收」卡片上点「扫描二维码」时，由 iOS 弹出。它只说摄像头用来
+   做什么：读取对方设备已经显示出来的配对二维码，从而不必手动输入那六位加入码。
+   PairingScannerView 使用的是仅限 .qr 的 AVCaptureMetadataOutput——没有拍照输出，
+   没有录像输出，也不会把任何一帧写入磁盘，最后那句话因此是事实而非安慰。 */
+"NSCameraUsageDescription" = "Relayium 只用摄像头读取另一台设备上显示的配对二维码，这样你就不必手动输入它那六位加入码。过程中不会录制或保存任何画面。";
 
 /* 传输第一次需要经由本网络直达对方设备时，由 iOS 弹出。说的是「传输」而不是
    「发现」：设备列表来自 Relayium 自己的服务器，走的是普通互联网访问，本应用

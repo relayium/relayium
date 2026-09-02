@@ -733,6 +733,58 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// owner is billed for the relay capacity it reserves.
     case directJoinNoAccountNeeded = "direct.joinNoAccountNeeded"
 
+    // MARK: - Reading the join link off the other screen (iOS)
+    //
+    // The sending device already draws its code as a QR join link. These are the
+    // other end of that: a camera that reads one back into the six-digit field.
+    //
+    // Two things every sentence here has to keep true, because both are product
+    // decisions rather than wording:
+    //
+    //  1. **A scan fills the field. It never joins.** The digits land where a
+    //     typed code lands, and the user still presses Join. So the success line
+    //     says what was filled in and what is left to do, rather than announcing
+    //     a transfer.
+    //  2. **Every refusal leaves typing available.** Denied, restricted, no
+    //     camera and a capture failure are four different true statements, and
+    //     each one names the six-digit field as the way through. A single
+    //     "camera unavailable" would be wrong three times out of four and would
+    //     leave the reader with no next action.
+
+    /// The control that opens the scanner, beside the six-digit field.
+    case pairingScanCode = "pairing.scanCode"
+    /// The scanner sheet's own title.
+    case pairingScanTitle = "pairing.scanTitle"
+    /// Under the viewfinder, while the camera is running.
+    case pairingScanHint = "pairing.scanHint"
+    /// The viewfinder itself has no text, so this is what VoiceOver reads in
+    /// place of an unlabelled rectangle of live video.
+    case pairingScanViewfinderLabel = "pairing.scanViewfinderLabel"
+    /// Between the tap and the system's answer.
+    case pairingScanRequesting = "pairing.scanRequesting"
+    /// The user, or this device's management, said no. Four distinct causes,
+    /// four sentences — see the note above.
+    case pairingScanDeniedTitle = "pairing.scanDeniedTitle"
+    case pairingScanDeniedBody = "pairing.scanDeniedBody"
+    case pairingScanRestrictedBody = "pairing.scanRestrictedBody"
+    /// The heading over the two states that are about the hardware rather than
+    /// about permission. "Camera access is off" would be a false diagnosis on a
+    /// device that has no camera to grant.
+    case pairingScanUnavailableTitle = "pairing.scanUnavailableTitle"
+    case pairingScanUnavailableBody = "pairing.scanUnavailableBody"
+    case pairingScanFailedBody = "pairing.scanFailedBody"
+    /// Deep-links to this app's own Settings page. Only offered for `denied`,
+    /// which is the one of the four a person can actually change.
+    case pairingScanOpenSettings = "pairing.scanOpenSettings"
+    /// A QR code was read and it was not a Relayium join code. Says that
+    /// nothing was changed, because the six digits already typed are the thing
+    /// a silent refusal would appear to have eaten.
+    case pairingScanRejected = "pairing.scanRejected"
+    /// After a good scan, beside the filled field. It names the remaining step
+    /// on purpose: this product never joins a session the user did not press
+    /// Join for.
+    case pairingScanFilled = "pairing.scanFilled"
+
     // MARK: - Direct, positioned and bounded (iOS)
 
     /// The honest limit of a peer-to-peer transfer, said where the user is
