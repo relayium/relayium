@@ -81,4 +81,60 @@ enum Palette {
     static var cardBackground: Color { Color(uiColor: .secondarySystemBackground) }
     /// A line that bounds or separates without being looked at.
     static var hairline: Color { Color(uiColor: .separator) }
+    /// **Prose the eye reaches second.** Every explanation, caption, detail line,
+    /// timestamp, byte count and empty-state sentence in the app.
+    ///
+    /// It exists because the system role it replaces is not readable enough in
+    /// Light. `Color.secondary` there is `#3C3C43` at 60%, which composites to
+    /// `#8A8A8E` on white and measures **3.44:1** — and **3.29:1** on
+    /// `Palette.cardBackground`, which is where most of this app's supporting
+    /// prose actually sits. WCAG 1.4.3 wants 4.5:1 for text this size, and none
+    /// of it is large enough for the 3:1 exemption.
+    ///
+    /// The asset answers all four appearances rather than one:
+    ///
+    /// | appearance | value | worst measured background | ratio |
+    /// | --- | --- | --- | --- |
+    /// | Light | `#66666C` | `#E7E7EC` quaternary composite | 4.63:1 |
+    /// | Light + Increase Contrast | `#4A4A50` | same | 7.14:1 |
+    /// | Dark | `#98989F` | `#28282A` quaternary composite | 5.13:1 |
+    /// | Dark + Increase Contrast | `#C6C6CE` | same | 8.67:1 |
+    ///
+    /// The Increase Contrast rows are written down because they are the thing a
+    /// literal loses. `Color.secondary` tracks that setting for free; a named
+    /// asset only tracks it if the catalog declares the variant, and one that
+    /// did not would have quietly made the accessibility setting a no-op on
+    /// every sentence in the app. `IOSSupportingTextGuardTests` recomputes all
+    /// four numbers from the catalog rather than trusting this table.
+    ///
+    /// Not a fill, not a symbol, not a control tint. The system role stays where
+    /// it belongs: a decorative glyph, a disclosure chevron, a pending marker,
+    /// an unselected checkbox — things WCAG measures at 3:1 as graphics, or not
+    /// at all. Those uses are enumerated in the guard by name.
+    static var supportingLabel: Color { Color("SupportingLabel") }
+    /// **A warning said in words**, at a contrast the words survive.
+    ///
+    /// `Color.orange` is `#FF9500` in Light and measures **2.14:1** on white —
+    /// so the over-limit byte counter and the "not sent" label, the two places
+    /// this app puts a warning into small prose, were the least readable text in
+    /// it. Being redundant with a symbol makes the symbol accessible; it does
+    /// not make the sentence beside it legible.
+    ///
+    /// | appearance | value | worst measured background | ratio |
+    /// | --- | --- | --- | --- |
+    /// | Light | `#9A4C00` | `#E7E7EC` quaternary composite | 5.00:1 |
+    /// | Light + Increase Contrast | `#7A3D00` | same | 6.83:1 |
+    /// | Dark | `#FF9F0A` | `#28282A` quaternary composite | 7.16:1 |
+    /// | Dark + Increase Contrast | `#FFB340` | same | 8.25:1 |
+    ///
+    /// The dark values are the system's own orange pair, kept deliberately: dark
+    /// orange was never the failure, and changing it would have moved a colour
+    /// that measures 7:1 for the sake of symmetry.
+    ///
+    /// The accompanying `exclamationmark.triangle.fill` symbols take this role
+    /// too. Not because a redundant glyph needs 4.5:1 — it does not — but
+    /// because leaving them at system orange would have put two different
+    /// oranges inside one warning, in the same `HStack`, which is the state the
+    /// dark-action batch recorded as worse than being uniformly wrong.
+    static var warningLabel: Color { Color("WarningLabel") }
 }

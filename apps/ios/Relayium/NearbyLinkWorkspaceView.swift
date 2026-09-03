@@ -122,12 +122,12 @@ struct NearbyLinkWorkspaceView: View {
             // name is peer-supplied and is never identity.
             Text(L10n.t(.nearbySessionPeerDisclaimer))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             if link.connection.isOpen && !link.isVerificationPending {
                 Text(L10n.t(.linkOneConnectionNote))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if link.relayExpiringSoon {
@@ -170,7 +170,7 @@ struct NearbyLinkWorkspaceView: View {
             PairingCodeText(code: sas, style: .verification)
             Text(L10n.t(.linkVerifyBody))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             if !link.armedFiles.isEmpty {
                 // The batch the user staged before Connect. Named while it is
@@ -178,7 +178,7 @@ struct NearbyLinkWorkspaceView: View {
                 // they cannot see from the screen otherwise.
                 Text(L10n.t(.linkVerifyHoldingFiles))
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Button(L10n.t(.linkVerifyMatches)) { link.confirmSAS() }
@@ -205,19 +205,19 @@ struct NearbyLinkWorkspaceView: View {
             } else {
                 Text(L10n.t(.linkConversationEmpty))
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
             composer
             if link.isWaitingForConversation {
                 Text(L10n.t(.linkWaitingForPeer))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Text(L10n.t(.linkHistoryIsLocal))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -232,7 +232,7 @@ struct NearbyLinkWorkspaceView: View {
                 VStack(alignment: .leading, spacing: Metrics.hairline) {
                     Text(L10n.t(message.direction == .outgoing ? .textSent : .textReceived))
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.supportingLabel)
                     // Verbatim, and never parsed: the body is peer-supplied
                     // text, and `Text(verbatim:)` is what stops it being read
                     // as markup.
@@ -293,7 +293,7 @@ struct NearbyLinkWorkspaceView: View {
             // than discovered by finding a file.
             Text(L10n.t(.linkSavedToAppFolder))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -310,7 +310,7 @@ struct NearbyLinkWorkspaceView: View {
                     // drawn as queued: queued means the lane took it.
                     Text(L10n.t(.linkBatchArmed))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.supportingLabel)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 LazyVStack(alignment: .leading, spacing: Metrics.inner) {
@@ -331,6 +331,8 @@ struct NearbyLinkWorkspaceView: View {
             HStack(alignment: .firstTextBaseline, spacing: Metrics.tight) {
                 Image(systemName: batch.direction == .outbound
                       ? "arrow.up.doc" : "arrow.down.doc")
+                    // secondary-role: symbol — the batch's direction glyph, captioned in words
+                    // beside it. Non-text.
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
                 Text(LinkBatchCopy.summary(files: batch.files.count,
@@ -340,7 +342,7 @@ struct NearbyLinkWorkspaceView: View {
                 Spacer(minLength: 0)
                 Text(LinkBatchCopy.text(for: batch.state))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize()
             }
             // One element: VoiceOver reads "3 files, 2 MB, Sending" rather than

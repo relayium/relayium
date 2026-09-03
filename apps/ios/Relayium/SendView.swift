@@ -109,7 +109,7 @@ struct SendView: View {
                 }
                 Text(L10n.t(.shareStaysHere))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -123,7 +123,7 @@ struct SendView: View {
             Text(ByteCountFormatter.string(fromByteCount: Int64(draft.totalBytes),
                                            countStyle: .file))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
             // Safe manifest identities only — no App Group path or staged URL.
             // This is the decision point between several waiting drafts, so a
             // count and total are not enough to tell the user which one Use or
@@ -142,7 +142,7 @@ struct SendView: View {
             if let refusal = selection.sharedDraftRefusal, refusal.applies(to: draft.id) {
                 Text(SharedDraftGate.message(for: refusal.reason))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -218,7 +218,7 @@ struct SendView: View {
         SectionCard(title) {
             Text(message)
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Button(action: onOpenAccount) {
                 Text(L10n.t(.sendOpenAccount)).frame(maxWidth: .infinity)
@@ -281,7 +281,7 @@ struct SendView: View {
                 ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file),
             ]))
             .font(.callout)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Palette.supportingLabel)
             // Wrapping rather than truncating: at the largest Dynamic Type
             // sizes this sentence is several lines on an iPhone, and the part
             // that would be cut is the part that says where the files are.
@@ -291,7 +291,7 @@ struct SendView: View {
             if let message {
                 Text(L10n.t(.uploadInterruptedReason, [L10n.token(message)]))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -325,7 +325,7 @@ struct SendView: View {
             ProgressView { Text(L10n.t(.uploadHeading)) }
             Text(L10n.t(.uploadRestarting))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Button(L10n.t(.commonCancel)) { upload.cancel() }
                 .borderedAction()
@@ -491,7 +491,7 @@ struct SendView: View {
             // Relayium offers to carry on. Both halves are in the sentence.
             Text(L10n.t(.uploadKeepOpen))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             PendingFileList(sessionFiles: upload.sessionFiles)
             Button(L10n.t(.commonCancel)) { upload.cancel() }
@@ -519,7 +519,7 @@ struct SendView: View {
             if let cleanupWarning = upload.cleanupWarning {
                 Text(cleanupWarning)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
             // Visible first, then explicit hand-off choices. Copy is a
@@ -552,7 +552,7 @@ struct SendView: View {
                           dateStyle: .medium, timeStyle: .short),
             ]))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
             // Same reason as Discard above: after a sent shared draft there is
             // no selection to go back to, and after an ordinary send there is.
             // The send model owns which.
@@ -588,7 +588,7 @@ struct SendView: View {
         } else {
             Text(notice.text)
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

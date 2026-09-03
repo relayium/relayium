@@ -244,7 +244,7 @@ struct ReceiveView: View {
                         Text(L10n.bytes(Int64(file.size))).fixedSize()
                     }
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                 }
             }
             if burnAfterRead {
@@ -260,7 +260,7 @@ struct ReceiveView: View {
                           dateStyle: .medium, timeStyle: .short),
             ]))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
             Button(action: save) {
                 Text(L10n.t(.downloadReceive)).frame(maxWidth: .infinity)
             }
@@ -292,7 +292,7 @@ struct ReceiveView: View {
             // folder than the errors do.
             Text(ReceiveDestinationCopy.savedLocation())
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             // `dragURLs`, not the file list: a folder or multi-file receive
             // offers its CONTAINER as one item, so Save to Files copies the

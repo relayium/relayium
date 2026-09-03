@@ -843,7 +843,7 @@ struct PairingScannerView: View {
                 .accessibilityHint(L10n.t(.pairingScanHint))
             Text(L10n.t(.pairingScanHint))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             // Said only after something was actually read and refused. Silence
@@ -864,7 +864,7 @@ struct PairingScannerView: View {
             SectionCard(title) {
                 Text(message)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 if offersSettings, let settings = URL(string: UIApplication.openSettingsURLString) {
                     Link(destination: settings) {

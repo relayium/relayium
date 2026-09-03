@@ -113,7 +113,7 @@ struct AccountTab: View {
             // The address is the user's own: isolated, not translated.
             Text(L10n.t(.contentCheckEmailBody, [L10n.token(email)]))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
 
             switch session.resendState {

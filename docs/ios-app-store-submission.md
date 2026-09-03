@@ -1137,36 +1137,63 @@ one while the label state is `unassessed`.
 
 ### The known blocker
 
-In light appearance, enabled body copy drawn in `Color.secondary` — iOS's own
-`secondaryLabel` — measures **3.29–3.44:1** against the surfaces behind it, below
-the 4.5:1 that a Sufficient Contrast claim requires for normal text. Measured in
-pixels off rendered simulator screenshots at 3×. Apple's own audit
-reports it as *nearly passed* rather than *failed*, and it is Apple's colour used
-for secondary copy in every iOS app — but that is an explanation, not a pass.
-**Sufficient Contrast is therefore not claimable on either device family**, and
-the packet carries that blocker on the feature row itself rather than only in
-prose, so deleting it fails the validator.
+**No measured contrast shortfall remains.** Both recorded blockers are closed,
+and what still blocks the label is the assessment rather than a defect.
 
-**What changed, and what did not.** The blocker recorded here previously was a
-different one: the dark `.bordered` button label at approximately 2:1. That is
-**resolved**. The dark action-label and small-symbol failures were fixed against
-a semantic `ActionLabel` role and re-measured on real screenshots at **4.91:1 to
-7.36:1**, and `apps/ios/RelayiumUITests/AppShellUITests.swift` now runs the
-system contrast audit in *both* appearances rather than subtracting it. This
-remaining light-appearance finding is classified there explicitly as **open** —
-not as a false positive — sentence by sentence, so a new one fails the gate
-rather than joining a class.
+**The dark `.bordered` button label at approximately 2:1** was fixed against a
+semantic `ActionLabel` role and re-measured on real screenshots at **4.91:1 to
+7.36:1**.
 
-Fixing it means replacing the system's secondary label with a token of this
-app's own across every surface. That is a **separate scoped task**. It is not
-part of the metadata batch, and this record does not pretend it has been done.
+**Light supporting text at 3.29–3.44:1** — iOS's own `secondaryLabel`, which
+carried roughly a hundred and twenty sentences across the app and the Share
+extension — was replaced with a semantic `SupportingLabel` role. The values and
+the surfaces they were computed against:
+
+| appearance | value | systemBackground | card `#F2F2F7` | deepest quaternary composite |
+| --- | --- | --- | --- | --- |
+| Light | `#66666C` | 5.70:1 | 5.11:1 | **4.61:1** |
+| Light + Increase Contrast | `#4A4A50` | 8.80:1 | 7.89:1 | 7.11:1 |
+| Dark | `#98989F` | 7.33:1 | 5.94:1 | **5.16:1** |
+| Dark + Increase Contrast | `#C6C6CE` | 12.37:1 | 10.02:1 | 8.71:1 |
+
+The same audit exposed a second, smaller failure that a green primary-flow gate
+would have concealed: the composer's over-limit byte counter and the transcript's
+*not sent* label were `Color.orange`, **2.20:1** on white — the least readable
+text in the product. Both now use a semantic `WarningLabel` role at **4.98:1 to
+6.16:1** in Light and **7.16:1 to 10.22:1** in Dark, with the
+`exclamationmark.triangle.fill` symbols beside them taking the same role so one
+warning is not drawn in two oranges. The redundant symbol is preserved; it was
+never a substitute for a legible sentence.
+
+Both roles declare **explicit Increase Contrast variants**, which is the part a
+named asset silently loses — `Color.secondary` tracked that setting for free, and
+a catalog that declared only Light and Dark would have made the accessibility
+setting a no-op on every sentence in the app. The compiled `Assets.car` in both
+the app and the Share extension was inspected and carries all four appearances
+(`UIAppearanceDark`, `UIAppearanceHighContrastAny`, `UIAppearanceHighContrastDark`)
+for both roles.
+
+The arithmetic is recomputed from the asset catalog on every run by
+`apps/RelayiumKit/Tests/RelayiumKitTests/IOSSupportingTextGuardTests.swift`
+rather than quoted, and `apps/ios/RelayiumUITests/AppShellUITests.swift` now
+passes the system contrast audit in **both** Light and Dark with **no
+unclassified finding** and no open-blocker exception list.
+
+**Sufficient Contrast is still not claimable on either device family**, and the
+packet still carries a blocker on the feature row itself so deleting it fails the
+validator. The reason has changed rather than disappeared: Apple evaluates this
+label **per device family across every common task**, that exercise has not been
+performed on real iPhone or iPad hardware, and an automated audit on one
+simulator layout is not a substitute for it. This record does not pretend
+otherwise.
 
 ### Why nothing else is claimable either
 
-Contrast is still the only *measured* blocker. Every other feature is unclaimable for
-a different and equally binding reason: the common tasks have not been run with
-the feature switched on, per device family. A feature that has not been
-exercised is `not-assessed`, not "probably fine".
+There is no longer a *measured* blocker anywhere in this section, and that makes
+every feature unclaimable for the same single reason: the common tasks have not
+been run with the feature switched on, per device family. A feature that has not
+been exercised is `not-assessed`, not "probably fine" — and a resolved contrast
+measurement is evidence about a colour, not about a task somebody completed.
 
 The checklist each feature has to pass, on each of iPhone and iPad, is
 `accessibilityNutritionLabel.checklistPerDeviceFamily` in the packet:

@@ -252,13 +252,20 @@ final class IOSActionColorGuardTests: XCTestCase {
 
     // MARK: - the two coloursets
 
-    /// **The accent asset is unchanged, and this batch's whole approach depends
-    /// on it staying that way.**
+    /// **The accent's two ordinary values are unchanged, and this batch's whole
+    /// approach depends on them staying that way.**
     ///
-    /// Darkening it would fix the labels and break every fill: white on the
+    /// Darkening either would fix the labels and break every fill: white on the
     /// current dark accent measures 5.6–5.7:1, and the tab bar, the switches,
     /// the selection and every `.borderedProminent` shape are drawn from it by
     /// the system for free.
+    ///
+    /// The asset has since gained a third entry — a Dark + Increase Contrast
+    /// variant, measured and guarded in
+    /// `testTheAccentColoursetDeclaresTheMeasuredDarkHighContrastVariant`. This
+    /// test is deliberately blind to it: its whole job is that the two values
+    /// every ratio in this file was measured at did not move while that variant
+    /// was added.
     func testTheAccentColorsetIsUnchanged() throws {
         try assertColourset("apps/ios/Relayium/Assets.xcassets/AccentColor.colorset",
                             light: (0x6D, 0x28, 0xD9), dark: (0x7C, 0x3A, 0xED))
@@ -274,8 +281,167 @@ final class IOSActionColorGuardTests: XCTestCase {
     /// control that no longer clears 4.5:1 — so the number is defended here,
     /// where it is defined, rather than there, where it is used.
     func testTheActionLabelColorsetCarriesTheMeasuredValues() throws {
-        try assertColourset("apps/ios/Relayium/Assets.xcassets/ActionLabel.colorset",
-                            light: (0x6D, 0x28, 0xD9), dark: (0xB4, 0x9C, 0xFB))
+        let path = "apps/ios/Relayium/Assets.xcassets/ActionLabel.colorset"
+        XCTAssertEqual(try entry(path, dark: false), [0x6D, 0x28, 0xD9],
+                       "ActionLabel Light changed; every Light ratio recorded in this batch "
+                       + "was measured at the old value")
+        XCTAssertEqual(try entry(path, dark: false, increaseContrast: true), [0x5A, 0x21, 0xB4],
+                       "ActionLabel Light + Increase Contrast changed; it exists because "
+                       + "Increase Contrast DARKENS the bordered fill under it, from "
+                       + "#DEDEE4 to #CFCFD5, and the ordinary Light value only cleared "
+                       + "4.58:1 there")
+        XCTAssertEqual(try entry(path, dark: true), [0xB4, 0x9C, 0xFB],
+                       "ActionLabel Dark changed; every Dark ratio recorded in this batch — "
+                       + "including the 4.91:1 that `AppShellUITests` classifies by name — "
+                       + "was measured at the old value")
+        XCTAssertEqual(try entry(path, dark: true, increaseContrast: true), [0xCB, 0xBA, 0xFC],
+                       "ActionLabel Dark + Increase Contrast changed; it exists because "
+                       + "Increase Contrast LIGHTENS the bordered fill under it, from "
+                       + "#39393D to #46464A, which dropped the ordinary Dark value to "
+                       + "4.07:1 — a real failure the Dark audit reproduced")
+    }
+
+    // MARK: - what Increase Contrast actually does to this role
+
+    /// **The surfaces this role is drawn on, sampled off real screens.**
+    ///
+    /// Every number in this file is a ratio against one of these, and none of
+    /// them is a system constant quoted from documentation: each is the modal
+    /// pixel value of a full-screen capture of this app's Nearby tab, in each of
+    /// the four appearances, taken on iPhone 17 / iOS 26.5.
+    ///
+    /// The four rows are the finding. Increase Contrast does not touch a named
+    /// asset colour — `ActionLabel` renders identically with it on and off — but
+    /// it moves every fill the system draws UNDER that colour, and it moves them
+    /// in opposite directions in the two appearances:
+    ///
+    ///  * Light: the card goes `#F2F2F7` → `#EBEBF0` and the bordered fills go
+    ///    `#E3E3E8`/`#DEDEE4` → `#D4D4DA`/`#CFCFD5`. Darker under dark text, so
+    ///    the ratio FALLS: `#6D28D9` went from 5.30:1 to 4.58:1.
+    ///  * Dark: the card goes `#1C1C1E` → `#242426` and the bordered fills go
+    ///    `#313136`/`#39393D` → `#3E3E43`/`#46464A`. Lighter under light text,
+    ///    so the ratio falls there too, and further: `#B49CFB` went from 4.98:1
+    ///    to **4.07:1**, under the line.
+    ///
+    /// So "the ordinary value already clears it, and Increase Contrast only
+    /// separates them further" — the reason the previous batch recorded for
+    /// declaring no variant — was wrong in both appearances, and wrong by enough
+    /// to fail in one. It is the direction of the FILL that decides this, not
+    /// the direction of the setting.
+    private static let surfaces: [String: [(String, UInt32)]] = [
+        "Light": [("systemBackground", 0xFFFFFF), ("card", 0xF2F2F7),
+                  ("bordered fill", 0xE3E3E8), ("deepest bordered fill", 0xDEDEE4)],
+        "Light + Increase Contrast":
+                 [("systemBackground", 0xFFFFFF), ("card", 0xEBEBF0),
+                  ("bordered fill", 0xD4D4DA), ("deepest bordered fill", 0xCFCFD5)],
+        "Dark": [("systemBackground", 0x000000), ("card", 0x1C1C1E),
+                 ("bordered fill", 0x313136), ("lightest bordered fill", 0x39393D)],
+        "Dark + Increase Contrast":
+                [("systemBackground", 0x000000), ("card", 0x242426),
+                 ("bordered fill", 0x3E3E43), ("lightest bordered fill", 0x46464A)],
+    ]
+
+    /// WCAG 2.x relative luminance, in sRGB.
+    private func luminance(_ rgb: [UInt8]) -> Double {
+        func channel(_ v: UInt8) -> Double {
+            let s = Double(v) / 255
+            return s <= 0.03928 ? s / 12.92 : pow((s + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2])
+    }
+
+    private func ratio(_ a: [UInt8], _ b: UInt32) -> Double {
+        let other: [UInt8] = [UInt8((b >> 16) & 0xFF), UInt8((b >> 8) & 0xFF), UInt8(b & 0xFF)]
+        let (x, y) = (luminance(a), luminance(other))
+        return (max(x, y) + 0.05) / (min(x, y) + 0.05)
+    }
+
+    private static func hex(_ rgb: [UInt8]) -> String {
+        String(format: "#%02X%02X%02X", Int(rgb[0]), Int(rgb[1]), Int(rgb[2]))
+    }
+
+    /// The four declared appearances, addressed the way the catalog stores them.
+    private func actionLabelAppearances() throws -> [(String, [UInt8])] {
+        let path = "apps/ios/Relayium/Assets.xcassets/ActionLabel.colorset"
+        return [("Light", try entry(path, dark: false)),
+                ("Light + Increase Contrast",
+                 try entry(path, dark: false, increaseContrast: true)),
+                ("Dark", try entry(path, dark: true)),
+                ("Dark + Increase Contrast",
+                 try entry(path, dark: true, increaseContrast: true))]
+    }
+
+    /// **All four appearances, against all four of their own surfaces,
+    /// arithmetically.**
+    ///
+    /// Not "the asset has the value I wrote down" — the pin above already says
+    /// that, and a careless edit updates a pin along with the colour. This
+    /// recomputes relative luminance from the bytes actually in the catalog and
+    /// fails on the number. A lightened role, a darkened surface, or a fifth
+    /// appearance added with no measurement behind it all fail here.
+    ///
+    /// 4.5:1 rather than 3:1 because this role draws an action's WORDS. It also
+    /// draws `PathRail`'s small meaningful graphics, which owe only 3:1 under
+    /// WCAG 1.4.11 — so holding the whole role to the text line is the strictly
+    /// stronger claim and covers both uses at once.
+    func testEveryActionLabelAppearanceClearsTheLineOnItsOwnSurfaces() throws {
+        for (appearance, value) in try actionLabelAppearances() {
+            let surfaces = try XCTUnwrap(Self.surfaces[appearance],
+                                         "no measured surfaces for \(appearance)")
+            for (surface, background) in surfaces {
+                let measured = ratio(value, background)
+                XCTAssertGreaterThanOrEqual(
+                    measured, 4.5,
+                    "ActionLabel \(appearance) \(Self.hex(value)) measures "
+                    + String(format: "%.3f", measured)
+                    + ":1 on the \(surface) "
+                    + String(format: "#%06X", background)
+                    + ". An action's label is ordinary-sized text, so WCAG 1.4.3 asks "
+                    + "4.5:1 and there is no large-text exemption available to it.")
+            }
+        }
+    }
+
+    /// **Increase Contrast must actually increase contrast.**
+    ///
+    /// Measured on the worst surface of each appearance rather than asserted as
+    /// a hex value, so a variant that exists but does not help fails here. This
+    /// is the guard against the failure mode with no symptom: a declared variant
+    /// that leaves the setting a no-op still compiles, still renders, and looks
+    /// answered.
+    func testIncreaseContrastVariantsAreStrictlyStrongerThanTheOrdinaryValues() throws {
+        let appearances = Dictionary(uniqueKeysWithValues: try actionLabelAppearances())
+        for (ordinary, high) in [("Light", "Light + Increase Contrast"),
+                                 ("Dark", "Dark + Increase Contrast")] {
+            let worst = try XCTUnwrap(Self.surfaces[high]?.last?.1)
+            let ordinaryValue = try XCTUnwrap(appearances[ordinary])
+            let highValue = try XCTUnwrap(appearances[high])
+            XCTAssertGreaterThan(
+                ratio(highValue, worst), ratio(ordinaryValue, worst),
+                "ActionLabel's \(high) value \(Self.hex(highValue)) is not stronger than "
+                + "its ordinary \(ordinary) value \(Self.hex(ordinaryValue)) on the surface "
+                + "that appearance actually paints. A variant that does not raise the ratio "
+                + "is worse than none: it looks answered.")
+        }
+    }
+
+    /// The premise of the two new variants, recomputed rather than quoted.
+    ///
+    /// If either ordinary value ever clears 4.5:1 on its own Increase Contrast
+    /// surface, these variants stopped being necessary and this file should say
+    /// so out loud instead of carrying two colours nobody re-derived.
+    func testTheOrdinaryValuesReallyDoFallOnTheIncreaseContrastSurfaces() throws {
+        let appearances = Dictionary(uniqueKeysWithValues: try actionLabelAppearances())
+        let dark = try XCTUnwrap(appearances["Dark"])
+        let darkWorst = try XCTUnwrap(Self.surfaces["Dark + Increase Contrast"]?.last?.1)
+        XCTAssertLessThan(ratio(dark, darkWorst), 4.5,
+                          "the ordinary Dark value now clears 4.5:1 on the Increase Contrast "
+                          + "bordered fill; the Dark variant may no longer be needed")
+        let light = try XCTUnwrap(appearances["Light"])
+        let lightWorst = try XCTUnwrap(Self.surfaces["Light + Increase Contrast"]?.last?.1)
+        XCTAssertLessThan(ratio(light, lightWorst), 5.0,
+                          "the ordinary Light value now has real margin on the Increase "
+                          + "Contrast bordered fill; the Light variant may no longer be needed")
     }
 
     /// Light is byte-identical to the accent, and that is a claim the code makes
@@ -296,30 +462,201 @@ final class IOSActionColorGuardTests: XCTestCase {
                           + "the 2.02:1 defect")
     }
 
-    /// **No third appearance, and that is a decision rather than an oversight.**
+    /// **All four appearances are declared, and none of them is a duplicate.**
     ///
-    /// A high-contrast variant was considered and deliberately not written: the
-    /// ordinary Dark value already clears 4.5:1 on the fills these controls
-    /// draw, and Increase Contrast separates those fills further rather than
-    /// less. Adding a value this batch could not measure would have been prose.
+    /// This replaces an assertion that the OPPOSITE was true. The previous batch
+    /// wrote `testNeitherColoursetClaimsAnUnmeasuredHighContrastVariant` and
+    /// recorded a reason: the ordinary Dark value already cleared the fills, and
+    /// Increase Contrast separated them further. The first half was true only
+    /// with the setting off, and the second half was backwards — Increase
+    /// Contrast LIGHTENS a dark fill, and the Dark audit run with the setting on
+    /// failed. So the absence is now the regression and the presence is the
+    /// guard, which is why this test was inverted rather than deleted.
     ///
-    /// This asserts the absence so that a future high-contrast entry is a
-    /// deliberate, measured act — the test names what evidence it needs.
-    func testNeitherColoursetClaimsAnUnmeasuredHighContrastVariant() throws {
-        for path in ["apps/ios/Relayium/Assets.xcassets/AccentColor.colorset",
-                     "apps/ios/Relayium/Assets.xcassets/ActionLabel.colorset"] {
+    /// A colourset that declares only some of the four still compiles and still
+    /// renders; it just silently makes the accessibility setting a no-op for
+    /// every control drawn in the role. Only the count and the shape are checked
+    /// here — the values themselves are pinned and re-derived above.
+    func testTheActionLabelColoursetDeclaresEveryAppearance() throws {
+        for path in ["apps/ios/Relayium/Assets.xcassets/ActionLabel.colorset",
+                     "apps/ios/RelayiumShare/Assets.xcassets/ActionLabel.colorset"] {
             let entries = try manifest(path).colors
-            XCTAssertEqual(entries.count, 2, "\(path) should carry exactly universal + dark")
+            XCTAssertEqual(entries.count, 4,
+                           "\(path) should declare exactly four appearances — Light, Dark and "
+                           + "an Increase Contrast variant of each — and got \(entries.count)")
             for entry in entries {
                 for appearance in entry.appearances ?? [] {
-                    XCTAssertEqual(appearance.appearance, "luminosity",
-                                   "\(path) gained a `\(appearance.appearance)` appearance. "
-                                   + "If that is a high-contrast variant, it needs a measured "
-                                   + "ratio behind it under Increase Contrast, which this "
-                                   + "batch did not have; add the measurement with the value.")
+                    XCTAssertTrue(["luminosity", "contrast"].contains(appearance.appearance),
+                                  "\(path) gained a `\(appearance.appearance)` appearance, "
+                                  + "which needs a measured ratio behind it on the surfaces "
+                                  + "that appearance actually renders on; add the measurement "
+                                  + "with the value.")
                 }
             }
+            var seen = Set<[Bool]>()
+            for dark in [false, true] {
+                for high in [false, true] {
+                    _ = try entry(path, dark: dark, increaseContrast: high)
+                    seen.insert([dark, high])
+                }
+            }
+            XCTAssertEqual(seen.count, 4, "\(path) is missing an appearance combination")
         }
+    }
+
+    /// **The accent now declares three, and the third one is the fix.**
+    ///
+    /// This test used to assert the opposite — that `AccentColor` carried only
+    /// its two luminosities — and it recorded why it would have to be inverted
+    /// one day. That day is this batch, so it is inverted rather than deleted,
+    /// and the measurement it recorded is kept verbatim because it is the
+    /// evidence the new value answers.
+    ///
+    /// `.borderedProminent` does not render the accent literally when Increase
+    /// Contrast is on and the colourset declares no high-contrast entry: it
+    /// derives a fill, in opposite directions in the two appearances — measured
+    /// `#7C3AED` → `#B488FF` in Dark and `#6D28D9` → `#461A8B` in Light, off
+    /// full-screen captures on iPhone 17 / iOS 26.5. The system's own white
+    /// label on the Dark one measures **2.66:1**, down from 5.70:1 with the
+    /// setting off; Light IMPROVES, to 11.79:1. That asymmetry is why the Dark +
+    /// Increase Contrast audit reported `Choose Files or Folders…`, `Go to
+    /// Account` and `Sign in`, and the Light one reported nothing — and it is
+    /// why only Dark gains a variant. A Light variant would be a colour added to
+    /// answer a ratio that already measures 11.79:1.
+    ///
+    /// **Declaring the entry takes the derivation back, and that is measured
+    /// rather than assumed.** A capture of this app under Dark + Increase
+    /// Contrast with the entry declared renders the prominent fill as the
+    /// declared bytes exactly — 139,029 pixels of them under a pure `#FFFFFF`
+    /// label, no derived value anywhere on screen. That is the fact the whole
+    /// approach rests on: if the style had derived from the declared value too,
+    /// every arithmetic test in this file would still pass while the button on
+    /// screen stayed at 2.66:1.
+    ///
+    /// **The value is the system's own Light rule, applied to the Dark value.**
+    /// `#7C3AED` × 0.642 — the exact factor iOS uses to derive `#461A8B` from
+    /// `#6D28D9` in Light + Increase Contrast — is `#502598`, which carries the
+    /// white label at **10.20:1**. The bar it has to clear is 7:1 rather than
+    /// 4.5:1, and both of those numbers were bracketed by running the audit
+    /// rather than read anywhere;
+    /// `testTheDarkHighContrastAccentClearsTheRaisedIncreaseContrastBar` carries
+    /// the four rendered points that fix it, including the two candidates that
+    /// cleared 4.5:1 and were rejected anyway.
+    ///
+    /// The cost is recorded rather than hidden: at 2.06:1 against black the
+    /// button stands off the screen behind it less than the ordinary Dark accent
+    /// does. That is the same trade iOS itself makes in Light, where its derived
+    /// `#461A8B` is a very dark button on white — under this setting the words
+    /// win. Ordinary Light and Dark are untouched, which
+    /// `testTheAccentColorsetIsUnchanged` asserts separately.
+    func testTheAccentColoursetDeclaresTheMeasuredDarkHighContrastVariant() throws {
+        for path in ["apps/ios/Relayium/Assets.xcassets/AccentColor.colorset",
+                     "apps/ios/RelayiumShare/Assets.xcassets/AccentColor.colorset"] {
+            let entries = try manifest(path).colors
+            XCTAssertEqual(entries.count, 3,
+                           "\(path) should carry exactly universal + dark + dark/high "
+                           + "contrast, and got \(entries.count). Light needs no variant: "
+                           + "the derivation the setting applies there raises the white "
+                           + "label to 11.79:1 on its own.")
+            XCTAssertEqual(try entry(path, dark: true, increaseContrast: true),
+                           [0x50, 0x25, 0x98],
+                           "\(path) Dark + Increase Contrast changed. It exists because the "
+                           + "prominent fill derived from the ordinary Dark accent measured "
+                           + "#B488FF with the setting on, and the system's white label on "
+                           + "that measured 2.66:1 — a failure the Dark audit reproduced on "
+                           + "three buttons. Re-measure both of its ratios before moving it: "
+                           + "the band it sits in is 0.03 of relative luminance wide.")
+            // The variant must not have arrived by moving the two values every
+            // other ratio in this batch was measured at.
+            XCTAssertEqual(try entry(path, dark: false), [0x6D, 0x28, 0xD9],
+                           "\(path) Light moved while the Increase Contrast variant was "
+                           + "added")
+            XCTAssertEqual(try entry(path, dark: true), [0x7C, 0x3A, 0xED],
+                           "\(path) Dark moved while the Increase Contrast variant was "
+                           + "added")
+        }
+    }
+
+    /// **The bar the audit actually enforces here is 7:1, and it was found by
+    /// measurement rather than read anywhere.**
+    ///
+    /// The checker reports `Contrast failed for SwiftUI.AccessibilityNode` and
+    /// no arithmetic, so the threshold had to be bracketed by running it. Four
+    /// rendered points did it, all on this app's own prominent buttons:
+    ///
+    /// | fill | white label | Increase Contrast | audit |
+    /// | --- | --- | --- | --- |
+    /// | `#7C3AED` ordinary Dark | 5.70:1 | off | accepted |
+    /// | `#B488FF` derived | 2.66:1 | on | rejected |
+    /// | `#8946FD` | 4.82:1 | on | rejected |
+    /// | `#6F24F0` | 6.59:1 | on | rejected |
+    ///
+    /// 5.70:1 passes with the setting off and 6.59:1 fails with it on, so the
+    /// line moves when the user asks for more contrast, and it moves to
+    /// somewhere above 6.59 — WCAG's AAA 7:1, which is the only published
+    /// number in that gap. `#502598` clears it at **10.20:1**.
+    ///
+    /// The two rejected candidates are kept in the table because each killed a
+    /// theory that looked right: `#6F24F0` was chosen to maximise the label and
+    /// `#8946FD` to satisfy a 3:1 shape line as well, and the audit rejected
+    /// both. Whatever the checker weighs, it is not the fill against the card:
+    /// `#8946FD` measured 3.22:1 there, better than the ordinary Dark accent's
+    /// 2.72:1, which the audit accepts with the setting off.
+    func testTheDarkHighContrastAccentClearsTheRaisedIncreaseContrastBar() throws {
+        let value = try entry("apps/ios/Relayium/Assets.xcassets/AccentColor.colorset",
+                              dark: true, increaseContrast: true)
+        let onWhite = ratio(value, 0xFFFFFF)
+        XCTAssertGreaterThanOrEqual(
+            onWhite, 7.0,
+            "the Dark + Increase Contrast accent \(Self.hex(value)) leaves the system's "
+            + "white prominent label at " + String(format: "%.3f", onWhite)
+            + ":1. 4.5:1 is not enough here: the audit accepted 5.70:1 with the setting "
+            + "off and rejected 6.59:1 with it on, so this role owes the AAA 7:1 line "
+            + "whenever the user has asked for increased contrast.")
+    }
+
+    /// **Increase Contrast must actually increase contrast, and for this fill
+    /// the ratio that has to rise is the label's.**
+    ///
+    /// Which direction that means was not obvious and is not symmetric with
+    /// `ActionLabel`. The answer came from watching what iOS does to this same
+    /// asset in the appearance where its own derivation is CORRECT: in Light +
+    /// Increase Contrast it darkens `#6D28D9` to `#461A8B`, a factor of 0.642,
+    /// taking the white label from 5.30:1 to 11.79:1. It maximises the label.
+    ///
+    /// In Dark it does the opposite — lightens `#7C3AED` to `#B488FF` and drops
+    /// the label to 2.66:1 — which is the defect. So the declared Dark variant
+    /// is the Light rule applied to the Dark value: `#7C3AED` times that same
+    /// 0.642 is `#502598`, hue held at 261.7° against the accent's 262.1°. Not a
+    /// colour picked to clear a threshold, but the system's own answer to this
+    /// question, taken from the half of it the system gets right.
+    func testTheDarkHighContrastAccentCarriesWhiteBetterThanTheOrdinaryDark() throws {
+        let path = "apps/ios/Relayium/Assets.xcassets/AccentColor.colorset"
+        let ordinary = try entry(path, dark: true)
+        let high = try entry(path, dark: true, increaseContrast: true)
+        XCTAssertGreaterThan(
+            ratio(high, 0xFFFFFF), ratio(ordinary, 0xFFFFFF),
+            "the Dark + Increase Contrast accent \(Self.hex(high)) does not carry the "
+            + "system's white label better than the ordinary Dark accent "
+            + "\(Self.hex(ordinary)) does. A variant that does not raise the ratio the "
+            + "setting exists to raise is worse than none: it looks answered.")
+    }
+
+    /// One brand is one value, in the extension too — and the extension draws
+    /// its own `.borderedProminent` Send from the same asset, so a Share sheet
+    /// that kept the two-entry catalog would keep the 2.66:1 label the app just
+    /// fixed. Byte-for-byte, for the reason the `ActionLabel` twin records: a
+    /// value comparison cannot see a dropped appearance.
+    func testTheShareExtensionAccentIsByteIdenticalToTheApp() throws {
+        let app = try RepoRoot.text(
+            "apps/ios/Relayium/Assets.xcassets/AccentColor.colorset/Contents.json")
+        let share = try RepoRoot.text(
+            "apps/ios/RelayiumShare/Assets.xcassets/AccentColor.colorset/Contents.json")
+        XCTAssertEqual(app, share,
+                       "AccentColor.colorset differs between the app and the Share "
+                       + "extension. The extension resolves its own copy, so a variant "
+                       + "declared only in the app leaves the share sheet on the derived "
+                       + "#B488FF fill and its white label at 2.66:1.")
     }
 
     // MARK: - the Share extension boundary
@@ -339,15 +676,21 @@ final class IOSActionColorGuardTests: XCTestCase {
     /// Ship one without the other and the Cancel is either the wrong violet or
     /// back at the `#7C3AED` 2:1 it started from.
     func testTheShareExtensionShipsAndUsesTheLabelRole() throws {
-        let app = try colourset("apps/ios/Relayium/Assets.xcassets/ActionLabel.colorset")
-        let share = try colourset("apps/ios/RelayiumShare/Assets.xcassets/ActionLabel.colorset")
-        XCTAssertEqual(share.light, app.light,
-                       "the extension's ActionLabel diverged from the app's in Light; one "
-                       + "brand is one value, and a share sheet that renders a different "
-                       + "violet is a share sheet that looks like somebody else's app")
-        XCTAssertEqual(share.dark, app.dark,
-                       "the extension's ActionLabel diverged from the app's in Dark, where "
-                       + "the whole defect was")
+        // Byte-for-byte rather than value-for-value, and that distinction is the
+        // whole reason this assertion changed shape. Comparing Light and Dark
+        // alone passed a Share copy that had silently lost either Increase
+        // Contrast entry — the appearances are half the content of this file
+        // now, and the half a colour comparison cannot see.
+        let app = try RepoRoot.text(
+            "apps/ios/Relayium/Assets.xcassets/ActionLabel.colorset/Contents.json")
+        let share = try RepoRoot.text(
+            "apps/ios/RelayiumShare/Assets.xcassets/ActionLabel.colorset/Contents.json")
+        XCTAssertEqual(app, share,
+                       "ActionLabel.colorset differs between the app and the Share "
+                       + "extension. One brand is one value, and a share sheet that renders "
+                       + "a different violet — or drops an Increase Contrast variant the app "
+                       + "keeps — is a share sheet that looks like somebody else's app, "
+                       + "inside somebody else's app.")
 
         let view = Self.code(try RepoRoot.text("apps/ios/RelayiumShare/ShareRootView.swift"))
         let cancel = try XCTUnwrap(
@@ -508,26 +851,43 @@ final class IOSActionColorGuardTests: XCTestCase {
         return try JSONDecoder().decode(Manifest.self, from: Data(contentsOf: url))
     }
 
-    private func colourset(_ path: String) throws -> (light: [UInt8], dark: [UInt8]) {
+    /// Reads ONE appearance out of a colourset, addressed by both axes.
+    ///
+    /// Deliberately matches on `luminosity` AND `contrast` together rather than
+    /// asking "does this entry mention dark". The looser spelling this replaces
+    /// was correct only while no colourset declared an Increase Contrast
+    /// variant: the moment `ActionLabel` gained one, `first { mentions dark }`
+    /// could return the Dark+Increase-Contrast entry and every "Dark is
+    /// unchanged" assertion in this file would have been checking the wrong
+    /// four bytes — and passing.
+    private func entry(_ path: String,
+                       dark: Bool,
+                       increaseContrast: Bool = false) throws -> [UInt8] {
         let entries = try manifest(path).colors
-        func bytes(_ entry: Manifest.Entry) throws -> [UInt8] {
-            XCTAssertEqual(entry.color.colorSpace, "srgb",
-                           "\(path) must stay sRGB; every ratio here was computed in it")
-            XCTAssertEqual(entry.color.components.alpha, "1.000",
-                           "\(path) must stay opaque; a translucent role composites against "
-                           + "whatever is behind it and has no single measurable ratio")
-            return try [entry.color.components.red, entry.color.components.green,
-                        entry.color.components.blue].map {
-                try XCTUnwrap(UInt8($0.replacingOccurrences(of: "0x", with: ""), radix: 16),
-                              "\(path) carries a non-hex component `\($0)`")
+        let match = try XCTUnwrap(entries.first { candidate in
+            let appearances = candidate.appearances ?? []
+            let isDark = appearances.contains {
+                $0.appearance == "luminosity" && $0.value == "dark"
             }
+            let isHigh = appearances.contains {
+                $0.appearance == "contrast" && $0.value == "high"
+            }
+            return isDark == dark && isHigh == increaseContrast
+        }, "\(path) declares no entry for dark=\(dark) increaseContrast=\(increaseContrast)")
+        XCTAssertEqual(match.color.colorSpace, "srgb",
+                       "\(path) must stay sRGB; every ratio here was computed in it")
+        XCTAssertEqual(match.color.components.alpha, "1.000",
+                       "\(path) must stay opaque; a translucent role composites against "
+                       + "whatever is behind it and has no single measurable ratio")
+        return try [match.color.components.red, match.color.components.green,
+                    match.color.components.blue].map {
+            try XCTUnwrap(UInt8($0.replacingOccurrences(of: "0x", with: ""), radix: 16),
+                          "\(path) carries a non-hex component `\($0)`")
         }
-        let light = try XCTUnwrap(entries.first { ($0.appearances ?? []).isEmpty },
-                                  "\(path) has no universal entry")
-        let dark = try XCTUnwrap(entries.first {
-            ($0.appearances ?? []).contains { $0.appearance == "luminosity" && $0.value == "dark" }
-        }, "\(path) has no dark entry")
-        return (try bytes(light), try bytes(dark))
+    }
+
+    private func colourset(_ path: String) throws -> (light: [UInt8], dark: [UInt8]) {
+        (try entry(path, dark: false), try entry(path, dark: true))
     }
 
     private func assertColourset(_ path: String,

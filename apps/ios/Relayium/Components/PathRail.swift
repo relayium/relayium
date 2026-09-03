@@ -126,7 +126,7 @@ struct PathRail: View {
             if let detail = stop.detail {
                 Text(detail)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -157,6 +157,7 @@ struct PathRail: View {
                 Image(systemName: stop.symbol)
                     .font(.caption2)
                     .foregroundStyle(stop.progress == .current ? Palette.actionLabel
+                                     // secondary-role: symbol — a stop not yet reached. Non-text.
                                      : Color.secondary)
             }
         }

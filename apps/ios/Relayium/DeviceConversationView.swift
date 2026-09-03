@@ -134,7 +134,7 @@ struct DeviceConversationView: View {
         SectionCard {
             Text(L10n.t(.sendDeviceExplain))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             if let refusal = deliveries.refusal {
                 InlineMessage(.warning, InboxSendPresentation.text(for: refusal))
@@ -182,7 +182,7 @@ struct DeviceConversationView: View {
                 }
                 Text(L10n.t(.sendOutstandingExplain))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 // Which actions exist, and which of them is the cancel, are
                 // `InboxSendActions`' answers — the same ones the delivery list
@@ -221,7 +221,7 @@ struct DeviceConversationView: View {
             SectionCard(L10n.t(.inboxComposeHeading)) {
                 Text(L10n.t(.inboxComposeUnavailable))
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("inbox-compose-unavailable")
             }
@@ -333,7 +333,7 @@ struct DeviceConversationView: View {
             } else {
                 Text(L10n.t(.inboxTimelineEmpty))
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("inbox-timeline-empty")
             }
@@ -402,13 +402,13 @@ struct DeviceConversationView: View {
                     }
                     Text(state)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.supportingLabel)
                         .accessibilityIdentifier("inbox-entry-state")
                 }
             }
             Text(InboxTimelinePresentation.at(entry))
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
             // A visible control, not a swipe: a swipe action is undiscoverable
             // and unreachable to somebody navigating with VoiceOver. It never
             // deletes on its own — it raises the confirmation, which is the one

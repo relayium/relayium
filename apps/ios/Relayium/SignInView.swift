@@ -98,7 +98,7 @@ struct SignInView: View {
                         .accessibilityAddTraits(.isHeader)
                     Text(L10n.t(mode.bodyKey))
                         .font(.callout)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.supportingLabel)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -221,7 +221,7 @@ struct SignInView: View {
                 line
                 Text(L10n.t(.loginAppleDivider))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                 line
             }
             // Hidden from VoiceOver: the button below is the control, and the

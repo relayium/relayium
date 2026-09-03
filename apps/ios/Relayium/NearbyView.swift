@@ -213,7 +213,7 @@ struct NearbyView: View {
         SectionCard(L10n.t(.presenceBusyTitle)) {
             Text(L10n.t(.presenceBusyBody))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Button { onShowSession(owner) } label: {
                 Text(L10n.t(.presenceShowIt)).frame(maxWidth: .infinity)
@@ -247,7 +247,7 @@ struct NearbyView: View {
 
         Text(L10n.t(.nearbyNoAccountNeeded))
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Palette.supportingLabel)
             .fixedSize(horizontal: false, vertical: true)
 
         verificationSetting
@@ -327,7 +327,7 @@ struct NearbyView: View {
             DisclosureGroup(isExpanded: $showsMechanism) {
                 Text(L10n.t(.nearbyExplain))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, Metrics.hairline)
@@ -340,7 +340,15 @@ struct NearbyView: View {
             // but it is not THE control: drawn in the accent it read as loud as
             // the task below it, which is the one thing the accent is for. The
             // chevron still says it opens.
-            .tint(Color.secondary)
+            //
+            // The role rather than the system grey, because `.tint` on a
+            // `DisclosureGroup` colours the LABEL as well as the chevron — so
+            // "How this list works" was being drawn in `Color.secondary` with no
+            // `.foregroundStyle` anywhere near it to say so. A source audit
+            // classified this as a control tint and was wrong; the Light system
+            // audit rendered it and reported the sentence. Grey is preserved,
+            // legibility is added, and the chevron comes along at 4.61:1.
+            .tint(Palette.supportingLabel)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -379,7 +387,7 @@ struct NearbyView: View {
             // contradiction of that decision; hiding it would be.
             Text(L10n.t(isListening ? .nearbyListeningBody : .nearbyPausedBody))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             if isListening {
                 // Where an unsolicited file lands, and it is the place this
@@ -390,7 +398,7 @@ struct NearbyView: View {
                 // about delivery, so it is made only while delivery can happen.
                 Text(L10n.t(.nearbySavedToAppFolder))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
             switch receive.state {
@@ -518,7 +526,7 @@ struct NearbyView: View {
                     }
                     Text(L10n.t(.nearbyNamesDisclaimer))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.supportingLabel)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .accessibilityElement(children: .contain)
@@ -552,6 +560,8 @@ struct NearbyView: View {
                 // at 2.70:1 against the 3:1 a meaningful non-text graphic owes.
                 // The label role clears it at 6.7:1 and is unchanged in Light.
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    // secondary-role: selection-state — the UNSELECTED checkbox. Non-text, and
+                    // selection is also carried by the filled/hollow shape, not colour alone.
                     .foregroundStyle(selected ? Palette.actionLabel : Color.secondary)
                 // The peer's own name, already stripped of control and bidi
                 // characters by `safeDisplayName`.
@@ -605,7 +615,7 @@ struct NearbyView: View {
             // a human gate that is not there.
             Text(L10n.t(.nearbyAcceptanceNote))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -615,7 +625,7 @@ struct NearbyView: View {
     private func linkActions(for device: NearbyDevice) -> some View {
         Text(L10n.t(.linkConnectToDeviceHint))
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Palette.supportingLabel)
             .fixedSize(horizontal: false, vertical: true)
         Button { connectLink(to: device) } label: {
             Text(L10n.t(.linkConnectToDevice)).frame(maxWidth: .infinity)
@@ -628,7 +638,7 @@ struct NearbyView: View {
             // being sent now, and it is not being dropped either.
             Text(L10n.t(.linkConnectCarriesStagedFiles))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
         // `actionError` is NOT rendered here: `sendTask` already draws it once,
@@ -644,7 +654,7 @@ struct NearbyView: View {
                 Text(selection.summary.map { L10n.t(.nearbySelectionSendHint, [$0]) }
                      ?? L10n.t(.nearbyAddFilesHint))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 Button { sendFiles() } label: {
                     Text(L10n.t(.commonSend)).frame(maxWidth: .infinity)
@@ -655,7 +665,7 @@ struct NearbyView: View {
             case .text:
                 Text(L10n.t(.nearbyTextIntent))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 Button { startText() } label: {
                     Text(L10n.t(.nearbyStartMessageSession)).frame(maxWidth: .infinity)
@@ -692,7 +702,7 @@ struct NearbyView: View {
                     // still showing.
                     Text(L10n.t(.nearbyLeavingClearsHistory))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.supportingLabel)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -708,7 +718,7 @@ struct NearbyView: View {
                     .font(.headline)
                 Text(L10n.t(.nearbySessionPeerDisclaimer))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -734,11 +744,11 @@ struct NearbyView: View {
                 .disabled(isLocked)
             Text(L10n.t(.verifyExplainWhat))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Text(L10n.t(.verifyExplainEncryption))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

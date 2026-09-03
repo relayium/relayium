@@ -53,7 +53,7 @@ private struct PairingJoinLinkView: View {
             if copied {
                 Label(L10n.t(.pairingLinkCopied), systemImage: "checkmark")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
             }
         }
         // This view can retain its structural identity if a later generated
@@ -318,7 +318,7 @@ struct DirectView: View {
         VStack(alignment: .leading, spacing: Metrics.inner) {
             Text(L10n.t(.navPairingCodeSubtitle))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             PathRail(stops: PathRailPresentation.iosPairingCode())
         }
@@ -356,7 +356,7 @@ struct DirectView: View {
             .accessibilityHint(L10n.t(.directModeMatchHint))
             Text(L10n.t(.directModeMatchHint))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("pairing-mode-match-hint")
         }
@@ -530,7 +530,7 @@ struct DirectView: View {
             if case .allowed = gate {
                 Text(L10n.t(.textStartBody))
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 Button { createTextSession() } label: {
                     Text(L10n.t(.textCreateCode)).frame(maxWidth: .infinity)
@@ -567,7 +567,7 @@ struct DirectView: View {
                 Text(L10n.t(.gateCreateCodeTitle)).font(.subheadline.weight(.semibold))
                 Text(L10n.t(.gateCreateCodeBody))
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 openAccountButton
 
@@ -581,7 +581,7 @@ struct DirectView: View {
                 Text(L10n.t(.contentCheckEmailTitle)).font(.subheadline.weight(.semibold))
                 Text(L10n.t(.contentCheckEmailBody, [L10n.token(email)]))
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 openAccountButton
 
@@ -593,7 +593,7 @@ struct DirectView: View {
                               dateStyle: .medium, timeStyle: .none),
                 ]))
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 openAccountButton
             }
@@ -606,7 +606,7 @@ struct DirectView: View {
         SectionCard(L10n.t(.presenceBusyTitle)) {
             Text(L10n.t(.presenceBusyBody))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Button { onShowSession(owner) } label: {
                 Text(L10n.t(.presenceShowIt)).frame(maxWidth: .infinity)
@@ -658,10 +658,10 @@ struct DirectView: View {
                           dateStyle: .none, timeStyle: .short),
             ]))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
             Text(L10n.t(.pairingCodeExpiryNote))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("pairing-code-expiry-note")
             if let joinURL = transferPairingJoinURL(code: code, mode: mode) {
@@ -675,7 +675,7 @@ struct DirectView: View {
             ProgressView { Text(L10n.t(.directWaitingForDevice)) }
             Text(L10n.t(.directKeepBothOpen))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Button(L10n.t(.commonCancel), action: cancel)
                 .borderedAction()
@@ -707,7 +707,7 @@ struct DirectView: View {
         SectionCard(L10n.t(.directLargeFilesTitle)) {
             Text(L10n.t(.directLargeFilesBody))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Button(action: onOpenSend) {
                 Text(L10n.t(.directOpenSend)).frame(maxWidth: .infinity)
@@ -741,11 +741,11 @@ struct DirectView: View {
                 .disabled(isLocked)
             Text(L10n.t(.verifyExplainWhat))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Text(L10n.t(.verifyExplainEncryption))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -816,7 +816,7 @@ struct DirectView: View {
             if showsAnonymousNote {
                 Text(L10n.t(.directJoinNoAccountNeeded))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

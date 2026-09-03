@@ -4728,13 +4728,31 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// **The branded accent is an asset, it matches the Mac exactly, and the
-    /// project actually resolves it.**
+    /// **The branded accent is an asset, its ORDINARY values match the Mac
+    /// exactly, and the project actually resolves it.**
     ///
     /// All three halves are needed. A colorset nothing names is dead weight; a
     /// build setting with no asset silently falls back to system blue; and two
     /// hand-copied violets that drift are worse than one blue, because the two
     /// apps then look like two products.
+    ///
+    /// **"Exactly" narrowed to the ordinary values, and only there.** This test
+    /// used to require the two catalogs to be identical, entry for entry, and
+    /// that was the right shape while both carried one violet plus a dark
+    /// override. iOS now carries a third: a Dark + Increase Contrast entry,
+    /// `#502598`, which exists because `.borderedProminent` on iOS derives its
+    /// fill from the accent when no high-contrast entry is declared and derives
+    /// it UPWARDS in Dark — `#7C3AED` renders as `#B488FF`, putting the system's
+    /// own white label at 2.66:1. `IOSActionColorGuardTests` owns that value,
+    /// its rationale and its arithmetic.
+    ///
+    /// That defect is iOS-only, so the answer is too: there is no macOS
+    /// appearance to compare it against and none is being added here. So the
+    /// parity claim is split rather than relaxed — the ordinary Light and Dark
+    /// violets must still be identical across both apps AND across the app and
+    /// its Share extension, and the third appearance is recognised by name and
+    /// validated on its own rather than being allowed through by a loosened
+    /// comparison. A fourth appearance, or a different one, still fails.
     func testTheAccentColourIsOneBrandedAssetSharedWithTheMac() throws {
         func colorset(_ target: String) throws -> [[String: Any]] {
             let json = try JSONSerialization.jsonObject(with: try RepoRoot.data(
@@ -4768,24 +4786,59 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // while the app it belongs to drew violet — which is the one place a
         // user sees Relayium next to another product's chrome.
         let share = try colorset("ios/RelayiumShare")
+
+        // The app and its Share extension are held to BYTE identity, not value
+        // identity. They are separate binaries with separate catalogs, and the
+        // failure that matters is one of them silently keeping fewer
+        // appearances than the other — which a comparison of colours cannot
+        // see, and which would leave the share sheet on the derived #B488FF
+        // fill after the app stopped using it.
+        XCTAssertEqual(
+            try RepoRoot.text(
+                "apps/ios/RelayiumShare/Assets.xcassets/AccentColor.colorset/Contents.json"),
+            try RepoRoot.text(
+                "apps/ios/Relayium/Assets.xcassets/AccentColor.colorset/Contents.json"),
+            "the share sheet's accent catalog is not byte-identical to the app's")
         XCTAssertEqual(components(share), components(ios),
                        "the share sheet is a different brand from the app")
         XCTAssertEqual(appearances(share), appearances(ios),
                        "the share sheet answers light and dark differently from the app")
-        XCTAssertEqual(appearances(ios), appearances(mac),
-                       "the two apps answer light and dark differently")
-        XCTAssertEqual(appearances(ios), ["universal", "luminosity=dark"],
-                       "the accent asset is not one base colour plus a dark override")
-        XCTAssertEqual(components(ios).count, 2,
-                       "the accent asset has no separate dark appearance")
-        XCTAssertEqual(components(ios), components(mac),
-                       "the two apps' brand violets have drifted apart")
+
+        // The shape of each catalog, stated in full rather than compared to the
+        // other. The Mac's two entries and iOS's three are both exact: a fourth
+        // iOS appearance, a different one, or a macOS catalog that quietly grew
+        // one all fail here.
+        XCTAssertEqual(appearances(mac), ["universal", "luminosity=dark"],
+                       "the Mac accent asset is not one base colour plus a dark override")
+        XCTAssertEqual(appearances(ios),
+                       ["universal", "luminosity=dark", "contrast=high,luminosity=dark"],
+                       "the iOS accent asset is not one base colour, a dark override and "
+                       + "the Dark + Increase Contrast entry that `IOSActionColorGuardTests` "
+                       + "measures. A new appearance needs a rendered ratio behind it, not "
+                       + "a widened assertion here.")
+
+        // ORDINARY parity, which the third entry does not touch. Addressed by
+        // appearance rather than by position, because `.last` stopped meaning
+        // "dark" the moment iOS gained a third entry — the assertion that used
+        // to read it that way passed for the wrong reason and then failed for
+        // the wrong reason.
+        func ordinary(_ colors: [[String: Any]]) -> [[String: String]] {
+            let wanted = ["universal", "luminosity=dark"]
+            return zip(appearances(colors), components(colors))
+                .filter { wanted.contains($0.0) }
+                .map(\.1)
+        }
+        XCTAssertEqual(ordinary(ios).count, 2, "iOS lost an ordinary accent value")
+        XCTAssertEqual(ordinary(ios), ordinary(mac),
+                       "the two apps' ordinary brand violets have drifted apart. The iOS "
+                       + "Increase Contrast entry is allowed to be iOS-only; these two are "
+                       + "not.")
         // The values themselves, so a coordinated edit to both still has to be
         // a decision: #6D28D9, and #7C3AED in dark.
-        XCTAssertEqual(components(ios).first, ["alpha": "1.000", "red": "0x6D",
-                                               "green": "0x28", "blue": "0xD9"])
-        XCTAssertEqual(components(ios).last, ["alpha": "1.000", "red": "0x7C",
-                                              "green": "0x3A", "blue": "0xED"])
+        XCTAssertEqual(ordinary(ios).first, ["alpha": "1.000", "red": "0x6D",
+                                             "green": "0x28", "blue": "0xD9"])
+        XCTAssertEqual(ordinary(ios).last, ["alpha": "1.000", "red": "0x7C",
+                                            "green": "0x3A", "blue": "0xED"])
 
         let project = try String(
             contentsOf: try appsRoot.appendingPathComponent("ios/Relayium.xcodeproj/project.pbxproj"),

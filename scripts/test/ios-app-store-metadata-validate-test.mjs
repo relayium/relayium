@@ -1075,7 +1075,7 @@ rejects(
 );
 
 rejects(
-  "Sufficient Contrast claimed despite the known Light secondary-text blocker",
+  "Sufficient Contrast claimed while the per-device-family assessment is unperformed",
   (p) => {
     const family = p.accessibilityNutritionLabel.deviceFamilies[1];
     const feature = family.features.find((entry) => entry.id === "sufficient-contrast");

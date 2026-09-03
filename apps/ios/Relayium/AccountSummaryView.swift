@@ -254,7 +254,7 @@ struct AccountSummaryView: View {
             if !user.displayName.isEmpty {
                 Text(user.email)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -286,7 +286,7 @@ struct AccountSummaryView: View {
             meter(L10n.t(.accountStorage), UsagePresentation.display(usage.storage))
 
             Text(UsagePresentation.resetText(resetsAt: usage.resetsAt, now: Date()))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
 
             // The figures above are the last ones that arrived, not the current
@@ -328,7 +328,7 @@ struct AccountSummaryView: View {
         SectionCard(L10n.t(.accountDevicesHeading)) {
             // Browsers are left out on purpose — see AccountDevice.holdsRevocableToken.
             Text(L10n.t(.accountDevicesBody))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
 
             // A refresh must never replace a usable list with a spinner, which
@@ -372,7 +372,7 @@ struct AccountSummaryView: View {
             Text(AccountPresentation.deviceDetail(kind: device.kind,
                                                   lastSeenAt: device.lastSeenAt,
                                                   createdAt: device.createdAt))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
 
             // Only the row being changed is disabled: a slow revoke on one
@@ -410,7 +410,7 @@ struct AccountSummaryView: View {
     private var filesSection: some View {
         SectionCard(L10n.t(.accountFilesHeading)) {
             Text(L10n.t(.accountFilesBody))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
 
             if management.isLoading && management.files.isEmpty {
@@ -437,7 +437,7 @@ struct AccountSummaryView: View {
                 .font(.caption.monospaced()).textSelection(.enabled)
                 .lineLimit(2).truncationMode(.middle)
             Text(AccountPresentation.fileDetail(row.file))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
 
             // Which of the three states this row is in is decided in
@@ -574,7 +574,7 @@ struct AccountSummaryView: View {
         SectionCard(L10n.t(.accountDeleteAccountHeading)) {
             // The address is the user's own: isolated, never translated.
             Text(L10n.t(.accountDeleteAccountBody, [L10n.token(user.email)]))
-                .font(.callout).foregroundStyle(.secondary)
+                .font(.callout).foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
 
             Link(L10n.t(.subscriptionManage), destination: URL(string: "https://apps.apple.com/account/subscriptions")!)
@@ -640,7 +640,7 @@ struct AccountSummaryView: View {
         VStack(alignment: .leading, spacing: Metrics.hairline) {
             Text(title).font(.subheadline)
             Text(L10n.t(.accountMeterOf, [display.usedText, display.capText]))
-                .font(.subheadline).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(Palette.supportingLabel)
             // No bar when unlimited: there is no ratio to draw.
             if let fraction = display.fraction {
                 ProgressView(value: fraction)

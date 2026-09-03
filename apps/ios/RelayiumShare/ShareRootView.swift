@@ -74,7 +74,7 @@ struct ShareRootView: View {
             // this product has.
             Text(L10n.plural(.shareItemCount, model.itemCount))
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
         // One element, so VoiceOver reads "Send with Relayium, 3 items" rather
@@ -240,10 +240,20 @@ struct ShareRootView: View {
     /// Wrapping rather than truncating. At the largest Dynamic Type sizes these
     /// sentences are several lines on an iPhone, and the part that would be cut
     /// is the part that says nothing has been uploaded.
+    ///
+    /// `Palette.supportingLabel` rather than the `Color("...")` spelling the
+    /// Cancel above it uses, and the difference is not a style choice. That role
+    /// is declared in `Components/ActionButton.swift`, which this target does not
+    /// compile; this one is declared in `Components/DesignTokens.swift`, which it
+    /// does. So the symbol exists here, and it resolves against `Bundle.main` —
+    /// which, inside an app extension, IS this extension's bundle. That is why
+    /// `SupportingLabel` and `WarningLabel` are shipped in this target's own
+    /// asset catalog as well, byte-identical to the app's, and why
+    /// `IOSSupportingTextGuardTests` compares them rather than trusting them.
     private func paragraph(_ text: String) -> some View {
         Text(text)
             .font(.callout)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Palette.supportingLabel)
             .fixedSize(horizontal: false, vertical: true)
     }
 }

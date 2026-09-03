@@ -58,7 +58,7 @@ struct DirectFileSessionView: View {
             PairingCodeText(code: sas, style: .verification)
             Text(L10n.t(.sessionCheckMatchesBody))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             fileList
             // Equally weighted on purpose. A visually secondary reject is a
@@ -92,7 +92,7 @@ struct DirectFileSessionView: View {
             // no resume behind it to soften it.
             Text(L10n.t(.directKeepBothOpen))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Button(L10n.t(.commonCancel), role: .destructive) { model.cancel() }
                 .borderedAction(.destructive)
@@ -122,7 +122,7 @@ struct DirectFileSessionView: View {
                 // folders.
                 Text(ReceiveDestinationCopy.savedLocation())
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 // `dragURLs`, not the file list: a folder or multi-file receive
                 // offers its CONTAINER as one item, so *Save to Files* copies
@@ -152,7 +152,7 @@ struct DirectFileSessionView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .fixedSize(horizontal: false, vertical: true)
                         Text(L10n.bytes(Int64(file.size)))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Palette.supportingLabel)
                             .fixedSize()
                     }
                     .font(.footnote)

@@ -56,7 +56,7 @@ struct DeviceDeliveryList: View {
                 // delivery is waiting the OTHER device is what fetches it.
                 Text(L10n.t(.sendOutstandingExplain))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 ForEach(deliveries.items) { item in
                     card(item)
@@ -72,7 +72,7 @@ struct DeviceDeliveryList: View {
                 .fixedSize(horizontal: false, vertical: true)
             Text(InboxSendPresentation.summary(of: item))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
             // Safe manifest identities only — no staged URL, no container path.
             // A recovered card offers Send for files chosen in a session the
             // user may not remember, and "3 files" is not enough to decide that;

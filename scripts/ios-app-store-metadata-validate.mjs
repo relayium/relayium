@@ -936,7 +936,7 @@ packet.accessibilityNutritionLabel.deviceFamilies.forEach((family, index) => {
   if (contrast && typeof contrast.blocker !== "string") {
     fail(
       `${path}.features`,
-      "sufficient-contrast must carry its known blocker; Light Color.secondary body text measures 3.29-3.44:1",
+      "sufficient-contrast must carry its known blocker; the measured shortfalls are resolved, but the per-device-family assessment has not been performed",
     );
   }
 });

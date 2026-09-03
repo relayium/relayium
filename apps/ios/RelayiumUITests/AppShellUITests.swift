@@ -1776,64 +1776,52 @@ final class AppShellUITests: XCTestCase {
             return "measured \(dark ? "4.91" : "5.23"):1, above the 4.5:1 required"
         }
 
-        // 5. KNOWN OPEN, and deliberately not called a false positive.
+        // 5. There is no fifth class, and the empty space is the point.
         //
-        //    `Color.secondary` — iOS's own `secondaryLabel` — measures
-        //    3.29–3.44:1 on a light background (`#8A8A8E` on `#FFFFFF`,
-        //    `#85858B` on `#F2F2F7`), which is genuinely under the 4.5:1 normal
-        //    text owes. Apple reports it as `nearly passed` rather than
-        //    `failed`, and it is Apple's colour, used for secondary copy in
-        //    every iOS app — but that is an explanation, not a pass.
+        //    It used to hold a list of thirteen sentences drawn in
+        //    `Color.secondary` — iOS's own `secondaryLabel`, which measures
+        //    3.29–3.44:1 on this app's light backgrounds (`#8A8A8E` on
+        //    `#FFFFFF`, `#85858B` on `#F2F2F7`). That was under the 4.5:1
+        //    ordinary text owes, it was recorded as an open Sufficient Contrast
+        //    blocker rather than as a false positive, and the note here said
+        //    that removing these lines was what fixing it would look like.
         //
-        //    It is out of THIS batch's scope, which was the Dark accent-on-fill
-        //    failures, and fixing it means replacing the system's secondary
-        //    label everywhere with a token of this app's own. The sentences are
-        //    listed one by one so a NEW one fails rather than joining a class,
-        //    and it is allowed in Light only: Dark measures the same colour at
-        //    5.95:1 and must stay clean.
+        //    It was fixed rather than deleted. All 119 of those sentences —
+        //    across the app and the Share extension — now use
+        //    `Palette.supportingLabel`, which measures 4.61:1 on the deepest
+        //    Light surface in the app and 5.16:1 on the deepest Dark one, and
+        //    declares Increase Contrast variants of both. The two orange
+        //    warning sentences the same audit exposed went to
+        //    `Palette.warningLabel` at 4.98:1 in Light, up from 2.20:1.
         //
-        //    Recorded as an unresolved Sufficient Contrast blocker in
-        //    `docs/app-store-metadata-ios.json`. Removing these lines is what
-        //    fixing it looks like; deleting them is not.
-        if !dark, Self.lightSecondaryLabelShortfalls.contains(element.label) {
-            return "OPEN: Color.secondary in Light, 3.29–3.44:1 — recorded blocker"
-        }
+        //    So BOTH appearances are now capable of zero unclassified contrast
+        //    findings, and a new sentence written in the system role fails —
+        //    here on screen, and in `IOSSupportingTextGuardTests` for the
+        //    screens this walk never visits.
+        //
+        // 6. And there is no sixth class either, which took one more finding to
+        //    earn. Running these same two audits with **Increase Contrast
+        //    enabled** — a setting neither of them sets, so it has to be turned
+        //    on around them — rejected three prominent buttons the ordinary
+        //    Dark run accepts: `Choose Files or Folders…`, `Go to Account` and
+        //    `Sign in`.
+        //
+        //    It was a real defect, not an artefact. `.borderedProminent`
+        //    derives its fill from the accent when the colourset declares no
+        //    high-contrast entry, and in Dark it derives UPWARDS — `#7C3AED`
+        //    rendered as `#B488FF`, which put the system's own white label at
+        //    2.66:1. `AccentColor` now declares the entry, and the fill renders
+        //    as the declared `#502598` at 10.20:1; both audits pass with the
+        //    setting on and neither gained an exemption for it.
+        //
+        //    Recorded here because the setting is invisible in this file: these
+        //    two tests pass under it, and nothing in them says so. Turning it on
+        //    is part of running them, and
+        //    `IOSActionColorGuardTests` carries the four rendered points that
+        //    fixed where the bar moves to.
 
         return nil
     }
-
-    /// Every sentence in the app drawn in `Color.secondary` that the Light audit
-    /// currently reports, verbatim.
-    ///
-    /// A list rather than a predicate, so adding a screen adds a line here on
-    /// purpose and a re-measurement rather than inheriting the exemption.
-    private static let lightSecondaryLabelShortfalls: Set<String> = [
-        "Devices running Relayium at the same public address as this device. On a "
-            + "carrier, VPN or shared gateway that address can include strangers, so "
-            + "choose who you send to.",
-        "How this list works",
-        "This device is not listening for nearby devices. It can still send, and "
-            + "pairing codes still work.",
-        "Sending and receiving on this network needs no account.",
-        "Text and small files across networks — both sides online",
-        "Choose Files or Text to match what the sender started. The code itself does "
-            + "not identify the type.",
-        "Creating a code reserves relay capacity that is billed to the account that "
-            + "created it. Joining a code somebody else created needs no account.",
-        "Files you send are encrypted on this device and uploaded to your Relayium "
-            + "account, so sending needs you to sign in. Receiving a link never does.",
-        "Device Inbox delivers files and messages sent from your own account, so it "
-            + "needs you signed in on this device.",
-        "Sign in to send encrypted links and manage your plan, devices, and stored "
-            + "files.",
-        "Paste a Relayium link. The key stays in the link and never reaches "
-            + "Relayium's servers.",
-        // The detail line of the same idle receive empty state as the message
-        // above: `.foregroundStyle(.secondary)` on `.secondarySystemBackground`,
-        // the same class. Hosted run 33698074644 surfaced it at `eef695e`;
-        // whether the audit reports it at all depends on the simulator's layout.
-        "Opening a link somebody sent you needs no account.",
-    ]
 
     /// The launch argument that puts the app in Dark, mirrored from
     /// `UITestMode.darkAppearanceArgument`, which the UI-test target cannot see.

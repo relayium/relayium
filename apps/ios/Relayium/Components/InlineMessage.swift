@@ -30,8 +30,10 @@ struct InlineMessage: View {
 
         var tint: Color {
             switch self {
+            // secondary-role: symbol — the info glyph. The sentence beside it is
+            // Palette.supportingLabel; this tints only the icon. Non-text.
             case .info: return .secondary
-            case .warning: return .orange
+            case .warning: return Palette.warningLabel
             }
         }
     }
@@ -47,7 +49,7 @@ struct InlineMessage: View {
     var body: some View {
         Label {
             Text(text)
-                .foregroundStyle(kind == .info ? AnyShapeStyle(.secondary)
+                .foregroundStyle(kind == .info ? AnyShapeStyle(Palette.supportingLabel)
                                                : AnyShapeStyle(.primary))
                 // Wrapping rather than truncating: these sentences are the ones
                 // that say what went wrong and what to do, and the part a

@@ -259,7 +259,7 @@ struct RootView: View {
                 Text(title(for: surface))
                 Text(subtitle(for: surface))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
         } icon: {

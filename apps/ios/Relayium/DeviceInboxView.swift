@@ -157,7 +157,7 @@ struct DeviceInboxView: View {
 
             Text(L10n.t(.inboxIOSExplain))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
 
             // Where the bytes go, named as the Files-app route the user can
@@ -165,7 +165,7 @@ struct DeviceInboxView: View {
             // from the same two constants.
             Text(IOSInboxCopy.folderExplanation())
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("inbox-folder")
 
@@ -202,7 +202,7 @@ struct DeviceInboxView: View {
 
             Text(L10n.t(.inboxIOSPolicyExplain))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
 
             // A refusal of the action the user just took, beside the control
@@ -225,7 +225,7 @@ struct DeviceInboxView: View {
             SectionCard(L10n.t(.inboxAskHeading)) {
                 Text(L10n.t(.inboxAskExplain))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 ForEach(inbox.asking) { item in
                     askRow(item)
@@ -247,7 +247,7 @@ struct DeviceInboxView: View {
                 ]),
             ]))
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Palette.supportingLabel)
             .fixedSize(horizontal: false, vertical: true)
 
             Button(L10n.t(.inboxAskAccept)) { inbox.respond(toAsk: item.id, accept: true) }
@@ -286,7 +286,7 @@ struct DeviceInboxView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(L10n.t(.sendDeviceExplain))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
                 Button(L10n.t(.commonRefresh), action: refreshTargets)
@@ -390,23 +390,24 @@ struct DeviceInboxView: View {
                     if let conversation = row.conversation {
                         Text(InboxTimelinePresentation.conversationSummary(conversation))
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Palette.supportingLabel)
                             .fixedSize(horizontal: false, vertical: true)
                     } else if let candidate = row.candidate {
                         Text(InboxSendPresentation.detail(for: candidate))
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Palette.supportingLabel)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if unread > 0 {
                         Text(L10n.t(.inboxConversationUnread, [L10n.number(unread)]))
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Palette.supportingLabel)
                     }
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.forward") // nonlocalized: SF Symbol name
                     .font(.footnote)
+                    // secondary-role: chevron — a disclosure indicator, not prose. Non-text.
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
             }
@@ -480,7 +481,7 @@ struct DeviceInboxView: View {
         SectionCard(title) {
             Text(message)
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Button(action: onOpenAccount) {
                 Text(actionTitle ?? L10n.t(.gateOpenAccount)).frame(maxWidth: .infinity)

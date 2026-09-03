@@ -30,7 +30,7 @@ struct PendingFileList: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .fixedSize(horizontal: false, vertical: true)
                             Text(size)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Palette.supportingLabel)
                                 .fixedSize()
                         }
                         .font(.footnote)
