@@ -51,7 +51,7 @@
       "name": "relayium",
       "subtitle": "End-to-end encrypted transfer",
       "promotionalText": "Move files and messages between your own devices, or with someone on the same network. End-to-end encrypted, so Relayium's servers only ever carry ciphertext.",
-      "description": "Relayium moves files and text between devices without handing the contents to a server.\n\nWHAT YOU CAN DO\n\n• LAN Transfer — messages and files with another device on the same network. No account, and both devices stay open while it runs.\n\n• Cross-network Transfer — reach a device anywhere with a six-digit code. Showing a code needs a Relayium account; joining a code somebody else is showing does not. Type the six digits, or point the camera at the code on the other device.\n\n• Send a link — hand a large file to someone who picks it up later, with your own expiry and download limits.\n\n• Device Inbox — sign in on two of your own devices and move files and messages between them. Relayium receives while it is open on the receiving device, receiving stays off until you switch it on for that account, and what arrives is saved into Relayium ▸ Received, which you can open in the Files app.\n\n• Account — your plan, your devices and your stored files.\n\nENCRYPTED END TO END\n\nFiles and messages are encrypted on the device that sends them and decrypted on the device that receives them. Relayium's servers carry ciphertext and never hold your keys. Relayium cannot read what you send.\n\nWHAT NEEDS AN ACCOUNT\n\nDevice Inbox, stored links, your plan and showing a cross-network code need a Relayium account. LAN Transfer needs none, and neither does joining a cross-network code somebody else is showing.\n\nSUBSCRIPTIONS\n\nRelayium Plus, Pro and Max raise your storage, transfer and retention limits. Every price, period and renewal term is shown in the app before you confirm, and a subscription renews until you cancel it in the App Store.\n\nTerms of Service: https://relayium.com/terms/\nPrivacy Policy: https://relayium.com/privacy/",
+      "description": "Relayium moves files and text between devices without handing the contents to a server.\n\nWHAT YOU CAN DO\n\n• LAN Transfer — messages and files with another device on the same network. No account, and both devices stay open while it runs.\n\n• Cross-network Transfer — reach a device anywhere with a six-digit code. Showing a code needs a Relayium account; joining a code somebody else is showing does not. Type the six digits, or point the camera at the code on the other device.\n\n• Send a link — hand a large file to someone who picks it up later. You choose when the link expires, and you can have it delete itself after the first download.\n\n• Device Inbox — sign in on two of your own devices and move files and messages between them. Relayium receives while it is open on the receiving device, receiving stays off until you switch it on for that account, and what arrives is saved into Relayium ▸ Received, which you can open in the Files app.\n\n• Account — your plan, your devices and your stored files.\n\nENCRYPTED END TO END\n\nFiles and messages are encrypted on the device that sends them and decrypted on the device that receives them. Relayium's servers carry ciphertext and never hold your keys. Relayium cannot read what you send.\n\nWHAT NEEDS AN ACCOUNT\n\nDevice Inbox, stored links, your plan and showing a cross-network code need a Relayium account. LAN Transfer needs none, and neither does joining a cross-network code somebody else is showing.\n\nSUBSCRIPTIONS\n\nRelayium Plus, Pro and Max raise your storage, transfer and retention limits. Every price, period and renewal term is shown in the app before you confirm, and a subscription renews until you cancel it in the App Store.\n\nTerms of Service: https://relayium.com/terms/\nPrivacy Policy: https://relayium.com/privacy/",
       "keywords": [
         "file transfer",
         "send files",
@@ -70,7 +70,7 @@
       "name": "relayium",
       "subtitle": "端到端加密的设备间传输",
       "promotionalText": "在你自己的设备之间直接传送文件和消息，也可以和同一网络里的人互传。内容端到端加密，Relayium 的服务器全程只经手密文。",
-      "description": "Relayium 在设备之间传送文件和文字，而不把内容交给服务器。\n\n可以做什么\n\n• 局域网传输 —— 和同一网络里的另一台设备互传消息和文件。不需要账户，两边都保持打开即可。\n\n• 跨网络传输 —— 用六位数字码连上任意位置的设备。出示配对码需要 Relayium 账户；加入别人出示的码则不需要。手动输入那六位数字，或者把摄像头对准对方设备上的码。\n\n• 发送链接 —— 把大文件交给稍后来取的人，有效期和下载次数由你自己定。\n\n• 设备收件箱 —— 在你自己的两台设备上登录同一账户，在它们之间传送文件和消息。Relayium 只在接收端打开时才接收，接收功能在你为该账户开启之前一直关闭，收到的内容保存在 Relayium ▸ 已接收 里，可以在“文件”App 中打开。\n\n• 账户 —— 你的套餐、你的设备和你的已存文件。\n\n端到端加密\n\n文件和消息在发送的那台设备上加密，在接收的那台设备上解密。Relayium 的服务器经手的是密文，也从不持有你的密钥。Relayium 读不到你传送的内容。\n\n哪些功能需要账户\n\n设备收件箱、存储链接、套餐，以及出示跨网络配对码，都需要 Relayium 账户；局域网传输不需要，加入别人出示的跨网络配对码也不需要。\n\n订阅\n\nRelayium Plus、Pro 和 Max 会提高存储、传输和留存上限。价格、周期和续订条款都会在确认购买前于 App 内显示；订阅会持续续订，直到你在 App Store 中取消。\n\n服务条款：https://relayium.com/terms/\n隐私政策：https://relayium.com/privacy/",
+      "description": "Relayium 在设备之间传送文件和文字，而不把内容交给服务器。\n\n可以做什么\n\n• 局域网传输 —— 和同一网络里的另一台设备互传消息和文件。不需要账户，两边都保持打开即可。\n\n• 跨网络传输 —— 用六位数字码连上任意位置的设备。出示配对码需要 Relayium 账户；加入别人出示的码则不需要。手动输入那六位数字，或者把摄像头对准对方设备上的码。\n\n• 发送链接 —— 把大文件交给稍后来取的人。有效期由你自己定，也可以选择首次下载后即删除。\n\n• 设备收件箱 —— 在你自己的两台设备上登录同一账户，在它们之间传送文件和消息。Relayium 只在接收端打开时才接收，接收功能在你为该账户开启之前一直关闭，收到的内容保存在 Relayium ▸ 已接收 里，可以在“文件”App 中打开。\n\n• 账户 —— 你的套餐、你的设备和你的已存文件。\n\n端到端加密\n\n文件和消息在发送的那台设备上加密，在接收的那台设备上解密。Relayium 的服务器经手的是密文，也从不持有你的密钥。Relayium 读不到你传送的内容。\n\n哪些功能需要账户\n\n设备收件箱、存储链接、套餐，以及出示跨网络配对码，都需要 Relayium 账户；局域网传输不需要，加入别人出示的跨网络配对码也不需要。\n\n订阅\n\nRelayium Plus、Pro 和 Max 会提高存储、传输和留存上限。价格、周期和续订条款都会在确认购买前于 App 内显示；订阅会持续续订，直到你在 App Store 中取消。\n\n服务条款：https://relayium.com/terms/\n隐私政策：https://relayium.com/privacy/",
       "keywords": [
         "文件传输",
         "跨设备",
@@ -84,6 +84,85 @@
       "supportUrl": "https://relayium.com/zh/support/",
       "marketingUrl": "https://relayium.com/",
       "privacyPolicyUrl": "https://relayium.com/privacy/"
+    }
+  },
+  "appPrivacy": {
+    "state": "drafted-in-this-repository-app-store-connect-readback-required",
+    "observedAppStoreConnectState": false,
+    "sourceOfTruth": "apps/ios/Relayium/PrivacyInfo.xcprivacy",
+    "tracking": false,
+    "trackingDomains": [],
+    "note": "The App Privacy answers this project PROPOSES for the iOS record, drafted from the shipped privacy manifest named in sourceOfTruth. Nothing here has been entered in App Store Connect and nothing has been read back from it, so this section states what the app declares and never what the record currently holds. Entering it is a separate authorized step, and the App Store Connect questionnaire uses its own wording — fill it from this graph rather than from memory, then re-inspect the record read-only. scripts/ios-app-store-metadata-validate.mjs checks this list against the shipped manifest, so the two cannot drift apart silently.",
+    "collected": [
+      {
+        "type": "NSPrivacyCollectedDataTypeName",
+        "linked": true,
+        "tracking": false,
+        "purposes": [
+          "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+        ],
+        "basis": "The create-account form's own name field, sent by AccountClient.register as displayName, plus the name Apple supplies on a FIRST Sign in with Apple authorization and posted to api/auth/apple/native. Retained in users.display_name. NOT the device label: AppEnvironment.deviceName() answers iPhone, iPad or iPod touch on this platform, and a hardware family is not a name."
+      },
+      {
+        "type": "NSPrivacyCollectedDataTypeEmailAddress",
+        "linked": true,
+        "tracking": false,
+        "purposes": [
+          "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+        ],
+        "basis": "The address typed to register or sign in. Linked by definition, because it IS the account identifier."
+      },
+      {
+        "type": "NSPrivacyCollectedDataTypePurchaseHistory",
+        "linked": true,
+        "tracking": false,
+        "purposes": [
+          "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+        ],
+        "basis": "StoreKit's signed transaction, submitted to Relayium and retained as the account's subscription source, plan, status and renewal period."
+      },
+      {
+        "type": "NSPrivacyCollectedDataTypeUserID",
+        "linked": true,
+        "tracking": false,
+        "purposes": [
+          "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+        ],
+        "basis": "The per-account appAccountToken sent to Apple with a purchase and retained in both parties' records."
+      },
+      {
+        "type": "NSPrivacyCollectedDataTypeOtherUsageData",
+        "linked": true,
+        "tracking": false,
+        "purposes": [
+          "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+        ],
+        "basis": "Metering: byte counts and timestamps only, never content. Four producers on iOS — uploads, stored downloads, relayed bytes, and the Device Inbox delivery this release adds, which deviceinbox_task.go meters into usage_monthly. The app reads its own totals back through api/me/usage."
+      },
+      {
+        "type": "NSPrivacyCollectedDataTypeProductInteraction",
+        "linked": false,
+        "tracking": false,
+        "purposes": [
+          "NSPrivacyCollectedDataTypePurposeAnalytics"
+        ],
+        "basis": "The identifier-free monthly activation aggregate. activation_funnel_monthly holds a month, one of three closed stages and a nonnegative count, with no account, user, IP, code, room, device, session or content field. The one UNLINKED entry, and the one declared for Analytics rather than App Functionality."
+      }
+    ],
+    "deliberatelyAbsent": [
+      {
+        "type": "NSPrivacyCollectedDataTypeDeviceID",
+        "declaredOnMacOS": true,
+        "reason": "macOS declares it and iOS must not. The macOS producers are an installation identifier posted when a BROWSER sign-in begins, which iOS has no path to, and a purchase-continuation appInstanceId. This app does call purchase-dispatch, so 'iOS never reaches it' would be false: the field comes from a purchase continuation, only the durableContinuationRequired policy creates one, macOS selects that policy explicitly and IOSAppleSubscriptions.makeModel names no policy at all — so it takes the default legacyOneShot, no continuation exists, and the encoder omits appInstanceId entirely.",
+        "revisitTrigger": "If iOS adopts purchase continuation, or gains any browser sign-in path, this entry becomes REQUIRED in the manifest, in this packet and in the App Store Connect answers.",
+        "guardedBy": "apps/RelayiumKit/Tests/RelayiumKitTests/IOSPrivacyManifestTests.swift testTheAppDeclaresNoDeviceIDBecauseNoIOSSourceSendsOne"
+      }
+    ],
+    "shareExtension": {
+      "bundleId": "com.relayium.app.share",
+      "collected": [],
+      "reason": "An appex is a separate bundle and Apple reads a separate manifest for it. This target holds only the App Group entitlement, reaches no network, and therefore transmits nothing for an entry to describe. Its manifest declares an empty collected-data list, which is a claim in its own right rather than the absence of one.",
+      "guardedBy": "scripts/ios-app-store-candidate.sh SHARE_COLLECTED_DATA_GRAPH"
     }
   },
   "appReview": {

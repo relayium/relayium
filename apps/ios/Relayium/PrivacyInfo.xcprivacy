@@ -16,13 +16,53 @@
 <dict>
 	<!-- Nothing here tracks. There is no analytics SDK, no advertising
 	     identifier and no third-party network destination in this binary, so
-	     there are no tracking domains to declare either. -->
+	     there are no tracking domains to declare either.
+
+	     One entry below carries Apple's ANALYTICS purpose, and that is not a
+	     contradiction: Apple's "tracking" means linking this app's data to
+	     third-party data for advertising or measurement brokering, while
+	     "Analytics" is what a purpose-built, first-party, identifier-free
+	     aggregate is FOR. The aggregate in question is written by Relayium's own
+	     server, carries no identifier of any kind, and reaches nobody else. -->
 	<key>NSPrivacyTracking</key>
 	<false/>
 	<key>NSPrivacyTrackingDomains</key>
 	<array/>
 	<key>NSPrivacyCollectedDataTypes</key>
 	<array>
+		<!-- A name the user types, or hands over once through Apple. Two call
+		     sites on this platform, and both are the person's own words:
+
+		       · the create-account form's own field — `SignInView`'s
+		         `TextField(L10n.t(.loginDisplayName), text: $draft.displayName)`,
+		         sent by `AccountClient.register` as `"displayName": displayName`
+		         and kept in `users.display_name`;
+		       · Sign in with Apple — `credential.fullName` on the FIRST
+		         authorization only, formatted by `AppleSignInName.format` and
+		         posted to `api/auth/apple/native` as `"name": name`. Apple sends
+		         it once and empty afterwards, and empty is what the server gets:
+		         a name derived from the address would be one this app invented.
+
+		     **The device label is deliberately not part of this entry.** On macOS
+		     the app sends `Host.current().localizedName` — the computer name,
+		     which macOS usually seeds from the owner's full name, and which is
+		     therefore a name. iOS cannot and does not do that:
+		     `AppEnvironment.deviceName()` resolves to `deviceFamilyName(
+		     forModelIdentifier:)`, which answers "iPhone", "iPad" or "iPod touch"
+		     and nothing else. A hardware family is not a name, and declaring it as
+		     one here would describe a personal detail this build never sends. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeName</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
 		<!-- The email address a user types to register or sign in, sent to
 		     Relayium's own server (`POST /api/auth/register`,
 		     `/api/auth/email/resend` — `AccountClient.swift`). Linked to the
@@ -73,6 +113,99 @@
 				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
 			</array>
 		</dict>
+		<!-- Metering: how much of the service this account used, which is activity
+		     in the app and therefore Apple's "Other Usage Data". Four call sites
+		     produce it on this platform, and each is retained past the request it
+		     served:
+
+		       · uploads — `HTTPResumableTransport` (`api/uploads`, the chunk PATCH
+		         and `/finalize`) makes the server meter the bytes (`files.go`,
+		         `RecordMeter(… MeterUpload …)` → `usage_monthly`) and keep the
+		         ciphertext's `stored_files.size` against the storage quota;
+		       · stored downloads — `CloudClient` (`api/files/<id>/blob`) meter the
+		         same way (`RecordMeter(… MeterDownload …)`);
+		       · relayed bytes — `HTTPICEClient` (`api/ice`) takes TURN credentials
+		         whose username carries `<owner>.<code>` (`turn.go`), so a node's
+		         heartbeat books that allocation's bytes to the account (`nodes.go`,
+		         `RecordUsage` → `usage_events`/`usage_periods`);
+		       · **the Device Inbox delivery this release adds** — `InboxClient.blob`
+		         fetches `api/devices/<id>/inbox/tasks/<task>/blob`, and
+		         `deviceinbox_task.go` meters the bytes it served with
+		         `RecordMeter(… MeterDownload …)` into the same `usage_monthly`.
+		         Receiving a file on iPhone or iPad therefore adds to the account's
+		         monthly total, and saying so is the point of this bullet.
+
+		     Byte counts and timestamps only — never what was transferred, which the
+		     server holds as ciphertext. They are kept as per-month, per-account
+		     totals because that is what enforces the quotas included in the plan,
+		     and the app reads them back through `AccountClient.fetchUsage`
+		     (`api/me/usage`). That account-linked metering is Other Usage Data for
+		     App Functionality; the identifier-free activation aggregate below is a
+		     different thing and is declared separately. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeOtherUsageData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<!-- First-party, identifier-free activation aggregates. Showing a
+		     cross-network code from this app mints one (`PairClient`, `api/pair`),
+		     and the server counts three pairing actions by UTC month: a successful
+		     code mint, the first admitted socket for that live code, and the first
+		     transition to two admitted peers. It keeps only month, one closed stage
+		     and a nonnegative count; `activation_funnel_monthly` has no event row,
+		     exact timestamp, account, user, IP, code, room, device, session, token,
+		     platform, locale or content field. Writes are bounded best-effort, so
+		     the result is a monthly lower bound used to evaluate whether this
+		     product flow works, not a user or cohort history. Apple classifies
+		     retained information about interaction with a feature as Product
+		     Interaction, and evaluation of feature effectiveness as Analytics, even
+		     when identifiers are absent — so this entry is unlinked, and Analytics
+		     rather than App Functionality. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeProductInteraction</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+			</array>
+		</dict>
+		<!-- **`NSPrivacyCollectedDataTypeDeviceID` is deliberately absent, and the
+		     macOS manifest declares it.** That difference is real, not an
+		     oversight, and it is the entry most likely to be added "for parity":
+
+		       · macOS sends `InstallationIdentity`'s 32 random bytes as
+		         `install_id` when a BROWSER sign-in begins
+		         (`HTTPDeviceAuthClient.start`, reached from
+		         `AppEnvironment.makeBrowserLoginModel`). This app has no browser
+		         sign-in path and never calls that client;
+		       · the Apple purchase-continuation flow can post an `appInstanceId`
+		         to `purchase-dispatch`/`purchase-outcome`. **This app does call
+		         `purchase-dispatch`**, so "iOS never reaches it" would be the
+		         wrong reason and would be false. The identifier is absent for a
+		         narrower one: that field comes from a purchase CONTINUATION, only
+		         the `.durableContinuationRequired` policy creates one,
+		         `AppStoreDistribution` selects that policy on macOS and
+		         `IOSAppleSubscriptions.makeModel` names no policy at all — so it
+		         takes the default `.legacyOneShot`, `continuation` is nil, and
+		         `AccountClient.dispatchApplePurchase` OMITS the field rather than
+		         sending it empty.
+
+		     Linking a module is not calling it, and calling an endpoint is not
+		     sending every field it accepts — so `IOSPrivacyManifestTests` asserts
+		     this from the iOS source, the policy default and the encoder, rather
+		     than from the module list. If iOS ever adopts purchase continuation,
+		     this entry becomes required. -->
 	</array>
 	<key>NSPrivacyAccessedAPITypes</key>
 	<array>

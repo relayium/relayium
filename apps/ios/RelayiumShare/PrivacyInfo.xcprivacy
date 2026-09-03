@@ -7,11 +7,28 @@
      which is a false statement in the direction people assume is safe.
 
      What this target actually is: a staging process. It copies what the user
-     shared into the App Group and stops. It links only `RelayiumShareKit`, holds
-     no network entitlement at all, and `IOSSurfaceGuardTests` scans its source
-     for `URLSession`, `AccountSession`, `bearerToken`, Keychain access and the
-     rest — so "it collects nothing" is enforced by the sandbox and by tests
-     rather than asserted here alone. -->
+     shared into the App Group and stops.
+
+     What holds the empty collection claim up is NOT an entitlement. iOS has no
+     `com.apple.security.network.client` gate — that is macOS App Sandbox
+     reasoning, and on iOS every app and app extension may open a socket
+     whatever its `.entitlements` file does or does not name. The claim rests on
+     three things `IOSPrivacyManifestTests` reads instead:
+
+       1. this target stages locally and hands nothing off itself;
+       2. the one package module it links, `RelayiumShareKit`, is declared in
+          `Package.swift` with no dependencies, so no account client, uploader
+          or transport is reachable from it even transitively; and
+       3. the source of BOTH halves the appex compiles — its own target
+          directory and that module — is scanned for `URLSession`,
+          `URLRequest`, `NWConnection`, `WebSocket`, `bearerToken`,
+          `AccountSession`, `AccountClient` and `CloudClient`.
+
+     The extension's entitlements are still asserted, as a scope-change guard
+     rather than a network proof: a keychain group, associated domain or
+     background mode appearing there means the staging-only scope widened and
+     this manifest needs re-auditing. `IOSSurfaceGuardTests` owns the wider
+     source scan, which also bans credentials, key material and logging. -->
 <dict>
 	<key>NSPrivacyTracking</key>
 	<false/>

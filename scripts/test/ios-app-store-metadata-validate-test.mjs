@@ -30,14 +30,27 @@
 //     BOM, a CRLF, a tab. `JSON.parse` normalizes or accepts every one of them
 //     and reports nothing, so these are mutated as TEXT rather than as values.
 //
+// A third class was added on 2026-09-03, when the validator started PARSING
+// `PrivacyInfo.xcprivacy` rather than scanning it for type names:
+//
+//   * THE MANIFEST. A flipped linked flag, a swapped purpose, a repeated key, a
+//     fifth key, a tracking answer turned on. Each leaves the ordered list of
+//     type names untouched, so each was invisible to the text scan the validator
+//     used before — and each is a different privacy label than the one the app
+//     ships. These cases cannot be driven through `--packet`, because the
+//     manifest paths are resolved from the validator's own location, so they
+//     build a throwaway repository under the temporary directory instead: a copy
+//     of the validator, a copy of each manifest, one mutation, and a run. The
+//     product's own manifests are never written to.
+//
 // Nothing here reads a credential, contacts a network or observes App Store
 // Connect. The fixtures live under a temporary directory that is removed on the
-// way out, and the shipped packet is only ever read.
+// way out, and the shipped packet and manifests are only ever read.
 //
 // USAGE: node scripts/test/ios-app-store-metadata-validate-test.mjs
 // EXIT   0 every case behaved; 1 at least one did not
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -1180,6 +1193,551 @@ rejectsRaw(
   "a top-level array instead of an object",
   () => "[]\n",
   "must be an object, not an array",
+);
+
+// ── the draft App Privacy graph ──────────────────────────────────────────────
+//
+// The packet carries the answers somebody will type into App Store Connect, and
+// they must be exactly what the app ships. Every case below is a way that list
+// goes wrong while remaining well-formed JSON that passes every other rule —
+// which is the whole problem with a privacy label: nothing at runtime, in a
+// build, or at upload notices.
+//
+// The other direction — the validator's pin against the manifest the app
+// actually ships — is exercised further down, under "the manifest itself".
+
+rejects(
+  "a collected-data type missing from the App Privacy graph",
+  (p) => {
+    p.appPrivacy.collected = p.appPrivacy.collected.filter(
+      (entry) => entry.type !== "NSPrivacyCollectedDataTypeOtherUsageData",
+    );
+  },
+  "appPrivacy.collected",
+);
+
+rejects(
+  "DeviceID added to the App Privacy graph",
+  (p) => {
+    p.appPrivacy.collected[4] = {
+      type: "NSPrivacyCollectedDataTypeDeviceID",
+      linked: true,
+      tracking: false,
+      purposes: ["NSPrivacyCollectedDataTypePurposeAppFunctionality"],
+      basis: "A parity-minded edit that copied the macOS entry across.",
+    };
+  },
+  "NSPrivacyCollectedDataTypeDeviceID",
+);
+
+rejects(
+  "the App Privacy graph reordered against the shipped manifest",
+  (p) => {
+    p.appPrivacy.collected.reverse();
+  },
+  "the order matches the shipped manifest",
+);
+
+rejects(
+  "the identifier-free aggregate declared as linked to the account",
+  (p) => {
+    p.appPrivacy.collected[5].linked = true;
+  },
+  "appPrivacy.collected[5].linked",
+);
+
+rejects(
+  "an account-linked type declared as unlinked",
+  (p) => {
+    p.appPrivacy.collected[1].linked = false;
+  },
+  "appPrivacy.collected[1].linked",
+);
+
+rejects(
+  "a collected type declared as tracking",
+  (p) => {
+    p.appPrivacy.collected[1].tracking = true;
+  },
+  "appPrivacy.collected[1].tracking",
+);
+
+rejects(
+  "a wrong purpose on a linked type",
+  (p) => {
+    p.appPrivacy.collected[0].purposes = ["NSPrivacyCollectedDataTypePurposeAnalytics"];
+  },
+  "appPrivacy.collected[0].purposes",
+);
+
+rejects(
+  "the aggregate declared for App Functionality instead of Analytics",
+  (p) => {
+    p.appPrivacy.collected[5].purposes = ["NSPrivacyCollectedDataTypePurposeAppFunctionality"];
+  },
+  "appPrivacy.collected[5].purposes",
+);
+
+rejects(
+  "a second purpose nobody justified",
+  (p) => {
+    p.appPrivacy.collected[0].purposes = [
+      "NSPrivacyCollectedDataTypePurposeAppFunctionality",
+      "NSPrivacyCollectedDataTypePurposeAnalytics",
+    ];
+  },
+  "appPrivacy.collected[0].purposes",
+);
+
+rejects(
+  "the recorded reason for DeviceID's absence removed",
+  (p) => {
+    p.appPrivacy.deliberatelyAbsent = p.appPrivacy.deliberatelyAbsent.filter(
+      (entry) => entry.type !== "NSPrivacyCollectedDataTypeDeviceID",
+    );
+  },
+  "appPrivacy.deliberatelyAbsent",
+);
+
+rejects(
+  "the Share extension claiming to collect something",
+  (p) => {
+    p.appPrivacy.shareExtension.collected = ["NSPrivacyCollectedDataTypeEmailAddress"];
+  },
+  "appPrivacy.shareExtension.collected",
+);
+
+rejects(
+  "the tracking answer flipped to true",
+  (p) => {
+    p.appPrivacy.tracking = true;
+  },
+  "appPrivacy.tracking",
+);
+
+rejects(
+  "a tracking domain named",
+  (p) => {
+    p.appPrivacy.trackingDomains = ["https://relayium.com/"];
+  },
+  "appPrivacy.trackingDomains",
+);
+
+// The state fields, which are what keep this a DRAFT. A packet that claimed the
+// answers were entered would be making a provider-state claim nothing here has
+// observed — the same failure the subscriptions section is pinned against.
+rejects(
+  "an App Privacy section claiming App Store Connect state was observed",
+  (p) => {
+    p.appPrivacy.observedAppStoreConnectState = true;
+  },
+  "appPrivacy.observedAppStoreConnectState",
+);
+
+rejects(
+  "an App Privacy section claiming the answers are live",
+  (p) => {
+    p.appPrivacy.state = "entered-in-app-store-connect";
+  },
+  "appPrivacy.state",
+);
+
+rejects(
+  "the App Privacy source of truth repointed away from the shipped manifest",
+  (p) => {
+    p.appPrivacy.sourceOfTruth = "docs/ios-app-store-submission.md";
+  },
+  "appPrivacy.sourceOfTruth",
+);
+
+// ── the stored-link controls the app actually ships ──────────────────────────
+//
+// `SendView` offers an expiry picker and a delete-after-first-download toggle.
+// There is no download-count field, and the storefront copy claimed one.
+
+rejects(
+  "an English download-limit claim",
+  (p) => {
+    p.storefront["en-US"].description = p.storefront["en-US"].description.replace(
+      "You choose when the link expires, and you can have it delete itself after the first download.",
+      "with your own expiry and download limits.",
+    );
+  },
+  "a download-limit claim",
+);
+
+rejects(
+  "a Chinese download-count claim",
+  (p) => {
+    p.storefront["zh-Hans"].description = p.storefront["zh-Hans"].description.replace(
+      "有效期由你自己定，也可以选择首次下载后即删除。",
+      "有效期和下载次数由你自己定。",
+    );
+  },
+  "'下载次数' (download count)",
+);
+
+rejects(
+  "an English description that drops the stored-link controls entirely",
+  (p) => {
+    p.storefront["en-US"].description = p.storefront["en-US"].description.replace(
+      "You choose when the link expires, and you can have it delete itself after the first download.",
+      "Pick it up whenever.",
+    );
+  },
+  "when the link expires",
+);
+
+rejects(
+  "a Chinese description that drops the stored-link controls entirely",
+  (p) => {
+    p.storefront["zh-Hans"].description = p.storefront["zh-Hans"].description.replace(
+      "有效期由你自己定，也可以选择首次下载后即删除。",
+      "稍后来取即可。",
+    );
+  },
+  "有效期由你自己定",
+);
+
+// ── the manifest itself ──────────────────────────────────────────────────────
+//
+// Everything above mutates the PACKET. This section mutates the file Apple
+// actually reads, which is the half that used to be untested — and untestable,
+// while the only way to reach it was to edit the product's own manifest.
+//
+// It is reachable now because the validator resolves the two manifests relative
+// to ITS OWN location. So each case builds a throwaway repository under the
+// temporary directory — a copy of the validator in `scripts/`, a copy of each
+// manifest under `apps/ios/` — mutates one manifest inside that copy, and runs
+// the copied validator against the REAL shipped packet. Nothing in
+// `apps/ios/` is written to, and the shipped packet is only ever read.
+//
+// The first case is the control, and it is not decoration: it proves the
+// fixture is a faithful copy. Without it, every red below could be the fixture
+// being broken rather than the mutation being caught, and a validator that
+// rejected any temporary repository outright would look like a complete suite.
+//
+// Each mutation below is one the previous text scan could not see. That scan
+// collected the ordered list of type NAMES, so a flipped linked flag, a swapped
+// purpose, a repeated key, an extra key and a tracking answer turned on all left
+// it green while the manifest and the packet described different labels.
+
+const APP_MANIFEST_PATH = join("apps", "ios", "Relayium", "PrivacyInfo.xcprivacy");
+const SHARE_MANIFEST_PATH = join("apps", "ios", "RelayiumShare", "PrivacyInfo.xcprivacy");
+const shippedAppManifest = readFileSync(join(repoRoot, APP_MANIFEST_PATH), "utf8");
+const shippedShareManifest = readFileSync(join(repoRoot, SHARE_MANIFEST_PATH), "utf8");
+
+/** One collected-data entry's `<dict>`, located by the type it declares.
+ *
+ *  The comments are what make this need care: the manifest argues about
+ *  `NSPrivacyCollectedDataTypeDeviceID` and about Analytics in prose, so a
+ *  mutation applied to the whole file could land in an explanation. Anchoring on
+ *  the `<string>` element and widening to the enclosing `<dict>` keeps every
+ *  edit inside markup. */
+function inEntry(text, type, pattern, replacement) {
+  const anchor = text.indexOf(`<string>${type}</string>`);
+  if (anchor === -1) throw new Error(`the fixture manifest declares no ${type}`);
+  const start = text.lastIndexOf("<dict>", anchor);
+  const end = text.indexOf("</dict>", anchor) + "</dict>".length;
+  const block = text.slice(start, end);
+  const mutated = block.replace(pattern, replacement);
+  if (mutated === block) throw new Error(`the mutation did not apply inside the ${type} entry`);
+  return text.slice(0, start) + mutated + text.slice(end);
+}
+
+/** The whole `<dict>` for one entry, so a case can duplicate or move it. */
+function entryBlock(text, type) {
+  const anchor = text.indexOf(`<string>${type}</string>`);
+  const start = text.lastIndexOf("<dict>", anchor);
+  const end = text.indexOf("</dict>", anchor) + "</dict>".length;
+  return text.slice(start, end);
+}
+
+let fixtureRepo = 0;
+/** A throwaway repository holding the two manifest texts, and one run of the
+ *  copied validator inside it. `null` means "do not write this manifest at
+ *  all", which is the one failure a text mutation cannot express. */
+function runInFixture({ appText = shippedAppManifest, shareText = shippedShareManifest } = {}) {
+  fixtureRepo += 1;
+  const root = join(work, `repo-${fixtureRepo}`);
+  mkdirSync(join(root, "scripts"), { recursive: true });
+  mkdirSync(join(root, "apps", "ios", "Relayium"), { recursive: true });
+  mkdirSync(join(root, "apps", "ios", "RelayiumShare"), { recursive: true });
+  copyFileSync(validator, join(root, "scripts", "ios-app-store-metadata-validate.mjs"));
+  if (appText !== null) writeFileSync(join(root, APP_MANIFEST_PATH), appText);
+  if (shareText !== null) writeFileSync(join(root, SHARE_MANIFEST_PATH), shareText);
+  const result = spawnSync(
+    process.execPath,
+    [join(root, "scripts", "ios-app-store-metadata-validate.mjs"),
+     "--packet", shippedPacketPath, "--quiet"],
+    { encoding: "utf8" },
+  );
+  return { status: result.status, out: `${result.stdout ?? ""}${result.stderr ?? ""}` };
+}
+
+/**
+ * One manifest mutation, required to be caught.
+ *
+ * The same no-op guard the packet cases carry, and it earns its place here for
+ * a sharper reason: these mutations are `String.replace` calls against
+ * TAB-INDENTED XML. A search string whose whitespace does not match the file
+ * replaces nothing, the fixture is written pristine, and the case would
+ * otherwise report "exited 0" — a rule that looks missing when it is the test
+ * that is broken.
+ */
+function manifestRejects(label, { app, share, omitApp = false }, expected) {
+  cases += 1;
+  let appText;
+  let shareText;
+  try {
+    if (omitApp) appText = null;
+    else if (app) appText = app(shippedAppManifest);
+    if (share) shareText = share(shippedShareManifest);
+  } catch (error) {
+    bad(label, `the fixture could not be built: ${error.message}`);
+    return;
+  }
+  if (appText === shippedAppManifest || shareText === shippedShareManifest) {
+    bad(label, "the manifest mutation was a no-op; the rule it targets was never exercised");
+    return;
+  }
+  assertRejected(label, runInFixture({ appText, shareText }), expected);
+}
+
+cases += 1;
+{
+  // The control. An unmutated copy must behave exactly like the real tree.
+  const { status, out } = runInFixture();
+  if (status !== 0) {
+    bad("an unmutated manifest fixture passes",
+        `exited ${status}; the fixture is not a faithful copy and every case below is meaningless. ` +
+        `output: ${out.trim().split("\n").slice(0, 6).join(" | ")}`);
+  } else {
+    ok("an unmutated manifest fixture passes");
+  }
+}
+
+manifestRejects(
+  "the manifest linking the identifier-free aggregate to the account",
+  {
+    app: (text) =>
+      inEntry(text, "NSPrivacyCollectedDataTypeProductInteraction",
+              /(<key>NSPrivacyCollectedDataTypeLinked<\/key>\s*)<false\/>/, "$1<true/>"),
+  },
+  "linked=true",
+);
+
+manifestRejects(
+  "the manifest unlinking an account-linked type",
+  {
+    app: (text) =>
+      inEntry(text, "NSPrivacyCollectedDataTypeEmailAddress",
+              /(<key>NSPrivacyCollectedDataTypeLinked<\/key>\s*)<true\/>/, "$1<false/>"),
+  },
+  "linked=false",
+);
+
+manifestRejects(
+  "the manifest declaring a collected type as tracking",
+  {
+    app: (text) =>
+      inEntry(text, "NSPrivacyCollectedDataTypeName",
+              /(<key>NSPrivacyCollectedDataTypeTracking<\/key>\s*)<false\/>/, "$1<true/>"),
+  },
+  "tracking=true",
+);
+
+manifestRejects(
+  "the manifest moving the aggregate from Analytics to App Functionality",
+  {
+    app: (text) =>
+      inEntry(text, "NSPrivacyCollectedDataTypeProductInteraction",
+              "NSPrivacyCollectedDataTypePurposeAnalytics",
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality"),
+  },
+  "NSPrivacyCollectedDataTypeProductInteraction(linked=false, tracking=false, " +
+    "purposes=[NSPrivacyCollectedDataTypePurposeAppFunctionality])",
+);
+
+manifestRejects(
+  "the manifest growing a second purpose nobody justified",
+  {
+    app: (text) =>
+      inEntry(text, "NSPrivacyCollectedDataTypeUserID",
+              "<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>",
+              "<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>" +
+              "<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>"),
+  },
+  "does not match the shipped manifest",
+);
+
+manifestRejects(
+  "the manifest declaring the same purpose twice",
+  {
+    app: (text) =>
+      inEntry(text, "NSPrivacyCollectedDataTypeUserID",
+              "<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>",
+              "<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>" +
+              "<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>"),
+  },
+  "repeats a purpose",
+);
+
+manifestRejects(
+  "the manifest declaring an entry key twice",
+  {
+    app: (text) =>
+      inEntry(text, "NSPrivacyCollectedDataTypeName",
+              /(<key>NSPrivacyCollectedDataTypeLinked<\/key>\s*<true\/>)/,
+              "$1<key>NSPrivacyCollectedDataTypeLinked</key><false/>"),
+  },
+  "declares the key 'NSPrivacyCollectedDataTypeLinked' twice",
+);
+
+manifestRejects(
+  "the manifest carrying a fifth key on an entry",
+  {
+    app: (text) =>
+      inEntry(text, "NSPrivacyCollectedDataTypeName",
+              /(<key>NSPrivacyCollectedDataTypeLinked<\/key>\s*<true\/>)/,
+              "$1<key>NSPrivacyCollectedDataTypeNotes</key><string>whatever</string>"),
+  },
+  "is not the shape Apple defines",
+);
+
+manifestRejects(
+  "the manifest declaring the same data type twice",
+  {
+    app: (text) =>
+      text.replace(entryBlock(text, "NSPrivacyCollectedDataTypeUserID"),
+                   `${entryBlock(text, "NSPrivacyCollectedDataTypeUserID")}\n${entryBlock(text, "NSPrivacyCollectedDataTypeUserID")}`),
+  },
+  "declares 'NSPrivacyCollectedDataTypeUserID' more than once",
+);
+
+manifestRejects(
+  "the manifest adding DeviceID for parity with macOS",
+  {
+    app: (text) =>
+      text.replace(entryBlock(text, "NSPrivacyCollectedDataTypeName"),
+                   `${entryBlock(text, "NSPrivacyCollectedDataTypeName")}
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeDeviceID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>`),
+  },
+  "NSPrivacyCollectedDataTypeDeviceID",
+);
+
+manifestRejects(
+  "the manifest dropping an entry the packet declares",
+  {
+    app: (text) => text.replace(entryBlock(text, "NSPrivacyCollectedDataTypeOtherUsageData"), ""),
+  },
+  "but apps/ios/Relayium/PrivacyInfo.xcprivacy declares 5",
+);
+
+manifestRejects(
+  "the manifest reordering its entries",
+  {
+    app: (text) => {
+      const first = entryBlock(text, "NSPrivacyCollectedDataTypeName");
+      const second = entryBlock(text, "NSPrivacyCollectedDataTypeEmailAddress");
+      return text.replace(first, " FIRST ").replace(second, first).replace(" FIRST ", second);
+    },
+  },
+  "does not match the shipped manifest",
+);
+
+manifestRejects(
+  "the manifest turning the label-level tracking answer on",
+  {
+    app: (text) => text.replace("<key>NSPrivacyTracking</key>\n\t<false/>",
+                                "<key>NSPrivacyTracking</key>\n\t<true/>"),
+  },
+  "declares NSPrivacyTracking true",
+);
+
+manifestRejects(
+  "the manifest naming a tracking domain",
+  {
+    app: (text) => text.replace("<key>NSPrivacyTrackingDomains</key>\n\t<array/>",
+                                "<key>NSPrivacyTrackingDomains</key>\n\t<array><string>relayium.com</string></array>"),
+  },
+  "appPrivacy.trackingDomains",
+);
+
+manifestRejects(
+  "the manifest carrying an unknown top-level key",
+  {
+    app: (text) => text.replace("<key>NSPrivacyTracking</key>",
+                                "<key>NSPrivacyCollectsEverything</key><true/><key>NSPrivacyTracking</key>"),
+  },
+  "declares the unknown top-level key",
+);
+
+manifestRejects(
+  "a manifest this validator cannot read exactly",
+  { app: (text) => text.replace("</string>\n\t\t\t<key>NSPrivacyCollectedDataTypeLinked</key>", "\n\t\t\t<key>NSPrivacyCollectedDataTypeLinked</key>") },
+  "appPrivacy.sourceOfTruth",
+);
+
+manifestRejects(
+  "an empty manifest file",
+  { app: () => "" },
+  "does not open with a <plist> element",
+);
+
+manifestRejects(
+  "a manifest that is not there at all",
+  { omitApp: true },
+  "could not be read",
+);
+
+manifestRejects(
+  "the Share extension's manifest declaring a collected type",
+  {
+    share: (text) => text.replace("<key>NSPrivacyCollectedDataTypes</key>\n\t<array/>",
+                                  `<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>`),
+  },
+  "appPrivacy.shareExtension.collected",
+);
+
+manifestRejects(
+  "the Share extension's manifest turning tracking on",
+  {
+    share: (text) => text.replace("<key>NSPrivacyTracking</key>\n\t<false/>",
+                                  "<key>NSPrivacyTracking</key>\n\t<true/>"),
+  },
+  "the appex tracks nothing",
+);
+
+manifestRejects(
+  "the Share extension's manifest dropping its collected-data claim",
+  { share: (text) => text.replace("<key>NSPrivacyCollectedDataTypes</key>\n\t<array/>", "") },
+  "declares no NSPrivacyCollectedDataTypes",
 );
 
 // ── the CLI contract ─────────────────────────────────────────────────────────

@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import privacy from "./content/legal/privacy.mjs";
 import terms from "./content/legal/terms.mjs";
+// Only for the undiverged-doc control in the lastmod suite below, which is why
+// it is not in `docs`: that array pins buildLegalPages' 18-page count.
+import support from "./content/legal/support.mjs";
 import { buildLegalPages, buildSitemap, articleGroupsByLang, buildGuidesIndexPages } from "./build-pages.mjs";
 import { landingUrl, landingPath, ctaHref, validateLangs, LANDING_LANGS, SPA_ONLY_EN_SLUGS, NO_LOCALIZED_TWIN_SLUGS, urlPath, LANGS, MAINTAINED_LANGS, FROZEN_LANGS } from "./shared.mjs";
 import guidesIndex from "./content/guides-index.mjs";
@@ -51,9 +54,10 @@ function lastmods(sitemapXml) {
 // A <lastmod> is a per-URL claim, and this loop emitted English's date for all
 // nine. That was invisible while the nine locales moved together and became a
 // false statement the moment they stopped: the 2026-08-14 freeze left the seven
-// archived privacy translations at 2026-08-13, and the maintained pair moved to
-// 2026-08-30, so /ja/privacy/ was telling crawlers it had been revised on a day
-// its prose did not change.
+// archived privacy translations at 2026-08-13 while the maintained pair kept
+// moving (2026-08-30, then 2026-09-03 for the iOS platform disclosure), so
+// /ja/privacy/ was telling crawlers it had been revised on a day its prose did
+// not change.
 describe("localized legal URLs are dated from their own locale", () => {
   const dated = lastmods(buildSitemap([privacy], { home: false }));
 
@@ -70,7 +74,7 @@ describe("localized legal URLs are dated from their own locale", () => {
     // These are the two dates that must actually appear, and the split between
     // them is the whole point of the fix.
     for (const lang of MAINTAINED_LANGS) {
-      expect(dated.get(`https://relayium.com${urlPath("privacy", lang)}`), lang).toBe("2026-08-30");
+      expect(dated.get(`https://relayium.com${urlPath("privacy", lang)}`), lang).toBe("2026-09-03");
     }
     for (const lang of FROZEN_LANGS) {
       expect(dated.get(`https://relayium.com${urlPath("privacy", lang)}`), lang).toBe("2026-08-13");
@@ -94,13 +98,37 @@ describe("localized legal URLs are dated from their own locale", () => {
   });
 
   it("still dates a doc whose nine locales agree with that one date", () => {
-    // terms/ has not diverged, so the fix must be a no-op there — the change is
-    // "read the locale's own value", not "make frozen locales older".
-    const termsDated = lastmods(buildSitemap([terms], { home: false }));
+    // The control: the change is "read the locale's own value", not "make
+    // frozen locales older", so a doc that has NOT diverged must come out with
+    // one date on all nine URLs.
+    //
+    // This used to be terms/, and terms/ diverged on 2026-09-03 when its
+    // "Stored content" clause stopped saying the browser encrypts. support/ is
+    // the undiverged doc now. Asserted against `support.langs.en.updated`
+    // rather than a literal, so restoring the control only needs the import
+    // swapped if support/ diverges too.
+    const supportDated = lastmods(buildSitemap([support], { home: false }));
     for (const lang of LANGS) {
-      expect(termsDated.get(`https://relayium.com${urlPath("terms", lang)}`), lang).toBe(
-        terms.langs.en.updated,
+      expect(supportDated.get(`https://relayium.com${urlPath("support", lang)}`), lang).toBe(
+        support.langs.en.updated,
       );
+    }
+    // And the control is only a control while its nine really do agree.
+    expect(new Set(LANGS.map((lang) => support.langs[lang].updated)).size).toBe(1);
+  });
+
+  it("gives terms/ the same maintained-versus-frozen split as privacy/", () => {
+    // terms/ is the second doc to diverge, and it diverged the same way: the
+    // maintained pair was corrected on 2026-09-03 and the seven archived
+    // translations kept the date their prose was last true for. A sitemap that
+    // dated /ja/terms/ from English would be making the same false claim the
+    // per-locale read was written to stop.
+    const dated = lastmods(buildSitemap([terms], { home: false }));
+    for (const lang of MAINTAINED_LANGS) {
+      expect(dated.get(`https://relayium.com${urlPath("terms", lang)}`), lang).toBe("2026-09-03");
+    }
+    for (const lang of FROZEN_LANGS) {
+      expect(dated.get(`https://relayium.com${urlPath("terms", lang)}`), lang).toBe("2026-08-13");
     }
   });
 });

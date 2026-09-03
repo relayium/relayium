@@ -63,6 +63,14 @@ bad() { printf 'FAIL — %s\n     %s\n' "$1" "$2"; failures=$((failures + 1)); }
   { printf 'missing the metadata validator\n' >&2; exit 2; }
 [ -f "$repo_root/docs/app-store-metadata-ios.json" ] ||
   { printf 'missing the metadata packet\n' >&2; exit 2; }
+# The validator cross-checks the packet against the two SHIPPED privacy
+# manifests, resolved from its own location rather than from the packet's. The
+# fixture repository below therefore has to carry them too, and a missing
+# source-of-truth file is a broken checkout rather than a test failure.
+[ -f "$repo_root/apps/ios/Relayium/PrivacyInfo.xcprivacy" ] ||
+  { printf "missing the app's privacy manifest\n" >&2; exit 2; }
+[ -f "$repo_root/apps/ios/RelayiumShare/PrivacyInfo.xcprivacy" ] ||
+  { printf "missing the Share extension's privacy manifest\n" >&2; exit 2; }
 [ -x "$script_under_test" ] || { printf '%s is not executable\n' "$script_under_test" >&2; exit 2; }
 
 case "$(uname -s)" in
@@ -129,6 +137,18 @@ PrivacyInfo\.xcprivacy	the built privacy manifests are no longer checked
 ^NSPrivacyAccessedAPICategoryUserDefaults[[:space:]]CA92\.1'$	the app's pinned graph no longer declares the user-defaults category, or is no longer terminated
 ^readonly SHARE_REQUIRED_REASON_GRAPH='NSPrivacyAccessedAPICategoryFileTimestamp[[:space:]]DDA9\.1'$	the Share extension's smaller pinned graph is gone; the appex could ship the app's
 ^required_reason_graph_of\(\) \{$	nothing reads a built manifest's required-reason graph
+^readonly APP_COLLECTED_DATA_GRAPH='NSPrivacyCollectedDataTypeEmailAddress[[:space:]]true[[:space:]]false[[:space:]]NSPrivacyCollectedDataTypePurposeAppFunctionality$	the app's pinned collected-data graph no longer opens with the linked, non-tracking email declaration
+^NSPrivacyCollectedDataTypeName[[:space:]]true[[:space:]]false[[:space:]]NSPrivacyCollectedDataTypePurposeAppFunctionality$	the pinned collected-data graph no longer declares Name, which the account form and Sign in with Apple both send
+^NSPrivacyCollectedDataTypeOtherUsageData[[:space:]]true[[:space:]]false[[:space:]]NSPrivacyCollectedDataTypePurposeAppFunctionality$	the pinned collected-data graph no longer declares the metering counters, including the Device Inbox delivery meter
+^NSPrivacyCollectedDataTypeProductInteraction[[:space:]]false[[:space:]]false[[:space:]]NSPrivacyCollectedDataTypePurposeAnalytics$	the identifier-free aggregate is gone, or is no longer the UNLINKED Analytics entry it must be
+^NSPrivacyCollectedDataTypePurchaseHistory[[:space:]]true[[:space:]]false[[:space:]]NSPrivacyCollectedDataTypePurposeAppFunctionality$	the pinned collected-data graph no longer declares the StoreKit transaction
+^NSPrivacyCollectedDataTypeUserID[[:space:]]true[[:space:]]false[[:space:]]NSPrivacyCollectedDataTypePurposeAppFunctionality'$	the pinned collected-data graph no longer declares the appAccountToken, or is no longer terminated
+^readonly SHARE_COLLECTED_DATA_GRAPH=''$	the Share extension is no longer pinned to collecting NOTHING; the appex could be checked against the app's list and pass while shipping the app's manifest
+^collected_data_graph_of\(\) \{$	nothing reads a built manifest's collected-data graph, so the App Store privacy label is unchecked
+expect_collected_data_graph "\$archive_app_dir/PrivacyInfo\.xcprivacy"	the ARCHIVED app's collected-data graph is no longer verified
+expect_collected_data_graph "\$archive_appex_dir/PrivacyInfo\.xcprivacy"	the ARCHIVED Share extension is no longer proved to collect nothing
+expect_collected_data_graph "\$app_dir/PrivacyInfo\.xcprivacy"	the EXPORTED app's collected-data graph is no longer verified
+expect_collected_data_graph "\$appex_dir/PrivacyInfo\.xcprivacy"	the EXPORTED Share extension is no longer proved to collect nothing
 LC_ALL=C sort	the graph is no longer canonically ordered, so entry order in the plist would decide the comparison
 expect_required_reason_graph "\$archive_app_dir/PrivacyInfo\.xcprivacy"	the ARCHIVED app's required-reason graph is no longer verified
 expect_required_reason_graph "\$archive_appex_dir/PrivacyInfo\.xcprivacy"	the ARCHIVED Share extension's required-reason graph is no longer verified
@@ -352,6 +372,34 @@ mutate 'the graph comparison stops being canonically ordered' \
   sed_mutator 's/LC_ALL=C sort/cat/'
 mutate 'a shipped manifest is no longer linted' \
   sed_mutator '/plutil -lint "\$file"/d'
+mutate 'the pinned collected-data graph is deleted' \
+  sed_mutator "/^readonly APP_COLLECTED_DATA_GRAPH=/d"
+mutate 'a declared collected-data type is dropped from the pinned graph' \
+  sed_mutator '/^NSPrivacyCollectedDataTypeOtherUsageData	/d'
+# DeviceID takes a DECLARED line's place rather than being appended after it.
+# Appending would need a newline in the replacement, and BSD `sed` does not read
+# `\n` there as one — the mutation would insert a literal `n`, or match nothing
+# at all, and `mutate` would report a no-op instead of exercising the rule. A
+# substitution needs no newline and removes a pinned line, which is what the
+# predicate is watching for.
+mutate 'DeviceID replaces a declared type in the pinned collected-data graph' \
+  sed_mutator 's/^NSPrivacyCollectedDataTypeName	true	false	NSPrivacyCollectedDataTypePurposeAppFunctionality$/NSPrivacyCollectedDataTypeDeviceID	true	false	NSPrivacyCollectedDataTypePurposeAppFunctionality/'
+mutate 'the identifier-free aggregate is dropped from the pinned graph' \
+  sed_mutator '/^NSPrivacyCollectedDataTypeProductInteraction	/d'
+mutate 'the identifier-free aggregate is pinned as linked to the account' \
+  sed_mutator 's/^NSPrivacyCollectedDataTypeProductInteraction	false	false	/NSPrivacyCollectedDataTypeProductInteraction	true	false	/'
+mutate 'a collected-data purpose is changed' \
+  sed_mutator 's/^NSPrivacyCollectedDataTypeName	true	false	NSPrivacyCollectedDataTypePurposeAppFunctionality$/NSPrivacyCollectedDataTypeName	true	false	NSPrivacyCollectedDataTypePurposeAnalytics/'
+mutate 'nothing reads a built manifest as a collected-data graph' \
+  sed_mutator '/^collected_data_graph_of\(\) \{$/d'
+mutate 'the archived bundles stop having their collected data checked' \
+  sed_mutator '/expect_collected_data_graph "\$archive_/d'
+mutate 'the exported app stops having its collected data checked' \
+  sed_mutator '/expect_collected_data_graph "\$app_dir/d'
+mutate 'the exported Share extension stops being proved to collect nothing' \
+  sed_mutator '/expect_collected_data_graph "\$appex_dir/d'
+mutate 'the Share extension is allowed to declare the app collected-data graph' \
+  sed_mutator 's/^readonly SHARE_COLLECTED_DATA_GRAPH=.*$/readonly SHARE_COLLECTED_DATA_GRAPH="$APP_COLLECTED_DATA_GRAPH"/'
 mutate 'provisioning updates are allowed' \
   append_mutator '  xcodebuild -allowProvisioningUpdates archive'
 mutate 'an upload tool is added' \
@@ -837,6 +885,473 @@ MANIFEST
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Part 1d — the collected-data graph reader, driven adversarially
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# The same treatment as Part 1c, for the OTHER half of a privacy manifest — and
+# the half where a mistake is quieter. A wrong required-reason graph is refused
+# at upload by Apple, so somebody finds out. A wrong collected-data list uploads
+# cleanly, becomes the App Store privacy label, and is then read as a promise by
+# people deciding whether to install. Nothing outside this script checks it.
+#
+# So the two functions are LIFTED out of the shipped script rather than
+# reimplemented, and driven against manifests built here. `plutil_path` is
+# already lifted above and is reused.
+
+eval "$(sed -n '/^collected_data_graph_of() {/,/^}/p' "$script_under_test")"
+eval "$(sed -n '/^expect_collected_data_graph() {/,/^}/p' "$script_under_test")"
+eval "$(sed -n "/^readonly APP_COLLECTED_DATA_GRAPH=/,/NSPrivacyCollectedDataTypeUserID.*'\$/p" \
+  "$script_under_test")"
+eval "$(sed -n "/^readonly SHARE_COLLECTED_DATA_GRAPH=/p" "$script_under_test")"
+
+collected_lifted_ok=1
+for lifted in collected_data_graph_of expect_collected_data_graph; do
+  if ! declare -f "$lifted" >/dev/null 2>&1; then
+    bad "$lifted can be lifted out of the script" 'the function was not found or did not parse'
+    collected_lifted_ok=0
+  fi
+done
+if [ -z "${APP_COLLECTED_DATA_GRAPH:-}" ]; then
+  bad 'the pinned collected-data graph can be lifted out of the script' \
+      'the constant did not parse'
+  collected_lifted_ok=0
+fi
+# `SHARE_COLLECTED_DATA_GRAPH` is deliberately EMPTY, so "did it parse" cannot be
+# asked by testing it for emptiness — an unparsed variable and a correctly
+# parsed one look identical. `declare -p` distinguishes set-and-empty from
+# never-set, which is the only question worth asking here.
+if ! declare -p SHARE_COLLECTED_DATA_GRAPH >/dev/null 2>&1; then
+  bad 'the pinned empty Share collected-data graph can be lifted out of the script' \
+      'the constant did not parse'
+  collected_lifted_ok=0
+fi
+
+if [ "$collected_lifted_ok" -eq 1 ]; then
+  collected_failures=0
+  # shellcheck disable=SC2329
+  fail_check() { collected_failures=$((collected_failures + 1)); }
+  # shellcheck disable=SC2329
+  pass_check() { :; }
+
+  collected="$work/collected-fixtures"
+  mkdir -p "$collected"
+
+  # One `NSPrivacyCollectedDataTypes` entry. Purposes are variadic so a
+  # duplicated or extra purpose can be expressed, and the two booleans are
+  # parameters so a wrong `Linked` is a fixture rather than a hand-written file.
+  collected_entry() {
+    local type="$1" linked="$2" tracking="$3"; shift 3
+    local purpose
+    printf '\t\t<dict>\n'
+    printf '\t\t\t<key>NSPrivacyCollectedDataType</key>\n\t\t\t<string>%s</string>\n' "$type"
+    printf '\t\t\t<key>NSPrivacyCollectedDataTypeLinked</key>\n\t\t\t<%s/>\n' "$linked"
+    printf '\t\t\t<key>NSPrivacyCollectedDataTypeTracking</key>\n\t\t\t<%s/>\n' "$tracking"
+    printf '\t\t\t<key>NSPrivacyCollectedDataTypePurposes</key>\n\t\t\t<array>\n'
+    for purpose in "$@"; do printf '\t\t\t\t<string>%s</string>\n' "$purpose"; done
+    printf '\t\t\t</array>\n\t\t</dict>'
+  }
+
+  # A whole manifest around a body of collected-data entries. The required-reason
+  # list is a fixed valid one: this section is not about that half, and an empty
+  # one would make these fixtures fail a DIFFERENT check than the one under test.
+  write_collected_manifest() {
+    local path="$collected/$1.xcprivacy" body="$2"
+    cat >"$path" <<MANIFEST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+$body
+	</array>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>DDA9.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
+MANIFEST
+    printf '%s' "$path"
+  }
+
+  readonly FUNCTIONALITY='NSPrivacyCollectedDataTypePurposeAppFunctionality'
+  readonly ANALYTICS='NSPrivacyCollectedDataTypePurposeAnalytics'
+
+  name_entry="$(collected_entry NSPrivacyCollectedDataTypeName true false "$FUNCTIONALITY")"
+  email_entry="$(collected_entry NSPrivacyCollectedDataTypeEmailAddress true false "$FUNCTIONALITY")"
+  purchase_entry="$(collected_entry NSPrivacyCollectedDataTypePurchaseHistory true false "$FUNCTIONALITY")"
+  user_id_entry="$(collected_entry NSPrivacyCollectedDataTypeUserID true false "$FUNCTIONALITY")"
+  usage_entry="$(collected_entry NSPrivacyCollectedDataTypeOtherUsageData true false "$FUNCTIONALITY")"
+  aggregate_entry="$(collected_entry NSPrivacyCollectedDataTypeProductInteraction false false "$ANALYTICS")"
+  real_collected_body="$name_entry$email_entry$purchase_entry$user_id_entry$usage_entry$aggregate_entry"
+
+  # ── the reader accepts what it must accept ─────────────────────────────────
+  #
+  # First and most importantly: the manifest this repository actually ships must
+  # produce exactly the graph the script pins, and the extension's must produce
+  # the empty one. This is what ties the two halves together —
+  # `IOSPrivacyManifestTests` derives the same set from the source that justifies
+  # each entry, the script states it independently, and if those two statements
+  # ever disagree the operator's run fails on a correct build.
+  expect_collected_reader() {
+    local label="$1" file="$2" expected="$3" actual
+    if ! actual="$(collected_data_graph_of "$file")"; then
+      bad "$label" "the reader refused $file"
+      return
+    fi
+    if [ "$actual" = "$expected" ]; then
+      ok "$label"
+    else
+      bad "$label" "read '$actual', expected '$expected'"
+    fi
+  }
+
+  expect_collected_reader "the shipped iOS app manifest reads back as the script's pinned collected-data graph" \
+    "$repo_root/apps/ios/Relayium/PrivacyInfo.xcprivacy" "$APP_COLLECTED_DATA_GRAPH"
+  expect_collected_reader "the shipped Share extension manifest reads back as collecting nothing" \
+    "$repo_root/apps/ios/RelayiumShare/PrivacyInfo.xcprivacy" "$SHARE_COLLECTED_DATA_GRAPH"
+
+  # Entry order in the plist does not change the graph, which is what the
+  # canonical sort is for.
+  expect_collected_reader 'entry order in the plist does not change the collected-data graph' \
+    "$(write_collected_manifest reordered \
+       "$aggregate_entry$user_id_entry$name_entry$usage_entry$email_entry$purchase_entry")" \
+    "$APP_COLLECTED_DATA_GRAPH"
+
+  # ── and rejects every way it must reject ───────────────────────────────────
+
+  expect_collected_differs() {
+    local label="$1" name="$2" body="$3" file actual
+    file="$(write_collected_manifest "$name" "$body")"
+    if ! actual="$(collected_data_graph_of "$file")"; then
+      # A refusal is also a rejection, and an acceptable one: the caller turns
+      # both into a finding. What must never happen is a match.
+      ok "$label"
+      return
+    fi
+    if [ "$actual" = "$APP_COLLECTED_DATA_GRAPH" ]; then
+      bad "$label" 'the mutated manifest read back as the pinned app collected-data graph'
+    else
+      ok "$label"
+    fi
+  }
+
+  # 1. A MISSING type. The label would under-report what the app collects, which
+  #    is the direction Apple treats as a misrepresentation rather than caution.
+  without_usage_body="$name_entry$email_entry$purchase_entry$user_id_entry$aggregate_entry"
+  expect_collected_differs 'a manifest missing the metering declaration does not match' \
+    no-usage "$without_usage_body"
+  expect_collected_differs 'a manifest missing the aggregate declaration does not match' \
+    no-aggregate "$name_entry$email_entry$purchase_entry$user_id_entry$usage_entry"
+
+  # 2. An ADDED type, and specifically the one this platform must never declare.
+  #    `DeviceID` is what the macOS manifest carries and what a parity-minded
+  #    edit would copy across; iOS reaches neither producer, so declaring it
+  #    would publish a claim that this app sends a device identifier.
+  expect_collected_differs 'a manifest declaring DeviceID does not match' \
+    device-id "$real_collected_body$(
+      collected_entry NSPrivacyCollectedDataTypeDeviceID true false "$FUNCTIONALITY")"
+
+  # 3. DUPLICATES, which are what a set-shaped reader collapses into a graph
+  #    that compares EQUAL to the correct one.
+  expect_collected_differs 'a manifest declaring a type twice does not match' \
+    duplicate-type "$real_collected_body$user_id_entry"
+  expect_collected_differs 'a manifest repeating a purpose inside one entry does not match' \
+    duplicate-purpose "$name_entry$email_entry$purchase_entry$user_id_entry$aggregate_entry$(
+      collected_entry NSPrivacyCollectedDataTypeOtherUsageData true false \
+        "$FUNCTIONALITY" "$FUNCTIONALITY")"
+  # The same type twice with DIFFERENT flags — a first-wins reader keeps the
+  # correct one and never sees the second.
+  expect_collected_differs 'a manifest declaring one type twice with different flags does not match' \
+    duplicate-type-disagreeing "$real_collected_body$(
+      collected_entry NSPrivacyCollectedDataTypeUserID false false "$ANALYTICS")"
+
+  # 4. A WRONG LINKED flag. The type, the purpose and the count are all correct,
+  #    and the claim under them is not: an unlinked aggregate declared as linked
+  #    over-reports, and a linked identifier declared as unlinked under-reports.
+  #    Neither is visible to any check that only reads the type list.
+  expect_collected_differs 'the aggregate declared as linked to the account does not match' \
+    aggregate-linked "$name_entry$email_entry$purchase_entry$user_id_entry$usage_entry$(
+      collected_entry NSPrivacyCollectedDataTypeProductInteraction true false "$ANALYTICS")"
+  expect_collected_differs 'an account-linked type declared as unlinked does not match' \
+    email-unlinked "$name_entry$purchase_entry$user_id_entry$usage_entry$aggregate_entry$(
+      collected_entry NSPrivacyCollectedDataTypeEmailAddress false false "$FUNCTIONALITY")"
+
+  # 5. A WRONG TRACKING flag, which is the single most consequential bit in the
+  #    file: `true` here would put Relayium in App Tracking Transparency's scope.
+  expect_collected_differs 'a type declared as tracking does not match' \
+    email-tracking "$name_entry$purchase_entry$user_id_entry$usage_entry$aggregate_entry$(
+      collected_entry NSPrivacyCollectedDataTypeEmailAddress true true "$FUNCTIONALITY")"
+
+  # 6. A WRONG PURPOSE, in both directions: Analytics attached to something
+  #    account-linked, and App Functionality attached to the aggregate.
+  expect_collected_differs 'a linked type declared for Analytics does not match' \
+    name-analytics "$email_entry$purchase_entry$user_id_entry$usage_entry$aggregate_entry$(
+      collected_entry NSPrivacyCollectedDataTypeName true false "$ANALYTICS")"
+  expect_collected_differs 'the aggregate declared for App Functionality does not match' \
+    aggregate-functionality "$name_entry$email_entry$purchase_entry$user_id_entry$usage_entry$(
+      collected_entry NSPrivacyCollectedDataTypeProductInteraction false false "$FUNCTIONALITY")"
+  expect_collected_differs 'an entry carrying a second purpose nobody justified does not match' \
+    extra-purpose "$email_entry$purchase_entry$user_id_entry$usage_entry$aggregate_entry$(
+      collected_entry NSPrivacyCollectedDataTypeName true false "$FUNCTIONALITY" "$ANALYTICS")"
+
+  # 7. An EMPTY list where the app's is expected — what a manifest stripped of
+  #    its declarations looks like, and what a reader returning "" on failure
+  #    would produce.
+  expect_collected_differs 'an app manifest declaring nothing does not match' \
+    app-declares-nothing ''
+
+  # ── the appex direction: empty is a CLAIM, not the absence of one ──────────
+  #
+  # The classic failure is not a missing manifest but the APP's manifest ending
+  # up in the extension: present, valid, lint-clean, and declaring six types that
+  # process cannot collect. A per-bundle presence check cannot see it.
+  app_collected_in_share_slot="$(write_collected_manifest app-collected-in-share-slot \
+    "$real_collected_body")"
+  if [ "$(collected_data_graph_of "$app_collected_in_share_slot")" \
+       = "$SHARE_COLLECTED_DATA_GRAPH" ]; then
+    bad 'the app collected-data graph does not read back as the extension one' \
+        'the two graphs compared equal'
+  else
+    ok 'the app collected-data graph does not read back as the extension one'
+  fi
+
+  # And a single stray entry in the appex, which is the smaller and likelier
+  # version of the same mistake.
+  expect_collected_appex_differs() {
+    local label="$1" file="$2" actual
+    if ! actual="$(collected_data_graph_of "$file")"; then
+      ok "$label"
+      return
+    fi
+    if [ "$actual" = "$SHARE_COLLECTED_DATA_GRAPH" ]; then
+      bad "$label" 'a non-empty appex manifest read back as collecting nothing'
+    else
+      ok "$label"
+    fi
+  }
+  expect_collected_appex_differs 'an appex declaring one collected type does not read back as empty' \
+    "$(write_collected_manifest appex-one-entry "$email_entry")"
+
+  # ── unreadable input is a refusal, never an empty graph ────────────────────
+  #
+  # This is the one that would be silent, and it is sharper here than in Part 1c
+  # because the extension's CORRECT answer is the empty string. A reader that
+  # answered "" for a malformed manifest would make an unparseable appex
+  # manifest PASS the emptiness check — the wrong verdict, not merely the right
+  # verdict for the wrong reason.
+  expect_collected_refuses() {
+    local label="$1" file="$2" actual
+    if actual="$(collected_data_graph_of "$file")"; then
+      bad "$label" "the reader returned '$actual' instead of refusing"
+    else
+      ok "$label"
+    fi
+  }
+
+  no_collected_key="$collected/no-collected-key.xcprivacy"
+  cat >"$no_collected_key" <<'MANIFEST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+</dict>
+</plist>
+MANIFEST
+  expect_collected_refuses 'a manifest with no NSPrivacyCollectedDataTypes key is refused' \
+    "$no_collected_key"
+
+  # An entry naming no type. The refusal matters most for the APPEX: without it
+  # this element would be discarded and the manifest would read as empty.
+  untyped_collected="$collected/untyped-collected.xcprivacy"
+  cat >"$untyped_collected" <<'MANIFEST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
+MANIFEST
+  expect_collected_refuses 'a collected-data entry naming no type is refused' "$untyped_collected"
+
+  # An entry with no `Linked` key at all. Apple defines four keys per entry, and
+  # an omitted flag is a malformed entry rather than a truthful one with a
+  # default — a reader that supplied `false` would publish "not linked to you"
+  # over a file that never said so.
+  no_linked_key="$collected/no-linked-key.xcprivacy"
+  cat >"$no_linked_key" <<'MANIFEST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
+MANIFEST
+  expect_collected_refuses 'a collected-data entry with no Linked flag is refused' "$no_linked_key"
+
+  # A `Linked` value that is not a boolean. `plutil` extracts it happily; the
+  # shape check is what rejects it, and without that the graph would carry a
+  # string where a flag belongs.
+  non_boolean_linked="$collected/non-boolean-linked.xcprivacy"
+  cat >"$non_boolean_linked" <<'MANIFEST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<string>yes</string>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
+MANIFEST
+  expect_collected_refuses 'a non-boolean Linked flag is refused' "$non_boolean_linked"
+
+  # An entry declaring a type with NO purpose. App Store Connect requires at
+  # least one, so this is a rejected submission rather than something to
+  # describe — and `?? empty` would have turned it into a silent pass.
+  purposeless="$collected/purposeless.xcprivacy"
+  cat >"$purposeless" <<'MANIFEST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array/>
+		</dict>
+	</array>
+</dict>
+</plist>
+MANIFEST
+  expect_collected_refuses 'a collected-data entry with an empty purpose list is refused' \
+    "$purposeless"
+
+  collected_not_a_plist="$collected/not-a-plist.xcprivacy"
+  printf 'this is not a plist\n' >"$collected_not_a_plist"
+  expect_collected_refuses 'a collected-data manifest that is not a plist is refused' \
+    "$collected_not_a_plist"
+
+  expect_collected_refuses 'a collected-data manifest that is not there is refused' \
+    "$collected/does-not-exist.xcprivacy"
+
+  # ── and the caller turns every one of those into a finding ─────────────────
+  #
+  # The reader's return value is not the gate; `expect_collected_data_graph` is.
+
+  expect_collected_checker() {
+    local label="$1" file="$2" expected="$3" want_failures="$4" before
+    before="$collected_failures"
+    expect_collected_data_graph "$file" "$expected" 'fixture' >/dev/null 2>&1
+    local raised=$((collected_failures - before))
+    if [ "$want_failures" -eq 0 ] && [ "$raised" -eq 0 ]; then
+      ok "$label"
+    elif [ "$want_failures" -ne 0 ] && [ "$raised" -gt 0 ]; then
+      ok "$label"
+    else
+      bad "$label" "it raised $raised finding(s)"
+    fi
+  }
+
+  # The correct manifests raise nothing. A checker that failed everything would
+  # be as useless as one that failed nothing, and would pass every case below.
+  expect_collected_checker 'the shipped app manifest raises no collected-data finding' \
+    "$repo_root/apps/ios/Relayium/PrivacyInfo.xcprivacy" "$APP_COLLECTED_DATA_GRAPH" 0
+  expect_collected_checker 'the shipped Share manifest raises no collected-data finding' \
+    "$repo_root/apps/ios/RelayiumShare/PrivacyInfo.xcprivacy" "$SHARE_COLLECTED_DATA_GRAPH" 0
+
+  # Each reuses the fixture its reader case already wrote, by the name that case
+  # gave it — which is only safe because those names are distinct.
+  expect_collected_checker 'a missing collected-data type is a finding' \
+    "$collected/no-usage.xcprivacy" "$APP_COLLECTED_DATA_GRAPH" 1
+  expect_collected_checker 'a declared DeviceID is a finding' \
+    "$collected/device-id.xcprivacy" "$APP_COLLECTED_DATA_GRAPH" 1
+  expect_collected_checker 'a duplicated collected-data type is a finding' \
+    "$collected/duplicate-type.xcprivacy" "$APP_COLLECTED_DATA_GRAPH" 1
+  expect_collected_checker 'a wrong Linked flag is a finding' \
+    "$collected/aggregate-linked.xcprivacy" "$APP_COLLECTED_DATA_GRAPH" 1
+  expect_collected_checker 'a tracking declaration is a finding' \
+    "$collected/email-tracking.xcprivacy" "$APP_COLLECTED_DATA_GRAPH" 1
+  expect_collected_checker 'a wrong purpose is a finding' \
+    "$collected/name-analytics.xcprivacy" "$APP_COLLECTED_DATA_GRAPH" 1
+  expect_collected_checker 'an extension shipping the app collected-data list is a finding' \
+    "$app_collected_in_share_slot" "$SHARE_COLLECTED_DATA_GRAPH" 1
+  expect_collected_checker 'an extension declaring one collected type is a finding' \
+    "$collected/appex-one-entry.xcprivacy" "$SHARE_COLLECTED_DATA_GRAPH" 1
+  expect_collected_checker 'a malformed collected-data entry is a finding' \
+    "$no_linked_key" "$APP_COLLECTED_DATA_GRAPH" 1
+  # And the same malformed file measured against the EMPTY expectation, which is
+  # the appex's. This is the case a reader returning "" on failure would pass.
+  expect_collected_checker 'a malformed appex manifest is a finding rather than an empty match' \
+    "$no_linked_key" "$SHARE_COLLECTED_DATA_GRAPH" 1
+  expect_collected_checker 'a collected-data manifest that is absent is a finding' \
+    "$collected/does-not-exist.xcprivacy" "$APP_COLLECTED_DATA_GRAPH" 1
+  expect_collected_checker 'a manifest with no collected-data key at all is a finding' \
+    "$no_collected_key" "$SHARE_COLLECTED_DATA_GRAPH" 1
+
+  unset -f fail_check pass_check
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Part 2 — the script actually runs, and actually refuses
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -963,12 +1478,22 @@ export GIT_COMMITTER_EMAIL='candidate-test@example.invalid'
 # an iOS project directory the script only needs to find, and a bare remote the
 # branch tracks.
 pristine="$work/pristine"
-mkdir -p "$pristine/repo/scripts" "$pristine/repo/docs" "$pristine/repo/apps/ios/Relayium.xcodeproj"
+mkdir -p "$pristine/repo/scripts" "$pristine/repo/docs" \
+  "$pristine/repo/apps/ios/Relayium.xcodeproj" \
+  "$pristine/repo/apps/ios/Relayium" "$pristine/repo/apps/ios/RelayiumShare"
 cp "$script_under_test" "$pristine/repo/scripts/$script_name"
 # The real validator and the real packet, so the executed cases below exercise
 # the actual gate rather than a stand-in that always agrees.
 cp "$repo_root/scripts/ios-app-store-metadata-validate.mjs" "$pristine/repo/scripts/"
 cp "$repo_root/docs/app-store-metadata-ios.json" "$pristine/repo/docs/"
+# And the two manifests the validator cross-checks the packet against. It
+# resolves them from ITS OWN directory — `<validator>/../apps/ios/...` — so a
+# fixture holding only the packet makes the real gate reject a packet that is
+# correct, and every case after the gate fails for a reason none of them is
+# about. These are copies of the shipped files rather than stand-ins, for the
+# same reason the packet is: a fixture that always agrees proves nothing.
+cp "$repo_root/apps/ios/Relayium/PrivacyInfo.xcprivacy" "$pristine/repo/apps/ios/Relayium/"
+cp "$repo_root/apps/ios/RelayiumShare/PrivacyInfo.xcprivacy" "$pristine/repo/apps/ios/RelayiumShare/"
 printf '// fixture\n' >"$pristine/repo/apps/ios/Relayium.xcodeproj/project.pbxproj"
 printf 'fixture\n' >"$pristine/repo/README.md"
 git init -q --initial-branch=main "$pristine/repo" >/dev/null 2>&1
@@ -980,6 +1505,26 @@ git -C "$pristine/repo" push -q --set-upstream origin main >/dev/null 2>&1
 
 if ! git -C "$pristine/repo" rev-parse '@{upstream}' >/dev/null 2>&1; then
   printf 'could not build the fixture repository\n' >&2
+  exit 2
+fi
+
+# The fixture has to be able to PASS the metadata gate, not merely to contain a
+# packet. The gate is the real validator reading real files out of the fixture
+# tree, so every file it learns to cross-check has to be copied in above — and
+# when one is not, the gate rejects a correct packet and each executed case
+# after it refuses for that reason instead of its own, which is a suite that
+# reports dozens of failures and names the cause of none of them.
+#
+# Asserting the fixture here turns that cascade into one line naming the file.
+# It is a fixture-construction failure, so it exits 2 like the checks above
+# rather than counting as a test failure: nothing about the script under test
+# has been established yet either way.
+metadata_probe=''
+if ! metadata_probe="$(node "$pristine/repo/scripts/ios-app-store-metadata-validate.mjs" \
+    --packet "$pristine/repo/docs/app-store-metadata-ios.json" \
+    --expect-version 0.3.0 --quiet 2>&1)"; then
+  printf 'the fixture repository cannot pass the metadata gate, so no case beyond it would test what it claims:\n%s\n' \
+    "$metadata_probe" >&2
   exit 2
 fi
 

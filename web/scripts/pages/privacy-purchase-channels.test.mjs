@@ -1,40 +1,64 @@
-// web/scripts/pages/privacy-purchase-channels.test.mjs — which apps the privacy
-// policy says you can buy a subscription in, and which of the nine locales is
-// allowed to answer that question.
+// web/scripts/pages/privacy-purchase-channels.test.mjs — what the maintained
+// privacy policy says about each native platform, and which of the nine locales
+// is allowed to answer that question at all.
 //
-// The defect this file closes was live in the maintained copy on 2026-08-28: the
-// policy named "our iOS and macOS apps" as the in-app-purchase surface and Apple
-// as the processor for iOS purchases. There is no iOS app. iOS development is
-// paused and nothing has ever been published, so the only Apple in-app purchase
-// a reader can actually make is in the Mac App Store build. A privacy policy is
-// the wrong document to be aspirational in: it names processors, and naming a
-// processor for a channel that does not exist misdescribes where a real person's
-// payment data goes.
+// This file has had its premise inverted once, and the history is the reason it
+// is written the way it is now.
 //
-// The correction has two halves that pull against each other, which is why they
-// are pinned together here:
+//   · 2026-08-28: the policy named "our iOS and macOS apps" as the in-app-purchase
+//     surface and described an APNs token and photo-library access. None of that
+//     was true of any shipping binary, so the maintained pair was narrowed to
+//     macOS and this file banned the word-shapes the defect took.
+//   · 2026-09-03: an iOS binary exists and is being prepared for App Store
+//     submission, and App Review reads <https://relayium.com/privacy/> while
+//     reviewing it. Guideline 5.1.1 requires the linked policy to identify what
+//     the app collects, how, and every use. A macOS-scoped policy does not
+//     describe the binary under review, so the blanket "no iOS" bans became the
+//     defect: they pinned the document to a platform statement that was no
+//     longer complete.
 //
-//   1. **Maintained en/zh must be current.** They are the product's live legal
-//      text, so they say macOS, and they may not name an iOS purchase channel.
-//   2. **The seven frozen locales must NOT be rewritten.** They are archived
-//      translations under the 2026-08-14 language freeze; their prose is
-//      byte-stable and is corrected by retranslation if a locale is ever
-//      restored, never by an English-speaking editor reaching into it. Each one
-//      is pinned by the exact sentence it still carries, so "fixing" a frozen
-//      locale fails here rather than passing quietly.
+// So the guards below are no longer "does the word iOS appear". They are the
+// exact per-platform truth, positive and negative, derived from the source:
 //
-// Both halves apply again, unchanged, to the second correction below: the
-// device-level-data section, which described an APNs token and camera/photo
-// access that exist in no macOS target. Same document, same freeze rule, same
-// file.
+//   · device label — `AppEnvironment.deviceName()` returns
+//     `Host.current().localizedName` on macOS and `deviceFamilyName(
+//     forModelIdentifier:)` ("iPhone"/"iPad"/"iPod touch") everywhere else;
+//   · installation identifier — `InstallationIdentity`'s 32 bytes are posted as
+//     `install_id` by `HTTPDeviceAuthClient.start`, which only the macOS browser
+//     sign-in reaches. iOS takes the default `.legacyOneShot` purchase policy, so
+//     `AccountClient.dispatchApplePurchase` omits `appInstanceId` as well;
+//   · camera — `NSCameraUsageDescription` exists in `apps/ios/Relayium/Info.plist`
+//     and in no macOS Info.plist; `PairingScannerView` reads a pairing code and
+//     nothing leaves the device;
+//   · push — no `aps-environment`, no `registerForRemoteNotifications` anywhere
+//     under `apps/ios`; macOS posts local `UNUserNotificationCenter` banners only;
+//   · purchase — `IOSAppleSubscriptions` builds a real `StoreKitSubscriptionStore`,
+//     so Apple in-app purchase is iOS app behaviour as well as macOS app behaviour.
+//
+// Two rules did NOT change and are still enforced here:
+//
+//   1. **The seven frozen locales must not be rewritten.** They are archived
+//      translations under the 2026-08-14 language freeze, corrected by
+//      retranslation if a locale is ever restored, never by an editor who cannot
+//      read them. Each is pinned by the exact sentence it still carries.
+//   2. **The policy describes behaviour, not availability.** The iOS app is not
+//      published and nobody can install it. Saying how a build behaves is what
+//      5.1.1 asks for; saying it is on sale would be the same aspirational defect
+//      in the opposite direction, so publication claims are banned outright.
 //
 // maintained-frozen-split.test.mjs owns the rendered-page half of the freeze
 // (selectors, hreflang, archive notices). This file owns what the maintained
-// privacy policy claims about the native app, in the source of record.
+// privacy policy claims about the native apps, in the source of record and in
+// the generated en/zh pages a reviewer actually opens.
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
 
 import privacy from "./content/legal/privacy.mjs";
 import { MAINTAINED_LANGS, FROZEN_LANGS, LANGS } from "./shared.mjs";
+
+const MAINTAINED_DATE = "2026-09-03";
+const FROZEN_DATE = "2026-08-13";
 
 /** Every string in a locale's document, flattened, so a sentence cannot hide
  *  from this file by moving between `body` and `bullets`. */
@@ -46,6 +70,20 @@ function strings(v, out = []) {
 }
 
 const textOf = (lang) => strings(privacy.langs[lang]).join("\n");
+
+/** The section that introduces device-level native-app data, found by a clause
+ *  rather than by its heading: the heading is prose and may be reworded, while
+ *  the claim this file exists to police may not move out of the document. */
+const NATIVE_SECTION_MARK = {
+  en: "device-level data that the website does not",
+  zh: "网站不涉及的设备级数据",
+};
+
+const nativeSection = (lang) =>
+  privacy.langs[lang].sections.find((s) => strings(s).join("\n").includes(NATIVE_SECTION_MARK[lang]));
+
+const generatedPrivacyPage = (lang) =>
+  readFileSync(resolve(process.cwd(), `public/${lang === "en" ? "" : `${lang}/`}privacy/index.html`), "utf8");
 
 describe("the privacy policy covers every generated language exactly once", () => {
   it("carries all nine locales and no others", () => {
@@ -60,6 +98,8 @@ describe("the privacy policy covers every generated language exactly once", () =
 });
 
 describe("maintained copy truthfully discloses identifier-free activation aggregates", () => {
+  // Unchanged by the iOS correction, and re-pinned here because a rewrite of the
+  // native-app section is exactly when an unrelated paragraph gets lost.
   it("pins the three server-owned actions and the deliberately weak semantics", () => {
     const en = textOf("en");
     const zh = textOf("zh");
@@ -73,200 +113,365 @@ describe("maintained copy truthfully discloses identifier-free activation aggreg
     expect(zh).toMatch(/数据库不按账号保存这些聚合，也不含将其连接到账号的字段/);
   });
 
+  it("keeps the account-metering and zero-knowledge claims the whole product rests on", () => {
+    const REQUIRED = {
+      en: [
+        /A paid subscription is a fixed price for a plan, not a per-byte charge\./,
+        /The server stores only ciphertext\. It cannot read your file contents, filenames, or keys\./,
+        /The contents of your files\./,
+        /Your encryption keys\./,
+        /no advertising or third-party analytics SDK/,
+      ],
+      zh: [
+        /付费订阅按套餐收取固定价格，不是按字节计费。/,
+        /服务器仅存储密文，无法读取你的文件内容、文件名或密钥。/,
+        /你的文件内容。/,
+        /你的加密密钥。/,
+        /不含任何广告或第三方分析 SDK/,
+      ],
+    };
+    for (const lang of MAINTAINED_LANGS) {
+      const text = textOf(lang);
+      for (const re of REQUIRED[lang]) {
+        expect(re.test(text), `${lang} privacy policy dropped a global truth (${re})`).toBe(true);
+      }
+    }
+  });
+
   it("does not rewrite the seven frozen translations", () => {
     for (const lang of FROZEN_LANGS) {
-      expect(privacy.langs[lang].updated).toBe("2026-08-13");
+      expect(privacy.langs[lang].updated).toBe(FROZEN_DATE);
       expect(textOf(lang)).not.toMatch(/best-effort lower-bound|尽力写入的动作数下界/);
     }
   });
 });
 
-describe("maintained copy names the macOS app as the only in-app purchase channel", () => {
-  it("english says macOS, and says it in both places the claim appears", () => {
-    const en = privacy.langs.en;
-    const all = strings(en);
+describe("maintained copy names Apple in-app purchase as macOS AND iOS app behaviour", () => {
+  it("english names both platforms in both places the claim appears", () => {
+    const all = strings(privacy.langs.en);
     // The processor list.
     expect(all).toContain(
-      "Apple, for subscriptions purchased inside our macOS app via in-app purchase — see Payments.",
+      "Apple, for subscriptions purchased inside our macOS or iOS app via in-app purchase — see Payments.",
     );
     // The Payments section itself.
-    const payments = all.find((s) => s.startsWith("In our macOS app, subscriptions are bought"));
-    expect(payments, "the Payments bullet must lead with the macOS app").toBeTruthy();
+    const payments = all.find((s) => s.startsWith("In our native apps, on macOS and on iOS alike"));
+    expect(payments, "the Payments bullet must cover both native platforms").toBeTruthy();
     expect(payments).toMatch(/Apple processes the payment under your Apple ID/);
+    expect(payments).toMatch(/we never see your payment method/);
+    // `appAccountToken`: minted by us, handed to Apple with the purchase, and
+    // returned inside the signed transaction. Naming only half of that round
+    // trip understates what leaves the device.
+    expect(payments).toMatch(/random token that ties an App Store purchase to your Relayium account/);
+    expect(payments).toMatch(/hands that token to Apple with the purchase/);
   });
 
   it("chinese says the same thing in its own words", () => {
     const all = strings(privacy.langs.zh);
     expect(all).toContain(
-      "Apple——在我们的 macOS App 内通过应用内购买订阅时的处理方，详见「支付」。",
+      "Apple——在我们的 macOS 或 iOS App 内通过应用内购买订阅时的处理方，详见「支付」。",
     );
-    const payments = all.find((s) => s.startsWith("在我们的 macOS App 内，订阅通过 Apple 应用内购买完成。"));
-    expect(payments, "the Payments bullet must lead with the macOS app").toBeTruthy();
+    const payments = all.find((s) => s.startsWith("在我们的原生 App 内——macOS 与 iOS 同样如此"));
+    expect(payments, "the Payments bullet must cover both native platforms").toBeTruthy();
+    expect(payments).toMatch(/Apple 从你的 Apple ID 处理支付/);
+    expect(payments).toMatch(/App 在购买时把该令牌交给 Apple/);
   });
 
-  it("neither maintained locale claims an iOS app or an iOS purchase", () => {
-    // Bounded to the purchase claim rather than banning the token outright:
-    // "iOS" is a legitimate word for a policy to use about a platform. What it
-    // may not do is put a Relayium app on it. The patterns are the shapes the
-    // defect actually took, in both languages.
-    const BANNED = {
-      en: [
-        { label: "our iOS app(s)", re: /\bour iOS\b/i },
-        { label: "iOS and macOS apps", re: /iOS and macOS apps?/i },
-        { label: "iOS app", re: /\biOS app\b/i },
-        { label: "purchases on iOS", re: /iOS.{0,40}\bin-app purchase\b/i },
-      ],
-      zh: [
-        { label: "我们的 iOS App", re: /我们的\s*iOS/ },
-        { label: "iOS 与 macOS App", re: /iOS\s*[与和及]\s*macOS/ },
-        { label: "iOS App", re: /iOS\s*App/ },
-      ],
-    };
-    for (const lang of MAINTAINED_LANGS) {
-      const text = textOf(lang);
-      for (const { label, re } of BANNED[lang]) {
-        expect(re.test(text), `${lang} privacy policy sells an iOS app (${label})`).toBe(false);
-      }
-    }
-  });
-
-  it("keeps Stripe as the web channel, so removing iOS did not remove a processor", () => {
-    // The correction narrowed one bullet. The negative test above would also
-    // pass if somebody deleted the Apple bullet outright, which would be a
-    // different lie — so both processors are required to still be named.
+  it("keeps Stripe as the web channel, so adding iOS did not merge two processors", () => {
+    // The negative tests elsewhere would also pass if somebody collapsed both
+    // channels into Apple, which would be a different lie — so both processors
+    // are required to still be named, each on its own surface.
     expect(textOf("en")).toMatch(/On the web, payments are handled by Stripe/);
-    expect(textOf("en")).toMatch(/subscriptions are bought through Apple in-app purchase/);
+    expect(textOf("en")).toMatch(/Card details go to Stripe, not to us/);
     expect(textOf("zh")).toMatch(/在网页端，支付由 Stripe 处理/);
-    expect(textOf("zh")).toMatch(/订阅通过 Apple 应用内购买完成/);
+    expect(textOf("zh")).toMatch(/卡片信息提交给 Stripe，而非我们/);
+  });
+
+  it("never lets a card number or a payment method be described as ours", () => {
+    expect(textOf("en")).toMatch(/We never receive or store your full card number\./);
+    expect(textOf("en")).toMatch(/never card data/);
+    expect(textOf("zh")).toMatch(/我们绝不接收或存储你的完整卡号。/);
+    expect(textOf("zh")).toMatch(/绝不存储卡片数据/);
   });
 });
 
-describe("maintained copy describes one native app, because there is one", () => {
-  // Same defect family as the purchase channel above, found in the same sweep:
-  // the section that introduces device-level data said "Our native apps" and
-  // then described an APNs token. There is one native app. `apps/ios` is paused
-  // and has never been published, so a plural here tells an iPhone owner that a
-  // Relayium app on their phone is storing a push token for them.
-  //
-  // Narrowing the lead-in to macOS was only HALF the correction, and on its own
-  // it made the document worse rather than better: it took three bullets written
-  // about the paused iOS app and re-attached them to macOS, where two of them are
-  // false. The macOS targets have no `aps-environment` in any of their
-  // entitlements files, no `registerForRemoteNotifications` call anywhere under
-  // `apps/mac` or `apps/RelayiumKit/Sources`, and no `NSCameraUsageDescription`
-  // or `NSPhotoLibraryUsageDescription` in either Info.plist. A policy that
-  // claims a push token and camera access the code cannot exercise is not
-  // conservative — it is a false statement about where a real person's data goes,
-  // in the one document that exists to answer that.
-  it("english and chinese name macOS and do not pluralise", () => {
-    const leadIns = {
-      en: "Our macOS app handles a little device-level data that the website does not:",
-      zh: "我们的 macOS App 会处理少量网站不涉及的设备级数据：",
-    };
-    for (const lang of MAINTAINED_LANGS) {
-      expect(strings(privacy.langs[lang]), `${lang} device-data lead-in`).toContain(leadIns[lang]);
-    }
-    // The exact retired sentences, and the shape they could come back as.
-    expect(textOf("en")).not.toContain("Our native apps");
-    expect(textOf("en")).not.toMatch(/\b(our|the) native apps\b/i);
-    expect(textOf("zh")).not.toContain("我们的原生 App");
-    expect(textOf("zh")).not.toMatch(/原生\s*App\s*(们|们的)?[会都]/);
+describe("stored-link encryption is claimed for every client, not just the browser", () => {
+  // `StoredWire`/`ChunkEncryptor` is the same AES-GCM framing in RelayiumKit that
+  // the browser and the CLI implement, and `generateStoreKey()` mints the same 32
+  // random bytes that only ever appear in the `#k=` fragment. A browser-only
+  // sentence would understate the guarantee on the platform under review, and
+  // understating a zero-knowledge claim is as wrong as overstating one.
+  it("english covers browser, CLI and both native apps", () => {
+    const en = textOf("en");
+    expect(en).toMatch(/encrypted with AES-256-GCM on your own device before they leave it/);
+    expect(en).toMatch(/our native macOS and iOS apps all encrypt and decrypt locally/);
+    expect(en).toMatch(/The decryption key exists only in the URL fragment — it is never sent to the server\./);
   });
 
-  // The three bullets that replaced them, each traced to the call site and the
-  // server column that keeps the value — the same discipline
-  // `apps/mac/Relayium/PrivacyInfo.xcprivacy` is held to, because the manifest
-  // and this policy are two public statements about one app and must not
-  // disagree. Narrowing the lead-in only helps if what it introduces is true AND
-  // still says something; an empty section would be a different failure.
-  const PRESENT_MACOS_FACTS = {
+  it("chinese covers browser, CLI and both native apps", () => {
+    const zh = textOf("zh");
+    expect(zh).toMatch(/在离开你的设备之前就已在本机以 AES-256-GCM 加密/);
+    expect(zh).toMatch(/我们的 macOS 与 iOS 原生 App，都在本地完成加解密/);
+    expect(zh).toMatch(/解密密钥仅存在于链接的 URL 片段（# 部分）中，绝不发送至服务器。/);
+  });
+});
+
+describe("the native-app section states each platform's device data exactly", () => {
+  it("exists in both maintained locales and still carries three bullets", () => {
+    for (const lang of MAINTAINED_LANGS) {
+      const section = nativeSection(lang);
+      expect(section, `${lang} native-app section`).toBeTruthy();
+      // The frozen seven carry three bullets here and content.test.mjs requires
+      // one shape across all nine, so this count is not cosmetic: changing it
+      // would either break the archive or silently rewrite it.
+      expect(section.bullets, `${lang} native-app bullets`).toHaveLength(3);
+    }
+  });
+
+  // Every claim below is a fact about a specific platform. Splitting them into
+  // two maps is the point: the failure this file is built to catch is a true
+  // sentence attached to the wrong operating system.
+  const MACOS_FACTS = {
     en: [
-      // AppEnvironment.deviceName() reads Host.current().localizedName;
-      // AccountClient.login sends it as `deviceName` into `devices.name`, and
-      // LanDiscovery announces it to the same-network room.
-      /computer name from your Mac's Sharing settings/,
-      /tell your devices apart and you can sign one out/,
-      // InstallationIdentity: 32 bytes from SecRandomCopyBytes, kept in the
-      // keychain, posted as `install_id` by HTTPDeviceAuthClient.start.
-      /32 random bytes the app generates on this Mac and keeps in its keychain/,
-      /never derived from your hardware/,
-      // UNUserNotificationCenter only: InboxNotifier and TransferNotifier compose
-      // and post locally. NSPrivacyTracking is false and there is no third-party
-      // network destination.
-      /registers no push token and receives no push notifications/,
-      /no advertising or third-party analytics SDKs/,
+      /On macOS the app reads the computer name from your Mac's Sharing settings/,
+      /macOS often seeds that name from your full name/,
+      /An installation identifier, on macOS only\./,
+      /32 random bytes the app generates on that Mac and keeps in its keychain/,
+      /sent when you sign in through your browser/,
+      /never derived from your hardware — no serial number, MAC address, or hostname/,
+      /announced by macOS on that Mac itself/,
+      /deliberately carry no file names, links, or codes/,
+      /The macOS app asks for no camera access at all/,
     ],
     zh: [
-      /「共享」设置中的电脑名称/,
-      /区分各台设备并注销其中一台/,
-      /32 字节随机值并保存在本机钥匙串中/,
-      /绝不由硬件推导/,
-      /不注册推送令牌，也不接收推送通知/,
-      /不含广告或第三方分析 SDK/,
+      /在 macOS 上，App 会读取 Mac「共享」设置中的电脑名称/,
+      /macOS 通常会以你的全名生成该名称/,
+      /安装标识符，仅限 macOS。/,
+      /32 字节随机值，保存在本机钥匙串中/,
+      /通过浏览器登录时发送/,
+      /绝不由硬件推导——不含序列号、MAC 地址或主机名/,
+      /都由 macOS 在那台 Mac 本地提示/,
+      /刻意不含文件名、链接或配对码/,
+      /macOS App 完全不申请摄像头权限/,
     ],
   };
 
-  it("states only device data the macOS build actually handles", () => {
-    for (const lang of MAINTAINED_LANGS) {
+  const IOS_FACTS = {
+    en: [
+      /On iOS the label is generic and is never a name you chose/,
+      /"iPhone", "iPad" or "iPod touch"/,
+      /No personal name reaches us from an iPhone or iPad this way\./,
+      /The iOS app has no browser sign-in to continue, so it generates no such identifier/,
+      /it sends us no installation identifier and no identifier read from the device itself/,
+      /the iOS app has no push capability and registers nothing with Apple's push service/,
+      /The iOS app asks for the camera for one purpose/,
+      /reading the pairing QR code another device is showing/,
+      /that happens entirely on your device/,
+      /nothing the camera sees is stored by the app or sent to us as camera data/,
+      /the system's own picker runs outside the app and hands it only the items you chose/,
+    ],
+    zh: [
+      /在 iOS 上，这个标签是通用的，绝不会是你自己起的名字/,
+      /「iPhone」「iPad」或「iPod touch」/,
+      /不会有任何个人姓名经由这条路径从 iPhone 或 iPad 到达我们/,
+      /iOS App 没有需要接续的浏览器登录流程，因此不会生成这样的标识符/,
+      /既不向我们发送安装标识符，也不发送任何从设备本身读取的标识符/,
+      /iOS App 根本不具备推送能力，也不会向 Apple 的推送服务注册任何东西/,
+      /iOS App 申请摄像头只有一个用途/,
+      /读取另一台设备正在显示的配对二维码/,
+      /这完全发生在你的设备上/,
+      /摄像头看到的任何内容都不会被 App 保存，也不会作为摄像头数据发送给我们/,
+      /是系统自带的选择器在 App 之外运行，只把你选中的项目交给 App/,
+    ],
+  };
+
+  const SHARED_FACTS = {
+    en: [
+      /Neither registers a push token and neither receives push notifications/,
+      /Neither app tracks you across other apps or websites, and neither contains advertising or third-party analytics SDKs\./,
+    ],
+    zh: [
+      /两者都不注册推送令牌，也都不接收推送通知/,
+      /两个 App 都不会跨其他 App 或网站追踪你，也都不含广告或第三方分析 SDK。/,
+    ],
+  };
+
+  for (const lang of MAINTAINED_LANGS) {
+    it(`${lang} states the macOS-only facts`, () => {
       const text = textOf(lang);
-      for (const re of PRESENT_MACOS_FACTS[lang]) {
-        expect(re.test(text), `${lang} privacy policy dropped a present macOS fact (${re})`).toBe(true);
-      }
-    }
+      for (const re of MACOS_FACTS[lang])
+        expect(re.test(text), `${lang} lost a macOS fact (${re})`).toBe(true);
+    });
+
+    it(`${lang} states the iOS facts the binary under review actually exhibits`, () => {
+      const text = textOf(lang);
+      for (const re of IOS_FACTS[lang])
+        expect(re.test(text), `${lang} lost an iOS fact (${re})`).toBe(true);
+    });
+
+    it(`${lang} states what neither app does`, () => {
+      const text = textOf(lang);
+      for (const re of SHARED_FACTS[lang])
+        expect(re.test(text), `${lang} lost a both-platforms fact (${re})`).toBe(true);
+    });
+  }
+
+  // Structural guards, because a regex over the whole document cannot tell that
+  // a claim moved to the wrong platform — only that both strings are present
+  // somewhere. These assert the two halves are in the SAME bullet, which is what
+  // makes the scoping readable to a person rather than merely true in aggregate.
+  const bulletWith = (lang, needle) =>
+    nativeSection(lang).bullets.find((b) => b.includes(needle));
+
+  it("scopes the installation identifier to macOS and denies it for iOS in one bullet", () => {
+    const en = bulletWith("en", "installation identifier");
+    expect(en, "english installation-identifier bullet").toBeTruthy();
+    expect(en).toContain("on macOS only");
+    expect(en).toContain("no installation identifier and no identifier read from the device itself");
+    // The random device id in the account list is ours, not the phone's — the
+    // distinction a reader most easily collapses.
+    expect(en).toContain("is not derived from your phone");
+
+    const zh = bulletWith("zh", "安装标识符");
+    expect(zh, "chinese installation-identifier bullet").toBeTruthy();
+    expect(zh).toContain("仅限 macOS");
+    expect(zh).toContain("既不向我们发送安装标识符");
+    expect(zh).toContain("并非由你的手机推导而来");
   });
 
-  it("no longer claims a push token, a camera or a photo library on macOS", () => {
-    // The retired iOS-derived claims, banned in the maintained pair only. The
-    // frozen seven keep them and are pinned below — that asymmetry is the freeze
-    // working, not an inconsistency.
-    //
-    // "push token" itself is NOT banned: the surviving bullet uses the words to
-    // deny one, and banning the noun would force the policy to stop making the
-    // clearer negative statement. What is banned is the service that would issue
-    // it and the two device permissions the app never requests.
+  it("puts the iOS camera purpose and the macOS camera denial in one bullet", () => {
+    const en = bulletWith("en", "camera");
+    expect(en, "english camera bullet").toBeTruthy();
+    expect(en).toContain("The iOS app asks for the camera for one purpose");
+    expect(en).toContain("The macOS app asks for no camera access at all");
+
+    const zh = bulletWith("zh", "摄像头");
+    expect(zh, "chinese camera bullet").toBeTruthy();
+    expect(zh).toContain("iOS App 申请摄像头只有一个用途");
+    expect(zh).toContain("macOS App 完全不申请摄像头权限");
+  });
+
+  it("puts both platforms' device labels in one bullet", () => {
+    const en = bulletWith("en", "The label this device carries in your account");
+    expect(en, "english device-label bullet").toBeTruthy();
+    expect(en).toContain("On macOS");
+    expect(en).toContain("On iOS");
+
+    const zh = bulletWith("zh", "本设备在你账号中显示的标签");
+    expect(zh, "chinese device-label bullet").toBeTruthy();
+    expect(zh).toContain("在 macOS 上");
+    expect(zh).toContain("在 iOS 上");
+  });
+});
+
+describe("the maintained pair describes behaviour and never claims availability", () => {
+  // The 5.1.1 correction is about completeness, and the cheapest way to overshoot
+  // it is to let a policy imply the app is on sale. It is not: no iOS build has
+  // been published and nobody can install one. A policy may say how a binary
+  // behaves without saying it exists in a store, and this is the line.
+  const PUBLICATION_CLAIMS = {
+    en: [
+      { label: "available on the App Store", re: /available (?:now )?(?:on|in|from) the App Store/i },
+      { label: "download the app", re: /download (?:our|the) (?:iOS |macOS )?app/i },
+      { label: "available for download", re: /available for download/i },
+      { label: "published", re: /\bpublish(?:ed|es)\b/i },
+      { label: "you can install", re: /you can install/i },
+      { label: "get it on the App Store", re: /get it on the App Store/i },
+      { label: "now shipping", re: /now (?:shipping|available)/i },
+    ],
+    zh: [
+      { label: "上架", re: /上架/ },
+      { label: "已发布/已上线", re: /已(?:发布|上线|推出)/ },
+      { label: "可下载", re: /可以?下载(?:我们的)?\s*(?:iOS|macOS)?\s*App/ },
+      { label: "前往 App Store 下载", re: /(?:前往|去)\s*App Store/ },
+      { label: "立即下载", re: /立即下载/ },
+    ],
+  };
+
+  for (const lang of MAINTAINED_LANGS) {
+    it(`${lang} makes no publication, store-availability or install claim`, () => {
+      const text = textOf(lang);
+      for (const { label, re } of PUBLICATION_CLAIMS[lang]) {
+        expect(re.test(text), `${lang} privacy policy claims the app is available (${label})`).toBe(false);
+      }
+    });
+  }
+
+  it("still refuses the claims that were false in the other direction", () => {
+    // The 2026-08-28 defects, kept banned. Each names a data flow no build has:
+    // an APNs registration, a stored push token, and photo-library access. The
+    // words "push token" and "photo library" are NOT banned — the maintained copy
+    // uses both to deny them, and banning the noun would force the document to
+    // stop making the clearer negative statement. What is banned is the
+    // affirmative shape.
     const RETIRED = {
       en: [
         { label: "APNs", re: /APNs/ },
         { label: "Apple Push Notification service", re: /Apple Push Notification service/i },
         { label: "stores a device token", re: /we store an?\b[^.]*device token/i },
-        { label: "camera", re: /\bcamera\b/i },
-        { label: "photo library", re: /photo librar/i },
-        { label: "your photos", re: /\bphotos\b/i },
+        { label: "delivers notifications from a server", re: /deliver notifications to your device/i },
+        // "has access to your photo library" is the DENIAL the copy makes, so the
+        // ban is the transitive verb form that would be a claim.
+        { label: "reads the photo library", re: /(?:accesses|reads|uses) (?:your|the) photo librar/i },
+        { label: "uploads from the library", re: /uploaded from (?:your|the) (?:camera|librar)/i },
       ],
       zh: [
         { label: "APNs", re: /APNs/ },
-        { label: "推送通知服务", re: /推送通知服务/ },
-        { label: "相机", re: /相机/ },
-        { label: "相册", re: /相册/ },
-        { label: "扫描二维码", re: /扫描二维码/ },
+        { label: "推送通知服务令牌", re: /存储[^。]*推送(?:通知)?(?:服务)?[^。]*令牌/ },
+        { label: "访问相册", re: /访问(?:你的)?相册/ },
+        { label: "从相册上传", re: /从(?:相机|相册)[^。]*上传/ },
       ],
     };
     for (const lang of MAINTAINED_LANGS) {
       const text = textOf(lang);
       for (const { label, re } of RETIRED[lang]) {
-        expect(re.test(text), `${lang} privacy policy restored a retired iOS claim (${label})`).toBe(false);
+        expect(re.test(text), `${lang} privacy policy restored a false claim (${label})`).toBe(false);
       }
     }
   });
 
   it("dates the maintained pair to this correction and leaves the frozen seven alone", () => {
-    // The visible "Last updated" line is owned by this source file, one value
-    // per locale. Maintained legal prose changed here, so its date moves; a
-    // frozen translation whose prose did not change must not silently claim it
-    // was reviewed on a day nobody reviewed it.
+    // The visible "Last updated" line is owned by the source file, one value per
+    // locale. Maintained legal prose changed here, so its date moves; a frozen
+    // translation whose prose did not change must not silently claim it was
+    // reviewed on a day nobody reviewed it.
     for (const lang of MAINTAINED_LANGS)
-      expect(privacy.langs[lang].updated, `${lang} last-updated`).toBe("2026-08-30");
+      expect(privacy.langs[lang].updated, `${lang} last-updated`).toBe(MAINTAINED_DATE);
     for (const lang of FROZEN_LANGS)
-      expect(privacy.langs[lang].updated, `${lang} last-updated`).toBe("2026-08-13");
+      expect(privacy.langs[lang].updated, `${lang} last-updated`).toBe(FROZEN_DATE);
+  });
+});
+
+describe("the generated pages carry the correction, and only where they should", () => {
+  // A corrected source with a stale `public/` page is the same wrong answer one
+  // build step later — and this URL is the one submitted to App Review, so the
+  // generated artifact is the thing that actually gets read.
+  it("en and zh are regenerated with the new date and the iOS facts", () => {
+    for (const lang of MAINTAINED_LANGS) {
+      const html = generatedPrivacyPage(lang);
+      expect(html, `${lang} generated date`).toContain(MAINTAINED_DATE);
+      expect(html, `${lang} generated iOS mention`).toContain("iOS");
+      expect(html, `${lang} generated camera scope`).toMatch(
+        lang === "en" ? /asks for no camera access at all/ : /完全不申请摄像头权限/,
+      );
+    }
+  });
+
+  it("the seven frozen pages keep their archived date and prose", () => {
+    for (const lang of FROZEN_LANGS) {
+      const html = generatedPrivacyPage(lang);
+      expect(html, `${lang} generated date`).toContain(FROZEN_DATE);
+      expect(html, `${lang} generated date`).not.toContain(MAINTAINED_DATE);
+    }
   });
 });
 
 describe("the seven frozen translations keep their archived prose", () => {
   // The exact sentence each frozen locale carried on 2026-08-28, harvested from
   // the file rather than written from the English. If a well-meaning edit
-  // "corrects" one of these to macOS, this fails — which is the point. A frozen
-  // locale is corrected by retranslating it when it is restored, and restoring a
-  // locale is an owner decision (PROJECT-GOVERNANCE, supported-language policy).
+  // "corrects" one of these — in either direction, toward macOS-only or toward
+  // the new two-platform text — this fails, which is the point. A frozen locale
+  // is corrected by retranslating it when it is restored, and restoring a locale
+  // is an owner decision (PROJECT-GOVERNANCE, supported-language policy).
   const ARCHIVED_IOS_AND_MACOS = {
     ja: "iOS および macOS アプリでは、サブスクリプションは Apple のアプリ内課金を通じて購入されます。",
     ko: "iOS 및 macOS 앱에서는 Apple 인앱 구매를 통해 구독을 구매합니다.",
@@ -277,10 +482,9 @@ describe("the seven frozen translations keep their archived prose", () => {
     pt: "Nos nossos apps de iOS e macOS, as assinaturas são compradas por meio da compra no app da Apple.",
   };
 
-  // The plural device-data lead-in each frozen locale still carries. It is the
-  // same sentence the maintained pair just lost, and it stays: a frozen locale
-  // is corrected by retranslation when it is restored, not by an editor who
-  // does not read it.
+  // The plural device-data lead-in each frozen locale still carries. The
+  // maintained pair lost it in 2026-08 and has now grown its own two-platform
+  // wording; neither event reaches the archive.
   const ARCHIVED_NATIVE_APPS_PLURAL = {
     ja: "当社のネイティブアプリは、ウェブサイトでは扱わない、デバイスレベルの小さなデータを扱います：",
     ko: "저희 네이티브 앱은 웹사이트에서는 다루지 않는 소량의 기기 수준 데이터를 처리합니다:",
@@ -291,13 +495,11 @@ describe("the seven frozen translations keep their archived prose", () => {
     pt: "Nossos aplicativos nativos lidam com alguns dados no nível do dispositivo que o site não trata:",
   };
 
-  // The two device-data bullets the maintained pair just retired, still standing
-  // in each frozen locale. They are the sharpest case for the freeze rule and
-  // the reason they are pinned rather than swept: they are WRONG about macOS,
-  // and an editor who has just proved that has every reason to reach in and fix
-  // seven translations they cannot read. A frozen locale is not live legal text
-  // — it is an archived translation, labelled as one on the rendered page, and
-  // it is corrected by retranslating it when the owner restores that locale.
+  // The two device-data bullets the maintained pair retired. They describe an
+  // APNs token and photo-library access that no shipping build has, on either
+  // platform — so they are the sharpest case for the freeze rule and the reason
+  // they are pinned rather than swept. A frozen locale is not live legal text: it
+  // is an archived translation, labelled as one on the rendered page.
   const ARCHIVED_APNS = {
     ja: "プッシュ通知：有効にした場合、デバイスに通知を配信できるよう、Apple Push Notification service（APNs）のデバイストークンを保存します。通知はいつでもデバイスの設定でオフにできます。",
     ko: "푸시 알림: 활성화하면 기기에 알림을 전달할 수 있도록 Apple Push Notification service(APNs) 기기 토큰을 저장합니다. 알림은 언제든지 기기 설정에서 끌 수 있습니다.",

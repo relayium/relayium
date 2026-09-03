@@ -102,6 +102,12 @@
 #     Exact in both directions, since a category the source does not justify is
 #     as false a public statement as a missing one, and the appex silently
 #     shipping the APP's manifest is present, valid and wrong;
+#   * and, in the same four places, exactly the pinned COLLECTED-DATA graph —
+#     the app's six types with their linked, tracking and purpose flags, and the
+#     extension's empty list. This is the half that becomes the App Store
+#     privacy label, and the half nothing else catches: a wrong required-reason
+#     graph is an upload rejection, while a wrong collected-data list uploads
+#     cleanly and publishes a false promise to everyone reading the listing;
 #   * both purpose strings in the app, the camera one localized in `en` and
 #     `zh-Hans` inside the app bundle where iOS actually reads it, and NO camera
 #     declaration and no `.lproj` at all in the extension;
@@ -188,6 +194,58 @@ NSPrivacyAccessedAPICategoryFileTimestamp	DDA9.1
 NSPrivacyAccessedAPICategorySystemBootTime	35F9.1
 NSPrivacyAccessedAPICategoryUserDefaults	CA92.1'
 readonly SHARE_REQUIRED_REASON_GRAPH='NSPrivacyAccessedAPICategoryFileTimestamp	DDA9.1'
+
+# ── the collected-data graph each bundle must declare ────────────────────────
+#
+# The OTHER half of a privacy manifest, and the half that becomes the App Store
+# privacy label a shopper reads before installing. It is checked here for the
+# same reason as the graph above — nothing at runtime notices whether it is true
+# — but it fails differently and more quietly: a required-reason mistake is an
+# upload rejection Apple raises, while a collected-data mistake ships, publishes
+# a wrong label, and is discovered by somebody who trusted it.
+#
+# Pinned as sorted `type<TAB>linked<TAB>tracking<TAB>purpose,purpose` lines and
+# compared for EQUALITY, so all six ways this list goes wrong are caught:
+# a MISSING type loses a line, an UNEXPECTED one gains a line, a wrong LINKED or
+# TRACKING flag changes a field, a wrong PURPOSE changes the last field, and a
+# DUPLICATED type — which a set-shaped reader collapses into a graph comparing
+# equal to the correct one — produces a repeated line.
+#
+#   Name              the create-account form's own field, plus the name Apple
+#                     hands over on a first Sign in with Apple authorization.
+#                     NOT the device label: `AppEnvironment.deviceName()`
+#                     answers "iPhone"/"iPad"/"iPod touch" on this platform,
+#                     and a hardware family is not a name.
+#   EmailAddress      the account identifier itself.
+#   PurchaseHistory   StoreKit's signed transaction, retained as the account's
+#                     subscription source, plan, status and renewal period.
+#   UserID            the per-account appAccountToken sent to Apple.
+#   OtherUsageData    metering — uploads, stored downloads, relayed bytes, and
+#                     the Device Inbox delivery this release adds, all booked to
+#                     the account in `usage_monthly`.
+#   ProductInteraction  the identifier-free monthly activation aggregate. The
+#                     one UNLINKED entry, and the one declared for Analytics.
+#
+# `NSPrivacyCollectedDataTypeDeviceID` is deliberately ABSENT and the macOS
+# manifest declares it. iOS reaches neither producer: there is no browser
+# sign-in, and although this app does call `purchase-dispatch`, it takes the
+# default `.legacyOneShot` policy, so no continuation exists and the encoder
+# omits `appInstanceId` entirely. Equality is what keeps that absence enforced —
+# a "contains" check would accept it being added back.
+#
+# The Share extension's list is EMPTY, and that is a different assertion rather
+# than a smaller graph: the appex holds only the App Group entitlement, reaches
+# no network, and therefore transmits nothing for an entry to describe. It is a
+# NAMED constant rather than an empty literal at the two call sites, so that
+# repointing the extension at the app's graph is one edit to one line that this
+# file's own contract test can see.
+readonly APP_COLLECTED_DATA_GRAPH='NSPrivacyCollectedDataTypeEmailAddress	true	false	NSPrivacyCollectedDataTypePurposeAppFunctionality
+NSPrivacyCollectedDataTypeName	true	false	NSPrivacyCollectedDataTypePurposeAppFunctionality
+NSPrivacyCollectedDataTypeOtherUsageData	true	false	NSPrivacyCollectedDataTypePurposeAppFunctionality
+NSPrivacyCollectedDataTypeProductInteraction	false	false	NSPrivacyCollectedDataTypePurposeAnalytics
+NSPrivacyCollectedDataTypePurchaseHistory	true	false	NSPrivacyCollectedDataTypePurposeAppFunctionality
+NSPrivacyCollectedDataTypeUserID	true	false	NSPrivacyCollectedDataTypePurposeAppFunctionality'
+readonly SHARE_COLLECTED_DATA_GRAPH=''
 
 # The export contract. `destination = export` is what makes this a build rather
 # than a submission: the alternative value is `upload`, and it is the single
@@ -415,6 +473,102 @@ expect_required_reason_graph() {
     return
   fi
   pass_check "$label: required-reason graph is exactly the pinned one"
+}
+
+# ── the collected-data graph of a BUILT manifest ─────────────────────────────
+
+# The collected-data list a manifest actually declares, as sorted
+# `type<TAB>linked<TAB>tracking<TAB>purpose,purpose` lines: one line per ENTRY
+# rather than per type, purposes in file order with no deduplication, and the
+# two booleans printed as `plutil` renders them.
+#
+# Same shape and same reasoning as `required_reason_graph_of`, including its
+# failure contract: this returns NON-ZERO and prints nothing partial when the
+# file is not a plist, is not a dictionary, is missing the key, or carries an
+# entry with no type, no purposes or an empty purpose list. An unreadable
+# manifest must reach the caller as a finding, never as a graph that happens to
+# compare unequal for the wrong reason.
+#
+# An EMPTY list is a legitimate, successful answer — it is what the Share
+# extension must declare — so a count of `0` prints nothing and returns zero.
+# That is exactly why the caller distinguishes "read failed" from "read empty":
+# collapsing them would make an unparseable appex manifest pass the emptiness
+# check it is supposed to fail.
+collected_data_graph_of() {
+  local file="$1"
+  local entry_count entry_index purpose_count purpose_index
+  local type linked tracking purpose purposes lines=''
+
+  entry_count="$(plist_value "$file" "$(plutil_path NSPrivacyCollectedDataTypes)")" || return 1
+  [[ "$entry_count" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
+
+  for (( entry_index = 0; entry_index < entry_count; entry_index++ )); do
+    type="$(plist_value "$file" \
+      "$(plutil_path NSPrivacyCollectedDataTypes "$entry_index" NSPrivacyCollectedDataType)")" ||
+      return 1
+    [ -n "$type" ] || return 1
+
+    # Both flags are REQUIRED and read as raw booleans. A missing key is a
+    # failed extraction, which is the correct outcome: Apple defines four keys
+    # per entry, and an entry that omits `Linked` is not a truthful entry with a
+    # default — it is a malformed one.
+    linked="$(plist_value "$file" \
+      "$(plutil_path NSPrivacyCollectedDataTypes "$entry_index" \
+                     NSPrivacyCollectedDataTypeLinked)")" || return 1
+    [[ "$linked" =~ ^(true|false)$ ]] || return 1
+    tracking="$(plist_value "$file" \
+      "$(plutil_path NSPrivacyCollectedDataTypes "$entry_index" \
+                     NSPrivacyCollectedDataTypeTracking)")" || return 1
+    [[ "$tracking" =~ ^(true|false)$ ]] || return 1
+
+    purpose_count="$(plist_value "$file" \
+      "$(plutil_path NSPrivacyCollectedDataTypes "$entry_index" \
+                     NSPrivacyCollectedDataTypePurposes)")" || return 1
+    [[ "$purpose_count" =~ ^[1-9][0-9]*$ ]] || return 1
+
+    purposes=''
+    for (( purpose_index = 0; purpose_index < purpose_count; purpose_index++ )); do
+      purpose="$(plist_value "$file" \
+        "$(plutil_path NSPrivacyCollectedDataTypes "$entry_index" \
+                       NSPrivacyCollectedDataTypePurposes "$purpose_index")")" || return 1
+      [ -n "$purpose" ] || return 1
+      if [ -z "$purposes" ]; then purposes="$purpose"; else purposes="$purposes,$purpose"; fi
+    done
+
+    lines="$lines$type	$linked	$tracking	$purposes
+"
+  done
+
+  printf '%s' "$lines" | LC_ALL=C sort
+}
+
+# One built bundle's collected-data list, against the graph it is pinned to.
+#
+# Exact rather than "contains", in both directions and for the same reason as
+# the required-reason graph: a type the source does not justify passes every "is
+# it there" check ever written, reads as caution, and publishes a label claiming
+# this app collects something it does not.
+expect_collected_data_graph() {
+  local file="$1" expected="$2" label="$3" actual
+
+  if [ ! -f "$file" ]; then
+    fail_check "$label: no privacy manifest at $file"
+    return
+  fi
+  if ! actual="$(collected_data_graph_of "$file")"; then
+    fail_check "$label: $file declares no readable NSPrivacyCollectedDataTypes list"
+    return
+  fi
+  if [ "$actual" != "$expected" ]; then
+    fail_check "$label: the collected-data graph in $file is not the pinned one"
+    printf '  expected:\n%s\n  actual:\n%s\n' "$expected" "$actual" >&2
+    return
+  fi
+  if [ -z "$expected" ]; then
+    pass_check "$label: collects nothing, as it must"
+  else
+    pass_check "$label: collected-data graph is exactly the pinned one"
+  fi
 }
 
 # `is_within ANCESTOR CANDIDATE` — true when CANDIDATE is ANCESTOR itself or
@@ -1108,6 +1262,26 @@ expect_required_reason_graph "$app_dir/PrivacyInfo.xcprivacy" \
   "$APP_REQUIRED_REASON_GRAPH" 'app privacy manifest'
 expect_required_reason_graph "$appex_dir/PrivacyInfo.xcprivacy" \
   "$SHARE_REQUIRED_REASON_GRAPH" 'share privacy manifest'
+
+# And the collected-data list, in the same four places and for a sharper
+# reason. The required-reason graph above is enforced by Apple at upload, so a
+# mistake there is caught by somebody. Nothing enforces this one: a wrong
+# collected-data list uploads cleanly, becomes the App Store privacy label, and
+# is read as a promise by people deciding whether to install.
+#
+# The extension's expectation is the EMPTY string, which is a claim in its own
+# right rather than the absence of one — the appex must ship a manifest that
+# declares an empty list, not a manifest with the key missing and not the app's
+# list. `collected_data_graph_of` returns non-zero for the first and the pinned
+# comparison rejects the second.
+expect_collected_data_graph "$archive_app_dir/PrivacyInfo.xcprivacy" \
+  "$APP_COLLECTED_DATA_GRAPH" 'archive app collected data'
+expect_collected_data_graph "$archive_appex_dir/PrivacyInfo.xcprivacy" \
+  "$SHARE_COLLECTED_DATA_GRAPH" 'archive share collected data'
+expect_collected_data_graph "$app_dir/PrivacyInfo.xcprivacy" \
+  "$APP_COLLECTED_DATA_GRAPH" 'app collected data'
+expect_collected_data_graph "$appex_dir/PrivacyInfo.xcprivacy" \
+  "$SHARE_COLLECTED_DATA_GRAPH" 'share collected data'
 
 # Protected-resource declarations. The app declares both purpose strings and
 # localizes the camera one where iOS reads it — the app's OWN bundle, before any

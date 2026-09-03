@@ -40,9 +40,21 @@
 //     particular anything under `/apps/`, which 404s in English;
 //   * a placeholder, a secret-shaped value, a contact detail or a price;
 //   * a marketing claim this product does not ship — background receiving,
-//     notifications, sync, backup — and a reviewer note that has lost one of
-//     the disclosures a single-device reviewer needs;
-//   * a screenshot or accessibility state that claims more than has been done.
+//     notifications, sync, backup, a download-count limit on a stored link —
+//     and a reviewer note that has lost one of the disclosures a single-device
+//     reviewer needs;
+//   * a screenshot or accessibility state that claims more than has been done;
+//   * a draft App Privacy graph that is not exactly the one the app ships. The
+//     packet carries the answers somebody will type into App Store Connect, and
+//     they are checked twice: against the graph pinned in this file, and
+//     against `apps/ios/Relayium/PrivacyInfo.xcprivacy` itself — so a packet and
+//     a validator edited to agree with each other, and not with the binary,
+//     is a finding rather than a passing run. The manifest is PARSED, not
+//     scanned: the linked flag, the tracking flag and the ordered purpose list
+//     of every entry are compared, along with the label-level tracking answer
+//     and its domains, and a manifest this validator cannot read exactly —
+//     duplicate key, extra key, unknown element, repeated data type — is a
+//     finding rather than an empty reading;
 //
 // ── what it is not ───────────────────────────────────────────────────────────
 //
@@ -127,6 +139,44 @@ const LIMIT = {
 const PLANS = ["plus", "pro", "max"];
 const CYCLES = ["monthly", "yearly"];
 const PRODUCT_IDS = PLANS.flatMap((plan) => CYCLES.map((cycle) => `${BUNDLE_ID}.${plan}.${cycle}`));
+
+// ── the App Privacy answers, pinned ──────────────────────────────────────────
+//
+// The App Store privacy label is the one part of this packet that is a PUBLIC
+// PROMISE rather than a form field: a shopper reads it before installing, and
+// unlike a subtitle over its limit, a wrong answer here saves cleanly and is
+// discovered by somebody who trusted it.
+//
+// It is stated three times in this repository, deliberately and independently:
+// `apps/ios/Relayium/PrivacyInfo.xcprivacy` is what the app SHIPS,
+// `IOSPrivacyManifestTests` derives it from the source and server storage that
+// justify each entry, and `scripts/ios-app-store-candidate.sh` checks the BUILT
+// bundles. This is the fourth statement and it has a different job: it is what
+// somebody will type into App Store Connect, so it is pinned here and then
+// cross-checked against the shipped manifest below. Three agreeing statements
+// and a packet that quietly disagrees with all of them is exactly the failure
+// this constant exists to prevent.
+//
+// `NSPrivacyCollectedDataTypeDeviceID` is absent and the macOS record declares
+// it. That asymmetry is checked as an explicit absence rather than left to the
+// equality comparison, because it is the entry a parity-minded edit adds.
+const APP_PRIVACY_TYPES = [
+  { type: "NSPrivacyCollectedDataTypeName", linked: true, purpose: "AppFunctionality" },
+  { type: "NSPrivacyCollectedDataTypeEmailAddress", linked: true, purpose: "AppFunctionality" },
+  { type: "NSPrivacyCollectedDataTypePurchaseHistory", linked: true, purpose: "AppFunctionality" },
+  { type: "NSPrivacyCollectedDataTypeUserID", linked: true, purpose: "AppFunctionality" },
+  { type: "NSPrivacyCollectedDataTypeOtherUsageData", linked: true, purpose: "AppFunctionality" },
+  { type: "NSPrivacyCollectedDataTypeProductInteraction", linked: false, purpose: "Analytics" },
+].map(({ type, linked, purpose }) => ({
+  type,
+  linked,
+  tracking: false,
+  purposes: [`NSPrivacyCollectedDataTypePurpose${purpose}`],
+}));
+
+const APP_PRIVACY_ABSENT_TYPES = ["NSPrivacyCollectedDataTypeDeviceID"];
+const APP_MANIFEST = "apps/ios/Relayium/PrivacyInfo.xcprivacy";
+const SHARE_MANIFEST = "apps/ios/RelayiumShare/PrivacyInfo.xcprivacy";
 
 const OWNER_ENTERED_FIELDS = [
   "contactFirstName",
@@ -381,6 +431,51 @@ const SCHEMA = obj({
     }),
   }),
   storefront: localeMap(storefrontSpec),
+  appPrivacy: obj({
+    // Same two-part honesty as `subscriptions.state`: what this repository
+    // holds, and that a read-back is owed. "no answers exist in the record"
+    // would be a claim about App Store Connect, and nothing here has looked.
+    state: str({ equals: "drafted-in-this-repository-app-store-connect-readback-required" }),
+    observedAppStoreConnectState: bool({ equals: false }),
+    sourceOfTruth: str({ equals: APP_MANIFEST }),
+    // The label-level tracking answer, which must agree with the manifest's
+    // `NSPrivacyTracking`. Pinned to false with no domains, because a `true`
+    // here would put Relayium inside App Tracking Transparency's scope.
+    tracking: bool({ equals: false }),
+    trackingDomains: arr(str(), { max: 0 }),
+    note: str({ multiline: true }),
+    collected: arr(
+      obj({
+        type: str({ pattern: /^NSPrivacyCollectedDataType[A-Za-z]+$/ }),
+        linked: bool(),
+        tracking: bool({ equals: false }),
+        purposes: arr(str({ pattern: /^NSPrivacyCollectedDataTypePurpose[A-Za-z]+$/ }), {
+          min: 1,
+          unique: true,
+        }),
+        basis: str({ multiline: true }),
+      }),
+      { min: APP_PRIVACY_TYPES.length, max: APP_PRIVACY_TYPES.length },
+    ),
+    deliberatelyAbsent: arr(
+      obj({
+        type: str({ pattern: /^NSPrivacyCollectedDataType[A-Za-z]+$/ }),
+        declaredOnMacOS: bool(),
+        reason: str({ multiline: true }),
+        revisitTrigger: str({ multiline: true }),
+        guardedBy: str(),
+      }),
+      { min: 1 },
+    ),
+    shareExtension: obj({
+      bundleId: str({ equals: SHARE_BUNDLE_ID }),
+      // `max: 0` rather than a missing key: the extension declaring an EMPTY
+      // list is a claim in its own right, and one this packet must carry.
+      collected: arr(str(), { max: 0 }),
+      reason: str({ multiline: true }),
+      guardedBy: str(),
+    }),
+  }),
   appReview: obj({
     signInRequired: bool({ equals: true }),
     ownerEnteredFields: arr(
@@ -755,6 +850,56 @@ const REQUIRED_ACCOUNT_DISTINCTION = [
   ["testFlight.whatToTest.zh-Hans", ["未登录时可以加入别人出示的码，但不能出示码"]],
 ];
 
+// A stored link's controls are an EXPIRY and an optional delete-after-first-
+// download, and that is all `SendView` offers: a `Picker` bound to `upload.ttl`
+// and a `Toggle` bound to `upload.burnAfterRead`. No iOS surface offers a
+// download-count cap, and no client model carries one.
+//
+// A download-count cap does exist elsewhere in the product — the CLI's
+// `--max-downloads`, resolved server-side — which is exactly why the claim read
+// as plausible and survived review. It is still false about the app this
+// listing describes, and the listing is what a shopper reads.
+//
+// The storefront copy said users set "your own expiry and download limits" (and
+// "有效期和下载次数由你自己定" in Chinese) — a control this build does not ship,
+// promised to somebody choosing whether to install. It is the same class of
+// defect as the background-receiving claim above and is banned the same way: a
+// shopper who buys a plan expecting to cap downloads at five has been told
+// something untrue by the listing.
+//
+// "Burn after read" is deliberately NOT how the ban is phrased. The honest
+// replacement uses the app's own words — "Delete after first download" /
+// "首次下载后即删除" — so the vocabulary a reader meets in the listing is the
+// vocabulary they meet in the app.
+const FORBIDDEN_STORED_LINK_CLAIMS = [
+  [/download limits?/i, "a download-limit claim"],
+  [/limit[^.]{0,30}\bdownloads?\b/i, "a download-limit claim"],
+  [/\bdownloads?\b[^.]{0,20}\blimits?\b/i, "a download-limit claim"],
+  [/number of downloads/i, "a download-count claim"],
+  [/下载次数/, "'下载次数' (download count)"],
+  [/下载(?:数量|上限)/, "a download-count or download-cap claim"],
+];
+
+for (const { path, value } of allStrings) {
+  if (!marketingPathSet.has(path)) continue;
+  for (const [pattern, what] of FORBIDDEN_STORED_LINK_CLAIMS) {
+    if (pattern.test(value)) {
+      fail(
+        path,
+        `makes ${what}; a stored link's shipped controls are an expiry and an optional delete-after-first-download, and there is no download-count field in the app`,
+      );
+    }
+  }
+}
+
+// The accurate statement has to be PRESENT, not merely un-contradicted:
+// deleting the sentence would satisfy every ban above and leave the listing
+// silent about the one control a sender actually has.
+const REQUIRED_STORED_LINK_CONTROLS = [
+  ["storefront.en-US.description", ["when the link expires", "delete itself after the first download"]],
+  ["storefront.zh-Hans.description", ["有效期由你自己定", "首次下载后即删除"]],
+];
+
 // The review attachment: the packet says whether it exists, and the reviewer
 // notes say something about it. A packet whose state and whose prose disagree is
 // worse than either alone, because whichever one an operator reads is the one
@@ -800,7 +945,11 @@ const REQUIRED_SUBSTRINGS = [
 ];
 
 const stringAt = new Map(allStrings.map(({ path, value }) => [path, value]));
-for (const [path, required] of [...REQUIRED_SUBSTRINGS, ...REQUIRED_ACCOUNT_DISTINCTION]) {
+for (const [path, required] of [
+  ...REQUIRED_SUBSTRINGS,
+  ...REQUIRED_ACCOUNT_DISTINCTION,
+  ...REQUIRED_STORED_LINK_CONTROLS,
+]) {
   const value = stringAt.get(path);
   if (value === undefined) continue;
   for (const needle of required) {
@@ -942,6 +1091,452 @@ packet.accessibilityNutritionLabel.deviceFamilies.forEach((family, index) => {
 });
 if (packet.accessibilityNutritionLabel.deviceFamilies.some((family) => family.features.some((f) => f.claimed))) {
   fail("accessibilityNutritionLabel", "claims a feature while the label state is unassessed");
+}
+
+// ── the App Privacy answers, against the manifest the app actually ships ─────
+//
+// Two checks, and they answer different questions. The first compares the
+// packet against the graph pinned at the top of this file: it catches a packet
+// edited on its own. The second compares BOTH against
+// `apps/ios/Relayium/PrivacyInfo.xcprivacy`: it catches the case the first
+// cannot see, where the manifest changed and the packet and this validator were
+// updated together to agree with each other and not with the app.
+//
+// Without the second, three files could agree on an answer the shipped binary
+// contradicts — which is the whole failure mode this section exists for, since
+// the manifest is what Apple reads and the packet is only what somebody types.
+
+const declaredPrivacy = packet.appPrivacy.collected;
+APP_PRIVACY_TYPES.forEach((expected, index) => {
+  const actual = declaredPrivacy[index];
+  const path = `appPrivacy.collected[${index}]`;
+  if (!actual) {
+    fail("appPrivacy.collected", `is missing the '${expected.type}' entry`);
+    return;
+  }
+  // Order is compared, not merely membership. The manifest is an ordered list
+  // and the candidate script indexes the built one positionally, so a packet
+  // that reorders these is describing a different file than the one shipping.
+  if (actual.type !== expected.type) {
+    fail(`${path}.type`, `must be '${expected.type}'; the order matches the shipped manifest`);
+    return;
+  }
+  if (actual.linked !== expected.linked) {
+    fail(`${path}.linked`, `must be ${expected.linked} for '${expected.type}'`);
+  }
+  if (actual.tracking !== expected.tracking) {
+    fail(`${path}.tracking`, `must be ${expected.tracking}; nothing in this app tracks`);
+  }
+  const samePurposes =
+    actual.purposes.length === expected.purposes.length &&
+    expected.purposes.every((purpose, position) => actual.purposes[position] === purpose);
+  if (!samePurposes) {
+    fail(`${path}.purposes`, `must be exactly [${expected.purposes.join(", ")}] for '${expected.type}'`);
+  }
+});
+
+const declaredPrivacyTypes = declaredPrivacy.map((entry) => entry.type);
+for (const absent of APP_PRIVACY_ABSENT_TYPES) {
+  if (declaredPrivacyTypes.includes(absent)) {
+    fail(
+      "appPrivacy.collected",
+      `declares '${absent}', which iOS must not: the macOS record declares it, and no iOS call site sends one`,
+    );
+  }
+}
+const absentTypes = packet.appPrivacy.deliberatelyAbsent.map((entry) => entry.type);
+for (const absent of APP_PRIVACY_ABSENT_TYPES) {
+  if (!absentTypes.includes(absent)) {
+    fail(
+      "appPrivacy.deliberatelyAbsent",
+      `does not record why '${absent}' is absent; an unexplained absence is indistinguishable from an oversight`,
+    );
+  }
+}
+
+// ── the manifest, read exactly ───────────────────────────────────────────────
+//
+// This used to be a regular expression over the file's text that collected the
+// ORDERED LIST OF TYPES and nothing else, on the argument that a full plist
+// parser "would be a second thing to get wrong". The argument was wrong in a way
+// that mattered: an ordered list of type names is the one part of a collected-
+// data entry that CANNOT be edited quietly. Everything else can.
+//
+// A manifest that flips `NSPrivacyCollectedDataTypeLinked` on the activation
+// aggregate, or swaps a purpose from Analytics to App Functionality, or grows a
+// second purpose, or declares the same type twice, still yields exactly the type
+// list this validator was pinned against — so the run stayed green while the
+// packet described a different privacy label than the binary shipped. That is
+// the precise failure this whole section exists to catch, and the text scan
+// could not see it.
+//
+// So the manifest is parsed. Not with `plutil`, which is macOS-only and would
+// make this validator unrunnable in CI on anything else, and not with a
+// dependency: with the small strict reader below, which accepts the subset of
+// the plist XML grammar Apple's manifests use and REFUSES everything else. A
+// refusal is a finding, never a silent fallback to "no entries found" — that
+// direction is how an unreadable file passes as an empty one.
+//
+// XML comments are stripped first, and that is load-bearing rather than tidy.
+// The manifest argues at length for its own contents — including a paragraph
+// naming `NSPrivacyCollectedDataTypeDeviceID` in order to explain why it is
+// absent, and another containing the literal `api/devices/<id>/inbox/...` — so a
+// parser fed the raw text would read prose as markup.
+
+class ManifestError extends Error {}
+
+/** Every tag and text run in the document, in order. Attributes are dropped:
+ *  `<plist version="1.0">` is an open tag named `plist`, and no value in this
+ *  grammar carries an attribute that means anything. */
+function plistTokens(text) {
+  const tokens = [];
+  let index = 0;
+  while (index < text.length) {
+    const open = text.indexOf("<", index);
+    if (open === -1) {
+      tokens.push({ kind: "text", value: text.slice(index) });
+      break;
+    }
+    if (open > index) tokens.push({ kind: "text", value: text.slice(index, open) });
+    const close = text.indexOf(">", open);
+    if (close === -1) throw new ManifestError("contains an unterminated tag");
+    const raw = text.slice(open + 1, close).trim();
+    if (raw.length === 0) throw new ManifestError("contains an empty tag");
+    if (raw.startsWith("/")) tokens.push({ kind: "close", name: raw.slice(1).trim() });
+    else if (raw.endsWith("/")) tokens.push({ kind: "empty", name: raw.slice(0, -1).trim().split(/\s/)[0] });
+    else tokens.push({ kind: "open", name: raw.split(/\s/)[0] });
+    index = close + 1;
+  }
+  return tokens;
+}
+
+const ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+
+function decodeEntities(value) {
+  return value.replace(/&(#x[0-9A-Fa-f]+|#[0-9]+|[a-z]+);/g, (whole, body) => {
+    if (body.startsWith("#x")) return String.fromCodePoint(parseInt(body.slice(2), 16));
+    if (body.startsWith("#")) return String.fromCodePoint(parseInt(body.slice(1), 10));
+    const named = ENTITIES[body];
+    if (named === undefined) throw new ManifestError(`uses the unknown XML entity '&${body};'`);
+    return named;
+  });
+}
+
+// The value kinds Apple's manifests contain, plus the numeric ones a hand edit
+// could plausibly introduce. Anything else — `<data>`, `<date>`, a tag this
+// grammar does not name — is refused rather than skipped.
+//
+// `key` is NOT here. It is read by the dict branch below through the same
+// routine, but it is not a value: an `<array>` holding a `<key>` is a malformed
+// document, and listing `key` as a scalar would silently accept one as a string.
+const SCALARS = new Set(["string", "integer", "real"]);
+
+/** The text of a `<name>…</name>` element that has already been opened at `at`.
+ *  Returns the raw text and the index after the closing tag. */
+function parseTextElement(tokens, at, name) {
+  let text = "";
+  let index = at + 1;
+  while (tokens[index] && tokens[index].kind === "text") {
+    text += tokens[index].value;
+    index += 1;
+  }
+  const closing = tokens[index];
+  if (!closing || closing.kind !== "close" || closing.name !== name) {
+    throw new ManifestError(`has an unclosed <${name}>`);
+  }
+  return [text, index + 1];
+}
+
+/** One value starting at `at`. Returns the value and the index after it. */
+function parseValue(tokens, at) {
+  const token = tokens[at];
+  if (!token) throw new ManifestError("ends in the middle of a value");
+  if (token.kind === "empty") {
+    if (token.name === "true") return [true, at + 1];
+    if (token.name === "false") return [false, at + 1];
+    if (token.name === "array") return [[], at + 1];
+    if (token.name === "dict") return [new Map(), at + 1];
+    if (token.name === "string") return ["", at + 1];
+    throw new ManifestError(`declares an empty <${token.name}/>, which is not a value`);
+  }
+  if (token.kind !== "open") throw new ManifestError(`has a stray </${token.name ?? "?"}>`);
+
+  if (SCALARS.has(token.name)) {
+    const [text, after] = parseTextElement(tokens, at, token.name);
+    if (token.name === "string") return [decodeEntities(text), after];
+    const number = Number(text.trim());
+    if (!Number.isFinite(number)) throw new ManifestError(`has a <${token.name}> that is not a number`);
+    return [number, after];
+  }
+
+  if (token.name === "array") {
+    const values = [];
+    let index = at + 1;
+    for (;;) {
+      index = skipWhitespace(tokens, index);
+      const next = tokens[index];
+      if (!next) throw new ManifestError("has an unclosed <array>");
+      if (next.kind === "close") {
+        if (next.name !== "array") throw new ManifestError(`closes an <array> with </${next.name}>`);
+        return [values, index + 1];
+      }
+      const [value, after] = parseValue(tokens, index);
+      values.push(value);
+      index = after;
+    }
+  }
+
+  if (token.name === "dict") {
+    // A Map, not an object: it preserves declaration order, it cannot collide
+    // with `__proto__`, and `.has` gives the duplicate-key check below something
+    // exact to ask.
+    const entries = new Map();
+    let index = at + 1;
+    for (;;) {
+      index = skipWhitespace(tokens, index);
+      const next = tokens[index];
+      if (!next) throw new ManifestError("has an unclosed <dict>");
+      if (next.kind === "close") {
+        if (next.name !== "dict") throw new ManifestError(`closes a <dict> with </${next.name}>`);
+        return [entries, index + 1];
+      }
+      if (next.kind !== "open" || next.name !== "key") {
+        throw new ManifestError(`has a <dict> entry that starts with <${next.name}> instead of <key>`);
+      }
+      const [rawKey, afterKey] = parseTextElement(tokens, index, "key");
+      const key = decodeEntities(rawKey);
+      // The failure `plutil` and `PropertyListSerialization` both paper over:
+      // a repeated key. Whichever one a reader keeps, the other is invisible.
+      if (entries.has(key)) throw new ManifestError(`declares the key '${key}' twice`);
+      const [value, afterValue] = parseValue(tokens, skipWhitespace(tokens, afterKey));
+      entries.set(key, value);
+      index = afterValue;
+    }
+  }
+
+  throw new ManifestError(`declares <${token.name}>, which is not part of this grammar`);
+}
+
+/** Whitespace-only text between markup is structure, not content. Text that is
+ *  NOT whitespace-only outside a scalar is a document this reader will not
+ *  guess about. */
+function skipWhitespace(tokens, at) {
+  let index = at;
+  while (tokens[index] && tokens[index].kind === "text") {
+    if (tokens[index].value.trim().length > 0) {
+      throw new ManifestError(`has the stray text '${tokens[index].value.trim().slice(0, 40)}' between tags`);
+    }
+    index += 1;
+  }
+  return index;
+}
+
+const MANIFEST_KEYS = [
+  "NSPrivacyTracking",
+  "NSPrivacyTrackingDomains",
+  "NSPrivacyCollectedDataTypes",
+  "NSPrivacyAccessedAPITypes",
+];
+
+const COLLECTED_ENTRY_KEYS = [
+  "NSPrivacyCollectedDataType",
+  "NSPrivacyCollectedDataTypeLinked",
+  "NSPrivacyCollectedDataTypeTracking",
+  "NSPrivacyCollectedDataTypePurposes",
+];
+
+/**
+ * The privacy manifest at `relativePath`, as the four facts this validator
+ * compares: the label-level tracking answer, the tracking domains, and the
+ * ordered collected-data entries with their linked flag, tracking flag and
+ * ordered purposes.
+ *
+ * Throws `ManifestError` on anything it cannot read EXACTLY. A returned value
+ * is a complete reading of the file, never a partial one — which is what makes
+ * "the manifest declares no such type" a fact rather than an artefact of a
+ * scan that stopped early.
+ */
+function readPrivacyManifest(relativePath) {
+  const text = readFileSync(resolve(repoRoot, relativePath), "utf8")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<\?xml[\s\S]*?\?>/g, "")
+    .replace(/<!DOCTYPE[^>]*>/g, "");
+
+  const tokens = plistTokens(text);
+  let index = skipWhitespace(tokens, 0);
+  const root = tokens[index];
+  if (!root || root.kind !== "open" || root.name !== "plist") {
+    throw new ManifestError("does not open with a <plist> element");
+  }
+  const [body, afterBody] = parseValue(tokens, skipWhitespace(tokens, index + 1));
+  index = skipWhitespace(tokens, afterBody);
+  if (!tokens[index] || tokens[index].kind !== "close" || tokens[index].name !== "plist") {
+    throw new ManifestError("does not close its <plist> element after exactly one value");
+  }
+  if (skipWhitespace(tokens, index + 1) !== tokens.length) {
+    throw new ManifestError("carries a second document after </plist>");
+  }
+  if (!(body instanceof Map)) throw new ManifestError("is not a dictionary at the top level");
+
+  for (const key of body.keys()) {
+    if (!MANIFEST_KEYS.includes(key)) throw new ManifestError(`declares the unknown top-level key '${key}'`);
+  }
+  for (const key of ["NSPrivacyTracking", "NSPrivacyTrackingDomains", "NSPrivacyCollectedDataTypes"]) {
+    if (!body.has(key)) throw new ManifestError(`declares no ${key}`);
+  }
+
+  const tracking = body.get("NSPrivacyTracking");
+  if (typeof tracking !== "boolean") throw new ManifestError("declares a non-boolean NSPrivacyTracking");
+
+  const domains = body.get("NSPrivacyTrackingDomains");
+  if (!Array.isArray(domains) || domains.some((domain) => typeof domain !== "string")) {
+    throw new ManifestError("declares NSPrivacyTrackingDomains that is not a list of strings");
+  }
+
+  const rawCollected = body.get("NSPrivacyCollectedDataTypes");
+  if (!Array.isArray(rawCollected)) {
+    throw new ManifestError("declares NSPrivacyCollectedDataTypes that is not an array");
+  }
+
+  const collected = rawCollected.map((entry, position) => {
+    const where = `NSPrivacyCollectedDataTypes[${position}]`;
+    if (!(entry instanceof Map)) throw new ManifestError(`${where} is not a dictionary`);
+    // Exactly Apple's four keys. A fifth is as wrong as a missing one, and
+    // neither has a runtime that would notice.
+    const keys = [...entry.keys()].sort();
+    if (keys.length !== COLLECTED_ENTRY_KEYS.length ||
+        !COLLECTED_ENTRY_KEYS.every((key) => keys.includes(key))) {
+      throw new ManifestError(`${where} is not the shape Apple defines: [${keys.join(", ")}]`);
+    }
+    const type = entry.get("NSPrivacyCollectedDataType");
+    if (typeof type !== "string" || !/^NSPrivacyCollectedDataType[A-Za-z]+$/.test(type)) {
+      throw new ManifestError(`${where} names no readable data type`);
+    }
+    const linked = entry.get("NSPrivacyCollectedDataTypeLinked");
+    const entryTracking = entry.get("NSPrivacyCollectedDataTypeTracking");
+    if (typeof linked !== "boolean" || typeof entryTracking !== "boolean") {
+      throw new ManifestError(`${where} ('${type}') has a non-boolean linked or tracking flag`);
+    }
+    const purposes = entry.get("NSPrivacyCollectedDataTypePurposes");
+    if (!Array.isArray(purposes) || purposes.length === 0 ||
+        purposes.some((purpose) => typeof purpose !== "string" ||
+          !/^NSPrivacyCollectedDataTypePurpose[A-Za-z]+$/.test(purpose))) {
+      throw new ManifestError(`${where} ('${type}') has no readable purpose list`);
+    }
+    if (new Set(purposes).size !== purposes.length) {
+      throw new ManifestError(`${where} ('${type}') repeats a purpose`);
+    }
+    return { type, linked, tracking: entryTracking, purposes };
+  });
+
+  const seen = new Set();
+  for (const entry of collected) {
+    if (seen.has(entry.type)) throw new ManifestError(`declares '${entry.type}' more than once`);
+    seen.add(entry.type);
+  }
+
+  return { tracking, trackingDomains: domains, collected };
+}
+
+const describeEntry = (entry) =>
+  `${entry.type}(linked=${entry.linked}, tracking=${entry.tracking}, ` +
+  `purposes=[${entry.purposes.join(", ")}])`;
+
+/** A manifest failure, reported. Anything that is neither a reading failure nor
+ *  a filesystem failure is a BUG IN THIS FILE and is rethrown: reporting it as
+ *  a manifest finding would send somebody to re-audit a correct manifest. */
+function failManifest(path, where, error) {
+  if (error instanceof ManifestError) fail(where, `${path} ${error.message}`);
+  else if (error && error.code) fail(where, `${path} could not be read: ${error.message}`);
+  else throw error;
+}
+
+let manifest = null;
+try {
+  manifest = readPrivacyManifest(APP_MANIFEST);
+} catch (error) {
+  failManifest(APP_MANIFEST, "appPrivacy.sourceOfTruth", error);
+}
+if (manifest !== null) {
+  // The label-level answers, which are a public promise of their own: a
+  // manifest that turned NSPrivacyTracking on would put Relayium inside App
+  // Tracking Transparency's scope while this packet said it was outside it.
+  if (manifest.tracking !== packet.appPrivacy.tracking) {
+    fail(
+      "appPrivacy.tracking",
+      `is ${packet.appPrivacy.tracking}, but ${APP_MANIFEST} declares NSPrivacyTracking ${manifest.tracking}`,
+    );
+  }
+  if (manifest.trackingDomains.length !== packet.appPrivacy.trackingDomains.length) {
+    fail(
+      "appPrivacy.trackingDomains",
+      `lists ${packet.appPrivacy.trackingDomains.length}, but ${APP_MANIFEST} declares [${manifest.trackingDomains.join(", ")}]`,
+    );
+  }
+
+  // The graph itself, entry by entry and in order. Compared against the pin at
+  // the top of this file rather than against the packet, because the packet has
+  // already been compared to that pin above: agreeing with the pin and with the
+  // manifest is the same as all three agreeing, and reporting it this way names
+  // the manifest — the file Apple actually reads — in the finding.
+  const expected = APP_PRIVACY_TYPES;
+  if (manifest.collected.length !== expected.length) {
+    fail(
+      "appPrivacy.collected",
+      `has ${expected.length} entries, but ${APP_MANIFEST} declares ${manifest.collected.length}: ` +
+        `[${manifest.collected.map((entry) => entry.type).join(", ")}]. The manifest is what Apple reads; reconcile before submitting`,
+    );
+  }
+  expected.forEach((want, index) => {
+    const got = manifest.collected[index];
+    if (!got) return; // already reported by the length finding above
+    const same =
+      got.type === want.type &&
+      got.linked === want.linked &&
+      got.tracking === want.tracking &&
+      got.purposes.length === want.purposes.length &&
+      want.purposes.every((purpose, position) => got.purposes[position] === purpose);
+    if (!same) {
+      fail(
+        `appPrivacy.collected[${index}]`,
+        `does not match the shipped manifest. ${APP_MANIFEST} declares ${describeEntry(got)}, ` +
+          `this packet and validator pin ${describeEntry(want)}. The manifest is what Apple reads; ` +
+          "reconcile before submitting",
+      );
+    }
+  });
+
+  const manifestTypes = manifest.collected.map((entry) => entry.type);
+  for (const absent of APP_PRIVACY_ABSENT_TYPES) {
+    if (manifestTypes.includes(absent)) {
+      fail("appPrivacy.deliberatelyAbsent", `${APP_MANIFEST} now declares '${absent}', which this packet records as absent`);
+    }
+  }
+}
+
+// And the extension, whose declared list must be empty in both places — and
+// which must not have quietly acquired a tracking answer either.
+let shareManifest = null;
+try {
+  shareManifest = readPrivacyManifest(SHARE_MANIFEST);
+} catch (error) {
+  failManifest(SHARE_MANIFEST, "appPrivacy.shareExtension", error);
+}
+if (shareManifest !== null) {
+  if (shareManifest.collected.length > 0) {
+    fail(
+      "appPrivacy.shareExtension.collected",
+      `is empty, but ${SHARE_MANIFEST} declares [${shareManifest.collected.map(describeEntry).join(", ")}]; ` +
+        "the extension stages files into the App Group and must collect nothing",
+    );
+  }
+  if (shareManifest.tracking !== false || shareManifest.trackingDomains.length > 0) {
+    fail(
+      "appPrivacy.shareExtension",
+      `${SHARE_MANIFEST} declares NSPrivacyTracking ${shareManifest.tracking} with ` +
+        `${shareManifest.trackingDomains.length} tracking domain(s); the appex tracks nothing`,
+    );
+  }
 }
 
 // ── report ───────────────────────────────────────────────────────────────────

@@ -28,6 +28,20 @@ const ONLINE_WORD = {
   pt: /on-?line/i,
 };
 
+// The exact phrase each FROZEN terms translation still uses for the party that
+// encrypts a stored file. Held as literals rather than as a "does it mention a
+// browser" pattern, because the point is byte-stability of an archived
+// translation, not its meaning.
+const FROZEN_STORED_ENCRYPTOR = {
+  ja: "ブラウザがアップロード前にファイルを暗号化し",
+  ko: "브라우저가 업로드 전에 파일을 암호화하고",
+  de: "verschlüsselt Ihr Browser die Dateien vor dem Hochladen",
+  fr: "votre navigateur chiffre les fichiers avant l'envoi",
+  ar: "يُشفِّر متصفحك الملفات قبل الرفع",
+  es: "tu navegador cifra los archivos antes de subirlos",
+  pt: "seu navegador criptografa os arquivos antes do envio",
+};
+
 const blob = (doc, lang) => JSON.stringify(doc.langs[lang]);
 const sectionBlob = (doc, lang, index) => JSON.stringify(doc.langs[lang].sections[index]);
 
@@ -41,13 +55,16 @@ describe("legal pages describe temporary text accurately", () => {
       // byte counters kept per account for a quota, and not analytics.
       const metering = sectionBlob(privacy, lang, 5);
 
-      // The maintained pair moved again on 2026-08-30 when it disclosed the
-      // identifier-free activation aggregate; its earlier native-app correction
-      // remains in the same maintained copy. The seven frozen translations are
-      // archived at the 2026-08-14 language freeze and keep the date their prose
-      // was last actually true for.
+      // The maintained pair moved again on 2026-09-03, when the native-app
+      // section stopped being macOS-only and started describing the iOS binary
+      // under App Store review as well — App Review reads this URL, and
+      // Guideline 5.1.1 asks the linked policy to describe the app it is linked
+      // from. The 2026-08-30 aggregate disclosure and the earlier native-app
+      // correction remain in the same maintained copy. The seven frozen
+      // translations are archived at the 2026-08-14 language freeze and keep the
+      // date their prose was last actually true for.
       expect(privacy.langs[lang].updated).toBe(
-        MAINTAINED_LANGS.includes(lang) ? "2026-08-30" : "2026-08-13",
+        MAINTAINED_LANGS.includes(lang) ? "2026-09-03" : "2026-08-13",
       );
       expect(all).toMatch(TEXT_WORD[lang]);
       expect(all).toMatch(ONLINE_WORD[lang]);
@@ -72,7 +89,13 @@ describe("legal pages describe temporary text accurately", () => {
         ),
       );
 
-      expect(terms.langs[lang].updated).toBe("2026-08-13");
+      // The maintained pair moved on 2026-09-03, when "Stored content" stopped
+      // saying that the BROWSER encrypts — see the note in terms.mjs and the
+      // stored-encryption guard below. The frozen seven keep the date their
+      // prose was last actually true for.
+      expect(terms.langs[lang].updated).toBe(
+        MAINTAINED_LANGS.includes(lang) ? "2026-09-03" : "2026-08-13",
+      );
       expect(all).toMatch(TEXT_WORD[lang]);
       expect(liveText, `terms.${lang}.liveText`).toBeDefined();
       expect(JSON.stringify(liveText)).toMatch(ONLINE_WORD[lang]);
@@ -80,6 +103,52 @@ describe("legal pages describe temporary text accurately", () => {
       expect(JSON.stringify(stored), `terms.${lang}.stored`).toMatch(
         /file|文件|ファイル|파일|Datei|fichier|ملف|archivo|arquivo/i,
       );
+    });
+
+    // Who encrypts a stored file, and which locales are allowed to answer.
+    //
+    // The clause said "your browser encrypts files before upload". That was
+    // written when a browser was the only client that could create a stored
+    // link, and it stopped being the whole truth as the CLI, the macOS app and
+    // the iOS app each gained the same flow — every one of them encrypting
+    // locally with a key the server never sees. A term that governs all stored
+    // transfers while naming one client tells a CLI user that the promise
+    // covers software they are not running.
+    //
+    // Both halves are pinned here, because they pull against each other:
+    //
+    //   1. Maintained en/zh state WHERE the encryption happens — on the user's
+    //      own device — and name no client. Naming one is what went wrong, so
+    //      the replacement may not name a different one either: "our apps
+    //      encrypt" would be the same defect pointed at iOS, and would imply an
+    //      app is available to a reader on a platform where none is.
+    //   2. The seven frozen translations keep their original sentence, browser
+    //      and all. They are archived under the 2026-08-14 language freeze and
+    //      are corrected by retranslation if a locale is ever restored, never by
+    //      an editor reaching into a language they do not maintain. Each is
+    //      pinned by the exact phrase it still carries, so "fixing" one fails
+    //      here rather than passing quietly.
+    it(`terms.${lang} attributes stored encryption to the right place`, () => {
+      const stored = JSON.stringify(
+        terms.langs[lang].sections.find((section) =>
+          /Stored content|暂存内容|保存コンテンツ|임시 보관 콘텐츠|Zwischengespeicherte Inhalte|Contenu stocké|المحتوى المُخزَّن|Contenido almacenado|Conteúdo armazenado/i.test(
+            section.heading,
+          ),
+        ),
+      );
+
+      if (MAINTAINED_LANGS.includes(lang)) {
+        expect(stored, `terms.${lang} still names a client as the encryptor`).not.toMatch(
+          /browser|浏览器|app\b|应用|客户端/i,
+        );
+        expect(stored, `terms.${lang} no longer says where a stored file is encrypted`).toMatch(
+          lang === "en" ? /encrypted on your own device/ : /在你自己的设备本机加密/,
+        );
+      } else {
+        expect(stored, `terms.${lang} is frozen and was edited`).toContain(
+          FROZEN_STORED_ENCRYPTOR[lang],
+        );
+      }
     });
 
     it(`security.${lang} distinguishes browser and CLI text security`, () => {

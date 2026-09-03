@@ -211,6 +211,19 @@ entered in App Store Connect.
 a What's New drafted for another marketing version passes every limit Apple
 enforces and is still a false public statement about the build being archived.
 
+The validator also reads the packet's `appPrivacy` block — the draft App Privacy
+answers — against its own pinned graph **and** against
+`apps/ios/Relayium/PrivacyInfo.xcprivacy`. The second comparison is the one that
+matters: without it, the packet and the validator could be edited together to
+agree with each other and not with the binary Apple reads. It likewise refuses
+storefront copy that promises a control this build does not ship — the copy said
+a stored link takes "your own expiry and download limits", and `SendView`'s
+options are exactly an expiry `Picker` and a `burnAfterRead` `Toggle`. A
+download-count cap does exist in the product (the CLI's `--max-downloads`, and
+the server resolves one), which is precisely why the claim read as plausible;
+what matters here is that **no iOS surface offers it**, and the listing is
+describing the iOS app.
+
 The gate needs `node` on `PATH` and refuses without it, because an unvalidated
 packet is not a candidate. `scripts/test/ios-app-store-candidate-test.sh` proves
 both the refusal and its position in the ladder, by mutation and by executing
@@ -271,6 +284,15 @@ against source, because signing, thinning and packaging sit between the two:
   in both directions: a category the source does not justify is as false a
   public statement as a missing one, and the extension silently shipping the
   **app's** manifest is present, valid and wrong;
+- in the same four files, **exactly** the pinned collected-data graph: the app's
+  six types with their linked, tracking and purpose flags, and the extension's
+  **empty** list. This is the half that becomes the App Store privacy label, and
+  it fails more quietly than the one above — a wrong required-reason graph is an
+  upload rejection Apple raises, while a wrong collected-data list uploads
+  cleanly and publishes a false promise to everyone reading the listing. The
+  comparison is equality, so `NSPrivacyCollectedDataTypeDeviceID` being added
+  back is a finding rather than something a "contains" check would wave through.
+  See [App Privacy](#app-privacy) for the graph itself;
 - `NSCameraUsageDescription` and `NSLocalNetworkUsageDescription` in the built
   app `Info.plist`, the camera string localized in the app bundle's own
   `en.lproj` and `zh-Hans.lproj`, and **no** camera declaration and **no**
@@ -412,8 +434,14 @@ Before uploading a TestFlight build:
 4. Configure the iOS App Store Server Notifications V2 Sandbox and Production
    URLs, then verify Apple's signed TEST notification reaches Relayium.
 5. Confirm App Privacy and subscription metadata match the code and public
-   policy. The app manifest declares linked Email Address, User ID and Purchase
-   History for App Functionality, with no tracking.
+   policy. The app manifest declares linked Name, Email Address, Purchase
+   History, User ID and Other Usage Data for App Functionality, plus an
+   **unlinked** Product Interaction entry for Analytics — the identifier-free
+   activation aggregate — with tracking false throughout and `DeviceID`
+   deliberately absent. The full graph, the reasoning and the DeviceID revisit
+   trigger are in [App Privacy](#app-privacy); note that the policy source now
+   covers iOS but the deployed URL has not been redeployed or read back, and that
+   section records the remaining blocker.
 
 The server must be ready before TestFlight: otherwise every signed-in Account
 screen receives `unknown_bundle`, and a charged transaction cannot be accepted.
@@ -946,12 +974,193 @@ inspect content — not a convenient one.
 A privacy policy URL and complete data-practice answers are required:
 <https://developer.apple.com/help/app-store-connect/manage-app-information/manage-app-privacy/>
 
-The answers must match the binary. The built app's merged privacy manifest
-declares **linked Email Address, User ID and Purchase History, all for App
-Functionality, with tracking false and no tracking domains**. Message and file
-bodies are end-to-end encrypted and decrypted only on the device; the server
-sees ciphertext. If an App Privacy answer and the manifest ever disagree, one
-of them is wrong — fix the disagreement, do not pick the easier form.
+**This section is a DRAFT this repository maintains. It is not observed provider
+state.** Nothing here has been entered in App Store Connect and no App Privacy
+answer has been read back from the record, so what follows is what the app
+declares and what somebody should therefore enter — never what the record
+currently holds. Entering it is a separate authorized step, and it must be
+followed by a fresh read-only re-inspection of the record. The App Store Connect
+questionnaire uses its own wording and its own category tree; fill it from the
+graph below rather than from memory, and reconcile the two rather than assuming
+they map one-to-one.
+
+The answers must match the binary. The app's manifest
+(`apps/ios/Relayium/PrivacyInfo.xcprivacy`) declares **tracking false, no
+tracking domains, and exactly these six collected data types**:
+
+| Type | Linked | Tracking | Purpose | What it actually is |
+| --- | --- | --- | --- | --- |
+| `Name` | yes | no | App Functionality | The create-account form's own name field (`AccountClient.register` → `display_name`), plus the name Apple supplies on a **first** Sign in with Apple authorization (`api/auth/apple/native`). |
+| `EmailAddress` | yes | no | App Functionality | The address typed to register or sign in. Linked by definition — it *is* the account identifier. |
+| `PurchaseHistory` | yes | no | App Functionality | StoreKit's signed transaction, retained as the account's subscription source, plan, status and renewal period. |
+| `UserID` | yes | no | App Functionality | The per-account `appAccountToken` sent to Apple with a purchase. |
+| `OtherUsageData` | yes | no | App Functionality | Metering — byte counts and timestamps only. Uploads, stored downloads, relayed bytes, and **the Device Inbox delivery this release adds**, which `deviceinbox_task.go` meters into `usage_monthly`. |
+| `ProductInteraction` | **no** | no | **Analytics** | The identifier-free monthly activation aggregate. The one unlinked entry and the one Analytics purpose. |
+
+The Share extension's manifest declares an **empty** collected-data list. That
+is a claim in its own right rather than the absence of one: the appex holds only
+the App Group entitlement, reaches no network, and transmits nothing.
+
+Two things are worth stating plainly because they are the ones most likely to be
+"corrected" into a false answer:
+
+- **`Name` is not the device label.** On macOS the app sends
+  `Host.current().localizedName`, the computer name, which macOS usually seeds
+  from the owner's full name — so the macOS record counts it under `Name`. iOS
+  resolves the same function to a hardware family: `AppEnvironment.deviceName()`
+  answers `iPhone`, `iPad` or `iPod touch` and nothing else. A device family is
+  not a name, and declaring it as one would describe a personal detail this build
+  never sends.
+- **`DeviceID` is absent, and the macOS record declares it.** Both macOS
+  producers are unreachable here. There is no browser sign-in on iOS, so
+  `install_id` is never posted. And although **this app does call
+  `purchase-dispatch`** — so "iOS never reaches it" would be false — the
+  `appInstanceId` field comes from a purchase *continuation*: only the
+  `.durableContinuationRequired` policy creates one, `AppStoreDistribution`
+  selects that policy on macOS, and `IOSAppleSubscriptions.makeModel` names no
+  policy at all and so takes the default `.legacyOneShot`. With no continuation,
+  `AccountClient.dispatchApplePurchase` omits the field entirely rather than
+  sending it empty.
+
+> **DeviceID revisit trigger.** If iOS adopts purchase continuation — or gains
+> any browser sign-in path, or any other producer of a durable installation or
+> instance identifier — then `NSPrivacyCollectedDataTypeDeviceID` becomes
+> **required** in `apps/ios/Relayium/PrivacyInfo.xcprivacy`, in
+> `docs/app-store-metadata-ios.json`, in `scripts/ios-app-store-candidate.sh`'s
+> pinned graph, and in the App Store Connect answers. The absence is enforced
+> from source by `IOSPrivacyManifestTests.testTheAppDeclaresNoDeviceIDBecauseNoIOSSourceSendsOne`,
+> which fails the moment an iOS source file reaches either producer — so the
+> trigger fires as a failing test rather than as something to remember.
+
+Message and file bodies are end-to-end encrypted and decrypted only on the
+device; the server sees ciphertext, which is why no file content or file
+metadata type is declared. That absence is the product's central promise stated
+where Apple publishes it, not an omission.
+
+The same graph is stated in four places, deliberately and independently, so that
+no single edit can move the public answer:
+
+1. `apps/ios/Relayium/PrivacyInfo.xcprivacy` — what the app **ships**.
+2. `IOSPrivacyManifestTests` — derives it from the iOS **send sites** and the
+   **server storage** that retains each value, and pins `DeviceID`'s absence.
+3. `scripts/ios-app-store-candidate.sh` — checks the **built** bundles, in the
+   archive *and* the exported payload, for both the app and the extension.
+4. `docs/app-store-metadata-ios.json` `appPrivacy` — the **draft answers** to
+   type into App Store Connect. `scripts/ios-app-store-metadata-validate.mjs`
+   checks that packet against its own pinned graph *and* against the shipped
+   manifest, so a packet and a validator edited to agree with each other but not
+   with the binary is a finding.
+
+   That cross-check was strengthened on 2026-09-03. It used to read the manifest
+   with a regular expression that collected the **ordered list of type names**,
+   which is the one part of a collected-data entry that cannot change quietly:
+   a flipped `NSPrivacyCollectedDataTypeLinked`, a purpose moved between
+   Analytics and App Functionality, a second purpose, a repeated key, a fifth
+   key, or `NSPrivacyTracking` turned on all produced the same list and left the
+   gate green. The validator now **parses** both manifests — with a strict
+   in-file reader of the plist XML subset Apple's manifests use, so there is no
+   `plutil` dependency and the gate runs on any platform — and compares type,
+   linked flag, tracking flag and ordered purposes entry by entry, plus the
+   label-level tracking answer and its domains. Anything it cannot read exactly
+   is a finding, never an empty reading.
+   `scripts/test/ios-app-store-metadata-validate-test.mjs` proves each of those
+   mutations red by building a throwaway repository under a temporary directory
+   — a copy of the validator and of both manifests — so no case edits the
+   product's own manifest, and a control case asserts the unmutated copy still
+   passes.
+
+If an App Privacy answer and the manifest ever disagree, one of them is wrong —
+fix the disagreement, do not pick the easier form.
+
+#### The privacy-policy and terms sources are prepared; neither deployed URL is verified
+
+The policy at <https://relayium.com/privacy/> is the URL this record submits, and
+App Review opens it while reviewing an **iOS** build. Guideline 5.1.1 requires the
+linked policy to identify what the app collects, how, and every use it is put to.
+
+Until 2026-09-03 the maintained English and Simplified-Chinese copy scoped in-app
+purchase and all device-level data to "our macOS app". That wording had been a
+deliberate 2026-08-30 correction — naming an iOS purchase channel nobody could
+use was judged aspirational in a document that names data processors — but it is
+**incomplete for the binary under review**, which is a submission-readiness
+blocker rather than a stylistic preference. The maintained pair was therefore
+rewritten on 2026-09-03 to describe both platforms, and the delivered source now
+states, per platform and traced to the same call sites this record cites
+elsewhere:
+
+- **Purchase.** Apple in-app purchase is described as macOS *and* iOS app
+  behaviour, alongside Stripe on the web. The `appAccountToken` round trip is
+  named in both directions.
+- **Device label.** macOS sends the **personal computer name** from Sharing
+  settings; iOS sends only the **generic hardware family** (`iPhone`/`iPad`/
+  `iPod touch`). The two are stated as different facts, not merged.
+- **Installation identifier.** The 32 random keychain bytes and the
+  browser-login continuation they exist for are stated as **macOS-only**, and iOS
+  is stated to send **no installation identifier and no identifier read from the
+  device** today — matching `DeviceID`'s deliberate absence from
+  `apps/ios/Relayium/PrivacyInfo.xcprivacy`.
+- **Camera.** iOS camera access is **local-only**, for reading a pairing QR code,
+  and neither the image nor the code it carries is stored by the app or sent to
+  us as camera data. macOS asks for no camera access; neither app has photo
+  library access.
+- **Push.** Neither app registers a push token or receives push notifications;
+  macOS notifications are local and deliberately content-minimized.
+- **Stored links.** Client-side AES-256-GCM encryption is claimed for the native
+  apps as well as the browser and CLI, so the zero-knowledge promise is not
+  understated on the platform under review.
+- **Unchanged.** The account/metering truth, the identifier-free monthly
+  aggregate wording, and the zero-knowledge content claims carry over verbatim.
+
+Nothing in the rewrite states or implies the iOS app is published, downloadable
+or on sale; it describes how each build behaves.
+`web/scripts/pages/privacy-purchase-channels.test.mjs` was rewritten from its
+blanket "no iOS" bans into exact per-platform positive and negative guards,
+including a publication-claim ban, and the seven frozen locales remain pinned as
+archived translations that must not be edited.
+
+##### Terms of Service, corrected the same day and for the same reason
+
+`https://relayium.com/terms/` is not a field in this record, but it is a public
+legal document that describes the app under review, and its "Stored content"
+clause said **"your browser encrypts files before upload"**. That was written
+when a browser was the only client that could create a stored link. The CLI, the
+macOS app and the iOS app now all create them, each encrypting locally with
+AES-256-GCM before upload — so a term governing every stored transfer named one
+client, and a reader on any other client was told the promise covered software
+they were not running.
+
+The maintained `en`/`zh` clause was rewritten on 2026-09-03 to state **where**
+the encryption happens rather than **which program** performs it — "the files are
+encrypted on your own device before they are uploaded" / "文件在上传前就已在你自己
+的设备本机加密". It deliberately names no client, so it neither repeats the defect
+pointed at a different platform nor implies an app is available anywhere it is
+not. The seven frozen translations keep their original wording and their
+2026-08-13 date under the 2026-08-14 language freeze;
+`web/scripts/pages/content/legal/legal-text-positioning.test.mjs` pins both
+halves, and `web/scripts/pages/build-pages.test.mjs` pins the per-locale sitemap
+dates now that `terms/` has diverged the same way `privacy/` did.
+
+##### What is still unresolved, and it is still a submission blocker
+
+Only the *source* and the *generated* `en`/`zh` pages were prepared, for the
+privacy policy and for the terms alike. Deployment is outside this task's
+authorization, so:
+
+- `https://relayium.com/privacy/` has **not** been redeployed and has **not** been
+  read back, and until it is, the live URL a reviewer opens still serves the
+  macOS-scoped text.
+- `https://relayium.com/terms/` has **not** been redeployed and has **not** been
+  read back either, so the live terms still tell every non-browser client that a
+  browser encrypts their stored files.
+- Do not submit while either is true. The verification is to deploy the web build
+  and then fetch all four of `https://relayium.com/privacy/`,
+  `https://relayium.com/zh/privacy/`, `https://relayium.com/terms/` and
+  `https://relayium.com/zh/terms/`, confirming each shows `Last updated:
+  2026-09-03`, that the privacy pages carry the per-platform section above, and
+  that the terms pages carry the device-local stored-encryption clause.
+- The frozen locales' public pages must come back byte-identical, for `terms/` as
+  well as `privacy/`; the regenerated output was checked for that locally, but a
+  deployment can still diverge.
 
 ### App Review information
 
