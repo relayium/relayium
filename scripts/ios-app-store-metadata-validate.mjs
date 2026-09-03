@@ -55,14 +55,40 @@
 //     and its domains, and a manifest this validator cannot read exactly —
 //     duplicate key, extra key, unknown element, repeated data type — is a
 //     finding rather than an empty reading;
+//   * an App Store Connect observation that has drifted from what was actually
+//     read back. `appStoreConnectObservation` is a DATED, FIELD-SCOPED record of
+//     one read-only pass, and every fact in it is pinned below: which record is
+//     the iOS target, which record is the macOS one that must never be, and the
+//     present/absent state of each field that was read. A packet that claims a
+//     build, a subscription product, a completed privacy or accessibility
+//     answer, a price, an availability selection, a screenshot, an archive, an
+//     upload, a submission, a release, or a fully submission-ready record is
+//     refused, and so is one that says the already-configured notification
+//     endpoints are absent;
+//   * the macOS record used as the iOS delivery target. `6801142976` /
+//     `com.relayium.mac` is a real App Store Connect record that ALSO carries an
+//     abandoned, empty iOS platform, which is exactly what makes it a plausible
+//     wrong answer. It may appear only where this packet forbids it, never as
+//     the record, the bundle, the share extension or a product identifier;
+//   * the blanket "nothing has been read back" posture, reasserted anywhere in
+//     the packet. It was true until the record was read; restoring it would
+//     discard a dated observation and replace it with a false absence;
 //
 // ── what it is not ───────────────────────────────────────────────────────────
 //
 // It reads one file. It performs no network request, reads no credential,
 // resolves no URL, and observes no App Store Connect state — so a pass says the
 // packet is internally consistent and within Apple's limits, NOT that any of it
-// has been entered, accepted, or is live. `scripts/test/ios-app-store-metadata-
-// validate-test.mjs` proves each rule by mutation.
+// has been entered, accepted, or is live.
+//
+// That last point is sharper now that the packet carries an observation. The
+// `appStoreConnectObservation` section is a RECORDED read-back, not a live one:
+// this validator checks that what was written down is internally consistent,
+// that it names the right record, and that it claims nothing it also says is
+// unmet — and it cannot tell whether the read-back happened at all. A passing
+// run is not evidence that the record still looks like this. Re-inspect
+// read-only before acting. `scripts/test/ios-app-store-metadata-validate-
+// test.mjs` proves each rule by mutation.
 //
 // USAGE
 //   node scripts/ios-app-store-metadata-validate.mjs
@@ -99,6 +125,67 @@ const MARKETING_VERSION = "0.3.0";
 // paste. Exact case, both locales.
 const DISPLAY_NAME = "relayium";
 const EXCLUDED_TERRITORIES = ["CN", "FR"];
+
+// ── the two records, and the one that is never the iOS target ────────────────
+//
+// There are two App Store Connect app records, and the wrong one is not
+// obviously wrong. `6801142976` is the shipped macOS record for
+// `com.relayium.mac`, and it ALSO carries an abandoned, empty iOS `0.1.0`
+// platform — so it appears in the Apps list showing an iOS platform, exactly
+// like a record somebody looking for the iOS app would expect to find. It is
+// not the iOS app: different bundle identifier, different build-number
+// sequence, different subscription catalogue, different product.
+//
+// The iOS record is `6791918822` / `com.relayium.app`, and it is the only one
+// this packet describes. Pinning both halves — the target AND the decoy — is
+// the point: pinning only the target catches a typo, and it is not a typo that
+// puts a build on the macOS record, it is a plausible-looking Apps row.
+const MAC_APPLE_ID = "6801142976";
+const MAC_BUNDLE_ID = "com.relayium.mac";
+
+// The one read-only pass this packet records, and the fields it covered.
+const OBSERVED_AT = "2026-09-03";
+const OBSERVED_TIME_ZONE = "Asia/Dubai";
+const OBSERVED_VERSION_STATE = "Prepare for Submission";
+const NOTIFICATION_URL = "https://relayium.com/api/apple/notifications";
+
+// What the record actually held on `OBSERVED_AT`, pinned here rather than read
+// out of the packet — the same reason every other fact above is restated: a
+// packet that can edit what it is checked against is checked against nothing.
+//
+// `present` is the whole point. Eleven of these were read as EMPTY, and an
+// empty field is a fact with a date on it, not an absence of information. The
+// direction that matters is upward: a packet edited to say a build exists, a
+// product exists, privacy is answered, a price is set or a screenshot is
+// uploaded is claiming a gate is met that was observed unmet, and that claim is
+// how an unsubmittable record gets treated as a submittable one.
+const OBSERVED_FIELDS = [
+  { id: "version", present: true, blocksSubmission: false,
+    why: "the record's editable version was read back as 0.3.0 Prepare for Submission" },
+  { id: "testflight-builds", present: false, blocksSubmission: true,
+    why: "TestFlight listed no builds" },
+  { id: "subscription-groups", present: false, blocksSubmission: true,
+    why: "the record carried no subscription group" },
+  { id: "subscription-products", present: false, blocksSubmission: true,
+    why: "the record carried no in-app purchase or subscription product" },
+  { id: "app-privacy-data-practices", present: false, blocksSubmission: true,
+    why: "App Privacy read Not Started" },
+  { id: "app-privacy-policy-url", present: false, blocksSubmission: true,
+    why: "no Privacy Policy URL was saved on the record" },
+  { id: "app-privacy-choices-url", present: false, blocksSubmission: false,
+    why: "no User Privacy Choices URL was saved, and Apple treats that field as optional" },
+  { id: "accessibility", present: false, blocksSubmission: false,
+    why: "the Accessibility Nutrition Label read Not Started, and it is voluntary" },
+  { id: "price-schedule", present: false, blocksSubmission: true,
+    why: "the record had no price schedule" },
+  { id: "availability", present: false, blocksSubmission: true,
+    why: "app availability was not set" },
+  { id: "screenshots", present: false, blocksSubmission: true,
+    why: "the record held zero screenshots" },
+  { id: "app-store-server-notifications", present: true, blocksSubmission: false,
+    why: "both the Production and Sandbox Server URLs were already saved to the Relayium endpoint" },
+];
+const OBSERVED_FIELD_IDS = OBSERVED_FIELDS.map((entry) => entry.id);
 
 const URLS = {
   "en-US": {
@@ -351,6 +438,13 @@ if (findings.length > 0) report(); // a malformed raw document gets no schema re
 // one that matters. A packet is copy-and-paste material for a form nothing here
 // can see, so a key that no rule reads is a key nobody will notice is unread.
 
+// `because` is appended to the finding an `equals` pin produces. A pinned value
+// says WHAT it must be; some of these pins exist for a reason the operator has
+// to know — that the other Apple ID is a real record with an iOS platform on
+// it, that a count was observed to be zero on a particular day — and a bare
+// `must be exactly 'X'` sends them to change X. The schema walk reports and
+// exits before any cross-check runs, so a cross-check cannot carry this: it
+// would be unreachable code explaining a finding nobody would ever see with it.
 const str = (options = {}) => ({ kind: "string", ...options });
 const bool = (options = {}) => ({ kind: "boolean", ...options });
 const int = (options = {}) => ({ kind: "integer", ...options });
@@ -397,24 +491,98 @@ const SCHEMA = obj({
   schemaVersion: int({ equals: 1 }),
   packet: obj({
     id: str({ equals: "ios-app-store-metadata" }),
-    state: str({ equals: "draft-in-this-repository-app-store-connect-readback-required" }),
-    observedAppStoreConnectState: bool({ equals: false }),
+    state: str({ equals: `draft-in-this-repository-record-observed-${OBSERVED_AT}` }),
+    // Was a boolean, and a boolean was the defect: one flag for a whole record
+    // can only say "all of it" or "none of it", and the truth is neither. It
+    // points at the section that says which fields were read and when.
+    observedAppStoreConnectState: str({ equals: "field-scoped-see-appStoreConnectObservation" }),
     prose: str({ equals: "docs/ios-app-store-submission.md" }),
     validator: str({ equals: "scripts/ios-app-store-metadata-validate.mjs" }),
     note: str({ multiline: true }),
   }),
   record: obj({
     recordName: str({ equals: RECORD_NAME }),
-    appleId: str({ equals: APPLE_ID, exemptFromSecretScan: true }),
-    bundleId: str({ equals: BUNDLE_ID }),
-    shareExtensionBundleId: str({ equals: SHARE_BUNDLE_ID }),
+    appleId: str({
+      equals: APPLE_ID,
+      exemptFromSecretScan: true,
+      because:
+        `${MAC_APPLE_ID} is the other record — the macOS one, which also carries an abandoned empty iOS ` +
+        "platform and is therefore the plausible wrong answer. It is never an iOS delivery target",
+    }),
+    bundleId: str({
+      equals: BUNDLE_ID,
+      because: `'${MAC_BUNDLE_ID}' and anything under it belongs to the macOS record and is never the iOS target`,
+    }),
+    shareExtensionBundleId: str({
+      equals: SHARE_BUNDLE_ID,
+      because: `'${MAC_BUNDLE_ID}.share' belongs to the macOS record and is never the iOS extension`,
+    }),
     teamId: str({ equals: TEAM_ID }),
     marketingVersion: str({ pattern: /^\d+\.\d+\.\d+$/ }),
     primaryCategoryUti: str({ equals: "public.app-category.utilities" }),
   }),
+  // The dated read-back. Everything above it is what this project proposes;
+  // this is the only section that states what App Store Connect holds, and it
+  // states it per field, with the day it was read.
+  appStoreConnectObservation: obj({
+    state: str({ equals: "field-scoped-read-only-observation-recorded" }),
+    observedAt: str({ equals: OBSERVED_AT, pattern: /^\d{4}-\d{2}-\d{2}$/ }),
+    timeZone: str({ equals: OBSERVED_TIME_ZONE }),
+    method: str({ multiline: true }),
+    scope: str({ multiline: true }),
+    // Deliberately NOT pinned to false here. The rule below derives it from the
+    // gates this same section reports unmet, so the claim is refused by the
+    // evidence rather than by a constant somebody could move.
+    fullySubmissionReady: bool(),
+    readinessNote: str({ multiline: true }),
+    records: arr(
+      obj({
+        role: str(),
+        appleId: str({ exemptFromSecretScan: true }),
+        bundleId: str(),
+        platforms: str(),
+        observedVersion: str({ pattern: /^\d+\.\d+\.\d+$/ }),
+        observedVersionState: str(),
+        targetForIosRelease: bool(),
+        note: str({ multiline: true }),
+      }),
+      { min: 2, max: 2 },
+    ),
+    observedFields: arr(
+      obj({
+        id: str({ oneOf: OBSERVED_FIELD_IDS }),
+        field: str(),
+        present: bool(),
+        blocksSubmission: bool(),
+        observed: str({ multiline: true }),
+        nextAction: str({ multiline: true }),
+      }),
+      { min: OBSERVED_FIELDS.length, max: OBSERVED_FIELDS.length },
+    ),
+    // The one input that is already configured, so the failure mode here is the
+    // opposite of everywhere else: not an unearned claim, a silent deletion.
+    appStoreServerNotifications: obj({
+      productionUrlConfigured: bool({ equals: true }),
+      sandboxUrlConfigured: bool({ equals: true }),
+      url: str({ equals: NOTIFICATION_URL }),
+      signedTestNotificationObservedForThisRecord: bool({ equals: false }),
+      note: str({ multiline: true }),
+    }),
+    deliveryState: obj({
+      archived: bool({ equals: false }),
+      uploaded: bool({ equals: false }),
+      submittedForReview: bool({ equals: false }),
+      released: bool({ equals: false }),
+      note: str({ multiline: true }),
+    }),
+    notObserved: arr(str({ multiline: true }), { min: 1, unique: true }),
+  }),
   locales: arr(str(), { unique: true, exact: LOCALES }),
   availability: obj({
-    state: str({ equals: "recorded-in-this-repository-app-store-connect-readback-required" }),
+    // The selection this repository intends, and — since 2026-09-03 — the fact
+    // that the record carries none. Both halves, because either alone is a
+    // different and misleading statement.
+    state: str({ equals: "recorded-in-this-repository-record-shows-availability-not-set" }),
     initialExcludedTerritories: arr(
       obj({ code: str(), name: str(), reason: str({ multiline: true }) }),
       { min: 1 },
@@ -433,10 +601,12 @@ const SCHEMA = obj({
   storefront: localeMap(storefrontSpec),
   appPrivacy: obj({
     // Same two-part honesty as `subscriptions.state`: what this repository
-    // holds, and that a read-back is owed. "no answers exist in the record"
-    // would be a claim about App Store Connect, and nothing here has looked.
-    state: str({ equals: "drafted-in-this-repository-app-store-connect-readback-required" }),
-    observedAppStoreConnectState: bool({ equals: false }),
+    // holds, and what the record holds. Until 2026-09-03 the second half could
+    // only be "a read-back is owed", because nothing had looked. It has now
+    // been looked at, and it is empty — which is a dated fact, not the blanket
+    // absence of one.
+    state: str({ equals: "drafted-in-this-repository-record-shows-data-practices-not-started" }),
+    observedAppStoreConnectState: str({ equals: "field-scoped-see-appStoreConnectObservation" }),
     sourceOfTruth: str({ equals: APP_MANIFEST }),
     // The label-level tracking answer, which must agree with the manifest's
     // `NSPrivacyTracking`. Pinned to false with no domains, because a `true`
@@ -494,11 +664,17 @@ const SCHEMA = obj({
     whatToTest: localeMap(str({ multiline: true, maxChars: LIMIT.description })),
   }),
   subscriptions: obj({
-    // 'no row exists' would be a claim about the live record, and nothing here has
-    // read the live record. The state says what this repository holds and that a
-    // read-back is owed — the only two things it can honestly say.
-    state: str({ equals: "drafted-in-this-repository-app-store-connect-readback-required" }),
-    productIdentifiersAreProposedDrafts: bool({ equals: true }),
+    // 'no row exists' used to be unsayable here, because nothing had read the
+    // live record. It has now been read, on the date pinned above, and it holds
+    // no group and no products — so the state says both what this repository
+    // drafts and what the record was observed to hold.
+    state: str({ equals: "drafted-in-this-repository-record-shows-no-group-or-products" }),
+    productIdentifiersAreProposedDrafts: bool({
+      equals: true,
+      because:
+        `the record was observed on ${OBSERVED_AT} with no subscription group and no products at all, and an ` +
+        "identifier that exists nowhere is a proposal",
+    }),
     ownerConfirmationRequired: str({ multiline: true }),
     submittedWithAppVersion: bool({ equals: true }),
     submittedWithAppVersionNote: str({ multiline: true }),
@@ -515,7 +691,10 @@ const SCHEMA = obj({
   }),
   screenshots: obj({
     state: str({ equals: "not-captured" }),
-    capturedCount: int({ equals: 0 }),
+    capturedCount: int({
+      equals: 0,
+      because: `none have been captured here, and the record was observed on ${OBSERVED_AT} holding no screenshots`,
+    }),
     blockedBy: arr(str({ multiline: true }), { min: 1, unique: true }),
     rules: obj({
       minPerSetPerLocale: int({ equals: 1 }),
@@ -547,7 +726,10 @@ const SCHEMA = obj({
   }),
   accessibilityNutritionLabel: obj({
     state: str({ equals: "unassessed" }),
-    anyFeatureClaimed: bool({ equals: false }),
+    anyFeatureClaimed: bool({
+      equals: false,
+      because: `the Accessibility Nutrition Label was observed Not Started on the record on ${OBSERVED_AT}`,
+    }),
     note: str({ multiline: true }),
     knownBlockers: arr(str({ multiline: true }), { min: 1, unique: true }),
     deviceFamilies: arr(obj({ id: str({ oneOf: DEVICE_FAMILIES }), features: arr(featureSpec, { min: 1 }) }), {
@@ -573,13 +755,17 @@ function walk(value, spec, path) {
       return walkString(value, spec, path);
     case "boolean":
       if (typeof value !== "boolean") return fail(path, `must be a boolean, not ${describe(value)}`);
-      if (spec.equals !== undefined && value !== spec.equals) fail(path, `must be ${spec.equals}`);
+      if (spec.equals !== undefined && value !== spec.equals) {
+        fail(path, `must be ${spec.equals}${spec.because ? `; ${spec.because}` : ""}`);
+      }
       return undefined;
     case "integer":
       if (typeof value !== "number" || !Number.isInteger(value)) {
         return fail(path, `must be an integer, not ${describe(value)}`);
       }
-      if (spec.equals !== undefined && value !== spec.equals) fail(path, `must be ${spec.equals}`);
+      if (spec.equals !== undefined && value !== spec.equals) {
+        fail(path, `must be ${spec.equals}${spec.because ? `; ${spec.because}` : ""}`);
+      }
       return undefined;
     case "array":
       return walkArray(value, spec, path);
@@ -604,7 +790,9 @@ function walkString(value, spec, path) {
   if (spec.minChars !== undefined && chars < spec.minChars) {
     fail(path, `is ${chars} characters, under Apple's minimum of ${spec.minChars}`);
   }
-  if (spec.equals !== undefined && value !== spec.equals) fail(path, `must be exactly '${spec.equals}'`);
+  if (spec.equals !== undefined && value !== spec.equals) {
+    fail(path, `must be exactly '${spec.equals}'${spec.because ? `; ${spec.because}` : ""}`);
+  }
   if (spec.oneOf && !spec.oneOf.includes(value)) fail(path, `must be one of ${spec.oneOf.join(", ")}`);
   if (spec.pattern && !spec.pattern.test(value)) fail(path, `does not match ${spec.pattern}`);
   if (spec.noComma && value.includes(",")) fail(path, "must not contain a comma");
@@ -1093,6 +1281,261 @@ if (packet.accessibilityNutritionLabel.deviceFamilies.some((family) => family.fe
   fail("accessibilityNutritionLabel", "claims a feature while the label state is unassessed");
 }
 
+// ── the App Store Connect observation ────────────────────────────────────────
+//
+// One read-only pass, written down. Nothing here can re-run it, so what is
+// checked is everything that CAN be checked without looking: that the right
+// record is named and the wrong one is refused, that the per-field readings
+// match what was actually read, that no gate reported unmet is also reported
+// met, and that the drafts elsewhere in this packet still agree with it.
+//
+// The asymmetry is deliberate. A packet that understates the record costs a
+// wasted re-inspection. A packet that overstates it — a build that is not
+// there, a product that was never created, an answered privacy questionnaire —
+// sends somebody to archive, upload or submit against a record that will refuse
+// them, or worse, does not refuse them.
+
+const observation = packet.appStoreConnectObservation;
+
+// `record.appleId`, `record.bundleId` and `record.shareExtensionBundleId` are
+// pinned by the schema above and carry the macOS record in their `because`, so
+// a swap is refused there with its reason attached. What is left for here is
+// everywhere else. The two places the macOS identifiers legitimately
+// appear are this observation, which exists to forbid them, and the subscription
+// review requirements, which warn against reusing a macOS product identifier.
+// Anywhere else, a macOS identifier in an iOS packet is either a paste or a
+// drift, and neither is something to read past.
+const macIdentifierIsAllowedAt = (path) =>
+  path.startsWith("appStoreConnectObservation.") || /^subscriptions\.reviewRequirements\[\d+\]$/.test(path);
+
+for (const { path, value } of allStrings) {
+  if (macIdentifierIsAllowedAt(path)) continue;
+  if (value.includes(MAC_APPLE_ID)) {
+    fail(path, `names Apple ID ${MAC_APPLE_ID}, the macOS record; this packet describes the iOS record ${APPLE_ID} only`);
+  }
+  if (value.includes(MAC_BUNDLE_ID)) {
+    fail(path, `names '${MAC_BUNDLE_ID}', the macOS bundle; this packet describes '${BUNDLE_ID}' only`);
+  }
+}
+
+// Exactly one of the two records is the iOS target, and it is the iOS one.
+const targets = observation.records.filter((entry) => entry.targetForIosRelease);
+if (targets.length !== 1) {
+  fail(
+    "appStoreConnectObservation.records",
+    `names ${targets.length} iOS targets; exactly one record may be the iOS delivery target`,
+  );
+}
+const iosRecord = targets[0];
+if (iosRecord) {
+  if (iosRecord.appleId !== APPLE_ID || iosRecord.bundleId !== BUNDLE_ID) {
+    fail(
+      "appStoreConnectObservation.records",
+      `names ${iosRecord.appleId} / '${iosRecord.bundleId}' as the iOS target; it is ${APPLE_ID} / '${BUNDLE_ID}'`,
+    );
+  }
+  if (iosRecord.observedVersion !== packet.record.marketingVersion) {
+    fail(
+      "appStoreConnectObservation.records",
+      `read the target's version back as '${iosRecord.observedVersion}', but this packet is drafted for ` +
+        `'${packet.record.marketingVersion}'; one of the two is describing a different version than the other`,
+    );
+  }
+  if (iosRecord.observedVersionState !== OBSERVED_VERSION_STATE) {
+    fail(
+      "appStoreConnectObservation.records",
+      `reports the target's version state as '${iosRecord.observedVersionState}'; it was read back as ` +
+        `'${OBSERVED_VERSION_STATE}', which is the state of a version that has never been submitted`,
+    );
+  }
+}
+
+const macRecord = observation.records.find((entry) => entry.appleId === MAC_APPLE_ID);
+if (!macRecord) {
+  fail(
+    "appStoreConnectObservation.records",
+    `does not record the macOS record ${MAC_APPLE_ID}. It exists, it shows an abandoned empty iOS platform, and an ` +
+      "operator who has not been told that will find it and treat it as the iOS record",
+  );
+} else {
+  if (macRecord.targetForIosRelease) {
+    fail(
+      "appStoreConnectObservation.records",
+      `marks the macOS record ${MAC_APPLE_ID} as the iOS delivery target. Its iOS platform is an abandoned empty ` +
+        `0.1.0 on a different bundle identifier; the iOS record is ${APPLE_ID}`,
+    );
+  }
+  if (macRecord.bundleId !== MAC_BUNDLE_ID) {
+    fail(
+      "appStoreConnectObservation.records",
+      `records ${MAC_APPLE_ID} with bundle '${macRecord.bundleId}'; it is '${MAC_BUNDLE_ID}'`,
+    );
+  }
+}
+
+// Each field, against what was read. Order is compared as well as membership:
+// the list is a transcript of one pass, and a reordered transcript is a
+// different document.
+OBSERVED_FIELDS.forEach((expected, index) => {
+  const actual = observation.observedFields[index];
+  const path = `appStoreConnectObservation.observedFields[${index}]`;
+  if (!actual) {
+    fail("appStoreConnectObservation.observedFields", `is missing the '${expected.id}' reading`);
+    return;
+  }
+  if (actual.id !== expected.id) {
+    fail(`${path}.id`, `must be '${expected.id}'; the order is the order the fields were read in`);
+    return;
+  }
+  if (actual.present !== expected.present) {
+    fail(
+      `${path}.present`,
+      `claims '${expected.id}' is ${actual.present ? "present" : "absent"} on the record, but on ${OBSERVED_AT} ` +
+        `${expected.why}. Change this only from a fresh read-only inspection, and change the date with it`,
+    );
+  }
+  if (actual.blocksSubmission !== expected.blocksSubmission) {
+    fail(
+      `${path}.blocksSubmission`,
+      `must be ${expected.blocksSubmission} for '${expected.id}'; whether a missing field blocks submission is ` +
+        "Apple's rule, not this packet's preference",
+    );
+  }
+});
+
+const openGates = observation.observedFields.filter((entry) => entry.blocksSubmission && !entry.present);
+
+// The claim this whole section exists to make unsayable.
+if (observation.fullySubmissionReady) {
+  fail(
+    "appStoreConnectObservation.fullySubmissionReady",
+    openGates.length > 0
+      ? `claims the record is fully submission-ready while this same section reports ${openGates.length} unmet gate(s): ` +
+          `${openGates.map((entry) => entry.id).join(", ")}`
+      : "claims the record is fully submission-ready. Submission readiness is decided in App Store Connect against a " +
+          "build this packet does not have; it is never a value this repository may assert",
+  );
+}
+
+// The drafts elsewhere in this packet are held against these same readings by
+// their own schema pins — `screenshots.capturedCount`, the proposed-draft flag
+// on the subscription identifiers, and the accessibility claim flag each carry
+// the observation in their `because`. They are not re-checked here: a
+// cross-check behind a pin is unreachable code.
+
+// An empty TestFlight list is the reading most likely to be over-read. It does
+// not say no build number was ever consumed — expired, removed and Invalid
+// builds keep theirs — and the candidate script's `--readback-highest-build`
+// still rests on an operator attestation. Losing that caveat turns a limit of
+// the observation into an apparent finding of it.
+if (!observation.notObserved.some((entry) => entry.includes("build number"))) {
+  fail(
+    "appStoreConnectObservation.notObserved",
+    "no longer records that the highest consumed build number is unobserved. An empty TestFlight list does not " +
+      "answer it, and scripts/ios-app-store-candidate.sh's --readback-highest-build is still an attestation",
+  );
+}
+
+// The screenshot reading is the second one most likely to be over-read, and it
+// over-reads in a direction the `present: false` pin cannot see. What was read
+// is the version record's OWN screenshot count — zero, on the page inspected.
+// Each device set and each localization was not opened and read back one at a
+// time. "Zero on this record" and "zero in every set and every locale" are
+// different statements: the first is a field reading, the second is a survey
+// nobody ran. Both block the gate, so nothing is gained by the wider one and a
+// dated observation is what is lost. Keep the caveat that says which one this
+// is.
+if (!observation.notObserved.some(
+  (entry) => /screenshot/i.test(entry) && /localization/i.test(entry),
+)) {
+  fail(
+    "appStoreConnectObservation.notObserved",
+    "no longer records that screenshot state was not read back set by set and localization by localization. The " +
+      "reading is the record's own screenshot count; without this caveat a field-scoped zero reads as a per-set " +
+      "and per-locale survey that was never run",
+  );
+}
+
+// The posture this section replaced, refused if it comes back. Until the record
+// was read, "nothing here has been read back" was the honest thing to say and
+// it is written all over this packet's history. Restoring it now would delete a
+// dated observation and put a false absence in its place — and a false absence
+// reads exactly like a fact nobody has established.
+const FORBIDDEN_BLANKET_ABSENCE = [
+  [/nothing[^.]{0,40}has been read back/i, "the blanket 'nothing has been read back' posture"],
+  [/has read back no\b/i, "the blanket 'this file has read back nothing' posture"],
+  [/nothing here has looked/i, "the blanket 'nothing here has looked' posture"],
+  [/no(?:thing| field| value| part)[^.]{0,40}of the record has been (?:read|observed|inspected)/i,
+   "a blanket claim that the record has not been inspected"],
+];
+
+// The same over-read, arriving as prose instead of as a dropped caveat.
+//
+// This is scoped narrowly on purpose. "One to ten screenshots per set, per
+// localization" is Apple's UPLOAD RULE and is stated all over this packet and
+// its prose; "zero screenshots in every set and every locale" is a CLAIM ABOUT
+// LIVE STATE that no read-back supports. The discriminator is the emptiness
+// word: a rule states a limit, this over-read states an absence. So a sentence
+// is refused only when it carries all three of a screenshot, an emptiness and a
+// universal quantifier over sets or locales — which no rule statement does.
+const SCREENSHOT_SURVEY_TOKENS = [
+  /\bscreenshots?\b/i,
+  /\b(?:zero|none|no|empty|nothing|not a single)\b/i,
+  /\b(?:every|all|each|any)\s+(?:set|sets|locale|locales|localization|localizations)\b/i,
+];
+
+// And the exact conjunction the corrected reading was written with, refused on
+// its own. Nothing in this packet needs to quantify over both axes at once, so
+// its return is a reversion rather than a rephrasing.
+const EVERY_SET_AND_EVERY_LOCALE =
+  /\b(?:every|all|each)\s+(?:set|sets)\s+and\s+(?:every|all|each)\s+(?:locale|locales|localization|localizations)\b/i;
+
+const claimsAScreenshotSurvey = (value) =>
+  EVERY_SET_AND_EVERY_LOCALE.test(value) ||
+  value
+    .split(/[.;\n]/)
+    .some((sentence) => SCREENSHOT_SURVEY_TOKENS.every((token) => token.test(sentence)));
+
+// And the opposite overclaim, in prose rather than in a flag.
+const FORBIDDEN_READINESS_CLAIMS = [
+  [/\bfully (?:submission[- ]?)?ready\b/i, "a fully-ready claim"],
+  [/\bsubmission[- ]ready\b/i, "a submission-ready claim"],
+  [/\bready to submit\b/i, "a ready-to-submit claim"],
+  [/\bready (?:for|to) release\b/i, "a ready-to-release claim"],
+  [/\ball (?:the )?gates?[^.]{0,24}\b(?:met|passed|green|clear)\b/i, "an all-gates-met claim"],
+  [/\bnothing\b[^.]{0,24}\bblock(?:s|ing)\b/i, "a nothing-is-blocking claim"],
+];
+
+for (const { path, value } of allStrings) {
+  for (const [pattern, what] of FORBIDDEN_BLANKET_ABSENCE) {
+    if (pattern.test(value)) {
+      fail(
+        path,
+        `restates ${what}. The record was read field by field on ${OBSERVED_AT}; ` +
+          "appStoreConnectObservation is where what it held is written, and a blanket absence would discard it",
+      );
+    }
+  }
+  for (const [pattern, what] of FORBIDDEN_READINESS_CLAIMS) {
+    if (pattern.test(value)) {
+      fail(
+        path,
+        `makes ${what}. There is no build, no product, no privacy answer, no price, no availability and no ` +
+          "screenshot on this record; submission readiness is not something this packet may assert",
+      );
+    }
+  }
+  if (claimsAScreenshotSurvey(value)) {
+    fail(
+      path,
+      "claims a screenshot state across every set or every locale. What was read on " +
+        `${OBSERVED_AT} is the version record's own screenshot count, zero, on the page inspected; no per-set ` +
+        "and no per-localization read-back was performed, and the gate is already blocked by the reading that was",
+    );
+  }
+}
+
+
 // ── the App Privacy answers, against the manifest the app actually ships ─────
 //
 // Two checks, and they answer different questions. The first compares the
@@ -1567,7 +2010,16 @@ function report() {
       `  ${packet.subscriptions.products.length} subscription products, ` +
         `screenshots ${packet.screenshots.state}, accessibility ${packet.accessibilityNutritionLabel.state}\n`,
     );
-    process.stdout.write("  nothing here has been read back from App Store Connect.\n");
+    const open = packet.appStoreConnectObservation.observedFields.filter((e) => e.blocksSubmission && !e.present);
+    process.stdout.write(
+      `  record ${APPLE_ID} (${BUNDLE_ID}) read back ${OBSERVED_AT} ${OBSERVED_TIME_ZONE}: ` +
+        `${open.length} of ${OBSERVED_FIELDS.length} observed fields are unmet gates` +
+        `${open.length > 0 ? ` — ${open.map((e) => e.id).join(", ")}` : ""}\n`,
+    );
+    process.stdout.write(
+      `  ${MAC_APPLE_ID} (${MAC_BUNDLE_ID}) is the macOS record and is never an iOS target.\n` +
+        "  this is a recorded read-back, not a live one; re-inspect read-only before archiving, uploading or submitting.\n",
+    );
   }
   process.exit(0);
 }

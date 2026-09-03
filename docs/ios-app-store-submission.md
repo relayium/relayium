@@ -23,6 +23,29 @@ about a macOS version, build number or release constrains it.
 | Share extension bundle | `com.relayium.app.share` |
 | Team | `7PVYUG4YQS` |
 
+### There are two records, and the wrong one looks right
+
+**Never target `6801142976` with an iOS release.**
+
+| Apple ID | Bundle | What it is |
+| --- | --- | --- |
+| `6791918822` | `com.relayium.app` | **The iOS record.** The only record this document, the metadata packet and any iOS archive describe. |
+| `6801142976` | `com.relayium.mac` | The shipped **macOS** record. It *also* carries an abandoned, empty iOS `0.1.0` platform. |
+
+The second row is the whole problem. `6801142976` appears in the Apps list
+showing an iOS platform, so it reads exactly like the record somebody looking
+for the iOS app would expect to find — and it is a different bundle identifier,
+a different build-number sequence, a different subscription catalogue and a
+different product. An iOS build uploaded there reaches the macOS record's
+abandoned iOS platform, not this app.
+
+This is not left to memory. `scripts/ios-app-store-metadata-validate.mjs` pins
+both identifiers and refuses a packet that names `6801142976` or
+`com.relayium.mac` as the record, the bundle, the share extension or a product
+identifier; that marks the macOS record as the iOS delivery target; or that
+drops it from the observation below — because an operator who has not been told
+the second record exists is the one who will find it.
+
 ## Development baseline
 
 | Field | Value |
@@ -44,7 +67,11 @@ uploaded build, not a TestFlight candidate and not a release.
   is not constrained that way.
 - Historical `0.1.0` **build 4 was uploaded** to this record, after build 3 was
   rejected by a purpose-string check. Build `5` is therefore the next build
-  above the highest one this record is known to have accepted.
+  above the highest one this record is known to have accepted. The 2026-09-03
+  read-back below found **no builds in TestFlight**, which does not contradict
+  this: a TestFlight build expires and disappears from that list while its
+  number stays consumed. It does mean the empty list is not evidence about
+  build numbers in either direction.
 - A local signed archive and non-uploading App Store export of historical
   build `1` passed with the intended distribution identities and profiles. The
   retained historical artifacts are:
@@ -56,14 +83,57 @@ uploaded build, not a TestFlight candidate and not a release.
   These are historical acceptance evidence for a build that is several versions
   behind. They are not the `0.3.0 (5)` baseline and not permission to upload.
 
-### A fresh App Store Connect read-back is required before any archive or upload
+### App Store Connect read-back, 2026-09-03
 
-**Nothing in this document reports current App Store Connect state.** The last
-read-only inspection recorded here was 2026-08-13, and the build history above
-is reconstructed from this project's own records rather than from a current
-query. Build `5` has **not** been verified against the record remotely, and the
-claim that it is the next free build number is therefore a local expectation,
-not an observed fact.
+The correct record — `6791918822` / `com.relayium.app` — was inspected
+read-only on **2026-09-03 (Asia/Dubai)**, field by field. That replaces the
+blanket "nothing in this document reports current App Store Connect state" that
+stood here until then. It does **not** make this document a live view: what
+follows is a dated transcript of one pass, and it goes stale.
+
+`docs/app-store-metadata-ios.json` carries the same readings machine-readably
+under `appStoreConnectObservation`, and
+`scripts/ios-app-store-metadata-validate.mjs` refuses a packet that claims any
+absent field is present.
+
+| Field | Read back | Gate |
+| --- | --- | --- |
+| App Store version | `0.3.0`, **Prepare for Submission** — changed the same day from the abandoned `0.1.0` | met |
+| TestFlight builds | none | **blocks submission** |
+| Subscription groups | none | **blocks submission** |
+| In-app purchases and subscription products | none | **blocks submission** |
+| App Privacy data practices | **Not Started** | **blocks submission** |
+| App Privacy — Privacy Policy URL | not saved | **blocks submission** |
+| App Privacy — User Privacy Choices URL | not saved | optional; not owed |
+| Accessibility Nutrition Label | **Not Started** | voluntary; not owed |
+| Pricing | no price schedule | **blocks submission** |
+| App availability | not set | **blocks submission** |
+| Screenshots | zero on the record as read | **blocks submission** |
+| App Store Server Notifications V2, Production and Sandbox URLs | both already saved to `https://relayium.com/api/apple/notifications` | met — **preserve it** |
+
+Eight of those twelve are unmet gates. **No archive, no upload, no submission
+and no release has happened against this record.** *Prepare for Submission* is
+App Store Connect's state for a version that has never been submitted; it is
+not a claim that anything is prepared, and nothing here says this record is
+ready to be submitted.
+
+The notification endpoints are the one row where the risk runs the other way.
+They are already configured, so the failure mode is deleting them rather than
+forgetting them: do not remove, blank or repoint either URL. One endpoint serves
+both environments, because the server distinguishes them from the signed
+envelope. A signed `TEST` delivery has been observed reaching Relayium for the
+**macOS** record, not for this one, so end-to-end delivery here is configured
+and still unproven.
+
+#### What was not read back, and is still owed
+
+An empty TestFlight list does **not** say that no build number was ever
+consumed: expired, removed and `Invalid` builds keep theirs. So the build-number
+question is exactly as open as it was before this inspection. Build `5` has
+**not** been verified against the record remotely, the claim that it is the next
+free build number remains a local expectation, and
+`scripts/ios-app-store-candidate.sh`'s `--readback-highest-build` remains an
+operator attestation rather than an observed fact.
 
 Before archiving or uploading, re-inspect the record read-only and confirm, at
 minimum:
@@ -75,9 +145,30 @@ minimum:
    build number within the record;
 3. the current App Store and TestFlight status of the app.
 
-If the read-back contradicts the baseline above, correct the project source and
-this document before building — do not upload against these numbers and do not
-record a remote fact this file has not observed.
+Also unobserved on 2026-09-03: the export-compliance answers carried on the
+version, the age-rating questionnaire, and App Review information — the contact
+fields and the demo account, which are owner-entered in App Store Connect and
+are never recorded in this repository.
+
+The screenshot reading has a boundary of its own. What was read is the version
+record's **own screenshot count, zero, on the page inspected** — each device set
+and each localization was *not* opened and read back separately. "Zero
+screenshots on this record" is therefore the whole of the observed fact, and
+nothing here establishes a per-set or per-localization live state. The gate
+stays blocked either way, because zero on the record is already enough to block
+it; what may not happen is that a field-scoped reading quietly grows into an
+all-sets, all-locales claim nobody made.
+
+The macOS record is a different matter, and the boundary there is **scope, not
+ignorance**. Its two identifiers, its platforms and its abandoned iOS version are
+recorded above because the two-record trap needs them to be executable. Beyond
+those, this iOS packet records and relies on **no** field of that record:
+everything else about it is out of scope for this document, and nothing here
+authorizes touching it.
+
+If a later read-back contradicts any of this, correct the project source, this
+document and the metadata packet before building — do not upload against these
+numbers and do not record a remote fact this file has not observed.
 
 ## Building the candidate: `scripts/ios-app-store-candidate.sh`
 
@@ -393,6 +484,10 @@ the subscription source scope. A live subscription can change tier in the app
 that sold it, but another Relayium app is blocked from creating a second Apple
 charge. A lapsed subscription may move to the other app. Migrated rows with no
 known scope fail closed and self-repair from a verified same-app event.
+
+The 2026-09-03 read-back found the record carrying **no subscription group and
+no in-app purchase or subscription product at all**, so everything below is work
+to do rather than work to verify.
 
 Before uploading a TestFlight build:
 
@@ -859,11 +954,14 @@ because this record has already failed the check once.
 
 ## App Store metadata and App Review information
 
-This section is the maintained **draft source** for the external fields. It
-reports no current App Store Connect state: this document has observed none of
-these fields, and the read-back rule above applies to them exactly as it does
-to build numbers. Reconcile every value against a live read-only inspection at
-submission time.
+This section is the maintained **draft source** for the external fields, and it
+reports no current App Store Connect state. The 2026-09-03 read-back covered the
+record's *gates* — version, builds, subscription catalogue, privacy,
+accessibility, pricing, availability, screenshots and the notification endpoints
+— and deliberately **not** these storefront strings: no name, subtitle,
+promotional text, description, keyword list, What's New or URL was read back
+from the record, so nothing in this section says what the record holds.
+Reconcile every value against a live read-only inspection at submission time.
 
 Apple's authoritative list of required and editable properties:
 <https://developer.apple.com/help/app-store-connect/reference/app-information/required-localizable-and-editable-properties>
@@ -975,11 +1073,13 @@ A privacy policy URL and complete data-practice answers are required:
 <https://developer.apple.com/help/app-store-connect/manage-app-information/manage-app-privacy/>
 
 **This section is a DRAFT this repository maintains. It is not observed provider
-state.** Nothing here has been entered in App Store Connect and no App Privacy
-answer has been read back from the record, so what follows is what the app
-declares and what somebody should therefore enter — never what the record
-currently holds. Entering it is a separate authorized step, and it must be
-followed by a fresh read-only re-inspection of the record. The App Store Connect
+state.** Nothing here has been entered in App Store Connect. What the record
+itself holds *was* read back, on 2026-09-03, and it holds nothing: App Privacy
+reads **Not Started**, with **no Privacy Policy URL** and **no User Privacy
+Choices URL** saved. So what follows is what the app declares and what somebody
+should therefore enter — never what the record currently holds. Entering it is
+a separate authorized step, and it must be followed by a fresh read-only
+re-inspection of the record. The App Store Connect
 questionnaire uses its own wording and its own category tree; fill it from the
 graph below rather than from memory, and reconcile the two rather than assuming
 they map one-to-one.
@@ -1236,7 +1336,11 @@ Specifications and upload rules:
 - <https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/>
 - <https://developer.apple.com/help/app-store-connect/manage-app-information/upload-app-previews-and-screenshots>
 
-This record targets iPhone **and** iPad, so both sets are required.
+This record targets iPhone **and** iPad, so both sets are required. The
+2026-09-03 read-back found **zero screenshots on the record** — the version
+record's own screenshot count, read on the page, and not a separate per-set and
+per-localization read-back — matching the `not-captured` state the metadata
+packet records.
 
 | Set | Accepted portrait sizes, pixels |
 | --- | --- |
@@ -1342,7 +1446,11 @@ false public statement of exactly the kind this record exists to prevent.
 both iPhone and iPad is recorded in
 `docs/app-store-metadata-ios.json` as `claimed: false`,
 `assessment: "not-assessed"`, and the validator refuses any packet that claims
-one while the label state is `unassessed`.
+one while the label state is `unassessed`. The record agrees: the 2026-09-03
+read-back found the Accessibility Nutrition Label **Not Started**, with no
+feature answered. The label is voluntary, so this is not a submission blocker —
+but it is also not something to answer from a guess to make the page look
+finished.
 
 ### The known blocker
 
@@ -1449,7 +1557,9 @@ What the owner actually decided:
 `scripts/ios-app-store-metadata-validate.mjs` refuses a packet that quietly
 returns France to the initial release or turns ANSSI back into a launch blocker.
 Territory selection itself is an owner action in App Store Connect; no value in
-this repository performs it, and this record has observed none of it.
+this repository performs it. The 2026-09-03 read-back found **app availability
+not set at all** on the record — no territory selection exists yet, so the
+exclusions above are still a decision to enter rather than one to verify.
 
 The part of the declaration that reaches this repository is the outcome. If the approved
 declaration comes with an Apple compliance code, that code belongs in
@@ -1481,7 +1591,8 @@ to add France**:
 ## TestFlight acceptance
 
 There is no candidate yet. `0.3.0 (5)` is a development baseline, and promoting
-it to a candidate requires the App Store Connect read-back above plus a new
+it to a candidate requires the outstanding App Store Connect read-back above —
+the build-number question the 2026-09-03 inspection did not answer — plus a new
 exact-source archive and checksum — which is what
 `scripts/ios-app-store-candidate.sh` produces, and which running that script
 does **not** by itself authorize uploading. Upload only the exact candidate
@@ -1491,9 +1602,9 @@ compiles anything, fails closed when no such toolchain is installed, and prints
 the selected versions into its own log. That keeps the runner image's default
 Xcode 16.4 and any unvalidated newer preview out of the builds this checklist
 depends on. It covers the toolchain only: it signs, archives and uploads
-nothing, so the App Store Connect read-back above, an exact-source archive and
-TestFlight build availability remain separate gates a green iOS lane does not
-satisfy.
+nothing, so the outstanding App Store Connect read-back above, an exact-source
+archive and TestFlight build availability remain separate gates a green iOS lane
+does not satisfy.
 
 **France is not part of initial availability**, so no ANSSI declaration is owed
 by this candidate. See *France availability and the ANSSI encryption

@@ -961,7 +961,7 @@ rejects(
   "must be one of not-produced, produced",
 );
 
-// ── nothing claims live App Store Connect state ──────────────────────────────
+// ── the packet's own state strings ───────────────────────────────────────────
 
 rejects(
   "the packet claiming it is not entered in App Store Connect",
@@ -1002,6 +1002,584 @@ rejects(
   },
   "subscriptions.ownerConfirmationRequired: is missing",
 );
+
+
+// ── the App Store Connect observation ────────────────────────────────────────
+//
+// Added 2026-09-03, when the record was read for the first time and the packet
+// stopped saying "nothing here has been read back". Everything below is one of
+// two failures:
+//
+//   * THE WRONG RECORD. There are two, and the wrong one is not obviously
+//     wrong: `6801142976` / `com.relayium.mac` is the macOS record and it also
+//     carries an abandoned, empty iOS platform, so it appears in the Apps list
+//     showing iOS exactly like the record somebody would expect to find. Every
+//     way of naming it as the iOS target is mutated here.
+//   * A GATE CLAIMED MET. Eleven fields were read as empty. Each of them is one
+//     boolean away from claiming a build exists, a product exists, privacy is
+//     answered, a price is set, a screenshot is uploaded — and each of those
+//     sends an operator at a record that cannot accept what they are about to
+//     do. The twelfth, the notification endpoints, fails the other way: it is
+//     already configured, so the mutation to catch is a deletion.
+
+rejects(
+  "the macOS record's Apple ID used as the iOS target",
+  (p) => {
+    p.record.appleId = "6801142976";
+  },
+  "is never an iOS delivery target",
+);
+
+rejects(
+  "the macOS bundle identifier used as the iOS target",
+  (p) => {
+    p.record.bundleId = "com.relayium.mac";
+  },
+  "belongs to the macOS record and is never the iOS target",
+);
+
+rejects(
+  "the share extension moved onto the macOS bundle",
+  (p) => {
+    p.record.shareExtensionBundleId = "com.relayium.mac.share";
+  },
+  "record.shareExtensionBundleId",
+);
+
+rejects(
+  "the macOS record marked as the iOS delivery target",
+  (p) => {
+    p.appStoreConnectObservation.records[1].targetForIosRelease = true;
+  },
+  "marks the macOS record",
+);
+
+rejects(
+  "both records marked as the iOS target",
+  (p) => {
+    p.appStoreConnectObservation.records[1].targetForIosRelease = true;
+    p.appStoreConnectObservation.records[0].note = "Either record will do.";
+  },
+  "names 2 iOS targets",
+);
+
+rejects(
+  "neither record marked as the iOS target",
+  (p) => {
+    p.appStoreConnectObservation.records[0].targetForIosRelease = false;
+  },
+  "names 0 iOS targets",
+);
+
+rejects(
+  "the iOS target swapped onto the macOS identifiers",
+  (p) => {
+    p.appStoreConnectObservation.records[0].appleId = "6801142976";
+    p.appStoreConnectObservation.records[0].bundleId = "com.relayium.mac";
+  },
+  "as the iOS target; it is 6791918822",
+);
+
+rejects(
+  "the macOS record dropped from the observation",
+  (p) => {
+    p.appStoreConnectObservation.records[1].appleId = "6801142977";
+  },
+  "does not record the macOS record",
+);
+
+rejects(
+  "the macOS record recorded under the wrong bundle",
+  (p) => {
+    p.appStoreConnectObservation.records[1].bundleId = "com.relayium.macos";
+  },
+  "records 6801142976 with bundle",
+);
+
+rejects(
+  "the macOS Apple ID pasted into the reviewer notes",
+  (p) => {
+    p.appReview.notes = `${p.appReview.notes}\n\nApp Store Connect record 6801142976.`;
+  },
+  "names Apple ID 6801142976",
+);
+
+rejects(
+  "the macOS bundle pasted into the reviewer notes",
+  (p) => {
+    p.appReview.notes = `${p.appReview.notes}\n\nThe bundle under review is com.relayium.mac.`;
+  },
+  "names 'com.relayium.mac'",
+);
+
+rejects(
+  "the observed version drifting from the version this packet is drafted for",
+  (p) => {
+    p.appStoreConnectObservation.records[0].observedVersion = "0.4.0";
+  },
+  "read the target's version back as",
+);
+
+rejects(
+  "the observed version state promoted past what was read",
+  (p) => {
+    p.appStoreConnectObservation.records[0].observedVersionState = "Waiting for Review";
+  },
+  "reports the target's version state as",
+);
+
+rejects(
+  "a TestFlight build claimed on a record that has none",
+  (p) => {
+    p.appStoreConnectObservation.observedFields[1].present = true;
+  },
+  "TestFlight listed no builds",
+);
+
+rejects(
+  "a subscription group claimed on a record that has none",
+  (p) => {
+    p.appStoreConnectObservation.observedFields[2].present = true;
+  },
+  "carried no subscription group",
+);
+
+rejects(
+  "subscription products claimed on a record that has none",
+  (p) => {
+    p.appStoreConnectObservation.observedFields[3].present = true;
+  },
+  "no in-app purchase or subscription product",
+);
+
+rejects(
+  "the App Privacy questionnaire claimed answered",
+  (p) => {
+    p.appStoreConnectObservation.observedFields[4].present = true;
+  },
+  "App Privacy read Not Started",
+);
+
+rejects(
+  "a Privacy Policy URL claimed saved on the record",
+  (p) => {
+    p.appStoreConnectObservation.observedFields[5].present = true;
+  },
+  "no Privacy Policy URL was saved",
+);
+
+rejects(
+  "a User Privacy Choices URL claimed saved on the record",
+  (p) => {
+    p.appStoreConnectObservation.observedFields[6].present = true;
+  },
+  "no User Privacy Choices URL was saved",
+);
+
+rejects(
+  "the Accessibility Nutrition Label claimed answered",
+  (p) => {
+    p.appStoreConnectObservation.observedFields[7].present = true;
+  },
+  "Accessibility Nutrition Label read Not Started",
+);
+
+rejects(
+  "a price schedule claimed on a record that has none",
+  (p) => {
+    p.appStoreConnectObservation.observedFields[8].present = true;
+  },
+  "had no price schedule",
+);
+
+rejects(
+  "availability claimed set on a record where it is not",
+  (p) => {
+    p.appStoreConnectObservation.observedFields[9].present = true;
+  },
+  "app availability was not set",
+);
+
+rejects(
+  "screenshots claimed on a record that holds none",
+  (p) => {
+    p.appStoreConnectObservation.observedFields[10].present = true;
+  },
+  "held zero screenshots",
+);
+
+rejects(
+  "a blocking gate quietly downgraded to non-blocking",
+  (p) => {
+    p.appStoreConnectObservation.observedFields[10].blocksSubmission = false;
+  },
+  "must be true for 'screenshots'",
+);
+
+rejects(
+  "the readings reordered so the transcript no longer matches the pass",
+  (p) => {
+    const fields = p.appStoreConnectObservation.observedFields;
+    [fields[1], fields[2]] = [fields[2], fields[1]];
+  },
+  "the order is the order the fields were read in",
+);
+
+rejects(
+  "a reading dropped from the transcript",
+  (p) => {
+    p.appStoreConnectObservation.observedFields.splice(10, 1);
+  },
+  "fewer than the required 12",
+);
+
+rejects(
+  "a reading of a field nobody defined",
+  (p) => {
+    p.appStoreConnectObservation.observedFields[11].id = "app-store-connect-vibes";
+  },
+  "appStoreConnectObservation.observedFields[11].id",
+);
+
+rejects(
+  "the record claimed fully submission-ready",
+  (p) => {
+    p.appStoreConnectObservation.fullySubmissionReady = true;
+  },
+  "unmet gate(s)",
+);
+
+rejects(
+  "a ready-to-submit claim in prose rather than in the flag",
+  (p) => {
+    p.appStoreConnectObservation.readinessNote =
+      "The record has been read back and is ready to submit.";
+  },
+  "a ready-to-submit claim",
+);
+
+rejects(
+  "an all-gates-met claim in prose",
+  (p) => {
+    p.appStoreConnectObservation.scope = "All gates are met and the record needs nothing further.";
+  },
+  "an all-gates-met claim",
+);
+
+rejects(
+  "the production notification endpoint claimed absent",
+  (p) => {
+    p.appStoreConnectObservation.appStoreServerNotifications.productionUrlConfigured = false;
+  },
+  "productionUrlConfigured",
+);
+
+rejects(
+  "the sandbox notification endpoint claimed absent",
+  (p) => {
+    p.appStoreConnectObservation.appStoreServerNotifications.sandboxUrlConfigured = false;
+  },
+  "sandboxUrlConfigured",
+);
+
+rejects(
+  "the notification endpoint repointed away from Relayium's",
+  (p) => {
+    p.appStoreConnectObservation.appStoreServerNotifications.url = "https://relayium.com/api/apple/notify";
+  },
+  "appStoreServerNotifications.url",
+);
+
+rejects(
+  "the notification endpoints removed from the observation altogether",
+  (p) => {
+    delete p.appStoreConnectObservation.appStoreServerNotifications;
+  },
+  "appStoreConnectObservation.appStoreServerNotifications: is missing",
+);
+
+rejects(
+  "the observed reading of the notification endpoints flipped to absent",
+  (p) => {
+    p.appStoreConnectObservation.observedFields[11].present = false;
+  },
+  "both the Production and Sandbox Server URLs were already saved",
+);
+
+rejects(
+  "a signed TEST notification claimed for this record",
+  (p) => {
+    p.appStoreConnectObservation.appStoreServerNotifications.signedTestNotificationObservedForThisRecord = true;
+  },
+  "signedTestNotificationObservedForThisRecord",
+);
+
+rejects(
+  "an archive claimed against this record",
+  (p) => {
+    p.appStoreConnectObservation.deliveryState.archived = true;
+  },
+  "deliveryState.archived",
+);
+
+rejects(
+  "an upload claimed against this record",
+  (p) => {
+    p.appStoreConnectObservation.deliveryState.uploaded = true;
+  },
+  "deliveryState.uploaded",
+);
+
+rejects(
+  "a submission claimed against this record",
+  (p) => {
+    p.appStoreConnectObservation.deliveryState.submittedForReview = true;
+  },
+  "deliveryState.submittedForReview",
+);
+
+rejects(
+  "a release claimed against this record",
+  (p) => {
+    p.appStoreConnectObservation.deliveryState.released = true;
+  },
+  "deliveryState.released",
+);
+
+rejects(
+  "the observation date moved without a new reading",
+  (p) => {
+    p.appStoreConnectObservation.observedAt = "2026-09-10";
+  },
+  "appStoreConnectObservation.observedAt",
+);
+
+rejects(
+  "the observation date reduced to a year",
+  (p) => {
+    p.appStoreConnectObservation.observedAt = "2026";
+  },
+  "appStoreConnectObservation.observedAt",
+);
+
+rejects(
+  "the time zone of the reading changed",
+  (p) => {
+    p.appStoreConnectObservation.timeZone = "UTC";
+  },
+  "appStoreConnectObservation.timeZone",
+);
+
+rejects(
+  "the whole observation deleted",
+  (p) => {
+    delete p.appStoreConnectObservation;
+  },
+  "appStoreConnectObservation: is missing",
+);
+
+rejects(
+  "the observation growing a field no rule reads",
+  (p) => {
+    p.appStoreConnectObservation.confidence = "high";
+  },
+  "appStoreConnectObservation.confidence",
+);
+
+rejects(
+  "the build-number caveat deleted from what was not observed",
+  (p) => {
+    p.appStoreConnectObservation.notObserved = p.appStoreConnectObservation.notObserved.filter(
+      (entry) => !entry.includes("build number"),
+    );
+  },
+  "highest consumed build number is unobserved",
+);
+
+rejects(
+  "the blanket 'nothing has been read back' posture restored",
+  (p) => {
+    p.packet.note = "Every value here is a draft. Nothing here has been read back from App Store Connect.";
+  },
+  "blanket 'nothing has been read back' posture",
+);
+
+rejects(
+  "the blanket 'this file has read back nothing' posture restored",
+  (p) => {
+    p.subscriptions.ownerConfirmationRequired =
+      "The six identifiers are a proposal and this file has read back no row.";
+  },
+  "blanket 'this file has read back nothing' posture",
+);
+
+rejects(
+  "the blanket 'nothing here has looked' posture restored",
+  (p) => {
+    p.appPrivacy.note = "The App Privacy answers this project proposes. Nothing here has looked at the record.";
+  },
+  "blanket 'nothing here has looked' posture",
+);
+
+rejects(
+  "a blanket claim that the record has never been inspected",
+  (p) => {
+    p.appStoreConnectObservation.scope = "No field of the record has been read, so all of this is a proposal.";
+  },
+  "a blanket claim that the record has not been inspected",
+);
+
+rejects(
+  "a fully-ready claim in prose",
+  (p) => {
+    p.appStoreConnectObservation.readinessNote = "The record is fully ready and needs no further work.";
+  },
+  "a fully-ready claim",
+);
+
+rejects(
+  "a submission-ready claim in prose",
+  (p) => {
+    p.appStoreConnectObservation.readinessNote = "This record is submission-ready as of the date above.";
+  },
+  "a submission-ready claim",
+);
+
+rejects(
+  "a ready-for-release claim in prose",
+  (p) => {
+    p.appStoreConnectObservation.readinessNote = "The version is ready for release once somebody presses the button.";
+  },
+  "a ready-to-release claim",
+);
+
+rejects(
+  "a nothing-is-blocking claim in prose",
+  (p) => {
+    p.appStoreConnectObservation.readinessNote = "Nothing is blocking this record from going out.";
+  },
+  "a nothing-is-blocking claim",
+);
+
+rejects(
+  "the packet's observation pointer reverted to a single boolean",
+  (p) => {
+    p.packet.observedAppStoreConnectState = false;
+  },
+  "packet.observedAppStoreConnectState",
+);
+
+rejects(
+  "the App Privacy section's observation pointer reverted to a single boolean",
+  (p) => {
+    p.appPrivacy.observedAppStoreConnectState = false;
+  },
+  "appPrivacy.observedAppStoreConnectState",
+);
+
+rejects(
+  "the App Privacy state reverted to the blanket read-back-required posture",
+  (p) => {
+    p.appPrivacy.state = "drafted-in-this-repository-app-store-connect-readback-required";
+  },
+  "appPrivacy.state",
+);
+
+rejects(
+  "a screenshot count raised above what the record was observed to hold",
+  (p) => {
+    p.screenshots.state = "not-captured";
+    p.screenshots.capturedCount = 3;
+  },
+  "observed on 2026-09-03 holding no screenshots",
+);
+
+// ── the screenshot reading, and the survey it is not ──────────────────────
+//
+// The reading is the version record's own screenshot count, zero, on the page
+// inspected. It is NOT a per-set and per-localization survey, and the gap
+// between those two matters because the wider one is free to write, reads as
+// more thorough, blocks exactly the same gate, and is unsupported. `present:
+// false` cannot catch it: the over-read agrees with the pin and overstates the
+// evidence behind it. These cases hold the narrow reading in place from both
+// directions — the caveat may not be dropped, and the survey may not be written.
+
+rejects(
+  "the screenshot per-set and per-localization caveat dropped",
+  (p) => {
+    p.appStoreConnectObservation.notObserved =
+      p.appStoreConnectObservation.notObserved.filter(
+        (entry) => !(/screenshot/i.test(entry) && /localization/i.test(entry)),
+      );
+  },
+  "set by set and localization by localization",
+);
+
+rejects(
+  "the caveat kept, but narrowed until it no longer names the localization axis",
+  (p) => {
+    const observation = p.appStoreConnectObservation;
+    const index = observation.notObserved.findIndex(
+      (entry) => /screenshot/i.test(entry) && /localization/i.test(entry),
+    );
+    observation.notObserved[index] =
+      "Screenshot state read one device set at a time. The count above is the record's own.";
+  },
+  "set by set and localization by localization",
+);
+
+rejects(
+  "the field reading re-expanded into the every-set-and-every-locale survey",
+  (p) => {
+    p.appStoreConnectObservation.observedFields[10].observed =
+      "The record holds zero screenshots, across every set and every locale.";
+  },
+  "across every set or every locale",
+);
+
+rejects(
+  "the same survey written with all-sets-and-all-locales wording",
+  (p) => {
+    p.appStoreConnectObservation.observedFields[10].observed =
+      "Screenshots were read back empty in all sets and all localizations.";
+  },
+  "across every set or every locale",
+);
+
+rejects(
+  "the survey asserted somewhere other than the reading it belongs to",
+  (p) => {
+    p.screenshots.blockedBy.push(
+      "Confirmed at read-back: no screenshot is present in any localization of either set.",
+    );
+  },
+  "across every set or every locale",
+);
+
+rejects(
+  "the survey smuggled in as a next action rather than an observation",
+  (p) => {
+    p.appStoreConnectObservation.observedFields[10].nextAction =
+      "Every set and every locale was verified empty, so capture them as the screenshots section specifies.";
+  },
+  "across every set or every locale",
+);
+
+// The other direction, and the reason the rule is three tokens rather than one:
+// Apple's upload RULE quantifies over sets and localizations in every packet
+// that states it. A guard that refused the word "localization" near the word
+// "screenshot" would refuse the rule too, and the packet would be edited to
+// stop stating it. The limit is not an observation and must stay sayable.
+{
+  const packet = clone();
+  packet.screenshots.blockedBy.push(
+    "Apple accepts one to ten screenshots per set, per localization, and each set is uploaded separately.",
+  );
+  accepts(
+    "Apple's per-set, per-localization upload rule, which is a limit and not a reading",
+    serialize(packet),
+  );
+}
 
 // ── screenshots ──────────────────────────────────────────────────────────────
 
