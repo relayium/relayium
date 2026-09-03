@@ -1828,6 +1828,11 @@ final class AppShellUITests: XCTestCase {
             + "files.",
         "Paste a Relayium link. The key stays in the link and never reaches "
             + "Relayium's servers.",
+        // The detail line of the same idle receive empty state as the message
+        // above: `.foregroundStyle(.secondary)` on `.secondarySystemBackground`,
+        // the same class. Hosted run 33698074644 surfaced it at `eef695e`;
+        // whether the audit reports it at all depends on the simulator's layout.
+        "Opening a link somebody sent you needs no account.",
     ]
 
     /// The launch argument that puts the app in Dark, mirrored from
