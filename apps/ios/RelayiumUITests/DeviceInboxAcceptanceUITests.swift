@@ -679,7 +679,11 @@ final class DeviceInboxAcceptanceUITests: XCTestCase {
     /// rather than an environment value, so the name both ends assert is the
     /// name the sender's launch actually stages.
     private enum Fixture {
-        static let bundleID = "com.relayium.app"
+        /// The app's own bundle id, shared with macOS since the universal-
+        /// purchase migration. This target's OWN bundle is
+        /// `com.relayium.ios.UITests`, which is a different identifier on
+        /// purpose — see `UniversalPurchaseIdentityTests`.
+        static let bundleID = "com.relayium.mac"
         // nonlocalized: the Debug-staged acceptance fixture
         static let name = "Relayium product brief.txt"
         static let stem = "Relayium product brief"

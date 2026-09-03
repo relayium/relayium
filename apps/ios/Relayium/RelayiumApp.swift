@@ -284,7 +284,17 @@ struct RelayiumApp: App {
         // wrong looks like an upload whose link the Account tab cannot rebuild,
         // and the key exists nowhere else: not on the server, only in the link
         // and in this store. R3-B made `makeStoredLinkKeyStore` per-platform, so
-        // this resolves to com.relayium.app with NO access group and no `#if`.
+        // this resolves to the iOS keychain SERVICE label with NO access group
+        // and no `#if`. That label is still `com.relayium.app` and deliberately
+        // did not follow the bundle id onto `com.relayium.mac`: it is a lookup
+        // key, and keeping it is continuity with the `com.relayium.mac`
+        // iOS/TestFlight lineage that already wrote stored-link keys under the
+        // shared bundle id, and with the code and tests that name it. Moving it
+        // would orphan those keys, which exist nowhere else. It does NOT reach
+        // a separately installed `com.relayium.app` development app's keys: the
+        // bundle id change moved this app's implicit default keychain access
+        // group to `7PVYUG4YQS.com.relayium.mac`, and a service label does not
+        // cross access groups. See `AppEnvironment.iosKeychainService`.
         let keys = UITestMode.makeStoredLinkKeyStore()
             ?? AppEnvironment.makeStoredLinkKeyStore()
         // R3-G: the stored-send half gets durable recovery. The bytes are

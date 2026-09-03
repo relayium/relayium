@@ -58,18 +58,25 @@
 //   * an App Store Connect observation that has drifted from what was actually
 //     read back. `appStoreConnectObservation` is a DATED, FIELD-SCOPED record of
 //     one read-only pass, and every fact in it is pinned below: which record is
-//     the iOS target, which record is the macOS one that must never be, and the
+//     the target, which record is superseded and must never be, and the
 //     present/absent state of each field that was read. A packet that claims a
-//     build, a subscription product, a completed privacy or accessibility
-//     answer, a price, an availability selection, a screenshot, an archive, an
-//     upload, a submission, a release, or a fully submission-ready record is
-//     refused, and so is one that says the already-configured notification
-//     endpoints are absent;
-//   * the macOS record used as the iOS delivery target. `6801142976` /
-//     `com.relayium.mac` is a real App Store Connect record that ALSO carries an
-//     abandoned, empty iOS platform, which is exactly what makes it a plausible
-//     wrong answer. It may appear only where this packet forbids it, never as
-//     the record, the bundle, the share extension or a product identifier;
+//     selected build, a screenshot, an archive, an upload, a submission, a
+//     release or a fully submission-ready record is refused — and so, in the
+//     other direction, is one that says the Approved subscription group, the six
+//     Approved products, the published privacy answers, the price schedule, the
+//     availability selection or the configured notification endpoints are
+//     absent;
+//   * the superseded record used as the delivery target. `6791918822` /
+//     `com.relayium.app` is a real, separate, iOS-only App Store Connect record
+//     that this repository itself used to name as the target, which is exactly
+//     what makes it the plausible wrong answer. It may appear only where this
+//     packet forbids it, never as the record, the bundle, the share extension
+//     or a product identifier;
+//   * a SECOND product namespace. The six `com.relayium.mac.*` subscription
+//     products already exist and are Approved; a `com.relayium.app.*` product
+//     identifier proposed anywhere in this packet is refused outright, because
+//     an identifier is permanent once created and a second namespace would fork
+//     the catalogue the released macOS app is already selling through;
 //   * the blanket "nothing has been read back" posture, reasserted anywhere in
 //     the packet. It was true until the record was read; restoring it would
 //     discard a dated observation and replace it with a false absence;
@@ -112,9 +119,15 @@ const DEFAULT_PACKET = resolve(repoRoot, "docs/app-store-metadata-ios.json");
 // Restated here rather than read out of the packet, so that editing the packet
 // cannot also edit what the packet is checked against.
 const LOCALES = ["en-US", "zh-Hans"];
-const APPLE_ID = "6791918822";
-const BUNDLE_ID = "com.relayium.app";
-const SHARE_BUNDLE_ID = "com.relayium.app.share";
+// The universal-purchase record: ONE App Store Connect record carrying both the
+// macOS and the iOS platform. Apple requires every platform in such a record to
+// share a single Bundle ID, which is why the iOS bundle is the macOS one.
+const APPLE_ID = "6801142976";
+const BUNDLE_ID = "com.relayium.mac";
+// `com.relayium.mac.Share` is the MACOS extension. The iOS appex is a separate
+// App ID under the same app, and the two must not be confused: they are
+// different bundles inside different binaries of the same record.
+const SHARE_BUNDLE_ID = "com.relayium.mac.ShareIOS";
 const TEAM_ID = "7PVYUG4YQS";
 const RECORD_NAME = "relayium";
 const MARKETING_VERSION = "0.3.0";
@@ -126,62 +139,110 @@ const MARKETING_VERSION = "0.3.0";
 const DISPLAY_NAME = "relayium";
 const EXCLUDED_TERRITORIES = ["CN", "FR"];
 
-// ── the two records, and the one that is never the iOS target ────────────────
+// ── the two records, and the one that is never the target ────────────────────
 //
-// There are two App Store Connect app records, and the wrong one is not
-// obviously wrong. `6801142976` is the shipped macOS record for
-// `com.relayium.mac`, and it ALSO carries an abandoned, empty iOS `0.1.0`
-// platform — so it appears in the Apps list showing an iOS platform, exactly
-// like a record somebody looking for the iOS app would expect to find. It is
-// not the iOS app: different bundle identifier, different build-number
-// sequence, different subscription catalogue, different product.
+// There are two App Store Connect app records showing an iOS platform, and this
+// pin used to name the wrong one as the target. That is corrected here rather
+// than annotated, because a stale identity in a release gate is worse than no
+// gate: it passes, and it passes a build onto a record that holds none of this
+// app's subscription products.
 //
-// The iOS record is `6791918822` / `com.relayium.app`, and it is the only one
-// this packet describes. Pinning both halves — the target AND the decoy — is
-// the point: pinning only the target catches a typo, and it is not a typo that
-// puts a build on the macOS record, it is a plausible-looking Apps row.
-const MAC_APPLE_ID = "6801142976";
-const MAC_BUNDLE_ID = "com.relayium.mac";
+// `6801142976` is the target. It is ONE universal-purchase record carrying both
+// platforms: the publicly released macOS app, and an iOS platform whose
+// TestFlight was read back holding a Validated `0.1.0 (4)` whose Build Metadata
+// reports main bundle `com.relayium.mac`, Share Extension application
+// identifier `7PVYUG4YQS.com.relayium.mac.ShareIOS` and App Group
+// `group.com.relayium.app`. That is an existing platform of an existing app,
+// not a new one, and the six live `com.relayium.mac.*` subscription products
+// belong to it.
+//
+// `6791918822` / `com.relayium.app` is the separate iOS-only record this packet
+// used to describe. It is SUPERSEDED and entirely read-only: no build was ever
+// uploaded to it, no product was created on it, and nothing may be entered into
+// it. It is pinned here as the decoy for the same reason the decoy was always
+// pinned — pinning only the target catches a typo, and this is not a typo, it
+// is a plausible-looking Apps row plus a repository's own history pointing at
+// it.
+const SUPERSEDED_APPLE_ID = "6791918822";
+const SUPERSEDED_BUNDLE_ID = "com.relayium.app";
+
+// The App Group survived the migration and the keychain service label did too.
+// Both contain the superseded bundle identifier as a SUBSTRING, and neither is
+// that record: an App Group is a separately registered container and a keychain
+// service is a lookup key for items already on the device. The scan below
+// removes these before looking for the superseded identity, so that preserving
+// a live identity does not read as naming a dead record.
+const PRESERVED_IDENTIFIERS_CONTAINING_SUPERSEDED_BUNDLE = [
+  "group.com.relayium.app",
+];
 
 // The one read-only pass this packet records, and the fields it covered.
 const OBSERVED_AT = "2026-09-03";
 const OBSERVED_TIME_ZONE = "Asia/Dubai";
 const OBSERVED_VERSION_STATE = "Prepare for Submission";
 const NOTIFICATION_URL = "https://relayium.com/api/apple/notifications";
+// The existing, Approved subscription group this record already carries. It is
+// REUSED, never recreated: it serves the live macOS app, and a second group
+// would be a second catalogue for one app.
+const SUBSCRIPTION_GROUP_ID = "22307427";
 
 // What the record actually held on `OBSERVED_AT`, pinned here rather than read
 // out of the packet — the same reason every other fact above is restated: a
 // packet that can edit what it is checked against is checked against nothing.
 //
-// `present` is the whole point. Eleven of these were read as EMPTY, and an
-// empty field is a fact with a date on it, not an absence of information. The
-// direction that matters is upward: a packet edited to say a build exists, a
-// product exists, privacy is answered, a price is set or a screenshot is
-// uploaded is claiming a gate is met that was observed unmet, and that claim is
-// how an unsubmittable record gets treated as a submittable one.
+// This table changed shape when the target changed, and the direction it moved
+// is the interesting part. Against the superseded record almost everything read
+// EMPTY. Against the universal-purchase record most of it reads DONE, because
+// the record has been shipping macOS for months: the subscription group and its
+// six products are Approved, App Privacy is published, a price schedule exists
+// and availability is selected. Two gates remain, and they are the two that are
+// per-version rather than per-record.
+//
+// `present` therefore carries risk in BOTH directions now, where it used to
+// carry it in one:
+//
+//   * upward, as before — a packet edited to say a build is selected or a
+//     screenshot is uploaded claims a gate is met that was observed unmet, and
+//     sends somebody to submit a version App Store Connect will refuse;
+//   * downward, which is new — a packet edited to say the products, the privacy
+//     answers, the price or the availability are ABSENT invites somebody to
+//     create them. On this record that is not a wasted afternoon: creating a
+//     second subscription group, or a second set of product identifiers,
+//     permanently forks the catalogue that the released macOS app is selling
+//     through. Identifiers cannot be deleted.
+//
+// `blocksSubmission` is Apple's rule about the field and is independent of
+// `present`: it says whether an ABSENT reading would block submission, so it
+// does not move when a field gets filled in. `openGates` below is the
+// conjunction — blocking AND absent — and that is the only place the two are
+// combined.
 const OBSERVED_FIELDS = [
-  { id: "version", present: true, blocksSubmission: false,
-    why: "the record's editable version was read back as 0.3.0 Prepare for Submission" },
-  { id: "testflight-builds", present: false, blocksSubmission: true,
-    why: "TestFlight listed no builds" },
-  { id: "subscription-groups", present: false, blocksSubmission: true,
-    why: "the record carried no subscription group" },
-  { id: "subscription-products", present: false, blocksSubmission: true,
-    why: "the record carried no in-app purchase or subscription product" },
-  { id: "app-privacy-data-practices", present: false, blocksSubmission: true,
-    why: "App Privacy read Not Started" },
-  { id: "app-privacy-policy-url", present: false, blocksSubmission: true,
-    why: "no Privacy Policy URL was saved on the record" },
+  { id: "version", present: true, blocksSubmission: true,
+    why: "the record's editable iOS version was read back as 0.3.0 Prepare for Submission" },
+  { id: "version-build-selection", present: false, blocksSubmission: true,
+    why: "no build is selected for the 0.3.0 iOS version" },
+  { id: "subscription-group", present: true, blocksSubmission: true,
+    why: `the record carries subscription group ${SUBSCRIPTION_GROUP_ID}, Approved` },
+  { id: "subscription-products", present: true, blocksSubmission: true,
+    why: "the record carries the six com.relayium.mac.{plus,pro,max}.{monthly,yearly} products, Approved" },
+  { id: "app-privacy-data-practices", present: true, blocksSubmission: true,
+    why: "App Privacy is published on the record" },
+  { id: "app-privacy-policy-url", present: true, blocksSubmission: true,
+    why: "https://relayium.com/privacy/ is saved as the record's Privacy Policy URL" },
   { id: "app-privacy-choices-url", present: false, blocksSubmission: false,
-    why: "no User Privacy Choices URL was saved, and Apple treats that field as optional" },
-  { id: "accessibility", present: false, blocksSubmission: false,
-    why: "the Accessibility Nutrition Label read Not Started, and it is voluntary" },
-  { id: "price-schedule", present: false, blocksSubmission: true,
-    why: "the record had no price schedule" },
-  { id: "availability", present: false, blocksSubmission: true,
-    why: "app availability was not set" },
+    why: "the User Privacy Choices URL is blank, and Apple treats that field as optional" },
+  { id: "price-schedule", present: true, blocksSubmission: true,
+    why: "the app is Free across all 175 price territories" },
+  { id: "availability", present: true, blocksSubmission: true,
+    why: "the app is available in 173 territories, with China mainland and France excluded" },
   { id: "screenshots", present: false, blocksSubmission: true,
-    why: "the record held zero screenshots" },
+    why: "the iOS version's required iPhone and iPad screenshot sets are missing" },
+  // Read off the record rather than intended here. It does not block
+  // submission — App Store Connect requires an answer and defaults to one — but
+  // the answer it carries decides whether an approved version ships itself, so
+  // a packet must not be able to restate it as a plan somebody may revise.
+  { id: "release-type", present: true, blocksSubmission: false,
+    why: "manual release is the option selected on the iOS 0.3.0 version" },
   { id: "app-store-server-notifications", present: true, blocksSubmission: false,
     why: "both the Production and Sandbox Server URLs were already saved to the Relayium endpoint" },
 ];
@@ -218,14 +279,20 @@ const LIMIT = {
   whatsNew: 4000,
   keywordBytes: 100,
   keywordMinChars: 3, // Apple refuses a keyword of two characters or fewer
-  iapDisplayNameMin: 2,
-  iapDisplayNameMax: 30,
-  iapDescription: 45,
 };
+// Apple's in-app-purchase display-name and description limits used to be here.
+// They are gone with the drafts they measured: this packet no longer proposes
+// IAP copy, because the six products already exist and are Approved. See
+// `productSpec`. If a SEVENTH product is ever genuinely new, its copy comes back
+// and so do these.
 
 const PLANS = ["plus", "pro", "max"];
 const CYCLES = ["monthly", "yearly"];
 const PRODUCT_IDS = PLANS.flatMap((plan) => CYCLES.map((cycle) => `${BUNDLE_ID}.${plan}.${cycle}`));
+// The namespace that must never appear as a product identifier. Creating one
+// `com.relayium.app.*` product would permanently fork the catalogue: identifiers
+// cannot be deleted, and the released macOS app sells through the other one.
+const FORBIDDEN_PRODUCT_PREFIX = `${SUPERSEDED_BUNDLE_ID}.`;
 
 // ── the App Privacy answers, pinned ──────────────────────────────────────────
 //
@@ -264,6 +331,30 @@ const APP_PRIVACY_TYPES = [
 const APP_PRIVACY_ABSENT_TYPES = ["NSPrivacyCollectedDataTypeDeviceID"];
 const APP_MANIFEST = "apps/ios/Relayium/PrivacyInfo.xcprivacy";
 const SHARE_MANIFEST = "apps/ios/RelayiumShare/PrivacyInfo.xcprivacy";
+
+// ── the union that is actually PUBLISHED, and why it is not the list above ───
+//
+// App Privacy is answered once per RECORD, not once per platform. This record
+// carries two platforms, so the answers published on it are the UNION of what
+// macOS declares and what iOS declares — and the published union was read back
+// as seven data types while the iOS manifest declares six.
+//
+// The seventh is `DeviceID`, and it is macOS's. That is the same asymmetry
+// `APP_PRIVACY_ABSENT_TYPES` already records from the other side: iOS must NOT
+// declare Device ID in its manifest, because no iOS source sends one, and the
+// record must publish it anyway, because macOS does. Both statements are true
+// at once and each looks like a bug from the other's vantage point, which is
+// precisely why they are pinned together here.
+//
+// Derived rather than listed: the union is computed from the iOS graph plus the
+// deliberately-absent-on-iOS types, and then compared against what the packet
+// says was published. A hand-written seventh entry would be a third independent
+// list to keep in step; a derived one cannot disagree with the two it comes
+// from, and the comparison still catches a published union that is neither.
+const PUBLISHED_PRIVACY_UNION = [
+  ...APP_PRIVACY_TYPES.map((entry) => entry.type),
+  ...APP_PRIVACY_ABSENT_TYPES,
+].sort();
 
 const OWNER_ENTERED_FIELDS = [
   "contactFirstName",
@@ -464,17 +555,20 @@ const storefrontSpec = obj({
   privacyPolicyUrl: str({ url: true }),
 });
 
+// A product this packet REUSES, not one it proposes.
+//
+// The display name and description that used to sit here were drafts for
+// products that did not exist. They exist now, they are Approved, and they are
+// serving the released macOS app — so a draft display name here would not be a
+// proposal, it would be an edit to an Approved product, pasted by somebody who
+// took this file for a source of truth and put the catalogue back into review
+// for no reason. This packet therefore carries the IDENTITY of each product,
+// which is checked, and nothing about its live copy, which was not read back.
 const productSpec = obj({
   productId: str(),
-  referenceName: str(),
   plan: str({ oneOf: PLANS }),
   cycle: str({ oneOf: CYCLES }),
-  localizations: localeMap(
-    obj({
-      displayName: str({ minChars: LIMIT.iapDisplayNameMin, maxChars: LIMIT.iapDisplayNameMax }),
-      description: str({ maxChars: LIMIT.iapDescription }),
-    }),
-  ),
+  observedState: str({ equals: "Approved" }),
 });
 
 const featureSpec = obj(
@@ -491,7 +585,7 @@ const SCHEMA = obj({
   schemaVersion: int({ equals: 1 }),
   packet: obj({
     id: str({ equals: "ios-app-store-metadata" }),
-    state: str({ equals: `draft-in-this-repository-record-observed-${OBSERVED_AT}` }),
+    state: str({ equals: `draft-in-this-repository-universal-record-observed-${OBSERVED_AT}` }),
     // Was a boolean, and a boolean was the defect: one flag for a whole record
     // can only say "all of it" or "none of it", and the truth is neither. It
     // points at the section that says which fields were read and when.
@@ -506,16 +600,21 @@ const SCHEMA = obj({
       equals: APPLE_ID,
       exemptFromSecretScan: true,
       because:
-        `${MAC_APPLE_ID} is the other record — the macOS one, which also carries an abandoned empty iOS ` +
-        "platform and is therefore the plausible wrong answer. It is never an iOS delivery target",
+        `${SUPERSEDED_APPLE_ID} is the separate iOS-only record this packet used to name, and it is the ` +
+        "plausible wrong answer precisely because this repository's own history points at it. It is " +
+        "superseded and read-only, and it is never a delivery target",
     }),
     bundleId: str({
       equals: BUNDLE_ID,
-      because: `'${MAC_BUNDLE_ID}' and anything under it belongs to the macOS record and is never the iOS target`,
+      because:
+        `'${SUPERSEDED_BUNDLE_ID}' is the retired identity. Apple requires every platform of a ` +
+        "universal-purchase record to share one Bundle ID, and this record's is the macOS one",
     }),
     shareExtensionBundleId: str({
       equals: SHARE_BUNDLE_ID,
-      because: `'${MAC_BUNDLE_ID}.share' belongs to the macOS record and is never the iOS extension`,
+      because:
+        `'${BUNDLE_ID}.Share' is the MACOS extension and '${SUPERSEDED_BUNDLE_ID}.share' is the retired ` +
+        "iOS one; the live iOS appex is the identifier the record's own Build Metadata reports",
     }),
     teamId: str({ equals: TEAM_ID }),
     marketingVersion: str({ pattern: /^\d+\.\d+\.\d+$/ }),
@@ -548,6 +647,17 @@ const SCHEMA = obj({
       }),
       { min: 2, max: 2 },
     ),
+    // The record's macOS platform, which is publicly released and entirely out
+    // of this batch's reach. Carried because "one record, two platforms" is the
+    // whole reason the identity moved, and because every read-only fact below
+    // is something an operator could otherwise mistake for an iOS gate.
+    universalPurchase: obj({
+      platforms: arr(str(), { exact: ["macOS", "iOS"] }),
+      sharedBundleId: str({ equals: BUNDLE_ID }),
+      macOSPubliclyReleased: bool({ equals: true }),
+      macOSIsReadOnlyHere: bool({ equals: true }),
+      note: str({ multiline: true }),
+    }),
     observedFields: arr(
       obj({
         id: str({ oneOf: OBSERVED_FIELD_IDS }),
@@ -568,21 +678,42 @@ const SCHEMA = obj({
       signedTestNotificationObservedForThisRecord: bool({ equals: false }),
       note: str({ multiline: true }),
     }),
+    // Scoped to the iOS platform, and the scope is now load-bearing rather than
+    // implied: this record's macOS platform IS publicly released, so four
+    // unqualified `false`s would read as a claim about the whole record and be
+    // wrong about half of it.
     deliveryState: obj({
+      platform: str({ equals: "iOS" }),
       archived: bool({ equals: false }),
       uploaded: bool({ equals: false }),
       submittedForReview: bool({ equals: false }),
       released: bool({ equals: false }),
+      // Manual, and READ OFF THE RECORD rather than intended here. The
+      // distinction is the point of the second flag: an intention is something
+      // a later author may quietly revise into "automatic, it is fine", while
+      // an observation is something they have to go and contradict. What it
+      // protects is the last moment a human can decide not to ship.
+      releaseType: str({ equals: "manual" }),
+      releaseTypeObservedOnTheRecord: bool({
+        equals: true,
+        because:
+          "manual release was read back as the option selected on the iOS 0.3.0 version, and demoting an " +
+          "observation to an intention is how a read-back quietly becomes a preference",
+      }),
       note: str({ multiline: true }),
     }),
     notObserved: arr(str({ multiline: true }), { min: 1, unique: true }),
   }),
   locales: arr(str(), { unique: true, exact: LOCALES }),
   availability: obj({
-    // The selection this repository intends, and — since 2026-09-03 — the fact
-    // that the record carries none. Both halves, because either alone is a
-    // different and misleading statement.
-    state: str({ equals: "recorded-in-this-repository-record-shows-availability-not-set" }),
+    // No longer "what this repository intends and the record does not have".
+    // The selection is ON the record: Free in all 175 price territories, and
+    // available in 173 with the two exclusions below. Recording it as absent
+    // would invite somebody to set it again.
+    state: str({ equals: "observed-on-the-record-173-of-175-territories-selected" }),
+    priceTerritoryCount: int({ equals: 175 }),
+    availableTerritoryCount: int({ equals: 173 }),
+    free: bool({ equals: true }),
     initialExcludedTerritories: arr(
       obj({ code: str(), name: str(), reason: str({ multiline: true }) }),
       { min: 1 },
@@ -600,14 +731,29 @@ const SCHEMA = obj({
   }),
   storefront: localeMap(storefrontSpec),
   appPrivacy: obj({
-    // Same two-part honesty as `subscriptions.state`: what this repository
-    // holds, and what the record holds. Until 2026-09-03 the second half could
-    // only be "a read-back is owed", because nothing had looked. It has now
-    // been looked at, and it is empty — which is a dated fact, not the blanket
-    // absence of one.
-    state: str({ equals: "drafted-in-this-repository-record-shows-data-practices-not-started" }),
+    // The record's App Privacy is PUBLISHED, and that changes what this section
+    // is for. It is no longer a draft waiting to be typed in; it is the iOS half
+    // of something already public, kept here so that a change to the iOS
+    // manifest is visibly a change to a published promise.
+    state: str({ equals: "published-on-the-record-this-section-is-the-ios-half" }),
     observedAppStoreConnectState: str({ equals: "field-scoped-see-appStoreConnectObservation" }),
     sourceOfTruth: str({ equals: APP_MANIFEST }),
+    // What the RECORD publishes: the union across both platforms, because App
+    // Privacy is answered per record and this record has two. Checked against
+    // the iOS graph plus the macOS-only types below, so it cannot drift into a
+    // third independent list.
+    recordLevelPublishedUnion: arr(str({ pattern: /^NSPrivacyCollectedDataType[A-Za-z]+$/ }), {
+      min: PUBLISHED_PRIVACY_UNION.length,
+      max: PUBLISHED_PRIVACY_UNION.length,
+      unique: true,
+    }),
+    recordLevelPublishedUnionNote: str({ multiline: true }),
+    privacyPolicyUrlOnRecord: str({ equals: URLS["en-US"].privacyPolicyUrl }),
+    // A boolean rather than an empty string, because every string in this packet
+    // is required to be non-empty and trimmed — an empty one is a finding, not a
+    // way to say "blank". Blank is a decision here: Relayium publishes no
+    // privacy-choices page and Apple treats the field as optional.
+    userPrivacyChoicesUrlOnRecordIsBlank: bool({ equals: true }),
     // The label-level tracking answer, which must agree with the manifest's
     // `NSPrivacyTracking`. Pinned to false with no domains, because a `true`
     // here would put Relayium inside App Tracking Transparency's scope.
@@ -664,26 +810,49 @@ const SCHEMA = obj({
     whatToTest: localeMap(str({ multiline: true, maxChars: LIMIT.description })),
   }),
   subscriptions: obj({
-    // 'no row exists' used to be unsayable here, because nothing had read the
-    // live record. It has now been read, on the date pinned above, and it holds
-    // no group and no products — so the state says both what this repository
-    // drafts and what the record was observed to hold.
-    state: str({ equals: "drafted-in-this-repository-record-shows-no-group-or-products" }),
-    productIdentifiersAreProposedDrafts: bool({
+    // This section was a PROPOSAL and is now an INVENTORY, and the inversion is
+    // the single most consequential correction in this file. The record was read
+    // back carrying an Approved subscription group and six Approved products —
+    // the ones the released macOS app is selling through — so nothing here is to
+    // be created, confirmed or named. It is to be reused, and the validator's
+    // job is now to refuse a second catalogue rather than to sanity-check a
+    // first one.
+    state: str({ equals: "existing-approved-catalogue-reused-under-the-universal-record" }),
+    productIdentifiersAlreadyExistAndAreApproved: bool({
       equals: true,
       because:
-        `the record was observed on ${OBSERVED_AT} with no subscription group and no products at all, and an ` +
-        "identifier that exists nowhere is a proposal",
+        `the record was read back on ${OBSERVED_AT} carrying subscription group ${SUBSCRIPTION_GROUP_ID} and ` +
+        "the six com.relayium.mac products, all Approved; an identifier that exists is not a proposal",
     }),
-    ownerConfirmationRequired: str({ multiline: true }),
-    submittedWithAppVersion: bool({ equals: true }),
+    noNewProductsMayBeCreated: bool({
+      equals: true,
+      because:
+        "an App Store product identifier is permanent and cannot be deleted, so a seventh product or a second " +
+        "namespace forks the catalogue the released macOS app already sells through",
+    }),
+    // Was `true`, on the rule that a record's FIRST subscription group must be
+    // submitted together with an app version. That rule does not apply: this
+    // group is not first, it is Approved, and it is live. Submitting the iOS
+    // version does not resubmit it.
+    submittedWithAppVersion: bool({
+      equals: false,
+      because:
+        "Apple's submit-together rule is about a record's FIRST group; this record's group is already Approved " +
+        "and serving the released macOS app",
+    }),
     submittedWithAppVersionNote: str({ multiline: true }),
     group: obj({
-      referenceName: str(),
-      localizations: localeMap(obj({ displayName: str({ minChars: LIMIT.iapDisplayNameMin, maxChars: LIMIT.iapDisplayNameMax }) })),
+      groupId: str({ equals: SUBSCRIPTION_GROUP_ID, exemptFromSecretScan: true }),
+      observedState: str({ equals: "Approved" }),
+      // The group's reference name and localized display names exist on the
+      // record and were NOT read back. They are deliberately absent rather than
+      // guessed: a display name written here would be an edit somebody could
+      // paste into an Approved group.
+      referenceNameAndLocalizationsAreLiveAndNotAuthoredHere: bool({ equals: true }),
+      note: str({ multiline: true }),
     }),
     priceAndAvailability: obj({
-      state: str({ equals: "owner-decision-outstanding" }),
+      state: str({ equals: "live-on-the-record-not-authored-here" }),
       note: str({ multiline: true }),
     }),
     products: arr(productSpec, { min: 6, max: 6 }),
@@ -693,7 +862,9 @@ const SCHEMA = obj({
     state: str({ equals: "not-captured" }),
     capturedCount: int({
       equals: 0,
-      because: `none have been captured here, and the record was observed on ${OBSERVED_AT} holding no screenshots`,
+      because:
+        "none have been captured here, and the iOS version's required iPhone and iPad sets were observed " +
+        `missing on the record on ${OBSERVED_AT}`,
     }),
     blockedBy: arr(str({ multiline: true }), { min: 1, unique: true }),
     rules: obj({
@@ -728,7 +899,10 @@ const SCHEMA = obj({
     state: str({ equals: "unassessed" }),
     anyFeatureClaimed: bool({
       equals: false,
-      because: `the Accessibility Nutrition Label was observed Not Started on the record on ${OBSERVED_AT}`,
+      because:
+        "the per-device-family common-task assessment has not been performed on real hardware. This used to " +
+        "rest on the record reading Not Started, and that reading was of the SUPERSEDED record — it does not " +
+        "transfer. The local reason is the durable one and does not depend on any read-back",
     }),
     note: str({ multiline: true }),
     knownBlockers: arr(str({ multiline: true }), { min: 1, unique: true }),
@@ -939,11 +1113,10 @@ for (const locale of LOCALES) {
   for (const field of ["name", "subtitle", "promotionalText", "description", "whatsNew"]) {
     marketingPaths.push(`storefront.${locale}.${field}`);
   }
-  marketingPaths.push(`subscriptions.group.localizations.${locale}.displayName`);
-  packet.subscriptions.products.forEach((_, index) => {
-    marketingPaths.push(`subscriptions.products[${index}].localizations.${locale}.displayName`);
-    marketingPaths.push(`subscriptions.products[${index}].localizations.${locale}.description`);
-  });
+  // The subscription group's and products' display names and descriptions were
+  // once scanned here too. They are no longer in this packet — the catalogue is
+  // Approved and its copy lives on the record — so there is nothing here to
+  // scan. The storefront copy, which IS drafted here, is still covered.
 }
 const marketingPathSet = new Set(marketingPaths);
 
@@ -1160,7 +1333,11 @@ if (packet.record.marketingVersion !== MARKETING_VERSION) {
   );
 }
 
-for (const scope of ["storefront", "testFlight.betaAppDescription", "testFlight.whatToTest", "subscriptions.group.localizations"]) {
+// `subscriptions.group.localizations` used to be in this list. It is gone with
+// the drafts it covered: the group is Approved and its localized display names
+// live on the record, so this packet no longer carries any subscription copy for
+// a locale rule to apply to.
+for (const scope of ["storefront", "testFlight.betaAppDescription", "testFlight.whatToTest"]) {
   const value = scope.split(".").reduce((node, key) => node?.[key], packet);
   const keys = Object.keys(value ?? {});
   if (keys.length !== LOCALES.length || !LOCALES.every((locale) => keys.includes(locale))) {
@@ -1204,6 +1381,21 @@ if (
   );
 }
 
+// The six products, and the namespace that must never join them.
+//
+// This check used to refuse a `com.relayium.mac.*` identifier on the grounds
+// that the two records must not share a product. That was right about the
+// danger and wrong about the direction, and the correction is total: there is
+// ONE record, its products ARE the `com.relayium.mac.*` six, and the identifier
+// that must never appear is the retired `com.relayium.app.*` one.
+//
+// The asymmetry between the two failures below is deliberate. A wrong-but-live
+// identifier is a packet error. A `com.relayium.app.*` identifier is an
+// instruction to create something permanent: App Store product identifiers
+// cannot be deleted or renamed, so a second namespace is not a mistake that can
+// be undone afterwards — it is a fork of the catalogue the released macOS app
+// sells through, and every entitlement decision downstream would then depend on
+// which of two namespaces a given transaction came from.
 const seenProductIds = new Set();
 packet.subscriptions.products.forEach((product, index) => {
   const path = `subscriptions.products[${index}]`;
@@ -1211,14 +1403,33 @@ packet.subscriptions.products.forEach((product, index) => {
   if (product.productId !== expected) {
     fail(`${path}.productId`, `must be '${expected}' for the ${product.plan} ${product.cycle} row`);
   }
-  if (product.productId.startsWith("com.relayium.mac.")) {
-    fail(`${path}.productId`, "reuses a macOS identifier; the two records must not share a product");
+  if (product.productId.startsWith(FORBIDDEN_PRODUCT_PREFIX)) {
+    fail(
+      `${path}.productId`,
+      `proposes a '${FORBIDDEN_PRODUCT_PREFIX}' product. That namespace belongs to the superseded record ` +
+        `${SUPERSEDED_APPLE_ID}; creating one would permanently fork the catalogue the released macOS app ` +
+        "sells through, and an App Store product identifier cannot be deleted",
+    );
   }
   if (seenProductIds.has(product.productId)) fail(`${path}.productId`, "is a duplicate");
   seenProductIds.add(product.productId);
 });
 for (const id of PRODUCT_IDS) {
   if (!seenProductIds.has(id)) fail("subscriptions.products", `is missing the row for '${id}'`);
+}
+
+// And the same refusal over the WHOLE packet, not only the product rows. A
+// second namespace proposed in a review requirement, a note or a reviewer
+// comment is still a proposal somebody can act on, and it would not be caught
+// by a rule that only reads `subscriptions.products`.
+for (const { path, value } of allStrings) {
+  if (PLANS.some((plan) => value.includes(FORBIDDEN_PRODUCT_PREFIX + plan))) {
+    fail(
+      path,
+      `names a '${FORBIDDEN_PRODUCT_PREFIX}' subscription product. The six Approved products are under ` +
+        `'${BUNDLE_ID}.'; a second namespace is permanent and must never be proposed`,
+    );
+  }
 }
 
 const enteredFields = packet.appReview.ownerEnteredFields.map((entry) => entry.field);
@@ -1298,23 +1509,44 @@ if (packet.accessibilityNutritionLabel.deviceFamilies.some((family) => family.fe
 const observation = packet.appStoreConnectObservation;
 
 // `record.appleId`, `record.bundleId` and `record.shareExtensionBundleId` are
-// pinned by the schema above and carry the macOS record in their `because`, so
-// a swap is refused there with its reason attached. What is left for here is
-// everywhere else. The two places the macOS identifiers legitimately
-// appear are this observation, which exists to forbid them, and the subscription
-// review requirements, which warn against reusing a macOS product identifier.
-// Anywhere else, a macOS identifier in an iOS packet is either a paste or a
-// drift, and neither is something to read past.
-const macIdentifierIsAllowedAt = (path) =>
+// pinned by the schema above and carry the superseded record in their `because`,
+// so a swap is refused there with its reason attached. What is left for here is
+// everywhere else. The two places the superseded identifiers legitimately appear
+// are this observation, which exists to record that the record is superseded,
+// and the subscription review requirements, which warn against creating a
+// product under it. Anywhere else, the retired identity in this packet is either
+// a paste or a drift, and neither is something to read past.
+const supersededIdentifierIsAllowedAt = (path) =>
   path.startsWith("appStoreConnectObservation.") || /^subscriptions\.reviewRequirements\[\d+\]$/.test(path);
 
+// Two live identifiers CONTAIN the superseded bundle id as a substring and are
+// not it: the App Group `group.com.relayium.app`, which is a separately
+// registered container the portal authorizes for both bundles, and — outside
+// this packet — the iOS keychain service label. Neither followed the bundle id,
+// deliberately, because renaming a container strands staged drafts and renaming
+// a keychain service loses every credential already on the device. They are
+// removed before the scan so that PRESERVING a live identity does not read as
+// naming a dead record.
+const withoutPreservedIdentifiers = (value) =>
+  PRESERVED_IDENTIFIERS_CONTAINING_SUPERSEDED_BUNDLE.reduce(
+    (text, identifier) => text.split(identifier).join(""),
+    value,
+  );
+
 for (const { path, value } of allStrings) {
-  if (macIdentifierIsAllowedAt(path)) continue;
-  if (value.includes(MAC_APPLE_ID)) {
-    fail(path, `names Apple ID ${MAC_APPLE_ID}, the macOS record; this packet describes the iOS record ${APPLE_ID} only`);
+  if (supersededIdentifierIsAllowedAt(path)) continue;
+  if (value.includes(SUPERSEDED_APPLE_ID)) {
+    fail(
+      path,
+      `names Apple ID ${SUPERSEDED_APPLE_ID}, the superseded iOS-only record; this packet describes the ` +
+        `universal-purchase record ${APPLE_ID} only`,
+    );
   }
-  if (value.includes(MAC_BUNDLE_ID)) {
-    fail(path, `names '${MAC_BUNDLE_ID}', the macOS bundle; this packet describes '${BUNDLE_ID}' only`);
+  if (withoutPreservedIdentifiers(value).includes(SUPERSEDED_BUNDLE_ID)) {
+    fail(
+      path,
+      `names '${SUPERSEDED_BUNDLE_ID}', the retired bundle identifier; this packet describes '${BUNDLE_ID}' only`,
+    );
   }
 }
 
@@ -1350,25 +1582,25 @@ if (iosRecord) {
   }
 }
 
-const macRecord = observation.records.find((entry) => entry.appleId === MAC_APPLE_ID);
-if (!macRecord) {
+const supersededRecord = observation.records.find((entry) => entry.appleId === SUPERSEDED_APPLE_ID);
+if (!supersededRecord) {
   fail(
     "appStoreConnectObservation.records",
-    `does not record the macOS record ${MAC_APPLE_ID}. It exists, it shows an abandoned empty iOS platform, and an ` +
-      "operator who has not been told that will find it and treat it as the iOS record",
+    `does not record the superseded iOS-only record ${SUPERSEDED_APPLE_ID}. It still exists, this repository's ` +
+      "own history named it as the target, and an operator who has not been told that will find it and use it",
   );
 } else {
-  if (macRecord.targetForIosRelease) {
+  if (supersededRecord.targetForIosRelease) {
     fail(
       "appStoreConnectObservation.records",
-      `marks the macOS record ${MAC_APPLE_ID} as the iOS delivery target. Its iOS platform is an abandoned empty ` +
-        `0.1.0 on a different bundle identifier; the iOS record is ${APPLE_ID}`,
+      `marks the superseded record ${SUPERSEDED_APPLE_ID} as the iOS delivery target. It holds no build, no ` +
+        `product and no catalogue; the target is the universal-purchase record ${APPLE_ID}`,
     );
   }
-  if (macRecord.bundleId !== MAC_BUNDLE_ID) {
+  if (supersededRecord.bundleId !== SUPERSEDED_BUNDLE_ID) {
     fail(
       "appStoreConnectObservation.records",
-      `records ${MAC_APPLE_ID} with bundle '${macRecord.bundleId}'; it is '${MAC_BUNDLE_ID}'`,
+      `records ${SUPERSEDED_APPLE_ID} with bundle '${supersededRecord.bundleId}'; it is '${SUPERSEDED_BUNDLE_ID}'`,
     );
   }
 }
@@ -1520,8 +1752,10 @@ for (const { path, value } of allStrings) {
     if (pattern.test(value)) {
       fail(
         path,
-        `makes ${what}. There is no build, no product, no privacy answer, no price, no availability and no ` +
-          "screenshot on this record; submission readiness is not something this packet may assert",
+        `makes ${what}. The record carries a great deal — an Approved catalogue, published privacy answers, a ` +
+          "price schedule and an availability selection — and it still has no build selected for the iOS " +
+          "version and no iPhone or iPad screenshots. Submission readiness is decided in App Store Connect " +
+          "against a build this packet does not have; it is never something this packet may assert",
       );
     }
   }
@@ -1529,8 +1763,8 @@ for (const { path, value } of allStrings) {
     fail(
       path,
       "claims a screenshot state across every set or every locale. What was read on " +
-        `${OBSERVED_AT} is the version record's own screenshot count, zero, on the page inspected; no per-set ` +
-        "and no per-localization read-back was performed, and the gate is already blocked by the reading that was",
+        `${OBSERVED_AT} is that the iOS version's required iPhone and iPad sets are missing; no ` +
+        "per-localization read-back was performed, and the gate is already blocked by the reading that was",
     );
   }
 }
@@ -1548,6 +1782,55 @@ for (const { path, value } of allStrings) {
 // Without the second, three files could agree on an answer the shipped binary
 // contradicts — which is the whole failure mode this section exists for, since
 // the manifest is what Apple reads and the packet is only what somebody types.
+
+// ── the published union, against the two lists it must be the union OF ──────
+//
+// App Privacy is answered once per record and this record has two platforms, so
+// what a shopper reads is neither the iOS manifest nor the macOS one — it is
+// their union, and it is already public. Getting this wrong is not an upload
+// rejection; it is a public statement about a released app.
+//
+// Two failure directions, and neither is caught by the manifest comparisons
+// below. A union that is MISSING a type the iOS app declares means the record
+// under-declares what iOS collects, which is the direction that matters to a
+// user. A union carrying a type NEITHER platform declares means somebody
+// answered a questionnaire from memory. Both read as a plausible list.
+const publishedUnion = [...packet.appPrivacy.recordLevelPublishedUnion].sort();
+if (
+  publishedUnion.length !== PUBLISHED_PRIVACY_UNION.length ||
+  !PUBLISHED_PRIVACY_UNION.every((type, index) => publishedUnion[index] === type)
+) {
+  const missing = PUBLISHED_PRIVACY_UNION.filter((type) => !publishedUnion.includes(type));
+  const extra = publishedUnion.filter((type) => !PUBLISHED_PRIVACY_UNION.includes(type));
+  fail(
+    "appPrivacy.recordLevelPublishedUnion",
+    "is not the union of what iOS declares and what only macOS declares" +
+      `${missing.length > 0 ? `; missing ${missing.join(", ")}` : ""}` +
+      `${extra.length > 0 ? `; unexpected ${extra.join(", ")}` : ""}`,
+  );
+}
+
+// And the one type that must be in the union while being ABSENT from the iOS
+// manifest. Asserted on its own rather than left to the set comparison, because
+// it is the entry both a parity-minded edit and a tidying edit reach for — one
+// adds it to the iOS manifest, the other removes it from the union, and each
+// leaves a self-consistent pair of lists that says something false.
+for (const type of APP_PRIVACY_ABSENT_TYPES) {
+  if (!packet.appPrivacy.recordLevelPublishedUnion.includes(type)) {
+    fail(
+      "appPrivacy.recordLevelPublishedUnion",
+      `omits '${type}', which the macOS platform of this record declares. The union is per RECORD, so dropping ` +
+        "it would under-declare what the app as a whole collects",
+    );
+  }
+  if (packet.appPrivacy.collected.some((entry) => entry.type === type)) {
+    fail(
+      "appPrivacy.collected",
+      `declares '${type}' for iOS. It belongs to the macOS platform only; no iOS source sends one, and ` +
+        "IOSPrivacyManifestTests holds that line from the manifest's side",
+    );
+  }
+}
 
 const declaredPrivacy = packet.appPrivacy.collected;
 APP_PRIVACY_TYPES.forEach((expected, index) => {
@@ -2017,7 +2300,9 @@ function report() {
         `${open.length > 0 ? ` — ${open.map((e) => e.id).join(", ")}` : ""}\n`,
     );
     process.stdout.write(
-      `  ${MAC_APPLE_ID} (${MAC_BUNDLE_ID}) is the macOS record and is never an iOS target.\n` +
+      `  ${SUPERSEDED_APPLE_ID} (${SUPERSEDED_BUNDLE_ID}) is superseded, read-only, and never a target.\n` +
+        `  ${BUNDLE_ID} is shared with macOS: one universal-purchase record, two platforms, one catalogue of ` +
+        `${PRODUCT_IDS.length} Approved products under group ${SUBSCRIPTION_GROUP_ID}.\n` +
         "  this is a recorded read-back, not a live one; re-inspect read-only before archiving, uploading or submitting.\n",
     );
   }

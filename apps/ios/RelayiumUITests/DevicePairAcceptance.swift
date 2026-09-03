@@ -655,7 +655,10 @@ extension XCTestCase {
 enum DevicePair {
 
     /// The bundle whose container the launcher reads a received file out of.
-    static let bundleID = "com.relayium.app"
+    ///
+    /// Shared with macOS since the universal-purchase migration; this target's
+    /// own bundle is the distinct `com.relayium.ios.UITests`.
+    static let bundleID = "com.relayium.mac"
 
     /// `VerificationPreference.defaultsKey`.
     ///

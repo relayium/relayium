@@ -232,7 +232,10 @@ source "$repo_root/scripts/lib/ios-physical-device.sh"
 # `ReceiveDestination.directory()` — `Documents/Received` inside the app's own
 # container. The digest is written here rather than computed from the sending
 # device, which is what makes the comparison independent of both ends.
-bundle_id="com.relayium.app"
+#
+# The app's bundle id, shared with macOS since iOS joined the one
+# universal-purchase App Store record.
+bundle_id="com.relayium.mac"
 fixture_name="Relayium product brief.txt"
 fixture_container_path="Documents/Received/$fixture_name"
 fixture_sha256="1d71499ab7454d9955704333e6fddbded53e45217087bfdbaf529436765cfcfc"

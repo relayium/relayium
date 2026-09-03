@@ -9,42 +9,92 @@ Nothing in this document authorizes creating paid products, changing production
 configuration, uploading a build, adding testers, submitting for review, or
 releasing a version.
 
+**iOS is not public.** There is no public App Store release of the iOS app, no
+Relayium download surface offers it, and no public surface may present iOS as a
+Relayium platform. The macOS platform of the same App Store record *is*
+publicly released, which is exactly why every statement here is scoped to a
+platform rather than to "the record".
+
 ## App record
 
-Relayium's iOS App Store record is **separate from the macOS one**. It has its
-own Apple ID, its own bundle IDs and its own build-number sequence; nothing
-about a macOS version, build number or release constrains it.
+Relayium's iOS app is **the second platform of the macOS App Store record**, not
+a record of its own. Apple ID `6801142976` carries both macOS and iOS, and Apple
+requires every platform in one universal-purchase record to share a single
+Bundle ID — which is why the iOS app signs as `com.relayium.mac`.
 
 | Field | Value |
 | --- | --- |
 | App Store Connect name | relayium |
-| Apple ID | `6791918822` |
-| Bundle ID | `com.relayium.app` |
-| Share extension bundle | `com.relayium.app.share` |
+| Apple ID | `6801142976` |
+| Bundle ID (both platforms) | `com.relayium.mac` |
+| iOS share extension bundle | `com.relayium.mac.ShareIOS` |
+| macOS share extension bundle | `com.relayium.mac.Share` |
 | Team | `7PVYUG4YQS` |
+
+The iOS platform is not new. Its TestFlight was read back holding a Validated
+`0.1.0 (4)` whose Build Metadata reports main bundle `com.relayium.mac`, Share
+Extension application identifier `7PVYUG4YQS.com.relayium.mac.ShareIOS` and App
+Group `group.com.relayium.app`. Those three readings are what the iOS source
+was migrated to match, rather than the other way round.
+
+The two App Store provisioning profiles the Release configuration names —
+`Relayium iOS Universal App Store` and `Relayium iOS Share Extension App Store`
+— are named by this repository and **created in the developer account by the
+owner**. Nothing here provisions anything, and no profile has been observed to
+exist. `scripts/ios-app-store-candidate.sh` fails closed on a missing one: the
+archive fails and an operator investigates.
 
 ### There are two records, and the wrong one looks right
 
-**Never target `6801142976` with an iOS release.**
+**This reverses on 2026-09-03.** Until then this document named `6791918822` as
+the target and told the operator never to touch `6801142976`. The owner supplied
+the actual iOS TestFlight URL, which resolves to `6801142976`, and directed that
+the version be updated there. The instruction is now inverted, and the old one
+is not preserved as a caveat because a document carrying both would be worse
+than one carrying the wrong one.
+
+**Never target `6791918822` with an iOS release.**
 
 | Apple ID | Bundle | What it is |
 | --- | --- | --- |
-| `6791918822` | `com.relayium.app` | **The iOS record.** The only record this document, the metadata packet and any iOS archive describe. |
-| `6801142976` | `com.relayium.mac` | The shipped **macOS** record. It *also* carries an abandoned, empty iOS `0.1.0` platform. |
+| `6801142976` | `com.relayium.mac` | **The target.** One universal-purchase record, macOS and iOS. The only record this document, the metadata packet and any iOS archive describe. |
+| `6791918822` | `com.relayium.app` | A real, separate, **iOS-only** record. Superseded and entirely read-only. |
 
-The second row is the whole problem. `6801142976` appears in the Apps list
-showing an iOS platform, so it reads exactly like the record somebody looking
-for the iOS app would expect to find — and it is a different bundle identifier,
-a different build-number sequence, a different subscription catalogue and a
-different product. An iOS build uploaded there reaches the macOS record's
-abandoned iOS platform, not this app.
+The second row is the whole problem, and it is more dangerous than it was when
+the rows were the other way round: `6791918822` is a genuine iOS record that
+*this repository itself named as the target* until 2026-09-03, so it looks
+correct in every older commit, plan and copy of this file. Nothing was ever
+delivered to it — no build uploaded, no subscription group or product created,
+no privacy answer entered — and its editable version was set to `0.3.0` Prepare
+for Submission by the same superseded pass, which makes it look prepared.
+
+Never upload to it, never enter this packet into it, never create a product
+under `com.relayium.app`, and never let an iOS identifier resolve to it.
 
 This is not left to memory. `scripts/ios-app-store-metadata-validate.mjs` pins
-both identifiers and refuses a packet that names `6801142976` or
-`com.relayium.mac` as the record, the bundle, the share extension or a product
-identifier; that marks the macOS record as the iOS delivery target; or that
-drops it from the observation below — because an operator who has not been told
-the second record exists is the one who will find it.
+both identifiers and refuses a packet that names `6791918822` as the record,
+that names a `com.relayium.app.*` product identifier anywhere, that marks the
+superseded record as the iOS delivery target, or that drops it from the
+observation below — because an operator who has not been told the second record
+exists is the one who will find it. `UniversalPurchaseIdentityTests` holds the
+same identity across both Xcode projects, the entitlements, the candidate script
+and the packet.
+
+### Why a second product namespace must never be created
+
+An App Store product identifier is permanent: it cannot be deleted or renamed.
+The six `com.relayium.mac.{plus,pro,max}.{monthly,yearly}` subscriptions already
+exist in group `22307427`, are Approved, and are what the released macOS app
+sells through. Creating a `com.relayium.app.*` set — which targeting
+`6791918822` would have required — would permanently fork the catalogue, and
+every entitlement decision downstream would then depend on which namespace a
+transaction arrived from.
+
+Reuse is also what makes the migration cheap on the server: Relayium's
+`apple_products` table already maps those six identifiers for bundle
+`com.relayium.mac`, so an iOS purchase is resolvable with no catalogue or
+verifier change. That is an expectation to **verify by read-back** before an iOS
+purchase is accepted, not a conclusion this document may assert on its own.
 
 ## Development baseline
 
@@ -65,13 +115,16 @@ uploaded build, not a TestFlight candidate and not a release.
   a later iOS marketing version does not have to exceed it. App Store Connect
   requires the *build* number to increase within a record; the marketing version
   is not constrained that way.
-- Historical `0.1.0` **build 4 was uploaded** to this record, after build 3 was
-  rejected by a purpose-string check. Build `5` is therefore the next build
-  above the highest one this record is known to have accepted. The 2026-09-03
-  read-back below found **no builds in TestFlight**, which does not contradict
-  this: a TestFlight build expires and disappears from that list while its
-  number stays consumed. It does mean the empty list is not evidence about
-  build numbers in either direction.
+- `0.1.0` **build 4 is Validated / Ready to Submit** on this record's iOS
+  TestFlight, read back on 2026-09-03; an earlier `0.1.0` build was rejected by
+  a purpose-string check. Build `5` is therefore the next build above the
+  highest number this record is **known** to have consumed. That reading is a
+  **floor, not an answer**: expired, removed and `Invalid` builds keep their
+  numbers and do not appear in a TestFlight list, so the true highest may be
+  above 4 and the operator still owes a live read-back.
+  `scripts/ios-app-store-candidate.sh` encodes exactly that asymmetry — it
+  refuses a `--readback-highest-build` below `4` as provably wrong, and accepts
+  anything at or above it without treating it as verified.
 - A local signed archive and non-uploading App Store export of historical
   build `1` passed with the intended distribution identities and profiles. The
   retained historical artifacts are:
@@ -85,86 +138,125 @@ uploaded build, not a TestFlight candidate and not a release.
 
 ### App Store Connect read-back, 2026-09-03
 
-The correct record — `6791918822` / `com.relayium.app` — was inspected
-read-only on **2026-09-03 (Asia/Dubai)**, field by field. That replaces the
-blanket "nothing in this document reports current App Store Connect state" that
-stood here until then. It does **not** make this document a live view: what
-follows is a dated transcript of one pass, and it goes stale.
+The target record — `6801142976` / `com.relayium.mac` — was inspected read-only
+on **2026-09-03 (Asia/Dubai)**, field by field. This does **not** make this
+document a live view: what follows is a dated transcript of one pass, and it
+goes stale.
 
 `docs/app-store-metadata-ios.json` carries the same readings machine-readably
 under `appStoreConnectObservation`, and
 `scripts/ios-app-store-metadata-validate.mjs` refuses a packet that claims any
 absent field is present.
 
+Most of this record was configured for the **released macOS app**, and that is
+what closed most of the gates at once. It is also the hazard: these fields are
+shared across both platforms, so editing one to suit iOS changes it for macOS
+customers.
+
 | Field | Read back | Gate |
 | --- | --- | --- |
-| App Store version | `0.3.0`, **Prepare for Submission** — changed the same day from the abandoned `0.1.0` | met |
-| TestFlight builds | none | **blocks submission** |
-| Subscription groups | none | **blocks submission** |
-| In-app purchases and subscription products | none | **blocks submission** |
-| App Privacy data practices | **Not Started** | **blocks submission** |
-| App Privacy — Privacy Policy URL | not saved | **blocks submission** |
-| App Privacy — User Privacy Choices URL | not saved | optional; not owed |
-| Accessibility Nutrition Label | **Not Started** | voluntary; not owed |
-| Pricing | no price schedule | **blocks submission** |
-| App availability | not set | **blocks submission** |
-| Screenshots | zero on the record as read | **blocks submission** |
-| App Store Server Notifications V2, Production and Sandbox URLs | both already saved to `https://relayium.com/api/apple/notifications` | met — **preserve it** |
+| App Store version (iOS platform) | `0.3.0`, **Prepare for Submission** | met |
+| Build selected for the iOS `0.3.0` version | none selected | **blocks submission** |
+| Subscription group | `22307427`, **Approved** | met — **reuse it** |
+| In-app purchases and subscription products | the six `com.relayium.mac.*`, all **Approved** | met — **reuse them** |
+| App Privacy data practices | **published** | met — **preserve it** |
+| App Privacy — Privacy Policy URL | `https://relayium.com/privacy/` saved | met — **preserve it** |
+| App Privacy — User Privacy Choices URL | blank | optional; not owed |
+| Pricing | **Free** across all 175 price territories | met — **preserve it** |
+| App availability | 173 territories; China mainland and France excluded | met — **preserve it** |
+| Screenshots | required iPhone and iPad sets missing on the iOS version | **blocks submission** |
+| Version release option (iOS `0.3.0`) | **Manual** release selected | met — **preserve it** |
+| App Store Server Notifications V2, Production and Sandbox URLs | both saved to `https://relayium.com/api/apple/notifications` | met — **preserve it** |
 
-Eight of those twelve are unmet gates. **No archive, no upload, no submission
-and no release has happened against this record.** *Prepare for Submission* is
-App Store Connect's state for a version that has never been submitted; it is
-not a claim that anything is prepared, and nothing here says this record is
-ready to be submitted.
+**Two of those twelve are unmet gates: the build selection and the
+screenshots.** For the iOS platform, no archive, no upload, no submission and no
+release has happened. *Prepare for Submission* is App Store Connect's state for
+a version that has never been submitted; it is not a claim that anything is
+prepared, and **nothing here says this app is ready to be submitted**.
 
-The notification endpoints are the one row where the risk runs the other way.
-They are already configured, so the failure mode is deleting them rather than
-forgetting them: do not remove, blank or repoint either URL. One endpoint serves
-both environments, because the server distinguishes them from the signed
-envelope. A signed `TEST` delivery has been observed reaching Relayium for the
-**macOS** record, not for this one, so end-to-end delivery here is configured
-and still unproven.
+The scope of those four negatives matters, because this record's **macOS**
+platform *is* publicly released. Unqualified, they would be a claim about the
+whole record and wrong about half of it.
+
+Most rows are now "preserve it" rather than "do it", which inverts the failure
+mode for them. The risk is no longer forgetting to enter a value; it is editing
+or deleting one that is already live and shared with a released app. Do not
+remove, blank or repoint the notification URLs. Do not change the app price, the
+territory selection, the subscription group, the products or their prices to
+suit iOS.
+
+The release option is the row most easily mistaken for an intention this
+repository holds. It is not: **manual** was read off the iOS `0.3.0` version.
+Leave it there. A version set to release automatically ships itself the moment
+review passes, which removes the last point at which a human can decide not to
+ship — and iOS is not public.
+
+On the signed `TEST` notification delivery this document deliberately claims
+nothing. Such a delivery has been recorded elsewhere for this record's **macOS**
+platform, and now that the target *is* that record it would be easy to promote
+that into a claim about the iOS side — but it was not re-verified in this
+read-back, so it stays unproven. Prove it rather than inferring it from the
+merge of the two records.
 
 #### What was not read back, and is still owed
 
-An empty TestFlight list does **not** say that no build number was ever
-consumed: expired, removed and `Invalid` builds keep theirs. So the build-number
-question is exactly as open as it was before this inspection. Build `5` has
-**not** been verified against the record remotely, the claim that it is the next
-free build number remains a local expectation, and
+The TestFlight reading gives a **floor of 4**, not the highest consumed build
+number: expired, removed and `Invalid` builds keep theirs and do not appear. So
+the build-number question is narrowed by this inspection, not closed. Build `5`
+has **not** been verified as free against the record remotely, the claim that it
+is the next free build number remains a local expectation, and
 `scripts/ios-app-store-candidate.sh`'s `--readback-highest-build` remains an
-operator attestation rather than an observed fact.
+operator attestation — now with a floor beneath it that catches an attestation
+carried over from the superseded record's (empty) history.
 
 Before archiving or uploading, re-inspect the record read-only and confirm, at
 minimum:
 
-1. the highest build number the record has accepted for every marketing version,
-   including builds in `Invalid`, `Processing` or expired-TestFlight states,
-   which still consume a number;
+1. the highest build number the record has accepted **on its iOS platform** for
+   every marketing version, including builds in `Invalid`, `Processing` or
+   expired-TestFlight states, which still consume a number;
 2. that the intended `(marketing version, build)` pair is free and increases the
    build number within the record;
-3. the current App Store and TestFlight status of the app.
+3. the current App Store and TestFlight status of the app, on both platforms.
 
-Also unobserved on 2026-09-03: the export-compliance answers carried on the
-version, the age-rating questionnaire, and App Review information — the contact
-fields and the demo account, which are owner-entered in App Store Connect and
-are never recorded in this repository.
+Also unobserved on 2026-09-03:
 
-The screenshot reading has a boundary of its own. What was read is the version
-record's **own screenshot count, zero, on the page inspected** — each device set
-and each localization was *not* opened and read back separately. "Zero
-screenshots on this record" is therefore the whole of the observed fact, and
-nothing here establishes a per-set or per-localization live state. The gate
-stays blocked either way, because zero on the record is already enough to block
-it; what may not happen is that a field-scoped reading quietly grows into an
-all-sets, all-locales claim nobody made.
+- the **Accessibility Nutrition Label** on this record. The earlier *Not
+  Started* reading was of the superseded record and does not transfer. Nothing
+  is claimable regardless, for the reason the Accessibility section below gives,
+  so this is an unread field rather than an open gate;
+- the live subscription group's reference name, its localized display names, and
+  each product's localized display name, description, price and territory
+  availability. Their existence and Approved state were read; their **copy** was
+  not, and it is deliberately not drafted in the metadata packet — a display
+  name written there is an edit somebody can paste into an Approved product;
+- whether the Approved products already carry their own review information and
+  review screenshots;
+- a signed App Store Server Notification `TEST` delivery observed arriving from
+  this record's iOS side;
+- **Sign in with Apple completed end to end on a real signed iOS device**, and
+  **an Apple purchase completed against the six live products from such a
+  build**. Both are covered under "What is still owed before any customer sees
+  this" below;
+- the export-compliance answers carried on the version, and the age-rating
+  questionnaire;
+- App Review information — the contact fields and the demo account, which are
+  owner-entered in App Store Connect and are never recorded in this repository.
 
-The macOS record is a different matter, and the boundary there is **scope, not
-ignorance**. Its two identifiers, its platforms and its abandoned iOS version are
-recorded above because the two-record trap needs them to be executable. Beyond
-those, this iOS packet records and relies on **no** field of that record:
-everything else about it is out of scope for this document, and nothing here
-authorizes touching it.
+The screenshot reading has a boundary of its own. What was read is that the iOS
+version's **required iPhone and iPad device sets are missing**; each set's
+per-localization sub-view was *not* opened and read back separately. Nothing
+here establishes a per-localization live state. The gate stays blocked either
+way, because the device-set reading is already enough to block it; what may not
+happen is that a field-scoped reading quietly grows into an all-locales claim
+nobody made.
+
+The **macOS platform of this same record** is a different matter, and the
+boundary there is **scope, not ignorance**. It is publicly released, and its
+version, builds, prices, TestFlight groups and release state are read-only for
+this document. What is recorded above about it is only what the iOS side depends
+on — the shared bundle id, the shared catalogue, the shared privacy answers,
+the shared price and availability. Nothing here authorizes changing any of it.
 
 If a later read-back contradicts any of this, correct the project source, this
 document and the metadata packet before building — do not upload against these
@@ -272,10 +364,12 @@ Beyond the read-back, the script refuses to archive unless:
   is the SDK the binary was linked against;
 - the worktree is clean, `HEAD` is a commit, the branch has an upstream, and
   `HEAD` equals it — a candidate names a commit somebody else can fetch;
-- both targets declare team `7PVYUG4YQS`, bundle IDs `com.relayium.app` and
-  `com.relayium.app.share`, `CODE_SIGN_STYLE = Manual` for Release, and the
-  exact profiles `Relayium iOS App Store` and
-  `Relayium Share Extension App Store`;
+- both targets declare team `7PVYUG4YQS`, bundle IDs `com.relayium.mac` and
+  `com.relayium.mac.ShareIOS`, `CODE_SIGN_STYLE = Manual` for Release, and the
+  exact profiles `Relayium iOS Universal App Store` and
+  `Relayium iOS Share Extension App Store`;
+- the attested highest consumed build is not below `4`, the floor this record's
+  iOS TestFlight was read back at;
 - the App Store metadata packet passes its validator, for **this** marketing
   version — see below.
 
@@ -478,68 +572,143 @@ and finishes it only after the server accepts the entitlement. Account exposes
 purchase, restore, Apple subscription management, Privacy Policy and Terms; it
 contains no web checkout. The Share extension does not link StoreKit.
 
-The iOS App Store record and the macOS App Store record use separate bundle IDs
-and subscription groups. Relayium therefore records Apple's signed bundle ID as
-the subscription source scope. A live subscription can change tier in the app
-that sold it, but another Relayium app is blocked from creating a second Apple
-charge. A lapsed subscription may move to the other app. Migrated rows with no
-known scope fail closed and self-repair from a verified same-app event.
+iOS and macOS are **one universal-purchase record sharing one bundle ID and one
+subscription catalogue**. Relayium records Apple's signed bundle ID as the
+subscription source scope (`ExternalScope`), so both platforms now write the
+*same* scope string where they previously wrote two different ones. Migrated
+rows with no known scope fail closed and self-repair from a verified same-app
+event.
 
-The 2026-09-03 read-back found the record carrying **no subscription group and
-no in-app purchase or subscription product at all**, so everything below is work
-to do rather than work to verify.
+Two consequences follow from that, and they are the money-moving half of this
+migration:
+
+- **The catalogue and the verifier need no change, and that is a claim to
+  verify rather than assume.** `AppleProduct` is keyed by the *pair* (bundle id,
+  product id), and the verifier's closed app set is keyed by (bundle id, App
+  Apple ID). Both are expected to already hold `com.relayium.mac` /
+  `6801142976`, because the released macOS app uses them. Read them back.
+- **A cross-platform guard changed meaning without any code changing.**
+  `ApplySubscriptionSource` refuses a second live Apple subscription when the
+  incoming event has a different original transaction id **or** a different
+  scope (`sqlite_entitlement.go`). Before the migration the two platforms
+  differed by scope; now they do not, so that half of the guard no longer
+  separates them and only the original transaction id does. For a genuine
+  universal purchase that is correct — Apple issues one subscription with one
+  original transaction id across both platforms — but it is a protection that
+  silently stopped applying, not one that was deliberately removed.
+
+Before the migration an iOS build signed as `com.relayium.app` matched no
+catalogue row and was refused with `unknown_bundle`; purchases were gated
+closed. After it, an iOS build reaches the live, Approved products the released
+macOS app sells through. The gate that was doing the protecting is gone by
+design, so the entitlement paths owe **adversarial** evidence — a double-charge,
+early-grant, wrong-tier or cross-platform-conflict case — rather than a
+regression run.
+
+Note also that several server comments still describe macOS and iOS as
+"different bundle ids" and "separate App Store records"
+(`server/account/apple_transaction.go`, `server/account/entitlement.go`,
+`server/account/sqlite_entitlement.go`, `server/account/store.go`). The
+mechanism they describe is unaffected — it compares strings — but the prose is
+now stale. `server/` is outside this task's scope; this is recorded as a
+follow-up, not changed here.
+
+The 2026-09-03 read-back found the record carrying **subscription group
+`22307427`, Approved, with all six `com.relayium.mac.{plus,pro,max}.{monthly,yearly}`
+products Approved**. So the work below is verification, not creation.
 
 Before uploading a TestFlight build:
 
-1. Create the iOS subscription group and its monthly/yearly Plus, Pro and Max
-   products in App Store Connect. Product identifiers must be unique to
-   `com.relayium.app`; do not reuse the `com.relayium.mac.*` identifiers.
-   The six identifiers and their `en-US` and `zh-Hans` display names and
-   descriptions are drafted in `docs/app-store-metadata-ios.json` under
-   `subscriptions`, and the validator refuses a row whose identifier does not
-   match its own plan and cycle, a duplicate, a macOS identifier, or a set that
-   is not exactly six. Three things about that catalogue are worth stating
-   plainly because each is easy to get wrong:
-   - **the record's first subscription group and its products must be submitted
-     together with an app version.** This catalogue is part of the `0.3.0`
-     submission, not a later edit;
-   - **price point and territory availability are an owner decision** and are
-     deliberately absent from the packet. Do not carry the macOS record's prices
-     across as a default; the validator refuses any currency amount or decimal
-     price anywhere in the file;
-   - **each product carries its own review information**, and Apple may require
-     a review screenshot per product. Those are review-only assets and never
-     reach the storefront.
-   **This record has observed nothing in App Store Connect**, so it does not say
-   whether a row exists there. What it says is what it holds: a proposal
-   (`subscriptions.state` is
-   `drafted-in-this-repository-app-store-connect-readback-required`, with
-   `productIdentifiersAreProposedDrafts: true`). The identifiers, the group
-   reference name and every display string are drafts awaiting owner
-   confirmation, live creation and a read-back — and an identifier is permanent
-   once created, so a confirmed draft and a created product are different states
-   and this repository only ever claims the first. The same applies to
-   availability: the excluded territories are this project's record of an owner
-   decision, not an observation of the record's territory settings.
-2. Add exact `(bundle ID, product ID) -> (plan, cycle)` rows to Relayium's
-   `apple_products` catalog and read them back as live.
-3. Add `com.relayium.app` and Apple ID `6791918822` to the production verifier's
-   closed app set while retaining both signed Sandbox and Production
-   environments and the existing macOS identity.
-4. Configure the iOS App Store Server Notifications V2 Sandbox and Production
-   URLs, then verify Apple's signed TEST notification reaches Relayium.
+1. **Create nothing.** The group and all six products exist and are Approved.
+   An App Store product identifier is permanent — it cannot be deleted or
+   renamed — so creating a `com.relayium.app.*` set would permanently fork the
+   catalogue the released macOS app sells through. The validator refuses such an
+   identifier anywhere in the packet, and `UniversalPurchaseIdentityTests`
+   refuses it in the repository. Four things about that catalogue are worth
+   stating plainly because each is easy to get wrong:
+   - **do not edit the live products' reference names, display names,
+     descriptions, prices or territory availability to suit iOS.** One record has
+     one catalogue; those fields are shared with the released macOS app, and an
+     edit here is an edit there. The packet deliberately records no copy for
+     them — a display name written there is an edit somebody can paste into an
+     Approved product;
+   - **Apple's "first subscription group must be submitted with an app version"
+     rule does not apply.** That is about a record's *first* group. This group is
+     Approved and already selling, so submitting the iOS `0.3.0` version does not
+     resubmit it;
+   - **prices and territory availability are live, not an owner decision
+     outstanding.** They were configured for macOS and serve iOS unchanged. The
+     validator still refuses any currency amount or decimal price anywhere in the
+     packet, so nothing about them is transcribed into this repository;
+   - **each product carries its own review information**, and Apple may require a
+     review screenshot per product. Whether the Approved products already carry
+     them was **not** read back.
+   The packet's `subscriptions.state` is
+   `existing-approved-catalogue-reused-under-the-universal-record`, with
+   `noNewProductsMayBeCreated: true`. Their existence and Approved state are a
+   dated read-back, not a live query; re-inspect read-only before relying on it.
+2. **Verify, do not add,** the `(bundle ID, product ID) -> (plan, cycle)` rows in
+   Relayium's `apple_products` catalog. All six are expected to be present
+   already for bundle `com.relayium.mac`, because the released macOS app sells
+   through them — that is what makes an iOS purchase resolvable with no server or
+   catalogue change. Read them back as live; an expectation this repository holds
+   is not evidence.
+3. **Verify, do not add,** the production verifier's closed app set. It is
+   expected to admit `com.relayium.mac` and Apple ID `6801142976` already, for
+   the same reason. **No second verifier identity is to be added** — admitting
+   `com.relayium.app` would re-open the identity this migration closed.
+4. The App Store Server Notifications V2 Sandbox and Production URLs are already
+   configured and were read back on 2026-09-03; **preserve them**. What is still
+   owed is a signed `TEST` notification observed reaching Relayium from this
+   record's iOS side. Do not remove or repoint either URL to get it.
 5. Confirm App Privacy and subscription metadata match the code and public
    policy. The app manifest declares linked Name, Email Address, Purchase
    History, User ID and Other Usage Data for App Functionality, plus an
    **unlinked** Product Interaction entry for Analytics — the identifier-free
    activation aggregate — with tracking false throughout and `DeviceID`
    deliberately absent. The full graph, the reasoning and the DeviceID revisit
-   trigger are in [App Privacy](#app-privacy); note that the policy source now
-   covers iOS but the deployed URL has not been redeployed or read back, and that
-   section records the remaining blocker.
+   trigger are in [App Privacy](#app-privacy). The record's App Privacy is
+   already **published** and its Privacy Policy URL `https://relayium.com/privacy/`
+   is saved, so this step is a consistency check against a live public promise,
+   not a form to fill. The record's published list is the **union** across both
+   platforms — seven types, against the six in the iOS manifest; the extra one is
+   `DeviceID` and it is macOS's alone. The two lists disagreeing is correct, and
+   the failure mode is making them agree.
 
-The server must be ready before TestFlight: otherwise every signed-in Account
-screen receives `unknown_bundle`, and a charged transaction cannot be accepted.
+**Verify the server before TestFlight, and verify it rather than assuming it.**
+Before the migration an iOS build signed as `com.relayium.app` was refused with
+`unknown_bundle`, which is a gate that fails safe. After it, the binary reaches
+a live catalogue, so a wrong `apple_products` row or verifier entry no longer
+produces a refusal — it produces a wrong entitlement or an unaccepted charge.
+Steps 2 and 3 above are expected to already pass; read them back and prove it.
+
+### What is still owed before any customer sees this
+
+Nothing in this batch touched production, and nothing needs to. A read-only
+production check on **2026-09-03** found the Sign in with Apple audience
+allowlist `RELAYIUM_APPLE_CLIENT_IDS` **already admitting `com.relayium.mac`**,
+alongside `com.relayium.app` and the web Services ID — so the migrated bundle
+id's `aud` is accepted, and no production change is part of this work.
+
+That closes a configuration question and opens nothing. Two kinds of evidence
+are still outstanding, and neither is satisfied by a repository test, a
+simulator run or a read-back:
+
+- **A real Sign in with Apple on a signed device.** An admitted audience is not
+  a completed sign-in. The live flow — a real Apple ID on a signed iOS build,
+  through the authorization-code redemption, to a Relayium account — has never
+  been run. The App ID's Sign in with Apple capability also has to be present in
+  the **iOS provisioning profile** the build is signed with, which is a
+  different fact from the capability being enabled on the App ID.
+- **Adversarial cross-platform entitlement evidence.** iOS and macOS now write
+  the *same* `ExternalScope`, so the scope half of `ApplySubscriptionSource`'s
+  conflict guard no longer separates them. Before an iOS build reaches a
+  customer, a **double-charge**, **early-grant**, **wrong-tier** and
+  **cross-platform-conflict** case must each be exercised against the shared
+  scope, and a purchase must be completed end to end against the live products
+  from a signed build. A regression suite that passed before the migration
+  passed while `unknown_bundle` was refusing every iOS purchase; it is not
+  evidence about the path that is now open.
 
 ## Local Network access: a resolved functional prerequisite
 
@@ -1072,17 +1241,27 @@ inspect content — not a convenient one.
 A privacy policy URL and complete data-practice answers are required:
 <https://developer.apple.com/help/app-store-connect/manage-app-information/manage-app-privacy/>
 
-**This section is a DRAFT this repository maintains. It is not observed provider
-state.** Nothing here has been entered in App Store Connect. What the record
-itself holds *was* read back, on 2026-09-03, and it holds nothing: App Privacy
-reads **Not Started**, with **no Privacy Policy URL** and **no User Privacy
-Choices URL** saved. So what follows is what the app declares and what somebody
-should therefore enter — never what the record currently holds. Entering it is
-a separate authorized step, and it must be followed by a fresh read-only
-re-inspection of the record. The App Store Connect
-questionnaire uses its own wording and its own category tree; fill it from the
-graph below rather than from memory, and reconcile the two rather than assuming
-they map one-to-one.
+**This section is the iOS half of an answer that is already published.** The
+2026-09-03 read-back found the record's App Privacy **published**, with
+`https://relayium.com/privacy/` saved as the Privacy Policy URL and the User
+Privacy Choices URL blank. So this is no longer a form waiting to be filled.
+
+Its job now is the opposite one: to keep a change to the iOS privacy manifest
+visible as what it would be — a change to a **public promise about a released
+app**, which requires re-answering the record's questionnaire rather than
+editing a file here.
+
+App Privacy is answered once per record, and this record carries two platforms,
+so what a shopper reads is the **union** of what macOS declares and what iOS
+declares: seven types, against the six in the iOS manifest below. The seventh is
+`DeviceID` and it is macOS's alone. The two lists disagreeing is correct. The
+failure mode is making them agree — adding `DeviceID` to the iOS manifest would
+declare something iOS does not collect, and removing it from the record would
+under-declare what the app as a whole collects.
+
+If the questionnaire ever is re-answered, the App Store Connect wording and
+category tree are its own; work from the graph below rather than from memory,
+and reconcile the two rather than assuming they map one-to-one.
 
 The answers must match the binary. The app's manifest
 (`apps/ios/Relayium/PrivacyInfo.xcprivacy`) declares **tracking false, no
@@ -1337,10 +1516,11 @@ Specifications and upload rules:
 - <https://developer.apple.com/help/app-store-connect/manage-app-information/upload-app-previews-and-screenshots>
 
 This record targets iPhone **and** iPad, so both sets are required. The
-2026-09-03 read-back found **zero screenshots on the record** — the version
-record's own screenshot count, read on the page, and not a separate per-set and
-per-localization read-back — matching the `not-captured` state the metadata
-packet records.
+2026-09-03 read-back found the iOS version's **required iPhone and iPad
+screenshot sets missing** — a reading of the required device sets, not a
+separate per-localization read-back — matching the `not-captured` state the
+metadata packet records. This is one of the two gates still blocking the iOS
+`0.3.0` version.
 
 | Set | Accepted portrait sizes, pixels |
 | --- | --- |
@@ -1566,11 +1746,13 @@ false public statement of exactly the kind this record exists to prevent.
 both iPhone and iPad is recorded in
 `docs/app-store-metadata-ios.json` as `claimed: false`,
 `assessment: "not-assessed"`, and the validator refuses any packet that claims
-one while the label state is `unassessed`. The record agrees: the 2026-09-03
-read-back found the Accessibility Nutrition Label **Not Started**, with no
-feature answered. The label is voluntary, so this is not a submission blocker —
-but it is also not something to answer from a guess to make the page look
-finished.
+one while the label state is `unassessed`. The Accessibility Nutrition Label on
+the **target** record was **not** read back on 2026-09-03; the earlier *Not
+Started* reading was of the superseded record and does not transfer. That makes
+it an unread field rather than an observed one. Nothing is claimable either way,
+for the local reason below, and the label is voluntary — so this is not a
+submission blocker, and it is also not something to answer from a guess to make
+the page look finished.
 
 ### The known blocker
 
@@ -1677,9 +1859,12 @@ What the owner actually decided:
 `scripts/ios-app-store-metadata-validate.mjs` refuses a packet that quietly
 returns France to the initial release or turns ANSSI back into a launch blocker.
 Territory selection itself is an owner action in App Store Connect; no value in
-this repository performs it. The 2026-09-03 read-back found **app availability
-not set at all** on the record — no territory selection exists yet, so the
-exclusions above are still a decision to enter rather than one to verify.
+this repository performs it. The 2026-09-03 read-back found the app **available
+in 173 of 175 territories, with China mainland and France excluded** — so the
+exclusions above are now a live setting to preserve rather than a decision to
+enter. It is a record-level setting shared with the released macOS app: adding
+France would add it for macOS too, and still requires a truthful ANSSI
+declaration first.
 
 The part of the declaration that reaches this repository is the outcome. If the approved
 declaration comes with an Apple compliance code, that code belongs in
@@ -1752,6 +1937,14 @@ Internal TestFlight acceptance must cover:
     stored link still opens over whichever surface the user was on.
   A clean install is the easier case and passing it says nothing about the
   upgrade; run both and record them separately;
+  The upgrade under test is `com.relayium.mac` over `com.relayium.mac` — the
+  TestFlight lineage build 4 belongs to — which is why the signed-in session is
+  expected to survive: the bundle id is unchanged, so the app's implicit default
+  keychain access group is unchanged. A locally installed development build of
+  the retired `com.relayium.app` is a **different app** and not this test: it is
+  not replaced by the TestFlight install, its keychain items live in a different
+  access group, and nothing in `0.3.0` migrates or reads them. Signing in again
+  after installing over that build is correct behaviour, not the defect above;
 - sign in and display of all six localized StoreKit offers;
 - one Sandbox purchase and immediate Relayium plan refresh;
 - restore after sign-out/sign-in or reinstall;

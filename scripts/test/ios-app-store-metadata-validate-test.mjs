@@ -182,29 +182,77 @@ rejects(
   "over Apple's limit of 4000",
 );
 
+// Three cases lived here: an in-app purchase display name under Apple's
+// minimum of two characters, one over thirty, and a description over forty-five.
+// They are gone because the rules they exercised are gone, and the rules are
+// gone because the packet no longer proposes any subscription copy — the six
+// products already exist and are Approved, so a display name written in this
+// repository would be an edit to a live product rather than a draft of a new
+// one. If a genuinely new product is ever proposed, the limits and these three
+// cases come back together. What replaces them is the set below: the packet
+// must not be able to say the catalogue is a proposal, and must not be able to
+// name a second product namespace.
+
 rejects(
-  "an in-app purchase display name of one character",
+  "the Approved catalogue restated as a proposal",
   (p) => {
-    p.subscriptions.products[0].localizations["en-US"].displayName = "R";
+    p.subscriptions.productIdentifiersAlreadyExistAndAreApproved = false;
   },
-  "under Apple's minimum of 2",
+  "an identifier that exists is not a proposal",
 );
 
 rejects(
-  "an in-app purchase display name over 30 characters",
+  "permission to create new products",
   (p) => {
-    p.subscriptions.products[0].localizations["en-US"].displayName = "Relayium Plus Monthly Subscription";
+    p.subscriptions.noNewProductsMayBeCreated = false;
   },
-  "over Apple's limit of 30",
+  "cannot be deleted",
 );
 
 rejects(
-  "an in-app purchase description over 45 characters",
+  "a product moved into the superseded namespace",
   (p) => {
-    p.subscriptions.products[3].localizations["en-US"].description =
-      "The Relayium Pro plan, billed once every year.";
+    p.subscriptions.products[0].productId = "com.relayium.app.plus.monthly";
   },
-  "over Apple's limit of 45",
+  "permanently fork the catalogue",
+);
+
+// The same proposal arriving as prose rather than as a product row. A reviewer
+// requirement or a note saying "create com.relayium.app.plus.monthly" is just
+// as actionable as a row, and a rule that reads only `subscriptions.products`
+// would not see it.
+rejects(
+  "a second product namespace proposed in prose",
+  (p) => {
+    p.subscriptions.reviewRequirements.push(
+      "Create com.relayium.app.plus.monthly for the iOS storefront.",
+    );
+  },
+  "a second namespace is permanent",
+);
+
+rejects(
+  "a product whose live state is downgraded from Approved",
+  (p) => {
+    p.subscriptions.products[2].observedState = "Ready to Submit";
+  },
+  "subscriptions.products[2].observedState",
+);
+
+rejects(
+  "the Approved group resubmitted with the app version",
+  (p) => {
+    p.subscriptions.submittedWithAppVersion = true;
+  },
+  "already Approved",
+);
+
+rejects(
+  "a second subscription group id",
+  (p) => {
+    p.subscriptions.group.groupId = "22307428";
+  },
+  "subscriptions.group.groupId",
 );
 
 // ── keywords: the byte limit, and why characters are not enough ──────────────
@@ -297,12 +345,20 @@ rejects(
   "testFlight.whatToTest.zh-Hans",
 );
 
+// A product localization dropping a locale was the third locale case. The
+// packet carries no product localizations any more, so the equivalent
+// assertion is that a product cannot quietly REGROW one: an unknown key at any
+// depth is a finding, which is what stops the removed drafts from being pasted
+// back in beside the identifiers.
 rejects(
-  "a product localization locale that has gone missing",
+  "a product that regrows its localization drafts",
   (p) => {
-    delete p.subscriptions.products[2].localizations["zh-Hans"];
+    p.subscriptions.products[2].localizations = {
+      "en-US": { displayName: "Relayium Pro Monthly", description: "Relayium Pro plan, billed monthly." },
+      "zh-Hans": { displayName: "Relayium Pro 月付", description: "Relayium Pro 套餐，按月计费。" },
+    };
   },
-  "subscriptions.products[2].localizations.zh-Hans",
+  "subscriptions.products[2].localizations",
 );
 
 rejects(
@@ -408,7 +464,7 @@ rejects(
 rejects(
   "the bundle identifier drifting",
   (p) => {
-    p.record.bundleId = "com.relayium.mac";
+    p.record.bundleId = "com.relayium.ios";
   },
   "record.bundleId",
 );
@@ -547,36 +603,35 @@ rejects(
   "is a duplicate",
 );
 
-rejects(
-  "a product reusing a macOS identifier",
-  (p) => {
-    p.subscriptions.products[0].productId = "com.relayium.mac.plus.monthly";
-  },
-  "reuses a macOS identifier",
-);
+// "A product reusing a macOS identifier" used to be here, and it was refused.
+// It is now the CORRECT value and the refusal has been inverted — that case
+// moved up to "a product moved into the superseded namespace". This is the one
+// rule in the file whose polarity the universal-purchase migration reversed, so
+// it is worth being explicit: `com.relayium.mac.*` is the catalogue, and
+// `com.relayium.app.*` is what must never be created.
 
 rejects(
   "a product identifier that does not match its own plan and cycle",
   (p) => {
     p.subscriptions.products[1].cycle = "monthly";
   },
-  "must be 'com.relayium.app.plus.monthly' for the plus monthly row",
+  "must be 'com.relayium.mac.plus.monthly' for the plus monthly row",
 );
 
 rejects(
-  "the subscription group losing its Chinese display name",
+  "the group's live copy being reclaimed as this repository's to author",
   (p) => {
-    delete p.subscriptions.group.localizations["zh-Hans"];
+    p.subscriptions.group.referenceNameAndLocalizationsAreLiveAndNotAuthoredHere = false;
   },
-  "subscriptions.group.localizations.zh-Hans",
+  "subscriptions.group.referenceNameAndLocalizationsAreLiveAndNotAuthoredHere",
 );
 
 rejects(
-  "the first-submission requirement being switched off",
+  "the group's live state being downgraded from Approved",
   (p) => {
-    p.subscriptions.submittedWithAppVersion = false;
+    p.subscriptions.group.observedState = "Missing Metadata";
   },
-  "subscriptions.submittedWithAppVersion",
+  "subscriptions.group.observedState",
 );
 
 // ── availability and ANSSI ───────────────────────────────────────────────────
@@ -685,10 +740,15 @@ rejects(
   "a currency amount",
 );
 
+// The bare-decimal case used to run against a product description. There are
+// no product descriptions here now, so it runs against the section that DOES
+// still talk about price — the note explaining that prices are live on the
+// record and not authored in this repository. That is exactly where somebody
+// would be tempted to write one down.
 rejects(
-  "a bare decimal price in a product description",
+  "a bare decimal price in the subscription price note",
   (p) => {
-    p.subscriptions.products[0].localizations["en-US"].description = "Relayium Plus, 1.99 monthly.";
+    p.subscriptions.priceAndAvailability.note += " Plus is 1.99 monthly.";
   },
   "a decimal price",
 );
@@ -987,71 +1047,74 @@ rejects(
   "availability.state",
 );
 
-rejects(
-  "the product identifiers being promoted from proposal to fact",
-  (p) => {
-    p.subscriptions.productIdentifiersAreProposedDrafts = false;
-  },
-  "subscriptions.productIdentifiersAreProposedDrafts",
-);
-
-rejects(
-  "the owner-confirmation requirement disappearing",
-  (p) => {
-    delete p.subscriptions.ownerConfirmationRequired;
-  },
-  "subscriptions.ownerConfirmationRequired: is missing",
-);
+// "The product identifiers being promoted from proposal to fact" used to sit
+// here, refusing a packet that claimed the six identifiers existed. They do
+// exist, so that case has inverted into "the Approved catalogue restated as a
+// proposal" further up, alongside the two rules that now matter more: that no
+// new product may be created, and that the superseded namespace may not be
+// named anywhere in the packet.
 
 
 // ── the App Store Connect observation ────────────────────────────────────────
 //
-// Added 2026-09-03, when the record was read for the first time and the packet
-// stopped saying "nothing here has been read back". Everything below is one of
-// two failures:
+// Rewritten 2026-09-03 with the target. Until then the target was the separate
+// iOS-only record `6791918822` and almost every field on it was empty, so every
+// case here mutated in one direction: a gate claimed met. The universal-purchase
+// record is not like that. It ships macOS publicly, its catalogue is Approved,
+// its privacy answers are published, its price and availability are set — so
+// the cases below now come in three kinds:
 //
-//   * THE WRONG RECORD. There are two, and the wrong one is not obviously
-//     wrong: `6801142976` / `com.relayium.mac` is the macOS record and it also
-//     carries an abandoned, empty iOS platform, so it appears in the Apps list
-//     showing iOS exactly like the record somebody would expect to find. Every
-//     way of naming it as the iOS target is mutated here.
-//   * A GATE CLAIMED MET. Eleven fields were read as empty. Each of them is one
-//     boolean away from claiming a build exists, a product exists, privacy is
-//     answered, a price is set, a screenshot is uploaded — and each of those
-//     sends an operator at a record that cannot accept what they are about to
-//     do. The twelfth, the notification endpoints, fails the other way: it is
-//     already configured, so the mutation to catch is a deletion.
+//   * THE WRONG RECORD. Still two records, and the decoy has swapped places:
+//     `6791918822` / `com.relayium.app` is the one this repository itself used
+//     to name, which makes it look correct to anyone reading an older commit.
+//     Every way of naming it as the target is mutated here.
+//   * A GATE CLAIMED MET, as before, but only two gates are left to claim: a
+//     build selected on the iOS version, and the screenshots.
+//   * A LIVE FACT CLAIMED ABSENT, which is new and is the more dangerous half.
+//     Saying the subscription group, the products, the privacy answers, the
+//     price, the availability or the selected release option are missing does
+//     not merely understate the record — it invites somebody to set them, and
+//     on this record creating a product or a second group is permanent and
+//     forks the catalogue the released macOS app is selling through.
 
 rejects(
-  "the macOS record's Apple ID used as the iOS target",
+  "the superseded record's Apple ID used as the target",
   (p) => {
-    p.record.appleId = "6801142976";
+    p.record.appleId = "6791918822";
   },
-  "is never an iOS delivery target",
+  "never a delivery target",
 );
 
 rejects(
-  "the macOS bundle identifier used as the iOS target",
+  "the retired bundle identifier used as the target",
   (p) => {
-    p.record.bundleId = "com.relayium.mac";
+    p.record.bundleId = "com.relayium.app";
   },
-  "belongs to the macOS record and is never the iOS target",
+  "is the retired identity",
 );
 
 rejects(
-  "the share extension moved onto the macOS bundle",
+  "the iOS share extension moved onto the macOS appex identifier",
   (p) => {
-    p.record.shareExtensionBundleId = "com.relayium.mac.share";
+    p.record.shareExtensionBundleId = "com.relayium.mac.Share";
   },
   "record.shareExtensionBundleId",
 );
 
 rejects(
-  "the macOS record marked as the iOS delivery target",
+  "the iOS share extension reverted to the retired identifier",
+  (p) => {
+    p.record.shareExtensionBundleId = "com.relayium.app.share";
+  },
+  "record.shareExtensionBundleId",
+);
+
+rejects(
+  "the superseded record marked as the delivery target",
   (p) => {
     p.appStoreConnectObservation.records[1].targetForIosRelease = true;
   },
-  "marks the macOS record",
+  "marks the superseded record",
 );
 
 rejects(
@@ -1072,44 +1135,60 @@ rejects(
 );
 
 rejects(
-  "the iOS target swapped onto the macOS identifiers",
+  "the target swapped back onto the superseded identifiers",
   (p) => {
-    p.appStoreConnectObservation.records[0].appleId = "6801142976";
-    p.appStoreConnectObservation.records[0].bundleId = "com.relayium.mac";
+    p.appStoreConnectObservation.records[0].appleId = "6791918822";
+    p.appStoreConnectObservation.records[0].bundleId = "com.relayium.app";
   },
-  "as the iOS target; it is 6791918822",
+  "as the iOS target; it is 6801142976",
 );
 
 rejects(
-  "the macOS record dropped from the observation",
+  "the superseded record dropped from the observation",
   (p) => {
-    p.appStoreConnectObservation.records[1].appleId = "6801142977";
+    p.appStoreConnectObservation.records[1].appleId = "6791918823";
   },
-  "does not record the macOS record",
+  "does not record the superseded iOS-only record",
 );
 
 rejects(
-  "the macOS record recorded under the wrong bundle",
+  "the superseded record recorded under the wrong bundle",
   (p) => {
-    p.appStoreConnectObservation.records[1].bundleId = "com.relayium.macos";
+    p.appStoreConnectObservation.records[1].bundleId = "com.relayium.ios";
   },
-  "records 6801142976 with bundle",
+  "records 6791918822 with bundle",
 );
 
 rejects(
-  "the macOS Apple ID pasted into the reviewer notes",
+  "the superseded Apple ID pasted into the reviewer notes",
   (p) => {
-    p.appReview.notes = `${p.appReview.notes}\n\nApp Store Connect record 6801142976.`;
+    p.appReview.notes = `${p.appReview.notes}\n\nApp Store Connect record 6791918822.`;
   },
-  "names Apple ID 6801142976",
+  "names Apple ID 6791918822",
 );
 
 rejects(
-  "the macOS bundle pasted into the reviewer notes",
+  "the retired bundle pasted into the reviewer notes",
   (p) => {
-    p.appReview.notes = `${p.appReview.notes}\n\nThe bundle under review is com.relayium.mac.`;
+    p.appReview.notes = `${p.appReview.notes}\n\nThe bundle under review is com.relayium.app.`;
   },
-  "names 'com.relayium.mac'",
+  "names 'com.relayium.app'",
+);
+
+// The App Group survived the migration with the retired bundle id inside its
+// name, so the scan above has to see past it. A rule that refused this string
+// would make preserving a live container look like naming a dead record — and
+// the container is what every staged share draft lives in.
+accepts(
+  "the App Group's name, which contains the retired bundle id and is not it",
+  serialize(
+    (() => {
+      const p = clone();
+      p.appPrivacy.shareExtension.reason +=
+        " The container is group.com.relayium.app and it did not follow the bundle id.";
+      return p;
+    })(),
+  ),
 );
 
 rejects(
@@ -1129,43 +1208,43 @@ rejects(
 );
 
 rejects(
-  "a TestFlight build claimed on a record that has none",
+  "a build claimed selected on the iOS version",
   (p) => {
     p.appStoreConnectObservation.observedFields[1].present = true;
   },
-  "TestFlight listed no builds",
+  "no build is selected",
 );
 
 rejects(
-  "a subscription group claimed on a record that has none",
+  "the Approved subscription group claimed absent",
   (p) => {
-    p.appStoreConnectObservation.observedFields[2].present = true;
+    p.appStoreConnectObservation.observedFields[2].present = false;
   },
-  "carried no subscription group",
+  "subscription group 22307427",
 );
 
 rejects(
-  "subscription products claimed on a record that has none",
+  "the six Approved products claimed absent",
   (p) => {
-    p.appStoreConnectObservation.observedFields[3].present = true;
+    p.appStoreConnectObservation.observedFields[3].present = false;
   },
-  "no in-app purchase or subscription product",
+  "the six com.relayium.mac",
 );
 
 rejects(
-  "the App Privacy questionnaire claimed answered",
+  "the published App Privacy answers claimed unanswered",
   (p) => {
-    p.appStoreConnectObservation.observedFields[4].present = true;
+    p.appStoreConnectObservation.observedFields[4].present = false;
   },
-  "App Privacy read Not Started",
+  "App Privacy is published on the record",
 );
 
 rejects(
-  "a Privacy Policy URL claimed saved on the record",
+  "the saved Privacy Policy URL claimed absent",
   (p) => {
-    p.appStoreConnectObservation.observedFields[5].present = true;
+    p.appStoreConnectObservation.observedFields[5].present = false;
   },
-  "no Privacy Policy URL was saved",
+  "is saved as the record's Privacy Policy URL",
 );
 
 rejects(
@@ -1173,45 +1252,50 @@ rejects(
   (p) => {
     p.appStoreConnectObservation.observedFields[6].present = true;
   },
-  "no User Privacy Choices URL was saved",
+  "the User Privacy Choices URL is blank",
 );
 
 rejects(
-  "the Accessibility Nutrition Label claimed answered",
+  "the price schedule claimed absent",
   (p) => {
-    p.appStoreConnectObservation.observedFields[7].present = true;
+    p.appStoreConnectObservation.observedFields[7].present = false;
   },
-  "Accessibility Nutrition Label read Not Started",
+  "Free across all 175 price territories",
 );
 
 rejects(
-  "a price schedule claimed on a record that has none",
+  "the availability selection claimed absent",
   (p) => {
-    p.appStoreConnectObservation.observedFields[8].present = true;
+    p.appStoreConnectObservation.observedFields[8].present = false;
   },
-  "had no price schedule",
+  "available in 173 territories",
 );
 
 rejects(
-  "availability claimed set on a record where it is not",
+  "screenshots claimed on a version that has none",
   (p) => {
     p.appStoreConnectObservation.observedFields[9].present = true;
   },
-  "app availability was not set",
+  "required iPhone and iPad screenshot sets are missing",
 );
 
+// The one gate whose reading is neither "still owed" nor "already done": the
+// version's release option was READ as manual. Claiming it absent invites
+// somebody to go and set it, and the option they would most likely set is the
+// default — automatic — which ships an approved version with no human in the
+// loop.
 rejects(
-  "screenshots claimed on a record that holds none",
+  "the selected manual release option claimed absent",
   (p) => {
-    p.appStoreConnectObservation.observedFields[10].present = true;
+    p.appStoreConnectObservation.observedFields[10].present = false;
   },
-  "held zero screenshots",
+  "manual release is the option selected",
 );
 
 rejects(
   "a blocking gate quietly downgraded to non-blocking",
   (p) => {
-    p.appStoreConnectObservation.observedFields[10].blocksSubmission = false;
+    p.appStoreConnectObservation.observedFields[9].blocksSubmission = false;
   },
   "must be true for 'screenshots'",
 );
@@ -1239,6 +1323,142 @@ rejects(
     p.appStoreConnectObservation.observedFields[11].id = "app-store-connect-vibes";
   },
   "appStoreConnectObservation.observedFields[11].id",
+);
+
+// ── the universal-purchase shape itself ──────────────────────────────────────
+
+rejects(
+  "the record described as iOS-only",
+  (p) => {
+    p.appStoreConnectObservation.universalPurchase.platforms = ["iOS"];
+  },
+  "appStoreConnectObservation.universalPurchase.platforms",
+);
+
+rejects(
+  "the shared bundle id contradicted inside the universal-purchase section",
+  (p) => {
+    p.appStoreConnectObservation.universalPurchase.sharedBundleId = "com.relayium.ios";
+  },
+  "appStoreConnectObservation.universalPurchase.sharedBundleId",
+);
+
+rejects(
+  "the released macOS platform reclaimed as writable here",
+  (p) => {
+    p.appStoreConnectObservation.universalPurchase.macOSIsReadOnlyHere = false;
+  },
+  "appStoreConnectObservation.universalPurchase.macOSIsReadOnlyHere",
+);
+
+rejects(
+  "the iOS delivery state widened to speak for the whole record",
+  (p) => {
+    p.appStoreConnectObservation.deliveryState.platform = "macOS";
+  },
+  "appStoreConnectObservation.deliveryState.platform",
+);
+
+rejects(
+  "the iOS platform claimed released, which the macOS one is",
+  (p) => {
+    p.appStoreConnectObservation.deliveryState.released = true;
+  },
+  "appStoreConnectObservation.deliveryState.released",
+);
+
+rejects(
+  "the iOS version set to release itself on approval",
+  (p) => {
+    p.appStoreConnectObservation.deliveryState.releaseType = "automatic";
+  },
+  "appStoreConnectObservation.deliveryState.releaseType",
+);
+
+// Manual release was read off the record. Demoting that to an intention is the
+// edit that makes it revisable by opinion rather than by re-reading.
+rejects(
+  "the observed manual release restated as a mere intention",
+  (p) => {
+    p.appStoreConnectObservation.deliveryState.releaseTypeObservedOnTheRecord = false;
+  },
+  "demoting an observation to an intention",
+);
+
+rejects(
+  "a signed test notification claimed for this record",
+  (p) => {
+    p.appStoreConnectObservation.appStoreServerNotifications
+      .signedTestNotificationObservedForThisRecord = true;
+  },
+  "signedTestNotificationObservedForThisRecord",
+);
+
+// ── the published privacy union, which is per RECORD and not per platform ────
+
+rejects(
+  "the published union losing the type only macOS declares",
+  (p) => {
+    p.appPrivacy.recordLevelPublishedUnion =
+      p.appPrivacy.recordLevelPublishedUnion.filter((t) => t !== "NSPrivacyCollectedDataTypeDeviceID");
+  },
+  "appPrivacy.recordLevelPublishedUnion",
+);
+
+rejects(
+  "the iOS manifest list padded to match the published union",
+  (p) => {
+    p.appPrivacy.collected.push({
+      type: "NSPrivacyCollectedDataTypeDeviceID",
+      linked: true,
+      tracking: false,
+      purposes: ["NSPrivacyCollectedDataTypePurposeAppFunctionality"],
+      basis: "Parity with the record's published answers.",
+    });
+  },
+  "appPrivacy.collected",
+);
+
+rejects(
+  "a published union carrying a type neither platform declares",
+  (p) => {
+    p.appPrivacy.recordLevelPublishedUnion[6] = "NSPrivacyCollectedDataTypePreciseLocation";
+  },
+  "unexpected NSPrivacyCollectedDataTypePreciseLocation",
+);
+
+rejects(
+  "the record's saved Privacy Policy URL repointed",
+  (p) => {
+    p.appPrivacy.privacyPolicyUrlOnRecord = "https://relayium.com/legal/privacy/";
+  },
+  "appPrivacy.privacyPolicyUrlOnRecord",
+);
+
+rejects(
+  "a User Privacy Choices URL claimed present in the privacy section",
+  (p) => {
+    p.appPrivacy.userPrivacyChoicesUrlOnRecordIsBlank = false;
+  },
+  "appPrivacy.userPrivacyChoicesUrlOnRecordIsBlank",
+);
+
+// ── availability, now that it is a live selection rather than an intention ───
+
+rejects(
+  "the live territory counts contradicted",
+  (p) => {
+    p.availability.availableTerritoryCount = 175;
+  },
+  "availability.availableTerritoryCount",
+);
+
+rejects(
+  "the app claimed not to be free",
+  (p) => {
+    p.availability.free = false;
+  },
+  "availability.free",
 );
 
 rejects(
@@ -1407,7 +1627,7 @@ rejects(
 rejects(
   "the blanket 'this file has read back nothing' posture restored",
   (p) => {
-    p.subscriptions.ownerConfirmationRequired =
+    p.subscriptions.priceAndAvailability.note =
       "The six identifiers are a proposal and this file has read back no row.";
   },
   "blanket 'this file has read back nothing' posture",
@@ -1491,7 +1711,7 @@ rejects(
     p.screenshots.state = "not-captured";
     p.screenshots.capturedCount = 3;
   },
-  "observed on 2026-09-03 holding no screenshots",
+  "sets were observed missing on the record on 2026-09-03",
 );
 
 // ── the screenshot reading, and the survey it is not ──────────────────────

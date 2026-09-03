@@ -2,17 +2,17 @@
   "schemaVersion": 1,
   "packet": {
     "id": "ios-app-store-metadata",
-    "state": "draft-in-this-repository-record-observed-2026-09-03",
+    "state": "draft-in-this-repository-universal-record-observed-2026-09-03",
     "observedAppStoreConnectState": "field-scoped-see-appStoreConnectObservation",
     "prose": "docs/ios-app-store-submission.md",
     "validator": "scripts/ios-app-store-metadata-validate.mjs",
-    "note": "Copy-ready source for the external App Store Connect fields of the iOS record. Every storefront, reviewer, TestFlight, subscription and privacy value here is a DRAFT this repository maintains, and entering any of it is a separate authorized step. What HAS been read back from App Store Connect is recorded in appStoreConnectObservation, field by field and with the date it was read; nothing outside that section states what the record holds. No credential, contact detail or demo login may ever be added to this file."
+    "note": "Copy-ready source for the external App Store Connect fields of the iOS PLATFORM of the universal-purchase record. Every storefront, reviewer and TestFlight value here is a DRAFT this repository maintains, and entering any of it is a separate authorized step. The subscription catalogue and the App Privacy answers are NOT drafts: they already exist on the record, they are Approved and published, and this file records their identity so that nothing recreates them. What HAS been read back from App Store Connect is in appStoreConnectObservation, field by field and with the date it was read; nothing outside that section states what the record holds. No credential, contact detail or demo login may ever be added to this file."
   },
   "record": {
     "recordName": "relayium",
-    "appleId": "6791918822",
-    "bundleId": "com.relayium.app",
-    "shareExtensionBundleId": "com.relayium.app.share",
+    "appleId": "6801142976",
+    "bundleId": "com.relayium.mac",
+    "shareExtensionBundleId": "com.relayium.mac.ShareIOS",
     "teamId": "7PVYUG4YQS",
     "marketingVersion": "0.3.0",
     "primaryCategoryUti": "public.app-category.utilities"
@@ -22,119 +22,129 @@
     "observedAt": "2026-09-03",
     "timeZone": "Asia/Dubai",
     "method": "A read-only pass over the authenticated App Store Connect web interface, field by field. Nothing in this repository can see App Store Connect, so this section is a RECORDED observation and not a live query: the validator checks that what is written here is internally consistent and that no gate is claimed met, and it cannot re-verify the record. Re-inspect read-only before acting on any of it. No credential, session or contact value is recorded here.",
-    "scope": "Only the entries in observedFields were read back on the date above. Every other value in this packet — the storefront copy, the reviewer notes, the TestFlight text, the six proposed products, the App Privacy answers — is still a draft this repository maintains and has NOT been entered in the record.",
+    "scope": "Only the entries in observedFields were read back on the date above. The storefront copy, the reviewer notes and the TestFlight text remain drafts this repository maintains and have NOT been entered. The subscription catalogue, the App Privacy answers, the price schedule and the availability selection are the opposite: they are live on the record and are recorded here as identity and state only, never as copy to paste back.",
     "fullySubmissionReady": false,
-    "readinessNote": "The record exists and holds a 0.3.0 version in Prepare for Submission. Nothing else about it is done: no build, no subscription group or product, no App Privacy answer, no price, no availability and no screenshot. This is the start of a submission, not a submittable one. Every observedFields entry whose blocksSubmission is true and whose present is false is an open gate, and the validator refuses any claim to the contrary.",
+    "readinessNote": "The record is a going concern — it ships macOS publicly, its subscription group and six products are Approved, its App Privacy is published, it has a price schedule and an availability selection. Its iOS 0.3.0 version is in Prepare for Submission with two gates open: no build is selected for that version, and the required iPhone and iPad screenshot sets are missing. Every observedFields entry whose blocksSubmission is true and whose present is false is an open gate, and the validator refuses any claim to the contrary.",
     "records": [
       {
-        "role": "ios-target",
+        "role": "universal-purchase-target",
+        "appleId": "6801142976",
+        "bundleId": "com.relayium.mac",
+        "platforms": "macOS and iOS, in one universal-purchase record",
+        "observedVersion": "0.3.0",
+        "observedVersionState": "Prepare for Submission",
+        "targetForIosRelease": true,
+        "note": "The one record this packet, this validator and any iOS archive may target. Apple requires every platform of a universal-purchase record to share a single Bundle ID, which is why the iOS app now carries the macOS one. Its iOS platform already existed before this migration: TestFlight holds a Validated 0.1.0 (4) whose Build Metadata reports main bundle com.relayium.mac, Share Extension application identifier 7PVYUG4YQS.com.relayium.mac.ShareIOS and App Group group.com.relayium.app. Those three readings are what the iOS source was migrated to match, rather than the other way round. The observedVersion here is the iOS platform's editable App Store version; the macOS platform is separately and publicly released and is read-only for this packet."
+      },
+      {
+        "role": "superseded-separate-ios-record",
         "appleId": "6791918822",
         "bundleId": "com.relayium.app",
         "platforms": "iOS",
         "observedVersion": "0.3.0",
         "observedVersionState": "Prepare for Submission",
-        "targetForIosRelease": true,
-        "note": "The independent iOS record, and the only record this packet, this validator or any iOS archive may target. Its editable version was changed from the abandoned 0.1.0 to 0.3.0 and read back as 0.3.0 Prepare for Submission on the date above."
-      },
-      {
-        "role": "macos-record-with-abandoned-ios-platform",
-        "appleId": "6801142976",
-        "bundleId": "com.relayium.mac",
-        "platforms": "macOS, plus an abandoned and empty iOS platform",
-        "observedVersion": "0.1.0",
-        "observedVersionState": "abandoned empty iOS platform on the macOS record",
         "targetForIosRelease": false,
-        "note": "The shipped macOS record. It ALSO carries an abandoned, empty iOS 0.1.0 platform, which is exactly why it reads as a plausible iOS target and is not one: different bundle identifier, different build-number sequence, different product, different subscription catalogue. Never upload an iOS build to it, never enter this packet into it, and never let an iOS identifier resolve to it. Two records showing an iOS platform is the trap this entry exists to make executable rather than remembered. Scope, not ignorance: this iOS packet records and relies on NO other field of that record. Its identifiers, its platforms and its abandoned iOS version are the whole of what is carried here; everything else about it is out of scope for this packet, and nothing here authorizes touching it."
+        "note": "A real, separate, iOS-only App Store record, and the one this repository itself named as the target until 2026-09-03. That history is what makes it dangerous rather than merely wrong: it looks correct to anyone reading an older commit, an older plan or an older copy of this file. Nothing was ever delivered to it — no build was uploaded, no subscription group or product was created, no privacy answer was entered — and its editable version was set to 0.3.0 Prepare for Submission by the same superseded pass. It is now entirely READ-ONLY: never upload to it, never enter this packet into it, never create a product under its bundle identifier, and never let an iOS identifier resolve to it. Scope, not ignorance: this packet records and relies on no other field of it, and nothing here authorizes touching it."
       }
     ],
+    "universalPurchase": {
+      "platforms": [
+        "macOS",
+        "iOS"
+      ],
+      "sharedBundleId": "com.relayium.mac",
+      "macOSPubliclyReleased": true,
+      "macOSIsReadOnlyHere": true,
+      "note": "One record, two platforms, one Bundle ID, one subscription catalogue, one App Privacy answer set, one price schedule and one availability selection. That is what makes this a universal purchase and it is also what makes it hazardous: most of what an operator sees on this record was configured for the released macOS app, and editing it to suit iOS would change the live macOS product. The macOS version, its builds, its prices, its TestFlight groups and its release state are read-only for this packet. The iOS platform's own version, build selection and screenshots are the only fields this packet is about."
+    },
     "observedFields": [
       {
         "id": "version",
-        "field": "App Store version",
+        "field": "App Store version (iOS platform)",
         "present": true,
-        "blocksSubmission": false,
-        "observed": "The editable version reads 0.3.0 in Prepare for Submission, changed the same day from the abandoned 0.1.0.",
-        "nextAction": "Leave it at 0.3.0. It must keep matching record.marketingVersion in this packet, and the validator refuses a drift between the two."
+        "blocksSubmission": true,
+        "observed": "The iOS platform's editable version reads 0.3.0 in Prepare for Submission.",
+        "nextAction": "Leave it at 0.3.0. It must keep matching record.marketingVersion in this packet, and the validator refuses a drift between the two. Do not touch the macOS version on this same record."
       },
       {
-        "id": "testflight-builds",
-        "field": "TestFlight builds",
+        "id": "version-build-selection",
+        "field": "Build selected for the iOS 0.3.0 version",
         "present": false,
         "blocksSubmission": true,
-        "observed": "TestFlight lists no builds for this record.",
-        "nextAction": "Archive and upload a 0.3.0 candidate under a separate authorization. An empty TestFlight list is NOT evidence that no build number was ever consumed — expired, removed and Invalid builds still consume one — so the highest consumed build number stays an operator attestation, not an observed fact."
+        "observed": "No build is selected for the iOS 0.3.0 version.",
+        "nextAction": "Archive and upload a 0.3.0 candidate under a separate authorization, then select it on the version. Separately from selection: the record's iOS TestFlight holds a Validated 0.1.0 (4), so at least four build numbers are consumed. That is a FLOOR and not the answer — expired, removed and Invalid builds keep their numbers and do not appear — so the highest consumed number stays an operator attestation, and scripts/ios-app-store-candidate.sh refuses an attestation below the floor."
       },
       {
-        "id": "subscription-groups",
-        "field": "Subscription groups",
-        "present": false,
+        "id": "subscription-group",
+        "field": "Subscription group",
+        "present": true,
         "blocksSubmission": true,
-        "observed": "The record carries no subscription group.",
-        "nextAction": "The owner confirms the six proposed identifiers, then a group and its products are created live. An identifier is permanent once created, so a confirmed draft and a created product remain different states."
+        "observed": "The record carries subscription group 22307427, Approved, serving the released macOS app.",
+        "nextAction": "Reuse it. Do not create a second group: this app has one catalogue across both platforms, and a second group would split it permanently."
       },
       {
         "id": "subscription-products",
         "field": "In-app purchases and subscription products",
-        "present": false,
+        "present": true,
         "blocksSubmission": true,
-        "observed": "The record carries no in-app purchase and no subscription product.",
-        "nextAction": "Create the six products this packet proposes only after the owner confirms them, then re-inspect the record read-only and confirm each row is Live before relying on it."
+        "observed": "The record carries the six com.relayium.mac.{plus,pro,max}.{monthly,yearly} products, all Approved.",
+        "nextAction": "Reuse them exactly. Create nothing: an App Store product identifier is permanent and cannot be deleted, and a com.relayium.app.* namespace would fork the catalogue the released macOS app is selling through. Relayium's apple_products table already maps these six for bundle com.relayium.mac, which is what makes an iOS purchase resolvable without a server change."
       },
       {
         "id": "app-privacy-data-practices",
         "field": "App Privacy data practices",
-        "present": false,
+        "present": true,
         "blocksSubmission": true,
-        "observed": "App Privacy reads Not Started; no data-practice answer exists on the record.",
-        "nextAction": "Enter the appPrivacy graph below, using App Store Connect's own question wording rather than memory, then re-inspect read-only."
+        "observed": "App Privacy is published on the record, declaring Name, Email Address, User ID, Device ID, Purchase History, Product Interaction and Other Usage Data.",
+        "nextAction": "Leave it. That list is the UNION across both platforms of this one record — see appPrivacy.recordLevelPublishedUnion — and Device ID is macOS's alone. Do not add Device ID to the iOS manifest to make the two agree, and do not remove it from the record to make the record agree with iOS."
       },
       {
         "id": "app-privacy-policy-url",
         "field": "App Privacy — Privacy Policy URL",
-        "present": false,
+        "present": true,
         "blocksSubmission": true,
-        "observed": "No Privacy Policy URL is saved on the record.",
-        "nextAction": "Enter https://relayium.com/privacy/ — the URL this packet already pins for both locales — once that page is confirmed deployed."
+        "observed": "https://relayium.com/privacy/ is saved as the record's Privacy Policy URL.",
+        "nextAction": "Leave it. It is the same URL this packet pins for both storefront locales."
       },
       {
         "id": "app-privacy-choices-url",
         "field": "App Privacy — User Privacy Choices URL",
         "present": false,
         "blocksSubmission": false,
-        "observed": "No User Privacy Choices URL is saved on the record.",
-        "nextAction": "Apple treats this one as optional and Relayium ships no such page, so an empty field is a decision rather than an omission. Revisit if a privacy-choices page is ever published."
-      },
-      {
-        "id": "accessibility",
-        "field": "Accessibility Nutrition Label",
-        "present": false,
-        "blocksSubmission": false,
-        "observed": "The Accessibility Nutrition Label reads Not Started; no feature is answered on the record.",
-        "nextAction": "It is voluntary, and accessibilityNutritionLabel below records why nothing is claimable yet. Do not answer it from a guess to make the page look finished."
+        "observed": "The User Privacy Choices URL is blank.",
+        "nextAction": "Apple treats this one as optional and Relayium ships no such page, so a blank field is a decision rather than an omission. Revisit if a privacy-choices page is ever published."
       },
       {
         "id": "price-schedule",
         "field": "Pricing",
-        "present": false,
+        "present": true,
         "blocksSubmission": true,
-        "observed": "The record has no price schedule.",
-        "nextAction": "A price — including Free — must be selected before the version can be submitted. It is an owner decision, and no amount may be recorded in this packet."
+        "observed": "The app is Free across all 175 price territories.",
+        "nextAction": "Leave it. The app itself is free and its plans are sold as subscriptions; changing the app price would change it for the released macOS app on this same record."
       },
       {
         "id": "availability",
         "field": "App availability",
-        "present": false,
+        "present": true,
         "blocksSubmission": true,
-        "observed": "App availability is not set; the record holds no territory selection.",
-        "nextAction": "Enter the selection the availability section below records: every territory except the two it excludes, each with the reason it gives."
+        "observed": "The app is available in 173 territories, with China mainland and France excluded.",
+        "nextAction": "Leave it. The two exclusions and their reasons are recorded in the availability section below; adding France still requires a truthful ANSSI declaration first."
       },
       {
         "id": "screenshots",
         "field": "Screenshots",
         "present": false,
         "blocksSubmission": true,
-        "observed": "The inspected iOS version record showed zero screenshots; its screenshot count read zero and no screenshot was shown on the page.",
-        "nextAction": "Capture them as the screenshots section below specifies. They are blocked on their own preconditions, which that section lists rather than hides."
+        "observed": "The iOS version's required iPhone and iPad screenshot sets are missing.",
+        "nextAction": "Capture them as the screenshots section below specifies, and stage them through the bundle gate that section names. What was read is the required device sets; the per-localization sub-views were not opened one at a time, and notObserved records that."
+      },
+      {
+        "id": "release-type",
+        "field": "Version release option for the iOS 0.3.0 version",
+        "present": true,
+        "blocksSubmission": false,
+        "observed": "Manual release is the option selected on the iOS 0.3.0 version.",
+        "nextAction": "Leave it selected. A version that releases itself the moment review passes removes the last point at which a human can decide not to ship it, and iOS is not public. This is a reading of the record, not an intention recorded here."
       },
       {
         "id": "app-store-server-notifications",
@@ -150,21 +160,29 @@
       "sandboxUrlConfigured": true,
       "url": "https://relayium.com/api/apple/notifications",
       "signedTestNotificationObservedForThisRecord": false,
-      "note": "Both URLs read back saved to the one Relayium endpoint on the date above. One endpoint serves both environments, because the server distinguishes them from the signed envelope. This is recorded as a fact to PRESERVE rather than a gate to open: do not remove, blank or repoint either URL, and the validator refuses a packet that says either is absent. A signed TEST delivery has been observed reaching Relayium for the macOS record, not for this one, so end-to-end delivery on this record is configured but still unproven."
+      "note": "Both URLs read back saved to the one Relayium endpoint on the date above. One endpoint serves both environments, because the server distinguishes them from the signed envelope. This is recorded as a fact to PRESERVE rather than a gate to open: do not remove, blank or repoint either URL, and the validator refuses a packet that says either is absent. On the signed TEST delivery, this packet deliberately claims nothing. Such a delivery has been recorded elsewhere for this record's macOS platform, and now that the target IS that record it would be easy to promote that into a claim about the iOS side — but it was not re-verified in the read-back this section covers, so the flag stays false. Prove it before relying on it rather than inferring it from the merge of the two records."
     },
     "deliveryState": {
+      "platform": "iOS",
       "archived": false,
       "uploaded": false,
       "submittedForReview": false,
       "released": false,
-      "note": "No archive, no upload, no submission and no release has happened against this record. Prepare for Submission is App Store Connect's state for a version that has never been submitted; it is not a claim that anything is prepared."
+      "releaseType": "manual",
+      "releaseTypeObservedOnTheRecord": true,
+      "note": "Scoped to the iOS platform, and the scope carries the weight: this record's macOS platform IS publicly released, so four unqualified false values would be a claim about the whole record and wrong about half of it. For iOS: no archive, no upload, no submission and no release, and no public App Store listing offers the iOS app. Prepare for Submission is App Store Connect's state for a version that has never been submitted; it is not a claim that anything is prepared. releaseType is an OBSERVATION, not an intention: manual release was read back as the option selected on the iOS 0.3.0 version — see the release-type entry in observedFields — which is also what this repository would have wanted, because a version that ships itself the moment review passes removes the last point at which a human can decide not to ship it."
     },
     "notObserved": [
-      "The highest build number this record has ever consumed. An empty TestFlight list does not answer it, because expired, removed and Invalid builds still consume a number — so the --readback-highest-build value scripts/ios-app-store-candidate.sh cross-checks remains an operator attestation.",
+      "The highest build number this record has ever consumed. The iOS TestFlight reading gives a floor of 4, not an answer: expired, removed and Invalid builds still consume a number and do not appear in the list — so the --readback-highest-build value scripts/ios-app-store-candidate.sh cross-checks remains an operator attestation, now with a floor beneath it.",
+      "The Accessibility Nutrition Label on this record. The earlier Not Started reading was of the superseded record and does not transfer. Nothing is claimable regardless, for the local reason accessibilityNutritionLabel gives, so this is an unread field rather than an open gate.",
+      "The live subscription group's reference name, its localized display names, and each product's localized display name, description, price and territory availability. Their existence and Approved state were read; their copy was not, and it is deliberately not drafted here — a display name written in this file is an edit somebody can paste into an Approved product.",
+      "Whether the six Approved products already carry their own review information and any review screenshot Apple asks for.",
+      "A signed App Store Server Notification TEST delivery observed arriving from this record's iOS side. The endpoints are configured; the delivery was not re-verified.",
+      "Sign in with Apple completed end to end on a real signed iOS device, and an Apple purchase completed against the six live products from such a build. A separate read-only production check on 2026-09-03 found the server's audience allowlist already admitting com.relayium.mac, so no production change is owed — but an admitted audience is not a completed sign-in, and a resolvable catalogue is not an accepted charge.",
       "App Review information: the contact fields and the demo account, which are owner-entered in App Store Connect and must never be recorded in this repository.",
       "The export-compliance answers carried on the version.",
       "The age-rating questionnaire.",
-      "Screenshot state read set by set and localization by localization. What the reading above records is the version record's own screenshot count, read as zero on the page inspected; those sub-views were not opened and read back one at a time. 'Zero screenshots on this record' is therefore the whole of the observed fact, and nothing wider than it may be derived from it. The gate stays blocked regardless, because zero on the record already blocks it."
+      "Screenshot state per localization. The reading above covers the required iPhone and iPad device sets as missing on the iOS version; each set's per-localization sub-view was not opened and read back one at a time. The gate stays blocked regardless, because the device-set reading already blocks it."
     ]
   },
   "locales": [
@@ -172,17 +190,20 @@
     "zh-Hans"
   ],
   "availability": {
-    "state": "recorded-in-this-repository-record-shows-availability-not-set",
+    "state": "observed-on-the-record-173-of-175-territories-selected",
+    "priceTerritoryCount": 175,
+    "availableTerritoryCount": 173,
+    "free": true,
     "initialExcludedTerritories": [
       {
         "code": "CN",
         "name": "China mainland",
-        "reason": "Held out of the initial release by owner decision. No mainland-China regulatory filing has been made and none is claimed here."
+        "reason": "Held out by owner decision, and read back as excluded on the record. No mainland-China regulatory filing has been made and none is claimed here."
       },
       {
         "code": "FR",
         "name": "France",
-        "reason": "Held out of the initial release. Relayium implements encryption outside Apple's operating system, so offering the app in France requires a truthful ANSSI declaration first. That is a precondition for ADDING France later, not a condition on the initial release."
+        "reason": "Held out, and read back as excluded on the record. Relayium implements encryption outside Apple's operating system, so offering the app in France requires a truthful ANSSI declaration first. That is a precondition for ADDING France later, not a condition on the current release."
       }
     ],
     "anssiDeclaration": {
@@ -237,12 +258,24 @@
     }
   },
   "appPrivacy": {
-    "state": "drafted-in-this-repository-record-shows-data-practices-not-started",
+    "state": "published-on-the-record-this-section-is-the-ios-half",
     "observedAppStoreConnectState": "field-scoped-see-appStoreConnectObservation",
     "sourceOfTruth": "apps/ios/Relayium/PrivacyInfo.xcprivacy",
+    "recordLevelPublishedUnion": [
+      "NSPrivacyCollectedDataTypeName",
+      "NSPrivacyCollectedDataTypeEmailAddress",
+      "NSPrivacyCollectedDataTypeUserID",
+      "NSPrivacyCollectedDataTypeDeviceID",
+      "NSPrivacyCollectedDataTypePurchaseHistory",
+      "NSPrivacyCollectedDataTypeProductInteraction",
+      "NSPrivacyCollectedDataTypeOtherUsageData"
+    ],
+    "recordLevelPublishedUnionNote": "What the RECORD publishes, which is what a shopper actually reads. App Privacy is answered once per record and this record carries two platforms, so the published answers are the union of what macOS declares and what iOS declares — seven types, against the six in the iOS manifest. The seventh is Device ID and it is macOS's alone: deliberatelyAbsent below records why no iOS source sends one. The two lists disagreeing is correct; the failure mode is making them agree. Adding Device ID to the iOS manifest would declare something iOS does not collect, and removing it from this union would under-declare what the app as a whole collects. The validator derives this union from the other two lists so it cannot become a third independent statement.",
+    "privacyPolicyUrlOnRecord": "https://relayium.com/privacy/",
+    "userPrivacyChoicesUrlOnRecordIsBlank": true,
     "tracking": false,
     "trackingDomains": [],
-    "note": "The App Privacy answers this project PROPOSES for the iOS record, drafted from the shipped privacy manifest named in sourceOfTruth. The record's own App Privacy page was read back on 2026-09-03 and holds NOTHING: data practices Not Started, no Privacy Policy URL, no User Privacy Choices URL. So this section states what the app declares, the record states nothing, and entering it is a separate authorized step. App Store Connect's questionnaire uses its own wording — fill it from this graph rather than from memory, then re-inspect the record read-only. scripts/ios-app-store-metadata-validate.mjs checks this list against the shipped manifest, so the two cannot drift apart silently.",
+    "note": "The iOS half of App Privacy: what the shipped iOS manifest named in sourceOfTruth declares. The record's App Privacy is already PUBLISHED — data practices answered, https://relayium.com/privacy/ saved, User Privacy Choices left blank — so this section is no longer a draft waiting to be typed in. Its job now is to keep a change to the iOS manifest visible as what it is: a change to a public promise about a released app, which requires re-answering the record's questionnaire rather than editing this file. scripts/ios-app-store-metadata-validate.mjs checks this list against the shipped manifest and against the published union, so none of the three can drift silently.",
     "collected": [
       {
         "type": "NSPrivacyCollectedDataTypeName",
@@ -303,15 +336,15 @@
       {
         "type": "NSPrivacyCollectedDataTypeDeviceID",
         "declaredOnMacOS": true,
-        "reason": "macOS declares it and iOS must not. The macOS producers are an installation identifier posted when a BROWSER sign-in begins, which iOS has no path to, and a purchase-continuation appInstanceId. This app does call purchase-dispatch, so 'iOS never reaches it' would be false: the field comes from a purchase continuation, only the durableContinuationRequired policy creates one, macOS selects that policy explicitly and IOSAppleSubscriptions.makeModel names no policy at all — so it takes the default legacyOneShot, no continuation exists, and the encoder omits appInstanceId entirely.",
-        "revisitTrigger": "If iOS adopts purchase continuation, or gains any browser sign-in path, this entry becomes REQUIRED in the manifest, in this packet and in the App Store Connect answers.",
+        "reason": "macOS declares it, the RECORD therefore publishes it — see recordLevelPublishedUnion — and the iOS manifest must not. The macOS producers are an installation identifier posted when a BROWSER sign-in begins, which iOS has no path to, and a purchase-continuation appInstanceId. This app does call purchase-dispatch, so 'iOS never reaches it' would be false: the field comes from a purchase continuation, only the durableContinuationRequired policy creates one, macOS selects that policy explicitly and IOSAppleSubscriptions.makeModel names no policy at all — so it takes the default legacyOneShot, no continuation exists, and the encoder omits appInstanceId entirely.",
+        "revisitTrigger": "If iOS adopts purchase continuation, or gains any browser sign-in path, this entry becomes REQUIRED in the iOS manifest and in appPrivacy.collected. The record's published union would not change, because macOS already puts Device ID there — which is exactly why the manifest, and not the union, is where that change has to be noticed.",
         "guardedBy": "apps/RelayiumKit/Tests/RelayiumKitTests/IOSPrivacyManifestTests.swift testTheAppDeclaresNoDeviceIDBecauseNoIOSSourceSendsOne"
       }
     ],
     "shareExtension": {
-      "bundleId": "com.relayium.app.share",
+      "bundleId": "com.relayium.mac.ShareIOS",
       "collected": [],
-      "reason": "An appex is a separate bundle and Apple reads a separate manifest for it. This target holds only the App Group entitlement, reaches no network, and therefore transmits nothing for an entry to describe. Its manifest declares an empty collected-data list, which is a claim in its own right rather than the absence of one.",
+      "reason": "An appex is a separate bundle and Apple reads a separate manifest for it. This target holds only the App Group entitlement — group.com.relayium.app, which kept its name through the bundle-id migration because a registered container is not derived from a bundle id and renaming it would strand every staged draft — reaches no network, and therefore transmits nothing for an entry to describe. Its manifest declares an empty collected-data list, which is a claim in its own right rather than the absence of one.",
       "guardedBy": "scripts/ios-app-store-candidate.sh SHARE_COLLECTED_DATA_GRAPH"
     }
   },
@@ -365,129 +398,66 @@
     }
   },
   "subscriptions": {
-    "state": "drafted-in-this-repository-record-shows-no-group-or-products",
-    "productIdentifiersAreProposedDrafts": true,
-    "ownerConfirmationRequired": "The six product identifiers, the group reference name and every display string below are this project's PROPOSAL. None of them has been confirmed by the owner, and the record was read back on 2026-09-03 with no subscription group and no products at all. Before any of it is relied on: the owner confirms the identifiers, the products are created live, and the record is re-inspected read-only. An identifier is permanent once created, so a confirmed draft and a created product are different states and this file only ever claims the first.",
-    "submittedWithAppVersion": true,
-    "submittedWithAppVersionNote": "Apple requires a record's FIRST subscription group and its products to be submitted together with an app version. That makes this catalogue part of the 0.3.0 submission rather than a later edit.",
+    "state": "existing-approved-catalogue-reused-under-the-universal-record",
+    "productIdentifiersAlreadyExistAndAreApproved": true,
+    "noNewProductsMayBeCreated": true,
+    "submittedWithAppVersion": false,
+    "submittedWithAppVersionNote": "Apple's rule that a subscription group must be submitted together with an app version applies to a record's FIRST group. This is not that: group 22307427 is Approved and has been selling through the released macOS app. Submitting the iOS 0.3.0 version does not resubmit it, and nothing in this catalogue is part of that submission.",
     "group": {
-      "referenceName": "Relayium Plans",
-      "localizations": {
-        "en-US": {
-          "displayName": "Relayium Plans"
-        },
-        "zh-Hans": {
-          "displayName": "Relayium 套餐"
-        }
-      }
+      "groupId": "22307427",
+      "observedState": "Approved",
+      "referenceNameAndLocalizationsAreLiveAndNotAuthoredHere": true,
+      "note": "The group's reference name and its localized display names exist on the record and were not read back. They are deliberately absent here rather than guessed: this file used to carry a PROPOSED name for a group that did not exist, and leaving that text in place after the group turned out to exist would have turned a draft into an instruction to rename an Approved group. One subscription group serves both platforms, because one universal-purchase record has one catalogue."
     },
     "priceAndAvailability": {
-      "state": "owner-decision-outstanding",
-      "note": "Price point and territory availability for each of the six products are an owner decision and are deliberately absent from this file. Do not copy the macOS record's prices across; that is a decision, not a default."
+      "state": "live-on-the-record-not-authored-here",
+      "note": "Each product's price points and territory availability are live on the Approved products and are not drafted, proposed or recorded here. They were configured for the released macOS app and they serve iOS unchanged, which is the point of a universal purchase. An earlier version of this file said not to copy the macOS prices across; that instruction is void, because there is nothing to copy across — it is one catalogue, and changing a price here would change it for macOS customers."
     },
     "products": [
       {
-        "productId": "com.relayium.app.plus.monthly",
-        "referenceName": "Relayium Plus Monthly (iOS)",
+        "productId": "com.relayium.mac.plus.monthly",
         "plan": "plus",
         "cycle": "monthly",
-        "localizations": {
-          "en-US": {
-            "displayName": "Relayium Plus Monthly",
-            "description": "Relayium Plus plan, billed monthly."
-          },
-          "zh-Hans": {
-            "displayName": "Relayium Plus 月付",
-            "description": "Relayium Plus 套餐，按月计费。"
-          }
-        }
+        "observedState": "Approved"
       },
       {
-        "productId": "com.relayium.app.plus.yearly",
-        "referenceName": "Relayium Plus Yearly (iOS)",
+        "productId": "com.relayium.mac.plus.yearly",
         "plan": "plus",
         "cycle": "yearly",
-        "localizations": {
-          "en-US": {
-            "displayName": "Relayium Plus Yearly",
-            "description": "Relayium Plus plan, billed yearly."
-          },
-          "zh-Hans": {
-            "displayName": "Relayium Plus 年付",
-            "description": "Relayium Plus 套餐，按年计费。"
-          }
-        }
+        "observedState": "Approved"
       },
       {
-        "productId": "com.relayium.app.pro.monthly",
-        "referenceName": "Relayium Pro Monthly (iOS)",
+        "productId": "com.relayium.mac.pro.monthly",
         "plan": "pro",
         "cycle": "monthly",
-        "localizations": {
-          "en-US": {
-            "displayName": "Relayium Pro Monthly",
-            "description": "Relayium Pro plan, billed monthly."
-          },
-          "zh-Hans": {
-            "displayName": "Relayium Pro 月付",
-            "description": "Relayium Pro 套餐，按月计费。"
-          }
-        }
+        "observedState": "Approved"
       },
       {
-        "productId": "com.relayium.app.pro.yearly",
-        "referenceName": "Relayium Pro Yearly (iOS)",
+        "productId": "com.relayium.mac.pro.yearly",
         "plan": "pro",
         "cycle": "yearly",
-        "localizations": {
-          "en-US": {
-            "displayName": "Relayium Pro Yearly",
-            "description": "Relayium Pro plan, billed yearly."
-          },
-          "zh-Hans": {
-            "displayName": "Relayium Pro 年付",
-            "description": "Relayium Pro 套餐，按年计费。"
-          }
-        }
+        "observedState": "Approved"
       },
       {
-        "productId": "com.relayium.app.max.monthly",
-        "referenceName": "Relayium Max Monthly (iOS)",
+        "productId": "com.relayium.mac.max.monthly",
         "plan": "max",
         "cycle": "monthly",
-        "localizations": {
-          "en-US": {
-            "displayName": "Relayium Max Monthly",
-            "description": "Relayium Max plan, billed monthly."
-          },
-          "zh-Hans": {
-            "displayName": "Relayium Max 月付",
-            "description": "Relayium Max 套餐，按月计费。"
-          }
-        }
+        "observedState": "Approved"
       },
       {
-        "productId": "com.relayium.app.max.yearly",
-        "referenceName": "Relayium Max Yearly (iOS)",
+        "productId": "com.relayium.mac.max.yearly",
         "plan": "max",
         "cycle": "yearly",
-        "localizations": {
-          "en-US": {
-            "displayName": "Relayium Max Yearly",
-            "description": "Relayium Max plan, billed yearly."
-          },
-          "zh-Hans": {
-            "displayName": "Relayium Max 年付",
-            "description": "Relayium Max 套餐，按年计费。"
-          }
-        }
+        "observedState": "Approved"
       }
     ],
     "reviewRequirements": [
-      "Every proposed product identifier is unique to com.relayium.app. The com.relayium.mac.* identifiers belong to the separate macOS record and must not be reused. Identifiers are permanent once created, so confirm them with the owner before creating anything.",
-      "Each product needs its own review information, and Apple may require a review screenshot per product; those are review-only assets and never reach the storefront.",
-      "Relayium's apple_products catalogue needs an exact (bundle id, product id) -> (plan, cycle) row for each of the six, read back as live, before a purchase can be accepted.",
-      "The production verifier must carry com.relayium.app and Apple ID 6791918822 while retaining the existing macOS identity and both signed environments.",
+      "Create nothing. All six identifiers exist and are Approved under group 22307427. An App Store product identifier is permanent and cannot be deleted or renamed, so creating a com.relayium.app.* namespace — which the superseded record 6791918822 would have needed — would permanently fork the catalogue the released macOS app sells through, and every entitlement decision downstream would then depend on which namespace a transaction came from. The validator refuses such an identifier anywhere in this packet.",
+      "Do not edit the live products' reference names, display names, descriptions, prices or territory availability to suit iOS. One universal-purchase record has one catalogue; those fields are shared with the released macOS app, and an edit here is an edit there.",
+      "Relayium's apple_products catalogue already holds an exact (bundle id, product id) -> (plan, cycle) row for each of the six under bundle com.relayium.mac, because macOS sells through them. That is what makes an iOS purchase resolvable with no server or catalogue change — and it is an expectation to VERIFY by read-back before an iOS purchase is accepted, not a conclusion this file may assert on its own.",
+      "The production verifier already admits com.relayium.mac, for the same reason. No second verifier identity is to be added: admitting com.relayium.app would re-open the identity the migration closed.",
+      "Before an iOS build reaches a customer, the entitlement path owes ADVERSARIAL evidence rather than a regression run. Until this migration an iOS binary matched no catalogue row and was refused with unknown_bundle, so purchases were gated closed by accident of identity; that gate is gone by design. A double-charge, early-grant, wrong-tier and cross-platform-conflict case must each be exercised against the shared scope, because ApplySubscriptionSource's conflict guard separated the two platforms by ExternalScope as well as by original transaction id, and the scope halves of that guard now match.",
+      "Each product needs its own review information, and Apple may require a review screenshot per product; those are review-only assets and never reach the storefront. Whether the Approved products already carry them was not read back.",
       "App Store Server Notifications V2 Sandbox and Production URLs are already configured for this record, read back on 2026-09-03 and recorded in appStoreConnectObservation.appStoreServerNotifications. What is still owed is a signed TEST notification observed reaching Relayium from THIS record; do not remove or repoint either URL to get it."
     ]
   },
@@ -495,7 +465,7 @@
     "state": "not-captured",
     "capturedCount": 0,
     "blockedBy": [
-      "The subscription products above do not exist yet, so the Account screen cannot render a real offer list.",
+      "No Release build under the migrated identity has rendered the Account screen against the live products. The six products exist and are Approved, so the offer list is now reachable in principle — but only from a build signed as com.relayium.mac, on a device or simulator where StoreKit resolves them. Until that has been seen, the Account shot has no honest source: the UITestSubscriptions fixture prices are forbidden and so is a retouched one.",
       "No neutral demonstration data has been staged, and a public asset may not carry an account address, device name, pairing code, share link, file name or host."
     ],
     "rules": {
@@ -541,7 +511,7 @@
       "Send — choosing content for one of the account's own devices.",
       "LAN Transfer — a transfer running on the same network.",
       "Cross-network Transfer — the six-digit code path.",
-      "Account — signed-in state with the real subscription offers."
+      "Account — signed-in state with the real subscription offers, resolved live from the six Approved products."
     ]
   },
   "accessibilityNutritionLabel": {

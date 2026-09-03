@@ -186,7 +186,12 @@ receiver_events="READY PEER RECEIVING MESSAGE NAME FILE HOLDING DONE"
 # container. The digest is a constant here, never a value read back off the
 # sending device, which is what makes the comparison a comparison and not an
 # echo; `--self-test` re-derives it from the fixture's own rule.
-bundle_id="com.relayium.app"
+#
+# The bundle id is the app's, not this harness's. It moved onto the macOS
+# identifier when iOS joined the one universal-purchase App Store record, and
+# `DeviceInboxAcceptanceSeamTests` pins this literal against the product's own
+# so the container this reads and the container the app writes cannot drift.
+bundle_id="com.relayium.mac"
 fixture_name="Relayium product brief.txt"
 fixture_container_path="Documents/Received/$fixture_name"
 fixture_bytes=1536

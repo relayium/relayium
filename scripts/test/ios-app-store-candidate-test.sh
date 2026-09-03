@@ -101,10 +101,12 @@ required_rules() {
   cat <<'RULES'
 ^set -euo pipefail$	the script would continue past a failed command, an unset variable or a failed pipeline
 ^readonly EXPECTED_TEAM='7PVYUG4YQS'$	the pinned team is gone; any team could sign a candidate
-^readonly APP_BUNDLE_ID='com\.relayium\.app'$	the pinned app bundle identifier is gone
-^readonly SHARE_BUNDLE_ID='com\.relayium\.app\.share'$	the pinned Share extension bundle identifier is gone
-^readonly APP_PROFILE='Relayium iOS App Store'$	the pinned app provisioning profile is gone
-^readonly SHARE_PROFILE='Relayium Share Extension App Store'$	the pinned Share provisioning profile is gone
+^readonly TARGET_APPLE_ID='6801142976'$	the target App Store record is no longer named, so a refusal cannot say which record it is about
+^readonly OBSERVED_HIGHEST_BUILD_FLOOR='4'$	the observed build-number floor is gone; a read-back attestation of 0 would be accepted again
+^readonly APP_BUNDLE_ID='com\.relayium\.mac'$	the pinned app bundle identifier is gone, or has reverted to the retired separate-record one
+^readonly SHARE_BUNDLE_ID='com\.relayium\.mac\.ShareIOS'$	the pinned Share extension bundle identifier is gone, or has collided with the macOS appex
+^readonly APP_PROFILE='Relayium iOS Universal App Store'$	the pinned app provisioning profile is gone
+^readonly SHARE_PROFILE='Relayium iOS Share Extension App Store'$	the pinned Share provisioning profile is gone
 ^readonly EXPORT_DESTINATION='export'$	the export could target upload instead of a local export
 ^readonly EXPORT_METHOD='app-store-connect'$	the export method is no longer the App Store one
 ^readonly EXPORT_SIGNING_STYLE='manual'$	signing could fall back to automatic, which resolves profiles Xcode chooses
@@ -113,6 +115,7 @@ required_rules() {
 ^readonly READBACK_MAX_AGE_SECONDS=	a read-back of any age would authorize a build number
 ^next_free_build="\$\(decimal_increment "\$readback_highest_build"\)"$	the two supplied build numbers are no longer cross-checked
 ^if \[ "\$build_number" != "\$next_free_build" \]; then$	the next-free comparison is gone, or has gone back to fixed-width shell arithmetic that wraps
+^if decimal_less_than "\$readback_highest_build" "\$OBSERVED_HIGHEST_BUILD_FLOOR"; then$	the attestation is no longer held against the build number observed on the target record
 status --porcelain	a dirty worktree could become a candidate
 @\{upstream\}	an unpushed commit could become a candidate
 already exists	an existing caller directory could be written into
@@ -338,6 +341,10 @@ mutate 'the two build numbers stop being cross-checked' \
   sed_mutator 's/decimal_increment "\$readback_highest_build"/printf %s "\$readback_highest_build"/'
 mutate 'the next-free comparison goes back to shell arithmetic' \
   sed_mutator 's/\[ "\$build_number" != "\$next_free_build" \]/[ "$((10#$build_number))" -ne "$((10#$next_free_build))" ]/'
+mutate 'the observed build-number floor is removed' \
+  sed_mutator "/^readonly OBSERVED_HIGHEST_BUILD_FLOOR=/d"
+mutate 'the target record is no longer named' \
+  sed_mutator "/^readonly TARGET_APPLE_ID=/d"
 mutate 'the clean-worktree check is removed' \
   sed_mutator "/status --porcelain/d"
 mutate 'the upstream check is removed' \
@@ -460,8 +467,8 @@ else
 <dict>
 	<key>ApplicationProperties</key>
 	<dict>
-		<key>CFBundleIdentifier</key>
-		<string>com.relayium.app</string>
+	<key>CFBundleIdentifier</key>
+		<string>com.relayium.mac</string>
 		<key>CFBundleShortVersionString</key>
 		<string>0.3.0</string>
 		<key>CFBundleVersion</key>
@@ -479,7 +486,7 @@ FIXTURE
 <plist version="1.0">
 <dict>
 	<key>application-identifier</key>
-	<string>7PVYUG4YQS.com.relayium.app</string>
+	<string>7PVYUG4YQS.com.relayium.mac</string>
 	<key>com.apple.developer.applesignin</key>
 	<array>
 		<string>Default</string>
@@ -505,7 +512,7 @@ FIXTURE
   }
 
   expect_path 'a nested archive path reaches the bundle identifier' \
-    "$fixtures/archive-info.plist" 'com.relayium.app' raw ApplicationProperties CFBundleIdentifier
+    "$fixtures/archive-info.plist" 'com.relayium.mac' raw ApplicationProperties CFBundleIdentifier
   expect_path 'a nested archive path reaches the build number' \
     "$fixtures/archive-info.plist" '6' raw ApplicationProperties CFBundleVersion
   expect_path 'a nested archive path reaches the signing identity' \
@@ -515,7 +522,7 @@ FIXTURE
   expect_path 'a dotted App Group entitlement is read as one literal key' \
     "$fixtures/entitlements.plist" '["group.com.relayium.app"]' json 'com.apple.security.application-groups'
   expect_path 'an undotted entitlement name still works' \
-    "$fixtures/entitlements.plist" '7PVYUG4YQS.com.relayium.app' raw 'application-identifier'
+    "$fixtures/entitlements.plist" '7PVYUG4YQS.com.relayium.mac' raw 'application-identifier'
 
   # The converse, and the reason the separator must not be escaped away: a
   # nested path written as ONE component names a top-level key that is not
@@ -1402,11 +1409,11 @@ done
 if [ "$show_settings" -eq 1 ]; then
   case "$target" in
     Relayium)
-      bundle="${STUB_APP_BUNDLE:-com.relayium.app}"
-      profile="${STUB_APP_PROFILE:-Relayium iOS App Store}" ;;
+      bundle="${STUB_APP_BUNDLE:-com.relayium.mac}"
+      profile="${STUB_APP_PROFILE:-Relayium iOS Universal App Store}" ;;
     RelayiumShare)
-      bundle="${STUB_SHARE_BUNDLE:-com.relayium.app.share}"
-      profile="${STUB_SHARE_PROFILE:-Relayium Share Extension App Store}" ;;
+      bundle="${STUB_SHARE_BUNDLE:-com.relayium.mac.ShareIOS}"
+      profile="${STUB_SHARE_PROFILE:-Relayium iOS Share Extension App Store}" ;;
     *) printf 'stub xcodebuild: unknown target %s\n' "$target" >&2; exit 1 ;;
   esac
   printf 'Build settings for action build and target %s:\n' "$target"
@@ -1566,10 +1573,10 @@ reset_stubs() {
   export STUB_BUILD='6'
   export STUB_TEAM='7PVYUG4YQS'
   export STUB_SIGN_STYLE='Manual'
-  export STUB_APP_BUNDLE='com.relayium.app'
-  export STUB_SHARE_BUNDLE='com.relayium.app.share'
-  export STUB_APP_PROFILE='Relayium iOS App Store'
-  export STUB_SHARE_PROFILE='Relayium Share Extension App Store'
+  export STUB_APP_BUNDLE='com.relayium.mac'
+  export STUB_SHARE_BUNDLE='com.relayium.mac.ShareIOS'
+  export STUB_APP_PROFILE='Relayium iOS Universal App Store'
+  export STUB_SHARE_PROFILE='Relayium iOS Share Extension App Store'
   export STUB_ARCHIVE_MODE='fail'
 }
 
@@ -1768,15 +1775,55 @@ expect_refusal 'the correct successor across a carry passes the read-back check'
   --readback-observed-at "$(now_iso)" \
   --artifact-root "$fixture/out/relayium-ios-0.3.0-1000-$short_sha"
 
-# 0 consumed builds is a real record state — nothing has been accepted yet — so
-# it must pass the shape check and be refused later, on the project's numbers,
-# rather than here.
+# An attestation ABOVE the observed floor still has to reach the project's own
+# numbers to be refused: the floor is a lower bound on one operand, not a second
+# opinion about the pair. `7`/`8` is a consistent pair the project does not
+# declare, so it must get past this section and die on CURRENT_PROJECT_VERSION.
 new_fixture
-expect_refusal 'a highest consumed build of 0 passes the shape check' "$REFUSED" \
+expect_refusal 'a highest consumed build above the floor passes the shape check' "$REFUSED" \
   'CURRENT_PROJECT_VERSION' \
+  --marketing-version 0.3.0 --build 8 --readback-highest-build 7 \
+  --readback-observed-at "$(now_iso)" \
+  --artifact-root "$fixture/out/relayium-ios-0.3.0-8-$short_sha"
+
+# 0 consumed builds used to be a real state of the record this candidate
+# targeted, and it is not a real state of THIS one: the universal-purchase
+# record's iOS TestFlight was read back holding a Validated `0.1.0 (4)`, so four
+# numbers are already gone. An attestation of 0 is now the shape of the exact
+# migration error the floor exists for — reading the retired record's history,
+# or none at all — and it is refused before anything is built.
+#
+# The pair is internally consistent (`0` then `1`), so it clears the successor
+# check and can only be caught here. That is the point: the successor check
+# compares the operator against themselves, and this compares them against
+# something observed.
+new_fixture
+expect_refusal 'a highest consumed build of 0 is refused against the observed floor' "$REFUSED" \
+  'is below 4' \
   --marketing-version 0.3.0 --build 1 --readback-highest-build 0 \
   --readback-observed-at "$(now_iso)" \
   --artifact-root "$fixture/out/relayium-ios-0.3.0-1-$short_sha"
+
+# One below the floor, which is the off-by-one a `<=` would let through.
+new_fixture
+expect_refusal 'a highest consumed build one below the floor is refused' "$REFUSED" \
+  'is below 4' \
+  --marketing-version 0.3.0 --build 4 --readback-highest-build 3 \
+  --readback-observed-at "$(now_iso)" \
+  --artifact-root "$fixture/out/relayium-ios-0.3.0-4-$short_sha"
+
+# And the floor itself is ACCEPTED. A gate that refuses the exact observed value
+# is as broken as one that accepts a value below it. Proved by pushing the
+# toolchain out of range instead: that check runs strictly AFTER the read-back
+# section, so reaching it is proof this pair got through.
+new_fixture
+STUB_XCODE_VERSION='27.0'
+expect_refusal 'the observed floor itself passes the read-back section' "$REFUSED" \
+  'not the required major' \
+  --marketing-version 0.3.0 --build 5 --readback-highest-build 4 \
+  --readback-observed-at "$(now_iso)" \
+  --artifact-root "$fixture/out/relayium-ios-0.3.0-5-$short_sha"
+reset_stubs
 
 new_fixture
 expect_refusal 'a marketing version that is not x.y.z is refused' "$REFUSED" 'is not an x.y.z marketing version' \
@@ -2012,10 +2059,42 @@ set_default_args
 expect_refusal 'a provisioning profile that is not the pinned one is refused' "$REFUSED" 'PROVISIONING_PROFILE_SPECIFIER' "${DEFAULT_ARGS[@]}"
 reset_stubs
 
+# The MACOS Share extension's identifier, which is the plausible wrong answer
+# now that both platforms sit under `com.relayium.mac`: it is a legal suffix of
+# the app's bundle id, it exists in this team, and it is already provisioned —
+# so nothing but this check distinguishes it from the iOS appex.
 new_fixture
-STUB_SHARE_BUNDLE='com.relayium.app.shareext'
+STUB_SHARE_BUNDLE='com.relayium.mac.Share'
 set_default_args
-expect_refusal 'a Share extension bundle identifier that drifted is refused' "$REFUSED" 'PRODUCT_BUNDLE_IDENTIFIER' "${DEFAULT_ARGS[@]}"
+expect_refusal "the macOS Share extension's bundle identifier is refused for the iOS appex" "$REFUSED" \
+  'PRODUCT_BUNDLE_IDENTIFIER' "${DEFAULT_ARGS[@]}"
+reset_stubs
+
+# And the retired separate-record identity, in both bundles. This is the exact
+# regression the universal-purchase migration can suffer — a project reverted to
+# `com.relayium.app` still builds, still signs if the old profile is installed,
+# and uploads to a record that holds none of this app's subscription products.
+new_fixture
+STUB_APP_BUNDLE='com.relayium.app'
+set_default_args
+expect_refusal 'the retired com.relayium.app app identity is refused' "$REFUSED" \
+  'PRODUCT_BUNDLE_IDENTIFIER' "${DEFAULT_ARGS[@]}"
+reset_stubs
+
+new_fixture
+STUB_SHARE_BUNDLE='com.relayium.app.share'
+set_default_args
+expect_refusal 'the retired com.relayium.app.share extension identity is refused' "$REFUSED" \
+  'PRODUCT_BUNDLE_IDENTIFIER' "${DEFAULT_ARGS[@]}"
+reset_stubs
+
+# The pre-migration profile name, which is the half a partial revert leaves
+# behind: the bundle ids move and the specifier does not.
+new_fixture
+STUB_SHARE_PROFILE='Relayium Share Extension App Store'
+set_default_args
+expect_refusal 'the pre-migration share profile name is refused' "$REFUSED" \
+  'PROVISIONING_PROFILE_SPECIFIER' "${DEFAULT_ARGS[@]}"
 reset_stubs
 
 # ── every precondition satisfied: what the script actually asks xcodebuild ───
@@ -2088,8 +2167,8 @@ else
   expect_option teamID 7PVYUG4YQS
   expect_option signingStyle manual
   expect_option manageAppVersionAndBuildNumber false
-  expect_option 'provisioningProfiles.com\.relayium\.app' 'Relayium iOS App Store'
-  expect_option 'provisioningProfiles.com\.relayium\.app\.share' 'Relayium Share Extension App Store'
+  expect_option 'provisioningProfiles.com\.relayium\.mac' 'Relayium iOS Universal App Store'
+  expect_option 'provisioningProfiles.com\.relayium\.mac\.ShareIOS' 'Relayium iOS Share Extension App Store'
 
   if grep -q 'upload' "$export_options"; then
     bad 'the export options name no upload destination' "$export_options mentions upload"

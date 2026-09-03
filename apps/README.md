@@ -20,11 +20,20 @@
   as `<team>.<group>`, so `AppGroup.identifier` resolves per platform. It ships
   inside the released 1.3.9 app. The system Share menu is verified to list it; a
   real Finder share has not yet been driven by hand.
-- `ios/` — iOS SwiftUI app (`com.relayium.app`), same local package. **In
-  development at 0.3.0 and not public.**
-- `ios/RelayiumShare/` — the iOS Share Extension (`com.relayium.app.share`),
+- `ios/` — iOS SwiftUI app (`com.relayium.mac`), same local package. **In
+  development at 0.3.0 and not public.** The bundle id is macOS's on purpose:
+  iOS and macOS are two platforms of ONE universal-purchase App Store record
+  (Apple ID `6801142976`), and Apple requires every platform in such a record to
+  carry the same Bundle ID. That is also what puts an iOS build in front of the
+  six already-Approved `com.relayium.mac.*` subscription products instead of a
+  catalogue of its own.
+- `ios/RelayiumShare/` — the iOS Share Extension (`com.relayium.mac.ShareIOS`),
   embedded in the app at `PlugIns/RelayiumShare.appex`. Links `RelayiumShareKit`
-  only. **In development at 0.3.0 and not public.** It has run on a physical iPad,
+  only. **In development at 0.3.0 and not public.** Its identifier is *not*
+  `com.relayium.mac.Share` — that is the macOS extension. The target record's
+  iOS TestFlight build metadata reports extension application identifier
+  `7PVYUG4YQS.com.relayium.mac.ShareIOS`, so that is what this project must
+  carry. It has run on a physical iPad,
   where a real system share reached the containing app; coverage of real iPhone
   Photos, Files and third-party providers was still open when work stopped.
 
@@ -95,6 +104,18 @@ earlier pause, and neither the iOS app nor its share extension is publicly
 offered. There is no public App Store release and no Relayium download surface
 offers iOS.
 
+iOS ships as the second platform of the macOS App Store record (Apple ID
+`6801142976`) rather than as a record of its own, so it inherits that record's
+subscription group, its published App Privacy answers, its price schedule and
+its territory selection. Those gates are therefore already met for iOS — they
+were met for the released macOS app — and the iOS `0.3.0` version has **two
+open blocking gates**: no build is selected for it, and its required iPhone and
+iPad screenshot sets are missing. That is a shorter list than it was, not a
+finished one; `docs/app-store-metadata-ios.json` holds the field-by-field
+read-back and remains the authoritative record of what is and is not done. It
+is also not a shorter list of *risks*: sharing a record with a released, paid
+macOS app is what makes an iOS mistake reach macOS customers.
+
 ### Two macOS products, one source
 
 The project builds the same app for two distribution channels. They share every
@@ -113,10 +134,12 @@ the shared code.
 
 Both apps ship bundle id `com.relayium.mac` and both extensions ship
 `com.relayium.mac.Share`: they are one app through two channels, and an
-extension's bundle id has to be prefixed by its host's. Both also produce
-`Relayium.app`, so **build them into separate `-derivedDataPath` directories** —
-otherwise the second build replaces the first's artifact in
-`Build/Products/<config>/`.
+extension's bundle id has to be prefixed by its host's. The iOS app now carries
+that same `com.relayium.mac` — see the iOS section — but its extension is
+`com.relayium.mac.ShareIOS`, so the two `.appex` identifiers stay distinct.
+Both also produce `Relayium.app`, so **build them into separate
+`-derivedDataPath` directories** — otherwise the second build replaces the
+first's artifact in `Build/Products/<config>/`.
 
 The seam is two files, each a member of exactly one target and both declaring
 the same four names, so `RelayiumApp.swift`, `Settings/SettingsView.swift` and
@@ -326,18 +349,35 @@ set on both iOS targets so a signed build can resolve a profile for each.
 **Manual preconditions this repository cannot satisfy**, and which no simulator
 or unsigned build proves:
 
-- the `com.relayium.app` App ID and its provisioning profile must carry the Sign
-  in with Apple capability;
+- the `com.relayium.mac` App ID and its **iOS** provisioning profile must carry
+  the Sign in with Apple capability. The App ID already has the capability —
+  it was enabled for macOS — but a capability on the App ID and a capability in
+  the profile a build is signed with are two different facts, and only the
+  second is what an installed binary carries;
 - the App Group `group.com.relayium.app` must be registered on the developer
   portal and carried by BOTH the app's and the extension's provisioning
   profiles; without it `AppGroup.containerURL` fails closed, the share
   extension refuses with a sentence rather than staging into a container the
   app cannot read, and the Send tab simply never shows a shared draft;
-- production `RELAYIUM_APPLE_CLIENT_IDS` must include `com.relayium.app`, and the
-  deployment must hold the Apple Team ID, Key ID and `.p8` key (without them the
-  route answers 503 rather than pretending);
+- production `RELAYIUM_APPLE_CLIENT_IDS` must include the app's Bundle ID,
+  because the allowlist is checked against the identity token's `aud` and for a
+  native sign-in the `aud` IS the Bundle ID. This one moved with the
+  universal-purchase migration and **needs no production change**: a read-only
+  production check on 2026-09-03 found the allowlist already admitting
+  `com.relayium.mac`, alongside `com.relayium.app` and the web Services ID. The
+  deployment must also hold the Apple Team ID, Key ID and `.p8` key (without
+  them the route answers 503 rather than pretending). Do not read the
+  `com.relayium.app,com.relayium.web` pair in `server/.env.example` as the
+  production value; it is an example file and production is wider than it;
+- the native route must keep refusing the web Services ID `com.relayium.web` as
+  an audience even though the allowlist admits it. That allowlist is shared with
+  the browser flow, so a web identity token would otherwise verify on the native
+  endpoint and buy a native bearer; the server refuses it separately, before any
+  authorization code is spent. Adding the new bundle id does not relax that;
 - the live flow — a real Apple ID on a signed device build, through to an account
   — has not been run. Simulator evidence is compile-and-render evidence only.
+  An admitted audience is not a completed sign-in, and this is the gate the
+  migration did **not** close.
 
 **Deferred, and launch-blocking:** the exchange consumes the authorization code
 but stores no Apple refresh or access token. Apple's account-lifecycle guidance
@@ -990,12 +1030,54 @@ Developer ID identity.
 > no public surface (the root `README.md`, `/apps`, `/releases`, `llms.txt`)
 > may present iOS as a Relayium platform until one is.
 
-`apps/ios/Relayium.xcodeproj` (bundle id `com.relayium.app`,
+`apps/ios/Relayium.xcodeproj` (bundle id `com.relayium.mac`,
 `IPHONEOS_DEPLOYMENT_TARGET = 16.0`, iPhone + iPad) is a SwiftUI app over the
 same local `RelayiumKit` package. **In development at 0.3.0 and not public** —
 internal TestFlight builds were used for development acceptance before the
 earlier pause, but there is no public App Store listing and the website offers
 no iOS download.
+
+The bundle id is shared with macOS because iOS is the second platform of one
+universal-purchase App Store record (Apple ID `6801142976`), which Apple
+requires to carry a single Bundle ID across its platforms. Three identifiers
+deliberately did **not** follow it, and each would be a plausible-looking
+follow-up edit that broke something:
+
+- the Share Extension is `com.relayium.mac.ShareIOS`, not macOS's
+  `com.relayium.mac.Share` — the target record's iOS TestFlight build metadata
+  reports extension application identifier `7PVYUG4YQS.com.relayium.mac.ShareIOS`
+  and the project must match what the record already carries;
+- the UI-test bundle is `com.relayium.ios.UITests`, distinct from macOS's
+  `com.relayium.mac.UITests`, and ships in nothing;
+- the App Group stays `group.com.relayium.app` and the iOS keychain **service**
+  stays `com.relayium.app`. A group is a separately registered container the
+  portal already authorizes, and a keychain service is a lookup key within
+  whatever access group the app already has. Keeping both is continuity with the
+  `com.relayium.mac` iOS/TestFlight lineage — the installs that already wrote
+  under the shared bundle id — and with the existing code; renaming either would
+  strand that lineage's staged share drafts and orphan its stored bearer and
+  stored-link keys. Neither is a migration from the retired identity: moving the
+  main bundle from `com.relayium.app` to `com.relayium.mac` moves this app's
+  implicit default keychain access group with it, so a separately installed
+  `com.relayium.app` development app's items are neither carried over nor
+  exposed, and no explicit `keychain-access-groups` entitlement is added to
+  reach them.
+
+`UniversalPurchaseIdentityTests` holds all of that — both projects, the
+entitlements, the candidate script's constants and the metadata packet — to one
+set of literals. It proves the repository agrees with itself and nothing about
+App Store Connect, the portal or production.
+
+The migration is money-moving, and the reason is worth stating where somebody
+will meet it. Before it, an iOS build signed as `com.relayium.app` matched no
+`apple_products` row and every purchase was refused with `unknown_bundle` — a
+gate that failed safe by accident of identity. After it, an iOS build reaches
+the six live Approved products the released macOS app sells through, and both
+platforms write the *same* subscription `ExternalScope`, so the scope half of
+`ApplySubscriptionSource`'s cross-platform conflict guard no longer separates
+them. Adversarial double-charge, early-grant, wrong-tier and
+cross-platform-conflict evidence is owed before any customer sees an iOS build;
+`docs/ios-app-store-submission.md` records that as an open gate.
 
 R3-A, the first slice, does exactly one thing: receive an anonymous encrypted
 stored link. Paste the link, inspect the decrypted manifest, its safe file
@@ -1024,7 +1106,7 @@ xcodebuild -project apps/ios/Relayium.xcodeproj -scheme Relayium \
 
 ### Share Extension
 
-`apps/ios/RelayiumShare` (bundle id `com.relayium.app.share`,
+`apps/ios/RelayiumShare` (bundle id `com.relayium.mac.ShareIOS`,
 `IPHONEOS_DEPLOYMENT_TARGET = 16.0`, embedded at
 `Relayium.app/PlugIns/RelayiumShare.appex`). Sharing files, folders, photos or
 movies to Relayium from any app copies them into the App Group
@@ -1658,10 +1740,16 @@ a mis-provisioned association cannot widen what the app acts on.
 `web/public/.well-known/apple-app-site-association` names
 `7PVYUG4YQS.com.relayium.mac` and `7PVYUG4YQS.com.relayium.app` for `/d/*` and
 `/cross-network` and nothing else; `aasa.test.mjs` asserts the marketing,
-pricing, legal and account pages are not claimed. The iOS app was added under
-`applinks` only — the same file's `webcredentials` list is a separate permission
-(password AutoFill), it stays as it was, and no iOS entitlement or form asks for
-it.
+pricing, legal and account pages are not claimed. Since the universal-purchase
+migration the iOS app signs as `com.relayium.mac`, so the entry written for the
+Mac app is now both apps'. The second entry is the identifier iOS shipped under
+before the migration and is kept deliberately: development builds carrying it
+are installed on real devices, and removing it would break their link routing
+for no gain. It is backward compatibility, not a second shipping app. The iOS
+app is under `applinks` only — the same file's `webcredentials` list is a
+separate permission (password AutoFill), it stays as it was, and no iOS
+entitlement or form asks for it. AutoFill therefore stays off because of the
+**entitlement** half now, not the site half.
 
 `AppDeepLinkCoordinatorTests` drives all of it against real models — a real
 `CloudDownloadModel` over a stubbed URL session and real realtime models over a
@@ -1702,8 +1790,8 @@ audience listed under "Sign in with Apple" above.
 **Universal Links are unverified on a device, and no package test can change
 that.** The association is fetched from relayium.com and verified by the OS at
 install time, so a simulator proves nothing about whether a tapped link opens
-the app at all. Outstanding: the com.relayium.app App ID carrying the Associated
-Domains capability in its provisioning profile; a signed install actually
+the app at all. Outstanding: the com.relayium.mac App ID carrying the Associated
+Domains capability in its **iOS** provisioning profile; a signed install actually
 claiming `relayium.com`; a `/d/<id>#k=` link tapped in Mail, Messages and Safari
 opening the app on *Receive* with the manifest resolved; the same for
 `/cross-network#c=<code>` landing on *Direct* with both codes prefilled; a link

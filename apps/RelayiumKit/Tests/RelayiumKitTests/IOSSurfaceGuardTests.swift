@@ -2242,7 +2242,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
 
         XCTAssertEqual(project.components(separatedBy: "com.apple.product-type.app-extension").count - 1, 1,
                        "a second app extension would be a second process nobody has reasoned about")
-        XCTAssertEqual(project.components(separatedBy: "PRODUCT_BUNDLE_IDENTIFIER = com.relayium.app.share;").count - 1, 2,
+        XCTAssertEqual(project.components(separatedBy: "PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac.ShareIOS;").count - 1, 2,
                        "the extension's bundle id must be set in both configurations")
         XCTAssertTrue(project.contains("dstSubfolderSpec = 13;"),
                       "the appex must be embedded into PlugIns, or it never loads")
@@ -2419,7 +2419,17 @@ final class IOSSurfaceGuardTests: XCTestCase {
     }
 
     /// The site's side of the association names this app, for exactly the two
-    /// paths it can act on — and still names the Mac app.
+    /// paths it can act on — and still names the identifier retired builds use.
+    ///
+    /// Since the universal-purchase migration this app IS
+    /// `7PVYUG4YQS.com.relayium.mac`, so the entry that was the Mac app's alone
+    /// is now both apps'. The second entry, `7PVYUG4YQS.com.relayium.app`, is
+    /// the identifier iOS shipped under before the migration; it is kept so
+    /// that development builds already installed on real devices keep routing
+    /// links, and it corresponds to no App Store record this project targets.
+    /// The SOURCE file is out of this batch's scope and unchanged — what is
+    /// asserted here is that it still covers the identifier the app now signs
+    /// as, which the exact-list comparison below already does.
     ///
     /// Read here rather than only in the web test because the two halves fail
     /// separately and silently: an entitlement with no matching `appIDs` entry
@@ -2451,15 +2461,24 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "a path was claimed for a hand-off iOS cannot perform")
 
         // `webcredentials` shares the file and is a different permission: the
-        // site allowing password AutoFill for an app. This app claims no
-        // `webcredentials:` entitlement and its sign-in form does not use
-        // AutoFill, so being added there would be a credential-adjacent
-        // association ahead of anything asking for it — and the natural mistake
-        // is to add the ID to both lists because they sit four lines apart.
+        // site allowing password AutoFill for an app.
+        //
+        // The universal-purchase migration changed what this list MEANS without
+        // changing a byte of it, and that is worth stating rather than leaving
+        // for somebody to rediscover. The one entry was written for the Mac app;
+        // this app now signs as the same identifier, so the SITE half of the
+        // AutoFill association now covers iOS too. AutoFill is still off, and
+        // the reason it is off has moved: it is now the ENTITLEMENT half alone.
+        // `Relayium.entitlements` claims `applinks:relayium.com` and no
+        // `webcredentials:relayium.com`, and Apple requires both halves before
+        // AutoFill activates. So the guard that matters after the migration is
+        // the entitlement one — `testTheEntitlementsFileClaimsOnlyAppleSignInAndAppLinks` —
+        // and this assertion's job narrows to catching a SECOND identifier
+        // being added here, which would extend AutoFill to something else.
         let credentials = try XCTUnwrap(
             (json["webcredentials"] as? [String: Any])?["apps"] as? [String])
         XCTAssertEqual(credentials, ["7PVYUG4YQS.com.relayium.mac"],
-                       "the site associates this app for AutoFill, which it does not use")
+                       "the site's AutoFill association changed shape; the app claims no webcredentials entitlement")
     }
 
     /// The bearer is read at the moment of use, only by the surfaces that spend

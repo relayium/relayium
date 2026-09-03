@@ -56,8 +56,11 @@ public enum AppEnvironment {
         return isolated
     }
 
-    /// The iOS credential identity: this app's own bundle id, and NO access
-    /// group. See `KeychainConfiguration.accessGroup`.
+    /// The iOS credential identity. `com.relayium.app` is the stable service
+    /// label of the `com.relayium.mac` iOS/TestFlight lineage, not this app's
+    /// current bundle id: the identity migration must not silently move where
+    /// existing installs read their credentials from. NO access group is set.
+    /// See `KeychainConfiguration.accessGroup`.
     public static let iosKeychainService = "com.relayium.app"
 
     public static func keychainConfiguration(for platform: KeychainPlatform) -> KeychainConfiguration {

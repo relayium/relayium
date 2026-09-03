@@ -133,13 +133,13 @@ final class DeviceInboxAcceptanceSeamTests: XCTestCase {
             launcher.contains(
                 "fixture_container_path=\"Documents/\(ReceiveDestination.folderName)/$fixture_name\""),
             "the launcher no longer reads the brief out of the product's own receive folder")
-        XCTAssertTrue(launcher.contains("bundle_id=\"com.relayium.app\""),
+        XCTAssertTrue(launcher.contains("bundle_id=\"com.relayium.mac\""),
                       "the launcher reads a container that is not the product's")
 
         let suite = try Self.suiteSource()
         XCTAssertTrue(suite.contains("name = \"Relayium product brief.txt\""),
                       "the suite asserts a file name the product does not stage")
-        XCTAssertTrue(suite.contains("bundleID = \"com.relayium.app\""),
+        XCTAssertTrue(suite.contains("bundleID = \"com.relayium.mac\""),
                       "the suite names a bundle that is not the product's")
     }
 

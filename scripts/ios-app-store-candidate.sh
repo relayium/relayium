@@ -24,8 +24,18 @@
 # observe it. A build number is consumed the moment a build is accepted — and
 # also by builds sitting in `Invalid`, `Processing` or expired-TestFlight
 # states — so "build 5 is next" is a local expectation until somebody reads the
-# record. Historical `0.1.0` build 3 of this very record was rejected outright,
-# which is exactly how a number gets consumed without shipping anything.
+# record. A `0.1.0` build was rejected outright during this product's earlier
+# iOS attempts, which is exactly how a number gets consumed without shipping
+# anything.
+#
+# The target record changed under this paragraph and the rule did not. iOS now
+# ships as a platform of the universal-purchase record Apple ID 6801142976,
+# whose iOS TestFlight was read back holding a Validated `0.1.0 (4)`. That makes
+# 4 an observed FLOOR for the highest consumed number on this record, not a
+# ceiling and not the answer: an expired or removed build still holds its
+# number and would not appear. So `--readback-highest-build` remains an operator
+# attestation about a live record, and the floor is only useful in one
+# direction — an attestation BELOW it is provably wrong.
 #
 # So the caller does not tick a box saying they looked. They restate what they
 # saw, in three independent pieces that this script cross-checks against each
@@ -112,7 +122,7 @@
 #     `zh-Hans` inside the app bundle where iOS actually reads it, and NO camera
 #     declaration and no `.lproj` at all in the extension;
 #   * `AVCapture` undefined symbols in the app's OWN binary and in the embedded
-#     WebRTC framework. Build 3 of this record was rejected for a missing
+#     WebRTC framework. An earlier `0.1.0` build was rejected for a missing
 #     `NSCameraUsageDescription` against symbols the app did not knowingly use;
 #     the app now has a real QR scanner, and this readback is what keeps the
 #     declaration and the binary describing the same product.
@@ -121,10 +131,10 @@
 #
 #   scripts/ios-app-store-candidate.sh \
 #     --marketing-version 0.3.0 \
-#     --build 6 \
-#     --readback-highest-build 5 \
+#     --build 5 \
+#     --readback-highest-build 4 \
 #     --readback-observed-at 2026-09-02T11:30:00Z \
-#     --artifact-root /Users/you/relayium/test-builds/ios/0.3.0-6-<short8-sha>
+#     --artifact-root /Users/you/relayium/test-builds/ios/0.3.0-5-<short8-sha>
 #
 # Exit codes are three classes, so a caller can tell them apart: 2 a refused
 # precondition (nothing was built), 3 a failed archive or export (logs kept),
@@ -144,11 +154,37 @@ set -euo pipefail
 # them and refuses on any difference, so a project edit that changes the team,
 # a bundle identifier, the signing style or a profile name cannot silently
 # become a candidate.
+#
+# The two bundle identifiers moved onto the macOS ones, and the reason is
+# structural rather than cosmetic: iOS and macOS are two platforms of ONE
+# universal-purchase App Store record (Apple ID 6801142976), and Apple requires
+# every platform in such a record to carry the SAME Bundle ID. That is also what
+# puts this binary in front of the six already-Approved
+# `com.relayium.mac.{plus,pro,max}.{monthly,yearly}` subscription products, which
+# is why the identity is pinned here as well as in the project: an archive built
+# under the retired `com.relayium.app` would upload to a record that no longer
+# holds this app's catalogue.
+#
+# The profiles are named, not created. This script signs manually and never
+# writes to the developer account, so the two specifiers below fail CLOSED: if
+# `Relayium iOS Universal App Store` or `Relayium iOS Share Extension App Store`
+# does not exist in the account, the archive fails and an operator investigates,
+# which is the correct outcome. Nothing here provisions anything.
 readonly EXPECTED_TEAM='7PVYUG4YQS'
-readonly APP_BUNDLE_ID='com.relayium.app'
-readonly SHARE_BUNDLE_ID='com.relayium.app.share'
-readonly APP_PROFILE='Relayium iOS App Store'
-readonly SHARE_PROFILE='Relayium Share Extension App Store'
+# The App Store record this candidate is for. Recorded so the refusal messages
+# below can NAME it: the failure this gate exists to catch is an operator
+# carrying a number, a bundle or a profile over from the retired separate iOS
+# record, and a message that says only "wrong number" does not tell them that.
+# Not a credential and not a secret — it is the public App Store id.
+readonly TARGET_APPLE_ID='6801142976'
+# The highest build number read back as consumed on that record's iOS platform:
+# a Validated `0.1.0 (4)`. A FLOOR for the operator attestation, never a ceiling
+# — see the refusal that uses it.
+readonly OBSERVED_HIGHEST_BUILD_FLOOR='4'
+readonly APP_BUNDLE_ID='com.relayium.mac'
+readonly SHARE_BUNDLE_ID='com.relayium.mac.ShareIOS'
+readonly APP_PROFILE='Relayium iOS Universal App Store'
+readonly SHARE_PROFILE='Relayium iOS Share Extension App Store'
 readonly APP_TARGET='Relayium'
 readonly SHARE_TARGET='RelayiumShare'
 readonly APP_BUNDLE_NAME='Relayium.app'
@@ -156,6 +192,11 @@ readonly SHARE_BUNDLE_NAME='RelayiumShare.appex'
 readonly SCHEME='Relayium'
 readonly CONFIGURATION='Release'
 readonly ARCHIVE_DESTINATION='generic/platform=iOS'
+# Unchanged by the bundle-id migration, and checked here so that staying put is
+# an assertion rather than an omission. An App Group is a separately registered
+# container, the portal already authorizes this one for both the app and
+# `com.relayium.mac.ShareIOS`, and renaming it would strand every draft an
+# installed build has staged.
 readonly APP_GROUP='group.com.relayium.app'
 readonly ASSOCIATED_DOMAIN='applinks:relayium.com'
 readonly APPLE_SIGNIN_VALUE='Default'
@@ -643,6 +684,30 @@ decimal_increment() {
   printf '%s' "$result"
 }
 
+# True when canonical decimal `$1` is strictly less than canonical decimal `$2`.
+#
+# Written out for the same reason `decimal_increment` is: `$(( ))` is fixed-width
+# signed arithmetic that wraps silently at 2^64, and a wrapped comparison here
+# would answer "the attestation clears the floor" for a number that does not.
+# The regexes above already pinned both operands to canonical decimals with no
+# leading zero, so a longer string is the larger number and equal lengths are
+# decided by the first differing digit. Compared digit by digit rather than with
+# `[[ < ]]` so that no locale's collation is involved in a release gate.
+decimal_less_than() {
+  local a="$1" b="$2" index
+  if [ "${#a}" -ne "${#b}" ]; then
+    [ "${#a}" -lt "${#b}" ]
+    return
+  fi
+  for (( index = 0; index < ${#a}; index++ )); do
+    if [ "${a:index:1}" != "${b:index:1}" ]; then
+      [ "${a:index:1}" -lt "${b:index:1}" ]
+      return
+    fi
+  done
+  return 1
+}
+
 # ── 1. arguments ─────────────────────────────────────────────────────────────
 
 marketing_version=''
@@ -693,8 +758,18 @@ step 'App Store Connect read-back attestation'
 # rule that holds only while an implementation detail holds is not a rule.
 #
 # So the shape is pinned to what App Store Connect actually shows: a build is at
-# least 1, and a highest-consumed build may be 0 because a record with nothing
-# consumed yet is the honest first case.
+# least 1, and a highest-consumed build may be 0, because a record with nothing
+# consumed yet is an honest first case for this SHAPE check.
+#
+# It is no longer an honest case for THIS record, and the two checks are kept
+# apart on purpose. The shape check answers "is this a number at all", which is
+# a property of the argument and true of any record. The floor check further
+# down answers "is this number possible on Apple ID 6801142976", which is a
+# property of one record that was read back holding a Validated `0.1.0 (4)` — so
+# 0 parses here and is refused there, with a message that says which record it
+# contradicts. Folding the floor into this regex would produce "not a canonical
+# decimal" for a perfectly canonical 0, which is the wrong sentence for the
+# mistake actually being made.
 [[ "$build_number" =~ ^[1-9][0-9]*$ ]] ||
   refuse "--build '$build_number' is not a canonical positive decimal build number; write it as [1-9][0-9]* — no leading zero, sign, space or other text"
 [[ "$readback_highest_build" =~ ^(0|[1-9][0-9]*)$ ]] ||
@@ -721,6 +796,25 @@ step 'App Store Connect read-back attestation'
 next_free_build="$(decimal_increment "$readback_highest_build")"
 if [ "$build_number" != "$next_free_build" ]; then
   refuse "--build $build_number is not the next free build after the attested highest consumed build $readback_highest_build; the next free build is $next_free_build"
+fi
+
+# The one half of the attestation this repository CAN falsify.
+#
+# Everything above is a consistency check between two numbers the operator
+# supplies, and it is satisfied just as well by a guess. This is not: the target
+# record's iOS TestFlight was read back holding a Validated `0.1.0 (4)`, so at
+# least four build numbers are consumed on it and an attestation below that
+# floor is provably wrong rather than merely unproven.
+#
+# It is a FLOOR and never a ceiling. Expired, removed and Invalid builds keep
+# their numbers and do not appear in a TestFlight list, so the true highest may
+# be well above this and the operator still owes a live read-back. Refusing
+# below it costs an operator who typed the wrong record's history one message,
+# and it catches the specific migration error this gate exists for: numbering a
+# candidate from the retired `com.relayium.app` record, whose sequence is not
+# this record's.
+if decimal_less_than "$readback_highest_build" "$OBSERVED_HIGHEST_BUILD_FLOOR"; then
+  refuse "--readback-highest-build $readback_highest_build is below $OBSERVED_HIGHEST_BUILD_FLOOR, the highest build this repository has recorded as consumed on Apple ID $TARGET_APPLE_ID; a lower attestation is describing a different record's build sequence"
 fi
 
 [[ "$readback_observed_at" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] ||
@@ -1324,7 +1418,7 @@ if [ -d "$appex_dir" ]; then
   fi
 fi
 
-# The AVCapture readback. Build 3 of this record was rejected for a missing
+# The AVCapture readback. An earlier `0.1.0` build was rejected for a missing
 # camera purpose string against symbols the product did not knowingly use. The
 # app now has a real scanner, so the expectation has flipped: the app's OWN
 # binary must reference capture APIs, and so must the embedded WebRTC framework.

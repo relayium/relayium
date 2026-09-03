@@ -434,7 +434,11 @@ enum UITestMode {
     /// nobody is looking at it. A suite name of this launch's own, removed
     /// first, so one run cannot inherit the answer another established.
     static func inboxDefaults() -> UserDefaults? {
-        // nonlocalized: a defaults suite name, never displayed
+        // nonlocalized: a defaults suite name, never displayed. It is an
+        // arbitrary private namespace rather than an identity, so it did NOT
+        // follow the bundle id onto `com.relayium.mac`: nothing resolves it
+        // from the bundle, no acceptance script names it, and renaming it would
+        // only be churn. It is scoped to this launch and cleared on entry.
         let suite = "com.relayium.app.uitest-inbox"
         guard isActive, let defaults = UserDefaults(suiteName: suite) else { return nil }
         defaults.removePersistentDomain(forName: suite)
@@ -751,7 +755,7 @@ final class UITestAccountTransport: URLProtocol {
     // nonlocalized: an acceptance fixture row, absent from Release
     static let otherDeviceName = "Kitchen laptop"
     // nonlocalized: acceptance fixture identifiers, absent from Release
-    static let bundleID = "com.relayium.app"
+    static let bundleID = "com.relayium.mac"
     static let monthlyProductID = "uitest.subscription.month"
     static let yearlyProductID = "uitest.subscription.year"
 
