@@ -55,7 +55,8 @@ function lastmods(sitemapXml) {
 // nine. That was invisible while the nine locales moved together and became a
 // false statement the moment they stopped: the 2026-08-14 freeze left the seven
 // archived privacy translations at 2026-08-13 while the maintained pair kept
-// moving (2026-08-30, then 2026-09-03 for the iOS platform disclosure), so
+// moving (2026-08-30, then 2026-09-03 for the iOS disclosure and neutral
+// App Store purchase wording), so
 // /ja/privacy/ was telling crawlers it had been revised on a day its prose did
 // not change.
 describe("localized legal URLs are dated from their own locale", () => {

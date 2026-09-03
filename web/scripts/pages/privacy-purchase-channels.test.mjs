@@ -18,7 +18,10 @@
 //     longer complete.
 //
 // So the guards below are no longer "does the word iOS appear". They are the
-// exact per-platform truth, positive and negative, derived from the source:
+// exact per-platform device truth, positive and negative, derived from the
+// source. Purchase-channel wording is the deliberate exception: it names
+// Apple's App Store without naming a platform, so it remains true before and
+// after the reviewed iOS binary becomes public.
 //
 //   · device label — `AppEnvironment.deviceName()` returns
 //     `Host.current().localizedName` on macOS and `deviceFamilyName(
@@ -146,44 +149,96 @@ describe("maintained copy truthfully discloses identifier-free activation aggreg
   });
 });
 
-describe("maintained copy names Apple in-app purchase as macOS AND iOS app behaviour", () => {
-  it("english names both platforms in both places the claim appears", () => {
-    const all = strings(privacy.langs.en);
-    // The processor list.
-    expect(all).toContain(
-      "Apple, for subscriptions purchased inside our macOS or iOS app via in-app purchase — see Payments.",
+describe("maintained copy names Apple's App Store as the native purchase channel", () => {
+  // Superseded on 2026-09-03. The 2026-08-28 correction was right that a policy
+  // may not name a purchase channel a reader cannot reach, and it fixed that by
+  // naming macOS. That answer is now too narrow in the other direction: this
+  // page is about to be entered as the Privacy Policy URL on the iOS App Store
+  // Connect record, so "in our macOS app" becomes a false statement about an
+  // iOS purchase the moment one is possible — while platform-specific purchase
+  // wording can imply that the not-yet-public iOS purchase channel is live.
+  //
+  // Platform-neutral wording is the only phrasing true in both states: the
+  // store is Apple's App Store, the seller is Apple, and the policy names
+  // neither a platform that cannot buy nor one that does not ship. Both halves
+  // are pinned below, so neither the retired macOS-only wording nor a premature
+  // iOS purchase-channel claim can come back. This bridge deliberately changes the
+  // purchase channel ONLY; the per-platform device-data section is a separate
+  // claim and keeps describing the real macOS and pre-publication iOS binaries.
+  const NEUTRAL_PROCESSOR = {
+    en: "Apple, for subscriptions purchased through Apple's App Store — see Payments.",
+    zh: "Apple——通过 Apple 的 App Store 购买订阅时的处理方，详见「支付」。",
+  };
+
+  it("names the store rather than a platform, in the processor list", () => {
+    for (const lang of MAINTAINED_LANGS) {
+      expect(strings(privacy.langs[lang]), `${lang} processor list`).toContain(
+        NEUTRAL_PROCESSOR[lang],
+      );
+    }
+  });
+
+  it("english Payments names the store, the signed transaction and the binding token", () => {
+    const payments = strings(privacy.langs.en).find((s) =>
+      s.startsWith("In a native app, subscriptions are bought"),
     );
-    // The Payments section itself.
-    const payments = all.find((s) => s.startsWith("In our native apps, on macOS and on iOS alike"));
-    expect(payments, "the Payments bullet must cover both native platforms").toBeTruthy();
+    expect(payments, "the Payments bullet must lead with a platform-neutral native app").toBeTruthy();
+    expect(payments).toMatch(/through Apple's App Store rather than from us/);
     expect(payments).toMatch(/Apple processes the payment under your Apple ID/);
-    expect(payments).toMatch(/we never see your payment method/);
-    // `appAccountToken`: minted by us, handed to Apple with the purchase, and
-    // returned inside the signed transaction. Naming only half of that round
-    // trip understates what leaves the device.
+    // The two things a native app actually sends us on a purchase, and the only
+    // two: Apple's signed transaction, and the random token that binds it to an
+    // account. Both are named because both leave the device.
+    expect(payments).toMatch(/Apple's signed record of the transaction/);
     expect(payments).toMatch(/random token that ties an App Store purchase to your Relayium account/);
-    expect(payments).toMatch(/hands that token to Apple with the purchase/);
   });
 
-  it("chinese says the same thing in its own words", () => {
-    const all = strings(privacy.langs.zh);
-    expect(all).toContain(
-      "Apple——在我们的 macOS 或 iOS App 内通过应用内购买订阅时的处理方，详见「支付」。",
+  it("chinese Payments says the same thing in its own words", () => {
+    const payments = strings(privacy.langs.zh).find((s) =>
+      s.startsWith("在原生 App 内，订阅是通过 Apple 的 App Store 购买的"),
     );
-    const payments = all.find((s) => s.startsWith("在我们的原生 App 内——macOS 与 iOS 同样如此"));
-    expect(payments, "the Payments bullet must cover both native platforms").toBeTruthy();
+    expect(payments, "the Payments bullet must lead with a platform-neutral native app").toBeTruthy();
     expect(payments).toMatch(/Apple 从你的 Apple ID 处理支付/);
-    expect(payments).toMatch(/App 在购买时把该令牌交给 Apple/);
+    expect(payments).toMatch(/Apple 签名的交易记录/);
+    expect(payments).toMatch(/随机令牌，把 App Store 购买与你的 Relayium 账号关联起来/);
   });
 
-  it("keeps Stripe as the web channel, so adding iOS did not merge two processors", () => {
-    // The negative tests elsewhere would also pass if somebody collapsed both
-    // channels into Apple, which would be a different lie — so both processors
-    // are required to still be named, each on its own surface.
+  it("does not restore a platform-specific purchase channel", () => {
+    // Scoped to the purchase claim. "macOS" remains required in the separate
+    // per-platform device-data section; what may not return is a sentence that
+    // makes macOS the place a subscription is bought.
+    const RETIRED_PLATFORM_SPECIFIC = {
+      en: [
+        { label: "purchased inside our macOS app", re: /purchased inside our macOS app/i },
+        { label: "In our macOS app, subscriptions are bought", re: /In our macOS app, subscriptions are bought/i },
+        { label: "macOS scoped to a purchase", re: /macOS[^.]{0,60}(in-app purchase|subscriptions are bought)/i },
+        { label: "iOS scoped to a purchase", re: /iOS[^.]{0,60}(in-app purchase|subscriptions are bought)/i },
+      ],
+      zh: [
+        { label: "在我们的 macOS App 内通过应用内购买", re: /在我们的 macOS App 内通过应用内购买/ },
+        { label: "在我们的 macOS App 内，订阅", re: /在我们的 macOS App 内，订阅/ },
+        { label: "macOS App 作用域内的购买", re: /macOS App[^。]{0,40}应用内购买/ },
+        { label: "iOS App 作用域内的购买", re: /iOS App[^。]{0,40}应用内购买/ },
+      ],
+    };
+    for (const lang of MAINTAINED_LANGS) {
+      const text = textOf(lang);
+      for (const { label, re } of RETIRED_PLATFORM_SPECIFIC[lang]) {
+        expect(
+          re.test(text),
+          `${lang} privacy policy restored a platform-specific purchase channel (${label})`,
+        ).toBe(false);
+      }
+    }
+  });
+
+  it("keeps both processors named, so going neutral did not drop one", () => {
+    // The negative tests above would also pass if somebody deleted the Apple
+    // bullet outright, which would be a different lie — so both processors are
+    // required to still be named, each on its own channel.
     expect(textOf("en")).toMatch(/On the web, payments are handled by Stripe/);
-    expect(textOf("en")).toMatch(/Card details go to Stripe, not to us/);
+    expect(textOf("en")).toMatch(/subscriptions are bought through Apple's App Store/);
     expect(textOf("zh")).toMatch(/在网页端，支付由 Stripe 处理/);
-    expect(textOf("zh")).toMatch(/卡片信息提交给 Stripe，而非我们/);
+    expect(textOf("zh")).toMatch(/订阅是通过 Apple 的 App Store 购买的/);
   });
 
   it("never lets a card number or a payment method be described as ours", () => {

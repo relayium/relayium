@@ -55,14 +55,12 @@ describe("legal pages describe temporary text accurately", () => {
       // byte counters kept per account for a quota, and not analytics.
       const metering = sectionBlob(privacy, lang, 5);
 
-      // The maintained pair moved again on 2026-09-03, when the native-app
-      // section stopped being macOS-only and started describing the iOS binary
-      // under App Store review as well — App Review reads this URL, and
-      // Guideline 5.1.1 asks the linked policy to describe the app it is linked
-      // from. The 2026-08-30 aggregate disclosure and the earlier native-app
-      // correction remain in the same maintained copy. The seven frozen
-      // translations are archived at the 2026-08-14 language freeze and keep the
-      // date their prose was last actually true for.
+      // The maintained pair moved again on 2026-09-03: its native-app section
+      // now describes the iOS binary under review, while purchase-channel copy
+      // stays platform-neutral until that app is public. The identifier-free
+      // activation aggregate and earlier native-app corrections remain in the
+      // same maintained copy. The seven frozen translations keep the date their
+      // prose was last actually true for.
       expect(privacy.langs[lang].updated).toBe(
         MAINTAINED_LANGS.includes(lang) ? "2026-09-03" : "2026-08-13",
       );
