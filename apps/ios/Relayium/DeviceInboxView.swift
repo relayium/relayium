@@ -142,7 +142,7 @@ struct DeviceInboxView: View {
             // shared rule rather than reusing it.
             if let recovery = IOSInboxCopy.recovery(for: inbox.state) {
                 Button(IOSInboxCopy.label(for: recovery)) { perform(recovery) }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
                     .accessibilityIdentifier("inbox-recovery")
             }
@@ -256,7 +256,7 @@ struct DeviceInboxView: View {
             Button(L10n.t(.inboxAskDecline), role: .destructive) {
                 inbox.respond(toAsk: item.id, accept: false)
             }
-            .buttonStyle(.bordered)
+            .borderedAction(.destructive)
             .controlSize(.large)
         }
         .accessibilityElement(children: .contain)
@@ -290,6 +290,7 @@ struct DeviceInboxView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
                 Button(L10n.t(.commonRefresh), action: refreshTargets)
+                    .textAction()
                     .disabled(deliveries.directory == .loading)
                     .accessibilityIdentifier("inbox-devices-refresh")
             }

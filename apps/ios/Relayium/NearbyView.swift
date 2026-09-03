@@ -396,11 +396,11 @@ struct NearbyView: View {
             switch receive.state {
             case .paused:
                 Button(L10n.t(.nearbyResumeReceiving)) { residency.resume() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
             case .connecting, .ready, .reconnecting, .active:
                 Button(L10n.t(.nearbyPauseReceiving)) { residency.pause() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
                     .disabled(busy)
             case .off:
@@ -460,6 +460,7 @@ struct NearbyView: View {
                     Text(summary).font(.subheadline.weight(.semibold))
                     Spacer(minLength: 0)
                     Button(L10n.t(.commonClear)) { selection.clear() }
+                        .textAction()
                         .disabled(busy)
                 }
                 // One element, so VoiceOver reads "3 files" rather than
@@ -486,7 +487,7 @@ struct NearbyView: View {
                 Button { isChoosingFiles = true } label: {
                     Text(L10n.t(.commonChooseFilesOrFolders)).frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
                 .disabled(busy)
             }
@@ -529,7 +530,7 @@ struct NearbyView: View {
             // again" belongs here rather than beside the pause control, which
             // is about a different decision.
             Button(L10n.t(.nearbyLookAgain)) { residency.refresh() }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
                 .disabled(busy)
         }
@@ -544,8 +545,14 @@ struct NearbyView: View {
             if selected { discovery.clearSelection() } else { discovery.select(device.id) }
         } label: {
             HStack(spacing: Metrics.inner) {
+                // `actionLabel`, not `action`. This glyph is the FIRST carrier
+                // of "this is the one you chose", and it sits on
+                // `Palette.actionSurface` — the accent as a foreground on a
+                // wash of itself, which is the pair a real screenshot measured
+                // at 2.70:1 against the 3:1 a meaningful non-text graphic owes.
+                // The label role clears it at 6.7:1 and is unchanged in Light.
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selected ? Palette.action : Color.secondary)
+                    .foregroundStyle(selected ? Palette.actionLabel : Color.secondary)
                 // The peer's own name, already stripped of control and bidi
                 // characters by `safeDisplayName`.
                 Text(device.label)
@@ -677,7 +684,7 @@ struct NearbyView: View {
             }
             if hasRetainedSession && !busy {
                 Button(L10n.t(.nearbyBackToDevices)) { leaveOrConfirm() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
                 if modes.mode == .text {
                     // Says so rather than surprising: leaving is the one action
@@ -742,6 +749,7 @@ struct NearbyView: View {
         VStack(alignment: .leading, spacing: Metrics.tight) {
             failureLine(notice)
             Button(L10n.t(.commonDismiss)) { foreground.dismissInterruption() }
+                .textAction()
         }
     }
 

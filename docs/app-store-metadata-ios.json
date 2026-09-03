@@ -320,7 +320,7 @@
     "anyFeatureClaimed": false,
     "note": "Apple's Accessibility Nutrition Label is a per-device-family claim about tasks a user can actually complete. Nothing here may be claimed until the common tasks have been exercised per device family with the feature switched on. Reconcile this feature list against App Store Connect's own questionnaire at submission time rather than trusting this copy of it.",
     "knownBlockers": [
-      "Dark appearance: the .bordered button label measures approximately 2:1 against its fill, below the 4.5:1 the Sufficient Contrast claim requires. Sufficient Contrast is therefore not claimable on either device family. Fixing the contrast is a separate scoped task and is deliberately not part of this metadata batch."
+      "Light appearance: enabled body copy drawn in Color.secondary (iOS's own secondaryLabel) measures about 3.3 to 3.4 to 1 against the surfaces behind it, below the 4.5:1 the Sufficient Contrast claim requires for normal text. Measured in pixels off rendered simulator screenshots at 3x; Apple's own audit reports it as 'nearly passed' rather than 'failed', which is an explanation and not a pass. Sufficient Contrast is therefore not claimable on either device family. The previously recorded dark .bordered button blocker is resolved and is no longer the reason: the dark action-label and small-symbol failures were fixed and re-measured between about 4.9 and 7.4 to 1, and apps/ios/RelayiumUITests/AppShellUITests.swift now runs the contrast audit in both appearances and classifies this remaining Light finding explicitly as open rather than as a false positive. Fixing it means replacing the system's secondary label with a token of this app's own across every surface, which is a separate scoped task and is deliberately not part of this metadata batch. Exact per-element ratios are recorded in docs/ios-app-store-submission.md."
     ],
     "deviceFamilies": [
       {
@@ -345,7 +345,7 @@
             "id": "sufficient-contrast",
             "claimed": false,
             "assessment": "not-assessed",
-            "blocker": "Dark .bordered button label is approximately 2:1."
+            "blocker": "Light Color.secondary body text is about 3.3 to 3.4 to 1, below 4.5:1. The dark .bordered label blocker is resolved and re-measured above 4.5:1."
           },
           {
             "id": "reduced-motion",
@@ -396,7 +396,7 @@
             "id": "sufficient-contrast",
             "claimed": false,
             "assessment": "not-assessed",
-            "blocker": "Dark .bordered button label is approximately 2:1."
+            "blocker": "Light Color.secondary body text is about 3.3 to 3.4 to 1, below 4.5:1. The dark .bordered label blocker is resolved and re-measured above 4.5:1."
           },
           {
             "id": "reduced-motion",

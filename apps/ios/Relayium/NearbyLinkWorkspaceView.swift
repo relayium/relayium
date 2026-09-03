@@ -186,7 +186,7 @@ struct NearbyLinkWorkspaceView: View {
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
             Button(L10n.t(.linkVerifyDiffers), role: .destructive) { link.rejectSAS() }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
         }
@@ -285,7 +285,7 @@ struct NearbyLinkWorkspaceView: View {
             Button { isChoosingFiles = true } label: {
                 Text(L10n.t(.linkSendFilesOrFolders)).frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .borderedAction()
             .controlSize(.large)
             .disabled(!link.acceptsWork)
             // Where an accepted inbound batch lands. iOS has no folder picker
@@ -362,7 +362,7 @@ struct NearbyLinkWorkspaceView: View {
                 Button(L10n.t(.linkDeclineFiles), role: .destructive) {
                     link.rejectInboundBatch()
                 }
-                    .buttonStyle(.bordered)
+                    .borderedAction(.destructive)
                     .controlSize(.large)
                     .frame(maxWidth: .infinity)
             }
@@ -370,14 +370,14 @@ struct NearbyLinkWorkspaceView: View {
                 Button(L10n.t(.commonCancel), role: .destructive) {
                     link.cancelQueuedBatch(batch.id)
                 }
-                    .buttonStyle(.bordered)
+                    .borderedAction(.destructive)
                     .controlSize(.large)
             }
             if case .transferring = batch.state, batch.direction == .outbound {
                 Button(L10n.t(.commonCancel), role: .destructive) {
                     link.cancelOutboundBatch()
                 }
-                    .buttonStyle(.bordered)
+                    .borderedAction(.destructive)
                     .controlSize(.large)
             }
             received(batch)
@@ -399,7 +399,7 @@ struct NearbyLinkWorkspaceView: View {
                 ShareLink(items: payload.dragURLs) {
                     Text(L10n.t(.commonShare)).frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
             }
         }
@@ -429,7 +429,7 @@ struct NearbyLinkWorkspaceView: View {
     private var exit: some View {
         VStack(alignment: .leading, spacing: Metrics.hairline) {
             Button(exitTitle, role: isEnded ? nil : .destructive) { leave() }
-                .buttonStyle(.bordered)
+                .borderedAction(isEnded ? .ordinary : .destructive)
                 .controlSize(.large)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

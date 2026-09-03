@@ -105,6 +105,7 @@ struct AccountSummaryView: View {
                     InlineMessage(.warning, cleanupWarning)
                     Button(L10n.t(.commonDismiss)) { management.dismissKeyCleanupWarning() }
                         .font(.callout)
+                        .textAction()
                 }
             }
 
@@ -278,6 +279,7 @@ struct AccountSummaryView: View {
             if IOSAppleSubscriptions.channel.showsWebPlanHandoff {
                 Button(L10n.t(.accountManagePlan)) { openURL(AppEnvironment.plansWebURL) }
                     .font(.callout)
+                    .textAction()
             }
 
             meter(L10n.t(.accountTraffic), UsagePresentation.display(usage.traffic))
@@ -383,7 +385,7 @@ struct AccountSummaryView: View {
             // belongs to this row, and a full-width destructive button on every
             // device would read as the screen's primary action repeated.
             Button(L10n.t(.commonRevoke), role: .destructive) { deviceToRevoke = device }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
                 .disabled(management.isBusy(row: device.id))
                 // The visible label is one word on every row, which is right to
@@ -471,7 +473,7 @@ struct AccountSummaryView: View {
                         }
                     }
                 }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
             case .unavailable(let explanation):
                 // The honest version of a disabled button: the key was only ever
@@ -487,7 +489,7 @@ struct AccountSummaryView: View {
             }
 
             Button(L10n.t(.commonDelete), role: .destructive) { fileToDelete = row.file }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
                 .disabled(management.isBusy(row: row.id))
                 .accessibilityLabel(AccountPresentation.deleteActionLabel(fileId: row.file.id))
@@ -543,7 +545,7 @@ struct AccountSummaryView: View {
             Button { refresh() } label: {
                 Text(L10n.t(.commonRefresh)).frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .borderedAction()
             .controlSize(.large)
             // Handed to the coordinator rather than performed here. Doing it
             // here would be a second logout path racing the self-revoke one, and
@@ -551,7 +553,7 @@ struct AccountSummaryView: View {
             Button(role: .destructive) { signOut.signOut(scope: scope) } label: {
                 Text(L10n.t(.commonSignOut)).frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .borderedAction(.destructive)
             .controlSize(.large)
         }
     }
@@ -609,7 +611,7 @@ struct AccountSummaryView: View {
                 Button(L10n.t(.accountDeleteAccount), role: .destructive) {
                     confirmingAccountDeletion = true
                 }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
             }
         }

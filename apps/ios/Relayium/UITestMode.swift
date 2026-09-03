@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import RelayiumAppKit
 import RelayiumKit
+import SwiftUI
 
 #if DEBUG
 /// One injected file selection, made once, by an object that owns its own
@@ -598,8 +599,30 @@ enum UITestMode {
             at: documents.appendingPathComponent(ReceiveDestination.folderName,
                                                  isDirectory: true))
     }
+    /// **Dark appearance, asked for by the launch rather than by the device.**
+    ///
+    /// `XCUIDevice.shared.appearance` is the API this would otherwise use, and
+    /// it does not work: setting it to `.dark` on Xcode 26.6 / iOS 26 leaves
+    /// the simulator in Light, and a screenshot taken straight afterwards is
+    /// Light. A contrast audit that believes it ran in Dark and did not is
+    /// worse than no dark audit — it reports the Light findings under a Dark
+    /// heading — so the appearance is a fact about the LAUNCH here, and
+    /// `AppShellUITests` proves from a real screenshot that it took.
+    ///
+    /// `.preferredColorScheme` is the whole mechanism: it sets the trait for
+    /// the scene, so every semantic UIKit colour, every asset appearance and
+    /// every `Palette` role resolves exactly as it does on a device set to
+    /// Dark. Nothing else in the app reads this.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let darkAppearanceArgument = "--relayium-ui-testing-dark-appearance"
+    static let forcedColorScheme: ColorScheme? =
+        ProcessInfo.processInfo.arguments.contains(darkAppearanceArgument) ? .dark : nil
+
     #else
     static let isActive = false
+    /// `nil`, and unreachable: a shipped launch has no argument that could set
+    /// it, so the scene keeps whatever appearance the device is in.
+    static let forcedColorScheme: ColorScheme? = nil
     /// false, and unreachable: a shipped launch never takes the acceptance arm
     /// of the residency gate, because `isActive` is already false beside it.
     static let allowsResidency = false

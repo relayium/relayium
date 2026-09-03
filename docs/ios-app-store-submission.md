@@ -1137,18 +1137,33 @@ one while the label state is `unassessed`.
 
 ### The known blocker
 
-In dark appearance, the label of a `.bordered` button measures approximately
-**2:1** against its fill — well below the 4.5:1 that a Sufficient Contrast claim
-requires. **Sufficient Contrast is therefore not claimable on either device
-family**, and the packet carries that blocker on the feature row itself rather
-than only in prose, so deleting it fails the validator.
+In light appearance, enabled body copy drawn in `Color.secondary` — iOS's own
+`secondaryLabel` — measures **3.29–3.44:1** against the surfaces behind it, below
+the 4.5:1 that a Sufficient Contrast claim requires for normal text. Measured in
+pixels off rendered simulator screenshots at 3×. Apple's own audit
+reports it as *nearly passed* rather than *failed*, and it is Apple's colour used
+for secondary copy in every iOS app — but that is an explanation, not a pass.
+**Sufficient Contrast is therefore not claimable on either device family**, and
+the packet carries that blocker on the feature row itself rather than only in
+prose, so deleting it fails the validator.
 
-Fixing the contrast is a **separate scoped task**. It is not part of the
-metadata batch, and this record does not pretend it has been done.
+**What changed, and what did not.** The blocker recorded here previously was a
+different one: the dark `.bordered` button label at approximately 2:1. That is
+**resolved**. The dark action-label and small-symbol failures were fixed against
+a semantic `ActionLabel` role and re-measured on real screenshots at **4.91:1 to
+7.36:1**, and `apps/ios/RelayiumUITests/AppShellUITests.swift` now runs the
+system contrast audit in *both* appearances rather than subtracting it. This
+remaining light-appearance finding is classified there explicitly as **open** —
+not as a false positive — sentence by sentence, so a new one fails the gate
+rather than joining a class.
+
+Fixing it means replacing the system's secondary label with a token of this
+app's own across every surface. That is a **separate scoped task**. It is not
+part of the metadata batch, and this record does not pretend it has been done.
 
 ### Why nothing else is claimable either
 
-Contrast is the only *measured* blocker. Every other feature is unclaimable for
+Contrast is still the only *measured* blocker. Every other feature is unclaimable for
 a different and equally binding reason: the common tasks have not been run with
 the feature switched on, per device family. A feature that has not been
 exercised is `not-assessed`, not "probably fine".

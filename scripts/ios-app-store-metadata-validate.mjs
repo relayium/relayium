@@ -936,7 +936,7 @@ packet.accessibilityNutritionLabel.deviceFamilies.forEach((family, index) => {
   if (contrast && typeof contrast.blocker !== "string") {
     fail(
       `${path}.features`,
-      "sufficient-contrast must carry its known blocker; the dark .bordered button label measures about 2:1",
+      "sufficient-contrast must carry its known blocker; Light Color.secondary body text measures 3.29-3.44:1",
     );
   }
 });

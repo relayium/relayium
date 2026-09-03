@@ -157,7 +157,7 @@ struct SendView: View {
             Button(role: .destructive) { selection.discardSharedDraft(draft.id) } label: {
                 Text(L10n.t(.uploadDiscard)).frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .borderedAction(.destructive)
             .controlSize(.large)
         }
         .accessibilityElement(children: .contain)
@@ -242,7 +242,7 @@ struct SendView: View {
             VStack(alignment: .leading, spacing: Metrics.inner) {
                 ProgressView { Text(L10n.t(.uploadCheckingRecovery)) }
                 Button(L10n.t(.commonCancel)) { upload.cancel() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
             }
         case .preparing:
@@ -252,7 +252,7 @@ struct SendView: View {
             VStack(alignment: .leading, spacing: Metrics.inner) {
                 ProgressView { Text(L10n.t(.uploadPreparing)) }
                 Button(L10n.t(.commonCancel)) { upload.cancel() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
             }
         case let .uploading(sent, total):
@@ -309,7 +309,7 @@ struct SendView: View {
             Button(role: .destructive) { selection.discardPendingUpload() } label: {
                 Text(L10n.t(.uploadDiscard)).frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .borderedAction(.destructive)
             .controlSize(.large)
         }
         // One element for the explanation, so VoiceOver reads the situation as
@@ -328,7 +328,7 @@ struct SendView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button(L10n.t(.commonCancel)) { upload.cancel() }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
         }
     }
@@ -364,6 +364,7 @@ struct SendView: View {
                     Text(summary).font(.subheadline.weight(.semibold))
                     Spacer(minLength: 0)
                     Button(L10n.t(.commonClear)) { selection.clear() }
+                        .textAction()
                         .disabled(busy)
                 }
                 // One element, so VoiceOver reads "3 files" rather than
@@ -404,7 +405,7 @@ struct SendView: View {
                 Button { isChoosingFiles = true } label: {
                     Text(L10n.t(.commonChooseFilesOrFolders)).frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
                 .disabled(busy)
             }
@@ -414,7 +415,7 @@ struct SendView: View {
                          matching: .any(of: [.images, .videos])) {
                 Text(L10n.t(.sendChoosePhotos)).frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .borderedAction()
             .controlSize(.large)
             .disabled(busy)
         }
@@ -494,7 +495,7 @@ struct SendView: View {
                 .fixedSize(horizontal: false, vertical: true)
             PendingFileList(sessionFiles: upload.sessionFiles)
             Button(L10n.t(.commonCancel)) { upload.cancel() }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
         }
     }
@@ -544,7 +545,7 @@ struct SendView: View {
                         .frame(maxWidth: .infinity)
                 }
             }
-            .buttonStyle(.bordered)
+            .borderedAction()
             .controlSize(.large)
             Text(L10n.t(.commonExpires, [
                 L10n.date(Date(timeIntervalSince1970: TimeInterval(expiresAt)),
@@ -559,7 +560,7 @@ struct SendView: View {
                 copiedGeneratedLink = false
                 selection.resetUpload()
             }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
         }
         .onChange(of: link) { _ in copiedGeneratedLink = false }
@@ -575,7 +576,7 @@ struct SendView: View {
             // retry the same staged bytes rather than sending them back to the
             // app they came from.
             Button(L10n.t(.commonTryAgain)) { selection.resetUpload() }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
         }
     }

@@ -34,7 +34,7 @@ struct DirectFileSessionView: View {
                 ProgressView { Text(L10n.t(.sessionConnecting)) }
                 fileList
                 Button(L10n.t(.commonCancel)) { model.cancel() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
             }
 
@@ -70,7 +70,7 @@ struct DirectFileSessionView: View {
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
             Button(L10n.t(.sessionTheyDontMatch), role: .destructive) { model.rejectSAS() }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
         }
@@ -95,7 +95,7 @@ struct DirectFileSessionView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button(L10n.t(.commonCancel), role: .destructive) { model.cancel() }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
         }
     }
@@ -137,7 +137,7 @@ struct DirectFileSessionView: View {
             // `cancel()`, not a bare state reset: it is the one path that also
             // lets go of the connection a terminal state leaves retained.
             Button(L10n.t(.commonDone), action: onDone)
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
         }
     }

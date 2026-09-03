@@ -47,7 +47,7 @@ struct DirectTextSessionView: View {
             case .joining, .connecting:
                 ProgressView { Text(L10n.t(.textConnecting)) }
                 Button(L10n.t(.commonCancel)) { model.reset() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
             case let .verifying(sas):
                 verify(sas)
@@ -110,7 +110,7 @@ struct DirectTextSessionView: View {
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
             Button(L10n.t(.sessionTheyDontMatch), role: .destructive) { model.rejectSAS() }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
         }
@@ -127,7 +127,7 @@ struct DirectTextSessionView: View {
                     .textSelection(.enabled)
             }
             Button(L10n.t(.commonEndSession), role: .destructive) { endOrConfirmDraftDiscard() }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
         }
     }
@@ -162,7 +162,7 @@ struct DirectTextSessionView: View {
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
             Button(L10n.t(.commonReject), role: .destructive) { model.reject() }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
         }
@@ -207,7 +207,7 @@ struct DirectTextSessionView: View {
             }
                 .disabled(model.history.isEmpty)
             Button(L10n.t(.commonEndSession), role: .destructive) { endOrConfirmDraftDiscard() }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
         }
     }
@@ -319,7 +319,7 @@ struct DirectTextSessionView: View {
                     Label(L10n.t(copiedDraft ? .commonCopied : .commonCopy),
                           systemImage: copiedDraft ? "checkmark" : "doc.on.doc")
                 }
-                .buttonStyle(.bordered)
+                .borderedAction()
             }
         }
     }

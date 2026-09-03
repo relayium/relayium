@@ -10,14 +10,15 @@ import SwiftUI
 ///
 /// ## What it does NOT contain
 ///
-/// No colour of its own beyond the two roles below, and no hex value anywhere.
-/// UIKit already has semantic backgrounds and label colours that answer light
-/// mode, dark mode, Increase Contrast and Smart Invert correctly, and a literal
-/// written here would answer none of them. The one brand colour in the app is
-/// the `AccentColor` asset — `#6D28D9`, `#7C3AED` in dark, the same asset values
-/// the Mac ships — and it is reached through `Color.accentColor`, which is also
-/// what makes the system draw the tab bar, switches, selection and prominent
-/// buttons in it for free. `Palette` exists to say where it may and may not go.
+/// No colour of its own beyond the roles below, and no hex value anywhere. UIKit
+/// already has semantic backgrounds and label colours that answer light mode,
+/// dark mode, Increase Contrast and Smart Invert correctly, and a literal
+/// written here would answer none of them. Both brand values in the app are
+/// assets: `AccentColor` — `#6D28D9`, `#7C3AED` in dark, the same asset values
+/// the Mac ships — reached through `Color.accentColor`, which is also what makes
+/// the system draw the tab bar, switches, selection and prominent buttons in it
+/// for free; and `ActionLabel`, which `Components/ActionButton.swift` declares
+/// and explains. `Palette` exists to say where each may and may not go.
 ///
 /// No fonts either. Every string in this app uses a semantic text style so it
 /// scales with the user's setting; the one deliberate exception is
@@ -57,7 +58,14 @@ enum Metrics {
 /// Everything resolves through `Color.accentColor`, so the asset is the single
 /// source and dark mode is already answered.
 enum Palette {
-    /// The primary action, the current selection, the reached state.
+    /// The brand as a FILL: the tab bar's selection, a switch, a
+    /// `.borderedProminent` shape, and the wash below.
+    ///
+    /// Not a foreground. White on this measures 5.6–5.7:1 and is correct; this
+    /// colour ON something measured 2.02–2.99:1 and is not, which is what
+    /// `Palette.actionLabel` in `Components/ActionButton.swift` answers. The
+    /// split is the one rule to keep: an accent-coloured label or meaningful
+    /// symbol uses that role, never this one.
     static var action: Color { .accentColor }
     /// The same colour at the weight a background can carry behind a symbol —
     /// used for the one current stop on a path rail, never for a block of copy.

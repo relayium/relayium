@@ -663,6 +663,11 @@ struct RelayiumApp: App {
                      navigation: navigation, shell: shell, presence: presence,
                      deepLinks: deepLinks, deepLinkRouting: deepLinkRouting)
                 .environmentObject(session)
+                // Debug-only, and `nil` in every shipped launch — see
+                // `UITestMode.forcedColorScheme`. It exists because the
+                // accessibility contrast gate has to be able to run the app in
+                // Dark and prove it did.
+                .preferredColorScheme(UITestMode.forcedColorScheme)
                 // The conversation composer's staged batch. Injected rather than
                 // passed down through the shell, because the shell renders none
                 // of it and threading it through four initializers would put a

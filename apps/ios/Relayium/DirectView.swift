@@ -47,7 +47,7 @@ private struct PairingJoinLinkView: View {
                     HStack(spacing: Metrics.tight) { copyButton; shareButton }
                 }
             }
-            .buttonStyle(.bordered)
+            .borderedAction()
             .controlSize(.large)
 
             if copied {
@@ -385,7 +385,7 @@ struct DirectView: View {
                 // partial write to discard, and `.failed` still holds the dead
                 // connection.
                 Button(L10n.t(.commonDone)) { file.cancel() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
             }
         case .minting:
@@ -393,7 +393,7 @@ struct DirectView: View {
                 ProgressView { Text(L10n.t(.directCreatingCode)) }
                 PendingFileList(sessionFiles: file.sessionFiles)
                 Button(L10n.t(.commonCancel)) { file.cancel() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
             }
         case let .showingCode(code, expiresAt):
@@ -439,6 +439,7 @@ struct DirectView: View {
                         Text(summary).font(.subheadline.weight(.semibold))
                         Spacer(minLength: 0)
                         Button(L10n.t(.commonClear)) { selection.clear() }
+                            .textAction()
                     }
                     // One element, so VoiceOver reads "3 files" rather than
                     // stopping on each fragment of the summary.
@@ -464,7 +465,7 @@ struct DirectView: View {
                     Button { isChoosingFiles = true } label: {
                         Text(L10n.t(.commonChooseFilesOrFolders)).frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
                 }
                 Button { createAndSend() } label: {
@@ -502,13 +503,13 @@ struct DirectView: View {
         case .failed, .ended, .refused, .unsupported:
             DirectTextSessionView(model: text)
             Button(L10n.t(.commonDone)) { finishTextOrConfirm() }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
         case .minting:
             SectionCard(L10n.t(.textStartHeading)) {
                 ProgressView { Text(L10n.t(.textCreatingCode)) }
                 Button(L10n.t(.commonCancel)) { text.reset() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
             }
         case let .showingCode(code, expiresAt):
@@ -619,7 +620,7 @@ struct DirectView: View {
         Button(action: onOpenAccount) {
             Text(L10n.t(.gateOpenAccount)).frame(maxWidth: .infinity)
         }
-        .buttonStyle(.bordered)
+        .borderedAction()
         .controlSize(.large)
     }
 
@@ -677,7 +678,7 @@ struct DirectView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button(L10n.t(.commonCancel), action: cancel)
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
         }
     }
@@ -688,6 +689,7 @@ struct DirectView: View {
         VStack(alignment: .leading, spacing: Metrics.tight) {
             failureLine(notice)
             Button(L10n.t(.commonDismiss)) { foreground.dismissInterruption() }
+                .textAction()
         }
     }
 
@@ -697,10 +699,11 @@ struct DirectView: View {
     /// about a decision already made, next to a button that would take the user
     /// off the screen showing their own transfer.
     private var largeFileRoute: some View {
-        // A card, and a `.bordered` button inside it. It is a real offer with a
+        // A card, and a `.borderedAction()` button inside it. It is a real offer
+        // with a
         // real destination, so it gets the same boundary the two tasks above it
         // have — but it is the answer to a question the user may not be asking,
-        // so it never takes the accent away from the task they came for.
+        // so it never takes the prominent fill away from the task they came for.
         SectionCard(L10n.t(.directLargeFilesTitle)) {
             Text(L10n.t(.directLargeFilesBody))
                 .font(.callout)
@@ -709,7 +712,7 @@ struct DirectView: View {
             Button(action: onOpenSend) {
                 Text(L10n.t(.directOpenSend)).frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .borderedAction()
             .controlSize(.large)
         }
     }
@@ -787,7 +790,7 @@ struct DirectView: View {
             //
             // Reading the other screen's QR code is the faster way to fill these
             // six digits and it is the only reason this app declares
-            // `NSCameraUsageDescription`. It is `.bordered` rather than
+            // `NSCameraUsageDescription`. It is `.borderedAction()` rather than
             // prominent because Join below is still the task; and it is the tap
             // that separates app launch from the system camera prompt, which is
             // why nothing above it touches `AVCaptureDevice`.
@@ -795,7 +798,7 @@ struct DirectView: View {
                 Label(L10n.t(.pairingScanCode), systemImage: "qrcode.viewfinder")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .borderedAction()
             .controlSize(.large)
             // Derived rather than cleared: it is shown while the field still
             // holds exactly what the scan put there, so the first digit the

@@ -870,7 +870,7 @@ struct PairingScannerView: View {
                     Link(destination: settings) {
                         Text(L10n.t(.pairingScanOpenSettings)).frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
                 }
                 // The way back to the field that still works, named rather than

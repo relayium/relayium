@@ -277,7 +277,7 @@ struct DeviceConversationView: View {
                 Button { isChoosingFiles = true } label: {
                     Text(L10n.t(.commonChooseFilesOrFolders)).frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
                 .accessibilityIdentifier("inbox-choose-files")
             }
@@ -288,7 +288,7 @@ struct DeviceConversationView: View {
                 // seal them to a particular device.
                 PendingFileList(files: composer.files)
                 Button(L10n.t(.commonClear)) { composer.clearFiles() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
                     .accessibilityIdentifier("inbox-clear-files")
                 Button(action: sendFiles) {
@@ -324,7 +324,7 @@ struct DeviceConversationView: View {
                     // The snapshot is taken HERE, at the moment the user asked.
                     deletingConversation = conversation.entryIDs
                 }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
                 .accessibilityIdentifier("inbox-conversation-delete")
                 ForEach(conversation.entries) { entry in
@@ -416,7 +416,7 @@ struct DeviceConversationView: View {
             Button(L10n.t(.inboxEntryDelete), role: .destructive) {
                 deletingEntry = entry
             }
-            .buttonStyle(.bordered)
+            .borderedAction(.destructive)
             .accessibilityLabel(InboxTimelinePresentation.menuLabel(of: entry,
                                                                     peerName: peerName))
             .accessibilityIdentifier("inbox-entry-delete")
@@ -439,7 +439,7 @@ struct DeviceConversationView: View {
                 UIPasteboard.general.string = message.text
                 copiedEntryID = entry.id
             }
-            .buttonStyle(.bordered)
+            .borderedAction()
             .accessibilityLabel(InboxMessagePresentation.copyActionLabel(
                 copied: copiedEntryID == entry.id))
             .accessibilityIdentifier("inbox-entry-copy")

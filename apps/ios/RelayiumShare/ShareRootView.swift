@@ -207,11 +207,33 @@ struct ShareRootView: View {
     /// Copy to Relayium above a small floating Cancel that belonged to neither
     /// edge. Inside, the shape fills — the same pair of stacked full-width
     /// actions `SendView` puts on a waiting draft.
+    ///
+    /// **The label colour is `ActionLabel`, not the accent.** This is the one
+    /// ordinary bordered control in the extension, and it had the same defect
+    /// the app's 64 did: `.bordered` draws its label in the tint, the tint is
+    /// `AccentColor`, and `#7C3AED` on the neutral fill iOS puts under it
+    /// measures about 2:1 in Dark against the 4.5:1 text owes.
+    ///
+    /// `.foregroundStyle` rather than `.tint` for the reason the app's
+    /// `borderedAction(_:)` records: on iOS 26 the fill is derived from the
+    /// tint, so tinting the label lighter lightens the pill under it by the
+    /// same amount and the ratio barely moves. This colours the words and
+    /// leaves the fill exactly as it shipped.
+    ///
+    /// Written as `Color("ActionLabel")` rather than `Palette.actionLabel`
+    /// because this target compiles `Components/DesignTokens.swift` but not
+    /// `Components/ActionButton.swift`, where that role is declared. The
+    /// colourset is therefore shipped in this extension's OWN asset catalog
+    /// with the same two values the app's carries, and
+    /// `IOSActionColorGuardTests` fails if the two ever diverge or if this
+    /// control loses the role.
     private var cancelButton: some View {
         Button(action: model.cancel) {
             Text(L10n.t(.commonCancel)).frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
+        // nonlocalized: asset catalog colour name
+        .foregroundStyle(Color("ActionLabel"))
         .controlSize(.large)
     }
 

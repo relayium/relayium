@@ -176,14 +176,14 @@ struct DeliveryActions: View {
             Button(role: .destructive) { activate(action) } label: {
                 Text(InboxSendPresentation.label(for: action)).frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .borderedAction(.destructive)
             .controlSize(.large)
             .accessibilityLabel(InboxSendPresentation.actionLabel(for: action, on: item))
         case .stopAttempt, .dismiss:
             Button { activate(action) } label: {
                 Text(InboxSendPresentation.label(for: action)).frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .borderedAction()
             .controlSize(.large)
             .accessibilityLabel(InboxSendPresentation.actionLabel(for: action, on: item))
         }

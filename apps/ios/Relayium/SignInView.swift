@@ -79,7 +79,10 @@ struct SignInView: View {
                       ? "person.crop.circle"
                       : "person.crop.circle.badge.plus")
                     .font(.title2)
-                    .foregroundStyle(Palette.action)
+                    // `actionLabel`, not `action`: this is the accent as a
+                    // FOREGROUND on `actionSurface`, the same pair the nearby
+                    // roster's selected glyph measured 2.70:1 at.
+                    .foregroundStyle(Palette.actionLabel)
                     .frame(width: Metrics.hitTarget, height: Metrics.hitTarget)
                     .background(Palette.actionSurface, in: Circle())
                     // Capped, for the same reason the inline message's symbol
@@ -179,8 +182,16 @@ struct SignInView: View {
             // against". It keeps its appearance; only the target grows, and
             // `contentShape` is what makes the grown area actually take the
             // tap rather than leave a button that merely looks bigger.
+            //
+            // The same audit measured its COLOUR at 2.99:1 — the accent read as
+            // a foreground on the card behind it, which is the failure
+            // `Palette.actionLabel` exists for. `.textAction()` is the whole
+            // fix: the same plain shape and the same weight against the
+            // prominent button above it, 7.4:1 on that card in Dark and
+            // byte-identical in Light.
             Button(L10n.t(mode.switchTitleKey)) { switchMode() }
                 .font(.callout)
+                .textAction()
                 .frame(minHeight: Metrics.hitTarget)
                 .contentShape(Rectangle())
                 .disabled(form.isBusy)

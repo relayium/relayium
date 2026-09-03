@@ -92,6 +92,7 @@ struct ReceiveView: View {
                     Button(action: onDismiss) {
                         Text(L10n.t(.commonDone)).font(.body.weight(.semibold))
                     }
+                    .textAction()
                     .padding(.horizontal)
                     .padding(.bottom, Metrics.tight)
                     .accessibilityIdentifier("stored-receive-done")
@@ -208,7 +209,7 @@ struct ReceiveView: View {
                     Button { model.retry() } label: {
                         Text(L10n.t(.commonTryAgain)).frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
                 }
             }
@@ -301,7 +302,7 @@ struct ReceiveView: View {
                 ShareLink(items: payload.dragURLs) {
                     Text(L10n.t(.commonShare)).frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
                 .accessibilityIdentifier("received.share")
             }
@@ -316,7 +317,7 @@ struct ReceiveView: View {
             } label: {
                 Text(L10n.t(.commonDone)).frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .borderedAction()
             .controlSize(.large)
             .accessibilityIdentifier("receive.done")
         }
@@ -332,7 +333,7 @@ struct ReceiveView: View {
 
     private var cancelButton: some View {
         Button(L10n.t(.commonCancel), action: model.cancel)
-            .buttonStyle(.bordered)
+            .borderedAction()
             .controlSize(.large)
     }
 

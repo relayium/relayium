@@ -23,6 +23,21 @@ import SwiftUI
 ///    mirrors correctly in Arabic and nothing points the wrong way. Order is the
 ///    direction.
 ///
+/// ## Why these graphics use `Palette.actionLabel` and not `Palette.action`
+///
+/// Every marker and connector here is `accessibilityHidden(true)`, and the rule
+/// above is why: the state is also in the words. That does NOT make them
+/// decoration. A stop's fill is what a sighted reader looks at to see how far a
+/// transfer has got, so it is a meaningful non-text graphic and owes 3:1 — and
+/// on a real Dark screenshot the accent measured **2.99:1** as a reached stop's
+/// fill on `Palette.cardBackground` and **2.70:1** as a current stop's ring and
+/// symbol on `Palette.actionSurface`. The label role clears both.
+///
+/// The one thing here that IS decoration is the checkmark drawn inside a reached
+/// stop, which repeats the fill it sits on. It is `Palette.cardBackground` on
+/// the label role and measures 7.4:1 in Dark and 6.3:1 in Light anyway, so
+/// nothing turned on classifying it.
+///
 /// ## The one thing it does that the Mac's does not
 ///
 /// It turns. Three columns of caption text across a 375pt iPhone is already the
@@ -126,10 +141,10 @@ struct PathRail: View {
                 .fill(stop.progress == .current ? Palette.actionSurface : Color.clear)
             Circle()
                 .strokeBorder(stop.progress == nil || stop.progress == .pending
-                              ? Palette.hairline : Palette.action,
+                              ? Palette.hairline : Palette.actionLabel,
                               lineWidth: stop.progress == .current ? 2 : 1)
             if stop.progress == .reached {
-                Circle().fill(Palette.action)
+                Circle().fill(Palette.actionLabel)
                 // nonlocalized: SF Symbol name
                 Image(systemName: "checkmark")
                     .font(.caption2.weight(.bold))
@@ -141,7 +156,7 @@ struct PathRail: View {
                 // beside them.
                 Image(systemName: stop.symbol)
                     .font(.caption2)
-                    .foregroundStyle(stop.progress == .current ? Palette.action
+                    .foregroundStyle(stop.progress == .current ? Palette.actionLabel
                                      : Color.secondary)
             }
         }
@@ -165,7 +180,7 @@ struct PathRail: View {
     private func connector(before stop: PathStop) -> some View {
         let travelled = stop.progress == .reached
         return RailRule(vertical: isStacked)
-            .stroke(travelled ? Palette.action : Palette.hairline,
+            .stroke(travelled ? Palette.actionLabel : Palette.hairline,
                     style: StrokeStyle(lineWidth: 1, dash: travelled ? [] : [2, 3]))
             .accessibilityHidden(true)
     }

@@ -739,7 +739,11 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(mintingBlocks.count, 2)
         for block in mintingBlocks {
             let body = block.components(separatedBy: "case let .showingCode").first ?? ""
-            XCTAssertTrue(body.contains(".buttonStyle(.bordered)"))
+            // `.borderedAction()`, not `.buttonStyle(.bordered)`: outlined rather
+            // than prominent is still the claim, and the ordinary role is now
+            // part of it — a Cancel that abandons a code nobody has yet seen
+            // destroys nothing, so it must not carry the destructive red.
+            XCTAssertTrue(body.contains(".borderedAction()"))
             XCTAssertTrue(body.contains(".controlSize(.large)"))
         }
     }
@@ -768,12 +772,21 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let fileTransfer = try XCTUnwrap(files.components(
             separatedBy: "private func transferring").dropFirst().first?
             .components(separatedBy: "private var completed").first)
+        // Either role, because these two phases legitimately differ: outlined
+        // rather than prominent is what both must be.
         for phase in [fileConnecting, fileTransfer] {
-            XCTAssertTrue(phase.contains(".buttonStyle(.bordered)"))
+            XCTAssertTrue(phase.contains(".borderedAction("))
             XCTAssertTrue(phase.contains(".controlSize(.large)"))
         }
+        XCTAssertTrue(fileConnecting.contains(".borderedAction()"),
+                      "cancelling before a connection exists is not destructive and must "
+                      + "not be drawn as though it were")
         XCTAssertTrue(fileTransfer.contains("role: .destructive"),
                       "cancelling an active write does not communicate its consequence")
+        XCTAssertTrue(fileTransfer.contains(".borderedAction(.destructive)"),
+                      "the button declares the destructive role but the style does not, so "
+                      + "the control keeps the ordinary label colour instead of the system "
+                      + "red the confirmation it opens uses")
 
         let text = try XCTUnwrap(all.first { $0.name == "DirectTextSessionView.swift" }?.text)
         let textConnecting = try XCTUnwrap(text.components(
@@ -786,11 +799,17 @@ final class IOSSurfaceGuardTests: XCTestCase {
             separatedBy: "private func session(").dropFirst().first?
             .components(separatedBy: "private var composer").first)
         for phase in [textConnecting, waiting, open] {
-            XCTAssertTrue(phase.contains(".buttonStyle(.bordered)"))
+            XCTAssertTrue(phase.contains(".borderedAction("))
             XCTAssertTrue(phase.contains(".controlSize(.large)"))
         }
+        XCTAssertTrue(textConnecting.contains(".borderedAction()"),
+                      "cancelling before a connection exists is not destructive")
         for phase in [waiting, open] {
             XCTAssertTrue(phase.contains("role: .destructive"))
+            XCTAssertTrue(phase.contains(".borderedAction(.destructive)"),
+                          "ending a session with a transcript behind it declares the "
+                          + "destructive role on the button; the style has to agree, or the "
+                          + "control is drawn as an ordinary action")
         }
     }
 
@@ -813,7 +832,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let cancel = try XCTUnwrap(showing.components(
             separatedBy: "Button(L10n.t(.commonCancel), action: cancel)").dropFirst().first?
             .components(separatedBy: "}").first)
-        XCTAssertTrue(cancel.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(cancel.contains(".borderedAction()"))
         XCTAssertTrue(cancel.contains(".controlSize(.large)"))
     }
 
@@ -870,7 +889,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
             .components(separatedBy: "case .preparing:").first)
         XCTAssertTrue(checking.contains("ProgressView { Text(L10n.t(.uploadCheckingRecovery)) }"))
         XCTAssertTrue(checking.contains("Button(L10n.t(.commonCancel)) { upload.cancel() }"))
-        XCTAssertTrue(checking.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(checking.contains(".borderedAction()"))
         XCTAssertTrue(checking.contains(".controlSize(.large)"))
     }
 
@@ -890,12 +909,12 @@ final class IOSSurfaceGuardTests: XCTestCase {
             separatedBy: "private func linkReady(").dropFirst().first?
             .components(separatedBy: "private func failure").first)
         for phase in [preparing, restarting, uploading] {
-            XCTAssertTrue(phase.contains(".buttonStyle(.bordered)"))
+            XCTAssertTrue(phase.contains(".borderedAction("))
             XCTAssertTrue(phase.contains(".controlSize(.large)"))
         }
         let sendAnother = try XCTUnwrap(completed.components(
             separatedBy: "Button(L10n.t(.uploadSendAnother))").dropFirst().first)
-        XCTAssertTrue(sendAnother.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(sendAnother.contains(".borderedAction()"))
         XCTAssertTrue(sendAnother.contains(".controlSize(.large)"))
         XCTAssertTrue(completed.contains("Text(link)"))
         XCTAssertTrue(completed.contains(".fixedSize(horizontal: false, vertical: true)"))
@@ -912,7 +931,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let cancel = try XCTUnwrap(receive.components(
             separatedBy: "private var cancelButton:").dropFirst().first?
             .components(separatedBy: "// MARK: - actions").first)
-        XCTAssertTrue(cancel.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(cancel.contains(".borderedAction()"))
         XCTAssertTrue(cancel.contains(".controlSize(.large)"))
     }
 
@@ -3692,7 +3711,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(fileIdle.contains("createFiles"))
         XCTAssertTrue(fileIdle.contains("joinCard("))
         XCTAssertTrue(fileFailed.contains("L10n.t(.commonDone)"))
-        XCTAssertTrue(fileFailed.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(fileFailed.contains(".borderedAction()"))
         XCTAssertTrue(fileFailed.contains(".controlSize(.large)"))
         XCTAssertFalse(fileFailed.contains("createFiles"),
                        "a failed file session can be replaced before cleanup")
@@ -3712,7 +3731,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(textIdle.contains("joinCard("))
         XCTAssertTrue(textTerminal.contains("DirectTextSessionView(model: text)"))
         XCTAssertTrue(textTerminal.contains("L10n.t(.commonDone)"))
-        XCTAssertTrue(textTerminal.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(textTerminal.contains(".borderedAction()"))
         XCTAssertTrue(textTerminal.contains(".controlSize(.large)"))
         XCTAssertFalse(textTerminal.contains("createText"),
                        "a terminal transcript can be replaced before Done")
@@ -4839,7 +4858,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
                           "\(name) leaves an empty task with no first move")
             let staged = try XCTUnwrap(view.components(separatedBy: emptiness)
                 .dropFirst().first?.components(separatedBy: "} else {").dropFirst().first)
-            XCTAssertTrue(staged.contains(".buttonStyle(.bordered)"),
+            XCTAssertTrue(staged.contains(".borderedAction()"),
                           "\(name) keeps two prominent controls once something is staged")
         }
     }

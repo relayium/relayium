@@ -95,7 +95,7 @@ struct AppleSubscriptionCard: View {
             }
 
             Button(L10n.t(.subscriptionRestore)) { Task { await model.restore() } }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .disabled(isBusy)
                 .accessibilityIdentifier("subscription-restore")
 
@@ -104,6 +104,7 @@ struct AppleSubscriptionCard: View {
                 Button(L10n.t(.subscriptionManage)) {
                     openURL(AppEnvironment.appleSubscriptionsURL)
                 }
+                .textAction()
                 .accessibilityIdentifier("subscription-manage")
                 Text(L10n.t(.subscriptionManagedByApple))
                     .font(.caption).foregroundStyle(.secondary)

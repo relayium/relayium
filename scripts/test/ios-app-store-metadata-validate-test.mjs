@@ -1075,7 +1075,7 @@ rejects(
 );
 
 rejects(
-  "Sufficient Contrast claimed despite the known 2:1 blocker",
+  "Sufficient Contrast claimed despite the known Light secondary-text blocker",
   (p) => {
     const family = p.accessibilityNutritionLabel.deviceFamilies[1];
     const feature = family.features.find((entry) => entry.id === "sufficient-contrast");
@@ -1086,7 +1086,7 @@ rejects(
 );
 
 rejects(
-  "the contrast blocker being quietly dropped",
+  "the per-family contrast blocker being quietly dropped",
   (p) => {
     for (const family of p.accessibilityNutritionLabel.deviceFamilies) {
       for (const feature of family.features) delete feature.blocker;
