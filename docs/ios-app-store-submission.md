@@ -1354,9 +1354,12 @@ Hard rules:
 - The pixel size must be exactly one of the accepted values above.
 
 **Current state: no screenshot has been captured.** The packet records that as
-`screenshots.state = "not-captured"` with `capturedCount: 0`, and the validator
-refuses a non-zero count while the state says none exist. Two things block a
-capture, and neither is a matter of finding time for it:
+`screenshots.state = "not-captured"` with `capturedCount: 0`;
+`scripts/ios-app-store-metadata-validate.mjs` refuses a non-zero count while the
+state says none exist, and `scripts/ios-app-store-screenshots-validate.mjs`
+refuses to report any staged bundle as ready while it says that — see *The
+staged bundle, and the check that accepts it* below. Two things block a capture,
+and neither is a matter of finding time for it:
 
 1. the six subscription products do not exist in App Store Connect, so the
    Account screen cannot render a real offer list;
@@ -1433,6 +1436,123 @@ Keep the two asset channels separate:
   appear on the storefront. They are the right place to demonstrate a
   two-device Device Inbox delivery a single-device reviewer cannot reproduce.
   They do not satisfy the storefront requirement.
+
+### The staged bundle, and the check that accepts it
+
+Everything above is prose, and prose does not stop an upload. When the assets
+exist they are staged as a **bundle** and checked by
+`scripts/ios-app-store-screenshots-validate.mjs` before anything is dragged into
+App Store Connect:
+
+```
+node scripts/ios-app-store-screenshots-validate.mjs --expect-blocked   # today
+node scripts/ios-app-store-screenshots-validate.mjs --bundle <dir>     # once staged
+```
+
+The bundle is a directory holding a `manifest.json` and exactly two levels of
+directories — `<set>/<localization>/<name>.png` — and nothing else:
+
+```
+manifest.json
+iphone-6.9/en-US/01-device-inbox.png
+iphone-6.9/zh-Hans/01-device-inbox.png
+ipad-13/en-US/01-device-inbox.png
+ipad-13/zh-Hans/01-device-inbox.png
+```
+
+Each `manifest.json` file entry carries the file's `sha256`, `bytes`,
+`encoding`, `pixelSize`, the `shot` it stages quoted exactly from the packet's
+`screenshots.shotList`, a `capture` block, and a `humanReview` block. The
+validator derives the sets, the accepted pixel sizes, the localizations, the
+one-to-ten per-cell counts, the capture rules and the shot list **from
+`docs/app-store-metadata-ios.json`** rather than restating them, so the packet
+stays the single place those facts live. It then reads the actual image bytes
+and refuses:
+
+- an alpha channel — PNG colour type 4 or 6, or a `tRNS` chunk — a failed chunk
+  CRC, bytes after `IEND` or after `EOI`, a truncated stream, or a landscape
+  frame;
+- a file that is a header rather than an image. A PNG must carry consecutive
+  `IDAT` chunks whose concatenated zlib stream inflates to exactly the scanlines
+  its own `IHDR` describes, at a colour-type/bit-depth pair PNG defines, with a
+  `PLTE` of at most 256 entries if it carries one at all and a `PLTE` it can
+  index if it is a palette image; a JPEG must carry a real entropy-coded scan
+  behind its frame header, stepped past stuffed `0xff00` pairs and restart
+  markers to its `EOI`. `SOI`+`SOF`+`EOI`, or `IHDR`+`IEND`, is a
+  plausible-looking file that renders nowhere, and it is refused. Adam7
+  interlacing is refused too — this validator measures the non-interlaced
+  scanline layout, and will not report a file as checked on a layout it did not
+  check;
+- a JPEG whose tables or component references do not resolve. `DQT` and `DHT`
+  segments are parsed to the byte and must be consumed exactly, so an empty,
+  truncated or malformed segment defines **no table** rather than counting as a
+  marker that went past; a frame may not repeat a component id; and by scan time
+  every quantization selector, and every DC/AC Huffman selector the scan can
+  actually reach, must name a table something really defined, against a
+  component the frame really declared, with no component selected twice.
+  Progressive frames are handled on their own terms: a scan codes one spectral
+  band, so it is required to resolve only the table that band uses. **This is a
+  structural claim.** It proves the scan's references resolve — not that the
+  entropy bytes behind them decode;
+- a pixel size that is not exactly one of the accepted values for that set, and
+  a manifest `pixelSize`, `sha256`, `bytes`, `encoding` or extension that
+  disagrees with the file itself;
+- a JPEG that is not 8-bit baseline or progressive greyscale/YCbCr;
+- a missing, extra, empty or over-full set-localization cell, a shot staged
+  twice in one cell, and a set whose ordered shot sequence differs between the
+  two localizations;
+- two byte-identical files anywhere in the bundle — across localizations that is
+  a translation that was never actually performed;
+- an unsafe path or file name, a symlink, and any file on disk the manifest does
+  not list;
+- a Debug configuration, a `--relayium-ui-testing` launch argument, an admitted
+  UI-test fixture, fabricated price or retouch;
+- the **Account** shot, while the packet records that the subscription products
+  do not exist on the record. That check unblocks itself when the packet records
+  real products;
+- **any report that the current packet is ready.** While
+  `screenshots.state` is `not-captured`, a structurally perfect bundle still
+  exits non-zero. Staging files next to a packet that says none exist is not a
+  way to turn the gate green.
+
+**What it does not do is look at the picture.** It inflates a PNG's scanlines
+and steps through a JPEG's entropy-coded bytes, but only to MEASURE them against
+the header; nothing interprets, renders or reads what those pixels show. The
+JPEG entropy data in particular is **stepped, never Huffman-decoded** — there is
+no Huffman decoder, no dequantization and no IDCT in this validator, so a file
+whose structure and references are all sound can still hold entropy data that
+decodes to nothing. Structural integrity is the claim; decodability is not. There
+is no OCR, no text extraction, no image model and no automatic privacy
+inspection in it, and none is planned — a passing OCR run would be more
+dangerous than an absent one, because it would read as "checked" while missing
+rotated, truncated or low-contrast text. So the two rules that matter most on a
+public asset are handled the only way they honestly can be: for **each file**, a
+named human records in `humanReview` that they looked at that frame and
+confirmed it carries no sensitive value from the list above
+(`neutralContentConfirmed`) and shows the app's real appearance and data,
+unretouched (`truthfulUnretouchedConfirmed`).
+`humanReview.method` must be exactly `human-visual`; `ocr`, `automated`,
+`script`, `model` and similar values are named and refused. A passing run means
+the bundle is structurally uploadable and somebody has put their name to the
+rest — **not** that the screenshots are clean.
+
+`docs/app-store-metadata-ios.json` needs no new field for any of this and gains
+none: every rule is derived from the `screenshots` section it already carries.
+
+Until the assets exist, `--expect-blocked` is the runnable form. It **asserts**
+the blocked state rather than skipping it: it exits zero only while the packet
+records `not-captured`, a zero captured count, at least one recorded blocker,
+and a `screenshots` observed field that still reads as an unmet blocking gate.
+With no arguments at all the validator exits non-zero, because "nothing staged"
+is a failing state rather than a passing one.
+`scripts/test/ios-app-store-screenshots-validate-test.mjs` proves each rule by
+mutation over synthetic fixtures built in a temporary directory: real deflated
+PNG scanlines and real Huffman-coded baseline JPEGs, each mutated in exactly one
+way, and each mutation checked to actually turn its case red. Two structurally
+progressive fixtures are the labelled exception — a `SOF2` frame over sequential
+entropy bytes — because the progressive table rule is about which references a
+scan must resolve, not about decoding it. They are flat block patterns depicting
+nothing, and no storefront asset exists in this repository.
 
 ## Accessibility Nutrition Label
 
