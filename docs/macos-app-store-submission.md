@@ -36,28 +36,33 @@ the App Store version — the root `README.md`, `apps/README.md`, the nine
 `web/scripts/pages/app-store-release.test.mjs` holds this document to it too.
 
 Build numbers consumed so far, none of which may be rebuilt or re-uploaded:
-`5`, `6`, `7`, `11`, `12`, `24` (`1.3.6`), `25` (`1.3.7`) and `26` (`1.3.8`).
-**The next archive of any version needs a build number strictly above `26`.**
-The published minimum is macOS 13.0, and the published build does not remove
-compatibility with older Relayium clients.
+`5`, `6`, `7`, `11`, `12`, `24` (`1.3.6`), `25` (`1.3.7`), `26` (`1.3.8`) and
+`27` (`1.3.9`). **The next archive of any version needs a build number strictly
+above `27`.** The published minimum is macOS 13.0, and the published build does
+not remove compatibility with older Relayium clients.
 
-There is no submission in flight, and no build above `26` has been uploaded. The
-repository source is *prepared* at `1.3.9` (build `27`), which is a state of the
-source tree and nothing more: build `27` has not been archived, uploaded, or
-consumed, and preparing a version is not submitting one. Nothing in this
-document authorizes archiving, uploading, adding for review, or releasing it.
+There is no submission in flight and no version has been added for review.
+Build `27` has, however, been uploaded and is therefore consumed: an
+authenticated App Store Connect read-back on 2026-09-04 shows TestFlight
+carrying `1.3.9` (build `27`) as a **complete** processed upload. That upload
+was never added for review, never approved and never released, so Apple has
+still served nothing above `1.3.8` (build `26`) — an upload is not a
+submission, and a TestFlight build is not a public release.
 
-#### Prepared next version — `1.3.9` (build `27`), NOT submitted
+The repository source is now *prepared* at `1.3.10` (build `28`), which is a
+state of the source tree and nothing more: build `28` has not been archived,
+uploaded, or consumed, and preparing a version is not submitting one. Nothing in
+this document authorizes archiving, uploading, adding for review, or releasing
+it.
 
-**`1.3.8` (build `26`) is what Apple is serving.** The Xcode project in this
-branch builds `1.3.9` (build `27`); that is the only thing that has moved.
-`web/mac-app-store-release.json` still reads `1.3.8` and must keep reading
-`1.3.8` until Apple actually publishes a later build, so the root `README.md`,
-`apps/README.md` and the nine `/releases` pages correctly continue to name
-`1.3.8` as the published App Store version. Do not "synchronize" them to
-`1.3.9`; they are describing what Apple is serving, not what this branch builds.
+The Developer ID/GitHub download channel is versioned, released and verified
+separately from this record. Its state is never evidence about what the Mac App
+Store is serving, in either direction, even when the two version numbers happen
+to agree.
 
-`1.3.9` is a connection-reliability repair, prepared from product source on
+#### `1.3.9` (build `27`) — uploaded to TestFlight, never released
+
+`1.3.9` is the connection-reliability repair prepared from product source on
 `work/macos-1.3.9-release`, based on
 `934cf18de1e9850685c24fb1c20370dd5e463365` or its version-only descendant. It
 carries the responder-side DataChannel delegate fix: when this Mac was the side
@@ -66,42 +71,96 @@ channel had a delegate and be dropped, so an occasional cross-network
 connection never started and had to be retried. The channel is now claimed
 before anything can arrive on it, on both data-channel transports the Mac uses:
 the unified link transport and the compatibility transport it falls back to for
-peers that do not advertise it. The change alters no wire byte, protocol
-generation, or compatibility route, and it changes no subscription product,
-price, entitlement, purchase transition, or provider configuration. The minimum
-remains macOS 13.0, and build `27` satisfies the strictly-above-`26` floor
-recorded above.
+peers that do not advertise it.
 
-The copy below is drafted for that build and has **not** been submitted,
-uploaded, reviewed, approved, or published. English and Simplified Chinese are
-Relayium's maintained languages; no other locale is drafted here.
+Build `27` reached TestFlight and stopped there. **No Mac App Store customer has
+ever received that repair**, which is why `1.3.10` carries it forward and why
+the drafted copy below covers it as well as the newer correction. Build `27` may
+not be rebuilt or re-uploaded under any version number.
 
-What's New for `1.3.9` (drafted, English):
+#### Prepared next version — `1.3.10` (build `28`), NOT submitted
 
-> Fixes an occasional cross-network connection failure. When your Mac was the
-> side being contacted, the very first message could arrive before the
-> receiving channel was ready and be missed, so the transfer had to be retried.
-> The channel is now ready before that first message can arrive.
+**`1.3.8` (build `26`) is what Apple is serving.** The Xcode project in this
+branch builds `1.3.10` (build `28`); that is the only thing that has moved.
+`web/mac-app-store-release.json` still reads `1.3.8` and must keep reading
+`1.3.8` until Apple actually publishes a later build, so the root `README.md`,
+`apps/README.md` and the nine `/releases` pages correctly continue to name
+`1.3.8` as the published App Store version. Do not "synchronize" them to
+`1.3.10`; they are describing what Apple is serving, not what this branch
+builds.
 
-What's New for `1.3.9` (drafted, Simplified Chinese):
+`1.3.10` is a pairing-reliability patch prepared from product source on
+`release/macos-1.3.10`, based on
+`d7cf449c2ad1a6c16bcfb6a67cf06d7b4cb70b5b` or its version-only descendant. It
+carries two corrections.
 
-> 修复了跨网络传输偶发的连接失败。当这台 Mac 是被联系的一方时，第一条消息可能
-> 在接收通道就绪之前到达而被漏掉，导致传输需要重试。现在通道会在第一条消息到达
-> 之前就准备好。
+The first is the `1.3.9` inbound-channel repair described above, unchanged and
+unreleased.
 
-What to Test for `1.3.9` (drafted, English):
+The second is new. A pairing room learns who else is present from the server's
+room-membership updates, and it learns what each device can do from that
+device's own capability announcement. Those two arrive on one connection, but
+the Mac applied a membership update one scheduling hop later than an
+announcement — so a membership update the server had sent *before* the other
+device announced itself could be applied *after* it, and discard that
+announcement. The Mac then read a device that had correctly announced the
+unified workspace link as having announced nothing. This app is built with
+`legacyFallback: .terminateUnsupported`, so the visible result was a refusal:
+the pane showed "The other device is running an older version that can't
+complete this transfer. It needs updating." about a device that was fully up to
+date, and the connection was closed. In the shared model's other fallback
+policy the same loss instead waits out the capability window and drops to the
+older file-only session; both are covered by regression tests. The same
+reversal could also retire a present device's relay measurements and withdraw a
+link request that was already in flight. Each
+membership update now carries the position it was actually delivered at, so an
+update can only answer for announcements that were delivered before it, and an
+update older than one the room has already applied is ignored. A device that
+genuinely leaves is still removed by the update that reports it.
 
-> Connect a browser and this Mac over a cross-network transfer and confirm the
-> connection succeeds on the first attempt, with no retry. Test both roles: once
-> with the browser starting the transfer and the Mac joining, and once with the
-> Mac starting it and the browser joining. In each role send text and then a
-> file, and confirm both arrive complete.
+The change alters no wire byte, protocol generation, or compatibility route, and
+it changes no subscription product, price, entitlement, purchase transition, or
+provider configuration. The minimum remains macOS 13.0, and build `28` satisfies
+the strictly-above-`27` floor recorded above.
 
-What to Test for `1.3.9` (drafted, Simplified Chinese):
+The copy below is drafted for that build and has **not** been archived,
+uploaded, submitted, reviewed, approved, or published. English and Simplified
+Chinese are Relayium's maintained languages; no other locale is drafted here.
 
-> 用浏览器与这台 Mac 建立跨网络传输，确认首次尝试即可连接成功，无需重试。两种
-> 发起方向都要测试：一次由浏览器发起、Mac 加入，一次由 Mac 发起、浏览器加入。
-> 每个方向都先发送文本再发送文件，确认都能完整送达。
+What's New for `1.3.10` (drafted, English):
+
+> Fixes two connection problems in cross-network transfer. Pairing with a code
+> could occasionally be refused with a message saying the other device was
+> running an older version, even when that device was fully up to date, because
+> your Mac could apply an out-of-date room update over that device's
+> capabilities. And when your Mac was the side being contacted, the very first
+> message could arrive before the receiving channel was ready and be missed, so
+> the transfer had to be retried.
+
+What's New for `1.3.10` (drafted, Simplified Chinese):
+
+> 修复了跨网络传输中的两个连接问题。使用配对码连接时，Mac 可能把过期的房间成员
+> 信息覆盖到对方的能力信息上，于是即使对方设备已是最新版本，也会被误判并提示
+> “对方设备运行的是较旧的版本”，导致偶发连接失败。另外，当这台 Mac 是被联系的
+> 一方时，第一条消息可能在接收通道就绪之前到达而被漏掉，导致传输需要重试。
+
+What to Test for `1.3.10` (drafted, English):
+
+> Pair this Mac with a browser using a pairing code several times in a row,
+> including a run where the browser is already waiting in the room before the
+> Mac joins and a run where the Mac joins first. Confirm every attempt connects
+> as a full workspace on the first try, with no "The other device is running an
+> older version" warning. Then run a cross-network transfer in both
+> directions, once with the browser starting it and once with the Mac starting
+> it, sending text and then a file each time, and confirm both arrive complete.
+
+What to Test for `1.3.10` (drafted, Simplified Chinese):
+
+> 用配对码把这台 Mac 与浏览器连续配对多次，其中一次让浏览器先在房间内等待、
+> Mac 后加入，另一次让 Mac 先加入。确认每次都能在首次尝试时建立完整工作区连接，
+> 不出现“对方设备运行的是较旧的版本”的提示。然后在两个发起方向上各做
+> 一次跨网络传输：一次由浏览器发起，一次由 Mac 发起，每次都先发送文本再发送
+> 文件，确认都能完整送达。
 
 #### Delivered submission copy, retained as history
 

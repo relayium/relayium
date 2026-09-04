@@ -308,6 +308,148 @@ final class LinkCapabilityVectorTests: XCTestCase {
         XCTAssertTrue(forbidden.recordProvenLink(peerId: "p", signal: signal))
         XCTAssertFalse(forbidden.supports("p", LINK_CAPABILITY))
     }
+
+    // MARK: - delivery order, and the one mutation that respects it
+    //
+    // A roster frame and an announcement are ordered against each other ONLY on
+    // the signalling delivery queue: the announcement is recorded there inline,
+    // because `LinkRoomRouter.intercept` gates the frame behind it on that same
+    // queue, while the roster reaches its model through an independent
+    // `Task { @MainActor }`. Driving the prune from the roster's PROJECTION
+    // order instead is a self-only roster deleting a hello that was delivered
+    // after it, one hop before the roster naming that peer is projected.
+
+    private func hello(_ caps: [String]) -> JSONValue { capsField(caps) }
+
+    /// The union, both halves. An announcement delivered BEFORE the roster frame
+    /// is one that frame was entitled to answer, and a departed peer's entry
+    /// stays deleted; one delivered AFTER it is spared, because the roster
+    /// naming that peer is still in flight behind it.
+    func testARetainSparesOnlyAnnouncementsDeliveredAfterItsOwnRosterFrame() {
+        let registry = PeerCapabilityRegistry(linkRoomActive: { true })
+        registry.record(peerId: "departed", signal: hello([LINK_CAPABILITY]))
+        let rosterPosition = registry.rosterDelivered()
+        registry.record(peerId: "ahead", signal: hello([LINK_CAPABILITY]))
+
+        // The membership this frame carried names neither of them.
+        registry.retain(["still-here"], preservingAnnouncementsAfter: rosterPosition)
+
+        XCTAssertFalse(registry.supports("departed", LINK_CAPABILITY),
+                       "an announcement older than the roster frame is one it may answer")
+        XCTAssertTrue(registry.supports("ahead", LINK_CAPABILITY),
+                      "the roster frame predates this announcement and cannot have an opinion on it")
+    }
+
+    /// Sparing is not membership, and it does not accumulate: a roster frame
+    /// that was ACTUALLY delivered later prunes the peer the earlier one spared.
+    func testAnActuallyLaterRosterFramePrunesAPeerAnEarlierOneSpared() {
+        let registry = PeerCapabilityRegistry(linkRoomActive: { true })
+        let first = registry.rosterDelivered()
+        registry.record(peerId: "ahead", signal: hello([LINK_CAPABILITY]))
+        registry.retain([], preservingAnnouncementsAfter: first)
+        XCTAssertTrue(registry.supports("ahead", LINK_CAPABILITY))
+
+        let second = registry.rosterDelivered()
+        registry.retain([], preservingAnnouncementsAfter: second)
+        XCTAssertFalse(registry.supports("ahead", LINK_CAPABILITY),
+                       "a roster delivered after the announcement is entitled to prune it")
+    }
+
+    /// **A reader never sees a spared announcement disappear.** The keep set is
+    /// computed and applied inside one critical section, so the only states a
+    /// concurrent reader can observe are the one before and the one after; a
+    /// prune-then-repair implementation would expose the interval between them.
+    ///
+    /// It cannot false-fail — the spared entry is never legitimately absent for
+    /// the whole run — and it exercises the actual lock, not a test seam.
+    func testConcurrentReadersNeverSeeASparedAnnouncementDisappear() {
+        let registry = PeerCapabilityRegistry(linkRoomActive: { true })
+        registry.record(peerId: "ahead", signal: hello([LINK_CAPABILITY]))
+        let missed = Missed()
+
+        DispatchQueue.concurrentPerform(iterations: 8) { worker in
+            for round in 0..<200 {
+                if worker == 0 {
+                    // Every roster frame here is delivered BEFORE the
+                    // announcement above, so none of them may take it.
+                    registry.retain(["peer-\(round)"], preservingAnnouncementsAfter: 0)
+                } else if !registry.supports("ahead", LINK_CAPABILITY) {
+                    missed.record()
+                }
+            }
+        }
+
+        XCTAssertEqual(missed.count, 0,
+                       "a reader on another thread saw a spared announcement missing")
+        XCTAssertTrue(registry.supports("ahead", LINK_CAPABILITY))
+    }
+
+    /// Positions come from ONE counter over both kinds of event, so any two of
+    /// them are comparable and no two share a value. That is the whole basis on
+    /// which "delivered after" is decided.
+    func testDeliveryPositionsAreStrictlyIncreasingAcrossBothKindsOfEvent() {
+        let registry = PeerCapabilityRegistry(linkRoomActive: { true })
+        let first = registry.rosterDelivered()
+        registry.record(peerId: "p", signal: hello([LINK_CAPABILITY]))
+        let second = registry.rosterDelivered()
+        XCTAssertGreaterThan(second, first)
+
+        // The announcement between them landed strictly between them: the
+        // earlier frame may not take it, the later one may.
+        registry.retain([], preservingAnnouncementsAfter: first)
+        XCTAssertTrue(registry.supports("p", LINK_CAPABILITY))
+        registry.retain([], preservingAnnouncementsAfter: second)
+        XCTAssertFalse(registry.supports("p", LINK_CAPABILITY))
+    }
+
+    /// A malformed frame teaches the registry nothing, so it must not consume a
+    /// position either — a stamp for a frame that changed no state would let a
+    /// later roster be judged against an announcement that does not exist.
+    func testAFrameThatIsNotAnAnnouncementTakesNoDeliveryPosition() {
+        let registry = PeerCapabilityRegistry(linkRoomActive: { true })
+        let before = registry.rosterDelivered()
+        XCTAssertFalse(registry.record(peerId: "p", signal: .object(["caps": .string("link/1")])))
+        let after = registry.rosterDelivered()
+        XCTAssertEqual(after, before + 1, "a frame that recorded nothing consumed a position")
+    }
+
+    /// A proven-link repair takes a position of its own, so a roster frame
+    /// delivered before it cannot take it either.
+    func testProvenLinkIsStampedLikeAnyOtherAnnouncement() throws {
+        let block = try capability(vectors())
+        let row = try XCTUnwrap(block["provenLink"] as? [String: Any])
+        let signal = try JSONValue.decode(XCTUnwrap(row["signal"] as? [String: Any]))
+
+        let registry = PeerCapabilityRegistry(linkRoomActive: { true })
+        let rosterPosition = registry.rosterDelivered()
+        XCTAssertTrue(registry.recordProvenLink(peerId: "ahead", signal: signal))
+        registry.retain([], preservingAnnouncementsAfter: rosterPosition)
+        XCTAssertTrue(registry.supports("ahead", LINK_CAPABILITY),
+                      "the roster frame predates this proof and cannot take it")
+
+        registry.retain([], preservingAnnouncementsAfter: registry.rosterDelivered())
+        XCTAssertFalse(registry.supports("ahead", LINK_CAPABILITY))
+    }
+
+    /// The room-scope rule is unchanged by any of this: sparing an announcement
+    /// is not permission to route it.
+    func testASparedAnnouncementIsStillRefusedWhereTheRoomForbidsLink() {
+        let registry = PeerCapabilityRegistry(linkRoomActive: { false })
+        let rosterPosition = registry.rosterDelivered()
+        registry.record(peerId: "ahead", signal: hello([LINK_CAPABILITY]))
+        registry.retain([], preservingAnnouncementsAfter: rosterPosition)
+        XCTAssertEqual(registry.announcements(for: "ahead"), [LINK_CAPABILITY])
+        XCTAssertFalse(registry.supports("ahead", LINK_CAPABILITY))
+    }
+}
+
+/// A counter a concurrent reader can report a miss into without becoming the
+/// thing under test.
+private final class Missed: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _count = 0
+    var count: Int { lock.lock(); defer { lock.unlock() }; return _count }
+    func record() { lock.lock(); _count += 1; lock.unlock() }
 }
 
 extension JSONValue {
