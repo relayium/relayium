@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		B100000000000000000000B2 /* RelayiumKit in Frameworks */ = {isa = PBXBuildFile; productRef = B100000000000000000000B1 /* RelayiumKit */; };
 		B100000000000000000001B2 /* RelayiumStoreKit in Frameworks */ = {isa = PBXBuildFile; productRef = B100000000000000000001B1 /* RelayiumStoreKit */; };
+		B100000000000000000001C2 /* RelayiumLocalPeerKit in Frameworks */ = {isa = PBXBuildFile; productRef = B100000000000000000001C1 /* RelayiumLocalPeerKit */; };
 		B100000000000000000000D6 /* RelayiumShareKit in Frameworks */ = {isa = PBXBuildFile; productRef = B100000000000000000000D5 /* RelayiumShareKit */; };
 		B100000000000000000000D7 /* RelayiumShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B100000000000000000000D1 /* RelayiumShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -92,6 +93,7 @@
 			files = (
 				B100000000000000000000B2 /* RelayiumKit in Frameworks */,
 				B100000000000000000001B2 /* RelayiumStoreKit in Frameworks */,
+				B100000000000000000001C2 /* RelayiumLocalPeerKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -157,6 +159,7 @@
 			packageProductDependencies = (
 				B100000000000000000000B1 /* RelayiumKit */,
 				B100000000000000000001B1 /* RelayiumStoreKit */,
+				B100000000000000000001C1 /* RelayiumLocalPeerKit */,
 			);
 			productName = Relayium;
 			productReference = B100000000000000000000A4 /* Relayium.app */;
@@ -633,6 +636,10 @@
 		B100000000000000000001B1 /* RelayiumStoreKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = RelayiumStoreKit;
+		};
+		B100000000000000000001C1 /* RelayiumLocalPeerKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RelayiumLocalPeerKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

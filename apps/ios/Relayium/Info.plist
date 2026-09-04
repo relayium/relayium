@@ -86,21 +86,15 @@
 	     same sentence and `zh-Hans.lproj/InfoPlist.strings` the translation. -->
 	<key>NSCameraUsageDescription</key>
 	<string>Relayium uses the camera only to read the pairing QR code another device is showing, so you do not have to type its six-digit join code by hand. Nothing is recorded or saved.</string>
-	<!-- The other purpose string this app owes, and the reason it is owed is the
-	     TRANSFER rather than the roster.
+	<!-- Local Network access is used by both Nearby discovery and direct transfer.
 
-	     Two different things wear the word "nearby" here, and only one of them
-	     touches the local network:
+	     Two different operations wear the word "nearby" here, and both touch the
+	     local network:
 
-	      1. **Finding the other device is a server question.** `LanDiscoveryModel`
-	         joins Relayium's code-less rendezvous room over the same HTTPS/
-	         WebSocket origin as the rest of the app, and the server groups that
-	         room by the public address it observes each device arriving from.
-	         There is no Bonjour, no mDNS query and no subnet scan, which is why
-	         `NSBonjourServices` and the multicast entitlement stay absent —
-	         declaring either would ask for machinery this app genuinely does not
-	         use.
-	      2. **Carrying the bytes is not.** Once the user picks a device, every
+	      1. **Finding the other device is local.** iOS browses and advertises
+	         exactly `_relayium._tcp` in the local Bonjour domain. It does not scan
+	         addresses, inspect the Wi-Fi network, or use a multicast entitlement.
+	      2. **Carrying the bytes is local too.** Once the user picks a device, every
 	         realtime lane builds its peer connection with `iceTransportPolicy =
 	         .all` (`RealtimeConnectionFactory.liveConnection`,
 	         `LinkWorkspaceModel`), so the winning candidate pair is routinely a
@@ -123,11 +117,8 @@
 	     English file and this string are the same sentence, so the fallback can
 	     never drift into saying something else.
 
-	     The sentence itself describes what the user is agreeing to and nothing
-	     more: files and messages going straight to the device they picked. It
-	     does not say Relayium looks at, scans or lists the network, because it
-	     does not — see (1) — and a purpose string that overstates its reach is
-	     the failure mode Apple's guidance is about.
+	     The sentence describes both actions that can raise the prompt: finding
+	     nearby Relayium devices and sending directly to the one the user picks.
 
 	     Still not here, and deliberately: `NSMicrophoneUsageDescription`. The
 	     same embedded framework references `AVAudioSession` symbols, but
@@ -137,7 +128,11 @@
 	     invented on the strength of symbol linkage would be the exact false
 	     statement the camera key spent five builds refusing to make. -->
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Relayium sends the files and messages you choose directly to the device you select, when that device is on the same network as this one.</string>
+	<string>Relayium uses your local network to find nearby Relayium devices and send files and messages directly to the device you choose.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_relayium._tcp</string>
+	</array>
 	<!-- Present and empty on purpose: an iOS app without a launch-screen
 	     declaration is letterboxed at a legacy size rather than run at the
 	     device's native resolution. Empty means the system's default, which is

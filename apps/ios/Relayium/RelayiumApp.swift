@@ -5,6 +5,9 @@ import RelayiumAppKit
 // directly rather than through a re-export that would hide which module owns the
 // token.
 import RelayiumKit
+// iOS-only Bonjour discovery and direct local signalling. The macOS app does
+// not link this product and retains its existing hub-backed Nearby path.
+import RelayiumLocalPeerKit
 
 /// R3-F: the sixth native iOS slice.
 ///
@@ -18,15 +21,11 @@ import RelayiumKit
 /// text session at a time. **Account** is R3-B's sign-in and usage summary plus
 /// R3-D's device and stored-file management.
 ///
-/// **What R3-E got wrong about Nearby, and what R3-F then got wrong in the
-/// other direction.** R3-E deferred the nearby half on the grounds that it
-/// needed "the local-network entitlement". That was wrong about DISCOVERY:
-/// `LanDiscoveryModel` is not Bonjour and scans nothing — it joins Relayium's
-/// code-less rendezvous room over the same origin as everything else in the
-/// app, and the server groups that room by the public IP it observes. So
-/// finding the other device needs ordinary internet access, and in exchange it
-/// can list a stranger sitting behind the same carrier or VPN gateway, which is
-/// why the tab explains what the roster is and never picks a device.
+/// iOS Nearby discovers only Relayium's `_relayium._tcp` service on the local
+/// link. It no longer joins the server's public-IP-grouped code-less room, so a
+/// shared carrier, VPN or café NAT cannot place an unrelated device in this
+/// roster. Discovery opens no peer connection; an outbound direct connection
+/// is created only for the row the user chooses.
 ///
 /// R3-F then generalised that answer to the whole feature and shipped with no
 /// purpose string at all, which was wrong about the TRANSFER. Every realtime
@@ -37,12 +36,10 @@ import RelayiumKit
 /// is what retained physical runs `0af36138` and `56e78dbf` recorded on
 /// iOS/iPadOS 26 while iPadOS 18 masked it.
 ///
-/// So the app now declares exactly one purpose string,
-/// `NSLocalNetworkUsageDescription`, localized in `en.lproj` and `zh-Hans.lproj`
-/// beside `Info.plist`. Everything else on the old list is still absent and
-/// still for the original reason: no Bonjour service and no multicast
-/// entitlement, because neither the roster nor the transfer uses them, and no
-/// background mode, no push and no notification. A session that arrives while
+/// So the app declares `NSLocalNetworkUsageDescription`, localized in
+/// `en.lproj` and `zh-Hans.lproj` beside `Info.plist`, plus exactly one Bonjour
+/// service: `_relayium._tcp`. It still requests no multicast or wifi-info
+/// entitlement, background mode, push or notification. A session that arrives while
 /// the user is elsewhere brings the tab forward in app instead — which is also
 /// why residency is foreground-only and honestly says so.
 ///
@@ -478,17 +475,15 @@ struct RelayiumApp: App {
         // models read it through a closure when the SAS lands — a second object
         // would be a setting the sessions never see.
         //
-        // R3-F switches these to the NEARBY factories, and the whole graph is
+        // The whole Nearby graph is
         // built here because each object needs the previous one at construction
         // and a `@StateObject` default value cannot reference another property.
-        // One discovery model, one inbound room, two session models, one
-        // listener: both same-network directions reach through the single room
-        // socket the discovery model owns, and reconnecting mints a new socket,
-        // which is why the listener re-subscribes through the observer slot
-        // rather than holding one.
+        // One discovery model, one inbound room, two session models, one local
+        // listener/browser generation: both same-network directions reach
+        // through the single direct signaling channel the discovery model owns.
         let verifying = VerificationPreference()
         _verification = StateObject(wrappedValue: verifying)
-        let nearby = AppEnvironment.makeLanDiscoveryModel()
+        let nearby = LocalNearbyEnvironment.makeDiscoveryModel()
         // Holds the exact socket an inbound attempt is being built on. A peer id
         // only means something inside the room that issued it, so a builder that
         // read "the current room" would, in the one case that matters — a drop

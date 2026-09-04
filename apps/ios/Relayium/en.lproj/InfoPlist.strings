@@ -27,8 +27,5 @@
    is what makes the last sentence true rather than reassuring. */
 "NSCameraUsageDescription" = "Relayium uses the camera only to read the pairing QR code another device is showing, so you do not have to type its six-digit join code by hand. Nothing is recorded or saved.";
 
-/* Shown by iOS when a transfer first needs to reach the other device across
-   this network. It describes the transfer — not discovery: the roster comes
-   from Relayium's own server over ordinary internet access, and this app runs
-   no Bonjour query and no subnet scan. */
-"NSLocalNetworkUsageDescription" = "Relayium sends the files and messages you choose directly to the device you select, when that device is on the same network as this one.";
+/* Shown when Nearby begins local Bonjour discovery or a direct local transfer. */
+"NSLocalNetworkUsageDescription" = "Relayium uses your local network to find nearby Relayium devices and send files and messages directly to the device you choose.";

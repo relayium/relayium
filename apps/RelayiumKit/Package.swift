@@ -41,6 +41,7 @@ let package = Package(
         // declared above it and names no StoreKit type, which is what lets the
         // whole purchase policy run under `swift test` with no store at all.
         .library(name: "RelayiumStoreKit", targets: ["RelayiumStoreKit"]),
+        .library(name: "RelayiumLocalPeerKit", targets: ["RelayiumLocalPeerKit"]),
     ],
     dependencies: [
         // Exact, not `from:` — this is the crypto the whole E2E guarantee rests
@@ -108,6 +109,8 @@ let package = Package(
         // seam is that the only thing it can do with a purchase is hand it up.
         .target(name: "RelayiumStoreKit",
                 dependencies: ["RelayiumAppKit"]),
+        .target(name: "RelayiumLocalPeerKit",
+                dependencies: ["RelayiumAppKit", "RelayiumKit"]),
         .testTarget(
             name: "RelayiumKitTests",
             // Tests also link `RelayiumStoreKit`, so `swift test` type-checks
@@ -115,7 +118,7 @@ let package = Package(
             // through a fake store; what linking the real one buys is that the
             // StoreKit 2 API surface it names cannot rot unnoticed.
             dependencies: ["RelayiumKit", "RelayiumAppKit", "RelayiumShareKit",
-                           "RelayiumStoreKit"],
+                           "RelayiumLocalPeerKit", "RelayiumStoreKit"],
             path: "Tests",
             resources: [.process("Fixtures")]
         ),

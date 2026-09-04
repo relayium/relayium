@@ -1418,35 +1418,60 @@ views and the wiring that connects them are covered independently by tests.
 
 ### Nearby transfer (R3-F)
 
-The same realtime stack as Direct, without a code: a live roster of the other
-devices Relayium's rendezvous service sees arriving from the same public
-address, an explicit send to the one the user picks, and a passive half that
-accepts one unsolicited file or text session at a time. No account in either
-direction — the code-less room mints nothing and `/api/ice` answers it
-STUN-only.
+The same realtime stack as Direct, without a code: a live roster, an explicit
+send to the one device the user picks, and a passive half that accepts one
+unsolicited file or text session at a time. On iOS the roster is now local:
+`RelayiumLocalPeerKit` advertises and browses exactly `_relayium._tcp` in the
+`local.` Bonjour domain. Bonjour carries a fresh 128-bit channel identity, the
+peer-supplied display name and the capability list that peer speaks; addressed
+signaling travels over a bounded direct TCP stream, while the existing
+WebRTC/SAS path still authenticates and encrypts the actual file or message
+session. No account or server signaling is used for the iOS Nearby graph. macOS
+retains its existing hub-backed graph, and
+`LocalNearbyModuleBoundaryTests` asserts that it still does.
 
-**Finding a device is not Bonjour, not mDNS and not a LAN scan, and R3-E's note
-in this file said otherwise.** That note deferred Nearby on the grounds that it
-needed the local-network entitlement. Source audit corrected it:
-`LanDiscoveryModel` joins the hub's code-less room over the same HTTPS/WebSocket
-origin as everything else, and the server groups that room by the public IP it
-observes. So the ROSTER needs ordinary internet access on every platform — and
-in exchange it can list a stranger sitting behind the same carrier or VPN
-gateway. What the audit then over-generalised was the transfer, which does need
-Local Network access on iOS; "Capabilities" below records that correction and
-the physical evidence behind it.
+**The capability list is on the wire because the alternative is a forgery.** In
+the hub's room a peer announces what it speaks and `PeerCapabilityRegistry`
+records that announcement; on a local link the advertisement IS that hello, so
+`LocalPeerAdvertisement` carries it in the TXT record's `c` field and
+`LocalPeerSignalingChannel` credits each discovered peer with exactly what THAT
+peer advertised. Synthesising the credit from this build's own list instead
+would state a capability nobody announced — an announcement about ourselves
+wearing somebody else's id — and two builds that disagreed about what
+`_relayium._tcp` speaks would each invite the other into an establishment it
+cannot answer. It stays a HINT on the same footing as the room hello: it can be
+stripped or forged, both of which are denials, and neither can put plaintext on
+the wire because session keys are derived through commit/reveal. A record whose
+key set, identity, name or capability list is not exactly what this shape
+allows is refused whole rather than admitted with a guess, and the credit is
+delivered before the roster frame, so no device is listed as selectable before
+what it can speak has been established.
 
-Every product decision on the screen follows from the grouping fact above:
-`nearby.explain` states the grouping and the caveat, `nearby.namesDisclaimer`
-says the names are peer-supplied labels, and **nothing is ever preselected**,
-not even when the room holds
-exactly one other entry — which is precisely the case where the only candidate
-might be a stranger. `IOSSurfaceGuardTests` pins the single `discovery.select(`
-call site to the row's own tap handler.
+Browsing is not a subnet probe and does not open connections. A connection is
+made only to an endpoint returned by Bonjour, and only when an addressed
+session signal needs to be sent. Discovery metadata is an untrusted hint:
+**nothing is ever preselected**, even when exactly one entry appears, names are
+still labelled as peer supplied, and SAS confirmation remains the identity
+check when enabled. `IOSSurfaceGuardTests` pins the single
+`discovery.select(` call site to the row's own tap handler.
+
+**A start that cannot finish ends, rather than searching forever.**
+`NWListener` and `NWBrowser` report a refused Local Network permission — or a
+link that is simply not up — as `waiting`, which is neither of the two edges
+the transport announces. `NetworkLocalPeerTransport` therefore bounds the
+arming window (`startDeadline`, 20 s: long enough not to race a user reading
+the system alert), and an expired window is announced as a failure.
+`LanDiscoveryModel` then leaves `connecting` for `reconnecting` and retries on
+its existing bounded backoff, so permission granted a moment later is picked
+up. The channel is also armed by an explicit `begin()` rather than by its
+initialiser, because `SignalingClient` is constructed FROM the channel and
+installs `onOpen`/`onText`/`onClose` afterwards: an edge delivered into three
+nil handlers is never re-announced, and the room would hang in `connecting`
+with no error and nothing to retry.
 
 **Residency has an order, and it lives in `NearbyResidencyCoordinator` rather
-than in the scene body.** Joining the room is what advertises this device as
-reachable, so before the socket opens the receive folder is resolved
+than in the scene body.** Starting discovery is what advertises this device as
+reachable, so before the local listener/browser starts the receive folder is resolved
 (`ReceiveDestination.directory()`) and installed on the shared file model. A
 failure joins nothing, renders the Files-app recovery (`ReceiveDestinationCopy`
 `.appFolder`) and offers a retry — unreachable is a state the user can be told
@@ -1454,7 +1479,7 @@ about, reachable-with-nowhere-to-write is one they find out about afterwards.
 The same object owns the lifecycle: `.active` joins (idempotent, and it never
 overrides a pause), `.inactive` does **nothing at all** — not even a filesystem
 touch, because that is the phase a document picker produces — and `.background`
-leaves the room *first* and only then runs R3-E's session cleanup, so there is
+stops discovery *first* and only then runs R3-E's session cleanup, so there is
 no window in which this device is listed, dialable and already torn down.
 Returning to the foreground rejoins without clearing a retained result or
 transcript. A pause is the user's, is sticky across a background cycle, and is
@@ -1497,19 +1522,15 @@ paragraph now names no folder, macOS renders `nearby.savedToDownloads`, and iOS
 renders `nearby.savedToAppFolder`, which points at the Files app. One shared
 sentence would have had to be false on one of the two platforms.
 
-**R3-F claimed to add no capability, and one third of that claim did not
-survive.** R3-F added no `NSBonjourServices`, no multicast or wifi-info
-entitlement, no background mode, no push, no notification, no Associated
-Domains, no App Group, no shared keychain group and no StoreKit; the entitlement
-file it left behind claimed only `com.apple.developer.applesignin`. It also
-omitted `NSLocalNetworkUsageDescription`, and that omission was a defect, not a
-restraint — the transfer it shipped reaches the chosen device over the local
-subnet. The app declares that purpose string now; see "Capabilities" below.
+**R3-F claimed to add no capability, and that historical claim has since been
+superseded.** The app now declares both `NSLocalNetworkUsageDescription` and the
+single Bonjour service `_relayium._tcp`. It still claims no multicast or
+wifi-info entitlement, background mode, push or notification capability.
 
 Associated Domains is the one thing on that list that has since changed: the
 Universal Link slice claimed it, for `applinks:relayium.com` alone, which is
 where R3-F's own deep-link deferral was discharged — see "Universal Links"
-below. Nothing else on the list has moved. A foreground inbound session
+below. A foreground inbound session
 navigates in app instead of notifying, which is the honest shape for an app that
 is either in the foreground or has no session at all.
 
@@ -1625,12 +1646,12 @@ Sign in with Apple button described above, and
 arrived with Universal Link routing below, plus
 `com.apple.security.application-groups = [group.com.relayium.app]`, which is the
 local handoff shared with the file-staging Share extension. Still absent:
-keychain access group, background modes, push, `NSBonjourServices` and the
-multicast/wifi-info entitlements. Local Network and the camera are absent from
-this file for a different reason — both are user-consented protected resources
-declared as purpose strings in `Info.plist` rather than as signed entitlements —
-and the app declares both: `NSLocalNetworkUsageDescription` for the transfer,
-see below, and `NSCameraUsageDescription` for the pairing QR scanner, which
+keychain access group, background modes, push, and the multicast/wifi-info
+entitlements. Local Network and the camera are absent from this file for a
+different reason — both are user-consented protected resources declared in
+`Info.plist` rather than as signed entitlements — and the app declares both:
+`NSLocalNetworkUsageDescription` for Nearby discovery and transfer, and
+`NSCameraUsageDescription` for the pairing QR scanner, which
 `docs/ios-app-store-submission.md` records in full. StoreKit does not require an
 entitlement; its boundary is the adapter linked only into the main App Store
 app, never the extension.
@@ -1638,30 +1659,21 @@ Each entitlement lands with the functional slice that needs it, and
 `IOSSurfaceGuardTests` fails on any other key appearing in the file — and on the
 associated-domains value being anything other than that one `applinks:` entry.
 
-#### Local Network, and the two ways this file got it wrong
+#### Local Network and Bonjour
 
-R3-E recorded that its deferral of the nearby half "cost something", on the
-grounds that Nearby would need the local-network *entitlement*. R3-F replied
-that it needed nothing at all. Both were wrong, in opposite directions, and the
-accurate answer splits the feature in two.
+iOS Nearby discovery is a local-network question. The app browses and
+advertises exactly `_relayium._tcp` in the `local.` domain through
+`NWBrowser`/`NWListener`; it does not scan SSIDs, enumerate addresses, probe a
+subnet, enable peer-to-peer Wi-Fi, or request multicast/wifi-info entitlements.
+Browsing never dials. Only a service endpoint returned by that browser may be
+dialled, and only for addressed signaling to a discovered identity.
 
-**Discovery is a server question.** `LanDiscoveryModel` is not Bonjour, does not
-scan, and reaches the same origin as the rest of the app; the room is grouped by
-the public IP the server observes. That half genuinely needs no declaration,
-which is why `NSBonjourServices` and the multicast and wifi-info entitlements
-are absent and stay absent — each is for machinery this app does not run.
-
-**The transfer is not.** Once the user picks a device, every realtime lane
-builds its peer connection with `iceTransportPolicy = .all`
-(`RealtimeConnectionFactory.liveConnection`, `LinkWorkspaceModel`), so the
-candidate pair that wins between two devices in one building is a unicast socket
-to the peer's address on this subnet. iOS 14 and later gate that behind Local
-Network access, and iOS grants it only to an app that has declared why it wants
-it. Shipping without the declaration did not save a prompt; it removed the
-prompt and the feature together. Retained physical runs `0af36138` and
-`56e78dbf` recorded both faces of that: iOS/iPadOS 26 withheld the prompt
-entirely and the local path never connected, while iPadOS 18 masked the omission
-and made the build look correct.
+The direct WebRTC lane also uses local-network access once the user selects a
+device. iOS 14 and later gates these operations behind Local Network consent.
+Shipping without the declaration did not save a prompt; it removed the prompt
+and the feature together. Retained physical runs `0af36138` and `56e78dbf`
+recorded both faces of the earlier omission: iOS/iPadOS 26 withheld the prompt
+entirely and the local path never connected, while iPadOS 18 masked it.
 
 So `apps/ios/Relayium/Info.plist` now declares `NSLocalNetworkUsageDescription`,
 localized in the app bundle's own `en.lproj/InfoPlist.strings` and
@@ -1669,8 +1681,8 @@ localized in the app bundle's own `en.lproj/InfoPlist.strings` and
 because a system permission alert is drawn by the OS before any Relayium code
 runs and iOS never looks in `RelayiumAppKit` for it. The English text in
 `Info.plist` is the fallback and is byte-identical to the English catalog. The
-sentence describes the transfer and only the transfer: it does not say the app
-looks at, scans or lists the network, because it does not.
+sentence truthfully describes both finding nearby Relayium devices and sending
+files and messages directly to the device the user chooses.
 
 `IOSLocalNetworkPermissionTests` is the guard on the whole of that — the key is
 present and non-empty, exactly two `.lproj` folders exist and they are
@@ -1690,11 +1702,27 @@ feature, and that batch deleted it. What replaced it, and the copy bound on the
 new key, are `IOSPairingScannerTests` and the camera section of
 `docs/ios-app-store-submission.md`.
 
-The negative half of the local-network claim moved to `IOSSurfaceGuardTests`'
-`testTheLocalNetworkDeclarationCoversTheTransferAndNothingElse`: no
-`NSBonjourServices`, no multicast or wifi-info entitlement, no background mode,
-and no `NWBrowser`/`NWListener`/`NetService`/`MultipeerConnectivity` anywhere in
-the target.
+The negative half of the local-network claim lives in `IOSSurfaceGuardTests`
+and `LocalNearbyModuleBoundaryTests`: the Bonjour list must be exactly
+`_relayium._tcp`, the Share extension must contain none of the local peer
+module, and there may be no multicast or wifi-info entitlement, background
+mode, `NetService` or `MultipeerConnectivity`. SSID and hotspot inspection
+(`CNCopyCurrentNetworkInfo`, `NEHotspotNetwork`, `NEHotspotHelper`,
+`CWWiFiClient`) and interface/address enumeration (`getifaddrs`,
+`SCNetworkReachability`) are banned in the app target AND in the local-peer
+module — the app-target ban is what keeps discovery inside one reviewed module,
+so `NWBrowser`, `NWListener` and the service-type literal itself stay banned in
+`apps/ios/Relayium` even though the product now browses. The service type is
+spelled exactly once in the whole module, in its own constant.
+
+Those two bans are SCOPED, and the scope is the honest part. `RelayiumAppKit`'s
+`LocalNetworkAddresses` does call `getifaddrs`, and the shipped binary
+references it: that is this device reading its OWN interface list so the receive
+surface can answer "am I on the network I think I am?", which is a different
+operation from enumerating other hosts and is neither stored nor sent. It is
+banned where discovery lives precisely so the two cannot be confused. Its own
+doc comment still describes the room as grouped by the service-observed public
+address, which remains true of macOS and is now stale for iOS.
 
 ### Universal Links
 

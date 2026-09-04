@@ -282,31 +282,21 @@ final class IOSLocalNetworkPermissionTests: XCTestCase {
 
     // MARK: - what the copy may and may not say
 
-    /// The sentence describes the transfer, and claims nothing about discovery.
-    ///
-    /// This is the product invariant the whole repair turns on. Relayium does
-    /// not scan, browse, or enumerate the local network: the roster comes from
-    /// its own server, keyed by the public address it observes. A purpose string
-    /// that said otherwise would be asking for consent to something that does
-    /// not happen — the exact overclaim Apple's guidance is about, and the one
-    /// the previous (wrong) guard was trying to prevent by removing the key
-    /// altogether.
-    ///
-    /// The transport vocabulary is banned for a different reason: `ICE`,
+    /// The sentence describes both local discovery and direct sending. It uses
+    /// product language rather than transport vocabulary: `ICE`,
     /// `WebRTC` and `STUN` are accurate and mean nothing to the person reading
     /// a system alert, and a purpose string is read once, under time pressure,
     /// by someone deciding whether to trust the app.
-    func testNeitherPurposeStringClaimsDiscoveryOrExposesTransportJargon() throws {
+    func testPurposeStringsDescribeDiscoveryAndSendWithoutTransportJargon() throws {
         // Word-bounded so a future sentence is judged on the word it uses and
         // not on a substring inside an unrelated one.
-        let bannedWords = ["scan", "scans", "scanning", "discover", "discovers",
-                           "discovery", "browse", "browses", "browsing",
-                           "bonjour", "mdns", "multicast", "broadcast",
+        let bannedWords = ["scan", "scans", "scanning", "browse", "browses",
+                           "browsing", "bonjour", "mdns", "multicast", "broadcast",
                            "webrtc", "ice", "stun", "turn", "udp", "socket",
                            "subnet", "wi-fi", "wifi"]
         // Chinese has no word boundaries a regex can use, so these are plain
         // substrings — which is the stricter direction and the safe one here.
-        let bannedSubstrings = ["扫描", "发现", "浏览", "搜索", "枚举",
+        let bannedSubstrings = ["扫描", "浏览", "搜索", "枚举",
                                 "组播", "广播", "子网", "套接字",
                                 "Bonjour", "WebRTC", "STUN", "TURN", "Wi-Fi", "无线"]
 
@@ -329,12 +319,12 @@ final class IOSLocalNetworkPermissionTests: XCTestCase {
         // And it says the thing it is FOR. A sentence that avoided every banned
         // word by describing nothing would pass the half above.
         let english = try purpose(.en).lowercased()
-        for required in ["send", "device"] {
+        for required in ["find", "nearby", "send", "device"] {
             XCTAssertTrue(english.contains(required),
                           "the English purpose string never mentions \(required)ing")
         }
         let chinese = try purpose(.zh)
-        for required in ["发送", "设备"] {
+        for required in ["查找", "附近", "发送", "设备"] {
             XCTAssertTrue(chinese.contains(required),
                           "the Chinese purpose string never mentions \(required)")
         }

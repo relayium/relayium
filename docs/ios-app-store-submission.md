@@ -726,21 +726,30 @@ localized in the app bundle's own `en.lproj/InfoPlist.strings` and
 `zh-Hans.lproj/InfoPlist.strings`. The English text in `Info.plist` is the
 fallback and is identical to the English catalog.
 
-The requirement comes from the transfer, not from device discovery, and the
-distinction matters for both App Review answers and support copy:
+The requirement covers both discovery and transfer:
 
-- **Discovery is a server question.** The nearby roster comes from Relayium's
-  own code-less rendezvous room over the same HTTPS/WebSocket origin as the rest
-  of the app, grouped by the public address the server observes. There is no
-  Bonjour, no mDNS and no subnet scan. `NSBonjourServices`, the multicast
-  entitlement and the wifi-info entitlement are therefore absent and stay
-  absent.
-- **The transfer is not.** Every realtime lane builds its peer connection with
-  `iceTransportPolicy = .all`, so between two devices on one network the
-  selected candidate pair is routinely a unicast socket to the peer's address on
-  that subnet. iOS 14 and later gate that behind Local Network access, and iOS
-  grants it only to an app that has declared why it wants it:
+- **Discovery is local and narrowly declared.** The iOS app browses and
+  advertises exactly `_relayium._tcp` in the `local.` Bonjour domain. It does
+  not scan SSIDs, enumerate addresses, probe subnets or enable peer-to-peer
+  Wi-Fi. `NSBonjourServices` therefore contains exactly that one service, while
+  the multicast and wifi-info entitlements remain absent.
+- **Signaling and transfer are direct.** Browsing never opens a connection. The
+  app may dial only a service endpoint returned by Bonjour, and only for
+  addressed signaling to a discovered identity. The existing encrypted WebRTC
+  lane then sends the selected file or message. iOS 14 and later gate these
+  operations behind Local Network consent:
   <https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy>
+- **What the advertisement contains.** A per-session random 128-bit channel
+  identity, the device's display name, and the capability list this build
+  speaks. No account, no durable installation handle, no key material and no
+  user content. The identity is minted per discovery session rather than
+  persisted, so the advertisement is not a stable device tracker.
+- **What a refusal looks like.** `NWListener`/`NWBrowser` report a refused
+  permission as `waiting` rather than as a failure, so the transport bounds its
+  arming window and reports an expired window as a failure. The Nearby surface
+  then shows its reconnecting state and retries on the existing backoff instead
+  of displaying a search that cannot end. Account, plan and stored-link surfaces
+  are unaffected.
 
 ### Why the omission was a silent failure rather than a smaller permission set
 
@@ -755,9 +764,9 @@ A build that passes on an older OS is therefore not evidence for this item.
 
 ### The copy, and the bound on it
 
-The purpose string describes files and messages going directly to the device the
-user selected. It deliberately does **not** claim that Relayium scans, browses
-or lists the network, because it does not, and it uses no transport vocabulary
+The purpose string describes finding nearby Relayium devices and sending files
+and messages directly to the device the user selected. It does not claim that
+Relayium scans the network, and it uses no transport vocabulary
 (`WebRTC`, `ICE`, `STUN`) in a sentence a person has to act on. If the copy is
 revised, keep both bounds: an overclaiming purpose string is its own review
 risk, and `IOSLocalNetworkPermissionTests` enforces the wording bounds,
@@ -770,10 +779,12 @@ following must be observed by hand on a **physical iOS/iPadOS 26 device**, on
 the exact candidate, before that candidate is treated as functionally complete:
 
 1. On a device that has not already granted this app Local Network access, the
-   first eligible transfer attempt to a selected nearby device presents the
-   Local Network prompt, and the alert renders the app's own sentence. Reach
-   that state by using a device where the permission has not yet been decided —
-   **do not** uninstall or reinstall the app, clear its data, reset privacy
+   first eligible Nearby discovery start presents the
+   Local Network prompt, and the alert renders the app's own sentence. Denying
+   it must leave Nearby in its truthful reconnecting state rather than an
+   endless search, and must leave sign-in, Account and stored links working.
+   Reach that state by using a device where the permission has not yet been
+   decided — **do not** uninstall or reinstall the app, clear its data, reset privacy
    settings, sign out, or change any device setting to force the prompt. If
    every available device has already decided the permission, record that and
    leave this item outstanding rather than mutating device or account state.
@@ -794,9 +805,11 @@ claims the declaration is correct **in source only**.
 
 ### Review-facing answers
 
-- The app requires Local Network access to transfer to a device on the same
-  network; it is requested at the first such transfer, not at launch.
-- It is not used for discovery, advertising, or enumerating other hosts.
+- The app requires Local Network access to discover Relayium devices and
+  transfer to the selected device on the same network; it is requested when the
+  foreground Nearby service first starts, not merely by launching the app.
+- It advertises and browses only `_relayium._tcp`; it does not enumerate or
+  probe arbitrary hosts.
 - Refusing it does not disable the app's account and cloud surfaces. Sign-in,
   the Account and plan screens, and creating, uploading to and downloading from
   a stored link all run over ordinary HTTPS to Relayium's servers and never

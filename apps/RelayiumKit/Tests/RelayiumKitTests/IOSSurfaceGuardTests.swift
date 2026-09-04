@@ -3454,16 +3454,16 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// Both realtime models are app-scoped, built once, and — since R3-F — from
-    /// the NEARBY factories, against one discovery model and one inbound room.
+    /// Both realtime models are app-scoped and built once, against one local
+    /// discovery model and one inbound room.
     ///
     /// Two claims, and the second is the one a diff hides. App-scoped, because a
     /// `TabView` tears an off-screen tab down and a live DataChannel must not go
     /// with it — the user checking their plan mid-transfer is exactly that.
     /// Nearby-wired, because the two direct surfaces drive the SAME two models
-    /// and both same-network paths reach through the one room socket the
-    /// discovery model owns; a second graph would be a second room membership
-    /// and a device listed twice.
+    /// and both same-network paths reach through the one local signaling
+    /// channel the discovery model owns; a second graph would advertise this
+    /// device twice and could list each peer twice.
     func testTheRealtimeModelsAreAppScopedAndBuiltFromTheNearbyFactories() throws {
         let all = try sources()
         let app = try XCTUnwrap(all.first { $0.name == "RelayiumApp.swift" })
@@ -3496,10 +3496,15 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(all.map {
             $0.text.components(separatedBy: "UITestMode.makeRealtimeTextModel(").count - 1
         }.reduce(0, +), 1, "the acceptance substitution happens more than once")
+        XCTAssertEqual(all.map {
+            $0.text.components(separatedBy: "LocalNearbyEnvironment.makeDiscoveryModel(").count - 1
+        }.reduce(0, +), 1, "iOS must own exactly one local discovery graph")
+        XCTAssertFalse(all.contains { $0.text.contains("AppEnvironment.makeLanDiscoveryModel(") },
+                       "iOS Nearby must not reconnect to the server-backed roster")
         for once in ["makeRealtimeModel(", "VerificationPreference(",
                      "DirectModeSelection(",
                      "ForegroundSessionCoordinator(",
-                     "makeLanDiscoveryModel(", "InboundRoom(", "makeNearbyReceiveModel(",
+                     "InboundRoom(", "makeNearbyReceiveModel(",
                      "makeLinkWorkspaceModel(",
                      "NearbyResidencyCoordinator(", "TransferPresence(", "AppNavigationModel("] {
             XCTAssertEqual(all.map { $0.text.components(separatedBy: once).count - 1 }.reduce(0, +), 1,
@@ -4433,7 +4438,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("L10n.t(.textDiscardLocalContentConfirmBody)"))
     }
 
-    /// **The one network declaration this app owes, and the ones it does not.**
+    /// **The narrow local-network declaration this app owes.**
     ///
     /// This test used to assert the opposite, and it was the assertion that kept
     /// the bug in place. Its argument was that `LanDiscoveryModel` is not
@@ -4454,10 +4459,9 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// — two `.lproj` folders, one key each, a real translation, a fallback that
     /// matches English, and an extension that declares none of it — is
     /// `IOSLocalNetworkPermissionTests`. What stays banned here is everything the
-    /// app genuinely does not use: Bonjour, multicast, wifi-info and every
-    /// discovery API, because declaring one of those WOULD be a prompt for
-    /// something that does not happen.
-    func testTheLocalNetworkDeclarationCoversTheTransferAndNothingElse() throws {
+    /// app genuinely does not use: multicast, wifi-info, broad discovery APIs,
+    /// background networking or a second Bonjour service type.
+    func testTheLocalNetworkDeclarationCoversDiscoveryAndTransferAndNothingElse() throws {
         let plist = try infoPlist()
         let purpose = try XCTUnwrap(plist["NSLocalNetworkUsageDescription"] as? String,
                                     "the app connects to peers on this subnet with no "
@@ -4465,8 +4469,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
                                         + "the transfer without ever prompting")
         XCTAssertFalse(purpose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                        "the purpose string is present but says nothing")
-        XCTAssertNil(plist["NSBonjourServices"],
-                     "the app declares Bonjour browsing it does not do")
+        XCTAssertEqual(plist["NSBonjourServices"] as? [String], ["_relayium._tcp"],
+                       "the app must declare exactly its one product-specific service")
         XCTAssertNil(plist["UIBackgroundModes"])
         XCTAssertNil(plist["NSUserActivityTypes"])
         // Read as a plist, not as text: the file's comment enumerates the
@@ -4491,9 +4495,23 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "aps-environment"] {
             XCTAssertNil(entitlements[banned], "the entitlements file claims \(banned)")
         }
+        // Scoped to `apps/ios/Relayium` — the APP target. Bonjour lives in
+        // `RelayiumLocalPeerKit`, behind `LocalNearbyEnvironment`, and that
+        // boundary is the reason these stay banned rather than being relaxed
+        // now that the product browses at all: an app target that reached for
+        // `NWBrowser` directly, or spelled the service type itself, would be a
+        // second discovery surface outside the one module the privacy review,
+        // the lifecycle rules and `LocalNearbyModuleBoundaryTests` all cover.
+        // The rest are machinery this app does not run in any module: SSID
+        // inspection, hotspot state and address enumeration are how "local
+        // network" turns into "the network the user is on", which is the exact
+        // overclaim the purpose string refuses to make.
         for (name, text) in try sources() {
-            for symbol in ["NWBrowser", "NWListener", "NetService", "Bonjour",
-                           "_relayium._tcp", "MultipeerConnectivity"] {
+            for symbol in ["NWBrowser", "NWListener", "NetService",
+                           "MultipeerConnectivity", "_relayium._tcp",
+                           "CNCopyCurrentNetworkInfo", "NEHotspotNetwork",
+                           "NEHotspotHelper", "CWWiFiClient", "getifaddrs",
+                           "SCNetworkReachability", "inet_ntop"] {
                 XCTAssertFalse(text.contains(symbol), "\(name) reaches for \(symbol)")
             }
         }

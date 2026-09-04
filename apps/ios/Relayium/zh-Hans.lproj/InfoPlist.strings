@@ -15,7 +15,5 @@
    没有录像输出，也不会把任何一帧写入磁盘，最后那句话因此是事实而非安慰。 */
 "NSCameraUsageDescription" = "Relayium 只用摄像头读取另一台设备上显示的配对二维码，这样你就不必手动输入它那六位加入码。过程中不会录制或保存任何画面。";
 
-/* 传输第一次需要经由本网络直达对方设备时，由 iOS 弹出。说的是「传输」而不是
-   「发现」：设备列表来自 Relayium 自己的服务器，走的是普通互联网访问，本应用
-   不做 Bonjour 查询，也不扫描子网。 */
-"NSLocalNetworkUsageDescription" = "Relayium 会把你选择的文件和消息，直接发送到你选中的那台设备；前提是该设备与本机处于同一网络。";
+/* Nearby 开始本地 Bonjour 发现或直接本地传输时，由 iOS 弹出。 */
+"NSLocalNetworkUsageDescription" = "Relayium 使用本地网络查找附近的 Relayium 设备，并将文件和消息直接发送到你选择的设备。";
