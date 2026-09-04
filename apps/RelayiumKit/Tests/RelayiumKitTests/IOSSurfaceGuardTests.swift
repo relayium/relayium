@@ -1208,6 +1208,76 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "the batch state words must be the shared ones")
     }
 
+    /// **The link transcript observes the conversation model itself.**
+    ///
+    /// `LinkWorkspaceModel` does not forward `LinkSessionPresentationModel`'s
+    /// `objectWillChange`, so a transcript that read `textMessages` only
+    /// through the parent would compile, draw once, and never hear an inbound
+    /// message. The transcript and its empty line must therefore live in a
+    /// child view holding the presentation model as `@ObservedObject`, so an
+    /// arriving message invalidates that subtree directly.
+    func testTheLinkTranscriptObservesThePresentationModelDirectly() throws {
+        let view = try code(at: try iosRoot.appendingPathComponent("NearbyLinkWorkspaceView.swift"))
+        let parts = view.components(separatedBy: "struct LinkConversationTranscript")
+        XCTAssertEqual(parts.count, 2,
+                       "the transcript must live in exactly one child view")
+        let child = parts[1]
+        XCTAssertTrue(child.contains("@ObservedObject var text: LinkSessionPresentationModel"),
+                      "the child must observe LinkSessionPresentationModel itself")
+        XCTAssertTrue(child.contains("ForEach(text.textMessages)"),
+                      "the message loop must read the model the child observes")
+        XCTAssertTrue(child.contains(".linkConversationEmpty"),
+                      "the empty state must invalidate with the same observation")
+        XCTAssertFalse(parts[0].contains("ForEach(text.textMessages)"),
+                       "the parent renders the transcript only through the observing child")
+        XCTAssertTrue(parts[0].contains("LinkConversationTranscript(text: text)"),
+                      "the workspace must render the transcript through the child")
+    }
+
+    /// **The transfer list observes the file model itself.**
+    ///
+    /// The same boundary as the transcript, on the other lane: `fileModel` is
+    /// reached through `LinkWorkspaceModel`, which does not forward
+    /// `LinkFilePresentationModel`'s `objectWillChange`. A batch list read
+    /// through the parent compiles and then never repaints, so an accepted
+    /// inbound batch keeps reading `Waiting for you to accept` and a sent one
+    /// keeps reading `Queued`. The whole section — the card, the rows, the
+    /// state words, the accept/reject/cancel controls and the received-file
+    /// share — must therefore live in a child holding the file model as
+    /// `@ObservedObject`, and the card's own emptiness test must be asked
+    /// there too, because `batches` becoming non-empty is itself a change the
+    /// parent never hears.
+    func testTheLinkTransferListObservesTheFileModelDirectly() throws {
+        let view = try code(at: try iosRoot.appendingPathComponent("NearbyLinkWorkspaceView.swift"))
+        let parts = view.components(separatedBy: "struct LinkTransfersSection")
+        XCTAssertEqual(parts.count, 2,
+                       "the transfer list must live in exactly one child view")
+        let child = parts[1]
+        XCTAssertTrue(child.contains("@ObservedObject var files: LinkFilePresentationModel"),
+                      "the child must observe LinkFilePresentationModel itself")
+        XCTAssertTrue(child.contains("ForEach(files.batches)"),
+                      "the batch loop must read the model the child observes")
+        XCTAssertTrue(child.contains("!files.batches.isEmpty || !link.armedFiles.isEmpty"),
+                      "the card's visibility must be decided under the same observation")
+        for control in ["LinkBatchCopy.text(for: batch.state)",
+                        "link.acceptInboundBatch()",
+                        "link.rejectInboundBatch()",
+                        "link.cancelQueuedBatch(batch.id)",
+                        "link.cancelOutboundBatch()",
+                        "ShareLink(items: payload.dragURLs)"] {
+            XCTAssertTrue(child.contains(control),
+                          "\(control) must repaint with the batch it belongs to")
+            XCTAssertFalse(parts[0].contains(control),
+                           "\(control) must not be drawn through the parent")
+        }
+        XCTAssertTrue(child.contains("@ObservedObject var link: LinkWorkspaceModel"),
+                      "armed files and the controls stay owned by the workspace model")
+        XCTAssertTrue(child.contains("L10n.t(.linkBatchArmed)"),
+                      "the parent-owned armed-file line must survive the move")
+        XCTAssertTrue(parts[0].contains("LinkTransfersSection(link: link, files: files)"),
+                      "the workspace must render the transfers through the child")
+    }
+
     func testNoDeferredFeatureIsReferenced() throws {
         // A later slice owns this. A reference means either a dead control or a
         // capability claimed before it works.

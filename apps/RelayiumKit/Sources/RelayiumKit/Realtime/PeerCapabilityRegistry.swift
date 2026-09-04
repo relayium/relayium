@@ -146,8 +146,35 @@ public func linkCapsHello(linkRoomActive: Bool) -> JSONValue {
 /// Thread-safe: announcements arrive on the socket's delivery queue while the
 /// UI and the link admission read them from the main actor.
 public final class PeerCapabilityRegistry: @unchecked Sendable {
+    /// One peer's announcement, and where the frame carrying it sat in DELIVERY
+    /// order.
+    ///
+    /// The position is stored HERE, beside the capabilities it belongs to and
+    /// under the same lock, rather than in a ledger the caller keeps alongside
+    /// this object. That placement is the whole correctness of
+    /// `retain(_:preservingAnnouncementsAfter:)`: a caller that first asked a
+    /// separate ledger which peers to protect and then called a retain would
+    /// leave a window between the two in which the delivery queue records a
+    /// brand-new announcement — one the just-computed protection set cannot name
+    /// and the roster does not yet contain — and the retain would delete it.
+    /// That is the same defect this class exists to close, one call site out.
+    private struct Announcement {
+        var caps: Set<String>
+        var position: Int
+    }
+
     private let lock = NSLock()
-    private var announced: [String: Set<String>] = [:]
+    private var announced: [String: Announcement] = [:]
+    /// A monotonic counter over the two kinds of event whose relative order
+    /// decides whether a roster frame may prune an announcement: roster frames
+    /// (`rosterDelivered`) and announcements (`record` / `recordProvenLink`).
+    ///
+    /// Both are stamped on the signalling delivery queue, which is the only
+    /// place their order is a fact. It is deliberately NOT reset by `reset()`:
+    /// a position is compared only against another position from this same
+    /// counter, so letting it run on across room epochs costs nothing and
+    /// removes the one way a stale comparison could ever read as fresh.
+    private var delivered = 0
     private let linkRoomActive: () -> Bool
 
     /// `linkRoomActive` is the COMPOSED predicate — build support and room scope
@@ -156,6 +183,25 @@ public final class PeerCapabilityRegistry: @unchecked Sendable {
     /// effect on the next routing decision, not the next launch.
     public init(linkRoomActive: @escaping () -> Bool) {
         self.linkRoomActive = linkRoomActive
+    }
+
+    /// Stamp the instant a roster frame was DELIVERED, and return that position.
+    ///
+    /// Called on the signalling delivery queue, where roster frames and
+    /// announcements are actually ordered against each other. Everything after
+    /// that point is a race the projection loses silently: a roster frame hops
+    /// to the main actor through its own `Task`, while an announcement is
+    /// recorded inline on this queue. Carrying the position across that hop is
+    /// what lets `retain(_:preservingAnnouncementsAfter:)` tell an announcement
+    /// a roster frame could have seen from one it could not.
+    ///
+    /// Takes no roster and stores none. This object is not a membership record
+    /// and must not become one — it answers only which announcements a given
+    /// roster frame is too old to have an opinion about.
+    public func rosterDelivered() -> Int {
+        lock.lock(); defer { lock.unlock() }
+        delivered += 1
+        return delivered
     }
 
     /// Record a peer's announcement. Returns true when this frame WAS a caps
@@ -176,7 +222,8 @@ public final class PeerCapabilityRegistry: @unchecked Sendable {
             return nil
         }
         lock.lock()
-        announced[peerId] = Set(caps)
+        delivered += 1
+        announced[peerId] = Announcement(caps: Set(caps), position: delivered)
         lock.unlock()
         return true
     }
@@ -192,7 +239,7 @@ public final class PeerCapabilityRegistry: @unchecked Sendable {
     public func supports(_ peerId: String, _ capability: String) -> Bool {
         if capability == LINK_CAPABILITY, !linkRoomActive() { return false }
         lock.lock(); defer { lock.unlock() }
-        return announced[peerId]?.contains(capability) == true
+        return announced[peerId]?.caps.contains(capability) == true
     }
 
     /// Everything this peer announced, sorted so two readings of one state are
@@ -205,7 +252,7 @@ public final class PeerCapabilityRegistry: @unchecked Sendable {
     /// Every routing question still goes through `supports`.
     public func announcements(for peerId: String) -> [String] {
         lock.lock(); defer { lock.unlock() }
-        return (announced[peerId] ?? []).sorted()
+        return (announced[peerId]?.caps ?? []).sorted()
     }
 
     /// Record what a frame PROVES about its sender, for a frame that is not a
@@ -248,9 +295,11 @@ public final class PeerCapabilityRegistry: @unchecked Sendable {
     @discardableResult
     public func recordProvenLink(peerId: String, signal: JSONValue) -> Bool {
         guard signalGeneration(signal) == .link else { return false }
-        lock.lock(); defer { lock.unlock() }
-        guard announced[peerId] == nil else { return false }
-        announced[peerId] = [LINK_CAPABILITY]
+        lock.lock()
+        guard announced[peerId] == nil else { lock.unlock(); return false }
+        delivered += 1
+        announced[peerId] = Announcement(caps: [LINK_CAPABILITY], position: delivered)
+        lock.unlock()
         return true
     }
 
@@ -258,10 +307,61 @@ public final class PeerCapabilityRegistry: @unchecked Sendable {
     /// is issued a fresh id by the hub, so nothing stale can be inherited by the
     /// new connection — but a departed peer's entry would otherwise leak for the
     /// life of the process.
+    ///
+    /// For a caller that can say WHEN its roster frame was delivered, prefer
+    /// `retain(_:preservingAnnouncementsAfter:)`. This spelling prunes against
+    /// the membership it is handed with no regard for delivery order, which is
+    /// correct only where the caller has no announcement newer than that
+    /// membership to lose.
     public func retain(_ peerIds: [String]) {
         let keep = Set(peerIds)
         lock.lock()
         announced = announced.filter { keep.contains($0.key) }
+        lock.unlock()
+    }
+
+    /// Prune to `peerIds`, EXCEPT announcements delivered after the roster frame
+    /// that produced that membership.
+    ///
+    /// ## What it is for
+    ///
+    /// The reverse-direction capability loss physical run `7e1970a0` caught. An
+    /// announcement is recorded synchronously on the signalling delivery queue,
+    /// because `LinkRoomRouter.intercept` gates the frame behind it inline on
+    /// that same queue; a roster frame reaches its model through an independent
+    /// `Task { @MainActor }`. Those are two clocks. A self-only roster DELIVERED
+    /// before a peer's hello can therefore be PROJECTED after it, and a plain
+    /// `retain` driven by that older membership deletes an announcement the room
+    /// had already correctly made — one hop before the roster naming that peer
+    /// is projected. The device is then listed with no capabilities at all and
+    /// the unified link silently falls back to the legacy surface.
+    ///
+    /// Comparing `rosterPosition` — the stamp `rosterDelivered()` returned for
+    /// that exact frame — against each announcement's own stamp is what tells
+    /// the two apart. An announcement OLDER than the frame is one the frame was
+    /// entitled to answer, and a departed peer's entry stays deleted. An
+    /// announcement NEWER than it is one the frame cannot have had an opinion
+    /// about, and the roster naming that peer is still in flight behind it.
+    ///
+    /// ## Why it is one call
+    ///
+    /// The keep set is computed and applied inside ONE critical section, so the
+    /// only states a concurrent reader on the delivery queue can observe are the
+    /// one before and the one after. There is no instant at which a still-valid
+    /// announcement is missing, and therefore no instant at which
+    /// `LinkRoomRouter.intercept` can read `supports == false` for a peer that
+    /// did announce and misroute its establishment frame — permanently, since a
+    /// frame passed to a legacy handler that is not installed is dropped with no
+    /// reply at all.
+    ///
+    /// Preservation is not membership. Nothing here lists, admits, greets or
+    /// ranks a preserved peer — a roster frame remains the only authority for
+    /// every one of those, and an actually later roster that excludes the peer
+    /// prunes it.
+    public func retain(_ peerIds: [String], preservingAnnouncementsAfter rosterPosition: Int) {
+        let keep = Set(peerIds)
+        lock.lock()
+        announced = announced.filter { keep.contains($0.key) || $0.value.position > rosterPosition }
         lock.unlock()
     }
 

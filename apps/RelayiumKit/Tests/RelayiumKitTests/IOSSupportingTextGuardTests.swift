@@ -408,14 +408,14 @@ final class IOSSupportingTextGuardTests: XCTestCase {
             supporting += code.components(separatedBy: "Palette.supportingLabel").count - 1
             warning += code.components(separatedBy: "Palette.warningLabel").count - 1
         }
-        // 118 in the app and 2 in the Share extension. The declarations
+        // 119 in the app and 2 in the Share extension. The declarations
         // themselves are not counted: `DesignTokens` spells the property name
         // without the `Palette.` prefix, which is what makes this a count of
         // USES rather than of mentions.
-        XCTAssertEqual(supporting, 120,
-                       "the supporting role should reach every one of the 119 sentences the "
+        XCTAssertEqual(supporting, 121,
+                       "the supporting role should reach every one of the 120 sentences the "
                        + "audit counted across both targets, plus the disclosure tint that "
-                       + "draws a 120th")
+                       + "draws a 121st")
         // The over-limit byte counter, the not-sent label, and the three
         // `exclamationmark.triangle.fill` symbols that accompany them.
         XCTAssertEqual(warning, 5,

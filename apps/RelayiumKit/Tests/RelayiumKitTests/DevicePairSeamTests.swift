@@ -454,6 +454,146 @@ final class DevicePairSeamTests: XCTestCase {
         }
     }
 
+    /// **The link's exit is re-resolved against the screen on every pass, and
+    /// never scrolled toward with an assertion.**
+    ///
+    /// `NearbyLinkWorkspaceView` draws ONE exit button whose title is
+    /// `link.leaveConnection` while the connection is up and `common.done`
+    /// once it is `.ended` — and either device ending the link ends it for
+    /// both. The resident's `holdForContainerRead` sits between its last
+    /// assertion and its exit, and the connector is free to finish inside that
+    /// window, so the resident routinely reaches its exit with a workspace that
+    /// is already ended and a button that already says Done.
+    ///
+    /// A helper that waited unconditionally for "End connection" would spend
+    /// its whole budget on a control the product will never draw again and then
+    /// fail. But resolving the title ONCE and then acting on that reading is
+    /// the same defect one step later, and it is the one this guard exists for:
+    /// between the reading and the tap sits `scrollUntilHittable`, which is
+    /// seconds of gestures ending in `XCTAssertTrue(element.isHittable)`. A
+    /// peer that ends the link inside those seconds — which it is entitled to
+    /// do — makes the product correctly replace the title, and the assertion
+    /// then fails a device that is showing exactly the right screen, reported
+    /// as a control that "never became reachable". Both reds are owned by
+    /// nothing and cost two people's hardware to reproduce.
+    ///
+    /// Guarded as source because the race is a race: a green offline run proves
+    /// nothing about which title a physical device happened to be showing, or
+    /// when it flipped. What is pinned is the SHAPE — one bounded loop over one
+    /// deadline; EVERY reading of the replaceable control taken inside it and
+    /// none outside it; no verdict passed from within it, so a legitimate title
+    /// replacement can never be an error; a failure when the deadline expires
+    /// with no exit resolved; and the terminal Done claim left outside the
+    /// branch, where both paths must satisfy it exactly once.
+    func testTheLinkExitIsResolvedAgainstTheScreenRatherThanAssumedLive() throws {
+        let suite = try Self.codeOnly(Self.uiTestSource("DevicePairUITests.swift"))
+        let exit = try XCTUnwrap(
+            suite.components(separatedBy: "private func endLinkAndDismiss(")
+                .dropFirst().first?.components(separatedBy: "\n    }").first,
+            "DevicePairUITests no longer has one helper that ends the link and dismisses it")
+
+        // 1. Both titles are queried, and neither is waited on with its own
+        //    timer — a private wait on either is a wait the other cannot answer.
+        for label in ["DevicePair.endConnectionLabel", "DevicePair.doneLabel"] {
+            XCTAssertTrue(exit.contains(label), """
+                the exit no longer queries \(label), so it can only recognise one of the \
+                two titles the single exit button takes.
+                """)
+        }
+        XCTAssertFalse(exit.contains("leave.waitForExistence"), """
+            the exit waits for "End connection" on its own timer again. A link the peer \
+            ended during the container-read hold never draws that title, so the wait \
+            expires in full and reports a missing control on a device that is showing the \
+            correct screen.
+            """)
+
+        // 2. The exit is ONE bounded loop, and it is the loop that observes the
+        //    screen — both titles, reachability, and the deadline together.
+        let split = exit.components(separatedBy: "\n        while ")
+        XCTAssertEqual(split.count, 2, """
+            the exit no longer drives exactly one loop of its own at the helper's body \
+            level. Its whole correctness is that the screen is re-read between every \
+            action it takes; zero loops means it acts on a single reading, and two mean \
+            there is a second place where a reading can go stale unnoticed.
+            """)
+        let head = split.first ?? ""
+        let afterWhile = (split.last ?? "").components(separatedBy: "\n        }")
+        let loop = afterWhile.first ?? ""
+        let tail = afterWhile.dropFirst().joined(separator: "\n        }")
+        for observation in ["Date() < deadline", "leave.exists", "done.exists",
+                            "leave.isHittable", "leave.tap()"] {
+            XCTAssertTrue(loop.contains(observation), """
+                the exit's loop no longer observes \(observation), so it cannot resolve \
+                both of the screen's mutually exclusive exits against the one ceiling and \
+                act on whichever it actually found.
+                """)
+        }
+
+        // 3. THE STALE WINDOW, which is what this guard is for. Every reading
+        //    of the control the product is ALLOWED to replace lives inside the
+        //    loop that re-resolves it. Nothing outside may read it, scroll
+        //    toward it, or press it on the strength of an older reading.
+        for stale in ["leave.exists", "leave.isHittable", "leave.tap(",
+                      "scrollUntilHittable(leave"] {
+            XCTAssertFalse(head.contains(stale) || tail.contains(stale), """
+                the exit reaches for "End connection" via `\(stale)` outside the loop that \
+                re-resolves it, so it is acting on a reading taken earlier. The peer may \
+                end the link at any instant after that reading — the workspace then \
+                correctly replaces the title with Done — and this device would be driving \
+                a control that no longer exists.
+                """)
+        }
+        XCTAssertFalse(exit.contains("scrollUntilHittable(leave"), """
+            the exit scrolls toward "End connection" with the ASSERTING helper, which is \
+            the exact stale-element window: that helper spends up to eighteen gestures and \
+            then fails with "never became reachable". A peer ending the link mid-scroll is \
+            valid product behaviour and must not be able to produce that failure — the \
+            replaceable control is chased one gesture at a time, re-reading the title \
+            between them, and only the terminal Done is scrolled to with an assertion.
+            """)
+
+        // 4. No verdict is passed from inside the loop. While the exit is still
+        //    resolving, a missing title is a state and not a failure.
+        for verdict in ["XCTAssert", "XCTFail"] {
+            XCTAssertTrue(loop.range(of: verdict) == nil, """
+                the exit's loop passes a \(verdict) verdict on a screen it has not finished \
+                resolving. Inside the loop, "End connection" being absent means the peer \
+                ended the link — a legitimate title replacement — and the only thing \
+                entitled to fail is the deadline.
+                """)
+        }
+
+        // 5. That deadline still fails, so a workspace offering no exit at all
+        //    is a red rather than a silent fall-through into the Done wait.
+        XCTAssertTrue(tail.contains("XCTFail(") && tail.contains("DevicePair.settleBudget"), """
+            the exit no longer fails when its budget expires having resolved neither exit. \
+            A workspace showing neither title would then fall through to the terminal wait \
+            and be diagnosed by whatever that timed out on, instead of by the check that \
+            knows no exit was ever offered.
+            """)
+
+        // 6. The terminal claim belongs to BOTH paths, at the helper's own body
+        //    level, and Done is pressed exactly once.
+        for terminal in [
+            "\n        XCTAssertTrue(done.waitForExistence(timeout: DevicePair.establishBudget)",
+            "\n        scrollUntilHittable(done, in: app, file: file, line: line)",
+            "\n        done.tap()",
+        ] {
+            let unindented = terminal.trimmingCharacters(in: .whitespacesAndNewlines)
+            XCTAssertTrue(exit.contains(terminal), """
+                "\(unindented)" is no longer at the helper's own body level, so it belongs \
+                to one path through the exit rather than to both. Whichever title the \
+                workspace was showing, this helper must still require Done, make it \
+                genuinely hittable, and press it — that is the claim, and a branch that \
+                skips it dismisses nothing.
+                """)
+        }
+        XCTAssertEqual(exit.components(separatedBy: "done.tap()").count - 1, 1, """
+            the exit presses Done from more than one place, so the two paths no longer \
+            converge on the single terminal action this helper exists to perform.
+            """)
+    }
+
     /// **Both reads are taken, and the second is not conditional on the first.**
     ///
     /// The live read says the transfer wrote the right bytes. The post-exit read

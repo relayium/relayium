@@ -79,6 +79,31 @@ public enum LanDiscoveryState: Equatable {
     case reconnecting(String)
 }
 
+/// A signalling client whose transport has been BUILT but not yet ARMED, plus
+/// the one call that arms it.
+///
+/// The split exists for exactly one ordering: `LanDiscoveryModel.openSocket`
+/// installs `onSelfId`/`onPeers`/`onClose`, the capability listener and the
+/// room observers on the client it is handed, and only a transport armed AFTER
+/// all of that can guarantee its first edges land in installed handlers. A
+/// factory that returns an already-live client leaves a window in which a
+/// synchronously-ready transport (the local link with a peer already on it)
+/// delivers `welcome`, the roster and the capability credit into nil handlers —
+/// frames nothing re-sends.
+///
+/// `activate` is called exactly once, by the model, when installation is done.
+/// A connection that needs no arming step (the hub's WebSocket, every existing
+/// test double) uses a no-op.
+public struct PreparedNearbyConnection {
+    public let client: SignalingClient
+    public let activate: () -> Void
+
+    public init(client: SignalingClient, activate: @escaping () -> Void) {
+        self.client = client
+        self.activate = activate
+    }
+}
+
 /// Notified when the room socket is replaced or lost.
 ///
 /// The reason this is a protocol rather than the discovery model simply owning
@@ -348,9 +373,17 @@ public final class LanDiscoveryModel: ObservableObject {
     /// worth trading that for.
     static let reconnectBackoff: [TimeInterval] = [1, 2, 5, 10, 20, 30]
 
-    private let connect: () -> SignalingClient
+    private let prepare: () -> PreparedNearbyConnection
     private let sleep: @Sendable (UInt64) async -> Void
     private var roster: [Peer] = []
+    /// Where the roster this model currently holds sat in DELIVERY order — the
+    /// stamp `PeerCapabilityRegistry.rosterDelivered()` returned for the frame
+    /// that produced it. Zero while no roster frame has been applied.
+    ///
+    /// It decides two things, and `applyDeliveredRoster` is where both are
+    /// spelled out: which announcements this membership is entitled to prune,
+    /// and which roster frames are too old to be applied at all.
+    private var rosterPosition = 0
     private var selfId = ""
     /// Operation identity: a callback from a socket the user has stopped must
     /// not repopulate a roster they closed, and a retry timer armed for a socket
@@ -379,7 +412,18 @@ public final class LanDiscoveryModel: ObservableObject {
                 // Optional rather than a defaulted closure literal — see
                 // `realSleep`. `nil` means the real timer.
                 sleep: (@Sendable (UInt64) async -> Void)? = nil) {
-        self.connect = connect
+        // A client from this factory is live the moment it exists — the hub's
+        // WebSocket, and every double written against this initializer — so
+        // there is nothing left to arm and the activation is a no-op.
+        self.prepare = { PreparedNearbyConnection(client: connect(), activate: {}) }
+        self.sleep = sleep ?? realSleep
+    }
+
+    /// For a connection whose transport must not be armed until this model has
+    /// installed every callback — see `PreparedNearbyConnection`.
+    public init(prepare: @escaping () -> PreparedNearbyConnection,
+                sleep: (@Sendable (UInt64) async -> Void)? = nil) {
+        self.prepare = prepare
         self.sleep = sleep ?? realSleep
     }
 
@@ -442,7 +486,13 @@ public final class LanDiscoveryModel: ObservableObject {
         teardown()
         let g = generation
         state = .connecting
-        let socket = connect()
+        let prepared = prepare()
+        let socket = prepared.client
+        // The one object that sees both clocks — roster frames and
+        // announcements are stamped against each other inside it, under the
+        // lock that also answers `supports`. Captured here so every handler
+        // below stamps into the same registry this model publishes from.
+        let registry = capabilities
         socket.onSelfId = { [weak self] id, _ in
             Task { @MainActor in
                 self?.apply(g) { model in
@@ -456,10 +506,15 @@ public final class LanDiscoveryModel: ObservableObject {
             }
         }
         socket.onPeers = { [weak self] peers in
+            // Stamped HERE, on the delivery queue, because this is the instant
+            // the frame became the room's answer — and the only place where it
+            // is ordered against the announcements recorded inline on this same
+            // queue. The projection below runs later, on the main actor, and by
+            // then that order is no longer observable.
+            let position = registry.rosterDelivered()
             Task { @MainActor in
                 self?.apply(g) { model in
-                    model.roster = peers
-                    model.refresh()
+                    model.applyDeliveredRoster(peers, deliveredAt: position)
                 }
             }
         }
@@ -488,7 +543,10 @@ public final class LanDiscoveryModel: ObservableObject {
         // room shapes differ but the queue ordering is identical, and a rule
         // that held in one room and not the other is the drift the shared
         // announcer exists to prevent.
-        let registry = capabilities
+        //
+        // Each recorder stamps its own delivery position inside the same lock
+        // that stores the capabilities, so an announcement is never visible
+        // without the position that says which roster frames may prune it.
         capsSubscription = socket.addSignalListener { [weak self] from, data in
             let announced = registry.record(peerId: from, signal: data)
             let proven = announced ? false : registry.recordProvenLink(peerId: from, signal: data)
@@ -517,6 +575,12 @@ public final class LanDiscoveryModel: ObservableObject {
         // announcer, so this only has to arm the new one's retries.
         scheduleCapsRetries()
         announceRoomConnected(socket)
+        // Armed LAST, and exactly once. Every handler, listener and observer
+        // above is installed by now, so a transport that is ready the instant
+        // it starts — the local link with a peer already advertising — cannot
+        // deliver `welcome`, the roster or the capability credit into a nil
+        // handler. Nothing re-sends those frames; arming earlier loses them.
+        prepared.activate()
     }
 
     /// Bounded, and tied to this socket epoch. The hello is unacknowledged, so
@@ -556,6 +620,12 @@ public final class LanDiscoveryModel: ObservableObject {
         client = nil
         announceRoomDisconnected()
         roster = []
+        // Back to "no roster frame has been applied", so the first frame of the
+        // next room — whatever position the registry's still-running counter
+        // gives it — is accepted rather than compared against a room that has
+        // ended. `announcer.roomChanged()` above has already discarded the
+        // announcements those positions belonged to.
+        rosterPosition = 0
         selfId = ""
         devices = []
         selectedId = nil
@@ -621,6 +691,38 @@ public final class LanDiscoveryModel: ObservableObject {
                                 })
     }
 
+    /// Project ONE roster frame, identified by the delivery position it was
+    /// stamped with when it arrived.
+    ///
+    /// ## Why a position and not just the frame
+    ///
+    /// Each roster frame reaches this model through its own
+    /// `Task { @MainActor }`, and independent tasks carry no ordering guarantee
+    /// between them. Nothing stops the frame stamped third from running before
+    /// the frame stamped first. Without this guard the older one would then win
+    /// twice over: it would overwrite `roster` with membership the room has
+    /// already superseded, and it would overwrite `rosterPosition` with a
+    /// smaller number — so the NEXT prune would be judged against a frame two
+    /// deliveries stale and would spare announcements a later roster had
+    /// already answered for.
+    ///
+    /// Rejecting anything not strictly newer than what has been applied makes
+    /// `rosterPosition` monotonic, which is the property every other rule here
+    /// rests on. A frame that loses this comparison is dropped whole rather than
+    /// partially applied: it is not a correction, it is an older answer to a
+    /// question the room has since re-answered.
+    ///
+    /// Internal rather than private so a test can apply stamped frames in an
+    /// explicitly chosen order — the one thing firing frames in a burst and
+    /// hoping the scheduler reverses them cannot do deterministically. It is the
+    /// production path itself, not a copy of it.
+    func applyDeliveredRoster(_ peers: [Peer], deliveredAt position: Int) {
+        guard position > rosterPosition else { return }
+        roster = peers
+        rosterPosition = position
+        refresh()
+    }
+
     /// A roster frame landed, or a `welcome` finally made one meaningful. This
     /// is the ONLY path that prunes the registry and announces membership.
     private func refresh() {
@@ -645,7 +747,22 @@ public final class LanDiscoveryModel: ObservableObject {
         // the registry in the same call.
         if !selfId.isEmpty, !roster.isEmpty {
             let peerIds = devices.map(\.id)
-            announcer.rosterChanged(peerIds: peerIds)
+            // `deliveredAt` is what makes the prune inside this call correct
+            // rather than merely usual. It prunes to this membership in ONE
+            // registry mutation, sparing only announcements stamped after the
+            // roster frame that produced it — the ones this frame cannot have
+            // had an opinion about, whose own roster is still in flight behind
+            // them. A departed peer's announcement is older than the frame that
+            // dropped it and stays deleted.
+            //
+            // Nothing spared this way is listed, ranked, greeted or announced:
+            // `peerIds` comes from `devices`, which comes from the roster alone,
+            // and it is `peerIds` that this call greets and `announceRoster`
+            // publishes. Membership authority did not move.
+            //
+            // `rosterPosition` is non-zero here by construction — the only path
+            // that sets `roster` is `applyDeliveredRoster`, which sets both.
+            announcer.rosterChanged(peerIds: peerIds, deliveredAt: rosterPosition)
             announceRoster(Set(peerIds))
         }
         // A device that left must not leave a selection pointing at nothing:
@@ -670,6 +787,7 @@ public final class LanDiscoveryModel: ObservableObject {
         client = nil
         announceRoomDisconnected()
         roster = []
+        rosterPosition = 0
         selfId = ""
         devices = []
         selectedId = nil

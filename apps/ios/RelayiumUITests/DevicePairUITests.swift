@@ -164,20 +164,141 @@ final class DevicePairUITests: XCTestCase {
             """, file: file, line: line)
     }
 
-    /// End the link and dismiss its result, which is two controls and not one.
+    /// End the link and dismiss its result, which is two controls and not one
+    /// — unless the peer ended the link first, in which case it is one.
+    ///
+    /// The workspace draws a SINGLE exit button whose title flips from
+    /// `End connection` to `Done` the moment the connection is `.ended`, and
+    /// either device ending it ends it for BOTH. That is not a corner case in
+    /// this harness, it is the resident's normal window: the container-read
+    /// hold sits between its last assertion and this call, and the connector is
+    /// free to finish and end the link inside it. This device then arrives here
+    /// with a workspace that has already ended and a button that says `Done` —
+    /// and an unconditional wait for `End connection` would spend the settle
+    /// budget on a control the product will never draw again, then fail a run in
+    /// which nothing went wrong and blame the exit for the peer's timing.
+    ///
+    /// So the exit is RESOLVED — and resolved REPEATEDLY, because the answer
+    /// has a shelf life of one screen read. Deciding ONCE that the link is
+    /// still live and then acting on that decision is the same bug one step
+    /// later: the decision is followed by scrolling, scrolling takes seconds,
+    /// and the peer is entitled to end the link inside them. The title then
+    /// correctly becomes `Done`, `End connection` is gone, and a helper that
+    /// asserts reachability fails a device that is showing exactly the right
+    /// screen — a red the product earned by behaving correctly. A valid title
+    /// replacement is never an error here.
+    ///
+    /// What runs instead is a small bounded state machine over one deadline.
+    /// Every pass re-reads which title the single button is carrying and takes
+    /// at most ONE action: press `End connection` if it is genuinely hittable,
+    /// spend ONE scroll gesture toward it if it is not, or — if that title is
+    /// simply gone — accept the `Done` that has replaced it. Nothing survives a
+    /// pass except how much of the scrolling repertoire is left, so there is no
+    /// window in which a stale reading outlives the screen it was taken from.
+    /// The live verb is asked about first on every pass, which is what keeps a
+    /// still-connected workspace out of the peer-ended branch.
+    ///
+    /// The claim is unweakened. The deadline is the same ceiling the
+    /// unconditional wait had and expiring it still fails, with a message that
+    /// distinguishes "never drawn" from "drawn but never reachable". And
+    /// whichever exit the workspace offered, `Done` must then exist, become
+    /// genuinely hittable, and be pressed exactly once — the terminal claim
+    /// this helper has always made, and the reason it sits outside the branch.
     private func endLinkAndDismiss(file: StaticString = #filePath, line: UInt = #line) {
         let leave = app.buttons[DevicePair.endConnectionLabel]
-        XCTAssertTrue(leave.waitForExistence(timeout: DevicePair.settleBudget),
-                      "a live link offers no way out", file: file, line: line)
-        scrollUntilHittable(leave, in: app, file: file, line: line)
-        leave.tap()
         let done = app.buttons[DevicePair.doneLabel]
+
+        let deadline = Date().addingTimeInterval(DevicePair.settleBudget)
+        var pressedLeave = false
+        var peerEnded = false
+        var sawLeave = false
+        var gesturesSpent = 0
+
+        while !pressedLeave && !peerEnded && Date() < deadline {
+            // Nothing is remembered about the title across a pass. Each of
+            // these reads is taken now, acted on once, and thrown away.
+            if leave.exists {
+                sawLeave = true
+                if leave.isHittable {
+                    // The one irreducible instant: the tap follows the reach
+                    // check with nothing between them. XCUITest offers no
+                    // atomic read-and-press, and a window one statement wide is
+                    // not the seconds-long window scrolling used to open.
+                    leave.tap()
+                    pressedLeave = true
+                } else if gesturesSpent < Self.exitReachGestures {
+                    // One gesture, then back to the top of the loop to re-read
+                    // the title. A control that disappears during this is the
+                    // product being correct, and the next pass says so.
+                    scrollOnce(step: gesturesSpent)
+                    gesturesSpent += 1
+                } else {
+                    Thread.sleep(forTimeInterval: 0.5)
+                }
+            } else if done.exists {
+                peerEnded = true
+            } else {
+                Thread.sleep(forTimeInterval: 0.5)
+            }
+        }
+
+        if !pressedLeave && !peerEnded {
+            let unresolved = sawLeave
+                ? "\"\(DevicePair.endConnectionLabel)\" was drawn but never became reachable"
+                : "neither \"\(DevicePair.endConnectionLabel)\" nor the "
+                    + "\"\(DevicePair.doneLabel)\" a peer-ended link is replaced by was ever drawn"
+            XCTFail("""
+                a live link offers no way out: within \(Int(DevicePair.settleBudget))s this \
+                workspace never presented an exit this device could press — \(unresolved).
+                \(app.debugDescription)
+                """, file: file, line: line)
+            // Explicit rather than implied by `continueAfterFailure = false`, so
+            // this cannot become a second full-budget timeout if that flips.
+            return
+        }
+
+        if peerEnded {
+            // Said out loud so a reader of the retained log knows this run took
+            // the peer-ended exit and did not merely fail to see one control.
+            print("""
+                \(DevicePairChannel.marker) note: the peer had already ended the link, so \
+                this device dismissed a workspace that was offering "\(DevicePair.doneLabel)" \
+                rather than ending a connection that was already over.
+                """)
+        }
+
         XCTAssertTrue(done.waitForExistence(timeout: DevicePair.establishBudget), """
             ending the connection did not produce its terminal Done.
             \(app.debugDescription)
             """, file: file, line: line)
         scrollUntilHittable(done, in: app, file: file, line: line)
         done.tap()
+    }
+
+    /// The size of the scrolling repertoire below, which is `scrollUntilHittable`'s.
+    private static let exitReachGestures = 18
+
+    /// `scrollUntilHittable`'s scrolling, taken ONE gesture at a time.
+    ///
+    /// Same repertoire in the same order — swipes up first, then short drags
+    /// forward, then short drags back — and the same total, so a control this
+    /// reaches is a control that helper would have reached. The only difference
+    /// is that the caller gets the screen back between gestures, which is what
+    /// lets it notice a legitimate title replacement instead of asserting that
+    /// the control it was chasing "never became reachable".
+    private func scrollOnce(step: Int) {
+        switch step {
+        case ..<6: app.swipeUp()
+        case ..<10: dragScreen(by: 0.22)
+        default: dragScreen(by: -0.22)
+        }
+    }
+
+    private func dragScreen(by fraction: CGFloat) {
+        let middle = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let target = app.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5 - fraction))
+        middle.press(forDuration: 0.05, thenDragTo: target)
     }
 
     /// **The end barrier: stay in the room until the peer has left it.**

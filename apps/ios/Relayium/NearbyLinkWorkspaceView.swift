@@ -200,9 +200,11 @@ struct NearbyLinkWorkspaceView: View {
     /// what is happening in the meantime.
     private var conversation: some View {
         SectionCard(L10n.t(.linkConversationHeading)) {
-            if let text = link.textModel, !text.textMessages.isEmpty {
-                transcript(text)
+            if let text = link.textModel {
+                LinkConversationTranscript(text: text)
             } else {
+                // No text lane yet, so there is no model to observe: the same
+                // empty line the transcript child draws, from the same key.
                 Text(L10n.t(.linkConversationEmpty))
                     .font(.callout)
                     .foregroundStyle(Palette.supportingLabel)
@@ -220,40 +222,6 @@ struct NearbyLinkWorkspaceView: View {
                 .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    /// A `LazyVStack` inside the tab's own `ScrollView`, never a second
-    /// scroller: two scroll regions on a phone is something the user cannot
-    /// reliably get past, and at the largest content sizes an inner one with a
-    /// fixed height shows about a line and a half.
-    private func transcript(_ text: LinkSessionPresentationModel) -> some View {
-        LazyVStack(alignment: .leading, spacing: Metrics.tight) {
-            ForEach(text.textMessages) { message in
-                VStack(alignment: .leading, spacing: Metrics.hairline) {
-                    Text(L10n.t(message.direction == .outgoing ? .textSent : .textReceived))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Palette.supportingLabel)
-                    // Verbatim, and never parsed: the body is peer-supplied
-                    // text, and `Text(verbatim:)` is what stops it being read
-                    // as markup.
-                    Text(verbatim: message.body)
-                        .font(.body.monospaced())
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(Metrics.tight)
-                .background(.quaternary.opacity(0.35),
-                            in: RoundedRectangle(cornerRadius: Metrics.corner,
-                                                 style: .continuous))
-                // One element per message, so VoiceOver reads "Sent, <body>"
-                // rather than stopping on the direction label alone.
-                .accessibilityElement(children: .combine)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(L10n.t(.linkA11yConversation))
     }
 
     /// The same composer shape as `DirectTextSessionView`, deliberately.
@@ -301,9 +269,196 @@ struct NearbyLinkWorkspaceView: View {
 
     // MARK: - the transfers
 
+    /// The transfer list, drawn by the child that OBSERVES the file model.
+    ///
+    /// Only the existence of a file lane is decided here; whether there is
+    /// anything to show is the child's question, because the answer changes
+    /// with `batches` and this view is never told when that happens.
     @ViewBuilder
     private var transfers: some View {
-        if let files = link.fileModel, !files.batches.isEmpty || !link.armedFiles.isEmpty {
+        if let files = link.fileModel {
+            LinkTransfersSection(link: link, files: files)
+        }
+    }
+
+    // MARK: - terminal
+
+    /// The transcript and the transfer list outlive the link on purpose: a
+    /// committed batch's saved files and the conversation the user was reading
+    /// are what they still need, exactly as the legacy terminal states keep
+    /// theirs. `dismiss()` — the Done below — is what clears them.
+    @ViewBuilder
+    private func ended(_ reason: LinkWorkspaceEnding) -> some View {
+        VStack(alignment: .leading, spacing: Metrics.section) {
+            InlineMessage(LinkEndingCopy.isFailure(reason) ? .warning : .info,
+                          LinkEndingCopy.text(for: reason))
+            if let text = link.textModel, !text.textMessages.isEmpty {
+                SectionCard(L10n.t(.linkConversationHeading)) {
+                    LinkConversationTranscript(text: text)
+                }
+            }
+            transfers
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - the exit
+
+    private var exit: some View {
+        VStack(alignment: .leading, spacing: Metrics.hairline) {
+            Button(exitTitle, role: isEnded ? nil : .destructive) { leave() }
+                .borderedAction(isEnded ? .ordinary : .destructive)
+                .controlSize(.large)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var isEnded: Bool {
+        if case .ended = link.connection { return true }
+        return false
+    }
+
+    private var exitTitle: String {
+        isEnded ? L10n.t(.commonDone) : L10n.t(.linkLeaveConnection)
+    }
+
+    // MARK: - actions
+
+    private var trimmedDraft: String {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Put a handed-back draft in front of the user again, without overwriting
+    /// something they have since typed.
+    private func restoreReturnedDraft() {
+        guard let returned = link.takeReturnedDraft() else { return }
+        guard trimmedDraft.isEmpty else { return }
+        draft = returned
+    }
+
+    private func sendDraft() {
+        let body = trimmedDraft
+        guard !body.isEmpty else { return }
+        actionError = nil
+        link.send(message: body)
+        // Cleared once the model has taken responsibility for it. The model
+        // holds an unsent draft itself until the conversation opens and hands it
+        // back through `returnedDraft` if the peer refuses, so nothing is
+        // silently lost.
+        draft = ""
+    }
+
+    /// The picker's result, staged and enqueued on the open link.
+    ///
+    /// Cleared immediately afterwards, and that is the difference between this
+    /// selection and the pre-connect one: a send made inside the workspace is
+    /// already committed and already addressed, so holding it would leave a
+    /// summary line describing files that have gone — and would keep the
+    /// security scopes it took for a batch the model now owns the descriptors of.
+    private func sendChosen(_ result: Result<[URL], Error>) {
+        selection.chooseFiles(result)
+        guard !selection.isEmpty else {
+            // A cancelled picker chose nothing and is not an error; a refused
+            // one already put its own message on `errorMessage`.
+            actionError = selection.errorMessage
+            return
+        }
+        guard let staged = selection.stageForSend() else {
+            actionError = selection.errorMessage ?? L10n.t(.nearbyAddFilesFirst)
+            selection.clear()
+            return
+        }
+        actionError = nil
+        link.send(files: staged.metas, sources: staged.sources)
+        selection.clear()
+    }
+
+    private func leave() {
+        if isEnded { link.dismiss() } else { link.leave() }
+    }
+
+    private func failureLine(_ message: String) -> some View {
+        InlineMessage(.warning, message)
+    }
+}
+
+/// The transcript and its empty line, in the smallest view that OBSERVES the
+/// conversation model itself.
+///
+/// `LinkWorkspaceModel` exposes `textModel` but does not forward its
+/// `objectWillChange`. The consequence lands here: a view that read
+/// `textMessages` through the parent would draw once and never hear
+/// an inbound message. `@ObservedObject` on the presentation model itself is
+/// what makes an arriving message invalidate exactly this subtree.
+///
+/// A `LazyVStack` inside the tab's own `ScrollView`, never a second scroller:
+/// two scroll regions on a phone is something the user cannot reliably get
+/// past, and at the largest content sizes an inner one with a fixed height
+/// shows about a line and a half.
+private struct LinkConversationTranscript: View {
+    @ObservedObject var text: LinkSessionPresentationModel
+
+    var body: some View {
+        if text.textMessages.isEmpty {
+            Text(L10n.t(.linkConversationEmpty))
+                .font(.callout)
+                .foregroundStyle(Palette.supportingLabel)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            LazyVStack(alignment: .leading, spacing: Metrics.tight) {
+                ForEach(text.textMessages) { message in
+                    VStack(alignment: .leading, spacing: Metrics.hairline) {
+                        Text(L10n.t(message.direction == .outgoing ? .textSent : .textReceived))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Palette.supportingLabel)
+                        // Verbatim, and never parsed: the body is peer-supplied
+                        // text, and `Text(verbatim:)` is what stops it being read
+                        // as markup.
+                        Text(verbatim: message.body)
+                            .font(.body.monospaced())
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(Metrics.tight)
+                    .background(.quaternary.opacity(0.35),
+                                in: RoundedRectangle(cornerRadius: Metrics.corner,
+                                                     style: .continuous))
+                    // One element per message, so VoiceOver reads "Sent, <body>"
+                    // rather than stopping on the direction label alone.
+                    .accessibilityElement(children: .combine)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(L10n.t(.linkA11yConversation))
+        }
+    }
+}
+
+/// The transfer list, its controls, and the share affordance — in the smallest
+/// view that OBSERVES the file model itself.
+///
+/// The same boundary `LinkConversationTranscript` exists for, on the other lane:
+/// `LinkWorkspaceModel` exposes `fileModel` without forwarding its
+/// `objectWillChange`, so a batch that is offered, accepted, transferred or
+/// committed changes only the child observable. A list read through the parent
+/// would compile, draw once, and then leave an inbound batch reading *Waiting
+/// for you to accept* for as long as the user was willing to look at it.
+///
+/// The card's own visibility is decided here for the same reason: `batches`
+/// going from empty to non-empty is exactly one of the changes the parent never
+/// hears.
+///
+/// `link` is observed too, and stays the owner of everything that is not a
+/// batch: the armed-file line is parent state, and every control acts through
+/// the workspace model rather than reaching into the lane.
+private struct LinkTransfersSection: View {
+    @ObservedObject var link: LinkWorkspaceModel
+    @ObservedObject var files: LinkFilePresentationModel
+
+    var body: some View {
+        if !files.batches.isEmpty || !link.armedFiles.isEmpty {
             SectionCard(L10n.t(.linkTransfersHeading)) {
                 if !link.armedFiles.isEmpty {
                     // A batch the lane has not seen. Its own state rather than
@@ -405,103 +560,5 @@ struct NearbyLinkWorkspaceView: View {
                 .controlSize(.large)
             }
         }
-    }
-
-    // MARK: - terminal
-
-    /// The transcript and the transfer list outlive the link on purpose: a
-    /// committed batch's saved files and the conversation the user was reading
-    /// are what they still need, exactly as the legacy terminal states keep
-    /// theirs. `dismiss()` — the Done below — is what clears them.
-    @ViewBuilder
-    private func ended(_ reason: LinkWorkspaceEnding) -> some View {
-        VStack(alignment: .leading, spacing: Metrics.section) {
-            InlineMessage(LinkEndingCopy.isFailure(reason) ? .warning : .info,
-                          LinkEndingCopy.text(for: reason))
-            if let text = link.textModel, !text.textMessages.isEmpty {
-                SectionCard(L10n.t(.linkConversationHeading)) { transcript(text) }
-            }
-            transfers
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    // MARK: - the exit
-
-    private var exit: some View {
-        VStack(alignment: .leading, spacing: Metrics.hairline) {
-            Button(exitTitle, role: isEnded ? nil : .destructive) { leave() }
-                .borderedAction(isEnded ? .ordinary : .destructive)
-                .controlSize(.large)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var isEnded: Bool {
-        if case .ended = link.connection { return true }
-        return false
-    }
-
-    private var exitTitle: String {
-        isEnded ? L10n.t(.commonDone) : L10n.t(.linkLeaveConnection)
-    }
-
-    // MARK: - actions
-
-    private var trimmedDraft: String {
-        draft.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// Put a handed-back draft in front of the user again, without overwriting
-    /// something they have since typed.
-    private func restoreReturnedDraft() {
-        guard let returned = link.takeReturnedDraft() else { return }
-        guard trimmedDraft.isEmpty else { return }
-        draft = returned
-    }
-
-    private func sendDraft() {
-        let body = trimmedDraft
-        guard !body.isEmpty else { return }
-        actionError = nil
-        link.send(message: body)
-        // Cleared once the model has taken responsibility for it. The model
-        // holds an unsent draft itself until the conversation opens and hands it
-        // back through `returnedDraft` if the peer refuses, so nothing is
-        // silently lost.
-        draft = ""
-    }
-
-    /// The picker's result, staged and enqueued on the open link.
-    ///
-    /// Cleared immediately afterwards, and that is the difference between this
-    /// selection and the pre-connect one: a send made inside the workspace is
-    /// already committed and already addressed, so holding it would leave a
-    /// summary line describing files that have gone — and would keep the
-    /// security scopes it took for a batch the model now owns the descriptors of.
-    private func sendChosen(_ result: Result<[URL], Error>) {
-        selection.chooseFiles(result)
-        guard !selection.isEmpty else {
-            // A cancelled picker chose nothing and is not an error; a refused
-            // one already put its own message on `errorMessage`.
-            actionError = selection.errorMessage
-            return
-        }
-        guard let staged = selection.stageForSend() else {
-            actionError = selection.errorMessage ?? L10n.t(.nearbyAddFilesFirst)
-            selection.clear()
-            return
-        }
-        actionError = nil
-        link.send(files: staged.metas, sources: staged.sources)
-        selection.clear()
-    }
-
-    private func leave() {
-        if isEnded { link.dismiss() } else { link.leave() }
-    }
-
-    private func failureLine(_ message: String) -> some View {
-        InlineMessage(.warning, message)
     }
 }

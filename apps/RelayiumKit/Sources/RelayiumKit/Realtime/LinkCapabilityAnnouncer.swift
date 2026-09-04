@@ -126,10 +126,37 @@ public final class LinkCapabilityAnnouncer {
 
     /// The roster changed. Greets peers this client has not greeted yet, and
     /// forgets the ones that left.
-    public func rosterChanged(peerIds: [String]) {
+    ///
+    /// `deliveredAt` is the stamp `PeerCapabilityRegistry.rosterDelivered()`
+    /// returned for THIS roster frame, for a caller that can supply one. With
+    /// it, the registry prune becomes one atomic mutation that keeps this
+    /// membership and, separately, any announcement delivered after this frame
+    /// was — see `retain(_:preservingAnnouncementsAfter:)` for why that
+    /// distinction is the difference between a working unified link and a
+    /// permanently misrouted establishment frame.
+    ///
+    /// Preservation is deliberately invisible to everything below the retain.
+    /// A preserved peer is not in `peerIds`, so it is never greeted, never
+    /// entered in `pending` or `greeted`, and never announced as membership: the
+    /// roster frame remains the sole authority for all of that. Only the
+    /// registry — a hint about what a peer speaks, read through `supports`
+    /// wherever routing asks — is spared, and only until a roster frame that
+    /// was actually delivered later answers for it.
+    ///
+    /// `nil` keeps the previous behaviour exactly, for the pairing room, whose
+    /// caller has no delivery stamp to give.
+    ///
+    /// The registry lock is released inside `retain` and is never held across
+    /// `announce`: greeting sends an outbound frame, and a lock held across a
+    /// send is a lock held across whatever the transport does with it.
+    public func rosterChanged(peerIds: [String], deliveredAt rosterPosition: Int? = nil) {
         guard !stopped else { return }
         let present = Set(peerIds)
-        registry.retain(peerIds)
+        if let rosterPosition {
+            registry.retain(peerIds, preservingAnnouncementsAfter: rosterPosition)
+        } else {
+            registry.retain(peerIds)
+        }
         pending = pending.filter { present.contains($0.key) }
         greeted.formIntersection(present)
         guard linkRoomActive() else { return }

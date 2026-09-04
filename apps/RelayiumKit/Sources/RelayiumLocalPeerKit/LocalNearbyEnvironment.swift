@@ -20,18 +20,23 @@ public enum LocalNearbyEnvironment {
     public static func makeDiscoveryModel(
         transport: @escaping () -> LocalPeerTransport = { NetworkLocalPeerTransport() }
     ) -> LanDiscoveryModel {
-        LanDiscoveryModel(connect: {
+        LanDiscoveryModel(prepare: {
             let advertisement = LocalPeerAdvertisement(
                 identity: LocalPeerAdvertisement.mintIdentity(),
                 name: AppEnvironment.deviceName(),
                 capabilities: advertisedCapabilities)
             let channel = LocalPeerSignalingChannel(advertisement: advertisement,
                                                     transport: transport())
-            // Built first, so `onOpen`/`onText`/`onClose` are installed before
-            // `begin()` arms anything that could announce an edge into them.
+            // Nothing is armed here. `SignalingClient` installs the channel's
+            // `onOpen`/`onText`/`onClose`, but the DISCOVERY MODEL's own
+            // callbacks and capability listener go onto the client after this
+            // closure returns — so `begin()` is handed back as the activation
+            // and runs only once that installation is complete. A transport
+            // that is ready synchronously (a peer already on the link) would
+            // otherwise announce the roster into handlers not yet installed.
             let client = SignalingClient(channel: channel, name: advertisement.name)
-            channel.begin()
-            return client
+            return PreparedNearbyConnection(client: client,
+                                            activate: { channel.begin() })
         })
     }
 }

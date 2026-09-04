@@ -337,6 +337,189 @@ final class LanDiscoveryTests: XCTestCase {
         XCTAssertFalse(model.capabilities.supports("other-3", TEXT_CAPABILITY))
     }
 
+    // MARK: - delivery order
+    //
+    // The reverse-direction defect physical run `7e1970a0` caught, in one
+    // sequence. An announcement is recorded SYNCHRONOUSLY on the delivery queue
+    // — `LinkRoomRouter.intercept` gates the frame behind it inline there — while
+    // every other socket edge reaches this model through its own
+    // `Task { @MainActor }`. So a self-only roster delivered BEFORE a peer's
+    // hello is projected AFTER it, retains the registry against a membership
+    // that predates the hello, and deletes it one hop before the roster naming
+    // that peer is projected. The device is then listed with no capabilities and
+    // the unified link silently falls back to the legacy surface.
+    //
+    // Most tests below therefore fire a whole burst with NO settle in between:
+    // that is what leaves the projections queued and out of step with the
+    // delivery queue. The last two do not rely on the scheduler at all — they
+    // stamp and apply roster frames directly, because "these two independent
+    // Tasks ran in the other order" is not something a burst can be made to
+    // demonstrate on purpose.
+
+    /// The exact mini-5 order: welcome, the self-only roster, the peer's
+    /// `link/1` hello, then the complete roster — all delivered before any
+    /// projection runs.
+    func testASelfOnlyRosterCannotDeleteAHelloDeliveredAfterIt() async {
+        let model = makeModel()
+        model.start()
+        welcome("self-1")
+        roster([("self-1", "Mac")])
+        capsHello(from: "peer-2", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        roster([("self-1", "Mac"), ("peer-2", "iPad")])
+        await settle()
+
+        XCTAssertEqual(model.devices.map(\.id), ["peer-2"])
+        XCTAssertEqual(model.devices.first?.supportsLink, true,
+                       "the roster that predates the hello deleted it before the complete roster landed")
+        XCTAssertEqual(model.devices.first?.announcesLegacyText, true)
+        XCTAssertTrue(model.capabilities.supports("peer-2", LINK_CAPABILITY))
+    }
+
+    /// The same burst, with the roster frames the other way round: a peer that
+    /// genuinely LEFT must still lose its announcement. This is the mutation
+    /// that separates ordering from "never prune anything" — a repair that
+    /// ignored delivery order would resurrect this peer.
+    func testARosterDeliveredAfterAHelloStillPrunesTheDepartedPeer() async {
+        let model = makeModel()
+        model.start()
+        welcome("self-1")
+        roster([("self-1", "Mac"), ("gone-2", "iPad")])
+        capsHello(from: "gone-2", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        roster([("self-1", "Mac")])
+        await settle()
+
+        XCTAssertTrue(model.devices.isEmpty)
+        XCTAssertFalse(model.capabilities.supports("gone-2", LINK_CAPABILITY),
+                       "a roster frame delivered after the hello is entitled to prune it")
+        XCTAssertFalse(model.capabilities.supports("gone-2", TEXT_CAPABILITY))
+    }
+
+    /// And the protection is spent by the first roster frame entitled to answer
+    /// it: a hello held through one stale prune is dropped by the NEXT roster
+    /// that omits its peer, so nothing accumulates for the life of the room.
+    func testAHeldAnnouncementIsPrunedByTheNextRosterThatOmitsIt() async {
+        let model = makeModel()
+        model.start()
+        welcome("self-1")
+        roster([("self-1", "Mac")])
+        capsHello(from: "peer-2", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        await settle()
+        XCTAssertTrue(model.capabilities.supports("peer-2", LINK_CAPABILITY),
+                      "the hello outlives the roster it was delivered after")
+
+        // A later self-only roster: this one WAS delivered after the hello, so
+        // it is membership authority over it.
+        roster([("self-1", "Mac")])
+        await settle()
+        XCTAssertFalse(model.capabilities.supports("peer-2", LINK_CAPABILITY))
+        XCTAssertTrue(model.devices.isEmpty)
+    }
+
+    /// Delivery order is per socket. A roster frame from a socket this model has
+    /// already replaced must not prune — or repair — anything in the room that
+    /// followed it, because its peer ids and its positions both died with it.
+    func testARosterFromAReplacedSocketTouchesNeitherRoomsAnnouncements() async {
+        let log = SocketLog()
+        let model = LanDiscoveryModel(connect: {
+            let ch = log.open()
+            let client = SignalingClient(channel: ch, name: "Mac")
+            ch.fireOpen()
+            return client
+        }, sleep: { _ in })
+        model.start()
+        log.channels[0].fireText(#"{"type":"welcome","name":"self-1","ip":"1.2.3.4"}"#)
+        log.channels[0].fireText(#"{"type":"peers","peers":[{"id":"self-1","name":"Mac"},{"id":"old-2","name":"iPad"}]}"#)
+        await settle()
+        XCTAssertEqual(model.devices.map(\.id), ["old-2"])
+
+        // "Look again": the first socket is torn down and a second room begins.
+        model.start()
+        XCTAssertEqual(log.channels.count, 2)
+        log.channels[1].fireText(#"{"type":"welcome","name":"self-9","ip":"1.2.3.4"}"#)
+        log.channels[1].fireText(#"{"type":"signal","from":"new-9","data":{"caps":["text/1","link/1"]}}"#)
+        log.channels[1].fireText(#"{"type":"peers","peers":[{"id":"self-9","name":"Mac"},{"id":"new-9","name":"iPad"}]}"#)
+        // …and the dead socket's roster finally arrives.
+        log.channels[0].fireText(#"{"type":"peers","peers":[{"id":"self-1","name":"Mac"}]}"#)
+        await settle()
+
+        XCTAssertEqual(model.devices.map(\.id), ["new-9"])
+        XCTAssertEqual(model.devices.first?.supportsLink, true,
+                       "a replaced socket's roster reached this room's registry")
+        XCTAssertTrue(model.capabilities.supports("new-9", LINK_CAPABILITY))
+        model.stop()
+    }
+
+    /// **Two roster projections, applied in the opposite order to delivery.**
+    ///
+    /// Each roster frame reaches this model through its own
+    /// `Task { @MainActor }`, and independent tasks carry no ordering guarantee
+    /// between them — the frame stamped second can run first. Applied
+    /// explicitly rather than fired in a burst, because trusting the scheduler
+    /// to reverse two tasks is not a test of anything.
+    ///
+    /// Without the guard the older frame wins twice: it overwrites the roster
+    /// with membership the room has already superseded, and it leaves
+    /// `rosterPosition` behind, so the next prune is judged against a stale
+    /// frame.
+    func testAnOlderRosterProjectionCannotOverwriteANewerOneThatAlreadyRan() async {
+        let model = makeModel()
+        let registry = model.capabilities
+        model.start()
+        welcome("self-1")
+        await settle()
+
+        // Delivery order: the self-only frame, then the complete one, then the
+        // peer's hello behind both.
+        let selfOnly = registry.rosterDelivered()
+        let complete = registry.rosterDelivered()
+        registry.record(peerId: "peer-2", signal: capsField([TEXT_CAPABILITY, LINK_CAPABILITY]))
+
+        // Application order: the newer frame first.
+        model.applyDeliveredRoster([Peer(id: "self-1", name: "Mac"),
+                                    Peer(id: "peer-2", name: "iPad")], deliveredAt: complete)
+        XCTAssertEqual(model.devices.map(\.id), ["peer-2"])
+
+        model.applyDeliveredRoster([Peer(id: "self-1", name: "Mac")], deliveredAt: selfOnly)
+        XCTAssertEqual(model.devices.map(\.id), ["peer-2"],
+                       "a roster frame older than the one already applied overwrote it")
+        XCTAssertTrue(registry.supports("peer-2", LINK_CAPABILITY))
+
+        // …and the room's next actual answer is still authoritative. The stale
+        // frame consumed nothing on its way through.
+        model.applyDeliveredRoster([Peer(id: "self-1", name: "Mac")],
+                                   deliveredAt: registry.rosterDelivered())
+        XCTAssertTrue(model.devices.isEmpty)
+        XCTAssertFalse(registry.supports("peer-2", LINK_CAPABILITY))
+        model.stop()
+    }
+
+    /// A peer whose announcement is spared is spared in the REGISTRY and
+    /// nowhere else: it is not listed, not selectable, and not published to a
+    /// room observer as membership. `LinkRoomRouter.rosterChanged` acts on that
+    /// membership — it cancels a pending request whose target is absent — so a
+    /// peer smuggled into it would be a peer the room never named.
+    func testASparedPeerIsNotListedSelectableOrAnnouncedAsMembership() async {
+        let model = makeModel()
+        let registry = model.capabilities
+        let rosters = RosterLog()
+        model.addRoomObserver(rosters)
+        model.start()
+        welcome("self-1")
+        await settle()
+
+        let selfOnly = registry.rosterDelivered()
+        registry.record(peerId: "peer-2", signal: capsField([TEXT_CAPABILITY, LINK_CAPABILITY]))
+        model.applyDeliveredRoster([Peer(id: "self-1", name: "Mac")], deliveredAt: selfOnly)
+
+        XCTAssertTrue(registry.supports("peer-2", LINK_CAPABILITY),
+                      "the roster frame predates the hello and may not take it")
+        XCTAssertTrue(model.devices.isEmpty, "a spared peer was listed")
+        model.select("peer-2")
+        XCTAssertNil(model.selectedId, "a spared peer was selectable")
+        XCTAssertEqual(rosters.rosters, [[]], "a spared peer was announced as membership")
+        model.stop()
+    }
+
     // MARK: - a hello is not a roster frame
     //
     // The macOS-1.2.4 defect, in one sequence: a peer reconnects, the hub issues
