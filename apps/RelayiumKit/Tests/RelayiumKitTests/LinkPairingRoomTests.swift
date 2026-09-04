@@ -2354,6 +2354,180 @@ final class LinkPairingRoomTests: XCTestCase {
         XCTAssertEqual(rig.pairingLinkActivations, 1, "and one user-visible settlement")
     }
 
+    // MARK: - P2. a roster is only authority over what was delivered BEFORE it
+
+    /// **The hostile burst, under the policy that has no lane to fall back to.**
+    ///
+    /// The hub sends a self-only roster and the peer's capability hello lands
+    /// behind it, in that delivery order — the ordinary shape whenever this side
+    /// joins a code a moment before the peer's hello is relayed. Both are on the
+    /// socket's delivery queue, so their order there is a fact; what is not a
+    /// fact is when the room ACTS on them, because a roster crosses to the main
+    /// actor through its own `Task` while the hello is recorded inline.
+    ///
+    /// The room therefore projects the older roster after the newer
+    /// announcement, and a prune driven by that membership deleted an
+    /// announcement the registry had already correctly taken. Under
+    /// `terminateUnsupported` the peer had then said something and supported
+    /// nothing, which is a decidable refusal: the room terminated a peer that
+    /// had announced exact `link/1` one hop earlier, told the user it was
+    /// unsupported, and closed the socket.
+    ///
+    /// Deterministic by construction: `fire` delivers inline, so the two hops
+    /// are enqueued on the main actor in the order the hub sent them, and this
+    /// asserts the room's answer rather than a scheduler's.
+    func testAStaleSelfOnlyRosterDoesNotRefuseAPeerThatAnnouncedBehindIt() async {
+        let rig = rig(config: stunOnlyConfig(), legacyFallback: .terminateUnsupported)
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+
+        // One burst, no settle between: the roster is DELIVERED first and the
+        // hello second, and the room sees them in the other order.
+        rig.roster([])
+        rig.announce("zzz-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        await settle()
+
+        XCTAssertFalse(rig.model.unsupportedPairingPeer,
+                       "a roster delivered BEFORE the hello refused the peer that sent it")
+        XCTAssertTrue(rig.adopted.isEmpty, "and it must not have reached a legacy session either")
+        XCTAssertFalse(rig.channels[0].closed,
+                       "a refusal closes the socket; there was nothing to refuse")
+        XCTAssertEqual(rig.model.connection, .establishing(sas: nil),
+                       "the room proceeds toward the link the peer announced")
+        XCTAssertEqual(rig.pairingLinkActivations, 1)
+        XCTAssertEqual(rig.transports.count, 1)
+
+        // And the answer is stable: nothing armed behind the burst turns it over.
+        rig.scheduler.advance(to: LinkWorkspaceModel.pairingCapabilityWait * 3)
+        await settle()
+        XCTAssertFalse(rig.model.unsupportedPairingPeer)
+        XCTAssertTrue(rig.adopted.isEmpty)
+    }
+
+    /// The same burst under the SHIPPED policy, where the loss is silent rather
+    /// than loud: a peer whose announcement was pruned supports neither
+    /// `link/1` nor `text/1`, so it is not decidable at all and simply waits out
+    /// `pairingCapabilityWait` — after which the room adopts a legacy session
+    /// with a peer that had announced the unified wire.
+    ///
+    /// The genuinely later roster is delivered too, because that is what makes
+    /// the window exist: it is the frame that arms the capability wait this test
+    /// then advances past.
+    func testAStaleSelfOnlyRosterDoesNotTimeAnAnnouncedPeerOutIntoLegacy() async {
+        let rig = rig(config: stunOnlyConfig(), legacyFallback: .adoptLegacySession)
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+
+        rig.roster([])
+        rig.announce("zzz-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        await settle()
+        XCTAssertEqual(rig.model.connection, .establishing(sas: nil),
+                       "the announcement is the decision; the stale roster has no say in it")
+
+        // The roster the hub really meant, behind both of them.
+        rig.roster(["zzz-web"])
+        await settle()
+        rig.scheduler.advance(to: LinkWorkspaceModel.pairingCapabilityWait * 3)
+        await settle()
+
+        XCTAssertTrue(rig.adopted.isEmpty,
+                      "a peer that announced link/1 timed out into the legacy lane")
+        XCTAssertTrue(rig.handedBackBatches.isEmpty)
+        XCTAssertEqual(rig.pairingLinkActivations, 1, "one unified link, and it stayed")
+        XCTAssertEqual(rig.transports.count, 1)
+        XCTAssertFalse(rig.model.unsupportedPairingPeer)
+    }
+
+    /// **Two roster frames, applied in the order the hop can really produce.**
+    ///
+    /// The socket cannot be made to hand the room a reversed pair — the rig's
+    /// delivery is in order by construction and so is the queue behind it — so
+    /// this drives `pairingRosterChanged` itself, at the stamps
+    /// `rosterDelivered()` would have issued, through the exact fence
+    /// production runs.
+    ///
+    /// The room is holding a parked link intent behind a shut relay gate, which
+    /// is where all three losses are visible at once: the older frame would
+    /// retire the peer's grace and its merged map, withdraw the ask through
+    /// `LinkRoomRouter.rosterChanged`, and overwrite `roster` with a membership
+    /// the room had already superseded. The peer's map then arrives and settles
+    /// a choice nobody is waiting for, so the link is never built at all.
+    func testARosterOlderThanTheOneAlreadyAppliedChangesNothing() async {
+        let rig = rig(config: pooledConfig(),
+                      relayMeasure: { pool, publish in
+                          for entry in pool { publish(entry.id, entry.id == "near" ? 10 : 90) }
+                      },
+                      // Long enough that no deadline elapses anywhere here: what
+                      // opens this gate is the peer's map, and nothing else.
+                      relayChoiceDeadline: 30)
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+        rig.announce("zzz-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        await settle()
+        XCTAssertEqual(rig.model.connection, .requesting)
+        XCTAssertTrue(rig.serverUrls.isEmpty, "the gate is shut: no map has met ours yet")
+
+        // The newer frame, and then the older one the hub had sent before it.
+        rig.model.pairingRosterChanged([Peer(id: "zzz-web", name: "peer")], deliveredAt: 20)
+        await settle()
+        rig.model.pairingRosterChanged([], deliveredAt: 19)
+        await settle()
+
+        XCTAssertEqual(rig.model.connection, .requesting,
+                       "the room has not retreated from the peer it parked an intent for")
+
+        // The one thing this room was waiting for. It can only settle if the
+        // peer, its grace and its parked intent all survived the older frame.
+        relayRtt(rig, from: "zzz-web", ["near": 12, "far": 80])
+        await settle()
+        XCTAssertEqual(rig.serverUrls, [["turn:near.relayium.test:3478"]],
+                       "an older roster took the peer's measurements with it")
+        XCTAssertEqual(rig.relayOnly, [true])
+        XCTAssertEqual(rig.transports.count, 1)
+        XCTAssertEqual(rig.pairingLinkActivations, 1)
+
+        // The fence is about ORDER, not about rejecting empty rosters: a
+        // genuinely later frame that names nobody is still a departure, and the
+        // room must not have been made deaf to one.
+        rig.model.pairingRosterChanged([], deliveredAt: 21)
+        await settle()
+        XCTAssertEqual(rig.transports.count, 1,
+                       "a later empty roster is heard; it simply has no live link to tear down")
+    }
+
+    /// The router half of the same reversal: the ask that already reached the
+    /// wire.
+    ///
+    /// `pairingRosterChanged` hands `LinkRoomRouter.rosterChanged` the
+    /// membership it applies, and the router withdraws a request whose target
+    /// that membership does not name — which is exactly right for a roster the
+    /// hub sent last, and exactly wrong for one it sent first. This side is the
+    /// LARGER id, so the frame at stake is a `linkRequest` already sent and
+    /// waiting for the peer's offer: the window the cancellation closes.
+    func testARosterOlderThanTheOneAlreadyAppliedDoesNotWithdrawTheAsk() async {
+        let rig = rig(config: stunOnlyConfig())
+        await requestingPairedLink(rig)
+        XCTAssertEqual(rig.linkFramesSent, ["request"])
+
+        rig.model.pairingRosterChanged([Peer(id: "aaa-web", name: "peer")], deliveredAt: 40)
+        await settle()
+        rig.model.pairingRosterChanged([], deliveredAt: 39)
+        await settle()
+        XCTAssertEqual(rig.model.connection, .requesting,
+                       "a roster older than the one already applied withdrew a live ask")
+        XCTAssertTrue(rig.adopted.isEmpty)
+
+        // And the authority itself is intact: the same empty membership,
+        // delivered genuinely later, still withdraws it.
+        rig.model.pairingRosterChanged([], deliveredAt: 41)
+        await settle()
+        XCTAssertNotEqual(rig.model.connection, .requesting,
+                          "a genuinely later roster must still withdraw an ask it names nobody in")
+    }
+
     // MARK: - R. the peer this side already chose, asking during the relay hold
 
     /// A room that has parked its link intent behind a shut relay gate, with the
