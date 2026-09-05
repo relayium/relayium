@@ -106,6 +106,19 @@ public final class RealtimeSessionModel: ObservableObject {
     private let makeRoomConnection: @MainActor (_ peerId: String, _ role: Role, _ iceServers: ICEConfig) async throws -> RealtimePeerConnection
     /// How long a nearby connect waits for the chosen device to answer.
     private let nearbyAnswerTimeout: TimeInterval
+    /// What the answer-timeout says to DO about it, because the two platforms
+    /// have two different answers. macOS times out on the hub-backed room,
+    /// where a browser on the production host is a listening peer and the
+    /// shared sentence is the right instruction; the iOS Local Nearby
+    /// composition times out on `_relayium._tcp`, where a browser publishes no
+    /// service and that instruction cannot work. Injected for the reason
+    /// `LanDiscoveryModel.reconnectingCopy` is: one module, both platforms, and
+    /// a `#if os(iOS)` here would change what a Mac-hosted test exercises.
+    ///
+    /// Internal rather than private so a guard test can read which sentence a
+    /// COMPOSITION chose without opening a socket or waiting out a timer. What
+    /// the factories pass is the half a driven timeout cannot show.
+    let nearbyNoAnswerCopy: L10nKey
     private let sleep: @Sendable (UInt64) async -> Void
     /// Read at the moment the SAS arrives, not captured at init: the user may
     /// flip the preference between sessions without restarting the app.
@@ -140,6 +153,9 @@ public final class RealtimeSessionModel: ObservableObject {
                 iceClient: ICEConfigClient,
                 requiresVerification: @escaping () -> Bool = { false },
                 nearbyAnswerTimeout: TimeInterval = 30,
+                // Defaults to the shared sentence, so every caller that does
+                // not name a transport keeps the wording it had.
+                nearbyNoAnswerCopy: L10nKey = .errorNearbyNoAnswer,
                 // Optional rather than a defaulted closure literal — see
                 // `realSleep`. `nil` means the real timer.
                 sleep: (@Sendable (UInt64) async -> Void)? = nil,
@@ -160,6 +176,7 @@ public final class RealtimeSessionModel: ObservableObject {
         self.iceClient = iceClient
         self.requiresVerification = requiresVerification
         self.nearbyAnswerTimeout = nearbyAnswerTimeout
+        self.nearbyNoAnswerCopy = nearbyNoAnswerCopy
         self.sleep = sleep ?? realSleep
         self.makeNearbyConnection = makeNearbyConnection
         self.makeInboundConnection = makeInboundConnection
@@ -443,7 +460,7 @@ public final class RealtimeSessionModel: ObservableObject {
                     // out of `.connecting`; only a silent peer is still here.
                     guard case .connecting = m.state else { return }
                     m.teardown()
-                    m.state = .failed(ErrorCopy.message(for: NearbyError.noAnswer))
+                    m.state = .failed(ErrorCopy.nearbyNoAnswer(m.nearbyNoAnswerCopy))
                 }
             }
         }

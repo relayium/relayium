@@ -1188,6 +1188,57 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// receiving here ever reaches the transport with a credential.
     case nearbyNoAccountNeeded = "nearby.noAccountNeeded"
 
+    // MARK: - Nearby pane, the iOS transport
+    //
+    // **iOS does not join the code-less rendezvous room, so it may not render
+    // the six sentences above that describe one.** Its Nearby tab is composed
+    // through `RelayiumLocalPeerKit`: it publishes and browses exactly one
+    // Bonjour service, `_relayium._tcp`, on the local link this device has
+    // joined, and no server is asked who is nearby. Every claim the shared copy
+    // makes about a public address, a carrier or VPN gateway putting strangers
+    // on that address, a browser on the production host being a peer, or a
+    // rendezvous to reconnect to, is therefore FALSE on that platform — which
+    // is how a Release screenshot of the shipped tab came to state four things
+    // the binary does not do.
+    //
+    // These are per-platform keys rather than a correction in place for the
+    // reason the platform split exists at all: macOS still runs the hub-backed
+    // room, and its sentences are still true there. One shared paragraph would
+    // have to be false on one of the two platforms.
+    //
+    // Maintained in English and Simplified Chinese only, per the supported-
+    // language policy; the frozen locales fall back to English rather than
+    // gaining a seventh half-maintained translation of a claim about a wire.
+
+    /// The always-visible iOS summary. Same job as `nearbySafetySummary` — the
+    /// one thing that has to be read before a device is chosen — with the
+    /// grouping that is actually true: everything on this local network, which
+    /// on a café, hotel or office network includes strangers' devices.
+    case nearbyIOSSafetySummary = "nearby.iosSafetySummary"
+    /// The iOS mechanism paragraph, behind the same closed disclosure. Names the
+    /// Bonjour service by the string the transport actually registers, states
+    /// that nothing outside the network is asked, and says what cannot appear —
+    /// a web browser does not publish this service and is not a peer here.
+    case nearbyIOSExplain = "nearby.iosExplain"
+    /// The iOS empty roster. The remedy is the Relayium app on the other device
+    /// on this same network — never a page on the production host, which
+    /// advertises no Bonjour service and can never join this roster.
+    case nearbyIOSEmptyRoster = "nearby.iosEmptyRoster"
+    /// What receiving allows on iOS, including the limit this platform actually
+    /// has: the app claims no background mode, so
+    /// `NearbyResidencyCoordinator` leaves the link on `.background` and the
+    /// window in which an unsolicited transfer can arrive is the window in
+    /// which the app is open.
+    case nearbyIOSListeningBody = "nearby.iosListeningBody"
+    /// What happens on the other end of an iOS Nearby send. The peer is another
+    /// Relayium app on this link, not a browser, so the shared note's
+    /// production-host sentence describes a device that cannot be there.
+    case nearbyIOSAcceptanceNote = "nearby.iosAcceptanceNote"
+    /// The iOS drop banner. There is no rendezvous to lose here — what dropped
+    /// is the local link — so `LanDiscoveryModel` renders this key instead of
+    /// `nearbyReconnecting` when `LocalNearbyEnvironment` composed it.
+    case nearbyIOSReconnecting = "nearby.iosReconnecting"
+
     // MARK: - Drop zone, picker, received result, QR
 
     case dropA11yLabel = "drop.a11yLabel"
@@ -1516,6 +1567,24 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case errorFactoryNoPeerAppeared = "error.factory.noPeerAppeared"
     case errorNearbyNotScanning = "error.nearby.notScanning"
     case errorNearbyNoAnswer = "error.nearby.noAnswer"
+    /// The seventh iOS-only Nearby key, and the one that is not on the Nearby
+    /// screen at all — which is why the first six did not catch it.
+    ///
+    /// `error.nearby.noAnswer` is a RECOVERY instruction, not a diagnosis: it
+    /// tells the user what makes a device answer. On the hub-backed room macOS
+    /// joins, the answer is a listening peer, and a browser on the production
+    /// host is one — so the shared sentence sends the user there and is true.
+    /// On the `_relayium._tcp` link iOS ships, a browser publishes no Bonjour
+    /// service and can never answer, so the same sentence is an instruction
+    /// that cannot work, printed at the exact moment the user is stuck.
+    ///
+    /// Reached from `RealtimeSessionModel.armAnswerTimeout` and
+    /// `RealtimeTextSessionModel.armAnswerTimeout` — both nearby timeout
+    /// paths, file and text — and from nowhere else. It is rendered instead of
+    /// the shared key only when a composition passed it in; see
+    /// `AppEnvironment.localNearbyNoAnswerCopy`, which is the one place the
+    /// substitution is made.
+    case errorNearbyIOSNoAnswer = "error.nearby.iosNoAnswer"
     /// %@ — the file-count limit, verbatim.
     case errorStagingFileCount = "error.staging.fileCount"
     case errorStagingUnreadable = "error.staging.unreadable"

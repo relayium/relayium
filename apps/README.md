@@ -1522,6 +1522,44 @@ paragraph now names no folder, macOS renders `nearby.savedToDownloads`, and iOS
 renders `nearby.savedToAppFolder`, which points at the Files app. One shared
 sentence would have had to be false on one of the two platforms.
 
+**And the device noun was not the last thing that was per-platform — the WIRE
+was.** Once iOS moved to `_relayium._tcp`, the shared nearby copy was still
+describing the hub-backed room: a roster grouped by the public address the
+server observes, a carrier or VPN gateway able to put strangers on it, "open
+relayium.com" as the way to be listed or to wake a silent device, and a lost
+rendezvous in the reconnect banner. All of that remains true on macOS and none
+of it is true on iOS, where nothing is asked outside the local link and a
+browser publishes no Bonjour service at all. A correction in place would only
+have moved the falsehood to the other platform, so the six screen strings and
+one error string were SPLIT: `nearby.iosSafetySummary`, `nearby.iosExplain`,
+`nearby.iosEmptyRoster`, `nearby.iosListeningBody`, `nearby.iosAcceptanceNote`,
+`nearby.iosReconnecting` and `error.nearby.iosNoAnswer`, in English and
+Simplified Chinese only per the supported-language policy, with the frozen
+locales falling back to English.
+
+The seventh is the one worth naming separately, because it is not on the screen.
+`error.nearby.noAnswer` is what both session models render when a chosen device
+never answers, and it is a RECOVERY instruction — open relayium.com there and
+keep the page open — which works against the room and cannot work against
+Bonjour. It is reached only by waiting out `armAnswerTimeout`, on the file lane
+and on the text lane, which is why rendering the tab did not surface it.
+
+Where the substitution happens is the point. `LanDiscoveryModel` takes a
+`reconnectingCopy` key and both session models take a `nearbyNoAnswerCopy` key,
+each defaulting to the shared sentence, so every existing caller — including
+both macOS transfer modules — is byte-identical. The iOS values are passed at
+one boundary each: `LocalNearbyEnvironment.makeDiscoveryModel` for the banner,
+and `AppEnvironment`'s two `#if os(iOS)` realtime overloads, which are the iOS
+Local Nearby composition, for the timeout. `AppEnvironment.localNearbyNoAnswerCopy`
+is declared outside that conditional on purpose: this package's tests are hosted
+on macOS, and a constant inside the block would be unreachable from every test
+that runs — which is how the shared copy reached an iOS Release screenshot in
+the first place. `NearbySessionModelTests` drives both real timeout paths in
+both maintained languages, `AppEnvironmentTests` proves every host-compiled
+factory still chose the shared sentence, and `LocalizedCopyTests` holds each iOS
+string against the claims it may not make and each shared string against the
+claims macOS still needs it to make.
+
 **R3-F claimed to add no capability, and that historical claim has since been
 superseded.** The app now declares both `NSLocalNetworkUsageDescription` and the
 single Bonjour service `_relayium._tcp`. It still claims no multicast or

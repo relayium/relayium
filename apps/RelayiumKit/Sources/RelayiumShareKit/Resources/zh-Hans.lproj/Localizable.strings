@@ -372,6 +372,14 @@
 "nearby.setupFailed" = "一次传入的附近传输未能建立。";
 "nearby.noAccountNeeded" = "在这个网络上发送和接收都不需要账户。";
 
+/* MARK: nearby pane, the iOS transport */
+"nearby.iosSafetySummary" = "与本设备处于同一本地网络、并且运行着 Relayium 应用的设备。在咖啡馆、酒店、办公室这类共用网络上，其中可能包含陌生人的设备，所以请自己挑选发给谁。";
+"nearby.iosExplain" = "Relayium 只在本设备已加入的本地网络上查找一个 Bonjour 服务 _relayium._tcp，并在开启接收时发布同一个服务。它不扫描地址，不读取该网络的其他任何信息，也不向这个网络之外的任何地方询问附近有谁。只有运行 Relayium 应用的设备才会出现在这里——网页浏览器不会。在咖啡馆、酒店、办公室这类共用网络上，应答的设备可能属于陌生人。";
+"nearby.iosEmptyRoster" = "还没有其他设备。请在对方设备上打开 Relayium 应用，连接到同一个网络，并让它保持打开。";
+"nearby.iosListeningBody" = "只要本应用处于打开状态，这个网络上的设备无需先征求同意就可以向本设备发送文件或发起消息会话。这个网络上任何运行 Relayium 的设备都可以尝试——如果这不是你想要的，请暂停接收。";
+"nearby.iosAcceptanceNote" = "只要你挑选的那台设备正在接收，它就会直接接受你发送的内容，消息会话也会在对方一侧直接打开，除非任一设备开启了下方的高级验证。只要本设备开启接收并且本应用处于打开状态，它也会以同样方式接受来自这个网络的传入传输。";
+"nearby.iosReconnecting" = "与本地网络的连接已断开，正在重新连接…";
+
 /* MARK: 拖放区、选择器、接收结果、二维码 */
 "drop.a11yLabel" = "待发送的文件";
 "drop.a11yHint" = "把文件或文件夹拖到这里，或激活以选择它们。";
@@ -517,6 +525,8 @@
 "error.factory.noPeerAppeared" = "在配对码过期之前没有人加入。请创建新的配对码并重试。";
 "error.nearby.notScanning" = "Relayium 已停止查找附近设备，因此那台设备不再可用。请重新查找，然后再选择它。";
 "error.nearby.noAnswer" = "那台设备没有应答。请在它上面打开 relayium.com 并保持页面打开，然后重新选择它。也可以改用配对码 — 在这台设备上接收正是靠配对码。";
+/* iOS Local Nearby 的对应句子。 */
+"error.nearby.iosNoAnswer" = "那台设备没有应答。请在它上面打开 Relayium 应用，连接到同一个本地网络，开启接收，然后重新选择它。如果两台设备不在同一个网络上，可以改用配对码。";
 "error.staging.fileCount" = "请选择 1 到 %@ 个文件。";
 "error.staging.unreadable" = "未能打开全部所选文件，因此什么都没有发送。请重新选择文件。";
 "error.text.authenticationFailed" = "这条加密消息未通过完整性校验，因此已被丢弃并关闭了会话。";

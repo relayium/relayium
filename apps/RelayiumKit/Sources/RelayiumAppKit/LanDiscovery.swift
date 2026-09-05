@@ -375,6 +375,15 @@ public final class LanDiscoveryModel: ObservableObject {
 
     private let prepare: () -> PreparedNearbyConnection
     private let sleep: @Sendable (UInt64) async -> Void
+    /// What the drop banner says, because the two platforms lose two different
+    /// things. macOS loses the hub's rendezvous socket and keeps the default;
+    /// iOS is composed by `LocalNearbyEnvironment` over a Bonjour transport
+    /// where no rendezvous exists to lose, and passes its own key.
+    ///
+    /// A defaulted parameter rather than a platform conditional: this file is
+    /// one module compiled for both, and `#if os(iOS)` here would silently
+    /// change what the macOS unit tests exercise on a Mac-hosted run.
+    private let reconnectingCopy: L10nKey
     private var roster: [Peer] = []
     /// Where the roster this model currently holds sat in DELIVERY order — the
     /// stamp `PeerCapabilityRegistry.rosterDelivered()` returned for the frame
@@ -411,20 +420,24 @@ public final class LanDiscoveryModel: ObservableObject {
     public init(connect: @escaping () -> SignalingClient,
                 // Optional rather than a defaulted closure literal — see
                 // `realSleep`. `nil` means the real timer.
-                sleep: (@Sendable (UInt64) async -> Void)? = nil) {
+                sleep: (@Sendable (UInt64) async -> Void)? = nil,
+                reconnectingCopy: L10nKey = .nearbyReconnecting) {
         // A client from this factory is live the moment it exists — the hub's
         // WebSocket, and every double written against this initializer — so
         // there is nothing left to arm and the activation is a no-op.
         self.prepare = { PreparedNearbyConnection(client: connect(), activate: {}) }
         self.sleep = sleep ?? realSleep
+        self.reconnectingCopy = reconnectingCopy
     }
 
     /// For a connection whose transport must not be armed until this model has
     /// installed every callback — see `PreparedNearbyConnection`.
     public init(prepare: @escaping () -> PreparedNearbyConnection,
-                sleep: (@Sendable (UInt64) async -> Void)? = nil) {
+                sleep: (@Sendable (UInt64) async -> Void)? = nil,
+                reconnectingCopy: L10nKey = .nearbyReconnecting) {
         self.prepare = prepare
         self.sleep = sleep ?? realSleep
+        self.reconnectingCopy = reconnectingCopy
     }
 
     /// Join the room and stay in it. Idempotent, and deliberately refuses to
@@ -801,7 +814,7 @@ public final class LanDiscoveryModel: ObservableObject {
             state = isPausedByUser ? .paused : .off
             return
         }
-        state = .reconnecting(L10n.t(.nearbyReconnecting))
+        state = .reconnecting(L10n.t(reconnectingCopy))
         scheduleReconnect()
     }
 

@@ -65,19 +65,24 @@ final class BundleVersionTests: XCTestCase {
 
     /// iOS: the app and its Share extension, both Debug and Release.
     func testTheIOSAppAndItsExtensionShipOneVersion() throws {
-        // `0.3.1 (5)`, the first iOS release candidate of the restarted line.
+        // `0.3.1 (6)`. **Build 5 is spent.** It was archived, uploaded to the
+        // universal-purchase record on 2026-09-05, processed, and reached
+        // `Ready to Submit` — and was then rejected before any submission,
+        // because a Release capture of its Nearby tab rendered the hub-backed
+        // room's public-address copy over the Bonjour transport iOS actually
+        // ships. A build number is consumed by the upload, not by the release,
+        // so the corrected candidate cannot reuse it.
+        //
         // `1.2.10 (2)` was a never-delivered candidate that deliberately matched
         // the then-current macOS numbers, so it is not a floor this line has to
-        // clear: the universal-purchase record's last iOS upload was `0.1.0`
-        // build 4, and 5 is the next build above it. Builds are what App Store
-        // Connect requires to be strictly monotonic per record; the marketing
-        // version is not.
+        // clear. Builds are what App Store Connect requires to be strictly
+        // monotonic per record; the marketing version is not.
         //
-        // The build does NOT move with the marketing version here. `0.3.0 (5)`
-        // was a development baseline that was never archived or uploaded, so
-        // build 5 is still unconsumed on the record and `0.3.1` is the first
-        // marketing version that will actually carry it.
+        // The build does NOT move with the marketing version. `0.3.0 (5)` was a
+        // development baseline that was never archived, and 0.3.1 keeps its
+        // marketing version across the correction: 5 and 6 are two candidates
+        // of the same unreleased version, not two versions.
         try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.3.1", occurrences: 4)
-        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "5", occurrences: 4)
+        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "6", occurrences: 4)
     }
 }

@@ -401,7 +401,7 @@ final class LocalSessionUITests: XCTestCase {
                       "the roster rendered rows outside its own accessibility container")
         XCTAssertFalse(
             app.staticTexts[
-                "No other devices yet. Open relayium.com on the other device and leave the page open."
+                "No other devices yet. Open the Relayium app on the other device, connected to this same network, and leave it open."
             ].exists,
             "the roster names a device and still tells the user there are none")
         return row

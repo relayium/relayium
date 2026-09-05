@@ -23,19 +23,24 @@
 # App Store Connect owns the build-number sequence, and this repository cannot
 # observe it. A build number is consumed the moment a build is accepted — and
 # also by builds sitting in `Invalid`, `Processing` or expired-TestFlight
-# states — so "build 5 is next" is a local expectation until somebody reads the
+# states — so "build 6 is next" is a local expectation until somebody reads the
 # record. A `0.1.0` build was rejected outright during this product's earlier
 # iOS attempts, which is exactly how a number gets consumed without shipping
 # anything.
 #
 # The target record changed under this paragraph and the rule did not. iOS now
 # ships as a platform of the universal-purchase record Apple ID 6801142976,
-# whose iOS TestFlight was read back holding a Validated `0.1.0 (4)`. That makes
-# 4 an observed FLOOR for the highest consumed number on this record, not a
-# ceiling and not the answer: an expired or removed build still holds its
-# number and would not appear. So `--readback-highest-build` remains an operator
-# attestation about a live record, and the floor is only useful in one
-# direction — an attestation BELOW it is provably wrong.
+# whose iOS TestFlight was read back holding a Validated `0.1.0 (4)`, and which
+# then took an upload of `0.3.1 (5)` on 2026-09-05 — processed, export-compliance
+# cleared, `Ready to Submit`, and rejected before submission over a product-copy
+# defect. That rejection did NOT return the number: an uploaded build is
+# consumed whatever happens to it afterwards, which is precisely the failure
+# this section exists for. So 5 is now the observed FLOOR for the highest
+# consumed number on this record, not a ceiling and not the answer: an expired
+# or removed build still holds its number and would not appear. So
+# `--readback-highest-build` remains an operator attestation about a live
+# record, and the floor is only useful in one direction — an attestation BELOW
+# it is provably wrong.
 #
 # So the caller does not tick a box saying they looked. They restate what they
 # saw, in three independent pieces that this script cross-checks against each
@@ -141,10 +146,10 @@
 #
 #   scripts/ios-app-store-candidate.sh \
 #     --marketing-version 0.3.1 \
-#     --build 5 \
-#     --readback-highest-build 4 \
-#     --readback-observed-at 2026-09-02T11:30:00Z \
-#     --artifact-root /Users/you/relayium/test-builds/ios/0.3.1-5-<short8-sha>
+#     --build 6 \
+#     --readback-highest-build 5 \
+#     --readback-observed-at 2026-09-05T18:00:00Z \
+#     --artifact-root /Users/you/relayium/test-builds/ios/0.3.1-6-<short8-sha>
 #
 # Exit codes are three classes, so a caller can tell them apart: 2 a refused
 # precondition (nothing was built), 3 a failed archive or export (logs kept),
@@ -187,10 +192,13 @@ readonly EXPECTED_TEAM='7PVYUG4YQS'
 # record, and a message that says only "wrong number" does not tell them that.
 # Not a credential and not a secret — it is the public App Store id.
 readonly TARGET_APPLE_ID='6801142976'
-# The highest build number read back as consumed on that record's iOS platform:
-# a Validated `0.1.0 (4)`. A FLOOR for the operator attestation, never a ceiling
-# — see the refusal that uses it.
-readonly OBSERVED_HIGHEST_BUILD_FLOOR='4'
+# The highest build number read back as consumed on that record's iOS platform.
+# It was 4 — a Validated `0.1.0 (4)` — until `0.3.1 (5)` was uploaded on
+# 2026-09-05 and observed on the record as `Ready to Submit`. That candidate was
+# then rejected over its Nearby copy and will never be submitted, and the number
+# stays gone regardless: consumption is the upload. A FLOOR for the operator
+# attestation, never a ceiling — see the refusal that uses it.
+readonly OBSERVED_HIGHEST_BUILD_FLOOR='5'
 readonly APP_BUNDLE_ID='com.relayium.mac'
 readonly SHARE_BUNDLE_ID='com.relayium.mac.ShareIOS'
 readonly APP_PROFILE='Relayium iOS Universal App Store'
@@ -951,9 +959,11 @@ fi
 #
 # Everything above is a consistency check between two numbers the operator
 # supplies, and it is satisfied just as well by a guess. This is not: the target
-# record's iOS TestFlight was read back holding a Validated `0.1.0 (4)`, so at
-# least four build numbers are consumed on it and an attestation below that
-# floor is provably wrong rather than merely unproven.
+# record's iOS TestFlight was read back holding a Validated `0.1.0 (4)` and the
+# record then accepted an upload of `0.3.1 (5)`, so at least five build numbers
+# are consumed on it and an attestation below that floor is provably wrong
+# rather than merely unproven. The rejection of build 5 is not a reason to lower
+# this: what consumed the number was the upload.
 #
 # It is a FLOOR and never a ceiling. Expired, removed and Invalid builds keep
 # their numbers and do not appear in a TestFlight list, so the true highest may

@@ -3,24 +3,34 @@ import UniformTypeIdentifiers
 import RelayiumAppKit
 import RelayiumKit
 
-/// R3-F: transfer to a device on this address, with no code and no account —
-/// and accept one that arrives the same way.
+/// R3-F: transfer to a device on this local network, with no code and no
+/// account — and accept one that arrives the same way.
 ///
-/// **This is not "devices on your Wi-Fi", and saying so is the first thing the
-/// screen does.** Nothing here scans the local network. The app joins
-/// Relayium's code-less rendezvous room, and the server groups that room by the
-/// public address it observes a device arriving from. Usually that is the
-/// user's own Wi-Fi. Behind a carrier NAT or a shared VPN gateway it is not, and
-/// the roster can hold devices belonging to strangers. The screen opens with the
-/// half of that which changes a decision — the address can be shared with
-/// strangers — and keeps the mechanism itself one tap away in a closed
+/// **This screen is composed over Bonjour, and every sentence it renders has to
+/// be that wire's.** `RelayiumApp` builds the discovery graph through
+/// `LocalNearbyEnvironment`, which drives `NetworkLocalPeerTransport`: this
+/// device publishes and browses exactly `_relayium._tcp` on the local link it
+/// has joined, and asks nothing outside that link who is nearby. So the roster
+/// is *this network*, not a public address a server observed — and a browser on
+/// the production host, which advertises no Bonjour service, can never be on it.
+///
+/// That is why the six sentences below are `nearbyIOS*` keys rather than the
+/// shared ones beside them. macOS still runs the hub-backed code-less room, so
+/// its public-address, carrier/VPN and open-the-site copy is still true there
+/// and is deliberately left alone; rendering it here stated four things this
+/// binary does not do, which is what a Release capture of this tab exposed.
+///
+/// The risk did not go away with the rendezvous, it changed shape: a café,
+/// hotel or office network is shared, so the devices that answer can still
+/// belong to strangers. The screen therefore opens with the half of that which
+/// changes a decision and keeps the mechanism one tap away in a closed
 /// disclosure, because as an always-open paragraph it pushed every control off
 /// the first several screens at accessibility content sizes. Everything else
 /// here follows from that same fact:
 ///
-///  - **nothing is ever preselected**, not even when the room holds exactly one
-///    other entry — that is precisely the case where the only candidate might be
-///    a stranger;
+///  - **nothing is ever preselected**, not even when the roster holds exactly
+///    one other entry — that is precisely the case where the only candidate
+///    might be a stranger on a shared network;
 ///  - **names are labels**, peer-supplied and duplicated as a matter of course,
 ///    so the disclaimer sits under the list rather than in a help article;
 ///  - **receiving is opt-outable in one tap**, and what it means while it is on
@@ -33,17 +43,18 @@ import RelayiumKit
 /// them would end a live DataChannel, drop a sandbox extension mid-read, or take
 /// this device off the roster, on a tab switch.
 ///
-/// **It adds one declaration, and it is about the transfer rather than this
-/// screen.** Reading the roster needs nothing: the list above comes from the
-/// rendezvous room over ordinary internet access, so no Bonjour service and no
-/// multicast entitlement appear anywhere. Connecting to the device the user
-/// picks is the part iOS gates — the session is built with
-/// `iceTransportPolicy = .all` and routinely settles on the peer's address on
-/// this subnet — so `Info.plist` declares `NSLocalNetworkUsageDescription` and
-/// iOS asks once, at the first connection rather than on arriving here. There is
-/// still no background mode and no notification: an inbound session brings this
-/// tab forward in app, because the app is in the foreground or the session does
-/// not exist.
+/// **It adds one declaration, and both halves of this tab now need it.**
+/// Reading the roster is itself a local-network operation — `_relayium._tcp`
+/// browsed and advertised, still with no multicast entitlement and no address
+/// scan — and connecting to the device the user picks is gated for the second
+/// time: the session is built with `iceTransportPolicy = .all` and routinely
+/// settles on the peer's address on this subnet. So `Info.plist` declares
+/// `NSLocalNetworkUsageDescription` and iOS asks once, and its purpose string
+/// names both actions rather than only the transfer. There is still no
+/// background mode and no notification: `NearbyResidencyCoordinator` leaves the
+/// link on `.background`, so an inbound session brings this tab forward in app,
+/// because the app is open or the session does not exist. That limit is not
+/// only a comment — it is the sentence `nearbyIOSListeningBody` states.
 ///
 /// ## Two products behind one roster, chosen by the peer
 ///
@@ -300,17 +311,22 @@ struct NearbyView: View {
     /// **The claim that may never be behind a tap, and the paragraph that may.**
     ///
     /// The mechanism explanation is the honest one and none of it is dropped:
-    /// nothing is scanned, the room is grouped by the public address the server
-    /// observes. But as the first thing on the screen it cost the user
+    /// one Bonjour service on the local link, no address scan, nothing outside
+    /// that link asked. But as the first thing on the screen it cost the user
     /// everything below it — at the largest accessibility content sizes that one
     /// paragraph filled several screens before any control could be reached,
     /// which is how a safety notice turns into something scrolled past rather
     /// than read.
     ///
-    /// So the part that changes a decision — this address can be shared with
-    /// strangers behind a carrier, VPN or shared gateway — stays visible and
-    /// stays short, and the mechanism moves into a disclosure that starts
-    /// closed. The order changed; nothing was removed and nothing was softened.
+    /// So the part that changes a decision — a shared network is somebody
+    /// else's network too, and the devices that answer can be strangers' —
+    /// stays visible and stays short, and the mechanism moves into a disclosure
+    /// that starts closed. The order changed; nothing was removed and nothing
+    /// was softened.
+    ///
+    /// Both halves are `nearbyIOS*`. The shared keys beside them say the same
+    /// two things about a public address and a carrier or VPN gateway, which is
+    /// the macOS room's truth and not this one's.
     private var safetySummary: some View {
         VStack(alignment: .leading, spacing: Metrics.tight) {
             // The shared inline-message role rather than another grey
@@ -320,12 +336,12 @@ struct NearbyView: View {
             // not `.warning` — nothing has gone wrong, and spending the
             // warning colour here would leave the real failures below it
             // looking the same as the standing caution above them.
-            InlineMessage(.info, L10n.t(.nearbySafetySummary))
+            InlineMessage(.info, L10n.t(.nearbyIOSSafetySummary))
             // Labelled, because a bare chevron says nothing about what it
             // hides — and a disclosure nobody opens is the same as deleting the
             // explanation.
             DisclosureGroup(isExpanded: $showsMechanism) {
-                Text(L10n.t(.nearbyExplain))
+                Text(L10n.t(.nearbyIOSExplain))
                     .font(.footnote)
                     .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
@@ -385,7 +401,7 @@ struct NearbyView: View {
             // The default is no prompt, by the same decision that made advanced
             // verification opt-in. Stating the consequence is not a
             // contradiction of that decision; hiding it would be.
-            Text(L10n.t(isListening ? .nearbyListeningBody : .nearbyPausedBody))
+            Text(L10n.t(isListening ? .nearbyIOSListeningBody : .nearbyPausedBody))
                 .font(.footnote)
                 .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
@@ -514,11 +530,12 @@ struct NearbyView: View {
                 // hand-built ones.
                 // nonlocalized: SF Symbol name
                 EmptyStateView(symbol: "dot.radiowaves.left.and.right",
-                               message: L10n.t(.nearbyEmptyRoster))
+                               message: L10n.t(.nearbyIOSEmptyRoster))
             } else {
                 VStack(alignment: .leading, spacing: Metrics.inner) {
-                    // Keyed by peer id, never by position: the hub's roster
-                    // order is not stable, and a row that moves under the
+                    // Keyed by peer id, never by position: roster order is not
+                    // stable — here it is whatever order the Bonjour browser
+                    // resolved its results in — and a row that moves under the
                     // finger between two frames is how the wrong device gets
                     // tapped.
                     ForEach(discovery.devices) { device in
@@ -613,7 +630,7 @@ struct NearbyView: View {
             }
             // Says what actually happens on the other end rather than implying
             // a human gate that is not there.
-            Text(L10n.t(.nearbyAcceptanceNote))
+            Text(L10n.t(.nearbyIOSAcceptanceNote))
                 .font(.footnote)
                 .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)

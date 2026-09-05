@@ -5,9 +5,10 @@ import Foundation
 ///
 /// `AppEnvironment.deviceName()` answers the device FAMILY on iOS — "iPhone",
 /// "iPad", "iPod touch" — rather than the name the owner gave the device. That
-/// is a privacy property of the product and it is correct: the code-less room is
-/// keyed by the public address the hub observes, so it can hold strangers, and
-/// broadcasting "Lily's iPad" into it would be worse than broadcasting "iPad".
+/// is a privacy property of the product and it is correct: on iOS the roster is
+/// every device answering `_relayium._tcp` on the local link, which on a shared
+/// network can hold strangers, and broadcasting "Lily's iPad" onto it would be
+/// worse than broadcasting "iPad".
 ///
 /// It also means a valid pair of test devices can announce the SAME string, and
 /// the two announced names then carry different amounts of information:

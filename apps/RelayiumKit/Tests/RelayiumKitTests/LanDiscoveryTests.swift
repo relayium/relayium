@@ -1,6 +1,7 @@
 import XCTest
 @testable import RelayiumAppKit
 @testable import RelayiumKit
+import RelayiumShareKit
 
 /// Every socket a model has opened, in order. Two live at once would put this
 /// Mac in the room twice, under two peer ids, and every other device would see
@@ -808,6 +809,59 @@ final class LanResidencyTests: XCTestCase {
         for _ in 0..<20 { await settle() }
         XCTAssertEqual(log.channels.count, 2, "a superseded retry must not open a third socket")
         model.stop()
+    }
+
+    /// **The drop banner names what the composing platform actually lost, and
+    /// BOTH sides of that seam are asserted here.**
+    ///
+    /// This model renders exactly one string, and until 0.3.1 it was the hub's:
+    /// "lost the connection to Relayium's device rendezvous". macOS did lose
+    /// exactly that. iOS is composed by `LocalNearbyEnvironment` over a Bonjour
+    /// transport with no rendezvous to lose, so it passes `nearbyIOSReconnecting`
+    /// — one of the six sentences a Release capture of the iOS tab showed
+    /// stating something the binary does not do.
+    ///
+    /// The default is asserted as hard as the injection. A defaulted parameter
+    /// whose default nobody exercises is how the platform that did NOT change
+    /// stops being covered, and macOS 1.3.10 ships that default.
+    func testTheDropBannerNamesWhatTheComposingPlatformLost() async {
+        func dropMessage(_ reconnectingCopy: L10nKey?) async -> String? {
+            let log = SocketLog()
+            let held = Gate2()
+            let connect: () -> SignalingClient = {
+                let ch = log.open()
+                let client = SignalingClient(channel: ch, name: "Mac")
+                ch.fireOpen()
+                return client
+            }
+            let model = reconnectingCopy.map {
+                LanDiscoveryModel(connect: connect,
+                                  sleep: { _ in await held.wait() },
+                                  reconnectingCopy: $0)
+            } ?? LanDiscoveryModel(connect: connect, sleep: { _ in await held.wait() })
+
+            model.startResident()
+            log.channels[0].fireRemoteClose()
+            await settle()
+            guard case .reconnecting(let text) = model.state else {
+                model.stop()
+                return nil
+            }
+            model.stop()
+            return text
+        }
+
+        // macOS: unchanged, and it is the DEFAULT that keeps it that way — no
+        // call site in the Mac app passes this argument.
+        let mac = await dropMessage(nil)
+        XCTAssertEqual(mac, L10n.t(.nearbyReconnecting),
+                       "the default drop banner moved; macOS renders this one")
+
+        // iOS: the local-link sentence, and provably not the shared one.
+        let ios = await dropMessage(.nearbyIOSReconnecting)
+        XCTAssertEqual(ios, L10n.t(.nearbyIOSReconnecting))
+        XCTAssertNotEqual(ios, mac,
+                          "the injected key rendered the sentence it exists to replace")
     }
 
     /// An explicit pause is truthful and sticky: nothing listens, nothing

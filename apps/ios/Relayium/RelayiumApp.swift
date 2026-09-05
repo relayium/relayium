@@ -714,15 +714,24 @@ struct RelayiumApp: App {
                 // `ForegroundSessionCoordinatorTests` drive every phase against
                 // real models; this only reports the phase.
                 .onChange(of: scenePhase) { phase in
-                    // UI acceptance must not publish a simulator into the
-                    // public-address Nearby room. In Release `isActive` is a
-                    // compile-time false, so shipped residency is unconditional.
+                    // UI acceptance must not advertise a simulator onto the
+                    // local link. Residency is what publishes this device's
+                    // Bonjour service, so a resident acceptance build would put
+                    // a test into the roster of every real Relayium device on
+                    // the office or café network it is running in — offering a
+                    // stranger a connection to a test, and making the run's own
+                    // roster depend on who else is on the Wi-Fi. Suppressed by
+                    // default is therefore both the safe and the deterministic
+                    // default. In Release `isActive` is a compile-time false, so
+                    // shipped residency is unconditional.
                     //
-                    // `allowsResidency` is the one exception, and it is the
-                    // exception that removes the reason rather than overriding
-                    // it: it is true only for an acceptance launch whose
-                    // resolved origin is loopback, where the room is a server on
-                    // this machine and holds nobody else. See its own comment.
+                    // `allowsResidency` is the one deliberate opt-in: true
+                    // only for an acceptance launch whose resolved origin is
+                    // loopback, which is the harnessed same-host run whose
+                    // counterpart is a process beside it on this machine and
+                    // whose whole subject is discovery. That run accepts a
+                    // bounded, attended advertisement; no other launch does.
+                    // See its own comment.
                     if !UITestMode.isActive || UITestMode.allowsResidency {
                         residency.phaseChanged(to: lifecycle(phase))
                     }

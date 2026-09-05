@@ -736,9 +736,11 @@ enum DevicePair {
     /// the connector's gate while the resident was still reaching the room —
     /// which is the same failure as no barrier at all, one step later.
     static let readyStatus = "Nearby receiving: ready"
-    /// `nearby.emptyRoster`.
+    /// `nearby.iosEmptyRoster` — the iOS transport's own sentence. The shared
+    /// `nearby.emptyRoster` sends the user to the production host, which
+    /// publishes no `_relayium._tcp` service and can never join this roster.
     static let emptyRosterCopy =
-        "No other devices yet. Open relayium.com on the other device and leave the page open."
+        "No other devices yet. Open the Relayium app on the other device, connected to this same network, and leave it open."
 
     // MARK: - the unified link workspace, which only Nearby reaches on iOS
 

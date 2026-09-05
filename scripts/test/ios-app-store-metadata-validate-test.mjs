@@ -1207,12 +1207,19 @@ rejects(
   "reports the target's version state as",
 );
 
+// The gate whose meaning narrowed on 2026-09-05. Until then `present: false`
+// and "the version carries no build" were one statement; then `0.3.1 (5)` was
+// uploaded, processed, selected on the version and rejected here before
+// submission. A build IS selected now and the gate is still unmet, so this is
+// the one flag somebody flips in good faith — and flipping it would report the
+// gate met and send a reader to submit the rejected candidate. The expectation
+// tracks the refusal's own wording so the two cannot drift apart.
 rejects(
   "a build claimed selected on the iOS version",
   (p) => {
     p.appStoreConnectObservation.observedFields[1].present = true;
   },
-  "no build is selected",
+  "rejected before submission",
 );
 
 rejects(

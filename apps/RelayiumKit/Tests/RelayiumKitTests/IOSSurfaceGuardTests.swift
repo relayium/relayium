@@ -1475,6 +1475,16 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // `nearby.acceptanceNote` and `error.nearby.noAnswer` — all of which
         // said *this Mac* — were corrected in place in all nine catalogs to the
         // device noun each language uses.
+        //
+        // Three of those four have since been SPLIT rather than corrected
+        // again, and the difference matters to this list. `nearby.explain`,
+        // `nearby.acceptanceNote` and `error.nearby.noAnswer` describe the
+        // hub-backed room macOS joins, which iOS does not; iOS renders
+        // `nearby.iosExplain`, `nearby.iosAcceptanceNote` and
+        // `error.nearby.iosNoAnswer` instead. A platform noun was never the
+        // problem there — the WIRE was — so the ban above would not have caught
+        // it, and `LocalizedCopyTests` owns the split with claim-level guards
+        // in both maintained languages.
         // `LocalizedCopyTests.testNothingTheNearbySurfaceRendersNamesAPlatform`
         // and `testTheCorrectedNearbySentencesStillNameADevice` carry the claim
         // from here on, together with the half a ban cannot make: that each
@@ -4233,14 +4243,19 @@ final class IOSSurfaceGuardTests: XCTestCase {
 
     /// The three sentences the roster cannot be shown without.
     ///
-    /// A list of device names is read as "the devices on my Wi-Fi" unless it is
-    /// told otherwise, and here it is not true: the room is grouped by the
-    /// public address the server observes, which a carrier or VPN gateway can
-    /// share with strangers, and the names are peer-supplied labels.
+    /// A list of device names is read as "these are mine" unless it is told
+    /// otherwise, and here it is not: the roster is every device on this local
+    /// link answering `_relayium._tcp`, which on a shared network can be a
+    /// stranger's, and the names are peer-supplied labels.
+    ///
+    /// The keys are the iOS ones. The shared `nearbySafetySummary` /
+    /// `nearbyExplain` pair describes the hub-backed public-address room macOS
+    /// still joins, and rendering it here is the exact defect this asserts
+    /// against.
     func testTheRosterStatesWhatItIsAndWhatTheNamesAreNot() throws {
         let view = try nearby()
-        for copy in [".nearbySafetySummary", ".nearbyExplain", ".nearbyNamesDisclaimer",
-                     ".nearbyEmptyRoster"] {
+        for copy in [".nearbyIOSSafetySummary", ".nearbyIOSExplain", ".nearbyNamesDisclaimer",
+                     ".nearbyIOSEmptyRoster"] {
             XCTAssertTrue(view.text.contains(copy), "the roster does not render \(copy)")
         }
     }
@@ -4265,14 +4280,14 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(view.text.contains("L10n.t(.nearbyHowItWorks)"),
                       "an unlabelled chevron is an explanation nobody opens")
 
-        let summary = try XCTUnwrap(view.text.range(of: "L10n.t(.nearbySafetySummary)"))
+        let summary = try XCTUnwrap(view.text.range(of: "L10n.t(.nearbyIOSSafetySummary)"))
         let group = try XCTUnwrap(view.text.range(of: "DisclosureGroup(isExpanded:"))
-        let paragraph = try XCTUnwrap(view.text.range(of: "L10n.t(.nearbyExplain)"))
+        let paragraph = try XCTUnwrap(view.text.range(of: "L10n.t(.nearbyIOSExplain)"))
         XCTAssertTrue(summary.lowerBound < group.lowerBound,
                       "the always-visible warning is drawn after the disclosure")
         XCTAssertTrue(group.lowerBound < paragraph.lowerBound,
                       "the paragraph is still drawn outside the disclosure")
-        XCTAssertEqual(view.text.components(separatedBy: "L10n.t(.nearbyExplain)").count - 1, 1,
+        XCTAssertEqual(view.text.components(separatedBy: "L10n.t(.nearbyIOSExplain)").count - 1, 1,
                        "a second copy of the paragraph would put it back on the first screen")
 
         // Not a preference: a remembered "open" restores exactly the layout
@@ -4598,7 +4613,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "the tab never says where an unsolicited file lands")
         XCTAssertFalse(view.text.contains(".nearbySavedToDownloads"),
                        "the iOS tab promises a Downloads folder it does not have")
-        XCTAssertTrue(view.text.contains(".nearbyListeningBody"),
+        XCTAssertTrue(view.text.contains(".nearbyIOSListeningBody"),
                       "the tab never says what receiving actually allows")
         XCTAssertTrue(view.text.contains(".nearbyPausedBody"),
                       "and it must say what pausing changes")
@@ -4617,7 +4632,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "a raw binding can change verification during claim-before-handshake")
         XCTAssertFalse(view.text.contains("@State private var requiresSAS"),
                        "a view-local copy would be a setting no session reads")
-        XCTAssertTrue(view.text.contains("L10n.t(.nearbyAcceptanceNote)"),
+        XCTAssertTrue(view.text.contains("L10n.t(.nearbyIOSAcceptanceNote)"),
                       "the screen must say what happens on the other end")
     }
 
@@ -5471,7 +5486,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let all = try sources()
         let nearby = try XCTUnwrap(all.first { $0.name == "NearbyView.swift" }?.text)
         XCTAssertTrue(nearby.contains("EmptyStateView(symbol: \"dot.radiowaves.left.and.right\","))
-        XCTAssertTrue(nearby.contains("message: L10n.t(.nearbyEmptyRoster)"))
+        XCTAssertTrue(nearby.contains("message: L10n.t(.nearbyIOSEmptyRoster)"))
         // The device list moved out of the Send tab in 0.3.0 and into the
         // Device Inbox, merged with the conversations — one device, one row,
         // one page — so the empty state moved with it. Its message changed with

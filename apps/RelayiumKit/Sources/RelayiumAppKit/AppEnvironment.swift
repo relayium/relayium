@@ -512,7 +512,13 @@ public enum AppEnvironment {
                                         verification: VerificationPreference,
                                         nearby: LanDiscoveryModel,
                                         inboundRoom: InboundRoom,
-                                        pairingRoom: LinkRoomHandle) -> RealtimeSessionModel {
+                                        pairingRoom: LinkRoomHandle,
+                                        // Defaulted, so this factory's existing
+                                        // behaviour is unchanged; the iOS
+                                        // overload below is the only caller
+                                        // that passes anything else.
+                                        nearbyNoAnswerCopy: L10nKey = .errorNearbyNoAnswer)
+        -> RealtimeSessionModel {
         RealtimeSessionModel(
             pairClient: HTTPPairClient(baseURL: baseURL),
             iceClient: HTTPICEClient(baseURL: baseURL),
@@ -520,6 +526,7 @@ public enum AppEnvironment {
             // preference must take effect on the next connection, not the next
             // app launch.
             requiresVerification: { verification.requiresSASConfirmation },
+            nearbyNoAnswerCopy: nearbyNoAnswerCopy,
             // Reuses the socket the roster came from: reconnecting would earn a
             // new peer id and a room the user never saw. Read at call time, so
             // a device picked before discovery stopped fails cleanly instead of
@@ -568,11 +575,14 @@ public enum AppEnvironment {
                                             verification: VerificationPreference,
                                             nearby: LanDiscoveryModel,
                                             inboundRoom: InboundRoom,
-                                            pairingRoom: LinkRoomHandle) -> RealtimeTextSessionModel {
+                                            pairingRoom: LinkRoomHandle,
+                                            nearbyNoAnswerCopy: L10nKey = .errorNearbyNoAnswer)
+        -> RealtimeTextSessionModel {
         RealtimeTextSessionModel(
             pairClient: HTTPPairClient(baseURL: baseURL),
             iceClient: HTTPICEClient(baseURL: baseURL),
             requiresVerification: { verification.requiresSASConfirmation },
+            nearbyNoAnswerCopy: nearbyNoAnswerCopy,
             makeNearbyConnection: { peerId, role, servers in
                 guard let signaling = nearby.client else { throw NearbyError.notScanning }
                 return try await RealtimeConnectionFactory.connectNearby(
@@ -617,12 +627,44 @@ public enum AppEnvironment {
         )
     }
 
+    /// The answer-timeout recovery step for the iOS Local Nearby composition.
+    ///
+    /// **Declared unconditionally on purpose.** Everything that USES it is
+    /// inside the `#if os(iOS)` block below, and putting the value there too
+    /// would put it out of reach of every test that runs — this package's tests
+    /// are hosted on macOS, so a Mac-hosted run compiles neither the overloads
+    /// nor a constant beside them, and the iOS wording would be asserted only
+    /// by reading source text. The shared Nearby copy reached an iOS Release
+    /// screenshot precisely because nothing executable was checking it.
+    ///
+    /// A constant rather than a literal at the two call sites, so the file
+    /// model and the text model cannot be given different answers: both lanes
+    /// time out from the same screen, and a screen that recovered two ways
+    /// depending on which lane the user started is worse than either.
+    ///
+    /// Why this value: `error.nearby.noAnswer` tells the user to open
+    /// relayium.com on the silent device and keep the page open. On the
+    /// hub-backed room that is the correct instruction — a browser there IS a
+    /// listening peer. iOS Nearby is `LocalNearbyEnvironment` over
+    /// `_relayium._tcp`, where a browser publishes no service, joins no roster
+    /// and can never answer, so the shared sentence is an instruction that
+    /// cannot succeed, shown at the one moment the user needs one that can.
+    public static let localNearbyNoAnswerCopy: L10nKey = .errorNearbyIOSNoAnswer
+
     #if os(iOS)
     /// iOS uses nearby discovery but does not compose the macOS `link/1`
     /// workspace. Keep the fallback handle inside the shared factory so the iOS
     /// target neither names nor accidentally starts owning that surface; the
     /// session model's room-connection closure retains the handle for exactly
     /// as long as the model graph lives.
+    ///
+    /// These two overloads are also the iOS Local Nearby composition boundary,
+    /// and that is why the answer-timeout copy is substituted HERE rather than
+    /// at the app's call site. `RelayiumApp` is the only caller today; a second
+    /// one that had to remember to pass the key would be a screen that says the
+    /// wrong thing and still compiles. The substitution is not conditional on
+    /// anything the caller supplies, because on this platform there is no other
+    /// transport for these two models to be nearby over.
     @MainActor
     public static func makeRealtimeModel(baseURL: URL = transferBaseURL,
                                          verification: VerificationPreference,
@@ -630,7 +672,8 @@ public enum AppEnvironment {
                                          inboundRoom: InboundRoom) -> RealtimeSessionModel {
         makeRealtimeModel(
             baseURL: baseURL, verification: verification, nearby: nearby,
-            inboundRoom: inboundRoom, pairingRoom: LinkRoomHandle())
+            inboundRoom: inboundRoom, pairingRoom: LinkRoomHandle(),
+            nearbyNoAnswerCopy: localNearbyNoAnswerCopy)
     }
 
     @MainActor
@@ -640,7 +683,8 @@ public enum AppEnvironment {
                                              inboundRoom: InboundRoom) -> RealtimeTextSessionModel {
         makeRealtimeTextModel(
             baseURL: baseURL, verification: verification, nearby: nearby,
-            inboundRoom: inboundRoom, pairingRoom: LinkRoomHandle())
+            inboundRoom: inboundRoom, pairingRoom: LinkRoomHandle(),
+            nearbyNoAnswerCopy: localNearbyNoAnswerCopy)
     }
     #endif
 
