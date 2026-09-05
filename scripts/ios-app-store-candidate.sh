@@ -101,7 +101,11 @@
 #   * exactly one `.appex` anywhere in the payload, and it is the Share
 #     extension;
 #   * a distribution signature and this team on both, with `get-task-allow`
-#     absent — a development signature would install and would never upload;
+#     absent or explicitly FALSE and nothing else — a development signature
+#     would install and would never upload. Both shapes are accepted because a
+#     real distribution entitlement set writes the key explicitly; a value that
+#     is merely string- or number-shaped is rejected as malformed rather than
+#     read as a disabled debugger;
 #   * the app's three entitlements and the extension's one, INCLUDING the
 #     absences: the extension carries no Sign in with Apple and no associated
 #     domains, which is a boundary this product argues for in
@@ -119,8 +123,14 @@
 #     graph is an upload rejection, while a wrong collected-data list uploads
 #     cleanly and publishes a false promise to everyone reading the listing;
 #   * both purpose strings in the app, the camera one localized in `en` and
-#     `zh-Hans` inside the app bundle where iOS actually reads it, and NO camera
-#     declaration and no `.lproj` at all in the extension;
+#     `zh-Hans` inside the app bundle where iOS actually reads it; and in the
+#     extension, NO camera declaration, no `.lproj` at its own bundle root, no
+#     `InfoPlist.strings` at any depth, and a `.lproj` set exactly equal to the
+#     pinned `RelayiumShareKit` product-localization bundle. The extension ships
+#     its own interface copy in the two maintained languages, so the check is
+#     placement and equality rather than absence. Read in the ARCHIVE's copy of
+#     the extension and again in the EXPORT's, for the same reason the privacy
+#     graphs are read four times rather than two;
 #   * `AVCapture` undefined symbols in the app's OWN binary and in the embedded
 #     WebRTC framework. An earlier `0.1.0` build was rejected for a missing
 #     `NSCameraUsageDescription` against symbols the app did not knowingly use;
@@ -288,6 +298,26 @@ NSPrivacyCollectedDataTypePurchaseHistory	true	false	NSPrivacyCollectedDataTypeP
 NSPrivacyCollectedDataTypeUserID	true	false	NSPrivacyCollectedDataTypePurposeAppFunctionality'
 readonly SHARE_COLLECTED_DATA_GRAPH=''
 
+# The Share extension's localization surface, pinned as a SET of bundle-relative
+# `.lproj` paths rather than as an absence.
+#
+# It used to be an absence — "no `.lproj` anywhere in the appex", found
+# recursively — and the first real signed export proved that wrong.
+# `RelayiumShareKit` is a SwiftPM target declaring `.process("Resources")`, so
+# every build embeds `RelayiumKit_RelayiumShareKit.bundle` inside the appex
+# carrying `en.lproj` and `zh-Hans.lproj` of `Localizable.strings`: the
+# extension's OWN interface copy, in the two maintained languages, which the
+# supported-language policy requires it to ship. The recursive rule rejected a
+# correctly signed `0.3.1 (5)` for shipping its own translations.
+#
+# Equality rather than an allowlist keyed on the bundle name, because the
+# failure this has actually seen is a language coming BACK: a generated SwiftPM
+# resource bundle retains its copy of a removed localized resource across an
+# incremental build, and `ja.lproj` reappeared in one of these bundles that way.
+# A name-keyed allowlist would have waved that through; a pinned set does not.
+readonly SHARE_ALLOWED_LPROJ='RelayiumKit_RelayiumShareKit.bundle/en.lproj
+RelayiumKit_RelayiumShareKit.bundle/zh-Hans.lproj'
+
 # The export contract. `destination = export` is what makes this a build rather
 # than a submission: the alternative value is `upload`, and it is the single
 # character of configuration between this script and an App Store Connect
@@ -417,6 +447,125 @@ expect_plist_key_absent() {
     return
   fi
   pass_check "$label: $key is absent, as it must be"
+}
+
+# `get-task-allow`, which is where a debuggable build gives itself away.
+#
+# This was an ABSENCE check, and the first real signed export showed that the
+# absence was never the property: Xcode 26 writes an explicit
+# `get-task-allow` / Boolean-false pair into a distribution entitlement set
+# rather than omitting the key, so the rule stopped a correctly signed
+# `0.3.1 (5)` on both bundles. What matters is that the shipped bundle does not
+# permit a debugger to attach, and both shapes say that.
+#
+# So: absent, or present and Boolean FALSE. Everything else is a finding,
+# including a value that merely reads as false.
+#
+# The type check is the point of the `xml1` extraction and is not decoration.
+# `plutil -extract ... raw` prints `false` for the Boolean and for the STRING
+# "false", and prints `0` for the integer; a `raw` comparison would accept all
+# three. A string or a number here is not a disabled debugger — it is a
+# malformed entitlement whose runtime meaning is not this script's to guess, and
+# guessing it is exactly how a debuggable candidate would get through. `xml1` is
+# the only extraction that keeps the type, so the comparison is against the
+# literal element plutil emits for a false Boolean.
+#
+# `awk` rather than `grep` to drop the plist wrapper, because `grep` finding
+# nothing is a non-zero status that would end the pipeline under `pipefail` and
+# take the whole script with it under `set -e`; `awk` returns a value this
+# function decides about.
+expect_get_task_allow_disabled() {
+  local file="$1" label="$2"
+  local key_path element
+  key_path="$(plutil_path 'get-task-allow')"
+
+  # Fail closed on the file itself. An unreadable plist makes every key look
+  # absent, and "absent" is one of the two ACCEPTING answers here, so a reader
+  # that skipped this would turn a malformed entitlement set into a pass.
+  if [ ! -f "$file" ] || ! plutil -lint "$file" >/dev/null 2>&1; then
+    fail_check "$label: $file is not a readable property list, so get-task-allow was never decided"
+    return
+  fi
+
+  if ! plist_has_key "$file" "$key_path"; then
+    pass_check "$label: get-task-allow is absent"
+    return
+  fi
+
+  if ! element="$(plutil -extract "$key_path" xml1 -o - "$file" 2>/dev/null)"; then
+    fail_check "$label: get-task-allow is declared in $file but could not be read back"
+    return
+  fi
+  element="$(printf '%s\n' "$element" |
+    awk '!/^<\?xml|^<!DOCTYPE|^<plist|^<\/plist>/ { gsub(/[[:space:]]/, ""); printf "%s", $0 }')"
+
+  if [ "$element" = '<false/>' ]; then
+    pass_check "$label: get-task-allow is present and Boolean false"
+    return
+  fi
+  fail_check "$label: get-task-allow in $file is '$element'; it must be absent or a false Boolean, and a debuggable or malformed distribution entitlement never uploads"
+}
+
+# ── the Share extension's localization surface ───────────────────────────────
+
+# iOS reads a purpose string out of an extension's OWN bundle root — `Info.plist`
+# first, then `<language>.lproj/InfoPlist.strings` beside it — and it attributes
+# the resulting prompt to the HOST APP. A camera sentence placed there is
+# therefore a claim about a process that opens no camera, shown to the user as
+# the app's own words. That is the boundary being defended, and it is narrower
+# than "the appex contains no localized resources": see `SHARE_ALLOWED_LPROJ`
+# for why the broad version rejected a correct candidate.
+#
+# Three findings rather than one, because they fail independently:
+#
+#   1. no `.lproj` at the appex ROOT, the one location iOS reads;
+#   2. no `InfoPlist.strings` at ANY depth, the file itself wherever it is put —
+#      "it is not at the root" is a placement argument, and this check reads the
+#      artifact rather than accepting one;
+#   3. the `.lproj` set equals the pinned one exactly, which is what notices a
+#      third language, a second resource bundle, or a bundle that moved.
+#
+# The set in (3) is bundle-relative so the comparison does not depend on where
+# the payload was unpacked.
+share_lproj_set_of() {
+  local appex="$1" found
+  while IFS= read -r found; do
+    printf '%s\n' "${found#"$appex"/}"
+  done < <(find "$appex" -name '*.lproj' -type d -print) | LC_ALL=C sort
+}
+
+expect_share_localization_boundary() {
+  local appex="$1" expected="$2" label="$3"
+  local root_lproj strings_files actual
+
+  if [ ! -d "$appex" ]; then
+    fail_check "$label: $appex is not a directory, so its localization surface was never read"
+    return
+  fi
+
+  root_lproj="$(find "$appex" -maxdepth 1 -name '*.lproj' -type d -print | LC_ALL=C sort)"
+  if [ -n "$root_lproj" ]; then
+    fail_check "$label: the extension carries .lproj at its own bundle root, which is where iOS reads a purpose string:"
+    printf '%s\n' "$root_lproj" >&2
+  else
+    pass_check "$label: no .lproj at the extension's bundle root"
+  fi
+
+  strings_files="$(find "$appex" -name 'InfoPlist.strings' -print | LC_ALL=C sort)"
+  if [ -n "$strings_files" ]; then
+    fail_check "$label: the extension carries InfoPlist.strings, whose only purpose is localizing a purpose string:"
+    printf '%s\n' "$strings_files" >&2
+  else
+    pass_check "$label: no InfoPlist.strings at any depth in the extension"
+  fi
+
+  actual="$(share_lproj_set_of "$appex")"
+  if [ "$actual" = "$expected" ]; then
+    pass_check "$label: the .lproj set is exactly the pinned product-localization bundle"
+  else
+    fail_check "$label: the extension's .lproj set is not the pinned one"
+    printf 'expected:\n%s\n\nactual:\n%s\n' "$expected" "$actual" >&2
+  fi
 }
 
 # ── the required-reason graph of a BUILT manifest ────────────────────────────
@@ -1306,8 +1455,10 @@ if [ -d "$app_dir" ] && entitlements_of "$app_dir" "$app_entitlements"; then
   expect_plist_value "$app_entitlements" "$(plutil_path 'com.apple.developer.associated-domains')" "[\"$ASSOCIATED_DOMAIN\"]" 'app entitlements' json
   expect_plist_value "$app_entitlements" "$(plutil_path 'com.apple.security.application-groups')" "[\"$APP_GROUP\"]" 'app entitlements' json
   # A distribution build must not be debuggable, and must not claim push it
-  # neither registers for nor implements.
-  expect_plist_key_absent "$app_entitlements" "$(plutil_path 'get-task-allow')" 'app entitlements'
+  # neither registers for nor implements. The first is absent-or-false because a
+  # distribution entitlement set states it explicitly; the second is a plain
+  # absence, because claiming push is claiming a capability, not disabling one.
+  expect_get_task_allow_disabled "$app_entitlements" 'app entitlements'
   expect_plist_key_absent "$app_entitlements" "$(plutil_path 'aps-environment')" 'app entitlements'
 else
   fail_check "could not read the app's entitlements out of $app_dir"
@@ -1323,7 +1474,7 @@ if [ -d "$appex_dir" ] && entitlements_of "$appex_dir" "$share_entitlements"; th
   expect_plist_key_absent "$share_entitlements" "$(plutil_path 'com.apple.developer.applesignin')" 'share entitlements'
   expect_plist_key_absent "$share_entitlements" "$(plutil_path 'com.apple.developer.associated-domains')" 'share entitlements'
   expect_plist_key_absent "$share_entitlements" "$(plutil_path 'keychain-access-groups')" 'share entitlements'
-  expect_plist_key_absent "$share_entitlements" "$(plutil_path 'get-task-allow')" 'share entitlements'
+  expect_get_task_allow_disabled "$share_entitlements" 'share entitlements'
 else
   fail_check "could not read the Share extension's entitlements out of $appex_dir"
 fi
@@ -1379,9 +1530,10 @@ expect_collected_data_graph "$appex_dir/PrivacyInfo.xcprivacy" \
 
 # Protected-resource declarations. The app declares both purpose strings and
 # localizes the camera one where iOS reads it — the app's OWN bundle, before any
-# Relayium code runs. The extension declares neither and carries no .lproj at
-# all; iOS attributes an extension's prompt to its host app, so a camera string
-# there would be a claim about a process that opens no camera.
+# Relayium code runs. The extension declares neither, and its localization
+# surface is held to the pinned boundary above rather than to an absence: it
+# does ship translated interface copy, and none of that copy may sit anywhere
+# iOS would read a purpose string out of.
 if [ -f "$app_info" ]; then
   for purpose_key in NSCameraUsageDescription NSLocalNetworkUsageDescription; do
     if purpose_text="$(plist_value "$app_info" "$(plutil_path "$purpose_key")")" && [ -n "$purpose_text" ]; then
@@ -1408,15 +1560,17 @@ done
 if [ -f "$appex_info" ]; then
   expect_plist_key_absent "$appex_info" "$(plutil_path NSCameraUsageDescription)" 'share'
 fi
-if [ -d "$appex_dir" ]; then
-  share_lproj="$(find "$appex_dir" -name '*.lproj' -type d -print | sort)"
-  if [ -n "$share_lproj" ]; then
-    fail_check "share: the extension carries .lproj directories it should not:"
-    printf '%s\n' "$share_lproj" >&2
-  else
-    pass_check 'share: no .lproj directories, and so no localized purpose string'
-  fi
-fi
+
+# Twice, against the same pinned set, for the reason the privacy graphs above
+# are read four times rather than two: the export re-signs and repackages the
+# archive, so neither copy is evidence about the other. A `.lproj` that the
+# export strips was still shipped in the archive, and a `.lproj` the export
+# introduces was never in it — and the operator record claims BOTH signed
+# copies have the accepted shape, which is a claim only two reads can make.
+# Distinct labels so a finding names the surface it was found on; the contract
+# suite fails if either call site is lost.
+expect_share_localization_boundary "$archive_appex_dir" "$SHARE_ALLOWED_LPROJ" 'archive share'
+expect_share_localization_boundary "$appex_dir" "$SHARE_ALLOWED_LPROJ" 'share'
 
 # The AVCapture readback. An earlier `0.1.0` build was rejected for a missing
 # camera purpose string against symbols the product did not knowingly use. The
