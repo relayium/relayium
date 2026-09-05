@@ -9,10 +9,11 @@
 #     drives `RelayiumUITests/LocalSessionUITests` against a real simulator, so
 #     the roster the user reads, the Connect they tap, the digits they compare
 #     and the Done that returns them are all on the path.
-#   * PROVES the app's Nearby roster names a real second endpoint, that Connect
-#     establishes a `link/1`, that a staged batch and a typed message reach the
-#     counterpart with matching SHA-256 digests, and that Done leaves no
-#     half-session behind.
+#   * PROVES the app's Nearby roster names a real second endpoint on its own
+#     link — a `_relayium._tcp` peer this script advertises, which is the only
+#     rendezvous shipped iOS has — that Connect establishes a `link/1`, that a
+#     staged batch and a typed message reach the counterpart with matching
+#     SHA-256 digests, and that Done leaves no half-session behind.
 #   * PROVES the app joins a pairing code MINTED BY ANOTHER PROCESS on the local
 #     server and drives it to a completed transfer.
 #
@@ -34,9 +35,14 @@
 # is, and falls back to production on every failure. A shipped binary contains
 # neither the argument name nor the parser. `UITestMode.allowsResidency` is
 # `isActive && AppEnvironment.isLoopbackTransferOrigin`, which is what lets an
-# acceptance launch join a code-less room at all: the public hub keys that room
-# by observed public address, so a resident simulator would share a roster with
-# strangers, and a loopback origin removes that reason rather than tolerating it.
+# acceptance launch become reachable at all rather than staying out of every
+# rendezvous as every offline UI test does.
+#
+# It governs both halves, for different reasons. Direct is a room on this server,
+# and the origin is what makes it this server rather than the public hub. Nearby
+# is not a room: shipped iOS advertises and browses `_relayium._tcp` on the local
+# link, so what the origin buys there is the residency gate plus the loopback ICE
+# fetch the link makes. Nothing about the roster travels through the server.
 #
 # The isolation rules — ephemeral ports, one per-run root, tokens in the
 # environment, PID-exact cleanup, no release check, loopback-only STUN — live in
@@ -88,14 +94,19 @@ say "-- driving iPhone Simulator $device_id"
 
 # ── the second endpoint ──────────────────────────────────────────────────────
 #
-# Started BEFORE the app so it is already in the room when the roster is first
-# read. The name carries the run tag: a shared build agent may have another run
-# resident, and a roster assertion that matched on a constant would pass against
-# somebody else's peer.
+# On the link rather than in a room on the server: shipped iOS composes its
+# roster through `LocalNearbyEnvironment`, which advertises and browses
+# `_relayium._tcp` and joins no hub room at all, so a counterpart resident in
+# that room is invisible to it. macOS discovery did not move, and
+# `macos-ui-session-acceptance.sh` still drives `nearby-receiver`.
+#
+# Started before the app so it is already advertising when the roster is first
+# read. The name carries the run tag: Bonjour has no per-run room to hide behind,
+# and a shared build agent may have another run's peer on the same link.
 mkdir -p "$run_root/nearby-receive" "$run_root/pair-send"
 
 peer_name="acceptance-peer-$run_tag"
-start_peer nearby-receiver nearby-receiver \
+start_peer local-link-peer local-link-peer \
   --name "$peer_name" \
   --receive-root "$run_root/nearby-receive"
 nearby_port="$peer_port"
@@ -115,7 +126,41 @@ pair_port="$peer_port"
 # a pairing code is short-lived and single-use, so the test mints it at the
 # moment it is about to type it.
 control "$nearby_port" POST /start >/dev/null
-say "-- $peer_name is resident in the code-less room on $origin"
+
+# And it really is advertising, before a simulator boot is spent on it.
+# `resident` is published once `LanDiscoveryModel` reaches `joined`, which on
+# this transport means the listener and the browser both reported ready. A host
+# that cannot advertise `_relayium._tcp` between this process and the Simulator
+# and an app that stopped rendering its roster otherwise present identically —
+# as an empty roster 90 seconds into a UI test.
+#
+# `if` rather than `test … && fail`, for the reason `assert_run_was_local`
+# records: as the last command of a `&&` list, the ordinary "not ready yet"
+# answer returns non-zero and `set -e` would end the run on it.
+peer_status=""
+peer_phase=""
+peer_waited=0
+while [ "$peer_waited" -lt 120 ]; do
+  peer_status="$(control "$nearby_port" GET /status)" \
+    || fail "the local peer stopped answering its control API while coming up"
+  peer_phase="$(json_field "$peer_status" phase)"
+  if [ "$peer_phase" = "resident" ]; then
+    break
+  fi
+  if [ "$peer_phase" = "failed" ]; then
+    fail "the local peer could not advertise on this link: $peer_status"
+  fi
+  sleep 0.5
+  peer_waited=$((peer_waited + 1))
+done
+if [ "$peer_phase" != "resident" ]; then
+  fail "the local peer never advertised _relayium._tcp within 60s.
+   last status: $peer_status
+   This host has to let this process and the iOS Simulator discover each other
+   over Bonjour. A run that cannot is a harness failure on this machine, not an
+   app one."
+fi
+say "-- $peer_name is advertising _relayium._tcp on this link"
 
 maybe_fault after-ios-peers
 
@@ -224,5 +269,6 @@ assert_run_was_local
 
 completed=1
 say ""
-say "PASS: the built iOS app's own UI completed a Nearby link/1 transfer and a"
-say "      pairing-code transfer against $origin, with matching SHA-256 digests."
+say "PASS: the built iOS app's own UI completed a Nearby link/1 transfer over a"
+say "      real local $peer_name peer and a pairing-code transfer against $origin,"
+say "      with matching SHA-256 digests."

@@ -483,7 +483,20 @@ struct RelayiumApp: App {
         // through the single direct signaling channel the discovery model owns.
         let verifying = VerificationPreference()
         _verification = StateObject(wrappedValue: verifying)
-        let nearby = LocalNearbyEnvironment.makeDiscoveryModel()
+        // ONE discovery graph, composed once below. Only the transport factory
+        // is compile-conditional: the Release factory is the ordinary default
+        // construction and does not name the seam at all, while the Debug one
+        // reads a gate that is true only for an acceptance launch that also
+        // resolved a loopback origin. See `UITestMode.allowsSameHostLoopback`.
+        #if DEBUG
+        let localTransport: () -> LocalPeerTransport = {
+            NetworkLocalPeerTransport(
+                sameHostAcceptanceAllowsLoopback: UITestMode.allowsSameHostLoopback)
+        }
+        #else
+        let localTransport: () -> LocalPeerTransport = { NetworkLocalPeerTransport() }
+        #endif
+        let nearby = LocalNearbyEnvironment.makeDiscoveryModel(transport: localTransport)
         // Holds the exact socket an inbound attempt is being built on. A peer id
         // only means something inside the room that issued it, so a builder that
         // read "the current room" would, in the one case that matters — a drop

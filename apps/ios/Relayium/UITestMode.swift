@@ -113,6 +113,26 @@ enum UITestMode {
     /// passes none, resolves production and is refused here.
     static let allowsResidency = isActive && AppEnvironment.isLoopbackTransferOrigin
 
+    /// Whether this launch may dial and accept a link over a same-host route.
+    ///
+    /// The built-App acceptance is the one arrangement whose two endpoints are
+    /// unavoidably on one machine: XCUITest drives one app, the Simulator shares
+    /// the launcher's network stack, and the counterpart is a process beside it.
+    /// The shipped transport prohibits `.loopback`, which is right for a feature
+    /// about two devices and is what a failing run showed refusing the only
+    /// route available — both listeners up, reciprocal discovery, and no
+    /// outbound socket from the app after Connect.
+    ///
+    /// Three conditions, not one. `allowsResidency` already carries `isActive`
+    /// and the loopback-origin rule, so a launch that passes this argument
+    /// without the acceptance harness behind it — no `--relayium-ui-testing`, or
+    /// an origin that resolves production — resolves false and changes nothing.
+    /// In Release the argument does not exist at all.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let sameHostLoopbackArgument = "--relayium-ui-testing-same-host-loopback"
+    static let allowsSameHostLoopback = allowsResidency
+        && ProcessInfo.processInfo.arguments.contains(sameHostLoopbackArgument)
+
     /// Whether this launch should leave one deterministic file where the system
     /// document browser can reach it.
     ///
@@ -630,6 +650,10 @@ enum UITestMode {
     /// false, and unreachable: a shipped launch never takes the acceptance arm
     /// of the residency gate, because `isActive` is already false beside it.
     static let allowsResidency = false
+    /// false, and unreachable twice over: `allowsResidency` is already false
+    /// beside it, and the transport's permissive branch is not compiled into a
+    /// Release build at all. A shipped launch prohibits the same-host route.
+    static let allowsSameHostLoopback = false
     /// Folded to a constant, so a shipped launch always takes the residency
     /// branch and no argument can hold this device out of the room.
     static let showsOffReceiving = false

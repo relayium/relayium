@@ -2,6 +2,8 @@ import Combine
 import Foundation
 import RelayiumAppKit
 import RelayiumKit
+// The local link's own discovery, reachable from this harness executable only.
+import RelayiumLocalPeerKit
 import RelayiumPeerKit
 
 // The acceptance peer.
@@ -16,6 +18,8 @@ import RelayiumPeerKit
 //                     --name <room name> --receive-root <dir> --run-tag <tag>
 //   LocalTransferPeer --role nearby-sender   --origin ... --name ... \
 //                     --counterpart <name> --run-tag <tag>
+//   LocalTransferPeer --role local-link-peer --origin ... --name <link name> \
+//                     --receive-root <dir> --run-tag <tag>
 //   LocalTransferPeer --role pair-sender     --origin ... --receive-root ... --run-tag ...
 //   LocalTransferPeer --role pair-receiver   --origin ... --receive-root ... --run-tag ...
 //   LocalTransferPeer --role inbox-endpoint  --origin ... --state-root <dir> --run-tag <tag>
@@ -55,6 +59,10 @@ func require(_ name: String) -> String {
 enum Role: String {
     case nearbyReceiver = "nearby-receiver"
     case nearbySender = "nearby-sender"
+    /// Nearby on the link itself, which is the only rendezvous shipped iOS
+    /// has. `nearby-receiver` above joins the hub's code-less room, which is
+    /// still right for macOS. See `LocalLinkPeerRun`.
+    case localLinkPeer = "local-link-peer"
     case pairSender = "pair-sender"
     case pairReceiver = "pair-receiver"
     /// The `link/1` pairing surface, which is a different wire from the two
@@ -88,8 +96,8 @@ enum Config {
     static let role: Role = {
         guard let role = Role(rawValue: require("--role")) else {
             fail("--role must be one of nearby-receiver, nearby-sender, "
-                 + "pair-sender, pair-receiver, pair-link, inbox-sender, "
-                 + "inbox-receiver, inbox-endpoint")
+                 + "local-link-peer, pair-sender, pair-receiver, pair-link, "
+                 + "inbox-sender, inbox-receiver, inbox-endpoint")
         }
         return role
     }()
@@ -313,6 +321,26 @@ func json(_ value: [String: Any], status: Int = 200) -> (status: Int, body: Data
     func teardown() { host.teardown() }
 }
 
+/// What a link-serving role can be asked about its link.
+///
+/// A protocol rather than a concrete host because two compositions now serve a
+/// real `link/1` — one in the hub's code-less room (`AppReceiverHost`), one on
+/// the local link (`LocalLinkPeerHost`) — and the launcher, the UI suite and the
+/// stall watchdog must read the same facts from either. Every member is already
+/// `AppReceiverHost`'s own public surface, so the conformance adds nothing.
+@MainActor
+protocol LinkObserving: AnyObject {
+    var link: LinkWorkspaceModel { get }
+    func receipts() -> [FileReceipt]
+    func allReceipts() -> [FileReceipt]
+    func receivedMessages() -> [String]
+    func allMessages() -> [String]
+    func linkSAS() -> String?
+    func linkEpoch() -> Int
+}
+
+extension AppReceiverHost: LinkObserving {}
+
 /// An ordered, stable rendering of everything about this link that can move.
 ///
 /// Its only job is "did anything change since the last look", so it is built
@@ -320,7 +348,7 @@ func json(_ value: [String: Any], status: Int = 200) -> (status: Int, body: Data
 /// what a stalled run prints, which is why it names the phase and the batch
 /// states rather than reducing them to a count.
 @MainActor
-func linkProgressFingerprint(host: AppReceiverHost) -> String {
+func linkProgressFingerprint(host: some LinkObserving) -> String {
     let batches = (host.link.fileModel?.batches ?? [])
         .map { "\($0.direction):\($0.state):\($0.transferredBytes)" }
         .joined(separator: ",")
@@ -339,7 +367,7 @@ func linkProgressFingerprint(host: AppReceiverHost) -> String {
 /// both arrived. Nothing here is derived: every value is read off the model the
 /// production writer filled in.
 @MainActor
-func liveLinkFacts(host: AppReceiverHost) -> [String: Any] {
+func liveLinkFacts(host: some LinkObserving) -> [String: Any] {
     func entries(_ receipts: [FileReceipt]) -> [[String: Any]] {
         receipts.map { receipt in
             var entry: [String: Any] = ["name": receipt.name, "size": receipt.size,
@@ -369,6 +397,232 @@ func liveLinkFacts(host: AppReceiverHost) -> [String: Any] {
         out["batchStates"] = batches.map { "\($0.direction):\($0.state)" }
     }
     return out
+}
+
+// MARK: - Nearby, on the local link
+
+/// The second endpoint of an iOS Nearby link: a real `_relayium._tcp` peer on
+/// the same link rather than a resident in a room on a server.
+///
+/// `nearby-receiver` joins the hub's code-less room, which is still where macOS
+/// discovery looks. Shipped iOS composes its roster through
+/// `LocalNearbyEnvironment`, so it browses and advertises one Bonjour service
+/// and joins no room at all: a counterpart in the hub's room is not a device on
+/// its link, and the app truthfully renders an empty roster against one.
+///
+/// The capabilities, the transport, the channel and the link surface are the
+/// product's own, so this peer cannot announce a wire the app would refuse and
+/// every receipt it reports is read off the model a production writer filled in.
+/// Only the advertised NAME is composed here rather than taken from
+/// `LocalNearbyEnvironment.makeDiscoveryModel()`, which uses
+/// `AppEnvironment.deviceName()` — one constant string per machine, and unusable
+/// for a roster assertion that has to name this run on a shared build agent. The
+/// rest of that composition is repeated verbatim, including arming the channel
+/// in `activate`: a local transport can be ready synchronously and would
+/// otherwise announce a roster into callbacks `LanDiscoveryModel` has not
+/// installed yet.
+@MainActor final class LocalLinkPeerHost: LinkObserving {
+
+    /// Published on `/status`, so a failing run can say what it advertised
+    /// rather than leaving that to be inferred from a roster that never named it.
+    let advertisement: LocalPeerAdvertisement
+    let discovery: LanDiscoveryModel
+    /// Retained because `LanDiscoveryModel.observer` is weak. It answers a
+    /// legacy offer with the tagged `busy` this build's peers understand, rather
+    /// than leaving one to wait out its own timeout in silence.
+    let receive: NearbyReceiveModel
+    let link: LinkWorkspaceModel
+    let counterpart: LinkCounterpart
+
+    private let receiveRoot: URL
+    private let defaults: UserDefaults
+    private let defaultsSuite: String
+
+    init(name: String, receiveRoot: URL) throws {
+        try FileManager.default.createDirectory(at: receiveRoot,
+                                                withIntermediateDirectories: true)
+        self.receiveRoot = receiveRoot
+        // Scoped by role as well as run tag: this run starts a second peer
+        // process, and two processes sharing a defaults domain would erase each
+        // other's on teardown.
+        defaultsSuite = "com.relayium.acceptance.\(Config.runTag).\(Config.role.rawValue)"
+        guard let defaults = UserDefaults(suiteName: defaultsSuite) else {
+            throw AppReceiverHost.HostError.unusableDefaultsSuite(defaultsSuite)
+        }
+        self.defaults = defaults
+        // The shipped default is verification OFF, read from a throwaway domain
+        // so the run does not inherit whatever the person running it chose.
+        let verification = VerificationPreference(defaults: defaults)
+
+        advertisement = LocalPeerAdvertisement(
+            identity: LocalPeerAdvertisement.mintIdentity(),
+            name: name,
+            capabilities: LocalNearbyEnvironment.advertisedCapabilities)
+        let advertisement = self.advertisement
+        discovery = LanDiscoveryModel(prepare: {
+            let channel = LocalPeerSignalingChannel(
+                advertisement: advertisement,
+                // The shipped transport, taking the same Debug-only same-host
+                // seam the gated test App takes: both endpoints of this
+                // acceptance are on one Mac, so a connection addressed through
+                // the host's own Wi-Fi address can still be classified as
+                // loopback, which the shipped default prohibits. Either side
+                // may listen or dial, so both opt in.
+                //
+                // It permits that route and nothing else. The advertisement,
+                // the name-based dial, the framing and the link surface are all
+                // still the product's, and `includePeerToPeer` stays false.
+                // `LocalNearbyModuleBoundaryTests` rejects a Release or ordinary
+                // shipped construction that opts in; the app's own Debug factory
+                // names it by design, behind the acceptance gate.
+                transport: NetworkLocalPeerTransport(sameHostAcceptanceAllowsLoopback: true))
+            let client = SignalingClient(channel: channel, name: advertisement.name)
+            return PreparedNearbyConnection(client: client,
+                                            activate: { channel.begin() })
+        })
+
+        receive = AppEnvironment.makeListeningOnlyNearbyReceiveModel(
+            discovery: discovery, inboundRoom: InboundRoom())
+
+        // Passed explicitly and never allowed to default, for the reason
+        // `AppReceiverHost` records: the macOS overload defaults to the user's
+        // Downloads folder, and this fixture writes only inside the run root.
+        let root = receiveRoot
+        link = AppEnvironment.makeLinkWorkspaceModel(
+            baseURL: Config.origin, verification: verification, nearby: discovery,
+            // No code is watched on this path, exactly as for the nearby host.
+            pairingRoom: LinkRoomHandle(),
+            receiveDirectory: { root })
+        counterpart = LinkCounterpart(link: link)
+    }
+
+    /// Headless answers before advertising, for the reason `AppReceiverHost
+    /// .start` gives: a peer can dial the instant the listener is ready, and an
+    /// admission gate installed afterwards would race the first offer.
+    func start() {
+        counterpart.start()
+        discovery.startResident()
+    }
+
+    func teardown() {
+        link.leave()
+        discovery.stop()
+        defaults.removePersistentDomain(forName: defaultsSuite)
+        try? FileManager.default.removeItem(at: receiveRoot)
+    }
+
+    /// Only the link's receipts, which is the honest total: this composition
+    /// has no legacy transport to have written anything else.
+    func receipts() -> [FileReceipt] { counterpart.receipts() }
+    func allReceipts() -> [FileReceipt] { counterpart.allReceipts() }
+    func receivedMessages() -> [String] { counterpart.current.messages }
+    func allMessages() -> [String] { counterpart.allMessages() }
+    func linkSAS() -> String? { counterpart.current.sas }
+    func linkEpoch() -> Int { counterpart.current.epoch }
+}
+
+/// The `local-link-peer` role: advertise, then serve every link the app opens.
+@MainActor final class LocalLinkPeerRun {
+    let host: LocalLinkPeerHost
+
+    /// From the last observed progress rather than from `start`, for the reason
+    /// `NearbyReceiverRun.idleCeiling` records: a UI run boots a simulator and
+    /// drives a roster before anything here can be observed.
+    static let idleCeiling: TimeInterval = 240
+
+    init(receiveRoot: URL, name: String) throws {
+        host = try LocalLinkPeerHost(name: name, receiveRoot: receiveRoot)
+        // Every link transition this side sees. A UI run's app is gone by the
+        // time anybody reads the failure, so this is the surviving account.
+        host.counterpart.logEvent = { log($0) }
+    }
+
+    func start() {
+        host.start()
+        state.set(phase: "advertising")
+        Task { @MainActor in
+            var lastProgress = Date()
+            var seen = ""
+            var lastRoster = ""
+            var announced = false
+            while true {
+                let room = String(describing: host.discovery.state)
+                // `joined` is a real readiness edge: the lifecycle announces
+                // it only once the listener and the browser are both ready, so
+                // the Bonjour service is registered and the browse is running.
+                // Its own phase, so the launcher can refuse to spend a simulator
+                // boot on a host where the service never came up.
+                if !announced, case .joined = host.discovery.state {
+                    announced = true
+                    state.set("peerName", host.advertisement.name)
+                    state.set("peerIdentity", host.advertisement.identity)
+                    state.set(phase: "resident")
+                    lastProgress = Date()
+                }
+                // The link's own committed state, and the same `received`-only
+                // rule the nearby host uses: `finished` is a report this
+                // projection has seen no proof of.
+                if let batches = host.link.fileModel?.batches,
+                   batches.contains(where: { batch in
+                       guard batch.direction == .inbound else { return false }
+                       if case .received = batch.state { return true }
+                       return false
+                   }) {
+                    state.finish(receipts: host.receipts())
+                    return
+                }
+                // This peer's own view, beside the app's. Discovery is
+                // symmetric and its halves fail separately: an inbound offer
+                // from a device this side has not discovered is held and then
+                // dropped at `LocalPeerSignalingChannel.inboundGracePeriod`,
+                // which without this reads exactly like a dial that never came.
+                let roster = host.discovery.devices
+                    .map { "\($0.name)/\($0.supportsLink ? "link" : "legacy")" }
+                    .sorted().joined(separator: ",")
+                let progress = "room=\(room) roster=[\(roster)] "
+                    + linkProgressFingerprint(host: host)
+                if progress != seen {
+                    seen = progress
+                    state.set("room", room)
+                    state.set("roster", roster)
+                    lastProgress = Date()
+                }
+                // Logged on change, with a timestamp: a failed run has to
+                // answer when this side learned about the app relative to when
+                // the app dialled, and a status field holds only the last answer.
+                if roster != lastRoster {
+                    lastRoster = roster
+                    log("roster: [\(roster)]")
+                }
+                guard Date().timeIntervalSince(lastProgress) < Self.idleCeiling else {
+                    return state.failed(
+                        "nothing moved for \(Int(Self.idleCeiling))s: " + progress)
+                }
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            }
+        }
+    }
+
+    /// The live view, plus this side's own roster.
+    ///
+    /// Discovery is symmetric and its halves complete at different times: the
+    /// app lists a peer that was already advertising almost at once, while this
+    /// side has to be told about a service the Simulator registers afterwards.
+    /// `LocalPeerSignalingChannel.inboundGracePeriod` is five seconds, so an app
+    /// that dials as soon as its own roster fills can reach a counterpart that
+    /// is still blind. Published so the suite can wait for the second half
+    /// rather than race it; `supportsLink` comes from the credit this side gave
+    /// the app's TXT record, so waiting on it waits for a real announcement.
+    @MainActor
+    func observed() -> [String: Any] {
+        var facts = liveLinkFacts(host: host)
+        facts["roster"] = host.discovery.devices.map {
+            ["id": $0.id, "name": $0.name, "supportsLink": $0.supportsLink]
+        }
+        return facts
+    }
+
+    func teardown() { host.teardown() }
 }
 
 /// Nearby, sending: a plain peer that dials the resident receiver by name.
@@ -1445,9 +1699,11 @@ final class RunBox {
 
     /// The live view `/observed` answers, installed by the roles that have one.
     ///
-    /// A closure rather than a stored host, so a role with no link surface —
-    /// every role but `nearby-receiver` today — answers "no live view" instead
-    /// of an empty one that reads like a link that produced nothing.
+    /// A closure rather than a stored host, so a role with no link surface
+    /// answers "no live view" instead of an empty one that reads like a link
+    /// that produced nothing. Installed by the roles that serve a real `link/1`
+    /// — `nearby-receiver` in the hub's room and `local-link-peer` on the link —
+    /// plus `pair-link` and `inbox-endpoint`.
     private var observeRun: (() -> [String: Any])?
 
     /// The roles a launcher can also SEND through. Nil for every role that runs
@@ -1477,6 +1733,12 @@ final class RunBox {
                 let run = NearbySenderRun(name: require("--name"),
                                           counterpart: require("--counterpart"))
                 teardownRun = { run.teardown() }
+                run.start()
+            case .localLinkPeer:
+                let run = try LocalLinkPeerRun(receiveRoot: requireReceiveRoot(),
+                                               name: require("--name"))
+                teardownRun = { run.teardown() }
+                observeRun = { run.observed() }
                 run.start()
             case .pairSender:
                 let run = try PairSenderRun(receiveRoot: requireReceiveRoot())

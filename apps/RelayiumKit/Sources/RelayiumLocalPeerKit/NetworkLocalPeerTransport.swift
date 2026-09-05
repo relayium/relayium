@@ -13,15 +13,30 @@ public final class NetworkLocalPeerTransport: LocalPeerTransport {
 
     private let queue: DispatchQueue
     private let startDeadline: TimeInterval
+    /// False in every shipped construction, and in Release the permissive branch
+    /// does not exist at all — see `parameters(sameHostAcceptanceAllowsLoopback:)`.
+    ///
+    /// Prohibiting `.loopback` is what makes "a link between two devices"
+    /// literal. It is also what a built-App acceptance cannot satisfy: XCUITest
+    /// drives one app, the Simulator shares this host's network stack, and the
+    /// counterpart is a process beside it — so the route between them is a
+    /// same-host route however it is addressed. Live inspection of a failing run
+    /// showed both Bonjour listeners up, reciprocal discovery, and no outbound
+    /// TCP socket from the app after Connect: the dialling side's own parameters
+    /// refused the only route available. Permitting it is therefore a property
+    /// of the test topology, granted per launch, and never of a shipped build.
+    private let sameHostAcceptanceAllowsLoopback: Bool
     private var lifecycle = LocalPeerTransportLifecycle()
     private var listener: NWListener?
     private var browser: NWBrowser?
     private weak var delegate: LocalPeerTransportDelegate?
 
     public init(queue: DispatchQueue = DispatchQueue(label: "com.relayium.localpeer.transport"),
-                startDeadline: TimeInterval = NetworkLocalPeerTransport.startDeadline) {
+                startDeadline: TimeInterval = NetworkLocalPeerTransport.startDeadline,
+                sameHostAcceptanceAllowsLoopback: Bool = false) {
         self.queue = queue
         self.startDeadline = startDeadline
+        self.sameHostAcceptanceAllowsLoopback = sameHostAcceptanceAllowsLoopback
     }
 
     public func start(advertising advertisement: LocalPeerAdvertisement,
@@ -34,7 +49,7 @@ public final class NetworkLocalPeerTransport: LocalPeerTransport {
         guard lifecycle.start() == .arm else { return }
         self.delegate = delegate
 
-        let parameters = Self.parameters()
+        let parameters = parameters()
         var txt = NWTXTRecord()
         for (key, value) in advertisement.txtRecord { txt[key] = value }
 
@@ -67,10 +82,15 @@ public final class NetworkLocalPeerTransport: LocalPeerTransport {
             return
         }
 
+        // The browser keeps the shipped answer even under the seam. Browsing
+        // decides what the roster SAYS; the listener and the dial decide what a
+        // route may traverse. Handing the browser the permissive answer was
+        // measured making the same service appear and disappear every few
+        // seconds, and a peer that leaves the roster takes the link with it.
         let browser = NWBrowser(
             for: .bonjourWithTXTRecord(type: LOCAL_PEER_SERVICE_TYPE,
                                        domain: LOCAL_PEER_SERVICE_DOMAIN),
-            using: parameters)
+            using: Self.parameters())
         browser.stateUpdateHandler = { [weak self] state in
             switch state {
             case .ready: self?.browserBecameReady()
@@ -96,7 +116,7 @@ public final class NetworkLocalPeerTransport: LocalPeerTransport {
                                           domain: LOCAL_PEER_SERVICE_DOMAIN,
                                           interface: nil)
         let stream = NetworkLocalPeerConnection(
-            connection: NWConnection(to: endpoint, using: Self.parameters()), queue: queue)
+            connection: NWConnection(to: endpoint, using: parameters()), queue: queue)
         return stream
     }
 
@@ -150,11 +170,36 @@ public final class NetworkLocalPeerTransport: LocalPeerTransport {
         performStop()
     }
 
-    private static func parameters() -> NWParameters {
+    /// The listener's, the browser's and every dial's parameters, in one
+    /// function, so those three cannot come to disagree about which interfaces
+    /// this product may touch.
+    ///
+    /// `includePeerToPeer` is false in BOTH answers: the seam permits a
+    /// same-host route and nothing else, so no build can quietly gain AWDL or
+    /// Bluetooth. In Release the permissive branch is not compiled, so the
+    /// shipped binary contains only the prohibition.
+    ///
+    /// `internal` rather than `private` so the guards can assert both answers
+    /// directly instead of inferring them from behaviour.
+    static func parameters(sameHostAcceptanceAllowsLoopback: Bool = false) -> NWParameters {
         let parameters = NWParameters.tcp
         parameters.includePeerToPeer = false
+        #if DEBUG
+        parameters.prohibitedInterfaceTypes = sameHostAcceptanceAllowsLoopback ? [] : [.loopback]
+        #else
         parameters.prohibitedInterfaceTypes = [.loopback]
+        #endif
         return parameters
+    }
+
+    /// This instance's answer, so its listener and its dials inherit the one
+    /// decision made at construction.
+    ///
+    /// `internal` so a guard can assert what a DEFAULT-CONSTRUCTED transport
+    /// resolves: the static default alone would still pass if the initializer's
+    /// own default were flipped.
+    func parameters() -> NWParameters {
+        Self.parameters(sameHostAcceptanceAllowsLoopback: sameHostAcceptanceAllowsLoopback)
     }
 
     static func parse(_ result: NWBrowser.Result) -> LocalPeerAdvertisement? {

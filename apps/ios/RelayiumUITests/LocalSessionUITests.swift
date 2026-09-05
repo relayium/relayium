@@ -7,24 +7,33 @@ import XCTest
 ///
 /// Every test in that file is offline by construction: `--relayium-ui-testing`
 /// with no origin resolves production, `UITestMode.allowsResidency` is therefore
-/// false, and the app deliberately stays out of the Nearby room. That is the
-/// right default — the public hub keys the code-less room by observed public
-/// address, so a resident simulator would share a roster with strangers — and it
-/// is also why 35 UI tests could never once observe a second device. Q0's four
-/// remaining iOS cells all reduce to the same sentence: *no second endpoint has
-/// ever existed at runtime.*
+/// false, and the app deliberately becomes reachable to nobody. That is the
+/// right default — an acceptance build that advertised itself would offer a
+/// stranger's device a connection to a test — and it is also why 35 UI tests
+/// could never once observe a second device. Q0's four remaining iOS cells all
+/// reduce to the same sentence: *no second endpoint has ever existed at
+/// runtime.*
 ///
 /// T2a built the endpoint (a real Go server, a real WebRTC counterpart process,
 /// a loopback control API) and closed no cell, saying so in its own header. This
 /// file is what consumes it.
 ///
+/// ## The two halves reach the app by two different rendezvous
+///
+/// Nearby is the local link: shipped iOS advertises and browses
+/// `_relayium._tcp` and joins no room on any server, so the counterpart these
+/// two cases name is a real Bonjour peer the launcher advertises on this
+/// machine and nothing about the roster travels through the throwaway server.
+/// Direct is a room on that server, minted by a second process, and is
+/// unaffected by any of it.
+///
 /// ## What is real here, and what a reader should not over-read
 ///
-/// Real: the server, the counterpart process, the WebRTC transport, the room,
-/// the roster, the capability announcement, the `link/1` establishment, the SAS,
-/// the file lane, the text lane, the writer, and every control the assertions
-/// touch. The digests compared at the end are of bytes a separate process wrote
-/// to disk.
+/// Real: the server, the counterpart process, the Bonjour advertisement, the
+/// WebRTC transport, the roster, the capability announcement, the `link/1`
+/// establishment, the SAS, the file lane, the text lane, the writer, and every
+/// control the assertions touch. The digests compared at the end are of bytes a
+/// separate process wrote to disk.
 ///
 /// Not real, and deliberately: the origin is loopback, the account lives on a
 /// throwaway database, and the counterpart answers its own admission prompts
@@ -112,13 +121,26 @@ final class LocalSessionUITests: XCTestCase {
     /// `--relayium-transfer-origin` is the whole seam: it is `#if DEBUG`, it
     /// admits loopback origins only, and it is what makes
     /// `UITestMode.allowsResidency` true — so this launch, and only a launch
-    /// like it, may join a code-less room.
+    /// like it, may become reachable at all. It buys both halves at once: the
+    /// Direct room is on this server rather than the public hub, and the Nearby
+    /// half gets the residency that starts the local advertisement and browse.
     private func launch(_ harness: Harness,
                         verifying: Bool,
                         extraArguments: [String] = []) {
         app = XCUIApplication()
         app.launchArguments = offlineLaunchArguments
             + ["--relayium-transfer-origin", harness.origin]
+            // Passed only HERE, beside the loopback origin that is its second
+            // gate, and only by this file: the app resolves it through
+            // `UITestMode.allowsSameHostLoopback`, which is
+            // `--relayium-ui-testing` AND a loopback origin AND this argument.
+            // Both endpoints of this acceptance are on one machine — XCUITest
+            // drives one app and the counterpart is a process beside the
+            // Simulator — so the route between them is a same-host route, which
+            // the shipped transport prohibits and a shipped build cannot be
+            // asked to permit. Every offline test in `LocalSessionUITests`'
+            // sibling files passes no origin, so this cannot reach them.
+            + [Self.sameHostLoopbackArgument]
             // **The verification preference, pinned per test.**
             //
             // `VerificationPreference` reads `UserDefaults`, which PERSISTS in
@@ -136,6 +158,14 @@ final class LocalSessionUITests: XCTestCase {
             + extraArguments
         app.launch()
     }
+
+    /// `UITestMode.sameHostLoopbackArgument`, repeated because a UI test target
+    /// links no product module.
+    ///
+    /// A rename cannot silently turn this into a no-op: the app would take the
+    /// shipped prohibition, no link would establish on this host, and both
+    /// Nearby cases below would fail rather than pass vacuously.
+    private static let sameHostLoopbackArgument = "--relayium-ui-testing-same-host-loopback"
 
     /// `VerificationPreference.defaultsKey`, repeated because a UI test target
     /// links no product module.
@@ -230,6 +260,52 @@ final class LocalSessionUITests: XCTestCase {
                          file: file, line: line)
     }
 
+    /// The peer ids the counterpart's own roster already holds, read BEFORE
+    /// this test's app has advertised anything.
+    ///
+    /// A baseline for the same reason `counterpartEpoch` is one: one
+    /// counterpart serves the whole run and a shared build agent may hold
+    /// another run's peer on the same link, so "has it discovered a device"
+    /// answered against a roster that was never empty is not an answer.
+    private func counterpartRoster(_ harness: Harness) -> Set<String> {
+        let roster = control(harness.nearbyPort, "GET", "/observed")?["roster"]
+            as? [[String: Any]]
+        return Set((roster ?? []).compactMap { $0["id"] as? String })
+    }
+
+    /// Wait until the counterpart can answer, not merely until this app can ask.
+    ///
+    /// Local-link discovery is symmetric and its two halves complete at
+    /// different times: this app lists a peer that was already advertising
+    /// almost at once, while the counterpart has to be told about a service the
+    /// Simulator registers afterwards. `LocalPeerSignalingChannel` holds an
+    /// inbound offer from a device it has not discovered for five seconds and
+    /// then drops it, so an app that taps Connect as soon as its own roster
+    /// fills reaches a counterpart that is still blind — the app reports a
+    /// failed connection and the counterpart reports no link at all.
+    ///
+    /// Nothing here makes discovery happen; the app is still found on its own
+    /// merits. `supportsLink` is required as well as presence, so what is waited
+    /// for is a real capability announcement rather than a name appearing.
+    /// Bounded, and loud when it expires.
+    private func awaitCounterpartDiscovery(_ harness: Harness,
+                                           notIn known: Set<String>,
+                                           file: StaticString = #filePath,
+                                           line: UInt = #line) {
+        awaitCounterpart(harness.nearbyPort, timeout: 150,
+                         describing: "discovered this app on the link and credited "
+                                   + "it with link/1",
+                         satisfied: { facts in
+                             let roster = facts["roster"] as? [[String: Any]] ?? []
+                             return roster.contains { entry in
+                                 guard let id = entry["id"] as? String,
+                                       !known.contains(id) else { return false }
+                                 return entry["supportsLink"] as? Bool == true
+                             }
+                         },
+                         file: file, line: line)
+    }
+
     /// Poll the counterpart's live view until `satisfied`, or fail saying what
     /// it last held.
     ///
@@ -298,16 +374,23 @@ final class LocalSessionUITests: XCTestCase {
 
     /// The roster row for the counterpart.
     ///
-    /// Matched on the peer's own announced NAME, which carries the run tag: a
-    /// shared build agent may have another run resident, and a row matched by
-    /// position would tap whichever device the hub happened to sort there.
+    /// Matched on the peer's own announced NAME, which carries the run tag.
+    /// Bonjour has no per-run room to hide behind — every peer advertising
+    /// `_relayium._tcp` on this link is a candidate, including another run's on
+    /// a shared build agent — so a row matched by position would tap whichever
+    /// device the browser happened to report first.
     private func rosterRow(_ harness: Harness) -> XCUIElement {
         app.buttons.containing(
             NSPredicate(format: "label CONTAINS %@", harness.peerName)).firstMatch
     }
 
-    /// Wait for the room to produce the counterpart, and assert the roster is
-    /// describing it rather than still describing an empty room.
+    /// Wait for the link to produce the counterpart, and assert the roster is
+    /// describing it rather than still describing an empty one.
+    ///
+    /// The launcher has already established that the peer is advertising before
+    /// a simulator was booted, so a failure here is the APP's side of discovery
+    /// — the browser, the advertisement parse, the capability credit or the
+    /// roster render — and not a harness that never came up.
     private func awaitRoster(_ harness: Harness) -> XCUIElement {
         let row = rosterRow(harness)
         XCTAssertTrue(row.waitForExistence(timeout: 90), """
@@ -334,6 +417,7 @@ final class LocalSessionUITests: XCTestCase {
         let harness = try requireHarness()
         awaitIdleCounterpart(harness)
         let baseline = counterpartEpoch(harness)
+        let knownPeers = counterpartRoster(harness)
         // Verification OFF, which is the shipped default: this cell is about the
         // roster and the join, and the SAS boundary is the other test's subject.
         // Pinned rather than inherited, because the preference persists in the
@@ -358,13 +442,19 @@ final class LocalSessionUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Nearby receiving: paused"].exists,
                        "a loopback acceptance launch paused its listener")
 
+        // Before the roster is touched, not between reading it and tapping
+        // it: this wait is tens of seconds, and holding an expanded row open
+        // across it exposes Connect to every roster repaint in that window.
+        awaitCounterpartDiscovery(harness, notIn: knownPeers)
+
         let row = awaitRoster(harness)
         scrollUntilHittable(row)
         row.tap()
 
         // A `link/1` peer offers exactly one verb. Its presence is the assertion
-        // that the capability announcement crossed the room and was believed:
-        // a legacy peer would render Send and "Start a message session" instead.
+        // that the capability announcement crossed the link and was believed —
+        // on this transport the peer's TXT record IS that announcement — and a
+        // legacy peer would render Send and "Start a message session" instead.
         let connect = app.buttons["Connect"]
         XCTAssertTrue(connect.waitForExistence(timeout: 15),
                       "the roster row offered no unified Connect for a link/1 peer")
@@ -399,6 +489,7 @@ final class LocalSessionUITests: XCTestCase {
         let harness = try requireHarness()
         awaitIdleCounterpart(harness)
         let baseline = counterpartEpoch(harness)
+        let knownPeers = counterpartRoster(harness)
         launch(harness, verifying: true,
                extraArguments: ["--relayium-ui-testing-preselect-direct-fixture"])
 
@@ -427,6 +518,9 @@ final class LocalSessionUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["pendingFile.0"]
             .waitForExistence(timeout: 20),
                       "the preselected fixture never became a pending Nearby send")
+
+        // Before the roster is touched, for the reason the roster case records.
+        awaitCounterpartDiscovery(harness, notIn: knownPeers)
 
         let row = awaitRoster(harness)
         scrollUntilHittable(row)

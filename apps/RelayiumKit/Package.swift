@@ -151,6 +151,15 @@ let package = Package(
                 "RelayiumKit",
                 "RelayiumAppKit",
                 "RelayiumPeerKit",
+                // The local link, for the `local-link-peer` role: the
+                // acceptance counterpart of an iOS Nearby session has to be on
+                // `_relayium._tcp` rather than in the hub's code-less room.
+                //
+                // It does not widen the module's shipped reach. The boundary
+                // `LocalNearbyModuleBoundaryTests` pins is which products the
+                // apps link; this target is a harness executable that no app
+                // links and no signed build contains.
+                "RelayiumLocalPeerKit",
             ],
             path: "Sources/LocalTransferPeer"
         ),

@@ -1,3 +1,4 @@
+import Network
 import XCTest
 @testable import RelayiumAppKit
 @testable import RelayiumKit
@@ -257,5 +258,61 @@ final class LocalNearbyDiscoveryTests: XCTestCase {
                        "the join's self-only roster deleted the credit that followed it")
         XCTAssertEqual(model.devices.first?.announcesLegacyText, true)
         model.stop()
+    }
+
+    // MARK: - the interface policy
+
+    /// The shipped default prohibits `.loopback`, and only an explicit opt-in
+    /// changes that.
+    ///
+    /// Both halves matter. A default that is checked but overridable everywhere
+    /// is worth nothing, and so is an opt-in whose default was flipped
+    /// underneath it — so what a DEFAULT-CONSTRUCTED transport resolves is
+    /// asserted too, which is the answer every shipped composition builds.
+    ///
+    /// The seam permits a same-host route and nothing else: `includePeerToPeer`
+    /// is false in both answers, so no build can quietly gain AWDL or Bluetooth.
+    func testLoopbackIsProhibitedByDefaultAndTheSeamWidensNothingElse() {
+        XCTAssertEqual(NetworkLocalPeerTransport.parameters().prohibitedInterfaceTypes,
+                       [.loopback],
+                       "the shipped default no longer keeps this transport off loopback")
+        XCTAssertEqual(
+            NetworkLocalPeerTransport.parameters(sameHostAcceptanceAllowsLoopback: false)
+                .prohibitedInterfaceTypes,
+            [.loopback],
+            "the explicit production answer disagrees with the default")
+
+        let shipped = NetworkLocalPeerTransport().parameters()
+        XCTAssertEqual(shipped.prohibitedInterfaceTypes, [.loopback],
+                       "a default-constructed transport no longer prohibits loopback")
+        XCTAssertFalse(shipped.includePeerToPeer,
+                       "a default-constructed transport turned on peer-to-peer")
+
+        for allowsLoopback in [true, false] {
+            XCTAssertFalse(
+                NetworkLocalPeerTransport
+                    .parameters(sameHostAcceptanceAllowsLoopback: allowsLoopback)
+                    .includePeerToPeer,
+                "sameHostAcceptanceAllowsLoopback: \(allowsLoopback) turned on peer-to-peer")
+        }
+        XCTAssertFalse(
+            NetworkLocalPeerTransport(sameHostAcceptanceAllowsLoopback: true)
+                .parameters().includePeerToPeer,
+            "the opt-in reaches beyond the loopback prohibition")
+
+        // The permissive answer exists in Debug only. This suite builds Debug,
+        // so it is asserted here; the Release half is asserted by source, in
+        // `LocalNearbyModuleBoundaryTests`, because no Debug test can observe a
+        // branch that is not compiled.
+        #if DEBUG
+        // `?? []` because the property is optional and nil means "nothing
+        // prohibited", which is the same answer this asserts.
+        XCTAssertEqual(
+            NetworkLocalPeerTransport
+                .parameters(sameHostAcceptanceAllowsLoopback: true)
+                .prohibitedInterfaceTypes ?? [],
+            [],
+            "the same-host answer still prohibits the one interface it exists to permit")
+        #endif
     }
 }
