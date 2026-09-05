@@ -173,14 +173,14 @@ final class LinkCapabilityAnnouncerTests: XCTestCase {
         XCTAssertTrue(recorder.sent.isEmpty)
     }
 
-    // MARK: - a roster frame that is older than an announcement
+    // MARK: - a roster frame older than an announcement
     //
     // `deliveredAt` lets a caller say WHERE its roster frame sat in delivery
-    // order, so the registry prune spares announcements that frame is too old
-    // to have an opinion about. The rule the tests below exist to hold is that
-    // this changes the REGISTRY and nothing else: a spared peer is not in the
-    // roster, and the roster is still the only authority for greeting,
-    // membership and everything built on them.
+    // order, so the registry prune spares announcements that frame is too old to
+    // have an opinion about. What these hold is that this changes the REGISTRY
+    // and nothing else: a spared peer is not in the roster, and the roster is
+    // still the only authority for greeting, membership and everything built on
+    // them.
 
     /// A spared peer is not greeted, not entered in the greeted set, and not
     /// treated as present. Only its announcement survives.
@@ -201,8 +201,8 @@ final class LinkCapabilityAnnouncerTests: XCTestCase {
         for _ in 0..<LINK_CAPS_ANNOUNCE_ATTEMPTS { announcer.retryTick() }
         XCTAssertFalse(recorder.peers.contains("ahead"))
 
-        // And when its own roster frame finally lands, it is greeted then — as
-        // a peer the roster newly named, exactly once.
+        // And when its own roster frame finally lands, it is greeted then — as a
+        // peer the roster newly named, exactly once.
         recorder.sent = []
         announcer.rosterChanged(peerIds: ["p1", "ahead"],
                                 deliveredAt: registry.rosterDelivered())
@@ -210,7 +210,7 @@ final class LinkCapabilityAnnouncerTests: XCTestCase {
     }
 
     /// Sparing does not accumulate. A roster frame actually delivered after the
-    /// announcement prunes it, and the peer is greeted as new if it returns.
+    /// announcement prunes it.
     func testARosterDeliveredAfterTheAnnouncementStillPrunesIt() {
         let (announcer, _, registry) = make()
         let early = registry.rosterDelivered()
@@ -223,8 +223,8 @@ final class LinkCapabilityAnnouncerTests: XCTestCase {
                        "a later roster that omits the peer must prune it")
     }
 
-    /// The pairing room passes no stamp and must behave exactly as before:
-    /// prune to the membership handed in, with nothing spared.
+    /// A caller with no stamp to give must behave exactly as before: prune to
+    /// the membership handed in, with nothing spared.
     func testWithoutAStampTheRetainIsUnchanged() {
         let (announcer, _, registry) = make()
         _ = registry.rosterDelivered()

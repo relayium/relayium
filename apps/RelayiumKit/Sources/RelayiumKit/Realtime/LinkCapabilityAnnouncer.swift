@@ -137,14 +137,14 @@ public final class LinkCapabilityAnnouncer {
     ///
     /// Preservation is deliberately invisible to everything below the retain.
     /// A preserved peer is not in `peerIds`, so it is never greeted, never
-    /// entered in `pending` or `greeted`, and never announced as membership: the
+    /// entered in `pending` or `greeted`, and never treated as present: the
     /// roster frame remains the sole authority for all of that. Only the
     /// registry — a hint about what a peer speaks, read through `supports`
     /// wherever routing asks — is spared, and only until a roster frame that
     /// was actually delivered later answers for it.
     ///
-    /// `nil` keeps the previous behaviour exactly, for the pairing room, whose
-    /// caller has no delivery stamp to give.
+    /// `nil` keeps the previous behaviour exactly, for a caller that has no
+    /// delivery stamp to give.
     ///
     /// The registry lock is released inside `retain` and is never held across
     /// `announce`: greeting sends an outbound frame, and a lock held across a

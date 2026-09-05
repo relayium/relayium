@@ -2354,7 +2354,7 @@ final class LinkPairingRoomTests: XCTestCase {
         XCTAssertEqual(rig.pairingLinkActivations, 1, "and one user-visible settlement")
     }
 
-    // MARK: - P2. a roster is only authority over what was delivered BEFORE it
+    // MARK: - P2. a roster is authority only over what was delivered BEFORE it
 
     /// **The hostile burst, under the policy that has no lane to fall back to.**
     ///
@@ -2406,8 +2406,8 @@ final class LinkPairingRoomTests: XCTestCase {
     }
 
     /// The same burst under the SHIPPED policy, where the loss is silent rather
-    /// than loud: a peer whose announcement was pruned supports neither
-    /// `link/1` nor `text/1`, so it is not decidable at all and simply waits out
+    /// than loud: a peer whose announcement was pruned supports neither `link/1`
+    /// nor `text/1`, so it is not decidable at all and simply waits out
     /// `pairingCapabilityWait` — after which the room adopts a legacy session
     /// with a peer that had announced the unified wire.
     ///
@@ -2445,8 +2445,8 @@ final class LinkPairingRoomTests: XCTestCase {
     /// The socket cannot be made to hand the room a reversed pair — the rig's
     /// delivery is in order by construction and so is the queue behind it — so
     /// this drives `pairingRosterChanged` itself, at the stamps
-    /// `rosterDelivered()` would have issued, through the exact fence
-    /// production runs.
+    /// `rosterDelivered()` would have issued, through the exact fence production
+    /// runs.
     ///
     /// The room is holding a parked link intent behind a shut relay gate, which
     /// is where all three losses are visible at once: the older frame would

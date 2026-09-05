@@ -146,8 +146,8 @@ public func linkCapsHello(linkRoomActive: Bool) -> JSONValue {
 /// Thread-safe: announcements arrive on the socket's delivery queue while the
 /// UI and the link admission read them from the main actor.
 public final class PeerCapabilityRegistry: @unchecked Sendable {
-    /// One peer's announcement, and where the frame carrying it sat in DELIVERY
-    /// order.
+    /// One peer's announcement together with where the frame that carried it
+    /// sat in DELIVERY order.
     ///
     /// The position is stored HERE, beside the capabilities it belongs to and
     /// under the same lock, rather than in a ledger the caller keeps alongside
@@ -155,9 +155,10 @@ public final class PeerCapabilityRegistry: @unchecked Sendable {
     /// `retain(_:preservingAnnouncementsAfter:)`: a caller that first asked a
     /// separate ledger which peers to protect and then called a retain would
     /// leave a window between the two in which the delivery queue records a
-    /// brand-new announcement — one the just-computed protection set cannot name
-    /// and the roster does not yet contain — and the retain would delete it.
-    /// That is the same defect this class exists to close, one call site out.
+    /// brand-new announcement — one the just-computed protection set cannot
+    /// name and the roster does not yet contain — and the retain would delete
+    /// it. That is the same defect this class exists to close, one call site
+    /// out.
     private struct Announcement {
         var caps: Set<String>
         var position: Int
@@ -170,8 +171,8 @@ public final class PeerCapabilityRegistry: @unchecked Sendable {
     /// (`rosterDelivered`) and announcements (`record` / `recordProvenLink`).
     ///
     /// Both are stamped on the signalling delivery queue, which is the only
-    /// place their order is a fact. It is deliberately NOT reset by `reset()`:
-    /// a position is compared only against another position from this same
+    /// place their order is a fact. It is deliberately NOT cleared by `reset()`:
+    /// a position is only ever compared against another position from this same
     /// counter, so letting it run on across room epochs costs nothing and
     /// removes the one way a stale comparison could ever read as fresh.
     private var delivered = 0
@@ -325,16 +326,16 @@ public final class PeerCapabilityRegistry: @unchecked Sendable {
     ///
     /// ## What it is for
     ///
-    /// The reverse-direction capability loss physical run `7e1970a0` caught. An
-    /// announcement is recorded synchronously on the signalling delivery queue,
-    /// because `LinkRoomRouter.intercept` gates the frame behind it inline on
-    /// that same queue; a roster frame reaches its model through an independent
-    /// `Task { @MainActor }`. Those are two clocks. A self-only roster DELIVERED
-    /// before a peer's hello can therefore be PROJECTED after it, and a plain
-    /// `retain` driven by that older membership deletes an announcement the room
-    /// had already correctly made — one hop before the roster naming that peer
-    /// is projected. The device is then listed with no capabilities at all and
-    /// the unified link silently falls back to the legacy surface.
+    /// An announcement is recorded synchronously on the signalling delivery
+    /// queue, because `LinkRoomRouter.intercept` gates the frame behind it
+    /// inline on that same queue; a roster frame reaches its model through an
+    /// independent `Task { @MainActor }`. Those are two clocks. A self-only
+    /// roster DELIVERED before a peer's hello can therefore be PROJECTED after
+    /// it, and a plain `retain` driven by that older membership deletes an
+    /// announcement the room had already correctly made — one hop before the
+    /// roster naming that peer is projected. The device is then read as having
+    /// announced nothing at all and the unified link silently falls back to the
+    /// legacy surface.
     ///
     /// Comparing `rosterPosition` — the stamp `rosterDelivered()` returned for
     /// that exact frame — against each announcement's own stamp is what tells

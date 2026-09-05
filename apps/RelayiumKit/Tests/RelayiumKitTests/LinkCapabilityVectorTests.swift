@@ -315,16 +315,15 @@ final class LinkCapabilityVectorTests: XCTestCase {
     // the signalling delivery queue: the announcement is recorded there inline,
     // because `LinkRoomRouter.intercept` gates the frame behind it on that same
     // queue, while the roster reaches its model through an independent
-    // `Task { @MainActor }`. Physical run `7e1970a0` is what happens when the
-    // prune is driven by the roster's PROJECTION order instead — a self-only
-    // roster deleting a hello that was delivered after it, one hop before the
-    // roster naming that peer was projected.
+    // `Task { @MainActor }`. Driving the prune from the roster's PROJECTION
+    // order instead is a self-only roster deleting a hello that was delivered
+    // after it, one hop before the roster naming that peer is projected.
 
     private func hello(_ caps: [String]) -> JSONValue { capsField(caps) }
 
-    /// The union, both halves. An announcement delivered BEFORE the roster
-    /// frame is one that frame was entitled to answer, and a departed peer's
-    /// entry stays deleted; one delivered AFTER it is spared, because the roster
+    /// The union, both halves. An announcement delivered BEFORE the roster frame
+    /// is one that frame was entitled to answer, and a departed peer's entry
+    /// stays deleted; one delivered AFTER it is spared, because the roster
     /// naming that peer is still in flight behind it.
     func testARetainSparesOnlyAnnouncementsDeliveredAfterItsOwnRosterFrame() {
         let registry = PeerCapabilityRegistry(linkRoomActive: { true })
@@ -414,6 +413,24 @@ final class LinkCapabilityVectorTests: XCTestCase {
         XCTAssertEqual(after, before + 1, "a frame that recorded nothing consumed a position")
     }
 
+    /// A proven-link repair takes a position of its own, so a roster frame
+    /// delivered before it cannot take it either.
+    func testProvenLinkIsStampedLikeAnyOtherAnnouncement() throws {
+        let block = try capability(vectors())
+        let row = try XCTUnwrap(block["provenLink"] as? [String: Any])
+        let signal = try JSONValue.decode(XCTUnwrap(row["signal"] as? [String: Any]))
+
+        let registry = PeerCapabilityRegistry(linkRoomActive: { true })
+        let rosterPosition = registry.rosterDelivered()
+        XCTAssertTrue(registry.recordProvenLink(peerId: "ahead", signal: signal))
+        registry.retain([], preservingAnnouncementsAfter: rosterPosition)
+        XCTAssertTrue(registry.supports("ahead", LINK_CAPABILITY),
+                      "the roster frame predates this proof and cannot take it")
+
+        registry.retain([], preservingAnnouncementsAfter: registry.rosterDelivered())
+        XCTAssertFalse(registry.supports("ahead", LINK_CAPABILITY))
+    }
+
     /// The room-scope rule is unchanged by any of this: sparing an announcement
     /// is not permission to route it.
     func testASparedAnnouncementIsStillRefusedWhereTheRoomForbidsLink() {
@@ -426,6 +443,8 @@ final class LinkCapabilityVectorTests: XCTestCase {
     }
 }
 
+/// A counter a concurrent reader can report a miss into without becoming the
+/// thing under test.
 private final class Missed: @unchecked Sendable {
     private let lock = NSLock()
     private var _count = 0
