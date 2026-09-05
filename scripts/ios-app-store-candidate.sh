@@ -130,11 +130,11 @@
 # ── usage ────────────────────────────────────────────────────────────────────
 #
 #   scripts/ios-app-store-candidate.sh \
-#     --marketing-version 0.3.0 \
+#     --marketing-version 0.3.1 \
 #     --build 5 \
 #     --readback-highest-build 4 \
 #     --readback-observed-at 2026-09-02T11:30:00Z \
-#     --artifact-root /Users/you/relayium/test-builds/ios/0.3.0-5-<short8-sha>
+#     --artifact-root /Users/you/relayium/test-builds/ios/0.3.1-5-<short8-sha>
 #
 # Exit codes are three classes, so a caller can tell them apart: 2 a refused
 # precondition (nothing was built), 3 a failed archive or export (logs kept),

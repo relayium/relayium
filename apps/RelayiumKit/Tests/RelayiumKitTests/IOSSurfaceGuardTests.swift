@@ -2944,7 +2944,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let delivery = readme.components(separatedBy: "## Delivery status")
             .dropFirst().first?.components(separatedBy: "\n## ").first ?? ""
         let flat = flattenedText(delivery)
-        XCTAssertTrue(flat.contains("`apps/ios/` exists in this repository and its development has **resumed**, at version `0.3.0`"),
+        XCTAssertTrue(flat.contains("`apps/ios/` exists in this repository and its development has **resumed**, at version `0.3.1`"),
                       "the delivery section no longer says what state iOS development is in")
         XCTAssertTrue(flat.contains("It has never been publicly released"),
                       "the delivery section no longer says iOS was never released")

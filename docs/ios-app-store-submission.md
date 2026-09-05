@@ -100,12 +100,34 @@ purchase is accepted, not a conclusion this document may assert on its own.
 
 | Field | Value |
 | --- | --- |
-| Marketing version in the project source | `0.3.0` |
+| Marketing version in the project source | `0.3.1` |
 | Build in the project source | `5` |
 
-`0.3.0 (5)` is the **development baseline** of the iOS line restarted on
+`0.3.1 (5)` is the **prepared release candidate** of the iOS line restarted on
 2026-09-01. It is what `apps/ios/Relayium.xcodeproj` builds; it is not an
-uploaded build, not a TestFlight candidate and not a release.
+uploaded build, not a TestFlight candidate and not a release. Nothing has been
+archived from it, and preparing it authorizes no upload.
+
+The build does **not** move with the marketing version. `0.3.0 (5)` was the
+development baseline and was never archived or uploaded, so build `5` is still
+unconsumed on the record and `0.3.1` is the first marketing version that will
+actually carry it. `0.3.1` adds the local-link Nearby work — LAN Transfer now
+discovers only the `_relayium._tcp` Bonjour service on the local network
+instead of the server's public-address room — on top of everything `0.3.0`
+already contained.
+
+**The App Store Connect version record now reads `0.3.1`.** The iOS platform's
+editable version was renamed on the record, and read back live on **2026-09-05
+15:27 (Asia/Dubai)** as `0.3.1`, *Prepare for Submission*, with **no build
+selected** and **Manual** release still selected. That reading is what
+`docs/app-store-metadata-ios.json` now carries under
+`appStoreConnectObservation`, so `record.marketingVersion` and
+`observedVersion` agree and `scripts/ios-app-store-metadata-validate.mjs`
+accepts the packet. The rename closed no gate: the build selection and the
+screenshots are still the two open ones. If the candidate version ever moves
+again, rename it on the record and read it back **first** — `observedVersion`
+records what was observed, not what is wanted, and the drift check exists to
+make that order compulsory.
 
 ### What the version history actually is
 
@@ -134,13 +156,15 @@ uploaded build, not a TestFlight candidate and not a release.
     `45be4bbf6ac8f14482276804e42a624af6c9ba185159b621e403996378df8bbc`.
 
   These are historical acceptance evidence for a build that is several versions
-  behind. They are not the `0.3.0 (5)` baseline and not permission to upload.
+  behind. They are not the `0.3.1 (5)` candidate and not permission to upload.
 
 ### App Store Connect read-back, 2026-09-03
 
 The target record — `6801142976` / `com.relayium.mac` — was inspected read-only
-on **2026-09-03 (Asia/Dubai)**, field by field. This does **not** make this
-document a live view: what follows is a dated transcript of one pass, and it
+on **2026-09-03 (Asia/Dubai)**, field by field, and its version, build
+selection and release option were re-read on **2026-09-05 15:27 (Asia/Dubai)**
+after the version was renamed to `0.3.1`. This does **not** make this document a
+live view: what follows is a dated transcript of two read-only passes, and it
 goes stale.
 
 `docs/app-store-metadata-ios.json` carries the same readings machine-readably
@@ -155,8 +179,8 @@ customers.
 
 | Field | Read back | Gate |
 | --- | --- | --- |
-| App Store version (iOS platform) | `0.3.0`, **Prepare for Submission** | met |
-| Build selected for the iOS `0.3.0` version | none selected | **blocks submission** |
+| App Store version (iOS platform) | `0.3.1`, **Prepare for Submission** — re-read 2026-09-05 | met |
+| Build selected for the iOS `0.3.1` version | none selected — re-read 2026-09-05 | **blocks submission** |
 | Subscription group | `22307427`, **Approved** | met — **reuse it** |
 | In-app purchases and subscription products | the six `com.relayium.mac.*`, all **Approved** | met — **reuse them** |
 | App Privacy data practices | **published** | met — **preserve it** |
@@ -165,8 +189,16 @@ customers.
 | Pricing | **Free** across all 175 price territories | met — **preserve it** |
 | App availability | 173 territories; China mainland and France excluded | met — **preserve it** |
 | Screenshots | required iPhone and iPad sets missing on the iOS version | **blocks submission** |
-| Version release option (iOS `0.3.0`) | **Manual** release selected | met — **preserve it** |
+| Version release option (iOS `0.3.1`) | **Manual** release selected — re-read 2026-09-05 | met — **preserve it** |
 | App Store Server Notifications V2, Production and Sandbox URLs | both saved to `https://relayium.com/api/apple/notifications` | met — **preserve it** |
+
+Three of those rows carry a **later, narrower reading**: the version, its build
+selection and its release option were re-read on **2026-09-05 15:27
+(Asia/Dubai)**, after the record's iOS version was renamed to `0.3.1`. Every
+other row is still the 2026-09-03 pass and has not been re-verified since. The
+gate count did not move — renaming a version neither opens nor closes one — and
+the version row remains **met** in the only sense the gate measures: an editable
+iOS version exists on the record.
 
 **Two of those twelve are unmet gates: the build selection and the
 screenshots.** For the iOS platform, no archive, no upload, no submission and no
@@ -186,7 +218,7 @@ territory selection, the subscription group, the products or their prices to
 suit iOS.
 
 The release option is the row most easily mistaken for an intention this
-repository holds. It is not: **manual** was read off the iOS `0.3.0` version.
+repository holds. It is not: **manual** was read off the iOS `0.3.1` version.
 Leave it there. A version set to release automatically ships itself the moment
 review passes, which removes the last point at which a human can decide not to
 ship — and iOS is not public.
@@ -339,14 +371,14 @@ source edit with a diff, not something a build script does on the way past.
 
 ```sh
 scripts/ios-app-store-candidate.sh \
-  --marketing-version 0.3.0 \
+  --marketing-version 0.3.1 \
   --build 5 \
   --readback-highest-build 4 \
   --readback-observed-at 2026-09-02T11:30:00Z \
-  --artifact-root ~/relayium-candidates/ios-0.3.0-5-<short8-sha>
+  --artifact-root ~/relayium-candidates/ios-0.3.1-5-<short8-sha>
 ```
 
-The values above match the baseline this document records — project `0.3.0 (5)`,
+The values above match the candidate this document records — project `0.3.1 (5)`,
 with build `4` the highest this record is known to have accepted. **They are an
 example of the shape, not a licence to skip the read-back**: supply what the
 record actually shows on the day.
@@ -634,7 +666,7 @@ Before uploading a TestFlight build:
      Approved product;
    - **Apple's "first subscription group must be submitted with an app version"
      rule does not apply.** That is about a record's *first* group. This group is
-     Approved and already selling, so submitting the iOS `0.3.0` version does not
+     Approved and already selling, so submitting the iOS version does not
      resubmit it;
    - **prices and territory availability are live, not an owner decision
      outstanding.** They were configured for macOS and serve iOS unchanged. The
@@ -1184,7 +1216,8 @@ rename an app as a side effect. If the owner ever wants the capitalization
 changed, that is their edit in App Store Connect and a separate decision — the
 validator pins the lowercase spelling in both directions until then. The primary
 category stays consistent with the bundle's `public.app-category.utilities`. The
-version is **this record's** `0.3.0`; a macOS version never sets it.
+version is **this record's** iOS version — `0.3.1`, which is what the record
+was read back holding on 2026-09-05; a macOS version never sets it.
 
 **The URLs, and the one that 404s.** The site builds `/support/` (English) and
 `/zh/support/`, both of which exist in `web/public/`. Privacy is
@@ -1533,7 +1566,7 @@ This record targets iPhone **and** iPad, so both sets are required. The
 screenshot sets missing** — a reading of the required device sets, not a
 separate per-localization read-back — matching the `not-captured` state the
 metadata packet records. This is one of the two gates still blocking the iOS
-`0.3.0` version.
+version.
 
 | Set | Accepted portrait sizes, pixels |
 | --- | --- |
@@ -1554,8 +1587,13 @@ refuses to report any staged bundle as ready while it says that — see *The
 staged bundle, and the check that accepts it* below. Two things block a capture,
 and neither is a matter of finding time for it:
 
-1. the six subscription products do not exist in App Store Connect, so the
-   Account screen cannot render a real offer list;
+1. no `Release` build under the migrated `com.relayium.mac` identity has yet
+   rendered the Account screen against the live products. The six subscription
+   products do exist in App Store Connect and are Approved, so the offer list is
+   reachable in principle — but only from a build signed as that identity, on a
+   device or simulator where StoreKit resolves them. Until that has been seen,
+   the Account shot has no honest source: the `UITestSubscriptions` fixture
+   prices are forbidden, and so is a retouched screen;
 2. no neutral demonstration data has been staged, and a public asset may carry
    none of the values listed below.
 
@@ -1908,13 +1946,15 @@ to add France**:
 
 ## TestFlight acceptance
 
-There is no candidate yet. `0.3.0 (5)` is a development baseline, and promoting
-it to a candidate requires the outstanding App Store Connect read-back above —
-the build-number question the 2026-09-03 inspection did not answer — plus a new
-exact-source archive and checksum — which is what
-`scripts/ios-app-store-candidate.sh` produces, and which running that script
-does **not** by itself authorize uploading. Upload only the exact candidate
-whose hosted Go, Swift, iOS Release build and UI gates are green. Every hosted iOS job
+No candidate has been built yet. `0.3.1 (5)` is the prepared candidate version
+in source, and promoting it to an actual candidate requires the outstanding App
+Store Connect read-back above — the build-number question the 2026-09-03
+inspection did not answer — plus a new exact-source archive and checksum — which
+is what `scripts/ios-app-store-candidate.sh` produces, and which running that
+script does **not** by itself authorize uploading. The record's iOS version
+already reads `0.3.1`, so a build can be selected on it once one exists. Upload
+only the exact candidate whose hosted Go, Swift, iOS Release build and UI gates
+are green. Every hosted iOS job
 selects exactly Xcode major 26 with an iphoneos SDK of at least 26 before it
 compiles anything, fails closed when no such toolchain is installed, and prints
 the selected versions into its own log. That keeps the runner image's default
@@ -1934,10 +1974,10 @@ must still be answered truthfully for this upload, and must not be answered
 
 Internal TestFlight acceptance must cover:
 
-- **upgrade from `0.1.0` to `0.3.0`, on a device that already has `0.1.0`
+- **upgrade from `0.1.0` to `0.3.1`, on a device that already has `0.1.0`
   installed**, as well as a clean install. This is a candidate acceptance gate
   and not an optional extra: build 4 of `0.1.0` was uploaded to this record, so
-  a real installed base for it can exist, and everything `0.3.0` adds sits on
+  a real installed base for it can exist, and everything `0.3.1` adds sits on
   top of state `0.1.0` wrote. Observe, on the upgraded install rather than on a
   fresh one:
   - the app launches, and the existing signed-in session survives — an upgrade
@@ -1956,7 +1996,7 @@ Internal TestFlight acceptance must cover:
   keychain access group is unchanged. A locally installed development build of
   the retired `com.relayium.app` is a **different app** and not this test: it is
   not replaced by the TestFlight install, its keychain items live in a different
-  access group, and nothing in `0.3.0` migrates or reads them. Signing in again
+  access group, and nothing in `0.3.1` migrates or reads them. Signing in again
   after installing over that build is correct behaviour, not the defect above;
 - sign in and display of all six localized StoreKit offers;
 - one Sandbox purchase and immediate Relayium plan refresh;

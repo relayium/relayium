@@ -130,7 +130,14 @@ const BUNDLE_ID = "com.relayium.mac";
 const SHARE_BUNDLE_ID = "com.relayium.mac.ShareIOS";
 const TEAM_ID = "7PVYUG4YQS";
 const RECORD_NAME = "relayium";
-const MARKETING_VERSION = "0.3.0";
+// The candidate this packet is written for. It currently agrees with the version
+// App Store Connect holds: the record was renamed and read back at 0.3.1 on
+// 2026-09-05 15:27 Asia/Dubai, which is why `OBSERVED_FIELDS` below says 0.3.1.
+// The agreement is a result, not a rule — the two are independent, and the order
+// that produced it is the rule. Moving this constant is a candidate decision;
+// moving those strings ahead of a rename and a fresh read-back would be inventing
+// a read-back.
+const MARKETING_VERSION = "0.3.1";
 // The name the record actually holds. This is NOT a place to propose a rename:
 // the App Store name is owner-controlled, changing it is an App Store Connect
 // edit with its own review implications, and a packet that quietly enters a
@@ -218,9 +225,9 @@ const SUBSCRIPTION_GROUP_ID = "22307427";
 // combined.
 const OBSERVED_FIELDS = [
   { id: "version", present: true, blocksSubmission: true,
-    why: "the record's editable iOS version was read back as 0.3.0 Prepare for Submission" },
+    why: "the record's editable iOS version was read back as 0.3.1 Prepare for Submission" },
   { id: "version-build-selection", present: false, blocksSubmission: true,
-    why: "no build is selected for the 0.3.0 iOS version" },
+    why: "no build is selected for the 0.3.1 iOS version" },
   { id: "subscription-group", present: true, blocksSubmission: true,
     why: `the record carries subscription group ${SUBSCRIPTION_GROUP_ID}, Approved` },
   { id: "subscription-products", present: true, blocksSubmission: true,
@@ -242,7 +249,7 @@ const OBSERVED_FIELDS = [
   // the answer it carries decides whether an approved version ships itself, so
   // a packet must not be able to restate it as a plan somebody may revise.
   { id: "release-type", present: true, blocksSubmission: false,
-    why: "manual release is the option selected on the iOS 0.3.0 version" },
+    why: "manual release is the option selected on the iOS 0.3.1 version" },
   { id: "app-store-server-notifications", present: true, blocksSubmission: false,
     why: "both the Production and Sandbox Server URLs were already saved to the Relayium endpoint" },
 ];
@@ -697,7 +704,7 @@ const SCHEMA = obj({
       releaseTypeObservedOnTheRecord: bool({
         equals: true,
         because:
-          "manual release was read back as the option selected on the iOS 0.3.0 version, and demoting an " +
+          "manual release was read back as the option selected on the iOS 0.3.1 version, and demoting an " +
           "observation to an intention is how a read-back quietly becomes a preference",
       }),
       note: str({ multiline: true }),

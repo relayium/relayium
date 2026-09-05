@@ -135,7 +135,7 @@ function accepts(label, text, extraArgs = []) {
 // ── the baseline ─────────────────────────────────────────────────────────────
 
 accepts("the shipped packet passes", shippedRaw);
-accepts("the shipped packet passes against its own declared version", shippedRaw, ["--expect-version", "0.3.0"]);
+accepts("the shipped packet passes against its own declared version", shippedRaw, ["--expect-version", "0.3.1"]);
 
 // A validator that exits 0 on anything would satisfy every `accepts` above and
 // nothing below, which is what the rest of this file is for.
@@ -509,7 +509,7 @@ rejects(
   (p) => {
     p.record.marketingVersion = "0.4.0";
   },
-  "not the '0.3.0' this packet was written for",
+  "not the '0.3.1' this packet was written for",
 );
 
 cases += 1;

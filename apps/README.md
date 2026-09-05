@@ -21,7 +21,7 @@
   inside the released 1.3.10 app. The system Share menu is verified to list it; a
   real Finder share has not yet been driven by hand.
 - `ios/` — iOS SwiftUI app (`com.relayium.mac`), same local package. **In
-  development at 0.3.0 and not public.** The bundle id is macOS's on purpose:
+  development at 0.3.1 and not public.** The bundle id is macOS's on purpose:
   iOS and macOS are two platforms of ONE universal-purchase App Store record
   (Apple ID `6801142976`), and Apple requires every platform in such a record to
   carry the same Bundle ID. That is also what puts an iOS build in front of the
@@ -29,7 +29,7 @@
   catalogue of its own.
 - `ios/RelayiumShare/` — the iOS Share Extension (`com.relayium.mac.ShareIOS`),
   embedded in the app at `PlugIns/RelayiumShare.appex`. Links `RelayiumShareKit`
-  only. **In development at 0.3.0 and not public.** Its identifier is *not*
+  only. **In development at 0.3.1 and not public.** Its identifier is *not*
   `com.relayium.mac.Share` — that is the macOS extension. The target record's
   iOS TestFlight build metadata reports extension application identifier
   `7PVYUG4YQS.com.relayium.mac.ShareIOS`, so that is what this project must
@@ -108,7 +108,7 @@ iOS ships as the second platform of the macOS App Store record (Apple ID
 `6801142976`) rather than as a record of its own, so it inherits that record's
 subscription group, its published App Privacy answers, its price schedule and
 its territory selection. Those gates are therefore already met for iOS — they
-were met for the released macOS app — and the iOS `0.3.0` version has **two
+were met for the released macOS app — and the iOS `0.3.1` version has **two
 open blocking gates**: no build is selected for it, and its required iPhone and
 iPad screenshot sets are missing. That is a shorter list than it was, not a
 finished one; `docs/app-store-metadata-ios.json` holds the field-by-field
@@ -1032,7 +1032,7 @@ Developer ID identity.
 
 `apps/ios/Relayium.xcodeproj` (bundle id `com.relayium.mac`,
 `IPHONEOS_DEPLOYMENT_TARGET = 16.0`, iPhone + iPad) is a SwiftUI app over the
-same local `RelayiumKit` package. **In development at 0.3.0 and not public** —
+same local `RelayiumKit` package. **In development at 0.3.1 and not public** —
 internal TestFlight builds were used for development acceptance before the
 earlier pause, but there is no public App Store listing and the website offers
 no iOS download.
