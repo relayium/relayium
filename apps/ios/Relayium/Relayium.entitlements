@@ -128,37 +128,43 @@
      Still absent, each with the slice that would earn it: background modes
      (transfers surviving suspension), push, IAP.
 
-     Local network is still not on that list, but the reason is narrower than
-     two earlier versions of this comment claimed, and getting it wrong cost a
-     working feature.
+     Local network is a different case from all of those, and the reason this
+     file is nonetheless unchanged by it is worth stating precisely: everything
+     Local Nearby declares is an Info.plist matter, not a signed capability.
 
-     What remains true is the DISCOVERY half. Relayium's nearby roster is not
-     Bonjour and does not scan: it joins the service's code-less rendezvous room
-     over the same origin as everything else, and the server groups that room by
-     the public IP it observes. Nothing about that needs NSBonjourServices, and
-     nothing about it needs the multicast entitlement — so both stay absent, and
-     declaring either would still be asking for machinery this app does not use.
+     DISCOVERY is Bonjour. iOS Nearby is RelayiumLocalPeerKit's
+     NetworkLocalPeerTransport, behind LocalNearbyEnvironment, publishing and
+     browsing exactly one product-specific service type on the local link and
+     joining no room on any server — so the roster is this network rather than a
+     public address some hub observed, and no address is ever scanned or
+     enumerated. Declaring that service is what NSBonjourServices does, and it
+     lives in Info.plist beside NSLocalNetworkUsageDescription. The multicast
+     entitlement is a different thing again and stays absent:
+     com.apple.developer.networking.multicast is for an app sending its own
+     multicast or broadcast traffic, which this app does not send — Bonjour's
+     mDNS is the system resolver's, not this process's.
 
-     What was WRONG was extending that to the transfer. Once the user picks a
-     device, every realtime lane builds its peer connection with
-     iceTransportPolicy = .all, so the pair iOS actually settles on is routinely
-     a unicast socket to the peer's address on this subnet — and iOS 14 and
-     later gate that behind Local Network access. R3-F shipped the Nearby tab
-     with no NSLocalNetworkUsageDescription on the strength of the discovery
-     argument alone, which made the local path fail rather than prompt: retained
-     physical runs 0af36138 and 56e78dbf recorded iOS/iPadOS 26 withholding the
-     prompt entirely while iPadOS 18 masked the omission.
+     TRANSFER is local too, and that is the half an earlier version of this
+     comment got wrong. Once the user picks a device, every realtime lane builds
+     its peer connection with iceTransportPolicy = .all, so the pair iOS
+     actually settles on is routinely a unicast socket to the peer's address on
+     this subnet — and iOS 14 and later gate that behind Local Network access.
+     R3-F shipped the Nearby tab with no NSLocalNetworkUsageDescription, which
+     made the local path fail rather than prompt: retained physical runs
+     0af36138 and 56e78dbf recorded iOS/iPadOS 26 withholding the prompt
+     entirely while iPadOS 18 masked the omission.
 
-     The correction is a purpose string, and it lives in Info.plist rather than
-     here, which is the whole reason this file is unchanged by it. Local Network
+     Both declarations live in Info.plist rather than here because Local Network
      is a user-consented protected resource, not a signed capability: an app
-     declares WHY it wants one and the system asks the user. NSBonjourServices
-     and com.apple.developer.networking.multicast are the entitlement-shaped
-     neighbours of that key, and they are for browsing and for multicast/
-     broadcast traffic respectively — neither of which this app sends. So the
-     three entitlements below are still exactly the three this app has earned,
-     and IOSLocalNetworkPermissionTests is what holds that line from the other
-     side: purpose string present, discovery machinery absent. -->
+     states WHY it wants one and WHICH service it browses, and the system asks
+     the user. So the three entitlements below are still exactly the three this
+     app has earned, and three suites hold that line from the other side.
+     IOSLocalNetworkPermissionTests: purpose string present, matching its two
+     localizations, and absent from the share extension. IOSSurfaceGuardTests:
+     NSBonjourServices is exactly this app's one service type, and multicast,
+     wifi-info, background networking and every address-scanning API stay out.
+     LocalNearbyModuleBoundaryTests: the browse itself stays inside
+     RelayiumLocalPeerKit rather than becoming a second discovery surface. -->
 <dict>
 	<key>com.apple.developer.applesignin</key>
 	<array>

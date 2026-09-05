@@ -102,7 +102,7 @@ required_rules() {
 ^set -euo pipefail$	the script would continue past a failed command, an unset variable or a failed pipeline
 ^readonly EXPECTED_TEAM='7PVYUG4YQS'$	the pinned team is gone; any team could sign a candidate
 ^readonly TARGET_APPLE_ID='6801142976'$	the target App Store record is no longer named, so a refusal cannot say which record it is about
-^readonly OBSERVED_HIGHEST_BUILD_FLOOR='4'$	the observed build-number floor is gone; a read-back attestation of 0 would be accepted again
+^readonly OBSERVED_HIGHEST_BUILD_FLOOR='5'$	the observed build-number floor is gone; a read-back attestation of 0 would be accepted again
 ^readonly APP_BUNDLE_ID='com\.relayium\.mac'$	the pinned app bundle identifier is gone, or has reverted to the retired separate-record one
 ^readonly SHARE_BUNDLE_ID='com\.relayium\.mac\.ShareIOS'$	the pinned Share extension bundle identifier is gone, or has collided with the macOS appex
 ^readonly APP_PROFILE='Relayium iOS Universal App Store'$	the pinned app provisioning profile is gone
@@ -2084,10 +2084,11 @@ expect_refusal 'a highest consumed build above the floor passes the shape check'
 
 # 0 consumed builds used to be a real state of the record this candidate
 # targeted, and it is not a real state of THIS one: the universal-purchase
-# record's iOS TestFlight was read back holding a Validated `0.1.0 (4)`, so four
-# numbers are already gone. An attestation of 0 is now the shape of the exact
-# migration error the floor exists for — reading the retired record's history,
-# or none at all — and it is refused before anything is built.
+# record's iOS TestFlight was read back holding a Validated `0.1.0 (4)` and the
+# record then took the `0.3.1 (5)` upload, so five numbers are already gone.
+# An attestation of 0 is now the shape of the exact migration error the floor
+# exists for — reading the retired record's history, or none at all — and it is
+# refused before anything is built.
 #
 # The pair is internally consistent (`0` then `1`), so it clears the successor
 # check and can only be caught here. That is the point: the successor check
@@ -2095,18 +2096,21 @@ expect_refusal 'a highest consumed build above the floor passes the shape check'
 # something observed.
 new_fixture
 expect_refusal 'a highest consumed build of 0 is refused against the observed floor' "$REFUSED" \
-  'is below 4' \
+  'is below 5' \
   --marketing-version 0.3.1 --build 1 --readback-highest-build 0 \
   --readback-observed-at "$(now_iso)" \
   --artifact-root "$fixture/out/relayium-ios-0.3.1-1-$short_sha"
 
-# One below the floor, which is the off-by-one a `<=` would let through.
+# One below the floor, which is the off-by-one a `<=` would let through. It is
+# also exactly the attestation an operator would write from the pre-upload
+# record: 4 was the floor until `0.3.1 (5)` was uploaded and consumed the next
+# number, and rejecting that build does not give it back.
 new_fixture
 expect_refusal 'a highest consumed build one below the floor is refused' "$REFUSED" \
-  'is below 4' \
-  --marketing-version 0.3.1 --build 4 --readback-highest-build 3 \
+  'is below 5' \
+  --marketing-version 0.3.1 --build 5 --readback-highest-build 4 \
   --readback-observed-at "$(now_iso)" \
-  --artifact-root "$fixture/out/relayium-ios-0.3.1-4-$short_sha"
+  --artifact-root "$fixture/out/relayium-ios-0.3.1-5-$short_sha"
 
 # And the floor itself is ACCEPTED. A gate that refuses the exact observed value
 # is as broken as one that accepts a value below it. Proved by pushing the
@@ -2116,9 +2120,9 @@ new_fixture
 STUB_XCODE_VERSION='27.0'
 expect_refusal 'the observed floor itself passes the read-back section' "$REFUSED" \
   'not the required major' \
-  --marketing-version 0.3.1 --build 5 --readback-highest-build 4 \
+  --marketing-version 0.3.1 --build 6 --readback-highest-build 5 \
   --readback-observed-at "$(now_iso)" \
-  --artifact-root "$fixture/out/relayium-ios-0.3.1-5-$short_sha"
+  --artifact-root "$fixture/out/relayium-ios-0.3.1-6-$short_sha"
 reset_stubs
 
 new_fixture

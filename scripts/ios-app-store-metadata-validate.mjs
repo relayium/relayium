@@ -226,8 +226,18 @@ const SUBSCRIPTION_GROUP_ID = "22307427";
 const OBSERVED_FIELDS = [
   { id: "version", present: true, blocksSubmission: true,
     why: "the record's editable iOS version was read back as 0.3.1 Prepare for Submission" },
+  // `present: false` on this entry means "no build this repository may submit
+  // is selected", and on 2026-09-03 those were the same sentence because the
+  // version carried no build at all. They came apart on 2026-09-05: `0.3.1 (5)`
+  // was uploaded, processed and selected on the version, and was then rejected
+  // here before submission over its Nearby copy. Flipping this to `true`
+  // because a build is now selected would report the gate met and send somebody
+  // to submit the rejected candidate — which is the same failure this pin has
+  // always guarded, arriving from the one direction that now looks like a
+  // correction.
   { id: "version-build-selection", present: false, blocksSubmission: true,
-    why: "no build is selected for the 0.3.1 iOS version" },
+    why: "no build was selected for the 0.3.1 iOS version, and the 0.3.1 (5) selected on it since "
+      + "is a candidate this repository rejected before submission" },
   { id: "subscription-group", present: true, blocksSubmission: true,
     why: `the record carries subscription group ${SUBSCRIPTION_GROUP_ID}, Approved` },
   { id: "subscription-products", present: true, blocksSubmission: true,
@@ -1760,8 +1770,9 @@ for (const { path, value } of allStrings) {
       fail(
         path,
         `makes ${what}. The record carries a great deal — an Approved catalogue, published privacy answers, a ` +
-          "price schedule and an availability selection — and it still has no build selected for the iOS " +
-          "version and no iPhone or iPad screenshots. Submission readiness is decided in App Store Connect " +
+          "price schedule and an availability selection — and it still has no build this repository may " +
+          "submit selected for the iOS version, the 0.3.1 (5) on it having been rejected here, and no " +
+          "iPhone or iPad screenshots. Submission readiness is decided in App Store Connect " +
           "against a build this packet does not have; it is never something this packet may assert",
       );
     }

@@ -3,6 +3,7 @@ import XCTest
 @testable import RelayiumAppKit
 @testable import RelayiumKit
 @testable import RelayiumLocalPeerKit
+import RelayiumShareKit
 
 private final class NoOpFakeConnection: LocalPeerConnection {
     var onBytes: ((Data) -> Void)?
@@ -29,6 +30,22 @@ private final class SynchronouslyReadyFakeTransport: LocalPeerTransport {
         NoOpFakeConnection()
     }
     func stop() {}
+}
+
+/// Starts, then fails on demand — the local link going away, which is the only
+/// thing this composition can lose.
+private final class FailingFakeTransport: LocalPeerTransport, @unchecked Sendable {
+    private var delegate: LocalPeerTransportDelegate?
+    func start(advertising advertisement: LocalPeerAdvertisement,
+               delegate: LocalPeerTransportDelegate) {
+        self.delegate = delegate
+        delegate.localPeerTransportDidStart()
+    }
+    func fail() { delegate?.localPeerTransportDidFail() }
+    func connect(to peer: LocalPeerAdvertisement) -> LocalPeerConnection {
+        NoOpFakeConnection()
+    }
+    func stop() { delegate = nil }
 }
 
 final class LocalNearbyDiscoveryTests: XCTestCase {
@@ -155,6 +172,41 @@ final class LocalNearbyDiscoveryTests: XCTestCase {
         XCTAssertEqual(model.devices.map(\.id), [id])
         XCTAssertEqual(model.devices.first?.supportsLink, true)
         model.stop()
+    }
+
+    /// **The composition, not the seam: what a real iOS drop actually says.**
+    ///
+    /// `LanDiscoveryModel`'s default drop banner names the hub's rendezvous
+    /// socket, which is exactly right for the macOS pane and false here — this
+    /// composition has no rendezvous, only a Bonjour transport that stopped.
+    /// `LanDiscoveryTests` covers the parameter in both positions; this covers
+    /// the one call site iOS actually ships, because a correct default and a
+    /// correct override still leave the possibility that this factory forgot to
+    /// pass it.
+    ///
+    /// The state is asserted, not the argument: `reconnectingCopy` is private,
+    /// and a test that read it back would pass against a model that never
+    /// rendered it.
+    @MainActor
+    func testTheShippedIOSCompositionDropsWithTheLocalLinkSentence() async {
+        let transport = FailingFakeTransport()
+        let model = LocalNearbyEnvironment.makeDiscoveryModel(transport: { transport })
+        model.start()
+
+        for _ in 0..<10_000 {
+            if case .reconnecting = model.state { break }
+            transport.fail()
+            await Task.yield()
+        }
+
+        guard case .reconnecting(let text) = model.state else {
+            model.stop()
+            return XCTFail("the shipped composition never reached a drop: \(model.state)")
+        }
+        model.stop()
+        XCTAssertEqual(text, L10n.t(.nearbyIOSReconnecting))
+        XCTAssertNotEqual(text, L10n.t(.nearbyReconnecting),
+                          "the shipped iOS composition still names a rendezvous it never had")
     }
 
     /// A channel whose room is already fully formed the instant it is armed:

@@ -82,6 +82,16 @@ public final class RealtimeTextSessionModel: ObservableObject {
     private let makeRoomConnection: @MainActor (_ peerId: String, _ role: Role, _ iceServers: ICEConfig) async throws -> RealtimePeerConnection
     /// How long a nearby connect waits for the chosen device to answer.
     private let nearbyAnswerTimeout: TimeInterval
+    /// What the answer-timeout tells the user to do — the same per-transport
+    /// substitution `RealtimeSessionModel.nearbyNoAnswerCopy` documents, on the
+    /// text lane's own timeout. Both lanes reach the timeout from the same
+    /// screen, so a fix on one of them would leave the other stating the wrong
+    /// recovery on alternate attempts.
+    ///
+    /// Internal rather than private so a guard test can read which sentence a
+    /// COMPOSITION chose without opening a socket or waiting out a timer. What
+    /// the factories pass is the half a driven timeout cannot show.
+    let nearbyNoAnswerCopy: L10nKey
     /// Read when the SAS lands, not captured at init: the user may flip the
     /// preference between sessions. Default OFF — see `VerificationPreference`.
     private let requiresVerification: () -> Bool
@@ -114,6 +124,9 @@ public final class RealtimeTextSessionModel: ObservableObject {
                 // `realSleep`. `nil` means the real timer.
                 idleSleep: (@Sendable (UInt64) async -> Void)? = nil,
                 nearbyAnswerTimeout: TimeInterval = 30,
+                // Defaults to the shared sentence, so every caller that does
+                // not name a transport keeps the wording it had.
+                nearbyNoAnswerCopy: L10nKey = .errorNearbyNoAnswer,
                 makeNearbyConnection: @escaping @MainActor (String, Role, ICEConfig) async throws -> RealtimePeerConnection = { _, _, _ in
                     throw NearbyError.notScanning
                 },
@@ -134,6 +147,7 @@ public final class RealtimeTextSessionModel: ObservableObject {
         self.idleSeconds = idleSeconds
         self.idleSleep = idleSleep ?? realSleep
         self.nearbyAnswerTimeout = nearbyAnswerTimeout
+        self.nearbyNoAnswerCopy = nearbyNoAnswerCopy
         self.makeNearbyConnection = makeNearbyConnection
         self.makeInboundConnection = makeInboundConnection
         self.makeRoomConnection = makeRoomConnection
@@ -352,7 +366,7 @@ public final class RealtimeTextSessionModel: ObservableObject {
             await MainActor.run {
                 self?.apply(g) { model in
                     guard case .connecting = model.state else { return }
-                    model.finish(.failed(ErrorCopy.message(for: NearbyError.noAnswer)))
+                    model.finish(.failed(ErrorCopy.nearbyNoAnswer(model.nearbyNoAnswerCopy)))
                 }
             }
         }

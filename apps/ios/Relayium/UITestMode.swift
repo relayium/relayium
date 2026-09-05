@@ -90,7 +90,7 @@ final class UITestPreselection {
 }
 #endif
 
-/// Keeps simulator UI acceptance from joining the public Nearby rendezvous.
+/// Keeps simulator UI acceptance off the local link's Nearby roster.
 ///
 /// The launch argument is absent from Release builds: the shipped binary folds
 /// this to `false`, so reachability cannot be disabled by a user or a link.
@@ -99,18 +99,24 @@ enum UITestMode {
     static let isActive = ProcessInfo.processInfo.arguments.contains(
         "--relayium-ui-testing") // nonlocalized: test-only launch argument
 
-    /// Whether this acceptance launch may become reachable.
+    /// Whether this acceptance launch may become discoverable.
     ///
-    /// The same rule the Mac's `UITestMode.allowsResidency` records, and it has
-    /// to be the same rule: the reason a simulator stays out of the room is that
-    /// the production hub keys the code-less room by observed public address, so
-    /// a resident acceptance build shares a roster with strangers behind that
-    /// address. A loopback origin removes that — the hub is a server on this
-    /// machine, bound where nothing off it can reach — rather than deciding to
-    /// tolerate it.
+    /// Suppressed by default, and for two reasons that point the same way.
+    /// Residency is what publishes this device's Bonjour service on the link it
+    /// has joined, so a resident acceptance build would advertise a test to
+    /// every real Relayium device on that office or café network — SAFETY — and
+    /// its own roster would then depend on who else happened to be on the Wi-Fi
+    /// — DETERMINISM. Isolation is the default a UI suite wants on both counts.
     ///
-    /// Every launch that resolves no loopback origin, which is every launch that
-    /// passes none, resolves production and is refused here.
+    /// The loopback origin is the one opt-in, and it is a marker for the
+    /// harness rather than a network restriction: only the same-host acceptance
+    /// run resolves it, and that run exists precisely to drive discovery
+    /// against a counterpart process beside it on this machine, attended and
+    /// bounded. Every launch that passes no origin resolves production and is
+    /// refused here — which is every launch in the offline suite.
+    ///
+    /// The Mac's `UITestMode.allowsResidency` records the same default from its
+    /// own rendezvous; iOS reaches it through Bonjour instead.
     static let allowsResidency = isActive && AppEnvironment.isLoopbackTransferOrigin
 
     /// Whether this launch may dial and accept a link over a same-host route.
@@ -655,7 +661,7 @@ enum UITestMode {
     /// Release build at all. A shipped launch prohibits the same-host route.
     static let allowsSameHostLoopback = false
     /// Folded to a constant, so a shipped launch always takes the residency
-    /// branch and no argument can hold this device out of the room.
+    /// branch and no argument can hold this device off the nearby roster.
     static let showsOffReceiving = false
 
     /// In Release the whole idea is absent: the optimiser folds this to an

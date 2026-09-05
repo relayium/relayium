@@ -352,13 +352,22 @@ final class UniversalPurchaseIdentityTests: XCTestCase {
     /// HISTORY — a Validated `0.1.0 (4)` — where the superseded one had none.
     /// So `--readback-highest-build 0`, which used to be an honest first
     /// reading, is now the shape of an operator describing the wrong record.
+    ///
+    /// The floor then MOVED, which is the case this pin exists to make
+    /// deliberate: `0.3.1 (5)` was uploaded to the record on 2026-09-05 and
+    /// processed, and was rejected here before submission over its Nearby copy.
+    /// A rejected build keeps its number — consumption is the upload — so the
+    /// floor is 5 and lowering it back to 4 to "match the TestFlight list"
+    /// would re-admit an attestation this record has already disproved.
+    ///
     /// Two things are asserted, because either alone passes while the gate is
     /// broken: that the floor is the observed number, and that the comparison
     /// is a strict `less than` against it rather than a `!=` or a ceiling.
     func testTheCandidateScriptRefusesAnAttestationBelowTheObservedFloor() throws {
         let constants = try candidateConstants()
-        XCTAssertEqual(constants["OBSERVED_HIGHEST_BUILD_FLOOR"], "4",
-                       "the observed build-number floor drifted from the 0.1.0 (4) read-back")
+        XCTAssertEqual(constants["OBSERVED_HIGHEST_BUILD_FLOOR"], "5",
+                       "the observed build-number floor drifted from the consumed 0.3.1 (5) "
+                       + "upload; the 0.1.0 (4) read-back is no longer the highest")
 
         let script = try RepoRoot.text("scripts/ios-app-store-candidate.sh")
         XCTAssertTrue(

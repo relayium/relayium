@@ -124,6 +124,26 @@ public enum ErrorCopy {
         return message(for: error, language: language)
     }
 
+    /// The nearby answer-timeout sentence, for a composition that has to
+    /// replace its recovery step.
+    ///
+    /// One function rather than a `#if os(iOS)` inside `message(for:)`, and the
+    /// difference is what a Mac-hosted test can reach. This module compiles for
+    /// both platforms out of one source, so a platform conditional here would
+    /// make the iOS wording unreachable from every unit test that runs — which
+    /// is exactly how the shared Nearby copy shipped onto an iOS screen in the
+    /// first place. A parameter is testable on the host that runs the tests.
+    ///
+    /// The default is the shared key, so every existing caller —
+    /// `message(for: NearbyError.noAnswer)`, macOS's two transfer modules, and
+    /// both models' own initializer defaults — keeps the sentence it had,
+    /// byte for byte. `AppEnvironment.localNearbyNoAnswerCopy` is the only
+    /// value this repository passes instead.
+    public static func nearbyNoAnswer(_ copy: L10nKey = .errorNearbyNoAnswer,
+                                      language: AppLanguage? = nil) -> String {
+        L10n.t(copy, language: language)
+    }
+
     public static func message(for error: Error, language: AppLanguage? = nil) -> String {
         if let e = error as? AccountError {
             switch e {
@@ -286,8 +306,16 @@ public enum ErrorCopy {
                 // devices reached the same rendezvous, so "you're not on the
                 // same network" would be a claim this code cannot make. What it
                 // can say is what makes a device answer — a listening peer,
-                // which today means relayium.com — and where to go instead.
-                return L10n.t(.errorNearbyNoAnswer, language: language)
+                // which on the hub-backed room means relayium.com — and where
+                // to go instead.
+                //
+                // **That is the answer for the room, and this arm is now the
+                // DEFAULT rather than the only answer.** A composition whose
+                // transport cannot have a browser peer overrides the recovery
+                // step through `nearbyNoAnswer(_:language:)` above; nothing
+                // that reaches this arm has been handed one, so the wording
+                // here is unchanged and macOS still renders exactly it.
+                return nearbyNoAnswer(language: language)
             }
         }
         if let e = error as? RealtimeStagingError {

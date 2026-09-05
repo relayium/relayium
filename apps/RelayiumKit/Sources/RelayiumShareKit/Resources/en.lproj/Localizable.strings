@@ -376,6 +376,16 @@
 "nearby.setupFailed" = "An incoming nearby transfer could not be set up.";
 "nearby.noAccountNeeded" = "Sending and receiving on this network needs no account.";
 
+/* MARK: nearby pane, the iOS transport — Bonjour on the local link, not the
+   code-less rendezvous room the six shared sentences above describe. English
+   and Simplified Chinese only; the frozen locales fall back to this file. */
+"nearby.iosSafetySummary" = "Devices running the Relayium app on the same local network as this device. On a shared network — a café, a hotel, an office — that can include strangers' devices, so choose who you send to.";
+"nearby.iosExplain" = "Relayium looks for one Bonjour service, _relayium._tcp, on the local network this device has joined, and publishes the same service while receiving is on. It does not scan addresses, read anything else about the network, or ask anything outside this network who is nearby. Only devices running the Relayium app can appear here — a web browser cannot. On a shared network such as a café, hotel or office, the devices that answer can belong to strangers.";
+"nearby.iosEmptyRoster" = "No other devices yet. Open the Relayium app on the other device, connected to this same network, and leave it open.";
+"nearby.iosListeningBody" = "While this app is open, a device on this network can send files or start a message session without asking first. Anything on this network running Relayium can try — pause receiving if that is not what you want.";
+"nearby.iosAcceptanceNote" = "The device you pick accepts what you send without asking while it is receiving, and a message session opens on its side without a prompt, unless advanced verification is on for either device (below). This device accepts incoming transfers from this network the same way while receiving is on and this app is open.";
+"nearby.iosReconnecting" = "Lost the local network connection. Reconnecting…";
+
 /* MARK: drop zone, picker, received result, QR */
 "drop.a11yLabel" = "Files to send";
 "drop.a11yHint" = "Drop files or folders here, or activate to choose them.";
@@ -527,6 +537,10 @@
 "error.factory.noPeerAppeared" = "Nobody joined before the pairing code expired. Create a new code and try again.";
 "error.nearby.notScanning" = "Relayium stopped looking for nearby devices, so that one is no longer available. Scan again, then pick it.";
 "error.nearby.noAnswer" = "That device didn't answer. Open relayium.com on it, keep that page open, and pick it again. A pairing code works instead, and is the way to receive on this device.";
+/* The iOS Local Nearby half of the sentence above. Same job — what makes a
+   device answer — over a transport where a browser cannot be a peer. English
+   and Simplified Chinese only, per the supported-language policy. */
+"error.nearby.iosNoAnswer" = "That device didn't answer. Open the Relayium app on it, connected to this same local network, turn receiving on, and pick it again. If the two devices are not on the same network, a pairing code works instead.";
 "error.staging.fileCount" = "Choose between 1 and %@ files.";
 "error.staging.unreadable" = "Couldn't open every selected file, so nothing was sent. Choose the files again.";
 "error.text.authenticationFailed" = "The encrypted message failed its integrity check, so it was discarded and the session was closed.";

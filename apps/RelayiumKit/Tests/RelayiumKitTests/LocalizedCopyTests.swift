@@ -1371,21 +1371,44 @@ final class LocalizedCopyTests: XCTestCase {
     /// Every non-plural key the iOS Nearby tab reaches, listed rather than
     /// derived, so adding one is a decision.
     private let nearbySurface: [L10nKey] = [
-        .navNearby, .nearbyExplain, .nearbySafetySummary, .nearbyHowItWorks,
-        .nearbyListeningBody, .nearbyPausedBody,
+        .navNearby, .nearbyIOSExplain, .nearbyIOSSafetySummary, .nearbyHowItWorks,
+        .nearbyIOSListeningBody, .nearbyPausedBody,
         .nearbySavedToAppFolder, .nearbyPauseReceiving, .nearbyResumeReceiving,
-        .nearbyLookAgain, .nearbyEmptyRoster, .nearbyNamesDisclaimer,
+        .nearbyLookAgain, .nearbyIOSEmptyRoster, .nearbyNamesDisclaimer,
         .nearbyA11yReceiving, .nearbyA11yDevices, .nearbyA11yChooseDevice,
         .nearbySendTo, .nearbySessionWith, .nearbySessionPeerDisclaimer,
         .nearbySelectionSendHint, .nearbyAddFilesHint,
-        .nearbyTextIntent, .nearbyStartMessageSession, .nearbyAcceptanceNote,
+        .nearbyTextIntent, .nearbyStartMessageSession, .nearbyIOSAcceptanceNote,
         .nearbyBackToDevices, .nearbyLeavingClearsHistory, .nearbyDeviceGone,
-        .nearbyAddFilesFirst, .nearbyReconnecting, .nearbyUnnamedDevice,
+        .nearbyAddFilesFirst, .nearbyIOSReconnecting, .nearbyUnnamedDevice,
         .nearbySetupFailed, .nearbyNoAccountNeeded,
         .nearbyStatusOff, .nearbyStatusPaused, .nearbyStatusJoining, .nearbyStatusReady,
         .nearbyStatusReconnecting, .nearbyStatusReceivingFiles, .nearbyStatusMessageSession,
         .presenceBusyTitle, .presenceBusyBody, .presenceShowIt,
-        .errorNearbyNotScanning, .errorNearbyNoAnswer,
+        .errorNearbyNotScanning, .errorNearbyIOSNoAnswer,
+    ]
+
+    /// **The seven keys that exist because iOS is not on the hub-backed room,
+    /// and the shared keys each of them replaced.**
+    ///
+    /// Listed as pairs rather than two lists, because every assertion below is
+    /// about the DIFFERENCE: the iOS half may not carry the wire claim, the
+    /// shared half must still carry it, and a "fix" that corrected the shared
+    /// copy in place would break macOS silently while every iOS check passed.
+    private let iosNearbyReplacements: [(ios: L10nKey, shared: L10nKey)] = [
+        (.nearbyIOSSafetySummary, .nearbySafetySummary),
+        (.nearbyIOSExplain, .nearbyExplain),
+        (.nearbyIOSEmptyRoster, .nearbyEmptyRoster),
+        (.nearbyIOSListeningBody, .nearbyListeningBody),
+        (.nearbyIOSAcceptanceNote, .nearbyAcceptanceNote),
+        (.nearbyIOSReconnecting, .nearbyReconnecting),
+        // The seventh, and the only one that is not on the Nearby screen: the
+        // answer-timeout recovery, printed by both session models when a
+        // chosen device never answers. The first six were found by rendering
+        // the screen; this one is reachable only by waiting, which is why the
+        // screenshot pass did not see it and `NearbySessionModelTests` drives
+        // both real timeout paths instead.
+        (.errorNearbyIOSNoAnswer, .errorNearbyNoAnswer),
     ]
 
     /// Nothing the nearby surface renders may name a platform any more.
@@ -1669,6 +1692,295 @@ final class LocalizedCopyTests: XCTestCase {
                     XCTAssertNotEqual(text, L10n.t(key, language: .en),
                                       "\(key.rawValue) [\(language.rawValue)] is untranslated")
                 }
+            }
+        }
+    }
+
+    // MARK: - the iOS Nearby transport says only what Bonjour can do
+
+    /// **Every word the shared room's copy owes to a server, refused on the iOS
+    /// surface — in both maintained languages.**
+    ///
+    /// This is the guard for the defect that stopped a release: a Release
+    /// screenshot of the shipped iOS Nearby tab, at the accepted 6.9-inch pixel
+    /// size, stated that the roster was grouped by a public address, that a
+    /// carrier or VPN could put strangers on it, that the way to be listed was
+    /// to open the production host, and that a lost rendezvous was reconnecting.
+    /// The iOS composition is `LocalNearbyEnvironment` over
+    /// `NetworkLocalPeerTransport`: one Bonjour service on the local link, and
+    /// no server asked anything. All four claims were false.
+    ///
+    /// Tokens rather than whole sentences, lowercased, because a translation is
+    /// free to rewrite the sentence and is not free to reintroduce the claim.
+    func testNoIOSNearbyStringStatesTheHubRoomsWire() throws {
+        let banned: [AppLanguage: [String]] = [
+            .en: ["public address", "carrier", "vpn", "gateway", "rendezvous",
+                  "server", "internet"],
+            .zh: ["公网", "运营商", "vpn", "网关", "会合", "服务器", "互联网"],
+        ]
+        for (ios, _) in iosNearbyReplacements {
+            for language in [AppLanguage.en, .zh] {
+                let text = L10n.t(ios, language: language).lowercased()
+                for token in try XCTUnwrap(banned[language]) {
+                    XCTAssertFalse(text.contains(token),
+                                   "\(ios.rawValue) [\(language.rawValue)] states '\(token)', "
+                                   + "which belongs to the hub-backed room iOS does not join: "
+                                   + text)
+                }
+                // The production host is its own assertion because it is the
+                // one that reads as help rather than as mechanism. A browser
+                // there publishes no `_relayium._tcp` service and can never be
+                // on this roster, so pointing a user at it is an instruction
+                // that cannot work.
+                XCTAssertFalse(text.contains(AppEnvironment.productionHost.lowercased()),
+                               "\(ios.rawValue) [\(language.rawValue)] sends the user to a page "
+                               + "that cannot join a Bonjour roster: \(text)")
+            }
+        }
+    }
+
+    /// **And the shared keys still say all of it, because macOS still does it.**
+    ///
+    /// The cheap repair for the screenshot would have been to correct the six
+    /// sentences in place. That is what this refuses: `LanConnectPane` renders
+    /// the same keys against the hub-backed code-less room, where the public
+    /// address, the carrier/VPN caveat, the production host and the rendezvous
+    /// are all literally what happens. Losing them there would replace a false
+    /// iOS screen with a false macOS one.
+    func testTheSharedNearbyCopyStillStatesTheHubRoomsWireForMacOS() throws {
+        let publicAddress: [AppLanguage: String] = [.en: "public address", .zh: "公网地址"]
+        let gateway: [AppLanguage: String] = [.en: "VPN", .zh: "VPN"]
+        let rendezvous: [AppLanguage: String] = [.en: "rendezvous", .zh: "会合"]
+        for language in [AppLanguage.en, .zh] {
+            for key in [L10nKey.nearbySafetySummary, .nearbyExplain, .nearbyListeningBody] {
+                XCTAssertTrue(L10n.t(key, language: language)
+                                .contains(try XCTUnwrap(publicAddress[language])),
+                              "\(key.rawValue) [\(language.rawValue)] stopped naming the grouping "
+                              + "macOS actually uses")
+            }
+            for key in [L10nKey.nearbySafetySummary, .nearbyExplain] {
+                XCTAssertTrue(L10n.t(key, language: language)
+                                .contains(try XCTUnwrap(gateway[language])),
+                              "\(key.rawValue) [\(language.rawValue)] dropped the caveat that "
+                              + "puts strangers on that address")
+            }
+            for key in [L10nKey.nearbyEmptyRoster, .nearbyAcceptanceNote] {
+                XCTAssertTrue(L10n.t(key, language: language)
+                                .contains(AppEnvironment.productionHost),
+                              "\(key.rawValue) [\(language.rawValue)] stopped naming the peer "
+                              + "macOS really can reach")
+            }
+            XCTAssertTrue(L10n.t(.nearbyReconnecting, language: language)
+                            .contains(try XCTUnwrap(rendezvous[language])),
+                          "nearby.reconnecting [\(language.rawValue)] stopped naming what macOS "
+                          + "actually lost")
+            // The answer-timeout recovery is the one where correcting the
+            // shared sentence in place would have looked most reasonable — it
+            // reads like an error message rather than like a claim about a
+            // wire. On the hub-backed room it is a working instruction, and a
+            // Mac user who follows it gets an answering peer.
+            XCTAssertTrue(L10n.t(.errorNearbyNoAnswer, language: language)
+                            .contains(AppEnvironment.productionHost),
+                          "error.nearby.noAnswer [\(language.rawValue)] stopped naming the peer "
+                          + "a Mac can really wake")
+        }
+    }
+
+    /// A per-platform key that renders the sentence it replaced is the same bug
+    /// with a longer name.
+    func testEveryIOSNearbyStringDiffersFromTheSharedOneItReplaced() {
+        for (ios, shared) in iosNearbyReplacements {
+            for language in [AppLanguage.en, .zh] {
+                XCTAssertNotEqual(L10n.t(ios, language: language),
+                                  L10n.t(shared, language: language),
+                                  "\(ios.rawValue) [\(language.rawValue)] is a copy of "
+                                  + shared.rawValue)
+            }
+        }
+    }
+
+    /// Refusing the false claims is half of it. The iOS summary and paragraph
+    /// have to make the true ones, or the screen is merely vaguer than the one
+    /// it replaced: the roster is this local network, the mechanism is one named
+    /// Bonjour service, nothing is scanned, a browser cannot be here, and a
+    /// shared network is a stranger's network too.
+    func testTheIOSNearbySummaryAndParagraphKeepTheirLocalNetworkClaims() throws {
+        let localNetwork: [AppLanguage: String] = [.en: "local network", .zh: "本地网络"]
+        let sharedNetwork: [AppLanguage: String] = [.en: "shared network", .zh: "共用网络"]
+        let strangers: [AppLanguage: String] = [.en: "stranger", .zh: "陌生人"]
+        let noScan: [AppLanguage: String] = [.en: "does not scan", .zh: "不扫描"]
+        let noBrowser: [AppLanguage: String] = [.en: "web browser", .zh: "网页浏览器"]
+
+        for language in [AppLanguage.en, .zh] {
+            let summary = L10n.t(.nearbyIOSSafetySummary, language: language)
+            for (label, table) in [("the local-network grouping", localNetwork),
+                                   ("the shared-network caveat", sharedNetwork),
+                                   ("the strangers it can include", strangers)] {
+                XCTAssertTrue(summary.contains(try XCTUnwrap(table[language])),
+                              "nearby.iosSafetySummary [\(language.rawValue)] dropped \(label): "
+                              + summary)
+            }
+
+            let paragraph = L10n.t(.nearbyIOSExplain, language: language)
+            // The service string itself, not a description of it: it is the
+            // exact value `NetworkLocalPeerTransport` registers and
+            // `Info.plist` declares in `NSBonjourServices`, and a paragraph
+            // that paraphrased it could drift from both.
+            XCTAssertTrue(paragraph.contains("_relayium._tcp"),
+                          "nearby.iosExplain [\(language.rawValue)] no longer names the one "
+                          + "service this device publishes and browses: \(paragraph)")
+            for (label, table) in [("the local-network grouping", localNetwork),
+                                   ("the no-scanning claim", noScan),
+                                   ("the browser exclusion", noBrowser),
+                                   ("the strangers it can include", strangers)] {
+                XCTAssertTrue(paragraph.contains(try XCTUnwrap(table[language])),
+                              "nearby.iosExplain [\(language.rawValue)] dropped \(label): "
+                              + paragraph)
+            }
+        }
+    }
+
+    /// The iOS summary stays a summary, for the same layout reason the shared
+    /// one does: it is the always-visible half, and a translation that grew it
+    /// back toward the paragraph would restore the accessibility-content-size
+    /// scroll the disclosure exists to remove.
+    func testTheIOSNearbySummaryStaysMuchShorterThanItsParagraph() {
+        for language in [AppLanguage.en, .zh] {
+            let summary = L10n.t(.nearbyIOSSafetySummary, language: language)
+            let paragraph = L10n.t(.nearbyIOSExplain, language: language)
+            XCTAssertTrue(summary.count * 3 <= paragraph.count * 2,
+                          "nearby.iosSafetySummary [\(language.rawValue)] is \(summary.count) "
+                          + "characters against a \(paragraph.count)-character paragraph — "
+                          + "no longer a summary")
+        }
+    }
+
+    /// **The receiving sentence states the limit iOS actually has.**
+    ///
+    /// This app claims no background mode, so `NearbyResidencyCoordinator`
+    /// leaves the link on `.background`: the window in which an unsolicited
+    /// transfer can arrive is the window in which the app is open. The shared
+    /// sentence says "while Relayium is running", which on this platform would
+    /// promise a resident receiver that does not exist. The way out has to
+    /// survive translation too.
+    func testTheIOSListeningBodyStatesTheOpenAppLimitAndTheWayOut() throws {
+        let openApp: [AppLanguage: String] = [
+            .en: "this app is open", .zh: "本应用处于打开状态",
+        ]
+        let pause: [AppLanguage: String] = [.en: "pause", .zh: "暂停"]
+        for language in [AppLanguage.en, .zh] {
+            let text = L10n.t(.nearbyIOSListeningBody, language: language)
+            XCTAssertTrue(text.contains(try XCTUnwrap(openApp[language])),
+                          "nearby.iosListeningBody [\(language.rawValue)] promises a receiver "
+                          + "that outlives the foreground: \(text)")
+            XCTAssertTrue(text.lowercased().contains(try XCTUnwrap(pause[language]).lowercased()),
+                          "nearby.iosListeningBody [\(language.rawValue)] dropped the way out: "
+                          + text)
+        }
+    }
+
+    /// The empty roster's remedy has to be reachable. On this transport that is
+    /// the Relayium app on the other device, on this same network — the one
+    /// instruction that can actually put a row on the list.
+    func testTheIOSEmptyRosterSendsTheUserToTheAppOnThisNetwork() throws {
+        let app: [AppLanguage: String] = [.en: "Relayium app", .zh: "Relayium 应用"]
+        let sameNetwork: [AppLanguage: String] = [.en: "same network", .zh: "同一个网络"]
+        let otherDevice: [AppLanguage: String] = [.en: "other device", .zh: "对方设备"]
+        for language in [AppLanguage.en, .zh] {
+            let text = L10n.t(.nearbyIOSEmptyRoster, language: language)
+            for (label, table) in [("what to open", app),
+                                   ("where it has to be", sameNetwork),
+                                   ("which device to open it on", otherDevice)] {
+                XCTAssertTrue(text.contains(try XCTUnwrap(table[language])),
+                              "nearby.iosEmptyRoster [\(language.rawValue)] dropped \(label): "
+                              + text)
+            }
+        }
+    }
+
+    /// The acceptance note still names a device and still names the escape.
+    /// Dropping the production host is only correct if what replaces it says
+    /// what happens on the other end and how to make it ask.
+    func testTheIOSAcceptanceNoteNamesADeviceAndTheVerificationEscape() throws {
+        let verification: [AppLanguage: String] = [.en: "verification", .zh: "验证"]
+        for language in [AppLanguage.en, .zh] {
+            let text = L10n.t(.nearbyIOSAcceptanceNote, language: language)
+            XCTAssertTrue(text.contains(try XCTUnwrap(deviceWord[language])),
+                          "nearby.iosAcceptanceNote [\(language.rawValue)] stopped naming the "
+                          + "device: \(text)")
+            XCTAssertTrue(text.contains(try XCTUnwrap(verification[language])),
+                          "nearby.iosAcceptanceNote [\(language.rawValue)] dropped the one "
+                          + "control that makes the other end ask: \(text)")
+        }
+        // And the reconnect banner names what iOS can actually lose.
+        let localNetwork: [AppLanguage: String] = [.en: "local network", .zh: "本地网络"]
+        for language in [AppLanguage.en, .zh] {
+            XCTAssertTrue(L10n.t(.nearbyIOSReconnecting, language: language)
+                            .contains(try XCTUnwrap(localNetwork[language])),
+                          "nearby.iosReconnecting [\(language.rawValue)] does not say what "
+                          + "dropped")
+        }
+    }
+
+    /// Maintained in English and Simplified Chinese only, with the frozen
+    /// locales rendering the English rather than a raw key.
+    ///
+    /// Same policy application as the Mac empty-roster split above, and the
+    /// same temptation: these are six short strings, and adding them to nine
+    /// catalogs "while we are here" is how a frozen locale quietly becomes a
+    /// maintained one nobody maintains.
+    func testTheIOSNearbyCopyIsMaintainedInExactlyTheTwoLanguages() throws {
+        let english = try XCTUnwrap(StringsCatalog.load(.en))
+        for (ios, _) in iosNearbyReplacements {
+            for language in AppLanguage.allCases {
+                let catalog = try XCTUnwrap(StringsCatalog.load(language))
+                let text = L10n.t(ios, language: language)
+                XCTAssertFalse(text.isEmpty, "\(ios.rawValue) [\(language.rawValue)]")
+                XCTAssertNotEqual(text, ios.rawValue,
+                                  "\(ios.rawValue) [\(language.rawValue)] rendered a raw key")
+                XCTAssertFalse(text.contains("%@"),
+                               "\(ios.rawValue) [\(language.rawValue)]: \(text)")
+                switch language {
+                case .en, .zh:
+                    XCTAssertNotNil(catalog[ios.rawValue],
+                                    "\(ios.rawValue) is missing from a MAINTAINED language")
+                default:
+                    XCTAssertNil(catalog[ios.rawValue],
+                                 "\(ios.rawValue) was translated into the frozen "
+                                 + "\(language.rawValue)")
+                    XCTAssertEqual(text, english[ios.rawValue],
+                                   "\(ios.rawValue) [\(language.rawValue)] did not fall back "
+                                   + "to English")
+                }
+            }
+            XCTAssertNotEqual(L10n.t(ios, language: .zh), L10n.t(ios, language: .en),
+                              "\(ios.rawValue) is untranslated in Simplified Chinese")
+        }
+    }
+
+    /// **Refusing relayium.com is only half of an error message.**
+    ///
+    /// A timeout that merely dropped the false instruction would leave the user
+    /// stuck with no next step — worse in practice than a wrong one, because a
+    /// wrong one at least gets tried. What replaces it has to be the thing that
+    /// actually makes a `_relayium._tcp` peer answer: the Relayium app open on
+    /// the other device, on this same local network, with receiving on. The
+    /// cross-network escape is named too, because "same network" is exactly the
+    /// assumption a stuck user should be invited to question.
+    func testTheIOSNoAnswerRecoveryNamesWhatActuallyMakesAPeerAnswer() throws {
+        let app: [AppLanguage: String] = [.en: "Relayium app", .zh: "Relayium 应用"]
+        let sameNetwork: [AppLanguage: String] = [.en: "same local network", .zh: "同一个本地网络"]
+        let receiving: [AppLanguage: String] = [.en: "turn receiving on", .zh: "开启接收"]
+        let pairingCode: [AppLanguage: String] = [.en: "pairing code", .zh: "配对码"]
+        for language in [AppLanguage.en, .zh] {
+            let text = L10n.t(.errorNearbyIOSNoAnswer, language: language)
+            for (label, table) in [("what to open", app),
+                                   ("where it has to be", sameNetwork),
+                                   ("the state it has to be in", receiving),
+                                   ("the way out when it is the wrong network", pairingCode)] {
+                XCTAssertTrue(text.contains(try XCTUnwrap(table[language])),
+                              "error.nearby.iosNoAnswer [\(language.rawValue)] dropped \(label): "
+                              + text)
             }
         }
     }

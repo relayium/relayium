@@ -1,5 +1,6 @@
 import RelayiumAppKit
 import RelayiumKit
+import RelayiumShareKit
 
 /// The iOS-only composition seam. macOS continues to construct its existing
 /// hub-backed `LanDiscoveryModel` through `AppEnvironment`.
@@ -37,6 +38,12 @@ public enum LocalNearbyEnvironment {
             let client = SignalingClient(channel: channel, name: advertisement.name)
             return PreparedNearbyConnection(client: client,
                                             activate: { channel.begin() })
-        })
+        },
+        // The one string `LanDiscoveryModel` renders that names the wire.
+        // Everything else the drop path publishes is state; this is copy, and
+        // the default names a rendezvous socket this composition does not have.
+        // Passed here rather than defaulted in the model so macOS keeps the
+        // sentence that is true for it.
+        reconnectingCopy: .nearbyIOSReconnecting)
     }
 }
