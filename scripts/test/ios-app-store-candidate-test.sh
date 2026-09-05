@@ -131,6 +131,11 @@ codesign --verify --strict	the exported bundles' signatures are no longer verifi
 TeamIdentifier=	the signing team of the exported bundles is no longer checked
 Authority=	the distribution authority of the exported bundles is no longer checked
 get-task-allow	a debuggable distribution build would pass verification
+^expect_get_task_allow_disabled\(\) \{$	nothing decides whether the shipped bundles are debuggable
+expect_get_task_allow_disabled "\$app_entitlements"	the app's get-task-allow is no longer decided
+expect_get_task_allow_disabled "\$share_entitlements"	the extension's get-task-allow is no longer decided
+plutil -extract "\$key_path" xml1	the get-task-allow value is no longer read with its TYPE, so a string "false" or an integer 0 would read as a disabled debugger
+\[ "\$element" = '<false/>' \]	the accepted get-task-allow value is no longer pinned to a false Boolean
 xcrun nm -u	the AVCapture undefined-symbol readback is gone
 AVCapture	the camera symbol readback is gone
 PrivacyInfo\.xcprivacy	the built privacy manifests are no longer checked
@@ -161,7 +166,15 @@ plutil -lint "\$file"	a shipped manifest is accepted without proving it is a val
 NSCameraUsageDescription	the camera purpose declaration is no longer checked
 NSLocalNetworkUsageDescription	the local network purpose declaration is no longer checked
 expect_plist_key_absent "\$appex_info" .*NSCameraUsageDescription	the Share extension could declare a camera purpose string
--name '\*\.lproj'	the Share extension could carry localized purpose strings
+-name '\*\.lproj'	nothing enumerates the Share extension's localized resources
+^readonly SHARE_ALLOWED_LPROJ='RelayiumKit_RelayiumShareKit\.bundle/en\.lproj$	the pinned Share .lproj set is gone, or no longer opens with the English product localization
+^RelayiumKit_RelayiumShareKit\.bundle/zh-Hans\.lproj'$	the Simplified Chinese product localization is gone from the pinned set, or the set is no longer terminated
+^share_lproj_set_of\(\) \{$	nothing reads the extension's .lproj set, so it cannot be compared with the pinned one
+^expect_share_localization_boundary\(\) \{$	nothing checks the Share extension's localization surface
+expect_share_localization_boundary "\$archive_appex_dir" "\$SHARE_ALLOWED_LPROJ" 'archive share'	the ARCHIVE's copy of the extension has no localization check, is no longer measured against the PINNED set, or no longer says which surface a finding is about
+expect_share_localization_boundary "\$appex_dir" "\$SHARE_ALLOWED_LPROJ" 'share'	the EXPORT's copy of the extension has no localization check, is no longer measured against the PINNED set, or no longer says which surface a finding is about
+-maxdepth 1 -name '\*\.lproj'	the extension could carry .lproj at its own bundle root, which is the one place iOS reads a purpose string from
+-name 'InfoPlist\.strings' -print	an InfoPlist.strings could be placed anywhere in the extension and go unnoticed
 com\.apple\.developer\.applesignin	the Sign in with Apple boundary is no longer checked
 com\.apple\.developer\.associated-domains	the associated-domains boundary is no longer checked
 com\.apple\.security\.application-groups	the App Group entitlement is no longer checked
@@ -359,6 +372,41 @@ mutate 'the AVCapture symbol readback is removed' \
   sed_mutator "/xcrun nm -u/d"
 mutate 'the Share camera-absence check is removed' \
   sed_mutator '/expect_plist_key_absent "\$appex_info"/d'
+mutate 'the app get-task-allow decision goes back to a bare absence check' \
+  sed_mutator "s/^  expect_get_task_allow_disabled \"\\\$app_entitlements\" 'app entitlements'\$/  expect_plist_key_absent \"\\\$app_entitlements\" \"\\\$(plutil_path 'get-task-allow')\" 'app entitlements'/"
+mutate 'the extension get-task-allow decision is removed' \
+  sed_mutator "/expect_get_task_allow_disabled \"\\\$share_entitlements\"/d"
+mutate 'the get-task-allow value stops being read with its type' \
+  sed_mutator 's/xml1 -o -/raw -o -/'
+mutate 'any get-task-allow value that is not a false Boolean becomes acceptable' \
+  sed_mutator "s/\\[ \"\\\$element\" = '<false\\/>' \\]/[ -n \"\\\$element\" ]/"
+mutate 'the pinned Share .lproj set is deleted' \
+  sed_mutator '/^readonly SHARE_ALLOWED_LPROJ=/d'
+mutate 'the Simplified Chinese product localization is dropped from the pinned set' \
+  sed_mutator "/^RelayiumKit_RelayiumShareKit\\.bundle\\/zh-Hans\\.lproj'\$/d"
+mutate 'nothing reads the extension .lproj set' \
+  sed_mutator '/^share_lproj_set_of\(\) \{$/d'
+mutate 'the extension localization surface stops being checked' \
+  sed_mutator '/^expect_share_localization_boundary\(\) \{$/d'
+# The two call sites are mutated SEPARATELY, and each mutation leaves the other
+# site untouched. That is the whole point: a single rule matching either one
+# would stay quiet while the archive — or the export — went unread, which is
+# exactly the gap this pair was added to close. The retarget case is the loss
+# that is not a deletion: two call sites still stand, and both read the export.
+mutate 'the archive localization call site is removed' \
+  sed_mutator '/^expect_share_localization_boundary "\$archive_appex_dir"/d'
+mutate 'the export localization call site is removed' \
+  sed_mutator '/^expect_share_localization_boundary "\$appex_dir"/d'
+mutate 'the archive localization call site is retargeted at the exported payload' \
+  sed_mutator 's/^expect_share_localization_boundary "\$archive_appex_dir"/expect_share_localization_boundary "$appex_dir"/'
+mutate 'the archive localization surface is measured against itself instead of the pinned set' \
+  sed_mutator 's/expect_share_localization_boundary "\$archive_appex_dir" "\$SHARE_ALLOWED_LPROJ"/expect_share_localization_boundary "$archive_appex_dir" "$(share_lproj_set_of "$archive_appex_dir")"/'
+mutate 'the export localization surface is measured against itself instead of the pinned set' \
+  sed_mutator 's/expect_share_localization_boundary "\$appex_dir" "\$SHARE_ALLOWED_LPROJ"/expect_share_localization_boundary "$appex_dir" "$(share_lproj_set_of "$appex_dir")"/'
+mutate 'the bundle-root .lproj check is removed' \
+  sed_mutator "/-maxdepth 1 -name '\\*\\.lproj'/d"
+mutate 'InfoPlist.strings is no longer rejected at any depth' \
+  sed_mutator "/-name 'InfoPlist\\.strings' -print/d"
 mutate 'the privacy manifest check is removed' \
   sed_mutator "s/PrivacyInfo\.xcprivacy/PrivacyInfo.absent/g"
 mutate 'the pinned app required-reason graph is deleted' \
@@ -1354,6 +1402,254 @@ MANIFEST
     "$collected/does-not-exist.xcprivacy" "$APP_COLLECTED_DATA_GRAPH" 1
   expect_collected_checker 'a manifest with no collected-data key at all is a finding' \
     "$no_collected_key" "$SHARE_COLLECTED_DATA_GRAPH" 1
+
+  unset -f fail_check pass_check
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Part 1e — the two boundaries a real signed export corrected
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Both of these were ABSENCE rules until 2026-09-05, when the first genuinely
+# signed export of `0.3.1 (5)` failed verification while being correct:
+#
+#   * both distribution entitlement sets declare `get-task-allow` explicitly as
+#     a false Boolean rather than omitting the key, and the rule required the
+#     key to be missing;
+#   * the Share extension embeds `RelayiumKit_RelayiumShareKit.bundle` carrying
+#     `en.lproj` and `zh-Hans.lproj` of its own interface copy, and the rule
+#     rejected every `.lproj` found recursively.
+#
+# Loosening a release gate after it has just stopped a release is the dangerous
+# kind of edit, and "it accepts the candidate now" is the one piece of evidence
+# a wrong loosening also produces. So neither correction is taken on trust: the
+# functions are LIFTED out of the shipped script — not reimplemented — and
+# driven against fixtures that include the shapes the old rules caught, so what
+# this part shows is that the corrections still REJECT those.
+#
+# `fail_check`/`pass_check` become counters and every case asserts the EXACT
+# number of findings, because both directions are failure modes here. A checker
+# that went quiet has stopped defending the boundary; a checker that raises two
+# findings where one was designed is reporting something this suite has not
+# understood, and reading either as "non-zero, good enough" is how a rule
+# becomes decorative.
+
+eval "$(sed -n '/^plist_has_key() {/,/^}/p' "$script_under_test")"
+eval "$(sed -n '/^expect_get_task_allow_disabled() {/,/^}/p' "$script_under_test")"
+eval "$(sed -n '/^share_lproj_set_of() {/,/^}/p' "$script_under_test")"
+eval "$(sed -n '/^expect_share_localization_boundary() {/,/^}/p' "$script_under_test")"
+eval "$(sed -n "/^readonly SHARE_ALLOWED_LPROJ=/,/zh-Hans\.lproj'\$/p" "$script_under_test")"
+
+boundary_ok=1
+for lifted in plist_has_key expect_get_task_allow_disabled share_lproj_set_of \
+    expect_share_localization_boundary; do
+  if ! declare -f "$lifted" >/dev/null 2>&1; then
+    bad "$lifted can be lifted out of the script" 'the function was not found or did not parse'
+    boundary_ok=0
+  fi
+done
+if [ -z "${SHARE_ALLOWED_LPROJ:-}" ]; then
+  bad 'the pinned Share .lproj set can be lifted out of the script' 'the constant did not parse'
+  boundary_ok=0
+fi
+
+if [ "$boundary_ok" -eq 1 ]; then
+  lifted_failures=0
+  # shellcheck disable=SC2329
+  fail_check() { lifted_failures=$((lifted_failures + 1)); }
+  # shellcheck disable=SC2329
+  pass_check() { :; }
+
+  # ── get-task-allow ─────────────────────────────────────────────────────────
+
+  gta="$work/get-task-allow"
+  mkdir -p "$gta"
+
+  # The declaration is spliced in verbatim rather than passed as a value, so a
+  # fixture can carry a TYPE the key must not have — a string, a number, a
+  # container — instead of only a wrong Boolean. The string cases are the whole
+  # reason the shipped reader extracts `xml1`: `plutil -extract ... raw` prints
+  # `false` for the string "false" exactly as it does for the Boolean.
+  entitlements_with() {
+    local file="$1" declaration="$2"
+    cat >"$file" <<XML
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>application-identifier</key>
+	<string>7PVYUG4YQS.com.relayium.mac</string>
+$declaration
+</dict>
+</plist>
+XML
+  }
+
+  entitlements_with "$gta/absent.plist" '	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.relayium.app</string>
+	</array>'
+  entitlements_with "$gta/boolean-false.plist" '	<key>get-task-allow</key>
+	<false/>'
+  entitlements_with "$gta/boolean-true.plist" '	<key>get-task-allow</key>
+	<true/>'
+  entitlements_with "$gta/string-false.plist" '	<key>get-task-allow</key>
+	<string>false</string>'
+  entitlements_with "$gta/string-true.plist" '	<key>get-task-allow</key>
+	<string>true</string>'
+  entitlements_with "$gta/integer-zero.plist" '	<key>get-task-allow</key>
+	<integer>0</integer>'
+  entitlements_with "$gta/container.plist" '	<key>get-task-allow</key>
+	<array>
+		<false/>
+	</array>'
+  printf 'this is not a property list\n' >"$gta/malformed.plist"
+
+  expect_gta_findings() {
+    local label="$1" file="$2" expected="$3"
+    lifted_failures=0
+    expect_get_task_allow_disabled "$file" 'entitlements' 2>/dev/null
+    if [ "$lifted_failures" -eq "$expected" ]; then
+      ok "$label"
+    else
+      bad "$label" "raised $lifted_failures finding(s), expected $expected"
+    fi
+  }
+
+  # The two accepting shapes. The second is the correction itself, and it is
+  # what a real Apple Distribution entitlement set looks like.
+  expect_gta_findings 'an absent get-task-allow is accepted' \
+    "$gta/absent.plist" 0
+  expect_gta_findings 'an explicit false Boolean get-task-allow is accepted' \
+    "$gta/boolean-false.plist" 0
+
+  # The property the old absence rule was really defending, which the
+  # correction must not have given up.
+  expect_gta_findings 'a true get-task-allow is a finding' \
+    "$gta/boolean-true.plist" 1
+
+  # The shapes a `raw` comparison would have accepted as "false".
+  expect_gta_findings 'a get-task-allow string "false" is a finding, not a disabled debugger' \
+    "$gta/string-false.plist" 1
+  expect_gta_findings 'a get-task-allow string "true" is a finding' \
+    "$gta/string-true.plist" 1
+  expect_gta_findings 'an integer 0 get-task-allow is a finding' \
+    "$gta/integer-zero.plist" 1
+  expect_gta_findings 'a container get-task-allow is a finding' \
+    "$gta/container.plist" 1
+
+  # And the file itself, because "absent" is now an ACCEPTING answer: a reader
+  # that treats an unreadable plist as a plist with no keys turns a malformed
+  # entitlement set into a pass.
+  expect_gta_findings 'a malformed entitlement file is a finding rather than an absence' \
+    "$gta/malformed.plist" 1
+  expect_gta_findings 'an entitlement file that does not exist is a finding rather than an absence' \
+    "$gta/does-not-exist.plist" 1
+
+  # ── the Share extension's localization surface ─────────────────────────────
+
+  appexes="$work/appex-fixtures"
+
+  # The shape a real signed export has: the extension's own resources at the
+  # root, and its translated interface copy inside the SwiftPM resource bundle.
+  make_appex() {
+    local dir="$1" bundle="${2:-RelayiumKit_RelayiumShareKit.bundle}" language
+    mkdir -p "$dir/_CodeSignature"
+    : >"$dir/Info.plist"
+    : >"$dir/PrivacyInfo.xcprivacy"
+    for language in en zh-Hans; do
+      mkdir -p "$dir/$bundle/$language.lproj"
+      : >"$dir/$bundle/$language.lproj/Localizable.strings"
+    done
+  }
+
+  make_appex "$appexes/pinned"
+
+  make_appex "$appexes/root-lproj"
+  mkdir -p "$appexes/root-lproj/en.lproj"
+  : >"$appexes/root-lproj/en.lproj/Localizable.strings"
+
+  make_appex "$appexes/root-purpose-string"
+  mkdir -p "$appexes/root-purpose-string/en.lproj"
+  : >"$appexes/root-purpose-string/en.lproj/InfoPlist.strings"
+
+  make_appex "$appexes/nested-purpose-string"
+  : >"$appexes/nested-purpose-string/RelayiumKit_RelayiumShareKit.bundle/en.lproj/InfoPlist.strings"
+
+  make_appex "$appexes/stray-purpose-string"
+  mkdir -p "$appexes/stray-purpose-string/Support.bundle"
+  : >"$appexes/stray-purpose-string/Support.bundle/InfoPlist.strings"
+
+  make_appex "$appexes/extra-language"
+  mkdir -p "$appexes/extra-language/RelayiumKit_RelayiumShareKit.bundle/ja.lproj"
+  : >"$appexes/extra-language/RelayiumKit_RelayiumShareKit.bundle/ja.lproj/Localizable.strings"
+
+  make_appex "$appexes/foreign-bundle"
+  mkdir -p "$appexes/foreign-bundle/Other.bundle/en.lproj"
+  : >"$appexes/foreign-bundle/Other.bundle/en.lproj/Localizable.strings"
+
+  make_appex "$appexes/renamed-bundle" 'RelayiumShareKit.bundle'
+
+  mkdir -p "$appexes/no-localization/_CodeSignature"
+  : >"$appexes/no-localization/Info.plist"
+
+  expect_localization_findings() {
+    local label="$1" dir="$2" expected="$3"
+    lifted_failures=0
+    expect_share_localization_boundary "$dir" "$SHARE_ALLOWED_LPROJ" 'share' 2>/dev/null
+    if [ "$lifted_failures" -eq "$expected" ]; then
+      ok "$label"
+    else
+      bad "$label" "raised $lifted_failures finding(s), expected $expected"
+    fi
+  }
+
+  # The correction: the shape the recursive rule rejected is the shape the
+  # product ships.
+  expect_localization_findings 'the shipped extension shape is accepted' \
+    "$appexes/pinned" 0
+
+  # A `.lproj` at the extension's own bundle root is the one location iOS reads
+  # a purpose string from. It is a finding on its own AND breaks the pinned set,
+  # which is two rules noticing one edit rather than one rule counted twice.
+  expect_localization_findings 'a .lproj at the extension bundle root is a finding' \
+    "$appexes/root-lproj" 2
+  expect_localization_findings 'a localized purpose string at the bundle root is a finding' \
+    "$appexes/root-purpose-string" 3
+
+  # The two cases the pinned set alone cannot see, and the reason
+  # `InfoPlist.strings` is rejected by NAME at any depth: both leave the set
+  # exactly equal to the pinned one.
+  expect_localization_findings 'an InfoPlist.strings hidden inside the allowed resource bundle is a finding' \
+    "$appexes/nested-purpose-string" 1
+  expect_localization_findings 'an InfoPlist.strings outside any .lproj is a finding' \
+    "$appexes/stray-purpose-string" 1
+
+  # The regression this repository has actually had: a generated SwiftPM
+  # resource bundle keeping its copy of a language whose source was removed.
+  expect_localization_findings 'a third language in the allowed resource bundle is a finding' \
+    "$appexes/extra-language" 1
+
+  # Equality rather than an allowlist keyed on the bundle name: a second bundle,
+  # or the same localizations moved into a differently named one, is a finding.
+  expect_localization_findings 'a .lproj under an unexpected nested bundle is a finding' \
+    "$appexes/foreign-bundle" 1
+  expect_localization_findings 'the pinned localizations under a renamed bundle are a finding' \
+    "$appexes/renamed-bundle" 1
+
+  # The shape the OLD recursive rule called a pass. It is now a finding, which
+  # is what says this correction is narrower rather than merely weaker: an
+  # extension that shipped no translations at all would be a product
+  # regression against the supported-language policy, and nothing else in this
+  # script would have noticed it.
+  expect_localization_findings 'an extension carrying no localizations at all is a finding' \
+    "$appexes/no-localization" 1
+
+  # Fail closed on the artifact, for the same reason the entitlement reader
+  # does: a missing directory makes every `find` come back empty, and empty
+  # would otherwise satisfy two of the three rules.
+  expect_localization_findings 'an extension directory that does not exist is a finding' \
+    "$appexes/does-not-exist" 1
 
   unset -f fail_check pass_check
 fi

@@ -484,7 +484,14 @@ against source, because signing, thinning and packaging sit between the two:
 - app and Share bundle identifiers, marketing version and build;
 - exactly one `.appex` anywhere in the payload, and it is the Share extension;
 - a distribution signature and team `7PVYUG4YQS` on both bundles, with
-  `get-task-allow` absent;
+  `get-task-allow` **absent or an explicit `false` Boolean, and nothing else**.
+  Both shapes are accepted because a real Apple Distribution entitlement set
+  writes the key explicitly rather than omitting it — `0.3.1 (5)` does, on both
+  bundles — and what matters is that the shipped bundle does not let a debugger
+  attach. A value that merely *reads* as false is rejected: the check extracts
+  the entitlement as typed XML, so the string `"false"` and the integer `0` are
+  findings rather than a disabled debugger, and an unreadable entitlement file
+  is a finding rather than an absence;
 - the app's three entitlements — Sign in with Apple, `applinks:relayium.com`,
   App Group `group.com.relayium.app` — and the extension's one, **including the
   absences**: the extension carries no Sign in with Apple, no associated
@@ -511,9 +518,26 @@ against source, because signing, thinning and packaging sit between the two:
   back is a finding rather than something a "contains" check would wave through.
   See [App Privacy](#app-privacy) for the graph itself;
 - `NSCameraUsageDescription` and `NSLocalNetworkUsageDescription` in the built
-  app `Info.plist`, the camera string localized in the app bundle's own
-  `en.lproj` and `zh-Hans.lproj`, and **no** camera declaration and **no**
-  `.lproj` at all in the extension;
+  app `Info.plist`, and the camera string localized in the app bundle's own
+  `en.lproj` and `zh-Hans.lproj`;
+- in the Share extension, **no** camera declaration, **no** `.lproj` at its own
+  bundle root, **no** `InfoPlist.strings` at any depth, and a `.lproj` set
+  **exactly equal** to `RelayiumKit_RelayiumShareKit.bundle/en.lproj` and
+  `RelayiumKit_RelayiumShareKit.bundle/zh-Hans.lproj`. The localization half of
+  that rule is read in **both** the archive's copy of the extension and the
+  export's — two reads of the same pinned set, for the reason the privacy
+  manifests are read four times: the export re-signs and repackages the archive,
+  so neither copy is evidence about the other, and a `.lproj` the export strips
+  was still shipped in the archive. (The camera *declaration* is read in the
+  exported payload, alongside the app purpose strings in the bullet above.) This
+  is a placement and equality rule rather than an absence: `RelayiumShareKit` is a SwiftPM target
+  with `.process("Resources")`, so every build embeds that resource bundle with
+  the extension's own translated interface copy. iOS reads a purpose string from
+  the extension's *own bundle root* — `Info.plist`, then
+  `<language>.lproj/InfoPlist.strings` beside it — and attributes the prompt to
+  the host app, so that root is the boundary; equality is what additionally
+  catches a third language, a second resource bundle, or those localizations
+  moved into a differently named one;
 - `AVCapture` undefined symbols in the app's own binary and in the embedded
   `WebRTC.framework` — the readback *Validation outstanding* below owes against
   a signed candidate rather than an unsigned local build.
@@ -1006,9 +1030,13 @@ than the other way round.
 `NSCameraUsageDescription` is declared in `apps/ios/Relayium/Info.plist` as the
 English fallback and localized in that bundle's `en.lproj/InfoPlist.strings` and
 `zh-Hans.lproj/InfoPlist.strings`. It is declared in the **main app only**; the
-Share extension declares none of it and has no `.lproj` folder, because it
-copies what the user shared into the App Group and opens no camera — and iOS
-attributes an extension's prompt to the host app.
+Share extension declares none of it and carries no `InfoPlist.strings` and no
+`.lproj` at its own bundle root, because it copies what the user shared into the
+App Group and opens no camera — and iOS attributes an extension's prompt to the
+host app. The extension does ship `en.lproj`/`zh-Hans.lproj` of
+`Localizable.strings` inside its embedded
+`RelayiumKit_RelayiumShareKit.bundle`; that is its own interface copy, in a
+nested resource bundle iOS never reads a purpose string out of.
 
 ### What now enforces it
 
@@ -1078,8 +1106,20 @@ upload time.
    (`NSCameraUsageDescription`, `NSLocalNetworkUsageDescription`), the built
    `en.lproj` and `zh-Hans.lproj` `InfoPlist.strings` catalogs both reach the
    bundle carrying the exact localized camera sentence, and the built
-   `RelayiumShare.appex` carries no `NSCameraUsageDescription` and no `*.lproj`
-   directory at all.
+   `RelayiumShare.appex` carries no `NSCameraUsageDescription`.
+
+   **Corrected 2026-09-05.** This paragraph previously also claimed the built
+   `RelayiumShare.appex` carried "no `*.lproj` directory at all". That was
+   wrong, and the signed `0.3.1 (5)` archive and export are where it was caught:
+   both copies of the appex carry
+   `RelayiumKit_RelayiumShareKit.bundle/en.lproj` and
+   `.../zh-Hans.lproj`, each holding `Localizable.strings`. The original
+   observation was true of the appex *root* and was written as if it covered
+   every depth. What the appex has never carried, and what the check now reads
+   for directly, is an `InfoPlist.strings` at any depth or a `.lproj` at its own
+   bundle root — read in the archive's copy of the extension and again in the
+   export's, so the claim about *both* signed copies is one the script actually
+   makes rather than one the operator carries over from a single read.
 
    Symbols: the readback **was** re-run for this batch, against
    `Build/Products/Release-iphoneos/Relayium.app`, with these results:
