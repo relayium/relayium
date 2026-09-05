@@ -33,10 +33,17 @@ import RelayiumKit
 /// them would end a live DataChannel, drop a sandbox extension mid-read, or take
 /// this device off the roster, on a tab switch.
 ///
-/// **And it adds no capability.** No local-network usage description, no Bonjour
-/// service, no multicast entitlement, no background mode and no notification: an
-/// inbound session brings this tab forward in app, because the app is in the
-/// foreground or the session does not exist.
+/// **It adds one declaration, and it is about the transfer rather than this
+/// screen.** Reading the roster needs nothing: the list above comes from the
+/// rendezvous room over ordinary internet access, so no Bonjour service and no
+/// multicast entitlement appear anywhere. Connecting to the device the user
+/// picks is the part iOS gates — the session is built with
+/// `iceTransportPolicy = .all` and routinely settles on the peer's address on
+/// this subnet — so `Info.plist` declares `NSLocalNetworkUsageDescription` and
+/// iOS asks once, at the first connection rather than on arriving here. There is
+/// still no background mode and no notification: an inbound session brings this
+/// tab forward in app, because the app is in the foreground or the session does
+/// not exist.
 ///
 /// ## Two products behind one roster, chosen by the peer
 ///
@@ -206,7 +213,7 @@ struct NearbyView: View {
         SectionCard(L10n.t(.presenceBusyTitle)) {
             Text(L10n.t(.presenceBusyBody))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Button { onShowSession(owner) } label: {
                 Text(L10n.t(.presenceShowIt)).frame(maxWidth: .infinity)
@@ -240,7 +247,7 @@ struct NearbyView: View {
 
         Text(L10n.t(.nearbyNoAccountNeeded))
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Palette.supportingLabel)
             .fixedSize(horizontal: false, vertical: true)
 
         verificationSetting
@@ -320,7 +327,7 @@ struct NearbyView: View {
             DisclosureGroup(isExpanded: $showsMechanism) {
                 Text(L10n.t(.nearbyExplain))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, Metrics.hairline)
@@ -333,7 +340,15 @@ struct NearbyView: View {
             // but it is not THE control: drawn in the accent it read as loud as
             // the task below it, which is the one thing the accent is for. The
             // chevron still says it opens.
-            .tint(Color.secondary)
+            //
+            // The role rather than the system grey, because `.tint` on a
+            // `DisclosureGroup` colours the LABEL as well as the chevron — so
+            // "How this list works" was being drawn in `Color.secondary` with no
+            // `.foregroundStyle` anywhere near it to say so. A source audit
+            // classified this as a control tint and was wrong; the Light system
+            // audit rendered it and reported the sentence. Grey is preserved,
+            // legibility is added, and the chevron comes along at 4.61:1.
+            .tint(Palette.supportingLabel)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -372,7 +387,7 @@ struct NearbyView: View {
             // contradiction of that decision; hiding it would be.
             Text(L10n.t(isListening ? .nearbyListeningBody : .nearbyPausedBody))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             if isListening {
                 // Where an unsolicited file lands, and it is the place this
@@ -383,17 +398,17 @@ struct NearbyView: View {
                 // about delivery, so it is made only while delivery can happen.
                 Text(L10n.t(.nearbySavedToAppFolder))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
             switch receive.state {
             case .paused:
                 Button(L10n.t(.nearbyResumeReceiving)) { residency.resume() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
             case .connecting, .ready, .reconnecting, .active:
                 Button(L10n.t(.nearbyPauseReceiving)) { residency.pause() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
                     .disabled(busy)
             case .off:
@@ -453,6 +468,7 @@ struct NearbyView: View {
                     Text(summary).font(.subheadline.weight(.semibold))
                     Spacer(minLength: 0)
                     Button(L10n.t(.commonClear)) { selection.clear() }
+                        .textAction()
                         .disabled(busy)
                 }
                 // One element, so VoiceOver reads "3 files" rather than
@@ -479,7 +495,7 @@ struct NearbyView: View {
                 Button { isChoosingFiles = true } label: {
                     Text(L10n.t(.commonChooseFilesOrFolders)).frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
                 .disabled(busy)
             }
@@ -510,7 +526,7 @@ struct NearbyView: View {
                     }
                     Text(L10n.t(.nearbyNamesDisclaimer))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.supportingLabel)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .accessibilityElement(children: .contain)
@@ -522,7 +538,7 @@ struct NearbyView: View {
             // again" belongs here rather than beside the pause control, which
             // is about a different decision.
             Button(L10n.t(.nearbyLookAgain)) { residency.refresh() }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
                 .disabled(busy)
         }
@@ -537,8 +553,16 @@ struct NearbyView: View {
             if selected { discovery.clearSelection() } else { discovery.select(device.id) }
         } label: {
             HStack(spacing: Metrics.inner) {
+                // `actionLabel`, not `action`. This glyph is the FIRST carrier
+                // of "this is the one you chose", and it sits on
+                // `Palette.actionSurface` — the accent as a foreground on a
+                // wash of itself, which is the pair a real screenshot measured
+                // at 2.70:1 against the 3:1 a meaningful non-text graphic owes.
+                // The label role clears it at 6.7:1 and is unchanged in Light.
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selected ? Palette.action : Color.secondary)
+                    // secondary-role: selection-state — the UNSELECTED checkbox. Non-text, and
+                    // selection is also carried by the filled/hollow shape, not colour alone.
+                    .foregroundStyle(selected ? Palette.actionLabel : Color.secondary)
                 // The peer's own name, already stripped of control and bidi
                 // characters by `safeDisplayName`.
                 Text(device.label)
@@ -591,7 +615,7 @@ struct NearbyView: View {
             // a human gate that is not there.
             Text(L10n.t(.nearbyAcceptanceNote))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -601,7 +625,7 @@ struct NearbyView: View {
     private func linkActions(for device: NearbyDevice) -> some View {
         Text(L10n.t(.linkConnectToDeviceHint))
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Palette.supportingLabel)
             .fixedSize(horizontal: false, vertical: true)
         Button { connectLink(to: device) } label: {
             Text(L10n.t(.linkConnectToDevice)).frame(maxWidth: .infinity)
@@ -614,7 +638,7 @@ struct NearbyView: View {
             // being sent now, and it is not being dropped either.
             Text(L10n.t(.linkConnectCarriesStagedFiles))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
         // `actionError` is NOT rendered here: `sendTask` already draws it once,
@@ -630,7 +654,7 @@ struct NearbyView: View {
                 Text(selection.summary.map { L10n.t(.nearbySelectionSendHint, [$0]) }
                      ?? L10n.t(.nearbyAddFilesHint))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 Button { sendFiles() } label: {
                     Text(L10n.t(.commonSend)).frame(maxWidth: .infinity)
@@ -641,7 +665,7 @@ struct NearbyView: View {
             case .text:
                 Text(L10n.t(.nearbyTextIntent))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 Button { startText() } label: {
                     Text(L10n.t(.nearbyStartMessageSession)).frame(maxWidth: .infinity)
@@ -670,7 +694,7 @@ struct NearbyView: View {
             }
             if hasRetainedSession && !busy {
                 Button(L10n.t(.nearbyBackToDevices)) { leaveOrConfirm() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
                 if modes.mode == .text {
                     // Says so rather than surprising: leaving is the one action
@@ -678,7 +702,7 @@ struct NearbyView: View {
                     // still showing.
                     Text(L10n.t(.nearbyLeavingClearsHistory))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.supportingLabel)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -694,7 +718,7 @@ struct NearbyView: View {
                     .font(.headline)
                 Text(L10n.t(.nearbySessionPeerDisclaimer))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -720,11 +744,11 @@ struct NearbyView: View {
                 .disabled(isLocked)
             Text(L10n.t(.verifyExplainWhat))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Text(L10n.t(.verifyExplainEncryption))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -735,6 +759,7 @@ struct NearbyView: View {
         VStack(alignment: .leading, spacing: Metrics.tight) {
             failureLine(notice)
             Button(L10n.t(.commonDismiss)) { foreground.dismissInterruption() }
+                .textAction()
         }
     }
 

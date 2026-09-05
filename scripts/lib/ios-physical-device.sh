@@ -237,9 +237,19 @@ ios_peer_name_mode() {
 
 # One published fact, or a refusal. Never a default and never a retry.
 #
-#   ios_published <channel.py> <log> <tag> <role> <event>
+# The optional sixth argument selects the marker vocabulary the channel reads —
+# `RELAYIUM-DEVICE-INBOX` for the Device Inbox harness. Absent, the channel's
+# own default (the pair harness's marker) applies, so every existing caller is
+# unchanged. The channel refuses a marker it does not define.
+#
+#   ios_published <channel.py> <log> <tag> <role> <event> [marker]
 ios_published() {
-  python3 "$1" extract --log "$2" --tag "$3" --role "$4" --event "$5"
+  if [ -n "${6:-}" ]; then
+    python3 "$1" extract --log "$2" --tag "$3" --role "$4" --event "$5" \
+      --marker "$6"
+  else
+    python3 "$1" extract --log "$2" --tag "$3" --role "$4" --event "$5"
+  fi
 }
 
 # ── waiting for ONE published fact, while its publisher is still alive ───────
@@ -268,13 +278,16 @@ ios_published() {
 #   1  the publisher exited first — it will never publish, so do not wait
 #   2  the budget was exhausted while it was still alive
 #
-#   ios_await_event <channel.py> <log> <tag> <role> <event> <pid> <limit>
+# The optional eighth argument is the marker vocabulary, exactly as
+# `ios_published` takes it; absent, the channel's default applies.
+#
+#   ios_await_event <channel.py> <log> <tag> <role> <event> <pid> <limit> [marker]
 ios_await_event() {
   local channel="$1" log="$2" tag="$3" role="$4" event="$5"
-  local publisher_pid="$6" limit="$7"
+  local publisher_pid="$6" limit="$7" marker="${8:-}"
   local value="" waited=0
   while [ "$waited" -lt "$limit" ]; do
-    if value="$(ios_published "$channel" "$log" "$tag" "$role" "$event" 2>/dev/null)" \
+    if value="$(ios_published "$channel" "$log" "$tag" "$role" "$event" "$marker" 2>/dev/null)" \
        && [ -n "$value" ]; then
       say "-- $role published $event after ${waited}s"
       printf '%s' "$value"

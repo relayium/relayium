@@ -104,6 +104,7 @@
 "tab.send" = "发送";
 "tab.account" = "账户";
 "tab.direct" = "直连";
+"tab.deviceInbox" = "收件箱";
 
 /* MARK: 导航侧栏 */
 "nav.sectionDirect" = "直连";
@@ -119,6 +120,7 @@
 "nav.storedSendSubtitle" = "大文件，稍后再取——需登录，受套餐限制";
 "nav.storedReceive" = "打开链接";
 "nav.deviceInboxSubtitle" = "来自你自己账户的文件会送到你选定的文件夹——需要登录；关闭窗口也能接收";
+"nav.iosDeviceInboxSubtitle" = "来自你自己设备的文件和消息，保存在 Relayium 内——需要登录；仅在 Relayium 打开时接收";
 "nav.account" = "账户";
 "nav.accountSubtitle" = "套餐、设备与已存文件";
 "nav.a11ySections" = "Relayium 功能页";
@@ -182,6 +184,20 @@
 "direct.waitingForDevice" = "正在等待对方设备…";
 "direct.chooseFilesFirst" = "请先选择要发送的文件或文件夹。";
 "direct.joinNoAccountNeeded" = "加入别人创建的配对码不需要账户。";
+"pairing.scanCode" = "扫描二维码";
+"pairing.scanTitle" = "扫描加入码";
+"pairing.scanHint" = "把摄像头对准对方设备上显示的加入码。";
+"pairing.scanViewfinderLabel" = "用于读取对方设备加入码的摄像头取景框";
+"pairing.scanRequesting" = "正在等待摄像头权限…";
+"pairing.scanDeniedTitle" = "摄像头权限未开启";
+"pairing.scanDeniedBody" = "Relayium 靠摄像头读取加入码，而本应用目前没有摄像头权限。你可以在「设置」里允许，也可以直接输入那六位数字。";
+"pairing.scanRestrictedBody" = "本设备不允许使用摄像头，因此这里无法读取加入码。请直接输入那六位数字。";
+"pairing.scanUnavailableTitle" = "这里无法扫码";
+"pairing.scanUnavailableBody" = "本设备没有 Relayium 可用的摄像头。请直接输入那六位数字。";
+"pairing.scanFailedBody" = "摄像头没能启动。请直接输入那六位数字。";
+"pairing.scanOpenSettings" = "打开「设置」";
+"pairing.scanRejected" = "这不是 Relayium 的加入码。已输入的内容没有被改动——可以换一个码对准，或者直接输入那六位数字。";
+"pairing.scanFilled" = "已把扫到的加入码填入。请核对后再选择「加入」。";
 "direct.modeMatchHint" = "请选择与发送方发起内容相符的「文件」或「文本」。配对码本身不包含类型信息。";
 "direct.largeFilesTitle" = "要发送大文件？";
 "direct.largeFilesBody" = "直连传输只在两台设备都开着 Relayium 时进行，所以大文件走这条路可能更慢，任何一端关掉应用都要从头再来。“发送”改为存放加密后的文件，对方随时都能取。";
@@ -619,6 +635,26 @@
 "inbox.composeHeading" = "发送到这台设备";
 "inbox.composeUnavailable" = "这台 Mac 无法向该设备发送内容，因此这里只显示它的历史记录。";
 "inbox.sentMessageMissing" = "这台 Mac 已不再保存这条消息的正文。";
+
+/* MARK: 设备收件箱在 iPhone 和 iPad 上的行为 */
+"inbox.iosExplain" = "你的其他 Relayium 设备可以把文件和消息直接发到这台设备。这里无需选择文件夹：收到的内容都保存在 Relayium 内，可在“文件”App 中打开。Relayium 永远看不到其中的内容。";
+"inbox.iosSignedOutBody" = "设备收件箱接收的是从你自己账户发来的文件和消息，因此需要你在这台设备上登录。";
+"inbox.iosPolicyExplain" = "“每次询问”会先保留每次投递，等你在这里同意后再保存。“自动接收”则一到达就保存。无论选哪种，都只有在 Relayium 打开时才会收到。";
+"inbox.iosForegroundOnly" = "Relayium 只在这台设备上打开时才接收。它不会在后台接收，也不会给你发送通知——所以在 Relayium 关闭时发来的文件，会在你下次打开它时才到达。";
+"inbox.iosFolderExplain" = "发到这台设备的文件保存在 %@，可在“文件”App 中打开。已有文件永远不会被覆盖。";
+"inbox.iosFolderAccessDenied" = "Relayium 目前无法使用自己的接收文件夹。请重试；如果反复出现，请重新启动 Relayium。";
+"inbox.iosFolderUnresolvable" = "无法打开 Relayium 的接收文件夹。可能有一个同名的非文件夹项目占用了它——请在“文件”App 中查看 Relayium。";
+"inbox.iosFolderNotWritable" = "Relayium 目前无法写入自己的接收文件夹。请检查这台设备是否还有可用空间，然后重试。";
+"inbox.iosBlockedPermission" = "有一项投递中断了，因为 Relayium 无法写入自己的接收文件夹。请重试；如果反复出现，请重新启动 Relayium。";
+"inbox.iosBlockedDirectory" = "有一项投递中断了，因为 Relayium 的接收文件夹当时不可用。请重试。";
+"inbox.iosBlockedNameConflict" = "有一项投递因文件名无法安全使用而中断。请在“文件”App 中打开 Relayium，整理 Received 文件夹后重试。";
+"inbox.iosBlockedDecrypt" = "有一项投递无法用这台设备的密钥解密。请让发送方重新发送。";
+"inbox.iosBlockedInternal" = "有一项投递因 Relayium 无法判定的原因而停止，未保存任何文件。";
+"inbox.iosFailedEnrolment" = "Relayium 无法将这台设备设置为接收设备。更新到最新版本或可解决。";
+"inbox.iosFailedKey" = "这台设备的接收密钥不可用，因此无法解密任何内容。请解锁设备后重新打开 Relayium 再试。";
+"inbox.iosFailedIdentity" = "这台设备的登录已不再被接受。请重新登录以继续接收。";
+"inbox.iosConversationsEmpty" = "还没有内容发到这台设备。可以从登录同一账户的其他设备发送，或在下面打开一台设备并向它发送。";
+"inbox.iosOpenConversation" = "打开与 %@ 的会话";
 "inbox.sentStateStaged" = "已在这台 Mac 上准备好，尚未发出";
 "inbox.sentStateSending" = "正在从这台 Mac 发送";
 "inbox.sentStateCreated" = "等待对方设备接收";

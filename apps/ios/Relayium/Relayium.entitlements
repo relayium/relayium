@@ -40,17 +40,36 @@
      association cannot widen what the app will act on.
 
      Associated Domains needs two more things a SIGNED build supplies: the
-     com.relayium.app App ID carrying that capability, and relayium.com serving
-     an `apple-app-site-association` that names `7PVYUG4YQS.com.relayium.app`
+     com.relayium.mac App ID carrying that capability, and relayium.com serving
+     an `apple-app-site-association` that names `7PVYUG4YQS.com.relayium.mac`
      under `applinks` — which `web/public/.well-known/apple-app-site-association`
-     now does, alongside the Mac app. Neither is proved by a simulator build: the
-     association is fetched and verified by the OS at install time, so link
-     routing is on the list of things that still need a real device.
+     already does, because that identifier is the Mac app's and this app now
+     shares it. Neither is proved by a simulator build: the association is
+     fetched and verified by the OS at install time, so link routing is on the
+     list of things that still need a real device.
 
-     A SIGNED build additionally needs the com.relayium.app App ID to carry the
-     Sign in with Apple capability in its provisioning profile, and the server's
-     RELAYIUM_APPLE_CLIENT_IDS to include com.relayium.app. Neither is something
-     this file can establish, and neither is proved by a simulator build.
+     The identifier changed under this comment and the site file did not, which
+     is worth being exact about. iOS moved onto the macOS bundle id so both
+     platforms sit in ONE universal-purchase App Store record, which Apple
+     requires to share a single Bundle ID. `7PVYUG4YQS.com.relayium.mac` was
+     already in the `applinks` list for the Mac app, so this app's routing is
+     covered by an entry that predates the migration. The list ALSO still names
+     `7PVYUG4YQS.com.relayium.app`, and that entry is deliberately left alone:
+     development builds carrying the old identifier are installed on real
+     devices, and removing it would break their link routing for no gain. It is
+     backward compatibility, not a second shipping app.
+
+     A SIGNED build additionally needs the com.relayium.mac App ID to carry the
+     Sign in with Apple capability in the iOS provisioning profile it is signed
+     with. The App ID itself already carries the capability — it was enabled for
+     macOS — but a capability on an App ID and a capability inside the profile a
+     binary embeds are two different facts, and only the second travels with an
+     install. The SERVER half is already in place and needs no change: a fresh
+     read-only production check on 2026-09-03 found RELAYIUM_APPLE_CLIENT_IDS
+     admitting com.relayium.mac alongside com.relayium.app and the web Services
+     ID, and the native route refuses the Services ID audience on its own terms.
+     None of that is something this file can establish, and none of it is proved
+     by a simulator build.
 
      The bearer token and the stored-link keys still live in this app's OWN
      default per-app keychain access group — the one every app gets — which is
@@ -68,7 +87,30 @@
      the user shared into that container and this app reads it back; a group is
      the only way two processes in one app can share a directory at all.
 
-     It arrives ALONE, and the pairing an earlier version of this comment
+     The group kept its name when the bundle identifiers changed, and that is
+     deliberate rather than an oversight. An App Group identifier is a
+     registered container, not a derivative of the bundle id: it is provisioned
+     on its own, it is what the portal already authorizes for BOTH this app and
+     `com.relayium.mac.ShareIOS`, and renaming it would strand every draft an
+     installed build has already staged. `group.com.relayium.app` is therefore a
+     live identity that outlived the record migration, and `AppGroup.swift` is
+     unchanged by it. The same is true one layer up, with one distinction worth
+     stating precisely: `AppEnvironment`'s iOS keychain SERVICE label is still
+     `com.relayium.app`. A service label is a lookup key, not a signed
+     capability, and keeping it is continuity with the `com.relayium.mac`
+     iOS/TestFlight lineage — the installs that already wrote their items under
+     the shared bundle id — and with the existing code and tests that name it.
+     What it is NOT is a migration from the retired identity. Moving the main
+     bundle from `com.relayium.app` to `com.relayium.mac` moves this app's
+     IMPLICIT DEFAULT keychain access group with it, from
+     `7PVYUG4YQS.com.relayium.app` to `7PVYUG4YQS.com.relayium.mac`, so items a
+     separately installed `com.relayium.app` development app wrote are neither
+     carried over nor exposed here: a matching service label does not reach
+     across access groups. That is the correct outcome, and reaching them would
+     require an explicit `keychain-access-groups` entitlement that this file
+     deliberately does not add.
+
+     The App Group arrives ALONE, and the pairing an earlier version of this comment
      predicted — an App Group plus a shared keychain group — turned out to be
      wrong by one. The extension holds no credential and mints no key: it stages
      plaintext copies and stops. The content key for a shared draft is generated
@@ -86,15 +128,37 @@
      Still absent, each with the slice that would earn it: background modes
      (transfers surviving suspension), push, IAP.
 
-     Local network is NOT on that list, and R3-E's version of this comment was
-     wrong to put it there. Relayium's nearby feature is not Bonjour and does
-     not scan: it joins the service's code-less rendezvous room over the same
-     origin as everything else, and the server groups that room by the public IP
-     it observes. R3-F therefore shipped the whole Nearby tab — roster, explicit
-     send and unsolicited receive — without adding any entitlement, any
-     NSLocalNetworkUsageDescription, any NSBonjourServices or the multicast
-     entitlement. Asking for local-network access would be a permission prompt
-     for something this app does not do. -->
+     Local network is still not on that list, but the reason is narrower than
+     two earlier versions of this comment claimed, and getting it wrong cost a
+     working feature.
+
+     What remains true is the DISCOVERY half. Relayium's nearby roster is not
+     Bonjour and does not scan: it joins the service's code-less rendezvous room
+     over the same origin as everything else, and the server groups that room by
+     the public IP it observes. Nothing about that needs NSBonjourServices, and
+     nothing about it needs the multicast entitlement — so both stay absent, and
+     declaring either would still be asking for machinery this app does not use.
+
+     What was WRONG was extending that to the transfer. Once the user picks a
+     device, every realtime lane builds its peer connection with
+     iceTransportPolicy = .all, so the pair iOS actually settles on is routinely
+     a unicast socket to the peer's address on this subnet — and iOS 14 and
+     later gate that behind Local Network access. R3-F shipped the Nearby tab
+     with no NSLocalNetworkUsageDescription on the strength of the discovery
+     argument alone, which made the local path fail rather than prompt: retained
+     physical runs 0af36138 and 56e78dbf recorded iOS/iPadOS 26 withholding the
+     prompt entirely while iPadOS 18 masked the omission.
+
+     The correction is a purpose string, and it lives in Info.plist rather than
+     here, which is the whole reason this file is unchanged by it. Local Network
+     is a user-consented protected resource, not a signed capability: an app
+     declares WHY it wants one and the system asks the user. NSBonjourServices
+     and com.apple.developer.networking.multicast are the entitlement-shaped
+     neighbours of that key, and they are for browsing and for multicast/
+     broadcast traffic respectively — neither of which this app sends. So the
+     three entitlements below are still exactly the three this app has earned,
+     and IOSLocalNetworkPermissionTests is what holds that line from the other
+     side: purpose string present, discovery machinery absent. -->
 <dict>
 	<key>com.apple.developer.applesignin</key>
 	<array>

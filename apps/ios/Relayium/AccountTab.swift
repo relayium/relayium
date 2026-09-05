@@ -83,6 +83,7 @@ struct AccountTab: View {
                     // control here would look like a second first move.
                     Button(L10n.t(.commonSignOut)) { Task { await session.logOut() } }
                         .font(.callout)
+                        .textAction()
                 }
 
             case let .ready(user, usage):
@@ -112,7 +113,7 @@ struct AccountTab: View {
             // The address is the user's own: isolated, not translated.
             Text(L10n.t(.contentCheckEmailBody, [L10n.token(email)]))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
 
             switch session.resendState {
@@ -145,6 +146,7 @@ struct AccountTab: View {
 
             Button(L10n.t(.contentBackToSignIn)) { Task { await session.logOut() } }
                 .font(.callout)
+                .textAction()
         }
     }
 
@@ -170,6 +172,7 @@ struct AccountTab: View {
             .controlSize(.large)
             Button(L10n.t(.contentBackToSignIn)) { Task { await session.logOut() } }
                 .font(.callout)
+                .textAction()
         }
     }
 }

@@ -105,6 +105,7 @@ struct AccountSummaryView: View {
                     InlineMessage(.warning, cleanupWarning)
                     Button(L10n.t(.commonDismiss)) { management.dismissKeyCleanupWarning() }
                         .font(.callout)
+                        .textAction()
                 }
             }
 
@@ -253,7 +254,7 @@ struct AccountSummaryView: View {
             if !user.displayName.isEmpty {
                 Text(user.email)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -278,13 +279,14 @@ struct AccountSummaryView: View {
             if IOSAppleSubscriptions.channel.showsWebPlanHandoff {
                 Button(L10n.t(.accountManagePlan)) { openURL(AppEnvironment.plansWebURL) }
                     .font(.callout)
+                    .textAction()
             }
 
             meter(L10n.t(.accountTraffic), UsagePresentation.display(usage.traffic))
             meter(L10n.t(.accountStorage), UsagePresentation.display(usage.storage))
 
             Text(UsagePresentation.resetText(resetsAt: usage.resetsAt, now: Date()))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
 
             // The figures above are the last ones that arrived, not the current
@@ -326,7 +328,7 @@ struct AccountSummaryView: View {
         SectionCard(L10n.t(.accountDevicesHeading)) {
             // Browsers are left out on purpose — see AccountDevice.holdsRevocableToken.
             Text(L10n.t(.accountDevicesBody))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
 
             // A refresh must never replace a usable list with a spinner, which
@@ -370,7 +372,7 @@ struct AccountSummaryView: View {
             Text(AccountPresentation.deviceDetail(kind: device.kind,
                                                   lastSeenAt: device.lastSeenAt,
                                                   createdAt: device.createdAt))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
 
             // Only the row being changed is disabled: a slow revoke on one
@@ -383,7 +385,7 @@ struct AccountSummaryView: View {
             // belongs to this row, and a full-width destructive button on every
             // device would read as the screen's primary action repeated.
             Button(L10n.t(.commonRevoke), role: .destructive) { deviceToRevoke = device }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
                 .disabled(management.isBusy(row: device.id))
                 // The visible label is one word on every row, which is right to
@@ -408,7 +410,7 @@ struct AccountSummaryView: View {
     private var filesSection: some View {
         SectionCard(L10n.t(.accountFilesHeading)) {
             Text(L10n.t(.accountFilesBody))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
 
             if management.isLoading && management.files.isEmpty {
@@ -435,7 +437,7 @@ struct AccountSummaryView: View {
                 .font(.caption.monospaced()).textSelection(.enabled)
                 .lineLimit(2).truncationMode(.middle)
             Text(AccountPresentation.fileDetail(row.file))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
 
             // Which of the three states this row is in is decided in
@@ -471,7 +473,7 @@ struct AccountSummaryView: View {
                         }
                     }
                 }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
             case .unavailable(let explanation):
                 // The honest version of a disabled button: the key was only ever
@@ -487,7 +489,7 @@ struct AccountSummaryView: View {
             }
 
             Button(L10n.t(.commonDelete), role: .destructive) { fileToDelete = row.file }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
                 .disabled(management.isBusy(row: row.id))
                 .accessibilityLabel(AccountPresentation.deleteActionLabel(fileId: row.file.id))
@@ -543,7 +545,7 @@ struct AccountSummaryView: View {
             Button { refresh() } label: {
                 Text(L10n.t(.commonRefresh)).frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .borderedAction()
             .controlSize(.large)
             // Handed to the coordinator rather than performed here. Doing it
             // here would be a second logout path racing the self-revoke one, and
@@ -551,7 +553,7 @@ struct AccountSummaryView: View {
             Button(role: .destructive) { signOut.signOut(scope: scope) } label: {
                 Text(L10n.t(.commonSignOut)).frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .borderedAction(.destructive)
             .controlSize(.large)
         }
     }
@@ -572,7 +574,7 @@ struct AccountSummaryView: View {
         SectionCard(L10n.t(.accountDeleteAccountHeading)) {
             // The address is the user's own: isolated, never translated.
             Text(L10n.t(.accountDeleteAccountBody, [L10n.token(user.email)]))
-                .font(.callout).foregroundStyle(.secondary)
+                .font(.callout).foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
 
             Link(L10n.t(.subscriptionManage), destination: URL(string: "https://apps.apple.com/account/subscriptions")!)
@@ -609,7 +611,7 @@ struct AccountSummaryView: View {
                 Button(L10n.t(.accountDeleteAccount), role: .destructive) {
                     confirmingAccountDeletion = true
                 }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
             }
         }
@@ -638,7 +640,7 @@ struct AccountSummaryView: View {
         VStack(alignment: .leading, spacing: Metrics.hairline) {
             Text(title).font(.subheadline)
             Text(L10n.t(.accountMeterOf, [display.usedText, display.capText]))
-                .font(.subheadline).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(Palette.supportingLabel)
             // No bar when unlimited: there is no ratio to draw.
             if let fraction = display.fraction {
                 ProgressView(value: fraction)

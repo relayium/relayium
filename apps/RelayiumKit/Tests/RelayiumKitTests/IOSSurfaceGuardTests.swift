@@ -106,10 +106,57 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "nothing empties the receive folder, so the completion path "
                       + "passes once per simulator and then fails on its own leftovers")
 
+        // The acceptance launch may choose the destination it opens on, and
+        // nothing else — and only in Debug. Starting a shipped launch on a
+        // screen the user did not ask for is the failure mode this seam has to
+        // be incapable of.
+        XCTAssertTrue(debugHalf.contains("--relayium-ui-testing-open-stored-link"),
+                      "the stored-link entry seam is not in the Debug half")
+        XCTAssertTrue(releaseHalf.contains(
+            "static func initialDestination() -> AppDestination? { nil }"),
+            "a shipped launch can be started on a destination by launch argument")
+        XCTAssertTrue(app.contains("UITestMode.initialDestination() ?? IOSSurface.browseable[0].route"),
+                      "the launch destination no longer falls back to the product's "
+                      + "own first browseable surface")
+
+        // **The runtime smoke enumerates the product's own destination list.**
+        //
+        // This used to pin five literal tab names, one of which was `Receive` —
+        // a tab 0.3.0 deliberately stopped drawing, because a stored link is
+        // presented rather than browsed to. The pin went stale silently: it
+        // passed, because the stale literals were still sitting in the test
+        // source it read, while the suite those literals belonged to failed at
+        // runtime waiting twenty seconds for a tab the product no longer had. A
+        // guard whose expectations are a copy of the thing it guards can only
+        // ever confirm that nobody edited the copy.
+        //
+        // Derived from `IOSSurface.browseable` instead, so adding a destination
+        // to the product — or removing one — fails here until the acceptance
+        // target's own list follows it.
+        let nav = try RepoRoot.text("apps/ios/RelayiumUITests/AppShellNavigation.swift")
+        for surface in IOSSurface.browseable {
+            XCTAssertTrue(nav.contains("id: \"\(surface.rawValue)\""),
+                          "the acceptance navigation driver omits \(surface.rawValue)")
+        }
+        XCTAssertEqual(nav.components(separatedBy: "Surface(id:").count - 1,
+                       IOSSurface.browseable.count,
+                       "the acceptance navigation driver names a destination the "
+                       + "product does not offer as a row")
+
         let ui = try RepoRoot.text("apps/ios/RelayiumUITests/AppShellUITests.swift")
-        for task in ["Receive", "Send", "Direct", "Nearby", "Account"] {
-            XCTAssertTrue(ui.contains("(tab: \"\(task)\""),
-                          "the runtime smoke omits \(task)")
+        // And the smoke drives that one list rather than a second copy of it.
+        XCTAssertTrue(ui.contains("for surface in Shell.browseable"),
+                      "the runtime smoke enumerates its own destination list again")
+        // The destination that is NOT a row keeps its runtime evidence. Losing
+        // its tab must not mean losing the screen a stored link arrives through.
+        XCTAssertTrue(ui.contains(
+            "func testTheStoredLinkScreenIsPresentedOverABrowseableDestination()"),
+            "no runtime path drives the presented stored-link screen")
+        // Both shells are driven, and on the device shapes that draw them.
+        for suite in ["apps/ios/RelayiumUITests/DeviceInboxShellUITests.swift",
+                      "apps/ios/RelayiumUITests/AdaptiveShellUITests.swift"] {
+            XCTAssertFalse(try RepoRoot.text(suite).isEmpty,
+                           "the \(suite) acceptance suite is gone")
         }
 
         let scheme = try RepoRoot.text(
@@ -252,24 +299,38 @@ final class IOSSurfaceGuardTests: XCTestCase {
         //    never spread into them. The shared selector may accommodate every
         //    directory Files validly remembers, but must still finish through
         //    the browser fixture helper rather than injecting a selection.
+        let browse = try XCTUnwrap(ui.components(
+            separatedBy: "private func openBrowseInSystemPicker(timeout: TimeInterval = 20)")
+            .dropFirst().first?.components(separatedBy: "\n    /// ").first,
+            "the adaptive system-browser entry helper is gone")
+        XCTAssertTrue(browse.contains("DOC.browsingModeTabBar"),
+                      "the compact Files picker can no longer enter Browse")
+        XCTAssertTrue(browse.contains("DOCSidebarView"),
+                      "the full-width iPad Files picker is no longer recognised")
+        XCTAssertTrue(browse.contains("browsingTabs.buttons[\"Browse\"].tap()"),
+                      "the compact Files picker observes its tab bar but never enters Browse")
+        XCTAssertTrue(browse.contains("if sidebar.exists { return }"),
+                      "the full-width iPad Files picker observes its sidebar but never accepts it")
+
         let selector = try XCTUnwrap(ui.components(
             separatedBy: "private func selectStagedFixture(named stem: String)")
             .dropFirst().first?.components(separatedBy: "\n    /// ").first,
             "the deterministic browser-state selector is gone")
         XCTAssertTrue(selector.contains("tapStagedFixture(named:"),
                       "the browser-state selector no longer chooses the real fixture")
-        XCTAssertTrue(selector.contains("tapInBrowser(\"On My iPhone\")"),
-                      "the browser-state selector cannot enter device storage")
+        XCTAssertTrue(selector.contains("\"On My iPhone\", \"On My iPad\""),
+                      "the browser-state selector cannot enter on-device storage "
+                      + "on both compact and regular-width devices")
         for picker in ["func testPendingSendNamesTheFileAndItsSizeBeforeTransfer()",
                        "func testASignedInStoredSendNamesTheFileItWouldUpload()"] {
             let body = try XCTUnwrap(ui.components(separatedBy: picker)
                 .dropFirst().first?.components(separatedBy: "\n    /// ").first,
                 "the dedicated real-picker test \(picker) is gone")
-            XCTAssertTrue(body.contains("DOC.browsingModeTabBar"),
+            XCTAssertTrue(body.contains("openBrowseInSystemPicker()"),
                           "\(picker) stopped driving the real system document browser")
             XCTAssertTrue(body.contains("selectStagedFixture(named:"),
                           "\(picker) no longer selects the fixture through the browser")
-            XCTAssertFalse(body.contains("--relayium-ui-testing-preselect-fixture"),
+            XCTAssertFalse(body.contains("--relayium-ui-testing-preselect"),
                            "\(picker) was switched to the injection seam, so nothing "
                            + "exercises the picker any more")
         }
@@ -678,7 +739,11 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(mintingBlocks.count, 2)
         for block in mintingBlocks {
             let body = block.components(separatedBy: "case let .showingCode").first ?? ""
-            XCTAssertTrue(body.contains(".buttonStyle(.bordered)"))
+            // `.borderedAction()`, not `.buttonStyle(.bordered)`: outlined rather
+            // than prominent is still the claim, and the ordinary role is now
+            // part of it — a Cancel that abandons a code nobody has yet seen
+            // destroys nothing, so it must not carry the destructive red.
+            XCTAssertTrue(body.contains(".borderedAction()"))
             XCTAssertTrue(body.contains(".controlSize(.large)"))
         }
     }
@@ -707,12 +772,21 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let fileTransfer = try XCTUnwrap(files.components(
             separatedBy: "private func transferring").dropFirst().first?
             .components(separatedBy: "private var completed").first)
+        // Either role, because these two phases legitimately differ: outlined
+        // rather than prominent is what both must be.
         for phase in [fileConnecting, fileTransfer] {
-            XCTAssertTrue(phase.contains(".buttonStyle(.bordered)"))
+            XCTAssertTrue(phase.contains(".borderedAction("))
             XCTAssertTrue(phase.contains(".controlSize(.large)"))
         }
+        XCTAssertTrue(fileConnecting.contains(".borderedAction()"),
+                      "cancelling before a connection exists is not destructive and must "
+                      + "not be drawn as though it were")
         XCTAssertTrue(fileTransfer.contains("role: .destructive"),
                       "cancelling an active write does not communicate its consequence")
+        XCTAssertTrue(fileTransfer.contains(".borderedAction(.destructive)"),
+                      "the button declares the destructive role but the style does not, so "
+                      + "the control keeps the ordinary label colour instead of the system "
+                      + "red the confirmation it opens uses")
 
         let text = try XCTUnwrap(all.first { $0.name == "DirectTextSessionView.swift" }?.text)
         let textConnecting = try XCTUnwrap(text.components(
@@ -725,11 +799,17 @@ final class IOSSurfaceGuardTests: XCTestCase {
             separatedBy: "private func session(").dropFirst().first?
             .components(separatedBy: "private var composer").first)
         for phase in [textConnecting, waiting, open] {
-            XCTAssertTrue(phase.contains(".buttonStyle(.bordered)"))
+            XCTAssertTrue(phase.contains(".borderedAction("))
             XCTAssertTrue(phase.contains(".controlSize(.large)"))
         }
+        XCTAssertTrue(textConnecting.contains(".borderedAction()"),
+                      "cancelling before a connection exists is not destructive")
         for phase in [waiting, open] {
             XCTAssertTrue(phase.contains("role: .destructive"))
+            XCTAssertTrue(phase.contains(".borderedAction(.destructive)"),
+                          "ending a session with a transcript behind it declares the "
+                          + "destructive role on the button; the style has to agree, or the "
+                          + "control is drawn as an ordinary action")
         }
     }
 
@@ -752,7 +832,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let cancel = try XCTUnwrap(showing.components(
             separatedBy: "Button(L10n.t(.commonCancel), action: cancel)").dropFirst().first?
             .components(separatedBy: "}").first)
-        XCTAssertTrue(cancel.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(cancel.contains(".borderedAction()"))
         XCTAssertTrue(cancel.contains(".controlSize(.large)"))
     }
 
@@ -809,7 +889,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
             .components(separatedBy: "case .preparing:").first)
         XCTAssertTrue(checking.contains("ProgressView { Text(L10n.t(.uploadCheckingRecovery)) }"))
         XCTAssertTrue(checking.contains("Button(L10n.t(.commonCancel)) { upload.cancel() }"))
-        XCTAssertTrue(checking.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(checking.contains(".borderedAction()"))
         XCTAssertTrue(checking.contains(".controlSize(.large)"))
     }
 
@@ -829,12 +909,12 @@ final class IOSSurfaceGuardTests: XCTestCase {
             separatedBy: "private func linkReady(").dropFirst().first?
             .components(separatedBy: "private func failure").first)
         for phase in [preparing, restarting, uploading] {
-            XCTAssertTrue(phase.contains(".buttonStyle(.bordered)"))
+            XCTAssertTrue(phase.contains(".borderedAction("))
             XCTAssertTrue(phase.contains(".controlSize(.large)"))
         }
         let sendAnother = try XCTUnwrap(completed.components(
             separatedBy: "Button(L10n.t(.uploadSendAnother))").dropFirst().first)
-        XCTAssertTrue(sendAnother.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(sendAnother.contains(".borderedAction()"))
         XCTAssertTrue(sendAnother.contains(".controlSize(.large)"))
         XCTAssertTrue(completed.contains("Text(link)"))
         XCTAssertTrue(completed.contains(".fixedSize(horizontal: false, vertical: true)"))
@@ -851,7 +931,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let cancel = try XCTUnwrap(receive.components(
             separatedBy: "private var cancelButton:").dropFirst().first?
             .components(separatedBy: "// MARK: - actions").first)
-        XCTAssertTrue(cancel.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(cancel.contains(".borderedAction()"))
         XCTAssertTrue(cancel.contains(".controlSize(.large)"))
     }
 
@@ -1128,6 +1208,76 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "the batch state words must be the shared ones")
     }
 
+    /// **The link transcript observes the conversation model itself.**
+    ///
+    /// `LinkWorkspaceModel` does not forward `LinkSessionPresentationModel`'s
+    /// `objectWillChange`, so a transcript that read `textMessages` only
+    /// through the parent would compile, draw once, and never hear an inbound
+    /// message. The transcript and its empty line must therefore live in a
+    /// child view holding the presentation model as `@ObservedObject`, so an
+    /// arriving message invalidates that subtree directly.
+    func testTheLinkTranscriptObservesThePresentationModelDirectly() throws {
+        let view = try code(at: try iosRoot.appendingPathComponent("NearbyLinkWorkspaceView.swift"))
+        let parts = view.components(separatedBy: "struct LinkConversationTranscript")
+        XCTAssertEqual(parts.count, 2,
+                       "the transcript must live in exactly one child view")
+        let child = parts[1]
+        XCTAssertTrue(child.contains("@ObservedObject var text: LinkSessionPresentationModel"),
+                      "the child must observe LinkSessionPresentationModel itself")
+        XCTAssertTrue(child.contains("ForEach(text.textMessages)"),
+                      "the message loop must read the model the child observes")
+        XCTAssertTrue(child.contains(".linkConversationEmpty"),
+                      "the empty state must invalidate with the same observation")
+        XCTAssertFalse(parts[0].contains("ForEach(text.textMessages)"),
+                       "the parent renders the transcript only through the observing child")
+        XCTAssertTrue(parts[0].contains("LinkConversationTranscript(text: text)"),
+                      "the workspace must render the transcript through the child")
+    }
+
+    /// **The transfer list observes the file model itself.**
+    ///
+    /// The same boundary as the transcript, on the other lane: `fileModel` is
+    /// reached through `LinkWorkspaceModel`, which does not forward
+    /// `LinkFilePresentationModel`'s `objectWillChange`. A batch list read
+    /// through the parent compiles and then never repaints, so an accepted
+    /// inbound batch keeps reading `Waiting for you to accept` and a sent one
+    /// keeps reading `Queued`. The whole section — the card, the rows, the
+    /// state words, the accept/reject/cancel controls and the received-file
+    /// share — must therefore live in a child holding the file model as
+    /// `@ObservedObject`, and the card's own emptiness test must be asked
+    /// there too, because `batches` becoming non-empty is itself a change the
+    /// parent never hears.
+    func testTheLinkTransferListObservesTheFileModelDirectly() throws {
+        let view = try code(at: try iosRoot.appendingPathComponent("NearbyLinkWorkspaceView.swift"))
+        let parts = view.components(separatedBy: "struct LinkTransfersSection")
+        XCTAssertEqual(parts.count, 2,
+                       "the transfer list must live in exactly one child view")
+        let child = parts[1]
+        XCTAssertTrue(child.contains("@ObservedObject var files: LinkFilePresentationModel"),
+                      "the child must observe LinkFilePresentationModel itself")
+        XCTAssertTrue(child.contains("ForEach(files.batches)"),
+                      "the batch loop must read the model the child observes")
+        XCTAssertTrue(child.contains("!files.batches.isEmpty || !link.armedFiles.isEmpty"),
+                      "the card's visibility must be decided under the same observation")
+        for control in ["LinkBatchCopy.text(for: batch.state)",
+                        "link.acceptInboundBatch()",
+                        "link.rejectInboundBatch()",
+                        "link.cancelQueuedBatch(batch.id)",
+                        "link.cancelOutboundBatch()",
+                        "ShareLink(items: payload.dragURLs)"] {
+            XCTAssertTrue(child.contains(control),
+                          "\(control) must repaint with the batch it belongs to")
+            XCTAssertFalse(parts[0].contains(control),
+                           "\(control) must not be drawn through the parent")
+        }
+        XCTAssertTrue(child.contains("@ObservedObject var link: LinkWorkspaceModel"),
+                      "armed files and the controls stay owned by the workspace model")
+        XCTAssertTrue(child.contains("L10n.t(.linkBatchArmed)"),
+                      "the parent-owned armed-file line must survive the move")
+        XCTAssertTrue(parts[0].contains("LinkTransfersSection(link: link, files: files)"),
+                      "the workspace must render the transfers through the child")
+    }
+
     func testNoDeferredFeatureIsReferenced() throws {
         // A later slice owns this. A reference means either a dead control or a
         // capability claimed before it works.
@@ -1162,18 +1312,22 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // which allows exactly that one write and still forbids every read.
         //
         // **The nearby half LEFT this list in R3-F, and the reason it was on it
-        // was wrong.** It was banned as needing "a local-network entitlement",
-        // which `LanDiscoveryModel` does not: it is not Bonjour, does not scan,
-        // and joins the hub's code-less room, which the server keys by the
-        // public IP it observes. What it needs is ordinary internet access. So
-        // `LanDiscoveryModel`, `NearbyReceiveModel`, `InboundRoom`, the two
-        // factories and `connectNearby` are now what this slice ships, and what
-        // replaces the ban is the whole R3-F section below — one room socket,
-        // a destination installed before residency, an explicit peer choice and
-        // a single presenting surface. `NSLocalNetworkUsageDescription`,
-        // Bonjour and the multicast entitlement stay banned by
-        // `testTheNearbyTabAddsNoNetworkCapability`, which is the accurate
-        // claim rather than the inherited one.
+        // was half wrong.** It was banned as needing "a local-network
+        // entitlement", which `LanDiscoveryModel` does not: it is not Bonjour,
+        // does not scan, and joins the hub's code-less room, which the server
+        // keys by the public IP it observes. Finding a device needs ordinary
+        // internet access. So `LanDiscoveryModel`, `NearbyReceiveModel`,
+        // `InboundRoom`, the two factories and `connectNearby` are now what this
+        // slice ships, and what replaces the ban is the whole R3-F section
+        // below — one room socket, a destination installed before residency, an
+        // explicit peer choice and a single presenting surface.
+        //
+        // Carrying the bytes was the part that answer did not cover, and R3-F
+        // shipped without the purpose string that half does need. Bonjour, the
+        // multicast entitlement and every discovery API stay banned by
+        // `testTheLocalNetworkDeclarationCoversTheTransferAndNothingElse`, which
+        // now also asserts `NSLocalNetworkUsageDescription` is PRESENT;
+        // `IOSLocalNetworkPermissionTests` owns the localized declaration.
         //
         // `acceptNearby` and `NearbyError` stay: answering an offer is
         // `NearbyReceiveModel`'s, on the socket the offer arrived on, and an
@@ -2158,7 +2312,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
 
         XCTAssertEqual(project.components(separatedBy: "com.apple.product-type.app-extension").count - 1, 1,
                        "a second app extension would be a second process nobody has reasoned about")
-        XCTAssertEqual(project.components(separatedBy: "PRODUCT_BUNDLE_IDENTIFIER = com.relayium.app.share;").count - 1, 2,
+        XCTAssertEqual(project.components(separatedBy: "PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac.ShareIOS;").count - 1, 2,
                        "the extension's bundle id must be set in both configurations")
         XCTAssertTrue(project.contains("dstSubfolderSpec = 13;"),
                       "the appex must be embedded into PlugIns, or it never loads")
@@ -2335,7 +2489,17 @@ final class IOSSurfaceGuardTests: XCTestCase {
     }
 
     /// The site's side of the association names this app, for exactly the two
-    /// paths it can act on — and still names the Mac app.
+    /// paths it can act on — and still names the identifier retired builds use.
+    ///
+    /// Since the universal-purchase migration this app IS
+    /// `7PVYUG4YQS.com.relayium.mac`, so the entry that was the Mac app's alone
+    /// is now both apps'. The second entry, `7PVYUG4YQS.com.relayium.app`, is
+    /// the identifier iOS shipped under before the migration; it is kept so
+    /// that development builds already installed on real devices keep routing
+    /// links, and it corresponds to no App Store record this project targets.
+    /// The SOURCE file is out of this batch's scope and unchanged — what is
+    /// asserted here is that it still covers the identifier the app now signs
+    /// as, which the exact-list comparison below already does.
     ///
     /// Read here rather than only in the web test because the two halves fail
     /// separately and silently: an entitlement with no matching `appIDs` entry
@@ -2367,15 +2531,24 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "a path was claimed for a hand-off iOS cannot perform")
 
         // `webcredentials` shares the file and is a different permission: the
-        // site allowing password AutoFill for an app. This app claims no
-        // `webcredentials:` entitlement and its sign-in form does not use
-        // AutoFill, so being added there would be a credential-adjacent
-        // association ahead of anything asking for it — and the natural mistake
-        // is to add the ID to both lists because they sit four lines apart.
+        // site allowing password AutoFill for an app.
+        //
+        // The universal-purchase migration changed what this list MEANS without
+        // changing a byte of it, and that is worth stating rather than leaving
+        // for somebody to rediscover. The one entry was written for the Mac app;
+        // this app now signs as the same identifier, so the SITE half of the
+        // AutoFill association now covers iOS too. AutoFill is still off, and
+        // the reason it is off has moved: it is now the ENTITLEMENT half alone.
+        // `Relayium.entitlements` claims `applinks:relayium.com` and no
+        // `webcredentials:relayium.com`, and Apple requires both halves before
+        // AutoFill activates. So the guard that matters after the migration is
+        // the entitlement one — `testTheEntitlementsFileClaimsOnlyAppleSignInAndAppLinks` —
+        // and this assertion's job narrows to catching a SECOND identifier
+        // being added here, which would extend AutoFill to something else.
         let credentials = try XCTUnwrap(
             (json["webcredentials"] as? [String: Any])?["apps"] as? [String])
         XCTAssertEqual(credentials, ["7PVYUG4YQS.com.relayium.mac"],
-                       "the site associates this app for AutoFill, which it does not use")
+                       "the site's AutoFill association changed shape; the app claims no webcredentials entitlement")
     }
 
     /// The bearer is read at the moment of use, only by the surfaces that spend
@@ -2411,21 +2584,42 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // rather than issuing a request with a dead credential. The positive
         // claims about that shape are asserted immediately below, because "is in
         // the list" is the weaker half.
-        XCTAssertEqual(readers, ["AccountSummaryView.swift", "DeviceSendView.swift",
+        // 0.3.0 adds the two Device Inbox surfaces, and both are the same shape
+        // as `DirectView`'s and `DeviceSendView`'s: every read is inside an
+        // action, none is stored, and each pairs the token with an `AccountGate`
+        // so a sign-out landing between a control being enabled and that control
+        // being tapped routes to the Account destination rather than issuing a
+        // request with a dead credential.
+        XCTAssertEqual(readers, ["AccountSummaryView.swift", "DeviceConversationView.swift",
+                                 "DeviceInboxView.swift", "DeviceSendView.swift",
                                  "DirectView.swift", "RelayiumApp.swift", "SendView.swift"],
                        "an unaccounted-for view-layer holder of the credential")
+        for name in ["DeviceSendView.swift", "DeviceConversationView.swift",
+                     "DeviceInboxView.swift"] {
+            let view = try XCTUnwrap(all.first { $0.name == name })
+            XCTAssertFalse(view.text.contains("@State private var token"),
+                           "\(name) stores a credential that would outlive its account")
+        }
         let devices = try XCTUnwrap(all.first { $0.name == "DeviceSendView.swift" })
-        XCTAssertFalse(devices.text.contains("@State private var token"),
-                       "a stored credential would outlive the account that issued it")
         XCTAssertEqual(devices.text.components(
-            separatedBy: "case .allowed = AccountGate.from(session.state, bearer: token)").count - 1, 2,
-            "a device send or a recovery action can be activated on a dead credential")
-        // The list read is the one deliberate exception, and it is not a gap: an
-        // empty or rejected bearer has to reach the model, because the model is
-        // what turns it into the unauthorized DIRECTORY state whose remedy names
-        // the account. Routing it to the Account tab instead would leave the
-        // picker silently empty.
-        XCTAssertTrue(devices.text.contains(
+            separatedBy: "case .allowed = AccountGate.from(session.state, bearer: token)").count - 1, 1,
+            "a delivery recovery action can be activated on a dead credential")
+        // The conversation page holds the other half: the two sends it starts
+        // both go through one `liveToken()`, which is the same gate in one
+        // place rather than two copies of it.
+        let page = try XCTUnwrap(all.first { $0.name == "DeviceConversationView.swift" })
+        XCTAssertEqual(page.text.components(
+            separatedBy: "case .allowed = AccountGate.from(session.state, bearer: token)").count - 1, 1,
+            "a device send can be started on a dead credential")
+        XCTAssertEqual(page.text.components(separatedBy: "guard let token = liveToken()").count - 1, 2,
+                       "both the message send and the file send must gate the credential")
+        // The directory read is the one deliberate exception, and it is not a
+        // gap: an empty or rejected bearer has to reach the model, because the
+        // model is what turns it into the unauthorized DIRECTORY state whose
+        // remedy names the account. Routing it to the Account destination
+        // instead would leave the device list silently empty.
+        let inbox = try XCTUnwrap(all.first { $0.name == "DeviceInboxView.swift" })
+        XCTAssertTrue(inbox.text.contains(
             "deliveries.refreshTargets(token: session.bearerToken ?? \"\")"),
             "a rejected credential must surface as an unauthorized device list")
         let app = try XCTUnwrap(all.first { $0.name == "RelayiumApp.swift" })
@@ -2484,31 +2678,48 @@ final class IOSSurfaceGuardTests: XCTestCase {
             "sending?.deviceSendCommitted(accountId: accountId, sourceDraftId: draftId)"),
             "the retirement must carry the ACCOUNT, or it cannot refuse a stale report")
         XCTAssertTrue(app.contains("@StateObject private var deliveries: InboxSendModel"))
-        XCTAssertTrue(app.contains("@StateObject private var sendRoutes: SendRouteSelection"))
     }
 
-    /// The route is a choice the user makes before anything is encrypted, and
-    /// its consequence is stated where the choice is made.
+    /// **The two kinds of send are separated by DESTINATION, not by a control.**
     ///
     /// A link publishes the content key in a URL fragment and a delivery seals
     /// it to one device. Those are different answers to "who can read this", so
-    /// neither may be entered by default from the other's failure and the
-    /// difference may not be something the user discovers afterwards.
-    func testTheSendRouteIsChosenExplicitlyAndExplainsItsConsequence() throws {
+    /// the difference must not be something a user can slide past — which is
+    /// what a segmented *As a link / To a device* control at the top of one
+    /// screen made it. 0.3.0 removes that control: Send is stored links only,
+    /// and a device send starts from that device's Device Inbox conversation.
+    ///
+    /// This is the positive form of the guard. It does not merely check the
+    /// chooser is gone — it checks the send screen holds nothing that could
+    /// address a device, which is the property the chooser's absence was
+    /// supposed to produce.
+    func testSendIsStoredLinksOnlyAndNamesNoDeviceAtAll() throws {
         let all = try sources()
-        let chooser = try XCTUnwrap(all.first { $0.name == "DeviceSendView.swift" }?.text)
-        XCTAssertTrue(chooser.contains("InboxSendPresentation.explanation(for: routes.route)"),
-                      "the two kinds of send are offered without saying how they differ")
-        XCTAssertTrue(chooser.contains("routes.select($0)"))
-        XCTAssertFalse(chooser.contains("@State private var route"),
-                       "a view-local route would reset to the other kind of send on a rebuild")
-
         let send = try XCTUnwrap(all.first { $0.name == "SendView.swift" }?.text)
-        XCTAssertTrue(send.contains("SendRouteChooser(routes: routes)"))
-        XCTAssertTrue(send.contains("if routes.route == .device, isChoosingFilesToSend {"),
-                      "a live or finished link upload must not be hidden behind the chooser")
-        XCTAssertTrue(send.contains("DeviceDeliveryList(deliveries: deliveries,"),
-                      "outstanding deliveries must be rendered under BOTH routes")
+        for deviceish in ["SendRouteChooser", "SendRouteSelection", "DeviceTargetPicker",
+                          "InboxSendModel", "DeviceDeliveryList", "routes.route",
+                          "PathRailPresentation.iosDeviceSend"] {
+            XCTAssertFalse(send.contains(deviceish),
+                           "the Send screen still names \(deviceish); a device delivery is a "
+                           + "different product and must start from Device Inbox")
+        }
+        // And the one rail it does draw is the stored-link one, positioned from
+        // the upload's own state.
+        XCTAssertTrue(send.contains("PathRailPresentation.iosStoredSend(upload.state)"),
+                      "the Send screen must still state where a link's bytes go")
+
+        // The other half of the move: the app no longer composes a route
+        // selection for anything to render.
+        let app = try XCTUnwrap(all.first { $0.name == "RelayiumApp.swift" }?.text)
+        XCTAssertFalse(app.contains("SendRouteSelection("),
+                       "a route selection nothing renders is a control waiting to come back")
+
+        // And the outstanding deliveries did not simply disappear with the
+        // picker: they render in the destination device sends now start from,
+        // so a transfer is never running with nothing on screen able to name it.
+        let inbox = try XCTUnwrap(all.first { $0.name == "DeviceInboxView.swift" }?.text)
+        XCTAssertTrue(inbox.contains("DeviceDeliveryList(deliveries: deliveries,"),
+                      "an outstanding delivery has no surface that can name or stop it")
     }
 
     /// An upload is not a delivery, and no view may decide otherwise.
@@ -2534,25 +2745,46 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "a recovered delivery offers Send without naming what it holds")
     }
 
-    /// Blocked devices are shown and are not tappable.
+    /// **A device that cannot be sent to still has a row, and that row still
+    /// opens.**
     ///
-    /// Dropping them is what turns a two-second fix into "Relayium cannot see my
-    /// Mac"; making them tappable is a dead end the user finds by pressing it.
-    func testTheTargetPickerShowsBlockedDevicesWithoutOfferingThem() throws {
-        let view = try XCTUnwrap(try sources().first { $0.name == "DeviceSendView.swift" }?.text)
-        XCTAssertTrue(view.contains("ForEach(blocked) { candidate in"))
-        XCTAssertTrue(view.contains("L10n.t(.sendDeviceBlockedHeading)"))
-        let blocked = try XCTUnwrap(view.components(separatedBy: "private func blockedRow(")
-            .dropFirst().first?.components(separatedBy: "private func failureLine").first)
-        XCTAssertFalse(blocked.contains("Button"),
-                       "a blocked device must not be selectable")
-        XCTAssertTrue(blocked.contains("InboxSendPresentation.detail(for: candidate)"),
-                      "a blocked device must say which remedy it needs")
-        // The three list states that are not a list, each with its own remedy.
-        for state in ["L10n.t(.sendDeviceNone)", "L10n.t(.sendDeviceNoneHelp)",
-                      "InboxSendPresentation.text(for: deliveries.directory)"] {
-            XCTAssertTrue(view.contains(state), "the target list cannot render \(state)")
+    /// The old target picker dropped nothing and made blocked rows untappable,
+    /// on the reasoning that a selection the Send button would then refuse is a
+    /// dead end found by pressing it. The Device Inbox list inverts half of
+    /// that, and deliberately: a row here opens a PAGE, not a target, and a
+    /// device whose owner turned receiving off still has a history worth
+    /// reading. Refusing to open it would be the dead end.
+    ///
+    /// What must not change is the other half: the device is still listed.
+    /// Dropping it is what turns a two-second fix into "Relayium cannot see my
+    /// Mac". Whether the page it opens may SEND is `selectedCandidate`'s answer,
+    /// taken there and not in the list.
+    func testTheDeviceListKeepsUnsendableDevicesAndStillOpensThem() throws {
+        let all = try sources()
+        let view = try XCTUnwrap(all.first { $0.name == "DeviceInboxView.swift" }?.text)
+        // Every candidate the directory offered, not only the sendable ones.
+        XCTAssertTrue(view.contains("for candidate in deliveries.candidates where !seen.contains"),
+                      "the list filters devices out instead of explaining them")
+        XCTAssertFalse(view.contains("filter(\\.isSendable)"),
+                       "a device whose receiving is off is the one the user is looking for")
+        XCTAssertTrue(view.contains("deliveries.focusPeer(row.peerID)"),
+                      "a row must open the device's page whatever its sendability")
+        XCTAssertTrue(view.contains("InboxSendPresentation.detail(for: candidate)"),
+                      "a device that cannot receive must say which remedy it needs")
+        // The list states that are not a list, each with its own remedy —
+        // `unavailable` is deliberately not an empty list.
+        for state in ["InboxSendPresentation.text(for: deliveries.directory)",
+                      "L10n.t(.inboxIOSConversationsEmpty)"] {
+            XCTAssertTrue(view.contains(state), "the device list cannot render \(state)")
         }
+
+        // And the composer, on the page, is gated by the model's own answer
+        // rather than by whatever the row believed when it was tapped.
+        let page = try XCTUnwrap(all.first { $0.name == "DeviceConversationView.swift" }?.text)
+        XCTAssertTrue(page.contains("deliveries.selectedCandidate"),
+                      "the composer must re-ask sendability rather than trust the row")
+        XCTAssertTrue(page.contains("L10n.t(.inboxComposeUnavailable)"),
+                      "a page with no composer must say why, not draw a disabled one")
     }
 
     // MARK: - R3-D: device and stored-file management
@@ -2712,7 +2944,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let delivery = readme.components(separatedBy: "## Delivery status")
             .dropFirst().first?.components(separatedBy: "\n## ").first ?? ""
         let flat = flattenedText(delivery)
-        XCTAssertTrue(flat.contains("`apps/ios/` exists in this repository and its development has **resumed**, at version `0.3.0`"),
+        XCTAssertTrue(flat.contains("`apps/ios/` exists in this repository and its development has **resumed**, at version `0.3.1`"),
                       "the delivery section no longer says what state iOS development is in")
         XCTAssertTrue(flat.contains("It has never been publicly released"),
                       "the delivery section no longer says iOS was never released")
@@ -3276,23 +3508,32 @@ final class IOSSurfaceGuardTests: XCTestCase {
     func testTheShellGainedTheDirectTabAndStillReadsNoSessionState() throws {
         let root = try XCTUnwrap(try sources().first { $0.name == "RootView.swift" })
         XCTAssertTrue(root.text.contains("L10n.t(.tabDirect)"))
-        XCTAssertTrue(root.text.contains(".tag(AppDestination.pairingCode)"))
+        // The tag is `surface.route` now, not a written-out destination: the two
+        // shells enumerate one `IOSSurface.browseable` list, so the mapping from
+        // a row to a destination is stated once on the enum rather than five
+        // times in a view. That the pairing-code destination is still reachable
+        // is asserted through the surface that routes to it.
+        XCTAssertEqual(IOSSurface.crossNetworkTransfer.route, .pairingCode)
+        XCTAssertTrue(IOSSurface.browseable.contains(.crossNetworkTransfer))
+        XCTAssertTrue(root.text.contains("case .crossNetworkTransfer:"),
+                      "the shell has no screen for the cross-network destination")
         for accountish in ["session.state", "AccountGate", "bearerToken"] {
             XCTAssertFalse(root.text.contains(accountish),
-                           "the shell reads \(accountish) — that would gate the receive tab")
+                           "the shell reads \(accountish) — that would gate the anonymous "
+                           + "surfaces")
         }
     }
 
-    /// Both realtime models are app-scoped, built once, and — since R3-F — from
-    /// the NEARBY factories, against one discovery model and one inbound room.
+    /// Both realtime models are app-scoped and built once, against one local
+    /// discovery model and one inbound room.
     ///
     /// Two claims, and the second is the one a diff hides. App-scoped, because a
     /// `TabView` tears an off-screen tab down and a live DataChannel must not go
     /// with it — the user checking their plan mid-transfer is exactly that.
     /// Nearby-wired, because the two direct surfaces drive the SAME two models
-    /// and both same-network paths reach through the one room socket the
-    /// discovery model owns; a second graph would be a second room membership
-    /// and a device listed twice.
+    /// and both same-network paths reach through the one local signaling
+    /// channel the discovery model owns; a second graph would advertise this
+    /// device twice and could list each peer twice.
     func testTheRealtimeModelsAreAppScopedAndBuiltFromTheNearbyFactories() throws {
         let all = try sources()
         let app = try XCTUnwrap(all.first { $0.name == "RelayiumApp.swift" })
@@ -3325,10 +3566,15 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(all.map {
             $0.text.components(separatedBy: "UITestMode.makeRealtimeTextModel(").count - 1
         }.reduce(0, +), 1, "the acceptance substitution happens more than once")
+        XCTAssertEqual(all.map {
+            $0.text.components(separatedBy: "LocalNearbyEnvironment.makeDiscoveryModel(").count - 1
+        }.reduce(0, +), 1, "iOS must own exactly one local discovery graph")
+        XCTAssertFalse(all.contains { $0.text.contains("AppEnvironment.makeLanDiscoveryModel(") },
+                       "iOS Nearby must not reconnect to the server-backed roster")
         for once in ["makeRealtimeModel(", "VerificationPreference(",
                      "DirectModeSelection(",
                      "ForegroundSessionCoordinator(",
-                     "makeLanDiscoveryModel(", "InboundRoom(", "makeNearbyReceiveModel(",
+                     "InboundRoom(", "makeNearbyReceiveModel(",
                      "makeLinkWorkspaceModel(",
                      "NearbyResidencyCoordinator(", "TransferPresence(", "AppNavigationModel("] {
             XCTAssertEqual(all.map { $0.text.components(separatedBy: once).count - 1 }.reduce(0, +), 1,
@@ -3474,9 +3720,20 @@ final class IOSSurfaceGuardTests: XCTestCase {
             XCTAssertEqual(view.text.components(separatedBy: wired).count - 1, 1,
                            "the one UIKit join field must carry \(wired), exactly once")
         }
-        // But each MODEL normalizes its own text, so both are wired to it.
-        XCTAssertEqual(view.text.components(separatedBy: "updateJoinCode(").count - 1, 2,
-                       "both models must normalize on every change")
+        // But each MODEL normalizes its own text, so both are wired to it —
+        // and now from BOTH entry paths. The pairing scanner fills the same
+        // field, and the property that matters is not the count but that no
+        // path writes `joinCode` raw: a scanned code that skipped the filter
+        // would be the only six digits in the app that never met it.
+        //
+        // Four: one per model in the binding setter, one per model in
+        // `applyScan`. A fifth is fine; a raw assignment is not, which is what
+        // the second assertion actually pins.
+        XCTAssertEqual(view.text.components(separatedBy: "updateJoinCode(").count - 1, 4,
+                       "both models must normalize on every change, from both the keyboard "
+                           + "and the scanner")
+        XCTAssertFalse(view.text.contains(".joinCode ="),
+                       "a raw write to a join code bypasses normalizedPairingCode")
         XCTAssertTrue(view.text.contains("let normalizedCode = Binding("))
         XCTAssertTrue(view.text.contains("set: { normalize($0) }"))
         XCTAssertTrue(view.text.contains("PairingCodeInput(text: normalizedCode"))
@@ -3548,7 +3805,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(fileIdle.contains("createFiles"))
         XCTAssertTrue(fileIdle.contains("joinCard("))
         XCTAssertTrue(fileFailed.contains("L10n.t(.commonDone)"))
-        XCTAssertTrue(fileFailed.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(fileFailed.contains(".borderedAction()"))
         XCTAssertTrue(fileFailed.contains(".controlSize(.large)"))
         XCTAssertFalse(fileFailed.contains("createFiles"),
                        "a failed file session can be replaced before cleanup")
@@ -3568,7 +3825,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(textIdle.contains("joinCard("))
         XCTAssertTrue(textTerminal.contains("DirectTextSessionView(model: text)"))
         XCTAssertTrue(textTerminal.contains("L10n.t(.commonDone)"))
-        XCTAssertTrue(textTerminal.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(textTerminal.contains(".borderedAction()"))
         XCTAssertTrue(textTerminal.contains(".controlSize(.large)"))
         XCTAssertFalse(textTerminal.contains("createText"),
                        "a terminal transcript can be replaced before Done")
@@ -3661,11 +3918,17 @@ final class IOSSurfaceGuardTests: XCTestCase {
     func testThePasteboardIsWrittenOnlyInsideAnExplicitCopyActionAndNeverRead() throws {
         let all = try sources()
         let holders = all.filter { $0.text.contains("UIPasteboard") }.map(\.name).sorted()
-        XCTAssertEqual(holders, ["AccountSummaryView.swift", "DirectTextSessionView.swift",
+        // The conversation timeline joins the list in 0.3.0, for the reason a
+        // text session already was on it: a message received on this device that
+        // the user cannot get out of the app is a message they have to retype.
+        // Same shape — one write, inside the button that says Copy.
+        XCTAssertEqual(holders, ["AccountSummaryView.swift", "DeviceConversationView.swift",
+                                 "DirectTextSessionView.swift",
                                  "DirectView.swift", "SendView.swift"],
                        "the pasteboard is reachable from somewhere other than Copy")
         let expectedWrites = [
             "AccountSummaryView.swift": "UIPasteboard.general.string = link",
+            "DeviceConversationView.swift": "UIPasteboard.general.string = message.text",
             "DirectTextSessionView.swift": "UIPasteboard.general.string = text",
             "DirectView.swift": "UIPasteboard.general.string = url.absoluteString",
             "SendView.swift": "UIPasteboard.general.string = link",
@@ -3728,17 +3991,46 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(app.text.contains("residency.phaseChanged(to: lifecycle(phase))"))
         XCTAssertFalse(app.text.contains("foreground.phaseChanged("),
                        "a second lifecycle path would let the room outlive the session cleanup")
-        // Exactly one observer, at the app scope: a second in a view would fire
-        // only while that view was mounted, which is precisely when it is not.
-        // Three occurrences, all in `RelayiumApp`: twice on the `@Environment`
-        // declaration (the key path and the property name) and once in the
-        // `onChange` that reads it. A fourth would be a second reader.
-        XCTAssertEqual(all.map { $0.text.components(separatedBy: "scenePhase").count - 1 }
-                          .reduce(0, +), 3,
-                       "the scene phase is declared and read in exactly one place")
+        // Exactly one SESSION lifecycle observer, at the app scope: a second in
+        // a view would fire only while that view was mounted, which is
+        // precisely when it is not. Three occurrences in `RelayiumApp`: twice
+        // on the `@Environment` declaration (the key path and the property
+        // name) and once in the `onChange` that reads it.
+        XCTAssertEqual(app.text.components(separatedBy: "scenePhase").count - 1, 3,
+                       "the app-scoped scene phase is declared and read more than once")
         for (name, text) in all where name != "RelayiumApp.swift" {
             XCTAssertFalse(text.contains("phaseChanged("),
                            "\(name) is a second lifecycle observer")
+        }
+
+        // **One view may read it, and only for the camera.**
+        //
+        // `PairingScannerView` is the exception the reasoning above allows
+        // rather than one it forbids: the resource it has to release —  a live
+        // `AVCaptureSession` — exists only while that view is mounted, so a
+        // mounted-only observer is exactly the right scope for it, and an
+        // app-scoped one would have to reach into a sheet it does not own. A
+        // camera left running behind the app switcher is a privacy defect the
+        // user cannot see.
+        //
+        // What it must NOT do is touch the session lifecycle, which the loop
+        // above already forbids by name. This pins the other half: the only
+        // things it drives from the phase are the camera's own suspend/resume.
+        let scannerName = "PairingScannerView.swift"
+        let readers = all.filter { $0.text.contains("scenePhase") }.map(\.name).sorted()
+        XCTAssertEqual(readers, [scannerName, "RelayiumApp.swift"].sorted(),
+                       "the scene phase is read in \(readers)")
+        let scanner = try XCTUnwrap(all.first { $0.name == scannerName })
+        let onChange = try XCTUnwrap(scanner.text
+            .components(separatedBy: ".onChange(of: scenePhase)").dropFirst().first?
+            .components(separatedBy: "\n        }").first)
+        XCTAssertTrue(onChange.contains("model.suspend()")
+                        && onChange.contains("await model.resume()"),
+                      "the scanner's scene-phase observer does something other than "
+                          + "stopping and restarting its own capture session")
+        for session in ["presence.", "foreground.", "residency.", "file.", "text."] {
+            XCTAssertFalse(onChange.contains(session),
+                           "the scanner's scene-phase observer reaches for \(session)")
         }
     }
 
@@ -3829,51 +4121,95 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// `@State` in this view to an app-scoped model: a `@State` is reset when
     /// SwiftUI rebuilds the tree, and the moment that matters is a session
     /// arriving while the user is somewhere else.
-    func testTheShellGainedTheNearbyTabAndRoutesFromAnAppScopedSelection() throws {
+    func testTheShellRendersOneSurfaceListAndRoutesFromAnAppScopedSelection() throws {
         let root = try XCTUnwrap(try sources().first { $0.name == "RootView.swift" })
-        for tag in [".tag(AppDestination.storedReceive)", ".tag(AppDestination.storedSend)",
-                    ".tag(AppDestination.pairingCode)", ".tag(AppDestination.nearby)",
-                    ".tag(AppDestination.account)"] {
-            XCTAssertTrue(root.text.contains(tag), "the tab set is missing \(tag)")
-        }
-        XCTAssertTrue(root.text.contains("TabView(selection: $navigation.selection)"),
+        // ONE enumerated list, rendered by both shells, rather than five
+        // written-out tabs beside five written-out sidebar rows — which is how
+        // the two layouts would come to list different things.
+        XCTAssertEqual(root.text.components(separatedBy: "ForEach(IOSSurface.browseable")
+                        .count - 1, 2,
+                       "the tab bar and the sidebar must enumerate the same one list")
+        XCTAssertTrue(root.text.contains(".tag(surface.route)"),
+                      "each tab must be tagged with the surface's own route")
+        XCTAssertTrue(root.text.contains("TabView(selection: surfaceSelection)"),
                       "the selection must survive an incoming session rebuilding the tree")
+        XCTAssertTrue(root.text.contains("NavigationSplitView"),
+                      "a full-width iPad must get a sidebar and a detail column")
+        XCTAssertTrue(root.text.contains("horizontalSizeClass == .regular"),
+                      "the shell must choose on available width, not on the device idiom")
+        XCTAssertFalse(root.text.contains("userInterfaceIdiom"),
+                       "an idiom check gives a Slide Over iPad a sidebar it has no room for")
         XCTAssertFalse(root.text.contains("@State private var selection"),
                        "a view-local selection cannot be routed to from outside the view")
         for accountish in ["session.state", "AccountGate", "bearerToken"] {
             XCTAssertFalse(root.text.contains(accountish),
-                           "the shell reads \(accountish) — that would gate the anonymous tabs")
+                           "the shell reads \(accountish) — that would gate the anonymous "
+                           + "surfaces")
         }
     }
 
-    /// **iOS never selects the macOS-only Device Inbox destination.**
+    /// **Every browseable iOS surface is reachable, and no unbrowseable one can
+    /// be selected into a tab that does not exist.**
     ///
-    /// `AppDestination` is deliberately one vocabulary for both shells, so the
-    /// two cannot drift into routing from two enums. The cost of sharing it is
-    /// this: macOS gained a sixth case for a resident receiver iOS does not have,
-    /// and a `TabView` handed a selection with no matching `.tag` renders an
-    /// empty tab — no error, no fallback, just a screen with nothing on it.
+    /// This replaces a ban. `AppDestination` is one vocabulary for both shells,
+    /// and it used to carry a case iOS could not draw: macOS had a resident
+    /// receiver behind `deviceInbox` and iOS had none, so the guard here refused
+    /// the word anywhere under `apps/ios` — because a `TabView` handed a
+    /// selection with no matching `.tag` renders an empty screen with no error
+    /// and no fallback.
     ///
-    /// The tab set above is checked to name five destinations; this is the other
-    /// half, and it is the half that catches the accident. A `navigation.select`
-    /// or an `AppRouting` answer that reached iOS with `.deviceInbox` in it would
-    /// leave the app on a blank tab the user cannot leave except by tapping
-    /// another one, and nothing in the tab list would look wrong.
-    func testNoIOSSurfaceCanSelectTheMacOnlyDeviceInboxDestination() throws {
-        for (name, text) in try sources() {
-            XCTAssertFalse(text.contains("deviceInbox"),
-                           "\(name) names the macOS-only Device Inbox destination; the iOS "
-                           + "tab bar has no tag for it and would render an empty tab")
+    /// iOS ships that destination now, so the ban is false and deleting it alone
+    /// would leave the empty-screen defect unguarded. What replaces it is the
+    /// property the ban was standing in for, asserted directly:
+    ///
+    ///  1. every surface the shell OFFERS has a screen behind it, and
+    ///  2. the shell's selection binding cannot produce a destination that has
+    ///     no tab — `IOSShellPlacement.backgroundRoute` is a browseable
+    ///     surface's route by construction, and both bindings read only that.
+    func testEveryBrowseableIOSSurfaceIsReachableAndNoOtherCanBeSelected() throws {
+        let root = try XCTUnwrap(try sources().first { $0.name == "RootView.swift" }?.text)
+
+        // 1. Every browseable surface has an arm in the one screen switch, and
+        //    the Device Inbox is among them.
+        XCTAssertTrue(IOSSurface.browseable.contains(.deviceInbox),
+                      "iOS ships a Device Inbox destination and must offer it")
+        for surface in IOSSurface.browseable {
+            XCTAssertTrue(root.contains("case .\(surface.rawValue):"),
+                          "the shell has no screen for the browseable surface \(surface.rawValue)")
         }
-        // And the shared routing rule keeps iOS out of it by construction: the
-        // only destinations it can produce are ones the tab bar has tags for.
-        for kind in NearbyReceiveKind.allCases {
-            XCTAssertNotEqual(AppRouting.destination(forIncoming: kind), .deviceInbox)
+
+        // 2. Both bindings read the placement's background route and nothing
+        //    else. A binding reading `navigation.selection` directly would hand
+        //    the TabView `.storedReceive` the moment a link arrived.
+        for binding in ["Binding(get: { shell.placement.backgroundRoute }"] {
+            XCTAssertEqual(root.components(separatedBy: binding).count - 1, 2,
+                           "the tab and sidebar selections must both read \(binding)")
         }
+        XCTAssertFalse(root.contains("selection: $navigation.selection"),
+                       "binding a shell selection straight to the navigation model would "
+                       + "select a destination the shell has no tab for")
+
+        // …and that is a property of the type, not of the view: every
+        // destination resolves to a surface, and the background is always one
+        // the shell offers.
         for destination in AppDestination.allCases {
-            XCTAssertNotEqual(AppRouting.destination(forOpenedFiles: destination), .deviceInbox,
-                              "an opened file routes to a destination iOS cannot render")
+            let placement = IOSShellPlacement(background: destination.iosSurface)
+            if destination.iosSurface.isBrowseable {
+                XCTAssertTrue(placement.background.isBrowseable)
+            } else {
+                XCTAssertFalse(destination.iosSurface.isBrowseable,
+                               "a non-browseable surface must not appear in the offered list")
+            }
         }
+
+        // 3. The one non-browseable surface is PRESENTED, never selected into a
+        //    tab — and it carries an explicit way out, because a sheet whose
+        //    only exit is a swipe is one a VoiceOver user cannot leave.
+        XCTAssertFalse(IOSSurface.storedReceive.isBrowseable,
+                       "opening a stored link is something the OS hands this app, not a tab")
+        XCTAssertTrue(root.contains(".sheet(isPresented: isPresentingStoredReceive)"))
+        XCTAssertTrue(root.contains("onDismiss: { navigation.select(shell.placement.backgroundRoute) }"),
+                      "dismissing must move the one navigation authority, not just close a sheet")
     }
 
     /// **Nearby is anonymous in both directions, and it is enforced by not
@@ -4172,20 +4508,39 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("L10n.t(.textDiscardLocalContentConfirmBody)"))
     }
 
-    /// **This slice adds no network capability, and the reason matters.**
+    /// **The narrow local-network declaration this app owes.**
     ///
-    /// `LanDiscoveryModel` is not Bonjour and does not scan: it joins the hub's
-    /// code-less room over the same HTTPS/WebSocket origin the rest of the app
-    /// uses, and the server groups that room by the public IP it observes. So
-    /// none of Apple's local-network machinery is involved, and declaring any
-    /// of it would be a permission prompt for something the app does not do —
-    /// which is worse than a missing capability, because the user is asked to
-    /// grant access that then explains nothing.
-    func testTheNearbyTabAddsNoNetworkCapability() throws {
+    /// This test used to assert the opposite, and it was the assertion that kept
+    /// the bug in place. Its argument was that `LanDiscoveryModel` is not
+    /// Bonjour and does not scan — which is true, and is about DISCOVERY. It
+    /// then applied that to the transfer, which is a different question with a
+    /// different answer: every realtime lane connects with
+    /// `iceTransportPolicy = .all`, so the pair that wins between two devices in
+    /// one building is a unicast socket to the peer's address on this subnet,
+    /// and iOS 14 and later gate exactly that behind Local Network access.
+    ///
+    /// A test that asserts a required declaration is ABSENT does not merely miss
+    /// a defect; it defends one. Retained physical runs `0af36138` and
+    /// `56e78dbf` recorded the shape it was defending — iOS/iPadOS 26 withheld
+    /// the prompt entirely and the local path never connected, while iPadOS 18
+    /// masked the omission.
+    ///
+    /// So the positive half is here, and the whole of the localized declaration
+    /// — two `.lproj` folders, one key each, a real translation, a fallback that
+    /// matches English, and an extension that declares none of it — is
+    /// `IOSLocalNetworkPermissionTests`. What stays banned here is everything the
+    /// app genuinely does not use: multicast, wifi-info, broad discovery APIs,
+    /// background networking or a second Bonjour service type.
+    func testTheLocalNetworkDeclarationCoversDiscoveryAndTransferAndNothingElse() throws {
         let plist = try infoPlist()
-        XCTAssertNil(plist["NSLocalNetworkUsageDescription"],
-                     "the app asks for local-network access it does not use")
-        XCTAssertNil(plist["NSBonjourServices"])
+        let purpose = try XCTUnwrap(plist["NSLocalNetworkUsageDescription"] as? String,
+                                    "the app connects to peers on this subnet with no "
+                                        + "local-network purpose string, so iOS 26 fails "
+                                        + "the transfer without ever prompting")
+        XCTAssertFalse(purpose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                       "the purpose string is present but says nothing")
+        XCTAssertEqual(plist["NSBonjourServices"] as? [String], ["_relayium._tcp"],
+                       "the app must declare exactly its one product-specific service")
         XCTAssertNil(plist["UIBackgroundModes"])
         XCTAssertNil(plist["NSUserActivityTypes"])
         // Read as a plist, not as text: the file's comment enumerates the
@@ -4210,9 +4565,23 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "aps-environment"] {
             XCTAssertNil(entitlements[banned], "the entitlements file claims \(banned)")
         }
+        // Scoped to `apps/ios/Relayium` — the APP target. Bonjour lives in
+        // `RelayiumLocalPeerKit`, behind `LocalNearbyEnvironment`, and that
+        // boundary is the reason these stay banned rather than being relaxed
+        // now that the product browses at all: an app target that reached for
+        // `NWBrowser` directly, or spelled the service type itself, would be a
+        // second discovery surface outside the one module the privacy review,
+        // the lifecycle rules and `LocalNearbyModuleBoundaryTests` all cover.
+        // The rest are machinery this app does not run in any module: SSID
+        // inspection, hotspot state and address enumeration are how "local
+        // network" turns into "the network the user is on", which is the exact
+        // overclaim the purpose string refuses to make.
         for (name, text) in try sources() {
-            for symbol in ["NWBrowser", "NWListener", "NetService", "Bonjour",
-                           "_relayium._tcp", "MultipeerConnectivity"] {
+            for symbol in ["NWBrowser", "NWListener", "NetService",
+                           "MultipeerConnectivity", "_relayium._tcp",
+                           "CNCopyCurrentNetworkInfo", "NEHotspotNetwork",
+                           "NEHotspotHelper", "CWWiFiClient", "getifaddrs",
+                           "SCNetworkReachability", "inet_ntop"] {
                 XCTAssertFalse(text.contains(symbol), "\(name) reaches for \(symbol)")
             }
         }
@@ -4466,13 +4835,31 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// **The branded accent is an asset, it matches the Mac exactly, and the
-    /// project actually resolves it.**
+    /// **The branded accent is an asset, its ORDINARY values match the Mac
+    /// exactly, and the project actually resolves it.**
     ///
     /// All three halves are needed. A colorset nothing names is dead weight; a
     /// build setting with no asset silently falls back to system blue; and two
     /// hand-copied violets that drift are worse than one blue, because the two
     /// apps then look like two products.
+    ///
+    /// **"Exactly" narrowed to the ordinary values, and only there.** This test
+    /// used to require the two catalogs to be identical, entry for entry, and
+    /// that was the right shape while both carried one violet plus a dark
+    /// override. iOS now carries a third: a Dark + Increase Contrast entry,
+    /// `#502598`, which exists because `.borderedProminent` on iOS derives its
+    /// fill from the accent when no high-contrast entry is declared and derives
+    /// it UPWARDS in Dark — `#7C3AED` renders as `#B488FF`, putting the system's
+    /// own white label at 2.66:1. `IOSActionColorGuardTests` owns that value,
+    /// its rationale and its arithmetic.
+    ///
+    /// That defect is iOS-only, so the answer is too: there is no macOS
+    /// appearance to compare it against and none is being added here. So the
+    /// parity claim is split rather than relaxed — the ordinary Light and Dark
+    /// violets must still be identical across both apps AND across the app and
+    /// its Share extension, and the third appearance is recognised by name and
+    /// validated on its own rather than being allowed through by a loosened
+    /// comparison. A fourth appearance, or a different one, still fails.
     func testTheAccentColourIsOneBrandedAssetSharedWithTheMac() throws {
         func colorset(_ target: String) throws -> [[String: Any]] {
             let json = try JSONSerialization.jsonObject(with: try RepoRoot.data(
@@ -4506,24 +4893,59 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // while the app it belongs to drew violet — which is the one place a
         // user sees Relayium next to another product's chrome.
         let share = try colorset("ios/RelayiumShare")
+
+        // The app and its Share extension are held to BYTE identity, not value
+        // identity. They are separate binaries with separate catalogs, and the
+        // failure that matters is one of them silently keeping fewer
+        // appearances than the other — which a comparison of colours cannot
+        // see, and which would leave the share sheet on the derived #B488FF
+        // fill after the app stopped using it.
+        XCTAssertEqual(
+            try RepoRoot.text(
+                "apps/ios/RelayiumShare/Assets.xcassets/AccentColor.colorset/Contents.json"),
+            try RepoRoot.text(
+                "apps/ios/Relayium/Assets.xcassets/AccentColor.colorset/Contents.json"),
+            "the share sheet's accent catalog is not byte-identical to the app's")
         XCTAssertEqual(components(share), components(ios),
                        "the share sheet is a different brand from the app")
         XCTAssertEqual(appearances(share), appearances(ios),
                        "the share sheet answers light and dark differently from the app")
-        XCTAssertEqual(appearances(ios), appearances(mac),
-                       "the two apps answer light and dark differently")
-        XCTAssertEqual(appearances(ios), ["universal", "luminosity=dark"],
-                       "the accent asset is not one base colour plus a dark override")
-        XCTAssertEqual(components(ios).count, 2,
-                       "the accent asset has no separate dark appearance")
-        XCTAssertEqual(components(ios), components(mac),
-                       "the two apps' brand violets have drifted apart")
+
+        // The shape of each catalog, stated in full rather than compared to the
+        // other. The Mac's two entries and iOS's three are both exact: a fourth
+        // iOS appearance, a different one, or a macOS catalog that quietly grew
+        // one all fail here.
+        XCTAssertEqual(appearances(mac), ["universal", "luminosity=dark"],
+                       "the Mac accent asset is not one base colour plus a dark override")
+        XCTAssertEqual(appearances(ios),
+                       ["universal", "luminosity=dark", "contrast=high,luminosity=dark"],
+                       "the iOS accent asset is not one base colour, a dark override and "
+                       + "the Dark + Increase Contrast entry that `IOSActionColorGuardTests` "
+                       + "measures. A new appearance needs a rendered ratio behind it, not "
+                       + "a widened assertion here.")
+
+        // ORDINARY parity, which the third entry does not touch. Addressed by
+        // appearance rather than by position, because `.last` stopped meaning
+        // "dark" the moment iOS gained a third entry — the assertion that used
+        // to read it that way passed for the wrong reason and then failed for
+        // the wrong reason.
+        func ordinary(_ colors: [[String: Any]]) -> [[String: String]] {
+            let wanted = ["universal", "luminosity=dark"]
+            return zip(appearances(colors), components(colors))
+                .filter { wanted.contains($0.0) }
+                .map(\.1)
+        }
+        XCTAssertEqual(ordinary(ios).count, 2, "iOS lost an ordinary accent value")
+        XCTAssertEqual(ordinary(ios), ordinary(mac),
+                       "the two apps' ordinary brand violets have drifted apart. The iOS "
+                       + "Increase Contrast entry is allowed to be iOS-only; these two are "
+                       + "not.")
         // The values themselves, so a coordinated edit to both still has to be
         // a decision: #6D28D9, and #7C3AED in dark.
-        XCTAssertEqual(components(ios).first, ["alpha": "1.000", "red": "0x6D",
-                                               "green": "0x28", "blue": "0xD9"])
-        XCTAssertEqual(components(ios).last, ["alpha": "1.000", "red": "0x7C",
-                                              "green": "0x3A", "blue": "0xED"])
+        XCTAssertEqual(ordinary(ios).first, ["alpha": "1.000", "red": "0x6D",
+                                             "green": "0x28", "blue": "0xD9"])
+        XCTAssertEqual(ordinary(ios).last, ["alpha": "1.000", "red": "0x7C",
+                                            "green": "0x3A", "blue": "0xED"])
 
         let project = try String(
             contentsOf: try appsRoot.appendingPathComponent("ios/Relayium.xcodeproj/project.pbxproj"),
@@ -4596,7 +5018,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
                           "\(name) leaves an empty task with no first move")
             let staged = try XCTUnwrap(view.components(separatedBy: emptiness)
                 .dropFirst().first?.components(separatedBy: "} else {").dropFirst().first)
-            XCTAssertTrue(staged.contains(".buttonStyle(.bordered)"),
+            XCTAssertTrue(staged.contains(".borderedAction()"),
                           "\(name) keeps two prominent controls once something is staged")
         }
     }
@@ -4756,7 +5178,20 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(send.contains(
             "PathRail(stops: PathRailPresentation.iosStoredSend(upload.state))"),
             "the one rail with real progress is not reading the model that has it")
-        XCTAssertTrue(send.contains("PathRail(stops: PathRailPresentation.iosDeviceSend())"))
+        // **The device-send rail is no longer on the Send screen**, because the
+        // device send is not: that flow starts from a Device Inbox conversation
+        // now. What the Device Inbox draws is the rail for the direction it
+        // actually describes — the route seen from the RECEIVING end, ending at
+        // this device rather than at a Mac.
+        XCTAssertFalse(send.contains("PathRailPresentation.iosDeviceSend()"),
+                       "the Send screen draws a rail for a send it no longer offers")
+        let deviceInbox = try XCTUnwrap(
+            try sources().first { $0.name == "DeviceInboxView.swift" }?.text)
+        XCTAssertTrue(deviceInbox.contains(
+            "PathRail(stops: PathRailPresentation.iosDeviceInbox())"),
+            "the Device Inbox must state where a delivery lands, and on THIS device")
+        XCTAssertFalse(deviceInbox.contains("PathRailPresentation.deviceInbox()"),
+                       "the Mac rail ends at \"This Mac\" and is a false claim on a phone")
         // Direct's rail is the pairing-code one, which IS the nearby one — the
         // same two devices and the same encrypted middle, because it is the same
         // route. What it may never be is `crossNetwork`, the Mac rail for this
@@ -4852,9 +5287,16 @@ final class IOSSurfaceGuardTests: XCTestCase {
         for stop in PathRailPresentation.iosStoredSend(.idle)
             + PathRailPresentation.iosStoredSend(done)
             + PathRailPresentation.iosDeviceSend()
+            + PathRailPresentation.iosDeviceInbox()
             + PathRailPresentation.iosNearby()
             + PathRailPresentation.iosPairingCode() {
             used.insert(stop.symbol)
+        }
+        // The shell's own glyphs. They live on `IOSSurface`, in the package, so
+        // the source sweep above cannot see them — and they are the ones every
+        // launch draws: five tab items, and five sidebar rows on an iPad.
+        for surface in IOSSurface.allCases {
+            used.insert(surface.symbol)
         }
         used.insert("checkmark")
 
@@ -4876,14 +5318,168 @@ final class IOSSurfaceGuardTests: XCTestCase {
         return (parts.first ?? 0) * 1_000 + (parts.count > 1 ? parts[1] : 0)
     }
 
+    /// **The Device Inbox is composed app-scoped, and its account signal reaches
+    /// it with no view mounted.**
+    ///
+    /// Three claims, and each has a defect behind it that a diff hides:
+    ///
+    ///  - a `.task`-installed session observation is absent for exactly the case
+    ///    it exists for, because a `TabView` may tear an off-screen destination
+    ///    down — leaving the app claiming, decrypting and writing deliveries
+    ///    under a credential the server has already revoked;
+    ///  - a controller built anywhere but the one factory is a controller whose
+    ///    stores an acceptance launch can half-isolate — the failure
+    ///    `WORKFLOW-LEARNINGS` records from the fixture that replaced the
+    ///    session's transport and left the account model talking to production;
+    ///  - the send half's three seams are what stop a delivery's own report
+    ///    resurrecting a history row the user deleted.
+    func testTheDeviceInboxReceiverIsAppScopedAndObservedBeforeAnyViewExists() throws {
+        let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" }?.text)
+        XCTAssertTrue(app.contains("@StateObject private var inbox: InboxController"),
+                      "the receiver must outlive the destination that renders it")
+        XCTAssertTrue(app.contains("private let inboxSession: InboxSessionBridge"),
+                      "the account signal must not depend on a view being mounted")
+        XCTAssertTrue(app.contains("bridge.observe(account.$state, bearer: { account.bearerToken })"),
+                      "the bridge must read the bearer at the instant the state changes")
+        XCTAssertEqual(app.components(separatedBy: "InboxSessionBridge(").count - 1, 1,
+                       "two bridges would be two answers to which generation may receive")
+        XCTAssertEqual(app.components(separatedBy: "AppEnvironment.makeIOSInboxController(").count - 1, 1,
+                       "the receiver must be assembled in exactly one place")
+        XCTAssertEqual(app.components(separatedBy: "InboxController(runtime:").count - 1, 0,
+                       "a hand-wired controller can half-isolate its stores")
+        for seam in ["delivering.onSentHistory = ", "delivering.onSentStateChanged = ",
+                     "delivering.isSentHistoryDeleted = "] {
+            XCTAssertTrue(app.contains(seam), "the send half is missing \(seam)")
+        }
+        // The composer's isolation, installed the same way and for the same
+        // reason: a batch chosen under one account must not survive into the
+        // next, with no conversation on screen.
+        XCTAssertTrue(app.contains("composing.observe(account.$state)"),
+                      "a staged batch could be sealed to the next account's device")
+    }
+
+    /// **The receiver is foreground-only, and the app enforces it rather than
+    /// only saying so.**
+    ///
+    /// `.inactive` is not background — a document picker, Control Centre and the
+    /// app switcher all produce it while the app is visible — so the gate is
+    /// driven through `lifecycle(_:)`, which is the one place this app maps a
+    /// `ScenePhase`. The behaviour itself is driven by `IOSInboxReceiveTests`;
+    /// this is the wiring that connects it, which is what a re-layout drops.
+    func testTheReceiverIsDrivenFromTheOneSceneLifecycleReader() throws {
+        let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" }?.text)
+        XCTAssertTrue(app.contains("inbox.foreground(lifecycle(phase) != .background)"),
+                      "the receiver is not gated on the app being in the foreground")
+        XCTAssertFalse(app.contains("inbox.pause()"),
+                       "the lifecycle must not spend the user's own sticky pause")
+        XCTAssertEqual(app.components(separatedBy: "@Environment(\\.scenePhase)").count - 1, 1,
+                       "a second scene-phase reader would disagree with the first")
+        // And no capability was introduced to make receiving work while away.
+        for background in ["UIBackgroundModes", "URLSessionConfiguration.background",
+                           "UNUserNotificationCenter", "registerForRemoteNotifications"] {
+            XCTAssertFalse(app.contains(background),
+                           "the receive slice claimed \(background), which this app does not have")
+        }
+        // Said on screen, unconditionally, rather than only as a failure state.
+        let view = try XCTUnwrap(try sources().first { $0.name == "DeviceInboxView.swift" }?.text)
+        XCTAssertTrue(view.contains("L10n.t(.inboxIOSForegroundOnly)"),
+                      "the surface never tells the user the receiver needs the app open")
+        XCTAssertFalse(view.contains("if inbox.state") ,
+                       "the foreground statement must not be conditional on a state")
+    }
+
+    /// Every sentence on the Device Inbox comes from the iOS copy layer, not
+    /// from the shared one that names a Mac and a folder picker.
+    ///
+    /// `IOSInboxCopyTests` drives the substitutions themselves over every state;
+    /// this is the half that checks the surface actually reads them.
+    func testTheDeviceInboxRendersTheIOSCopyRatherThanTheSharedMacOne() throws {
+        let view = try XCTUnwrap(try sources().first { $0.name == "DeviceInboxView.swift" }?.text)
+        XCTAssertTrue(view.contains("IOSInboxCopy.status(for: inbox.state)"))
+        XCTAssertTrue(view.contains("IOSInboxCopy.recovery(for: inbox.state)"))
+        XCTAssertTrue(view.contains("IOSInboxCopy.folderExplanation()"))
+        for macCopy in ["InboxStatusPresentation.text(for:", "InboxStatusPresentation.recovery(",
+                        "L10n.t(.inboxExplain)", "L10n.t(.inboxFolderExplain)",
+                        "L10n.t(.inboxSignedOutBody)", "L10n.t(.inboxPolicyExplain)"] {
+            XCTAssertFalse(view.contains(macCopy),
+                           "the Device Inbox renders \(macCopy), which describes a Mac")
+        }
+        // No folder chooser and no notification control: neither exists here,
+        // and a control that cannot work is worse than one that is absent.
+        for absent in ["chooseFolder()", "inbox.removeFolder()", "inbox.chooseFolder(",
+                       "notificationPermission", "openNotificationSettings",
+                       "inbox.revealReceiveFolder()", "inbox.reveal("] {
+            XCTAssertFalse(view.contains(absent),
+                           "the Device Inbox offers \(absent), which iOS cannot do")
+        }
+    }
+
+    /// The conversation page's destructive controls are reachable, named, and
+    /// confirmed — and its rows are one spoken element each.
+    ///
+    /// A swipe action is undiscoverable and unreachable to somebody navigating
+    /// with VoiceOver, and three identical "Delete" buttons on three rows are
+    /// three ways to delete the wrong thing.
+    func testTheConversationPageIsNavigableAndItsDeletionsAreConfirmed() throws {
+        let page = try XCTUnwrap(
+            try sources().first { $0.name == "DeviceConversationView.swift" }?.text)
+        // Deleting is always behind a confirmation, and the confirmation says
+        // what deleting is not.
+        XCTAssertEqual(page.components(separatedBy: ".confirmationDialog(").count - 1, 2,
+                       "an entry or a whole conversation can be deleted without confirming")
+        XCTAssertTrue(page.contains("InboxTimelinePresentation.entryDeleteBody("))
+        XCTAssertTrue(page.contains("InboxTimelinePresentation.conversationDeleteBody("))
+        XCTAssertTrue(page.contains("isRunning: runningItem(for: entry) != nil"),
+                      "the confirmation must say that a live delivery keeps running")
+        // The snapshot, not a live read: a delivery committed between the button
+        // and the confirmation was never observed and must not be erased.
+        XCTAssertTrue(page.contains("deletingConversation = conversation.entryIDs"))
+        XCTAssertTrue(page.contains("observedEntryIDs: observed"))
+        // Reachable without a gesture.
+        XCTAssertFalse(page.contains(".swipeActions"),
+                       "a destructive control behind a swipe is unreachable to VoiceOver")
+        // Direction is words, not alignment or colour.
+        XCTAssertTrue(page.contains("InboxTimelinePresentation.direction(of: entry,"))
+        XCTAssertTrue(page.contains("InboxTimelinePresentation.accessibilityLabel("))
+        // The staged batch is re-aimed on arrival and re-asked at the moment of
+        // use, so a page reused for another device cannot seal it to that one.
+        XCTAssertTrue(page.contains("composer.stage(for: peerID)"))
+        XCTAssertTrue(page.contains("composer.batch(for: peerID)"))
+        // And a device send never claims the authority to retire a shared draft.
+        XCTAssertTrue(page.contains("sourceDraftId: nil"),
+                      "a send from this page could delete another app's only copy of a file")
+    }
+
+    /// The iPad sidebar row says what a destination does before it is opened,
+    /// and says the same thing to VoiceOver.
+    func testTheIPadSidebarRowsCarryTheirSubtitleAsTheirHint() throws {
+        let root = try XCTUnwrap(try sources().first { $0.name == "RootView.swift" }?.text)
+        XCTAssertTrue(root.contains(".accessibilityHint(subtitle(for: surface))"),
+                      "a sidebar row explains itself on screen but not to VoiceOver")
+        XCTAssertTrue(root.contains(".accessibilityIdentifier(\"sidebar-\\(surface.rawValue)\")"))
+        XCTAssertTrue(root.contains("destination-\\(shell.placement.background.rawValue)"),
+                      "acceptance cannot tell the detail column from the row that opened it")
+        // Every browseable surface has a title AND a subtitle, in both languages.
+        for surface in IOSSurface.browseable {
+            XCTAssertTrue(root.contains("case .\(surface.rawValue):"),
+                          "\(surface.rawValue) is unnamed in the shell")
+        }
+    }
+
     /// The two empty states that are not merely absent content.
     func testBothEmptyDeviceListsAreDesignedStatesWithTheirRemedy() throws {
         let all = try sources()
         let nearby = try XCTUnwrap(all.first { $0.name == "NearbyView.swift" }?.text)
         XCTAssertTrue(nearby.contains("EmptyStateView(symbol: \"dot.radiowaves.left.and.right\","))
         XCTAssertTrue(nearby.contains("message: L10n.t(.nearbyEmptyRoster)"))
-        let devices = try XCTUnwrap(all.first { $0.name == "DeviceSendView.swift" }?.text)
-        XCTAssertTrue(devices.contains("message: L10n.t(.sendDeviceNone)"))
+        // The device list moved out of the Send tab in 0.3.0 and into the
+        // Device Inbox, merged with the conversations — one device, one row,
+        // one page — so the empty state moved with it. Its message changed with
+        // the list's meaning: it is now empty for two reasons at once (nothing
+        // has arrived, and there may be no device that could send), so it keeps
+        // the two-part shape and its remedy is still the same key.
+        let devices = try XCTUnwrap(all.first { $0.name == "DeviceInboxView.swift" }?.text)
+        XCTAssertTrue(devices.contains("message: L10n.t(.inboxIOSConversationsEmpty)"))
         XCTAssertTrue(devices.contains("detail: L10n.t(.sendDeviceNoneHelp)"),
                       "the empty device list dropped its remedy")
         // No action of its own on either: the thing to press next — Look again,
@@ -5108,6 +5704,153 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(tab.contains("ProgressView { Text(L10n.t(.accountRestoring)) }"))
         XCTAssertFalse(tab.contains("ProgressView()\n"),
                        "an unlabelled spinner reads as nothing")
+    }
+
+    /// **A signed-out device must SKIP the physical minting role, and the check
+    /// that decides so has to run BEFORE the staged-batch precondition.**
+    ///
+    /// `DirectView.createFiles` renders `PendingFileList` inside its
+    /// `case .allowed = gate` branch. So on a device with no ready account the
+    /// staged row and Create are both absent together, and `gate.createCodeTitle`
+    /// stands in their place — one state, not two independent ones.
+    ///
+    /// A retained physical run failed exactly on that. The iPhone was correct:
+    /// signed out, it drew "Creating a code needs an account". The harness
+    /// waited for `pendingFile.0` one step ABOVE the skip that already existed
+    /// for that condition, spent the budget, and reported a staging failure —
+    /// a red naming the fixture, and two people's hardware spent to produce it.
+    ///
+    /// Guarded as source rather than behavior because the two states are
+    /// mutually exclusive by construction: no run can have an account gate and
+    /// a staged batch at once, so there is no runtime in which the ordering
+    /// below is observable at all.
+    func testTheMintingRoleSkipsAnAccountGatedDeviceBeforeRequiringAStagedBatch() throws {
+        let suite = try RepoRoot.text("apps/ios/RelayiumUITests/DevicePairUITests.swift")
+
+        // 1. The role resolves "can this device mint" before it mints, and no
+        //    longer reaches for the staged row on its own.
+        let minting = try XCTUnwrap(suite.components(
+            separatedBy: "func testPairingCodeFilesAreSentToThePhysicalPeer() throws {")
+            .dropFirst().first?.components(separatedBy: "\n    // MARK:").first,
+            "the pairing-code minting role is gone")
+        guard let precondition = minting.range(of: "requireStagedFixtureUnlessAccountGated("),
+              let mint = minting.range(of: "mintCode(") else {
+            return XCTFail("""
+                the minting role no longer establishes the staged batch and the account \
+                gate together before it mints, so this guard cannot see the ordering it \
+                exists for.
+                """)
+        }
+        XCTAssertTrue(precondition.upperBound < mint.lowerBound, """
+            the minting role mints before it establishes whether this device can mint at \
+            all, so an account-gated device is diagnosed by whichever check runs first \
+            rather than by the one that knows the answer.
+            """)
+        XCTAssertFalse(minting.contains("pendingFile.0"), """
+            the minting role waits on the staged row directly again. That row lives inside \
+            DirectView.createFiles' `case .allowed = gate` branch, so on a signed-out \
+            device it never appears, and the wait becomes a timeout naming the fixture \
+            instead of a skip naming the account.
+            """)
+
+        // 2. The precondition handles BOTH states, in one bounded wait, and
+        //    prefers skipping to failing.
+        let precheck = try XCTUnwrap(suite.components(
+            separatedBy: "private func requireStagedFixtureUnlessAccountGated(")
+            .dropFirst().first?.components(separatedBy: "\n    }").first,
+            "the combined staged-batch/account-gate precondition is gone")
+        XCTAssertTrue(precheck.contains("\"pendingFile.0\""), """
+            the precondition no longer requires the staged batch on a device that CAN \
+            mint, so this lane could mint a legacy code carrying nothing.
+            """)
+        XCTAssertTrue(precheck.contains("DevicePair.createCodeGateTitle"), """
+            the precondition no longer recognises the account gate, which is the whole \
+            repair: it would fail on the absent row again.
+            """)
+        XCTAssertTrue(precheck.contains("DevicePair.establishBudget"), """
+            the precondition waits on a budget other than the one mintCode uses. \
+            AccountSession.restore() is a keychain read plus a network refresh, and a \
+            shorter ceiling expires inside it with NEITHER state on screen.
+            """)
+        XCTAssertFalse(precheck.contains("waitForExistence"), """
+            the precondition waits for one of the two states on its own timer, so the \
+            other cannot answer within it — which is the pre-check shape this replaced.
+            """)
+        let loop = try XCTUnwrap(precheck.components(separatedBy: "while Date() < deadline")
+            .dropFirst().first?.components(separatedBy: "{").first,
+            "the precondition no longer polls both states against one deadline")
+        for state in ["pending", "gate"] {
+            XCTAssertTrue(loop.contains(state), """
+                the precondition's wait no longer observes \(state), so it stops on the \
+                first seconds of a cold launch when neither state exists yet.
+                """)
+        }
+        guard let waited = precheck.range(of: "while Date() < deadline"),
+              let skip = precheck.range(of: "XCTSkip("),
+              let failed = precheck.range(of: "XCTFail(") else {
+            return XCTFail("the precondition lost its wait, its skip or its refusal")
+        }
+        XCTAssertTrue(waited.upperBound < skip.lowerBound, """
+            the precondition decides before it has waited, so a cold launch still \
+            resolving its account is read as one that has none.
+            """)
+        XCTAssertTrue(skip.lowerBound < failed.lowerBound, """
+            the precondition fails before it considers the account gate, which is the \
+            defect it was written to remove.
+            """)
+        XCTAssertTrue(precheck.contains("app.debugDescription"), """
+            the only genuinely unexplained outcome — neither a staged row nor a gate — \
+            no longer reports the screen it saw, which is the one case a reader of the \
+            retained bundle cannot reconstruct.
+            """)
+
+        // 3. Both discovery points say the same actionable thing, once.
+        XCTAssertEqual(suite.components(
+            separatedBy: "private static let createCodeNeedsAnAccount").count - 1, 1, """
+            the manual account step is declared more than once, so the two checks that \
+            can reach it are free to drift into telling the operator different halves \
+            of the same action.
+            """)
+        XCTAssertEqual(suite.components(
+            separatedBy: "XCTSkip(Self.createCodeNeedsAnAccount)").count - 1, 2, """
+            the staged-batch precondition and mintCode are the two places that can \
+            discover this device holds no account, and both must skip with the same \
+            words: which of them speaks first is an accident of the flow.
+            """)
+        // Read as the operator reads it — reflowed. The declaration is a
+        // line-continued literal, so any phrase in it may straddle a break, and
+        // a guard that matched the SOURCE would be pinning where the author
+        // happened to wrap rather than what the skip actually says.
+        let reason = try XCTUnwrap(suite.components(
+            separatedBy: "private static let createCodeNeedsAnAccount = \"\"\"")
+            .dropFirst().first?.components(separatedBy: "\"\"\"").first,
+            "the manual account step is no longer a literal this guard can read")
+        let spoken = reason.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty && $0 != "\\" }
+            .joined(separator: " ")
+        for step in ["Sign in ONCE by hand", "joining a code does not",
+                     "This harness holds no credential"] {
+            XCTAssertTrue(spoken.contains(step), """
+                the account skip no longer tells the operator "\(step)", so a skipped \
+                physical run reports a condition with no stated way out of it.
+                """)
+        }
+
+        // 4. And mintCode still re-reads the gate before it acts. That is what
+        //    makes the precondition safe to resolve a tie in favour of running:
+        //    a gate that is genuinely still up is caught one line later, by the
+        //    check that was always there.
+        let mintBody = try XCTUnwrap(suite.components(separatedBy: "private func mintCode(")
+            .dropFirst().first?.components(separatedBy: "\n    }").first,
+            "mintCode is gone")
+        guard let mintSkip = mintBody.range(of: "XCTSkip(Self.createCodeNeedsAnAccount)"),
+              let tapped = mintBody.range(of: "button.tap()") else {
+            return XCTFail("mintCode no longer skips on the account gate before it taps Create")
+        }
+        XCTAssertTrue(mintSkip.upperBound < tapped.lowerBound, """
+            mintCode taps Create before it reads the account gate, so the precondition's \
+            preference for continuing is no longer backed by a second reading.
+            """)
     }
 
 }

@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import RelayiumAppKit
 import RelayiumKit
+import SwiftUI
 
 #if DEBUG
 /// One injected file selection, made once, by an object that owns its own
@@ -111,6 +112,26 @@ enum UITestMode {
     /// Every launch that resolves no loopback origin, which is every launch that
     /// passes none, resolves production and is refused here.
     static let allowsResidency = isActive && AppEnvironment.isLoopbackTransferOrigin
+
+    /// Whether this launch may dial and accept a link over a same-host route.
+    ///
+    /// The built-App acceptance is the one arrangement whose two endpoints are
+    /// unavoidably on one machine: XCUITest drives one app, the Simulator shares
+    /// the launcher's network stack, and the counterpart is a process beside it.
+    /// The shipped transport prohibits `.loopback`, which is right for a feature
+    /// about two devices and is what a failing run showed refusing the only
+    /// route available — both listeners up, reciprocal discovery, and no
+    /// outbound socket from the app after Connect.
+    ///
+    /// Three conditions, not one. `allowsResidency` already carries `isActive`
+    /// and the loopback-origin rule, so a launch that passes this argument
+    /// without the acceptance harness behind it — no `--relayium-ui-testing`, or
+    /// an origin that resolves production — resolves false and changes nothing.
+    /// In Release the argument does not exist at all.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let sameHostLoopbackArgument = "--relayium-ui-testing-same-host-loopback"
+    static let allowsSameHostLoopback = allowsResidency
+        && ProcessInfo.processInfo.arguments.contains(sameHostLoopbackArgument)
 
     /// Whether this launch should leave one deterministic file where the system
     /// document browser can reach it.
@@ -407,6 +428,103 @@ enum UITestMode {
         Task { try? await store.save(id: "obj_uitest", keyB64url: key) }
         return store
     }
+    /// The keychain identity the Device Inbox's DEVICE KEY history may use.
+    ///
+    /// The same isolation the token store already gets, and for a sharper
+    /// reason. `KeychainInboxDeviceKeyStore` is a read/write store of X25519
+    /// private keys, keyed by account under the product's own service — so an
+    /// acceptance launch resolving the shipped identity would read the installed
+    /// app's device keys, and a generation change would WRITE over them. That is
+    /// the installed product losing the ability to decrypt deliveries already
+    /// sealed to it.
+    ///
+    /// Nil outside an acceptance launch, so a shipped build always resolves the
+    /// product's own identity and cannot be pointed at a test one.
+    static func inboxKeychainConfiguration() -> KeychainConfiguration? {
+        guard isActive else { return nil }
+        return AppEnvironment.isolatedKeychainConfiguration()
+    }
+
+    /// The defaults domain the Device Inbox's receive POLICY may use.
+    ///
+    /// Isolating one store is not isolating the app — the rule
+    /// `pendingUploadRoot` records. The policy is the user's standing consent to
+    /// unattended writes, so an acceptance launch that wrote it into
+    /// `UserDefaults.standard` would change what the installed product does when
+    /// nobody is looking at it. A suite name of this launch's own, removed
+    /// first, so one run cannot inherit the answer another established.
+    static func inboxDefaults() -> UserDefaults? {
+        // nonlocalized: a defaults suite name, never displayed. It is an
+        // arbitrary private namespace rather than an identity, so it did NOT
+        // follow the bundle id onto `com.relayium.mac`: nothing resolves it
+        // from the bundle, no acceptance script names it, and renaming it would
+        // only be churn. It is scoped to this launch and cleared on entry.
+        let suite = "com.relayium.app.uitest-inbox"
+        guard isActive, let defaults = UserDefaults(suiteName: suite) else { return nil }
+        defaults.removePersistentDomain(forName: suite)
+        return defaults
+    }
+
+    /// A receive directory of this launch's own.
+    ///
+    /// The product receives into `Documents/Received`, which is also where a
+    /// stored-link download lands and what `resetReceivedFolder` empties. An
+    /// acceptance launch gets a sibling instead, so a Device Inbox run cannot
+    /// delete or collide with what the stored-link acceptance path is asserting
+    /// about in the same container.
+    ///
+    /// Nil outside an acceptance launch, so a shipped build always receives into
+    /// the one folder it publishes to the Files app.
+    static func inboxReceiveDirectory() -> (@Sendable () throws -> URL)? {
+        guard isActive else { return nil }
+        return {
+            // Application Support is refused here for the reason the guard
+            // refuses `temporaryDirectory` everywhere in this file: a received
+            // file must land where the product puts received files. This is
+            // Documents, beside `Received`, and therefore equally durable and
+            // equally reachable from the Files app.
+            let documents = try ReceiveDestination.documentsDirectory()
+            // nonlocalized: an acceptance directory name, never displayed
+            let root = documents.appendingPathComponent("uitest-inbox", isDirectory: true)
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            return root
+        }
+    }
+
+    /// Opens the launch on the stored-link screen, which is no longer a tab.
+    ///
+    /// **Why acceptance needs a seam here at all.** Until 0.3.0 `storedReceive`
+    /// was the first of five tabs and the destination the app launched on, so
+    /// every stored-link test simply tapped it. It is not browseable any more —
+    /// opening a link is something the OS hands this app, not somewhere a person
+    /// sets out to go — and the two product routes that remain are a verified
+    /// Universal Link, which no UI test process can deliver, and a stored-file
+    /// row inside Account, which needs an account. The signed-OUT stored-link
+    /// behaviour — a malformed link, the keyboard's Go key, a refusal corrected
+    /// in place — has neither, and it is real product behaviour that would
+    /// otherwise lose its runtime evidence entirely.
+    ///
+    /// **It forges nothing.** All it does is choose the destination
+    /// `AppNavigationModel` starts on. `IOSShellModel` then applies its own
+    /// rule to that destination like any other, which is what puts the screen
+    /// up as a sheet over `lanTransfer` — so the presentation, the background
+    /// underneath it and the dismissal are the product's, not this argument's.
+    /// `testAStoredLinkOpenedFromTheAccountReturnsToTheSurfaceUnderneath` drives
+    /// the same surface through the real Account route, so the seam is never the
+    /// only evidence that presenting a stored link works.
+    ///
+    /// Nil outside an acceptance launch, and absent from Release, so no shipped
+    /// launch can be started on a screen the user did not ask for.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let openStoredLinkArgument = "--relayium-ui-testing-open-stored-link"
+
+    static func initialDestination() -> AppDestination? {
+        guard isActive,
+              ProcessInfo.processInfo.arguments.contains(openStoredLinkArgument)
+        else { return nil }
+        return .storedReceive
+    }
+
     /// The keychain an acceptance launch may use — never the item the installed
     /// product wrote, and emptied before the session restores.
     ///
@@ -505,11 +623,37 @@ enum UITestMode {
             at: documents.appendingPathComponent(ReceiveDestination.folderName,
                                                  isDirectory: true))
     }
+    /// **Dark appearance, asked for by the launch rather than by the device.**
+    ///
+    /// `XCUIDevice.shared.appearance` is the API this would otherwise use, and
+    /// it does not work: setting it to `.dark` on Xcode 26.6 / iOS 26 leaves
+    /// the simulator in Light, and a screenshot taken straight afterwards is
+    /// Light. A contrast audit that believes it ran in Dark and did not is
+    /// worse than no dark audit — it reports the Light findings under a Dark
+    /// heading — so the appearance is a fact about the LAUNCH here, and
+    /// `AppShellUITests` proves from a real screenshot that it took.
+    ///
+    /// `.preferredColorScheme` is the whole mechanism: it sets the trait for
+    /// the scene, so every semantic UIKit colour, every asset appearance and
+    /// every `Palette` role resolves exactly as it does on a device set to
+    /// Dark. Nothing else in the app reads this.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let darkAppearanceArgument = "--relayium-ui-testing-dark-appearance"
+    static let forcedColorScheme: ColorScheme? =
+        ProcessInfo.processInfo.arguments.contains(darkAppearanceArgument) ? .dark : nil
+
     #else
     static let isActive = false
+    /// `nil`, and unreachable: a shipped launch has no argument that could set
+    /// it, so the scene keeps whatever appearance the device is in.
+    static let forcedColorScheme: ColorScheme? = nil
     /// false, and unreachable: a shipped launch never takes the acceptance arm
     /// of the residency gate, because `isActive` is already false beside it.
     static let allowsResidency = false
+    /// false, and unreachable twice over: `allowsResidency` is already false
+    /// beside it, and the transport's permissive branch is not compiled into a
+    /// Release build at all. A shipped launch prohibits the same-host route.
+    static let allowsSameHostLoopback = false
     /// Folded to a constant, so a shipped launch always takes the residency
     /// branch and no argument can hold this device out of the room.
     static let showsOffReceiving = false
@@ -540,6 +684,24 @@ enum UITestMode {
     /// nil, so a shipped launch always keeps its stored-link keys where the
     /// product keeps them.
     static func makeStoredLinkKeyStore() -> StoredLinkKeyStore? { nil }
+
+    /// nil, so a shipped launch always resolves the product's own keychain
+    /// identity for its Device Inbox key history — the store whose contents are
+    /// the only way already-sealed deliveries can be decrypted.
+    static func inboxKeychainConfiguration() -> KeychainConfiguration? { nil }
+
+    /// nil, so a shipped launch always keeps the user's receiving consent in the
+    /// domain the product reads it from.
+    static func inboxDefaults() -> UserDefaults? { nil }
+
+    /// nil, so a shipped launch always receives into the one folder it publishes
+    /// to the Files app, and no argument can redirect a delivery.
+    static func inboxReceiveDirectory() -> (@Sendable () throws -> URL)? { nil }
+
+    /// nil, so a shipped launch always opens on the destination the product
+    /// chose, and no argument can start the app on a screen the user did not
+    /// ask for.
+    static func initialDestination() -> AppDestination? { nil }
 
     /// nil, so a shipped launch always stages where the product stages.
     static func pendingUploadRoot() -> URL? { nil }
@@ -617,7 +779,7 @@ final class UITestAccountTransport: URLProtocol {
     // nonlocalized: an acceptance fixture row, absent from Release
     static let otherDeviceName = "Kitchen laptop"
     // nonlocalized: acceptance fixture identifiers, absent from Release
-    static let bundleID = "com.relayium.app"
+    static let bundleID = "com.relayium.mac"
     static let monthlyProductID = "uitest.subscription.month"
     static let yearlyProductID = "uitest.subscription.year"
 

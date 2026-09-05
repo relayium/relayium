@@ -6221,7 +6221,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "apps/README.md must date the internal TestFlight use as history, not current distribution")
         XCTAssertFalse(apps.contains("are engineering builds distributed through internal TestFlight"),
                        "apps/README.md must not present internal TestFlight as a current iOS distribution channel")
-        XCTAssertTrue(apps.contains("**In development at 0.3.0 and not public**"),
+        XCTAssertTrue(apps.contains("**In development at 0.3.1 and not public**"),
                       "the iOS section must keep its own status line")
         XCTAssertTrue(apps.contains("**Development resumed 2026-09-01, at version 0.3.0.**"),
                       "the iOS section must state the resumed version rather than the old pause")
@@ -6240,7 +6240,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         let root = flattened(try claimSurfaceText("README.md"))
         XCTAssertFalse(root.contains("The iOS app runs its transfer, nearby and account workflows"),
                        "the root README describes iOS capabilities for an app that ships nowhere")
-        XCTAssertTrue(root.contains("`apps/ios/` exists in this repository and its development has **resumed**, at version `0.3.0`"),
+        XCTAssertTrue(root.contains("`apps/ios/` exists in this repository and its development has **resumed**, at version `0.3.1`"),
                       "the root README must say outright what state iOS development is in")
         XCTAssertTrue(root.contains("It has never been publicly released"),
                       "the root README must say outright that iOS is unpublished")

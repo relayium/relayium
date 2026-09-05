@@ -32,7 +32,7 @@ const en = {
     {
       heading: "Stored transfer (download links)",
       body: [
-        "When you use the optional stored download-link mode, your browser encrypts your files with AES-256-GCM before they leave your device. The decryption key exists only in the URL fragment — it is never sent to the server. This means:",
+        "When you use the optional stored download-link mode, your files are encrypted with AES-256-GCM on your own device before they leave it. That is true of every client that can create or open one of these links: a browser, the command-line tool, and our native macOS and iOS apps all encrypt and decrypt locally, and none of them uploads anything the server could read. The decryption key exists only in the URL fragment — it is never sent to the server. This means:",
       ],
       bullets: [
         "The server stores only ciphertext. It cannot read your file contents, filenames, or keys.",
@@ -97,14 +97,14 @@ const en = {
       ],
     },
     {
-      heading: "The Relayium app",
+      heading: "The Relayium apps for macOS and iOS",
       body: [
-        "Our macOS app handles a little device-level data that the website does not:",
+        "Our native apps handle a little device-level data that the website does not, and the two platforms do not handle the same data. Each item below says which platform it describes.",
       ],
       bullets: [
-        "This Mac's name: the app reads the computer name from your Mac's Sharing settings and uses it as this device's label — sent with an email-and-password sign-in so your account can tell your devices apart and you can sign one out, and announced to the other devices in the room when you pair over the same network. macOS often seeds that name from your full name, so renaming the Mac changes what is sent.",
-        "An installation identifier: 32 random bytes the app generates on this Mac and keeps in its keychain, sent when you sign in through your browser so that signing back in returns to the device entry this Mac already has instead of adding another. It is random and never derived from your hardware — no serial number, MAC address, or hostname — so it identifies an installation and nothing about the machine.",
-        "What the app does not do: it registers no push token and receives no push notifications. A finished transfer or a new inbox delivery is announced by macOS on this Mac itself, and those banners deliberately carry no file names, links, or codes. The app does not track you across other apps or websites, and contains no advertising or third-party analytics SDKs.",
+        "The label this device carries in your account. On macOS the app reads the computer name from your Mac's Sharing settings and uses it as that label — sent with an email-and-password sign-in so your account can tell your devices apart and you can sign one out, and announced to the other devices in the room when you pair over the same network. macOS often seeds that name from your full name, so renaming the Mac changes what is sent. On iOS the label is generic and is never a name you chose: the app reads the hardware model and sends the device family — \"iPhone\", \"iPad\" or \"iPod touch\" — and nothing else, in those same two places. No personal name reaches us from an iPhone or iPad this way.",
+        "An installation identifier, on macOS only. It is 32 random bytes the app generates on that Mac and keeps in its keychain, sent when you sign in through your browser so that signing back in returns to the device entry this Mac already has instead of adding another. It is random and never derived from your hardware — no serial number, MAC address, or hostname — so it identifies an installation and nothing about the machine. The iOS app has no browser sign-in to continue, so it generates no such identifier: today it sends us no installation identifier and no identifier read from the device itself. The random device id in your account's device list is one we issue for your account, as described above, and is not derived from your phone.",
+        "What these apps do not do. Neither registers a push token and neither receives push notifications: on macOS, a finished transfer or a new inbox delivery is announced by macOS on that Mac itself, and those banners deliberately carry no file names, links, or codes, while the iOS app has no push capability and registers nothing with Apple's push service. The iOS app asks for the camera for one purpose — reading the pairing QR code another device is showing, so you do not have to type its join code by hand — and that happens entirely on your device: the picture and the code in it are used on the spot to join that pairing, and nothing the camera sees is stored by the app or sent to us as camera data. The macOS app asks for no camera access at all, and neither app has access to your photo library: when you pick photos to send on iOS, the system's own picker runs outside the app and hands it only the items you chose. Neither app tracks you across other apps or websites, and neither contains advertising or third-party analytics SDKs.",
       ],
     },
     {
@@ -169,7 +169,7 @@ const zh = {
     {
       heading: "暂存传输（下载链接）",
       body: [
-        "使用可选的暂存下载链接功能时，你的浏览器在文件离开设备前即以 AES-256-GCM 加密。解密密钥仅存在于链接的 URL 片段（# 部分）中，绝不发送至服务器。这意味着：",
+        "使用可选的暂存下载链接功能时，文件在离开你的设备之前就已在本机以 AES-256-GCM 加密。所有能创建或打开这类链接的客户端都是如此：浏览器、命令行工具，以及我们的 macOS 与 iOS 原生 App，都在本地完成加解密，没有任何一方会上传服务器可读的内容。解密密钥仅存在于链接的 URL 片段（# 部分）中，绝不发送至服务器。这意味着：",
       ],
       bullets: [
         "服务器仅存储密文，无法读取你的文件内容、文件名或密钥。",
@@ -229,14 +229,14 @@ const zh = {
       ],
     },
     {
-      heading: "Relayium App",
+      heading: "macOS 与 iOS 上的 Relayium App",
       body: [
-        "我们的 macOS App 会处理少量网站不涉及的设备级数据：",
+        "我们的原生 App 会处理少量网站不涉及的设备级数据，而且两个平台处理的数据并不相同。下面每一条都写明它描述的是哪个平台。",
       ],
       bullets: [
-        "这台 Mac 的名称：App 会读取 Mac「共享」设置中的电脑名称，作为本设备的标签——使用邮箱与密码登录时随请求发送，便于你在账号中区分各台设备并注销其中一台；在同一网络配对时，也会公布给同一房间内的其他设备。macOS 通常会以你的全名生成该名称，因此重命名这台 Mac 就会改变发送出去的内容。",
-        "安装标识符：App 在这台 Mac 上生成 32 字节随机值并保存在本机钥匙串中，通过浏览器登录时发送，使你重新登录后回到这台 Mac 已有的设备条目，而不是新增一条。它是随机的，绝不由硬件推导——不含序列号、MAC 地址或主机名——因此它只标识某一次安装，而不透露这台机器的任何信息。",
-        "App 不做的事：它不注册推送令牌，也不接收推送通知。传输完成或收件箱有新投递，都由 macOS 在这台 Mac 本地提示，且这些横幅刻意不含文件名、链接或配对码。App 不会跨其他 App 或网站追踪你，也不含广告或第三方分析 SDK。",
+        "本设备在你账号中显示的标签。在 macOS 上，App 会读取 Mac「共享」设置中的电脑名称并作为该标签——使用邮箱与密码登录时随请求发送，便于你在账号中区分各台设备并注销其中一台；在同一网络配对时，也会公布给同一房间内的其他设备。macOS 通常会以你的全名生成该名称，因此重命名这台 Mac 就会改变发送出去的内容。在 iOS 上，这个标签是通用的，绝不会是你自己起的名字：App 读取硬件型号后只发送设备族——「iPhone」「iPad」或「iPod touch」——除此之外别无内容，发送场合与上述两处相同。因此不会有任何个人姓名经由这条路径从 iPhone 或 iPad 到达我们。",
+        "安装标识符，仅限 macOS。它是 App 在那台 Mac 上生成的 32 字节随机值，保存在本机钥匙串中，通过浏览器登录时发送，使你重新登录后回到这台 Mac 已有的设备条目，而不是新增一条。它是随机的，绝不由硬件推导——不含序列号、MAC 地址或主机名——因此它只标识某一次安装，而不透露这台机器的任何信息。iOS App 没有需要接续的浏览器登录流程，因此不会生成这样的标识符：目前它既不向我们发送安装标识符，也不发送任何从设备本身读取的标识符。你账号设备列表中的随机设备 id 是我们为你的账号签发的（见上文），并非由你的手机推导而来。",
+        "这些 App 不做的事。两者都不注册推送令牌，也都不接收推送通知：在 macOS 上，传输完成或收件箱有新投递，都由 macOS 在那台 Mac 本地提示，且这些横幅刻意不含文件名、链接或配对码；而 iOS App 根本不具备推送能力，也不会向 Apple 的推送服务注册任何东西。iOS App 申请摄像头只有一个用途——读取另一台设备正在显示的配对二维码，免得你手动输入加入码——而且这完全发生在你的设备上：画面及其中的配对码当场用于加入这次配对，摄像头看到的任何内容都不会被 App 保存，也不会作为摄像头数据发送给我们。macOS App 完全不申请摄像头权限；两个 App 也都没有你相册的访问权限：在 iOS 上选择要发送的照片时，是系统自带的选择器在 App 之外运行，只把你选中的项目交给 App。两个 App 都不会跨其他 App 或网站追踪你，也都不含广告或第三方分析 SDK。",
       ],
     },
     {

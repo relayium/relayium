@@ -12,11 +12,24 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { LANGS } from "../../shared.mjs";
+import { LANGS, MAINTAINED_LANGS } from "../../shared.mjs";
 import terms from "./terms.mjs";
 import support from "./support.mjs";
 
+// The billing correction's own date, and the date every locale of both
+// documents carried when this file was written.
 const REVISED = "2026-08-13";
+
+// `terms/` has moved since, and only for its maintained pair: on 2026-09-03 the
+// "Stored content" clause stopped attributing the client-side encryption to the
+// browser, because the CLI and both native apps do it too. That is a different
+// section of the same document, so nothing this file asserts about billing
+// changed — but the date it reads did, for `en` and `zh` only. `support/` did
+// not move and is still checked against `REVISED` for all nine.
+//
+// Expressed as a per-locale lookup rather than a second literal at each call
+// site, so the next correction to either document changes one line here.
+const TERMS_DATE = (lang) => (MAINTAINED_LANGS.includes(lang) ? "2026-09-03" : REVISED);
 
 const REFUND = {
   en: /refund/i,
@@ -94,7 +107,7 @@ describe("terms and support separate Stripe billing from Apple billing", () => {
       const stripe = stripeSection(terms, lang);
       const apple = appleSection(terms, lang);
 
-      expect(doc.updated, `terms.${lang}.updated`).toBe(REVISED);
+      expect(doc.updated, `terms.${lang}.updated`).toBe(TERMS_DATE(lang));
       expect(stripe, `terms.${lang}.stripeSection`).toBeDefined();
       expect(apple, `terms.${lang}.appleSection`).toBeDefined();
 
@@ -145,7 +158,9 @@ describe("terms and support separate Stripe billing from Apple billing", () => {
     it(`generated terms and support pages for ${lang} carry the correction`, () => {
       for (const slug of ["terms", "support"]) {
         const html = generatedPage(slug, lang);
-        expect(html, `${slug}.${lang}.updated`).toContain(REVISED);
+        expect(html, `${slug}.${lang}.updated`).toContain(
+          slug === "terms" ? TERMS_DATE(lang) : REVISED,
+        );
         expect(html, `${slug}.${lang}.stripe`).toContain("Stripe");
         expect(html, `${slug}.${lang}.macAppStore`).toContain("Mac App Store");
         // Nothing in these two documents may describe Apple billing as an

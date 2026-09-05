@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// Runtime evidence that the real iOS shell exposes and renders every primary
@@ -54,34 +55,40 @@ final class AppShellUITests: XCTestCase {
         middle.press(forDuration: 0.05, thenDragTo: target)
     }
 
-    @discardableResult
-    private func openTask(_ tabName: String, title: String) -> XCUIElement {
-        let tabs = app.tabBars.firstMatch
-        XCTAssertTrue(tabs.waitForExistence(timeout: 20), "the primary tab bar did not render")
-        let tab = tabs.buttons[tabName]
-        XCTAssertTrue(tab.waitForExistence(timeout: 10), "the tab bar has no \(tabName) task")
-        tab.tap()
-        // SwiftUI may replace the labelled tab accessibility element with its
-        // selected icon after the tap. Holding the old element and waiting on
-        // `selected == true` then observes a stale object even though the real
-        // destination rendered. The navigation bar is the user-visible task
-        // state, so it is the synchronization point and the assertion.
-        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 10),
-                      "\(tabName) selected but its screen did not render")
-        return tab
+    /// Relaunch with the stored-link screen already presented.
+    ///
+    /// **Why the stored-link tests below relaunch at all.** They used to open a
+    /// `Receive` TAB, which was the first of five and the destination the app
+    /// launched on. 0.3.0 removed it: opening a stored link is something the OS
+    /// hands this app — a verified Universal Link, or a stored-file row inside
+    /// Account — rather than somewhere a person sets out to go, so the screen is
+    /// presented over whichever destination the user was on instead of occupying
+    /// a primary tab. The signed-out behaviour these tests own has neither of
+    /// those two routes available, so the launch names the destination and
+    /// `IOSShellModel` applies its ordinary rule to it.
+    ///
+    /// The presentation itself is asserted rather than assumed, through the Done
+    /// control that only the presented form of the screen carries — so a
+    /// regression that drew this as a bare destination again fails here rather
+    /// than passing quietly.
+    private func relaunchOnStoredLink(_ extra: [String] = []) {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-open-stored-link"] + extra
+        app.launch()
+        waitForPresentedStoredReceive(app)
     }
 
+    /// Every browseable destination draws its own screen.
+    ///
+    /// The list is `Shell.browseable`, which is the runtime mirror of
+    /// `IOSSurface.browseable` — one list, so a destination cannot be added to
+    /// the product and left out of the smoke, and the compact and regular shells
+    /// cannot be checked against two different sets.
     func testEveryPrimaryTaskRendersItsOwnScreen() {
-        let destinations = [
-            (tab: "Receive", title: "Receive files"),
-            (tab: "Send", title: "Send files"),
-            (tab: "Direct", title: "Direct"),
-            (tab: "Nearby", title: "Nearby"),
-            (tab: "Account", title: "Account"),
-        ]
-        for destination in destinations {
-            openTask(destination.tab, title: destination.title)
-            if destination.tab == "Nearby" {
+        for surface in Shell.browseable {
+            open(surface, in: app)
+            if surface.id == Shell.lanTransfer.id {
                 XCTAssertTrue(app.staticTexts["Nearby receiving: paused"].exists,
                               "the offline acceptance state is not explained")
                 XCTAssertTrue(app.buttons["Resume receiving"].exists,
@@ -90,15 +97,36 @@ final class AppShellUITests: XCTestCase {
         }
     }
 
+    /// The sixth destination, which is not a row on either shell.
+    ///
+    /// `storedReceive` losing its tab must not mean losing its runtime
+    /// evidence: it is still fully supported, still reachable from a verified
+    /// Universal Link and from Account, and still the screen a downloaded file
+    /// arrives through. This is the smoke's entry for it — presented rather than
+    /// browsed to, with a browseable destination still underneath.
+    func testTheStoredLinkScreenIsPresentedOverABrowseableDestination() {
+        relaunchOnStoredLink()
+
+        XCTAssertTrue(app.textFields["receive.link"].waitForExistence(timeout: 15),
+                      "the presented stored-link screen offers no link field")
+        app.buttons["stored-receive-done"].tap()
+
+        // Dismissing lands on a real destination rather than on nothing: the
+        // background is a browseable surface by construction, and this is the
+        // runtime half of that claim.
+        XCTAssertTrue(app.navigationBars[Shell.lanTransfer.title].waitForExistence(timeout: 15),
+                      "dismissing the stored-link screen left no destination behind it")
+    }
+
     func testAccountRemediesRouteToTheAccountTask() {
-        openTask("Send", title: "Send files")
+        open(Shell.storedSend, in: app)
         let sendRemedy = app.buttons["Go to Account"]
         XCTAssertTrue(sendRemedy.waitForExistence(timeout: 10),
                       "the signed-out Send task offers no account remedy")
         sendRemedy.tap()
         XCTAssertTrue(app.navigationBars["Account"].waitForExistence(timeout: 10))
 
-        openTask("Direct", title: "Direct")
+        open(Shell.crossNetworkTransfer, in: app)
         let directRemedy = app.buttons["Open Account"]
         XCTAssertTrue(directRemedy.waitForExistence(timeout: 10),
                       "the signed-out Direct task offers no account remedy")
@@ -107,7 +135,7 @@ final class AppShellUITests: XCTestCase {
     }
 
     func testDirectModeChoiceStaysInDirect() {
-        openTask("Direct", title: "Direct")
+        open(Shell.crossNetworkTransfer, in: app)
         let textMode = app.segmentedControls.firstMatch.buttons["Text"]
         XCTAssertTrue(textMode.waitForExistence(timeout: 10),
                       "Direct offers no text mode")
@@ -128,7 +156,7 @@ final class AppShellUITests: XCTestCase {
     }
 
     func testDirectLargeFileRouteReachesSend() {
-        openTask("Direct", title: "Direct")
+        open(Shell.crossNetworkTransfer, in: app)
         let route = app.buttons["Open Send"]
         XCTAssertTrue(route.waitForExistence(timeout: 10),
                       "Direct does not offer its large-file route")
@@ -140,7 +168,7 @@ final class AppShellUITests: XCTestCase {
     }
 
     func testAccountSwitchesToACompleteInAppRegistrationForm() {
-        openTask("Account", title: "Account")
+        open(Shell.account, in: app)
         let create = app.buttons["New to Relayium? Create an account"]
         XCTAssertTrue(create.waitForExistence(timeout: 10),
                       "the sign-in form offers no registration path")
@@ -164,7 +192,7 @@ final class AppShellUITests: XCTestCase {
     }
 
     func testMalformedReceiveLinkExplainsHowToRecover() {
-        openTask("Receive", title: "Receive files")
+        relaunchOnStoredLink()
 
         let link = app.textFields["receive.link"]
         XCTAssertTrue(link.waitForExistence(timeout: 10),
@@ -202,7 +230,7 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-signed-in"]
         app.launch()
 
-        openTask("Account", title: "Account")
+        open(Shell.account, in: app)
         XCTAssertTrue(app.staticTexts["person@example.com"].waitForExistence(timeout: 20),
                       "a signed-in launch did not render the account it holds")
         XCTAssertTrue(app.staticTexts["Signed-in devices"].exists,
@@ -254,7 +282,7 @@ final class AppShellUITests: XCTestCase {
             format: "label BEGINSWITH %@", "Delete stored file")).count, 2,
             "a stored object that cannot be linked also cannot be removed")
 
-        openTask("Send", title: "Send files")
+        open(Shell.storedSend, in: app)
         XCTAssertFalse(app.buttons["Go to Account"].exists,
                        "a signed-in Send task still offers the signed-out remedy")
     }
@@ -270,7 +298,7 @@ final class AppShellUITests: XCTestCase {
         ]
         app.launch()
 
-        openTask("Account", title: "Account")
+        open(Shell.account, in: app)
         let monthly = app.buttons["subscription-buy-uitest.subscription.month"]
         for _ in 0..<8 where !monthly.exists { app.swipeUp() }
         XCTAssertTrue(monthly.waitForExistence(timeout: 20),
@@ -316,7 +344,7 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-off-receiving"]
         app.launch()
 
-        openTask("Nearby", title: "Nearby")
+        open(Shell.lanTransfer, in: app)
 
         XCTAssertTrue(app.staticTexts["Nearby receiving: off"].waitForExistence(timeout: 10),
                       "the stopped listener does not report itself as off")
@@ -366,10 +394,41 @@ final class AppShellUITests: XCTestCase {
         element.tap()
     }
 
+    /// Land the system picker on Browse, whichever shape iOS presented it in.
+    ///
+    /// Compact widths present a browsing-mode chooser —
+    /// `DOC.browsingModeTabBar` — and Browse must be selected before any
+    /// location exists to tap. Full-width iPadOS 18 never draws that tab bar:
+    /// the picker opens directly on the Browse view, with the
+    /// `com_apple_DocumentManager_Service.DOCSidebarView` navigation bar
+    /// already on screen. Both are real states of the same real system
+    /// picker, so accept whichever arrives rather than require the compact
+    /// chrome on a shape that never draws it. Nothing downstream weakens: the
+    /// fixture still has to be found, tapped and confirmed through the real
+    /// Open.
+    private func openBrowseInSystemPicker(timeout: TimeInterval = 20) {
+        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
+        let sidebar = app.navigationBars[
+            "com_apple_DocumentManager_Service.DOCSidebarView"]
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if sidebar.exists { return }
+            if browsingTabs.waitForExistence(timeout: 1) {
+                return browsingTabs.buttons["Browse"].tap()
+            }
+        } while Date() < deadline
+        XCTFail("""
+            choosing files did not present the system document browser.
+            \(app.debugDescription)
+            """)
+    }
+
     /// Select the staged document without assuming which directory the system
     /// browser remembered from an earlier import. Files may reopen inside the
     /// app folder, at the app folder's parent, or at the Locations root; all
     /// three are valid system states and expose the same production importer.
+    /// The Locations root names the device it is on — "On My iPhone" or
+    /// "On My iPad" — so match either rather than encode one device idiom.
     private func selectStagedFixture(named stem: String) {
         let fixture = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label BEGINSWITH %@", stem)).firstMatch
@@ -383,7 +442,16 @@ final class AppShellUITests: XCTestCase {
             return tapStagedFixture(named: stem)
         }
 
-        tapInBrowser("On My iPhone")
+        let device = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@ OR label == %@",
+                        "On My iPhone", "On My iPad")).firstMatch
+        guard device.waitForExistence(timeout: 15) else {
+            return XCTFail("""
+                the system document browser offers no on-device location.
+                \(app.debugDescription)
+                """)
+        }
+        device.tap()
         tapInBrowser("Relayium")
         tapStagedFixture(named: stem)
     }
@@ -402,17 +470,14 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-pending-fixture"]
         app.launch()
 
-        openTask("Nearby", title: "Nearby")
+        open(Shell.lanTransfer, in: app)
         let chooser = app.buttons["Choose Files or Folders…"]
         XCTAssertTrue(chooser.waitForExistence(timeout: 10),
                       "Nearby has no file-selection surface")
         scrollUntilHittable(chooser)
         chooser.tap()
 
-        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
-        XCTAssertTrue(browsingTabs.waitForExistence(timeout: 20),
-                      "choosing files did not present the system document browser")
-        browsingTabs.buttons["Browse"].tap()
+        openBrowseInSystemPicker()
         selectStagedFixture(named: "Relayium product brief")
 
         let open = app.buttons["Open"]
@@ -432,7 +497,7 @@ final class AppShellUITests: XCTestCase {
     }
 
     func testRegistrationProblemKeepsTheDraftCorrectable() {
-        openTask("Account", title: "Account")
+        open(Shell.account, in: app)
         app.buttons["New to Relayium? Create an account"].tap()
         XCTAssertTrue(app.staticTexts["Create your Relayium account"]
             .waitForExistence(timeout: 10))
@@ -505,7 +570,7 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = offlineLaunchArguments
             + ["--relayium-ui-testing-signed-in"]
         app.launch()
-        openTask("Account", title: "Account")
+        open(Shell.account, in: app)
 
         let other = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", "Kitchen laptop")).firstMatch
@@ -551,7 +616,7 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = offlineLaunchArguments
             + ["--relayium-ui-testing-signed-in"]
         app.launch()
-        openTask("Account", title: "Account")
+        open(Shell.account, in: app)
 
         // By the delete action itself, not merely by the row's id: a rebuildable
         // row also carries Open, Copy link and Share, and any of them would
@@ -586,7 +651,7 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = offlineLaunchArguments
             + ["--relayium-ui-testing-signed-in"]
         app.launch()
-        openTask("Account", title: "Account")
+        open(Shell.account, in: app)
 
         XCTAssertTrue(app.staticTexts["person@example.com"].waitForExistence(timeout: 20),
                       "the signed-in launch did not render the account it holds")
@@ -610,7 +675,7 @@ final class AppShellUITests: XCTestCase {
 
         // The account-gated task must go back to offering its remedy, not to a
         // half-signed-in surface that would fail on first use.
-        openTask("Send", title: "Send files")
+        open(Shell.storedSend, in: app)
         XCTAssertTrue(app.buttons["Go to Account"].waitForExistence(timeout: 10),
                       "a signed-out Send task no longer offers its account remedy")
     }
@@ -628,7 +693,7 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-text-code"]
         app.launch()
 
-        openTask("Direct", title: "Direct")
+        open(Shell.crossNetworkTransfer, in: app)
         let textMode = app.segmentedControls.firstMatch.buttons["Text"]
         XCTAssertTrue(textMode.waitForExistence(timeout: 10), "Direct offers no text mode")
         textMode.tap()
@@ -665,7 +730,7 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-text-code"]
         app.launch()
 
-        openTask("Direct", title: "Direct")
+        open(Shell.crossNetworkTransfer, in: app)
         app.segmentedControls.firstMatch.buttons["Text"].tap()
         let create = app.buttons["Create a text code"]
         XCTAssertTrue(create.waitForExistence(timeout: 10))
@@ -695,7 +760,7 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-terminal-text"]
         app.launch()
 
-        openTask("Direct", title: "Direct")
+        open(Shell.crossNetworkTransfer, in: app)
         app.segmentedControls.firstMatch.buttons["Text"].tap()
         let create = app.buttons["Create a text code"]
         XCTAssertTrue(create.waitForExistence(timeout: 10))
@@ -766,7 +831,7 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pending-fixture"]
         app.launch()
 
-        openTask("Send", title: "Send files")
+        open(Shell.storedSend, in: app)
         XCTAssertFalse(app.buttons["Go to Account"].exists,
                        "a signed-in Send task still offers the signed-out remedy")
 
@@ -776,10 +841,7 @@ final class AppShellUITests: XCTestCase {
         scrollUntilHittable(chooser)
         chooser.tap()
 
-        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
-        XCTAssertTrue(browsingTabs.waitForExistence(timeout: 20),
-                      "choosing files did not present the system document browser")
-        browsingTabs.buttons["Browse"].tap()
+        openBrowseInSystemPicker()
         selectStagedFixture(named: "Relayium product brief")
         let open = app.buttons["Open"]
         XCTAssertTrue(open.waitForExistence(timeout: 10),
@@ -818,10 +880,11 @@ final class AppShellUITests: XCTestCase {
     func testEditingARefusedLinkClearsTheRefusalWithIt() {
         app.terminate()
         app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-invalid-download-link"]
+            + ["--relayium-ui-testing-invalid-download-link",
+               "--relayium-ui-testing-open-stored-link"]
         app.launch()
 
-        openTask("Receive", title: "Receive files")
+        waitForPresentedStoredReceive(app)
 
         let link = app.textFields["receive.link"]
         XCTAssertTrue(link.waitForExistence(timeout: 10))
@@ -892,7 +955,7 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-preselect-fixture"]
         app.launch()
 
-        openTask("Send", title: "Send files")
+        open(Shell.storedSend, in: app)
         let chooser = app.buttons["Choose Files or Folders…"]
         XCTAssertTrue(chooser.waitForExistence(timeout: 15))
         XCTAssertTrue(app.descendants(matching: .any)["pendingFile.0"].firstMatch
@@ -939,7 +1002,7 @@ final class AppShellUITests: XCTestCase {
                "--relayium-ui-testing-stall-upload"]
         app.launch()
 
-        openTask("Send", title: "Send files")
+        open(Shell.storedSend, in: app)
         let chooser = app.buttons["Choose Files or Folders…"]
         XCTAssertTrue(chooser.waitForExistence(timeout: 15))
         XCTAssertTrue(app.descendants(matching: .any)["pendingFile.0"].firstMatch
@@ -983,7 +1046,7 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-sign-in"]
         app.launch()
 
-        openTask("Account", title: "Account")
+        open(Shell.account, in: app)
         XCTAssertTrue(app.staticTexts["Welcome back"].waitForExistence(timeout: 15),
                       "a signed-out launch did not offer the sign-in form")
 
@@ -1020,7 +1083,7 @@ final class AppShellUITests: XCTestCase {
     /// and must not leave the file surface behind, or the user would be looking
     /// at a pending send that the mode they picked cannot perform.
     func testNearbyTransferTypeChangesWhatIsStaged() {
-        openTask("Nearby", title: "Nearby")
+        open(Shell.lanTransfer, in: app)
 
         let chooser = app.buttons["Choose Files or Folders…"]
         XCTAssertTrue(chooser.waitForExistence(timeout: 15),
@@ -1072,7 +1135,7 @@ final class AppShellUITests: XCTestCase {
                "--relayium-ui-testing-fail-upload"]
         app.launch()
 
-        openTask("Send", title: "Send files")
+        open(Shell.storedSend, in: app)
 
         // The precondition, asserted rather than assumed: Send below is only
         // meaningful against a file this launch actually staged and selected.
@@ -1112,16 +1175,14 @@ final class AppShellUITests: XCTestCase {
                "--relayium-ui-testing-file-code"]
         app.launch()
 
-        openTask("Direct", title: "Direct")
+        open(Shell.crossNetworkTransfer, in: app)
         let chooser = app.buttons["Choose Files or Folders…"]
         XCTAssertTrue(chooser.waitForExistence(timeout: 15),
                       "Direct's file mode stages nothing")
         scrollUntilHittable(chooser)
         chooser.tap()
 
-        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
-        XCTAssertTrue(browsingTabs.waitForExistence(timeout: 20))
-        browsingTabs.buttons["Browse"].tap()
+        openBrowseInSystemPicker()
         selectStagedFixture(named: "Relayium product brief")
         let open = app.buttons["Open"]
         XCTAssertTrue(open.waitForExistence(timeout: 10))
@@ -1159,10 +1220,11 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = offlineLaunchArguments + [
             "--relayium-ui-testing-sign-in",
             "--relayium-ui-testing-valid-download-link",
+            "--relayium-ui-testing-open-stored-link",
         ]
         app.launch()
 
-        openTask("Receive", title: "Receive files")
+        waitForPresentedStoredReceive(app)
         let link = app.textFields["receive.link"]
         XCTAssertTrue(link.waitForExistence(timeout: 15))
         XCTAssertEqual(link.value as? String,
@@ -1207,10 +1269,11 @@ final class AppShellUITests: XCTestCase {
             "--relayium-ui-testing-sign-in",
             "--relayium-ui-testing-valid-download-link",
             "--relayium-ui-testing-fresh-received-folder",
+            "--relayium-ui-testing-open-stored-link",
         ]
         app.launch()
 
-        openTask("Receive", title: "Receive files")
+        waitForPresentedStoredReceive(app)
         let open = app.buttons["Open"]
         XCTAssertTrue(open.waitForExistence(timeout: 15))
         scrollUntilHittable(open)
@@ -1266,9 +1329,10 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = offlineLaunchArguments + [
             "--relayium-ui-testing-sign-in",
             "--relayium-ui-testing-valid-download-link",
+            "--relayium-ui-testing-open-stored-link",
         ]
         app.launch()
-        openTask("Receive", title: "Receive files")
+        waitForPresentedStoredReceive(app)
         let reopen = app.buttons["Open"]
         XCTAssertTrue(reopen.waitForExistence(timeout: 15))
         scrollUntilHittable(reopen)
@@ -1308,18 +1372,53 @@ final class AppShellUITests: XCTestCase {
     /// of the archived languages actually sees is asserted by
     /// `testAnArchivedLanguagePreferenceRendersACompleteEnglishLeftToRightShell`.
     func testEveryShippedLanguageRendersItsOwnShell() {
-        let shipped = [("en", "Nearby"), ("zh-Hans", "附近设备")]
-        for (code, nearby) in shipped {
+        // Two destinations per language, not one: the second is the one this
+        // batch added, so a Device Inbox row shipped with an untranslated or
+        // missing title would be caught here rather than by eye.
+        let shipped = [("en", "Nearby", "Inbox"), ("zh-Hans", "附近设备", "收件箱")]
+        for (code, nearby, inbox) in shipped {
             app.terminate()
             app.launchArguments = ["--relayium-ui-testing",
                                    "-AppleLanguages", "(\(code))",
                                    "-AppleLocale", code]
             app.launch()
-            let tabs = app.tabBars.firstMatch
-            XCTAssertTrue(tabs.waitForExistence(timeout: 20),
-                          "\(code) did not produce a shell at all")
-            XCTAssertTrue(tabs.buttons[nearby].waitForExistence(timeout: 10),
-                          "\(code) rendered a shell that is not in \(code)")
+            let layout = waitForShell(app)
+            // A portrait iPadOS 18 launch collapses the sidebar, and rows that
+            // are off screen have no labels to read.
+            if layout == .regular { revealSidebar(app) }
+
+            // Located by IDENTIFIER and asserted on its LABEL. Looking the row
+            // up by its translated label could only ever fail by not finding it,
+            // which is indistinguishable from a shell that did not render;
+            // reading the label off the row the product built says which words
+            // it actually drew — and it is the same assertion on both shells.
+            for (surface, expected) in [(Shell.lanTransfer, nearby),
+                                        (Shell.deviceInbox, inbox)] {
+                let row = shellRow(surface, layout: layout)
+                XCTAssertTrue(row.waitForExistence(timeout: 15),
+                              "\(code) did not render the \(surface.id) destination")
+                XCTAssertTrue(row.label.contains(expected),
+                              "\(code) rendered \(surface.id) as '\(row.label)' "
+                              + "rather than in \(code)")
+            }
+        }
+    }
+
+    /// The row a destination is selected by, on whichever shell is drawn.
+    ///
+    /// Only the two tests that are ABOUT the shell itself — its copy and its
+    /// layout direction — need the row rather than the destination behind it.
+    /// Everything else goes through `open(_:in:)` and never learns which shell
+    /// it is running on.
+    private func shellRow(_ surface: Shell.Surface, layout: Shell.Layout) -> XCUIElement {
+        switch layout {
+        case .compact:
+            // Not a bare identifier lookup: iOS 18 stamps a `tabItem` Label's
+            // identifier onto the SELECTED tab's button only, and these two
+            // tests read the labels and frames of rows they never select.
+            return compactTabRow(surface, in: app)
+        case .regular:
+            return app.descendants(matching: .any)["sidebar-\(surface.id)"].firstMatch
         }
     }
 
@@ -1351,30 +1450,57 @@ final class AppShellUITests: XCTestCase {
                                    "-AppleLanguages", "(\(code))", "-AppleLocale", code]
             app.launch()
 
-            let tabs = app.tabBars.firstMatch
-            XCTAssertTrue(tabs.waitForExistence(timeout: 20),
-                          "\(code) did not produce a shell at all")
+            let layout = waitForShell(app)
+            // A portrait iPadOS 18 launch collapses the sidebar; the rows the
+            // assertions below read exist only once it is on screen.
+            if layout == .regular { revealSidebar(app) }
 
             // English words, not the archived translation.
-            XCTAssertTrue(tabs.buttons["Nearby"].waitForExistence(timeout: 15),
+            let first = shellRow(Shell.lanTransfer, layout: layout)
+            XCTAssertTrue(first.waitForExistence(timeout: 15),
+                          "a \(code) launch did not render a shell at all")
+            XCTAssertTrue(first.label.contains("Nearby"),
                           "a \(code) launch did not render the English shell")
 
             // And no destination fell through to its own catalog key. Asked of
-            // EVERY tab, because the lookup above resolves by the English label
-            // and so can never be the one that catches a raw key.
-            let ordered = tabs.buttons.allElementsBoundByIndex
-            XCTAssertGreaterThanOrEqual(ordered.count, 2,
-                                        "the \(code) shell rendered fewer destinations than it has")
-            for tab in ordered {
-                let shown = tab.label.isEmpty ? (tab.value as? String ?? "") : tab.label
+            // EVERY row, because the lookup above resolves one known surface and
+            // so can never be the one that catches a raw key.
+            let ordered = Shell.browseable.map { shellRow($0, layout: layout) }
+            for row in ordered {
+                let shown = row.label.isEmpty ? (row.value as? String ?? "") : row.label
                 XCTAssertFalse(shown.hasPrefix("tab.") || shown.hasPrefix("nav."),
                                "a \(code) launch rendered a raw catalog key: \(shown)")
             }
 
-            // And laid out left to right: the first destination is the LEADING
-            // one, so under LTR it sits left of the last.
-            XCTAssertLessThan(ordered[0].frame.minX, ordered[ordered.count - 1].frame.minX,
-                              "a \(code) launch mirrored the tab bar to right-to-left")
+            // And laid out left to right. The two shells express the same
+            // property along different axes, which is why the geometry is asked
+            // of each in its own terms rather than of a tab bar that a
+            // regular-width launch does not draw.
+            switch layout {
+            case .compact:
+                // The first destination is the LEADING one, so under LTR it sits
+                // left of the last.
+                XCTAssertLessThan(ordered[0].frame.minX,
+                                  ordered[ordered.count - 1].frame.minX,
+                                  "a \(code) launch mirrored the tab bar to right-to-left")
+            case .regular:
+                // The sidebar is the leading column, so under LTR it sits in
+                // the LEFT half of the screen. Asserted against the window's
+                // own midline rather than against the detail column, because a
+                // collapsed launch (portrait iPadOS 18) reveals the sidebar
+                // OVER a full-width detail whose minX matches the sidebar's on
+                // both layout directions; the midline separates the two
+                // directions on the tiled and the overlaid presentation alike.
+                let sidebar = app.descendants(matching: .any)["sidebar"].firstMatch
+                let detail = app.descendants(matching: .any)["destination-lanTransfer"]
+                    .firstMatch
+                XCTAssertTrue(detail.waitForExistence(timeout: 15),
+                              "a \(code) launch drew no detail column")
+                XCTAssertLessThan(sidebar.frame.midX,
+                                  app.windows.firstMatch.frame.midX,
+                                  "a \(code) launch mirrored the split view to "
+                                  + "right-to-left")
+            }
         }
     }
 
@@ -1390,24 +1516,39 @@ final class AppShellUITests: XCTestCase {
         app.terminate()
         app.launchArguments = offlineLaunchArguments
             + ["-UIPreferredContentSizeCategoryName",
-               "UICTContentSizeCategoryAccessibilityXXL"]
+               "UICTContentSizeCategoryAccessibilityXXL",
+               // The stored-link screen is presented rather than browsed to, so
+               // it is reached at launch and dismissed below before the
+               // browseable destinations are visited.
+               "--relayium-ui-testing-open-stored-link"]
         app.launch()
 
-        // Receive's Open, Direct's mode choice and Nearby's chooser are the three
-        // that sit furthest down their own screens.
-        openTask("Receive", title: "Receive files")
-        let open = app.buttons["Open"]
-        XCTAssertTrue(open.waitForExistence(timeout: 15),
-                      "Receive lost its action at the largest text size")
-        scrollUntilHittable(open, maxSwipes: 12)
+        // The stored link's Open, the Device Inbox's account route, Nearby's
+        // chooser and Account's registration path are the four that sit furthest
+        // down their own screens.
+        waitForPresentedStoredReceive(app)
+        let openLink = app.buttons["Open"]
+        XCTAssertTrue(openLink.waitForExistence(timeout: 15),
+                      "the stored-link screen lost its action at the largest text size")
+        scrollUntilHittable(openLink, maxSwipes: 12)
+        app.buttons["stored-receive-done"].tap()
 
-        openTask("Nearby", title: "Nearby")
+        open(Shell.lanTransfer, in: app)
         let chooser = app.buttons["Choose Files or Folders…"]
         XCTAssertTrue(chooser.waitForExistence(timeout: 15),
                       "Nearby lost its file chooser at the largest text size")
         scrollUntilHittable(chooser, maxSwipes: 12)
 
-        openTask("Account", title: "Account")
+        // The destination this batch added, and the one with the most content
+        // above its action: the status card, the foreground-only notice, the
+        // explanation and the folder route all sit before it.
+        open(Shell.deviceInbox, in: app)
+        let inboxAccount = app.buttons["inbox-open-account"]
+        XCTAssertTrue(inboxAccount.waitForExistence(timeout: 15),
+                      "the Device Inbox lost its account route at the largest text size")
+        scrollUntilHittable(inboxAccount, maxSwipes: 12)
+
+        open(Shell.account, in: app)
         let create = app.buttons["New to Relayium? Create an account"]
         XCTAssertTrue(create.waitForExistence(timeout: 15),
                       "Account lost its registration path at the largest text size")
@@ -1421,7 +1562,7 @@ final class AppShellUITests: XCTestCase {
     /// nothing is invisible in review and is the difference between finishing a
     /// paste with one thumb and hunting for a button.
     func testTheKeyboardGoKeyResolvesTheLink() {
-        openTask("Receive", title: "Receive files")
+        relaunchOnStoredLink()
 
         let link = app.textFields["receive.link"]
         XCTAssertTrue(link.waitForExistence(timeout: 15))
@@ -1453,7 +1594,7 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-text-code"]
         app.launch()
 
-        openTask("Direct", title: "Direct")
+        open(Shell.crossNetworkTransfer, in: app)
         app.segmentedControls.firstMatch.buttons["Text"].tap()
         let create = app.buttons["Create a text code"]
         XCTAssertTrue(create.waitForExistence(timeout: 15))
@@ -1501,68 +1642,251 @@ final class AppShellUITests: XCTestCase {
         guard #available(iOS 17.0, *) else {
             throw XCTSkip("the system accessibility audit needs iOS 17")
         }
-        let destinations = [
-            (tab: "Receive", title: "Receive files"),
-            (tab: "Send", title: "Send files"),
-            (tab: "Direct", title: "Direct"),
-            (tab: "Nearby", title: "Nearby"),
-            (tab: "Account", title: "Account"),
-        ]
-        var found: [String] = []
-        for destination in destinations {
-            openTask(destination.tab, title: destination.title)
-            // Handled here rather than left to XCTest so a failure names the
-            // surface and the element. The framework's own report is
-            // "Hit area is too small", which is true and unactionable.
-            try app.performAccessibilityAudit(for: Self.auditedTypes) { issue in
-                found.append("\(destination.tab): \(issue.compactDescription) — "
-                             + "label=\(issue.element?.label ?? "") "
-                             + "frame=\(issue.element?.frame ?? .zero)")
+        try auditEveryPrimarySurface(inDarkAppearance: false)
+    }
+
+    /// **The same walk in Dark, and it is a separate test because Dark is where
+    /// this app's contrast defects actually were.**
+    ///
+    /// Every colour in this app resolves differently in the two appearances —
+    /// the accent asset, every semantic UIKit background, every control fill —
+    /// so a Light-only audit says nothing about Dark. It said nothing for as
+    /// long as this suite existed: the three contrast failures this batch fixed
+    /// were all Dark-only, and the Light run reports none of them.
+    ///
+    /// The appearance is a fact about the LAUNCH rather than about the device,
+    /// and `assertAppearanceTook` proves it from a real screenshot. See
+    /// `UITestMode.forcedColorScheme` for why `XCUIDevice.shared.appearance` is
+    /// not the mechanism: it silently does nothing here, and an audit that
+    /// believes it ran in Dark and did not is worse than no dark audit at all.
+    func testEveryPrimaryTaskPassesTheSystemAccessibilityAuditInDarkAppearance() throws {
+        guard #available(iOS 17.0, *) else {
+            throw XCTSkip("the system accessibility audit needs iOS 17")
+        }
+        try auditEveryPrimarySurface(inDarkAppearance: true)
+    }
+
+    @available(iOS 17.0, *)
+    private func auditEveryPrimarySurface(inDarkAppearance dark: Bool) throws {
+        let extra = dark ? [Self.darkAppearanceArgument] : []
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments + extra
+        app.launch()
+        if dark { assertAppearanceTookEffect() }
+
+        var unclassified: [String] = []
+        var classified: [String] = []
+        func audit(_ surface: String) throws {
+            try app.performAccessibilityAudit(for: .all) { issue in
+                let line = "\(dark ? "dark" : "light")/\(surface): "
+                    + "\(issue.compactDescription) — label=\(issue.element?.label ?? "") "
+                    + "enabled=\(issue.element?.isEnabled ?? false) "
+                    + "frame=\(issue.element?.frame ?? .zero)"
+                if let reason = self.classification(of: issue, dark: dark) {
+                    classified.append("\(line) [\(reason)]")
+                } else {
+                    unclassified.append(line)
+                }
                 return true
             }
         }
-        XCTAssertTrue(found.isEmpty,
-                      "the system accessibility audit rejected what VoiceOver "
-                      + "would meet:\n" + found.joined(separator: "\n"))
+        for surface in Shell.browseable {
+            open(surface, in: app)
+            try audit(surface.id)
+        }
+        relaunchOnStoredLink(extra)
+        try audit("storedReceive")
+
+        // Attached rather than discarded. Every line here was measured off a
+        // real screenshot once; keeping the list in the report is what lets the
+        // next reader check that it still describes the same elements instead
+        // of trusting that somebody did.
+        let record = XCTAttachment(string: classified.joined(separator: "\n"))
+        record.name = "classified-accessibility-findings"
+        record.lifetime = .keepAlways
+        add(record)
+
+        XCTAssertTrue(unclassified.isEmpty,
+                      "the system accessibility audit rejected what a user would "
+                      + "meet, and none of these is a finding this suite has "
+                      + "already measured and classified:\n"
+                      + unclassified.joined(separator: "\n"))
     }
 
-    /// Everything the system audits EXCEPT contrast, and the reason is measured
-    /// rather than assumed.
+    /// Why an audit finding is not a defect, or `nil` when it is one.
     ///
-    /// Contrast was run first, on this build, and reported ten issues across the
-    /// five surfaces. Each was then measured off a real screenshot, in pixels:
+    /// **Contrast is audited, not subtracted.** It used to be
+    /// `.all.subtracting(.contrast)`, and the reason recorded there was sound —
+    /// a gate that is red for correct UI is a gate people learn to discount —
+    /// but the cost was that three real Dark failures sat behind it. So the
+    /// check is back on and the judgement moved here, one class at a time, with
+    /// every class either derived from a rule or measured in pixels.
     ///
-    /// * three were genuine — the paused card's `Resume receiving` at 2.06:1 and
-    ///   the gate's `Open Account` at 2.02:1, both accent-on-fill where text
-    ///   needs 4.5:1, and `New to Relayium? Create an account` at 2.99:1 in a
-    ///   19-point row. The row height is fixed in this batch. The two label
-    ///   colours are NOT, because they are not three controls: every one of the
-    ///   48 `.bordered` buttons in this app draws its label in the accent, so
-    ///   the answer is a palette decision for the whole app rather than a tint
-    ///   on whichever three screens an audit happened to visit first;
-    /// * four were correct UI the checker rejects anyway — `or` measured 5.94:1,
-    ///   and after the row-height fix `Resume receiving` measures 5.6:1 as white
-    ///   on the brand violet, the identical style the same screen's `Choose
-    ///   Files or Folders…` passes with at 5.70:1;
-    /// * the rest were a disabled control, which WCAG 1.4.3 exempts and iOS
-    ///   draws faint on purpose, or body text the audit sampled while it sat
-    ///   under the translucent tab bar it scrolls beneath.
-    ///
-    /// A gate that is red for correct UI is a gate people learn to discount —
-    /// this workspace has one of those already. So contrast stays measured and
-    /// recorded, and the automated gate keeps the checks whose findings here
-    /// were all real.
-    ///
-    /// Subtracted from `.all` rather than listed, so it keeps covering whatever
-    /// Apple adds next — and so the macOS half, when it lands, can state the
-    /// same rule rather than a different list: that platform has neither
-    /// `dynamicType` nor `trait` nor `textClipped`, which a literal list would
-    /// have had to fork. The macOS half is `WORK-QUEUE.md` Q9; it is not written
-    /// here yet because the audit finds six real shell-level gaps there and the
-    /// only way to a green macOS gate today is dropping the check that found them.
+    /// Nothing outside `.contrast` is ever classified: the other audits found
+    /// only real defects on this app and stay absolute.
     @available(iOS 17.0, *)
-    private static var auditedTypes: XCUIAccessibilityAuditType {
-        XCUIAccessibilityAuditType.all.subtracting(.contrast)
+    private func classification(of issue: XCUIAccessibilityAuditIssue,
+                                dark: Bool) -> String? {
+        guard issue.auditType == .contrast else { return nil }
+        guard let element = issue.element else { return nil }
+
+        // 1. A DISABLED control. WCAG 1.4.3 exempts an inactive control, and
+        //    iOS draws one faint deliberately — measured 1.76–1.87:1 for the
+        //    three this walk meets, which is what "off" is supposed to look
+        //    like. Colouring them to pass would be claiming they can be used.
+        if !element.isEnabled { return "disabled control, WCAG 1.4.3 exempt" }
+
+        // 2. OCCLUDED by the floating tab bar, or off the bottom of the screen.
+        //    The audit measures an element's frame wherever it is, and iOS 26's
+        //    tab bar is Liquid Glass over the scroll view — so a control that
+        //    has scrolled under it is sampled through a blur. Confirmed by
+        //    cropping the screenshot: `Scan a QR code` and `Compare
+        //    verification codes…` are legible mirrored THROUGH the bar.
+        //
+        //    Derived at runtime rather than hard-coded, so it stays true on a
+        //    device of a different height.
+        let window = app.windows.firstMatch.frame
+        let barTop = app.tabBars.firstMatch.exists
+            ? app.tabBars.firstMatch.frame.minY : window.maxY
+        if element.frame.maxY > min(barTop, window.maxY) {
+            return "occluded by the tab bar or below the screen"
+        }
+
+        // 3. The sign-in form's `or` DIVIDER. The audited element is the whole
+        //    row — `Text("or")` between two `Palette.hairline` rules — so what
+        //    the checker measures is a separator against the card, 1.46:1, and
+        //    a separator is not text. The word itself measures 5.94:1 in Dark
+        //    off the same screenshot, which is the number that matters and the
+        //    same one the previous audit recorded.
+        if element.label == "or" { return "separator sampled as text; the word measures 5.94:1" }
+
+        // 4. `Resume receiving`, the one ordinary `.borderedAction()` this walk
+        //    meets unoccluded and enabled. Measured on the screenshots this
+        //    batch took: **4.91:1** in Dark (`#B39BF9` on the `#39393D` fill)
+        //    and **5.23:1** in Light (`#6E2AD9` on `#DEDEE4`). Both clear 4.5:1
+        //    and the checker rejects them anyway.
+        //
+        //    Named rather than generalised to "any bordered button", because a
+        //    rule that trusted the whole class would keep passing if the colour
+        //    regressed. The colour itself is guarded where it is DEFINED:
+        //    `IOSActionColorGuardTests` pins both appearances of the
+        //    `ActionLabel` colourset to the exact values those ratios were
+        //    measured at.
+        if element.label == "Resume receiving" {
+            return "measured \(dark ? "4.91" : "5.23"):1, above the 4.5:1 required"
+        }
+
+        // 5. There is no fifth class, and the empty space is the point.
+        //
+        //    It used to hold a list of thirteen sentences drawn in
+        //    `Color.secondary` — iOS's own `secondaryLabel`, which measures
+        //    3.29–3.44:1 on this app's light backgrounds (`#8A8A8E` on
+        //    `#FFFFFF`, `#85858B` on `#F2F2F7`). That was under the 4.5:1
+        //    ordinary text owes, it was recorded as an open Sufficient Contrast
+        //    blocker rather than as a false positive, and the note here said
+        //    that removing these lines was what fixing it would look like.
+        //
+        //    It was fixed rather than deleted. All 119 of those sentences —
+        //    across the app and the Share extension — now use
+        //    `Palette.supportingLabel`, which measures 4.61:1 on the deepest
+        //    Light surface in the app and 5.16:1 on the deepest Dark one, and
+        //    declares Increase Contrast variants of both. The two orange
+        //    warning sentences the same audit exposed went to
+        //    `Palette.warningLabel` at 4.98:1 in Light, up from 2.20:1.
+        //
+        //    So BOTH appearances are now capable of zero unclassified contrast
+        //    findings, and a new sentence written in the system role fails —
+        //    here on screen, and in `IOSSupportingTextGuardTests` for the
+        //    screens this walk never visits.
+        //
+        // 6. And there is no sixth class either, which took one more finding to
+        //    earn. Running these same two audits with **Increase Contrast
+        //    enabled** — a setting neither of them sets, so it has to be turned
+        //    on around them — rejected three prominent buttons the ordinary
+        //    Dark run accepts: `Choose Files or Folders…`, `Go to Account` and
+        //    `Sign in`.
+        //
+        //    It was a real defect, not an artefact. `.borderedProminent`
+        //    derives its fill from the accent when the colourset declares no
+        //    high-contrast entry, and in Dark it derives UPWARDS — `#7C3AED`
+        //    rendered as `#B488FF`, which put the system's own white label at
+        //    2.66:1. `AccentColor` now declares the entry, and the fill renders
+        //    as the declared `#502598` at 10.20:1; both audits pass with the
+        //    setting on and neither gained an exemption for it.
+        //
+        //    Recorded here because the setting is invisible in this file: these
+        //    two tests pass under it, and nothing in them says so. Turning it on
+        //    is part of running them, and
+        //    `IOSActionColorGuardTests` carries the four rendered points that
+        //    fixed where the bar moves to.
+
+        return nil
     }
+
+    /// The launch argument that puts the app in Dark, mirrored from
+    /// `UITestMode.darkAppearanceArgument`, which the UI-test target cannot see.
+    /// `IOSActionColorGuardTests` compares the two spellings so the mirror
+    /// cannot rot into an argument the app ignores — which would leave this
+    /// whole test running in Light and saying Dark.
+    private static let darkAppearanceArgument = "--relayium-ui-testing-dark-appearance"
+
+    /// **The dark audit refuses to run against a Light screen.**
+    ///
+    /// Without this the whole test degrades silently into a second Light run —
+    /// which is exactly what happened while it was written, because
+    /// `XCUIDevice.shared.appearance = .dark` returns without error and changes
+    /// nothing. The screen is the only witness that cannot be fooled: a Dark
+    /// launch of this app paints its window background near black, and a Light
+    /// one paints it near white.
+    private func assertAppearanceTookEffect() {
+        let shot = XCUIScreen.main.screenshot()
+        let record = XCTAttachment(screenshot: shot)
+        record.name = "dark-appearance-proof"
+        record.lifetime = .keepAlways
+        add(record)
+
+        // A point inside the app's own background rather than a corner: the
+        // corner can be a rounded mask, and the top is the status bar.
+        guard let cgImage = shot.image.cgImage else {
+            return XCTFail("could not read the screenshot to prove the appearance")
+        }
+        guard let colour = Self.brightness(of: cgImage,
+                                           atRelative: CGPoint(x: 0.5, y: 0.92)) else {
+            return XCTFail("could not sample the screenshot to prove the appearance")
+        }
+        XCTAssertLessThan(colour, 0.25,
+                          "the dark audit is running against a light screen — the "
+                          + "launch argument did not take, and every finding below "
+                          + "would be a Light finding under a Dark heading")
+    }
+
+    /// One pixel's perceived brightness, 0…1, read straight out of the image.
+    ///
+    /// Redrawn into a known 8-bit RGBA context rather than trusting the
+    /// screenshot's own layout, which is the same thing `IOSAppIconAssetTests`
+    /// does and for the same reason: a `CGImage` may be any bit depth, any
+    /// component order and any colour space, and reading its bytes directly is
+    /// how a sample comes back plausible and wrong.
+    private static func brightness(of image: CGImage,
+                                   atRelative point: CGPoint) -> CGFloat? {
+        var pixel: [UInt8] = [0, 0, 0, 0]
+        guard let context = CGContext(data: &pixel, width: 1, height: 1,
+                                      bitsPerComponent: 8, bytesPerRow: 4,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        let x = CGFloat(image.width) * point.x
+        let y = CGFloat(image.height) * point.y
+        context.translateBy(x: -x, y: -(CGFloat(image.height) - y))
+        context.draw(image, in: CGRect(x: 0, y: 0,
+                                       width: CGFloat(image.width),
+                                       height: CGFloat(image.height)))
+        // Rec. 709 luma, which is enough to tell a near-black window from a
+        // near-white one; the pixel-accurate contrast work happens off-device
+        // against the attached screenshots.
+        return (0.2126 * CGFloat(pixel[0]) + 0.7152 * CGFloat(pixel[1])
+                + 0.0722 * CGFloat(pixel[2])) / 255
+    }
+
 
 }

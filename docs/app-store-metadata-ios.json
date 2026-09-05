@@ -1,0 +1,640 @@
+{
+  "schemaVersion": 1,
+  "packet": {
+    "id": "ios-app-store-metadata",
+    "state": "draft-in-this-repository-universal-record-observed-2026-09-03",
+    "observedAppStoreConnectState": "field-scoped-see-appStoreConnectObservation",
+    "prose": "docs/ios-app-store-submission.md",
+    "validator": "scripts/ios-app-store-metadata-validate.mjs",
+    "note": "Copy-ready source for the external App Store Connect fields of the iOS PLATFORM of the universal-purchase record. Every storefront, reviewer and TestFlight value here is a DRAFT this repository maintains, and entering any of it is a separate authorized step. The subscription catalogue and the App Privacy answers are NOT drafts: they already exist on the record, they are Approved and published, and this file records their identity so that nothing recreates them. What HAS been read back from App Store Connect is in appStoreConnectObservation, field by field and with the date it was read; nothing outside that section states what the record holds. No credential, contact detail or demo login may ever be added to this file."
+  },
+  "record": {
+    "recordName": "relayium",
+    "appleId": "6801142976",
+    "bundleId": "com.relayium.mac",
+    "shareExtensionBundleId": "com.relayium.mac.ShareIOS",
+    "teamId": "7PVYUG4YQS",
+    "marketingVersion": "0.3.1",
+    "primaryCategoryUti": "public.app-category.utilities"
+  },
+  "appStoreConnectObservation": {
+    "state": "field-scoped-read-only-observation-recorded",
+    "observedAt": "2026-09-03",
+    "timeZone": "Asia/Dubai",
+    "method": "A read-only pass over the authenticated App Store Connect web interface, field by field. Nothing in this repository can see App Store Connect, so this section is a RECORDED observation and not a live query: the validator checks that what is written here is internally consistent and that no gate is claimed met, and it cannot re-verify the record. Re-inspect read-only before acting on any of it. No credential, session or contact value is recorded here.",
+    "scope": "Only the entries in observedFields were read back on the date above. The storefront copy, the reviewer notes and the TestFlight text remain drafts this repository maintains and have NOT been entered. The subscription catalogue, the App Privacy answers, the price schedule and the availability selection are the opposite: they are live on the record and are recorded here as identity and state only, never as copy to paste back. One narrower re-read followed that pass: on 2026-09-05 15:27 Asia/Dubai the iOS platform's version, its version state, its build selection and its release option were read back again after the version was renamed on the record, and every entry carrying that later reading names the date. observedAt above stays the date of the full field-by-field pass — nothing outside those four entries has been re-verified since.",
+    "fullySubmissionReady": false,
+    "readinessNote": "The record is a going concern — it ships macOS publicly, its subscription group and six products are Approved, its App Privacy is published, it has a price schedule and an availability selection. Its iOS 0.3.1 version is in Prepare for Submission with two gates open: no build is selected for that version, and the required iPhone and iPad screenshot sets are missing. Every observedFields entry whose blocksSubmission is true and whose present is false is an open gate, and the validator refuses any claim to the contrary.",
+    "records": [
+      {
+        "role": "universal-purchase-target",
+        "appleId": "6801142976",
+        "bundleId": "com.relayium.mac",
+        "platforms": "macOS and iOS, in one universal-purchase record",
+        "observedVersion": "0.3.1",
+        "observedVersionState": "Prepare for Submission",
+        "targetForIosRelease": true,
+        "note": "The one record this packet, this validator and any iOS archive may target. Apple requires every platform of a universal-purchase record to share a single Bundle ID, which is why the iOS app now carries the macOS one. Its iOS platform already existed before this migration: TestFlight holds a Validated 0.1.0 (4) whose Build Metadata reports main bundle com.relayium.mac, Share Extension application identifier 7PVYUG4YQS.com.relayium.mac.ShareIOS and App Group group.com.relayium.app. Those three readings are what the iOS source was migrated to match, rather than the other way round. The observedVersion here is the iOS platform's editable App Store version; the macOS platform is separately and publicly released and is read-only for this packet. It reads 0.3.1, re-read live on 2026-09-05 15:27 Asia/Dubai after the version was renamed on the record from the 0.3.0 the 2026-09-03 pass recorded; that rename is the only change between the two readings, and the version is still Prepare for Submission with no build selected and manual release selected."
+      },
+      {
+        "role": "superseded-separate-ios-record",
+        "appleId": "6791918822",
+        "bundleId": "com.relayium.app",
+        "platforms": "iOS",
+        "observedVersion": "0.3.0",
+        "observedVersionState": "Prepare for Submission",
+        "targetForIosRelease": false,
+        "note": "A real, separate, iOS-only App Store record, and the one this repository itself named as the target until 2026-09-03. That history is what makes it dangerous rather than merely wrong: it looks correct to anyone reading an older commit, an older plan or an older copy of this file. Nothing was ever delivered to it — no build was uploaded, no subscription group or product was created, no privacy answer was entered — and its editable version was set to 0.3.0 Prepare for Submission by the same superseded pass. It is now entirely READ-ONLY: never upload to it, never enter this packet into it, never create a product under its bundle identifier, and never let an iOS identifier resolve to it. Scope, not ignorance: this packet records and relies on no other field of it, and nothing here authorizes touching it."
+      }
+    ],
+    "universalPurchase": {
+      "platforms": [
+        "macOS",
+        "iOS"
+      ],
+      "sharedBundleId": "com.relayium.mac",
+      "macOSPubliclyReleased": true,
+      "macOSIsReadOnlyHere": true,
+      "note": "One record, two platforms, one Bundle ID, one subscription catalogue, one App Privacy answer set, one price schedule and one availability selection. That is what makes this a universal purchase and it is also what makes it hazardous: most of what an operator sees on this record was configured for the released macOS app, and editing it to suit iOS would change the live macOS product. The macOS version, its builds, its prices, its TestFlight groups and its release state are read-only for this packet. The iOS platform's own version, build selection and screenshots are the only fields this packet is about."
+    },
+    "observedFields": [
+      {
+        "id": "version",
+        "field": "App Store version (iOS platform)",
+        "present": true,
+        "blocksSubmission": true,
+        "observed": "The iOS platform's editable version reads 0.3.1 in Prepare for Submission, re-read live on 2026-09-05 15:27 Asia/Dubai after the rename from 0.3.0.",
+        "nextAction": "Leave it at 0.3.1. It must keep matching record.marketingVersion in this packet, and the validator refuses a drift between the two. If the candidate version ever moves again, rename it on the record and re-read it FIRST: observedVersion records what was observed, and editing it to match this packet would invent a read-back. Do not touch the macOS version on this same record."
+      },
+      {
+        "id": "version-build-selection",
+        "field": "Build selected for the iOS 0.3.1 version",
+        "present": false,
+        "blocksSubmission": true,
+        "observed": "No build is selected for the iOS 0.3.1 version, re-read live on 2026-09-05 15:27 Asia/Dubai.",
+        "nextAction": "Archive and upload the 0.3.1 (5) candidate under a separate authorization, then select it on the version. Separately from selection: the record's iOS TestFlight holds a Validated 0.1.0 (4), so at least four build numbers are consumed. That is a FLOOR and not the answer — expired, removed and Invalid builds keep their numbers and do not appear — so the highest consumed number stays an operator attestation, and scripts/ios-app-store-candidate.sh refuses an attestation below the floor."
+      },
+      {
+        "id": "subscription-group",
+        "field": "Subscription group",
+        "present": true,
+        "blocksSubmission": true,
+        "observed": "The record carries subscription group 22307427, Approved, serving the released macOS app.",
+        "nextAction": "Reuse it. Do not create a second group: this app has one catalogue across both platforms, and a second group would split it permanently."
+      },
+      {
+        "id": "subscription-products",
+        "field": "In-app purchases and subscription products",
+        "present": true,
+        "blocksSubmission": true,
+        "observed": "The record carries the six com.relayium.mac.{plus,pro,max}.{monthly,yearly} products, all Approved.",
+        "nextAction": "Reuse them exactly. Create nothing: an App Store product identifier is permanent and cannot be deleted, and a com.relayium.app.* namespace would fork the catalogue the released macOS app is selling through. Relayium's apple_products table already maps these six for bundle com.relayium.mac, which is what makes an iOS purchase resolvable without a server change."
+      },
+      {
+        "id": "app-privacy-data-practices",
+        "field": "App Privacy data practices",
+        "present": true,
+        "blocksSubmission": true,
+        "observed": "App Privacy is published on the record, declaring Name, Email Address, User ID, Device ID, Purchase History, Product Interaction and Other Usage Data.",
+        "nextAction": "Leave it. That list is the UNION across both platforms of this one record — see appPrivacy.recordLevelPublishedUnion — and Device ID is macOS's alone. Do not add Device ID to the iOS manifest to make the two agree, and do not remove it from the record to make the record agree with iOS."
+      },
+      {
+        "id": "app-privacy-policy-url",
+        "field": "App Privacy — Privacy Policy URL",
+        "present": true,
+        "blocksSubmission": true,
+        "observed": "https://relayium.com/privacy/ is saved as the record's Privacy Policy URL.",
+        "nextAction": "Leave it. It is the same URL this packet pins for both storefront locales."
+      },
+      {
+        "id": "app-privacy-choices-url",
+        "field": "App Privacy — User Privacy Choices URL",
+        "present": false,
+        "blocksSubmission": false,
+        "observed": "The User Privacy Choices URL is blank.",
+        "nextAction": "Apple treats this one as optional and Relayium ships no such page, so a blank field is a decision rather than an omission. Revisit if a privacy-choices page is ever published."
+      },
+      {
+        "id": "price-schedule",
+        "field": "Pricing",
+        "present": true,
+        "blocksSubmission": true,
+        "observed": "The app is Free across all 175 price territories.",
+        "nextAction": "Leave it. The app itself is free and its plans are sold as subscriptions; changing the app price would change it for the released macOS app on this same record."
+      },
+      {
+        "id": "availability",
+        "field": "App availability",
+        "present": true,
+        "blocksSubmission": true,
+        "observed": "The app is available in 173 territories, with China mainland and France excluded.",
+        "nextAction": "Leave it. The two exclusions and their reasons are recorded in the availability section below; adding France still requires a truthful ANSSI declaration first."
+      },
+      {
+        "id": "screenshots",
+        "field": "Screenshots",
+        "present": false,
+        "blocksSubmission": true,
+        "observed": "The iOS version's required iPhone and iPad screenshot sets are missing.",
+        "nextAction": "Capture them as the screenshots section below specifies, and stage them through the bundle gate that section names. What was read is the required device sets; the per-localization sub-views were not opened one at a time, and notObserved records that."
+      },
+      {
+        "id": "release-type",
+        "field": "Version release option for the iOS 0.3.1 version",
+        "present": true,
+        "blocksSubmission": false,
+        "observed": "Manual release is the option selected on the iOS 0.3.1 version, re-read live on 2026-09-05 15:27 Asia/Dubai.",
+        "nextAction": "Leave it selected. A version that releases itself the moment review passes removes the last point at which a human can decide not to ship it, and iOS is not public. This is a reading of the record, not an intention recorded here."
+      },
+      {
+        "id": "app-store-server-notifications",
+        "field": "App Store Server Notifications V2 URLs",
+        "present": true,
+        "blocksSubmission": false,
+        "observed": "Both the Production Server URL and the Sandbox Server URL are already saved to the Relayium notifications endpoint.",
+        "nextAction": "Leave both in place; see appStoreServerNotifications below. This is the one input that is already configured, so the risk here is deleting it, not forgetting it."
+      }
+    ],
+    "appStoreServerNotifications": {
+      "productionUrlConfigured": true,
+      "sandboxUrlConfigured": true,
+      "url": "https://relayium.com/api/apple/notifications",
+      "signedTestNotificationObservedForThisRecord": false,
+      "note": "Both URLs read back saved to the one Relayium endpoint on the date above. One endpoint serves both environments, because the server distinguishes them from the signed envelope. This is recorded as a fact to PRESERVE rather than a gate to open: do not remove, blank or repoint either URL, and the validator refuses a packet that says either is absent. On the signed TEST delivery, this packet deliberately claims nothing. Such a delivery has been recorded elsewhere for this record's macOS platform, and now that the target IS that record it would be easy to promote that into a claim about the iOS side — but it was not re-verified in the read-back this section covers, so the flag stays false. Prove it before relying on it rather than inferring it from the merge of the two records."
+    },
+    "deliveryState": {
+      "platform": "iOS",
+      "archived": false,
+      "uploaded": false,
+      "submittedForReview": false,
+      "released": false,
+      "releaseType": "manual",
+      "releaseTypeObservedOnTheRecord": true,
+      "note": "Scoped to the iOS platform, and the scope carries the weight: this record's macOS platform IS publicly released, so four unqualified false values would be a claim about the whole record and wrong about half of it. For iOS: no archive, no upload, no submission and no release, and no public App Store listing offers the iOS app. Prepare for Submission is App Store Connect's state for a version that has never been submitted; it is not a claim that anything is prepared. releaseType is an OBSERVATION, not an intention: manual release was read back as the option selected on the iOS 0.3.1 version — see the release-type entry in observedFields — which is also what this repository would have wanted, because a version that ships itself the moment review passes removes the last point at which a human can decide not to ship it."
+    },
+    "notObserved": [
+      "The highest build number this record has ever consumed. The iOS TestFlight reading gives a floor of 4, not an answer: expired, removed and Invalid builds still consume a number and do not appear in the list — so the --readback-highest-build value scripts/ios-app-store-candidate.sh cross-checks remains an operator attestation, now with a floor beneath it.",
+      "The Accessibility Nutrition Label on this record. The earlier Not Started reading was of the superseded record and does not transfer. Nothing is claimable regardless, for the local reason accessibilityNutritionLabel gives, so this is an unread field rather than an open gate.",
+      "The live subscription group's reference name, its localized display names, and each product's localized display name, description, price and territory availability. Their existence and Approved state were read; their copy was not, and it is deliberately not drafted here — a display name written in this file is an edit somebody can paste into an Approved product.",
+      "Whether the six Approved products already carry their own review information and any review screenshot Apple asks for.",
+      "A signed App Store Server Notification TEST delivery observed arriving from this record's iOS side. The endpoints are configured; the delivery was not re-verified.",
+      "Sign in with Apple completed end to end on a real signed iOS device, and an Apple purchase completed against the six live products from such a build. A separate read-only production check on 2026-09-03 found the server's audience allowlist already admitting com.relayium.mac, so no production change is owed — but an admitted audience is not a completed sign-in, and a resolvable catalogue is not an accepted charge.",
+      "App Review information: the contact fields and the demo account, which are owner-entered in App Store Connect and must never be recorded in this repository.",
+      "The export-compliance answers carried on the version.",
+      "The age-rating questionnaire.",
+      "Screenshot state per localization. The reading above covers the required iPhone and iPad device sets as missing on the iOS version; each set's per-localization sub-view was not opened and read back one at a time. The gate stays blocked regardless, because the device-set reading already blocks it."
+    ]
+  },
+  "locales": [
+    "en-US",
+    "zh-Hans"
+  ],
+  "availability": {
+    "state": "observed-on-the-record-173-of-175-territories-selected",
+    "priceTerritoryCount": 175,
+    "availableTerritoryCount": 173,
+    "free": true,
+    "initialExcludedTerritories": [
+      {
+        "code": "CN",
+        "name": "China mainland",
+        "reason": "Held out by owner decision, and read back as excluded on the record. No mainland-China regulatory filing has been made and none is claimed here."
+      },
+      {
+        "code": "FR",
+        "name": "France",
+        "reason": "Held out, and read back as excluded on the record. Relayium implements encryption outside Apple's operating system, so offering the app in France requires a truthful ANSSI declaration first. That is a precondition for ADDING France later, not a condition on the current release."
+      }
+    ],
+    "anssiDeclaration": {
+      "state": "not-started",
+      "blocksInitialRelease": false,
+      "blocksAddingFrance": true,
+      "note": "If an approved declaration ever yields an Apple compliance code, that code is a separately leased plist change; see the ANSSI section of docs/ios-app-store-submission.md."
+    },
+    "exportComplianceCodeInPlists": {
+      "state": "absent-by-design",
+      "guardedBy": "IOSDistributionSigningTests.testNeitherBundleDeclaresExportCompliance"
+    }
+  },
+  "storefront": {
+    "en-US": {
+      "name": "relayium",
+      "subtitle": "End-to-end encrypted transfer",
+      "promotionalText": "Move files and messages between your own devices, or with someone on the same network. End-to-end encrypted, so Relayium's servers only ever carry ciphertext.",
+      "description": "Relayium moves files and text between devices without handing the contents to a server.\n\nWHAT YOU CAN DO\n\n• LAN Transfer — messages and files with another device on the same network. No account, and both devices stay open while it runs.\n\n• Cross-network Transfer — reach a device anywhere with a six-digit code. Showing a code needs a Relayium account; joining a code somebody else is showing does not. Type the six digits, or point the camera at the code on the other device.\n\n• Send a link — hand a large file to someone who picks it up later. You choose when the link expires, and you can have it delete itself after the first download.\n\n• Device Inbox — sign in on two of your own devices and move files and messages between them. Relayium receives while it is open on the receiving device, receiving stays off until you switch it on for that account, and what arrives is saved into Relayium ▸ Received, which you can open in the Files app.\n\n• Account — your plan, your devices and your stored files.\n\nENCRYPTED END TO END\n\nFiles and messages are encrypted on the device that sends them and decrypted on the device that receives them. Relayium's servers carry ciphertext and never hold your keys. Relayium cannot read what you send.\n\nWHAT NEEDS AN ACCOUNT\n\nDevice Inbox, stored links, your plan and showing a cross-network code need a Relayium account. LAN Transfer needs none, and neither does joining a cross-network code somebody else is showing.\n\nSUBSCRIPTIONS\n\nRelayium Plus, Pro and Max raise your storage, transfer and retention limits. Every price, period and renewal term is shown in the app before you confirm, and a subscription renews until you cancel it in the App Store.\n\nTerms of Service: https://relayium.com/terms/\nPrivacy Policy: https://relayium.com/privacy/",
+      "keywords": [
+        "file transfer",
+        "send files",
+        "encrypted",
+        "device to device",
+        "nearby",
+        "cross network",
+        "qr code"
+      ],
+      "whatsNew": "Device Inbox now receives on iPhone and iPad. Sign in on two of your own devices, switch receiving on, and move files and messages between them. Relayium receives while it is open on the receiving device, and what arrives is saved into Relayium ▸ Received, where the Files app can reach it.\n\nYou can now point the camera at the pairing code another device is showing instead of typing the six digits.\n\nLAN Transfer now looks for devices on your local network only. It finds Relayium on the network this device is actually joined to, so a shared carrier address or a VPN can no longer put a stranger's device in the list. Nothing is preselected: you pick the device, and only then is a connection opened.\n\nThe iPad layout adapts: the same five destinations in a sidebar at full width and in tabs when the window is narrow.",
+      "supportUrl": "https://relayium.com/support/",
+      "marketingUrl": "https://relayium.com/",
+      "privacyPolicyUrl": "https://relayium.com/privacy/"
+    },
+    "zh-Hans": {
+      "name": "relayium",
+      "subtitle": "端到端加密的设备间传输",
+      "promotionalText": "在你自己的设备之间直接传送文件和消息，也可以和同一网络里的人互传。内容端到端加密，Relayium 的服务器全程只经手密文。",
+      "description": "Relayium 在设备之间传送文件和文字，而不把内容交给服务器。\n\n可以做什么\n\n• 局域网传输 —— 和同一网络里的另一台设备互传消息和文件。不需要账户，两边都保持打开即可。\n\n• 跨网络传输 —— 用六位数字码连上任意位置的设备。出示配对码需要 Relayium 账户；加入别人出示的码则不需要。手动输入那六位数字，或者把摄像头对准对方设备上的码。\n\n• 发送链接 —— 把大文件交给稍后来取的人。有效期由你自己定，也可以选择首次下载后即删除。\n\n• 设备收件箱 —— 在你自己的两台设备上登录同一账户，在它们之间传送文件和消息。Relayium 只在接收端打开时才接收，接收功能在你为该账户开启之前一直关闭，收到的内容保存在 Relayium ▸ 已接收 里，可以在“文件”App 中打开。\n\n• 账户 —— 你的套餐、你的设备和你的已存文件。\n\n端到端加密\n\n文件和消息在发送的那台设备上加密，在接收的那台设备上解密。Relayium 的服务器经手的是密文，也从不持有你的密钥。Relayium 读不到你传送的内容。\n\n哪些功能需要账户\n\n设备收件箱、存储链接、套餐，以及出示跨网络配对码，都需要 Relayium 账户；局域网传输不需要，加入别人出示的跨网络配对码也不需要。\n\n订阅\n\nRelayium Plus、Pro 和 Max 会提高存储、传输和留存上限。价格、周期和续订条款都会在确认购买前于 App 内显示；订阅会持续续订，直到你在 App Store 中取消。\n\n服务条款：https://relayium.com/terms/\n隐私政策：https://relayium.com/privacy/",
+      "keywords": [
+        "文件传输",
+        "跨设备",
+        "局域网",
+        "加密传输",
+        "发送文件",
+        "设备互传",
+        "二维码"
+      ],
+      "whatsNew": "设备收件箱现在可以在 iPhone 和 iPad 上接收了。在你自己的两台设备上登录同一账户，开启接收，就能在它们之间传送文件和消息。Relayium 只在接收端打开时才接收，收到的内容保存在 Relayium ▸ 已接收 里，“文件”App 可以直接访问。\n\n现在可以把摄像头对准对方设备显示的配对码，不必再手动输入那六位数字。\n\n局域网传输现在只在本地网络上查找设备。它只会找到本机当前所连网络里的 Relayium，共用的运营商出口地址或 VPN 不会再把陌生人的设备放进列表。列表不会预先替你选中任何设备：先由你选择，然后才建立连接。\n\niPad 布局会自适应：宽窗口下五个入口在侧边栏，窄窗口下同样是这五个入口，改用标签栏。",
+      "supportUrl": "https://relayium.com/zh/support/",
+      "marketingUrl": "https://relayium.com/",
+      "privacyPolicyUrl": "https://relayium.com/privacy/"
+    }
+  },
+  "appPrivacy": {
+    "state": "published-on-the-record-this-section-is-the-ios-half",
+    "observedAppStoreConnectState": "field-scoped-see-appStoreConnectObservation",
+    "sourceOfTruth": "apps/ios/Relayium/PrivacyInfo.xcprivacy",
+    "recordLevelPublishedUnion": [
+      "NSPrivacyCollectedDataTypeName",
+      "NSPrivacyCollectedDataTypeEmailAddress",
+      "NSPrivacyCollectedDataTypeUserID",
+      "NSPrivacyCollectedDataTypeDeviceID",
+      "NSPrivacyCollectedDataTypePurchaseHistory",
+      "NSPrivacyCollectedDataTypeProductInteraction",
+      "NSPrivacyCollectedDataTypeOtherUsageData"
+    ],
+    "recordLevelPublishedUnionNote": "What the RECORD publishes, which is what a shopper actually reads. App Privacy is answered once per record and this record carries two platforms, so the published answers are the union of what macOS declares and what iOS declares — seven types, against the six in the iOS manifest. The seventh is Device ID and it is macOS's alone: deliberatelyAbsent below records why no iOS source sends one. The two lists disagreeing is correct; the failure mode is making them agree. Adding Device ID to the iOS manifest would declare something iOS does not collect, and removing it from this union would under-declare what the app as a whole collects. The validator derives this union from the other two lists so it cannot become a third independent statement.",
+    "privacyPolicyUrlOnRecord": "https://relayium.com/privacy/",
+    "userPrivacyChoicesUrlOnRecordIsBlank": true,
+    "tracking": false,
+    "trackingDomains": [],
+    "note": "The iOS half of App Privacy: what the shipped iOS manifest named in sourceOfTruth declares. The record's App Privacy is already PUBLISHED — data practices answered, https://relayium.com/privacy/ saved, User Privacy Choices left blank — so this section is no longer a draft waiting to be typed in. Its job now is to keep a change to the iOS manifest visible as what it is: a change to a public promise about a released app, which requires re-answering the record's questionnaire rather than editing this file. scripts/ios-app-store-metadata-validate.mjs checks this list against the shipped manifest and against the published union, so none of the three can drift silently.",
+    "collected": [
+      {
+        "type": "NSPrivacyCollectedDataTypeName",
+        "linked": true,
+        "tracking": false,
+        "purposes": [
+          "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+        ],
+        "basis": "The create-account form's own name field, sent by AccountClient.register as displayName, plus the name Apple supplies on a FIRST Sign in with Apple authorization and posted to api/auth/apple/native. Retained in users.display_name. NOT the device label: AppEnvironment.deviceName() answers iPhone, iPad or iPod touch on this platform, and a hardware family is not a name."
+      },
+      {
+        "type": "NSPrivacyCollectedDataTypeEmailAddress",
+        "linked": true,
+        "tracking": false,
+        "purposes": [
+          "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+        ],
+        "basis": "The address typed to register or sign in. Linked by definition, because it IS the account identifier."
+      },
+      {
+        "type": "NSPrivacyCollectedDataTypePurchaseHistory",
+        "linked": true,
+        "tracking": false,
+        "purposes": [
+          "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+        ],
+        "basis": "StoreKit's signed transaction, submitted to Relayium and retained as the account's subscription source, plan, status and renewal period."
+      },
+      {
+        "type": "NSPrivacyCollectedDataTypeUserID",
+        "linked": true,
+        "tracking": false,
+        "purposes": [
+          "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+        ],
+        "basis": "The per-account appAccountToken sent to Apple with a purchase and retained in both parties' records."
+      },
+      {
+        "type": "NSPrivacyCollectedDataTypeOtherUsageData",
+        "linked": true,
+        "tracking": false,
+        "purposes": [
+          "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+        ],
+        "basis": "Metering: byte counts and timestamps only, never content. Four producers on iOS — uploads, stored downloads, relayed bytes, and the Device Inbox delivery this release adds, which deviceinbox_task.go meters into usage_monthly. The app reads its own totals back through api/me/usage."
+      },
+      {
+        "type": "NSPrivacyCollectedDataTypeProductInteraction",
+        "linked": false,
+        "tracking": false,
+        "purposes": [
+          "NSPrivacyCollectedDataTypePurposeAnalytics"
+        ],
+        "basis": "The identifier-free monthly activation aggregate. activation_funnel_monthly holds a month, one of three closed stages and a nonnegative count, with no account, user, IP, code, room, device, session or content field. The one UNLINKED entry, and the one declared for Analytics rather than App Functionality."
+      }
+    ],
+    "deliberatelyAbsent": [
+      {
+        "type": "NSPrivacyCollectedDataTypeDeviceID",
+        "declaredOnMacOS": true,
+        "reason": "macOS declares it, the RECORD therefore publishes it — see recordLevelPublishedUnion — and the iOS manifest must not. The macOS producers are an installation identifier posted when a BROWSER sign-in begins, which iOS has no path to, and a purchase-continuation appInstanceId. This app does call purchase-dispatch, so 'iOS never reaches it' would be false: the field comes from a purchase continuation, only the durableContinuationRequired policy creates one, macOS selects that policy explicitly and IOSAppleSubscriptions.makeModel names no policy at all — so it takes the default legacyOneShot, no continuation exists, and the encoder omits appInstanceId entirely.",
+        "revisitTrigger": "If iOS adopts purchase continuation, or gains any browser sign-in path, this entry becomes REQUIRED in the iOS manifest and in appPrivacy.collected. The record's published union would not change, because macOS already puts Device ID there — which is exactly why the manifest, and not the union, is where that change has to be noticed.",
+        "guardedBy": "apps/RelayiumKit/Tests/RelayiumKitTests/IOSPrivacyManifestTests.swift testTheAppDeclaresNoDeviceIDBecauseNoIOSSourceSendsOne"
+      }
+    ],
+    "shareExtension": {
+      "bundleId": "com.relayium.mac.ShareIOS",
+      "collected": [],
+      "reason": "An appex is a separate bundle and Apple reads a separate manifest for it. This target holds only the App Group entitlement — group.com.relayium.app, which kept its name through the bundle-id migration because a registered container is not derived from a bundle id and renaming it would strand every staged draft — reaches no network, and therefore transmits nothing for an entry to describe. Its manifest declares an empty collected-data list, which is a claim in its own right rather than the absence of one.",
+      "guardedBy": "scripts/ios-app-store-candidate.sh SHARE_COLLECTED_DATA_GRAPH"
+    }
+  },
+  "appReview": {
+    "signInRequired": true,
+    "ownerEnteredFields": [
+      {
+        "field": "contactFirstName",
+        "enteredIn": "App Store Connect only"
+      },
+      {
+        "field": "contactLastName",
+        "enteredIn": "App Store Connect only"
+      },
+      {
+        "field": "contactPhoneNumber",
+        "enteredIn": "App Store Connect only"
+      },
+      {
+        "field": "contactEmail",
+        "enteredIn": "App Store Connect only"
+      },
+      {
+        "field": "demoAccountName",
+        "enteredIn": "App Store Connect only"
+      },
+      {
+        "field": "demoAccountPassword",
+        "enteredIn": "App Store Connect only"
+      },
+      {
+        "field": "betaFeedbackEmail",
+        "enteredIn": "App Store Connect only"
+      }
+    ],
+    "notes": "Relayium is account-gated: the Account, subscription and Device Inbox surfaces need a signed-in Relayium account, so a demo account is supplied in the review fields of this submission. LAN Transfer works signed out. Cross-network Transfer is direction-specific: joining a six-digit code somebody else is showing works signed out, but showing a code requires a signed-in account, because the account that mints the code owns whatever is relayed through it.\n\nDevice Inbox needs two devices signed in to the same Relayium account. With one device you can enrol it, switch receiving on and see the empty state, but no delivery can be observed — that is the product working as designed, not a broken screen. A review attachment demonstrating the two-device flow must be supplied with this submission. It has not been produced yet, and this record does not claim it exists; produce it and attach it before submitting, then update this sentence to say it is attached.\n\nRelayium receives only while it is open and in the foreground on the receiving device. Nothing arrives while the app is not in the foreground, and no notification of any kind is delivered at any point. This is shipped behaviour, stated on the Device Inbox screen itself.\n\nReceiving is off by default. It is an explicit per-account opt-in inside the app.\n\nReceived files are written into the app's own container and appear in Files ▸ On My iPhone ▸ Relayium ▸ Received (Files ▸ On My iPad ▸ Relayium ▸ Received on iPad).\n\nFile and message contents are end-to-end encrypted; they are decrypted only on the receiving device, and Relayium's servers hold ciphertext only.\n\nCross-network Transfer offers a QR scan on the joining side: it reads only a relayium.com pairing link, and it fills the six-digit field rather than joining. The camera prompt appears after an explicit tap on 'Scan a QR code'.\n\nLAN Transfer discovers devices only as the Bonjour service _relayium._tcp on the local network, so the roster lists devices on the same network and a device reachable only over the internet is not listed. iOS asks for Local Network access the first time that discovery starts, which is earlier than the first transfer. Discovery opens no connection by itself and nothing is ever preselected: an outbound connection is made only to the row the reviewer taps.\n\nSubscriptions are sold through StoreKit and validated by Relayium's server before any entitlement is granted. A Sandbox account is not charged.",
+    "attachment": {
+      "state": "not-produced",
+      "purpose": "A private review attachment showing one Device Inbox delivery across two devices signed in to one account, which a single-device reviewer cannot reproduce.",
+      "storefrontAsset": false
+    }
+  },
+  "testFlight": {
+    "betaAppDescription": {
+      "en-US": "Relayium is an end-to-end encrypted file and message transfer app. This build is the 0.3.1 line: LAN Transfer, Cross-network Transfer with a six-digit code and a QR scan, stored links, Device Inbox between your own devices, and Account.\n\nLAN Transfer finds devices over Bonjour on the local network in this build, so only devices on the same network are listed; a device that is reachable only over the internet will not appear. iOS asks for Local Network access the first time LAN Transfer starts looking.\n\nRead this before filing a bug: Relayium receives only while it is open and in the foreground on the receiving device, and it delivers no notification at any point. A file sent to a device whose Relayium is closed arrives the next time that device opens Relayium. Receiving is off until you switch it on for your account. Device Inbox, stored links, plan screens and showing a cross-network pairing code need a signed-in Relayium account. LAN Transfer works signed out, and so does joining a cross-network code somebody else is showing.",
+      "zh-Hans": "Relayium 是一个端到端加密的文件与消息传输 App。本构建属于 0.3.1 这一条线：局域网传输、带六位数字码和二维码扫描的跨网络传输、存储链接、你自己设备之间的设备收件箱，以及账户。\n\n本构建的局域网传输通过 Bonjour 在本地网络上查找设备，因此列表只会出现同一网络里的设备；仅能经由互联网访问的设备不会出现。首次开始查找时，iOS 会请求本地网络权限。\n\n提交问题前请先看这一段：Relayium 只在接收端打开并处于前台时才接收，全程不发送任何通知。发给一台 Relayium 已关闭的设备的文件，会在那台设备下次打开 Relayium 时才到达。接收功能在你为账户开启之前一直关闭。设备收件箱、存储链接、套餐界面，以及出示跨网络配对码，都需要登录 Relayium 账户；局域网传输不需要登录，加入别人出示的跨网络配对码也不需要。"
+    },
+    "whatToTest": {
+      "en-US": "1. Device Inbox across two devices on one account: switch receiving on, receive a file and a message from the other device, check both directions appear in the per-device conversation, then send a file and a message back. Confirm the received bytes under Files ▸ On My iPhone ▸ Relayium ▸ Received.\n2. The foreground boundary: send to a device whose Relayium is closed, confirm nothing arrives and no notification appears, then open Relayium there and confirm it arrives.\n3. The five-destination shell: tabs on iPhone, tabs on a compact-width iPad (Slide Over and a narrow Split View), sidebar plus detail column at full width, and a stored link opening over the surface you were on and returning to it.\n4. Cross-network Transfer, in both directions: join by typing the six digits, and join by scanning the code the other device shows. Confirm a scan fills the field and does not start a transfer, and that denying the camera leaves manual entry working. Confirm the asymmetry explicitly — signed out, joining a code somebody else is showing works, and showing a code does not; signed in, showing a code works.\n5. LAN Transfer on the same network, including the Local Network prompt on a device that has not decided it yet. Confirm the roster lists only devices on the same network — a second device on cellular or on a different Wi-Fi must not appear — and that no device is preselected before you choose one.\n6. Account: sign in, all six subscription offers rendering with real prices, one Sandbox purchase, restore, and the Manage Subscription, Privacy Policy and Terms destinations.\n7. The Share extension and Universal Links from Safari and Files.",
+      "zh-Hans": "1. 两台设备同一账户的设备收件箱：开启接收，从另一台设备接收一个文件和一条消息，确认按设备的会话里两个方向都出现，再回传一个文件和一条消息。在“文件 ▸ 我的 iPhone ▸ Relayium ▸ 已接收”中确认收到的内容。\n2. 前台边界：向一台 Relayium 已关闭的设备发送，确认什么都没到达、也没有任何通知，然后在那台设备上打开 Relayium，确认内容随即到达。\n3. 五入口外壳：iPhone 上的标签栏、紧凑宽度 iPad 上的标签栏（侧拉与窄分屏）、全宽下的侧边栏加详情栏，以及存储链接覆盖在当前界面之上打开、关闭后回到原界面。\n4. 跨网络传输，两个方向都测：手动输入六位数字加入，以及扫描对方设备显示的码加入。确认扫描只填入数字而不会直接开始传输，拒绝相机权限后手动输入仍然可用。并且明确验证这个不对称：未登录时可以加入别人出示的码，但不能出示码；登录后才能出示码。\n5. 同一网络下的局域网传输，包括在尚未做出选择的设备上出现的本地网络权限提示。确认列表只出现同一网络里的设备——另一台走蜂窝网络或连着不同 Wi-Fi 的设备不应出现——并且在你选择之前不会预先选中任何设备。\n6. 账户：登录、六个订阅项都以真实价格显示、一次 Sandbox 购买、恢复购买，以及管理订阅、隐私政策和服务条款的跳转。\n7. 共享扩展，以及从 Safari 和“文件”打开的 Universal Links。"
+    }
+  },
+  "subscriptions": {
+    "state": "existing-approved-catalogue-reused-under-the-universal-record",
+    "productIdentifiersAlreadyExistAndAreApproved": true,
+    "noNewProductsMayBeCreated": true,
+    "submittedWithAppVersion": false,
+    "submittedWithAppVersionNote": "Apple's rule that a subscription group must be submitted together with an app version applies to a record's FIRST group. This is not that: group 22307427 is Approved and has been selling through the released macOS app. Submitting the iOS 0.3.1 version does not resubmit it, and nothing in this catalogue is part of that submission.",
+    "group": {
+      "groupId": "22307427",
+      "observedState": "Approved",
+      "referenceNameAndLocalizationsAreLiveAndNotAuthoredHere": true,
+      "note": "The group's reference name and its localized display names exist on the record and were not read back. They are deliberately absent here rather than guessed: this file used to carry a PROPOSED name for a group that did not exist, and leaving that text in place after the group turned out to exist would have turned a draft into an instruction to rename an Approved group. One subscription group serves both platforms, because one universal-purchase record has one catalogue."
+    },
+    "priceAndAvailability": {
+      "state": "live-on-the-record-not-authored-here",
+      "note": "Each product's price points and territory availability are live on the Approved products and are not drafted, proposed or recorded here. They were configured for the released macOS app and they serve iOS unchanged, which is the point of a universal purchase. An earlier version of this file said not to copy the macOS prices across; that instruction is void, because there is nothing to copy across — it is one catalogue, and changing a price here would change it for macOS customers."
+    },
+    "products": [
+      {
+        "productId": "com.relayium.mac.plus.monthly",
+        "plan": "plus",
+        "cycle": "monthly",
+        "observedState": "Approved"
+      },
+      {
+        "productId": "com.relayium.mac.plus.yearly",
+        "plan": "plus",
+        "cycle": "yearly",
+        "observedState": "Approved"
+      },
+      {
+        "productId": "com.relayium.mac.pro.monthly",
+        "plan": "pro",
+        "cycle": "monthly",
+        "observedState": "Approved"
+      },
+      {
+        "productId": "com.relayium.mac.pro.yearly",
+        "plan": "pro",
+        "cycle": "yearly",
+        "observedState": "Approved"
+      },
+      {
+        "productId": "com.relayium.mac.max.monthly",
+        "plan": "max",
+        "cycle": "monthly",
+        "observedState": "Approved"
+      },
+      {
+        "productId": "com.relayium.mac.max.yearly",
+        "plan": "max",
+        "cycle": "yearly",
+        "observedState": "Approved"
+      }
+    ],
+    "reviewRequirements": [
+      "Create nothing. All six identifiers exist and are Approved under group 22307427. An App Store product identifier is permanent and cannot be deleted or renamed, so creating a com.relayium.app.* namespace — which the superseded record 6791918822 would have needed — would permanently fork the catalogue the released macOS app sells through, and every entitlement decision downstream would then depend on which namespace a transaction came from. The validator refuses such an identifier anywhere in this packet.",
+      "Do not edit the live products' reference names, display names, descriptions, prices or territory availability to suit iOS. One universal-purchase record has one catalogue; those fields are shared with the released macOS app, and an edit here is an edit there.",
+      "Relayium's apple_products catalogue already holds an exact (bundle id, product id) -> (plan, cycle) row for each of the six under bundle com.relayium.mac, because macOS sells through them. That is what makes an iOS purchase resolvable with no server or catalogue change — and it is an expectation to VERIFY by read-back before an iOS purchase is accepted, not a conclusion this file may assert on its own.",
+      "The production verifier already admits com.relayium.mac, for the same reason. No second verifier identity is to be added: admitting com.relayium.app would re-open the identity the migration closed.",
+      "Before an iOS build reaches a customer, the entitlement path owes ADVERSARIAL evidence rather than a regression run. Until this migration an iOS binary matched no catalogue row and was refused with unknown_bundle, so purchases were gated closed by accident of identity; that gate is gone by design. A double-charge, early-grant, wrong-tier and cross-platform-conflict case must each be exercised against the shared scope, because ApplySubscriptionSource's conflict guard separated the two platforms by ExternalScope as well as by original transaction id, and the scope halves of that guard now match.",
+      "Each product needs its own review information, and Apple may require a review screenshot per product; those are review-only assets and never reach the storefront. Whether the Approved products already carry them was not read back.",
+      "App Store Server Notifications V2 Sandbox and Production URLs are already configured for this record, read back on 2026-09-03 and recorded in appStoreConnectObservation.appStoreServerNotifications. What is still owed is a signed TEST notification observed reaching Relayium from THIS record; do not remove or repoint either URL to get it."
+    ]
+  },
+  "screenshots": {
+    "state": "not-captured",
+    "capturedCount": 0,
+    "blockedBy": [
+      "No Release build under the migrated identity has rendered the Account screen against the live products. The six products exist and are Approved, so the offer list is now reachable in principle — but only from a build signed as com.relayium.mac, on a device or simulator where StoreKit resolves them. Until that has been seen, the Account shot has no honest source: the UITestSubscriptions fixture prices are forbidden and so is a retouched one.",
+      "No neutral demonstration data has been staged, and a public asset may not carry an account address, device name, pairing code, share link, file name or host."
+    ],
+    "rules": {
+      "minPerSetPerLocale": 1,
+      "maxPerSetPerLocale": 10,
+      "alphaChannelAllowed": false,
+      "perLocalizationSets": true
+    },
+    "sets": [
+      {
+        "id": "iphone-6.9",
+        "name": "iPhone 6.9\"",
+        "acceptedPortraitPixelSizes": [
+          "1320x2868",
+          "1290x2796",
+          "1260x2736"
+        ]
+      },
+      {
+        "id": "ipad-13",
+        "name": "iPad 13\"",
+        "acceptedPortraitPixelSizes": [
+          "2064x2752",
+          "2048x2732"
+        ]
+      }
+    ],
+    "capture": {
+      "requiredConfiguration": "Release",
+      "signedIpaRequired": false,
+      "physicalDeviceRequired": false,
+      "releaseSimulatorCapturePermitted": true,
+      "debugBuildsForbidden": true,
+      "uiTestFixturesForbidden": true,
+      "fabricatedPricesForbidden": true,
+      "retouchingForbidden": true,
+      "methodIsOwnerChoice": true,
+      "note": "An earlier version of the prose required capture from the exact signed IPA on the physical fleet. That was wrong, and it is corrected here: what the asset must be honest about is the app's real appearance and real data. An honest Release-configuration simulator capture at one of the exact accepted pixel sizes above is permitted. What is never permitted is a DEBUG build, a --relayium-ui-testing launch, the UITestSubscriptions fixture prices, or a retouched screen. Whether the owner captures on a simulator or on hardware is their choice."
+    },
+    "shotList": [
+      "Device Inbox — a per-device conversation with both directions visible.",
+      "Device Inbox — the surface stating that it receives only while Relayium is open, so the storefront tells the truth before install.",
+      "Send — choosing content for one of the account's own devices.",
+      "LAN Transfer — a transfer running on the same network.",
+      "Cross-network Transfer — the six-digit code path.",
+      "Account — signed-in state with the real subscription offers, resolved live from the six Approved products."
+    ]
+  },
+  "accessibilityNutritionLabel": {
+    "state": "unassessed",
+    "anyFeatureClaimed": false,
+    "note": "Apple's Accessibility Nutrition Label is a per-device-family claim about tasks a user can actually complete. Nothing here may be claimed until the common tasks have been exercised per device family with the feature switched on. Reconcile this feature list against App Store Connect's own questionnaire at submission time rather than trusting this copy of it.",
+    "knownBlockers": [
+      "No measured text-contrast shortfall remains, and no Accessibility Nutrition Label feature may be claimed on that basis alone. The two recorded contrast blockers are both closed: the dark .bordered action labels were fixed and re-measured between about 4.9 and 7.4 to 1, and the Light supporting text that measured about 3.3 to 3.4 to 1 in iOS's own secondaryLabel now uses a semantic SupportingLabel role measuring at least 4.6 to 1 on every background class the app draws it on, with the small orange warning prose moved to a WarningLabel role at about 5.0 to 1, up from about 2.2 to 1. Both roles declare explicit Increase Contrast variants, ship in the app and Share extension asset catalogs, and are checked arithmetically by apps/RelayiumKit/Tests/RelayiumKitTests/IOSSupportingTextGuardTests.swift; apps/ios/RelayiumUITests/AppShellUITests.swift now passes the system contrast audit in both Light and Dark with no unclassified finding. What remains blocking is the assessment itself rather than a defect: Apple evaluates this label per device family across every common task, that per-device-family exercise has not been performed on real iPhone or iPad hardware, and no automated audit substitutes for it. Exact values and ratios are recorded in docs/ios-app-store-submission.md."
+    ],
+    "deviceFamilies": [
+      {
+        "id": "iphone",
+        "features": [
+          {
+            "id": "voice-over",
+            "claimed": false,
+            "assessment": "not-assessed"
+          },
+          {
+            "id": "voice-control",
+            "claimed": false,
+            "assessment": "not-assessed"
+          },
+          {
+            "id": "larger-text",
+            "claimed": false,
+            "assessment": "not-assessed"
+          },
+          {
+            "id": "sufficient-contrast",
+            "claimed": false,
+            "assessment": "not-assessed",
+            "blocker": "No measured contrast shortfall remains: the dark .bordered label and the Light supporting-text blockers are both resolved and re-measured above 4.5:1, in Light, Dark and both Increase Contrast variants. Not claimable yet because the per-device-family common-task assessment has not been performed on real hardware."
+          },
+          {
+            "id": "reduced-motion",
+            "claimed": false,
+            "assessment": "not-assessed"
+          },
+          {
+            "id": "differentiate-without-color-alone",
+            "claimed": false,
+            "assessment": "not-assessed"
+          },
+          {
+            "id": "dark-interface",
+            "claimed": false,
+            "assessment": "not-assessed"
+          },
+          {
+            "id": "captions",
+            "claimed": false,
+            "assessment": "not-assessed"
+          },
+          {
+            "id": "audio-descriptions",
+            "claimed": false,
+            "assessment": "not-assessed"
+          }
+        ]
+      },
+      {
+        "id": "ipad",
+        "features": [
+          {
+            "id": "voice-over",
+            "claimed": false,
+            "assessment": "not-assessed"
+          },
+          {
+            "id": "voice-control",
+            "claimed": false,
+            "assessment": "not-assessed"
+          },
+          {
+            "id": "larger-text",
+            "claimed": false,
+            "assessment": "not-assessed"
+          },
+          {
+            "id": "sufficient-contrast",
+            "claimed": false,
+            "assessment": "not-assessed",
+            "blocker": "No measured contrast shortfall remains: the dark .bordered label and the Light supporting-text blockers are both resolved and re-measured above 4.5:1, in Light, Dark and both Increase Contrast variants. Not claimable yet because the per-device-family common-task assessment has not been performed on real hardware."
+          },
+          {
+            "id": "reduced-motion",
+            "claimed": false,
+            "assessment": "not-assessed"
+          },
+          {
+            "id": "differentiate-without-color-alone",
+            "claimed": false,
+            "assessment": "not-assessed"
+          },
+          {
+            "id": "dark-interface",
+            "claimed": false,
+            "assessment": "not-assessed"
+          },
+          {
+            "id": "captions",
+            "claimed": false,
+            "assessment": "not-assessed"
+          },
+          {
+            "id": "audio-descriptions",
+            "claimed": false,
+            "assessment": "not-assessed"
+          }
+        ]
+      }
+    ],
+    "checklistPerDeviceFamily": [
+      "Sign in and reach the Account screen.",
+      "Switch Device Inbox receiving on for the account.",
+      "Send a file to one of the account's own devices.",
+      "Open a received item and reach it in the Files app.",
+      "Start and complete a LAN Transfer.",
+      "Join a Cross-network Transfer by typing the six-digit code, signed out.",
+      "Signed in, show a cross-network pairing code and read the six digits back.",
+      "Open the QR scanner and reach a refusal state without becoming stuck.",
+      "Reach Manage Subscription, Privacy Policy and Terms from Account."
+    ]
+  }
+}

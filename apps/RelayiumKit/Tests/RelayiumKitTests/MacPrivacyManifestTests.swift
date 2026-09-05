@@ -26,13 +26,99 @@ final class MacPrivacyManifestTests: XCTestCase {
             try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
                 as? [String: Any])
     }
-    private func apiTypes(_ plist: [String: Any]) -> [String: [String]] {
+    /// The declared required-reason entries, in FILE ORDER, as
+    /// (category, reasons).
+    private func apiEntries(_ plist: [String: Any]) -> [(category: String, reasons: [String])] {
         let entries = plist["NSPrivacyAccessedAPITypes"] as? [[String: Any]] ?? []
-        return Dictionary(uniqueKeysWithValues: entries.compactMap { entry in
+        return entries.compactMap { entry in
             (entry["NSPrivacyAccessedAPIType"] as? String).map {
-                ($0, entry["NSPrivacyAccessedAPITypeReasons"] as? [String] ?? [])
+                (category: $0, reasons: entry["NSPrivacyAccessedAPITypeReasons"] as? [String] ?? [])
             }
-        })
+        }
+    }
+    /// The same entries keyed by category.
+    ///
+    /// `uniquingKeysWith` rather than `uniqueKeysWithValues`, which TRAPS on a
+    /// manifest declaring one category twice. That is not a theoretical
+    /// difference: a trap takes down the whole `xctest` process with signal 5,
+    /// so a duplicate in ANY manifest this file reads — including the iOS one
+    /// the platform-distinction test below cross-checks — would abort every
+    /// other test in the target instead of failing one and reporting the rest.
+    /// Duplicates are asserted explicitly, by `apiEntries`, where they matter.
+    private func apiTypes(_ plist: [String: Any]) -> [String: [String]] {
+        Dictionary(apiEntries(plist).map { ($0.category, $0.reasons) },
+                   uniquingKeysWith: { first, _ in first })
+    }
+
+    /// The two keys Apple defines for a required-reason entry.
+    private let apiEntryKeys = ["NSPrivacyAccessedAPIType",
+                                "NSPrivacyAccessedAPITypeReasons"]
+
+    /// **Every raw `NSPrivacyAccessedAPITypes` element, accounted for** — run at
+    /// every call site before `apiTypes` is trusted, because both readers above
+    /// are lossy and every graph assertion in this file is a comparison against
+    /// what they returned.
+    ///
+    /// This file previously checked the app's list by comparing the parsed entry
+    /// count against the DICTIONARY count, and the extension's by asserting the
+    /// dictionary holds one key. Neither is a check:
+    ///
+    ///  - the two counts are produced by discarding the same elements, so they
+    ///    agree *precisely when* something has gone missing;
+    ///  - folding a category declared twice yields one key, so a duplicated
+    ///    `FileTimestamp` entry carrying a second reason list passes a
+    ///    `count == 1` assertion with the second list never read.
+    ///
+    /// The raw element count is the only number a malformed entry cannot move,
+    /// so each way an element can vanish fails here, closed:
+    ///
+    ///  1. the key is absent or is not an array — the list reads as nothing and
+    ///     every graph assertion passes over an empty set;
+    ///  2. an element is not a dictionary — Swift's array cast is all-or-nothing,
+    ///     so the typed read of the WHOLE list becomes `nil` and every
+    ///     well-formed entry disappears alongside the bad one;
+    ///  3. an element names no `NSPrivacyAccessedAPIType`, or names one that is
+    ///     not a string — it drops out of `apiEntries`, and what remains can
+    ///     equal the audited graph exactly while the shipped file carries an
+    ///     entry Apple reads and this file never saw;
+    ///  4. an element carries a key outside Apple's two;
+    ///  5. its reasons are missing, not an array of strings, or empty — `?? []`
+    ///     turns the first two into "declared with no reason", which is a
+    ///     rejected upload rather than something to describe;
+    ///  6. two elements declare the same category — `apiTypes` keeps the first,
+    ///     so the second's reason list is invisible to everything that follows.
+    private func assertAPIEntriesAreCompleteAndDistinct(
+        _ plist: [String: Any], _ path: String,
+        file: StaticString = #filePath, line: UInt = #line
+    ) {
+        let raw = plist["NSPrivacyAccessedAPITypes"] as? [Any] ?? []
+        XCTAssertFalse(raw.isEmpty,
+                       "\(path) declares no required-reason API list to check",
+                       file: file, line: line)
+        let dictionaries = plist["NSPrivacyAccessedAPITypes"] as? [[String: Any]] ?? []
+        XCTAssertEqual(dictionaries.count, raw.count,
+                       "\(path): an NSPrivacyAccessedAPITypes element is not a dictionary and "
+                        + "would be read as absent", file: file, line: line)
+        let entries = apiEntries(plist)
+        XCTAssertEqual(entries.count, raw.count,
+                       "\(path): an NSPrivacyAccessedAPITypes element names no string "
+                        + "NSPrivacyAccessedAPIType and would be discarded unread",
+                       file: file, line: line)
+
+        for (index, entry) in dictionaries.enumerated() {
+            XCTAssertEqual(entry.keys.sorted(), apiEntryKeys,
+                           "\(path) entry \(index) is not the shape Apple defines: "
+                            + "\(entry.keys.sorted())", file: file, line: line)
+            // One assertion for three failures the reader spells the same way:
+            // no reason key, a reason list that is not strings, and an empty one.
+            XCTAssertEqual((entry["NSPrivacyAccessedAPITypeReasons"] as? [String])?.isEmpty, false,
+                           "\(path) entry \(index) declares a category with no string reason code",
+                           file: file, line: line)
+        }
+
+        XCTAssertEqual(entries.count, apiTypes(plist).count,
+                       "\(path) declares a category more than once: \(entries.map(\.category))",
+                       file: file, line: line)
     }
     private func swiftSources(under relative: String) throws -> String {
         // Throws on a missing root AND on a root with no Swift in it: both make
@@ -100,6 +186,93 @@ final class MacPrivacyManifestTests: XCTestCase {
         }
     }
 
+    /// **The proof that the two guards this file used to have were not guards.**
+    ///
+    /// Both have been replaced by `assertAPIEntriesAreCompleteAndDistinct`, and
+    /// both are written out here against synthetic manifests rather than
+    /// described, because each reads as a check, passes on the real files, and
+    /// is satisfied by precisely the manifest it was supposed to reject. Neither
+    /// macOS manifest is touched by any of this.
+    func testTheEntryCheckSeesWhatTheFoldedCountsCannot() {
+        func plist(_ entries: [Any]) -> [String: Any] { ["NSPrivacyAccessedAPITypes": entries] }
+        let fileTimestamp: [String: Any] = [
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+            "NSPrivacyAccessedAPITypeReasons": ["DDA9.1"]]
+
+        // The shape both macOS manifests have parses whole, and passes.
+        assertAPIEntriesAreCompleteAndDistinct(plist([fileTimestamp]), "<synthetic>")
+        XCTAssertEqual(apiEntries(plist([fileTimestamp])).map(\.category),
+                       ["NSPrivacyAccessedAPICategoryFileTimestamp"],
+                       "the reader no longer recognises a well-formed entry")
+
+        // 1. The app's old guard: parsed entries against the FOLDED dictionary.
+        //    An element naming no category is discarded by both, so the two
+        //    numbers agree — while the raw element count, which nothing can
+        //    move, does not.
+        let orphanReasons: [String: Any] = ["NSPrivacyAccessedAPITypeReasons": ["CA92.1"]]
+        let missingCategory = plist([fileTimestamp, orphanReasons])
+        XCTAssertEqual(apiEntries(missingCategory).map(\.category),
+                       ["NSPrivacyAccessedAPICategoryFileTimestamp"],
+                       "the malformed element is no longer discarded; this proof is stale")
+        XCTAssertEqual(apiEntries(missingCategory).count, apiTypes(missingCategory).count,
+                       "the old entries-vs-dictionary comparison rejects this, so the raw-count "
+                        + "check is no longer the only thing standing between a malformed element "
+                        + "and a passing graph assertion")
+        XCTAssertNotEqual(apiEntries(missingCategory).count,
+                          (missingCategory["NSPrivacyAccessedAPITypes"] as? [Any])?.count,
+                          "the raw element count no longer sees the discarded element")
+
+        // The loss is bigger than one element when an element is not a
+        // dictionary: Swift's array cast is all-or-nothing, so the typed read of
+        // the whole list becomes `nil`, every good entry goes with it, and
+        // `?? []` presents that as a manifest declaring nothing.
+        let notADictionary = plist([fileTimestamp, "NSPrivacyAccessedAPICategoryUserDefaults"])
+        XCTAssertNil(notADictionary["NSPrivacyAccessedAPITypes"] as? [[String: Any]],
+                     "one non-dictionary element no longer voids the typed read of the list")
+        XCTAssertTrue(apiEntries(notADictionary).isEmpty,
+                      "the reader no longer loses the whole list to a single bad element")
+        XCTAssertEqual((notADictionary["NSPrivacyAccessedAPITypes"] as? [Any])?.count, 2,
+                       "the raw read no longer sees every element")
+
+        // 2. The extension's old guard: `declared.count == 1`. A category
+        //    declared TWICE folds to one key, so a second entry — carrying a
+        //    reason list that may say anything — passes both that count and an
+        //    exact-graph comparison, unread. The raw count cannot see this one
+        //    either, since both elements parse; distinctness is why the helper
+        //    asserts it separately.
+        let secondFileTimestamp: [String: Any] = [
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+            "NSPrivacyAccessedAPITypeReasons": ["C617.1"]]
+        let duplicated = plist([fileTimestamp, secondFileTimestamp])
+        XCTAssertEqual(apiTypes(duplicated).count, 1,
+                       "a duplicated category no longer folds to one key; the extension's old "
+                        + "count check would have caught it")
+        XCTAssertEqual(apiTypes(duplicated),
+                       ["NSPrivacyAccessedAPICategoryFileTimestamp": ["DDA9.1"]],
+                       "the folded graph no longer equals the audited one, so the exact-graph "
+                        + "assertion would have caught the duplicate without the helper")
+        XCTAssertEqual(apiEntries(duplicated).count,
+                       (duplicated["NSPrivacyAccessedAPITypes"] as? [Any])?.count,
+                       "a duplicate no longer parses whole; the raw-count check would catch it "
+                        + "and the distinctness assertion would be untested")
+        XCTAssertNotEqual(apiEntries(duplicated).count, apiTypes(duplicated).count,
+                          "a category declared twice would pass the distinctness check")
+
+        // And a category declared with no reason code at all, which every count
+        // above reads as perfectly well-formed — only the per-entry check sees
+        // it, and Apple rejects the upload.
+        let reasonless: [String: Any] = [
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace",
+            "NSPrivacyAccessedAPITypeReasons": [String]()]
+        let noReasons = plist([reasonless])
+        XCTAssertEqual(apiEntries(noReasons).count, apiTypes(noReasons).count,
+                       "the reasonless entry no longer parses whole; this proof is stale")
+        XCTAssertEqual(apiEntries(noReasons).count,
+                       (noReasons["NSPrivacyAccessedAPITypes"] as? [Any])?.count,
+                       "the reasonless entry is no longer counted; only the per-entry reason "
+                        + "check stands between it and a passing graph assertion")
+    }
+
     /// The app's three required-reason APIs, each traceable to a call site.
     ///
     /// The source scan is the point: if someone adds a `UserDefaults` read to a
@@ -110,7 +283,16 @@ final class MacPrivacyManifestTests: XCTestCase {
             + swiftSources(under: "apps/RelayiumKit/Sources/RelayiumShareKit")
             + swiftSources(under: "apps/RelayiumKit/Sources/RelayiumKit")
             + swiftSources(under: "apps/mac/Relayium")
-        let declared = apiTypes(try parsedPlist(appManifest))
+        let plist = try parsedPlist(appManifest)
+        let declared = apiTypes(plist)
+
+        // Every raw element parses, is Apple's shape, carries a reason code and
+        // names a category no other element names. Asserted against the RAW
+        // list before the dictionary below is trusted: a duplicate's second
+        // reason list and a malformed element alike are invisible to every graph
+        // comparison that follows, and a parsed-vs-folded count comparison —
+        // which is what stood here — cannot see either.
+        assertAPIEntriesAreCompleteAndDistinct(plist, appManifest)
 
         // UserDefaults — VerificationPreference, SharedDraftInbox and the Device
         // Inbox folder store.
@@ -128,14 +310,81 @@ final class MacPrivacyManifestTests: XCTestCase {
         XCTAssertEqual(declared.count, 3,
                        "the manifest declares an API the source does not use: \(declared.keys)")
 
-        // The two categories deliberately absent, asserted from the source so a
-        // future call site cannot make the manifest wrong in silence.
-        XCTAssertFalse(linked.contains("volumeAvailableCapacity"),
-                       "disk space is now used and must be declared")
+        // Active keyboard is absent because nothing calls it, asserted from the
+        // source so a future call site cannot make the manifest wrong in
+        // silence. Disk space is a DIFFERENT kind of absence and is read by the
+        // test below rather than here — see it before adding a scan for it.
         XCTAssertFalse(linked.contains("activeInputModes"),
                        "active keyboard is now used and must be declared")
-        XCTAssertNil(declared["NSPrivacyAccessedAPICategoryDiskSpace"])
         XCTAssertNil(declared["NSPrivacyAccessedAPICategoryActiveKeyboards"])
+    }
+
+    /// **Disk space is absent from the macOS manifest because macOS has no
+    /// required-reason rule — NOT because nothing reads free space.**
+    ///
+    /// This file used to assert the absence from the source, scanning for
+    /// `volumeAvailableCapacity`. That scan passed, and the claim it appeared to
+    /// support was false: `InboxSpace.freeBytes` in `RelayiumAppKit` — which both
+    /// macOS targets link — calls `statfs` on the receive folder before a Device
+    /// Inbox delivery is written. The assertion held only by asking about a
+    /// symbol this product never used, which is precisely the shape a
+    /// source-derived manifest test is supposed to make impossible.
+    ///
+    /// The real reason is platform, and it is worth stating where somebody
+    /// comparing the two manifests will look. Apple's required-reason API rule
+    /// names iOS, iPadOS, tvOS, visionOS and watchOS. macOS is not in that set,
+    /// so `apps/mac/Relayium/PrivacyInfo.xcprivacy` declares no Disk Space entry
+    /// while `apps/ios/Relayium/PrivacyInfo.xcprivacy` declares E174.1 for the
+    /// same call in the same module. That difference is correct, and a reader who
+    /// finds it by diffing the two files should find this test rather than
+    /// conclude one of them is stale.
+    func testDiskSpaceIsAbsentFromMacOSByPlatformRuleRatherThanByAbsentCallSite() throws {
+        // The call really is there, in a module both macOS targets link. If this
+        // ever stops being true the absence becomes source-derived after all,
+        // and this test — not a silent pass — is what says so.
+        let linked = try swiftSources(under: "apps/RelayiumKit/Sources/RelayiumAppKit")
+        XCTAssertTrue(["statfs", "fstatfs", "statvfs", "fstatvfs",
+                       "volumeAvailableCapacity", "systemFreeSize"]
+                        .contains { linked.contains($0) },
+                      "nothing in RelayiumAppKit reads free space any more; this test's premise "
+                       + "is gone and the iOS Disk Space declaration needs re-reading too")
+
+        // And it is deliberately not declared here. Both manifests are checked
+        // whole first, because this is an ABSENCE read through a lossy reader:
+        // a malformed Disk Space entry drops out of `apiTypes` and satisfies the
+        // two assertions below while Apple still reads it out of the file.
+        let app = try parsedPlist(appManifest)
+        assertAPIEntriesAreCompleteAndDistinct(app, appManifest)
+        XCTAssertNil(apiTypes(app)["NSPrivacyAccessedAPICategoryDiskSpace"],
+                     "macOS declared a required-reason API; Apple's rule does not cover macOS, "
+                      + "and an unnecessary declaration is still a public statement")
+        let share = try parsedPlist(shareManifest)
+        assertAPIEntriesAreCompleteAndDistinct(share, shareManifest)
+        XCTAssertNil(apiTypes(share)["NSPrivacyAccessedAPICategoryDiskSpace"])
+
+        // The iOS side of the same call, asserted from here so the two manifests
+        // cannot drift apart unnoticed in the direction that matters: iOS IS
+        // covered by the rule, so a missing declaration there is an upload
+        // rejection rather than a stylistic difference.
+        //
+        // Read from the raw elements rather than through `apiTypes`, which folds
+        // duplicates by keeping the first: a second Disk Space entry carrying a
+        // different reason list would answer this cross-platform question with
+        // the entry that happens to be right. `IOSPrivacyManifestTests` is what
+        // audits that file whole; this asserts only its one shared declaration,
+        // and asserts it about the only entry that may make it.
+        let iosEntries = try XCTUnwrap(
+            parsedPlist("apps/ios/Relayium/PrivacyInfo.xcprivacy")["NSPrivacyAccessedAPITypes"]
+                as? [[String: Any]],
+            "the iOS manifest declares no readable required-reason API list")
+        let iosDiskSpace = iosEntries.filter {
+            $0["NSPrivacyAccessedAPIType"] as? String == "NSPrivacyAccessedAPICategoryDiskSpace"
+        }
+        XCTAssertEqual(iosDiskSpace.count, 1,
+                       "the iOS app declares Disk Space \(iosDiskSpace.count) times")
+        XCTAssertEqual(iosDiskSpace.first?["NSPrivacyAccessedAPITypeReasons"] as? [String],
+                       ["E174.1"],
+                       "the iOS app no longer declares E174.1 for the free-space call macOS shares")
     }
 
     /// **The extension is not the app.** It links only `RelayiumShareKit`, so
@@ -146,10 +395,18 @@ final class MacPrivacyManifestTests: XCTestCase {
     func testTheExtensionDeclaresOnlyWhatItsOwnModuleUses() throws {
         let shareKit = try swiftSources(under: "apps/RelayiumKit/Sources/RelayiumShareKit")
         let appex = shareKit + (try swiftSources(under: "apps/mac/RelayiumShare"))
-        let declared = apiTypes(try parsedPlist(shareManifest))
+        let plist = try parsedPlist(shareManifest)
+        let declared = apiTypes(plist)
+
+        // Before the one-entry claim below means anything: `count == 1` is what
+        // a manifest declaring `FileTimestamp` TWICE also folds to, and the
+        // second entry's reason list would never be read.
+        assertAPIEntriesAreCompleteAndDistinct(plist, shareManifest)
 
         XCTAssertTrue(shareKit.contains(".modificationDate"))
         XCTAssertEqual(declared["NSPrivacyAccessedAPICategoryFileTimestamp"], ["DDA9.1"])
+        XCTAssertEqual(declared, ["NSPrivacyAccessedAPICategoryFileTimestamp": ["DDA9.1"]],
+                       "the extension's required-reason graph is not its own smaller one")
         XCTAssertEqual(declared.count, 1,
                        "the extension declares more than its module uses: \(declared.keys)")
 

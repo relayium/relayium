@@ -313,7 +313,7 @@ implementation notes, release evidence, acceptance procedures, and future work
 live in [`docs/`](docs/) rather than on this project overview.
 
 **On iOS:** `apps/ios/` exists in this repository and its development has
-**resumed**, at version `0.3.0`. It has never been publicly released — there is
+**resumed**, at version `0.3.1`. It has never been publicly released — there is
 no App Store listing and this site offers no iOS download — and nothing here
 should be read as a commitment to ship it. The material under `apps/ios/` and
 the iOS sections of [`apps/README.md`](apps/README.md) describe a build in

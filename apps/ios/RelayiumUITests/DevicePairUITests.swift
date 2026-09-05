@@ -164,20 +164,141 @@ final class DevicePairUITests: XCTestCase {
             """, file: file, line: line)
     }
 
-    /// End the link and dismiss its result, which is two controls and not one.
+    /// End the link and dismiss its result, which is two controls and not one
+    /// — unless the peer ended the link first, in which case it is one.
+    ///
+    /// The workspace draws a SINGLE exit button whose title flips from
+    /// `End connection` to `Done` the moment the connection is `.ended`, and
+    /// either device ending it ends it for BOTH. That is not a corner case in
+    /// this harness, it is the resident's normal window: the container-read
+    /// hold sits between its last assertion and this call, and the connector is
+    /// free to finish and end the link inside it. This device then arrives here
+    /// with a workspace that has already ended and a button that says `Done` —
+    /// and an unconditional wait for `End connection` would spend the settle
+    /// budget on a control the product will never draw again, then fail a run in
+    /// which nothing went wrong and blame the exit for the peer's timing.
+    ///
+    /// So the exit is RESOLVED — and resolved REPEATEDLY, because the answer
+    /// has a shelf life of one screen read. Deciding ONCE that the link is
+    /// still live and then acting on that decision is the same bug one step
+    /// later: the decision is followed by scrolling, scrolling takes seconds,
+    /// and the peer is entitled to end the link inside them. The title then
+    /// correctly becomes `Done`, `End connection` is gone, and a helper that
+    /// asserts reachability fails a device that is showing exactly the right
+    /// screen — a red the product earned by behaving correctly. A valid title
+    /// replacement is never an error here.
+    ///
+    /// What runs instead is a small bounded state machine over one deadline.
+    /// Every pass re-reads which title the single button is carrying and takes
+    /// at most ONE action: press `End connection` if it is genuinely hittable,
+    /// spend ONE scroll gesture toward it if it is not, or — if that title is
+    /// simply gone — accept the `Done` that has replaced it. Nothing survives a
+    /// pass except how much of the scrolling repertoire is left, so there is no
+    /// window in which a stale reading outlives the screen it was taken from.
+    /// The live verb is asked about first on every pass, which is what keeps a
+    /// still-connected workspace out of the peer-ended branch.
+    ///
+    /// The claim is unweakened. The deadline is the same ceiling the
+    /// unconditional wait had and expiring it still fails, with a message that
+    /// distinguishes "never drawn" from "drawn but never reachable". And
+    /// whichever exit the workspace offered, `Done` must then exist, become
+    /// genuinely hittable, and be pressed exactly once — the terminal claim
+    /// this helper has always made, and the reason it sits outside the branch.
     private func endLinkAndDismiss(file: StaticString = #filePath, line: UInt = #line) {
         let leave = app.buttons[DevicePair.endConnectionLabel]
-        XCTAssertTrue(leave.waitForExistence(timeout: DevicePair.settleBudget),
-                      "a live link offers no way out", file: file, line: line)
-        scrollUntilHittable(leave, in: app, file: file, line: line)
-        leave.tap()
         let done = app.buttons[DevicePair.doneLabel]
+
+        let deadline = Date().addingTimeInterval(DevicePair.settleBudget)
+        var pressedLeave = false
+        var peerEnded = false
+        var sawLeave = false
+        var gesturesSpent = 0
+
+        while !pressedLeave && !peerEnded && Date() < deadline {
+            // Nothing is remembered about the title across a pass. Each of
+            // these reads is taken now, acted on once, and thrown away.
+            if leave.exists {
+                sawLeave = true
+                if leave.isHittable {
+                    // The one irreducible instant: the tap follows the reach
+                    // check with nothing between them. XCUITest offers no
+                    // atomic read-and-press, and a window one statement wide is
+                    // not the seconds-long window scrolling used to open.
+                    leave.tap()
+                    pressedLeave = true
+                } else if gesturesSpent < Self.exitReachGestures {
+                    // One gesture, then back to the top of the loop to re-read
+                    // the title. A control that disappears during this is the
+                    // product being correct, and the next pass says so.
+                    scrollOnce(step: gesturesSpent)
+                    gesturesSpent += 1
+                } else {
+                    Thread.sleep(forTimeInterval: 0.5)
+                }
+            } else if done.exists {
+                peerEnded = true
+            } else {
+                Thread.sleep(forTimeInterval: 0.5)
+            }
+        }
+
+        if !pressedLeave && !peerEnded {
+            let unresolved = sawLeave
+                ? "\"\(DevicePair.endConnectionLabel)\" was drawn but never became reachable"
+                : "neither \"\(DevicePair.endConnectionLabel)\" nor the "
+                    + "\"\(DevicePair.doneLabel)\" a peer-ended link is replaced by was ever drawn"
+            XCTFail("""
+                a live link offers no way out: within \(Int(DevicePair.settleBudget))s this \
+                workspace never presented an exit this device could press — \(unresolved).
+                \(app.debugDescription)
+                """, file: file, line: line)
+            // Explicit rather than implied by `continueAfterFailure = false`, so
+            // this cannot become a second full-budget timeout if that flips.
+            return
+        }
+
+        if peerEnded {
+            // Said out loud so a reader of the retained log knows this run took
+            // the peer-ended exit and did not merely fail to see one control.
+            print("""
+                \(DevicePairChannel.marker) note: the peer had already ended the link, so \
+                this device dismissed a workspace that was offering "\(DevicePair.doneLabel)" \
+                rather than ending a connection that was already over.
+                """)
+        }
+
         XCTAssertTrue(done.waitForExistence(timeout: DevicePair.establishBudget), """
             ending the connection did not produce its terminal Done.
             \(app.debugDescription)
             """, file: file, line: line)
         scrollUntilHittable(done, in: app, file: file, line: line)
         done.tap()
+    }
+
+    /// The size of the scrolling repertoire below, which is `scrollUntilHittable`'s.
+    private static let exitReachGestures = 18
+
+    /// `scrollUntilHittable`'s scrolling, taken ONE gesture at a time.
+    ///
+    /// Same repertoire in the same order — swipes up first, then short drags
+    /// forward, then short drags back — and the same total, so a control this
+    /// reaches is a control that helper would have reached. The only difference
+    /// is that the caller gets the screen back between gestures, which is what
+    /// lets it notice a legitimate title replacement instead of asserting that
+    /// the control it was chasing "never became reachable".
+    private func scrollOnce(step: Int) {
+        switch step {
+        case ..<6: app.swipeUp()
+        case ..<10: dragScreen(by: 0.22)
+        default: dragScreen(by: -0.22)
+        }
+    }
+
+    private func dragScreen(by fraction: CGFloat) {
+        let middle = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let target = app.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5 - fraction))
+        middle.press(forDuration: 0.05, thenDragTo: target)
     }
 
     /// **The end barrier: stay in the room until the peer has left it.**
@@ -231,8 +352,8 @@ final class DevicePairUITests: XCTestCase {
         launchForDevicePair(app, verifying: true,
                             freshReceivedFolder: !run.keepsReceivedFolder)
 
-        guard openDevicePairTab(DevicePair.nearbyTab, title: DevicePair.nearbyTitle,
-                                in: app) else { return }
+        guard openDevicePairDestination(DevicePair.nearbySurface, in: app)
+        else { return }
         requireVerificationIsOn()
 
         // The listener really did start. A physical launch passes no
@@ -310,8 +431,8 @@ final class DevicePairUITests: XCTestCase {
         // pending row, the arming and the wire are all production.
         launchForDevicePair(app, verifying: true, stagingFixture: true)
 
-        guard openDevicePairTab(DevicePair.nearbyTab, title: DevicePair.nearbyTitle,
-                                in: app) else { return }
+        guard openDevicePairDestination(DevicePair.nearbySurface, in: app)
+        else { return }
         requireVerificationIsOn()
         emitDevicePair(.ready, value: run.tag, for: run)
 
@@ -367,14 +488,29 @@ final class DevicePairUITests: XCTestCase {
 
     // MARK: - the pairing-code (legacy lane) steps both code flows share
 
+    /// **The one manual step this harness cannot take, written once.**
+    ///
+    /// Two checks reach this same conclusion — the staged-batch precondition
+    /// below and `mintCode` itself — and they must say the whole action rather
+    /// than half of it, because which of the two speaks first is an accident of
+    /// the flow and the operator reading a skipped run gets only one of them.
+    private static let createCodeNeedsAnAccount = """
+        This device cannot create a pairing code: it holds no ready account. \
+        Creating a code needs one; joining a code does not. Sign in ONCE by \
+        hand on this device, with a verified address and any plan — the run \
+        passes no --relayium-ui-testing, so the app uses the product's own \
+        keychain and that session persists across runs. This harness holds no \
+        credential and reads none.
+        """
+
     /// Open the Direct tab in one of its two modes.
     ///
     /// The mode picker is above both cards, governs Create AND Join, and a code
     /// carries no type — which is exactly what the shipped hint says. So both
     /// ends must select the same mode, and neither may infer it.
     private func openPairingTab(mode: String) -> Bool {
-        guard openDevicePairTab(DevicePair.directTab, title: DevicePair.directTitle,
-                                in: app) else { return false }
+        guard openDevicePairDestination(DevicePair.directSurface, in: app)
+        else { return false }
         let segment = app.buttons[mode]
         guard segment.waitForExistence(timeout: DevicePair.settleBudget) else {
             XCTFail("""
@@ -386,6 +522,51 @@ final class DevicePairUITests: XCTestCase {
         scrollUntilHittable(segment, in: app)
         segment.tap()
         return true
+    }
+
+    /// The staged batch a legacy code carries — **or the account gate that
+    /// replaces the entire card it would have appeared in.**
+    ///
+    /// `DirectView.createFiles` renders `PendingFileList` INSIDE its
+    /// `case .allowed = gate` branch, so a device with no ready account draws
+    /// neither the pending row nor Create; it draws
+    /// `DevicePair.createCodeGateTitle`. Asserting the row on its own therefore
+    /// turned the one condition `mintCode` already knows how to skip for into a
+    /// timeout naming a fixture that was never the problem — a signed-out phone
+    /// reported as a staging failure, which is what the retained run shows.
+    ///
+    /// The two states are waited for TOGETHER, for the reason `mintCode` waits
+    /// for both of its: `AccountSession.restore()` is a keychain read followed
+    /// by a network refresh, so for the first seconds of a cold launch NEITHER
+    /// exists, and a fixed pre-check that expired inside that window would
+    /// answer with whichever half it happened to be looking at.
+    ///
+    /// **The staged row wins ties.** On a settled screen the two are mutually
+    /// exclusive, but a restore resolving mid-check can leave a gate readable
+    /// for one snapshot after the account became ready — and skipping a run two
+    /// people's devices are already held for is by far the more expensive of
+    /// the two mistakes. Nothing is lost by preferring to continue: `mintCode`
+    /// re-reads the gate on the very next line and skips there, in these same
+    /// words, if it is genuinely still up.
+    private func requireStagedFixtureUnlessAccountGated(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
+        let pending = app.descendants(matching: .any)["pendingFile.0"]
+        let gate = app.staticTexts[DevicePair.createCodeGateTitle]
+        let deadline = Date().addingTimeInterval(DevicePair.establishBudget)
+        while Date() < deadline, !pending.exists, !gate.exists {
+            Thread.sleep(forTimeInterval: 1)
+        }
+        if pending.exists { return }
+        if gate.exists { throw XCTSkip(Self.createCodeNeedsAnAccount) }
+        XCTFail("""
+            the preselected fixture never became a pending direct send, and this \
+            device is not account-gated either: after \
+            \(Int(DevicePair.establishBudget))s the Direct tab offered neither a \
+            staged row nor "\(DevicePair.createCodeGateTitle)".
+            \(app.debugDescription)
+            """, file: file, line: line)
     }
 
     /// Mint a code through the shipped Create control, and publish the digits
@@ -410,16 +591,7 @@ final class DevicePairUITests: XCTestCase {
         while Date() < deadline, !gate.exists, !button.exists {
             Thread.sleep(forTimeInterval: 1)
         }
-        if gate.exists {
-            throw XCTSkip("""
-                This device cannot create a pairing code: it holds no ready \
-                account. Creating a code needs one; joining a code does not. \
-                Sign in ONCE by hand on this device, with a verified address and \
-                any plan — the run passes no --relayium-ui-testing, so the app \
-                uses the product's own keychain and that session persists across \
-                runs. This harness holds no credential and reads none.
-                """)
-        }
+        if gate.exists { throw XCTSkip(Self.createCodeNeedsAnAccount) }
         XCTAssertTrue(button.exists, """
             the Direct tab offers neither "\(create)" nor the account gate that replaces \
             it, after \(Int(DevicePair.establishBudget))s.
@@ -481,10 +653,9 @@ final class DevicePairUITests: XCTestCase {
         // Staged before the code exists, because on this platform a legacy code
         // carries the batch that was chosen before it was minted. Create is
         // disabled with nothing staged, so this is a precondition of the tap
-        // below and not decoration.
-        XCTAssertTrue(app.descendants(matching: .any)["pendingFile.0"]
-            .waitForExistence(timeout: DevicePair.settleBudget),
-                      "the preselected fixture never became a pending direct send")
+        // below and not decoration — but only on a device that can mint at all,
+        // which is why the account gate is read HERE rather than one step later.
+        try requireStagedFixtureUnlessAccountGated()
 
         guard try mintCode(run, create: DevicePair.createCodeLabel,
                            heading: DevicePair.giveCodeHeading) != nil else { return }

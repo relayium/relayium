@@ -47,13 +47,13 @@ private struct PairingJoinLinkView: View {
                     HStack(spacing: Metrics.tight) { copyButton; shareButton }
                 }
             }
-            .buttonStyle(.bordered)
+            .borderedAction()
             .controlSize(.large)
 
             if copied {
                 Label(L10n.t(.pairingLinkCopied), systemImage: "checkmark")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
             }
         }
         // This view can retain its structural identity if a later generated
@@ -199,6 +199,13 @@ struct DirectView: View {
     @EnvironmentObject private var verification: VerificationPreference
 
     @State private var isChoosingFiles = false
+    /// The pairing scanner sheet. One flag for both modes, because exactly one
+    /// join card is on screen at a time — the mode switch above chooses which.
+    @State private var isScanning = false
+    /// Set by a scan that filled the field, cleared the moment the user edits
+    /// it or leaves the state. It confirms what happened and names the step the
+    /// scan deliberately did not take.
+    @State private var scanFilledCode: String?
     /// A failure to resolve the app's own receive folder. It happens before the
     /// model is involved at all, so it has no state case to live in, and it is
     /// cleared whenever a new attempt starts so it cannot outlive its cause.
@@ -271,6 +278,15 @@ struct DirectView: View {
             // SwiftUI's hands entirely.
             selection.chooseFiles(result)
         }
+        // On the `NavigationStack` for the same reason the importer is: which
+        // arm of the mode switch is rendered must not decide whether the sheet
+        // can return.
+        .sheet(isPresented: $isScanning) {
+            PairingScannerView { result in
+                applyScan(result)
+                isScanning = false
+            }
+        }
         .confirmationDialog(
             L10n.t(.textDiscardLocalContentConfirmTitle),
             isPresented: $confirmingLocalTextDone,
@@ -302,7 +318,7 @@ struct DirectView: View {
         VStack(alignment: .leading, spacing: Metrics.inner) {
             Text(L10n.t(.navPairingCodeSubtitle))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             PathRail(stops: PathRailPresentation.iosPairingCode())
         }
@@ -340,7 +356,7 @@ struct DirectView: View {
             .accessibilityHint(L10n.t(.directModeMatchHint))
             Text(L10n.t(.directModeMatchHint))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("pairing-mode-match-hint")
         }
@@ -369,7 +385,7 @@ struct DirectView: View {
                 // partial write to discard, and `.failed` still holds the dead
                 // connection.
                 Button(L10n.t(.commonDone)) { file.cancel() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
             }
         case .minting:
@@ -377,7 +393,7 @@ struct DirectView: View {
                 ProgressView { Text(L10n.t(.directCreatingCode)) }
                 PendingFileList(sessionFiles: file.sessionFiles)
                 Button(L10n.t(.commonCancel)) { file.cancel() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
             }
         case let .showingCode(code, expiresAt):
@@ -423,6 +439,7 @@ struct DirectView: View {
                         Text(summary).font(.subheadline.weight(.semibold))
                         Spacer(minLength: 0)
                         Button(L10n.t(.commonClear)) { selection.clear() }
+                            .textAction()
                     }
                     // One element, so VoiceOver reads "3 files" rather than
                     // stopping on each fragment of the summary.
@@ -448,7 +465,7 @@ struct DirectView: View {
                     Button { isChoosingFiles = true } label: {
                         Text(L10n.t(.commonChooseFilesOrFolders)).frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
                 }
                 Button { createAndSend() } label: {
@@ -486,13 +503,13 @@ struct DirectView: View {
         case .failed, .ended, .refused, .unsupported:
             DirectTextSessionView(model: text)
             Button(L10n.t(.commonDone)) { finishTextOrConfirm() }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
         case .minting:
             SectionCard(L10n.t(.textStartHeading)) {
                 ProgressView { Text(L10n.t(.textCreatingCode)) }
                 Button(L10n.t(.commonCancel)) { text.reset() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
             }
         case let .showingCode(code, expiresAt):
@@ -513,7 +530,7 @@ struct DirectView: View {
             if case .allowed = gate {
                 Text(L10n.t(.textStartBody))
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 Button { createTextSession() } label: {
                     Text(L10n.t(.textCreateCode)).frame(maxWidth: .infinity)
@@ -550,7 +567,7 @@ struct DirectView: View {
                 Text(L10n.t(.gateCreateCodeTitle)).font(.subheadline.weight(.semibold))
                 Text(L10n.t(.gateCreateCodeBody))
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 openAccountButton
 
@@ -564,7 +581,7 @@ struct DirectView: View {
                 Text(L10n.t(.contentCheckEmailTitle)).font(.subheadline.weight(.semibold))
                 Text(L10n.t(.contentCheckEmailBody, [L10n.token(email)]))
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 openAccountButton
 
@@ -576,7 +593,7 @@ struct DirectView: View {
                               dateStyle: .medium, timeStyle: .none),
                 ]))
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 openAccountButton
             }
@@ -589,7 +606,7 @@ struct DirectView: View {
         SectionCard(L10n.t(.presenceBusyTitle)) {
             Text(L10n.t(.presenceBusyBody))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Button { onShowSession(owner) } label: {
                 Text(L10n.t(.presenceShowIt)).frame(maxWidth: .infinity)
@@ -603,7 +620,7 @@ struct DirectView: View {
         Button(action: onOpenAccount) {
             Text(L10n.t(.gateOpenAccount)).frame(maxWidth: .infinity)
         }
-        .buttonStyle(.bordered)
+        .borderedAction()
         .controlSize(.large)
     }
 
@@ -641,10 +658,10 @@ struct DirectView: View {
                           dateStyle: .none, timeStyle: .short),
             ]))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
             Text(L10n.t(.pairingCodeExpiryNote))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("pairing-code-expiry-note")
             if let joinURL = transferPairingJoinURL(code: code, mode: mode) {
@@ -658,10 +675,10 @@ struct DirectView: View {
             ProgressView { Text(L10n.t(.directWaitingForDevice)) }
             Text(L10n.t(.directKeepBothOpen))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Button(L10n.t(.commonCancel), action: cancel)
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
         }
     }
@@ -672,6 +689,7 @@ struct DirectView: View {
         VStack(alignment: .leading, spacing: Metrics.tight) {
             failureLine(notice)
             Button(L10n.t(.commonDismiss)) { foreground.dismissInterruption() }
+                .textAction()
         }
     }
 
@@ -681,19 +699,20 @@ struct DirectView: View {
     /// about a decision already made, next to a button that would take the user
     /// off the screen showing their own transfer.
     private var largeFileRoute: some View {
-        // A card, and a `.bordered` button inside it. It is a real offer with a
+        // A card, and a `.borderedAction()` button inside it. It is a real offer
+        // with a
         // real destination, so it gets the same boundary the two tasks above it
         // have — but it is the answer to a question the user may not be asking,
-        // so it never takes the accent away from the task they came for.
+        // so it never takes the prominent fill away from the task they came for.
         SectionCard(L10n.t(.directLargeFilesTitle)) {
             Text(L10n.t(.directLargeFilesBody))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Button(action: onOpenSend) {
                 Text(L10n.t(.directOpenSend)).frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .borderedAction()
             .controlSize(.large)
         }
     }
@@ -722,11 +741,11 @@ struct DirectView: View {
                 .disabled(isLocked)
             Text(L10n.t(.verifyExplainWhat))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Text(L10n.t(.verifyExplainEncryption))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -767,6 +786,26 @@ struct DirectView: View {
         // one screen that appears to need signing in.
         return SectionCard(L10n.t(.directReceiveHeading)) {
             PairingCodeInput(text: normalizedCode, label: L10n.t(.commonCode))
+            // **The camera is offered beside the field, never instead of it.**
+            //
+            // Reading the other screen's QR code is the faster way to fill these
+            // six digits and it is the only reason this app declares
+            // `NSCameraUsageDescription`. It is `.borderedAction()` rather than
+            // prominent because Join below is still the task; and it is the tap
+            // that separates app launch from the system camera prompt, which is
+            // why nothing above it touches `AVCaptureDevice`.
+            Button { isScanning = true } label: {
+                Label(L10n.t(.pairingScanCode), systemImage: "qrcode.viewfinder")
+                    .frame(maxWidth: .infinity)
+            }
+            .borderedAction()
+            .controlSize(.large)
+            // Derived rather than cleared: it is shown while the field still
+            // holds exactly what the scan put there, so the first digit the
+            // user changes retires it with no state to reset.
+            if let scanFilledCode, code.wrappedValue == scanFilledCode {
+                InlineMessage(.info, L10n.t(.pairingScanFilled))
+            }
             Button(action: action) {
                 Text(L10n.t(.commonJoin)).frame(maxWidth: .infinity)
             }
@@ -777,13 +816,48 @@ struct DirectView: View {
             if showsAnonymousNote {
                 Text(L10n.t(.directJoinNoAccountNeeded))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
     // MARK: - actions
+
+    /// **What a scanned join link is allowed to do, which is fill a field.**
+    ///
+    /// `PairingScanPolicy` has already refused everything that is not a
+    /// `relayium.com` realtime link carrying a complete six-digit code, so what
+    /// arrives here is exactly what the keyboard could have produced. It is then
+    /// treated exactly as if it had been: normalized through the same
+    /// `updateJoinCode` a keystroke goes through, into the same binding, leaving
+    /// Join to the user.
+    ///
+    /// **There is deliberately no `join` on this path.** A QR code is printed by
+    /// anybody and photographed by accident; a scanner that connected would let
+    /// a poster on a wall start a session on a phone that was merely pointed at
+    /// it. The confirmation line beside the field says what was filled in and
+    /// that Join is still owed, so the extra tap reads as the design rather than
+    /// as something that failed to happen.
+    ///
+    /// **The mode hint goes through the same refusal the picker does.**
+    /// `DirectModeSelection.select` re-reads both model states, so a scan
+    /// arriving while a session is live cannot switch modes under it — and the
+    /// code then lands in whichever half is actually on screen, never in the
+    /// other model's invisible field.
+    private func applyScan(_ result: PairingScanResult) {
+        if let mode = result.mode {
+            modes.select(mode,
+                         file: file.state,
+                         text: text.state,
+                         sessionClaimed: presence.owner != nil)
+        }
+        switch modes.mode {
+        case .files: file.updateJoinCode(result.code)
+        case .text:  text.updateJoinCode(result.code)
+        }
+        scanFilledCode = result.code
+    }
 
     /// Receiving files: resolve where they go BEFORE opening a connection.
     ///

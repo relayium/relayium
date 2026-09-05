@@ -1,0 +1,31 @@
+/* Relayium — iOS app bundle, English (source of truth for the purpose strings).
+
+   This file exists for the same reason the app bundle carries its own
+   `CFBundleLocalizations`: the product's catalogs live in the RelayiumAppKit
+   package bundle, and iOS never looks there for a purpose string. A system
+   permission alert is drawn by the OS, from THIS bundle, before any Relayium
+   code runs — so a sentence that is only in the package is a sentence the user
+   never sees.
+
+   `Info.plist` holds the same English text as the fallback. That duplication is
+   deliberate and asserted: `IOSLocalNetworkPermissionTests` fails if the two
+   drift, because the fallback is what a device with an unmatched language
+   renders and it must not quietly become a different promise.
+
+   Exactly two keys, and they are the only protected resources this build
+   declares. `NSMicrophoneUsageDescription` is NOT here: the embedded WebRTC
+   framework references `AVAudioSession`, but this product configures no
+   recording and requests none, and a purpose string derived from symbol
+   linkage would be the same false statement the camera key spent five builds
+   refusing to make. See `docs/ios-app-store-submission.md`. */
+
+/* Shown by iOS the first time the user taps Scan a QR code on the Receive card.
+   It names the one thing the camera is for: reading the pairing QR code the
+   other device is already displaying, so the six-digit join code does not have
+   to be typed. `PairingScannerView` runs an `AVCaptureMetadataOutput` limited
+   to `.qr` — no photo output, no movie output, no frame ever written — which
+   is what makes the last sentence true rather than reassuring. */
+"NSCameraUsageDescription" = "Relayium uses the camera only to read the pairing QR code another device is showing, so you do not have to type its six-digit join code by hand. Nothing is recorded or saved.";
+
+/* Shown when Nearby begins local Bonjour discovery or a direct local transfer. */
+"NSLocalNetworkUsageDescription" = "Relayium uses your local network to find nearby Relayium devices and send files and messages directly to the device you choose.";

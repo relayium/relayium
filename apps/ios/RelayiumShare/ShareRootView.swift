@@ -74,7 +74,7 @@ struct ShareRootView: View {
             // this product has.
             Text(L10n.plural(.shareItemCount, model.itemCount))
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
         // One element, so VoiceOver reads "Send with Relayium, 3 items" rather
@@ -207,21 +207,53 @@ struct ShareRootView: View {
     /// Copy to Relayium above a small floating Cancel that belonged to neither
     /// edge. Inside, the shape fills — the same pair of stacked full-width
     /// actions `SendView` puts on a waiting draft.
+    ///
+    /// **The label colour is `ActionLabel`, not the accent.** This is the one
+    /// ordinary bordered control in the extension, and it had the same defect
+    /// the app's 64 did: `.bordered` draws its label in the tint, the tint is
+    /// `AccentColor`, and `#7C3AED` on the neutral fill iOS puts under it
+    /// measures about 2:1 in Dark against the 4.5:1 text owes.
+    ///
+    /// `.foregroundStyle` rather than `.tint` for the reason the app's
+    /// `borderedAction(_:)` records: on iOS 26 the fill is derived from the
+    /// tint, so tinting the label lighter lightens the pill under it by the
+    /// same amount and the ratio barely moves. This colours the words and
+    /// leaves the fill exactly as it shipped.
+    ///
+    /// Written as `Color("ActionLabel")` rather than `Palette.actionLabel`
+    /// because this target compiles `Components/DesignTokens.swift` but not
+    /// `Components/ActionButton.swift`, where that role is declared. The
+    /// colourset is therefore shipped in this extension's OWN asset catalog
+    /// with the same two values the app's carries, and
+    /// `IOSActionColorGuardTests` fails if the two ever diverge or if this
+    /// control loses the role.
     private var cancelButton: some View {
         Button(action: model.cancel) {
             Text(L10n.t(.commonCancel)).frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
+        // nonlocalized: asset catalog colour name
+        .foregroundStyle(Color("ActionLabel"))
         .controlSize(.large)
     }
 
     /// Wrapping rather than truncating. At the largest Dynamic Type sizes these
     /// sentences are several lines on an iPhone, and the part that would be cut
     /// is the part that says nothing has been uploaded.
+    ///
+    /// `Palette.supportingLabel` rather than the `Color("...")` spelling the
+    /// Cancel above it uses, and the difference is not a style choice. That role
+    /// is declared in `Components/ActionButton.swift`, which this target does not
+    /// compile; this one is declared in `Components/DesignTokens.swift`, which it
+    /// does. So the symbol exists here, and it resolves against `Bundle.main` —
+    /// which, inside an app extension, IS this extension's bundle. That is why
+    /// `SupportingLabel` and `WarningLabel` are shipped in this target's own
+    /// asset catalog as well, byte-identical to the app's, and why
+    /// `IOSSupportingTextGuardTests` compares them rather than trusting them.
     private func paragraph(_ text: String) -> some View {
         Text(text)
             .font(.callout)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Palette.supportingLabel)
             .fixedSize(horizontal: false, vertical: true)
     }
 }

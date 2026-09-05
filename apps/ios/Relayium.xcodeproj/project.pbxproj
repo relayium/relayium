@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		B100000000000000000000B2 /* RelayiumKit in Frameworks */ = {isa = PBXBuildFile; productRef = B100000000000000000000B1 /* RelayiumKit */; };
 		B100000000000000000001B2 /* RelayiumStoreKit in Frameworks */ = {isa = PBXBuildFile; productRef = B100000000000000000001B1 /* RelayiumStoreKit */; };
+		B100000000000000000001C2 /* RelayiumLocalPeerKit in Frameworks */ = {isa = PBXBuildFile; productRef = B100000000000000000001C1 /* RelayiumLocalPeerKit */; };
 		B100000000000000000000D6 /* RelayiumShareKit in Frameworks */ = {isa = PBXBuildFile; productRef = B100000000000000000000D5 /* RelayiumShareKit */; };
 		B100000000000000000000D7 /* RelayiumShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B100000000000000000000D1 /* RelayiumShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -92,6 +93,7 @@
 			files = (
 				B100000000000000000000B2 /* RelayiumKit in Frameworks */,
 				B100000000000000000001B2 /* RelayiumStoreKit in Frameworks */,
+				B100000000000000000001C2 /* RelayiumLocalPeerKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -157,6 +159,7 @@
 			packageProductDependencies = (
 				B100000000000000000000B1 /* RelayiumKit */,
 				B100000000000000000001B1 /* RelayiumStoreKit */,
+				B100000000000000000001C1 /* RelayiumLocalPeerKit */,
 			);
 			productName = Relayium;
 			productReference = B100000000000000000000A4 /* Relayium.app */;
@@ -333,8 +336,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.3.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.app;
+				MARKETING_VERSION = 0.3.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -361,10 +364,10 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.3.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.app;
+				MARKETING_VERSION = 0.3.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "Relayium iOS App Store";
+				PROVISIONING_PROFILE_SPECIFIER = "Relayium iOS Universal App Store";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -501,8 +504,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.3.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.app.share;
+				MARKETING_VERSION = 0.3.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac.ShareIOS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -529,10 +532,10 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.3.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.app.share;
+				MARKETING_VERSION = 0.3.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac.ShareIOS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "Relayium Share Extension App Store";
+				PROVISIONING_PROFILE_SPECIFIER = "Relayium iOS Share Extension App Store";
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -547,7 +550,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 7PVYUG4YQS;
 				GENERATE_INFOPLIST_FILE = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.app.UITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.ios.UITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -563,7 +566,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 7PVYUG4YQS;
 				GENERATE_INFOPLIST_FILE = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.app.UITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.ios.UITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -633,6 +636,10 @@
 		B100000000000000000001B1 /* RelayiumStoreKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = RelayiumStoreKit;
+		};
+		B100000000000000000001C1 /* RelayiumLocalPeerKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RelayiumLocalPeerKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
