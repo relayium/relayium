@@ -4,6 +4,10 @@ The frame format two peers exchange over the WebRTC DataChannel after the
 commit-reveal handshake agrees session keys. Byte layout only — the WebRTC
 transport and handshake are defined elsewhere.
 
+The transport that carries these frames — the two-lane `link/1` connection, its
+capability admission, lifecycle bytes, total frame-class partition and
+authenticated signalling — is `relayium-link-v1.md`.
+
 ## Frame
 - `[kind: 1 byte][seq: uint32 BE][payload]`. CHUNK_OVERHEAD = 5 + 16 (header + GCM tag).
 

@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English is the source language and the fallback. Every string here has a
+     Simplified Chinese counterpart in values-zh-rCN/strings.xml; the parity is
+     an executable test (AppStringsParityTest), not a convention. -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="app_name">Relayium</string>
+
+    <!-- Join screen. The distinction this copy must keep straight: this app
+         cannot MINT a link yet, but once connected it sends and receives like
+         any other Relayium — so the instruction is about where the link comes
+         from, never about what this phone can or cannot transfer. -->
+    <string name="join_title">Open a link</string>
+    <string name="join_intro">Create a link in Relayium on your other device, then paste the link or enter its six-digit code here.</string>
+    <string name="join_field_label">Code or link</string>
+    <string name="join_field_hint">000000</string>
+    <string name="join_action">Connect</string>
+    <string name="join_helper">Once connected, you can send and receive files and messages.</string>
+    <string name="join_error_empty">Enter the six-digit code from your other device.</string>
+    <string name="join_error_digits">A pairing code is exactly six digits, for example 004291.</string>
+    <string name="join_error_origin">That link is not a relayium.com transfer link.</string>
+    <string name="join_error_stored">That is a stored-file link. This app joins live transfers between two devices that are both open.</string>
+    <string name="join_error_link">That link has no pairing code in it.</string>
+
+    <!-- Connection -->
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_waiting_peer">Waiting for the other device…</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_verification_code">Verification code %1$s</string>
+    <string name="status_verification_hint">Both devices should show the same six digits. They are not the pairing code.</string>
+    <string name="status_disconnect">Disconnect</string>
+    <string name="status_reconnect">Start a new session</string>
+
+    <!-- Errors -->
+    <string name="error_code_not_found">That code is not active. Codes expire after a few minutes — ask your other device for a fresh one.</string>
+    <string name="error_network">Could not reach Relayium. Check this device\'s connection and try again.</string>
+    <string name="error_peer_busy">The other device is already connected to something else.</string>
+    <string name="error_peer_incompatible">The other device is running a version of Relayium this app cannot connect to. Update it and try again.</string>
+    <string name="error_handshake">The connection could not be verified and was stopped. Start a new session.</string>
+    <string name="error_connection_lost">The connection ended. Nothing more can arrive on it — start a new session to continue.</string>
+    <string name="error_transfer_failed">The transfer stopped and was not completed.</string>
+    <string name="error_integrity">The received file did not match what was sent, so it was discarded. Nothing was saved.</string>
+    <!-- No "nothing was written" claim: this key also covers mid-write and
+         cleanup-limited failures, where partial files or created folders can
+         legitimately remain — the separate cleanup warning owns that truth. -->
+    <string name="error_save_failed">The file could not be saved.</string>
+    <string name="error_no_space">There is not enough free space on this device for this transfer.</string>
+    <string name="error_unsafe_path">The other device sent a folder layout this app will not create. Nothing was saved.</string>
+    <string name="error_text_failed">Messages stopped working on this connection. Start a new session to continue.</string>
+    <string name="error_text_buffer_full">The connection is busy. Wait a moment and send again.</string>
+    <string name="session_ended">The session ended.</string>
+    <string name="cleanup_incomplete">Some partial files from a cancelled transfer could not be removed. Check your chosen folder and delete anything you did not expect.</string>
+    <string name="cleanup_dismiss">Dismiss</string>
+    <string name="picker_unknown_size">The size of “%1$s” could not be read, so it cannot be sent. Try a different file or copy it locally first.</string>
+    <string name="picker_unreadable">One of the chosen files could not be read. Nothing was sent.</string>
+    <string name="picker_folder_unavailable">That folder could not be opened. Choose a different folder.</string>
+
+    <!-- Text -->
+    <string name="text_title">Messages</string>
+    <string name="text_field_label">Message</string>
+    <string name="text_send">Send</string>
+    <string name="text_empty">Messages you send appear here. They are never stored anywhere.</string>
+    <string name="text_ended">This conversation ended.</string>
+    <string name="text_end">End conversation</string>
+    <string name="text_start">Start a conversation</string>
+    <string name="text_incoming_request">The other device would like to start a conversation.</string>
+    <string name="text_accept">Accept</string>
+    <string name="text_decline">Decline</string>
+    <!-- Byte counts, not countable objects: a plural form would be wrong in
+         zh and adds nothing in en. -->
+    <string name="text_too_long" tools:ignore="PluralsCandidate">This message is longer than one message can carry (%1$d of %2$d bytes).</string>
+    <string name="text_from_peer">From the other device</string>
+    <string name="text_from_me">From this device</string>
+    <string name="text_requested">Waiting for the other device to accept the conversation…</string>
+    <string name="text_failed">Messages stopped working on this connection. Files may still work; a new session restores messages.</string>
+
+    <!-- Files -->
+    <string name="files_title">Files</string>
+    <string name="files_pick">Choose files to send</string>
+    <string name="files_cancel">Cancel</string>
+    <string name="files_sending">Sending %1$s</string>
+    <string name="files_incoming_title">Incoming files</string>
+    <plurals name="files_incoming_summary">
+        <item quantity="one">%1$d file, %2$s</item>
+        <item quantity="other">%1$d files, %2$s</item>
+    </plurals>
+    <string name="files_choose_folder">Choose where to save</string>
+    <string name="files_decline">Decline</string>
+    <string name="files_receiving">Receiving %1$s</string>
+    <string name="files_receive_waiting">Accepted. Waiting for data from the other device…</string>
+    <string name="files_saved">Saved to your chosen folder</string>
+    <string name="files_progress">%1$s of %2$s</string>
+    <string name="files_lane_down">Files can no longer be sent on this connection. Messages still work — start a new session to send files again.</string>
+    <string name="files_waiting_accept">Waiting for the other device to accept…</string>
+    <string name="files_sent_batch">Delivered. The other device confirmed every file arrived intact.</string>
+
+    <!-- Accessibility -->
+    <string name="cd_progress">Transfer progress</string>
+    <string name="cd_message_list">Conversation</string>
+</resources>

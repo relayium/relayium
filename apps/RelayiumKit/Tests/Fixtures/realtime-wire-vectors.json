@@ -725,5 +725,1264 @@
         ]
       }
     }
+  },
+  "link": {
+    "capability": "link/1",
+    "channelLabels": [
+      "relayium",
+      "relayium-text"
+    ],
+    "captureMaxBytes": 262144,
+    "authTagLength": 44,
+    "heldSignalMax": 64,
+    "maxCandidateProgress": 6,
+    "deadlines": {
+      "noProgressMs": 30000,
+      "setupHardCapMs": 90000,
+      "keyRevealMs": 30000,
+      "handshakeDeadlineMs": 90000,
+      "linkAuthMs": 30000,
+      "linkRequestMs": 30000,
+      "linkRequestRetryMs": 3000,
+      "recoveryWindowMs": 90000,
+      "recoveryRetryMs": 1500
+    },
+    "controlHex": {
+      "accept": "fe",
+      "reject": "ff",
+      "complete": "fd",
+      "busy": "f9",
+      "batchAbort": "f8",
+      "textRequest": "fa",
+      "textEnd": "fb"
+    },
+    "lifecycle": {
+      "file": [
+        {
+          "frameHex": "fe",
+          "kind": "accept"
+        },
+        {
+          "frameHex": "ff",
+          "kind": "reject"
+        },
+        {
+          "frameHex": "fd",
+          "kind": "complete"
+        },
+        {
+          "frameHex": "f9",
+          "kind": "busy"
+        },
+        {
+          "frameHex": "f8",
+          "kind": "batchAbort"
+        },
+        {
+          "frameHex": "fa",
+          "kind": null,
+          "why": "0xfa is the TEXT lane's request byte and has no meaning here"
+        },
+        {
+          "frameHex": "fb",
+          "kind": null,
+          "why": "0xfb likewise"
+        },
+        {
+          "frameHex": "00",
+          "kind": null
+        },
+        {
+          "frameHex": "",
+          "kind": null
+        },
+        {
+          "frameHex": "fdfd",
+          "kind": null,
+          "why": "exactly one byte, or it is not a control"
+        }
+      ],
+      "text": [
+        {
+          "frameHex": "fa",
+          "kind": "request"
+        },
+        {
+          "frameHex": "fe",
+          "kind": "accept"
+        },
+        {
+          "frameHex": "ff",
+          "kind": "reject"
+        },
+        {
+          "frameHex": "fb",
+          "kind": "end"
+        },
+        {
+          "frameHex": "fd",
+          "kind": null,
+          "why": "COMPLETE belongs to the file protocol and has no meaning on a conversation"
+        },
+        {
+          "frameHex": "f9",
+          "kind": null
+        },
+        {
+          "frameHex": "f8",
+          "kind": null
+        },
+        {
+          "frameHex": "",
+          "kind": null
+        },
+        {
+          "frameHex": "fafa",
+          "kind": null,
+          "why": "exactly one byte"
+        }
+      ],
+      "textFrame": [
+        {
+          "frameHex": "0900000000d560d748d04fe94863afec7ee39da128417aea7c0e986e2c2caa29799c493558",
+          "isTextFrame": true
+        },
+        {
+          "frameHex": "09000000005a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+          "isTextFrame": true,
+          "why": "the minimum: 5-byte header plus a 16-byte tag"
+        },
+        {
+          "frameHex": "09000000005a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+          "isTextFrame": false,
+          "why": "one byte short of a tag; the Web fails the text lane on this rather than routing it"
+        },
+        {
+          "frameHex": "01000000005a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+          "isTextFrame": false
+        },
+        {
+          "frameHex": "09",
+          "isTextFrame": false
+        },
+        {
+          "frameHex": "",
+          "isTextFrame": false
+        }
+      ]
+    },
+    "frameClass": [
+      {
+        "label": "accept",
+        "frameHex": "fe",
+        "class": "lifecycle",
+        "control": "accept"
+      },
+      {
+        "label": "reject",
+        "frameHex": "ff",
+        "class": "lifecycle",
+        "control": "reject"
+      },
+      {
+        "label": "complete",
+        "frameHex": "fd",
+        "class": "lifecycle",
+        "control": "complete"
+      },
+      {
+        "label": "busy",
+        "frameHex": "f9",
+        "class": "lifecycle",
+        "control": "busy"
+      },
+      {
+        "label": "batchAbort",
+        "frameHex": "f8",
+        "class": "lifecycle",
+        "control": "batchAbort"
+      },
+      {
+        "label": "two bytes starting with ACCEPT",
+        "frameHex": "fefe",
+        "class": "unroutable",
+        "why": "a longer frame that merely STARTS with a control byte must never be read as consent"
+      },
+      {
+        "label": "two bytes starting with BATCH_ABORT",
+        "frameHex": "f800",
+        "class": "unroutable",
+        "why": "same rule, for the one control that travels sender to receiver"
+      },
+      {
+        "label": "empty frame",
+        "frameHex": "",
+        "class": "unroutable",
+        "why": "no kind to dispatch on"
+      },
+      {
+        "label": "one byte that is not a control",
+        "frameHex": "06",
+        "class": "unroutable",
+        "why": "below the 5-byte header there is no kind, whatever the first byte looks like"
+      },
+      {
+        "label": "four bytes",
+        "frameHex": "01000000",
+        "class": "unroutable",
+        "why": "the header is 5 bytes"
+      },
+      {
+        "label": "ack, exactly 13 bytes",
+        "frameHex": "06000000004130000000000000",
+        "class": "ack"
+      },
+      {
+        "label": "ack, 12 bytes",
+        "frameHex": "06000000005a5a5a5a5a5a5a",
+        "class": "unroutable",
+        "why": "parseAck refuses it, and it must not fall through into the protected stream either"
+      },
+      {
+        "label": "ack, 14 bytes",
+        "frameHex": "06000000005a5a5a5a5a5a5a5a5a",
+        "class": "unroutable",
+        "why": "same"
+      },
+      {
+        "label": "ack, header only",
+        "frameHex": "0600000000",
+        "class": "unroutable",
+        "why": "same"
+      },
+      {
+        "label": "resume request, well formed",
+        "frameHex": "05000000007b22696e646578223a332c226f6666736574223a3938373635347d",
+        "class": "resumeRequest"
+      },
+      {
+        "label": "resume request, unparseable payload",
+        "frameHex": "05000000007b",
+        "class": "resumeRequest"
+      },
+      {
+        "label": "resume request, empty payload",
+        "frameHex": "0500000000",
+        "class": "resumeRequest"
+      },
+      {
+        "label": "resume start, well formed",
+        "frameHex": "04000000007b22696e646578223a312c226f6666736574223a3339333231362c22736571223a397d",
+        "class": "resumeStart"
+      },
+      {
+        "label": "resume start, empty payload",
+        "frameHex": "0400000000",
+        "class": "resumeStart"
+      },
+      {
+        "label": "chunk",
+        "frameHex": "0100000001ea374d2fbe04418d9fe78d7efa47812ac0eb061a85fb4d46a3cef4",
+        "class": "protected"
+      },
+      {
+        "label": "batch (manifest)",
+        "frameHex": "0700000000933175ffc701da04025dbf6bd26b2a9850e7e8fe9a77d06bd135cb7489d630c609217195a03c2a5502adb72819a241233f90f19c11ee139399b0138bc2e3aff627d023c22cd7d597bad0a37e31450216368a4492b89b5b45c72d4bcf2a3a29dc8284c3d704b710b8500a6b8f162d8f8c8cb61f",
+        "class": "protected"
+      },
+      {
+        "label": "done",
+        "frameHex": "08000000022f9375dd20dac7c200f9d1bee3d4e9a354fd1f24ca4e71a426f40b9d25647e0244ec81685d2eb35bd2f511ec87e0df924d177e2176dc9838cfb162017aa6ee88da5124d03fd7f0c5f51e70e3a428fc37c2ca1ed548c3a49364eec31088",
+        "class": "protected"
+      },
+      {
+        "label": "chunk part",
+        "frameHex": "0a000000075a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "class": "protected"
+      },
+      {
+        "label": "batch part",
+        "frameHex": "0b000000005a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "class": "protected"
+      },
+      {
+        "label": "chunk, header only",
+        "frameHex": "0100000003",
+        "class": "protected",
+        "why": "shape routing only; the AEAD then fails it"
+      },
+      {
+        "label": "legacy done (kind 2)",
+        "frameHex": "02000000005a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "class": "protected",
+        "why": "routed so the receiver can report an older peer, never parsed"
+      },
+      {
+        "label": "legacy batch (kind 3)",
+        "frameHex": "03000000005a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "class": "protected",
+        "why": "same"
+      },
+      {
+        "label": "text frame on the file lane",
+        "frameHex": "09000000005a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "class": "unroutable"
+      },
+      {
+        "label": "kind 0",
+        "frameHex": "00000000005a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "class": "unroutable"
+      },
+      {
+        "label": "kind 13",
+        "frameHex": "0d000000005a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "class": "unroutable"
+      },
+      {
+        "label": "stored-keys handoff (kind 12)",
+        "frameHex": "0c000000005a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "class": "unroutable",
+        "why": "unroutable for a client that does not announce preupload/1, which is every native client. A client that DOES announce it demuxes kind 12 by kind alone, ahead of the file receiver, including a frame too short to be a valid one."
+      }
+    ],
+    "authPayload": [
+      {
+        "label": "empty signal",
+        "signal": {},
+        "payloadUtf8Hex": "7b2273647054797065223a6e756c6c2c22736470223a6e756c6c2c2263616e646964617465223a6e756c6c2c227364704d6964223a6e756c6c2c227364704d4c696e65496e646578223a6e756c6c2c22757365726e616d65467261676d656e74223a6e756c6c7d",
+        "payloadAscii": "{\"sdpType\":null,\"sdp\":null,\"candidate\":null,\"sdpMid\":null,\"sdpMLineIndex\":null,\"usernameFragment\":null}"
+      },
+      {
+        "label": "offer",
+        "signal": {
+          "sdp": {
+            "type": "offer",
+            "sdp": "v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\n"
+          }
+        },
+        "payloadUtf8Hex": "7b2273647054797065223a226f66666572222c22736470223a22763d305c725c6e6f3d2d2031203120494e2049503420302e302e302e305c725c6e222c2263616e646964617465223a6e756c6c2c227364704d6964223a6e756c6c2c227364704d4c696e65496e646578223a6e756c6c2c22757365726e616d65467261676d656e74223a6e756c6c7d",
+        "payloadAscii": "{\"sdpType\":\"offer\",\"sdp\":\"v=0\\r\\no=- 1 1 IN IP4 0.0.0.0\\r\\n\",\"candidate\":null,\"sdpMid\":null,\"sdpMLineIndex\":null,\"usernameFragment\":null}"
+      },
+      {
+        "label": "answer",
+        "signal": {
+          "sdp": {
+            "type": "answer",
+            "sdp": "v=0\r\na=setup:active\r\n"
+          }
+        },
+        "payloadUtf8Hex": "7b2273647054797065223a22616e73776572222c22736470223a22763d305c725c6e613d73657475703a6163746976655c725c6e222c2263616e646964617465223a6e756c6c2c227364704d6964223a6e756c6c2c227364704d4c696e65496e646578223a6e756c6c2c22757365726e616d65467261676d656e74223a6e756c6c7d",
+        "payloadAscii": "{\"sdpType\":\"answer\",\"sdp\":\"v=0\\r\\na=setup:active\\r\\n\",\"candidate\":null,\"sdpMid\":null,\"sdpMLineIndex\":null,\"usernameFragment\":null}"
+      },
+      {
+        "label": "ice candidate with every field",
+        "signal": {
+          "ice": {
+            "candidate": "candidate:1 1 udp 2113937151 192.0.2.1 54321 typ host",
+            "sdpMid": "0",
+            "sdpMLineIndex": 0,
+            "usernameFragment": "abcd"
+          }
+        },
+        "payloadUtf8Hex": "7b2273647054797065223a6e756c6c2c22736470223a6e756c6c2c2263616e646964617465223a2263616e6469646174653a312031207564702032313133393337313531203139322e302e322e312035343332312074797020686f7374222c227364704d6964223a2230222c227364704d4c696e65496e646578223a302c22757365726e616d65467261676d656e74223a2261626364227d",
+        "payloadAscii": "{\"sdpType\":null,\"sdp\":null,\"candidate\":\"candidate:1 1 udp 2113937151 192.0.2.1 54321 typ host\",\"sdpMid\":\"0\",\"sdpMLineIndex\":0,\"usernameFragment\":\"abcd\"}"
+      },
+      {
+        "label": "sdpMLineIndex 0 renders 0, not null",
+        "signal": {
+          "ice": {
+            "candidate": "candidate:2 1 udp 1 192.0.2.2 1 typ host",
+            "sdpMid": "data",
+            "sdpMLineIndex": 0
+          }
+        },
+        "payloadUtf8Hex": "7b2273647054797065223a6e756c6c2c22736470223a6e756c6c2c2263616e646964617465223a2263616e6469646174653a322031207564702031203139322e302e322e3220312074797020686f7374222c227364704d6964223a2264617461222c227364704d4c696e65496e646578223a302c22757365726e616d65467261676d656e74223a6e756c6c7d",
+        "payloadAscii": "{\"sdpType\":null,\"sdp\":null,\"candidate\":\"candidate:2 1 udp 1 192.0.2.2 1 typ host\",\"sdpMid\":\"data\",\"sdpMLineIndex\":0,\"usernameFragment\":null}"
+      },
+      {
+        "label": "ice candidate only",
+        "signal": {
+          "ice": {
+            "candidate": "candidate:3 1 udp 1 192.0.2.3 1 typ srflx"
+          }
+        },
+        "payloadUtf8Hex": "7b2273647054797065223a6e756c6c2c22736470223a6e756c6c2c2263616e646964617465223a2263616e6469646174653a332031207564702031203139322e302e322e33203120747970207372666c78222c227364704d6964223a6e756c6c2c227364704d4c696e65496e646578223a6e756c6c2c22757365726e616d65467261676d656e74223a6e756c6c7d",
+        "payloadAscii": "{\"sdpType\":null,\"sdp\":null,\"candidate\":\"candidate:3 1 udp 1 192.0.2.3 1 typ srflx\",\"sdpMid\":null,\"sdpMLineIndex\":null,\"usernameFragment\":null}"
+      },
+      {
+        "label": "caps and unknown fields are NOT covered",
+        "signal": {
+          "sdp": {
+            "type": "offer",
+            "sdp": "v=0\r\n"
+          },
+          "caps": [
+            "link/1",
+            "preupload/1"
+          ],
+          "commit": "Zm9v",
+          "rename": "x",
+          "link": true
+        },
+        "payloadUtf8Hex": "7b2273647054797065223a226f66666572222c22736470223a22763d305c725c6e222c2263616e646964617465223a6e756c6c2c227364704d6964223a6e756c6c2c227364704d4c696e65496e646578223a6e756c6c2c22757365726e616d65467261676d656e74223a6e756c6c7d",
+        "payloadAscii": "{\"sdpType\":\"offer\",\"sdp\":\"v=0\\r\\n\",\"candidate\":null,\"sdpMid\":null,\"sdpMLineIndex\":null,\"usernameFragment\":null}"
+      },
+      {
+        "label": "quote and backslash in the sdp",
+        "signal": {
+          "sdp": {
+            "type": "offer",
+            "sdp": "a=x:\"q\" \\ b"
+          }
+        },
+        "payloadUtf8Hex": "7b2273647054797065223a226f66666572222c22736470223a22613d783a5c22715c22205c5c2062222c2263616e646964617465223a6e756c6c2c227364704d6964223a6e756c6c2c227364704d4c696e65496e646578223a6e756c6c2c22757365726e616d65467261676d656e74223a6e756c6c7d",
+        "payloadAscii": "{\"sdpType\":\"offer\",\"sdp\":\"a=x:\\\"q\\\" \\\\ b\",\"candidate\":null,\"sdpMid\":null,\"sdpMLineIndex\":null,\"usernameFragment\":null}"
+      },
+      {
+        "label": "the five short escapes",
+        "signal": {
+          "sdp": {
+            "type": "offer",
+            "sdp": "\b\t\n\f\r"
+          }
+        },
+        "payloadUtf8Hex": "7b2273647054797065223a226f66666572222c22736470223a225c625c745c6e5c665c72222c2263616e646964617465223a6e756c6c2c227364704d6964223a6e756c6c2c227364704d4c696e65496e646578223a6e756c6c2c22757365726e616d65467261676d656e74223a6e756c6c7d",
+        "payloadAscii": "{\"sdpType\":\"offer\",\"sdp\":\"\\b\\t\\n\\f\\r\",\"candidate\":null,\"sdpMid\":null,\"sdpMLineIndex\":null,\"usernameFragment\":null}"
+      },
+      {
+        "label": "other C0 controls escape as lower-case backslash-u00XX",
+        "signal": {
+          "sdp": {
+            "type": "offer",
+            "sdp": "a\u0001\u000b\u001fb"
+          }
+        },
+        "payloadUtf8Hex": "7b2273647054797065223a226f66666572222c22736470223a22615c75303030315c75303030625c753030316662222c2263616e646964617465223a6e756c6c2c227364704d6964223a6e756c6c2c227364704d4c696e65496e646578223a6e756c6c2c22757365726e616d65467261676d656e74223a6e756c6c7d",
+        "payloadAscii": "{\"sdpType\":\"offer\",\"sdp\":\"a\\u0001\\u000b\\u001fb\",\"candidate\":null,\"sdpMid\":null,\"sdpMLineIndex\":null,\"usernameFragment\":null}"
+      },
+      {
+        "label": "DEL and C1 are emitted RAW, not escaped",
+        "signal": {
+          "ice": {
+            "candidate": "ab"
+          }
+        },
+        "payloadUtf8Hex": "7b2273647054797065223a6e756c6c2c22736470223a6e756c6c2c2263616e646964617465223a22617fc29f62222c227364704d6964223a6e756c6c2c227364704d4c696e65496e646578223a6e756c6c2c22757365726e616d65467261676d656e74223a6e756c6c7d"
+      },
+      {
+        "label": "astral characters are emitted raw as UTF-8, never as surrogate escapes",
+        "signal": {
+          "ice": {
+            "sdpMid": "🌍",
+            "candidate": "é"
+          }
+        },
+        "payloadUtf8Hex": "7b2273647054797065223a6e756c6c2c22736470223a6e756c6c2c2263616e646964617465223a2265cc81222c227364704d6964223a22f09f8c8d222c227364704d4c696e65496e646578223a6e756c6c2c22757365726e616d65467261676d656e74223a6e756c6c7d"
+      }
+    ],
+    "linkLeavePayload": [
+      {
+        "label": "ordinary hub peer ids",
+        "fromUtf16": [
+          48,
+          97,
+          49,
+          98,
+          50,
+          99,
+          51,
+          100,
+          52,
+          101,
+          53,
+          102,
+          54,
+          48,
+          55,
+          49
+        ],
+        "toUtf16": [
+          56,
+          49,
+          57,
+          50,
+          97,
+          51,
+          98,
+          52,
+          99,
+          53,
+          100,
+          54,
+          101,
+          55,
+          102,
+          48
+        ],
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d6c65617665222c2266726f6d223a2230613162326333643465356636303731222c22746f223a2238313932613362346335643665376630227d",
+        "payloadAscii": "{\"kind\":\"link-leave\",\"from\":\"0a1b2c3d4e5f6071\",\"to\":\"8192a3b4c5d6e7f0\"}"
+      },
+      {
+        "label": "the reverse direction is a DIFFERENT string",
+        "fromUtf16": [
+          56,
+          49,
+          57,
+          50,
+          97,
+          51,
+          98,
+          52,
+          99,
+          53,
+          100,
+          54,
+          101,
+          55,
+          102,
+          48
+        ],
+        "toUtf16": [
+          48,
+          97,
+          49,
+          98,
+          50,
+          99,
+          51,
+          100,
+          52,
+          101,
+          53,
+          102,
+          54,
+          48,
+          55,
+          49
+        ],
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d6c65617665222c2266726f6d223a2238313932613362346335643665376630222c22746f223a2230613162326333643465356636303731227d",
+        "payloadAscii": "{\"kind\":\"link-leave\",\"from\":\"8192a3b4c5d6e7f0\",\"to\":\"0a1b2c3d4e5f6071\"}",
+        "why": "a relay that reflects a leave back at its sender verifies the reversed tuple and fails"
+      },
+      {
+        "label": "empty ids",
+        "fromUtf16": [],
+        "toUtf16": [],
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d6c65617665222c2266726f6d223a22222c22746f223a22227d",
+        "payloadAscii": "{\"kind\":\"link-leave\",\"from\":\"\",\"to\":\"\"}"
+      },
+      {
+        "label": "quote and backslash",
+        "fromUtf16": [
+          97,
+          34,
+          98
+        ],
+        "toUtf16": [
+          99,
+          92,
+          100
+        ],
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d6c65617665222c2266726f6d223a22615c2262222c22746f223a22635c5c64227d",
+        "payloadAscii": "{\"kind\":\"link-leave\",\"from\":\"a\\\"b\",\"to\":\"c\\\\d\"}"
+      },
+      {
+        "label": "the five short escapes",
+        "fromUtf16": [
+          8,
+          9,
+          10,
+          12,
+          13
+        ],
+        "toUtf16": [
+          120
+        ],
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d6c65617665222c2266726f6d223a225c625c745c6e5c665c72222c22746f223a2278227d",
+        "payloadAscii": "{\"kind\":\"link-leave\",\"from\":\"\\b\\t\\n\\f\\r\",\"to\":\"x\"}"
+      },
+      {
+        "label": "other C0 controls escape as lower-case backslash-u00XX",
+        "fromUtf16": [
+          0,
+          1,
+          11,
+          14,
+          31
+        ],
+        "toUtf16": [],
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d6c65617665222c2266726f6d223a225c75303030305c75303030315c75303030625c75303030655c7530303166222c22746f223a22227d",
+        "payloadAscii": "{\"kind\":\"link-leave\",\"from\":\"\\u0000\\u0001\\u000b\\u000e\\u001f\",\"to\":\"\"}"
+      },
+      {
+        "label": "DEL and C1 are emitted RAW",
+        "fromUtf16": [
+          97,
+          127,
+          98
+        ],
+        "toUtf16": [
+          99,
+          133,
+          159,
+          100
+        ],
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d6c65617665222c2266726f6d223a22617f62222c22746f223a2263c285c29f64227d"
+      },
+      {
+        "label": "U+2028 and U+2029 are emitted RAW by JSON.stringify",
+        "fromUtf16": [
+          97,
+          8232,
+          98
+        ],
+        "toUtf16": [
+          99,
+          8233,
+          100
+        ],
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d6c65617665222c2266726f6d223a2261e280a862222c22746f223a2263e280a964227d"
+      },
+      {
+        "label": "astral character, as UTF-8 rather than surrogate escapes",
+        "fromUtf16": [
+          55356,
+          57101
+        ],
+        "toUtf16": [
+          101,
+          769
+        ],
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d6c65617665222c2266726f6d223a22f09f8c8d222c22746f223a2265cc81227d"
+      },
+      {
+        "label": "unpaired high surrogate",
+        "fromUtf16": [
+          55296
+        ],
+        "toUtf16": [
+          120
+        ],
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d6c65617665222c2266726f6d223a225c7564383030222c22746f223a2278227d",
+        "payloadAscii": "{\"kind\":\"link-leave\",\"from\":\"\\ud800\",\"to\":\"x\"}",
+        "swiftRepresentable": false,
+        "why": "JavaScript escapes a lone surrogate as backslash-udXXX (well-formed JSON.stringify). A Swift String cannot hold one at all, so the Swift port has no defined behaviour here and must skip this row. Reachable only through a hostile signalling relay; hub peer ids are ASCII hex. See relayium-link-v1.md section 12."
+      }
+    ],
+    "leave": {
+      "keyHex": "abababababababababababababababababababababababababababababababab",
+      "from": "0a1b2c3d4e5f6071",
+      "to": "8192a3b4c5d6e7f0",
+      "payload": "{\"kind\":\"link-leave\",\"from\":\"0a1b2c3d4e5f6071\",\"to\":\"8192a3b4c5d6e7f0\"}",
+      "tag": "qmKLXUf5TwMcNGbq1bdy0wqrdnQRug4aAlZrI7/TlW0=",
+      "tagLength": 44,
+      "reversedTag": "pKlM4Hr5a92nq5CdZwZJSWVHNMjYYFair1BX/nfMxZU=",
+      "maxAttempts": 8,
+      "shapes": [
+        {
+          "label": "the exact three keys",
+          "signal": {
+            "link": true,
+            "leave": true,
+            "auth": "qmKLXUf5TwMcNGbq1bdy0wqrdnQRug4aAlZrI7/TlW0="
+          },
+          "accepted": true
+        },
+        {
+          "label": "key order does not matter",
+          "signal": {
+            "auth": "qmKLXUf5TwMcNGbq1bdy0wqrdnQRug4aAlZrI7/TlW0=",
+            "leave": true,
+            "link": true
+          },
+          "accepted": true
+        },
+        {
+          "label": "a smuggled caps array",
+          "signal": {
+            "link": true,
+            "leave": true,
+            "auth": "qmKLXUf5TwMcNGbq1bdy0wqrdnQRug4aAlZrI7/TlW0=",
+            "caps": [
+              "link/1"
+            ]
+          },
+          "accepted": false
+        },
+        {
+          "label": "a smuggled commit",
+          "signal": {
+            "link": true,
+            "leave": true,
+            "auth": "qmKLXUf5TwMcNGbq1bdy0wqrdnQRug4aAlZrI7/TlW0=",
+            "commit": "Zm9v"
+          },
+          "accepted": false
+        },
+        {
+          "label": "a smuggled sdp",
+          "signal": {
+            "link": true,
+            "leave": true,
+            "auth": "qmKLXUf5TwMcNGbq1bdy0wqrdnQRug4aAlZrI7/TlW0=",
+            "sdp": {
+              "type": "offer",
+              "sdp": "v=0\r\n"
+            }
+          },
+          "accepted": false
+        },
+        {
+          "label": "a smuggled busy",
+          "signal": {
+            "link": true,
+            "leave": true,
+            "auth": "qmKLXUf5TwMcNGbq1bdy0wqrdnQRug4aAlZrI7/TlW0=",
+            "busy": true
+          },
+          "accepted": false
+        },
+        {
+          "label": "a smuggled rename",
+          "signal": {
+            "link": true,
+            "leave": true,
+            "auth": "qmKLXUf5TwMcNGbq1bdy0wqrdnQRug4aAlZrI7/TlW0=",
+            "rename": "x"
+          },
+          "accepted": false
+        },
+        {
+          "label": "no auth",
+          "signal": {
+            "link": true,
+            "leave": true
+          },
+          "accepted": false
+        },
+        {
+          "label": "auth is not a string",
+          "signal": {
+            "link": true,
+            "leave": true,
+            "auth": 44
+          },
+          "accepted": false
+        },
+        {
+          "label": "auth is null",
+          "signal": {
+            "link": true,
+            "leave": true,
+            "auth": null
+          },
+          "accepted": false
+        },
+        {
+          "label": "auth one character short",
+          "signal": {
+            "link": true,
+            "leave": true,
+            "auth": "qmKLXUf5TwMcNGbq1bdy0wqrdnQRug4aAlZrI7/TlW0"
+          },
+          "accepted": false
+        },
+        {
+          "label": "auth one character long",
+          "signal": {
+            "link": true,
+            "leave": true,
+            "auth": "qmKLXUf5TwMcNGbq1bdy0wqrdnQRug4aAlZrI7/TlW0=="
+          },
+          "accepted": false
+        },
+        {
+          "label": "auth empty",
+          "signal": {
+            "link": true,
+            "leave": true,
+            "auth": ""
+          },
+          "accepted": false
+        },
+        {
+          "label": "auth is 44 characters of nonsense",
+          "signal": {
+            "link": true,
+            "leave": true,
+            "auth": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+          },
+          "accepted": true,
+          "verifies": false,
+          "why": "the SHAPE is right, so one unit of budget is spent and the HMAC runs, and fails"
+        },
+        {
+          "label": "link is not true",
+          "signal": {
+            "link": false,
+            "leave": true,
+            "auth": "qmKLXUf5TwMcNGbq1bdy0wqrdnQRug4aAlZrI7/TlW0="
+          },
+          "accepted": false
+        },
+        {
+          "label": "leave is not true",
+          "signal": {
+            "link": true,
+            "leave": false,
+            "auth": "qmKLXUf5TwMcNGbq1bdy0wqrdnQRug4aAlZrI7/TlW0="
+          },
+          "accepted": false
+        },
+        {
+          "label": "leave missing",
+          "signal": {
+            "link": true,
+            "auth": "qmKLXUf5TwMcNGbq1bdy0wqrdnQRug4aAlZrI7/TlW0="
+          },
+          "accepted": false
+        },
+        {
+          "label": "resume generation",
+          "signal": {
+            "resume": true,
+            "leave": true,
+            "auth": "qmKLXUf5TwMcNGbq1bdy0wqrdnQRug4aAlZrI7/TlW0="
+          },
+          "accepted": false
+        }
+      ]
+    },
+    "signals": {
+      "request": {
+        "link": true,
+        "linkRequest": true
+      },
+      "busy": {
+        "link": true,
+        "busy": true
+      },
+      "leave": {
+        "link": true,
+        "leave": true,
+        "auth": "qmKLXUf5TwMcNGbq1bdy0wqrdnQRug4aAlZrI7/TlW0="
+      },
+      "generation": [
+        {
+          "signal": {},
+          "generation": "file"
+        },
+        {
+          "signal": {
+            "link": true
+          },
+          "generation": "link"
+        },
+        {
+          "signal": {
+            "resume": true
+          },
+          "generation": "resume"
+        },
+        {
+          "signal": {
+            "text": true
+          },
+          "generation": "text"
+        },
+        {
+          "signal": {
+            "resume": true,
+            "link": true
+          },
+          "generation": "resume"
+        },
+        {
+          "signal": {
+            "resume": true,
+            "text": true
+          },
+          "generation": "resume"
+        },
+        {
+          "signal": {
+            "link": true,
+            "text": true
+          },
+          "generation": "link"
+        },
+        {
+          "signal": {
+            "busy": true
+          },
+          "generation": "file"
+        },
+        {
+          "signal": {
+            "link": true,
+            "busy": true
+          },
+          "generation": "link"
+        },
+        {
+          "signal": {
+            "link": false
+          },
+          "generation": "file"
+        }
+      ],
+      "isLinkOffer": [
+        {
+          "signal": {
+            "link": true,
+            "sdp": {
+              "type": "offer",
+              "sdp": "v=0\r\n"
+            }
+          },
+          "expected": true
+        },
+        {
+          "signal": {
+            "link": true,
+            "sdp": {
+              "type": "answer",
+              "sdp": "v=0\r\n"
+            }
+          },
+          "expected": false
+        },
+        {
+          "signal": {
+            "link": true,
+            "resume": true,
+            "sdp": {
+              "type": "offer",
+              "sdp": "v=0\r\n"
+            }
+          },
+          "expected": false
+        },
+        {
+          "signal": {
+            "sdp": {
+              "type": "offer",
+              "sdp": "v=0\r\n"
+            }
+          },
+          "expected": false
+        },
+        {
+          "signal": {
+            "link": true
+          },
+          "expected": false
+        },
+        {
+          "signal": {
+            "link": true,
+            "linkRequest": true
+          },
+          "expected": false
+        }
+      ],
+      "isLinkRequest": [
+        {
+          "signal": {
+            "link": true,
+            "linkRequest": true
+          },
+          "expected": true
+        },
+        {
+          "signal": {
+            "link": true,
+            "linkRequest": true,
+            "sdp": {
+              "type": "offer",
+              "sdp": "v=0\r\n"
+            }
+          },
+          "expected": false
+        },
+        {
+          "signal": {
+            "linkRequest": true
+          },
+          "expected": false
+        },
+        {
+          "signal": {
+            "link": true
+          },
+          "expected": false
+        },
+        {
+          "signal": {
+            "link": false,
+            "linkRequest": true
+          },
+          "expected": false
+        }
+      ]
+    },
+    "flow": {
+      "windowBytes": 8388608,
+      "ackIntervalBytes": 524288
+    },
+    "textSession": {
+      "maxMessages": 500,
+      "maxBytes": 4194304,
+      "burst": 20,
+      "perSecond": 5,
+      "sendBufferMax": 1048576,
+      "idleMs": 600000,
+      "historyMax": 200
+    },
+    "bounds": {
+      "piecePlainBytes": [
+        {
+          "maxFrameBytes": 65536,
+          "pieceBytes": 65515
+        },
+        {
+          "maxFrameBytes": 262144,
+          "pieceBytes": 196608
+        },
+        {
+          "maxFrameBytes": 196629,
+          "pieceBytes": 196608
+        },
+        {
+          "maxFrameBytes": 196630,
+          "pieceBytes": 196608,
+          "why": "capped at CHUNK_SIZE; a bigger allowance buys nothing"
+        },
+        {
+          "maxFrameBytes": 4117,
+          "pieceBytes": 4096,
+          "why": "the smallest connection this protocol will use"
+        },
+        {
+          "maxFrameBytes": 4116,
+          "pieceBytes": null,
+          "why": "refused"
+        },
+        {
+          "maxFrameBytes": 0,
+          "pieceBytes": null,
+          "why": "refused"
+        }
+      ],
+      "textPlainLimit": [
+        {
+          "maxFrameBytes": 65536,
+          "limit": 65515
+        },
+        {
+          "maxFrameBytes": 262144,
+          "limit": 65536
+        },
+        {
+          "maxFrameBytes": 65557,
+          "limit": 65536
+        },
+        {
+          "maxFrameBytes": 21,
+          "limit": 0
+        },
+        {
+          "maxFrameBytes": 0,
+          "limit": 0
+        }
+      ],
+      "manifestCiphertext": [
+        {
+          "payloadBytes": 204784,
+          "accepted": true
+        },
+        {
+          "payloadBytes": 204785,
+          "accepted": false
+        },
+        {
+          "payloadBytes": 204800,
+          "accepted": false
+        }
+      ],
+      "manifestFileCount": [
+        {
+          "count": 1,
+          "accepted": true
+        },
+        {
+          "count": 1000,
+          "accepted": true
+        },
+        {
+          "count": 1001,
+          "accepted": false
+        },
+        {
+          "count": 0,
+          "accepted": false,
+          "why": "an empty manifest is not a batch"
+        }
+      ],
+      "manifestNameBytes": [
+        {
+          "nameBytes": 1,
+          "accepted": true
+        },
+        {
+          "nameBytes": 1024,
+          "accepted": true
+        },
+        {
+          "nameBytes": 1025,
+          "accepted": false
+        },
+        {
+          "nameBytes": 0,
+          "accepted": false
+        }
+      ],
+      "advanceAck": [
+        {
+          "acked": 0,
+          "sent": 1000,
+          "candidate": 500,
+          "result": 500
+        },
+        {
+          "acked": 500,
+          "sent": 1000,
+          "candidate": 500,
+          "result": 500,
+          "why": "not strictly greater"
+        },
+        {
+          "acked": 500,
+          "sent": 1000,
+          "candidate": 400,
+          "result": 500,
+          "why": "a rewind is ignored"
+        },
+        {
+          "acked": 500,
+          "sent": 1000,
+          "candidate": 1000,
+          "result": 1000,
+          "why": "exactly what was emitted is allowed"
+        },
+        {
+          "acked": 500,
+          "sent": 1000,
+          "candidate": 1001,
+          "result": 500,
+          "why": "beyond what this attempt emitted"
+        },
+        {
+          "acked": 0,
+          "sent": 0,
+          "candidate": 1,
+          "result": 0
+        }
+      ],
+      "resumePoint": [
+        {
+          "sizes": [
+            393221
+          ],
+          "point": {
+            "index": 0,
+            "offset": 0
+          },
+          "aligned": true,
+          "inRange": true
+        },
+        {
+          "sizes": [
+            393221
+          ],
+          "point": {
+            "index": 0,
+            "offset": 196608
+          },
+          "aligned": true,
+          "inRange": true
+        },
+        {
+          "sizes": [
+            393221
+          ],
+          "point": {
+            "index": 0,
+            "offset": 393221
+          },
+          "aligned": true,
+          "inRange": true,
+          "why": "the exact end of a file"
+        },
+        {
+          "sizes": [
+            393221
+          ],
+          "point": {
+            "index": 0,
+            "offset": 196609
+          },
+          "aligned": false,
+          "inRange": true
+        },
+        {
+          "sizes": [
+            393221
+          ],
+          "point": {
+            "index": 0,
+            "offset": 393222
+          },
+          "aligned": false,
+          "inRange": false
+        },
+        {
+          "sizes": [
+            393221
+          ],
+          "point": {
+            "index": 1,
+            "offset": 0
+          },
+          "aligned": false,
+          "inRange": false,
+          "why": "no such file"
+        },
+        {
+          "sizes": [
+            9,
+            196608
+          ],
+          "point": {
+            "index": 0,
+            "offset": 9
+          },
+          "aligned": true,
+          "inRange": true
+        },
+        {
+          "sizes": [
+            9,
+            196608
+          ],
+          "point": {
+            "index": 1,
+            "offset": 196608
+          },
+          "aligned": true,
+          "inRange": true
+        }
+      ]
+    }
   }
 }

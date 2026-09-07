@@ -606,7 +606,14 @@ const MUTATIONS = [
     name: "a lane's filter is narrowed off the tree it owns",
     mutate: (files) => withPaths(files, "web.yml", [".github/workflows/web.yml"]),
     path: "web/src/lib/pair.ts",
-    expectSelected: ["native-web-pairing"],
+    // The mutation removes `web/**` from web.yml ONLY, so `web` is what must
+    // disappear — that is the kill. The other two lanes watch this tree on
+    // their own account and are unaffected: both cross-client acceptances
+    // build and serve the Web bundle against a real native peer, so `web/**`
+    // is a genuine input to each. `android-interop` appears here since the
+    // Android lane stopped naming one harness file out of web/ while omitting
+    // the product tree around it.
+    expectSelected: ["android-interop", "native-web-pairing"],
   },
   {
     name: "an ordered exclusion is moved above the pattern it qualifies",

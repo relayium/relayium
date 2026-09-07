@@ -1,0 +1,85 @@
+name: android
+# The Android platform's own heavy lane: the pure-JVM protocol suite, the app's
+# unit tests, lint, and a debug assemble, on the cheapest hosted runner that can
+# do all four.
+#
+# What each tree in the filter is an input TO:
+#
+#   apps/android/**   the Gradle build this workflow runs — the `:protocol`
+#                     module (pure JVM), the `:app` module (Compose/WebRTC/SAF),
+#                     both catalogs, and the pinned wrapper.
+#
+# `apps/RelayiumKit/**` is deliberately ABSENT: that package is APPLE-SHARED —
+# Swift, SwiftPM, linked against Apple's WebRTC and Sodium builds — and nothing
+# under apps/android compiles a line of it. The cross-language wire contract the
+# two platforms share is judged where every platform's is: the always-on
+# `compat.yml`, whose `android-protocol` job runs this same `:protocol` suite
+# against the SAME frozen fixtures the Swift and Web suites read. `server/**`
+# and `web/**` are absent for the same reason they are absent from `ios.yml`:
+# this is the Android gate, not a server or web gate.
+#
+# Release signing NEVER runs here. The APK identity's key is not a repository
+# secret, `assembleRelease` in this repository produces an UNSIGNED artifact by
+# design, and this lane builds the debug variant only.
+on:
+  push:
+    # Only `main`, and this trigger is LOAD-BEARING for the same reason it is in
+    # every lane: branch work reaches this file through `merge-gate.yml`, which
+    # runs on `pull_request` only, so this event is the only thing that verifies
+    # `main` itself.
+    branches:
+      - main
+    # This list is the merge gate's only statement of what this lane watches:
+    # `scripts/ci/select-lanes.mjs` reads it off disk and selects this lane from
+    # it and from nothing else.
+    paths:
+      - 'apps/android/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+  # The aggregate merge gate's entry point.
+  workflow_call:
+
+# A literal prefix nothing else uses. Inside a CALLED workflow
+# `${{ github.workflow }}` is the CALLER's name, so sharing a group with the
+# caller is a deadlock; the literal keeps the groups disjoint by construction.
+concurrency:
+  group: android-lane-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # One job, four gates, one Gradle daemon: protocol tests, app unit tests,
+  # lint (warningsAsErrors), debug assemble. Splitting them into jobs would
+  # re-resolve the same dependency graph three more times for no added
+  # isolation — they share one module graph and one toolchain.
+  build:
+    runs-on: ubuntu-latest
+    # The first run downloads the AGP classpath and the app's dependency tree;
+    # generous for that, finite so a wedged resolver cannot hold a runner for
+    # GitHub's 6-hour default.
+    timeout-minutes: 45
+    steps:
+      # Third-party actions are pinned to a full commit SHA (with the
+      # human-readable version in a trailing comment) so a compromised or
+      # retagged upstream release can't silently change what runs here.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      # compileSdk is 37 through the MINOR-versioned platform package; hosted
+      # runners preinstall a rolling SDK set that is not guaranteed to carry it.
+      # Installed explicitly so the build fails here, by name, rather than deep
+      # inside AGP's missing-platform fallback.
+      - name: Install the pinned SDK platform
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-37.0' 'build-tools;36.0.0'
+      # `-Prelayium.android=true` is EXPLICIT even though the runner has an
+      # ambient SDK: a workflow that leaned on the environment fallback would
+      # silently change shape on a runner image edit. The wrapper carries a
+      # pinned distribution SHA-256, so the Gradle that runs here is the Gradle
+      # that was reviewed.
+      - name: Protocol tests, app unit tests, lint, debug assemble
+        working-directory: apps/android
+        run: ./gradlew --no-daemon -Prelayium.android=true :protocol:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug

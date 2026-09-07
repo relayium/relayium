@@ -1,0 +1,124 @@
+name: android-interop
+# The Android ↔ Web interoperability acceptance: the real APK on a real
+# emulator, a real headless Chrome on the real built Web bundle, one real Go
+# server between them, and real WebRTC — the cell no unit suite here can fill,
+# for the same reason `native-web-pairing.yml` exists on the Apple side.
+#
+# What each entry in the filter is an input TO:
+#
+#   apps/android/**                          the APK under test
+#   scripts/android-interop-acceptance.sh    the acceptance run itself
+#   scripts/android-ui-acceptance.sh         the offline UI matrix (join form, lifecycle)
+#   scripts/android-ui-session-acceptance.sh the real-DocumentsUI session round
+#   scripts/lib/local-acceptance.sh          the isolation library it sources
+#   scripts/test/android-interop-oracle.py   the comparison the run's one bit comes from
+#   web/e2e/android-interop.mjs              the browser half it drives
+#   web/**                                   the bundle the browser half loads
+#   server/**                                the signalling server between them
+#
+# `web/**` and `server/**` ARE inputs, and are named for exactly the reason
+# `native-web-pairing.yml` names them on the Apple side: this run BUILDS the
+# Web bundle and BUILDS and RUNS the Go server, so a realtime-wire or
+# signalling change on either side can break Android interoperability with no
+# edit under `apps/android/**` at all. Leaving them out would defer that break
+# to whenever an Android file next changed — which is not a filter decision,
+# it is a gate that does not hold. `web.yml` and `go.yml` owning those trees
+# is about their OWN suites; it says nothing about this acceptance's inputs.
+#
+# What is deliberately NOT here: `apps/RelayiumKit/**` and the other Apple
+# trees. This lane compiles no Swift.
+#
+# This lane became requireable only after the same script ran green LOCALLY
+# against the same server, bundle and a real device image; it is not a
+# hoped-for gate. No step here waives a timeout or re-rolls a failure.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/android/**'
+      - 'scripts/android-interop-acceptance.sh'
+      - 'scripts/lib/local-acceptance.sh'
+      # The oracle is a RUNTIME input of the acceptance — the shell invokes it
+      # for every round's comparison — so an edit to it must re-run the real
+      # integration, not only the oracle's own mutation test in repo-hygiene.
+      - 'scripts/test/android-interop-oracle.py'
+      - 'scripts/android-ui-acceptance.sh'
+      - 'scripts/android-ui-session-acceptance.sh'
+      - 'web/**'
+      - 'server/**'
+      - '.github/workflows/android-interop.yml'
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: android-interop-lane-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  interop:
+    runs-on: ubuntu-latest
+    # An emulator boot plus two application builds plus the rounds themselves.
+    # Finite: a wedged boot fails the lane rather than holding a runner for six
+    # hours, and the failure is the truthful result.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      # Hosted Linux runners gate /dev/kvm behind a root-owned udev rule; the
+      # emulator is unusably slow without it.
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install the pinned SDK platform
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-37.0' 'build-tools;36.0.0'
+      # The browser half's dependencies, from the lockfile. `npm ci` and not
+      # `npm install`: the run must exercise the resolved tree the repository
+      # pins, not whatever the registry offers today.
+      - name: Install the Web dependencies
+        working-directory: web
+        run: npm ci
+      # The harness LAUNCHES a real Chrome or throws — it never degrades to a
+      # skip — so a missing browser must fail here, by name, rather than deep
+      # inside a round as an unexplained timeout. Ubuntu runners ship one.
+      - name: Verify a real Chrome is present
+        run: |
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || true)"
+          [ -n "$chrome" ] || { echo "::error::no Google Chrome on this runner"; exit 1; }
+          "$chrome" --version
+      # The same image family the local acceptance runs on: the AOSP `default`
+      # tag, no Play, no GMS — only the ABI differs (x86_64 here, arm64 on the
+      # Apple-silicon dev machine). The acceptance script itself is the single
+      # source of what happens once the device is up.
+      # Both acceptances run inside ONE emulator boot: the wire interop (the
+      # real APK ↔ real browser round trips) and then the offline UI matrix
+      # (the join form's visible validation and the launch/recreation
+      # lifecycle, across the en/light and zh/dark/320dp/font2 corners). The UI
+      # matrix needs no server or browser, so it is cheap to append here and
+      # keeps the emulator this workflow already pays for doing both.
+      - name: Run the Android ↔ Web interop and UI acceptances
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 36
+          target: default
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: |
+            ./scripts/android-interop-acceptance.sh
+            ./scripts/android-ui-acceptance.sh
+            ./scripts/android-ui-session-acceptance.sh

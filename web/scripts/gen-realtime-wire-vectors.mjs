@@ -552,6 +552,522 @@ const capability = {
   },
 };
 
+// ── link/1: lifecycle bytes, the frame partition, and authenticated signalling
+//
+// docs/protocol/relayium-link-v1.md is the authoritative prose; this block is
+// the byte-level pin under it, and it exists because everything in it was
+// SOURCE-ONLY until now. `linkFileFrameClass`, `linkLeavePayload`, `authPayload`
+// and the lifecycle bytes each live in two hand-written implementations
+// (`web/src/lib/webrtc-core.ts` + `transfer.ts` + `text-wire.ts`, and
+// `apps/RelayiumKit/.../LinkProtocol.swift`) with nothing between them. A third
+// port re-deriving them by hand is exactly the drift check-wire-vectors.mjs was
+// written to stop.
+//
+// ## Why the escaping inputs are written as UTF-16 code units
+//
+// The escaping vectors are the point of the `linkLeavePayload` block, and the
+// inputs they need include a lone surrogate — which no Swift `String` can hold
+// and which, written literally, would put a `\ud800` into a fixture four
+// language suites parse. So every input string in that block is an array of
+// UTF-16 code units and every rendered payload is pinned as UTF-8 hex. A
+// consumer that cannot represent one input skips exactly that row (the
+// `swiftRepresentable` flag names them) instead of failing to parse the file.
+//
+// Control characters are built with String.fromCodePoint rather than typed
+// literally, for the same Trojan-source reason `files` above does it: a RLO or
+// a bare C1 in this source would reorder or hide the code around it.
+
+const S = String.fromCodePoint;
+
+// web/src/lib/peer-caps.svelte.ts, webrtc.ts, webrtc-core.ts, peer-link.svelte.ts
+const LINK_CAPABILITY = CAP_LINK;
+const LINK_CHANNEL_LABELS = ["relayium", "relayium-text"];
+const LINK_CAPTURE_MAX_BYTES = 256 * 1024;
+const LINK_AUTH_TAG_LENGTH = 44;
+const LINK_LEAVE_MAX_ATTEMPTS = 8;
+const LINK_HELD_SIGNAL_MAX = 64;
+const MAX_CANDIDATE_PROGRESS = 6;
+const MANIFEST_MAX_BYTES = 200 * 1024;
+const MAX_FILES = 1000;
+const MAX_FILE_NAME_LENGTH = 1024;
+const FLOW_WINDOW = 8 << 20;
+const FLOW_ACK_INTERVAL = 512 * 1024;
+const TEXT_MAX_BYTES = 64 * 1024;
+const TEXT_FRAME_OVERHEAD = 5 + 16;
+
+// transfer.ts control bytes the file lane owns on top of the shared three.
+const CTRL_BUSY = 0xf9;
+const CTRL_BATCH_ABORT = 0xf8;
+// text-wire.ts lifecycle bytes. ACCEPT/REJECT are the SHARED 0xfe/0xff; the
+// DataChannel label is what scopes their meaning to a conversation.
+const CTRL_TEXT_REQUEST = 0xfa;
+const CTRL_TEXT_END = 0xfb;
+
+const KIND_DONE_LEGACY = 2;
+const KIND_BATCH_LEGACY = 3;
+const KIND_STORED_KEYS = 12;
+
+const rawBytes = (...b) => new Uint8Array(b);
+const utf16 = (s) => [...Array(s.length)].map((_, i) => s.charCodeAt(i));
+const asciiOnly = (s) => {
+  for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) >= 0x80) return false;
+  return true;
+};
+
+/** A frame with a real 5-byte header and `n` filler payload bytes. Used for the
+ *  classification rows where only (kind, length) decides the answer. */
+const shaped = (kind, seq, n) => frame(kind, seq, new Uint8Array(n).fill(0x5a));
+
+// ── the two hand-rolled tag payloads ───────────────────────────────────────
+//
+// Byte-pinned to webrtc-core.ts. Reproduced here through JSON.stringify — which
+// IS the web implementation — so the fixture cannot drift from the browser. The
+// half this cannot prove (that the shipped module still renders these bytes) is
+// web/src/lib/link-protocol-vectors.test.ts's, which calls the real exports.
+
+/** webrtc-core.ts `authPayload`: an EXPLICIT field list, in this order, so that
+ *  adding a field to a signal cannot change what an existing tag covers. */
+function authPayload(msg) {
+  return JSON.stringify({
+    sdpType: msg.sdp?.type ?? null,
+    sdp: msg.sdp?.sdp ?? null,
+    candidate: msg.ice?.candidate ?? null,
+    sdpMid: msg.ice?.sdpMid ?? null,
+    sdpMLineIndex: msg.ice?.sdpMLineIndex ?? null,
+    usernameFragment: msg.ice?.usernameFragment ?? null,
+  });
+}
+
+/** webrtc-core.ts `linkLeavePayload`. Deliberately NOT authPayload: a leave has
+ *  no SDP and no ICE, so authPayload would render one constant, directionless
+ *  string for the life of a link. `kind` also makes this string unreachable
+ *  from authPayload, whose output always begins with `sdpType`. */
+function linkLeavePayload(from, to) {
+  return JSON.stringify({ kind: "link-leave", from, to });
+}
+
+/** One rendered payload, pinned as UTF-8 bytes and — only when it happens to be
+ *  pure ASCII — as a readable string too. */
+function renderedPayload(payload) {
+  const out = { payloadUtf8Hex: hex(enc.encode(payload)) };
+  if (asciiOnly(payload)) out.payloadAscii = payload;
+  return out;
+}
+
+// ── the file lane's total frame partition ──────────────────────────────────
+//
+// `LinkProtocol.swift`'s `linkFileFrameClass`, and the composition of
+// `transfer.ts`'s `controlKind` / `isBatchAbort` / `parseAck` / `isResumeReq`
+// through which the Web reaches the same answer. Every byte string lands in
+// EXACTLY ONE class: no frame can be both counted as flow control and fed to
+// the AEAD receiver, and none can be silently dropped.
+const linkFileFrameClass = [
+  { label: "accept", frameHex: hex(rawBytes(CTRL_ACCEPT)), class: "lifecycle", control: "accept" },
+  { label: "reject", frameHex: hex(rawBytes(CTRL_REJECT)), class: "lifecycle", control: "reject" },
+  { label: "complete", frameHex: hex(rawBytes(CTRL_COMPLETE)), class: "lifecycle", control: "complete" },
+  { label: "busy", frameHex: hex(rawBytes(CTRL_BUSY)), class: "lifecycle", control: "busy" },
+  { label: "batchAbort", frameHex: hex(rawBytes(CTRL_BATCH_ABORT)), class: "lifecycle", control: "batchAbort" },
+  {
+    label: "two bytes starting with ACCEPT",
+    frameHex: hex(rawBytes(CTRL_ACCEPT, CTRL_ACCEPT)),
+    class: "unroutable",
+    why: "a longer frame that merely STARTS with a control byte must never be read as consent",
+  },
+  {
+    label: "two bytes starting with BATCH_ABORT",
+    frameHex: hex(rawBytes(CTRL_BATCH_ABORT, 0x00)),
+    class: "unroutable",
+    why: "same rule, for the one control that travels sender to receiver",
+  },
+  { label: "empty frame", frameHex: "", class: "unroutable", why: "no kind to dispatch on" },
+  {
+    label: "one byte that is not a control",
+    frameHex: hex(rawBytes(KIND_ACK)),
+    class: "unroutable",
+    why: "below the 5-byte header there is no kind, whatever the first byte looks like",
+  },
+  { label: "four bytes", frameHex: hex(rawBytes(KIND_CHUNK, 0, 0, 0)), class: "unroutable", why: "the header is 5 bytes" },
+
+  // ACK: 13 bytes is part of what an ACK IS.
+  { label: "ack, exactly 13 bytes", frameHex: ackHex, class: "ack" },
+  { label: "ack, 12 bytes", frameHex: hex(shaped(KIND_ACK, 0, 7)), class: "unroutable", why: "parseAck refuses it, and it must not fall through into the protected stream either" },
+  { label: "ack, 14 bytes", frameHex: hex(shaped(KIND_ACK, 0, 9)), class: "unroutable", why: "same" },
+  { label: "ack, header only", frameHex: hex(shaped(KIND_ACK, 0, 0)), class: "unroutable", why: "same" },
+
+  // Resume control. Kind 5 is resumeRequest INCLUDING a payload that does not
+  // parse — a malformed resume request is control the lane must fail closed on,
+  // never bytes to route into the protected stream.
+  { label: "resume request, well formed", frameHex: resumeSection.reqFrameHex, class: "resumeRequest" },
+  { label: "resume request, unparseable payload", frameHex: hex(frame(KIND_RESUME_REQ, 0, enc.encode("{"))), class: "resumeRequest" },
+  { label: "resume request, empty payload", frameHex: hex(shaped(KIND_RESUME_REQ, 0, 0)), class: "resumeRequest" },
+  { label: "resume start, well formed", frameHex: resumeSection.startFrameHex, class: "resumeStart" },
+  { label: "resume start, empty payload", frameHex: hex(shaped(KIND_RESUME_START, 0, 0)), class: "resumeStart" },
+
+  // Everything that carries a nonce, INCLUDING the two legacy kinds: the
+  // receiver is the single place that turns those into a loud "older version"
+  // error, and a demux that swallowed them here would downgrade a version
+  // mismatch into silence.
+  { label: "chunk", frameHex: framesHex[1], class: "protected" },
+  { label: "batch (manifest)", frameHex: framesHex[0], class: "protected" },
+  { label: "done", frameHex: framesHex[2], class: "protected" },
+  { label: "chunk part", frameHex: hex(shaped(KIND_CHUNK_PART, 7, 32)), class: "protected" },
+  { label: "batch part", frameHex: hex(shaped(KIND_BATCH_PART, 0, 32)), class: "protected" },
+  { label: "chunk, header only", frameHex: hex(shaped(KIND_CHUNK, 3, 0)), class: "protected", why: "shape routing only; the AEAD then fails it" },
+  { label: "legacy done (kind 2)", frameHex: hex(shaped(KIND_DONE_LEGACY, 0, 16)), class: "protected", why: "routed so the receiver can report an older peer, never parsed" },
+  { label: "legacy batch (kind 3)", frameHex: hex(shaped(KIND_BATCH_LEGACY, 0, 16)), class: "protected", why: "same" },
+
+  // Not this lane's.
+  { label: "text frame on the file lane", frameHex: hex(shaped(KIND_TEXT_ENC, 0, 16)), class: "unroutable" },
+  { label: "kind 0", frameHex: hex(shaped(0, 0, 16)), class: "unroutable" },
+  { label: "kind 13", frameHex: hex(shaped(13, 0, 16)), class: "unroutable" },
+  {
+    label: "stored-keys handoff (kind 12)",
+    frameHex: hex(shaped(KIND_STORED_KEYS, 0, 32)),
+    class: "unroutable",
+    why: "unroutable for a client that does not announce preupload/1, which is every native client. A client that DOES announce it demuxes kind 12 by kind alone, ahead of the file receiver, including a frame too short to be a valid one.",
+  },
+];
+
+// ── the two lanes' lifecycle bytes ─────────────────────────────────────────
+const linkLifecycle = {
+  // transfer.ts `controlKind` + `isBatchAbort`; Swift `linkFileLifecycleKind`.
+  file: [
+    { frameHex: hex(rawBytes(CTRL_ACCEPT)), kind: "accept" },
+    { frameHex: hex(rawBytes(CTRL_REJECT)), kind: "reject" },
+    { frameHex: hex(rawBytes(CTRL_COMPLETE)), kind: "complete" },
+    { frameHex: hex(rawBytes(CTRL_BUSY)), kind: "busy" },
+    { frameHex: hex(rawBytes(CTRL_BATCH_ABORT)), kind: "batchAbort" },
+    { frameHex: hex(rawBytes(CTRL_TEXT_REQUEST)), kind: null, why: "0xfa is the TEXT lane's request byte and has no meaning here" },
+    { frameHex: hex(rawBytes(CTRL_TEXT_END)), kind: null, why: "0xfb likewise" },
+    { frameHex: hex(rawBytes(0x00)), kind: null },
+    { frameHex: "", kind: null },
+    { frameHex: hex(rawBytes(CTRL_COMPLETE, CTRL_COMPLETE)), kind: null, why: "exactly one byte, or it is not a control" },
+  ],
+  // text-wire.ts `textLifecycleKind`; Swift `linkTextLifecycleKind`.
+  text: [
+    { frameHex: hex(rawBytes(CTRL_TEXT_REQUEST)), kind: "request" },
+    { frameHex: hex(rawBytes(CTRL_ACCEPT)), kind: "accept" },
+    { frameHex: hex(rawBytes(CTRL_REJECT)), kind: "reject" },
+    { frameHex: hex(rawBytes(CTRL_TEXT_END)), kind: "end" },
+    { frameHex: hex(rawBytes(CTRL_COMPLETE)), kind: null, why: "COMPLETE belongs to the file protocol and has no meaning on a conversation" },
+    { frameHex: hex(rawBytes(CTRL_BUSY)), kind: null },
+    { frameHex: hex(rawBytes(CTRL_BATCH_ABORT)), kind: null },
+    { frameHex: "", kind: null },
+    { frameHex: hex(rawBytes(CTRL_TEXT_REQUEST, CTRL_TEXT_REQUEST)), kind: null, why: "exactly one byte" },
+  ],
+  // text-wire.ts `isTextFrame`; Swift `isLinkTextFrame`. A header with no room
+  // for an AEAD tag is not a frame.
+  textFrame: [
+    { frameHex: textFrames[0].frameHex, isTextFrame: true },
+    { frameHex: hex(shaped(KIND_TEXT_ENC, 0, TEXT_FRAME_OVERHEAD - 5)), isTextFrame: true, why: "the minimum: 5-byte header plus a 16-byte tag" },
+    { frameHex: hex(shaped(KIND_TEXT_ENC, 0, TEXT_FRAME_OVERHEAD - 6)), isTextFrame: false, why: "one byte short of a tag; the Web fails the text lane on this rather than routing it" },
+    { frameHex: hex(shaped(KIND_CHUNK, 0, 64)), isTextFrame: false },
+    { frameHex: hex(rawBytes(KIND_TEXT_ENC)), isTextFrame: false },
+    { frameHex: "", isTextFrame: false },
+  ],
+};
+
+// ── authPayload: the exact bytes a resume/ICE tag covers ───────────────────
+const linkAuthPayload = [
+  { label: "empty signal", signal: {} },
+  { label: "offer", signal: { sdp: { type: "offer", sdp: "v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\n" } } },
+  { label: "answer", signal: { sdp: { type: "answer", sdp: "v=0\r\na=setup:active\r\n" } } },
+  {
+    label: "ice candidate with every field",
+    signal: { ice: { candidate: "candidate:1 1 udp 2113937151 192.0.2.1 54321 typ host", sdpMid: "0", sdpMLineIndex: 0, usernameFragment: "abcd" } },
+  },
+  {
+    label: "sdpMLineIndex 0 renders 0, not null",
+    signal: { ice: { candidate: "candidate:2 1 udp 1 192.0.2.2 1 typ host", sdpMid: "data", sdpMLineIndex: 0 } },
+  },
+  { label: "ice candidate only", signal: { ice: { candidate: "candidate:3 1 udp 1 192.0.2.3 1 typ srflx" } } },
+  {
+    label: "caps and unknown fields are NOT covered",
+    signal: { sdp: { type: "offer", sdp: "v=0\r\n" }, caps: ["link/1", "preupload/1"], commit: "Zm9v", rename: "x", link: true },
+  },
+  { label: "quote and backslash in the sdp", signal: { sdp: { type: "offer", sdp: 'a=x:"q" \\ b' } } },
+  { label: "the five short escapes", signal: { sdp: { type: "offer", sdp: "\b\t\n\f\r" } } },
+  {
+    label: "other C0 controls escape as lower-case backslash-u00XX",
+    signal: { sdp: { type: "offer", sdp: "a" + S(0x01) + S(0x0b) + S(0x1f) + "b" } },
+  },
+  {
+    label: "DEL and C1 are emitted RAW, not escaped",
+    signal: { ice: { candidate: "a" + S(0x7f) + S(0x9f) + "b" } },
+  },
+  {
+    label: "astral characters are emitted raw as UTF-8, never as surrogate escapes",
+    signal: { ice: { sdpMid: S(0x1f30d), candidate: "e" + S(0x301) } },
+  },
+].map((entry) => ({ ...entry, ...renderedPayload(authPayload(entry.signal)) }));
+
+// ── linkLeavePayload: direction, and JSON.stringify escaping, exactly ───────
+const linkLeavePayloadCases = [
+  { label: "ordinary hub peer ids", from: "0a1b2c3d4e5f6071", to: "8192a3b4c5d6e7f0" },
+  {
+    label: "the reverse direction is a DIFFERENT string",
+    from: "8192a3b4c5d6e7f0",
+    to: "0a1b2c3d4e5f6071",
+    why: "a relay that reflects a leave back at its sender verifies the reversed tuple and fails",
+  },
+  { label: "empty ids", from: "", to: "" },
+  { label: "quote and backslash", from: 'a"b', to: "c\\d" },
+  { label: "the five short escapes", from: "\b\t\n\f\r", to: "x" },
+  { label: "other C0 controls escape as lower-case backslash-u00XX", from: S(0x00) + S(0x01) + S(0x0b) + S(0x0e) + S(0x1f), to: "" },
+  { label: "DEL and C1 are emitted RAW", from: "a" + S(0x7f) + "b", to: "c" + S(0x85) + S(0x9f) + "d" },
+  { label: "U+2028 and U+2029 are emitted RAW by JSON.stringify", from: "a" + S(0x2028) + "b", to: "c" + S(0x2029) + "d" },
+  { label: "astral character, as UTF-8 rather than surrogate escapes", from: S(0x1f30d), to: "e" + S(0x301) },
+  {
+    label: "unpaired high surrogate",
+    from: S(0xd800),
+    to: "x",
+    swiftRepresentable: false,
+    why: "JavaScript escapes a lone surrogate as backslash-udXXX (well-formed JSON.stringify). A Swift String cannot hold one at all, so the Swift port has no defined behaviour here and must skip this row. Reachable only through a hostile signalling relay; hub peer ids are ASCII hex. See relayium-link-v1.md section 12.",
+  },
+].map((entry) => {
+  const payload = linkLeavePayload(entry.from, entry.to);
+  const out = {
+    label: entry.label,
+    fromUtf16: utf16(entry.from),
+    toUtf16: utf16(entry.to),
+    ...renderedPayload(payload),
+  };
+  if (entry.swiftRepresentable === false) out.swiftRepresentable = false;
+  if (entry.why) out.why = entry.why;
+  return out;
+});
+
+// ── an authenticated leave, end to end ─────────────────────────────────────
+//
+// A fixed HMAC key rather than a derived resumeAuth: crypto-vectors.json already
+// pins the DERIVATION, and what this block is about is the tag's encoding, its
+// exact length, and the shapes a verifier must refuse before it ever computes
+// one. Standard base64 WITH padding — not URL-safe, not unpadded — so a 32-byte
+// HMAC is exactly LINK_AUTH_TAG_LENGTH characters.
+const leaveKeyRaw = fromHex("ab".repeat(32));
+const leaveKey = await crypto.subtle.importKey("raw", leaveKeyRaw, { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
+const leaveFrom = "0a1b2c3d4e5f6071";
+const leaveTo = "8192a3b4c5d6e7f0";
+const leavePayloadString = linkLeavePayload(leaveFrom, leaveTo);
+const b64 = (u8) => Buffer.from(u8).toString("base64");
+const leaveTag = b64(new Uint8Array(await crypto.subtle.sign("HMAC", leaveKey, enc.encode(leavePayloadString))));
+const reversedTag = b64(new Uint8Array(
+  await crypto.subtle.sign("HMAC", leaveKey, enc.encode(linkLeavePayload(leaveTo, leaveFrom))),
+));
+
+const linkLeave = {
+  keyHex: hex(leaveKeyRaw),
+  from: leaveFrom,
+  to: leaveTo,
+  payload: leavePayloadString,
+  tag: leaveTag,
+  tagLength: leaveTag.length,
+  /** The same key over the REVERSED tuple. A verifier that checked direction
+   *  loosely would accept this; one that does not, will not. */
+  reversedTag,
+  maxAttempts: LINK_LEAVE_MAX_ATTEMPTS,
+  /** peer-link.svelte.ts `isLinkLeave`; Swift `parsedLinkLeaveAuth`. Recognised
+   *  by EXACT shape, before anything cryptographic runs — this signal rides the
+   *  `link` generation, so an establishment in flight for the same peer sees it
+   *  too, and any extra field would be acted on by a handler that shares it. */
+  shapes: [
+    { label: "the exact three keys", signal: { link: true, leave: true, auth: leaveTag }, accepted: true },
+    { label: "key order does not matter", signal: { auth: leaveTag, leave: true, link: true }, accepted: true },
+    { label: "a smuggled caps array", signal: { link: true, leave: true, auth: leaveTag, caps: ["link/1"] }, accepted: false },
+    { label: "a smuggled commit", signal: { link: true, leave: true, auth: leaveTag, commit: "Zm9v" }, accepted: false },
+    { label: "a smuggled sdp", signal: { link: true, leave: true, auth: leaveTag, sdp: { type: "offer", sdp: "v=0\r\n" } }, accepted: false },
+    { label: "a smuggled busy", signal: { link: true, leave: true, auth: leaveTag, busy: true }, accepted: false },
+    { label: "a smuggled rename", signal: { link: true, leave: true, auth: leaveTag, rename: "x" }, accepted: false },
+    { label: "no auth", signal: { link: true, leave: true }, accepted: false },
+    { label: "auth is not a string", signal: { link: true, leave: true, auth: 44 }, accepted: false },
+    { label: "auth is null", signal: { link: true, leave: true, auth: null }, accepted: false },
+    { label: "auth one character short", signal: { link: true, leave: true, auth: leaveTag.slice(0, LINK_AUTH_TAG_LENGTH - 1) }, accepted: false },
+    { label: "auth one character long", signal: { link: true, leave: true, auth: leaveTag + "=" }, accepted: false },
+    { label: "auth empty", signal: { link: true, leave: true, auth: "" }, accepted: false },
+    {
+      label: "auth is 44 characters of nonsense",
+      signal: { link: true, leave: true, auth: "!".repeat(LINK_AUTH_TAG_LENGTH) },
+      accepted: true,
+      verifies: false,
+      why: "the SHAPE is right, so one unit of budget is spent and the HMAC runs, and fails",
+    },
+    { label: "link is not true", signal: { link: false, leave: true, auth: leaveTag }, accepted: false },
+    { label: "leave is not true", signal: { link: true, leave: false, auth: leaveTag }, accepted: false },
+    { label: "leave missing", signal: { link: true, auth: leaveTag }, accepted: false },
+    { label: "resume generation", signal: { resume: true, leave: true, auth: leaveTag }, accepted: false },
+  ],
+};
+
+// ── signalling: generations and the content-free frames ────────────────────
+const linkSignals = {
+  request: { link: true, linkRequest: true },
+  busy: { link: true, busy: true },
+  leave: { link: true, leave: true, auth: leaveTag },
+  /** webrtc-core.ts `signalGeneration`. `resume` outranks `link`: a signal
+   *  carrying both is a rebuild and never an establishment. The vocabulary is
+   *  deliberately WIDER than what can be constructed — a tag this build could
+   *  not classify would fall through to `file` and be answered as a legacy
+   *  transfer, which is the failure the tags exist to prevent. */
+  generation: [
+    { signal: {}, generation: "file" },
+    { signal: { link: true }, generation: "link" },
+    { signal: { resume: true }, generation: "resume" },
+    { signal: { text: true }, generation: "text" },
+    { signal: { resume: true, link: true }, generation: "resume" },
+    { signal: { resume: true, text: true }, generation: "resume" },
+    { signal: { link: true, text: true }, generation: "link" },
+    { signal: { busy: true }, generation: "file" },
+    { signal: { link: true, busy: true }, generation: "link" },
+    { signal: { link: false }, generation: "file" },
+  ],
+  /** peer-link.svelte.ts `isLinkOffer`. */
+  isLinkOffer: [
+    { signal: { link: true, sdp: { type: "offer", sdp: "v=0\r\n" } }, expected: true },
+    { signal: { link: true, sdp: { type: "answer", sdp: "v=0\r\n" } }, expected: false },
+    { signal: { link: true, resume: true, sdp: { type: "offer", sdp: "v=0\r\n" } }, expected: false },
+    { signal: { sdp: { type: "offer", sdp: "v=0\r\n" } }, expected: false },
+    { signal: { link: true }, expected: false },
+    { signal: { link: true, linkRequest: true }, expected: false },
+  ],
+  /** peer-link.svelte.ts `isLinkRequest`. A request carries NO sdp, and that
+   *  absence is part of recognising it. */
+  isLinkRequest: [
+    { signal: { link: true, linkRequest: true }, expected: true },
+    { signal: { link: true, linkRequest: true, sdp: { type: "offer", sdp: "v=0\r\n" } }, expected: false },
+    { signal: { linkRequest: true }, expected: false },
+    { signal: { link: true }, expected: false },
+    { signal: { link: false, linkRequest: true }, expected: false },
+  ],
+};
+
+// ── bounds, at the boundary and one step past it ───────────────────────────
+const linkBounds = {
+  /** transfer.ts `piecePlainBytes`: min(floor(max) - CHUNK_OVERHEAD, CHUNK_SIZE),
+   *  and a result below MIN_PIECE_BYTES is a named error rather than a transfer
+   *  that crawls. RFC 8841's default of 65 536 is the case every real browser
+   *  hits, and it means EVERY logical chunk fragments. */
+  piecePlainBytes: [
+    { maxFrameBytes: CONSERVATIVE_MAX_MESSAGE_BYTES, pieceBytes: piecePlainBytes(CONSERVATIVE_MAX_MESSAGE_BYTES) },
+    { maxFrameBytes: CHROME_MAX_MESSAGE_BYTES, pieceBytes: piecePlainBytes(CHROME_MAX_MESSAGE_BYTES) },
+    { maxFrameBytes: CHUNK_SIZE + CHUNK_OVERHEAD, pieceBytes: piecePlainBytes(CHUNK_SIZE + CHUNK_OVERHEAD) },
+    { maxFrameBytes: CHUNK_SIZE + CHUNK_OVERHEAD + 1, pieceBytes: CHUNK_SIZE, why: "capped at CHUNK_SIZE; a bigger allowance buys nothing" },
+    { maxFrameBytes: MIN_PIECE_BYTES + CHUNK_OVERHEAD, pieceBytes: MIN_PIECE_BYTES, why: "the smallest connection this protocol will use" },
+    { maxFrameBytes: MIN_PIECE_BYTES + CHUNK_OVERHEAD - 1, pieceBytes: null, why: "refused" },
+    { maxFrameBytes: 0, pieceBytes: null, why: "refused" },
+  ],
+  /** text-wire.ts `textPlainLimit`: the product cap lowered to whatever the
+   *  sealed frame must fit in. Text deliberately does NOT fragment, so the only
+   *  correct answer for an outsized message is to refuse it before sealing —
+   *  handing it to send() kills the channel and the whole session with it. */
+  textPlainLimit: [
+    { maxFrameBytes: CONSERVATIVE_MAX_MESSAGE_BYTES, limit: CONSERVATIVE_MAX_MESSAGE_BYTES - TEXT_FRAME_OVERHEAD },
+    { maxFrameBytes: CHROME_MAX_MESSAGE_BYTES, limit: TEXT_MAX_BYTES },
+    { maxFrameBytes: TEXT_MAX_BYTES + TEXT_FRAME_OVERHEAD, limit: TEXT_MAX_BYTES },
+    { maxFrameBytes: TEXT_FRAME_OVERHEAD, limit: 0 },
+    { maxFrameBytes: 0, limit: 0 },
+  ],
+  /** transfer.ts: the ceiling is compared against the CIPHERTEXT length. GCM
+   *  adds a 16-byte tag, so comparing the plaintext would let a critical
+   *  manifest pass the check and then blow up inside send(). */
+  manifestCiphertext: [
+    { payloadBytes: MANIFEST_MAX_BYTES - 16, accepted: true },
+    { payloadBytes: MANIFEST_MAX_BYTES - 15, accepted: false },
+    { payloadBytes: MANIFEST_MAX_BYTES, accepted: false },
+  ],
+  /** manifest.ts `validateManifestFiles`. */
+  manifestFileCount: [
+    { count: 1, accepted: true },
+    { count: MAX_FILES, accepted: true },
+    { count: MAX_FILES + 1, accepted: false },
+    { count: 0, accepted: false, why: "an empty manifest is not a batch" },
+  ],
+  manifestNameBytes: [
+    { nameBytes: 1, accepted: true },
+    { nameBytes: MAX_FILE_NAME_LENGTH, accepted: true },
+    { nameBytes: MAX_FILE_NAME_LENGTH + 1, accepted: false },
+    { nameBytes: 0, accepted: false },
+  ],
+  /** transfer.ts `advanceAck`. ACK carries no batch identifier, so this clamp is
+   *  what stands in for one: a delayed, duplicated or forged cumulative ACK
+   *  cannot open a later batch's whole window. */
+  advanceAck: [
+    { acked: 0, sent: 1000, candidate: 500, result: 500 },
+    { acked: 500, sent: 1000, candidate: 500, result: 500, why: "not strictly greater" },
+    { acked: 500, sent: 1000, candidate: 400, result: 500, why: "a rewind is ignored" },
+    { acked: 500, sent: 1000, candidate: 1000, result: 1000, why: "exactly what was emitted is allowed" },
+    { acked: 500, sent: 1000, candidate: 1001, result: 500, why: "beyond what this attempt emitted" },
+    { acked: 0, sent: 0, candidate: 1, result: 0 },
+  ],
+  /** transfer.ts `resumePointAligned` / `resumePointInRange`. The chain hash is
+   *  defined only at CHUNK_SIZE boundaries and at the exact end of a file, so an
+   *  unaligned point can only come from a peer that is not following this
+   *  protocol — and honouring one would make the sender skip the bytes between
+   *  the request and the next boundary. */
+  resumePoint: [
+    { sizes: [CHUNK_SIZE * 2 + 5], point: { index: 0, offset: 0 }, aligned: true, inRange: true },
+    { sizes: [CHUNK_SIZE * 2 + 5], point: { index: 0, offset: CHUNK_SIZE }, aligned: true, inRange: true },
+    { sizes: [CHUNK_SIZE * 2 + 5], point: { index: 0, offset: CHUNK_SIZE * 2 + 5 }, aligned: true, inRange: true, why: "the exact end of a file" },
+    { sizes: [CHUNK_SIZE * 2 + 5], point: { index: 0, offset: CHUNK_SIZE + 1 }, aligned: false, inRange: true },
+    { sizes: [CHUNK_SIZE * 2 + 5], point: { index: 0, offset: CHUNK_SIZE * 2 + 6 }, aligned: false, inRange: false },
+    { sizes: [CHUNK_SIZE * 2 + 5], point: { index: 1, offset: 0 }, aligned: false, inRange: false, why: "no such file" },
+    { sizes: [9, CHUNK_SIZE], point: { index: 0, offset: 9 }, aligned: true, inRange: true },
+    { sizes: [9, CHUNK_SIZE], point: { index: 1, offset: CHUNK_SIZE }, aligned: true, inRange: true },
+  ],
+};
+
+const link = {
+  capability: LINK_CAPABILITY,
+  channelLabels: LINK_CHANNEL_LABELS,
+  /** Combined across BOTH lanes. One maximum encrypted manifest plus lifecycle
+   *  overhead — deliberately far smaller than FLOW_WINDOW, because
+   *  pre-attachment traffic has not reached a content-consent state yet.
+   *  Overflow is fail-closed: a dropped admitted frame is the one failure the
+   *  reused receiver codecs cannot survive. */
+  captureMaxBytes: LINK_CAPTURE_MAX_BYTES,
+  authTagLength: LINK_AUTH_TAG_LENGTH,
+  heldSignalMax: LINK_HELD_SIGNAL_MAX,
+  maxCandidateProgress: MAX_CANDIDATE_PROGRESS,
+  /** Every establishment and recovery bound, in milliseconds. An implementation
+   *  may be stricter but must not be unbounded anywhere. */
+  deadlines: {
+    noProgressMs: 30_000,
+    setupHardCapMs: 90_000,
+    keyRevealMs: 30_000,
+    handshakeDeadlineMs: 90_000,
+    linkAuthMs: 30_000,
+    linkRequestMs: 30_000,
+    linkRequestRetryMs: 3_000,
+    recoveryWindowMs: 90_000,
+    recoveryRetryMs: 1_500,
+  },
+  controlHex: {
+    accept: CTRL_ACCEPT.toString(16),
+    reject: CTRL_REJECT.toString(16),
+    complete: CTRL_COMPLETE.toString(16),
+    busy: CTRL_BUSY.toString(16),
+    batchAbort: CTRL_BATCH_ABORT.toString(16),
+    textRequest: CTRL_TEXT_REQUEST.toString(16),
+    textEnd: CTRL_TEXT_END.toString(16),
+  },
+  lifecycle: linkLifecycle,
+  frameClass: linkFileFrameClass,
+  authPayload: linkAuthPayload,
+  linkLeavePayload: linkLeavePayloadCases,
+  leave: linkLeave,
+  signals: linkSignals,
+  flow: { windowBytes: FLOW_WINDOW, ackIntervalBytes: FLOW_ACK_INTERVAL },
+  textSession: {
+    maxMessages: 500,
+    maxBytes: 4 << 20,
+    burst: 20,
+    perSecond: 5,
+    sendBufferMax: 1 << 20,
+    idleMs: 600_000,
+    historyMax: 200,
+  },
+  bounds: linkBounds,
+};
+
 const out = {
   sessionKeyHex: hex(keyRaw),
   manifest: manifestObj,
@@ -583,6 +1099,7 @@ const out = {
   durableResume,
   multiFileResume,
   capability,
+  link,
 };
 
 writeFileSync("../apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json", JSON.stringify(out, null, 2) + "\n");

@@ -216,6 +216,52 @@ jobs:
       - name: shared Swift package CI ownership boundary
         run: node scripts/test/swift-ci-boundary-test.mjs
 
+  android-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      # The Android build-configuration and source-set facts no Kotlin test can
+      # assert about ITSELF. AGP generates host unit tests for the test build
+      # type only — there is no `testReleaseUnitTest` task in this project — so
+      # an assertion about the RELEASE variant either never executes (and
+      # reports as a pass) or is not a variant assertion at all.
+      #
+      # What that leaves unguarded is exactly what this job covers: that the
+      # release build really sets `ALLOW_BACKEND_OVERRIDE` to false, that the
+      # flag is a MANDATORY conjunct rather than a default parameter an
+      # explicit argument can reopen, that the cleartext policy, the disposable
+      # documents provider and the instrumentation hook are compiled OUT of a
+      # release APK rather than merely disabled, and that release carries no
+      # signing configuration. Each is one line from being silently untrue, and
+      # each would then be visible only inside an APK nobody unzips.
+      #
+      # Here rather than in `android.yml` for the reason the other policy jobs
+      # are here: this workflow has no path filter, so an edit to the build
+      # configuration it judges cannot land behind a filter that does not name
+      # it. No dependencies, so there is nothing to install.
+      - name: Android release fence and debug-only surfaces
+        run: node scripts/test/android-policy-test.mjs
+      # The interop acceptance's COMPARISON, judged by mutation.
+      #
+      # Everything expensive that lane does — an emulator, a Go server, a Web
+      # build, a real Chrome, real WebRTC — produces exactly one bit, and that
+      # bit is the comparison. A comparison that cannot fail turns the lane
+      # into a very slow `true`, and that is not hypothetical: the first
+      # version skipped its digest check whenever the browser reported no
+      # received bytes, so "the browser received nothing" passed identically to
+      # "the browser received the right bytes". That exact mutant is one of the
+      # cases here, and every case must be REJECTED.
+      #
+      # Cheap and unfiltered on purpose: it needs no emulator and no browser,
+      # so the rule that guards the expensive lane is itself checked on every
+      # push rather than only when the lane happens to run.
+      - name: Android interop comparison, mutation-tested
+        run: node scripts/test/android-interop-oracle-test.mjs
+
   contract-ci-policy:
     runs-on: ubuntu-latest
     timeout-minutes: 5

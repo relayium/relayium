@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The brand's action violet: the value the iOS accent asset and the web
+         accent-action token both carry. -->
+    <color name="ic_launcher_background">#6D28D9</color>
+</resources>

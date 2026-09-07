@@ -1,0 +1,11 @@
+# Build outputs and local Gradle state only. Nothing here may hide source: the
+# rules are narrow on purpose, and a wrapper jar (if one is ever added) stays
+# tracked.
+build/
+*/build/
+.gradle/
+local.properties
+captures/
+*.apk
+*.aab
+!gradle/wrapper/gradle-wrapper.jar

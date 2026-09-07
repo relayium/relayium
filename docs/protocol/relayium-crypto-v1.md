@@ -40,7 +40,7 @@ Source of truth for the Swift port. Any change requires regenerating
   field to a signal must not change it, or old and new peers compute different tags.
 
 ## Message-stream keys (AES-256-GCM, per direction)
-- Domain = ASCII "relayium-text-v1\0" (18 bytes incl. trailing NUL).
+- Domain = ASCII "relayium-text-v1\0" (17 bytes incl. trailing NUL).
 - `textSend` = `crypto_generichash(32, domain || sharedTx)`.
 - `textRecv` = `crypto_generichash(32, domain || sharedRx)`.
 - **Not sorted**, unlike the resume-auth key: that one is shared and must be

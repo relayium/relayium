@@ -203,6 +203,15 @@ const GOVERNED = [
   // `!apps/RelayiumKit/Tests/**` exclusions, and which workflow starts on which
   // package path) belongs to `scripts/test/swift-ci-boundary-test.mjs`.
   { file: "swift-package.yml", dispatch: true, call: true, directPr: false },
+  // The Android platform's two lanes. `android.yml` is the heavy owner of
+  // `apps/android/**` — protocol tests, app unit tests, lint, debug assemble —
+  // and `android-interop.yml` is the emulator↔browser acceptance, a separate
+  // file for the same reason `native-web-pairing.yml` is separate from
+  // `macos.yml`: the two have different input sets and a path filter is
+  // per-workflow. Both are here so the trigger, concurrency and budget rules
+  // bind them like every other lane.
+  { file: "android.yml", dispatch: true, call: true, directPr: false },
+  { file: "android-interop.yml", dispatch: true, call: true, directPr: false },
   { file: "web.yml", dispatch: true, call: true, directPr: false },
   // The root contract tree's own lane. It is here for the reason this list
   // exists at all: a workflow absent from it is bound by none of the trigger,
@@ -309,6 +318,8 @@ const GATE_LANES = new Map([
   ["go", "go.yml"],
   ["macos", MACOS],
   ["ios", "ios.yml"],
+  ["android", "android.yml"],
+  ["android-interop", "android-interop.yml"],
   ["swift-package", "swift-package.yml"],
   ["native-web-pairing", "native-web-pairing.yml"],
   ["contracts", "contracts.yml"],
@@ -394,6 +405,8 @@ const LITERAL_GROUP_PREFIX = new Map([
   ["web.yml", "web-lane"],
   ["go.yml", "go-lane"],
   ["ios.yml", "ios-lane"],
+  ["android.yml", "android-lane"],
+  ["android-interop.yml", "android-interop-lane"],
   ["swift-package.yml", "swift-package-lane"],
   ["native-web-pairing.yml", "native-web-pairing-lane"],
   ["contracts.yml", "contracts-lane"],
@@ -1963,7 +1976,9 @@ const SELF_COMMAND = `node ${SELF_TEST}`;
 /** Minutes. This file parses a handful of small YAML documents; it needs seconds. */
 const SELF_TIMEOUT_MAX = 10;
 
-/** The platform roots that exist today, and the one workflow that owns each. */
+/** The platform roots that exist today, and the one workflow that owns each.
+ *  `appleShared` marks the platforms that compile the Apple-shared Swift
+ *  package; the shared-package fan-out rules in 6c apply to exactly those. */
 const PLATFORM_OWNERS = [
   {
     label: "macOS",
@@ -1971,6 +1986,7 @@ const PLATFORM_OWNERS = [
     workflow: MACOS,
     marker: MACOS_PROJECT,
     sample: "apps/mac/Relayium/AccountView.swift",
+    appleShared: true,
   },
   {
     label: "iOS",
@@ -1978,6 +1994,20 @@ const PLATFORM_OWNERS = [
     workflow: IOS,
     marker: IOS_PROJECT,
     sample: "apps/ios/Relayium/RelayiumApp.swift",
+    appleShared: true,
+  },
+  {
+    // The marker is the Gradle task only `android.yml` may invoke in workflow
+    // text: the interop lane builds the same APK, but through
+    // `scripts/android-interop-acceptance.sh`, exactly as the pairing lane
+    // hides its `swift build` inside its acceptance script — so the "one heavy
+    // owner" rule keeps meaning one WORKFLOW hosts the platform build.
+    label: "Android",
+    root: "apps/android",
+    workflow: "android.yml",
+    marker: ":app:assembleDebug",
+    sample: "apps/android/app/src/main/kotlin/com/relayium/android/MainActivity.kt",
+    appleShared: false,
   },
 ];
 
@@ -1991,13 +2021,9 @@ const PLATFORM_OWNERS = [
  * cannot fake without becoming a real build.
  */
 const FUTURE_PLATFORMS = [
-  {
-    label: "Android",
-    root: "apps/android",
-    workflow: "android.yml",
-    sample: "apps/android/app/src/main/kotlin/Main.kt",
-    build: /gradlew|gradle\b|sdkmanager|kotlinc|\badb\b/,
-  },
+  // Android graduated to PLATFORM_OWNERS in the commit that created
+  // `apps/android/` and `android.yml` together, exactly as this list's header
+  // said it must.
   {
     label: "Windows",
     root: "apps/windows",
@@ -2321,7 +2347,7 @@ function platformBoundaryFailures(world) {
     + `change there can break either one alone; dropping it from one filter leaves that app's `
     + `compatibility with the shared package unproven until something else happens to touch it.`,
   );
-  for (const platform of PLATFORM_OWNERS) {
+  for (const platform of PLATFORM_OWNERS.filter((p) => p.appleShared)) {
     const paths = wPaths(world, platform.workflow);
     if (paths === null) continue;
     need(
@@ -2331,15 +2357,22 @@ function platformBoundaryFailures(world) {
       + `match the shared package through some broader glob.`,
     );
   }
-  for (const future of FUTURE_PLATFORMS) {
-    if (!world.docs.has(future.workflow)) continue;
+  // The same boundary for every platform that does NOT compile the package —
+  // owners that are not Apple (Android today) and futures alike. One loop over
+  // both, because the rule is about the package, not about how mature the
+  // platform is.
+  for (const platform of [
+    ...PLATFORM_OWNERS.filter((p) => !p.appleShared),
+    ...FUTURE_PLATFORMS,
+  ]) {
+    if (!world.docs.has(platform.workflow)) continue;
     need(
-      !wTriggers(world, future.workflow, SHARED_APPLE_SAMPLE),
-      `${future.workflow} triggers on ${SHARED_APPLE_ROOT}. That package is APPLE-SHARED, not `
+      !wTriggers(world, platform.workflow, SHARED_APPLE_SAMPLE),
+      `${platform.workflow} triggers on ${SHARED_APPLE_ROOT}. That package is APPLE-SHARED, not `
       + `cross-platform: it is Swift, it links WebRTC and Sodium through SwiftPM, and nothing `
-      + `outside macOS and iOS compiles it. A ${future.label} workflow watching it burns a runner `
-      + `on every Apple change and proves nothing. Truly cross-platform contracts belong in `
-      + `${COMPAT}.`,
+      + `outside macOS and iOS compiles it. A ${platform.label} workflow watching it burns a `
+      + `runner on every Apple change and proves nothing. Truly cross-platform contracts belong `
+      + `in ${COMPAT}.`,
     );
   }
 
@@ -6161,7 +6194,13 @@ function addWorkflow(world, file, doc) {
   return world;
 }
 
-const ANDROID = FUTURE_PLATFORMS.find((future) => future.root === "apps/android");
+/** The remaining FUTURE platform, for the placeholder-shape cases; and the
+ *  real Android owner, for the adopted-root cases. Android used to be the
+ *  synthetic subject of the future-platform mutations below; when it became a
+ *  real platform those cases moved to Windows so they keep exercising the
+ *  future-platform branch, and Android gained REAL-file mutations instead. */
+const WINDOWS = FUTURE_PLATFORMS.find((future) => future.root === "apps/windows");
+const ANDROID_OWNER = PLATFORM_OWNERS.find((platform) => platform.root === "apps/android");
 
 /** A governed workflow that is parsed, and a real one that deliberately is not. */
 const WEB = "web.yml";
@@ -6269,87 +6308,120 @@ const MUTATIONS = [
     expect: /apps\/RelayiumKit fans out to \[macos\.yml\]/,
   },
   {
-    name: "an apps/android root appears with no android.yml",
-    mutate: (world) => { world.roots.add("apps/android"); return world; },
-    expect: /apps\/android\/ exists but \.github\/workflows\/android\.yml does not/,
+    name: "an apps/windows root appears with no windows.yml",
+    mutate: (world) => { world.roots.add("apps/windows"); return world; },
+    expect: /apps\/windows\/ exists but \.github\/workflows\/windows\.yml does not/,
   },
   {
-    name: "an android.yml placeholder appears with no apps/android source",
-    mutate: (world) => addWorkflow(world, ANDROID.workflow, syntheticPlatform({
-      workflow: ANDROID.workflow, root: ANDROID.root, run: "./gradlew assembleDebug",
+    name: "a windows.yml placeholder appears with no apps/windows source",
+    mutate: (world) => addWorkflow(world, WINDOWS.workflow, syntheticPlatform({
+      workflow: WINDOWS.workflow, root: WINDOWS.root, run: "dotnet build apps/windows",
     })),
-    expect: /android\.yml exists but apps\/android\/ does not/,
+    expect: /windows\.yml exists but apps\/windows\/ does not/,
   },
   {
-    name: "android.yml and apps/android both exist, but the job only echoes",
+    name: "windows.yml and apps/windows both exist, but the job only echoes",
     mutate: (world) => {
-      world.roots.add(ANDROID.root);
-      return addWorkflow(world, ANDROID.workflow, syntheticPlatform({
-        workflow: ANDROID.workflow, root: ANDROID.root, run: 'echo "android build: TODO"',
+      world.roots.add(WINDOWS.root);
+      return addWorkflow(world, WINDOWS.workflow, syntheticPlatform({
+        workflow: WINDOWS.workflow, root: WINDOWS.root, run: 'echo "windows build: TODO"',
       }));
     },
-    expect: /android\.yml has no job that actually builds or tests apps\/android/,
+    expect: /windows\.yml has no job that actually builds or tests apps\/windows/,
   },
   {
-    name: "android.yml exists but its filter names the wrong root",
+    name: "windows.yml exists but its filter names the wrong root",
     mutate: (world) => {
-      world.roots.add(ANDROID.root);
-      addWorkflow(world, ANDROID.workflow, syntheticPlatform({
-        workflow: ANDROID.workflow, root: ANDROID.root, run: "./gradlew assembleDebug",
+      world.roots.add(WINDOWS.root);
+      addWorkflow(world, WINDOWS.workflow, syntheticPlatform({
+        workflow: WINDOWS.workflow, root: WINDOWS.root, run: "dotnet build apps/windows",
       }));
-      return withPaths(world, ANDROID.workflow, [
-        "apps/mac/**", `.github/workflows/${ANDROID.workflow}`,
+      return withPaths(world, WINDOWS.workflow, [
+        "apps/mac/**", `.github/workflows/${WINDOWS.workflow}`,
       ]);
     },
-    expect: /android\.yml does not trigger on its own root apps\/android/,
+    expect: /windows\.yml does not trigger on its own root apps\/windows/,
   },
   {
-    name: "android.yml claims the Apple-shared package as cross-platform",
+    name: "windows.yml claims the Apple-shared package as cross-platform",
     mutate: (world) => {
-      world.roots.add(ANDROID.root);
-      addWorkflow(world, ANDROID.workflow, syntheticPlatform({
-        workflow: ANDROID.workflow, root: ANDROID.root, run: "./gradlew assembleDebug",
+      world.roots.add(WINDOWS.root);
+      addWorkflow(world, WINDOWS.workflow, syntheticPlatform({
+        workflow: WINDOWS.workflow, root: WINDOWS.root, run: "dotnet build apps/windows",
       }));
-      return withPaths(world, ANDROID.workflow, [
-        "apps/android/**", "apps/RelayiumKit/**", `.github/workflows/${ANDROID.workflow}`,
+      return withPaths(world, WINDOWS.workflow, [
+        "apps/windows/**", "apps/RelayiumKit/**", `.github/workflows/${WINDOWS.workflow}`,
       ]);
     },
-    expect: /android\.yml triggers on apps\/RelayiumKit/,
+    expect: /windows\.yml triggers on apps\/RelayiumKit/,
   },
   {
-    name: "android.yml's build job loses its timeout",
+    name: "windows.yml's build job loses its timeout",
     mutate: (world) => {
-      world.roots.add(ANDROID.root);
-      addWorkflow(world, ANDROID.workflow, syntheticPlatform({
-        workflow: ANDROID.workflow, root: ANDROID.root, run: "./gradlew assembleDebug",
+      world.roots.add(WINDOWS.root);
+      addWorkflow(world, WINDOWS.workflow, syntheticPlatform({
+        workflow: WINDOWS.workflow, root: WINDOWS.root, run: "dotnet build apps/windows",
       }));
-      return withJob(world, ANDROID.workflow, (job) => { delete job["timeout-minutes"]; });
+      return withJob(world, WINDOWS.workflow, (job) => { delete job["timeout-minutes"]; });
     },
-    expect: /android\.yml\/build: timeout-minutes is undefined/,
+    expect: /windows\.yml\/build: timeout-minutes is undefined/,
   },
   {
-    name: "android.yml's build job becomes advisory",
+    name: "windows.yml's build job becomes advisory",
     mutate: (world) => {
-      world.roots.add(ANDROID.root);
-      addWorkflow(world, ANDROID.workflow, syntheticPlatform({
-        workflow: ANDROID.workflow, root: ANDROID.root, run: "./gradlew assembleDebug",
+      world.roots.add(WINDOWS.root);
+      addWorkflow(world, WINDOWS.workflow, syntheticPlatform({
+        workflow: WINDOWS.workflow, root: WINDOWS.root, run: "dotnet build apps/windows",
       }));
-      return withJob(world, ANDROID.workflow, (job) => { job["continue-on-error"] = "true"; });
+      return withJob(world, WINDOWS.workflow, (job) => { job["continue-on-error"] = "true"; });
     },
-    expect: /android\.yml\/build: continue-on-error makes this platform's gate advisory/,
+    expect: /windows\.yml\/build: continue-on-error makes this platform's gate advisory/,
   },
   {
-    name: "android.yml's build job retries until it agrees",
+    name: "windows.yml's build job retries until it agrees",
     mutate: (world) => {
-      world.roots.add(ANDROID.root);
-      addWorkflow(world, ANDROID.workflow, syntheticPlatform({
-        workflow: ANDROID.workflow,
-        root: ANDROID.root,
-        run: "./gradlew assembleDebug || ./gradlew assembleDebug # retry once",
+      world.roots.add(WINDOWS.root);
+      addWorkflow(world, WINDOWS.workflow, syntheticPlatform({
+        workflow: WINDOWS.workflow,
+        root: WINDOWS.root,
+        run: "dotnet build apps/windows || dotnet build apps/windows # retry once",
       }));
       return world;
     },
-    expect: /android\.yml\/build: a retry appeared/,
+    expect: /windows\.yml\/build: a retry appeared/,
+  },
+  // The REAL Android owner, mutated the way the real Apple owners are above:
+  // these judge the files on disk, not a synthetic placeholder.
+  {
+    name: "android.yml adopts apps/ios, welding two platforms back together",
+    mutate: (world) => withPaths(world, ANDROID_OWNER.workflow, [
+      "apps/android/**", "apps/ios/**", `.github/workflows/${ANDROID_OWNER.workflow}`,
+    ]),
+    expect: /platform root apps\/ios also starts android\.yml/,
+  },
+  {
+    name: "android.yml claims the Apple-shared package as cross-platform",
+    mutate: (world) => withPaths(world, ANDROID_OWNER.workflow, [
+      "apps/android/**", "apps/RelayiumKit/**", `.github/workflows/${ANDROID_OWNER.workflow}`,
+    ]),
+    expect: /android\.yml triggers on apps\/RelayiumKit/,
+  },
+  {
+    name: "the Android build moves out of its one heavy owner",
+    mutate: (world) => {
+      const doc = world.docs.get(ANDROID_OWNER.workflow);
+      if (!doc) throw new Error(`${ANDROID_OWNER.workflow} is not parsed`);
+      for (const job of Object.values(doc.jobs ?? {})) {
+        for (const step of job.steps ?? []) {
+          if (String(step?.run ?? "").includes(ANDROID_OWNER.marker)) {
+            step.run = String(step.run).replaceAll(ANDROID_OWNER.marker, ":app:help");
+            return world;
+          }
+        }
+      }
+      throw new Error(`${ANDROID_OWNER.workflow} has no step running ${ANDROID_OWNER.marker}`);
+    },
+    expect: /runs in \[\]; want exactly \[android\.yml\]/,
   },
   {
     name: "an unknown apps/ root appears with no declared owner",
@@ -6955,7 +7027,7 @@ const MUTATIONS = [
       delete jobs[COMPAT_JOB];
       return world;
     },
-    expect: /compat\.yml declares no job named `wire-vectors`; it declares \[vectors\]/,
+    expect: /compat\.yml declares no job named `wire-vectors`; it declares \[android-protocol, vectors\]/,
   },
   // ── the fuzz campaign (7) ────────────────────────────────────────────────
   //

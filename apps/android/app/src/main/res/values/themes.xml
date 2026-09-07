@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose owns the real theming; this is only the launch/window theme so
+         the first frame is not a jarring flash. `DeviceDefault.DayNight` needs
+         API 29 and min is 26, so day and night are split the API-26 way: this
+         light Material parent here, its dark counterpart in values-night/. -->
+    <style name="Theme.Relayium" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

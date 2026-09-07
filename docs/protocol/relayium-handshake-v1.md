@@ -4,6 +4,8 @@ Run over the signaling channel before the DataChannel opens. Anchors each peer's
 crypto_kx public key with a commit-then-reveal so a malicious signaling relay
 cannot MITM the 6-digit SAS. Hashes raw bytes only (never JSON).
 
+The transport this handshake anchors is `relayium-link-v1.md`.
+
 ## Per side
 - keypair = crypto_kx keypair (X25519); selfPub = 32-byte public key.
 - selfNonce = 32 random bytes.

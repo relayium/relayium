@@ -197,6 +197,11 @@ const SELF_TIMEOUT_MAX = 5;
  */
 const PARSED = [
   SWIFT_PACKAGE, MACOS, IOS, NWP, GO, WEB, CONTRACTS, OPS_DEPLOY_CONTRACT, "compat.yml", SELF_HOST,
+  // The Android platform's two filtered lanes. Neither may watch a Swift path:
+  // `apps/RelayiumKit` is Apple-shared and the Android protocol conformance
+  // that reads its frozen fixtures runs in the UNFILTERED `compat.yml`, which
+  // is precisely why no Android filter needs — or may claim — the package.
+  "android.yml", "android-interop.yml",
 ];
 
 /**
@@ -2111,11 +2116,11 @@ const MUTATIONS = [
     // behind its back is a claim that quietly stopped being checked.
     name: "a new path-filtered workflow appears that this policy does not know about",
     mutate: (w) => {
-      w.texts.set("android.yml", "on:\n  push:\n    paths:\n      - 'apps/android/**'\n");
-      w.filtered = [...w.filtered, "android.yml"].sort();
+      w.texts.set("windows.yml", "on:\n  push:\n    paths:\n      - 'apps/windows/**'\n");
+      w.filtered = [...w.filtered, "windows.yml"].sort();
       return w;
     },
-    expect: /\[android\.yml\] declare a `paths:` filter but are not in this file's PARSED list/,
+    expect: /\[windows\.yml\] declare a `paths:` filter but are not in this file's PARSED list/,
   },
   {
     name: "repo-hygiene.yml stops running this policy",

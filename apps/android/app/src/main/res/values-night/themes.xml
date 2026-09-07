@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The dark half of the launch theme; see values/themes.xml. -->
+    <style name="Theme.Relayium" parent="android:Theme.Material.NoActionBar" />
+</resources>

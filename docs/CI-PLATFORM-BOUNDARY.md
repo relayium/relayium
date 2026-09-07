@@ -18,7 +18,19 @@ builds, tests and signs it. For macOS, *releasing* it is a second workflow — s
 | ------------------- | ---------------------- | ---------- |
 | `apps/mac/`         | `.github/workflows/macos.yml` | `macos-15` |
 | `apps/ios/`         | `.github/workflows/ios.yml`   | `macos-15` |
+| `apps/android/`     | `.github/workflows/android.yml` | `ubuntu-latest` |
 | `apps/RelayiumKit/` | *shared — see [below](#the-shared-swift-package-source-tests-and-fixtures)* | `macos-15` for its own suite |
+
+Android also has a second, non-owning lane: `android-interop.yml`, the
+emulator↔browser acceptance, separate from the heavy owner for the same reason
+`native-web-pairing.yml` is separate from `macos.yml` — its input set (the
+acceptance script, the browser driver under `web/e2e/`, the isolation library)
+is not the owner's, and a filter is per-workflow. The pure-JVM
+`apps/android/protocol` conformance suite runs in the **unfiltered**
+`compat.yml` (`android-protocol` job), because it is a third implementation of
+the cross-language wire contract and reads the same frozen fixtures the Swift
+and Web suites do; that is why no Android filter needs — or may claim —
+`apps/RelayiumKit/**`.
 
 Path filters in GitHub Actions are per-**workflow**, never per-job. No
 arrangement of jobs, `if:` conditions or matrices inside one file can make two
@@ -1014,13 +1026,15 @@ from every other platform's release cadence.
 * A workflow that only `echo`es is the same failure wearing a build's clothes.
   It must contain a real build or test command for its own root.
 
-So the commit that first adds `apps/android/` must also add
-`.github/workflows/android.yml` with a filter naming `apps/android/**` and a job
-that really builds it — and must add the root and its owner to `PLATFORM_OWNERS`
-in `scripts/test/ci-event-policy-test.mjs`, which is what binds it to the
-trigger, concurrency and duplicate-run policy. `apps/android` and `apps/windows`
-are already named there as *future* roots, so the absence-or-completeness rule is
-live today: create either one alone and CI says so.
+Android followed exactly this path: the commit that first added `apps/android/`
+also added `.github/workflows/android.yml` with a filter naming
+`apps/android/**` and a job that really builds it, moved the root from the
+*future* list into `PLATFORM_OWNERS` in `scripts/test/ci-event-policy-test.mjs`
+(which binds it to the trigger, concurrency and duplicate-run policy), and
+registered both Android lanes in the merge gate's selector, roster and
+fixtures. `apps/windows` remains named as a *future* root, so the
+absence-or-completeness rule stays live: create the root or the workflow alone
+and CI says so.
 
 A new platform does **not** get `apps/RelayiumKit/**` in its filter (that package
 is Apple-shared), and does **not** get its own copy of the wire-vector gate

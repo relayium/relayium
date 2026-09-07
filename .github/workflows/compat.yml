@@ -248,3 +248,35 @@ jobs:
       - name: Regenerate the cross-language wire vectors and require zero diff
         working-directory: web
         run: npm run test:vectors
+
+  # The Android side of the same contract, in the same always-on gate and for
+  # the same reason `wire-vectors` is here: `apps/android/protocol` is a THIRD
+  # independent implementation of the wire, and its conformance suite reads the
+  # SAME frozen fixtures under `apps/RelayiumKit/Tests/Fixtures/` that the
+  # Swift and Web suites assert against. A path filter anywhere in front of it
+  # is exactly how a fixture regeneration would leave the Kotlin side agreeing
+  # with bytes nobody re-checked.
+  #
+  # PURE JVM, structurally: `-Prelayium.android=false` EXCLUDES the `:app`
+  # module at settings evaluation, so the Android Gradle Plugin is never
+  # resolved — not merely unused — and the job stays off the Android toolchain
+  # even though hosted runners ship ANDROID_HOME preset. The `grep` proves that
+  # exclusion happened on THIS run rather than trusting it: the ambient-SDK
+  # fallback choosing the other shape would print no such line and fail here by
+  # name. The wrapper carries a pinned distribution SHA-256.
+  android-protocol:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Run the pure-JVM Android protocol conformance suite
+        shell: bash
+        working-directory: apps/android
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon -Prelayium.android=false :protocol:test | tee "$RUNNER_TEMP/protocol-compat.log"
+          grep -q 'relayium: :app is excluded' "$RUNNER_TEMP/protocol-compat.log"

@@ -2239,3 +2239,71 @@ head -c 70000 /dev/zero | tr '\0' a | relayium text 483920; echo "exit=$?"
 **Expect:** non-zero exit; an error naming the byte count (70 000) and the
 65 536-byte limit, and pointing at `relayium send`. Nothing is sent — the peer sees
 no message at all.
+
+## Android client `[AUTOMATED + MANUAL]`
+
+The native Android client (`apps/android/`, in development, not public) has its
+own gates and they are not duplicated here:
+
+```bash
+# Pure-JVM protocol conformance (no SDK needed) — also always-on in compat.yml
+cd apps/android && ./gradlew -Prelayium.android=false :protocol:test
+
+# App unit tests, lint, debug APK (needs ANDROID_HOME with platforms;android-37.0)
+cd apps/android && ./gradlew -Prelayium.android=true :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+
+# Real APK ↔ real browser over a real local server, on an emulator
+./scripts/android-interop-acceptance.sh
+
+# The comparison that lane's one bit of value comes from, judged in isolation
+node scripts/test/android-interop-oracle-test.mjs
+```
+
+The interop acceptance drives the real `MainActivity`/`TransferViewModel`
+through its own `TransferController`, real OkHttp signalling, real native
+WebRTC and the real SAF stack against a real headless Chrome on the real Web
+bundle. Per run it proves, in BOTH role assignments (the run fails unless it
+has seen the browser as initiator AND responder): the two clients reach one
+`link/1` workspace and agree on the SAS; text both directions with exact
+Unicode/whitespace; files both directions compared by SHA-256, including a
+zero-byte file and a body crossing the 192 KiB fragment boundary; repeated
+batches on the same link so the global file sequence advances; and both
+cancels — a receive cancel that leaves nothing of its own behind (an unrelated
+sentinel file must survive) and a send cancel observed as retired at the peer,
+each followed by a fresh transfer on the same link that completes. A terminal
+in-band handshake keeps the Android Activity alive until the browser confirms
+it observed everything, so a fast local completion can never tear the session
+down mid-transfer. The multi-ENTRY batch is proved in BOTH directions: Android
+saves a three-file batch to a real folder, and Android sends a three-file batch
+(a >192 KiB body, a zero-byte file and a small one) that the browser saves
+through its directory path — the browser half's ledger wraps both the
+single-file `showSaveFilePicker` path and the multi-file `showDirectoryPicker`
+path, so every file is compared by its real bytes whichever the Web app takes.
+
+**What a green run does NOT prove.** It is an AOSP emulator image with no Google
+Play services, on host ICE candidates — not a physical device, not its radios,
+SAF providers or power management, and not a race detector.
+
+Two entry points cover the surfaces the wire acceptance stubs, both in the same
+emulator boot as the interop lane: `scripts/android-ui-acceptance.sh` runs
+`UiAcceptanceTest` OFFLINE across the en/light and zh/dark/320 dp/font 2 corners
+(join-form validation VISIBLE after submit, and the launch link consumed exactly
+once across an Activity recreation, with a screenshot per corner), and
+`scripts/android-ui-session-acceptance.sh` runs `UiSessionAcceptanceTest`
+against the same live browser peer with its folder and file grants coming from
+the REAL system DocumentsUI through UIAutomator, an Activity recreation
+mid-session, and the bytes compared both ways.
+
+**A cancelled send may leave a partial file at the browser.** The real Web calls
+`close()` on the receiving sink even on the abort path, so on a sender cancel it
+genuinely commits a PARTIAL file to the chosen folder — the acceptance requires
+the cancelled name, if present at all, to be strictly smaller than the full
+payload (a full-size or digest match is a completed transfer and fails) and
+drives the cancel deterministically by holding the browser's first write so the
+sender stalls, rather than racing a timeout.
+
+Manual smoke on a device or emulator: join a live code from another device's
+`/cross-network` page, compare the verification digits, send and receive one
+file and one message in each direction, and cancel one incoming batch — the
+folder must not silently keep partial files. `docs/android-development.md`
+carries the build, scope and CI shape.

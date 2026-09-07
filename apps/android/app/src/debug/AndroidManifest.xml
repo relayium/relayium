@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Cleartext to the emulator's loopback host ONLY, and only in debug.
+
+         The acceptance harness runs a real Go server on the host over plain
+         HTTP. Production is HTTPS, this overlay does not exist in a release
+         build, and no exported component accepts a backend override — so a
+         release APK cannot be talked into cleartext by any input. -->
+    <application
+        android:networkSecurityConfig="@xml/network_security_config_debug"
+        tools:replace="android:networkSecurityConfig">
+        <!-- DEBUG ONLY: the disposable-directory documents provider the
+             instrumentation acceptance saves into, so the run exercises the
+             real ContentResolver/DocumentFile/SAF stack without driving the
+             system picker's UI. MANAGE_DOCUMENTS is grantable only to the
+             system documents UI; the app and its instrumentation reach it as
+             the same uid. Absent from release builds entirely. -->
+        <provider
+            android:name=".TestDocumentsProvider"
+            android:authorities="${applicationId}.testdocs"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+    </application>
+</manifest>

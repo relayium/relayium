@@ -319,6 +319,14 @@ should be read as a commitment to ship it. The material under `apps/ios/` and
 the iOS sections of [`apps/README.md`](apps/README.md) describe a build in
 development, not something a reader can install.
 
+**On Android:** `apps/android/` is a native Kotlin/Compose client in early
+development, at version `0.1.0`. It joins an existing transfer (a code or a
+`cross-network` link) and sends and receives files and text in both directions;
+it is intended for direct-APK internal testing only — no Google Play listing, no
+Google Play Services dependency, and this site offers no Android download. Like
+the iOS material, it is a build in development, not something a reader can
+install.
+
 **Self-hosting:** a root [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) build a
 single self-contained image (`docker compose up -d --build`). See [`docs/self-hosting.md`](docs/self-hosting.md).
 
@@ -437,7 +445,7 @@ the full index; in short:
 | Part | License | What that means for you |
 | --- | --- | --- |
 | [`server/`](server) (signaling server, relay node, CLI) and [`web/`](web) (the app you use at relayium.com) | [AGPL-3.0](server/LICENSE) | You can run, study, modify, and redistribute it freely — including self-hosting it for yourself or your org. The one extra condition versus a permissive license: if you modify it and run your modified version as a network service for *other* people, you must publish your changes' source under the same license. This is what stops someone taking the whole stack (SEO content included) and standing up a competing hosted service without giving back. |
-| [`apps/`](apps) (RelayiumKit, the macOS app, and the iOS source in development) | [Apache-2.0](apps/LICENSE) | A fully permissive license — use it, embed it, ship modified versions closed-source if you like, no obligation to publish changes. It's Apache-2.0 rather than AGPL specifically so these clients can be distributed through the Apple App Store, whose terms conflict with GPL-family "no further restrictions" clauses. |
+| [`apps/`](apps) (RelayiumKit, the macOS app, and the iOS and Android source in development) | [Apache-2.0](apps/LICENSE) | A fully permissive license — use it, embed it, ship modified versions closed-source if you like, no obligation to publish changes. It's Apache-2.0 rather than AGPL specifically so these clients can be distributed through the Apple App Store, whose terms conflict with GPL-family "no further restrictions" clauses. |
 | [`docs/`](docs) (including the wire protocol spec in `docs/protocol/`) | [CC BY 4.0](docs/LICENSE) | Implement the protocol however you like, in any codebase, under any license — just credit Relayium as the source of the spec. Same terms for the rest of the docs (design notes, testing procedures). |
 
 **If you already have a copy of Relayium from before this relicensing** (any commit prior to the one that

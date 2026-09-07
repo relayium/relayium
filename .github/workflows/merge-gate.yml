@@ -111,6 +111,8 @@ jobs:
       go: ${{ steps.select.outputs['go'] }}
       macos: ${{ steps.select.outputs['macos'] }}
       ios: ${{ steps.select.outputs['ios'] }}
+      android: ${{ steps.select.outputs['android'] }}
+      android-interop: ${{ steps.select.outputs['android-interop'] }}
       swift-package: ${{ steps.select.outputs['swift-package'] }}
       native-web-pairing: ${{ steps.select.outputs['native-web-pairing'] }}
       contracts: ${{ steps.select.outputs['contracts'] }}
@@ -237,6 +239,20 @@ jobs:
     if: needs.select.outputs['ios'] == 'true'
     uses: ./.github/workflows/ios.yml
 
+  android:
+    needs: select
+    if: needs.select.outputs['android'] == 'true'
+    uses: ./.github/workflows/android.yml
+
+  # A second Android lane rather than a second job in `android.yml`, for the
+  # same reason `native-web-pairing.yml` is not a job in `macos.yml`: the two
+  # have different inputs (this one also watches the acceptance script and the
+  # browser half), and a filter is per-workflow.
+  android-interop:
+    needs: select
+    if: needs.select.outputs['android-interop'] == 'true'
+    uses: ./.github/workflows/android-interop.yml
+
   swift-package:
     needs: select
     if: needs.select.outputs['swift-package'] == 'true'
@@ -307,6 +323,8 @@ jobs:
       - go
       - macos
       - ios
+      - android
+      - android-interop
       - swift-package
       - native-web-pairing
       - contracts
@@ -347,7 +365,7 @@ jobs:
           # space-delimited, though: every consumer below turns it into newline
           # records EXPLICITLY, so nothing here leans on unquoted expansion to
           # do the splitting for it.
-          CONDITIONAL_LANES='web go macos ios swift-package native-web-pairing contracts ops-contract'
+          CONDITIONAL_LANES='web go macos ios android android-interop swift-package native-web-pairing contracts ops-contract'
           UNCONDITIONAL_LANES='compat repo-hygiene'
           SELECT_JOB='select'
 

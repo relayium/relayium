@@ -11,13 +11,16 @@ Nothing is stored server-side. Messages exist only in the two peers' memory.
 ## Realtime path (web, native)
 
 Runs after the commit-reveal handshake (relayium-handshake-v1.md) agrees session
-keys, on its own signalling generation.
+keys, on its own signalling generation. On a current client this lane is the
+`relayium-text` half of a `link/1` connection; that transport, and this lane's
+two extra lifecycle bytes (`0xfa` REQUEST / `0xfb` END), are
+`relayium-link-v1.md`.
 
 ### Keys
 
 Domain-separated from the file stream's keys:
 
-- domain = ASCII `"relayium-text-v1\0"` (18 bytes incl. trailing NUL).
+- domain = ASCII `"relayium-text-v1\0"` (17 bytes incl. trailing NUL).
 - `textSend = crypto_generichash(32, domain || sharedTx)`
 - `textRecv = crypto_generichash(32, domain || sharedRx)`
 

@@ -48,12 +48,22 @@
 // cannot silently drift from the names the rest of that file reasons about.
 
 export const PATH_MATRIX = [
-  ["server/account/pairroom.go", ["go.yml", "native-web-pairing.yml"],
-    "server-only: no native runner may start"],
-  ["server/go.mod", ["go.yml", "native-web-pairing.yml"],
-    "the server module: still not a native trigger"],
-  ["web/src/lib/pair.ts", ["native-web-pairing.yml", "web.yml"],
-    "web-only: no native runner may start"],
+  ["server/account/pairroom.go",
+    ["android-interop.yml", "go.yml", "native-web-pairing.yml"],
+    "server-only: no NATIVE-BUILD runner may start — no macOS signing lane, no iOS lane, no "
+    + "Android build/lint gate. The two acceptances are a different thing from a native build: "
+    + "both COMPILE AND RUN this server as the signalling half of a real cross-client transfer, "
+    + "so a change here can break either one with no edit under apps/ at all. Android joined "
+    + "this row when its interop lane stopped omitting its own inputs"],
+  ["server/go.mod",
+    ["android-interop.yml", "go.yml", "native-web-pairing.yml"],
+    "the server module: still not a native BUILD trigger, and still an input to both acceptances "
+    + "for the same reason — each one builds this module from source"],
+  ["web/src/lib/pair.ts",
+    ["android-interop.yml", "native-web-pairing.yml", "web.yml"],
+    "web-only: no native BUILD runner may start. Both cross-client acceptances build and serve "
+    + "the Web bundle this file is compiled into, and the peer they drive it against is a real "
+    + "native client, so a realtime-wire or pairing change here breaks them directly"],
   ["apps/mac/Relayium/AccountView.swift", ["macos.yml"],
     "macOS-only source: no iOS runner, and no pairing runner either. The acceptance builds "
     + "`server` and `apps/RelayiumKit` and serves the Web bundle; it never reads, compiles or "
@@ -76,8 +86,8 @@ export const PATH_MATRIX = [
   ["scripts/ios-ui-session-acceptance.sh", ["ios.yml"],
     "the iOS built-App acceptance: the workflow that runs it, and only that one. The pairing "
     + "workflow does not source this script, and `scripts/**` is gone from its filter"],
-  ["scripts/lib/local-acceptance.sh", ["ios.yml", "native-web-pairing.yml"],
-    "the isolation library those acceptance runs are built from"],
+  ["scripts/lib/local-acceptance.sh", ["android-interop.yml", "ios.yml", "native-web-pairing.yml"],
+    "the isolation library those acceptance runs — Apple and Android alike — are built from"],
   ["scripts/local-transfer-cleanup-test.sh", ["ios.yml"],
     "the launcher's own failure-path test, run by the iOS job and by nothing else"],
   ["scripts/go-race-shard.go", ["go.yml"],
@@ -99,6 +109,10 @@ export const PATH_MATRIX = [
   [".github/workflows/macos.yml", ["macos.yml"], "a workflow edit starts its own workflow only"],
   [".github/workflows/ios.yml", ["ios.yml"], "and the same for the new one"],
   [".github/workflows/go.yml", ["go.yml"], "and for an unrelated one"],
+  [".github/workflows/android.yml", ["android.yml"],
+    "and the Android build lane's own edit starts itself only"],
+  [".github/workflows/android-interop.yml", ["android-interop.yml"],
+    "and the Android interop lane's own edit starts itself only"],
   ["contracts/device-inbox-admission-v1.json", ["contracts.yml"],
     "the root contract tree: exactly its own lane, and no consumer suite. All three consumer "
     + "tests read this document, but each already lives in a tree its own workflow watches, so "
@@ -129,15 +143,47 @@ export const PATH_MATRIX = [
     "documentation under apps/: not an input to any native build and not an input to the "
     + "pairing acceptance either, so NO path-filtered workflow starts. `apps/**` in the pairing "
     + "filter matched it only because it was coarse"],
-  ["apps/android/app/src/main/kotlin/Main.kt", [],
+  ["apps/android/app/src/main/kotlin/Main.kt", ["android-interop.yml", "android.yml"],
+    "the Android platform root, which now exists: exactly its own two lanes — the build/unit/"
+    + "lint gate and the emulator interop acceptance — and no Apple or web runner. This row used "
+    + "to assert the empty set while the root was future; the day the root appeared, the ONLY "
+    + "things that adopted it are the workflows created in the same commit"],
+  ["apps/android/gradle/libs.versions.toml", ["android-interop.yml", "android.yml"],
+    "the pinned Android catalog: an edit to a version must rebuild and re-prove the platform "
+    + "that resolves it"],
+  ["apps/windows/Relayium/App.xaml.cs", [],
     "a platform root that does not exist yet: no current workflow may adopt it. This is the "
     + "whole point of removing `apps/**` — the day somebody creates this file, the ONLY thing "
     + "that runs is what its own new workflow says, plus the unfiltered always-on gates"],
-  ["apps/windows/Relayium/App.xaml.cs", [],
-    "the same, for the other plausible future root"],
-  ["scripts/android-emulator-acceptance.sh", [],
-    "a future Android script: `scripts/**` in a macOS-runner workflow is how it would have "
-    + "inherited a macOS runner without anybody choosing that"],
+  ["scripts/android-interop-acceptance.sh", ["android-interop.yml"],
+    "the Android acceptance run itself: its own lane and no other — `scripts/**` appears in no "
+    + "filter, so it cannot inherit a macOS runner"],
+  ["scripts/test/android-interop-oracle.py", ["android-interop.yml"],
+    "the comparison every round of that acceptance is judged by — a RUNTIME input of the run, "
+    + "not only a subject of its own mutation test in repo-hygiene. An edit to the rules that "
+    + "produce the lane's one bit must re-run the real integration; the selector returning [] "
+    + "for this path was measured, and is exactly the under-selection R17 exists to prevent"],
+  ["scripts/android-ui-acceptance.sh", ["android-interop.yml"],
+    "the offline UI matrix (join-form validation and the launch/recreation lifecycle across the "
+    + "en/light and zh/dark/320dp/font2 corners), run in the SAME emulator boot as the wire "
+    + "interop. Its own lane and no other — `scripts/**` is in no filter, so it cannot inherit a "
+    + "macOS runner; and it drives no Web bundle or Go server, so it belongs to this workflow, "
+    + "not web.yml or go.yml"],
+  ["scripts/android-ui-session-acceptance.sh", ["android-interop.yml"],
+    "the real-DocumentsUI session round (the join form, the system folder AND file pickers, an "
+    + "Activity recreation mid-session, bytes both ways against the live browser peer) — the "
+    + "evidence for the one thing the wire acceptance stubs. Same emulator boot, same lane and "
+    + "no other; it builds the Web bundle and the Go server like the wire run, but those trees "
+    + "already reach this workflow through `web/**`/`server/**`"],
+  ["web/e2e/android-interop.mjs", ["android-interop.yml", "native-web-pairing.yml", "web.yml"],
+    "the browser half the acceptance drives. All three lanes now reach it through `web/**` "
+    + "rather than by name — web.yml's own suite, the pairing acceptance that serves the "
+    + "bundle, and the Android lane that drives this exact file. The Android filter used to "
+    + "name this ONE path out of web/ while omitting the tree around it, which is how a "
+    + "workflow can watch its harness and miss the product the harness exercises"],
+  ["scripts/windows-package.ps1", [],
+    "a future Windows packaging script: `scripts/**` in a macOS-runner workflow is how it would "
+    + "have inherited a macOS runner without anybody choosing that"],
   ["scripts/windows-package.ps1", [],
     "and the same for a future Windows packaging script"],
   ["docs/billing-transparency.md", ["web.yml"],

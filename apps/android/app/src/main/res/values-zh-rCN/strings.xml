@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 简体中文。与 values/strings.xml 逐条对应，AppStringsParityTest 会强制两者键集一致。 -->
+<resources>
+    <string name="app_name">Relayium</string>
+
+    <string name="join_title">打开链接</string>
+    <string name="join_intro">在另一台设备的 Relayium 中创建链接，然后在这里粘贴链接或输入六位数字码。</string>
+    <string name="join_field_label">连接码或链接</string>
+    <string name="join_field_hint">000000</string>
+    <string name="join_action">连接</string>
+    <string name="join_helper">连接后，你可以发送和接收文件与文字。</string>
+    <string name="join_error_empty">请输入另一台设备上显示的六位数字码。</string>
+    <string name="join_error_digits">配对码正好是六位数字，例如 004291。</string>
+    <string name="join_error_origin">这不是 relayium.com 的传输链接。</string>
+    <string name="join_error_stored">这是已存储文件的链接。本应用连接的是两台设备同时在线的实时传输。</string>
+    <string name="join_error_link">这个链接里没有配对码。</string>
+
+    <string name="status_connecting">正在连接…</string>
+    <string name="status_waiting_peer">正在等待另一台设备…</string>
+    <string name="status_connected">已连接</string>
+    <string name="status_verification_code">验证码 %1$s</string>
+    <string name="status_verification_hint">两台设备应显示相同的六位数字。它不是配对码。</string>
+    <string name="status_disconnect">断开连接</string>
+    <string name="status_reconnect">重新建立会话</string>
+
+    <string name="error_code_not_found">这个码已失效。配对码几分钟后过期，请让另一台设备重新生成一个。</string>
+    <string name="error_network">无法连接 Relayium。请检查本机网络后重试。</string>
+    <string name="error_peer_busy">另一台设备正在进行其他连接。</string>
+    <string name="error_peer_incompatible">另一台设备的 Relayium 版本无法与本应用连接。请更新后重试。</string>
+    <string name="error_handshake">连接未能通过验证，已停止。请重新建立会话。</string>
+    <string name="error_connection_lost">连接已结束，不会再收到任何内容。请重新建立会话以继续。</string>
+    <string name="error_transfer_failed">传输已中断，未能完成。</string>
+    <string name="error_integrity">收到的文件与发送的内容不一致，已丢弃。没有保存任何文件。</string>
+    <!-- 不承诺"没有写入任何内容"：此键同样用于写入中途和清理受限的失败，
+         部分文件或已创建的文件夹可能合理残留——由独立的清理提示如实告知。 -->
+    <string name="error_save_failed">文件保存失败。</string>
+    <string name="error_no_space">本机剩余空间不足以完成这次传输。</string>
+    <string name="error_unsafe_path">另一台设备发送的文件夹结构本应用不会创建。没有保存任何文件。</string>
+    <string name="error_text_failed">这条连接上的消息功能已停止。请重新建立会话以继续。</string>
+    <string name="error_text_buffer_full">连接正忙，请稍等片刻再发送。</string>
+    <string name="session_ended">会话已结束。</string>
+    <string name="cleanup_incomplete">已取消传输的部分文件未能全部删除。请检查所选文件夹，删除任何不需要的内容。</string>
+    <string name="cleanup_dismiss">知道了</string>
+    <string name="picker_unknown_size">无法读取“%1$s”的大小，因此无法发送。请换一个文件，或先复制到本机。</string>
+    <string name="picker_unreadable">所选文件中有一个无法读取。没有发送任何内容。</string>
+    <string name="picker_folder_unavailable">无法打开该文件夹。请选择其他文件夹。</string>
+
+    <string name="text_title">消息</string>
+    <string name="text_field_label">消息</string>
+    <string name="text_send">发送</string>
+    <string name="text_empty">你发送的消息会显示在这里。它们不会被存储在任何地方。</string>
+    <string name="text_ended">这段对话已结束。</string>
+    <string name="text_end">结束对话</string>
+    <string name="text_start">开始对话</string>
+    <string name="text_incoming_request">另一台设备想要开始一段对话。</string>
+    <string name="text_accept">接受</string>
+    <string name="text_decline">拒绝</string>
+    <string name="text_too_long">这条消息超过了单条消息的上限（%1$d / %2$d 字节）。</string>
+    <string name="text_from_peer">来自另一台设备</string>
+    <string name="text_from_me">来自本机</string>
+    <string name="text_requested">正在等待另一台设备接受对话…</string>
+    <string name="text_failed">这条连接上的消息功能已停止。文件可能仍然可用；重新建立会话可恢复消息。</string>
+
+    <string name="files_title">文件</string>
+    <string name="files_pick">选择要发送的文件</string>
+    <string name="files_cancel">取消</string>
+    <string name="files_sending">正在发送 %1$s</string>
+    <string name="files_incoming_title">收到的文件</string>
+    <plurals name="files_incoming_summary">
+        <item quantity="other">%1$d 个文件，共 %2$s</item>
+    </plurals>
+    <string name="files_choose_folder">选择保存位置</string>
+    <string name="files_decline">拒绝</string>
+    <string name="files_receiving">正在接收 %1$s</string>
+    <string name="files_receive_waiting">已接受。正在等待另一台设备发来数据…</string>
+    <string name="files_saved">已保存到所选文件夹</string>
+    <string name="files_progress">%1$s / %2$s</string>
+    <string name="files_lane_down">这条连接上已无法继续发送文件。消息仍然可用——重新建立会话即可再次发送文件。</string>
+    <string name="files_waiting_accept">正在等待另一台设备接收…</string>
+    <string name="files_sent_batch">已送达。另一台设备确认所有文件完整无误。</string>
+
+    <string name="cd_progress">传输进度</string>
+    <string name="cd_message_list">对话</string>
+</resources>

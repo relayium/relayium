@@ -27,6 +27,14 @@
   carry the same Bundle ID. That is also what puts an iOS build in front of the
   six already-Approved `com.relayium.mac.*` subscription products instead of a
   catalogue of its own.
+- `android/` — native Android client (`com.relayium.android`), Kotlin + Jetpack
+  Compose over a pure-JVM `:protocol` module. **In development at 0.1.0 and not
+  public**; direct APK only, no Google Play, no Play Services. Joins a live
+  six-digit code or `/cross-network#c=` link (join-only first stage); English +
+  Simplified Chinese. Build and CI shape: `docs/android-development.md`.
+  Unlike the Apple apps it does NOT link `RelayiumKit` — its protocol layer is
+  its own Kotlin implementation, held to the same frozen wire fixtures by the
+  always-on `compat.yml` gate.
 - `ios/RelayiumShare/` — the iOS Share Extension (`com.relayium.mac.ShareIOS`),
   embedded in the app at `PlugIns/RelayiumShare.appex`. Links `RelayiumShareKit`
   only. **In development at 0.3.1 and not public.** Its identifier is *not*

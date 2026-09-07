@@ -136,6 +136,8 @@ const RESOLVED = [
   "apps/ios/Relayium.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved",
 ];
 const PACKAGE_LOCK = "web/package-lock.json";
+const GRADLE_CATALOG = "apps/android/gradle/libs.versions.toml";
+const GRADLE_WRAPPER_PROPS = "apps/android/gradle/wrapper/gradle-wrapper.properties";
 
 /** A 40-character lowercase hex object name. Uppercase is rejected on purpose:
  *  Git accepts it, string comparison against a review does not. */
@@ -170,6 +172,7 @@ async function readWorld() {
   const paths = [
     ...names.map((name) => `${WORKFLOW_DIR}/${name}`),
     PACKAGE_SWIFT, ...PBXPROJS, ...RESOLVED, PACKAGE_LOCK,
+    GRADLE_CATALOG, GRADLE_WRAPPER_PROPS,
   ];
   for (const path of paths) {
     world.set(path, await readFile(resolve(repoRoot, path), "utf8"));
@@ -741,6 +744,73 @@ function checkPackageLock(world, out) {
 // ---------------------------------------------------------------------------
 
 /** Every complaint the policy has about `world`, in rule order. */
+/**
+ * 6b. The Android build's pins: every `[versions]` entry in the Gradle version
+ * catalog is a concrete dotted-numeric release, and the wrapper carries a
+ * SHA-256 for its distribution.
+ *
+ * Same honesty note as rule 2: a catalog version is a fixed CONSTRAINT, not an
+ * identity — Maven Central artifacts are practically immutable, and the
+ * wrapper's `distributionSha256Sum` IS content-addressed, which is why it is
+ * required rather than merely permitted. A `+`, a range, `latest.release` or a
+ * `-SNAPSHOT` hands the resolver freedom this repository has decided nothing
+ * may have.
+ */
+function checkGradleCatalog(world, out) {
+  let versions = 0;
+  const catalog = world.get(GRADLE_CATALOG);
+  if (catalog === undefined) {
+    out.push(`${GRADLE_CATALOG} is missing from the world`);
+  } else {
+    let inVersions = false;
+    for (const raw of catalog.split("\n")) {
+      const line = raw.replace(/#.*$/, "").trim();
+      if (line === "") continue;
+      const section = line.match(/^\[([^\]]+)\]$/);
+      if (section) { inVersions = section[1] === "versions"; continue; }
+      if (!inVersions) continue;
+      const entry = line.match(/^([A-Za-z0-9_-]+)\s*=\s*"([^"]*)"$/);
+      if (!entry) {
+        out.push(`${GRADLE_CATALOG}: the [versions] line ${JSON.stringify(line)} is not a plain`
+          + ` \`key = "value"\` pin; a rich or dynamic form is not a version this gate can read.`);
+        continue;
+      }
+      versions += 1;
+      if (!/^\d+(?:\.\d+){0,3}$/.test(entry[2])) {
+        out.push(`${GRADLE_CATALOG}: [versions] ${entry[1]} = ${JSON.stringify(entry[2])} is not a`
+          + ` concrete dotted-numeric release. A \`+\`, a range, \`latest\` or a snapshot lets the`
+          + ` resolver choose a different artifact than the one that was reviewed.`);
+      }
+    }
+    if (versions === 0) {
+      out.push(`${GRADLE_CATALOG}: no [versions] entries were read; an empty catalog satisfies`
+        + ` every rule and guarantees nothing.`);
+    }
+  }
+
+  let wrapper = 0;
+  const props = world.get(GRADLE_WRAPPER_PROPS);
+  if (props === undefined) {
+    out.push(`${GRADLE_WRAPPER_PROPS} is missing from the world`);
+  } else {
+    const sha = props.match(/^distributionSha256Sum=([0-9a-f]+)\s*$/m);
+    if (!sha || sha[1].length !== 64) {
+      out.push(`${GRADLE_WRAPPER_PROPS}: distributionSha256Sum is missing or not 64 lowercase hex.`
+        + ` Without it the wrapper downloads and runs whatever bytes the distribution URL serves.`);
+    } else {
+      wrapper += 1;
+    }
+    if (!/^distributionUrl=https\\?:\/\/services\.gradle\.org\//m.test(props)) {
+      out.push(`${GRADLE_WRAPPER_PROPS}: distributionUrl does not point at`
+        + ` https://services.gradle.org/; a checksum only proves the bytes came from where the`
+        + ` review looked.`);
+    } else {
+      wrapper += 1;
+    }
+  }
+  return { versions, wrapper };
+}
+
 function policyFailures(world) {
   const out = [];
   checkActionPins(world, out);
@@ -749,6 +819,7 @@ function policyFailures(world) {
   checkResolved(world, out);
   checkNodeVersion(world, out);
   checkPackageLock(world, out);
+  checkGradleCatalog(world, out);
   return out;
 }
 
@@ -767,6 +838,7 @@ const counts = {
   resolved: checkResolved(world, []),
   node: checkNodeVersion(world, []),
   lock: checkPackageLock(world, []),
+  gradle: checkGradleCatalog(world, []),
 };
 check(counts.actions.remoteCount >= 5, `only ${counts.actions.remoteCount} remote action`
   + ` reference(s) found; this repository has many more, so the scanner is not seeing them`);
@@ -774,6 +846,10 @@ check(counts.resolved.pins >= 7, `only ${counts.resolved.pins} Swift pin(s) read
   + ` Package.resolved files`);
 check(counts.node.count >= 5, `only ${counts.node.count} node-version value(s) found`);
 check(counts.lock.entries >= 50, `only ${counts.lock.entries} locked npm package(s) checked`);
+check(counts.gradle.versions >= 10, `only ${counts.gradle.versions} Gradle catalog version(s)`
+  + ` read; the Android catalog has many more, so the scanner is not seeing them`);
+check(counts.gradle.wrapper === 2, `the Gradle wrapper's distribution pin was not fully read`
+  + ` (${counts.gradle.wrapper}/2 properties)`);
 
 // ---------------------------------------------------------------------------
 // 8. The mutations
@@ -1087,6 +1163,21 @@ const MUTATIONS = [
     mutate: (s) => withText(s, PACKAGE_LOCK, '"packages": {', '"dependencies": {},\n  "packages": {'),
     expect: /a top-level "dependencies" map is present alongside "packages"/,
   },
+  {
+    name: "a Gradle catalog version goes dynamic",
+    mutate: (s) => withText(s, GRADLE_CATALOG, 'okhttp = "', 'okhttp = "5.+x'),
+    expect: /okhttp = "5\.\+x[^"]*" is not a concrete dotted-numeric release/,
+  },
+  {
+    name: "the Gradle wrapper loses its distribution checksum",
+    mutate: (s) => withText(s, GRADLE_WRAPPER_PROPS, "distributionSha256Sum=", "distributionShaX="),
+    expect: /distributionSha256Sum is missing or not 64 lowercase hex/,
+  },
+  {
+    name: "the Gradle wrapper's distribution moves off services.gradle.org",
+    mutate: (s) => withText(s, GRADLE_WRAPPER_PROPS, "services.gradle.org", "example.com"),
+    expect: /distributionUrl does not point at/,
+  },
 ];
 
 // The positive control. The mutation plumbing copies the world and the rules
@@ -1154,6 +1245,7 @@ process.stdout.write(
   + ` over ${counts.resolved.identities} identity(ies) agree across ${RESOLVED.length}`
   + ` Package.resolved files, ${counts.node.count} node-version value(s) are all`
   + ` ${counts.node.major}, and ${counts.lock.entries} locked npm package(s) come from`
-  + ` ${REGISTRY} with integrity — and ${asserted} mutation assertion(s) prove each of those`
-  + ` can fail\n`,
+  + ` ${REGISTRY} with integrity, ${counts.gradle.versions} Gradle catalog version(s) are`
+  + ` concrete with a SHA-256-pinned wrapper — and ${asserted} mutation assertion(s) prove each`
+  + ` of those can fail\n`,
 );
