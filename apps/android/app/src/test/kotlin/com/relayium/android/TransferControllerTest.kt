@@ -566,11 +566,24 @@ class TransferControllerTest {
 
     // ── R12.1: async storage ownership ──────────────────────────────────────
 
-    /** A store whose [discard] always reports a leftover, without disturbing the
-     *  real staging/export logic. */
+    /**
+     * A store whose [discard] reports a leftover — but only while ARMED.
+     *
+     * `ReceiveStore.begin` runs a defensive discard, and a controller teardown
+     * runs one too, so an UNCONDITIONAL leftover fires on those incidental
+     * discards as well as the one a test means to exercise. That is what made
+     * the leftover-warning test flaky: the begin-time warning could satisfy the
+     * "surfaced" wait before the cancel ever ran, and a still-in-flight
+     * incidental discard could re-latch the warning just after the dismiss —
+     * so the "dismissed" wait would never see it clear. Arming scopes the
+     * injected failure to the exact discard under test (the cancel, then the
+     * explicit next join), leaving every incidental discard a real, clean one.
+     */
     private class LeftoverStore(root: File) : ReceiveStore(root) {
+        val armed = java.util.concurrent.atomic.AtomicBoolean(false)
         override fun discard(): Outcome {
-            super.discard()
+            val real = super.discard()
+            if (!armed.get()) return real
             // The real store latches this whenever a discard leaves anything
             // behind; the injected failure keeps that contract.
             unresolvedCleanup = true
@@ -602,25 +615,39 @@ class TransferControllerTest {
         // DiscardIncoming then Fail(RECEIVE): the failure bumps receiveGen before
         // discard completes, so a receiveGen-fenced warning would always vanish.
         val staging = temp.newFolder("staging-leftover")
-        val rig = rig(store = LeftoverStore(staging))
+        val store = LeftoverStore(staging)
+        val rig = rig(store = store)
         val remote = connect(rig)
         val sender = promptIncoming(rig, remote, listOf(FileMeta("in.bin", 3)))
+        // Accept BEFORE arming: begin's own defensive discard must NOT inject a
+        // warning, or it would satisfy the "surfaced" wait below before the
+        // cancel this test is about ever runs.
         rig.controller.acceptIncoming(rig.controller.state.value.promptId, rig.ops.node(rig.treeDir))
         awaitTrue("accepted") { !rig.controller.state.value.awaitingFolder }
-        // One real chunk arrives, then the user cancels the receive.
+        assertFalse(
+            "no incidental discard may have surfaced a warning before the cancel",
+            rig.controller.state.value.cleanupIncomplete,
+        )
+        // One real chunk arrives, then the user cancels the receive. Arm the
+        // fault so ONLY the cancel's discard leaves a leftover.
         for (frame in sender.chunkFrames(byteArrayOf(1, 2, 3), remote, RealtimeFrame.CONSERVATIVE_MAX_FRAME_BYTES)) {
             rig.transport.events.onFileFrame(frame)
         }
+        store.armed.set(true)
         rig.controller.cancelReceive()
         awaitTrue("the leftover warning is surfaced despite the generation bump") {
             rig.controller.state.value.cleanupIncomplete
         }
-        // Only the user's explicit acknowledgment clears it…
+        // The cancel's discard has now completed and surfaced. Disarm so no
+        // further incidental discard can re-latch the warning and race the
+        // dismiss; only the user's explicit acknowledgment clears it.
+        store.armed.set(false)
         rig.controller.dismissCleanupWarning()
         awaitTrue("dismissed") { !rig.controller.state.value.cleanupIncomplete }
-        // …and a FRESH link never erases an unacknowledged one: the join's own
-        // teardown discard fails again in this store, and the warning it
-        // latches must land in the NEW session's state, not vanish under it.
+        // …and a FRESH link never erases an unacknowledged one: re-arm so the
+        // join's own teardown discard fails again in this store, and the
+        // warning it latches must land in the NEW session's state.
+        store.armed.set(true)
         rig.controller.join(PairCode("654321"))
         awaitTrue("the leftover warning survives into the new session") {
             rig.controller.state.value.cleanupIncomplete &&
