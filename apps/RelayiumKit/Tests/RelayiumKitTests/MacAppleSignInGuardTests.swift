@@ -280,7 +280,7 @@ final class MacAppleSignInGuardTests: XCTestCase {
 
     // MARK: - version
 
-    /// This release is 1.3.10, and the App Store review fixes it carries
+    /// This release is 1.3.11, and the App Store review fixes it carries
     /// forward are still in place.
     ///
     /// The version read here is the one the project is BUILT at, which is not
@@ -289,12 +289,15 @@ final class MacAppleSignInGuardTests: XCTestCase {
     /// submitted and released. `1.3.9` is why those are two facts rather than
     /// one — it was built and consumed build 27 in TestFlight, but was never
     /// released, so the previous BUILT version moved while the published one
-    /// did not. `web/mac-app-store-release.json` owns that published fact, and
-    /// `MacSurfaceGuardTests` is what reads it.
-    func testTheReleaseIsVersionOnePointThreePointTen() throws {
+    /// did not. `1.3.10` then made the gap wider in both directions: it is
+    /// public on the Developer ID/GitHub channel AND, on a 2026-09-07 read-back,
+    /// approved and `PENDING_DEVELOPER_RELEASE` on the Mac App Store — still not
+    /// what Apple is serving. `web/mac-app-store-release.json` owns that
+    /// published fact, and `MacSurfaceGuardTests` is what reads it.
+    func testTheReleaseIsVersionOnePointThreePointEleven() throws {
         let project = projectText
-        XCTAssertTrue(project.contains("MARKETING_VERSION = 1.3.10;"))
-        XCTAssertFalse(project.contains("MARKETING_VERSION = 1.3.9;"),
+        XCTAssertTrue(project.contains("MARKETING_VERSION = 1.3.11;"))
+        XCTAssertFalse(project.contains("MARKETING_VERSION = 1.3.10;"),
                        "a target was left on the previous version")
         // **The App Store review fixes must not come back.** The app is named
         // `Relayium`, never "… for Mac", and the login item is never registered

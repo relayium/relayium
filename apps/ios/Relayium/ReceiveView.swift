@@ -72,7 +72,11 @@ struct ReceiveView: View {
                 // unreadable.
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .navigationTitle(L10n.t(.downloadHeading))
+            // The same rule as SendView: the sheet is titled with the name the
+            // shell uses for this surface (`RootView.title(for:)` answers
+            // `nav.storedReceive`), not with the action heading of a card
+            // inside it.
+            .navigationTitle(L10n.t(.navStoredReceive))
             // **In the content layer, not the navigation bar — because of a
             // measured Dynamic Type failure, not taste.** The system audit of
             // this screen's PRESENTED form — the only form users now meet,

@@ -11,14 +11,36 @@
   import Logo from "./Logo.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
-  // The href moved into the tab record. It used to be a five-branch ternary in
+  type NavLink = { id: Route; href: string; label: () => string };
+
+  // The href moved into the record. It used to be a five-branch ternary in
   // the template, which is exactly the shape that quietly gains a wrong branch
-  // when a sixth destination is added: one list, one place to be wrong.
-  const tabs: { id: Route; href: string; label: () => string }[] = [
+  // when another destination is added: one list, one place to be wrong.
+  //
+  // **Four entries, and the number is the point.** These are the four ways to
+  // move something — same network, a pairing code, a shared link, and this
+  // account's own devices — and they are a CHOICE a person makes between
+  // siblings. /cli and /apps were the fifth and sixth pills in this same row,
+  // dressed identically, so the row answered "how do I send this?" with two
+  // entries that answer "what can I install?" instead. They moved to `tools`
+  // below; nothing about their hrefs, routes or reachability changed.
+  const tabs: NavLink[] = [
     { id: "lan", href: LAN_PATH, label: () => t.nav.lanTab },
     { id: "cross", href: CROSS_PATH, label: () => t.nav.crossTab },
     { id: "offline", href: OFFLINE_PATH, label: () => t.nav.offlineTab },
     { id: "device-inbox", href: DEVICE_INBOX_PATH, label: () => t.nav.deviceInboxTab },
+  ];
+
+  // Downloads and tools: reachable, named, and deliberately not a transfer
+  // destination.
+  //
+  // **Plain links, and no state at all.** A menu or a popover would have to be
+  // opened before /cli could be seen to be the current page, which is exactly
+  // the case a direct load of /cli is — so `aria-current` would be inside a
+  // collapsed container on the one navigation that most needs to say where it
+  // is. Two anchors always render, always take focus in DOM order, and always
+  // carry their own current-page state, on every width and with no script.
+  const tools: NavLink[] = [
     { id: "cli", href: CLI_PATH, label: () => t.nav.cliTab },
     { id: "apps", href: APPS_PATH, label: () => t.nav.appsTab },
   ];
@@ -36,10 +58,12 @@
     || currentRoute() === "me" || currentRoute() === "device-inbox",
   );
 
-  // Mobile mode rail. The six tabs keep their natural width and the row scrolls
-  // instead of compressing every label into an unreadable sliver (zh/ko labels
-  // used to paint over each other at 320–390px). Device Inbox made the row wider
-  // in every locale, which is what the scroll and the edge fade are for.
+  // Mobile destination rail. The four tabs keep their natural width and the row
+  // scrolls instead of compressing every label into an unreadable sliver (zh
+  // labels used to paint over each other at 320–390px). Two destinations left
+  // the row for `tools`, and the two that remain are the longest ones in both
+  // maintained languages — so the scroll and the edge fade still have to work
+  // rather than being kept for a case that can no longer happen.
   let rail = $state<HTMLDivElement | undefined>(undefined);
   // Only fade the rail's edges while it actually overflows — an unconditional
   // mask dims the first/last pill in locales whose labels fit (e.g. en at 390px),
@@ -228,8 +252,8 @@
        "there is more" to someone who can see it and swipe it; these say the
        same thing to a keyboard, a trackpad without horizontal scroll, and to a
        reader who never saw the fade. They exist ONLY while the row actually
-       overflows: six destinations that already fit need no controls at all, and
-       a pair of dead buttons under them would read as a rendering bug.
+       overflows: four destinations that already fit need no controls at all,
+       and a pair of dead buttons under them would read as a rendering bug.
        They add no visible copy to a row that is already the tightest thing on
        the screen: a localized aria-label is their whole name. Each chevron
        points along the reading direction, so both glyphs flip in Arabic while
@@ -248,6 +272,24 @@
       ><span class="chev" aria-hidden="true"></span></button>
     </div>
   {/if}
+
+  <!-- Downloads and tools. A second, NAMED landmark rather than two more pills
+       in the row above: these are not ways to move a file, and dressing them as
+       siblings of the four that are was the whole defect. Real hrefs and real
+       aria-current, so a direct load of /cli or /apps says where it is without
+       anything having to be opened first. -->
+  <nav class="tools" aria-label={t.nav.toolsLabel}>
+    {#each tools as tool (tool.id)}
+      <a
+        href={tool.href}
+        data-nav={tool.id}
+        class="tool"
+        class:active={currentRoute() === tool.id}
+        aria-current={currentRoute() === tool.id ? "page" : undefined}
+        onclick={(e) => { e.preventDefault(); navigate(tool.id); }}
+      >{tool.label()}</a>
+    {/each}
+  </nav>
 
   <div class="util">
     <select
@@ -335,6 +377,42 @@
     .rail-btn::after { content: ""; position: absolute; inset: -7px; }
   }
 
+  /* Secondary by DESIGN, not by accident of order. The four destinations above
+     are pills; these are text links, so the header shows two ranks rather than
+     six equal things and a first-time reader can see which row answers "how do
+     I send this?".
+     Underline on the current page, not a filled pill: current-page state has to
+     survive a colour filter, and `--accent-fg` is the accessible text weight of
+     the brand rather than the decorative one. */
+  .tools { display: flex; align-items: center; gap: var(--space-3); flex: none; }
+  .tool {
+    font: inherit; font-size: var(--fs-xs); color: var(--text);
+    white-space: nowrap;
+    text-decoration: underline 1px transparent; text-underline-offset: 4px;
+    padding-block: 2px;
+    transition: color .13s, text-decoration-color .13s;
+  }
+  .tool:hover { color: var(--text-h); text-decoration-color: var(--accent-border); }
+  .tool.active { color: var(--accent-fg); text-decoration-color: currentColor; }
+  @media (prefers-reduced-motion: reduce) {
+    .tool { transition: none; }
+  }
+  /* A 13px link is a ~20x18px target, under the 44px floor in BOTH axes — "CLI"
+     is the narrowest label in either language. An invisible `::after` cannot fix
+     that here: to reach 44px wide it would have to overhang far enough to
+     overlap its neighbour's, and overlapping hit areas are a worse defect than a
+     small one. So the box itself grows, exactly as `CommandBlock`'s copy control
+     does, and flex `gap` then guarantees the two never touch. The underline is
+     `text-decoration`, not a border, so it stays on the WORD rather than sliding
+     to the bottom of a 44px box. */
+  @media (pointer: coarse) {
+    .tool {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-inline-size: 44px; min-block-size: 44px;
+      padding-block: 0;
+    }
+  }
+
   .lang {
     font: inherit; font-size: var(--fs-xs); padding-block: 5px; padding-inline: 10px 28px;
     border-radius: var(--radius-sm); border: 1px solid var(--border);
@@ -345,7 +423,7 @@
   @media (max-width: 1099px) {
     /* Row 1: brand on the left, the utility group (lang · theme · account)
        pushed to the right. Row 2: the mode tabs, full width. No lonely rows.
-       Six destinations, two selects and two languages do not honestly fit one
+       Four destinations, two selects and two languages do not honestly fit one
        320px row — the defect was equal-width compression, not the second row. */
     .topnav { flex-wrap: wrap; gap: 8px; row-gap: 10px; }
     /* Hidden from sight, NOT from the accessibility tree. `display: none` took
@@ -409,7 +487,7 @@
     }
     .tabs.overflowing.fade-left { --edge-l: transparent; }
     .tabs.overflowing.fade-right { --edge-r: transparent; }
-    /* Natural width — never truncate one of six primary destinations. */
+    /* Natural width — never truncate one of four primary destinations. */
     .tab { flex: none; padding-inline: var(--space-3); scroll-snap-align: center; }
     /* Its own line under the rail, one control at each end of the row it pages.
        `space-between` and the logical box mean Arabic mirrors with no second
@@ -420,6 +498,14 @@
       align-items: center; justify-content: space-between;
       margin-block-start: 2px;
     }
+    /* Its own row under the destinations, at the START of the reading order so
+       it lines up with the brand above it rather than floating against the
+       selects. On a phone that row is 44px tall, because that is what an
+       honestly hittable link costs — the price of keeping /cli and /apps
+       reachable at 320px without a disclosure that would hide the current-page
+       marker on a direct load of either. */
+    .tools { order: 5; inline-size: 100%; gap: var(--space-4); }
+
     /* Native selects size themselves from their longest option, not just the
        selected label. Japanese's longest theme label used to make the utility
        group 302px wide and push it onto a third row even at 390px. Bound both

@@ -687,6 +687,10 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case verifyToggle = "verify.toggle"
     case verifyExplainWhat = "verify.explainWhat"
     case verifyExplainEncryption = "verify.explainEncryption"
+    /// Names the disclosure the two `verify.explain*` paragraphs moved into on
+    /// iOS. It is what stops a closed chevron from being an unlabelled control
+    /// over an explanation nobody can guess the subject of.
+    case verifyHowItWorks = "verify.howItWorks"
 
     // MARK: - Single-session presence
     //

@@ -141,7 +141,7 @@ final class AppShellUITests: XCTestCase {
                       "Direct offers no text mode")
         textMode.tap()
 
-        XCTAssertTrue(app.navigationBars["Direct"].exists)
+        XCTAssertTrue(app.navigationBars["Pairing"].exists)
         XCTAssertTrue(app.staticTexts["Start a text session"].waitForExistence(timeout: 10),
                       "Direct selected Text but did not render the text task")
 
@@ -163,7 +163,7 @@ final class AppShellUITests: XCTestCase {
         scrollUntilHittable(route)
         route.tap()
 
-        XCTAssertTrue(app.navigationBars["Send files"].waitForExistence(timeout: 10),
+        XCTAssertTrue(app.navigationBars["Share a link"].waitForExistence(timeout: 10),
                       "the large-file route selected Send without rendering it")
     }
 
@@ -708,7 +708,7 @@ final class AppShellUITests: XCTestCase {
         // large number the listener has to re-segment.
         XCTAssertTrue(app.staticTexts["4 8 3 9 2 0"].waitForExistence(timeout: 15),
                       "the generated pairing code is not visible")
-        XCTAssertTrue(app.navigationBars["Direct"].exists)
+        XCTAssertTrue(app.navigationBars["Pairing"].exists)
 
         XCTAssertTrue(app.staticTexts["Join link"].exists,
                       "the generated code has no visible browser handoff")

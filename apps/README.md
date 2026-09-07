@@ -206,22 +206,28 @@ menu bar, the receive socket and any running transfer alive
 File ▸ New Window. Minimum window: **860×560**.
 
 Its content is a `NavigationSplitView` whose sidebar names five destinations at
-once, each with a compact subtitle that wraps when needed and is also its
-accessibility hint:
+once. Each row is compact — the destination's name and its symbol, plus a badge
+while that destination owns a running session — and the purpose sentence is the
+row's `.help` tooltip and its accessibility hint rather than a printed second
+line:
 
-| section | destination | account |
-|---|---|---|
-| Direct | LAN Transfer — a device on this network, reached directly | not needed |
-| Direct | Cross-network Transfer — a device anywhere, reached with a pairing code | needed to *create* a code, not to join one |
-| Links | Send a link — store an encrypted file | needed |
-| This Mac | Device Inbox — files from your own account, received with the window closed | needed |
-| — | Account — plan, devices, stored files | is the sign-in *and* the sign-up |
+| section | destination | purpose (tooltip and hint) | account |
+|---|---|---|---|
+| Live transfers | LAN Transfer | messages and files with a device on this network — both sides online | not needed |
+| Live transfers | Pairing Transfer | messages and files with a device anywhere, using a six-digit code — same network not required; both sides online | needed to *create* a code, not to join one |
+| Links | Share a link | large files, picked up later — plan limits apply | needed |
+| This Mac | Device Inbox | files from your own account land in a folder you choose — works with the window closed | needed |
+| — | Account | plan, devices and stored files | is the sign-in *and* the sign-up |
 
-**The sidebar is the only place a destination is named and explained.** No
-screen opens with a page heading repeating the row that was just clicked: the
-row is on screen at the same time, highlighted, so the heading said nothing the
-reader was not already looking at. The window still carries a `navigationTitle`,
-and section labels inside a screen — which say what a *part* of it is — stay.
+**The row carries the name; the destination carries the explanation.** No screen
+opens with a page heading repeating the row that was just clicked: the row is on
+screen at the same time, highlighted, so the heading said nothing the reader was
+not already looking at. The purpose sentence is not printed under the title
+either — five of them wrapping in one column explained four screens the reader
+was not looking at — so a pointer reaches it as a tooltip, VoiceOver reads it as
+the row's hint, and the selected destination states its own purpose in its
+content. The window still carries a `navigationTitle`, and section labels inside
+a screen — which say what a *part* of it is — stay.
 
 **Open a link is reachable, not browseable.** It has no row: opening a stored
 link somebody sent is something the OS hands this app, not somewhere a person
@@ -230,7 +236,7 @@ sets out for. `AppDeepLink` still selects `.storedReceive` for a supported
 `MacSurface.browseable` is the one list that says which surfaces the sidebar
 offers. A Finder **Open With** or a Dock drop never lands there.
 
-**LAN Transfer and Cross-network Transfer are two destinations for two
+**LAN Transfer and Pairing Transfer are two destinations for two
 preconditions.** They were briefly one row called Workspace. Underneath they
 still share every model and one `TransferPresence` — `AppDestination` keeps
 `.nearby` and `.pairingCode`, iOS renders them as two tabs, and deep links,
@@ -262,7 +268,7 @@ The shell itself never reads the account session — `MacSurfaceGuardTests`
 asserts that by name, and asserts that the stored-receive and LAN Transfer
 destination files mention neither `AccountSession` nor `bearerToken`. That is
 what keeps the anonymous capabilities reachable without a sign-in form in front
-of them. Cross-network Transfer does hold an `AccountSession`, for exactly one
+of them. Pairing Transfer does hold an `AccountSession`, for exactly one
 half of itself, and the guard checks that positionally rather than by presence:
 the gate must sit *before* the join controls, so joining somebody else's code
 cannot drift behind it. The account-backed halves render an
@@ -815,7 +821,7 @@ the Security call has answered, including rejecting stored bytes that are not a
 usable base64url key); the items themselves are only ever written by a signed
 build, and the two lines that actually call `SecItemCopyMatching` are the one
 part no `swift test` can reach. Its manual check is: sign in, send a file from
-**Send a link**, and confirm the "Link ready" screen says the key is stored on
+**Share a link**, and confirm the "Link ready" screen says the key is stored on
 this Mac and never sent to Relayium — **not** that the link is the only copy of
 it, which is what the failed-to-save warning says and the two must never both
 appear. Then open **Account** and confirm the new object offers **Copy
@@ -1490,7 +1496,7 @@ guard forbids any iOS source calling `startResident()`, `discovery.start()` or
 `discovery.stop()` directly.
 
 **Both direct tabs share one set of owners and exactly one draws the session.**
-Nearby and Direct are handed the same `RealtimeSessionModel`,
+Nearby and Pairing are handed the same `RealtimeSessionModel`,
 `RealtimeTextSessionModel`, `DirectSendSelection` (and therefore one set of
 security scopes) and `DirectModeSelection` (one answer to files-or-text, with
 R3-E's lock unchanged). Rendered side by side they would show one transfer

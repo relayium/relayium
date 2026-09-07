@@ -54,6 +54,27 @@ struct DeviceInboxView: View {
 
     @EnvironmentObject private var session: AccountSession
 
+    /// Whether the one consent control is open. The ONLY presentation state
+    /// this destination owns, and it is a `Bool`.
+    ///
+    /// Closed by default and opened on appearance while the receiver's own
+    /// answer is still `.off` — see `openSettingsIfUnconfigured()`. `.off` means
+    /// this destination cannot do the thing it exists for, so the control that
+    /// fixes that is what the screen opens on; any other answer means the
+    /// question has been settled, and the files that arrived are what the screen
+    /// opens on instead.
+    ///
+    /// **Seeded on appearance rather than derived every render**, and that is
+    /// the whole reason it is a `@State` and not a computed property. A derived
+    /// `inbox.policy == .off` would slam the section shut under the finger the
+    /// instant somebody chose *Ask first* — at the exact moment they are most
+    /// likely to be reading the explanation under it.
+    ///
+    /// Deliberately not persisted: this is a disclosure over a control, not a
+    /// preference, and the answer it is about is already durable in the
+    /// receiver.
+    @State private var showsSettings = false
+
     var body: some View {
         NavigationStack(path: conversationPath) {
             ScrollView {
@@ -75,7 +96,14 @@ struct DeviceInboxView: View {
         // The account's device list, read when this destination appears and by
         // the refresh control inside it. Never on a timer: this is a directory,
         // not a presence feed.
-        .task { refreshTargets() }
+        //
+        // Opening the consent control rides on the same appearance event, and
+        // only ever opens it: a return visit to a configured inbox leaves it
+        // exactly as the user left it.
+        .task {
+            refreshTargets()
+            openSettingsIfUnconfigured()
+        }
     }
 
     /// **The navigation path IS `InboxSendModel.focusedPeerID`.**
@@ -105,11 +133,32 @@ struct DeviceInboxView: View {
     private var content: some View {
         switch DeviceInboxEntry.entry(gate: gate, isSignedIn: inbox.isSignedIn) {
         case .surface:
-            statusSection
-            policySection
+            // **The order is the frequency of the question, and pending work
+            // outranks everything.**
+            //
+            // It used to be status → policy → asking → deliveries →
+            // conversations: a consent control that a configured person changes
+            // approximately never sat ABOVE the questions central is holding
+            // for an answer, above what is arriving right now, and above every
+            // device they might send to. On a phone that is not a preference, it
+            // is a scroll.
+            //
+            //  1. `askSection` — nothing is downloaded and nothing is written
+            //     until these are answered, and they expire. It renders only
+            //     when something is actually waiting, so first place costs
+            //     nothing in the ordinary case and is the whole screen in the
+            //     one that matters.
+            //  2. `statusSection` — can this device receive right now, the
+            //     recovery when it cannot, and the foreground-only limit that
+            //     is true in every state.
+            //  3. what is moving, then who it moves between.
+            //  4. `settingsSection` — the one consent, last, and closed once it
+            //     has been given.
             askSection
+            statusSection
             DeviceDeliveryList(deliveries: deliveries, onOpenAccount: onOpenAccount)
             conversationsSection
+            settingsSection
         case .statusOnly:
             statusSection
             openAccountCard(title: L10n.t(.inboxSignedOut),
@@ -121,6 +170,19 @@ struct DeviceInboxView: View {
 
     private var gate: AccountGate {
         AccountGate.from(session.state, bearer: session.bearerToken)
+    }
+
+    /// First-use setup, made findable without being made permanent.
+    ///
+    /// One direction only, and its exact scope: it never CLOSES the section, so
+    /// choosing *Ask first* or *Automatic* leaves the explanation open under the
+    /// finger, and a later visit to a configured inbox opens on what arrived.
+    /// While the answer is still `.off` it does reopen on each appearance — a
+    /// user who collapses an inbox that still cannot receive anything gets the
+    /// remedy back next time they arrive, which is the behaviour wanted for the
+    /// one state where the destination does not work at all.
+    private func openSettingsIfUnconfigured() {
+        if inbox.policy == .off { showsSettings = true }
     }
 
     // MARK: - status, and the one limitation that defines this platform
@@ -187,29 +249,72 @@ struct DeviceInboxView: View {
     /// and Off — durable, announced to central, one tap away in this very
     /// control — is the answer that survives. A Pause here would be a third
     /// spelling of a thing that already has two.
-    private var policySection: some View {
+    ///
+    /// ## Why the control is disclosed, and when it is not
+    ///
+    /// It is the whole first-use setup and then it is over. Somebody who has
+    /// never used this destination has to find it, and somebody who answered it
+    /// three weeks ago should not scroll past it to reach the file that just
+    /// arrived. So the disclosure starts **open** in the one state where the
+    /// answer is still owed — `policy == .off`, which is not a setting on a
+    /// working feature but the feature being off, and the status card above says
+    /// so in words with this as its remedy.
+    ///
+    /// **A refusal is rendered OUTSIDE the disclosure**, so no collapse can hide
+    /// it: a warning only visible behind a chevron the user has closed is a
+    /// warning that is not visible. Only the refusals THIS card's controls
+    /// produced, though — a refused answer to a held delivery renders in
+    /// `askSection`, beside the buttons it belongs to.
+    private var settingsSection: some View {
         SectionCard(L10n.t(.inboxPolicyHeading)) {
-            Picker(L10n.t(.inboxPolicyHeading),
-                   selection: Binding(get: { inbox.policy },
-                                      set: { inbox.setPolicy($0) })) {
-                ForEach(InboxAutoAccept.allCases, id: \.self) { policy in
-                    Text(InboxPolicyPresentation.label(for: policy)).tag(policy)
-                }
-            }
-            .pickerStyle(.inline)
-            .labelsHidden()
-            .accessibilityIdentifier("inbox-policy")
-
-            Text(L10n.t(.inboxIOSPolicyExplain))
-                .font(.footnote)
-                .foregroundStyle(Palette.supportingLabel)
-                .fixedSize(horizontal: false, vertical: true)
-
-            // A refusal of the action the user just took, beside the control
-            // that produced it. Cleared by the next one.
-            if let error = inbox.settingsError {
+            // A refusal of a CONFIGURATION change, beside the control that
+            // produced it and never inside the collapsed part. The refused
+            // answer to a held delivery is not one of these: it renders in
+            // `askSection`, beside the buttons `respond` restored.
+            if let error = inbox.settingsError, error.source == .configuration {
                 InlineMessage(.warning, InboxSettingsErrorCopy.message(error))
+                    .accessibilityIdentifier("inbox-settings-error")
             }
+
+            DisclosureGroup(isExpanded: $showsSettings) {
+                VStack(alignment: .leading, spacing: Metrics.inner) {
+                    Picker(L10n.t(.inboxPolicyHeading),
+                           selection: Binding(get: { inbox.policy },
+                                              set: { inbox.setPolicy($0) })) {
+                        ForEach(InboxAutoAccept.allCases, id: \.self) { policy in
+                            Text(InboxPolicyPresentation.label(for: policy)).tag(policy)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                    .accessibilityIdentifier("inbox-policy")
+
+                    Text(L10n.t(.inboxIOSPolicyExplain))
+                        .font(.footnote)
+                        .foregroundStyle(Palette.supportingLabel)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, Metrics.hairline)
+            } label: {
+                // The label states the ANSWER, not just the name of the
+                // question. A closed row saying only "Receiving" would hide the
+                // one fact a person opens it to check, and the whole point of
+                // closing it is that they no longer have to.
+                //
+                // **The identifier is on this leaf, not on the group.**
+                // `DeviceInboxUITests.testEachReceivingPolicyChoiceIsSeparatelyIdentifiable`
+                // is the record of what a container identifier does here: it
+                // reaches into the controls underneath and `inbox-policy` stops
+                // resolving to the picker. A label leaf cannot, and tapping it
+                // still toggles the row it is the label of.
+                Text(L10n.detail([L10n.t(.inboxPolicyHeading),
+                                  InboxPolicyPresentation.label(for: inbox.policy)]))
+                    .font(.footnote)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("inbox-settings-disclosure")
+            }
+            .tint(Palette.supportingLabel)
         }
     }
 
@@ -219,19 +324,42 @@ struct DeviceInboxView: View {
     /// says yes — so these rows carry no name, no preview and no sender: the
     /// manifest is not decrypted until a task is claimed, and claiming is what
     /// is being asked about.
+    ///
+    /// **And the refusal of an answer renders here, not with the settings.**
+    /// `.askResponseFailed` is an `InboxSettingsError` by type only: it is
+    /// produced by the Accept/Decline in this card, and `InboxController.respond`
+    /// puts the question back so those very buttons are on screen again. Drawn
+    /// with the configuration at the bottom of the destination it sat below
+    /// every conversation, detached from the action that failed and from the
+    /// retry. `InboxSettingsErrorSource` is the routing, so this card and
+    /// `settingsSection` partition the cases and neither can show the other's.
     @ViewBuilder
     private var askSection: some View {
-        if !inbox.asking.isEmpty {
+        if !inbox.asking.isEmpty || askFailure != nil {
             SectionCard(L10n.t(.inboxAskHeading)) {
-                Text(L10n.t(.inboxAskExplain))
-                    .font(.footnote)
-                    .foregroundStyle(Palette.supportingLabel)
-                    .fixedSize(horizontal: false, vertical: true)
-                ForEach(inbox.asking) { item in
-                    askRow(item)
+                if let askFailure {
+                    InlineMessage(.warning, InboxSettingsErrorCopy.message(askFailure))
+                        .accessibilityIdentifier("inbox-ask-error")
+                }
+                if !inbox.asking.isEmpty {
+                    Text(L10n.t(.inboxAskExplain))
+                        .font(.footnote)
+                        .foregroundStyle(Palette.supportingLabel)
+                        .fixedSize(horizontal: false, vertical: true)
+                    ForEach(inbox.asking) { item in
+                        askRow(item)
+                    }
                 }
             }
         }
+    }
+
+    /// The refused answer, when that is what the last refusal was. Pressing
+    /// Accept or Decline again clears it — `respond` nils `settingsError`
+    /// before it retries — so the recovery is the restored button itself.
+    private var askFailure: InboxSettingsError? {
+        guard let error = inbox.settingsError, error.source == .pendingAnswer else { return nil }
+        return error
     }
 
     private func askRow(_ item: InboxAskItem) -> some View {

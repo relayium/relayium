@@ -366,6 +366,37 @@ public enum InboxFolderPresentation {
     }
 }
 
+/// **Which control the user pressed, so its refusal renders beside that
+/// control.**
+///
+/// `InboxSettingsError` is one type covering three unrelated buttons, and the
+/// surfaces render it in one place each — which is fine until the sections move.
+/// `.askResponseFailed` is produced by Accept/Decline on a pending delivery, not
+/// by any configuration control: on a phone that put a failed acceptance at the
+/// bottom of the destination, below every conversation, while
+/// `InboxController.respond` had already restored the Accept/Decline buttons at
+/// the top. The routing is here rather than in either view so both platforms
+/// answer it the same way and a test can drive it without a renderer.
+public enum InboxSettingsErrorSource: Sendable, Equatable, CaseIterable {
+    /// The Accept/Decline the user just pressed on a held delivery. The question
+    /// is restored, so the failure belongs beside it.
+    case pendingAnswer
+    /// The macOS button that opens System Settings for this app's notifications.
+    case notificationAccess
+    /// The receive folder and the auto-accept answer.
+    case configuration
+}
+
+public extension InboxSettingsError {
+    var source: InboxSettingsErrorSource {
+        switch self {
+        case .askResponseFailed: return .pendingAnswer
+        case .notificationSettingsUnavailable: return .notificationAccess
+        case .folderNotWritable, .folderBookmarkFailed, .noFolderChosen: return .configuration
+        }
+    }
+}
+
 /// One refused user action.
 public enum InboxSettingsErrorCopy {
     public static func message(_ error: InboxSettingsError,

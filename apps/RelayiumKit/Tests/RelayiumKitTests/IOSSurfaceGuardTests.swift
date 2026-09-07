@@ -4044,27 +4044,64 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// The advanced-verification setting is on screen, and it is the shared
-    /// preference object rather than a local toggle.
+    /// The advanced-verification setting is on screen on BOTH surfaces that can
+    /// start a session, it is the shared preference object rather than a local
+    /// toggle, and the cryptography behind it is one tap away rather than
+    /// permanently open.
     ///
     /// Default OFF is `VerificationPreference`'s own decision and
     /// `VerificationPreference`'s tests prove it. What this pins is that the
     /// setting is REACHABLE — a security control that only exists on macOS is a
-    /// control iOS users cannot turn on — and that flipping it moves the object
-    /// both models read, rather than a `@State` nothing consults.
+    /// control iOS users cannot turn on — that flipping it moves the object both
+    /// models read rather than a `@State` nothing consults, and that the two
+    /// explanations are still rendered.
+    ///
+    /// **It reads one component now, and that is the point.** Nearby and Pairing
+    /// held byte-identical copies of this control, so a guard that only read
+    /// `DirectView` could not have seen the two drift apart — and drifting is
+    /// exactly what happens when a hierarchy change lands on one screen. The
+    /// delegation is asserted on both views; the behaviour is asserted once,
+    /// where it now lives.
     func testTheVerificationSettingIsVisibleAndIsTheSharedPreference() throws {
-        let view = try direct()
-        XCTAssertTrue(view.text.contains(
+        for view in [try direct(), try nearby()] {
+            XCTAssertTrue(view.text.contains("VerificationSettingCard(isLocked: isLocked)"),
+                          "\(view.name) no longer renders the shared verification card")
+            XCTAssertFalse(view.text.contains("Toggle(L10n.t(.verifyToggle)"),
+                           "\(view.name) grew a second copy of the verification control")
+        }
+
+        let card = try XCTUnwrap(
+            try sources().first { $0.name.hasSuffix("VerificationSettingCard.swift") })
+        XCTAssertTrue(card.text.contains(
             "set: { if !isLocked { verification.requiresSASConfirmation = $0 } }"),
                       "the shared preference must refuse changes after session claim")
-        XCTAssertFalse(view.text.contains("isOn: $verification.requiresSASConfirmation"),
+        XCTAssertFalse(card.text.contains("isOn: $verification.requiresSASConfirmation"),
                        "a raw binding can change verification during claim-before-handshake")
         for explanation in [".verifyExplainWhat", ".verifyExplainEncryption"] {
-            XCTAssertTrue(view.text.contains(explanation),
+            XCTAssertTrue(card.text.contains(explanation),
                           "the setting must say what it does and does not change: \(explanation)")
         }
-        XCTAssertFalse(view.text.contains("@State private var requiresSAS"),
+        XCTAssertFalse(card.text.contains("@State private var requiresSAS"),
                        "a view-local copy would be a setting no session reads")
+
+        // **The toggle is visible; the cryptography is disclosed.** The two
+        // paragraphs are ~580 characters of key handling and SAS semantics, and
+        // permanently open they were several screens of background under the
+        // last control on the longest tab in the app at accessibility content
+        // sizes. What may never move behind the chevron is the control itself
+        // or the state it is in.
+        let disclosure = try XCTUnwrap(card.text.components(separatedBy: "DisclosureGroup(")
+                                           .dropFirst().first)
+        for explanation in [".verifyExplainWhat", ".verifyExplainEncryption"] {
+            XCTAssertTrue(disclosure.contains(explanation),
+                          "\(explanation) is not inside the disclosure it was moved into")
+        }
+        XCTAssertFalse(disclosure.contains("Toggle("),
+                       "the verification control itself was hidden behind a chevron")
+        XCTAssertTrue(card.text.contains("L10n.t(.verifyHowItWorks)"),
+                      "an unlabelled chevron says nothing about what it hides")
+        XCTAssertTrue(card.text.contains("@State private var showsDetail = false"),
+                      "the explanation must start closed on every build, and not be persisted")
     }
 
     /// Direct says what it is for, and hands the large-file case to the tab that
@@ -4289,6 +4326,24 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "the paragraph is still drawn outside the disclosure")
         XCTAssertEqual(view.text.components(separatedBy: "L10n.t(.nearbyIOSExplain)").count - 1, 1,
                        "a second copy of the paragraph would put it back on the first screen")
+
+        // **The route illustration is mechanism too, and it is in here with the
+        // rest of it.** Drawn at the top of the send card it was ~45pt of
+        // standing route — every `iosNearby` stop's progress is nil — between
+        // that card's title and the chooser, which is what put the one control
+        // this screen exists for below the halfway line of a 390pt iPhone.
+        XCTAssertEqual(view.text.components(separatedBy: "PathRail(").count - 1, 1,
+                       "the nearby rail is drawn more than once")
+        let rail = try XCTUnwrap(view.text.range(of: "PathRail("))
+        let label = try XCTUnwrap(view.text.range(of: "L10n.t(.nearbyHowItWorks)"))
+        XCTAssertTrue(group.lowerBound < rail.lowerBound && rail.lowerBound < label.lowerBound,
+                      "the route rail is outside the disclosure it was moved into")
+        let card = try XCTUnwrap(view.text.components(separatedBy: "private var sendTask:")
+            .dropFirst().first?.components(separatedBy: "\n    private ").first)
+        XCTAssertFalse(card.contains("PathRail("),
+                       "the send task opens with a standing illustration again")
+        XCTAssertTrue(card.contains("L10n.t(.nearbyWhatToSend)"),
+                      "the send card no longer leads with what to send")
 
         // Not a preference: a remembered "open" restores exactly the layout
         // this refinement removes, on the content size where it hurts most.
@@ -4623,13 +4678,22 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// no second Accept step beside it: with verification off the existing
     /// handshake still runs and the session proceeds, which is
     /// `VerificationPreference`'s decision and not this view's to re-ask.
+    ///
+    /// The control itself is now `VerificationSettingCard`, shared with the
+    /// Pairing tab; that this tab renders it and holds no second copy is what
+    /// is checked here, and the card's own contents are checked in
+    /// `testTheVerificationSettingIsVisibleAndIsTheSharedPreference`.
+    ///
+    /// **The acceptance note is not part of that move.** It says what happens on
+    /// the other end when a transfer is sent, it appears beside the device the
+    /// user picked, and it is the autoaccept semantics — so it stays visible,
+    /// asserted here, and out of every disclosure on this screen.
     func testTheNearbyTabOffersTheSharedVerificationSettingAndNoSecondAccept() throws {
         let view = try nearby()
-        XCTAssertTrue(view.text.contains(
-            "set: { if !isLocked { verification.requiresSASConfirmation = $0 } }"),
-                      "the shared preference must refuse changes after session claim")
-        XCTAssertFalse(view.text.contains("isOn: $verification.requiresSASConfirmation"),
-                       "a raw binding can change verification during claim-before-handshake")
+        XCTAssertTrue(view.text.contains("VerificationSettingCard(isLocked: isLocked)"),
+                      "the tab no longer offers the shared verification setting")
+        XCTAssertFalse(view.text.contains("verification.requiresSASConfirmation = $0"),
+                       "the tab grew a second copy of the shared control")
         XCTAssertFalse(view.text.contains("@State private var requiresSAS"),
                        "a view-local copy would be a setting no session reads")
         XCTAssertTrue(view.text.contains("L10n.t(.nearbyIOSAcceptanceNote)"),
@@ -5088,16 +5152,17 @@ final class IOSSurfaceGuardTests: XCTestCase {
                            "\(half) draws the route as if it owned it")
         }
 
-        // The advanced-verification control is the same untitled card the Nearby
-        // tab gives the same control, rather than a fifth wall of loose grey.
+        // The advanced-verification control is literally the same card the
+        // Nearby tab gives the same control — one component, not a copy that
+        // reads the same preference — rather than a fifth wall of loose grey.
+        // Its contents are pinned in
+        // `testTheVerificationSettingIsVisibleAndIsTheSharedPreference`.
         let setting = try XCTUnwrap(view.text.components(
             separatedBy: "private var verificationSetting:").dropFirst().first?
             .components(separatedBy: "private func failureLine").first)
-        XCTAssertTrue(setting.contains("SectionCard {"))
-        for stated in ["L10n.t(.verifyToggle)", "L10n.t(.verifyExplainWhat)",
-                       "L10n.t(.verifyExplainEncryption)"] {
-            XCTAssertTrue(setting.contains(stated), "the toggle lost \(stated)")
-        }
+        XCTAssertTrue(setting.contains("VerificationSettingCard(isLocked: isLocked)"))
+        XCTAssertFalse(setting.contains("SectionCard {"),
+                       "the shared card was inlined back into this view")
     }
 
     /// **The two handoff controls turn, for the same reason the rail turns.**
@@ -5465,20 +5530,77 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "a send from this page could delete another app's only copy of a file")
     }
 
-    /// The iPad sidebar row says what a destination does before it is opened,
-    /// and says the same thing to VoiceOver.
-    func testTheIPadSidebarRowsCarryTheirSubtitleAsTheirHint() throws {
+    /// **The iPad sidebar names its destinations; it does not explain all five
+    /// of them.**
+    ///
+    /// Every row printed its full purpose sentence under its title — five
+    /// sentences, two of them past a hundred characters, four of them about
+    /// screens the reader was not looking at, in a column that stops fitting
+    /// them at the accessibility content sizes this app supports. It is the same
+    /// defect the macOS sidebar removed a round earlier, and it is fixed the
+    /// same way, which is why the same two things are asserted here as there:
+    ///
+    ///  - the visible second line is gone, so the row is a name and a symbol;
+    ///  - the sentence is NOT gone. It is the row's `accessibilityHint`, so a
+    ///    VoiceOver user hears exactly what they heard before choosing.
+    ///
+    /// A guard that only checked the first half would be passed by deleting the
+    /// explanation, which is the failure this pairing exists to prevent.
+    func testTheIPadSidebarNamesDestinationsAndKeepsTheirPurposeAsAHint() throws {
         let root = try XCTUnwrap(try sources().first { $0.name == "RootView.swift" }?.text)
         XCTAssertTrue(root.contains(".accessibilityHint(subtitle(for: surface))"),
-                      "a sidebar row explains itself on screen but not to VoiceOver")
+                      "a sidebar row lost the purpose sentence VoiceOver reads")
         XCTAssertTrue(root.contains(".accessibilityIdentifier(\"sidebar-\\(surface.rawValue)\")"))
         XCTAssertTrue(root.contains("destination-\\(shell.placement.background.rawValue)"),
                       "acceptance cannot tell the detail column from the row that opened it")
+
+        // Sliced to the next declaration, NOT to the next `// MARK:` — `sources()`
+        // strips comment lines, so a MARK-based slice runs to the end of the
+        // file and every negative assertion below becomes a statement about the
+        // whole shell instead of about this row.
+        let row = try XCTUnwrap(root.components(separatedBy: "private func sidebarRow(")
+                                    .dropFirst().first?
+                                    .components(separatedBy: "\n    private ").first)
+        XCTAssertTrue(row.contains("Text(title(for: surface))"),
+                      "a sidebar row must still be named")
+        XCTAssertFalse(row.contains("Text(subtitle(for: surface))"),
+                       "the sidebar prints all five destinations' prose again")
+        XCTAssertFalse(row.contains("Palette.supportingLabel"),
+                       "a supporting line came back into the sidebar row")
+        // The hint is only as good as what it reads. The Device Inbox's is the
+        // one that may not be the Mac's: `IOSInboxCopyTests` proves that key
+        // promises neither a folder picker nor delivery with the window closed,
+        // and this is what keeps the row pointed at it.
+        XCTAssertTrue(root.contains("return L10n.t(.navIOSDeviceInboxSubtitle)"),
+                      "the iPad Device Inbox row hints the macOS subtitle, which promises "
+                      + "background delivery this platform does not have")
+
         // Every browseable surface has a title AND a subtitle, in both languages.
         for surface in IOSSurface.browseable {
             XCTAssertTrue(root.contains("case .\(surface.rawValue):"),
                           "\(surface.rawValue) is unnamed in the shell")
         }
+
+        // **And the purpose is on the destination too, not only in a hint.**
+        // Taking the visible second line off the row is only honest if a sighted
+        // reader can still find out what the destination they selected is for.
+        // Nearby opens with its safety summary, Pairing with
+        // `nav.pairingCodeSubtitle`, the Device Inbox with `inbox.iosExplain`,
+        // and Share a link had NOTHING — no sentence anywhere naming the two
+        // things that decide whether to use it, that the recipient picks it up
+        // later and that plan limits apply. Account is the deliberate exception:
+        // its subtitle is "Plan, devices and stored files", which is a list of
+        // what the screen already shows.
+        let send = try XCTUnwrap(try sources().first { $0.name == "SendView.swift" }?.text)
+        XCTAssertTrue(send.contains("L10n.t(.navStoredSendSubtitle)"),
+                      "the stored-send destination never says what it is for")
+        let nearby = try self.nearby()
+        XCTAssertTrue(nearby.text.contains("L10n.t(.nearbyIOSSafetySummary)"))
+        let direct = try self.direct()
+        XCTAssertTrue(direct.text.contains("L10n.t(.navPairingCodeSubtitle)"))
+        let inbox = try XCTUnwrap(
+            try sources().first { $0.name == "DeviceInboxView.swift" }?.text)
+        XCTAssertTrue(inbox.contains("L10n.t(.inboxIOSExplain)"))
     }
 
     /// The two empty states that are not merely absent content.

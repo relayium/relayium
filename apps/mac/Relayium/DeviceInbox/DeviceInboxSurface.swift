@@ -144,11 +144,48 @@ struct DeviceInboxSurface: View {
                         // the user is in the middle of writing.
                         .id(peer.id)
                 } else {
+                    // **The order is how often the question is asked, and
+                    // pending work outranks everything.**
+                    //
+                    // It used to be status → notification → asking → folder →
+                    // policy → conversations → devices → login item: two
+                    // configuration sections that a set-up Mac changes
+                    // approximately never sat ABOVE every conversation and
+                    // every device this Mac can send to. Somebody opening this
+                    // pane to read what arrived scrolled past the receive
+                    // folder and the auto-accept policy to reach it, every
+                    // time.
+                    //
+                    //  1. `askSection` — central is holding these for an
+                    //     answer, nothing is downloaded or written until it
+                    //     gets one, and they expire. It renders only when
+                    //     something is actually waiting, so first place costs
+                    //     nothing in the ordinary case and is the whole pane in
+                    //     the one that matters.
+                    //  2. status and its recovery — can this Mac take a
+                    //     delivery right now, and the one control that fixes it
+                    //     when it cannot.
+                    //  3. `notificationSection` — conditional, and a different
+                    //     KIND of fact: receiving works, the announcement does
+                    //     not. It stays with the availability answers above it
+                    //     rather than moving down with the settings, because it
+                    //     is a problem to act on rather than a preference to
+                    //     revisit.
+                    //  4. what has passed between the devices, then the devices
+                    //     themselves.
+                    //  5. the three configuration sections, last.
+                    //
+                    // **They are not collapsed here, and that is deliberate.**
+                    // The iOS surface discloses its one consent control because
+                    // a phone genuinely cannot show the whole destination at
+                    // once. This is a resizable window with a scrolling `Form`
+                    // and three short sections, and the one thing a Mac user
+                    // most needs to find — the receive folder, without which
+                    // nothing is delivered at all — is exactly what a collapse
+                    // would hide. Order was the defect; order is the fix.
+                    askSection
                     statusSection(offersControls: true)
                     notificationSection
-                    askSection
-                    folderSection
-                    policySection
                     conversationsSection
                     // The devices, in the one branch where the account is usable
                     // for sending. Deliberately NOT in `.statusOnly`: that branch
@@ -158,6 +195,8 @@ struct DeviceInboxSurface: View {
                     // outcome is a staging failure.
                     DeviceSendSection(deliveries: deliveries,
                                       onAccount: { onAccount(.signIn) })
+                    folderSection
+                    policySection
                     residencySection
                 }
             case .statusOnly:
@@ -393,11 +432,16 @@ struct DeviceInboxSurface: View {
                     .buttonStyle(.bordered)
                     .accessibilityIdentifier("inbox-recovery")
             }
-            // Every refused action EXCEPT the notification one. That single
-            // exception is rendered beside the button that produced it in the
-            // section below, because a refusal that appears three sections away
-            // from the control the user just pressed reads as an unrelated fault.
-            if let error = inbox.settingsError, error != .notificationSettingsUnavailable {
+            // Every refused action except the notification one, which is
+            // rendered beside the button that produced it further down: a
+            // refusal three sections away from the control the user just
+            // pressed reads as an unrelated fault. Stated as the error's own
+            // `source` rather than as one hand-written exclusion, so a new case
+            // has to declare where it belongs instead of silently landing here.
+            // The status card is directly under `askSection`, which is why the
+            // refused answer to a held delivery is at home in it on this
+            // platform and needs its own card on the phone.
+            if let error = inbox.settingsError, error.source != .notificationAccess {
                 InlineMessage(.failure, InboxSettingsErrorCopy.message(error))
                     .accessibilityIdentifier("inbox-error")
             }

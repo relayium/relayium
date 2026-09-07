@@ -266,16 +266,19 @@ struct NearbyView: View {
 
     /// One card, two acts, one action.
     ///
-    /// The rail states the route before either act: this device, an encrypted
-    /// middle whose shape the client cannot prove, and the device the user
-    /// picks. Staging stays deliberately ABOVE and independent of the roster —
+    /// Staging stays deliberately ABOVE and independent of the roster —
     /// choosing what to send and choosing who to send it to are separate, and
-    /// only Send combines them — which is what the two headings now say out
-    /// loud instead of leaving it to the order.
+    /// only Send combines them — which is what the two headings say out loud
+    /// instead of leaving it to the order.
+    ///
+    /// **The route rail is not here any more; it is in the disclosure above.**
+    /// It makes no progress claim — every `iosNearby` stop's `progress` is nil —
+    /// so it was ~45pt of standing illustration between this card's title and
+    /// the chooser, which on a 390pt iPhone put the one control this screen
+    /// exists for below the halfway line. It is mechanism, and it now sits with
+    /// the rest of the mechanism.
     private var sendTask: some View {
         SectionCard(L10n.t(.nearbySendTaskTitle)) {
-            PathRail(stops: PathRailPresentation.iosNearby())
-
             OpenSection(L10n.t(.nearbyWhatToSend)) {
                 // **The picker is not always the right question.** For a peer
                 // that announced exact `link/1` the connection carries messages
@@ -308,21 +311,20 @@ struct NearbyView: View {
         }
     }
 
-    /// **The claim that may never be behind a tap, and the paragraph that may.**
+    /// **The claim that may never be behind a tap, and the mechanism that may.**
     ///
-    /// The mechanism explanation is the honest one and none of it is dropped:
-    /// one Bonjour service on the local link, no address scan, nothing outside
-    /// that link asked. But as the first thing on the screen it cost the user
-    /// everything below it — at the largest accessibility content sizes that one
-    /// paragraph filled several screens before any control could be reached,
-    /// which is how a safety notice turns into something scrolled past rather
-    /// than read.
+    /// What changes a decision — these devices share a local network, and a
+    /// shared network can hold strangers — stays visible, and stays to two
+    /// lines. Everything about HOW is one tap away and starts closed: the route
+    /// the bytes take, and the Bonjour paragraph that says one named service is
+    /// browsed, nothing is scanned, and a browser cannot appear here. None of it
+    /// is dropped, including the café/hotel/office examples the summary used to
+    /// spell out — `nearbyIOSExplain` still names all three.
     ///
-    /// So the part that changes a decision — a shared network is somebody
-    /// else's network too, and the devices that answer can be strangers' —
-    /// stays visible and stays short, and the mechanism moves into a disclosure
-    /// that starts closed. The order changed; nothing was removed and nothing
-    /// was softened.
+    /// As an always-open block this cost the user everything below it: at the
+    /// largest accessibility content sizes it filled several screens before any
+    /// control could be reached, which is how a safety notice turns into
+    /// something scrolled past rather than read.
     ///
     /// Both halves are `nearbyIOS*`. The shared keys beside them say the same
     /// two things about a public address and a carrier or VPN gateway, which is
@@ -341,12 +343,18 @@ struct NearbyView: View {
             // hides — and a disclosure nobody opens is the same as deleting the
             // explanation.
             DisclosureGroup(isExpanded: $showsMechanism) {
-                Text(L10n.t(.nearbyIOSExplain))
-                    .font(.footnote)
-                    .foregroundStyle(Palette.supportingLabel)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, Metrics.hairline)
+                VStack(alignment: .leading, spacing: Metrics.inner) {
+                    // The standing route, where the rest of the mechanism is.
+                    // It claims no progress and never did, so nothing about it
+                    // needs to be watched while a transfer runs.
+                    PathRail(stops: PathRailPresentation.iosNearby())
+                    Text(L10n.t(.nearbyIOSExplain))
+                        .font(.footnote)
+                        .foregroundStyle(Palette.supportingLabel)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, Metrics.hairline)
             } label: {
                 Text(L10n.t(.nearbyHowItWorks))
                     .font(.footnote)
@@ -358,8 +366,8 @@ struct NearbyView: View {
             // chevron still says it opens.
             //
             // The role rather than the system grey, because `.tint` on a
-            // `DisclosureGroup` colours the LABEL as well as the chevron — so
-            // "How this list works" was being drawn in `Color.secondary` with no
+            // `DisclosureGroup` colours the LABEL as well as the chevron, so the
+            // label was being drawn in `Color.secondary` with no
             // `.foregroundStyle` anywhere near it to say so. A source audit
             // classified this as a control tint and was wrong; the Light system
             // audit rendered it and reported the sentence. Grey is preserved,
@@ -748,26 +756,13 @@ struct NearbyView: View {
     /// Locked while a session is live, because the models read the preference
     /// when the SAS arrives and flipping it mid-handshake would make the gate
     /// depend on timing.
+    ///
+    /// The shared card, not a second copy of the Pairing tab's. The two bodies
+    /// were byte-identical over one app-scoped preference, which is exactly the
+    /// shape where a hierarchy change lands on one screen and not the other.
+    /// See `VerificationSettingCard`.
     private var verificationSetting: some View {
-        // In a card, untitled: the toggle's own label is the title, and the two
-        // paragraphs under it are what it does and what it does NOT change.
-        // Left loose at the bottom of the screen it was a wall of grey with no
-        // boundary, which is how a setting starts reading as a footer.
-        SectionCard {
-            Toggle(L10n.t(.verifyToggle), isOn: Binding(
-                get: { verification.requiresSASConfirmation },
-                set: { if !isLocked { verification.requiresSASConfirmation = $0 } }
-            ))
-                .disabled(isLocked)
-            Text(L10n.t(.verifyExplainWhat))
-                .font(.footnote)
-                .foregroundStyle(Palette.supportingLabel)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(L10n.t(.verifyExplainEncryption))
-                .font(.footnote)
-                .foregroundStyle(Palette.supportingLabel)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+        VerificationSettingCard(isLocked: isLocked)
     }
 
     /// What the app could not carry into the background, said after the fact

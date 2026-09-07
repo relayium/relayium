@@ -133,11 +133,15 @@ final class DeviceInboxShellUITests: XCTestCase {
 
         for part in [app.descendants(matching: .any)["inbox-status"],
                      app.descendants(matching: .any)["inbox-foreground-only"],
-                     app.descendants(matching: .any)["inbox-folder"],
-                     app.descendants(matching: .any)["inbox-policy"]] {
+                     app.descendants(matching: .any)["inbox-folder"]] {
             XCTAssertTrue(part.waitForExistence(timeout: 20),
                           "the signed-in Device Inbox is missing \(part)")
         }
+        // The consent lives in a disclosure now, open while the policy is still
+        // Off and closed once it is answered. Opened explicitly, so this asserts
+        // the control is REACHABLE rather than that this fixture happens to
+        // arrive unconfigured.
+        revealReceivingConsent(in: app)
 
         // The limitation, in the words the product promises. XCUITest caps a
         // string-identifier query at 128 characters and this sentence is longer,
@@ -181,9 +185,7 @@ final class DeviceInboxShellUITests: XCTestCase {
         try launchCompact(["--relayium-ui-testing-signed-in"])
 
         open(Shell.deviceInbox, in: app)
-        let policy = app.descendants(matching: .any)["inbox-policy"].firstMatch
-        XCTAssertTrue(policy.waitForExistence(timeout: 20),
-                      "the signed-in Device Inbox offers no receiving consent")
+        let policy = revealReceivingConsent(in: app)
 
         let wheel = policy.pickerWheels.firstMatch
         XCTAssertTrue(wheel.waitForExistence(timeout: 15),
@@ -199,6 +201,25 @@ final class DeviceInboxShellUITests: XCTestCase {
             XCTAssertEqual(wheel.value as? String, answer,
                            "the receiving consent could not be set to \(answer)")
         }
+
+        // **The closed path, which every assertion above starts too late to
+        // reach.** A fresh account is `Off`, so the disclosure is already open
+        // when this destination appears and none of the steps above prove the
+        // row can be operated at all. Answered first, so what is checked after
+        // reopening is a stored answer rather than the default.
+        wheel.adjust(toPickerWheelValue: "Ask every time")
+        let settingsRow = app.descendants(matching: .any)["inbox-settings-disclosure"].firstMatch
+        XCTAssertTrue(settingsRow.exists, "the receiving consent has no row to collapse")
+        settingsRow.tap()
+        XCTAssertFalse(app.descendants(matching: .any)["inbox-policy"].firstMatch
+            .waitForExistence(timeout: 3),
+                       "tapping the receiving-consent row did not collapse it")
+
+        // Reopened through the shared helper, so the path every other suite
+        // depends on for a configured account is the one exercised here.
+        let reopened = revealReceivingConsent(in: app)
+        XCTAssertEqual(reopened.pickerWheels.firstMatch.value as? String, "Ask every time",
+                       "collapsing and reopening the consent changed the stored answer")
 
         // And the explanation states the platform limit a second time, where the
         // choice is actually made: neither answer receives while Relayium is

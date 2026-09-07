@@ -226,10 +226,22 @@ struct RootView: View {
     /// A full-width iPad: a sidebar and a detail column.
     ///
     /// It renders the SAME `destination(for:)` the tab bar does — one app in two
-    /// layouts, not two implementations — and the sidebar rows carry the
-    /// subtitles the macOS sidebar carries, because on a screen with room for
-    /// them "what does this destination do" is answerable before it is opened
-    /// rather than after.
+    /// layouts, not two implementations.
+    ///
+    /// **The sidebar names the destinations; the screen it opens explains the
+    /// one you are on.** For one round every row printed its full explanatory
+    /// sentence under its title — five sentences, up to three wrapped lines
+    /// each, four of them about screens the reader was not looking at. Two of
+    /// them run past a hundred characters, and at the accessibility content
+    /// sizes this app supports the five rows stopped fitting the column at all.
+    /// It is also the exact defect the macOS sidebar removed a round earlier
+    /// (`SidebarView`'s own comment is the argument), reintroduced on the other
+    /// platform.
+    ///
+    /// **Nothing was lost to anyone.** Every row still carries the complete
+    /// sentence as its `accessibilityHint`, so VoiceOver reads exactly what it
+    /// read before; and every destination states its own purpose in its detail
+    /// column, which is where the reader who selected it is looking.
     ///
     /// `.balanced` rather than `.prominentDetail`: the destinations here are
     /// full working surfaces rather than a reading pane over a list, so the
@@ -253,15 +265,34 @@ struct RootView: View {
         .navigationSplitViewStyle(.balanced)
     }
 
+    /// A name, its symbol, and its selection. Nothing else.
+    ///
+    /// **No live-session marker, and its absence is a decision rather than an
+    /// oversight.** The macOS sidebar carries one, and it was the obvious thing
+    /// to bring across — but it cannot be brought across honestly here, for two
+    /// separate reasons:
+    ///
+    ///  1. **This file may not know.** A truthful marker needs BOTH ownership
+    ///     and activity (ownership alone keeps announcing "a transfer is running
+    ///     here" over a completed one, which is the exact defect macOS recorded)
+    ///     — and activity means reading `direct.isBusy`.
+    ///     `IOSSurfaceGuardTests.testTheLinkPathNeitherJoinsNorDownloads` bans
+    ///     this file from reading a transfer model at all, because it is also
+    ///     the file that receives every Universal Link and holds every model
+    ///     that link touches. A cosmetic badge is not worth widening that.
+    ///  2. **It would split the two layouts.** The iPhone tab bar has no marker
+    ///     and cannot easily have one, so a sidebar-only badge would make the
+    ///     regular and compact shells disagree about the same app — which is the
+    ///     one property `IOSSurface.browseable` and `destination(for:)` exist to
+    ///     hold.
+    ///
+    /// The fact itself is not lost: the destination that owns a session draws
+    /// it, and `TransferPresence` puts a "the session is on the other surface"
+    /// card with a button on the one that does not.
     private func sidebarRow(_ surface: IOSSurface) -> some View {
         Label {
-            VStack(alignment: .leading, spacing: Metrics.hairline) {
-                Text(title(for: surface))
-                Text(subtitle(for: surface))
-                    .font(.footnote)
-                    .foregroundStyle(Palette.supportingLabel)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            Text(title(for: surface))
+                .fixedSize(horizontal: false, vertical: true)
         } icon: {
             Image(systemName: surface.symbol)
                 // Decorative, and hidden for the reason the conversation rows'
@@ -282,9 +313,10 @@ struct RootView: View {
         // first. `.combine` makes the row what it looks like: one thing, whose
         // spoken name is its title followed by what it does.
         .accessibilityElement(children: .combine)
-        // The subtitle is the row's hint as well as its second line, so a
-        // VoiceOver user hears what a destination does before opening it — the
-        // same reason the macOS sidebar's subtitles are its hints.
+        // The purpose sentence, kept where a VoiceOver user still hears it
+        // before opening the destination — the same reason the macOS sidebar's
+        // subtitles are its hints, and the reason dropping the visible second
+        // line costs a browsing reader nothing.
         .accessibilityHint(subtitle(for: surface))
         .accessibilityIdentifier("sidebar-\(surface.rawValue)")
     }

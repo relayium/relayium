@@ -69,7 +69,7 @@ const en = {
       },
       {
         title: "Async complement",
-        desc: "Use this when the other side isn't online right now; use realtime cross-network transfer when both are present.",
+        desc: "Use this when the other side isn't online right now; use pairing transfer, live and across networks, when both are present.",
       },
     ],
   },
@@ -151,7 +151,7 @@ const zh = {
       },
       {
         title: "异步场景的补充",
-        desc: "当对方暂时不在线时使用；若双方同时在线，可改用实时跨网络传输。",
+        desc: "当对方暂时不在线时使用；若双方同时在线，可改用实时的「配对传输」。",
       },
       {
         title: "也能用命令行",

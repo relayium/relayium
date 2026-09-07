@@ -44,7 +44,12 @@ final class AdaptiveShellUITests: XCTestCase {
     }
 
     /// The sidebar lists exactly the five browseable destinations, in the
-    /// product's order, and says what each one does before it is opened.
+    /// product's order, and names each one.
+    ///
+    /// It used to print each destination's purpose as a visible second line.
+    /// That moved to the row's `accessibilityHint`, so a VoiceOver user still
+    /// hears it and the column stops carrying five explanations — see the
+    /// assertions below for which half of that is checkable from here.
     ///
     /// Order is asserted by GEOMETRY rather than by the array the rows were
     /// built from, because the second would only re-check the list this test
@@ -76,21 +81,38 @@ final class AdaptiveShellUITests: XCTestCase {
             XCTAssertFalse(row.label.contains("."),
                            "the \(surface.id) row is announced by a raw SF Symbol "
                            + "name: '\(row.label)'")
+            // **A name, not a name and a paragraph.** Every row used to print
+            // its full purpose sentence as a visible second line, so the column
+            // carried five explanations — two over a hundred characters — four
+            // of them about screens the reader was not looking at. Bounded
+            // rather than compared to an expected string: the row is built from
+            // `title(for:)` and the tab keys are deliberately shorter than the
+            // navigation titles this file's `Surface.title` holds, so an
+            // equality check here would pin the wrong one of the two.
+            XCTAssertFalse(row.label.trimmingCharacters(in: .whitespaces).isEmpty,
+                           "the \(surface.id) row is unnamed")
+            XCTAssertLessThan(row.label.count, 40,
+                              "the \(surface.id) row is announced as a sentence rather than "
+                              + "a destination: '\(row.label)'")
         }
 
-        // A screen with room for them answers "what is this destination" before
-        // it is opened. Read off the ROW rather than off any static text on
-        // screen, so this cannot pass on the same words appearing somewhere in
-        // the detail column. These two are the ones whose iOS wording differs
-        // from the Mac's, so they are the ones a regression would get wrong.
+        // The purpose itself did not go away — it is the row's
+        // `accessibilityHint`, which XCUITest does not expose, so the guard that
+        // holds it is
+        // `IOSSurfaceGuardTests.testTheIPadSidebarNamesDestinationsAndKeepsTheirPurposeAsAHint`
+        // and it fails if the hint is dropped. What runtime can still see is
+        // that the prose is no longer in the LABEL, which is what a regression
+        // to the old design would restore. These two sentences are the ones
+        // whose iOS wording differs from the Mac's, so they are the ones a
+        // regression would get wrong.
         let lan = app.descendants(matching: .any)["sidebar-lanTransfer"].firstMatch
-        XCTAssertTrue(lan.label.contains("no account"),
-                      "the LAN Transfer row does not say it needs no account: "
-                      + "'\(lan.label)'")
+        XCTAssertFalse(lan.label.contains("no account"),
+                       "the LAN Transfer row prints its purpose sentence again: "
+                       + "'\(lan.label)'")
         let inbox = app.descendants(matching: .any)["sidebar-deviceInbox"].firstMatch
-        XCTAssertTrue(inbox.label.contains("arrives while Relayium is open"),
-                      "the Device Inbox row promises the Mac's background delivery, "
-                      + "or says nothing about when a delivery arrives: '\(inbox.label)'")
+        XCTAssertFalse(inbox.label.contains("arrives while Relayium is open"),
+                       "the Device Inbox row prints its purpose sentence again: "
+                       + "'\(inbox.label)'")
         XCTAssertFalse(inbox.label.contains("window closed"),
                        "the iPad Device Inbox row claims the Mac's background delivery")
     }

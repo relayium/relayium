@@ -52,7 +52,10 @@ afterEach(() => {
 });
 
 const tabs = () => [...target.querySelectorAll<HTMLAnchorElement>(".tabs a.tab")];
+/** The secondary group: the two links that are not ways to move a file. */
+const tools = () => [...target.querySelectorAll<HTMLAnchorElement>("nav.tools a.tool")];
 const current = () => target.querySelectorAll(".tabs [aria-current='page']");
+const currentTool = () => target.querySelectorAll("nav.tools [aria-current='page']");
 const railNav = () => target.querySelector(".rail-nav");
 const prevBtn = () => target.querySelector<HTMLButtonElement>(".rail-prev");
 const nextBtn = () => target.querySelector<HTMLButtonElement>(".rail-next");
@@ -65,7 +68,7 @@ function rect(left: number, right: number): DOMRect {
  * jsdom has no layout, so the rail's geometry is stated rather than measured.
  * `from`..`to` are the destination indices fully inside the 280px-wide rail;
  * everything before sits off the start edge and everything after off the end.
- * `overflowing: false` states a rail whose six chips genuinely fit.
+ * `overflowing: false` states a rail whose four chips genuinely fit.
  */
 function layoutRail(from: number, to: number, overflowing = true) {
   const rail = target.querySelector<HTMLElement>(".tabs")!;
@@ -83,13 +86,15 @@ function layoutRail(from: number, to: number, overflowing = true) {
 }
 
 describe("Nav destinations", () => {
-  it("renders all six destinations as real links, never as fake tabs", () => {
+  it("renders the four transfer destinations as real links, never as fake tabs", () => {
     const links = tabs();
-    expect(links.length).toBe(6);
+    expect(links.length).toBe(4);
     // Device Inbox is a PRIMARY destination (PRD §12), so it sits in the rail
-    // with the other five rather than being reachable only from a device card.
+    // with the other three rather than being reachable only from a device card.
+    // /cli and /apps deliberately do NOT: they are not ways to move a file, and
+    // the row is the choice between the ways that are.
     expect(links.map((a) => new URL(a.href).pathname)).toEqual([
-      "/", CROSS_PATH, OFFLINE_PATH, DEVICE_INBOX_PATH, CLI_PATH, APPS_PATH,
+      "/", CROSS_PATH, OFFLINE_PATH, DEVICE_INBOX_PATH,
     ]);
     for (const a of links) {
       expect(a.tagName).toBe("A");
@@ -104,20 +109,29 @@ describe("Nav destinations", () => {
   });
 
   it("still marks exactly one link current after a route change", () => {
+    navigate("cross");
+    flushSync();
+    expect(current().length).toBe(1);
+    expect(current()[0]).toBe(tabs()[1]);
+
     navigate("device-inbox");
     flushSync();
     expect(current().length).toBe(1);
     expect(current()[0]).toBe(tabs()[3]);
 
+    // Leaving the transfer destinations empties the rail's current marker and
+    // moves it into the tools group — never both, and never neither.
     navigate("cli");
     flushSync();
-    expect(current().length).toBe(1);
-    expect(current()[0]).toBe(tabs()[4]);
+    expect(current().length).toBe(0);
+    expect(currentTool().length).toBe(1);
+    expect(currentTool()[0]).toBe(tools()[0]);
 
     navigate("apps");
     flushSync();
-    expect(current().length).toBe(1);
-    expect(current()[0]).toBe(tabs()[5]);
+    expect(current().length).toBe(0);
+    expect(currentTool().length).toBe(1);
+    expect(currentTool()[0]).toBe(tools()[1]);
   });
 
   // Every destination has to be operable from the keyboard, and Device Inbox is
@@ -147,22 +161,22 @@ describe("Nav destinations", () => {
     Object.defineProperty(rail, "scrollWidth", { configurable: true, value: 400 });
     Object.defineProperty(rail, "clientWidth", { configurable: true, value: 280 });
     spy.mockClear();
-    navigate("apps");
+    navigate("device-inbox");
     flushSync();
     expect(spy).toHaveBeenCalled();
-    expect(spy.mock.instances.at(-1)).toBe(tabs()[5]);
+    expect(spy.mock.instances.at(-1)).toBe(tabs()[3]);
     expect(spy.mock.calls.at(-1)![0]).toEqual({ block: "nearest", inline: "center" });
   });
 
-  // The case the route-change test cannot see: a reader who opens /cli directly
-  // arrives with the rail at scroll 0 and the active chip off the end of it, and
-  // there is no navigation afterwards to put it right. This is where the defect
-  // was actually reported — at 390px the CLI chip sat 20px PAST the rail's end
-  // edge on first paint.
+  // The case the route-change test cannot see: a reader who opens
+  // /device-inbox directly arrives with the rail at scroll 0 and the active
+  // chip off the end of it, and there is no navigation afterwards to put it
+  // right. This is where the defect was actually reported — at 390px the last
+  // chip sat 20px PAST the rail's end edge on first paint.
   it("reveals the active destination on a direct load, not only after a route change", () => {
     if (app) unmount(app);
     app = null;
-    history.pushState({}, "", CLI_PATH);
+    history.pushState({}, "", DEVICE_INBOX_PATH);
     syncRouteFromLocation();
 
     // The rail has to report overflow at the very first effect run, before any
@@ -177,7 +191,7 @@ describe("Nav destinations", () => {
       app = mount(Nav, { target });
       flushSync();
       expect(spy, "a direct load must reveal the active destination").toHaveBeenCalled();
-      expect(spy.mock.instances.at(-1)).toBe(tabs()[4]);
+      expect(spy.mock.instances.at(-1)).toBe(tabs()[3]);
       expect(spy.mock.calls.at(-1)![0]).toEqual({ block: "nearest", inline: "center" });
     } finally {
       Object.defineProperty(Element.prototype, "scrollWidth", sw);
@@ -191,26 +205,27 @@ describe("Nav destinations", () => {
     Object.defineProperty(rail, "scrollWidth", { configurable: true, value: 280 });
     Object.defineProperty(rail, "clientWidth", { configurable: true, value: 280 });
     spy.mockClear();
-    navigate("apps");
+    navigate("device-inbox");
     flushSync();
     expect(spy).not.toHaveBeenCalled();
   });
 });
 
-// Six primary destinations do not fit a 320px row in any language, so the row
+// Four primary destinations still do not fit a 320px row in either maintained
+// language — two of the four carry the longest labels in the set — so the row
 // scrolls. A fade at its edges tells a sighted swiper that there is more; these
 // controls are what tell everyone else, and what makes the hidden destinations
 // reachable without a horizontal-scroll gesture at all.
 describe("Nav rail overflow controls", () => {
   it("offers no controls while every destination already fits", () => {
-    layoutRail(0, 5, false);
+    layoutRail(0, 3, false);
     expect(railNav()).toBeNull();
     // …and the rail is not claiming an edge fade it does not need either.
     expect(target.querySelector(".tabs")!.classList.contains("overflowing")).toBe(false);
   });
 
   it("appears only once the row overflows, as two real buttons", () => {
-    layoutRail(0, 2);
+    layoutRail(0, 1);
     expect(railNav()).not.toBeNull();
     for (const btn of [prevBtn()!, nextBtn()!]) {
       expect(btn.tagName).toBe("BUTTON");
@@ -224,13 +239,13 @@ describe("Nav rail overflow controls", () => {
   });
 
   it("names both controls from the active locale, never from a hardcoded string", async () => {
-    layoutRail(0, 2);
+    layoutRail(0, 1);
     expect(prevBtn()!.getAttribute("aria-label")).toBe(messages.en.nav.railPrev);
     expect(nextBtn()!.getAttribute("aria-label")).toBe(messages.en.nav.railNext);
 
     await setLang("zh");
     flushSync();
-    layoutRail(0, 2);
+    layoutRail(0, 1);
     expect(prevBtn()!.getAttribute("aria-label")).toBe(messages.zh.nav.railPrev);
     expect(prevBtn()!.getAttribute("aria-label")).not.toBe(messages.en.nav.railPrev);
     await setLang("en");
@@ -238,27 +253,27 @@ describe("Nav rail overflow controls", () => {
   });
 
   it("disables the direction that has nothing left to reveal", () => {
-    layoutRail(0, 2);
+    layoutRail(0, 1);
     expect(prevBtn()!.disabled).toBe(true);
     expect(nextBtn()!.disabled).toBe(false);
 
-    layoutRail(2, 4);
+    layoutRail(1, 2);
     expect(prevBtn()!.disabled).toBe(false);
     expect(nextBtn()!.disabled).toBe(false);
 
-    layoutRail(3, 5);
+    layoutRail(2, 3);
     expect(prevBtn()!.disabled).toBe(false);
     expect(nextBtn()!.disabled).toBe(true);
   });
 
   it("reveals the next hidden destination in reading order, and the previous one going back", () => {
     const spy = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
-    layoutRail(2, 4);
+    layoutRail(1, 2);
 
     spy.mockClear();
     nextBtn()!.click();
     flushSync();
-    expect(spy.mock.instances.at(-1)).toBe(tabs()[5]);
+    expect(spy.mock.instances.at(-1)).toBe(tabs()[3]);
     // Centre, not "nearest". The rail snaps its chips on their centres, so a
     // minimal scroll is undone by proximity snapping and the control pages once
     // and then freezes — reproduced in Chrome at 320px before this was fixed.
@@ -267,7 +282,7 @@ describe("Nav rail overflow controls", () => {
     spy.mockClear();
     prevBtn()!.click();
     flushSync();
-    expect(spy.mock.instances.at(-1)).toBe(tabs()[1]);
+    expect(spy.mock.instances.at(-1)).toBe(tabs()[0]);
   });
 
   // The route reveal used to ask for the MINIMAL scroll here, on the reasoning
@@ -282,9 +297,9 @@ describe("Nav rail overflow controls", () => {
   // them lands where it was aimed.
   it("reveals a route with the same snap-compatible alignment the controls use", () => {
     const spy = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
-    layoutRail(0, 2);
+    layoutRail(0, 1);
     spy.mockClear();
-    navigate("apps");
+    navigate("device-inbox");
     flushSync();
     expect(spy.mock.calls.at(-1)![0]).toEqual({ block: "nearest", inline: "center" });
 
@@ -301,18 +316,18 @@ describe("Nav rail overflow controls", () => {
   it("fades only the edges that are actually hiding a destination", () => {
     const railEl = () => target.querySelector(".tabs")!;
 
-    // Scrolled to the start: nothing before, three destinations after.
-    layoutRail(0, 2);
+    // Scrolled to the start: nothing before, destinations after.
+    layoutRail(0, 1);
     expect(railEl().classList.contains("fade-left")).toBe(false);
     expect(railEl().classList.contains("fade-right")).toBe(true);
 
     // Mid-row: hiding destinations on both sides.
-    layoutRail(2, 4);
+    layoutRail(1, 2);
     expect(railEl().classList.contains("fade-left")).toBe(true);
     expect(railEl().classList.contains("fade-right")).toBe(true);
 
     // Scrolled to the end: nothing after it to promise.
-    layoutRail(3, 5);
+    layoutRail(2, 3);
     expect(railEl().classList.contains("fade-left")).toBe(true);
     expect(railEl().classList.contains("fade-right")).toBe(false);
   });
@@ -323,7 +338,7 @@ describe("Nav rail overflow controls", () => {
   // ended 5.4px inside a 16px fade at both 320 and 390px, and `/` (LAN) sat 5px
   // inside the start fade at every width.
   it("leaves a rail with nothing hidden on either side completely unfaded", () => {
-    layoutRail(0, 5, false);
+    layoutRail(0, 3, false);
     const rail = target.querySelector(".tabs")!;
     expect(rail.classList.contains("overflowing")).toBe(false);
     expect(rail.classList.contains("fade-left")).toBe(false);
@@ -369,7 +384,7 @@ describe("Nav rail overflow controls", () => {
   // rtl-head-isolation.test.mjs for the archived Arabic pages, where RTL
   // rendering is still live and still asserted end to end.
   it("still derives the glyph flip from dir(), not from a hardcoded direction", () => {
-    layoutRail(2, 4);
+    layoutRail(1, 2);
     expect(prevBtn()!.classList.contains("flip")).toBe(true);
     expect(nextBtn()!.classList.contains("flip")).toBe(false);
 
@@ -389,25 +404,94 @@ describe("Nav rail overflow controls", () => {
     // The behaviour the Arabic case shared: prev/next mean the same two
     // destinations regardless of which glyph is flipped.
     const spy = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
-    layoutRail(2, 4);
+    layoutRail(1, 2);
 
     spy.mockClear();
     nextBtn()!.click();
     flushSync();
-    expect(spy.mock.instances.at(-1)).toBe(tabs()[5]);
+    expect(spy.mock.instances.at(-1)).toBe(tabs()[3]);
 
     spy.mockClear();
     prevBtn()!.click();
     flushSync();
-    expect(spy.mock.instances.at(-1)).toBe(tabs()[1]);
+    expect(spy.mock.instances.at(-1)).toBe(tabs()[0]);
   });
 
-  it("still renders all six destinations as links while the controls are up", () => {
-    layoutRail(1, 3);
+  it("still renders all four destinations as links while the controls are up", () => {
+    layoutRail(1, 2);
     // The controls page the row; they never replace, collapse or hide a
     // destination behind a menu.
-    expect(tabs().length).toBe(6);
+    expect(tabs().length).toBe(4);
     expect(tabs().every((a) => a.getAttribute("href"))).toBe(true);
+  });
+});
+
+// The two links that are NOT ways to move a file. They were the fifth and sixth
+// pills in the destination row, dressed exactly like the four that are, so the
+// row answered "how do I send this?" with two entries that answer "what can I
+// install?". They moved into their own named landmark — and the whole risk of
+// that move is that a secondary group becomes a group nobody can reach, or one
+// that cannot say it is the page you are on.
+describe("Nav downloads and tools", () => {
+  it("is a second, separately named navigation landmark", () => {
+    const primary = target.querySelector("nav.topnav")!;
+    const secondary = target.querySelector("nav.tools")!;
+    expect(secondary).not.toBeNull();
+    // Two landmarks of the same role are indistinguishable in a screen reader's
+    // landmark list unless both are named, and named in the reader's language.
+    expect(primary.getAttribute("aria-label")).toBe(messages.en.nav.primaryLabel);
+    expect(secondary.getAttribute("aria-label")).toBe(messages.en.nav.toolsLabel);
+    expect(secondary.getAttribute("aria-label")).not.toBe(primary.getAttribute("aria-label"));
+  });
+
+  it("names itself from the active locale, never from a hardcoded string", async () => {
+    await setLang("zh");
+    flushSync();
+    expect(target.querySelector("nav.tools")!.getAttribute("aria-label"))
+      .toBe(messages.zh.nav.toolsLabel);
+    await setLang("en");
+    flushSync();
+  });
+
+  it("keeps both hrefs, as real anchors that are reachable from the keyboard", () => {
+    const links = tools();
+    expect(links.length).toBe(2);
+    expect(links.map((a) => new URL(a.href).pathname)).toEqual([CLI_PATH, APPS_PATH]);
+    for (const a of links) {
+      expect(a.tagName).toBe("A");
+      expect(a.getAttribute("role")).toBeNull();
+      // No tabindex needed and none wanted: a real anchor with an href already
+      // takes focus in DOM order, which is the only version of this that cannot
+      // be broken by a later style change.
+      expect(a.tabIndex).toBe(0);
+      expect(a.textContent!.trim()).not.toBe("");
+    }
+  });
+
+  it("marks the current tools page on a DIRECT load, with nothing to open first", () => {
+    // The case a menu or a popover gets wrong. Somebody arriving at /cli from a
+    // search result never opens anything, so a current-page marker that lives
+    // inside a collapsed container is a marker they never see. There is no
+    // container: the links are always rendered and always carry their state.
+    for (const [path, index] of [[CLI_PATH, 0], [APPS_PATH, 1]] as const) {
+      if (app) unmount(app);
+      history.pushState({}, "", path);
+      syncRouteFromLocation();
+      app = mount(Nav, { target });
+      flushSync();
+      expect(currentTool().length, path).toBe(1);
+      expect(currentTool()[0], path).toBe(tools()[index]);
+      expect(tools()[index].getAttribute("aria-current"), path).toBe("page");
+      // …and the transfer rail claims nothing while the reader is not on one.
+      expect(current().length, path).toBe(0);
+    }
+  });
+
+  it("navigates on a click, exactly as a destination does", () => {
+    tools()[1].click();
+    flushSync();
+    expect(location.pathname).toBe(APPS_PATH);
+    expect(currentTool()[0]).toBe(tools()[1]);
   });
 });
 

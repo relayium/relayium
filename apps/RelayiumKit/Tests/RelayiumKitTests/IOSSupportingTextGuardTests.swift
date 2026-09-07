@@ -408,14 +408,24 @@ final class IOSSupportingTextGuardTests: XCTestCase {
             supporting += code.components(separatedBy: "Palette.supportingLabel").count - 1
             warning += code.components(separatedBy: "Palette.warningLabel").count - 1
         }
-        // 119 in the app and 2 in the Share extension. The declarations
+        // 118 in the app and 2 in the Share extension. The declarations
         // themselves are not counted: `DesignTokens` spells the property name
         // without the `Palette.` prefix, which is what makes this a count of
         // USES rather than of mentions.
-        XCTAssertEqual(supporting, 121,
-                       "the supporting role should reach every one of the 120 sentences the "
-                       + "audit counted across both targets, plus the disclosure tint that "
-                       + "draws a 121st")
+        //
+        // A count is a proxy for "the prose is still there and still styled",
+        // and it moves when a refactor changes how many modifiers cover the same
+        // sentences. Both moves here are that: extracting
+        // `VerificationSettingCard` merged four per-`Text` modifiers on the two
+        // `verify.explain*` paragraphs into one on their `VStack` plus that
+        // card's disclosure tint, and `SendView.ready` gained the purpose
+        // sentence the iPad sidebar stopped printing. What a deletion could not
+        // pass is the by-key coverage in `IOSSurfaceGuardTests`:
+        // `testTheVerificationSettingIsVisibleAndIsTheSharedPreference` and
+        // `testTheIPadSidebarNamesDestinationsAndKeepsTheirPurposeAsAHint`.
+        XCTAssertEqual(supporting, 120,
+                       "the supporting role should reach every one of the sentences the "
+                       + "audit counted across both targets, plus the two disclosure tints")
         // The over-limit byte counter, the not-sent label, and the three
         // `exclamationmark.triangle.fill` symbols that accompany them.
         XCTAssertEqual(warning, 5,

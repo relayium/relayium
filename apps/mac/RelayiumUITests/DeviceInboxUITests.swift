@@ -1396,11 +1396,11 @@ final class DeviceInboxUITests: XCTestCase {
 
         // Away, into a live pairing, and back. This is the whole reproduction:
         // the destination on the right is rebuilt, the send model is not.
-        sidebarRow("crossNetworkTransfer", named: "Cross-network Transfer",
+        sidebarRow("crossNetworkTransfer", named: "Pairing Transfer",
                    in: window).click()
         XCTAssertTrue(element("destination-crossNetworkTransfer", in: window)
             .waitForExistence(timeout: 20),
-                      "the sidebar did not reach Cross-network Transfer")
+                      "the sidebar did not reach Pairing Transfer")
         sidebarRow("deviceInbox", named: "Device Inbox", in: window).click()
         XCTAssertTrue(element("destination-deviceInbox", in: window)
             .waitForExistence(timeout: 20),

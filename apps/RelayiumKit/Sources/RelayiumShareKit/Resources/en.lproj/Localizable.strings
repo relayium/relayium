@@ -102,22 +102,22 @@
 "content.reactivate" = "Reactivate on relayium.com";
 "content.backToSignIn" = "Back to sign in";
 "tab.receive" = "Receive";
-"tab.send" = "Send";
+"tab.send" = "Share Link";
 "tab.account" = "Account";
-"tab.direct" = "Direct";
+"tab.direct" = "Pairing";
 "tab.deviceInbox" = "Inbox";
 
 /* MARK: navigation sidebar */
-"nav.sectionDirect" = "Direct";
+"nav.sectionDirect" = "Live transfers";
 "nav.sectionLinks" = "Links";
 "nav.sectionDevice" = "This Mac";
 "nav.nearby" = "Nearby";
 "nav.pairingCodeSubtitle" = "Text and small files across networks — both sides online";
 "nav.lanTransfer" = "LAN Transfer";
 "nav.lanTransferSubtitle" = "Messages and files with a device on this network — no account; both sides online";
-"nav.crossNetwork" = "Cross-network Transfer";
+"nav.crossNetwork" = "Pairing Transfer";
 "nav.crossNetworkSubtitle" = "Messages and files with a device anywhere, using a six-digit code — same network not required; both sides online";
-"nav.storedSend" = "Send a link";
+"nav.storedSend" = "Share a link";
 "nav.storedSendSubtitle" = "Large files, picked up later — sign in; plan limits apply";
 "nav.storedReceive" = "Open a link";
 "nav.deviceInboxSubtitle" = "Files from your own account land in a folder you choose — sign in; works with the window closed";
@@ -163,6 +163,7 @@
 "verify.toggle" = "Compare verification codes with the other device";
 "verify.explainWhat" = "Off by default. When on, both devices show the same six-digit verification code (SAS) before anything moves; comparing it out loud detects a substituted signalling endpoint. It is not the pairing code you typed in, and it only detects anything if someone actually compares the two.";
 "verify.explainEncryption" = "This changes what is shown and what stops for confirmation — never the encryption. Keys are generated on this device and never sent to Relayium, the relay carries only ciphertext, and a tampered handshake always fails.";
+"verify.howItWorks" = "How verification codes work";
 
 /* MARK: single-session presence */
 "presence.busyTitle" = "This session is shown elsewhere";
@@ -339,7 +340,7 @@
 /* MARK: nearby pane */
 "nearby.explain" = "Devices running Relayium — the app or relayium.com — that reach the internet from the same public address as this device. Usually that means your Wi-Fi, but a carrier or VPN gateway can put strangers' devices on the list too. Relayium never scans your network; it asks its rendezvous service who else arrives from that address.";
 "nearby.safetySummary" = "Devices running Relayium at the same public address as this device. On a carrier, VPN or shared gateway that address can include strangers, so choose who you send to.";
-"nearby.howItWorks" = "How this list works";
+"nearby.howItWorks" = "How nearby transfer works";
 "nearby.lookAgain" = "Look again";
 "nearby.startReceiving" = "Start receiving";
 "nearby.resumeReceiving" = "Resume receiving";
@@ -379,7 +380,7 @@
 /* MARK: nearby pane, the iOS transport — Bonjour on the local link, not the
    code-less rendezvous room the six shared sentences above describe. English
    and Simplified Chinese only; the frozen locales fall back to this file. */
-"nearby.iosSafetySummary" = "Devices running the Relayium app on the same local network as this device. On a shared network — a café, a hotel, an office — that can include strangers' devices, so choose who you send to.";
+"nearby.iosSafetySummary" = "Devices on your local network running Relayium. A shared network can include strangers — choose who you send to.";
 "nearby.iosExplain" = "Relayium looks for one Bonjour service, _relayium._tcp, on the local network this device has joined, and publishes the same service while receiving is on. It does not scan addresses, read anything else about the network, or ask anything outside this network who is nearby. Only devices running the Relayium app can appear here — a web browser cannot. On a shared network such as a café, hotel or office, the devices that answer can belong to strangers.";
 "nearby.iosEmptyRoster" = "No other devices yet. Open the Relayium app on the other device, connected to this same network, and leave it open.";
 "nearby.iosListeningBody" = "While this app is open, a device on this network can send files or start a message session without asking first. Anything on this network running Relayium can try — pause receiving if that is not what you want.";
