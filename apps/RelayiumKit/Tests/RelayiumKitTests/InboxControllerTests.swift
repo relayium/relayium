@@ -766,7 +766,41 @@ final class InboxControllerTests: XCTestCase {
                         "a failed answer was not reported")
         XCTAssertEqual(harness.controller.asking.map(\.id), ["held1"],
                        "a question this Mac failed to answer was dropped anyway")
+        // The restored question and the failure have to be rendered together,
+        // and `source` is what the two surfaces route on to do it: this refusal
+        // came from Accept/Decline, not from any configuration control, so a
+        // surface that files it with the settings puts it below everything
+        // while the buttons that retry it are back at the top.
+        XCTAssertEqual(try XCTUnwrap(harness.controller.settingsError).source, .pendingAnswer)
+
+        // And pressing the restored button clears it before retrying, so the
+        // recovery is the control itself rather than a separate dismiss.
+        transport.acceptResult = .success(InboxTask(id: "held1", state: .queued))
+        harness.controller.respond(toAsk: "held1", accept: true)
+        XCTAssertNil(harness.controller.settingsError,
+                     "the stale refusal outlived the retry that replaced it")
         harness.controller.signedOut()
+    }
+
+    /// Every settings error names the control that produced it. A new case that
+    /// defaulted into `configuration` would render three sections away from the
+    /// button the user pressed, which is the defect `source` exists to prevent —
+    /// so this is exhaustive over `allCases` rather than a spot check.
+    func testEverySettingsErrorNamesTheControlThatProducedIt() {
+        XCTAssertEqual(InboxSettingsError.askResponseFailed.source, .pendingAnswer)
+        XCTAssertEqual(InboxSettingsError.notificationSettingsUnavailable.source,
+                       .notificationAccess)
+        for error in InboxSettingsError.allCases
+        where error != .askResponseFailed && error != .notificationSettingsUnavailable {
+            XCTAssertEqual(error.source, .configuration,
+                           "\(error.rawValue) is not a configuration control's refusal")
+        }
+        // Nothing is unroutable: every source is claimed by at least one error,
+        // so a surface that renders one branch renders something real.
+        for source in InboxSettingsErrorSource.allCases {
+            XCTAssertTrue(InboxSettingsError.allCases.contains { $0.source == source },
+                          "no error routes to \(source)")
+        }
     }
 
     // MARK: - backoff, wake and recovery

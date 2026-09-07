@@ -304,18 +304,24 @@ final class DeviceInboxAcceptanceUITests: XCTestCase {
     /// resolve the same way.
     private func requireSignedInDeviceInbox(in app: XCUIApplication) throws {
         open(Shell.deviceInbox, in: app)
+        // The consent's own row, not the picker: the picker lives inside a
+        // disclosure that is closed for an account that has already answered,
+        // which is the state this acceptance session is normally in. The row is
+        // rendered in every configured state, so it is what says "the surface
+        // came up with a usable account".
+        let settings = app.descendants(matching: .any)[A11y.settingsRow].firstMatch
         let policy = app.descendants(matching: .any)[A11y.policy].firstMatch
         let account = app.buttons[A11y.openAccount].firstMatch
         let deadline = Date().addingTimeInterval(Budget.establish)
         while Date() < deadline {
-            if policy.exists { return }
+            if policy.exists || settings.exists { return }
             if account.exists {
                 throw XCTSkip("""
                     This device holds no usable signed-in session, and this harness \
                     will not inject one. SIGN IN BY HAND: open Relayium on this \
                     device, go to Account, sign in to the shared acceptance account \
                     (resolving any verify/frozen state the Account screen shows), \
-                    return to Device Inbox, confirm the Receiving control is drawn, \
+                    return to Device Inbox, confirm the Receiving row is drawn, \
                     then rerun. No credential may be passed to this runner or the app.
                     """)
             }
@@ -333,7 +339,11 @@ final class DeviceInboxAcceptanceUITests: XCTestCase {
     /// the automatic answer is chosen by adjusting the wheel and proved by
     /// reading the wheel's own value back — the setter, not the layout.
     private func setReceivePolicyAutomatic(in app: XCUIApplication) {
-        let policy = app.descendants(matching: .any)[A11y.policy].firstMatch
+        // Open the disclosure first: a session that already answered arrives
+        // with the control collapsed, and the row that opens it may itself be
+        // below the fold.
+        scrollUntilHittable(app.descendants(matching: .any)[A11y.settingsRow].firstMatch, in: app)
+        let policy = revealReceivingConsent(in: app)
         scrollUntilHittable(policy, in: app)
         let wheel = policy.pickerWheels.firstMatch
         XCTAssertTrue(wheel.waitForExistence(timeout: Budget.settle),
@@ -697,6 +707,8 @@ final class DeviceInboxAcceptanceUITests: XCTestCase {
     /// Stable identifiers the product stamps, shared with the offline suites.
     private enum A11y {
         static let policy = "inbox-policy"
+        /// The row that opens the consent. Present whether or not it is open.
+        static let settingsRow = "inbox-settings-disclosure"
         static let status = "inbox-status"
         static let openAccount = "inbox-open-account"
         static let refreshDevices = "inbox-devices-refresh"

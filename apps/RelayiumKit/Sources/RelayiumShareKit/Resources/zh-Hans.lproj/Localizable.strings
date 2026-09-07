@@ -101,22 +101,22 @@
 "content.reactivate" = "在 relayium.com 重新激活";
 "content.backToSignIn" = "返回登录";
 "tab.receive" = "接收";
-"tab.send" = "发送";
+"tab.send" = "分享链接";
 "tab.account" = "账户";
-"tab.direct" = "直连";
+"tab.direct" = "配对";
 "tab.deviceInbox" = "收件箱";
 
 /* MARK: 导航侧栏 */
-"nav.sectionDirect" = "直连";
+"nav.sectionDirect" = "实时传输";
 "nav.sectionLinks" = "链接";
 "nav.sectionDevice" = "这台 Mac";
 "nav.nearby" = "附近设备";
 "nav.pairingCodeSubtitle" = "跨网络发送文本和小文件——双方须同时在线";
 "nav.lanTransfer" = "局域网传输";
 "nav.lanTransferSubtitle" = "与同一网络内的设备互传消息和文件——无需账户；双方须同时在线";
-"nav.crossNetwork" = "跨网络传输";
+"nav.crossNetwork" = "配对传输";
 "nav.crossNetworkSubtitle" = "用六位配对码与任意位置的设备互传消息和文件——不要求同一网络；双方须同时在线";
-"nav.storedSend" = "发送链接";
+"nav.storedSend" = "分享链接";
 "nav.storedSendSubtitle" = "大文件，稍后再取——需登录，受套餐限制";
 "nav.storedReceive" = "打开链接";
 "nav.deviceInboxSubtitle" = "来自你自己账户的文件会送到你选定的文件夹——需要登录；关闭窗口也能接收";
@@ -162,6 +162,7 @@
 "verify.toggle" = "与对方设备核对验证码";
 "verify.explainWhat" = "默认关闭。开启后，双方设备会在任何数据传输之前显示同一个六位验证码（SAS）；口头核对它可以发现被替换的信令端点。它不是你输入的配对码，而且只有真的有人去核对，它才起作用。";
 "verify.explainEncryption" = "这只改变显示什么、以及在哪里停下来等你确认 — 从不改变加密本身。密钥在这台设备上生成、绝不发送给 Relayium，中继只承载密文，被篡改的握手一定会失败。";
+"verify.howItWorks" = "验证码是怎么回事";
 
 /* MARK: single-session presence */
 "presence.busyTitle" = "该会话显示在别处";
@@ -335,7 +336,7 @@
 /* MARK: 附近设备 */
 "nearby.explain" = "正在运行 Relayium（应用或 relayium.com）、并且与这台设备从同一个公网地址访问互联网的设备。通常这意味着你的 Wi-Fi，但运营商或 VPN 网关也可能把陌生人的设备放进这个列表。Relayium 从不扫描你的网络；它只是向自己的会合服务询问还有谁来自那个地址。";
 "nearby.safetySummary" = "与这台设备处于同一公网地址、并且正在运行 Relayium 的设备。在运营商、VPN 或共用网关下，这个地址里也可能有陌生人，所以请自己决定发给谁。";
-"nearby.howItWorks" = "这个列表是怎么来的";
+"nearby.howItWorks" = "附近传输是怎么工作的";
 "nearby.lookAgain" = "重新查找";
 "nearby.startReceiving" = "开始接收";
 "nearby.resumeReceiving" = "恢复接收";
@@ -373,7 +374,7 @@
 "nearby.noAccountNeeded" = "在这个网络上发送和接收都不需要账户。";
 
 /* MARK: nearby pane, the iOS transport */
-"nearby.iosSafetySummary" = "与本设备处于同一本地网络、并且运行着 Relayium 应用的设备。在咖啡馆、酒店、办公室这类共用网络上，其中可能包含陌生人的设备，所以请自己挑选发给谁。";
+"nearby.iosSafetySummary" = "同一本地网络上运行 Relayium 的设备。共用网络上可能有陌生人的设备，请自己挑选发给谁。";
 "nearby.iosExplain" = "Relayium 只在本设备已加入的本地网络上查找一个 Bonjour 服务 _relayium._tcp，并在开启接收时发布同一个服务。它不扫描地址，不读取该网络的其他任何信息，也不向这个网络之外的任何地方询问附近有谁。只有运行 Relayium 应用的设备才会出现在这里——网页浏览器不会。在咖啡馆、酒店、办公室这类共用网络上，应答的设备可能属于陌生人。";
 "nearby.iosEmptyRoster" = "还没有其他设备。请在对方设备上打开 Relayium 应用，连接到同一个网络，并让它保持打开。";
 "nearby.iosListeningBody" = "只要本应用处于打开状态，这个网络上的设备无需先征求同意就可以向本设备发送文件或发起消息会话。这个网络上任何运行 Relayium 的设备都可以尝试——如果这不是你想要的，请暂停接收。";

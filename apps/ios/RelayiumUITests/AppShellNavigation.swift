@@ -54,8 +54,8 @@ enum Shell {
     }
 
     static let lanTransfer = Surface(id: "lanTransfer", title: "Nearby")
-    static let crossNetworkTransfer = Surface(id: "crossNetworkTransfer", title: "Direct")
-    static let storedSend = Surface(id: "storedSend", title: "Send files")
+    static let crossNetworkTransfer = Surface(id: "crossNetworkTransfer", title: "Pairing")
+    static let storedSend = Surface(id: "storedSend", title: "Share a link")
     static let deviceInbox = Surface(id: "deviceInbox", title: "Device Inbox")
     static let account = Surface(id: "account", title: "Account")
 
@@ -74,7 +74,12 @@ enum Shell {
     /// It is reached by being presented — a verified Universal Link, a
     /// stored-file row in Account, or the acceptance seam that starts a launch
     /// on it — never by browsing to it, which is why it has no identifier here.
-    static let storedReceiveTitle = "Receive files"
+    ///
+    /// The screen's own `navigationTitle` is `nav.storedReceive`, the same name
+    /// the shell uses for the surface. It was `upload`/`download.heading` until
+    /// the destinations were renamed, and this literal is what the largest-text
+    /// test resolves the presented sheet by.
+    static let storedReceiveTitle = "Open a link"
 
     /// Which shell is drawn. Resolved from what actually rendered rather than
     /// from `UIDevice.userInterfaceIdiom`, because the app decides on the
@@ -242,5 +247,32 @@ extension XCTestCase {
                       "the stored-link screen rendered without the explicit dismissal "
                       + "that a presented sheet owes a VoiceOver user",
                       file: file, line: line)
+    }
+
+    /// The Device Inbox receiving consent, with its disclosure opened first.
+    ///
+    /// The control is inside a `DisclosureGroup` that starts open only while the
+    /// stored policy is still `Off`. A CONFIGURED account therefore arrives with
+    /// it closed and `inbox-policy` genuinely absent from the tree — so a test
+    /// that wants the picker has to open the row rather than wait for something
+    /// that will never appear. Idempotent: already-open is a no-op.
+    ///
+    /// Returns the picker so callers can drive its wheel.
+    @discardableResult
+    func revealReceivingConsent(in app: XCUIApplication,
+                                timeout: TimeInterval = 20,
+                                file: StaticString = #filePath,
+                                line: UInt = #line) -> XCUIElement {
+        let policy = app.descendants(matching: .any)["inbox-policy"].firstMatch
+        if policy.waitForExistence(timeout: 3) { return policy }
+        let row = app.descendants(matching: .any)["inbox-settings-disclosure"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: timeout),
+                      "the Device Inbox offers neither the receiving consent nor the row "
+                      + "that opens it", file: file, line: line)
+        row.tap()
+        XCTAssertTrue(policy.waitForExistence(timeout: timeout),
+                      "opening the receiving-consent row did not reveal its control",
+                      file: file, line: line)
+        return policy
     }
 }

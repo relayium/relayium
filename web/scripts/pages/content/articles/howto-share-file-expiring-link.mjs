@@ -35,7 +35,7 @@ const en = {
       body: ["Creating a link takes a few steps, all in the browser:"],
       steps: [
         {
-          text: "Open the async transfer page and sign in. Only the sender needs an account; the recipient never will.",
+          text: "Open the Share a link page and sign in. Only the sender needs an account; the recipient never will.",
           code: ["https://relayium.com/offline-transfer"],
         },
         {
@@ -175,7 +175,7 @@ const zh = {
       body: ["创建链接只需要在浏览器里走几步："],
       steps: [
         {
-          text: "打开异步传输页面并登录。只有发送方需要账号，收件人始终不需要。",
+          text: "打开「分享链接」页面并登录。只有发送方需要账号，收件人始终不需要。",
           code: ["https://relayium.com/offline-transfer"],
         },
         {

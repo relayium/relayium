@@ -493,7 +493,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the runtime check does not confirm the LAN pane kept the fact")
         XCTAssertTrue(runtime.contains("NSPredicate(format: \"title == %@\", destination)"),
                       "the absence is asserted before the destination is on screen")
-        XCTAssertTrue(runtime.contains("\"Cross-network Transfer\""),
+        XCTAssertTrue(runtime.contains("\"Pairing Transfer\""),
                       "the sibling destination is not among the checked absences")
     }
 
@@ -6287,7 +6287,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         let apps = flattened(try claimSurfaceText("apps/README.md"))
         XCTAssertTrue(apps.contains("LAN Transfer"),
                       "apps/README.md does not name the same-network destination")
-        XCTAssertTrue(apps.contains("Cross-network Transfer"),
+        XCTAssertTrue(apps.contains("Pairing Transfer"),
                       "apps/README.md does not name the pairing-code destination")
         XCTAssertFalse(apps.contains("Open a link, Device Inbox"),
                        "apps/README.md still lists Open a link as a sidebar row")

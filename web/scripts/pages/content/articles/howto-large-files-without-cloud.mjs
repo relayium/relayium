@@ -56,7 +56,7 @@ const en = {
       ],
       steps: [
         {
-          text: "Open the async transfer page and sign in.",
+          text: "Open the Share a link page and sign in.",
           code: ["https://relayium.com/offline-transfer"],
         },
         {
@@ -192,7 +192,7 @@ const zh = {
       ],
       steps: [
         {
-          text: "打开异步传输页面并登录。",
+          text: "打开「分享链接」页面并登录。",
           code: ["https://relayium.com/offline-transfer"],
         },
         {

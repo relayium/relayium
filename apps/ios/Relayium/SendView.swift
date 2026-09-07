@@ -78,7 +78,13 @@ struct SendView: View {
                 // centred ragged column is unreadable.
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .navigationTitle(L10n.t(.uploadHeading))
+            // The DESTINATION's name, not the action inside it. `upload.heading`
+            // ("Send files") titles the card below and the progress line, and
+            // titling the screen with it too made the one surface a person
+            // navigates to disagree with the tab and sidebar row that opened it
+            // — `RootView.title(for:)` already answers `nav.storedSend` for this
+            // surface. One name per destination, and this is where it belongs.
+            .navigationTitle(L10n.t(.navStoredSend))
         }
         // Re-read on arrival. A draft can be staged while this tab is off screen
         // — that is the normal case, since the user was in another app — and
@@ -193,11 +199,20 @@ struct SendView: View {
     /// The signed-in screen: one card, one product.
     ///
     /// **One untitled card, and the rail is the title.** A card here could only
-    /// be titled "Send files" or "As a link", and the first is already the
-    /// navigation title — the exact repetition the Mac's second audit found and
+    /// be titled with the destination's own name, which the navigation bar has
+    /// just said — the exact repetition the Mac's second audit found and
     /// removed. What the card needed instead was a statement of where the bytes
     /// go, which is what the rail is: three stops, no new claim, and a real
     /// position along them read from `upload.state`.
+    ///
+    /// **And what this destination is FOR, in one sentence.** It is the same
+    /// `nav.storedSendSubtitle` the tab bar and the iPad sidebar carry as the
+    /// row's accessibility hint, and it is here because that is the other half
+    /// of taking the visible subtitle off the sidebar row: the purpose belongs
+    /// on the destination the reader selected, not printed five times over on
+    /// the way in. It is also the only place the two things a person needs
+    /// before choosing this route — picked up later, and plan limits apply —
+    /// are stated to a sighted user at all.
     ///
     /// The outstanding-delivery list that used to sit below this is gone from
     /// here, and its absence is not a transfer left unwatched: it renders in the
@@ -207,6 +222,10 @@ struct SendView: View {
     private var ready: some View {
         SectionCard {
             PathRail(stops: PathRailPresentation.iosStoredSend(upload.state))
+            Text(L10n.t(.navStoredSendSubtitle))
+                .font(.footnote)
+                .foregroundStyle(Palette.supportingLabel)
+                .fixedSize(horizontal: false, vertical: true)
             flow
         }
     }

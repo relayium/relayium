@@ -727,27 +727,12 @@ struct DirectView: View {
     /// the second says what it does not change. Locked while a session is live,
     /// because the models read the preference when the SAS arrives and flipping
     /// it mid-handshake would make the gate depend on timing.
+    /// The shared card, not a second copy of the Nearby tab's. The two bodies
+    /// were byte-identical over one app-scoped preference, which is precisely
+    /// the shape where a hierarchy change lands on one screen and not the
+    /// other. See `VerificationSettingCard`.
     private var verificationSetting: some View {
-        // In a card, untitled — the toggle's own label is the title, and the two
-        // paragraphs under it are what it does and what it does NOT change. The
-        // identical treatment the Nearby tab gives the identical control: left
-        // loose at the bottom of the screen it was a wall of grey with no
-        // boundary, which is how a setting starts reading as a footer.
-        SectionCard {
-            Toggle(L10n.t(.verifyToggle), isOn: Binding(
-                get: { verification.requiresSASConfirmation },
-                set: { if !isLocked { verification.requiresSASConfirmation = $0 } }
-            ))
-                .disabled(isLocked)
-            Text(L10n.t(.verifyExplainWhat))
-                .font(.footnote)
-                .foregroundStyle(Palette.supportingLabel)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(L10n.t(.verifyExplainEncryption))
-                .font(.footnote)
-                .foregroundStyle(Palette.supportingLabel)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+        VerificationSettingCard(isLocked: isLocked)
     }
 
     /// A failure line. The icon carries the label rather than sitting beside an
