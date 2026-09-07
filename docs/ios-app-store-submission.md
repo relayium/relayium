@@ -107,16 +107,41 @@ purchase is accepted, not a conclusion this document may assert on its own.
 2026-09-01, and it is prepared from the cross-platform navigation work accepted
 on 2026-09-07 at exact product `main` commit
 `97ef6b94e562281e61bb5c9940250648afb21976`. It is what
-`apps/ios/Relayium.xcodeproj` builds; it is not an uploaded build, not a
-TestFlight candidate and not a release. Nothing has been archived from it, and
-preparing it authorizes no upload.
+`apps/ios/Relayium.xcodeproj` builds. **It has since been archived, uploaded and
+accepted into internal TestFlight** — see the checkpoint immediately below. It
+is not a submission and not a release.
 
-**Its two predecessors are both spent.** An authenticated App Store Connect API
-read-back of this record on **2026-09-07T08:40:12Z** returned `0.3.1 (5)` and
-`0.3.1 (6)` as uploaded builds in `VALID` processing state, so 6 — not 5 — is
-the highest number this record is known to have consumed on its iOS platform,
-and 7 is the next free one. The paragraphs below describe why each predecessor
-was consumed; neither may be rebuilt or re-uploaded.
+#### Delivery checkpoint — `0.3.1 (7)` on internal TestFlight, 2026-09-07
+
+- **Signed source:** `f7a7c00a61ab7467825d7488865367346bac3f59`. That commit is
+  what was signed; later documentation commits, including this one, do not
+  change the bytes and do not move the source SHA.
+- **Artifact:** `test-builds/ios/0.3.1-7-cached-f7a7c00a`, IPA SHA-256
+  `fbdc6200477f2e1c5f1592a107131afa476ec0c088d28eb00f6797630283b1c8`.
+- **Upload:** `SUCCEEDED`, delivery `5254bd55-c3cd-49a2-bc30-e461bea28bc0`;
+  Apple processing `VALID`.
+- **Export compliance:** answered at upload with non-exempt encryption
+  **false**.
+- **TestFlight:** `IN_BETA_TESTING`, attached to the existing internal group
+  **Relayium Internal** only, assignment verified. No external group is
+  attached; external state remains `READY_FOR_BETA_SUBMISSION` and no beta
+  review was requested.
+- **Test information:** the bilingual *What to Test* below is entered on this
+  build, `en-US` and `zh-Hans` both verified on the record.
+- **Build `7` is now consumed.** It may not be rebuilt or re-uploaded under any
+  version. The next archive needs a number strictly above `7`, from a fresh
+  read-back.
+- **Unchanged by this delivery:** the App Store version still reads `0.3.1` in
+  *Prepare for Submission* and still selects `0.3.1 (6)`; no submission, no
+  release, and no App Store metadata or screenshot edit.
+
+**Its two predecessors were both spent before it.** An authenticated App Store
+Connect API read-back of this record on **2026-09-07T08:40:12Z** — a
+preparation-time snapshot, taken before the upload above — returned
+`0.3.1 (5)` and `0.3.1 (6)` as uploaded builds in `VALID` processing state, so 6
+was then the highest number this record was known to have consumed on its iOS
+platform, which is where build 7 came from. The paragraphs below describe why
+each predecessor was consumed; neither may be rebuilt or re-uploaded.
 
 **Build `5` is spent, and it is spent on a rejected candidate.** It was
 archived, uploaded to this record on 2026-09-05 and completed Apple's
@@ -339,8 +364,9 @@ observation this record has: it enumerated the uploaded builds directly rather
 than reading a TestFlight page, and returned `0.3.1 (6)` and `0.3.1 (5)` as the
 only `0.3.1` entries, both `VALID`. They are not the record's only iOS builds:
 the same listing carries `0.1.0 (4)`, which is why the floor argument below is
-about the highest consumed number rather than a count of entries. Build `7` is the next free number **as of that
-instant**, and `scripts/ios-app-store-candidate.sh`'s `--readback-highest-build`
+about the highest consumed number rather than a count of entries. Build `7` was
+the next free number **at that instant**, and has since been uploaded and
+consumed. `scripts/ios-app-store-candidate.sh`'s `--readback-highest-build`
 remains an operator attestation about a live record — so re-read before the
 archive rather than quoting the timestamp above.
 
@@ -482,9 +508,10 @@ scripts/ios-app-store-candidate.sh \
 ```
 
 The values above match the candidate this document records — project `0.3.1 (7)`,
-with build `6` the highest this record is known to have accepted, from the
-2026-09-07T08:40:12Z read-back. **They are an example of the shape, not a licence
-to skip the read-back**: the timestamp is refused once it is more than 12 hours
+with build `6` the highest this record was known to have accepted at that
+moment. **Build 7 has since been uploaded and consumed**, so these exact values
+would now be refused as a re-upload; the next archive needs a number above `7`.
+**They are an example of the shape, not a licence to skip the read-back**: the timestamp is refused once it is more than 12 hours
 old, so supply what the record actually shows on the day.
 
 The artifact root must be absolute, must not already exist, must sit outside
@@ -1701,7 +1728,7 @@ Both texts are drafted in `docs/app-store-metadata-ios.json`, per locale, under
 - **Beta feedback email:** an owner-entered App Store Connect value. Not
   recorded here and not in the packet.
 
-#### What to Test for `0.3.1 (7)` — drafted, not entered
+#### What to Test for `0.3.1 (7)` — entered on the build
 
 `docs/app-store-metadata-ios.json` is **frozen for this candidate**. Its
 `testFlight` and `whatsNew` texts describe build 6's scope, and this internal
@@ -1709,8 +1736,8 @@ TestFlight delivery does not edit the packet, its screenshots or any App Store
 version metadata. Aligning the packet — and capturing the required iPhone and
 iPad screenshot sets against the new navigation — is **deferred to the App Store
 submission that actually needs it**, and remains an open gate there. The two
-texts below are what an operator enters as this build's TestFlight *What to
-Test* in App Store Connect; they are drafted here and have not been entered.
+texts below are this build's TestFlight *What to Test*, and both locales are
+**entered on build 7** in App Store Connect as of the checkpoint above.
 
 Build 7 changes navigation and layout only. Nothing about transport, encryption,
 identity, account state or the receive defaults moves, so the standing
@@ -2178,14 +2205,15 @@ above; it is not TestFlight acceptance evidence and must not be submitted.
 `0.3.1 (6)` was uploaded to the same record later that day and read back `VALID`
 on 2026-09-07; it predates the accepted cross-platform navigation work and is
 superseded by build 7 rather than rejected.
-`0.3.1 (7)` is the prepared candidate version in source, and promoting it to an
-actual candidate requires a fresh App Store Connect read-back — an API listing
-goes stale the moment another upload lands — plus a new exact-source
-archive and checksum — which is what `scripts/ios-app-store-candidate.sh`
-produces, and which running that script does **not** by itself authorize
-uploading. The record's iOS version already reads `0.3.1`, and it currently
-selects `0.3.1 (6)`; this internal TestFlight delivery leaves that selection
-untouched. Selecting a different build on the version belongs to whichever App
+`0.3.1 (7)` was archived from `f7a7c00a`, uploaded, processed `VALID` and is
+`IN_BETA_TESTING` with the internal group, per the checkpoint above; it is
+consumed. Any later candidate still requires a fresh App Store Connect
+read-back — an API listing goes stale the moment another upload lands — plus its
+own exact-source archive and checksum, which is what
+`scripts/ios-app-store-candidate.sh` produces, and which running that script does
+**not** by itself authorize uploading. The record's iOS version already reads
+`0.3.1`, and it currently selects `0.3.1 (6)`; this internal TestFlight delivery
+left that selection untouched. Selecting a different build on the version belongs to whichever App
 Store submission is authorized later, with screenshots and copy that match it. Upload
 only the exact candidate whose hosted Go, Swift, iOS Release build and UI gates
 are green. Every hosted iOS job

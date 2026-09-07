@@ -37,8 +37,8 @@ the App Store version — the root `README.md`, `apps/README.md`, the nine
 
 Build numbers consumed so far, none of which may be rebuilt or re-uploaded:
 `5`, `6`, `7`, `11`, `12`, `24` (`1.3.6`), `25` (`1.3.7`), `26` (`1.3.8`),
-`27` (`1.3.9`) and `28` (`1.3.10`). **The next archive of any version needs a
-build number strictly above `28`.** The published minimum is macOS 13.0, and the
+`27` (`1.3.9`), `28` (`1.3.10`) and `29` (`1.3.11`). **The next archive of any
+version needs a build number strictly above `29`.** The published minimum is macOS 13.0, and the
 published build does not remove compatibility with older Relayium clients.
 
 **A `1.3.10` version does exist on the record and it is further along than any
@@ -61,11 +61,11 @@ and a TestFlight build is not a public release. Releasing `1.3.10` is a
 deliberate owner-authorized action that this document does not authorize and
 that no work in the current batch performs.
 
-The repository source is now *prepared* at `1.3.11` (build `29`), which is a
-state of the source tree and nothing more: build `29` has not been archived,
-uploaded, or consumed, and preparing a version is not submitting one. Nothing in
-this document authorizes archiving, uploading, adding for review, or releasing
-it.
+The repository source is at `1.3.11` (build `29`), which **has** been archived,
+uploaded and accepted into internal TestFlight — see the checkpoint in its own
+section below. It is not a submission and not a release: nothing in this
+document authorizes adding it for review, submitting it, or releasing it, and it
+does not release the approved `1.3.10` either.
 
 The Developer ID/GitHub download channel is versioned, released and verified
 separately from this record. Its state is never evidence about what the Mac App
@@ -183,13 +183,38 @@ What to Test for `1.3.10` (drafted, Simplified Chinese):
 > 一次跨网络传输：一次由浏览器发起，一次由 Mac 发起，每次都先发送文本再发送
 > 文件，确认都能完整送达。
 
-#### Prepared next version — `1.3.11` (build `29`), NOT submitted
+#### `1.3.11` (build `29`) — on internal TestFlight, NOT submitted
 
 `1.3.11` is the cross-platform navigation and task-hierarchy work accepted on
 2026-09-07, prepared from exact product `main` commit
-`97ef6b94e562281e61bb5c9940250648afb21976`. It is prepared for **internal
-TestFlight** only. Nothing here authorizes adding it for review, submitting it,
-or releasing it, and it does not release the approved `1.3.10` either.
+`97ef6b94e562281e61bb5c9940250648afb21976`. It is for **internal TestFlight**
+only. Nothing here authorizes adding it for review, submitting it, or releasing
+it, and it does not release the approved `1.3.10` either.
+
+##### Delivery checkpoint — `1.3.11 (29)` on internal TestFlight, 2026-09-07
+
+- **Signed source:** `f7a7c00a61ab7467825d7488865367346bac3f59`. That commit is
+  what was signed; later documentation commits, including this one, do not
+  change the bytes and do not move the source SHA.
+- **Artifact:** `test-builds/macos/1.3.11-29-f7a7c00a`, package SHA-256
+  `d7a1d3a6cd8f8c847aff942d0bb5ababdf4bec4601cb6a9f539c5a661cf89964`.
+- **Upload:** `SUCCEEDED`, delivery `78f3947b-17ec-430c-96e5-a4f1ba48de5a`;
+  Apple processing `VALID`.
+- **Export compliance:** answered at upload with non-exempt encryption
+  **false**.
+- **TestFlight:** `IN_BETA_TESTING`, attached to the existing internal group
+  **Relayium Internal** only, assignment verified. No external group is
+  attached; external state remains `READY_FOR_BETA_SUBMISSION` and no beta
+  review was requested.
+- **Test information:** the bilingual *What to Test* below is entered on this
+  build.
+- **Build `29` is now consumed.** It may not be rebuilt or re-uploaded under any
+  version. The next archive needs a number strictly above `29`, from a fresh
+  read-back.
+- **Unchanged by this delivery:** `1.3.10` remains approved and
+  `PENDING_DEVELOPER_RELEASE`, `1.3.8` (build `26`) remains what Apple is
+  serving, and the public Developer ID/GitHub `1.3.10` is untouched. No App
+  Store submission, release, metadata or screenshot edit.
 
 **Why the marketing version moves rather than only the build.** Two artifacts
 already answer to `1.3.10`: the Developer ID/GitHub release `macos-v1.3.10`,
@@ -204,9 +229,9 @@ hands-on testing; it was never uploaded and is a third thing that would
 otherwise share the number. `1.3.11 (29)` gives this candidate a number nothing
 else answers to.
 
-Build `29` satisfies the strictly-above-`28` floor recorded above, on the
-2026-09-07T08:40:12Z read-back. Re-read the record before archiving: an API
-listing is a point-in-time view and another upload would move the floor again.
+Build `29` was chosen against the strictly-above-`28` floor read back at
+2026-09-07T08:40:12Z, before the upload above. That snapshot is now historical:
+`29` is consumed, and the next archive needs its own fresh read-back.
 
 **What it changes on macOS**, which is a smaller set than the batch as a whole:
 
@@ -240,11 +265,11 @@ still links no Sparkle and ships no updater, and the direct Developer ID channel
 is versioned and released separately — its public `1.3.10` is unaffected by this
 candidate.
 
-The copy below is drafted for that build and has **not** been archived,
-uploaded, submitted, reviewed, approved, or published. English and Simplified
-Chinese are Relayium's maintained languages; no other locale is drafted here. No
-App Store version metadata, description or screenshot is edited for this
-internal TestFlight delivery; aligning that copy with the new navigation is
+The copy below is this build's TestFlight *What to Test*, entered on build `29`
+in both English and Simplified Chinese, which are Relayium's maintained
+languages; no other locale is drafted here. It has **not** been submitted,
+reviewed, approved, or published. No App Store version metadata, description or
+screenshot is edited for this internal TestFlight delivery; aligning that copy with the new navigation is
 deferred to the App Store submission that needs it and remains an open gate
 there.
 
