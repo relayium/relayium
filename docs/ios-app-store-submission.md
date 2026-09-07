@@ -101,12 +101,22 @@ purchase is accepted, not a conclusion this document may assert on its own.
 | Field | Value |
 | --- | --- |
 | Marketing version in the project source | `0.3.1` |
-| Build in the project source | `6` |
+| Build in the project source | `7` |
 
-`0.3.1 (6)` is the **prepared release candidate** of the iOS line restarted on
-2026-09-01. It is what `apps/ios/Relayium.xcodeproj` builds; it is not an
-uploaded build, not a TestFlight candidate and not a release. Nothing has been
-archived from it, and preparing it authorizes no upload.
+`0.3.1 (7)` is the **prepared release candidate** of the iOS line restarted on
+2026-09-01, and it is prepared from the cross-platform navigation work accepted
+on 2026-09-07 at exact product `main` commit
+`97ef6b94e562281e61bb5c9940250648afb21976`. It is what
+`apps/ios/Relayium.xcodeproj` builds; it is not an uploaded build, not a
+TestFlight candidate and not a release. Nothing has been archived from it, and
+preparing it authorizes no upload.
+
+**Its two predecessors are both spent.** An authenticated App Store Connect API
+read-back of this record on **2026-09-07T08:40:12Z** returned `0.3.1 (5)` and
+`0.3.1 (6)` as uploaded builds in `VALID` processing state, so 6 — not 5 — is
+the highest number this record is known to have consumed on its iOS platform,
+and 7 is the next free one. The paragraphs below describe why each predecessor
+was consumed; neither may be rebuilt or re-uploaded.
 
 **Build `5` is spent, and it is spent on a rejected candidate.** It was
 archived, uploaded to this record on 2026-09-05 and completed Apple's
@@ -118,16 +128,42 @@ relayium.com" as the empty-state remedy, and a lost server rendezvous in the
 reconnect banner. iOS runs the `_relayium._tcp` Bonjour transport and does none
 of those things, so all four statements were false and contradicted this
 version's own metadata. Do not submit build 5. An uploaded build consumes its
-number whatever happens to it afterwards, so the correction is build `6`, not a
+number whatever happens to it afterwards, so the correction was build `6`, not a
 re-upload of 5.
+
+**Build `6` is spent too, and this document previously said otherwise.** It was
+uploaded to this record on **2026-09-05 at 23:32 Asia/Dubai**
+(`2026-09-05T12:32:39-07:00`), after the paragraphs above were written, and the
+2026-09-07 read-back shows it `VALID`. The stale claim that "nothing has been
+archived from" build 6 is corrected here rather than left standing. Build 6
+carried the Nearby copy correction and nothing newer; it predates the
+cross-platform navigation work, so it is not this candidate either. A private
+Debug-signed development IPA of `0.3.1 (6)` built from `97ef6b94` also exists
+under the workspace `test-builds/ios/0.3.1-6-ui-97ef6b94/` for owner
+hands-on testing — SHA-256
+`44c1274505d12a87b7d0629bccef0dee5d9bd8bf866451ad1816058ee90dd9ad`. It was
+never uploaded, is not distribution-signed, and shares a build number with the
+uploaded build 6 while being a different binary; distinguish the two by commit
+and checksum, never by version string alone. Build `7` exists so that the
+navigation work reaches TestFlight under a number nothing else answers to.
 
 The build does **not** move with the marketing version. `0.3.0 (5)` was a
 development baseline that was never archived, and `0.3.1` keeps its marketing
-version across this correction: 5 and 6 are two candidates of one unreleased
-version. `0.3.1` adds the local-link Nearby work — LAN Transfer now discovers
-only the `_relayium._tcp` Bonjour service on the local network instead of the
-server's public-address room — on top of everything `0.3.0` already contained,
-and build 6 is where the screen's own words finally say so.
+version across these corrections: 5, 6 and 7 are three candidates of one
+unreleased version. `0.3.1` adds the local-link Nearby work — LAN Transfer now
+discovers only the `_relayium._tcp` Bonjour service on the local network instead
+of the server's public-address room — on top of everything `0.3.0` already
+contained, and build 6 is where the screen's own words finally said so.
+
+**Build `7` adds the accepted cross-platform navigation and task-hierarchy
+work** from `97ef6b94`, and nothing else: destination naming is consistent
+between pairing transfer and share links; the iOS Nearby screen leads with the
+action and moves its mechanism and verification detail behind a disclosure; the
+iPad sidebar is simplified; and in Device Inbox the pending deliveries, status,
+sessions and sending now precede settings, with failure text placed beside the
+action that produced it. Transport, encryption, identity, account behavior and
+the receive defaults are untouched by that work — including foreground-only
+receiving, receiving off by default, and Nearby's explicit-selection rule.
 
 **The App Store Connect version record now reads `0.3.1`.** The iOS platform's
 editable version was renamed on the record, and read back live on **2026-09-05
@@ -138,16 +174,31 @@ selected** and **Manual** release still selected. That reading is what
 `observedVersion` agree and `scripts/ios-app-store-metadata-validate.mjs`
 accepts the packet.
 
-**A later single-field reading at 2026-09-05 21:03 (Asia/Dubai) supersedes the
-build-selection half of that.** After `0.3.1 (5)` was uploaded and finished
-Apple's processing, and its export-compliance answer was entered, that build was
-read back as the one **selected** on this version, still under **Manual**
-release. It is also the build this repository rejected at 21:10 the same day and
-must not submit, so the gate did not close — it narrowed. `present: false` on
-the packet's `version-build-selection` entry now means *no build this repository
-may submit is selected*, and the validator's refusal names the rejected
-candidate so a reader who flips that flag in good faith is told why not. The
-per-field `observedAt` stays **2026-09-03**: one field was re-read, not twelve.
+**A later single-field reading at 2026-09-05 21:03 (Asia/Dubai) superseded the
+build-selection half of that, and a 2026-09-07 reading has superseded it in
+turn.** At 21:03, after `0.3.1 (5)` was uploaded and finished Apple's
+processing, that build was read back as the one selected on this version. It is
+also the build this repository rejected at 21:10 the same day and must not
+submit. **That is now history.** The authenticated API read-back of version
+record `93683d1b` on 2026-09-07 shows the selected build is `0.3.1 (6)`,
+`VALID` — a build this repository has not rejected — still under **Manual**
+release.
+
+**This task does not touch that selection.** It is an internal TestFlight
+delivery: build 7 goes to the existing internal group, and the App Store
+version's selected build stays exactly as read. Do not clear, replace or
+"correct" build 6 on the version as part of it.
+
+The `version-build-selection` gate is therefore open for a different reason than
+it was on 2026-09-05. It is not that a rejected build is selected; it is that no
+App Store submission is in scope here, and the submission that eventually
+carries the new navigation will need its own candidate selected on the version
+together with screenshots and version copy that match that candidate. The
+frozen `docs/app-store-metadata-ios.json` still encodes the 2026-09-05 reading
+under `version-build-selection`, including its instruction to clear build 5;
+that entry is **stale and deliberately unedited** for this TestFlight-only task,
+and realigning it belongs to the deferred submission work. The per-field
+`observedAt` stays **2026-09-03**: single fields were re-read, not twelve.
 
 The rename closed no gate: the build selection and the
 screenshots are still the two open ones. If the candidate version ever moves
@@ -166,15 +217,22 @@ make that order compulsory.
 - `0.1.0` **build 4 is Validated / Ready to Submit** on this record's iOS
   TestFlight, read back on 2026-09-03; an earlier `0.1.0` build was rejected by
   a purpose-string check. That gave a floor of 4 until **`0.3.1 (5)` was
-  uploaded to this record on 2026-09-05 and processed**, which consumed 5 — the
-  rejection of that candidate does not return the number. Build `6` is
-  therefore the next build above the highest number this record is **known** to
-  have consumed. That reading is a **floor, not an answer**: expired, removed,
-  rejected and `Invalid` builds keep their numbers and do not appear in a
-  TestFlight list, so the true highest may be above 5 and the operator still
-  owes a live read-back. `scripts/ios-app-store-candidate.sh` encodes exactly
-  that asymmetry — it refuses a `--readback-highest-build` below `5` as provably
-  wrong, and accepts anything at or above it without treating it as verified.
+  uploaded to this record on 2026-09-05 and processed**, which consumed 5, and
+  then **`0.3.1 (6)` was uploaded to the same record later that day**, which
+  consumed 6 — the rejection or supersession of a candidate does not return its
+  number. Build `7` is therefore the next build above the highest number this
+  record is **known** to have consumed, as of the
+  **2026-09-07T08:40:12Z** authenticated API read-back. That reading is still a
+  **floor, not an answer**: expired, removed, rejected and `Invalid` builds keep
+  their numbers and an API listing is a point-in-time view, so the operator
+  still owes a live read-back before each archive.
+  `scripts/ios-app-store-candidate.sh` encodes exactly that asymmetry — it
+  refuses a `--readback-highest-build` below its pinned floor as provably wrong,
+  and accepts anything at or above it without treating it as verified. That
+  pinned floor is still `5` and is therefore now **conservative rather than
+  wrong**: it would accept an attestation of 5 that the 2026-09-07 read-back
+  refutes. Raising it is a separate reviewed change to that script and was not
+  made in this batch.
 - A local signed archive and non-uploading App Store export of historical
   build `1` passed with the intended distribution identities and profiles. The
   retained historical artifacts are:
@@ -184,7 +242,7 @@ make that order compulsory.
     `45be4bbf6ac8f14482276804e42a624af6c9ba185159b621e403996378df8bbc`.
 
   These are historical acceptance evidence for a build that is several versions
-  behind. They are not the `0.3.1 (6)` candidate and not permission to upload.
+  behind. They are not the `0.3.1 (7)` candidate and not permission to upload.
 
 ### App Store Connect read-back, 2026-09-03
 
@@ -207,8 +265,8 @@ customers.
 
 | Field | Read back | Gate |
 | --- | --- | --- |
-| App Store version (iOS platform) | `0.3.1`, **Prepare for Submission** — re-read 2026-09-05 | met |
-| Build selected for the iOS `0.3.1` version | none at 2026-09-05 15:27; `0.3.1 (5)` selected at 2026-09-05 21:03, and that candidate is **rejected here** | **blocks submission** |
+| App Store version (iOS platform) | `0.3.1`, **Prepare for Submission** — re-read by API 2026-09-07T08:40:12Z | met |
+| Build selected for the iOS `0.3.1` version | **`0.3.1 (6)`, `VALID`** — read back by API on 2026-09-07 against version record `93683d1b`. The `0.3.1 (5)` selection read at 2026-09-05 21:03 is history, not current state | open for a submission; **nothing in the current task changes it** |
 | Subscription group | `22307427`, **Approved** | met — **reuse it** |
 | In-app purchases and subscription products | the six `com.relayium.mac.*`, all **Approved** | met — **reuse them** |
 | App Privacy data practices | **published** | met — **preserve it** |
@@ -224,16 +282,21 @@ Three of those rows carry a **later, narrower reading**: the version, its build
 selection and its release option were re-read on **2026-09-05 15:27
 (Asia/Dubai)**, after the record's iOS version was renamed to `0.3.1`, and the
 build-selection row was re-read once more at **21:03** after the `0.3.1 (5)`
-upload processed. Every other row is still the 2026-09-03 pass and has not been
-re-verified since. The gate count did not move — renaming a version neither
-opens nor closes one, and selecting a build this repository has rejected does
-not close the build gate either — and the version row remains **met** in the
-only sense the gate measures: an editable iOS version exists on the record.
+upload processed. The version and build-selection rows were then re-read by
+authenticated API on **2026-09-07T08:40:12Z**: the version is still `0.3.1` and
+still *Prepare for Submission*, and the selected build is now `0.3.1 (6)`.
+Every other row is still the 2026-09-03 pass and has not been re-verified since.
+The gate count did not move — renaming a version neither opens nor closes one,
+and a selected build does not close the build gate for a submission that will
+carry a different candidate — and the version row remains **met** in the only
+sense the gate measures: an editable iOS version exists on the record.
 
 **Two of those twelve are unmet gates: the build selection and the
-screenshots.** For the iOS platform there has been **one archive and one
-upload** — `0.3.1 (5)`, on 2026-09-05, processed by Apple and then rejected here
-before submission — and **no submission and no release**. *Prepare for
+screenshots.** For the iOS platform there have been **two `0.3.1` uploads** —
+`0.3.1 (5)` and `0.3.1 (6)`, both on 2026-09-05 and both processed by Apple, the
+first rejected here before submission and the second superseded by the
+navigation work build 7 carries — and **no submission and no release**. Earlier
+`0.1.0` uploads on this record are a separate, older lineage. *Prepare for
 Submission* is App Store Connect's state for a version that has never been
 submitted; it is not a claim that anything is prepared, and **nothing here says
 this app is ready to be submitted**.
@@ -265,14 +328,21 @@ merge of the two records.
 #### What was not read back, and is still owed
 
 The TestFlight reading gave a **floor of 4**, which the 2026-09-05 upload of
-`0.3.1 (5)` raised to **5**. Neither is the highest consumed build number:
-expired, removed, rejected and `Invalid` builds keep theirs and do not appear.
-So the build-number question is narrowed by these observations, not closed.
-Build `6` has **not** been verified as free against the record remotely, the
-claim that it is the next free build number remains a local expectation, and
-`scripts/ios-app-store-candidate.sh`'s `--readback-highest-build` remains an
-operator attestation — now with a floor beneath it that catches an attestation
-carried over from the superseded record's (empty) history.
+`0.3.1 (5)` raised to **5** and the 2026-09-05 upload of `0.3.1 (6)` raised to
+**6**. None of those is provably the highest consumed build number: expired,
+removed, rejected and `Invalid` builds keep theirs and an authenticated listing
+is a point-in-time view. So the build-number question is narrowed by these
+observations, not closed.
+
+The **2026-09-07T08:40:12Z** authenticated API read-back is the strongest
+observation this record has: it enumerated the uploaded builds directly rather
+than reading a TestFlight page, and returned `0.3.1 (6)` and `0.3.1 (5)` as the
+only `0.3.1` entries, both `VALID`. They are not the record's only iOS builds:
+the same listing carries `0.1.0 (4)`, which is why the floor argument below is
+about the highest consumed number rather than a count of entries. Build `7` is the next free number **as of that
+instant**, and `scripts/ios-app-store-candidate.sh`'s `--readback-highest-build`
+remains an operator attestation about a live record — so re-read before the
+archive rather than quoting the timestamp above.
 
 Before archiving or uploading, re-inspect the record read-only and confirm, at
 minimum:
@@ -405,16 +475,17 @@ source edit with a diff, not something a build script does on the way past.
 ```sh
 scripts/ios-app-store-candidate.sh \
   --marketing-version 0.3.1 \
-  --build 6 \
-  --readback-highest-build 5 \
-  --readback-observed-at 2026-09-05T18:00:00Z \
-  --artifact-root ~/relayium-candidates/ios-0.3.1-6-<short8-sha>
+  --build 7 \
+  --readback-highest-build 6 \
+  --readback-observed-at 2026-09-07T08:40:12Z \
+  --artifact-root ~/relayium-candidates/ios-0.3.1-7-<short8-sha>
 ```
 
-The values above match the candidate this document records — project `0.3.1 (6)`,
-with build `5` the highest this record is known to have accepted. **They are an
-example of the shape, not a licence to skip the read-back**: supply what the
-record actually shows on the day.
+The values above match the candidate this document records — project `0.3.1 (7)`,
+with build `6` the highest this record is known to have accepted, from the
+2026-09-07T08:40:12Z read-back. **They are an example of the shape, not a licence
+to skip the read-back**: the timestamp is refused once it is more than 12 hours
+old, so supply what the record actually shows on the day.
 
 The artifact root must be absolute, must not already exist, must sit outside
 this repository and at least two levels deep, must not be a system or home
@@ -433,8 +504,11 @@ Beyond the read-back, the script refuses to archive unless:
   `com.relayium.mac.ShareIOS`, `CODE_SIGN_STYLE = Manual` for Release, and the
   exact profiles `Relayium iOS Universal App Store` and
   `Relayium iOS Share Extension App Store`;
-- the attested highest consumed build is not below `5`, the floor this record's
-  iOS TestFlight reading plus the consumed `0.3.1 (5)` upload establish;
+- the attested highest consumed build is not below the script's pinned floor,
+  which this record's iOS TestFlight reading plus the consumed `0.3.1 (5)`
+  upload established as `5`. The 2026-09-07 read-back moves the true floor to
+  `6`; the pinned constant is therefore conservative, and tightening it is a
+  separate reviewed change to that script;
 - the App Store metadata packet passes its validator, for **this** marketing
   version — see below.
 
@@ -1627,6 +1701,85 @@ Both texts are drafted in `docs/app-store-metadata-ios.json`, per locale, under
 - **Beta feedback email:** an owner-entered App Store Connect value. Not
   recorded here and not in the packet.
 
+#### What to Test for `0.3.1 (7)` — drafted, not entered
+
+`docs/app-store-metadata-ios.json` is **frozen for this candidate**. Its
+`testFlight` and `whatsNew` texts describe build 6's scope, and this internal
+TestFlight delivery does not edit the packet, its screenshots or any App Store
+version metadata. Aligning the packet — and capturing the required iPhone and
+iPad screenshot sets against the new navigation — is **deferred to the App Store
+submission that actually needs it**, and remains an open gate there. The two
+texts below are what an operator enters as this build's TestFlight *What to
+Test* in App Store Connect; they are drafted here and have not been entered.
+
+Build 7 changes navigation and layout only. Nothing about transport, encryption,
+identity, account state or the receive defaults moves, so the standing
+statements above still hold: receiving is off by default and opt-in per account,
+the receiver works only while Relayium is in the foreground, no notification is
+delivered, received files land in *Files ▸ On My iPhone ▸ Relayium ▸ Received*,
+and Nearby on iOS discovers only the `_relayium._tcp` Bonjour service on the
+local network and never preselects a device.
+
+What to Test (English):
+
+```
+This build changes how you move around the app. Behavior, transfers and
+encryption are unchanged.
+
+1. Destination names. Open each destination from the main shell in English and
+   again with the device set to Simplified Chinese. The pairing destination
+   reads Pairing, the stored-link one reads Share Link, and each name must match
+   the screen it opens — the same words for the same thing everywhere it
+   appears, including the iPad sidebar.
+2. Nearby (iPhone and iPad). The screen now leads with picking a device and
+   sending. Open the details disclosure for how it works and how to verify a
+   device, then close it again — a file you already selected must still be
+   selected. Nearby is local network only on iOS: check that a device on another
+   network does not appear, and that nothing is picked for you.
+3. Device Inbox. Pending deliveries, status, the current session and sending now
+   come before settings. With a delivery waiting, check that accept and decline
+   are reachable without scrolling past settings. Turn receiving off, set it to
+   ask every time, then to automatic; collapse and reopen the section and
+   confirm the choice survives.
+4. iPad sidebar. At full width the sidebar carries the same destinations, in a
+   simpler grouping; at narrow width the same destinations appear as tabs.
+   Rotate and resize while a transfer is in progress.
+5. Failure text. Make a transfer fail — turn off Wi-Fi mid-send — and check the
+   message appears beside the action that failed rather than at the top of the
+   screen.
+6. Unchanged behavior. Receiving still only works while Relayium is open and in
+   the foreground, no notification arrives, and files still land in
+   Files ▸ On My iPhone ▸ Relayium ▸ Received.
+
+Also test in Dark Mode and at an enlarged system text size, and report anything
+you cannot reach or read.
+```
+
+What to Test (Simplified Chinese):
+
+```
+本次更新只调整了 App 内的导航和布局，传输行为与加密没有变化。
+
+1. 入口名称。分别在英文和简体中文下从主界面打开每个入口：配对入口显示为“配对”，
+   存储链接入口显示为“分享链接”，且每个名称都必须与打开的页面一致——包括 iPad
+   侧边栏在内，同一件事在任何位置都使用相同的措辞。
+2. 附近设备（iPhone 与 iPad）。该页面现在先呈现选择设备和发送。展开“工作原理”
+   与“如何验证设备”的详情后再收起，已选择的文件必须仍然处于选中状态。iOS 上的
+   附近设备只在本地网络查找：确认其他网络上的设备不会出现，也不会替你预先选中
+   任何设备。
+3. 设备收件箱。待确认的投递、状态、当前会话与发送现在都排在设置之前。有待确认
+   投递时，确认接受与拒绝无需越过设置即可点到。将接收关闭、改为每次询问、再改
+   为自动接收；折叠后重新展开，确认所选项保持不变。
+4. iPad 侧边栏。宽窗口下侧边栏包含相同的入口，分组更简洁；窄窗口下同样的入口
+   改用标签栏。在传输进行中旋转设备并改变窗口宽度。
+5. 失败提示。制造一次失败（发送过程中关闭 Wi-Fi），确认提示出现在对应操作旁边，
+   而不是页面顶部。
+6. 未变更的行为。接收仍然只在 Relayium 打开且处于前台时有效，不会收到通知，
+   文件仍然保存在“文件 ▸ 我的 iPhone ▸ Relayium ▸ 已接收”。
+
+请同时在深色模式和放大的系统字号下测试，并反馈任何无法点到或看不清的地方。
+```
+
 ## Screenshots
 
 Specifications and upload rules:
@@ -2022,13 +2175,18 @@ to add France**:
 `0.3.1 (5)` was built, uploaded and processed on 2026-09-05, and was then
 rejected here before submission over the Nearby product-copy defect recorded
 above; it is not TestFlight acceptance evidence and must not be submitted.
-`0.3.1 (6)` is the prepared candidate version in source, and promoting it to an
-actual candidate requires the outstanding App Store Connect read-back above —
-the build-number question no inspection has closed — plus a new exact-source
+`0.3.1 (6)` was uploaded to the same record later that day and read back `VALID`
+on 2026-09-07; it predates the accepted cross-platform navigation work and is
+superseded by build 7 rather than rejected.
+`0.3.1 (7)` is the prepared candidate version in source, and promoting it to an
+actual candidate requires a fresh App Store Connect read-back — an API listing
+goes stale the moment another upload lands — plus a new exact-source
 archive and checksum — which is what `scripts/ios-app-store-candidate.sh`
 produces, and which running that script does **not** by itself authorize
-uploading. The record's iOS version already reads `0.3.1`, so build 6 can be
-selected on it once it exists, and build 5 cleared from it. Upload
+uploading. The record's iOS version already reads `0.3.1`, and it currently
+selects `0.3.1 (6)`; this internal TestFlight delivery leaves that selection
+untouched. Selecting a different build on the version belongs to whichever App
+Store submission is authorized later, with screenshots and copy that match it. Upload
 only the exact candidate whose hosted Go, Swift, iOS Release build and UI gates
 are green. Every hosted iOS job
 selects exactly Xcode major 26 with an iphoneos SDK of at least 26 before it
