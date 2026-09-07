@@ -102,24 +102,26 @@
 "content.reactivate" = "Reactivate on relayium.com";
 "content.backToSignIn" = "Back to sign in";
 "tab.receive" = "Receive";
-"tab.send" = "Send";
+"tab.send" = "Share Link";
 "tab.account" = "Account";
-"tab.direct" = "Direct";
+"tab.direct" = "Pairing";
+"tab.deviceInbox" = "Inbox";
 
 /* MARK: navigation sidebar */
-"nav.sectionDirect" = "Direct";
+"nav.sectionDirect" = "Live transfers";
 "nav.sectionLinks" = "Links";
 "nav.sectionDevice" = "This Mac";
 "nav.nearby" = "Nearby";
 "nav.pairingCodeSubtitle" = "Text and small files across networks — both sides online";
 "nav.lanTransfer" = "LAN Transfer";
 "nav.lanTransferSubtitle" = "Messages and files with a device on this network — no account; both sides online";
-"nav.crossNetwork" = "Cross-network Transfer";
+"nav.crossNetwork" = "Pairing Transfer";
 "nav.crossNetworkSubtitle" = "Messages and files with a device anywhere, using a six-digit code — same network not required; both sides online";
-"nav.storedSend" = "Send a link";
+"nav.storedSend" = "Share a link";
 "nav.storedSendSubtitle" = "Large files, picked up later — sign in; plan limits apply";
 "nav.storedReceive" = "Open a link";
 "nav.deviceInboxSubtitle" = "Files from your own account land in a folder you choose — sign in; works with the window closed";
+"nav.iosDeviceInboxSubtitle" = "Files and messages from your own devices, saved into Relayium — sign in; arrives while Relayium is open";
 "nav.account" = "Account";
 "nav.accountSubtitle" = "Plan, devices and stored files";
 "nav.a11ySections" = "Relayium destinations";
@@ -161,6 +163,7 @@
 "verify.toggle" = "Compare verification codes with the other device";
 "verify.explainWhat" = "Off by default. When on, both devices show the same six-digit verification code (SAS) before anything moves; comparing it out loud detects a substituted signalling endpoint. It is not the pairing code you typed in, and it only detects anything if someone actually compares the two.";
 "verify.explainEncryption" = "This changes what is shown and what stops for confirmation — never the encryption. Keys are generated on this device and never sent to Relayium, the relay carries only ciphertext, and a tampered handshake always fails.";
+"verify.howItWorks" = "How verification codes work";
 
 /* MARK: single-session presence */
 "presence.busyTitle" = "This session is shown elsewhere";
@@ -183,6 +186,20 @@
 "direct.waitingForDevice" = "Waiting for the other device…";
 "direct.chooseFilesFirst" = "Choose files or folders to send first.";
 "direct.joinNoAccountNeeded" = "Joining a code somebody else created needs no account.";
+"pairing.scanCode" = "Scan a QR code";
+"pairing.scanTitle" = "Scan a join code";
+"pairing.scanHint" = "Point the camera at the join code the other device is showing.";
+"pairing.scanViewfinderLabel" = "Camera viewfinder for the other device's join code";
+"pairing.scanRequesting" = "Waiting for camera access…";
+"pairing.scanDeniedTitle" = "Camera access is off";
+"pairing.scanDeniedBody" = "Relayium reads a join code with the camera, and this app does not have access to it. You can allow it in Settings, or type the six digits instead.";
+"pairing.scanRestrictedBody" = "Camera access is not allowed on this device, so a join code cannot be read here. Type the six digits instead.";
+"pairing.scanUnavailableTitle" = "Can't scan here";
+"pairing.scanUnavailableBody" = "This device has no camera Relayium can use. Type the six digits instead.";
+"pairing.scanFailedBody" = "The camera could not be started. Type the six digits instead.";
+"pairing.scanOpenSettings" = "Open Settings";
+"pairing.scanRejected" = "That is not a Relayium join code. Nothing was changed — hold a different code in view, or type the six digits.";
+"pairing.scanFilled" = "Join code filled in from the scan. Check it, then choose Join.";
 "direct.modeMatchHint" = "Choose Files or Text to match what the sender started. The code itself does not identify the type.";
 "direct.largeFilesTitle" = "Sending something large?";
 "direct.largeFilesBody" = "A direct transfer runs only while both devices have Relayium open, so a large file can be slower this way and starts over if either app is closed. Send stores the encrypted file instead, and the other device can collect it whenever it likes.";
@@ -323,7 +340,7 @@
 /* MARK: nearby pane */
 "nearby.explain" = "Devices running Relayium — the app or relayium.com — that reach the internet from the same public address as this device. Usually that means your Wi-Fi, but a carrier or VPN gateway can put strangers' devices on the list too. Relayium never scans your network; it asks its rendezvous service who else arrives from that address.";
 "nearby.safetySummary" = "Devices running Relayium at the same public address as this device. On a carrier, VPN or shared gateway that address can include strangers, so choose who you send to.";
-"nearby.howItWorks" = "How this list works";
+"nearby.howItWorks" = "How nearby transfer works";
 "nearby.lookAgain" = "Look again";
 "nearby.startReceiving" = "Start receiving";
 "nearby.resumeReceiving" = "Resume receiving";
@@ -359,6 +376,16 @@
 "nearby.unnamedDevice" = "Unnamed device";
 "nearby.setupFailed" = "An incoming nearby transfer could not be set up.";
 "nearby.noAccountNeeded" = "Sending and receiving on this network needs no account.";
+
+/* MARK: nearby pane, the iOS transport — Bonjour on the local link, not the
+   code-less rendezvous room the six shared sentences above describe. English
+   and Simplified Chinese only; the frozen locales fall back to this file. */
+"nearby.iosSafetySummary" = "Devices on your local network running Relayium. A shared network can include strangers — choose who you send to.";
+"nearby.iosExplain" = "Relayium looks for one Bonjour service, _relayium._tcp, on the local network this device has joined, and publishes the same service while receiving is on. It does not scan addresses, read anything else about the network, or ask anything outside this network who is nearby. Only devices running the Relayium app can appear here — a web browser cannot. On a shared network such as a café, hotel or office, the devices that answer can belong to strangers.";
+"nearby.iosEmptyRoster" = "No other devices yet. Open the Relayium app on the other device, connected to this same network, and leave it open.";
+"nearby.iosListeningBody" = "While this app is open, a device on this network can send files or start a message session without asking first. Anything on this network running Relayium can try — pause receiving if that is not what you want.";
+"nearby.iosAcceptanceNote" = "The device you pick accepts what you send without asking while it is receiving, and a message session opens on its side without a prompt, unless advanced verification is on for either device (below). This device accepts incoming transfers from this network the same way while receiving is on and this app is open.";
+"nearby.iosReconnecting" = "Lost the local network connection. Reconnecting…";
 
 /* MARK: drop zone, picker, received result, QR */
 "drop.a11yLabel" = "Files to send";
@@ -511,6 +538,10 @@
 "error.factory.noPeerAppeared" = "Nobody joined before the pairing code expired. Create a new code and try again.";
 "error.nearby.notScanning" = "Relayium stopped looking for nearby devices, so that one is no longer available. Scan again, then pick it.";
 "error.nearby.noAnswer" = "That device didn't answer. Open relayium.com on it, keep that page open, and pick it again. A pairing code works instead, and is the way to receive on this device.";
+/* The iOS Local Nearby half of the sentence above. Same job — what makes a
+   device answer — over a transport where a browser cannot be a peer. English
+   and Simplified Chinese only, per the supported-language policy. */
+"error.nearby.iosNoAnswer" = "That device didn't answer. Open the Relayium app on it, connected to this same local network, turn receiving on, and pick it again. If the two devices are not on the same network, a pairing code works instead.";
 "error.staging.fileCount" = "Choose between 1 and %@ files.";
 "error.staging.unreadable" = "Couldn't open every selected file, so nothing was sent. Choose the files again.";
 "error.text.authenticationFailed" = "The encrypted message failed its integrity check, so it was discarded and the session was closed.";
@@ -629,6 +660,26 @@
 "inbox.composeHeading" = "Send to this device";
 "inbox.composeUnavailable" = "This device can't be sent to from this Mac, so its history is shown on its own.";
 "inbox.sentMessageMissing" = "This Mac no longer has the text of this message.";
+
+/* MARK: Device Inbox, as it works on iPhone and iPad */
+"inbox.iosExplain" = "Your other Relayium devices can send files and messages straight to this one. There is no folder to choose: everything that arrives is saved inside Relayium, where the Files app can reach it. Relayium never sees what is inside.";
+"inbox.iosSignedOutBody" = "Device Inbox delivers files and messages sent from your own account, so it needs you signed in on this device.";
+"inbox.iosPolicyExplain" = "Ask every time holds each delivery until you accept it here. Automatically saves it as soon as it arrives. Either way, nothing arrives unless Relayium is open.";
+"inbox.iosForegroundOnly" = "Relayium receives only while it is open on this device. It does not receive in the background, and it sends you no notifications — so a file sent while Relayium is closed arrives the next time you open it.";
+"inbox.iosFolderExplain" = "Files sent to this device are saved in %@, which you can open in the Files app. Existing files are never replaced.";
+"inbox.iosFolderAccessDenied" = "Relayium can't use its own receive folder right now. Try again, and if it keeps happening, restart Relayium.";
+"inbox.iosFolderUnresolvable" = "Relayium's receive folder can't be opened. Something that isn't a folder may be using its name — check Relayium in the Files app.";
+"inbox.iosFolderNotWritable" = "Relayium can't write into its receive folder right now. Check this device has free space, then try again.";
+"inbox.iosBlockedPermission" = "A delivery stopped because Relayium couldn't write into its receive folder. Try again, and if it keeps happening, restart Relayium.";
+"inbox.iosBlockedDirectory" = "A delivery stopped because Relayium's receive folder wasn't available. Try again.";
+"inbox.iosBlockedNameConflict" = "A delivery stopped because of a name it can't safely use. Open Relayium in the Files app, tidy up the Received folder, then try again.";
+"inbox.iosBlockedDecrypt" = "A delivery couldn't be decrypted with this device's key. Ask the sender to send it again.";
+"inbox.iosBlockedInternal" = "A delivery stopped for a reason Relayium couldn't identify, so nothing was saved.";
+"inbox.iosFailedEnrolment" = "Relayium couldn't set this device up to receive. Updating to the latest version may fix it.";
+"inbox.iosFailedKey" = "This device's receiving key is unavailable, so nothing can be decrypted. Unlock this device, reopen Relayium, then try again.";
+"inbox.iosFailedIdentity" = "This device's sign-in is no longer accepted. Sign in again to keep receiving.";
+"inbox.iosConversationsEmpty" = "Nothing has been sent to this device yet. Send something from another device signed in to your account, or open a device below to send to it.";
+"inbox.iosOpenConversation" = "Open the conversation with %@";
 "inbox.sentStateStaged" = "Ready to send from this Mac";
 "inbox.sentStateSending" = "Sending from this Mac";
 "inbox.sentStateCreated" = "Waiting for the other device";

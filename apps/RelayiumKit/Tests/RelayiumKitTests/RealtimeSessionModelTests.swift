@@ -979,6 +979,271 @@ final class RealtimeSessionModelTests: XCTestCase {
         XCTAssertEqual(conn.closeCount, 1)
         guard case .idle = m.state else { return XCTFail("got \(m.state)") }
         XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("a.txt").path))
+        // Cancel no longer discards on its own — it delegates to `releaseWriter`
+        // through `teardown`. Assert the destination is actually empty rather
+        // than that one name is gone, or the delegation could stop happening
+        // and this would still pass on a stale `fileExists`.
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path), [],
+                       "cancelling a partial receive left debris behind")
+    }
+
+    /// The same rule where cancelling has more to undo: a partial FOLDER
+    /// receive owns the container it created and the tree below it, and all of
+    /// it has to go. This is the half of `releaseWriter` that must keep working
+    /// now that `cancel()` delegates the decision instead of making it.
+    func testCancellingAPartialFolderReceiveRemovesTheContainerItCreated() async throws {
+        let dir = try tempDir()
+        let m = makeModel()
+        m.saveDirectory = dir
+        await m.join(code: "483920")
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        m.confirmSAS()
+        conn.onManifest?([
+            FileMeta(name: "a.txt", size: 9, path: "trip/day1/a.txt"),
+            FileMeta(name: "b.txt", size: 2, path: "trip/b.txt"),
+        ])
+        conn.onFileChunk?([1, 2, 3])
+        await settle()
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: dir.appendingPathComponent("trip/day1/a.txt").path),
+            "nothing was written, so this proves nothing about the cleanup")
+
+        m.cancel()
+
+        guard case .idle = m.state else { return XCTFail("got \(m.state)") }
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path), [],
+                       "the container an abandoned folder receive created was left on disk")
+        XCTAssertNil(m.received)
+    }
+
+    // MARK: - Done after a completed receive keeps the files
+
+    /// **Done** on the completion screen must not delete what it is reporting.
+    ///
+    /// Physical run `9e8b8189`, wired iPad 7 -> iPad mini 5: the runner read the
+    /// received file off the receiver and matched its SHA-256 to the staged
+    /// input while completion was still on screen, then released the receiver
+    /// through the shipped Done action. Immediately afterwards the file no
+    /// longer existed in `Documents/Received`, while the directory remained.
+    /// `DirectView.finishCompletedFileTransfer` calls `cancel()`, `cancel()`
+    /// discarded before tearing down, and `ManifestWriter.discard()` unlinks —
+    /// so Done deleted the transfer it had just reported as received.
+    ///
+    /// Both halves the device run established are asserted here: the exact
+    /// bytes survive, and the session still ends up idle. Fixing this by not
+    /// ending the session would trade data loss for a screen the user cannot
+    /// leave.
+    func testDoneAfterACompletedReceiveKeepsTheExactBytesAndReturnsToIdle() async throws {
+        let dir = try tempDir()
+        let m = makeModel()
+        m.saveDirectory = dir
+        await m.join(code: "483920")
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        m.confirmSAS()
+        conn.onManifest?([FileMeta(name: "a.txt", size: 3), FileMeta(name: "b.txt", size: 2)])
+        conn.onFileChunk?([1, 2, 3, 4, 5])
+        conn.onDone?(true)
+        await settle()
+        conn.onDone?(true)
+        await settle()
+        guard case let .completed(urls) = m.state else { return XCTFail("got \(m.state)") }
+        // The state the device run was in when it hashed the bytes.
+        XCTAssertEqual(try Data(contentsOf: urls[0]), Data([1, 2, 3]))
+        XCTAssertEqual(try Data(contentsOf: urls[1]), Data([4, 5]))
+
+        m.cancel()      // exactly what the completion screen's Done calls
+
+        guard case .idle = m.state else { return XCTFail("Done left the session owned: \(m.state)") }
+        XCTAssertEqual(conn.closeCount, 1, "Done still has to end the connection")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted(),
+                       ["a.txt", "b.txt"],
+                       "Done deleted the files it had just reported as received")
+        XCTAssertEqual(try Data(contentsOf: urls[0]), Data([1, 2, 3]),
+                       "Done changed the bytes the user was shown")
+        XCTAssertEqual(try Data(contentsOf: urls[1]), Data([4, 5]),
+                       "Done changed the bytes the user was shown")
+    }
+
+    /// The folder shape of the same press, which had more to lose: `discard()`
+    /// removes the created directories and the container as well as the leaves,
+    /// so Done on a completed folder receive used to take the whole tree.
+    func testDoneAfterACompletedFolderReceiveKeepsTheWholeTree() async throws {
+        let dir = try tempDir()
+        let m = makeModel()
+        m.saveDirectory = dir
+        await m.join(code: "483920")
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        m.confirmSAS()
+        conn.onManifest?([
+            FileMeta(name: "a.txt", size: 3, path: "trip/day1/a.txt"),
+            FileMeta(name: "b.txt", size: 2, path: "trip/b.txt"),
+        ])
+        conn.onFileChunk?([1, 2, 3])
+        conn.onDone?(true)
+        await settle()
+        conn.onFileChunk?([4, 5])
+        conn.onDone?(true)
+        await settle()
+        guard case let .completed(urls) = m.state else { return XCTFail("got \(m.state)") }
+        let container = try XCTUnwrap(m.receivedContainer)
+
+        m.cancel()
+
+        guard case .idle = m.state else { return XCTFail("got \(m.state)") }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: container.path),
+                      "Done removed the folder the receive had created")
+        XCTAssertEqual(try Data(contentsOf: urls[0]), Data([1, 2, 3]))
+        XCTAssertEqual(try Data(contentsOf: urls[1]), Data([4, 5]))
+    }
+
+    /// A peer that keeps sending DONE after the batch is complete must not be
+    /// able to take it back.
+    ///
+    /// An extra frame took `completedIncomingFiles` past the manifest and
+    /// landed in `failReceive`, which discarded on its way to `.failed`. The
+    /// transfer is over by then and the files have been named back to the user,
+    /// so the frame is the peer's problem, not theirs — and that means both
+    /// halves: the bytes stay, and so does the `.completed(urls)` the Reveal
+    /// and share affordances are built on. A DONE(false) is the same move
+    /// dressed as an integrity failure, so it is asserted here too.
+    func testAnExtraDoneFrameAfterCompletionCannotUndoTheReceive() async throws {
+        let dir = try tempDir()
+        let m = makeModel()
+        m.saveDirectory = dir
+        await m.join(code: "483920")
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        m.confirmSAS()
+        conn.onManifest?([FileMeta(name: "a.txt", size: 3)])
+        conn.onFileChunk?([1, 2, 3])
+        conn.onDone?(true)
+        await settle()
+        guard case let .completed(urls) = m.state else { return XCTFail("got \(m.state)") }
+
+        conn.onDone?(true)      // one frame more than the manifest promised
+        await settle()
+        conn.onDone?(false)     // and again, this time claiming a bad hash
+        await settle()
+
+        guard case let .completed(after) = m.state else {
+            return XCTFail("a stray DONE frame replaced the terminal result: \(m.state)")
+        }
+        XCTAssertEqual(after, urls, "the completed result stopped naming the received files")
+        XCTAssertEqual(try Data(contentsOf: urls[0]), Data([1, 2, 3]),
+                       "a stray DONE frame deleted a completed receive")
+        XCTAssertEqual(conn.completeCount, 1, "the peer was confirmed to a second time")
+    }
+
+    /// A stray control frame after completion is the same abuse by another
+    /// path, and `onControl` acts without a teardown — REJECT would report the
+    /// finished receive as declined, and a second COMPLETE would replace the
+    /// receiver's `.completed(urls)` with the sender's empty one, which is how
+    /// the files stop being reachable without anything being deleted.
+    func testAStrayControlFrameAfterCompletionCannotUndoTheReceive() async throws {
+        let dir = try tempDir()
+        let m = makeModel()
+        m.saveDirectory = dir
+        await m.join(code: "483920")
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        m.confirmSAS()
+        conn.onManifest?([FileMeta(name: "a.txt", size: 3)])
+        conn.onFileChunk?([1, 2, 3])
+        conn.onDone?(true)
+        await settle()
+        guard case let .completed(urls) = m.state else { return XCTFail("got \(m.state)") }
+
+        conn.onControl?(.reject)
+        await settle()
+        conn.onControl?(.complete)
+        await settle()
+
+        guard case let .completed(after) = m.state else {
+            return XCTFail("a stray control frame replaced the terminal result: \(m.state)")
+        }
+        XCTAssertEqual(after, urls, "the completed result stopped naming the received files")
+        XCTAssertNotNil(m.received, "the receive was still on screen but no longer revealable")
+        XCTAssertEqual(try Data(contentsOf: urls[0]), Data([1, 2, 3]),
+                       "a stray control frame deleted a completed receive")
+    }
+
+    /// Completion in one direction must not save the other direction's debris.
+    ///
+    /// A session that has finished SENDING reaches `.completed([])` on the
+    /// peer's CTRL_COMPLETE, and that says nothing about an inbound receive
+    /// still in flight beneath it. Deciding what to clean up by asking whether
+    /// the session is `.completed` gets this backwards and leaves a partial
+    /// file behind under a name the user was shown; the writer itself is the
+    /// only thing that knows whether it finished, and a completed one has
+    /// already been let go.
+    func testCompletingASendDoesNotPreserveAPartialReceiveUnderneathIt() async throws {
+        let dir = try tempDir()
+        let m = makeModel()
+        m.saveDirectory = dir
+        m.stageSend(sources: [DataSource(name: "out.txt", bytes: [9])],
+                    metas: [FileMeta(name: "out.txt", size: 1)])
+        await m.join(code: "483920", role: .initiator)
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        m.confirmSAS()
+
+        // The peer sends as well, and its batch is still only half here.
+        conn.onManifest?([FileMeta(name: "half.bin", size: 9)])
+        conn.onFileChunk?([1, 2, 3])
+        await settle()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("half.bin").path),
+                      "nothing was written, so this proves nothing about the cleanup")
+
+        conn.onControl?(.complete)      // our SEND landed; the receive did not
+        await settle()
+        guard case .completed = m.state else { return XCTFail("got \(m.state)") }
+
+        m.cancel()
+
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path), [],
+                       "a completed send preserved the unfinished receive's debris")
+    }
+
+    /// Nothing that outlives Done may still be able to reach the finished
+    /// writer. The next session in the same destination fails and cleans up
+    /// after itself; the previous transfer's files are not its to remove.
+    func testASessionAfterDoneCleansUpOnlyItsOwnPartialReceive() async throws {
+        let dir = try tempDir()
+        let m = makeModel(verify: false)
+        m.saveDirectory = dir
+        await m.join(code: "483920")
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        conn.onManifest?([FileMeta(name: "kept.bin", size: 2)])
+        conn.onFileChunk?([7, 8])
+        conn.onDone?(true)
+        await settle()
+        guard case .completed = m.state else { return XCTFail("got \(m.state)") }
+        m.cancel()
+
+        await m.join(code: "483920")
+        conn.onSAS?("y")
+        conn.onOpen?()
+        await settle()
+        conn.onManifest?([FileMeta(name: "half.bin", size: 9)])
+        conn.onFileChunk?([1, 2, 3])
+        await settle()
+        m.cancel()
+
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path), ["kept.bin"],
+                       "the second session did not clean up exactly its own partial receive")
+        XCTAssertEqual(try Data(contentsOf: dir.appendingPathComponent("kept.bin")), Data([7, 8]),
+                       "a later session deleted what an earlier Done had kept")
     }
 
     /// `.failed` is a state the session STAYS in, so the error keeps its place

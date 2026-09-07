@@ -4,7 +4,18 @@ const en = {
   description:
     "The terms for using Relayium — an open-source service for end-to-end encrypted file and real-time text transfers between devices. The core service is free; optional paid plans are available.",
   updatedLabel: "Last updated",
-  updated: "2026-08-13",
+  // 2026-09-03: "Stored content" stopped saying that the BROWSER encrypts. The
+  // clause was written when a browser was the only client that could make a
+  // stored link, and the CLI, the macOS app and the iOS app all do it too — each
+  // encrypting locally before upload, exactly as the sentence describes. Naming
+  // one client in a term that governs all of them told a CLI user their files
+  // were covered by a promise about software they were not running.
+  //
+  // The replacement says where the encryption happens rather than which program
+  // performs it, so it neither names a client nor implies that any particular
+  // one is available. The seven frozen translations keep 2026-08-13 and their
+  // original wording, per the 2026-08-14 language freeze.
+  updated: "2026-09-03",
   otherDocLabel: "Privacy Policy",
   lead: [
     "By using Relayium you agree to these terms. Relayium is an open-source service that lets you send files and real-time text between devices, end-to-end encrypted. The core service is free; some optional plans are paid — see Subscriptions and billing.",
@@ -73,7 +84,7 @@ const en = {
     {
       heading: "Stored content",
       body: [
-        "When you use the optional stored download-link mode, your browser encrypts files before upload and the server stores only ciphertext. Because we cannot decrypt stored content (zero-knowledge), we cannot pre-screen it. You agree to use stored transfers only for content you have the right to share and that does not violate applicable law.",
+        "When you use the optional stored download-link mode, the files are encrypted on your own device before they are uploaded, and the server stores only ciphertext. Because we cannot decrypt stored content (zero-knowledge), we cannot pre-screen it. You agree to use stored transfers only for content you have the right to share and that does not violate applicable law.",
         "Stored transfers are a temporary way to deliver files, not a backup. Because links expire and files are deleted after download or at expiry, please keep your own copy of anything important — we cannot recover stored content once it is gone.",
       ],
       bullets: [
@@ -123,7 +134,8 @@ const zh = {
   title: "服务条款",
   description: "使用 Relayium 的条款——一项开源、端到端加密的设备间文件与实时文本传输服务。核心服务免费，另有可选的付费套餐。",
   updatedLabel: "最后更新",
-  updated: "2026-08-13",
+  // Same 2026-09-03 correction as the English above.
+  updated: "2026-09-03",
   otherDocLabel: "隐私政策",
   lead: [
     "使用 Relayium 即表示你同意本条款。Relayium 是一项开源服务，让你在设备之间端到端加密地发送文件与实时文本。核心服务免费，部分可选套餐需付费——详见「订阅与计费」。",
@@ -190,7 +202,7 @@ const zh = {
     {
       heading: "暂存内容",
       body: [
-        "使用可选的暂存下载链接功能时，浏览器在上传前加密文件，服务器仅存储密文。由于我们无法解密暂存内容（零知识），因此无法预审其内容。你同意暂存传输仅用于你有权分享且不违反适用法律的内容。",
+        "使用可选的暂存下载链接功能时，文件在上传前就已在你自己的设备本机加密，服务器仅存储密文。由于我们无法解密暂存内容（零知识），因此无法预审其内容。你同意暂存传输仅用于你有权分享且不违反适用法律的内容。",
         "暂存传输是投递文件的临时方式，并非备份。由于链接会过期、文件在下载后或到期时即被删除，请自行保留重要文件的副本——内容一旦消失，我们无法恢复。",
       ],
       bullets: [

@@ -366,6 +366,37 @@ public enum InboxFolderPresentation {
     }
 }
 
+/// **Which control the user pressed, so its refusal renders beside that
+/// control.**
+///
+/// `InboxSettingsError` is one type covering three unrelated buttons, and the
+/// surfaces render it in one place each — which is fine until the sections move.
+/// `.askResponseFailed` is produced by Accept/Decline on a pending delivery, not
+/// by any configuration control: on a phone that put a failed acceptance at the
+/// bottom of the destination, below every conversation, while
+/// `InboxController.respond` had already restored the Accept/Decline buttons at
+/// the top. The routing is here rather than in either view so both platforms
+/// answer it the same way and a test can drive it without a renderer.
+public enum InboxSettingsErrorSource: Sendable, Equatable, CaseIterable {
+    /// The Accept/Decline the user just pressed on a held delivery. The question
+    /// is restored, so the failure belongs beside it.
+    case pendingAnswer
+    /// The macOS button that opens System Settings for this app's notifications.
+    case notificationAccess
+    /// The receive folder and the auto-accept answer.
+    case configuration
+}
+
+public extension InboxSettingsError {
+    var source: InboxSettingsErrorSource {
+        switch self {
+        case .askResponseFailed: return .pendingAnswer
+        case .notificationSettingsUnavailable: return .notificationAccess
+        case .folderNotWritable, .folderBookmarkFailed, .noFolderChosen: return .configuration
+        }
+    }
+}
+
 /// One refused user action.
 public enum InboxSettingsErrorCopy {
     public static func message(_ error: InboxSettingsError,
@@ -497,6 +528,60 @@ public enum InboxTimelinePresentation {
 
     public static func empty(language: AppLanguage? = nil) -> String {
         L10n.t(.inboxTimelineEmpty, language: language)
+    }
+
+    /// One conversation row's name.
+    ///
+    /// Three facts and one place to combine them: the legacy bucket has a name
+    /// of its own, a live peer has whatever the device directory resolved, and a
+    /// peer removed from the account keeps its name with the removal appended —
+    /// because a row that silently lost its qualifier is a device the user
+    /// believes they can still send to.
+    ///
+    /// `resolvedName` and `isRemoved` are ASKED FOR rather than looked up, so
+    /// this stays a pure function of its inputs: `InboxController.displayName(for:)`
+    /// and `isRemoved(_:)` are the model's answers, and a presentation layer that
+    /// reached for a controller would be a second place the name is decided.
+    public static func conversationName(_ conversation: InboxConversation,
+                                        resolvedName: String,
+                                        isRemoved: Bool,
+                                        language: AppLanguage? = nil) -> String {
+        if conversation.peerDeviceID == InboxConversationStore.legacySenderID {
+            return L10n.t(.inboxConversationLegacy, language: language)
+        }
+        return isRemoved
+            ? L10n.detail([resolvedName, L10n.t(.inboxConversationRemoved, language: language)],
+                          language: language)
+            : resolvedName
+    }
+
+    /// What is unread in a conversation, and when it last moved.
+    ///
+    /// Unread MESSAGES and unread FILES are counted separately and stated
+    /// separately, because they are two different things to go and look at — and
+    /// a row that summed them would claim a number matching neither. The
+    /// timestamp is always present: a conversation with nothing unread still has
+    /// to say how recent it is, or the list has no order the reader can see.
+    ///
+    /// It carries no body, no file name and no path. This is a list of rows on a
+    /// screen somebody may be holding in public.
+    public static func conversationSummary(_ conversation: InboxConversation,
+                                           language: AppLanguage? = nil) -> String {
+        var parts: [String] = []
+        let unread = conversation.entries.filter(\.isUnread)
+        let unreadMessages = unread.filter { $0.kind == .message }.count
+        let unreadFiles = unread.reduce(0) { $0 + $1.fileCount }
+        if unreadMessages > 0 {
+            parts.append(L10n.detail([L10n.number(unreadMessages, language: language),
+                                      L10n.t(.inboxSavedMessage, language: language)],
+                                     language: language))
+        }
+        if unreadFiles > 0 {
+            parts.append(L10n.plural(.inboxSavedFiles, unreadFiles, language: language))
+        }
+        parts.append(L10n.date(conversation.lastActivity, dateStyle: .medium,
+                               timeStyle: .short, language: language))
+        return L10n.detail(parts, language: language)
     }
 
     /// "From MacBook" / "To iPhone" — the accessible name and the visible badge

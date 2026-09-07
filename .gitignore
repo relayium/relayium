@@ -46,3 +46,11 @@ server/relayium-node
 # into a review or a bug report. Root-anchored on purpose: a product asset that
 # happens to be named screenshot-*.png under web/ or apps/ is still tracked.
 /screenshot-*.png
+# Two-device iOS acceptance evidence: scripts/ios-device-pair-acceptance.sh and
+# scripts/ios-device-inbox-acceptance.sh keep their run directory whatever the
+# outcome, because a pass is evidence too. Each run leaves logs, .xcresult
+# bundles and a DerivedData tree, so the roots reach multiple gigabytes. This is
+# intentionally retained local physical evidence, not build scratch to clean.
+# Root-anchored: only the evidence roots at the repository root are ignored.
+/.relayium-device-inbox/
+/.relayium-device-pair/

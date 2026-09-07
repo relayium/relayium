@@ -10,7 +10,7 @@
   (`SharedLocalizationExport.swift`), so `import RelayiumAppKit` still sees
   `L10n` and nothing at any call site changed.
 - `mac/` — macOS SwiftUI app (`com.relayium.mac`), depends on the local RelayiumKit
-  package. Released publicly as **1.3.9** (GitHub Release `macos-v1.3.9`).
+  package. Released publicly as **1.3.10** (GitHub Release `macos-v1.3.10`).
 - `mac/RelayiumShare/` — the macOS Share Extension (`com.relayium.mac.Share`),
   embedded in the app at `Contents/PlugIns/RelayiumShare.appex`. Links
   `RelayiumShareKit` only, exactly as the iOS one does, and shares its model —
@@ -18,13 +18,22 @@
   authorize `group.com.relayium.shared` and the team-prefixed wildcard and never
   `group.com.relayium.app`, and Apple documents the macOS form of an App Group
   as `<team>.<group>`, so `AppGroup.identifier` resolves per platform. It ships
-  inside the released 1.3.9 app. The system Share menu is verified to list it; a
+  inside the released 1.3.10 app. The system Share menu is verified to list it; a
   real Finder share has not yet been driven by hand.
-- `ios/` — iOS SwiftUI app (`com.relayium.app`), same local package. **In
-  development at 0.3.0 and not public.**
-- `ios/RelayiumShare/` — the iOS Share Extension (`com.relayium.app.share`),
+- `ios/` — iOS SwiftUI app (`com.relayium.mac`), same local package. **In
+  development at 0.3.1 and not public.** The bundle id is macOS's on purpose:
+  iOS and macOS are two platforms of ONE universal-purchase App Store record
+  (Apple ID `6801142976`), and Apple requires every platform in such a record to
+  carry the same Bundle ID. That is also what puts an iOS build in front of the
+  six already-Approved `com.relayium.mac.*` subscription products instead of a
+  catalogue of its own.
+- `ios/RelayiumShare/` — the iOS Share Extension (`com.relayium.mac.ShareIOS`),
   embedded in the app at `PlugIns/RelayiumShare.appex`. Links `RelayiumShareKit`
-  only. **In development at 0.3.0 and not public.** It has run on a physical iPad,
+  only. **In development at 0.3.1 and not public.** Its identifier is *not*
+  `com.relayium.mac.Share` — that is the macOS extension. The target record's
+  iOS TestFlight build metadata reports extension application identifier
+  `7PVYUG4YQS.com.relayium.mac.ShareIOS`, so that is what this project must
+  carry. It has run on a physical iPad,
   where a real system share reached the containing app; coverage of real iPhone
   Photos, Files and third-party providers was still open when work stopped.
 
@@ -72,11 +81,11 @@ operational requirement in `docs/CI-PLATFORM-BOUNDARY.md`.
 package. Views live in the app target; all logic worth testing lives in the
 `RelayiumAppKit` target inside that package and is covered by `swift test`.
 
-**Status: released as 1.3.9.** The owner requested this 1.3.9 release, the
+**Status: released as 1.3.10.** The owner requested this 1.3.10 release, the
 recorded decision in `apps/mac/release-readiness.json` remains approved
 (`"approved": true`), and the GitHub release workflow published the notarized
 build as GitHub Release
-[`macos-v1.3.9`](https://github.com/relayium/relayium/releases/tag/macos-v1.3.9):
+[`macos-v1.3.10`](https://github.com/relayium/relayium/releases/tag/macos-v1.3.10):
 a universal, Developer ID-signed, Apple-notarized and stapled `Relayium.dmg`
 with its SHA-256 alongside. Distribution is that direct download and Sparkle
 updates from it. The separately versioned Mac App Store channel is also public,
@@ -94,6 +103,18 @@ internal TestFlight builds were used for development acceptance before the
 earlier pause, and neither the iOS app nor its share extension is publicly
 offered. There is no public App Store release and no Relayium download surface
 offers iOS.
+
+iOS ships as the second platform of the macOS App Store record (Apple ID
+`6801142976`) rather than as a record of its own, so it inherits that record's
+subscription group, its published App Privacy answers, its price schedule and
+its territory selection. Those gates are therefore already met for iOS — they
+were met for the released macOS app — and the iOS `0.3.1` version has **two
+open blocking gates**: no build is selected for it, and its required iPhone and
+iPad screenshot sets are missing. That is a shorter list than it was, not a
+finished one; `docs/app-store-metadata-ios.json` holds the field-by-field
+read-back and remains the authoritative record of what is and is not done. It
+is also not a shorter list of *risks*: sharing a record with a released, paid
+macOS app is what makes an iOS mistake reach macOS customers.
 
 ### Two macOS products, one source
 
@@ -113,10 +134,12 @@ the shared code.
 
 Both apps ship bundle id `com.relayium.mac` and both extensions ship
 `com.relayium.mac.Share`: they are one app through two channels, and an
-extension's bundle id has to be prefixed by its host's. Both also produce
-`Relayium.app`, so **build them into separate `-derivedDataPath` directories** —
-otherwise the second build replaces the first's artifact in
-`Build/Products/<config>/`.
+extension's bundle id has to be prefixed by its host's. The iOS app now carries
+that same `com.relayium.mac` — see the iOS section — but its extension is
+`com.relayium.mac.ShareIOS`, so the two `.appex` identifiers stay distinct.
+Both also produce `Relayium.app`, so **build them into separate
+`-derivedDataPath` directories** — otherwise the second build replaces the
+first's artifact in `Build/Products/<config>/`.
 
 The seam is two files, each a member of exactly one target and both declaring
 the same four names, so `RelayiumApp.swift`, `Settings/SettingsView.swift` and
@@ -183,22 +206,28 @@ menu bar, the receive socket and any running transfer alive
 File ▸ New Window. Minimum window: **860×560**.
 
 Its content is a `NavigationSplitView` whose sidebar names five destinations at
-once, each with a compact subtitle that wraps when needed and is also its
-accessibility hint:
+once. Each row is compact — the destination's name and its symbol, plus a badge
+while that destination owns a running session — and the purpose sentence is the
+row's `.help` tooltip and its accessibility hint rather than a printed second
+line:
 
-| section | destination | account |
-|---|---|---|
-| Direct | LAN Transfer — a device on this network, reached directly | not needed |
-| Direct | Cross-network Transfer — a device anywhere, reached with a pairing code | needed to *create* a code, not to join one |
-| Links | Send a link — store an encrypted file | needed |
-| This Mac | Device Inbox — files from your own account, received with the window closed | needed |
-| — | Account — plan, devices, stored files | is the sign-in *and* the sign-up |
+| section | destination | purpose (tooltip and hint) | account |
+|---|---|---|---|
+| Live transfers | LAN Transfer | messages and files with a device on this network — both sides online | not needed |
+| Live transfers | Pairing Transfer | messages and files with a device anywhere, using a six-digit code — same network not required; both sides online | needed to *create* a code, not to join one |
+| Links | Share a link | large files, picked up later — plan limits apply | needed |
+| This Mac | Device Inbox | files from your own account land in a folder you choose — works with the window closed | needed |
+| — | Account | plan, devices and stored files | is the sign-in *and* the sign-up |
 
-**The sidebar is the only place a destination is named and explained.** No
-screen opens with a page heading repeating the row that was just clicked: the
-row is on screen at the same time, highlighted, so the heading said nothing the
-reader was not already looking at. The window still carries a `navigationTitle`,
-and section labels inside a screen — which say what a *part* of it is — stay.
+**The row carries the name; the destination carries the explanation.** No screen
+opens with a page heading repeating the row that was just clicked: the row is on
+screen at the same time, highlighted, so the heading said nothing the reader was
+not already looking at. The purpose sentence is not printed under the title
+either — five of them wrapping in one column explained four screens the reader
+was not looking at — so a pointer reaches it as a tooltip, VoiceOver reads it as
+the row's hint, and the selected destination states its own purpose in its
+content. The window still carries a `navigationTitle`, and section labels inside
+a screen — which say what a *part* of it is — stay.
 
 **Open a link is reachable, not browseable.** It has no row: opening a stored
 link somebody sent is something the OS hands this app, not somewhere a person
@@ -207,7 +236,7 @@ sets out for. `AppDeepLink` still selects `.storedReceive` for a supported
 `MacSurface.browseable` is the one list that says which surfaces the sidebar
 offers. A Finder **Open With** or a Dock drop never lands there.
 
-**LAN Transfer and Cross-network Transfer are two destinations for two
+**LAN Transfer and Pairing Transfer are two destinations for two
 preconditions.** They were briefly one row called Workspace. Underneath they
 still share every model and one `TransferPresence` — `AppDestination` keeps
 `.nearby` and `.pairingCode`, iOS renders them as two tabs, and deep links,
@@ -239,7 +268,7 @@ The shell itself never reads the account session — `MacSurfaceGuardTests`
 asserts that by name, and asserts that the stored-receive and LAN Transfer
 destination files mention neither `AccountSession` nor `bearerToken`. That is
 what keeps the anonymous capabilities reachable without a sign-in form in front
-of them. Cross-network Transfer does hold an `AccountSession`, for exactly one
+of them. Pairing Transfer does hold an `AccountSession`, for exactly one
 half of itself, and the guard checks that positionally rather than by presence:
 the gate must sit *before* the join controls, so joining somebody else's code
 cannot drift behind it. The account-backed halves render an
@@ -326,18 +355,35 @@ set on both iOS targets so a signed build can resolve a profile for each.
 **Manual preconditions this repository cannot satisfy**, and which no simulator
 or unsigned build proves:
 
-- the `com.relayium.app` App ID and its provisioning profile must carry the Sign
-  in with Apple capability;
+- the `com.relayium.mac` App ID and its **iOS** provisioning profile must carry
+  the Sign in with Apple capability. The App ID already has the capability —
+  it was enabled for macOS — but a capability on the App ID and a capability in
+  the profile a build is signed with are two different facts, and only the
+  second is what an installed binary carries;
 - the App Group `group.com.relayium.app` must be registered on the developer
   portal and carried by BOTH the app's and the extension's provisioning
   profiles; without it `AppGroup.containerURL` fails closed, the share
   extension refuses with a sentence rather than staging into a container the
   app cannot read, and the Send tab simply never shows a shared draft;
-- production `RELAYIUM_APPLE_CLIENT_IDS` must include `com.relayium.app`, and the
-  deployment must hold the Apple Team ID, Key ID and `.p8` key (without them the
-  route answers 503 rather than pretending);
+- production `RELAYIUM_APPLE_CLIENT_IDS` must include the app's Bundle ID,
+  because the allowlist is checked against the identity token's `aud` and for a
+  native sign-in the `aud` IS the Bundle ID. This one moved with the
+  universal-purchase migration and **needs no production change**: a read-only
+  production check on 2026-09-03 found the allowlist already admitting
+  `com.relayium.mac`, alongside `com.relayium.app` and the web Services ID. The
+  deployment must also hold the Apple Team ID, Key ID and `.p8` key (without
+  them the route answers 503 rather than pretending). Do not read the
+  `com.relayium.app,com.relayium.web` pair in `server/.env.example` as the
+  production value; it is an example file and production is wider than it;
+- the native route must keep refusing the web Services ID `com.relayium.web` as
+  an audience even though the allowlist admits it. That allowlist is shared with
+  the browser flow, so a web identity token would otherwise verify on the native
+  endpoint and buy a native bearer; the server refuses it separately, before any
+  authorization code is spent. Adding the new bundle id does not relax that;
 - the live flow — a real Apple ID on a signed device build, through to an account
   — has not been run. Simulator evidence is compile-and-render evidence only.
+  An admitted audience is not a completed sign-in, and this is the gate the
+  migration did **not** close.
 
 **Deferred, and launch-blocking:** the exchange consumes the authorization code
 but stores no Apple refresh or access token. Apple's account-lifecycle guidance
@@ -775,7 +821,7 @@ the Security call has answered, including rejecting stored bytes that are not a
 usable base64url key); the items themselves are only ever written by a signed
 build, and the two lines that actually call `SecItemCopyMatching` are the one
 part no `swift test` can reach. Its manual check is: sign in, send a file from
-**Send a link**, and confirm the "Link ready" screen says the key is stored on
+**Share a link**, and confirm the "Link ready" screen says the key is stored on
 this Mac and never sent to Relayium — **not** that the link is the only copy of
 it, which is what the failed-to-save warning says and the two must never both
 appear. Then open **Account** and confirm the new object offers **Copy
@@ -990,12 +1036,54 @@ Developer ID identity.
 > no public surface (the root `README.md`, `/apps`, `/releases`, `llms.txt`)
 > may present iOS as a Relayium platform until one is.
 
-`apps/ios/Relayium.xcodeproj` (bundle id `com.relayium.app`,
+`apps/ios/Relayium.xcodeproj` (bundle id `com.relayium.mac`,
 `IPHONEOS_DEPLOYMENT_TARGET = 16.0`, iPhone + iPad) is a SwiftUI app over the
-same local `RelayiumKit` package. **In development at 0.3.0 and not public** —
+same local `RelayiumKit` package. **In development at 0.3.1 and not public** —
 internal TestFlight builds were used for development acceptance before the
 earlier pause, but there is no public App Store listing and the website offers
 no iOS download.
+
+The bundle id is shared with macOS because iOS is the second platform of one
+universal-purchase App Store record (Apple ID `6801142976`), which Apple
+requires to carry a single Bundle ID across its platforms. Three identifiers
+deliberately did **not** follow it, and each would be a plausible-looking
+follow-up edit that broke something:
+
+- the Share Extension is `com.relayium.mac.ShareIOS`, not macOS's
+  `com.relayium.mac.Share` — the target record's iOS TestFlight build metadata
+  reports extension application identifier `7PVYUG4YQS.com.relayium.mac.ShareIOS`
+  and the project must match what the record already carries;
+- the UI-test bundle is `com.relayium.ios.UITests`, distinct from macOS's
+  `com.relayium.mac.UITests`, and ships in nothing;
+- the App Group stays `group.com.relayium.app` and the iOS keychain **service**
+  stays `com.relayium.app`. A group is a separately registered container the
+  portal already authorizes, and a keychain service is a lookup key within
+  whatever access group the app already has. Keeping both is continuity with the
+  `com.relayium.mac` iOS/TestFlight lineage — the installs that already wrote
+  under the shared bundle id — and with the existing code; renaming either would
+  strand that lineage's staged share drafts and orphan its stored bearer and
+  stored-link keys. Neither is a migration from the retired identity: moving the
+  main bundle from `com.relayium.app` to `com.relayium.mac` moves this app's
+  implicit default keychain access group with it, so a separately installed
+  `com.relayium.app` development app's items are neither carried over nor
+  exposed, and no explicit `keychain-access-groups` entitlement is added to
+  reach them.
+
+`UniversalPurchaseIdentityTests` holds all of that — both projects, the
+entitlements, the candidate script's constants and the metadata packet — to one
+set of literals. It proves the repository agrees with itself and nothing about
+App Store Connect, the portal or production.
+
+The migration is money-moving, and the reason is worth stating where somebody
+will meet it. Before it, an iOS build signed as `com.relayium.app` matched no
+`apple_products` row and every purchase was refused with `unknown_bundle` — a
+gate that failed safe by accident of identity. After it, an iOS build reaches
+the six live Approved products the released macOS app sells through, and both
+platforms write the *same* subscription `ExternalScope`, so the scope half of
+`ApplySubscriptionSource`'s cross-platform conflict guard no longer separates
+them. Adversarial double-charge, early-grant, wrong-tier and
+cross-platform-conflict evidence is owed before any customer sees an iOS build;
+`docs/ios-app-store-submission.md` records that as an open gate.
 
 R3-A, the first slice, does exactly one thing: receive an anonymous encrypted
 stored link. Paste the link, inspect the decrypted manifest, its safe file
@@ -1024,7 +1112,7 @@ xcodebuild -project apps/ios/Relayium.xcodeproj -scheme Relayium \
 
 ### Share Extension
 
-`apps/ios/RelayiumShare` (bundle id `com.relayium.app.share`,
+`apps/ios/RelayiumShare` (bundle id `com.relayium.mac.ShareIOS`,
 `IPHONEOS_DEPLOYMENT_TARGET = 16.0`, embedded at
 `Relayium.app/PlugIns/RelayiumShare.appex`). Sharing files, folders, photos or
 movies to Relayium from any app copies them into the App Group
@@ -1300,16 +1388,21 @@ that is the phase a document picker, a share sheet or the app switcher produces,
 which is to say the moment the user is choosing the files they are about to send.
 A finished receive and an already-ended text session are left alone.
 
-**No new capability.** R3-E added no local network, no background mode, no
-notifications, no Associated Domains, no App Group and no StoreKit; the
-entitlement file it left behind claimed only
-`com.apple.developer.applesignin`. It has since gained exactly one more key —
+**No new capability.** R3-E added no background mode, no notifications, no
+Associated Domains, no App Group and no StoreKit; the entitlement file it left
+behind claimed only `com.apple.developer.applesignin`. It also added no
+local-network purpose string, and *that* part of the claim was wrong rather than
+restrained — the Direct session it shipped already connected with
+`iceTransportPolicy = .all` and could settle on the peer's address on the same
+subnet. See "Capabilities" below, which is the corrected account.
+
+The entitlement file has since gained exactly one more key —
 `com.apple.developer.associated-domains`, added by the Universal Link slice
-described under "Capabilities" below — and nothing else. iOS gets the realtime models from
-`AppEnvironment`'s **code-only** factories, which take no `LanDiscoveryModel` and
-no `InboundRoom`; `AppEnvironmentTests` asserts the resulting models refuse every
-nearby entry point rather than half-working, and the macOS nearby factories are
-untouched.
+described under "Capabilities" below — and nothing else. R3-E's iOS build took
+the realtime models from `AppEnvironment`'s **code-only** factories, which take
+no `LanDiscoveryModel` and no `InboundRoom`; `AppEnvironmentTests` asserts those
+models refuse every nearby entry point rather than half-working, and the nearby
+factories are untouched.
 
 **One shared-model fix travelled with this slice.**
 `RealtimeSessionModel.join(code:role:)` now clears the staged outbound selection
@@ -1331,30 +1424,60 @@ views and the wiring that connects them are covered independently by tests.
 
 ### Nearby transfer (R3-F)
 
-The same realtime stack as Direct, without a code: a live roster of the other
-devices Relayium's rendezvous service sees arriving from the same public
-address, an explicit send to the one the user picks, and a passive half that
-accepts one unsolicited file or text session at a time. No account in either
-direction — the code-less room mints nothing and `/api/ice` answers it
-STUN-only.
+The same realtime stack as Direct, without a code: a live roster, an explicit
+send to the one device the user picks, and a passive half that accepts one
+unsolicited file or text session at a time. On iOS the roster is now local:
+`RelayiumLocalPeerKit` advertises and browses exactly `_relayium._tcp` in the
+`local.` Bonjour domain. Bonjour carries a fresh 128-bit channel identity, the
+peer-supplied display name and the capability list that peer speaks; addressed
+signaling travels over a bounded direct TCP stream, while the existing
+WebRTC/SAS path still authenticates and encrypts the actual file or message
+session. No account or server signaling is used for the iOS Nearby graph. macOS
+retains its existing hub-backed graph, and
+`LocalNearbyModuleBoundaryTests` asserts that it still does.
 
-**It is not Bonjour, not mDNS and not a LAN scan, and R3-E's note in this file
-said otherwise.** That note deferred Nearby on the grounds that it needed the
-local-network entitlement. Source audit corrected it: `LanDiscoveryModel` joins
-the hub's code-less room over the same HTTPS/WebSocket origin as everything
-else, and the server groups that room by the public IP it observes. So it needs
-ordinary internet access on every platform — and in exchange it can list a
-stranger sitting behind the same carrier or VPN gateway. Every product decision
-on the screen follows from that one fact: `nearby.explain` states the grouping
-and the caveat, `nearby.namesDisclaimer` says the names are peer-supplied
-labels, and **nothing is ever preselected**, not even when the room holds
-exactly one other entry — which is precisely the case where the only candidate
-might be a stranger. `IOSSurfaceGuardTests` pins the single `discovery.select(`
-call site to the row's own tap handler.
+**The capability list is on the wire because the alternative is a forgery.** In
+the hub's room a peer announces what it speaks and `PeerCapabilityRegistry`
+records that announcement; on a local link the advertisement IS that hello, so
+`LocalPeerAdvertisement` carries it in the TXT record's `c` field and
+`LocalPeerSignalingChannel` credits each discovered peer with exactly what THAT
+peer advertised. Synthesising the credit from this build's own list instead
+would state a capability nobody announced — an announcement about ourselves
+wearing somebody else's id — and two builds that disagreed about what
+`_relayium._tcp` speaks would each invite the other into an establishment it
+cannot answer. It stays a HINT on the same footing as the room hello: it can be
+stripped or forged, both of which are denials, and neither can put plaintext on
+the wire because session keys are derived through commit/reveal. A record whose
+key set, identity, name or capability list is not exactly what this shape
+allows is refused whole rather than admitted with a guess, and the credit is
+delivered before the roster frame, so no device is listed as selectable before
+what it can speak has been established.
+
+Browsing is not a subnet probe and does not open connections. A connection is
+made only to an endpoint returned by Bonjour, and only when an addressed
+session signal needs to be sent. Discovery metadata is an untrusted hint:
+**nothing is ever preselected**, even when exactly one entry appears, names are
+still labelled as peer supplied, and SAS confirmation remains the identity
+check when enabled. `IOSSurfaceGuardTests` pins the single
+`discovery.select(` call site to the row's own tap handler.
+
+**A start that cannot finish ends, rather than searching forever.**
+`NWListener` and `NWBrowser` report a refused Local Network permission — or a
+link that is simply not up — as `waiting`, which is neither of the two edges
+the transport announces. `NetworkLocalPeerTransport` therefore bounds the
+arming window (`startDeadline`, 20 s: long enough not to race a user reading
+the system alert), and an expired window is announced as a failure.
+`LanDiscoveryModel` then leaves `connecting` for `reconnecting` and retries on
+its existing bounded backoff, so permission granted a moment later is picked
+up. The channel is also armed by an explicit `begin()` rather than by its
+initialiser, because `SignalingClient` is constructed FROM the channel and
+installs `onOpen`/`onText`/`onClose` afterwards: an edge delivered into three
+nil handlers is never re-announced, and the room would hang in `connecting`
+with no error and nothing to retry.
 
 **Residency has an order, and it lives in `NearbyResidencyCoordinator` rather
-than in the scene body.** Joining the room is what advertises this device as
-reachable, so before the socket opens the receive folder is resolved
+than in the scene body.** Starting discovery is what advertises this device as
+reachable, so before the local listener/browser starts the receive folder is resolved
 (`ReceiveDestination.directory()`) and installed on the shared file model. A
 failure joins nothing, renders the Files-app recovery (`ReceiveDestinationCopy`
 `.appFolder`) and offers a retry — unreachable is a state the user can be told
@@ -1362,7 +1485,7 @@ about, reachable-with-nowhere-to-write is one they find out about afterwards.
 The same object owns the lifecycle: `.active` joins (idempotent, and it never
 overrides a pause), `.inactive` does **nothing at all** — not even a filesystem
 touch, because that is the phase a document picker produces — and `.background`
-leaves the room *first* and only then runs R3-E's session cleanup, so there is
+stops discovery *first* and only then runs R3-E's session cleanup, so there is
 no window in which this device is listed, dialable and already torn down.
 Returning to the foreground rejoins without clearing a retained result or
 transcript. A pause is the user's, is sticky across a background cycle, and is
@@ -1373,7 +1496,7 @@ guard forbids any iOS source calling `startResident()`, `discovery.start()` or
 `discovery.stop()` directly.
 
 **Both direct tabs share one set of owners and exactly one draws the session.**
-Nearby and Direct are handed the same `RealtimeSessionModel`,
+Nearby and Pairing are handed the same `RealtimeSessionModel`,
 `RealtimeTextSessionModel`, `DirectSendSelection` (and therefore one set of
 security scopes) and `DirectModeSelection` (one answer to files-or-text, with
 R3-E's lock unchanged). Rendered side by side they would show one transfer
@@ -1405,18 +1528,55 @@ paragraph now names no folder, macOS renders `nearby.savedToDownloads`, and iOS
 renders `nearby.savedToAppFolder`, which points at the Files app. One shared
 sentence would have had to be false on one of the two platforms.
 
-**No new capability, and that is now the accurate claim rather than an
-inherited one.** R3-F added no `NSLocalNetworkUsageDescription`, no
-`NSBonjourServices`, no multicast or wifi-info entitlement, no background mode,
-no push, no notification, no Associated Domains, no App Group, no shared
-keychain group and no StoreKit; the entitlement file it left behind claimed only
-`com.apple.developer.applesignin`. Associated Domains is the one thing on that
-list that has since changed: the Universal Link slice claimed it, for
-`applinks:relayium.com` alone, which is where R3-F's own deep-link deferral was
-discharged — see "Universal Links" below. Nothing else on the list has moved. A
-foreground inbound session navigates in app
-instead of notifying, which is the honest shape for an app that is either in the
-foreground or has no session at all.
+**And the device noun was not the last thing that was per-platform — the WIRE
+was.** Once iOS moved to `_relayium._tcp`, the shared nearby copy was still
+describing the hub-backed room: a roster grouped by the public address the
+server observes, a carrier or VPN gateway able to put strangers on it, "open
+relayium.com" as the way to be listed or to wake a silent device, and a lost
+rendezvous in the reconnect banner. All of that remains true on macOS and none
+of it is true on iOS, where nothing is asked outside the local link and a
+browser publishes no Bonjour service at all. A correction in place would only
+have moved the falsehood to the other platform, so the six screen strings and
+one error string were SPLIT: `nearby.iosSafetySummary`, `nearby.iosExplain`,
+`nearby.iosEmptyRoster`, `nearby.iosListeningBody`, `nearby.iosAcceptanceNote`,
+`nearby.iosReconnecting` and `error.nearby.iosNoAnswer`, in English and
+Simplified Chinese only per the supported-language policy, with the frozen
+locales falling back to English.
+
+The seventh is the one worth naming separately, because it is not on the screen.
+`error.nearby.noAnswer` is what both session models render when a chosen device
+never answers, and it is a RECOVERY instruction — open relayium.com there and
+keep the page open — which works against the room and cannot work against
+Bonjour. It is reached only by waiting out `armAnswerTimeout`, on the file lane
+and on the text lane, which is why rendering the tab did not surface it.
+
+Where the substitution happens is the point. `LanDiscoveryModel` takes a
+`reconnectingCopy` key and both session models take a `nearbyNoAnswerCopy` key,
+each defaulting to the shared sentence, so every existing caller — including
+both macOS transfer modules — is byte-identical. The iOS values are passed at
+one boundary each: `LocalNearbyEnvironment.makeDiscoveryModel` for the banner,
+and `AppEnvironment`'s two `#if os(iOS)` realtime overloads, which are the iOS
+Local Nearby composition, for the timeout. `AppEnvironment.localNearbyNoAnswerCopy`
+is declared outside that conditional on purpose: this package's tests are hosted
+on macOS, and a constant inside the block would be unreachable from every test
+that runs — which is how the shared copy reached an iOS Release screenshot in
+the first place. `NearbySessionModelTests` drives both real timeout paths in
+both maintained languages, `AppEnvironmentTests` proves every host-compiled
+factory still chose the shared sentence, and `LocalizedCopyTests` holds each iOS
+string against the claims it may not make and each shared string against the
+claims macOS still needs it to make.
+
+**R3-F claimed to add no capability, and that historical claim has since been
+superseded.** The app now declares both `NSLocalNetworkUsageDescription` and the
+single Bonjour service `_relayium._tcp`. It still claims no multicast or
+wifi-info entitlement, background mode, push or notification capability.
+
+Associated Domains is the one thing on that list that has since changed: the
+Universal Link slice claimed it, for `applinks:relayium.com` alone, which is
+where R3-F's own deep-link deferral was discharged — see "Universal Links"
+below. A foreground inbound session
+navigates in app instead of notifying, which is the honest shape for an app that
+is either in the foreground or has no session at all.
 
 **Not verified by any of this:** a real second device, actual inbound or
 outbound bytes, a roster with more than zero entries on a real network, real-
@@ -1530,25 +1690,83 @@ Sign in with Apple button described above, and
 arrived with Universal Link routing below, plus
 `com.apple.security.application-groups = [group.com.relayium.app]`, which is the
 local handoff shared with the file-staging Share extension. Still absent:
-keychain access group, local network, background modes and push. StoreKit does
-not require an entitlement; its boundary is the adapter linked only into the
-main App Store app, never the extension.
+keychain access group, background modes, push, and the multicast/wifi-info
+entitlements. Local Network and the camera are absent from this file for a
+different reason — both are user-consented protected resources declared in
+`Info.plist` rather than as signed entitlements — and the app declares both:
+`NSLocalNetworkUsageDescription` for Nearby discovery and transfer, and
+`NSCameraUsageDescription` for the pairing QR scanner, which
+`docs/ios-app-store-submission.md` records in full. StoreKit does not require an
+entitlement; its boundary is the adapter linked only into the main App Store
+app, never the extension.
 Each entitlement lands with the functional slice that needs it, and
 `IOSSurfaceGuardTests` fails on any other key appearing in the file — and on the
 associated-domains value being anything other than that one `applinks:` entry.
 
-R3-E recorded that its deferral of the nearby half "cost something", on the
-grounds that Nearby would need the local-network entitlement. **That reason was
-wrong, and R3-F is the correction.** `LanDiscoveryModel` is not Bonjour, does
-not scan, and reaches the same origin as the rest of the app; the room is
-grouped by the public IP the server observes. Nearby therefore needed no
-capability at all, and R3-F added none — it added a roster the user reads, and
-copy explaining what that roster is and is not. What R3-E's deferral actually
-cost was a slice's delay, not an entitlement. `IOSSurfaceGuardTests`'
-`testTheNearbyTabAddsNoNetworkCapability` now states the accurate claim by
-name: no `NSLocalNetworkUsageDescription`, no `NSBonjourServices`, no multicast
-or wifi-info entitlement, and no `NWBrowser`/`NWListener`/`NetService`/
-`MultipeerConnectivity` anywhere in the target.
+#### Local Network and Bonjour
+
+iOS Nearby discovery is a local-network question. The app browses and
+advertises exactly `_relayium._tcp` in the `local.` domain through
+`NWBrowser`/`NWListener`; it does not scan SSIDs, enumerate addresses, probe a
+subnet, enable peer-to-peer Wi-Fi, or request multicast/wifi-info entitlements.
+Browsing never dials. Only a service endpoint returned by that browser may be
+dialled, and only for addressed signaling to a discovered identity.
+
+The direct WebRTC lane also uses local-network access once the user selects a
+device. iOS 14 and later gates these operations behind Local Network consent.
+Shipping without the declaration did not save a prompt; it removed the prompt
+and the feature together. Retained physical runs `0af36138` and `56e78dbf`
+recorded both faces of the earlier omission: iOS/iPadOS 26 withheld the prompt
+entirely and the local path never connected, while iPadOS 18 masked it.
+
+So `apps/ios/Relayium/Info.plist` now declares `NSLocalNetworkUsageDescription`,
+localized in the app bundle's own `en.lproj/InfoPlist.strings` and
+`zh-Hans.lproj/InfoPlist.strings` — the app bundle rather than the package,
+because a system permission alert is drawn by the OS before any Relayium code
+runs and iOS never looks in `RelayiumAppKit` for it. The English text in
+`Info.plist` is the fallback and is byte-identical to the English catalog. The
+sentence truthfully describes both finding nearby Relayium devices and sending
+files and messages directly to the device the user chooses.
+
+`IOSLocalNetworkPermissionTests` is the guard on the whole of that — the key is
+present and non-empty, exactly two `.lproj` folders exist and they are
+`AppLanguage`'s, the Chinese is a real translation rather than a copy or a
+placeholder, the fallback matches English, and the Share extension declares none
+of it.
+
+This is no longer the app's only protected resource, so two of that file's
+assertions are now about the SET of declared purpose strings rather than about
+this one key: the pairing QR scanner added `NSCameraUsageDescription`, and each
+catalog must declare exactly the keys `Info.plist` declares — no fewer, which a
+language localizing one permission and not the other would violate at the exact
+moment a reader is deciding, and no more, since a localized string for an
+undeclared key ships and is never read. The guard that asserted no camera key had
+appeared was written to be deleted by the batch that shipped a real camera
+feature, and that batch deleted it. What replaced it, and the copy bound on the
+new key, are `IOSPairingScannerTests` and the camera section of
+`docs/ios-app-store-submission.md`.
+
+The negative half of the local-network claim lives in `IOSSurfaceGuardTests`
+and `LocalNearbyModuleBoundaryTests`: the Bonjour list must be exactly
+`_relayium._tcp`, the Share extension must contain none of the local peer
+module, and there may be no multicast or wifi-info entitlement, background
+mode, `NetService` or `MultipeerConnectivity`. SSID and hotspot inspection
+(`CNCopyCurrentNetworkInfo`, `NEHotspotNetwork`, `NEHotspotHelper`,
+`CWWiFiClient`) and interface/address enumeration (`getifaddrs`,
+`SCNetworkReachability`) are banned in the app target AND in the local-peer
+module — the app-target ban is what keeps discovery inside one reviewed module,
+so `NWBrowser`, `NWListener` and the service-type literal itself stay banned in
+`apps/ios/Relayium` even though the product now browses. The service type is
+spelled exactly once in the whole module, in its own constant.
+
+Those two bans are SCOPED, and the scope is the honest part. `RelayiumAppKit`'s
+`LocalNetworkAddresses` does call `getifaddrs`, and the shipped binary
+references it: that is this device reading its OWN interface list so the receive
+surface can answer "am I on the network I think I am?", which is a different
+operation from enumerating other hosts and is neither stored nor sent. It is
+banned where discovery lives precisely so the two cannot be confused. Its own
+doc comment still describes the room as grouped by the service-observed public
+address, which remains true of macOS and is now stale for iOS.
 
 ### Universal Links
 
@@ -1594,10 +1812,16 @@ a mis-provisioned association cannot widen what the app acts on.
 `web/public/.well-known/apple-app-site-association` names
 `7PVYUG4YQS.com.relayium.mac` and `7PVYUG4YQS.com.relayium.app` for `/d/*` and
 `/cross-network` and nothing else; `aasa.test.mjs` asserts the marketing,
-pricing, legal and account pages are not claimed. The iOS app was added under
-`applinks` only — the same file's `webcredentials` list is a separate permission
-(password AutoFill), it stays as it was, and no iOS entitlement or form asks for
-it.
+pricing, legal and account pages are not claimed. Since the universal-purchase
+migration the iOS app signs as `com.relayium.mac`, so the entry written for the
+Mac app is now both apps'. The second entry is the identifier iOS shipped under
+before the migration and is kept deliberately: development builds carrying it
+are installed on real devices, and removing it would break their link routing
+for no gain. It is backward compatibility, not a second shipping app. The iOS
+app is under `applinks` only — the same file's `webcredentials` list is a
+separate permission (password AutoFill), it stays as it was, and no iOS
+entitlement or form asks for it. AutoFill therefore stays off because of the
+**entitlement** half now, not the site half.
 
 `AppDeepLinkCoordinatorTests` drives all of it against real models — a real
 `CloudDownloadModel` over a stubbed URL session and real realtime models over a
@@ -1638,8 +1862,8 @@ audience listed under "Sign in with Apple" above.
 **Universal Links are unverified on a device, and no package test can change
 that.** The association is fetched from relayium.com and verified by the OS at
 install time, so a simulator proves nothing about whether a tapped link opens
-the app at all. Outstanding: the com.relayium.app App ID carrying the Associated
-Domains capability in its provisioning profile; a signed install actually
+the app at all. Outstanding: the com.relayium.mac App ID carrying the Associated
+Domains capability in its **iOS** provisioning profile; a signed install actually
 claiming `relayium.com`; a `/d/<id>#k=` link tapped in Mail, Messages and Safari
 opening the app on *Receive* with the manifest resolved; the same for
 `/cross-network#c=<code>` landing on *Direct* with both codes prefilled; a link

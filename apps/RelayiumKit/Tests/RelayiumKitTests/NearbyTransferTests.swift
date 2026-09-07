@@ -685,6 +685,206 @@ final class NearbySessionModelTests: XCTestCase {
         model.updateJoinCode("483920")
         XCTAssertTrue(model.canJoin, "no code was involved, so no code may be blacklisted")
     }
+
+    // MARK: - what the answer timeout tells the user to DO
+
+    // The seventh false claim the iOS Nearby screen could reach, and the one
+    // that is not on the screen: it is printed by the timeout, at the moment
+    // the user is already stuck.
+    //
+    // `error.nearby.noAnswer` says to open relayium.com on the silent device
+    // and keep the page open. On the hub-backed room macOS joins that is the
+    // correct recovery — a browser there really is a listening peer that will
+    // answer. iOS ships `_relayium._tcp`: a browser publishes no Bonjour
+    // service, never joins the roster, and can never answer. Following the
+    // instruction changes nothing, twice.
+    //
+    // Both lanes reach it. The file model arms its own `answerTimeout`; the
+    // text model reuses its idle-timer slot. A repair on one of them would
+    // leave the screen giving two different recoveries depending on which
+    // button the user pressed, so both are driven here through their REAL
+    // timeout paths — a real `connectNearby`, the real timer task, the real
+    // terminal state — rather than by calling the copy function.
+
+    /// The file lane, composed the way the iOS Local Nearby boundary composes
+    /// it. The key comes from `AppEnvironment` rather than being written out
+    /// again here: a boundary quietly reverted to the shared sentence must fail
+    /// this test instead of agreeing with a second copy of itself.
+    private func makeIOSLocalFileModel() -> RealtimeSessionModel {
+        pair = RecordingPair(); ice = RecordingICE(); peer = StubPeer()
+        let p = peer
+        return RealtimeSessionModel(
+            pairClient: pair,
+            iceClient: ice,
+            requiresVerification: { false },
+            nearbyAnswerTimeout: 0,
+            nearbyNoAnswerCopy: AppEnvironment.localNearbyNoAnswerCopy,
+            sleep: { _ in },
+            makeNearbyConnection: { _, _, _ in p },
+            makeConnection: { _, _, _ in p })
+    }
+
+    private func makeIOSLocalTextModel() -> RealtimeTextSessionModel {
+        pair = RecordingPair(); ice = RecordingICE(); peer = StubPeer()
+        let p = peer
+        return RealtimeTextSessionModel(
+            pairClient: pair,
+            iceClient: ice,
+            requiresVerification: { false },
+            idleSleep: { _ in },
+            nearbyAnswerTimeout: 0,
+            nearbyNoAnswerCopy: AppEnvironment.localNearbyNoAnswerCopy,
+            makeNearbyConnection: { _, _, _ in p },
+            makeConnection: { _, _, _ in p })
+    }
+
+    /// Drives an already-connecting model until it gives up, and returns what
+    /// it decided to say. Two overloads because the two lanes are two types
+    /// with two `state` enums; one shape, so neither can be waited on more
+    /// leniently than the other.
+    /// The message a real timeout ended on — or a **failure**, never a skip.
+    ///
+    /// Both helpers drive the actual answer timeout, so "no terminal state" is
+    /// not an environment this suite cannot run in; it is precisely the
+    /// regression the tests around them exist to catch — the model stopped
+    /// failing, or stopped failing within the settle budget. `XCTSkip` reported
+    /// that as a green suite, which is the one outcome a guard must never
+    /// produce. So: `XCTFail` at the caller's line, and then a throw, which is
+    /// what keeps the `-> String` shape honest. Returning a substitute message
+    /// would hand the assertions below something to judge that no model ever
+    /// produced, and one of them could pass on it.
+    private func failedMessage(_ model: RealtimeSessionModel,
+                               file: StaticString = #filePath,
+                               line: UInt = #line) async throws -> String {
+        for _ in 0..<50 {
+            if case .failed = model.state { break }
+            await settle()
+        }
+        guard case let .failed(message) = model.state else {
+            XCTFail("no terminal state; got \(model.state)", file: file, line: line)
+            throw NoTerminalState(state: "\(model.state)")
+        }
+        return message
+    }
+
+    /// The text lane's, held to the same standard for the same reason.
+    private func failedMessage(_ model: RealtimeTextSessionModel,
+                               file: StaticString = #filePath,
+                               line: UInt = #line) async throws -> String {
+        for _ in 0..<50 {
+            if case .failed = model.state { break }
+            await settle()
+        }
+        guard case let .failed(message) = model.state else {
+            XCTFail("no terminal state; got \(model.state)", file: file, line: line)
+            throw NoTerminalState(state: "\(model.state)")
+        }
+        return message
+    }
+
+    /// What both iOS assertions below check, so the file lane and the text lane
+    /// cannot be held to two different standards.
+    private func assertLocalLinkRecovery(_ message: String,
+                                         _ language: AppLanguage,
+                                         _ lane: String,
+                                         line: UInt = #line) {
+        XCTAssertEqual(message, L10n.t(.errorNearbyIOSNoAnswer, language: language),
+                       "\(lane) [\(language.rawValue)] rendered something other than the "
+                       + "local-link recovery", line: line)
+        XCTAssertNotEqual(message, L10n.t(.errorNearbyNoAnswer, language: language),
+                          "\(lane) [\(language.rawValue)] is still the shared Web recovery",
+                          line: line)
+        XCTAssertFalse(message.contains(AppEnvironment.productionHost),
+                       "\(lane) [\(language.rawValue)] tells a Bonjour user to open a page that "
+                       + "publishes no service and can never answer: \(message)", line: line)
+    }
+
+    /// **The file lane's real timeout, in both maintained languages.**
+    func testTheIOSLocalFileTimeoutGivesARecoveryThisTransportCanReach() async throws {
+        defer { L10n.resetCurrent() }
+        for language in [AppLanguage.en, .zh] {
+            L10n.current = language
+            let model = makeIOSLocalFileModel()
+            await model.connectNearby(peerId: "chosen-7")
+            assertLocalLinkRecovery(try await failedMessage(model), language, "the file lane")
+            XCTAssertFalse(model.isBusy)
+            XCTAssertEqual(peer.closeCount, 1,
+                           "giving up has to take the connection with it")
+        }
+    }
+
+    /// **The text lane's real timeout, on the idle-timer slot it reuses.**
+    func testTheIOSLocalTextTimeoutGivesARecoveryThisTransportCanReach() async throws {
+        defer { L10n.resetCurrent() }
+        for language in [AppLanguage.en, .zh] {
+            L10n.current = language
+            let model = makeIOSLocalTextModel()
+            await model.connectNearby(peerId: "chosen-7")
+            assertLocalLinkRecovery(try await failedMessage(model), language, "the text lane")
+        }
+    }
+
+    /// **The opposite guard, and the one that catches the cheap repair.**
+    ///
+    /// Correcting `error.nearby.noAnswer` in place would have turned every iOS
+    /// assertion above green while silently breaking macOS, whose room really
+    /// is reached by a browser on the production host. So: a model built with
+    /// no copy argument — which is what every macOS factory and every other
+    /// caller does — must still time out onto the shared Web recovery, and that
+    /// sentence must still name the host it sends people to.
+    func testADefaultComposedFileTimeoutStillSendsTheUserToTheWebRecovery() async throws {
+        defer { L10n.resetCurrent() }
+        for language in [AppLanguage.en, .zh] {
+            L10n.current = language
+            let model = makeFileModel(answerTimeout: 0, sleepImmediately: true)
+            XCTAssertEqual(model.nearbyNoAnswerCopy, .errorNearbyNoAnswer,
+                           "the initializer default moved off the shared sentence")
+            await model.connectNearby(peerId: "chosen-7")
+            let message = try await failedMessage(model)
+            XCTAssertEqual(message, ErrorCopy.message(for: NearbyError.noAnswer),
+                           "the default file timeout stopped matching ErrorCopy's own arm")
+            XCTAssertEqual(message, L10n.t(.errorNearbyNoAnswer, language: language))
+            XCTAssertTrue(message.contains(AppEnvironment.productionHost),
+                          "the shared recovery [\(language.rawValue)] stopped naming the peer "
+                          + "macOS can really reach: \(message)")
+        }
+    }
+
+    func testADefaultComposedTextTimeoutStillSendsTheUserToTheWebRecovery() async throws {
+        defer { L10n.resetCurrent() }
+        for language in [AppLanguage.en, .zh] {
+            L10n.current = language
+            let model = makeTextModel(answerTimeout: 0, sleepImmediately: true)
+            XCTAssertEqual(model.nearbyNoAnswerCopy, .errorNearbyNoAnswer,
+                           "the initializer default moved off the shared sentence")
+            await model.connectNearby(peerId: "chosen-7")
+            let message = try await failedMessage(model)
+            XCTAssertEqual(message, ErrorCopy.message(for: NearbyError.noAnswer))
+            XCTAssertTrue(message.contains(AppEnvironment.productionHost),
+                          "the shared recovery [\(language.rawValue)] stopped naming the peer "
+                          + "macOS can really reach: \(message)")
+        }
+    }
+
+    /// `ErrorCopy`'s own `NearbyError.noAnswer` arm is what macOS reaches
+    /// through every path that does not go near a session model, and it is
+    /// unchanged by the seam: no argument, the shared sentence.
+    func testErrorCopysNearbyArmIsUnchangedAndItsOverrideIsOptIn() {
+        XCTAssertEqual(ErrorCopy.message(for: NearbyError.noAnswer, language: .en),
+                       L10n.t(.errorNearbyNoAnswer, language: .en))
+        XCTAssertEqual(ErrorCopy.nearbyNoAnswer(language: .en),
+                       L10n.t(.errorNearbyNoAnswer, language: .en))
+        XCTAssertEqual(ErrorCopy.nearbyNoAnswer(AppEnvironment.localNearbyNoAnswerCopy,
+                                                language: .en),
+                       L10n.t(.errorNearbyIOSNoAnswer, language: .en))
+    }
+}
+
+/// Thrown only after `XCTFail`, so a helper that found no terminal state fails
+/// the test rather than skipping it and still satisfies its `-> String` return.
+private struct NoTerminalState: Error, CustomStringConvertible {
+    let state: String
+    var description: String { "no terminal state; got \(state)" }
 }
 
 /// Records that the injected sleep saw its own task cancelled.

@@ -54,16 +54,16 @@ struct AppleSubscriptionCard: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L10n.t(.subscriptionHeading)).font(.headline)
             Text(L10n.t(.subscriptionBody))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             if let renewalNotice {
                 Label(renewalNotice, systemImage: "info.circle")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .font(.callout).foregroundStyle(Palette.supportingLabel)
             }
 
             if let blocked = AppleSubscriptionPresentation.eligibilityNotice(model.eligibility) {
                 Label(blocked, systemImage: "info.circle")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .font(.callout).foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("subscription-blocked")
             }
@@ -72,7 +72,7 @@ struct AppleSubscriptionCard: View {
                 ForEach(rows) { offerRow($0) }
             } else if isUnavailable {
                 Text(L10n.t(.subscriptionNone))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(Palette.supportingLabel)
                     .accessibilityIdentifier("subscription-none")
             }
 
@@ -83,7 +83,7 @@ struct AppleSubscriptionCard: View {
                         .accessibilityIdentifier("subscription-progress")
                 case .info(let text), .success(let text):
                     Label(text, systemImage: "info.circle")
-                        .font(.callout).foregroundStyle(.secondary)
+                        .font(.callout).foregroundStyle(Palette.supportingLabel)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("subscription-notice")
                 case .failure(let text):
@@ -95,7 +95,7 @@ struct AppleSubscriptionCard: View {
             }
 
             Button(L10n.t(.subscriptionRestore)) { Task { await model.restore() } }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .disabled(isBusy)
                 .accessibilityIdentifier("subscription-restore")
 
@@ -104,9 +104,10 @@ struct AppleSubscriptionCard: View {
                 Button(L10n.t(.subscriptionManage)) {
                     openURL(AppEnvironment.appleSubscriptionsURL)
                 }
+                .textAction()
                 .accessibilityIdentifier("subscription-manage")
                 Text(L10n.t(.subscriptionManagedByApple))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -148,13 +149,13 @@ struct AppleSubscriptionCard: View {
                         .accessibilityIdentifier("subscription-current-\(row.productID)")
                 }
             }
-            Text(row.price).font(.caption).foregroundStyle(.secondary)
+            Text(row.price).font(.caption).foregroundStyle(Palette.supportingLabel)
             let effect = AppleSubscriptionPresentation.effectText(row.changeEffect)
-            if !effect.isEmpty { Text(effect).font(.caption).foregroundStyle(.secondary) }
+            if !effect.isEmpty { Text(effect).font(.caption).foregroundStyle(Palette.supportingLabel) }
             // What the tier grants, from the server's own plan row — never a
             // figure this build carries.
             if let entitlements = row.entitlements {
-                Text(entitlements).font(.caption).foregroundStyle(.secondary)
+                Text(entitlements).font(.caption).foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("subscription-entitlements-\(row.productID)")
             }

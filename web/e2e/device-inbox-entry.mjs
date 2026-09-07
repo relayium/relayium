@@ -173,11 +173,14 @@ async function reachFromHome(browser, base, view) {
     if (stillBad) throw new Error(`${view.id}: the Device Inbox nav link is ${stillBad}`);
   }
 
-  // Six destinations, all real links with real hrefs — never fake tabs.
+  // Four transfer destinations, all real links with real hrefs — never fake
+  // tabs. /cli and /apps are not among them: they are downloads and tools, and
+  // they live in the second, separately named nav landmark. They are checked
+  // for reachability below rather than counted here.
   const navs = await tab.evaluate(
     `[...document.querySelectorAll(".tabs a.tab")].map((a) => [a.getAttribute("data-nav"), new URL(a.href).pathname, a.getAttribute("role")])`,
   );
-  if (navs.length !== 6) throw new Error(`${view.id}: ${navs.length} primary destinations, expected 6`);
+  if (navs.length !== 4) throw new Error(`${view.id}: ${navs.length} primary destinations, expected 4`);
   const inbox = navs.find((n) => n[0] === "device-inbox");
   if (!inbox) throw new Error(`${view.id}: no Device Inbox destination among ${JSON.stringify(navs)}`);
   if (inbox[1] !== "/device-inbox") throw new Error(`${view.id}: the link points at ${inbox[1]}`);
@@ -202,6 +205,25 @@ async function reachFromHome(browser, base, view) {
   if (JSON.stringify(current) !== JSON.stringify(["device-inbox"])) {
     throw new Error(`${view.id}: aria-current is on ${JSON.stringify(current)}`);
   }
+  // The secondary group, on the same real viewport: both tools links present,
+  // visible without a gesture, and focusable. A menu would have satisfied the
+  // first of those and failed the other two on a 320px screen.
+  const tools = await tab.evaluate(
+    `[...document.querySelectorAll("nav.tools a.tool")].map((a) => [a.getAttribute("data-nav"), new URL(a.href).pathname])`,
+  );
+  if (JSON.stringify(tools) !== JSON.stringify([["cli", "/cli"], ["apps", "/apps"]])) {
+    throw new Error(`${view.id}: the downloads-and-tools links are ${JSON.stringify(tools)}`);
+  }
+  for (const id of ["cli", "apps"]) {
+    const hidden = await tab.evaluate(VISIBLE(`nav.tools [data-nav="${id}"]`));
+    if (hidden) throw new Error(`${view.id}: the ${id} tools link is ${hidden}`);
+  }
+  if (!(await tab.evaluate(
+    `!!document.querySelector("nav.tools")?.getAttribute("aria-label")`,
+  ))) {
+    throw new Error(`${view.id}: the tools navigation landmark has no accessible name`);
+  }
+
   // This route needs an account, so the account control must be in the nav —
   // the page's own Sign in button opens that component's dialog.
   if (!(await tab.evaluate(`!!document.querySelector(".acct-btn")`))) {

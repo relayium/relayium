@@ -3,24 +3,34 @@ import UniformTypeIdentifiers
 import RelayiumAppKit
 import RelayiumKit
 
-/// R3-F: transfer to a device on this address, with no code and no account —
-/// and accept one that arrives the same way.
+/// R3-F: transfer to a device on this local network, with no code and no
+/// account — and accept one that arrives the same way.
 ///
-/// **This is not "devices on your Wi-Fi", and saying so is the first thing the
-/// screen does.** Nothing here scans the local network. The app joins
-/// Relayium's code-less rendezvous room, and the server groups that room by the
-/// public address it observes a device arriving from. Usually that is the
-/// user's own Wi-Fi. Behind a carrier NAT or a shared VPN gateway it is not, and
-/// the roster can hold devices belonging to strangers. The screen opens with the
-/// half of that which changes a decision — the address can be shared with
-/// strangers — and keeps the mechanism itself one tap away in a closed
+/// **This screen is composed over Bonjour, and every sentence it renders has to
+/// be that wire's.** `RelayiumApp` builds the discovery graph through
+/// `LocalNearbyEnvironment`, which drives `NetworkLocalPeerTransport`: this
+/// device publishes and browses exactly `_relayium._tcp` on the local link it
+/// has joined, and asks nothing outside that link who is nearby. So the roster
+/// is *this network*, not a public address a server observed — and a browser on
+/// the production host, which advertises no Bonjour service, can never be on it.
+///
+/// That is why the six sentences below are `nearbyIOS*` keys rather than the
+/// shared ones beside them. macOS still runs the hub-backed code-less room, so
+/// its public-address, carrier/VPN and open-the-site copy is still true there
+/// and is deliberately left alone; rendering it here stated four things this
+/// binary does not do, which is what a Release capture of this tab exposed.
+///
+/// The risk did not go away with the rendezvous, it changed shape: a café,
+/// hotel or office network is shared, so the devices that answer can still
+/// belong to strangers. The screen therefore opens with the half of that which
+/// changes a decision and keeps the mechanism one tap away in a closed
 /// disclosure, because as an always-open paragraph it pushed every control off
 /// the first several screens at accessibility content sizes. Everything else
 /// here follows from that same fact:
 ///
-///  - **nothing is ever preselected**, not even when the room holds exactly one
-///    other entry — that is precisely the case where the only candidate might be
-///    a stranger;
+///  - **nothing is ever preselected**, not even when the roster holds exactly
+///    one other entry — that is precisely the case where the only candidate
+///    might be a stranger on a shared network;
 ///  - **names are labels**, peer-supplied and duplicated as a matter of course,
 ///    so the disclaimer sits under the list rather than in a help article;
 ///  - **receiving is opt-outable in one tap**, and what it means while it is on
@@ -33,10 +43,18 @@ import RelayiumKit
 /// them would end a live DataChannel, drop a sandbox extension mid-read, or take
 /// this device off the roster, on a tab switch.
 ///
-/// **And it adds no capability.** No local-network usage description, no Bonjour
-/// service, no multicast entitlement, no background mode and no notification: an
-/// inbound session brings this tab forward in app, because the app is in the
-/// foreground or the session does not exist.
+/// **It adds one declaration, and both halves of this tab now need it.**
+/// Reading the roster is itself a local-network operation — `_relayium._tcp`
+/// browsed and advertised, still with no multicast entitlement and no address
+/// scan — and connecting to the device the user picks is gated for the second
+/// time: the session is built with `iceTransportPolicy = .all` and routinely
+/// settles on the peer's address on this subnet. So `Info.plist` declares
+/// `NSLocalNetworkUsageDescription` and iOS asks once, and its purpose string
+/// names both actions rather than only the transfer. There is still no
+/// background mode and no notification: `NearbyResidencyCoordinator` leaves the
+/// link on `.background`, so an inbound session brings this tab forward in app,
+/// because the app is open or the session does not exist. That limit is not
+/// only a comment — it is the sentence `nearbyIOSListeningBody` states.
 ///
 /// ## Two products behind one roster, chosen by the peer
 ///
@@ -206,7 +224,7 @@ struct NearbyView: View {
         SectionCard(L10n.t(.presenceBusyTitle)) {
             Text(L10n.t(.presenceBusyBody))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Button { onShowSession(owner) } label: {
                 Text(L10n.t(.presenceShowIt)).frame(maxWidth: .infinity)
@@ -240,7 +258,7 @@ struct NearbyView: View {
 
         Text(L10n.t(.nearbyNoAccountNeeded))
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Palette.supportingLabel)
             .fixedSize(horizontal: false, vertical: true)
 
         verificationSetting
@@ -248,16 +266,19 @@ struct NearbyView: View {
 
     /// One card, two acts, one action.
     ///
-    /// The rail states the route before either act: this device, an encrypted
-    /// middle whose shape the client cannot prove, and the device the user
-    /// picks. Staging stays deliberately ABOVE and independent of the roster —
+    /// Staging stays deliberately ABOVE and independent of the roster —
     /// choosing what to send and choosing who to send it to are separate, and
-    /// only Send combines them — which is what the two headings now say out
-    /// loud instead of leaving it to the order.
+    /// only Send combines them — which is what the two headings say out loud
+    /// instead of leaving it to the order.
+    ///
+    /// **The route rail is not here any more; it is in the disclosure above.**
+    /// It makes no progress claim — every `iosNearby` stop's `progress` is nil —
+    /// so it was ~45pt of standing illustration between this card's title and
+    /// the chooser, which on a 390pt iPhone put the one control this screen
+    /// exists for below the halfway line. It is mechanism, and it now sits with
+    /// the rest of the mechanism.
     private var sendTask: some View {
         SectionCard(L10n.t(.nearbySendTaskTitle)) {
-            PathRail(stops: PathRailPresentation.iosNearby())
-
             OpenSection(L10n.t(.nearbyWhatToSend)) {
                 // **The picker is not always the right question.** For a peer
                 // that announced exact `link/1` the connection carries messages
@@ -290,20 +311,24 @@ struct NearbyView: View {
         }
     }
 
-    /// **The claim that may never be behind a tap, and the paragraph that may.**
+    /// **The claim that may never be behind a tap, and the mechanism that may.**
     ///
-    /// The mechanism explanation is the honest one and none of it is dropped:
-    /// nothing is scanned, the room is grouped by the public address the server
-    /// observes. But as the first thing on the screen it cost the user
-    /// everything below it — at the largest accessibility content sizes that one
-    /// paragraph filled several screens before any control could be reached,
-    /// which is how a safety notice turns into something scrolled past rather
-    /// than read.
+    /// What changes a decision — these devices share a local network, and a
+    /// shared network can hold strangers — stays visible, and stays to two
+    /// lines. Everything about HOW is one tap away and starts closed: the route
+    /// the bytes take, and the Bonjour paragraph that says one named service is
+    /// browsed, nothing is scanned, and a browser cannot appear here. None of it
+    /// is dropped, including the café/hotel/office examples the summary used to
+    /// spell out — `nearbyIOSExplain` still names all three.
     ///
-    /// So the part that changes a decision — this address can be shared with
-    /// strangers behind a carrier, VPN or shared gateway — stays visible and
-    /// stays short, and the mechanism moves into a disclosure that starts
-    /// closed. The order changed; nothing was removed and nothing was softened.
+    /// As an always-open block this cost the user everything below it: at the
+    /// largest accessibility content sizes it filled several screens before any
+    /// control could be reached, which is how a safety notice turns into
+    /// something scrolled past rather than read.
+    ///
+    /// Both halves are `nearbyIOS*`. The shared keys beside them say the same
+    /// two things about a public address and a carrier or VPN gateway, which is
+    /// the macOS room's truth and not this one's.
     private var safetySummary: some View {
         VStack(alignment: .leading, spacing: Metrics.tight) {
             // The shared inline-message role rather than another grey
@@ -313,17 +338,23 @@ struct NearbyView: View {
             // not `.warning` — nothing has gone wrong, and spending the
             // warning colour here would leave the real failures below it
             // looking the same as the standing caution above them.
-            InlineMessage(.info, L10n.t(.nearbySafetySummary))
+            InlineMessage(.info, L10n.t(.nearbyIOSSafetySummary))
             // Labelled, because a bare chevron says nothing about what it
             // hides — and a disclosure nobody opens is the same as deleting the
             // explanation.
             DisclosureGroup(isExpanded: $showsMechanism) {
-                Text(L10n.t(.nearbyExplain))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, Metrics.hairline)
+                VStack(alignment: .leading, spacing: Metrics.inner) {
+                    // The standing route, where the rest of the mechanism is.
+                    // It claims no progress and never did, so nothing about it
+                    // needs to be watched while a transfer runs.
+                    PathRail(stops: PathRailPresentation.iosNearby())
+                    Text(L10n.t(.nearbyIOSExplain))
+                        .font(.footnote)
+                        .foregroundStyle(Palette.supportingLabel)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, Metrics.hairline)
             } label: {
                 Text(L10n.t(.nearbyHowItWorks))
                     .font(.footnote)
@@ -333,7 +364,15 @@ struct NearbyView: View {
             // but it is not THE control: drawn in the accent it read as loud as
             // the task below it, which is the one thing the accent is for. The
             // chevron still says it opens.
-            .tint(Color.secondary)
+            //
+            // The role rather than the system grey, because `.tint` on a
+            // `DisclosureGroup` colours the LABEL as well as the chevron, so the
+            // label was being drawn in `Color.secondary` with no
+            // `.foregroundStyle` anywhere near it to say so. A source audit
+            // classified this as a control tint and was wrong; the Light system
+            // audit rendered it and reported the sentence. Grey is preserved,
+            // legibility is added, and the chevron comes along at 4.61:1.
+            .tint(Palette.supportingLabel)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -370,9 +409,9 @@ struct NearbyView: View {
             // The default is no prompt, by the same decision that made advanced
             // verification opt-in. Stating the consequence is not a
             // contradiction of that decision; hiding it would be.
-            Text(L10n.t(isListening ? .nearbyListeningBody : .nearbyPausedBody))
+            Text(L10n.t(isListening ? .nearbyIOSListeningBody : .nearbyPausedBody))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             if isListening {
                 // Where an unsolicited file lands, and it is the place this
@@ -383,17 +422,17 @@ struct NearbyView: View {
                 // about delivery, so it is made only while delivery can happen.
                 Text(L10n.t(.nearbySavedToAppFolder))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
             switch receive.state {
             case .paused:
                 Button(L10n.t(.nearbyResumeReceiving)) { residency.resume() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
             case .connecting, .ready, .reconnecting, .active:
                 Button(L10n.t(.nearbyPauseReceiving)) { residency.pause() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
                     .disabled(busy)
             case .off:
@@ -453,6 +492,7 @@ struct NearbyView: View {
                     Text(summary).font(.subheadline.weight(.semibold))
                     Spacer(minLength: 0)
                     Button(L10n.t(.commonClear)) { selection.clear() }
+                        .textAction()
                         .disabled(busy)
                 }
                 // One element, so VoiceOver reads "3 files" rather than
@@ -479,7 +519,7 @@ struct NearbyView: View {
                 Button { isChoosingFiles = true } label: {
                     Text(L10n.t(.commonChooseFilesOrFolders)).frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
                 .disabled(busy)
             }
@@ -498,11 +538,12 @@ struct NearbyView: View {
                 // hand-built ones.
                 // nonlocalized: SF Symbol name
                 EmptyStateView(symbol: "dot.radiowaves.left.and.right",
-                               message: L10n.t(.nearbyEmptyRoster))
+                               message: L10n.t(.nearbyIOSEmptyRoster))
             } else {
                 VStack(alignment: .leading, spacing: Metrics.inner) {
-                    // Keyed by peer id, never by position: the hub's roster
-                    // order is not stable, and a row that moves under the
+                    // Keyed by peer id, never by position: roster order is not
+                    // stable — here it is whatever order the Bonjour browser
+                    // resolved its results in — and a row that moves under the
                     // finger between two frames is how the wrong device gets
                     // tapped.
                     ForEach(discovery.devices) { device in
@@ -510,7 +551,7 @@ struct NearbyView: View {
                     }
                     Text(L10n.t(.nearbyNamesDisclaimer))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.supportingLabel)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .accessibilityElement(children: .contain)
@@ -522,7 +563,7 @@ struct NearbyView: View {
             // again" belongs here rather than beside the pause control, which
             // is about a different decision.
             Button(L10n.t(.nearbyLookAgain)) { residency.refresh() }
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
                 .disabled(busy)
         }
@@ -537,8 +578,16 @@ struct NearbyView: View {
             if selected { discovery.clearSelection() } else { discovery.select(device.id) }
         } label: {
             HStack(spacing: Metrics.inner) {
+                // `actionLabel`, not `action`. This glyph is the FIRST carrier
+                // of "this is the one you chose", and it sits on
+                // `Palette.actionSurface` — the accent as a foreground on a
+                // wash of itself, which is the pair a real screenshot measured
+                // at 2.70:1 against the 3:1 a meaningful non-text graphic owes.
+                // The label role clears it at 6.7:1 and is unchanged in Light.
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selected ? Palette.action : Color.secondary)
+                    // secondary-role: selection-state — the UNSELECTED checkbox. Non-text, and
+                    // selection is also carried by the filled/hollow shape, not colour alone.
+                    .foregroundStyle(selected ? Palette.actionLabel : Color.secondary)
                 // The peer's own name, already stripped of control and bidi
                 // characters by `safeDisplayName`.
                 Text(device.label)
@@ -589,9 +638,9 @@ struct NearbyView: View {
             }
             // Says what actually happens on the other end rather than implying
             // a human gate that is not there.
-            Text(L10n.t(.nearbyAcceptanceNote))
+            Text(L10n.t(.nearbyIOSAcceptanceNote))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -601,7 +650,7 @@ struct NearbyView: View {
     private func linkActions(for device: NearbyDevice) -> some View {
         Text(L10n.t(.linkConnectToDeviceHint))
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Palette.supportingLabel)
             .fixedSize(horizontal: false, vertical: true)
         Button { connectLink(to: device) } label: {
             Text(L10n.t(.linkConnectToDevice)).frame(maxWidth: .infinity)
@@ -614,7 +663,7 @@ struct NearbyView: View {
             // being sent now, and it is not being dropped either.
             Text(L10n.t(.linkConnectCarriesStagedFiles))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
         // `actionError` is NOT rendered here: `sendTask` already draws it once,
@@ -630,7 +679,7 @@ struct NearbyView: View {
                 Text(selection.summary.map { L10n.t(.nearbySelectionSendHint, [$0]) }
                      ?? L10n.t(.nearbyAddFilesHint))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 Button { sendFiles() } label: {
                     Text(L10n.t(.commonSend)).frame(maxWidth: .infinity)
@@ -641,7 +690,7 @@ struct NearbyView: View {
             case .text:
                 Text(L10n.t(.nearbyTextIntent))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 Button { startText() } label: {
                     Text(L10n.t(.nearbyStartMessageSession)).frame(maxWidth: .infinity)
@@ -670,7 +719,7 @@ struct NearbyView: View {
             }
             if hasRetainedSession && !busy {
                 Button(L10n.t(.nearbyBackToDevices)) { leaveOrConfirm() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
                 if modes.mode == .text {
                     // Says so rather than surprising: leaving is the one action
@@ -678,7 +727,7 @@ struct NearbyView: View {
                     // still showing.
                     Text(L10n.t(.nearbyLeavingClearsHistory))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.supportingLabel)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -694,7 +743,7 @@ struct NearbyView: View {
                     .font(.headline)
                 Text(L10n.t(.nearbySessionPeerDisclaimer))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -707,26 +756,13 @@ struct NearbyView: View {
     /// Locked while a session is live, because the models read the preference
     /// when the SAS arrives and flipping it mid-handshake would make the gate
     /// depend on timing.
+    ///
+    /// The shared card, not a second copy of the Pairing tab's. The two bodies
+    /// were byte-identical over one app-scoped preference, which is exactly the
+    /// shape where a hierarchy change lands on one screen and not the other.
+    /// See `VerificationSettingCard`.
     private var verificationSetting: some View {
-        // In a card, untitled: the toggle's own label is the title, and the two
-        // paragraphs under it are what it does and what it does NOT change.
-        // Left loose at the bottom of the screen it was a wall of grey with no
-        // boundary, which is how a setting starts reading as a footer.
-        SectionCard {
-            Toggle(L10n.t(.verifyToggle), isOn: Binding(
-                get: { verification.requiresSASConfirmation },
-                set: { if !isLocked { verification.requiresSASConfirmation = $0 } }
-            ))
-                .disabled(isLocked)
-            Text(L10n.t(.verifyExplainWhat))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(L10n.t(.verifyExplainEncryption))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+        VerificationSettingCard(isLocked: isLocked)
     }
 
     /// What the app could not carry into the background, said after the fact
@@ -735,6 +771,7 @@ struct NearbyView: View {
         VStack(alignment: .leading, spacing: Metrics.tight) {
             failureLine(notice)
             Button(L10n.t(.commonDismiss)) { foreground.dismissInterruption() }
+                .textAction()
         }
     }
 

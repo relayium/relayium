@@ -59,19 +59,46 @@ final class BundleVersionTests: XCTestCase {
         // the two products must not drift apart either: they are the same
         // release of the same app through two channels, and a user who installs
         // one after the other must not see the version go backwards.
-        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.3.9", occurrences: 10)
-        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "27", occurrences: 10)
+        //
+        // `1.3.11 (29)`. **`1.3.10 (28)` is spent**, and the marketing version
+        // moves with it rather than only the build. An authenticated App Store
+        // Connect read-back on 2026-09-07 shows build `28` uploaded and `VALID`
+        // on the universal-purchase record, with the `1.3.10` macOS version in
+        // `PENDING_DEVELOPER_RELEASE` — approved and awaiting a manual release.
+        // The Developer ID/GitHub `1.3.10` is separately public. Two artifacts
+        // therefore already answer to `1.3.10` — one public on that channel, one
+        // approved and awaiting release on the App Store — so a candidate that
+        // carries the newer cross-platform navigation work cannot reuse that
+        // number without making the version string stop identifying a build.
+        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.3.11", occurrences: 10)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "29", occurrences: 10)
     }
 
     /// iOS: the app and its Share extension, both Debug and Release.
     func testTheIOSAppAndItsExtensionShipOneVersion() throws {
-        // `0.3.0 (5)`, the restart baseline. `1.2.10 (2)` was a never-delivered
-        // candidate that deliberately matched the then-current macOS numbers,
-        // so it is not a floor this line has to clear: the separate iOS App
-        // Store record's last upload was `0.1.0` build 4, and 5 is the next
-        // build above it. Builds are what App Store Connect requires to be
-        // strictly monotonic per record; the marketing version is not.
-        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.3.0", occurrences: 4)
-        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "5", occurrences: 4)
+        // `0.3.1 (7)`. **Builds 5 and 6 are both spent.** Build 5 was archived,
+        // uploaded to the universal-purchase record on 2026-09-05, processed,
+        // and reached `Ready to Submit` — and was then rejected before any
+        // submission, because a Release capture of its Nearby tab rendered the
+        // hub-backed room's public-address copy over the Bonjour transport iOS
+        // actually ships. Build 6 was uploaded to the same record later that
+        // day and read back `VALID` on 2026-09-07. A build number is consumed
+        // by the upload, not by the release, so this candidate takes 7.
+        //
+        // `1.2.10 (2)` was a never-delivered candidate that deliberately matched
+        // the then-current macOS numbers, so it is not a floor this line has to
+        // clear. Builds are what App Store Connect requires to be strictly
+        // monotonic per record; the marketing version is not.
+        //
+        // The build does NOT move with the marketing version. `0.3.0 (5)` was a
+        // development baseline that was never archived, and 0.3.1 keeps its
+        // marketing version across every correction: 5, 6 and 7 are three
+        // candidates of the same unreleased version, not three versions.
+        // Nothing under `0.3.1` has ever been submitted or released, so unlike
+        // macOS above there is no published artifact for the number to collide
+        // with — the iOS App Store version record still reads `0.3.1` in
+        // `PREPARE_FOR_SUBMISSION`.
+        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.3.1", occurrences: 4)
+        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "7", occurrences: 4)
     }
 }

@@ -1162,8 +1162,18 @@ final class InboxSurfaceGuardTests: XCTestCase {
     /// and `AppInboxReceiverHost`, which is headless. Both were telling central
     /// they presented messages.
     ///
-    /// So the announcement is an argument, passed at exactly one site, and this
-    /// is what stops a second one appearing in a build with no such screen.
+    /// So the announcement is an argument, passed at exactly one site per
+    /// target, and this is what stops a second one appearing in a build with no
+    /// such screen.
+    ///
+    /// **iOS 0.3.0 changes which side of this iOS is on, and the guard changes
+    /// with it rather than being deleted.** That app now ships
+    /// `DeviceConversationView`, whose timeline renders a received message as
+    /// text, so announcing the token is honest there — and the check that used
+    /// to be "iOS must never name it" is now the same check every other
+    /// claimant gets: exactly one site, and that site is the app scene that
+    /// composes the receiver. The library still announces nothing on anyone's
+    /// behalf, which is the invariant that was actually load-bearing.
     func testOnlyTheBuildThatRendersMessagesAnnouncesTheTextCapability() throws {
         let app = try macSource("RelayiumApp.swift")
         XCTAssertTrue(app.contains(
@@ -1193,24 +1203,32 @@ final class InboxSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(hosts.contains("presentingText: true"),
                        "the headless receiver host claims a message surface it does not have")
 
-        // And iOS, which is the build the shared claim was actually false for.
+        // And iOS, which used to be the build the shared claim was false for and
+        // is now a claimant in its own right — under exactly the same rule.
         let iosRoot = try appsRoot.appendingPathComponent("ios")
         let iosNames = try FileManager.default.subpathsOfDirectory(atPath: iosRoot.path)
             .filter { $0.hasSuffix(".swift") }
         XCTAssertGreaterThanOrEqual(iosNames.count, 10,
                                     "found \(iosNames.count) iOS sources at \(iosRoot.path)")
-        for name in iosNames {
-            let source = try code(iosRoot.appendingPathComponent(name))
-            XCTAssertFalse(source.contains("presentingText: true"),
-                           "iOS/\(name) announces a Device Inbox text surface it does not ship")
-            // Naming the token at all needs a look. iOS ships no Device Inbox
-            // message surface, so the only honest uses here would be a refusal
-            // — and a refusal on this platform is currently expressed by simply
-            // not announcing it.
-            XCTAssertFalse(source.contains("InboxCapability.textV1"),
-                           "iOS/\(name) names the text capability token; iOS has no "
-                           + "Device Inbox message surface, so this needs review")
-        }
+        let iosClaimants = try iosNames.filter {
+            try code(iosRoot.appendingPathComponent($0)).contains("presentingText: true")
+        }.map { ($0 as NSString).lastPathComponent }.sorted()
+        XCTAssertEqual(iosClaimants, ["RelayiumApp.swift"],
+                       "the text claim must be made once, by the app scene that composes "
+                       + "the receiver — not by a view and not by a fixture")
+
+        // **And the screen that makes the claim true is actually there.** This
+        // is the half that a deletion of the old ban would have lost: without
+        // it, the announcement could stay behind after the timeline was removed,
+        // and central would go on offering this device as one that presents
+        // messages. The surface reads the protected body through the store its
+        // direction owns, which is what "presents it as text" means here.
+        let page = try code(iosRoot.appendingPathComponent(
+            "Relayium/DeviceConversationView.swift"))
+        XCTAssertTrue(page.contains("inbox.message(for: entry)"),
+                      "iOS announces a text surface but reads no received message body")
+        XCTAssertTrue(page.contains("Text(message.text)"),
+                      "iOS announces a text surface that never renders the message")
     }
 
     /// Nothing in the Device Inbox deletes a received message on a schedule.
@@ -1536,5 +1554,187 @@ final class InboxSurfaceGuardTests: XCTestCase {
                                                   range: body.upperBound..<pane.endIndex))
         XCTAssertLessThan(exit.lowerBound, transcript.lowerBound,
                           "long session content hides the session owner's only exit")
+    }
+
+    // MARK: - what the surface puts first
+
+    /// **Pending work, then the answer to "can this receive", then what
+    /// arrived — and the configuration last, on both platforms.**
+    ///
+    /// The defect was an ordering one and it was the same on each: a set of
+    /// controls a configured person changes approximately never — the receive
+    /// folder, the auto-accept policy, the login item — rendered ABOVE the
+    /// deliveries central was holding for an answer, above what was arriving,
+    /// and above every device on the account. Someone opening this destination
+    /// to read what turned up scrolled past their own settings to get there,
+    /// every single time, and on a phone that is several screens.
+    ///
+    /// Positions rather than mere presence, because presence is what already
+    /// held while the pane was unusable. `range(of:)` on the rendered branch is
+    /// the whole mechanism: each section is named once in the body, so its
+    /// offset IS its position on screen.
+    func testTheInboxPutsPendingWorkAndArrivalsAboveItsConfiguration() throws {
+        // ── macOS ──────────────────────────────────────────────────────────
+        let surface = try macSource("DeviceInbox/DeviceInboxSurface.swift")
+        let afterSurface = try XCTUnwrap(
+            surface.components(separatedBy: "case .surface:").dropFirst().first)
+        let mac = try XCTUnwrap(afterSurface.components(separatedBy: "case .statusOnly:").first)
+
+        func macAt(_ needle: String) throws -> String.Index {
+            try XCTUnwrap(mac.range(of: "\n                    \(needle)")?.lowerBound,
+                          "the macOS Device Inbox no longer renders \(needle)")
+        }
+        let ask = try macAt("askSection")
+        let status = try macAt("statusSection(offersControls: true)")
+        let conversations = try macAt("conversationsSection")
+        let send = try macAt("DeviceSendSection(")
+        for (name, later) in [("folderSection", try macAt("folderSection")),
+                              ("policySection", try macAt("policySection")),
+                              ("residencySection", try macAt("residencySection"))] {
+            XCTAssertLessThan(ask, later,
+                              "macOS: \(name) is above the questions awaiting an answer")
+            XCTAssertLessThan(status, later, "macOS: \(name) is above the status and its recovery")
+            XCTAssertLessThan(conversations, later, "macOS: \(name) is above the conversations")
+            XCTAssertLessThan(send, later, "macOS: \(name) is above the devices to send to")
+        }
+
+        // ── iOS ────────────────────────────────────────────────────────────
+        let ios = try code(try RepoRoot.directory("apps/ios/Relayium")
+            .appendingPathComponent("DeviceInboxView.swift"))
+        let branch = try XCTUnwrap(ios.components(separatedBy: "case .surface:").dropFirst().first?
+            .components(separatedBy: "case .statusOnly:").first)
+        func iosAt(_ needle: String) throws -> String.Index {
+            try XCTUnwrap(branch.range(of: "\n            \(needle)")?.lowerBound,
+                          "the iOS Device Inbox no longer renders \(needle)")
+        }
+        let iosAsk = try iosAt("askSection")
+        let iosStatus = try iosAt("statusSection")
+        let iosDeliveries = try iosAt("DeviceDeliveryList(")
+        let iosConversations = try iosAt("conversationsSection")
+        let iosSettings = try iosAt("settingsSection")
+        // Pending questions expire, and answering one is what starts a download
+        // at all. On a phone the status card alone is a screenful, so this is
+        // first rather than second.
+        XCTAssertLessThan(iosAsk, iosStatus, "iOS: pending questions sit below the status card")
+        for (name, later) in [("deliveries", iosDeliveries),
+                              ("conversations", iosConversations)] {
+            XCTAssertLessThan(iosStatus, later, "iOS: \(name) is above the status and its recovery")
+        }
+        for (name, earlier) in [("askSection", iosAsk), ("statusSection", iosStatus),
+                                ("the deliveries", iosDeliveries),
+                                ("the conversations", iosConversations)] {
+            XCTAssertLessThan(earlier, iosSettings, "iOS: the consent control is above \(name)")
+        }
+    }
+
+    /// **The one consent control is findable when it is still owed, and its
+    /// refusals can never be closed away.**
+    ///
+    /// iOS discloses it and macOS does not, and that asymmetry is the point
+    /// rather than a drift: a Mac shows a resizable window with three short
+    /// sections in a scrolling `Form`, and collapsing the receive folder —
+    /// without which nothing is delivered at all — would hide the single thing a
+    /// Mac user most needs to find. A phone genuinely cannot show the whole
+    /// destination at once.
+    ///
+    /// What the disclosure must never cost:
+    ///
+    ///  - **discoverability while unconfigured.** `.off` is not a setting on a
+    ///    working feature, it is the feature being off, so the control that
+    ///    fixes it is open when the screen appears;
+    ///  - **a visible refusal.** `inbox.settingsError` renders OUTSIDE the
+    ///    disclosure, so a user who collapses the section still sees that their
+    ///    last change was refused. A warning behind a closed chevron is not a
+    ///    warning;
+    ///  - **the answer itself.** The collapsed label states the current policy,
+    ///    so the fact somebody would open it to check is already on screen.
+    func testTheIOSConsentControlOpensWhenUnconfiguredAndNeverHidesARefusal() throws {
+        let ios = try code(try RepoRoot.directory("apps/ios/Relayium")
+            .appendingPathComponent("DeviceInboxView.swift"))
+
+        // Exactly one piece of presentation state, and it is a Bool.
+        XCTAssertEqual(ios.components(separatedBy: "@State private var").count - 1, 1,
+                       "the Device Inbox grew presentation state beyond the one disclosure flag")
+        XCTAssertTrue(ios.contains("@State private var showsSettings = false"))
+        // Seeded once on appearance, in one direction. A re-derived value would
+        // slam the section shut under the finger the moment somebody answered.
+        XCTAssertTrue(ios.contains("if inbox.policy == .off { showsSettings = true }"),
+                      "an unconfigured inbox no longer opens on the control that configures it")
+        XCTAssertTrue(ios.contains("openSettingsIfUnconfigured()"))
+        // Exactly two writes exist in the file: the declaration's `= false` and
+        // the one-directional seed. A third would be something closing the
+        // section under the user, which is the behaviour the seed exists to
+        // avoid. (`code()` has already stripped the comments, so a mention in
+        // prose cannot inflate this.)
+        XCTAssertEqual(ios.components(separatedBy: "showsSettings = ").count - 1, 2,
+                       "something else writes the disclosure flag")
+
+        let card = try XCTUnwrap(ios.components(separatedBy: "private var settingsSection:")
+            .dropFirst().first?.components(separatedBy: "\n    private ").first)
+        let disclosure = try XCTUnwrap(card.range(of: "DisclosureGroup(isExpanded: $showsSettings)"))
+        let error = try XCTUnwrap(card.range(of: "if let error = inbox.settingsError"),
+                                  "the settings refusal is no longer rendered on this card")
+        XCTAssertLessThan(error.lowerBound, disclosure.lowerBound,
+                          "a refused settings change can be collapsed out of sight")
+        XCTAssertTrue(card.contains("InboxPolicyPresentation.label(for: inbox.policy)"),
+                      "the collapsed row does not say what the current answer is")
+        // The control itself is inside; the picker is what the disclosure holds.
+        let inside = card[disclosure.upperBound...]
+        XCTAssertTrue(inside.contains("inbox.setPolicy($0)"),
+                      "the policy control is not the thing being disclosed")
+
+        // The platform limit is not part of any of this: it is true in every
+        // state, it is why a file sent to a locked phone waits, and it stays on
+        // the status card in the open.
+        // Sliced to the next declaration, NOT to the next `// MARK:` — `code()`
+        // strips comment lines, so a MARK-based slice silently runs to the end
+        // of the file and every negative assertion after it becomes a statement
+        // about some other section.
+        let status = try XCTUnwrap(ios.components(separatedBy: "private var statusSection:")
+            .dropFirst().first?.components(separatedBy: "\n    private ").first)
+        XCTAssertTrue(status.contains("L10n.t(.inboxIOSForegroundOnly)"),
+                      "the foreground-only limitation left the status card")
+        XCTAssertFalse(status.contains("DisclosureGroup"),
+                       "the status card put one of its facts behind a chevron")
+    }
+
+    /// **A refused ANSWER renders beside the buttons that failed, not with the
+    /// settings.**
+    ///
+    /// `.askResponseFailed` is an `InboxSettingsError` by type only:
+    /// `InboxController.respond` produces it and restores the question, so the
+    /// Accept/Decline are back on screen at the top while the warning was being
+    /// filed at the bottom of the destination, below every conversation.
+    /// `InboxSettingsErrorSource` partitions the cases, which is what makes the
+    /// two cards mutually exclusive rather than merely differently ordered — a
+    /// second copy would be the other failure mode.
+    func testTheRefusedAnswerRendersWithTheQuestionAndNotWithTheSettings() throws {
+        let ios = try code(try RepoRoot.directory("apps/ios/Relayium")
+            .appendingPathComponent("DeviceInboxView.swift"))
+
+        let ask = try XCTUnwrap(ios.components(separatedBy: "private var askSection:")
+            .dropFirst().first?.components(separatedBy: "\n    private ").first)
+        XCTAssertTrue(ask.contains("InboxSettingsErrorCopy.message(askFailure)"),
+                      "the ask card does not render the refusal of its own action")
+        XCTAssertTrue(ios.contains("error.source == .pendingAnswer"),
+                      "the ask card selects the refusal by something other than its source")
+        // The card has to survive the roster emptying under it, or the one
+        // state this exists for renders nothing at all.
+        XCTAssertTrue(ask.contains("!inbox.asking.isEmpty || askFailure != nil"),
+                      "a failed answer with no restored question would render nowhere")
+
+        let card = try XCTUnwrap(ios.components(separatedBy: "private var settingsSection:")
+            .dropFirst().first?.components(separatedBy: "\n    private ").first)
+        XCTAssertTrue(card.contains("error.source == .configuration"),
+                      "the settings card claims refusals its own controls did not produce")
+        XCTAssertEqual(ios.components(separatedBy: "InlineMessage(.warning, InboxSettingsErrorCopy")
+                          .count - 1, 2,
+                       "the same refusal is rendered in more than the two routed places")
+
+        // macOS routes on the same property rather than on a hand-written list
+        // of exceptions, so a new case cannot silently land in the wrong pane.
+        let mac = try macSource("DeviceInbox/DeviceInboxSurface.swift")
+        XCTAssertTrue(mac.contains("error.source != .notificationAccess"),
+                      "the macOS pane no longer routes refusals by their source")
     }
 }

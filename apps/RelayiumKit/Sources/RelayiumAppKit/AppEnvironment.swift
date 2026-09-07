@@ -56,8 +56,11 @@ public enum AppEnvironment {
         return isolated
     }
 
-    /// The iOS credential identity: this app's own bundle id, and NO access
-    /// group. See `KeychainConfiguration.accessGroup`.
+    /// The iOS credential identity. `com.relayium.app` is the stable service
+    /// label of the `com.relayium.mac` iOS/TestFlight lineage, not this app's
+    /// current bundle id: the identity migration must not silently move where
+    /// existing installs read their credentials from. NO access group is set.
+    /// See `KeychainConfiguration.accessGroup`.
     public static let iosKeychainService = "com.relayium.app"
 
     public static func keychainConfiguration(for platform: KeychainPlatform) -> KeychainConfiguration {
@@ -455,11 +458,23 @@ public enum AppEnvironment {
     // **These are not a permission boundary, and R3-E's comment here wrongly
     // implied they were.** `LanDiscoveryModel` is not Bonjour and does not scan:
     // it joins the hub's code-less room over the same origin as everything else,
-    // and the server groups that room by the public IP it observes. Nearby
-    // therefore needs ordinary internet access on every platform — no
-    // local-network prompt and no multicast entitlement — which is why iOS could
-    // take it in R3-F without acquiring a capability. What these code-only
+    // and the server groups that room by the public IP it observes. Building the
+    // ROSTER therefore needs nothing but ordinary internet access on every
+    // platform — no Bonjour, no multicast entitlement, and no local-network
+    // prompt for discovery itself, which is why iOS could take the roster in
+    // R3-F without acquiring a discovery capability. What these code-only
     // factories express is the absence of a FEATURE, not of a permission.
+    //
+    // The TRANSFER that follows is a separate question, and an earlier version
+    // of this comment wrongly generalised the roster sentence over it. Once the
+    // user picks a peer, the realtime lane connects with `iceTransportPolicy =
+    // .all` and between two devices on one network routinely settles on a
+    // unicast socket to the peer's address on that subnet — which iOS 14 and
+    // later do gate behind Local Network access. The iOS app therefore declares
+    // `NSLocalNetworkUsageDescription`, and that declaration is app-wide: it
+    // covers every lane that can reach a peer directly, is not scoped to these
+    // factories, and does not change with which overload a host calls.
+    // `IOSLocalNetworkPermissionTests` owns the declaration itself.
 
     @MainActor
     public static func makeRealtimeModel(baseURL: URL = transferBaseURL,
@@ -497,7 +512,13 @@ public enum AppEnvironment {
                                         verification: VerificationPreference,
                                         nearby: LanDiscoveryModel,
                                         inboundRoom: InboundRoom,
-                                        pairingRoom: LinkRoomHandle) -> RealtimeSessionModel {
+                                        pairingRoom: LinkRoomHandle,
+                                        // Defaulted, so this factory's existing
+                                        // behaviour is unchanged; the iOS
+                                        // overload below is the only caller
+                                        // that passes anything else.
+                                        nearbyNoAnswerCopy: L10nKey = .errorNearbyNoAnswer)
+        -> RealtimeSessionModel {
         RealtimeSessionModel(
             pairClient: HTTPPairClient(baseURL: baseURL),
             iceClient: HTTPICEClient(baseURL: baseURL),
@@ -505,6 +526,7 @@ public enum AppEnvironment {
             // preference must take effect on the next connection, not the next
             // app launch.
             requiresVerification: { verification.requiresSASConfirmation },
+            nearbyNoAnswerCopy: nearbyNoAnswerCopy,
             // Reuses the socket the roster came from: reconnecting would earn a
             // new peer id and a room the user never saw. Read at call time, so
             // a device picked before discovery stopped fails cleanly instead of
@@ -553,11 +575,14 @@ public enum AppEnvironment {
                                             verification: VerificationPreference,
                                             nearby: LanDiscoveryModel,
                                             inboundRoom: InboundRoom,
-                                            pairingRoom: LinkRoomHandle) -> RealtimeTextSessionModel {
+                                            pairingRoom: LinkRoomHandle,
+                                            nearbyNoAnswerCopy: L10nKey = .errorNearbyNoAnswer)
+        -> RealtimeTextSessionModel {
         RealtimeTextSessionModel(
             pairClient: HTTPPairClient(baseURL: baseURL),
             iceClient: HTTPICEClient(baseURL: baseURL),
             requiresVerification: { verification.requiresSASConfirmation },
+            nearbyNoAnswerCopy: nearbyNoAnswerCopy,
             makeNearbyConnection: { peerId, role, servers in
                 guard let signaling = nearby.client else { throw NearbyError.notScanning }
                 return try await RealtimeConnectionFactory.connectNearby(
@@ -602,12 +627,44 @@ public enum AppEnvironment {
         )
     }
 
+    /// The answer-timeout recovery step for the iOS Local Nearby composition.
+    ///
+    /// **Declared unconditionally on purpose.** Everything that USES it is
+    /// inside the `#if os(iOS)` block below, and putting the value there too
+    /// would put it out of reach of every test that runs — this package's tests
+    /// are hosted on macOS, so a Mac-hosted run compiles neither the overloads
+    /// nor a constant beside them, and the iOS wording would be asserted only
+    /// by reading source text. The shared Nearby copy reached an iOS Release
+    /// screenshot precisely because nothing executable was checking it.
+    ///
+    /// A constant rather than a literal at the two call sites, so the file
+    /// model and the text model cannot be given different answers: both lanes
+    /// time out from the same screen, and a screen that recovered two ways
+    /// depending on which lane the user started is worse than either.
+    ///
+    /// Why this value: `error.nearby.noAnswer` tells the user to open
+    /// relayium.com on the silent device and keep the page open. On the
+    /// hub-backed room that is the correct instruction — a browser there IS a
+    /// listening peer. iOS Nearby is `LocalNearbyEnvironment` over
+    /// `_relayium._tcp`, where a browser publishes no service, joins no roster
+    /// and can never answer, so the shared sentence is an instruction that
+    /// cannot succeed, shown at the one moment the user needs one that can.
+    public static let localNearbyNoAnswerCopy: L10nKey = .errorNearbyIOSNoAnswer
+
     #if os(iOS)
     /// iOS uses nearby discovery but does not compose the macOS `link/1`
     /// workspace. Keep the fallback handle inside the shared factory so the iOS
     /// target neither names nor accidentally starts owning that surface; the
     /// session model's room-connection closure retains the handle for exactly
     /// as long as the model graph lives.
+    ///
+    /// These two overloads are also the iOS Local Nearby composition boundary,
+    /// and that is why the answer-timeout copy is substituted HERE rather than
+    /// at the app's call site. `RelayiumApp` is the only caller today; a second
+    /// one that had to remember to pass the key would be a screen that says the
+    /// wrong thing and still compiles. The substitution is not conditional on
+    /// anything the caller supplies, because on this platform there is no other
+    /// transport for these two models to be nearby over.
     @MainActor
     public static func makeRealtimeModel(baseURL: URL = transferBaseURL,
                                          verification: VerificationPreference,
@@ -615,7 +672,8 @@ public enum AppEnvironment {
                                          inboundRoom: InboundRoom) -> RealtimeSessionModel {
         makeRealtimeModel(
             baseURL: baseURL, verification: verification, nearby: nearby,
-            inboundRoom: inboundRoom, pairingRoom: LinkRoomHandle())
+            inboundRoom: inboundRoom, pairingRoom: LinkRoomHandle(),
+            nearbyNoAnswerCopy: localNearbyNoAnswerCopy)
     }
 
     @MainActor
@@ -625,7 +683,8 @@ public enum AppEnvironment {
                                              inboundRoom: InboundRoom) -> RealtimeTextSessionModel {
         makeRealtimeTextModel(
             baseURL: baseURL, verification: verification, nearby: nearby,
-            inboundRoom: inboundRoom, pairingRoom: LinkRoomHandle())
+            inboundRoom: inboundRoom, pairingRoom: LinkRoomHandle(),
+            nearbyNoAnswerCopy: localNearbyNoAnswerCopy)
     }
     #endif
 
@@ -1227,9 +1286,21 @@ public enum AppEnvironment {
         journalStore: @escaping @Sendable (InboxAccountID) -> InboxJournalStore?,
         messageStore: @escaping @Sendable (InboxAccountID) -> InboxMessageStore?,
         folderStore: InboxFolderStoring,
+        /// How the grant is resolved and opened. Defaulted to the system's, so
+        /// no macOS caller changes; iOS passes `ContainerInboxFolderBookmarking`
+        /// because a plain iOS bookmark's URL answers
+        /// `startAccessingSecurityScopedResource()` with false, which
+        /// `InboxReceiveFolder.open` would report as a permission failure on a
+        /// directory the app owns outright.
+        ///
+        /// It is a PARAMETER rather than a second `InboxReceiveFolder` built
+        /// here, because the caller builds one too — for the status line — and
+        /// two folders over one grant is how the engine and the surface end up
+        /// disagreeing about where a delivery lands.
+        bookmarking: InboxFolderBookmarking = SystemInboxFolderBookmarking(),
         session: URLSession = .shared
     ) -> @Sendable (InboxAccountID, String) async throws -> InboxReceiveEngine {
-        let folder = InboxReceiveFolder(store: folderStore)
+        let folder = InboxReceiveFolder(store: folderStore, bookmarking: bookmarking)
         return { account, bearer in
             guard let journals = journalStore(account) else {
                 throw InboxSupportError.noJournalDirectory
@@ -1262,6 +1333,41 @@ public enum AppEnvironment {
     /// interpret it, so it is a label rather than a protocol value.
     // nonlocalized: a protocol platform token, never displayed as prose
     public static let inboxPlatform = "macos"
+
+    /// What this build reports when it enrols.
+    ///
+    /// Read from the bundle rather than hard-coded, so a version bump cannot
+    /// leave the account's device list claiming the previous release — which is
+    /// a claim a person acts on, because the compatibility of a delivery is read
+    /// off it.
+    ///
+    /// The em dash is the honest answer for a bundle that cannot name its own
+    /// version, and never an empty string: central bounds this to printable
+    /// ASCII and a blank would render as a device with no version at all rather
+    /// than as one whose version is unknown.
+    // nonlocalized: an em dash placeholder for a missing bundle value
+    public static func appVersion(_ bundle: Bundle = .main) -> String {
+        let value = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        guard let value, !value.trimmingCharacters(in: .whitespaces).isEmpty else { return "—" }
+        return value
+    }
+
+    /// What the iOS build calls itself when it enrols.
+    ///
+    /// A separate token from `inboxPlatform`, and it has to be: a person looking
+    /// at their device list is choosing where to send a file, and the one thing
+    /// they need from this string is whether the receiver is the Mac on their
+    /// desk or the phone in their pocket. It is also the token a sender's
+    /// surface uses to explain WHY a device may be unreachable, and the honest
+    /// explanations differ — a Mac receives with its window closed and an iPhone
+    /// does not.
+    ///
+    /// `ios`, covering iPhone, iPad and the Simulator alike. The device NAME
+    /// already distinguishes those (`deviceFamilyName(forModelIdentifier:)`), and
+    /// splitting the platform token by family would make central's device rows
+    /// depend on a distinction nothing on either side acts on.
+    // nonlocalized: a protocol platform token, never displayed as prose
+    public static let iosInboxPlatform = "ios"
 
     /// Assemble the whole resident receiver.
     ///
@@ -1339,6 +1445,111 @@ public enum AppEnvironment {
             refreshNotificationPermission: refreshNotificationPermission,
             openNotificationSettings: openNotificationSettings,
             platform: inboxPlatform, capabilities: capabilities,
+            appVersion: appVersion))
+    }
+
+    /// The whole iOS receiver, assembled once.
+    ///
+    /// The macOS factory above and this one differ in exactly four places, and
+    /// every one of them is a platform fact rather than a preference:
+    ///
+    ///  1. **The folder is the container's, not the user's.** There is no
+    ///     `NSOpenPanel`, no security scope and no bookmark that can go stale, so
+    ///     the two seams `InboxReceiveFolder` was built with are filled by
+    ///     `ContainerInboxFolderStore` and `ContainerInboxFolderBookmarking`
+    ///     rather than the folder logic being branched. Everything else about
+    ///     that type — the write probe, the refusal to enable receiving without
+    ///     a folder, the state vocabulary — is shared and unchanged. The
+    ///     *policy* is still the wrapped `UserDefaults` store's, still
+    ///     account-scoped and still default-off: a fixed destination removes the
+    ///     folder consent, never the receiving one.
+    ///  2. **No notifier and no notification seams.** This app declares no
+    ///     notification capability at all, so the defaults — an `unmeasured`
+    ///     permission that renders nothing, and an "open Settings" that reports
+    ///     it could not — are the honest answers rather than placeholders.
+    ///  3. **`reveal` is dropped, and the default no-op is the point.** There is
+    ///     no `NSWorkspace.activateFileViewerSelecting` here and no reliable way
+    ///     to open the Files app on a directory, so a Reveal control would be a
+    ///     button that does nothing. The iOS surface renders none and names the
+    ///     Files route in words instead — `ReceiveDestinationCopy.savedLocation`,
+    ///     which is the same sentence a stored-link receive already shows.
+    ///  4. **`ios` for the platform token — but the CAPABILITIES are the
+    ///     caller's.** The platform token is a fact about this build and belongs
+    ///     here. `inbox.text.v1` is not: it is a claim that the receiver
+    ///     PRESENTS a text delivery as text, which is a claim about a screen. It
+    ///     lived in `InboxProtocol.capabilities` for one commit and every build
+    ///     that linked the library inherited it — including a headless
+    ///     acceptance host that presents nothing. So it is defaulted here to the
+    ///     base set, which under-claims, and the app that ships the conversation
+    ///     timeline passes it at its one composition site.
+    ///
+    /// The keychain configuration is the iOS one by default (`keychainConfiguration`
+    /// resolves per platform), so the device key history lands under this app's
+    /// own service with no access group.
+    @MainActor
+    public static func makeIOSInboxController(
+        baseURL: URL = transferBaseURL,
+        keychain: KeychainConfiguration = keychainConfiguration,
+        defaults: UserDefaults = .standard,
+        journalSubdirectory: String = "device-inbox",
+        /// Overridden by the acceptance harness so a run receives into a
+        /// directory of its own rather than into the installed container's.
+        /// Production leaves it alone and gets `Documents/Received`, which is
+        /// the SAME directory a stored-link download writes to — one receive
+        /// folder in the Files app, not two.
+        receiveDirectory: @escaping @Sendable () throws -> URL
+            = { try InboxContainerFolder.directory() },
+        /// What the composing app announces. Defaulted to the base set, so a
+        /// build that forgets to pass one under-claims rather than promising a
+        /// surface it does not ship — the same rule the macOS factory records.
+        capabilities: [String] = InboxProtocol.capabilities,
+        appVersion: String,
+        session: URLSession = .shared
+    ) -> InboxController {
+        let folderStore = ContainerInboxFolderStore(
+            base: makeInboxFolderStore(defaults: defaults))
+        let bookmarking = ContainerInboxFolderBookmarking(directory: receiveDirectory)
+        let folder = InboxReceiveFolder(store: folderStore, bookmarking: bookmarking)
+        let keys = makeInboxKeyStore(keychain)
+        // Built from the SAME store and the SAME bookmarking as `folder` above.
+        // Two would be two answers to where a delivery lands — the engine's and
+        // the status line's — and they would agree right up until one of them was
+        // pointed somewhere else, which is exactly what the acceptance override
+        // does.
+        let makeEngine = makeInboxEngineFactory(
+            baseURL: baseURL, keys: keys,
+            journalStore: { account in
+                makeInboxJournalStore(subdirectory: inboxJournalSubdirectory(
+                    base: journalSubdirectory, account: account))
+            },
+            messageStore: { account in
+                makeInboxMessageStore(subdirectory: inboxJournalSubdirectory(
+                    base: journalSubdirectory, account: account))
+            },
+            folderStore: folderStore, bookmarking: bookmarking, session: session)
+        return InboxController(runtime: InboxRuntime(
+            folder: folder, makeEngine: makeEngine, notifier: nil,
+            messageStore: { account in
+                makeInboxMessageStore(subdirectory: inboxJournalSubdirectory(
+                    base: journalSubdirectory, account: account))
+            },
+            sentMessageStore: { account in
+                makeInboxSentMessageStore(subdirectory: inboxJournalSubdirectory(
+                    base: journalSubdirectory, account: account))
+            },
+            conversationStore: { account in
+                makeInboxConversationStore(subdirectory: inboxJournalSubdirectory(
+                    base: journalSubdirectory, account: account))
+            },
+            legacyReceipts: { account in
+                guard let journals = makeInboxJournalStore(subdirectory: inboxJournalSubdirectory(
+                    base: journalSubdirectory, account: account)) else { return [] }
+                return try journals.completedReceipts()
+            },
+            deviceDirectory: { token in
+                try await InboxSenderClient(baseURL: baseURL, token: token, session: session).devices()
+            },
+            platform: iosInboxPlatform, capabilities: capabilities,
             appVersion: appVersion))
     }
 

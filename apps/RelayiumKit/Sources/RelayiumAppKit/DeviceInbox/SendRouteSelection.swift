@@ -23,18 +23,27 @@ public enum SendRoute: String, Equatable, Sendable, CaseIterable {
     case device
 }
 
-/// Which of the two the Send screen is currently offering.
+/// Which of the two a screen is currently offering.
 ///
-/// App-scoped, and for the same reason `DirectModeSelection` is: SwiftUI tears
-/// off-screen tabs down and rebuilds them, so a `@State` here would silently
-/// reset the user's choice every time they checked their plan mid-send — and it
-/// would reset it to the OTHER kind of send, which is the one distinction on
-/// this screen that must not be made on the user's behalf.
+/// **Composed by nothing, as of iOS 0.3.0, and kept deliberately.**
 ///
-/// It deliberately does NOT lock while work is running. Outstanding device
-/// deliveries are rendered under both routes, so switching back to the link
-/// flow hides nothing and stops nothing; a lock would only strand a user who
-/// wanted to send something else while a delivery waited for an offline Mac.
+/// It existed for one surface: the iOS Send tab's segmented *As a link / To a
+/// device* control. That control is gone, because the distinction above is not
+/// one a user should be able to slide past — it is now made by WHICH
+/// DESTINATION you are on, which is how macOS has always made it (see
+/// `DeviceSendSection`, whose own comment cites the type above as its argument).
+/// Send is stored links; a device delivery starts from that device's Device
+/// Inbox conversation.
+///
+/// What remains is `SendRoute` itself — the shared statement of why the two are
+/// different products, which both platforms' compositions are built to respect —
+/// and this holder, which is the reversible half. Neither shell renders either
+/// today; `InboxSendPresentation.label(for:)` and `.explanation(for:)`, and the
+/// `send.chooseHow` copy behind them, are likewise unrendered rather than
+/// deleted. If a surface ever needs to offer both again it must be app-scoped
+/// for the reason `DirectModeSelection` is — SwiftUI tears off-screen surfaces
+/// down, and a `@State` would silently reset the user's choice to the OTHER kind
+/// of send.
 @MainActor
 public final class SendRouteSelection: ObservableObject {
     @Published public private(set) var route: SendRoute

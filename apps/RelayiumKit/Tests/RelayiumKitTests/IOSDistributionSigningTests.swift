@@ -77,8 +77,17 @@ final class IOSDistributionSigningTests: XCTestCase {
         return matches.first?.settings ?? [:]
     }
 
-    private let app = "com.relayium.app"
-    private let share = "com.relayium.app.share"
+    /// The app's bundle id, which iOS shares with macOS: Apple requires every
+    /// platform in one universal-purchase App Store record to carry the same
+    /// Bundle ID, and both platforms live under Apple ID 6801142976.
+    private let app = "com.relayium.mac"
+    /// The iOS Share Extension. `com.relayium.mac.Share` is the macOS
+    /// extension's identifier and a plausible wrong answer here. The portal
+    /// settles which one is correct: the target iOS TestFlight build's Build
+    /// Metadata under Apple ID 6801142976 names the Share Extension
+    /// application identifier `7PVYUG4YQS.com.relayium.mac.ShareIOS`, and this
+    /// project must match that already-validated identity.
+    private let share = "com.relayium.mac.ShareIOS"
 
     /// Release names the certificate and the profile, for both bundles.
     ///
@@ -88,8 +97,8 @@ final class IOSDistributionSigningTests: XCTestCase {
     /// `DEVELOPMENT_TEAM` is asserted alongside it because the profile names are
     /// only unique within the team that issued them.
     func testReleaseSignsBothBundlesManuallyForTheAppStore() throws {
-        for (bundleID, profile) in [(app, "Relayium iOS App Store"),
-                                    (share, "Relayium Share Extension App Store")] {
+        for (bundleID, profile) in [(app, "Relayium iOS Universal App Store"),
+                                    (share, "Relayium iOS Share Extension App Store")] {
             let settings = try configuration("Release", of: bundleID)
             XCTAssertEqual(settings["CODE_SIGN_STYLE"], "Manual",
                            "\(bundleID) Release does not sign manually")

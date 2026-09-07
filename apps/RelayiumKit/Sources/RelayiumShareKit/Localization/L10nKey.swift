@@ -215,10 +215,19 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case contentPendingDeletionBody = "content.pendingDeletionBody"
     case contentReactivate = "content.reactivate"
     case contentBackToSignIn = "content.backToSignIn"
-    /// The iOS receive tab, and the iOS account tab. macOS has no tab bar —
-    /// `nav.*` names its five sidebar destinations — so these two keys are
-    /// rendered by `apps/ios/Relayium` alone. `download.heading` ("Receive
-    /// files") is a screen title, too long for a tab item.
+    /// **No longer a tab, and kept deliberately.**
+    ///
+    /// Opening a stored link was one of iOS's five tabs until 0.3.0, when it
+    /// became what it had always been in product terms — something the OS hands
+    /// this app, from a verified Universal Link or an Account stored-file row,
+    /// rather than somewhere a person sets out to go. `IOSSurface.browseable`
+    /// records that decision and the screen is now presented over whichever
+    /// surface the user was on, keeping its own `download.heading` title.
+    ///
+    /// The key stays because the decision is reversible and the translation is
+    /// done; it renders nowhere today. macOS never rendered it: `nav.*` names
+    /// that shell's five sidebar destinations, and `nav.storedReceive` is the
+    /// title its equivalent screen carries.
     case tabReceive = "tab.receive"
     /// The iOS send tab. A third register again: `upload.heading` ("Send files")
     /// is a screen title and `common.send` is the button that starts a transfer,
@@ -226,6 +235,14 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case tabSend = "tab.send"
     case tabAccount = "tab.account"
     case tabDirect = "tab.direct"
+    /// The iOS Device Inbox tab.
+    ///
+    /// A third register again, and a shorter one than `inbox.title` on purpose:
+    /// *Device Inbox* is the screen's name and the iPad sidebar row's, and it
+    /// does not fit under a tab-bar glyph at the accessibility text sizes this
+    /// app supports. The two are the same feature and are allowed to be, in the
+    /// way `tab.send` and `upload.heading` already are.
+    case tabDeviceInbox = "tab.deviceInbox"
 
     // MARK: - Navigation
     //
@@ -260,6 +277,16 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// sidebar, the menu bar and the window title cannot end up calling one
     /// feature three things.
     case navDeviceInboxSubtitle = "nav.deviceInboxSubtitle"
+    /// The iPad sidebar's Device Inbox subtitle, and therefore its
+    /// accessibility hint.
+    ///
+    /// Separate from `nav.deviceInboxSubtitle` because that one makes two
+    /// promises this platform cannot keep — *a folder you choose* and *works
+    /// with the window closed*. Both are the macOS product; on iOS the folder is
+    /// fixed and the receiver runs only while Relayium is open. A subtitle is
+    /// the last thing somebody reads before committing to a destination, so it
+    /// is the worst place for either claim.
+    case navIOSDeviceInboxSubtitle = "nav.iosDeviceInboxSubtitle"
     case navAccount = "nav.account"
     case navAccountSubtitle = "nav.accountSubtitle"
     /// The sidebar list's accessibility label.
@@ -660,6 +687,10 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case verifyToggle = "verify.toggle"
     case verifyExplainWhat = "verify.explainWhat"
     case verifyExplainEncryption = "verify.explainEncryption"
+    /// Names the disclosure the two `verify.explain*` paragraphs moved into on
+    /// iOS. It is what stops a closed chevron from being an unlabelled control
+    /// over an explanation nobody can guess the subject of.
+    case verifyHowItWorks = "verify.howItWorks"
 
     // MARK: - Single-session presence
     //
@@ -705,6 +736,58 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// signed out. Only minting a code is gated, and only because the code's
     /// owner is billed for the relay capacity it reserves.
     case directJoinNoAccountNeeded = "direct.joinNoAccountNeeded"
+
+    // MARK: - Reading the join link off the other screen (iOS)
+    //
+    // The sending device already draws its code as a QR join link. These are the
+    // other end of that: a camera that reads one back into the six-digit field.
+    //
+    // Two things every sentence here has to keep true, because both are product
+    // decisions rather than wording:
+    //
+    //  1. **A scan fills the field. It never joins.** The digits land where a
+    //     typed code lands, and the user still presses Join. So the success line
+    //     says what was filled in and what is left to do, rather than announcing
+    //     a transfer.
+    //  2. **Every refusal leaves typing available.** Denied, restricted, no
+    //     camera and a capture failure are four different true statements, and
+    //     each one names the six-digit field as the way through. A single
+    //     "camera unavailable" would be wrong three times out of four and would
+    //     leave the reader with no next action.
+
+    /// The control that opens the scanner, beside the six-digit field.
+    case pairingScanCode = "pairing.scanCode"
+    /// The scanner sheet's own title.
+    case pairingScanTitle = "pairing.scanTitle"
+    /// Under the viewfinder, while the camera is running.
+    case pairingScanHint = "pairing.scanHint"
+    /// The viewfinder itself has no text, so this is what VoiceOver reads in
+    /// place of an unlabelled rectangle of live video.
+    case pairingScanViewfinderLabel = "pairing.scanViewfinderLabel"
+    /// Between the tap and the system's answer.
+    case pairingScanRequesting = "pairing.scanRequesting"
+    /// The user, or this device's management, said no. Four distinct causes,
+    /// four sentences — see the note above.
+    case pairingScanDeniedTitle = "pairing.scanDeniedTitle"
+    case pairingScanDeniedBody = "pairing.scanDeniedBody"
+    case pairingScanRestrictedBody = "pairing.scanRestrictedBody"
+    /// The heading over the two states that are about the hardware rather than
+    /// about permission. "Camera access is off" would be a false diagnosis on a
+    /// device that has no camera to grant.
+    case pairingScanUnavailableTitle = "pairing.scanUnavailableTitle"
+    case pairingScanUnavailableBody = "pairing.scanUnavailableBody"
+    case pairingScanFailedBody = "pairing.scanFailedBody"
+    /// Deep-links to this app's own Settings page. Only offered for `denied`,
+    /// which is the one of the four a person can actually change.
+    case pairingScanOpenSettings = "pairing.scanOpenSettings"
+    /// A QR code was read and it was not a Relayium join code. Says that
+    /// nothing was changed, because the six digits already typed are the thing
+    /// a silent refusal would appear to have eaten.
+    case pairingScanRejected = "pairing.scanRejected"
+    /// After a good scan, beside the filled field. It names the remaining step
+    /// on purpose: this product never joins a session the user did not press
+    /// Join for.
+    case pairingScanFilled = "pairing.scanFilled"
 
     // MARK: - Direct, positioned and bounded (iOS)
 
@@ -1109,6 +1192,57 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// receiving here ever reaches the transport with a credential.
     case nearbyNoAccountNeeded = "nearby.noAccountNeeded"
 
+    // MARK: - Nearby pane, the iOS transport
+    //
+    // **iOS does not join the code-less rendezvous room, so it may not render
+    // the six sentences above that describe one.** Its Nearby tab is composed
+    // through `RelayiumLocalPeerKit`: it publishes and browses exactly one
+    // Bonjour service, `_relayium._tcp`, on the local link this device has
+    // joined, and no server is asked who is nearby. Every claim the shared copy
+    // makes about a public address, a carrier or VPN gateway putting strangers
+    // on that address, a browser on the production host being a peer, or a
+    // rendezvous to reconnect to, is therefore FALSE on that platform — which
+    // is how a Release screenshot of the shipped tab came to state four things
+    // the binary does not do.
+    //
+    // These are per-platform keys rather than a correction in place for the
+    // reason the platform split exists at all: macOS still runs the hub-backed
+    // room, and its sentences are still true there. One shared paragraph would
+    // have to be false on one of the two platforms.
+    //
+    // Maintained in English and Simplified Chinese only, per the supported-
+    // language policy; the frozen locales fall back to English rather than
+    // gaining a seventh half-maintained translation of a claim about a wire.
+
+    /// The always-visible iOS summary. Same job as `nearbySafetySummary` — the
+    /// one thing that has to be read before a device is chosen — with the
+    /// grouping that is actually true: everything on this local network, which
+    /// on a café, hotel or office network includes strangers' devices.
+    case nearbyIOSSafetySummary = "nearby.iosSafetySummary"
+    /// The iOS mechanism paragraph, behind the same closed disclosure. Names the
+    /// Bonjour service by the string the transport actually registers, states
+    /// that nothing outside the network is asked, and says what cannot appear —
+    /// a web browser does not publish this service and is not a peer here.
+    case nearbyIOSExplain = "nearby.iosExplain"
+    /// The iOS empty roster. The remedy is the Relayium app on the other device
+    /// on this same network — never a page on the production host, which
+    /// advertises no Bonjour service and can never join this roster.
+    case nearbyIOSEmptyRoster = "nearby.iosEmptyRoster"
+    /// What receiving allows on iOS, including the limit this platform actually
+    /// has: the app claims no background mode, so
+    /// `NearbyResidencyCoordinator` leaves the link on `.background` and the
+    /// window in which an unsolicited transfer can arrive is the window in
+    /// which the app is open.
+    case nearbyIOSListeningBody = "nearby.iosListeningBody"
+    /// What happens on the other end of an iOS Nearby send. The peer is another
+    /// Relayium app on this link, not a browser, so the shared note's
+    /// production-host sentence describes a device that cannot be there.
+    case nearbyIOSAcceptanceNote = "nearby.iosAcceptanceNote"
+    /// The iOS drop banner. There is no rendezvous to lose here — what dropped
+    /// is the local link — so `LanDiscoveryModel` renders this key instead of
+    /// `nearbyReconnecting` when `LocalNearbyEnvironment` composed it.
+    case nearbyIOSReconnecting = "nearby.iosReconnecting"
+
     // MARK: - Drop zone, picker, received result, QR
 
     case dropA11yLabel = "drop.a11yLabel"
@@ -1437,6 +1571,24 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case errorFactoryNoPeerAppeared = "error.factory.noPeerAppeared"
     case errorNearbyNotScanning = "error.nearby.notScanning"
     case errorNearbyNoAnswer = "error.nearby.noAnswer"
+    /// The seventh iOS-only Nearby key, and the one that is not on the Nearby
+    /// screen at all — which is why the first six did not catch it.
+    ///
+    /// `error.nearby.noAnswer` is a RECOVERY instruction, not a diagnosis: it
+    /// tells the user what makes a device answer. On the hub-backed room macOS
+    /// joins, the answer is a listening peer, and a browser on the production
+    /// host is one — so the shared sentence sends the user there and is true.
+    /// On the `_relayium._tcp` link iOS ships, a browser publishes no Bonjour
+    /// service and can never answer, so the same sentence is an instruction
+    /// that cannot work, printed at the exact moment the user is stuck.
+    ///
+    /// Reached from `RealtimeSessionModel.armAnswerTimeout` and
+    /// `RealtimeTextSessionModel.armAnswerTimeout` — both nearby timeout
+    /// paths, file and text — and from nowhere else. It is rendered instead of
+    /// the shared key only when a composition passed it in; see
+    /// `AppEnvironment.localNearbyNoAnswerCopy`, which is the one place the
+    /// substitution is made.
+    case errorNearbyIOSNoAnswer = "error.nearby.iosNoAnswer"
     /// %@ — the file-count limit, verbatim.
     case errorStagingFileCount = "error.staging.fileCount"
     case errorStagingUnreadable = "error.staging.unreadable"
@@ -1777,6 +1929,81 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// An honest sentence rather than a disabled composer: a control that cannot
     /// work is worse than one that is absent with a reason beside it.
     case inboxComposeUnavailable = "inbox.composeUnavailable"
+
+    // MARK: - the iOS Device Inbox
+    //
+    // **Why these are separate keys and not edits to the ones above.**
+    //
+    // Every key in this section has a macOS counterpart whose sentence is FALSE
+    // on iPhone and iPad, and false in a way that costs the reader something:
+    //
+    //  | macOS key | what it says | why it does not hold on iOS |
+    //  |---|---|---|
+    //  | `inbox.explain` | *Choose a folder on this Mac* | there is no folder to choose |
+    //  | `inbox.signedOutBody` | *signed in on this Mac* | this is a phone |
+    //  | `inbox.policyExplain` | *even while the window is closed* | there is no window, and no background receive |
+    //  | `inbox.folderExplain` | *Choosing a folder does not switch receiving on* | as above |
+    //  | `inbox.folderAccessDenied` | *macOS refused access… Choose it again* | no panel, no grant, nothing to renew |
+    //  | `inbox.folderUnresolvable` | *was renamed, or is on a disk that isn't connected* | it is inside the app |
+    //  | `inbox.folderNotWritable` | *or choose another one* | there is no other one |
+    //  | `inbox.blockedPermission` | *Choose the folder again to renew permission* | as above |
+    //  | `inbox.blockedDirectory` | *Reconnect the disk, or choose another folder* | as above |
+    //  | `inbox.blockedNameConflict` | *Open your receive folder* (Finder) | the route is the Files app |
+    //  | `inbox.blockedDecrypt` | *this Mac's key* | this device's key |
+    //
+    // What is deliberately NOT duplicated is everything whose advice is already
+    // platform-neutral — every status line, every ask, every failure, the
+    // timeline and the composer — so the two platforms cannot drift into
+    // explaining one rule two ways. `IOSInboxCopy` is where the eleven
+    // substitutions are made, and it is the only thing that reads them.
+
+    /// What the Device Inbox is on this device: a destination the account's own
+    /// devices can send to, with no folder to choose and nothing to configure
+    /// beyond the one consent below.
+    case inboxIOSExplain = "inbox.iosExplain"
+    case inboxIOSSignedOutBody = "inbox.iosSignedOutBody"
+    /// The receiving consent, stated with the limit that actually applies here.
+    case inboxIOSPolicyExplain = "inbox.iosPolicyExplain"
+    /// **The foreground-only statement, and the single most important sentence
+    /// on the iOS Device Inbox.**
+    ///
+    /// This app declares no background mode, no push and no notification. A
+    /// delivery is claimed, decrypted and written while Relayium is open, and
+    /// not otherwise — so a user who sends a file to their iPhone and locks it
+    /// is waiting for something that will not happen until they unlock and open
+    /// the app. Every other sentence on the screen is true of macOS too; this
+    /// one is what makes the screen honest on a phone, and it is rendered
+    /// unconditionally rather than as a failure state.
+    case inboxIOSForegroundOnly = "inbox.iosForegroundOnly"
+    /// %@ — the Files-app route deliveries land under.
+    case inboxIOSFolderExplain = "inbox.iosFolderExplain"
+    case inboxIOSFolderAccessDenied = "inbox.iosFolderAccessDenied"
+    case inboxIOSFolderUnresolvable = "inbox.iosFolderUnresolvable"
+    case inboxIOSFolderNotWritable = "inbox.iosFolderNotWritable"
+    case inboxIOSBlockedPermission = "inbox.iosBlockedPermission"
+    case inboxIOSBlockedDirectory = "inbox.iosBlockedDirectory"
+    case inboxIOSBlockedNameConflict = "inbox.iosBlockedNameConflict"
+    case inboxIOSBlockedDecrypt = "inbox.iosBlockedDecrypt"
+    case inboxIOSBlockedInternal = "inbox.iosBlockedInternal"
+    /// The three terminal failures whose macOS wording names a Mac.
+    ///
+    /// `inbox.failedUnknown` is deliberately absent from this list: it says
+    /// *this version*, not *this Mac*, and is already true on both platforms.
+    /// The other three each name the machine — and `failedKey` also names the
+    /// keychain and tells the user to unlock it, which is a macOS action with no
+    /// iOS equivalent.
+    case inboxIOSFailedEnrolment = "inbox.iosFailedEnrolment"
+    case inboxIOSFailedKey = "inbox.iosFailedKey"
+    case inboxIOSFailedIdentity = "inbox.iosFailedIdentity"
+    /// No device has ever sent to this one, and this one has sent to none.
+    ///
+    /// A distinct sentence from `inbox.timelineEmpty`, which is about ONE
+    /// device's history. This is the whole list being empty, and its remedy is
+    /// different: there is nothing to open, so it names what would fill it.
+    case inboxIOSConversationsEmpty = "inbox.iosConversationsEmpty"
+    /// %@ — the spoken name of a conversation row, so VoiceOver hears which
+    /// device a row opens rather than five identically-labelled buttons.
+    case inboxIOSOpenConversation = "inbox.iosOpenConversation"
     /// This Mac has no body for an outgoing message row — the plan was staged
     /// and the process died before the body was written. Said out loud rather
     /// than rendered as an empty row.

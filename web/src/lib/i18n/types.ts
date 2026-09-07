@@ -162,7 +162,7 @@ export interface Messages {
   peersTitle: string;
   crossPeersTitle: string; // heading for the single connected peer on the cross-network page
   emptyPeers: string;
-  emptyCrossCta: string; // LAN empty-state escape hatch → cross-network transfer
+  emptyCrossCta: string; // LAN empty-state escape hatch → the pairing destination
   dragSendOne: (name: string) => string;
   dragSendMany: string;
   pickHint: (max: number) => string;
@@ -795,12 +795,17 @@ export interface Messages {
      *  exactly the way the top nav and the page footer used to. */
     footerLegalLabel: string; footerGuidesLabel: string;
     lanTab: string; crossTab: string; offlineTab: string; cliTab: string; appsTab: string;
-    /** Sixth primary destination: /device-inbox. It is a product entry point of
-     *  the same rank as the other five, not a page reachable only from
+    /** Fourth transfer destination: /device-inbox. It is a product entry point of
+     *  the same rank as the other three, not a page reachable only from
      *  a device card, so it gets a nav label rather than a link buried in prose.
-     *  Keep it SHORT — six labels share one row, and both maintained languages
+     *  Keep it SHORT — four labels share one row, and both maintained languages
      *  have to fit a 320px rail without any of them being truncated. */
     deviceInboxTab: string;
+    /** Names the SECOND nav landmark: the two links that are not ways to move a
+     *  file. `cliTab`/`appsTab` supply the link text; this names the group, so a
+     *  screen reader's landmark list can tell it from `primaryLabel` rather than
+     *  announcing two unnamed navigations. */
+    toolsLabel: string;
     /** Accessible names for the two rail controls that appear only while the
      *  mobile destination row actually overflows. They carry no visible copy —
      *  the buttons are direction-aware chevrons — so these strings are the only

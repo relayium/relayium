@@ -26,7 +26,7 @@ name: ios
 #                        simulator UI smoke and three acceptance runs that
 #                        could not observe it.
 #
-#                        That is not a coverage loss, including for the five
+#                        That is not a coverage loss, including for the ten
 #                        iOS guard selectors below, which ARE files under
 #                        `apps/RelayiumKit/Tests/`: editing one of them starts
 #                        `swift-package.yml`, whose unfiltered `swift test`
@@ -107,6 +107,197 @@ on:
 permissions:
   contents: read
 
+# The upload toolchain, declared ONCE for the whole lane.
+#
+# Apple refuses App Store Connect uploads built with anything older than Xcode
+# 26 and the iOS 26 SDK, and has since 2026-04-28. `macos-15`'s
+# `/Applications/Xcode.app` is still Xcode 16.4 with the iOS 18.5 SDK, so a lane
+# that says nothing about its toolchain compiles this app with a toolchain no
+# archive may be uploaded from — and reports green for it. The build succeeds,
+# the UI smoke passes, the acceptance runs pass, and the first signal is Apple
+# rejecting an archive that has already consumed a build number.
+#
+# "Newest installed Xcode" is NOT the fix. The hosted image inventory announces
+# an Xcode 27 PUBLIC PREVIEW, and a newest-wins rule adopts it silently the day
+# an image refresh lands one — silently because a preview compiles this app
+# perfectly well and nothing goes red.
+#
+# The claim here is deliberately narrow, because the obvious stronger one is not
+# supported: Apple's current guidance accepts builds from Xcode 27 betas for
+# TestFlight, so this lane does NOT assert that such an archive is refused at
+# upload. What it asserts is that a preview toolchain sits outside the one Xcode
+# major this lane certifies, and that its output is not something to submit an
+# App Store build on. This lane selects the newest Xcode WITHIN one required
+# major and fails closed when that major is not installed. EXACT-MAJOR SELECTION
+# IS THE DEFENCE against drifting onto an unvalidated newer major; the marker
+# check below is a cheap extra refusal, not a prerelease detector. Adopting a
+# newer major is a decision made against Apple's then-current requirement and a
+# demonstrated accepted upload, not against an image inventory.
+#
+# `RELAYIUM_SELECT_XCODE` lives HERE rather than in each job because four
+# copies of a version gate drift silently: a job left on 16.4 still compiles,
+# still passes, and still says nothing. GitHub Actions rejects YAML anchors and
+# a composite action would be a second file for one script, so a workflow-level
+# `env:` entry expanded into each job's `run:` is the one shared form that is
+# both YAML-safe and correct here.
+#
+# Every job runs it as its first step after checkout — before `xcodebuild`,
+# `swift` or `xcrun` touch anything — and it exports `DEVELOPER_DIR` through
+# `$GITHUB_ENV` so each later step in that job inherits the selection.
+# `scripts/test/ci-event-policy-test.mjs` section 6p asserts the structure and
+# the fail-closed exits by mutation.
+#
+# This gate is about the TOOLCHAIN and nothing else. It signs nothing, archives
+# nothing and uploads nothing; the release-side gates in
+# `docs/ios-app-store-submission.md` stay exactly where they are.
+env:
+  # The REQUIRED major, not a floor. Exactly one Xcode major is currently
+  # certified for this lane's output: 16.4 is below Apple's upload floor, and
+  # Xcode 27 is still a public preview this lane holds no App Store submission
+  # evidence for. Changing this number re-points what the whole lane certifies.
+  RELAYIUM_XCODE_MAJOR: '26'
+  # The SDK stays a FLOOR, because it is a different fact: what Apple validates
+  # is the SDK the binary was LINKED against, and any iOS 26-or-later SDK inside
+  # the required Xcode major satisfies it.
+  RELAYIUM_MIN_IOS_SDK_MAJOR: '26'
+  RELAYIUM_SELECT_XCODE: |
+    set -euo pipefail
+
+    required_xcode="${RELAYIUM_XCODE_MAJOR:?}"
+    min_sdk="${RELAYIUM_MIN_IOS_SDK_MAJOR:?}"
+
+    # `newer A B` is true when version A sorts after B field by field, so 26.10
+    # beats 26.9 and a two-field version still compares against a three-field
+    # one. A plain string comparison gets both of those wrong.
+    newer() {
+      awk -v a="$1" -v b="$2" 'BEGIN {
+        na = split(a, x, "."); nb = split(b, y, ".");
+        n = (na > nb) ? na : nb;
+        for (i = 1; i <= n; i++) {
+          ai = (i <= na) ? x[i] + 0 : 0;
+          bi = (i <= nb) ? y[i] + 0 : 0;
+          if (ai > bi) exit 0;
+          if (ai < bi) exit 1;
+        }
+        exit 1;
+      }'
+    }
+
+    # `prerelease TEXT` is true when TEXT carries an EXPLICIT seed marker.
+    #
+    # Scope, precisely: this refuses a toolchain that announces itself as a
+    # beta, preview or seed in its bundle path or its full `xcodebuild -version`
+    # report. It is a cheap extra refusal, NOT a reliable prerelease detector —
+    # Apple guarantees no such marker — and it is not what keeps the announced
+    # Xcode 27 preview out of this lane. The required-major filter below does
+    # that, and it is the defence to preserve.
+    #
+    # Two things are deliberately NOT treated as seed markers:
+    #   * "release candidate"/"rc". Apple's App Store Connect release notes have
+    #     explicitly permitted RC toolchains for App Store distribution — Xcode
+    #     26.6 with the iOS 26.5 RC SDK — so blanket-refusing every RC would
+    #     reject a combination Apple accepts.
+    #   * A build number's shape. A trailing lowercase letter does not mean
+    #     seed: stable Xcode 16.0 shipped as build `16A242d`.
+    prerelease() {
+      case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+        *beta*|*preview*|*seed*|*prerelease*|*pre-release*) return 0 ;;
+      esac
+      return 1
+    }
+
+    # Every installed toolchain, judged by what it REPORTS rather than by its
+    # bundle name. The image rotates its Xcode point releases without any commit
+    # here, so a hard-coded path turns an image refresh into a lane outage; but
+    # the newest of them is not the answer either, so each candidate is filtered
+    # before it can win.
+    echo "Installed Xcode toolchains on macOS $(sw_vers -productVersion):"
+    selected=""
+    selected_version=""
+    selected_build=""
+    for app in /Applications/Xcode*.app; do
+      developer="$app/Contents/Developer"
+      binary="$developer/usr/bin/xcodebuild"
+      [ -x "$binary" ] || continue
+
+      # A bundle that cannot report a version is not a candidate. Skipping it
+      # rather than aborting keeps one broken install from taking the lane down,
+      # and costs nothing: if no candidate survives, the empty-selection exit
+      # below is red.
+      if ! report="$(DEVELOPER_DIR="$developer" "$binary" -version 2>/dev/null)"; then
+        echo "  $app -> refused: xcodebuild reported no version"
+        continue
+      fi
+      version="$(printf '%s\n' "$report" | awk 'NR == 1 { print $2 }')"
+      build="$(printf '%s\n' "$report" | awk '/^Build version/ { print $3 }')"
+      if [ -z "$version" ] || [ -z "$build" ]; then
+        echo "  $app -> refused: incomplete version report from xcodebuild"
+        continue
+      fi
+
+      if prerelease "$report" || prerelease "$app"; then
+        echo "  $app -> Xcode $version ($build) refused: announces itself as a beta, preview or seed"
+        continue
+      fi
+
+      # The required major, enforced HERE so a newer one cannot win by simply
+      # being installed. A higher major is not an upgrade this lane may make on
+      # its own: it is an untested toolchain, and on this image it is a preview.
+      major="${version%%.*}"
+      if [ "$major" != "$required_xcode" ]; then
+        echo "  $app -> Xcode $version ($build) skipped: not the required major $required_xcode"
+        continue
+      fi
+
+      echo "  $app -> Xcode $version ($build) eligible"
+      if [ -z "$selected" ] || newer "$version" "$selected_version"; then
+        selected="$developer"
+        selected_version="$version"
+        selected_build="$build"
+      fi
+    done
+
+    # Fail closed. Reaching this line means the image carries no eligible Xcode
+    # $required_xcode at all — a runner-image regression, and a lane that must
+    # go red rather than quietly fall back to whatever else is on disk.
+    if [ -z "$selected" ]; then
+      echo "::error::no eligible Xcode $required_xcode is installed on this runner; refusing to build an iOS app with another major"
+      exit 1
+    fi
+
+    # Belt and braces on the loop above: if a future edit lets a different major
+    # through, this is the second place it dies rather than the first place it
+    # ships.
+    selected_major="${selected_version%%.*}"
+    if [ "$selected_major" != "$required_xcode" ]; then
+      echo "::error::selected Xcode $selected_version is not the required major $required_xcode; an archive from it is not known to be accepted at upload"
+      exit 1
+    fi
+
+    export DEVELOPER_DIR="$selected"
+    echo "DEVELOPER_DIR=$selected" >> "$GITHUB_ENV"
+
+    # Printed on every job for audit, so a run's own log answers "which
+    # toolchain built this?" without anybody rerunning it.
+    xcodebuild -version
+    swift --version
+
+    sdk_version="$(xcrun --sdk iphoneos --show-sdk-version)"
+    simulator_sdk_version="$(xcrun --sdk iphonesimulator --show-sdk-version)"
+    echo "Selected Xcode $selected_version ($selected_build) at $selected"
+    echo "  iphoneos SDK $sdk_version"
+    echo "  iphonesimulator SDK $simulator_sdk_version"
+
+    # The SDK floor, checked separately from the Xcode major because they are
+    # separate facts: what Apple validates at upload is the SDK the binary was
+    # linked against, and an Xcode that satisfies the check above with its
+    # iphoneos SDK removed or downgraded would otherwise pass.
+    sdk_major="${sdk_version%%.*}"
+    if [ "$sdk_major" -lt "$min_sdk" ]; then
+      echo "::error::iphoneos SDK $sdk_version is below the App Store minimum major $min_sdk; an archive against it is rejected at upload"
+      exit 1
+    fi
+
 # Supersede a pull request's own earlier runs, and nothing else. Identical to
 # the rule in every other governed workflow, and asserted by
 # `scripts/test/ci-event-policy-test.mjs`: group by PR NUMBER when there is one
@@ -131,19 +322,46 @@ jobs:
   # These jobs deliberately have no `needs:` edges. The previous single job
   # spent about 37 minutes serially doing ~2 minutes of guards, ~5 minutes of
   # builds, ~22 minutes of UI smoke and ~7 minutes of transfer acceptance. The
-  # three independent evidence classes now run concurrently. The reusable
-  # workflow still fails closed if any job fails, so this changes wall-clock
-  # time rather than coverage.
+  # independent evidence classes now run concurrently as four jobs — the UI
+  # class as two, one per shell shape, because a compact iPhone and a
+  # regular-width iPad answer different questions. The reusable workflow still
+  # fails closed if any job fails, so this changes wall-clock time rather than
+  # coverage.
   ios-build:
     runs-on: macos-15
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Toolchain versions
-        run: |
-          xcodebuild -version
-          swift --version
-      - name: iOS project, privacy, distribution, icon and version guards
+      # Nothing below this step may compile against the runner image's default
+      # Xcode, or against an untested newer major. One shared script, declared
+      # in the `env:` block above.
+      - name: Select and verify the Xcode 26 upload toolchain
+        timeout-minutes: 10
+        run: ${{ env.RELAYIUM_SELECT_XCODE }}
+      # Every selector here reads something under `apps/ios`, and this step is
+      # the ONLY place those reads happen for an `apps/ios/**`-only change:
+      # `swift-package.yml` watches `apps/RelayiumKit/**` and never
+      # `apps/ios/**`, so a change to a plist, a `.strings` file, a view or the
+      # project file starts THIS workflow and nothing else.
+      #
+      # Whole class where every case is an `apps/ios` reader; `Class/method`
+      # where the class is not iOS-only. The second form is not tidiness — a
+      # bare `BundleVersionTests` drags `testTheMacAppAndItsExtensionShipOneVersion`,
+      # and a bare `LocalizationIntegrityTests` drags twenty-odd catalog and
+      # plural cases plus two Mac bundle assertions, onto a lane that
+      # deliberately does not trigger on `apps/mac/**`.
+      #
+      # `LocalizationSourceGuardTests`' scanned roots DO include `apps/mac`, and
+      # that one is unavoidable: the guard is a single sweep over every surface
+      # that renders the shared catalogs, and `apps/ios/Relayium` and
+      # `apps/ios/RelayiumShare` are two of them. Its other two cases are
+      # self-tests of the detector against literal fixtures — no repository read
+      # — so the method selector is what an `apps/ios` change actually needs.
+      #
+      # `scripts/test/ci-event-policy-test.mjs` section 6k holds this list by
+      # equality in both directions and checks each class and method exists, so
+      # a dropped guard and a silently widened one both fail there.
+      - name: iOS project, privacy, distribution, icon, version, permission, scanner and localization guards
         working-directory: apps/RelayiumKit
         timeout-minutes: 20
         run: |
@@ -152,7 +370,12 @@ jobs:
             --filter 'RelayiumKitTests.IOSPrivacyManifestTests' \
             --filter 'RelayiumKitTests.IOSDistributionSigningTests' \
             --filter 'RelayiumKitTests.IOSAppIconAssetTests' \
-            --filter 'RelayiumKitTests.BundleVersionTests/testTheIOSAppAndItsExtensionShipOneVersion'
+            --filter 'RelayiumKitTests.IOSLocalNetworkPermissionTests' \
+            --filter 'RelayiumKitTests.IOSPairingScannerTests' \
+            --filter 'RelayiumKitTests.BundleVersionTests/testTheIOSAppAndItsExtensionShipOneVersion' \
+            --filter 'RelayiumKitTests.LocalizationIntegrityTests/testTheIOSAppDeclaresExactlyTheShippedLocalizations' \
+            --filter 'RelayiumKitTests.LocalizationIntegrityTests/testTheIOSProjectKnownRegionsCarryNoFrozenLocale' \
+            --filter 'RelayiumKitTests.LocalizationSourceGuardTests/testNoUserFacingEnglishLiteralsInTheAppOrViewModelLayer'
       # `generic/platform=iOS Simulator` builds for the simulator SDK without
       # booting a device or needing a runtime download.
       - name: Build (unsigned, iOS Simulator)
@@ -172,13 +395,27 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/dd-ios-release" \
             CODE_SIGNING_ALLOWED=NO build
 
+  # The COMPACT shell, on an iPhone, running the whole UI target.
+  #
+  # It is deliberately the whole target and deliberately an iPhone: this is the
+  # shape most of the suite is written for, and most of it asserts nothing about
+  # size class. `AdaptiveShellUITests` is the exception — every one of its cases
+  # opens with `guard waitForShell(app) == .regular else { throw XCTSkip(…) }`,
+  # so on this job the class runs, skips, and reports green. `ios-ipad-shell`
+  # below is the job that actually executes it; neither job stands in for the
+  # other, and `scripts/test/ci-event-policy-test.mjs` sections 6k and 6q hold
+  # both.
   ios-ui-smoke:
     runs-on: macos-15
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Toolchain versions
-        run: xcodebuild -version
+      # Nothing below this step may compile against the runner image's default
+      # Xcode, or against an untested newer major. One shared script, declared
+      # in the `env:` block above.
+      - name: Select and verify the Xcode 26 upload toolchain
+        timeout-minutes: 10
+        run: ${{ env.RELAYIUM_SELECT_XCODE }}
       - name: Run iOS primary-task UI smoke
         run: |
           set -euo pipefail
@@ -206,19 +443,123 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+  # The REGULAR-width shell, on an iPad, running exactly one class.
+  #
+  # ## The gap this job closes
+  #
+  # `AdaptiveShellUITests` covers the `NavigationSplitView` a full-width iPad
+  # gets: the sidebar's destination list, the absence of a tab bar beside it,
+  # the detail column building for every destination, and a stored link
+  # presenting over the split view. None of that exists on an iPhone, and the
+  # class says so by skipping rather than by asserting nothing — which is the
+  # honest shape, and also the one that made the coverage loss invisible. The
+  # only job that ran the UI target selected an iPhone, so every case in this
+  # class skipped on every run and the lane reported green for a layout no
+  # hosted run had ever executed.
+  #
+  # An iPad is chosen here for that reason alone: full-screen iPadOS is where
+  # `horizontalSizeClass` is `.regular`, and it is the only simulator shape on
+  # this image that reaches the branch.
+  #
+  # ## Why one class and not the target
+  #
+  # Running `-only-testing:RelayiumUITests` here would re-run every compact-shell,
+  # local-session and pairing case on a second PAID macOS runner for no second
+  # answer — the size class is the only variable that differs, and those cases
+  # do not read it. The scope is the class that skips on the other job.
+  #
+  # ## Why the summary is read afterwards
+  #
+  # `xcodebuild … test` exits 0 when every selected case SKIPS, which is exactly
+  # the failure this job exists for: an iPad that boots into a compact shell, a
+  # `waitForShell` that times out into `.compact`, or a future `-destination`
+  # edit back to an iPhone would each leave the job green while proving nothing.
+  # So the result bundle's own counts are asserted: at least one test ran, and
+  # none of them skipped.
+  ios-ipad-shell:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # Nothing below this step may compile against the runner image's default
+      # Xcode, or against an untested newer major. One shared script, declared
+      # in the `env:` block above.
+      - name: Select and verify the Xcode 26 upload toolchain
+        timeout-minutes: 10
+        run: ${{ env.RELAYIUM_SELECT_XCODE }}
+      - name: Run the regular-width adaptive shell on an iPad simulator
+        run: |
+          set -euo pipefail
+          # SORTED, not "the first one the JSON happens to list". The image's
+          # device set changes without a commit here, and an unordered pick
+          # would make a rerun of the same SHA a different run. The tuple is
+          # (name, runtime, udid) so the choice is stable by product name first
+          # and only tie-broken by things that rotate.
+          selection="$(xcrun simctl list devices available -j \
+            | /usr/bin/python3 -c 'import json, sys
+          data = json.load(sys.stdin)
+          pads = sorted(
+              (device["name"], runtime, device["udid"])
+              for runtime, devices in data["devices"].items()
+              for device in devices
+              if device.get("isAvailable")
+              and device.get("name", "").startswith("iPad"))
+          if pads:
+              name, runtime, udid = pads[0]
+              print(udid, name, runtime)')"
+          [ -n "$selection" ] || {
+            echo "::error::no available iPad Simulator runtime; the regular-width shell has no destination on this image and this job must not fall back to a compact one"
+            exit 1; }
+          read -r device_id device_label <<<"$selection"
+          echo "Regular-width destination: $device_label ($device_id)"
+          xcodebuild -project apps/ios/Relayium.xcodeproj -scheme Relayium \
+            -destination "platform=iOS Simulator,id=$device_id" \
+            -derivedDataPath "$RUNNER_TEMP/dd-ios-ipad" \
+            -resultBundlePath "$RUNNER_TEMP/ios-ipad-shell.xcresult" \
+            -only-testing:RelayiumUITests/AdaptiveShellUITests test
+      - name: Prove the regular-width cases ran rather than skipped
+        run: |
+          set -euo pipefail
+          summary="$(xcrun xcresulttool get test-results summary \
+            --path "$RUNNER_TEMP/ios-ipad-shell.xcresult" --format json)"
+          printf '%s\n' "$summary" | /usr/bin/python3 -c 'import json, sys
+          summary = json.load(sys.stdin)
+          total = summary.get("totalTestCount", 0)
+          skipped = summary.get("skippedTests", 0)
+          if total <= 0:
+              sys.exit("::error::the iPad run executed no tests at all; -only-testing selected nothing")
+          if skipped:
+              sys.exit(
+                  f"::error::{skipped} of {total} regular-width cases SKIPPED. "
+                  "AdaptiveShellUITests skips whenever the shell is not regular width, "
+                  "so this destination is not a full-width iPad and the job proved nothing.")
+          print(f"regular-width shell: {total} case(s), 0 skipped")'
+      - name: Retain iPad shell diagnosis
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-ipad-shell-diagnosis
+          path: ${{ runner.temp }}/ios-ipad-shell.xcresult
+          retention-days: 7
+          if-no-files-found: error
+
   ios-transfer-acceptance:
     runs-on: macos-15
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # Nothing below this step may compile against the runner image's default
+      # Xcode, or against an untested newer major. One shared script, declared
+      # in the `env:` block above.
+      - name: Select and verify the Xcode 26 upload toolchain
+        timeout-minutes: 10
+        run: ${{ env.RELAYIUM_SELECT_XCODE }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
-      - name: Toolchain versions
-        run: |
-          xcodebuild -version
-          go version
+      - name: Go toolchain version
+        run: go version
       # Populate the same DerivedData directory the built-App acceptance uses.
       # DerivedData is intentionally rebuilt on this runner instead of crossing
       # runner boundaries as a large, path-sensitive artifact.

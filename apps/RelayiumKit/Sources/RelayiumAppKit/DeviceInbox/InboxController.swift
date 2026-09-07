@@ -339,6 +339,30 @@ public final class InboxController: ObservableObject {
     /// Whether the user paused. Sticky across passes and across the window being
     /// closed; cleared only by an explicit resume.
     @Published public private(set) var isPaused = false
+    /// Whether the app is in the foreground, and therefore whether this device
+    /// may claim at all.
+    ///
+    /// **True unless something calls `foreground(false)`, which on macOS nothing
+    /// does.** A Mac keeps a `MenuBarExtra` and receives with its window closed;
+    /// its resident receiver is exactly the product, and gating it on an app
+    /// being frontmost would break the one thing the Device Inbox promises there.
+    ///
+    /// iOS is the opposite case and this is the seam that says so. That app has
+    /// no background mode, no push and no notification: the process is suspended
+    /// when the user leaves, so a receiver there runs while Relayium is open and
+    /// not otherwise. Reporting that honestly is the iOS surface's job — it
+    /// renders `inbox.iosForegroundOnly` unconditionally — and STOPPING honestly
+    /// is this.
+    ///
+    /// Deliberately **not** `@Published` and deliberately not an
+    /// `InboxRuntimeState` case. It is not rendered: a foreground-only receiver
+    /// is, by definition, in the foreground whenever its own UI is on screen, so
+    /// a published "we are in the background" could only ever be drawn as false.
+    /// A state case would have been the visible alternative and is worse — every
+    /// surface switching over `InboxRuntimeState` does so with no `default`, so a
+    /// seventh case is a compile error in three macOS screens that can never
+    /// reach it.
+    public private(set) var isForeground = true
     /// Whether macOS will show a banner when a delivery lands.
     ///
     /// Deliberately NOT part of `state`: a denied Mac receives, decrypts and
@@ -520,6 +544,25 @@ public final class InboxController: ObservableObject {
         while isCurrent(generation), !Task.isCancelled {
             if isPaused {
                 publish(.paused, for: generation)
+                await nap(runtime.backoff.idle, generation)
+                continue
+            }
+            // The foreground gate, checked INSIDE the loop and not only at the
+            // seam that sets it.
+            //
+            // `foreground(false)` stops the loop that is running, which covers
+            // the ordinary case. It cannot cover the other one: an account
+            // switch landing while the app is in the background calls `start`,
+            // and `start` builds a new loop unconditionally — so without this the
+            // new generation would begin claiming for the new account under a
+            // lifecycle the old one had already been stopped for.
+            //
+            // No `publish` here, deliberately. There is no surface to be honest
+            // to while the app is in the background, and the state `start` left
+            // — `loading`, or the user's own `paused` — is already true: nothing
+            // has been set up, and nothing will be until the app comes back.
+            // `foreground(true)` restarts and re-publishes at that point.
+            if !isForeground {
                 await nap(runtime.backoff.idle, generation)
                 continue
             }
@@ -1180,6 +1223,49 @@ public final class InboxController: ObservableObject {
         isPaused = false
         state = .loading
         runtime.sleeper.wake()
+    }
+
+    /// The app entered or left the foreground.
+    ///
+    /// **`.inactive` is not background, and no caller may treat it as one.** An
+    /// app switcher swipe, Control Centre, a call banner and a system alert all
+    /// produce `.inactive` while the app is still running and still visible;
+    /// stopping a delivery for any of them would cancel a transfer the user can
+    /// see, several times a session. `AppLifecyclePhase` already draws that line
+    /// and `RelayiumApp.lifecycle(_:)` is the one place iOS maps a `ScenePhase`
+    /// through it.
+    ///
+    /// ## Why leaving stops the loop rather than pausing it
+    ///
+    /// `pause()` is the USER's answer and is sticky: it survives launches, it is
+    /// cleared only by an explicit resume, and it renders as *Paused*. Reusing it
+    /// for the app lifecycle would tell somebody who never touched the control
+    /// that they had paused their inbox, and — worse — a `resume()` on the way
+    /// back would silently clear a pause they DID set. So the two are separate,
+    /// and the ordering in `run` is `isPaused` first: a user who paused stays
+    /// paused across a trip to the home screen.
+    ///
+    /// ## Why coming back restarts instead of merely waking
+    ///
+    /// `restart()` bumps the generation, which is what makes the return honest.
+    /// The pass that was in flight when the user left was cancelled mid-way — it
+    /// may have been between a download and a journal write — and `restart` is
+    /// the path every other invalidating change already takes, so recovery here
+    /// is the same recovery a policy change gets rather than a second one. It
+    /// also re-publishes the state synchronously, so the first frame after
+    /// returning says *Setting up…* rather than a `ready` left over from before.
+    ///
+    /// Idempotent, and a no-op with no account: `session(_:)` is what starts a
+    /// generation, and a lifecycle event may not manufacture one.
+    public func foreground(_ active: Bool) {
+        guard isForeground != active else { return }
+        isForeground = active
+        guard generation != nil else { return }
+        if active {
+            restart()
+        } else {
+            stopLoop()
+        }
     }
 
     /// Try again now. The control that makes a bounded backoff bearable: without

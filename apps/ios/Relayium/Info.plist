@@ -51,6 +51,88 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<!-- **The camera, and the one feature that earns it.**
+
+	     `PairingScannerView` reads the QR join code the other device is already
+	     showing — the same `https://relayium.com/cross-network#c=NNNNNN` link
+	     `transferPairingJoinURL` builds — and fills the six-digit field with it.
+	     It is an `AVCaptureMetadataOutput` restricted to `.qr`: no photo output,
+	     no movie output, no sample-buffer delegate, and nothing written to disk,
+	     which is what lets the sentence below say frames are neither recorded
+	     nor saved.
+
+	     Two properties of the REQUEST are what this string is honest about, and
+	     both are asserted by `IOSPairingScannerTests`:
+
+	      1. **It is asked for after an explicit tap.** The app's single
+	         `AVCaptureDevice.requestAccess` sits behind `PairingScannerModel
+	         .begin()`, which is reached only from the scanner sheet, which only
+	         the Scan control on the Receive card presents. Nothing at launch,
+	         and nothing on entering the tab, touches the camera.
+	      2. **Refusing it costs the scanner and nothing else.** Denied,
+	         restricted, no-camera and failed-to-start each get their own
+	         sentence naming the six-digit field, and that field is rendered and
+	         enabled identically either way.
+
+	     This key was absent through `0.3.0 (5)`, and its absence was correct
+	     then: the embedded WebRTC framework's `AVCapture*` symbols were an
+	     upload blocker precisely because the product had no camera feature, and
+	     a purpose string for a feature that does not exist is a false statement
+	     rather than a fix. `docs/ios-app-store-submission.md` records both
+	     honest resolutions; this is the first of them, and the declaration
+	     follows the feature rather than the other way round.
+
+	     ENGLISH FALLBACK, as below: `en.lproj/InfoPlist.strings` carries the
+	     same sentence and `zh-Hans.lproj/InfoPlist.strings` the translation. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Relayium uses the camera only to read the pairing QR code another device is showing, so you do not have to type its six-digit join code by hand. Nothing is recorded or saved.</string>
+	<!-- Local Network access is used by both Nearby discovery and direct transfer.
+
+	     Two different operations wear the word "nearby" here, and both touch the
+	     local network:
+
+	      1. **Finding the other device is local.** iOS browses and advertises
+	         exactly `_relayium._tcp` in the local Bonjour domain. It does not scan
+	         addresses, inspect the Wi-Fi network, or use a multicast entitlement.
+	      2. **Carrying the bytes is local too.** Once the user picks a device, every
+	         realtime lane builds its peer connection with `iceTransportPolicy =
+	         .all` (`RealtimeConnectionFactory.liveConnection`,
+	         `LinkWorkspaceModel`), so the winning candidate pair is routinely a
+	         unicast socket to the peer's address on this very subnet. iOS 14 and
+	         later gate exactly that behind Local Network access, and iOS grants
+	         it only to an app that has declared why it wants it.
+
+	     Which makes the absence of this key a silent product failure rather than
+	     a tidy minimalism. Retained physical runs `0af36138` and `56e78dbf`
+	     recorded both halves of the shape: on iOS/iPadOS 26 the system withheld
+	     the prompt altogether and the local path simply never connected, while
+	     iPadOS 18 masked the omission and made the build look correct. A missing
+	     purpose string is therefore not "one fewer permission"; it is a feature
+	     that fails without ever asking.
+
+	     This value is the ENGLISH FALLBACK. What a person actually reads comes
+	     from `en.lproj/InfoPlist.strings` and `zh-Hans.lproj/InfoPlist.strings`
+	     in this same bundle, which iOS resolves against the user's language
+	     before it draws the alert; `IOSLocalNetworkPermissionTests` asserts the
+	     English file and this string are the same sentence, so the fallback can
+	     never drift into saying something else.
+
+	     The sentence describes both actions that can raise the prompt: finding
+	     nearby Relayium devices and sending directly to the one the user picks.
+
+	     Still not here, and deliberately: `NSMicrophoneUsageDescription`. The
+	     same embedded framework references `AVAudioSession` symbols, but
+	     configuring an audio session is not requesting record permission, and
+	     this product records nothing. `docs/ios-app-store-submission.md` records
+	     why that observation is not conclusive either way; a purpose string
+	     invented on the strength of symbol linkage would be the exact false
+	     statement the camera key spent five builds refusing to make. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Relayium uses your local network to find nearby Relayium devices and send files and messages directly to the device you choose.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_relayium._tcp</string>
+	</array>
 	<!-- Present and empty on purpose: an iOS app without a launch-screen
 	     declaration is letterboxed at a legacy size rather than run at the
 	     device's native resolution. Empty means the system's default, which is

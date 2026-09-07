@@ -1,0 +1,19 @@
+/* Relayium — iOS 应用包，简体中文。品牌名 Relayium 保持原文。
+
+   与 en.lproj 一一对应，键必须完全一致：系统权限弹窗由 iOS 直接从本 bundle
+   取字，Relayium 自己的代码此时还没有运行，所以只写在 RelayiumAppKit 包里的
+   文案用户永远看不到。
+
+   只有两个键。这里没有 NSMicrophoneUsageDescription：内嵌 WebRTC 框架确实引用了
+   AVAudioSession，但配置音频会话并不等于申请录音权限，本产品也不做任何录制；
+   仅凭符号引用就编一句用途说明，正是摄像头那个键此前五个构建一直拒绝做的虚假
+   陈述。详见 docs/ios-app-store-submission.md。 */
+
+/* 用户第一次在「接收」卡片上点「扫描二维码」时，由 iOS 弹出。它只说摄像头用来
+   做什么：读取对方设备已经显示出来的配对二维码，从而不必手动输入那六位加入码。
+   PairingScannerView 使用的是仅限 .qr 的 AVCaptureMetadataOutput——没有拍照输出，
+   没有录像输出，也不会把任何一帧写入磁盘，最后那句话因此是事实而非安慰。 */
+"NSCameraUsageDescription" = "Relayium 只用摄像头读取另一台设备上显示的配对二维码，这样你就不必手动输入它那六位加入码。过程中不会录制或保存任何画面。";
+
+/* Nearby 开始本地 Bonjour 发现或直接本地传输时，由 iOS 弹出。 */
+"NSLocalNetworkUsageDescription" = "Relayium 使用本地网络查找附近的 Relayium 设备，并将文件和消息直接发送到你选择的设备。";

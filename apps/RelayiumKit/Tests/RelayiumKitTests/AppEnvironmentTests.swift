@@ -260,12 +260,29 @@ final class AppEnvironmentTests: XCTestCase {
     /// The code-only factories, and why they are separate functions rather than
     /// nil defaults on the existing ones.
     ///
-    /// The macOS factories need a `LanDiscoveryModel` and an `InboundRoom`
-    /// because both nearby paths reach through the one room socket that model
-    /// owns. iOS has no nearby feature, no local-network entitlement and no
-    /// roster — so an iOS app that constructed those two objects to satisfy a
-    /// signature would be claiming a capability it does not have, and would open
-    /// a socket nothing reads.
+    /// The nearby-capable factories need a `LanDiscoveryModel` and an
+    /// `InboundRoom` because both nearby paths reach through the one room socket
+    /// that model owns. A caller with no roster — which iOS was when these
+    /// overloads were written, and which any future code-only host would be —
+    /// would have had to construct those two objects purely to satisfy a
+    /// signature, and would then be holding a live room socket nothing reads.
+    ///
+    /// iOS is no longer that caller: `RelayiumApp` passes a real
+    /// `LanDiscoveryModel` and `InboundRoom`. These overloads therefore have no
+    /// production call site today, and the two tests below are what keeps them
+    /// honest — a refusing model rather than a half-working one — for the next
+    /// host that needs them.
+    ///
+    /// **These were never a permission boundary, and an earlier version of this
+    /// comment said they were.** It read "no local-network entitlement", which
+    /// is true only in the pedantic sense that Local Network is not an
+    /// entitlement at all: it is a user-consented protected resource declared as
+    /// `NSLocalNetworkUsageDescription` in the app's `Info.plist`, which the iOS
+    /// app now does declare, because the transfer connects with
+    /// `iceTransportPolicy = .all` and reaches the peer over the local subnet.
+    /// Nothing about that is expressed here. What these overloads express is the
+    /// absence of a FEATURE — no roster to read, no socket to answer on — and
+    /// `IOSLocalNetworkPermissionTests` owns the declaration itself.
     ///
     /// What the code-only wiring produces instead is a model whose two nearby
     /// entry points refuse. That is the assertion below: not "the closure is
@@ -311,6 +328,124 @@ final class AppEnvironmentTests: XCTestCase {
         // own refusal, which is the path that exists only on macOS.
         await model.connectNearby(peerId: "peer-1")
         guard case .failed = model.state else { return XCTFail("got \(model.state)") }
+    }
+
+    // MARK: - the answer-timeout recovery, per composition
+
+    // `error.nearby.noAnswer` tells the user to open relayium.com on the device
+    // that went quiet. That is a working instruction against the hub-backed
+    // code-less room — a browser there IS a listening peer — and an impossible
+    // one against `_relayium._tcp`, where a browser publishes no service and
+    // can never answer. So the sentence is a property of the COMPOSITION, not
+    // of the error, and these prove which sentence each factory chose.
+    //
+    // `NearbySessionModelTests` drives both real timeout paths and proves the
+    // chosen key becomes the rendered message; this proves the choice. Neither
+    // is sufficient alone: a factory could pick the right key for a model that
+    // ignored it, and a model could honour a key no factory ever passes.
+
+    /// Every factory this package compiles on the test host leaves the recovery
+    /// on the shared sentence.
+    ///
+    /// Listed as a table rather than as one assertion per factory, because the
+    /// claim is about the SET: `makeRealtimeModel`'s iOS overload is the only
+    /// exception in the file, and an exception that grew a second member
+    /// without anybody noticing is the failure this catches.
+    @MainActor
+    func testEveryHostCompiledFactoryLeavesTheRecoveryOnTheSharedWebSentence() {
+        let defaults = VerificationPreference(
+            defaults: UserDefaults(suiteName: "noanswer-\(UUID().uuidString)")!)
+        let nearby = AppEnvironment.makeLanDiscoveryModel()
+        let room = InboundRoom()
+        let pairing = LinkRoomHandle()
+
+        let files: [(String, RealtimeSessionModel)] = [
+            ("makeRealtimeModel(code-only)",
+             AppEnvironment.makeRealtimeModel(verification: defaults)),
+            ("makeRealtimeModel(nearby)",
+             AppEnvironment.makeRealtimeModel(verification: defaults, nearby: nearby,
+                                              inboundRoom: room, pairingRoom: pairing)),
+            ("makeNearbyRealtimeModel",
+             AppEnvironment.makeNearbyRealtimeModel(verification: defaults, nearby: nearby,
+                                                    inboundRoom: room)),
+            ("makeDirectRealtimeModel",
+             AppEnvironment.makeDirectRealtimeModel(verification: defaults,
+                                                    pairingRoom: pairing)),
+        ]
+        let texts: [(String, RealtimeTextSessionModel)] = [
+            ("makeRealtimeTextModel(code-only)",
+             AppEnvironment.makeRealtimeTextModel(verification: defaults)),
+            ("makeRealtimeTextModel(nearby)",
+             AppEnvironment.makeRealtimeTextModel(verification: defaults, nearby: nearby,
+                                                  inboundRoom: room, pairingRoom: pairing)),
+            ("makeNearbyRealtimeTextModel",
+             AppEnvironment.makeNearbyRealtimeTextModel(verification: defaults, nearby: nearby,
+                                                        inboundRoom: room)),
+            ("makeDirectRealtimeTextModel",
+             AppEnvironment.makeDirectRealtimeTextModel(verification: defaults,
+                                                        pairingRoom: pairing)),
+        ]
+        for (name, model) in files {
+            XCTAssertEqual(model.nearbyNoAnswerCopy, .errorNearbyNoAnswer,
+                           "\(name) moved macOS off the recovery that works for it")
+        }
+        for (name, model) in texts {
+            XCTAssertEqual(model.nearbyNoAnswerCopy, .errorNearbyNoAnswer,
+                           "\(name) moved macOS off the recovery that works for it")
+        }
+        XCTAssertEqual(files.count + texts.count, 8)
+    }
+
+    /// The value the iOS boundary substitutes, asserted here because the
+    /// overloads that use it are inside `#if os(iOS)` and a Mac-hosted run
+    /// compiles neither them nor anything declared beside them. That is exactly
+    /// why the constant is declared outside the conditional.
+    func testTheLocalNearbyRecoveryKeyIsTheLocalLinkOne() {
+        XCTAssertEqual(AppEnvironment.localNearbyNoAnswerCopy, .errorNearbyIOSNoAnswer)
+        XCTAssertNotEqual(AppEnvironment.localNearbyNoAnswerCopy, .errorNearbyNoAnswer)
+    }
+
+    /// **And the substitution happens only inside the iOS block.**
+    ///
+    /// The one claim a Mac-hosted run cannot make executably: whether the two
+    /// `#if os(iOS)` overloads still pass the key, and whether anything outside
+    /// them started to. Read as text, with comments stripped, because a comment
+    /// mentioning the identifier is not a call site.
+    func testTheOnlyOverrideOfTheRecoveryKeyIsTheIOSCompositionBoundary() throws {
+        let code = try RepoRoot
+            .text("apps/RelayiumKit/Sources/RelayiumAppKit/AppEnvironment.swift")
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+
+        let overrides = code.components(separatedBy: "nearbyNoAnswerCopy: localNearbyNoAnswerCopy")
+            .count - 1
+        XCTAssertEqual(overrides, 2,
+                       "the file model and the text model must both be composed with the "
+                       + "local-link recovery, and nothing else may be")
+
+        // Anchored on the constant, not on the first `#if os(iOS)` in the
+        // file: this file has several, and the block that matters is the one
+        // that follows the value it substitutes.
+        let constant = try XCTUnwrap(code.range(of: "public static let localNearbyNoAnswerCopy"))
+        let start = try XCTUnwrap(
+            code.range(of: "#if os(iOS)", range: constant.upperBound..<code.endIndex))
+        let end = try XCTUnwrap(code.range(of: "#endif", range: start.upperBound..<code.endIndex))
+        let iosBlock = code[start.upperBound..<end.lowerBound]
+        XCTAssertEqual(
+            iosBlock.components(separatedBy: "nearbyNoAnswerCopy: localNearbyNoAnswerCopy").count - 1,
+            2, "the substitution moved out of the iOS composition boundary")
+
+        // The shared factories still DECLARE the parameter and still default it
+        // to the shared sentence. A default flipped to the iOS key is the
+        // mutation that would put a Bonjour sentence on a Mac.
+        XCTAssertEqual(
+            code.components(separatedBy: "nearbyNoAnswerCopy: L10nKey = .errorNearbyNoAnswer").count - 1,
+            2, "a shared factory's default moved off the Web recovery")
+        XCTAssertFalse(code.contains("nearbyNoAnswerCopy: L10nKey = .errorNearbyIOSNoAnswer"),
+                       "a shared factory now defaults every platform to the local-link recovery")
+        XCTAssertEqual(code.components(separatedBy: ".errorNearbyIOSNoAnswer").count - 1, 1,
+                       "the local-link key must be named exactly once, at the constant")
     }
 
     // MARK: - R3-F: the nearby graph, wired the way both platforms use it

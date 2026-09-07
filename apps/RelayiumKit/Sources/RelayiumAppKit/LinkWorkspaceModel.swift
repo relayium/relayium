@@ -1066,6 +1066,23 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         /// sends `left` only for a physical disconnect, and a peer can leave the
         /// roster without one — see `pairingRosterChanged`.
         var roster: Set<String> = []
+        /// Where the newest roster frame this room has APPLIED sat in DELIVERY
+        /// order, as `PeerCapabilityRegistry.rosterDelivered()` stamped it.
+        ///
+        /// The room hears its rosters on the socket's delivery queue and acts on
+        /// them one `Task { @MainActor }` later, and those two orders are not the
+        /// same order: two frames delivered back to back are two independent
+        /// hops, and the room has no other way to tell which of them the hub
+        /// actually sent last. Everything a roster does — retiring a departed
+        /// peer's grace and its merged map, withdrawing an ask, replacing
+        /// `roster` — is destructive and unrecoverable, so applying the older of
+        /// two frames after the newer would delete state the room had already
+        /// correctly rebuilt.
+        ///
+        /// Zero, not nil: `rosterDelivered()` counts from one, so the first
+        /// frame of every room is strictly newer than this and nothing has to
+        /// special-case an empty room.
+        var appliedRosterPosition = 0
         var announcer: LinkCapabilityAnnouncer?
         var capsSubscription: SignalSubscription?
         /// The per-peer capability windows. Cancelled the moment a peer is
@@ -1317,8 +1334,29 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
                 self.pairingPeerAnnounced(from, generation: mine)
             }
         }
-        socket.onPeers = { [weak self] peers in
-            Task { @MainActor in self?.pairingRosterChanged(peers, generation: mine) }
+        // **Stamped HERE, on the delivery queue, for the same reason the hello
+        // above is recorded here rather than in the hop below.**
+        //
+        // This closure and that listener are the two clocks: an announcement is
+        // written inline on this queue, a roster reaches the room through its
+        // own `Task { @MainActor }`. Reading the roster's position after that
+        // hop would read it against announcements the frame never saw, which is
+        // no ordering at all. Taken here, it is the frame's real place in
+        // delivery, and `retain(_:preservingAnnouncementsAfter:)` can tell an
+        // announcement this roster was entitled to answer from one still in
+        // flight behind it.
+        //
+        // It is also what makes two roster frames comparable to each other:
+        // see `PairingRoom.appliedRosterPosition`.
+        //
+        // A registry that has gone means its room has, and the hop below would
+        // find no room to change.
+        socket.onPeers = { [weak self, weak capabilities] peers in
+            guard let position = capabilities?.rosterDelivered() else { return }
+            Task { @MainActor in
+                guard let self, self.generation == mine else { return }
+                self.pairingRosterChanged(peers, deliveredAt: position)
+            }
         }
         socket.onClose = { [weak self] in
             Task { @MainActor in self?.pairingRoomClosed(generation: mine) }
@@ -1743,8 +1781,41 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// room still choosing a peer: greeting, the capability windows, the hello
     /// retries and arming a grace. A latched room does not un-latch, and this
     /// does not change that.
-    private func pairingRosterChanged(_ peers: [Peer], generation mine: Int) {
-        guard generation == mine, let room = pairing else { return }
+    ///
+    /// ## `position` is where the frame sat in DELIVERY, not in arrival here
+    ///
+    /// Taken by `openPairingRoom`'s `onPeers` on the signalling delivery queue,
+    /// which is the only place a roster frame and a capability hello are ordered
+    /// against each other at all. It answers two different questions with one
+    /// number: which announcements this frame was entitled to prune, and whether
+    /// this frame is newer than the last one the room acted on.
+    ///
+    /// Internal rather than private for the second of those. The socket cannot
+    /// be made to hand this method two frames in the reversed order the `Task`
+    /// hop really produces — the rig's own delivery is in order by construction
+    /// — so `LinkPairingRoomTests` applies them here, through the exact method
+    /// and the exact fence production runs. Nothing about the room is reachable
+    /// through it that was not already reachable through the socket.
+    func pairingRosterChanged(_ peers: [Peer], deliveredAt position: Int) {
+        guard let room = pairing else { return }
+        // **Before every effect below, because every one of them is
+        // destructive.** A roster older than the newest this room has already
+        // applied has no opinion left to offer: the frame that superseded it has
+        // already retired whoever left, replaced `roster`, and told the router
+        // and the registry who is here. Letting it run would abandon a live
+        // peer's grace, withdraw the ask this room has in flight and prune an
+        // announcement the newer frame kept — none of which the next roster
+        // frame would put back, because the room would then agree with it.
+        //
+        // Strictly greater: the same frame applied twice is the same
+        // destruction twice, and `rosterDelivered()` never issues a position
+        // twice.
+        guard position > room.appliedRosterPosition else { return }
+        room.appliedRosterPosition = position
+        // Every call below is scoped to the attempt this frame belongs to. The
+        // socket closure has already proven that is the current one, so this
+        // reads it rather than carrying a second copy of the same number.
+        let mine = generation
         let selfId = room.signaling.selfId ?? ""
         let others = peers.map(\.id).filter { !$0.isEmpty && $0 != selfId }
         let present = Set(others)
@@ -1759,8 +1830,11 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         router?.rosterChanged(peerIds: present)
 
         guard !room.resolved else { return }
-        room.capabilities.retain(others)
-        room.announcer?.rosterChanged(peerIds: others)
+        // ONE prune, and it is the announcer's — a second, un-stamped
+        // `capabilities.retain(others)` ahead of this line deleted exactly what
+        // the stamped one exists to keep, and did it in its own critical section
+        // where no ordering evidence was even available.
+        room.announcer?.rosterChanged(peerIds: others, deliveredAt: position)
         // Tell each newly seen peer what this side has measured so far. Once per
         // peer: `peerJoined` broadcasts, and the room sees a roster frame every
         // time anyone joins or leaves. Every later increment is broadcast by the

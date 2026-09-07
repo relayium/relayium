@@ -34,7 +34,7 @@ struct DirectFileSessionView: View {
                 ProgressView { Text(L10n.t(.sessionConnecting)) }
                 fileList
                 Button(L10n.t(.commonCancel)) { model.cancel() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
             }
 
@@ -58,7 +58,7 @@ struct DirectFileSessionView: View {
             PairingCodeText(code: sas, style: .verification)
             Text(L10n.t(.sessionCheckMatchesBody))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             fileList
             // Equally weighted on purpose. A visually secondary reject is a
@@ -70,7 +70,7 @@ struct DirectFileSessionView: View {
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
             Button(L10n.t(.sessionTheyDontMatch), role: .destructive) { model.rejectSAS() }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
         }
@@ -92,10 +92,10 @@ struct DirectFileSessionView: View {
             // no resume behind it to soften it.
             Text(L10n.t(.directKeepBothOpen))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Button(L10n.t(.commonCancel), role: .destructive) { model.cancel() }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
         }
     }
@@ -122,7 +122,7 @@ struct DirectFileSessionView: View {
                 // folders.
                 Text(ReceiveDestinationCopy.savedLocation())
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 // `dragURLs`, not the file list: a folder or multi-file receive
                 // offers its CONTAINER as one item, so *Save to Files* copies
@@ -137,7 +137,7 @@ struct DirectFileSessionView: View {
             // `cancel()`, not a bare state reset: it is the one path that also
             // lets go of the connection a terminal state leaves retained.
             Button(L10n.t(.commonDone), action: onDone)
-                .buttonStyle(.bordered)
+                .borderedAction()
                 .controlSize(.large)
         }
     }
@@ -152,7 +152,7 @@ struct DirectFileSessionView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .fixedSize(horizontal: false, vertical: true)
                         Text(L10n.bytes(Int64(file.size)))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Palette.supportingLabel)
                             .fixedSize()
                     }
                     .font(.footnote)

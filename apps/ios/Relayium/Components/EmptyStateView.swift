@@ -27,6 +27,8 @@ struct EmptyStateView: View {
         VStack(alignment: .leading, spacing: Metrics.tight) {
             Image(systemName: symbol)
                 .font(.title2)
+                // secondary-role: symbol — the decorative empty-state glyph, which is
+                // accessibilityHidden and repeats the title below it. Non-text.
                 .foregroundStyle(.secondary)
                 // The sentence below carries the meaning; the symbol is a
                 // landmark for the eye and says nothing to VoiceOver.
@@ -37,7 +39,7 @@ struct EmptyStateView: View {
             if let detail {
                 Text(detail)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

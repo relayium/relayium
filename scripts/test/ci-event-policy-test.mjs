@@ -1190,18 +1190,54 @@ const SWIFT_TEST_TARGET_DIR = `${SWIFT_PACKAGE_DIR}/Tests/${SWIFT_TEST_TARGET}`;
 // syntax: a bare class name selects the whole class, and `Class/method` selects
 // exactly one case.
 //
-// Four are whole classes because every case in them reads `apps/ios`. The fifth
-// is a single method because its class is not iOS-only:
-// `BundleVersionTests` also carries `testTheMacAppAndItsExtensionShipOneVersion`,
-// which reads `apps/mac` — a tree this workflow deliberately does not trigger
-// on. Selecting the class would run a macOS assertion on an iOS-only change;
-// selecting the method runs the iOS half and nothing else.
+// Six are whole classes because every case in them reads `apps/ios`. The other
+// four are single methods because their classes are not iOS-only:
+//
+//   * `BundleVersionTests` also carries
+//     `testTheMacAppAndItsExtensionShipOneVersion`, which reads `apps/mac` — a
+//     tree this workflow deliberately does not trigger on.
+//   * `LocalizationIntegrityTests` is mostly about the shared catalogs, the
+//     seven frozen ones and plural grammar, plus two `apps/mac` bundle
+//     assertions; exactly two of its cases read `apps/ios`.
+//   * `LocalizationSourceGuardTests`' other two cases drive the detector
+//     against literal fixtures and read no repository file at all.
+//
+// Selecting those classes whole would run macOS and shared-package assertions
+// on an iOS-only change; selecting the methods runs the iOS half and nothing
+// else. The one unavoidable overlap is inside
+// `testNoUserFacingEnglishLiteralsInTheAppOrViewModelLayer`, which is a single
+// sweep over every surface that renders the shared catalogs — `apps/mac` among
+// them — and cannot be narrowed without changing the guard itself.
+//
+// The last five entries were added after two independently reproduced hosted
+// gaps: an `apps/ios/**`-only change — a plist key, an `InfoPlist.strings`
+// sentence, a new view, a `.lproj` — started this workflow and NOTHING read
+// what it changed. `swift-package.yml` owns the unfiltered suite and watches
+// `apps/RelayiumKit/**`, never `apps/ios/**`, so the camera and Local Network
+// declarations, the pairing scanner's structure and the app's localization
+// integrity were guarded only in the direction nobody was editing.
 const IOS_GUARD_SELECTORS = [
   "IOSSurfaceGuardTests",
   "IOSPrivacyManifestTests",
   "IOSDistributionSigningTests",
   "IOSAppIconAssetTests",
+  // The Local Network purpose string, the declared-key SET in both app
+  // catalogs, and the Share extension declaring none of them.
+  "IOSLocalNetworkPermissionTests",
+  // The camera purpose the QR scanner earns, the scanner's own source shape —
+  // AVFoundation rather than A12-only VisionKit, tap-before-request, no photo
+  // or movie output, no logging — and the funnel into `parseAppDeepLink`.
+  "IOSPairingScannerTests",
   "BundleVersionTests/testTheIOSAppAndItsExtensionShipOneVersion",
+  // `apps/ios/Relayium/Info.plist`'s `CFBundleLocalizations`, and the iOS
+  // project's `knownRegions`. Both are how a frozen locale gets re-adopted.
+  "LocalizationIntegrityTests/testTheIOSAppDeclaresExactlyTheShippedLocalizations",
+  "LocalizationIntegrityTests/testTheIOSProjectKnownRegionsCarryNoFrozenLocale",
+  // The regression guard over `apps/ios/Relayium` and `apps/ios/RelayiumShare`
+  // source: a `Text("Try again")` in the newest surface renders English in
+  // every language, because the catalogs live in a package bundle the app
+  // target's literals never resolve against.
+  "LocalizationSourceGuardTests/testNoUserFacingEnglishLiteralsInTheAppOrViewModelLayer",
 ];
 /** The class half of a selector — what has to exist as a file on disk. */
 const selectorClass = (selector) => String(selector).split("/")[0];
@@ -1209,6 +1245,29 @@ const selectorClass = (selector) => String(selector).split("/")[0];
 const selectorMethod = (selector) => String(selector).split("/")[1];
 /** An `apps/ios`-only change, as a path — the case section 6k exists for. */
 const IOS_GUARD_SAMPLE = "apps/ios/Relayium.xcodeproj/project.pbxproj";
+/** The lane that owns the repository's only unfiltered `swift test`. */
+const SWIFT_PACKAGE_LANE = "swift-package.yml";
+
+// ── the two device shapes the UI target has to be executed on ───────────────
+//
+// `AdaptiveShellUITests` is the only class in `RelayiumUITests` that reads the
+// size class, and every one of its cases opens by skipping unless the shell
+// came up regular-width. `ios-ui-smoke` selects an iPhone and runs the whole
+// target, so before `ios-ipad-shell` existed that class skipped on every hosted
+// run since it was written — a green lane over a `NavigationSplitView` no CI
+// run had ever drawn. A skip is not a failure and `xcodebuild` exits 0 for a
+// suite that skipped entirely, so nothing went red and nothing could.
+//
+// Section 6q holds the repair: one job, on an iPad, scoped to that class, which
+// asserts afterwards that its cases RAN.
+const IOS_COMPACT_JOB = "ios-ui-smoke";
+const IOS_REGULAR_WIDTH_JOB = "ios-ipad-shell";
+const IOS_UI_TARGET = "RelayiumUITests";
+const IOS_REGULAR_WIDTH_CLASS = "AdaptiveShellUITests";
+/** The `-only-testing` identifier the iPad job must carry, and only it. */
+const IOS_REGULAR_WIDTH_SELECTOR = `-only-testing:${IOS_UI_TARGET}/${IOS_REGULAR_WIDTH_CLASS}`;
+/** The whole-target selection that belongs to the iPhone job alone. */
+const IOS_WHOLE_UI_TARGET_SELECTOR = `-only-testing:${IOS_UI_TARGET} test`;
 const SHARED_KIT = "apps/RelayiumKit/**";
 const IOS_PROJECT = "-project apps/ios/Relayium.xcodeproj";
 const MACOS_PROJECT = "-project apps/mac/Relayium.xcodeproj";
@@ -1747,6 +1806,16 @@ const RUNNER_BUDGETS = [
         max: 55,
         why: "a PAID macOS runner is held by an iPhone simulator or UI test that never exits",
       },
+      // Declared 40. One class of six cases against one booted iPad simulator,
+      // plus the same UI-test-target build `ios-ui-smoke` pays for. Strictly
+      // less work than that job, so its 55 bounds this from above; 50 is that
+      // number brought down to what this scope actually justifies while still
+      // absorbing a cold build and a slow first boot.
+      "ios-ipad-shell": {
+        max: 50,
+        why: "a PAID macOS runner is held by an iPad simulator that never boots, or by a "
+          + "regular-width UI test waiting on a sidebar that never appeared",
+      },
       "ios-transfer-acceptance": {
         max: 45,
         why: "a PAID macOS runner is held by a transfer peer, local server or built-App session "
@@ -1967,7 +2036,7 @@ const appRoots = (() => {
 /**
  * The Swift test target's own file names, read from disk.
  *
- * Section 6k names five guard SELECTORS that `ios.yml` must execute by
+ * Section 6k names the guard SELECTORS that `ios.yml` must execute by
  * `--filter`. A filter naming a class that does not exist is not a smaller
  * gate, it is a `swift test` invocation matching nothing — so the names are
  * checked against the files that declare them, and carried in the world so
@@ -2020,6 +2089,46 @@ const swiftTestMethods = (() => {
 })();
 
 /**
+ * Every XCTest class the iOS UI-test target declares, read from disk.
+ *
+ * Section 6q requires `ios.yml`'s iPad job to select exactly
+ * `RelayiumUITests/${IOS_REGULAR_WIDTH_CLASS}` with `-only-testing`, and
+ * `xcodebuild` treats an `-only-testing` identifier that resolves to nothing
+ * the same way `swift test` treats an unmatched `--filter`: it runs zero tests
+ * and exits 0. So the class is checked against the file that declares it, and
+ * carried in the world so section 8 can rename it away and require the
+ * complaint.
+ *
+ * The same shallow `class X:` scan the Swift target gets, for the same reason:
+ * this needs the declared names, not a parse.
+ */
+const IOS_UI_TEST_DIR = "apps/ios/RelayiumUITests";
+const iosUITestClasses = (() => {
+  const out = new Set();
+  let names = [];
+  try {
+    names = readdirSync(resolve(repoRoot, IOS_UI_TEST_DIR), { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".swift"))
+      .map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+  for (const name of names) {
+    let text;
+    try {
+      text = readFileSync(resolve(repoRoot, IOS_UI_TEST_DIR, name), "utf8");
+    } catch {
+      continue;
+    }
+    for (const line of text.split("\n")) {
+      const declared = line.match(/\bclass\s+([A-Za-z_][A-Za-z0-9_]*)\s*:/);
+      if (declared) out.add(declared[1]);
+    }
+  }
+  return [...out].sort();
+})();
+
+/**
  * Does the fuzz campaign's discovery script exist?
  *
  * Read from disk rather than assumed, and carried in the world below, so
@@ -2052,6 +2161,7 @@ function realWorld() {
     inventory: fuzzInventoryExists,
     testFiles: [...swiftTestFiles],
     testMethods: [...swiftTestMethods],
+    uiTestClasses: [...iosUITestClasses],
   };
 }
 
@@ -3393,8 +3503,10 @@ function swiftTestFilters(run) {
  *
  * Not derived from anything, because there is nothing to derive it from: 6i
  * budgets JOBS against measured runtime and knows nothing about step keys. The
- * step's real work is a shared-package build plus five file-reading test
- * classes — minutes, not tens of minutes. 40 is chosen far enough above that to
+ * step's real work is a shared-package build plus the file-reading guard cases
+ * `IOS_GUARD_SELECTORS` names — minutes, not tens of minutes, and the five
+ * selectors added for the camera, Local Network, scanner and localization
+ * guards read files exactly as the first five do. 40 is chosen far enough above that to
  * absorb a cold SwiftPM build on a slow runner without ever firing on a healthy
  * run, and far enough below `ios-build`'s own budget that the step still fails
  * first when the run is wedged. Raising it past this is a decision about how
@@ -3425,7 +3537,7 @@ function iosParallelLaneFailures(world) {
   const doc = world.docs.get(IOS);
   if (!doc) return out;
 
-  const wanted = ["ios-build", "ios-ui-smoke", "ios-transfer-acceptance"];
+  const wanted = ["ios-build", "ios-ui-smoke", "ios-ipad-shell", "ios-transfer-acceptance"];
   const names = Object.keys(doc.jobs ?? {});
   need(
     names.length === wanted.length && wanted.every((name) => names.includes(name)),
@@ -3472,6 +3584,13 @@ function iosParallelLaneFailures(world) {
     + `or Go setup work.`,
   );
 
+  const ipad = body(IOS_REGULAR_WIDTH_JOB);
+  need(
+    !ipad.includes("local-transfer-acceptance.sh") && !ipad.includes("actions/setup-go"),
+    `${IOS}/${IOS_REGULAR_WIDTH_JOB} must own the regular-width shell and nothing else; transfer `
+    + `acceptance and Go setup belong to ${IOS}/ios-transfer-acceptance.`,
+  );
+
   const transfer = body("ios-transfer-acceptance");
   for (const marker of [
     "actions/setup-go",
@@ -3484,6 +3603,171 @@ function iosParallelLaneFailures(world) {
       transfer.includes(marker),
       `${IOS}/ios-transfer-acceptance does not contain ${JSON.stringify(marker)}. The split may `
       + `shorten the critical path, but it may not drop a transfer prerequisite or acceptance case.`,
+    );
+  }
+
+  return out;
+}
+
+// ── 6q: the regular-width shell is EXECUTED, not merely selected ────────────
+//
+// Everything below is about one failure and its near misses. `ios-ui-smoke`
+// runs the whole UI target on an iPhone; `AdaptiveShellUITests` skips itself
+// unless the shell is regular width; `xcodebuild` exits 0 for a run in which
+// every selected case skipped. So the sidebar, the detail column and the
+// stored-link presentation over a split view were covered on paper and executed
+// nowhere, for as long as the class had existed.
+//
+// A job that "runs the iPad tests" is not enough to fix that, because the three
+// ways it silently stops running them all leave a green job:
+//
+//   * the destination drifts back to an iPhone — one word in a `startswith`;
+//   * the scope widens to the whole target, which duplicates the iPhone job's
+//     twenty-odd unrelated cases on a second PAID macOS runner AND still lets
+//     the regular-width cases skip inside it;
+//   * the class is renamed, `-only-testing` resolves to nothing, and zero tests
+//     run.
+//
+// Each is asserted here, and section 8 mutates each one.
+
+/**
+ * `ios.yml`'s iPad job: the destination, the scope, the proof it ran, and the
+ * result bundle it leaves behind when it did not.
+ */
+function iosRegularWidthShellFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+  const doc = world.docs.get(IOS);
+  if (!doc) return out;
+
+  const job = doc.jobs?.[IOS_REGULAR_WIDTH_JOB];
+  need(
+    job !== undefined,
+    `${IOS} declares no \`${IOS_REGULAR_WIDTH_JOB}\` job. ${IOS_COMPACT_JOB} selects an iPhone `
+    + `and every ${IOS_REGULAR_WIDTH_CLASS} case skips on a compact shell, so without this job `
+    + `the regular-width ${IOS_UI_TARGET} coverage is selected, skipped and reported green — the `
+    + `state this section exists to end.`,
+  );
+  if (!job) return out;
+
+  const where = `${IOS}/${IOS_REGULAR_WIDTH_JOB}`;
+  const steps = job.steps ?? [];
+  // Every `run:` body in the job, with shell comment lines dropped.
+  //
+  // Every check below is about what the job EXECUTES. A prose line explaining
+  // why this job is not the compact one, or naming the selector it
+  // deliberately does not use, is neither a destination nor a selection —
+  // reading the comments too would make the refusals fire on documentation and
+  // let the requirements be satisfied by it.
+  const code = steps
+    .map((step) => String(step?.run ?? ""))
+    .join("\n")
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .join("\n");
+
+  // ── the destination ──────────────────────────────────────────────────────
+  //
+  // A quoted `iPad` literal in EXECUTED code, paired with the refusal below.
+  // Together they say "the selection names iPad and never iPhone"; the prose
+  // is excluded from both, so a job whose comment says iPad and whose
+  // `startswith` says iPhone — the regression this is written against — fails
+  // the second one.
+  need(
+    /["']iPad["']/.test(code),
+    `${where}: no step selects its simulator by an \`iPad\` name at all. This job's ONLY reason `
+    + `to exist is a regular-width shell, which on this image means a full-screen iPad; a `
+    + `destination chosen any other way is a job that duplicates ${IOS_COMPACT_JOB} at full `
+    + `price.`,
+  );
+  need(
+    !/iPhone/.test(code),
+    `${where}: a step names \`iPhone\`. Selecting one here — or falling back to one when no iPad `
+    + `is available — puts every ${IOS_REGULAR_WIDTH_CLASS} case straight back into the skip it `
+    + `takes on ${IOS_COMPACT_JOB}, at the cost of a second PAID macOS runner and with nothing `
+    + `going red. A missing iPad runtime is a runner-image regression this job must FAIL on.`,
+  );
+
+  // ── the scope ────────────────────────────────────────────────────────────
+  need(
+    code.includes(IOS_REGULAR_WIDTH_SELECTOR),
+    `${where}: no step passes \`${IOS_REGULAR_WIDTH_SELECTOR}\`. That identifier is the whole `
+    + `scope of this job; without it the job either runs something else or runs everything.`,
+  );
+  need(
+    !code.includes(IOS_WHOLE_UI_TARGET_SELECTOR),
+    `${where}: a step passes \`${IOS_WHOLE_UI_TARGET_SELECTOR}\`, the whole UI target. `
+    + `${IOS_COMPACT_JOB} already runs it on an iPhone, and the size class is the only variable `
+    + `that differs — so this re-runs every unrelated case on a second PAID macOS runner for no `
+    + `second answer, and buries the regular-width result among cases that pass either way.`,
+  );
+  const selected = [...code.matchAll(new RegExp(`-only-testing[:=]\\s*${IOS_UI_TARGET}/([A-Za-z0-9_]+)`, "g"))]
+    .map((match) => match[1]);
+  for (const className of selected) {
+    need(
+      className === IOS_REGULAR_WIDTH_CLASS,
+      `${where}: a step selects \`${IOS_UI_TARGET}/${className}\`. This job runs the ONE class `
+      + `that cannot run on ${IOS_COMPACT_JOB}; anything else here is a duplicate paid run of a `
+      + `case that already has a home. Adding a second regular-width-only class is a decision to `
+      + `make in \`IOS_REGULAR_WIDTH_CLASS\`, where the cost is visible.`,
+    );
+  }
+  need(
+    world.uiTestClasses.includes(IOS_REGULAR_WIDTH_CLASS),
+    `${where}: the job selects \`${IOS_UI_TARGET}/${IOS_REGULAR_WIDTH_CLASS}\`, but `
+    + `${IOS_UI_TEST_DIR} declares no such class. \`xcodebuild\` runs zero tests for an `
+    + `\`-only-testing\` identifier that resolves to nothing and exits 0, so this is a job that `
+    + `reports green while executing nothing. Follow the rename here, or decide the class is `
+    + `gone.`,
+  );
+
+  // ── the proof it ran ─────────────────────────────────────────────────────
+  //
+  // The one assertion that separates this job from the state it replaces. Every
+  // check above is about SELECTION; a compact shell on an iPad-shaped
+  // destination would satisfy all of them and skip anyway.
+  need(
+    /skippedTests/.test(code),
+    `${where}: no step reads \`skippedTests\` out of the result bundle. Selection is not `
+    + `execution: ${IOS_REGULAR_WIDTH_CLASS} skips whenever \`waitForShell\` does not report `
+    + `regular width, \`xcodebuild\` exits 0 for an all-skipped run, and this job would then `
+    + `report exactly the green ${IOS_COMPACT_JOB} already reports. Assert the counts.`,
+  );
+  need(
+    /totalTestCount/.test(code),
+    `${where}: no step requires the run to have executed any test at all. An \`-only-testing\` `
+    + `identifier that matches nothing produces a bundle with zero cases and a successful exit; `
+    + `a skip check alone passes that, because zero of zero skipped.`,
+  );
+
+  // ── the diagnosis it leaves behind ───────────────────────────────────────
+  const bundle = code.match(/-resultBundlePath\s+"?([^"\s\\]+)/);
+  need(
+    bundle !== null,
+    `${where}: no step declares \`-resultBundlePath\`. A UI failure on a hosted iPad simulator is `
+    + `not reproducible from a log line, and there is nothing to attach without a bundle.`,
+  );
+  const retain = steps.find((step) => String(step?.uses ?? "").includes("actions/upload-artifact"));
+  need(
+    retain !== undefined,
+    `${where}: nothing uploads the result bundle. ${IOS_COMPACT_JOB} retains its \`.xcresult\` on `
+    + `failure and this job — which drives a device shape no developer's default simulator is — `
+    + `needs it more, not less.`,
+  );
+  if (retain) {
+    need(
+      String(retain.if ?? "").includes("failure()"),
+      `${where}: the result-bundle upload declares \`if: ${JSON.stringify(retain.if)}\`, want a `
+      + `\`failure()\` condition. Uploading on every run pays for an artifact nobody opens; `
+      + `uploading on none leaves the red run undiagnosable.`,
+    );
+    const path = String(retain.with?.path ?? "");
+    need(
+      bundle === null || path.includes(bundle[1].replace("$RUNNER_TEMP", "").replace(/^\/+/, "")),
+      `${where}: the upload's \`path\` is ${JSON.stringify(path)}, which does not name the `
+      + `\`-resultBundlePath\` the test step wrote (${JSON.stringify(bundle?.[1])}). An artifact `
+      + `step pointed at the wrong path retains nothing and, with `
+      + `\`if-no-files-found: error\`, hides the real failure behind its own.`,
     );
   }
 
@@ -3552,6 +3836,59 @@ function iosGuardStepFailures(world) {
     `${where}: ${IOS} runs the iOS guard selectors but does not trigger on ${IOS_GUARD_SAMPLE}, `
     + `so an iOS-only pull request never starts the job that runs them.`,
   );
+
+  // One sample per INPUT CLASS the selectors read, not one sample overall.
+  //
+  // `IOS_GUARD_SAMPLE` is the project file, and it is the path a narrowed
+  // filter is least likely to lose. The guards added for the camera, Local
+  // Network and localization declarations read four other kinds of file, and
+  // each is a tree a future `paths:` edit could drop on its own — an
+  // `apps/ios/**` filter rewritten as `apps/ios/Relayium.xcodeproj/**` and
+  // `apps/ios/Relayium/*.swift` would keep the sample above passing while
+  // taking every plist and `.strings` change out of the lane. Each is checked
+  // against BOTH sides: `ios.yml` must start, and `swift-package.yml` — the
+  // owner of the unfiltered suite, and therefore the reason it is tempting to
+  // believe these run somewhere else — must not.
+  for (const { path, why } of [
+    {
+      path: "apps/ios/Relayium/Info.plist",
+      why: "the Local Network and camera purpose keys, and `CFBundleLocalizations`",
+    },
+    {
+      path: "apps/ios/Relayium/en.lproj/InfoPlist.strings",
+      why: "the English purpose sentences the system alert renders",
+    },
+    {
+      path: "apps/ios/Relayium/zh-Hans.lproj/InfoPlist.strings",
+      why: "the Simplified-Chinese purpose sentences",
+    },
+    {
+      path: "apps/ios/Relayium/PairingScannerView.swift",
+      why: "the scanner's source shape and the localization source guard",
+    },
+    {
+      path: "apps/ios/RelayiumShare/ShareViewController.swift",
+      why: "the extension the guards require to declare NO protected-resource key",
+    },
+  ]) {
+    need(
+      wTriggers(world, IOS, path),
+      `${where}: ${IOS} does not trigger on ${path}, which carries ${why}. The guard selectors `
+      + `above read that file and run NOWHERE ELSE for a change to it: the unfiltered suite lives `
+      + `in ${SWIFT_PACKAGE_LANE}, which watches ${SHARED_KIT} and no \`apps/ios\` tree at all. A `
+      + `change there would compile the app and accept its UI while nothing read the declaration `
+      + `it just edited.`,
+    );
+    need(
+      !wTriggers(world, SWIFT_PACKAGE_LANE, path),
+      `${where}: ${SWIFT_PACKAGE_LANE} triggers on ${path}. That lane owns the whole-suite `
+      + `\`swift test\`, so if it watched \`apps/ios\` these selectors would be a duplicate rather `
+      + `than the only coverage — and the negation in ${IOS}'s own filter, which exists to keep `
+      + `the package's test target out of this heavy lane, would be paying for nothing. Deciding `
+      + `that the package lane should watch the apps is a CI architecture decision; make it `
+      + `deliberately, and re-derive what this step is still for.`,
+    );
+  }
 
   need(
     step["working-directory"] === SWIFT_PACKAGE_DIR,
@@ -3654,7 +3991,7 @@ function iosGuardStepFailures(world) {
     `${where}: the guard step is bounded at `
     + `${JSON.stringify(step["timeout-minutes"])} minutes, above the `
     + `${IOS_GUARD_STEP_CEILING}-minute ceiling this section sets for it. The step's work is a `
-    + `shared-package build and five file-reading test classes; a bound that large no longer `
+    + `shared-package build and ${IOS_GUARD_SELECTORS.length} file-reading guard selectors; a bound that large no longer `
     + `bounds it, and the wedged run it is supposed to cut short would instead be left to the `
     + `carrier job. Either the step grew work that belongs elsewhere, or the number was raised `
     + `to make a slow run pass — both are decisions, and \`IOS_GUARD_STEP_CEILING\` is where to `
@@ -5018,17 +5355,391 @@ function compatEntryPointFailures(world) {
   return out;
 }
 
+// ── 6p. the iOS lane builds with the toolchain Apple will accept ────────────
+//
+// Every other section here is about which lane runs and what it costs. This one
+// is about whether the lane's green means anything, and it exists because a
+// hosted iOS run was green against a toolchain no upload may use: `macos-15`'s
+// default Xcode is 16.4, below Apple's Xcode 26 / iOS 26 SDK upload floor, and
+// nothing in the run says so. `ios.yml`'s own `env:` block carries the full
+// rationale; this section is the part of it that source can hold, asserted by
+// mutation because each shape below leaves a perfectly valid, perfectly green
+// workflow behind.
+//
+// The load-bearing claim is EXACT-MAJOR SELECTION, which is what keeps both the
+// 16.4 default and the announced Xcode 27 PUBLIC PREVIEW out. The explicit-
+// marker refusal is a cheap extra, not a prerelease detector, and nothing here
+// claims otherwise.
+//
+// Nothing here signs, archives or uploads anything, and it must not grow to.
+// App Store Connect read-back and TestFlight availability are separate gates,
+// owned by `docs/ios-app-store-submission.md`.
+
+/** The hosted image whose inventory this gate's Xcode claim is about. */
+const IOS_RUNNER = "macos-15";
+
+/**
+ * The one Xcode major this lane may build with, and the iOS SDK floor.
+ *
+ * The Xcode number is REQUIRED rather than minimum: Apple rejects below 26, and
+ * 27 is currently a public preview, so raising it is a decision made against a
+ * demonstrated upload rather than an image inventory. The SDK number stays a
+ * floor because Apple validates the SDK a binary was LINKED against.
+ */
+const REQUIRED_XCODE_MAJOR = 26;
+const APPLE_MIN_IOS_SDK_MAJOR = 26;
+
+const XCODE_MAJOR_KEY = "RELAYIUM_XCODE_MAJOR";
+const SDK_MIN_KEY = "RELAYIUM_MIN_IOS_SDK_MAJOR";
+const SELECT_KEY = "RELAYIUM_SELECT_XCODE";
+
+/** The one form a job may run the selection in; three copies is the drift. */
+const SELECT_REF = `\${{ env.${SELECT_KEY} }}`;
+const SELECT_REF_RE = new RegExp(`\\$\\{\\{\\s*env\\.${SELECT_KEY}\\s*\\}\\}`);
+
+/** Anything that compiles, tests or drives a simulator with the selected Xcode. */
+const TOOLCHAIN_COMMAND = /\b(xcodebuild|xcrun|swift)\b/;
+
+/** The script's executable lines: comments and blanks carry no behaviour. */
+function scriptLines(script) {
+  return String(script ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("#"));
+}
+
+/**
+ * The local variable a script binds an environment key to, or null.
+ *
+ * Read rather than assumed so the checks below survive a rename: what matters
+ * is that the declared number reaches a comparison, not how the shell variable
+ * is spelled.
+ */
+function localBinding(lines, envKey) {
+  const re = new RegExp(`^([A-Za-z_][A-Za-z0-9_]*)=.*\\$\\{?${envKey}\\b`);
+  for (const line of lines) {
+    const match = line.match(re);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+/**
+ * Does a guard matching `condition` reach a statement matching `body`?
+ *
+ * The pairing is what every script check below is about: a script that tests and
+ * carries on is not a gate, and a bare `exit`/`continue` with no test in front
+ * of it is not this gate. Bounded to the eight lines after the guard and stopped
+ * by the closing `fi` so a later block cannot satisfy an earlier condition.
+ */
+function guardLeadsTo(lines, condition, body) {
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!condition.test(lines[i])) continue;
+    for (let j = i + 1; j < lines.length && j <= i + 8; j += 1) {
+      if (/^fi\b/.test(lines[j])) break;
+      if (body.test(lines[j])) return true;
+    }
+  }
+  return false;
+}
+
+function iosUploadToolchainFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+
+  const doc = world.docs.get(IOS);
+  need(doc !== undefined, `${IOS} is missing or did not parse.`);
+  if (!doc) return out;
+
+  // ── the declared toolchain numbers ───────────────────────────────────────
+  const env = doc.env;
+  need(
+    env !== undefined && env !== null && typeof env === "object",
+    `${IOS} declares no workflow-level \`env:\` block. It is where this lane's required Xcode `
+    + `major, its iOS SDK floor and its one shared selection script live; without it every job `
+    + `falls back to the runner image's default Xcode, which is 16.4 on ${IOS_RUNNER} and produces `
+    + `binaries Apple refuses at upload.`,
+  );
+  if (!env || typeof env !== "object") return out;
+
+  const rawMajor = env[XCODE_MAJOR_KEY];
+  need(
+    Number.isInteger(Number(rawMajor)) && Number(rawMajor) === REQUIRED_XCODE_MAJOR,
+    `${IOS}: \`env.${XCODE_MAJOR_KEY}\` is ${JSON.stringify(rawMajor)}, want exactly `
+    + `${REQUIRED_XCODE_MAJOR}. BOTH directions off this number fail silently: 16 re-admits the `
+    + `${IOS_RUNNER} default, below Apple's upload floor; 27 admits the public preview the image `
+    + `carries, which is outside the major this lane certifies and is not evidence to submit an `
+    + `App Store build on — not, on current guidance, a build TestFlight refuses. Either way it `
+    + `still compiles and the lane stays green, so moving this belongs in the same commit as a `
+    + `demonstrated accepted upload from the new major.`,
+  );
+
+  const rawSdk = env[SDK_MIN_KEY];
+  need(
+    Number.isInteger(Number(rawSdk)) && Number(rawSdk) >= APPLE_MIN_IOS_SDK_MAJOR,
+    `${IOS}: \`env.${SDK_MIN_KEY}\` is ${JSON.stringify(rawSdk)}, want an integer of at least `
+    + `${APPLE_MIN_IOS_SDK_MAJOR}. Lowering it is how the gate stops gating with no line deleted: `
+    + `every step still runs and the comparison still passes.`,
+  );
+
+  // ── the one shared script ────────────────────────────────────────────────
+  const script = env[SELECT_KEY];
+  need(
+    typeof script === "string" && script.trim() !== "",
+    `${IOS}: \`env.${SELECT_KEY}\` is missing or empty. It is the whole mechanism: one selection `
+    + `script the three jobs share, so a toolchain rule cannot be tightened in one job and left `
+    + `behind in another.`,
+  );
+  const lines = scriptLines(script);
+  need(lines.length > 0, `${IOS}: the shared selection script has no executable lines at all.`);
+
+  if (lines.length > 0) {
+    need(
+      /^set\s+-euo\s+pipefail$/.test(lines[0]),
+      `${IOS}: the shared selection script begins with ${JSON.stringify(lines[0])}, want `
+      + `\`set -euo pipefail\`. Without \`-e\` a failed \`xcrun\` leaves an empty version string `
+      + `the script walks on to compare.`,
+    );
+    need(
+      lines.some((line) => /\/Applications\/Xcode\*\.app/.test(line)),
+      `${IOS}: the shared selection script never enumerates \`/Applications/Xcode*.app\`. The `
+      + `image rotates its Xcode point releases without any commit here, so naming one bundle path `
+      + `turns the next refresh into an outage, and naming none takes the 16.4 default.`,
+    );
+    need(
+      lines.some((line) => /DEVELOPER_DIR=.*>>\s*"?\$\{?GITHUB_ENV/.test(line)),
+      `${IOS}: the shared selection script does not export \`DEVELOPER_DIR\` through `
+      + `\`$GITHUB_ENV\`. Selecting a toolchain inside one step's shell changes nothing for the `
+      + `steps after it: they still compile against the image default while the selection step `
+      + `reports a correct version and passes.`,
+    );
+
+    // The explicit-marker refusal, scoped and not overclaimed: it drops a
+    // bundle that ANNOUNCES itself as a seed in its path or version report.
+    // Apple guarantees no such marker, so this catches some prereleases and not
+    // others — the required-major filter below is what keeps the announced
+    // Xcode 27 preview out. Asserted on the glob, not on printed prose, which
+    // contains "beta" too and would survive the rule's deletion.
+    //
+    // Two markers are deliberately absent and must stay absent. A trailing
+    // lowercase build letter is NOT a seed marker: stable Xcode 16.0 shipped as
+    // `16A242d`. Nor is "release candidate": Apple's App Store Connect release
+    // notes permitted Xcode 26.6 with the iOS 26.5 RC SDK for distribution.
+    need(
+      lines.some((line) => /\*beta\*/.test(line)),
+      `${IOS}: the shared selection script carries no \`*beta*\` match, so a toolchain that `
+      + `announces itself as a beta in its path or version report is a candidate like any other.`,
+    );
+    need(
+      guardLeadsTo(lines, /^if\s+!?\s*[^;]*\bprerelease\b/, /^continue\b/),
+      `${IOS}: the shared selection script never REFUSES a candidate carrying an explicit `
+      + `prerelease marker — nothing tests one and drops it from the enumeration. Defining the `
+      + `predicate is not the gate.`,
+    );
+
+    // ── the required major, as a filter inside the enumeration ────────────
+    //
+    // `!=` and `continue` are both load-bearing: a `-lt` guard accepts every
+    // major above the required one — here, the Xcode 27 preview — and one that
+    // exited would turn a merely uninteresting bundle into a lane outage. It
+    // must sit INSIDE the enumeration, before a candidate can win.
+    const xcodeVar = localBinding(lines, XCODE_MAJOR_KEY);
+    need(
+      xcodeVar !== null,
+      `${IOS}: the shared selection script never reads \`${XCODE_MAJOR_KEY}\`, so the declared `
+      + `required major reaches no comparison and the \`env:\` entry above is decoration.`,
+    );
+    const majorRe = new RegExp(`!=\\s+"?\\$\\{?${xcodeVar ?? "required"}\\b`);
+    need(
+      xcodeVar === null || guardLeadsTo(lines, majorRe, /^continue\b/),
+      `${IOS}: the shared selection script never restricts selection to the required Xcode major `
+      + `— no \`!= "$${xcodeVar ?? "required"}"\` test drops a candidate before it can be chosen. `
+      + `Without it the enumeration is newest-wins, which fails BOTH ways: the ${IOS_RUNNER} `
+      + `default when nothing newer is installed, and the Xcode 27 public preview the moment an `
+      + `image refresh lands one. A \`-lt\` floor is not a substitute, which is why this asks for `
+      + `an equality: "at least 26" is exactly the rule that selects 27.`,
+    );
+    need(
+      xcodeVar === null || guardLeadsTo(lines, majorRe, /\bexit\s+[1-9]/),
+      `${IOS}: the shared selection script never re-asserts the SELECTED major after the loop. `
+      + `The filter keeps a wrong major from winning; this exit catches a future edit that lets `
+      + `one through anyway — the difference between dying here and shipping.`,
+    );
+    need(
+      guardLeadsTo(lines, /-z\s+"?\$\{?selected/, /\bexit\s+[1-9]/),
+      `${IOS}: the shared selection script does not fail closed on an empty selection. Filtering `
+      + `to one required major means the enumeration can legitimately end with no candidate, and `
+      + `that has to be a non-zero exit. Walking past it exports an empty \`DEVELOPER_DIR\`, which `
+      + `is not an error downstream: it silently means the runner default, i.e. Xcode 16.4.`,
+    );
+
+    // ── the SDK floor, read and enforced ──────────────────────────────────
+    need(
+      lines.some((line) => /xcrun\s+--sdk\s+iphoneos\s+--show-sdk-version/.test(line)),
+      `${IOS}: the shared selection script never reads the iphoneos SDK version `
+      + `(\`xcrun --sdk iphoneos --show-sdk-version\`). Apple validates the SDK a binary was `
+      + `LINKED against — a different fact from the Xcode version, and it can be older.`,
+    );
+    const sdkVar = localBinding(lines, SDK_MIN_KEY);
+    need(
+      sdkVar !== null,
+      `${IOS}: the shared selection script never reads \`${SDK_MIN_KEY}\`, so the declared iOS `
+      + `SDK minimum reaches no comparison at all.`,
+    );
+    need(
+      sdkVar === null
+        || guardLeadsTo(lines, new RegExp(`-lt\\s+"?\\$\\{?${sdkVar}\\b`), /\bexit\s+[1-9]/),
+      `${IOS}: the shared selection script never compares the iphoneos SDK against `
+      + `\`${SDK_MIN_KEY}\` and exits non-zero. The Xcode check does not stand in for it: an `
+      + `Xcode 26 with its iOS 26 SDK replaced satisfies one and fails the upload on the other.`,
+    );
+  }
+
+  // ── every job runs it, first, and nothing puts the old toolchain back ────
+  const jobs = Object.entries(doc.jobs ?? {});
+  need(jobs.length > 0, `${IOS} declares no jobs, so every per-job check below inspects nothing.`);
+  for (const [name, job] of jobs) {
+    need(
+      job?.["runs-on"] === IOS_RUNNER,
+      `${IOS}/${name}: \`runs-on\` is ${JSON.stringify(job?.["runs-on"])}, want `
+      + `${JSON.stringify(IOS_RUNNER)}. This section is a claim about what that image has `
+      + `installed — an Xcode 26 beside the 16.4 default — and it does not travel to another `
+      + `image on its own. Make that decision here, against the new image's inventory.`,
+    );
+
+    const steps = job?.steps ?? [];
+    const guardIndices = steps
+      .map((step, index) => ({ step, index }))
+      .filter(({ step }) => SELECT_REF_RE.test(String(step?.run ?? "")))
+      .map(({ index }) => index);
+    const guardIndex = guardIndices[0] ?? -1;
+    need(
+      guardIndex !== -1,
+      `${IOS}/${name}: no step runs the shared Xcode selection \`${SELECT_REF}\`. Every job here `
+      + `compiles or drives the app, so a job that skips it builds with ${IOS_RUNNER}'s default `
+      + `Xcode 16.4 while the others report the toolchain is fine — two thirds of the lane `
+      + `standing as evidence for a toolchain the third did not use.`,
+    );
+    if (guardIndex === -1) continue;
+    // One selection per job. Two make "which one governs the build" a matter of
+    // reading order, and the checks below would answer it about the first.
+    need(
+      guardIndices.length === 1,
+      `${IOS}/${name}: ${guardIndices.length} steps run the shared Xcode selection `
+      + `(indices ${guardIndices.join(", ")}). Selection happens once per job; with two, the `
+      + `ordering and shape checks here describe the first while the build inherits whatever `
+      + `the last one exported.`,
+    );
+
+    // ── the selection step is the shared script, whole, and can report red ──
+    //
+    // Containing the reference is not running it. `run: ${{ env.… }} || true`,
+    // a `continue-on-error`, or an `if` that is false all leave a step that
+    // still MATCHES the reference above while the fail-closed exits inside the
+    // script reach nothing: the job goes green, and the build below it compiles
+    // against the image's default Xcode 16.4. The shared script is a whole
+    // command by construction, so the exact form is the check.
+    const guard = steps[guardIndex];
+    const guardRun = String(guard?.run ?? "").trim();
+    need(
+      guardRun === SELECT_REF,
+      `${IOS}/${name}: the Xcode selection step runs ${JSON.stringify(guardRun)}, want exactly `
+      + `\`${SELECT_REF}\`. Anything wrapped around the shared script — \`|| true\`, a trailing `
+      + `\`exit 0\`, a subshell whose status is dropped — swallows the fail-closed exits the `
+      + `script's whole purpose is to reach, and the job stays green on the toolchain it was `
+      + `written to refuse.`,
+    );
+    // Absent or literally `false` — nothing else. GitHub honours the quoted
+    // string `'true'` and an `${{ }}` expression here just as it honours the
+    // boolean, so "not the boolean true" is not the fail-closed reading.
+    for (const [scope, value] of [
+      ["step", guard?.["continue-on-error"]],
+      ["job", job?.["continue-on-error"]],
+    ]) {
+      need(
+        value === undefined || value === false,
+        `${IOS}/${name}: the Xcode selection ${scope} sets `
+        + `\`continue-on-error: ${JSON.stringify(value)}\`. A refused toolchain then reports green `
+        + `and the steps after it still build — with the \`DEVELOPER_DIR\` the selection never got `
+        + `far enough to export. Absent or \`false\`; a quoted \`'true'\` and an \`${"${{ }}"}\` `
+        + `expression are honoured here too.`,
+      );
+    }
+    need(
+      guard?.if === undefined,
+      `${IOS}/${name}: the Xcode selection step carries \`if: ${guard?.if}\`. A skipped step does `
+      + `not report red, it reports nothing, and the build steps below it are not conditional — `
+      + `so the lane goes green having compiled against ${IOS_RUNNER}'s default Xcode 16.4.`,
+    );
+
+    const work = steps
+      .map((step, index) => ({ step, index }))
+      .filter(({ step, index }) => index !== guardIndex
+        && TOOLCHAIN_COMMAND.test(String(step?.run ?? "")));
+    need(
+      work.length > 0,
+      `${IOS}/${name}: no step runs \`xcodebuild\`, \`xcrun\` or \`swift\` at all, so the ordering `
+      + `check below passes by having nothing to order against.`,
+    );
+    for (const { step, index } of work) {
+      need(
+        index > guardIndex,
+        `${IOS}/${name}: the Xcode selection step runs AFTER `
+        + `${JSON.stringify(step?.name ?? step?.uses ?? `step ${index}`)}. \`DEVELOPER_DIR\` `
+        + `exported through \`$GITHUB_ENV\` reaches SUBSEQUENT steps only, so everything above `
+        + `the selection compiles against the image default — silently, because the selection `
+        + `still succeeds afterwards and the job goes green.`,
+      );
+    }
+
+    // Nothing after the gate may put the old toolchain back. A YAML `env:` wins
+    // over the value the selection exported, and a later `xcode-select` is a
+    // second selection that no floor is enforced at.
+    for (const scope of [
+      { where: `${IOS}/${name}`, env: job?.env },
+      ...steps.map((step, index) => ({
+        where: `${IOS}/${name}, step `
+          + `${JSON.stringify(step?.name ?? step?.uses ?? `step ${index}`)}`,
+        env: step?.env,
+      })),
+    ]) {
+      if (!scope.env || typeof scope.env !== "object") continue;
+      for (const key of ["DEVELOPER_DIR", XCODE_MAJOR_KEY, SDK_MIN_KEY]) {
+        need(
+          scope.env[key] === undefined,
+          `${scope.where} overrides \`${key}\` with ${JSON.stringify(scope.env[key])}. A YAML `
+          + `\`env:\` wins over what the selection step exported, so the gate keeps passing while `
+          + `the build it governs uses a different toolchain — or moves a floor to where nobody `
+          + `reads it while the workflow-level number stays reassuringly correct.`,
+        );
+      }
+    }
+    const reselect = steps.find((step, index) => index !== guardIndex
+      && /\bxcode-select\b/.test(String(step?.run ?? "")));
+    need(
+      reselect === undefined,
+      `${IOS}/${name}: step ${JSON.stringify(reselect?.name ?? "")} runs \`xcode-select\`. `
+      + `Selection happens once, in the shared script, where both floors are enforced; a second `
+      + `selection anywhere else is unchecked by construction.`,
+    );
+  }
+
+  return out;
+}
+
 for (const message of triggerFailures(realWorld())) failures.push(message);
 for (const message of platformBoundaryFailures(realWorld())) failures.push(message);
 for (const message of pathMatrixFailures(realWorld())) failures.push(message);
 for (const message of fuzzCampaignFailures(realWorld())) failures.push(message);
 for (const message of iosParallelLaneFailures(realWorld())) failures.push(message);
 for (const message of iosGuardStepFailures(realWorld())) failures.push(message);
+for (const message of iosRegularWidthShellFailures(realWorld())) failures.push(message);
 for (const message of macosBudgetFailures(realWorld())) failures.push(message);
 for (const message of concurrencyFailures(realWorld())) failures.push(message);
 for (const message of releaseBoundaryFailures(realWorld())) failures.push(message);
 for (const message of aggregateGateFailures(realWorld())) failures.push(message);
 for (const message of compatEntryPointFailures(realWorld())) failures.push(message);
+for (const message of iosUploadToolchainFailures(realWorld())) failures.push(message);
 
 // ── 7h. the inventory script's own fail-closed proof, actually executed ─────
 //
@@ -5475,6 +6186,57 @@ function withGuardStep(world, mutate) {
     `no step in ${IOS} runs \`swift test\`, so the iOS guard gate this case is about is already `
     + `gone and the case cannot prove anything about it.`,
   );
+}
+
+/**
+ * Mutate the shared iOS selection script, and refuse to be a no-op.
+ *
+ * A mutation that silently stopped applying — the script rewritten, the pattern
+ * no longer matching — would leave the world unbroken and let its case pass
+ * while asserting nothing, which is what section 8 exists to prevent.
+ */
+function withIosScript(world, transform) {
+  const env = world.docs.get(IOS)?.env;
+  if (!env || typeof env !== "object") throw new Error(`${IOS} declares no workflow-level env`);
+  const before = String(env[SELECT_KEY] ?? "");
+  const after = transform(before);
+  if (after === before) {
+    throw new Error(
+      `the mutation left ${IOS}'s \`${SELECT_KEY}\` unchanged, so the case below it would judge `
+      + `the real script. Follow the script's rewrite here.`,
+    );
+  }
+  env[SELECT_KEY] = after;
+  return world;
+}
+
+/** Remove the whole `if … fi` block whose condition matches `re`. */
+function withoutIosScriptBlock(world, re, label) {
+  return withIosScript(world, (script) => {
+    const lines = script.split("\n");
+    const at = lines.findIndex((line) => re.test(line));
+    if (at === -1) throw new Error(`${IOS}'s selection script has no ${label} condition to remove`);
+    const indent = lines[at].length - lines[at].trimStart().length;
+    let end = at + 1;
+    while (end < lines.length
+      && !(lines[end].trim() === "fi" && lines[end].length - lines[end].trimStart().length === indent)) {
+      end += 1;
+    }
+    if (end >= lines.length) throw new Error(`${IOS}'s ${label} block is unterminated`);
+    lines.splice(at, end - at + 1);
+    return lines.join("\n");
+  });
+}
+
+/** Mutate the step list of an iOS job around the index its selection step sits at. */
+function withIosGuard(world, name, mutate) {
+  const job = world.docs.get(IOS)?.jobs?.[name];
+  if (job === undefined) throw new Error(`${IOS} declares no job named ${name}`);
+  const steps = job.steps ?? [];
+  const at = steps.findIndex((step) => SELECT_REF_RE.test(String(step?.run ?? "")));
+  if (at === -1) throw new Error(`${IOS}/${name} already runs no shared Xcode selection step`);
+  mutate(steps, at);
+  return world;
 }
 
 const MUTATIONS = [
@@ -7288,10 +8050,428 @@ const MUTATIONS = [
     },
     expect: /compat\.yml: concurrency\.cancel-in-progress is "true", want/,
   },
+  // ── 6p: the iOS upload toolchain ─────────────────────────────────────────
+  //
+  // Every case below leaves `ios.yml` a valid workflow GitHub would run happily,
+  // and every one puts the lane back to reporting green for a build Apple
+  // refuses at upload.
+  {
+    name: "an iOS job moves off the image this gate's inventory claim is about",
+    mutate: (world) => withNamedJob(world, IOS, "ios-transfer-acceptance", (job) => {
+      job["runs-on"] = "macos-latest";
+    }),
+    expect: /ios\.yml\/ios-transfer-acceptance: `runs-on` is "macos-latest", want "macos-15"/,
+  },
+  {
+    // Down, to the runner image default. The classic direction.
+    name: "the required Xcode major is lowered to the image default's",
+    mutate: (world) => { world.docs.get(IOS).env[XCODE_MAJOR_KEY] = "16"; return world; },
+    expect: /ios\.yml: `env\.RELAYIUM_XCODE_MAJOR` is "16", want exactly 26/,
+  },
+  {
+    // And UP: the direction a floor cannot see, and why this is an equality.
+    // Bumping to the preview `macos-15` carries reads like keeping current,
+    // compiles, passes every job — and is discovered at upload, against a
+    // build number already consumed.
+    name: "the required Xcode major is raised to the preview the image carries",
+    mutate: (world) => { world.docs.get(IOS).env[XCODE_MAJOR_KEY] = "27"; return world; },
+    expect: /ios\.yml: `env\.RELAYIUM_XCODE_MAJOR` is "27", want exactly 26/,
+  },
+  {
+    name: "the iOS SDK floor is lowered below Apple's",
+    mutate: (world) => { world.docs.get(IOS).env[SDK_MIN_KEY] = "18"; return world; },
+    expect: /ios\.yml: `env\.RELAYIUM_MIN_IOS_SDK_MAJOR` is "18", want an integer of at least 26/,
+  },
+  {
+    name: "the shared selection script itself is removed",
+    mutate: (world) => { delete world.docs.get(IOS).env[SELECT_KEY]; return world; },
+    expect: /ios\.yml: `env\.RELAYIUM_SELECT_XCODE` is missing or empty/,
+  },
+  {
+    name: "an iOS job loses the shared Xcode selection step",
+    mutate: (world) => withIosGuard(world, "ios-ui-smoke", (steps, at) => {
+      steps.splice(at, 1);
+    }),
+    expect: /ios\.yml\/ios-ui-smoke: no step runs the shared Xcode selection/,
+  },
+  {
+    // The subtle one: the step is present, runs, prints a correct version and
+    // passes — after the build it governs already compiled against 16.4.
+    name: "the Xcode selection runs after the build it governs",
+    mutate: (world) => withIosGuard(world, "ios-build", (steps, at) => {
+      const [guard] = steps.splice(at, 1);
+      steps.push(guard);
+    }),
+    expect: /ios\.yml\/ios-build: the Xcode selection step runs AFTER/,
+  },
+  {
+    // The three ways to keep a step that still MATCHES the shared reference and
+    // still cannot report red. Each leaves the workflow valid and the lane
+    // green, building against the 16.4 default the script exists to refuse.
+    name: "the Xcode selection swallows its own failure with `|| true`",
+    mutate: (world) => withIosGuard(world, "ios-build", (steps, at) => {
+      steps[at] = { ...steps[at], run: `${steps[at].run} || true` };
+    }),
+    expect: /ios\.yml\/ios-build: the Xcode selection step runs .*want exactly/,
+  },
+  {
+    name: "the Xcode selection is marked `continue-on-error`",
+    mutate: (world) => withIosGuard(world, "ios-ui-smoke", (steps, at) => {
+      steps[at] = { ...steps[at], "continue-on-error": true };
+    }),
+    expect: /ios\.yml\/ios-ui-smoke: the Xcode selection step sets `continue-on-error: true`/,
+  },
+  {
+    // The same bypass spelled as a string, which GitHub honours identically and
+    // a `!== true` predicate reads as safe.
+    name: "the Xcode selection is marked `continue-on-error` as a quoted string",
+    mutate: (world) => withNamedJob(world, IOS, "ios-build", (job) => {
+      job["continue-on-error"] = "true";
+    }),
+    expect: /ios\.yml\/ios-build: the Xcode selection job sets `continue-on-error: "true"`/,
+  },
+  {
+    name: "the Xcode selection is made conditional and skips",
+    mutate: (world) => withIosGuard(world, "ios-build", (steps, at) => {
+      steps[at] = { ...steps[at], if: "false" };
+    }),
+    expect: /ios\.yml\/ios-build: the Xcode selection step carries `if:/,
+  },
+  {
+    // Selection that reaches no later step: the gate passes, the builds below
+    // it use the image default anyway.
+    name: "the shared script stops exporting DEVELOPER_DIR to later steps",
+    mutate: (world) => withIosScript(world, (script) => script.replace(
+      /\n[^\n]*DEVELOPER_DIR=[^\n]*>>[^\n]*GITHUB_ENV[^\n]*\n/,
+      "\n",
+    )),
+    expect: /does not export `DEVELOPER_DIR` through/,
+  },
+  {
+    // Back to newest-wins. Both numbers still declared and read, the enumeration
+    // still runs and prints — and the filter that kept the Xcode 27 preview out
+    // of the running is gone. It reads as a simplification.
+    name: "the shared script goes back to selecting the globally newest Xcode",
+    mutate: (world) => withoutIosScriptBlock(world, /^\s*if \[ "\$major" !=/, "required-major"),
+    expect: /never restricts selection to the required Xcode major/,
+  },
+  {
+    // The likelier near miss: the filter survives as a FLOOR. "At least 26"
+    // reads as safer than "exactly 26" and is the rule that selects the preview.
+    name: "the required-major filter is relaxed back into a floor",
+    mutate: (world) => withIosScript(world, (script) => script.replace(
+      /"\$major" != "\$required_xcode"/,
+      '"$major" -lt "$required_xcode"',
+    )),
+    expect: /never restricts selection to the required Xcode major/,
+  },
+  {
+    // The second place a wrong major dies. Removing it is invisible while the
+    // in-loop filter is intact, which is why it is asserted separately.
+    name: "the shared script stops re-asserting the selected major after the loop",
+    mutate: (world) => withoutIosScriptBlock(
+      world, /^\s*if \[ "\$selected_major" !=/, "selected-major assertion",
+    ),
+    expect: /never re-asserts the SELECTED major after the loop/,
+  },
+  {
+    // "Nothing survived" is a REACHABLE state once selection filters to one
+    // major, and walking past it exports an empty `DEVELOPER_DIR` — not an
+    // error downstream, just a silent return to the runner default.
+    name: "the shared script stops failing closed when no Xcode 26 is installed",
+    mutate: (world) => withoutIosScriptBlock(world, /-z "\$selected" \]; then$/, "empty-selection"),
+    expect: /does not fail closed on an empty selection/,
+  },
+  {
+    // The refusal deleted while the predicate implementing it stays in the file.
+    // Nothing looks incomplete afterwards: it enumerates, filters, selects.
+    name: "the shared script stops refusing explicitly marked prerelease bundles",
+    mutate: (world) => withoutIosScriptBlock(world, /^\s*if prerelease /, "prerelease refusal"),
+    expect: /never REFUSES a candidate carrying an explicit prerelease marker/,
+  },
+  {
+    name: "the shared script drops its beta match",
+    mutate: (world) => withIosScript(world, (script) => script.replace("*beta*|", "")),
+    expect: /carries no `\*beta\*` match/,
+  },
+  {
+    name: "the shared script stops reading the iphoneos SDK version",
+    mutate: (world) => withIosScript(world, (script) => script.replace(
+      /xcrun --sdk iphoneos --show-sdk-version/,
+      "xcodebuild -showsdks",
+    )),
+    expect: /never reads the iphoneos SDK version/,
+  },
+  {
+    name: "the iphoneos SDK comparison is dropped from the shared script",
+    mutate: (world) => withoutIosScriptBlock(world, /-lt\s+"\$min_sdk"/, "iOS SDK floor"),
+    expect: /never compares the iphoneos SDK against `RELAYIUM_MIN_IOS_SDK_MAJOR`/,
+  },
+  {
+    // The override that beats the export: a YAML `env:` wins over `$GITHUB_ENV`,
+    // so the selection step passes while the build uses 16.4.
+    name: "a job pins DEVELOPER_DIR back to the image default",
+    mutate: (world) => withNamedJob(world, IOS, "ios-build", (job) => {
+      job.env = { DEVELOPER_DIR: "/Applications/Xcode.app/Contents/Developer" };
+    }),
+    expect: /ios\.yml\/ios-build overrides `DEVELOPER_DIR`/,
+  },
+  {
+    name: "a step re-selects a toolchain after the gate",
+    mutate: (world) => withNamedJob(world, IOS, "ios-build", (job) => {
+      job.steps.push({
+        name: "Use the fallback toolchain",
+        run: "sudo xcode-select -s /Library/Developer/CommandLineTools\n",
+      });
+    }),
+    expect: /runs `xcode-select`/,
+  },
+  {
+    // The opposite obligation. The step's NAME is prose: rewording it must not
+    // fail anything, or the next person to improve it learns to stop.
+    name: "the Xcode selection step is renamed",
+    mutate: (world) => withIosGuard(world, "ios-build", (steps, at) => {
+      steps[at] = { ...steps[at], name: "Pick the toolchain Apple accepts" };
+    }),
+    refute: /no step runs the shared Xcode selection|Xcode selection step runs AFTER/,
+  },
   // The two cases that used to sit here — `macos.yml`'s unfiltered `swift test`
   // gaining a `--filter`, and a legitimate fast pre-check beside it — moved
   // with their rule to `scripts/test/swift-ci-boundary-test.mjs`, which now
   // owns where that command may live and mutates both shapes there.
+  // ── 6k: the guard selectors an `apps/ios/**`-only change depends on ───────
+  //
+  // The four selectors added for the camera, Local Network, pairing scanner and
+  // localization guards are the ones nothing else can run for an `apps/ios/**`
+  // change, so each is removed here one at a time. Every mutation leaves
+  // `ios.yml` valid, leaves the step present and green, and returns the lane to
+  // compiling a plist change nothing read.
+  {
+    name: "ios.yml drops the Local Network declaration guard from its selectors",
+    mutate: (world) => withGuardStep(world, (step) => {
+      step.run = String(step.run)
+        .split("\n")
+        .filter((line) => !line.includes("IOSLocalNetworkPermissionTests"))
+        .join("\n");
+    }),
+    expect: /does not filter for exactly `RelayiumKitTests\.IOSLocalNetworkPermissionTests`/,
+  },
+  {
+    name: "ios.yml drops the camera/pairing-scanner guard from its selectors",
+    mutate: (world) => withGuardStep(world, (step) => {
+      step.run = String(step.run)
+        .split("\n")
+        .filter((line) => !line.includes("IOSPairingScannerTests"))
+        .join("\n");
+    }),
+    expect: /does not filter for exactly `RelayiumKitTests\.IOSPairingScannerTests`/,
+  },
+  {
+    name: "ios.yml drops the app localization source guard from its selectors",
+    mutate: (world) => withGuardStep(world, (step) => {
+      step.run = String(step.run)
+        .split("\n")
+        .filter((line) => !line.includes("LocalizationSourceGuardTests"))
+        .join("\n");
+    }),
+    expect: /does not filter for exactly `RelayiumKitTests\.LocalizationSourceGuardTests\/testNoUserFacingEnglishLiteralsInTheAppOrViewModelLayer`/,
+  },
+  {
+    // The opposite direction, and the expensive one: the two iOS cases widened
+    // to the whole class drags twenty-odd shared-catalog, plural-grammar and
+    // `apps/mac` bundle assertions onto every `apps/ios/**` change.
+    name: "ios.yml widens the localization integrity selectors to their whole class",
+    mutate: (world) => withGuardStep(world, (step) => {
+      step.run = String(step.run)
+        .replace(/RelayiumKitTests\.LocalizationIntegrityTests\/[A-Za-z0-9_]+/g,
+          "RelayiumKitTests.LocalizationIntegrityTests");
+    }),
+    expect: /filters for "RelayiumKitTests\.LocalizationIntegrityTests", which this policy does not name/,
+  },
+  {
+    // The narrowing that keeps the project-file sample passing and takes every
+    // declaration change out of the lane. It reads as a tightening — two
+    // precise globs instead of one broad one — and it is how the guards added
+    // here stop running without a single selector being touched.
+    name: "ios.yml's filter is narrowed to the project and Swift sources only",
+    mutate: (world) => withPaths(world, IOS, [
+      "apps/ios/Relayium.xcodeproj/**",
+      "apps/ios/Relayium/*.swift",
+      "apps/RelayiumKit/**",
+      "!apps/RelayiumKit/Tests/**",
+      `.github/workflows/${IOS}`,
+    ]),
+    expect: /ios\.yml does not trigger on apps\/ios\/Relayium\/Info\.plist/,
+  },
+  {
+    name: "ios.yml stops watching the Share extension the guards bound",
+    mutate: (world) => withPaths(world, IOS, [
+      "apps/ios/Relayium/**",
+      "apps/ios/Relayium.xcodeproj/**",
+      "apps/RelayiumKit/**",
+      "!apps/RelayiumKit/Tests/**",
+      `.github/workflows/${IOS}`,
+    ]),
+    expect: /ios\.yml does not trigger on apps\/ios\/RelayiumShare\/ShareViewController\.swift/,
+  },
+  {
+    // The other side of the same claim. If the package lane adopted the apps,
+    // "the guards run somewhere else" would become true — and the negation
+    // `ios.yml` carries to keep the package's test target out of this heavy
+    // lane would be paying for nothing.
+    name: "swift-package.yml adopts the iOS app tree",
+    mutate: (world) => withPaths(world, "swift-package.yml", [
+      "apps/RelayiumKit/**", "apps/ios/**", ".github/workflows/swift-package.yml",
+    ]),
+    expect: /swift-package\.yml triggers on apps\/ios\//,
+  },
+  {
+    name: "a newly guarded class is renamed out from under its filter",
+    mutate: (world) => {
+      world.testFiles = world.testFiles.filter((name) => name !== "IOSPairingScannerTests.swift");
+      return world;
+    },
+    expect: /IOSPairingScannerTests\.swift does not exist/,
+  },
+  {
+    name: "a newly guarded localization method is renamed out from under its filter",
+    mutate: (world) => {
+      world.testMethods = world.testMethods.filter(
+        (name) => name !== "LocalizationIntegrityTests/testTheIOSAppDeclaresExactlyTheShippedLocalizations");
+      return world;
+    },
+    expect: /declares no `LocalizationIntegrityTests\.testTheIOSAppDeclaresExactlyTheShippedLocalizations`/,
+  },
+  // ── 6q: the regular-width shell job ──────────────────────────────────────
+  //
+  // Every case below leaves a job that runs, passes and reports green while
+  // executing none of the regular-width cases it exists for.
+  {
+    name: "the iPad regular-width job is deleted",
+    mutate: (world) => {
+      delete world.docs.get(IOS).jobs[IOS_REGULAR_WIDTH_JOB];
+      return world;
+    },
+    expect: /ios\.yml declares no `ios-ipad-shell` job/,
+  },
+  {
+    // The one-word regression. The job keeps its name, its comment and its
+    // scope, boots a compact simulator, and every case skips.
+    name: "the iPad job's destination drifts back to an iPhone",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.run ?? "").includes("xcodebuild"));
+      step.run = String(step.run).replace(/"iPad"/g, '"iPhone"');
+    }),
+    expect: /ios\.yml\/ios-ipad-shell: a step names `iPhone`/,
+  },
+  {
+    // The prefix filter dropped altogether: `startswith("")` is true of every
+    // simulator, so the sorted pick becomes whatever the image lists first.
+    name: "the iPad job stops filtering its destination by name",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.run ?? "").includes("xcodebuild"));
+      step.run = String(step.run).replace(/"iPad"/g, '""');
+    }),
+    expect: /no step selects its simulator by an `iPad` name at all/,
+  },
+  {
+    // "Stronger gate", spelled as a second full paid UI run.
+    name: "the iPad job is widened to the whole UI target",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.run ?? "").includes("xcodebuild"));
+      step.run = String(step.run)
+        .replace("-only-testing:RelayiumUITests/AdaptiveShellUITests test",
+          "-only-testing:RelayiumUITests test");
+    }),
+    expect: /passes `-only-testing:RelayiumUITests test`, the whole UI target/,
+  },
+  {
+    name: "the iPad job adopts a class that already runs on the iPhone job",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.run ?? "").includes("xcodebuild"));
+      step.run = String(step.run)
+        .replace("-only-testing:RelayiumUITests/AdaptiveShellUITests test",
+          "-only-testing:RelayiumUITests/AdaptiveShellUITests \\\n"
+          + "            -only-testing:RelayiumUITests/LocalSessionUITests test");
+    }),
+    expect: /a step selects `RelayiumUITests\/LocalSessionUITests`/,
+  },
+  {
+    // Prose is not selection. Commenting the line out leaves every word this
+    // section looks for present in the file.
+    name: "the iPad job's scope survives only as a comment",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.run ?? "").includes("xcodebuild"));
+      step.run = String(step.run)
+        .split("\n")
+        .map((line) => (line.includes(IOS_REGULAR_WIDTH_SELECTOR) ? `# ${line.trim()}` : line))
+        .join("\n");
+    }),
+    expect: /no step passes `-only-testing:RelayiumUITests\/AdaptiveShellUITests`/,
+  },
+  {
+    // The silent one: `xcodebuild` runs zero tests for an identifier that
+    // resolves to nothing and exits 0.
+    name: "the regular-width class is renamed out from under -only-testing",
+    mutate: (world) => {
+      world.uiTestClasses = world.uiTestClasses.filter((name) => name !== IOS_REGULAR_WIDTH_CLASS);
+      return world;
+    },
+    expect: /apps\/ios\/RelayiumUITests declares no such class/,
+  },
+  {
+    // The check that makes this job different from the state it replaces, read
+    // as "tidying up a step that always passes".
+    name: "the iPad job stops asserting its cases were not skipped",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      job.steps = job.steps.filter((step) => !String(step?.run ?? "").includes("skippedTests"));
+    }),
+    expect: /no step reads `skippedTests` out of the result bundle/,
+  },
+  {
+    // And the half of that proof a skip check alone cannot make: zero of zero
+    // skipped is zero skipped.
+    name: "the iPad job asserts no skips but not that anything ran",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.run ?? "").includes("totalTestCount"));
+      step.run = String(step.run).replace(/totalTestCount/g, "passedTests");
+    }),
+    expect: /no step requires the run to have executed any test at all/,
+  },
+  {
+    name: "the iPad job stops retaining its result bundle",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      job.steps = job.steps.filter((step) => !String(step?.uses ?? "").includes("upload-artifact"));
+    }),
+    expect: /ios\.yml\/ios-ipad-shell: nothing uploads the result bundle/,
+  },
+  {
+    name: "the iPad job's diagnosis upload loses its failure condition",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.uses ?? "").includes("upload-artifact"));
+      delete step.if;
+    }),
+    expect: /the result-bundle upload declares `if: undefined`/,
+  },
+  {
+    name: "the iPad job is serialized behind the build job",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      job.needs = "ios-build";
+    }),
+    expect: /ios\.yml\/ios-ipad-shell declares `needs: "ios-build"`/,
+  },
+  {
+    // The legitimate shape. A prose line inside the run body explaining why
+    // this job is not the compact one names the device it is not, and that is
+    // not a destination — a check that fired here would be rewritten until it
+    // fired on nothing.
+    name: "the iPad job's run body explains, in a comment, which shape it is not",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.run ?? "").includes("xcodebuild"));
+      step.run = `# not an iPhone: every case here skips on a compact shell\n${step.run}`;
+    }),
+    refute: /a step names `iPhone`/,
+  },
 ];
 
 for (const { name, mutate, expect, refute } of MUTATIONS) {
@@ -7305,11 +8485,13 @@ for (const { name, mutate, expect, refute } of MUTATIONS) {
       ...fuzzCampaignFailures(world),
       ...iosParallelLaneFailures(world),
       ...iosGuardStepFailures(world),
+      ...iosRegularWidthShellFailures(world),
       ...macosBudgetFailures(world),
       ...concurrencyFailures(world),
       ...releaseBoundaryFailures(world),
       ...aggregateGateFailures(world),
       ...compatEntryPointFailures(world),
+      ...iosUploadToolchainFailures(world),
     ];
   } catch (err) {
     check(false, `the CI trigger-policy mutation "${name}" threw instead of reporting: ${err.message}`);

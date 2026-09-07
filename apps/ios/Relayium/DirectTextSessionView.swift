@@ -47,7 +47,7 @@ struct DirectTextSessionView: View {
             case .joining, .connecting:
                 ProgressView { Text(L10n.t(.textConnecting)) }
                 Button(L10n.t(.commonCancel)) { model.reset() }
-                    .buttonStyle(.bordered)
+                    .borderedAction()
                     .controlSize(.large)
             case let .verifying(sas):
                 verify(sas)
@@ -103,14 +103,14 @@ struct DirectTextSessionView: View {
             PairingCodeText(code: sas, style: .verification)
             Text(L10n.t(.textCheckMatchesBody))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Button(L10n.t(.sessionTheyMatch)) { model.confirmSAS() }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
             Button(L10n.t(.sessionTheyDontMatch), role: .destructive) { model.rejectSAS() }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
         }
@@ -127,7 +127,7 @@ struct DirectTextSessionView: View {
                     .textSelection(.enabled)
             }
             Button(L10n.t(.commonEndSession), role: .destructive) { endOrConfirmDraftDiscard() }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
         }
     }
@@ -155,14 +155,14 @@ struct DirectTextSessionView: View {
             }
             Text(L10n.t(.textNothingDecrypted))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             Button(L10n.t(.commonAccept)) { model.accept() }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
             Button(L10n.t(.commonReject), role: .destructive) { model.reject() }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
         }
@@ -174,11 +174,11 @@ struct DirectTextSessionView: View {
             if verification.requiresSASConfirmation {
                 Text(L10n.t(.textVerifiedPhrase, [L10n.token(sas)]))
                     .font(.footnote.monospaced())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
             }
             Text(L10n.t(.textNoServerHistory))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
 
             // A `LazyVStack` inside the tab's own `ScrollView` rather than a
@@ -188,7 +188,7 @@ struct DirectTextSessionView: View {
             if model.history.isEmpty {
                 Text(L10n.t(.textNoMessages))
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
             }
             LazyVStack(alignment: .leading, spacing: 10) {
                 ForEach(model.history) { messageRow($0) }
@@ -199,7 +199,7 @@ struct DirectTextSessionView: View {
 
             Text(L10n.t(.textClipboardNotice))
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
 
             Button(L10n.t(.textClearHistory), role: .destructive) {
@@ -207,7 +207,7 @@ struct DirectTextSessionView: View {
             }
                 .disabled(model.history.isEmpty)
             Button(L10n.t(.commonEndSession), role: .destructive) { endOrConfirmDraftDiscard() }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
         }
     }
@@ -225,14 +225,14 @@ struct DirectTextSessionView: View {
                 // two numbers beside it are what VoiceOver actually reads.
                 if overByteLimit {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Palette.warningLabel)
                         .accessibilityHidden(true)
                 }
                 Text(L10n.t(.textByteCounter, [L10n.number(model.draftByteCount),
                                                L10n.number(TEXT_MAX_BYTES)]))
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(overByteLimit ? AnyShapeStyle(Color.orange)
-                                                   : AnyShapeStyle(.secondary))
+                    .foregroundStyle(overByteLimit ? AnyShapeStyle(Palette.warningLabel)
+                                                   : AnyShapeStyle(Palette.supportingLabel))
                 Spacer(minLength: 0)
                 Button(L10n.t(.commonSend)) { model.sendDraft() }
                     .buttonStyle(.borderedProminent)
@@ -251,7 +251,7 @@ struct DirectTextSessionView: View {
                     // distinguishes a message that went from one that did not.
                     Label(L10n.t(.textNotSent), systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Palette.warningLabel)
                 }
                 Spacer(minLength: 0)
                 // The one pasteboard write in the app, and it happens only here,
@@ -303,7 +303,7 @@ struct DirectTextSessionView: View {
                 Text(L10n.t(.textUnsentDraftHeading)).font(.headline)
                 Text(L10n.t(.textUnsentDraftBody))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(model.draft)
                     .font(.body.monospaced())
@@ -319,7 +319,7 @@ struct DirectTextSessionView: View {
                     Label(L10n.t(copiedDraft ? .commonCopied : .commonCopy),
                           systemImage: copiedDraft ? "checkmark" : "doc.on.doc")
                 }
-                .buttonStyle(.bordered)
+                .borderedAction()
             }
         }
     }
@@ -331,7 +331,7 @@ struct DirectTextSessionView: View {
                 Text(L10n.t(.textLocalHistoryHeading)).font(.headline)
                 Text(L10n.t(.textLocalHistoryBody))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 LazyVStack(alignment: .leading, spacing: 10) {
                     ForEach(model.history) { messageRow($0) }
@@ -339,7 +339,7 @@ struct DirectTextSessionView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Text(L10n.t(.textClipboardNoticeShort))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 Button(L10n.t(.textClearHistory), role: .destructive) {
                     confirmingHistoryClear = true
@@ -354,11 +354,11 @@ struct DirectTextSessionView: View {
         case let .failed(message):
             failureLine(message)
         case .refused:
-            Text(L10n.t(.textRefused)).font(.callout).foregroundStyle(.secondary)
+            Text(L10n.t(.textRefused)).font(.callout).foregroundStyle(Palette.supportingLabel)
         case .unsupported:
-            Text(L10n.t(.textUnsupported)).font(.callout).foregroundStyle(.secondary)
+            Text(L10n.t(.textUnsupported)).font(.callout).foregroundStyle(Palette.supportingLabel)
         case .ended:
-            Text(L10n.t(.textEnded)).font(.callout).foregroundStyle(.secondary)
+            Text(L10n.t(.textEnded)).font(.callout).foregroundStyle(Palette.supportingLabel)
         default:
             EmptyView()
         }
@@ -370,7 +370,7 @@ struct DirectTextSessionView: View {
         Label {
             Text(text)
         } icon: {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Palette.warningLabel)
         }
         .font(.callout)
         .fixedSize(horizontal: false, vertical: true)

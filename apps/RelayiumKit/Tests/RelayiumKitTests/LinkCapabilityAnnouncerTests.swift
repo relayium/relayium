@@ -172,6 +172,78 @@ final class LinkCapabilityAnnouncerTests: XCTestCase {
         announcer.retryTick()
         XCTAssertTrue(recorder.sent.isEmpty)
     }
+
+    // MARK: - a roster frame older than an announcement
+    //
+    // `deliveredAt` lets a caller say WHERE its roster frame sat in delivery
+    // order, so the registry prune spares announcements that frame is too old to
+    // have an opinion about. What these hold is that this changes the REGISTRY
+    // and nothing else: a spared peer is not in the roster, and the roster is
+    // still the only authority for greeting, membership and everything built on
+    // them.
+
+    /// A spared peer is not greeted, not entered in the greeted set, and not
+    /// treated as present. Only its announcement survives.
+    func testASparedPeerIsNeitherGreetedNorTreatedAsPresent() {
+        let (announcer, recorder, registry) = make()
+        let rosterPosition = registry.rosterDelivered()
+        registry.record(peerId: "ahead", signal: linkCapsHello(linkRoomActive: true))
+
+        announcer.rosterChanged(peerIds: ["p1"], deliveredAt: rosterPosition)
+
+        XCTAssertEqual(recorder.peers, ["p1"],
+                       "a peer no roster frame has delivered was greeted")
+        XCTAssertTrue(registry.supports("ahead", LINK_CAPABILITY),
+                      "the roster frame predates this announcement and may not take it")
+
+        // Nor by the retry tick, which greets exactly what is pending.
+        recorder.sent = []
+        for _ in 0..<LINK_CAPS_ANNOUNCE_ATTEMPTS { announcer.retryTick() }
+        XCTAssertFalse(recorder.peers.contains("ahead"))
+
+        // And when its own roster frame finally lands, it is greeted then — as a
+        // peer the roster newly named, exactly once.
+        recorder.sent = []
+        announcer.rosterChanged(peerIds: ["p1", "ahead"],
+                                deliveredAt: registry.rosterDelivered())
+        XCTAssertEqual(recorder.peers, ["ahead"])
+    }
+
+    /// Sparing does not accumulate. A roster frame actually delivered after the
+    /// announcement prunes it.
+    func testARosterDeliveredAfterTheAnnouncementStillPrunesIt() {
+        let (announcer, _, registry) = make()
+        let early = registry.rosterDelivered()
+        registry.record(peerId: "ahead", signal: linkCapsHello(linkRoomActive: true))
+        announcer.rosterChanged(peerIds: ["p1"], deliveredAt: early)
+        XCTAssertTrue(registry.supports("ahead", LINK_CAPABILITY))
+
+        announcer.rosterChanged(peerIds: ["p1"], deliveredAt: registry.rosterDelivered())
+        XCTAssertFalse(registry.supports("ahead", LINK_CAPABILITY),
+                       "a later roster that omits the peer must prune it")
+    }
+
+    /// A caller with no stamp to give must behave exactly as before: prune to
+    /// the membership handed in, with nothing spared.
+    func testWithoutAStampTheRetainIsUnchanged() {
+        let (announcer, _, registry) = make()
+        _ = registry.rosterDelivered()
+        registry.record(peerId: "ahead", signal: linkCapsHello(linkRoomActive: true))
+        announcer.rosterChanged(peerIds: ["p1"])
+        XCTAssertFalse(registry.supports("ahead", LINK_CAPABILITY))
+    }
+
+    /// A stopped announcer touches the registry through neither spelling. The
+    /// stamp is not a way around the stop gate.
+    func testAStampDoesNotReviveAStoppedAnnouncer() {
+        let (announcer, recorder, registry) = make()
+        announcer.stop()
+        registry.record(peerId: "p1", signal: linkCapsHello(linkRoomActive: true))
+        announcer.rosterChanged(peerIds: [], deliveredAt: registry.rosterDelivered())
+        XCTAssertTrue(recorder.sent.isEmpty)
+        XCTAssertTrue(registry.supports("p1", LINK_CAPABILITY),
+                      "a stopped announcer must not prune either")
+    }
 }
 
 /// **What a client announces, and the seam that lets a composition tell the

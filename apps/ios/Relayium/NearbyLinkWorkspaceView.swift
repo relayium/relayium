@@ -122,12 +122,12 @@ struct NearbyLinkWorkspaceView: View {
             // name is peer-supplied and is never identity.
             Text(L10n.t(.nearbySessionPeerDisclaimer))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             if link.connection.isOpen && !link.isVerificationPending {
                 Text(L10n.t(.linkOneConnectionNote))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if link.relayExpiringSoon {
@@ -170,7 +170,7 @@ struct NearbyLinkWorkspaceView: View {
             PairingCodeText(code: sas, style: .verification)
             Text(L10n.t(.linkVerifyBody))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
             if !link.armedFiles.isEmpty {
                 // The batch the user staged before Connect. Named while it is
@@ -178,7 +178,7 @@ struct NearbyLinkWorkspaceView: View {
                 // they cannot see from the screen otherwise.
                 Text(L10n.t(.linkVerifyHoldingFiles))
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Button(L10n.t(.linkVerifyMatches)) { link.confirmSAS() }
@@ -186,7 +186,7 @@ struct NearbyLinkWorkspaceView: View {
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
             Button(L10n.t(.linkVerifyDiffers), role: .destructive) { link.rejectSAS() }
-                .buttonStyle(.bordered)
+                .borderedAction(.destructive)
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
         }
@@ -200,60 +200,28 @@ struct NearbyLinkWorkspaceView: View {
     /// what is happening in the meantime.
     private var conversation: some View {
         SectionCard(L10n.t(.linkConversationHeading)) {
-            if let text = link.textModel, !text.textMessages.isEmpty {
-                transcript(text)
+            if let text = link.textModel {
+                LinkConversationTranscript(text: text)
             } else {
+                // No text lane yet, so there is no model to observe: the same
+                // empty line the transcript child draws, from the same key.
                 Text(L10n.t(.linkConversationEmpty))
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
             composer
             if link.isWaitingForConversation {
                 Text(L10n.t(.linkWaitingForPeer))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Text(L10n.t(.linkHistoryIsLocal))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    /// A `LazyVStack` inside the tab's own `ScrollView`, never a second
-    /// scroller: two scroll regions on a phone is something the user cannot
-    /// reliably get past, and at the largest content sizes an inner one with a
-    /// fixed height shows about a line and a half.
-    private func transcript(_ text: LinkSessionPresentationModel) -> some View {
-        LazyVStack(alignment: .leading, spacing: Metrics.tight) {
-            ForEach(text.textMessages) { message in
-                VStack(alignment: .leading, spacing: Metrics.hairline) {
-                    Text(L10n.t(message.direction == .outgoing ? .textSent : .textReceived))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    // Verbatim, and never parsed: the body is peer-supplied
-                    // text, and `Text(verbatim:)` is what stops it being read
-                    // as markup.
-                    Text(verbatim: message.body)
-                        .font(.body.monospaced())
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(Metrics.tight)
-                .background(.quaternary.opacity(0.35),
-                            in: RoundedRectangle(cornerRadius: Metrics.corner,
-                                                 style: .continuous))
-                // One element per message, so VoiceOver reads "Sent, <body>"
-                // rather than stopping on the direction label alone.
-                .accessibilityElement(children: .combine)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(L10n.t(.linkA11yConversation))
     }
 
     /// The same composer shape as `DirectTextSessionView`, deliberately.
@@ -285,7 +253,7 @@ struct NearbyLinkWorkspaceView: View {
             Button { isChoosingFiles = true } label: {
                 Text(L10n.t(.linkSendFilesOrFolders)).frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .borderedAction()
             .controlSize(.large)
             .disabled(!link.acceptsWork)
             // Where an accepted inbound batch lands. iOS has no folder picker
@@ -293,7 +261,7 @@ struct NearbyLinkWorkspaceView: View {
             // than discovered by finding a file.
             Text(L10n.t(.linkSavedToAppFolder))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -301,107 +269,15 @@ struct NearbyLinkWorkspaceView: View {
 
     // MARK: - the transfers
 
+    /// The transfer list, drawn by the child that OBSERVES the file model.
+    ///
+    /// Only the existence of a file lane is decided here; whether there is
+    /// anything to show is the child's question, because the answer changes
+    /// with `batches` and this view is never told when that happens.
     @ViewBuilder
     private var transfers: some View {
-        if let files = link.fileModel, !files.batches.isEmpty || !link.armedFiles.isEmpty {
-            SectionCard(L10n.t(.linkTransfersHeading)) {
-                if !link.armedFiles.isEmpty {
-                    // A batch the lane has not seen. Its own state rather than
-                    // drawn as queued: queued means the lane took it.
-                    Text(L10n.t(.linkBatchArmed))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                LazyVStack(alignment: .leading, spacing: Metrics.inner) {
-                    ForEach(files.batches) { batch in
-                        batchRow(batch)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityElement(children: .contain)
-                .accessibilityLabel(L10n.t(.linkA11yTransfers))
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func batchRow(_ batch: LinkFileBatch) -> some View {
-        VStack(alignment: .leading, spacing: Metrics.tight) {
-            HStack(alignment: .firstTextBaseline, spacing: Metrics.tight) {
-                Image(systemName: batch.direction == .outbound
-                      ? "arrow.up.doc" : "arrow.down.doc")
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-                Text(LinkBatchCopy.summary(files: batch.files.count,
-                                           totalBytes: batch.totalBytes))
-                    .font(.callout)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
-                Text(LinkBatchCopy.text(for: batch.state))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize()
-            }
-            // One element: VoiceOver reads "3 files, 2 MB, Sending" rather than
-            // stopping on an unlabelled image and then on each fragment.
-            .accessibilityElement(children: .combine)
-
-            if let fraction = batch.fractionCompleted, !batch.isTerminal {
-                ProgressView(value: fraction)
-            }
-            if batch.state == .offered {
-                // Accepting a manifest releases a write to this user's disk, so
-                // it stays behind the verification boundary — `acceptsWork` —
-                // exactly as an outbound batch does.
-                Button(L10n.t(.linkAcceptFiles)) { link.acceptInboundBatch() }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .frame(maxWidth: .infinity)
-                    .disabled(!link.acceptsWork)
-                Button(L10n.t(.linkDeclineFiles), role: .destructive) {
-                    link.rejectInboundBatch()
-                }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                    .frame(maxWidth: .infinity)
-            }
-            if case .queued = batch.state, batch.direction == .outbound {
-                Button(L10n.t(.commonCancel), role: .destructive) {
-                    link.cancelQueuedBatch(batch.id)
-                }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-            }
-            if case .transferring = batch.state, batch.direction == .outbound {
-                Button(L10n.t(.commonCancel), role: .destructive) {
-                    link.cancelOutboundBatch()
-                }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-            }
-            received(batch)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// A committed inbound batch, and the one thing iOS can offer over it.
-    ///
-    /// `dragURLs`, not the file list: a folder batch offers its CONTAINER as one
-    /// item, so *Save to Files* copies the tree in one piece instead of
-    /// flattening it. Built by the same function the legacy receive uses, so a
-    /// foldered link batch shares behaves exactly as a foldered legacy one does.
-    @ViewBuilder
-    private func received(_ batch: LinkFileBatch) -> some View {
-        if let files = batch.receivedFiles, !files.isEmpty {
-            let payload = receivedPayload(files: files, container: batch.receivedContainer)
-            if !payload.dragURLs.isEmpty {
-                ShareLink(items: payload.dragURLs) {
-                    Text(L10n.t(.commonShare)).frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-            }
+        if let files = link.fileModel {
+            LinkTransfersSection(link: link, files: files)
         }
     }
 
@@ -417,7 +293,9 @@ struct NearbyLinkWorkspaceView: View {
             InlineMessage(LinkEndingCopy.isFailure(reason) ? .warning : .info,
                           LinkEndingCopy.text(for: reason))
             if let text = link.textModel, !text.textMessages.isEmpty {
-                SectionCard(L10n.t(.linkConversationHeading)) { transcript(text) }
+                SectionCard(L10n.t(.linkConversationHeading)) {
+                    LinkConversationTranscript(text: text)
+                }
             }
             transfers
         }
@@ -429,7 +307,7 @@ struct NearbyLinkWorkspaceView: View {
     private var exit: some View {
         VStack(alignment: .leading, spacing: Metrics.hairline) {
             Button(exitTitle, role: isEnded ? nil : .destructive) { leave() }
-                .buttonStyle(.bordered)
+                .borderedAction(isEnded ? .ordinary : .destructive)
                 .controlSize(.large)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -501,5 +379,186 @@ struct NearbyLinkWorkspaceView: View {
 
     private func failureLine(_ message: String) -> some View {
         InlineMessage(.warning, message)
+    }
+}
+
+/// The transcript and its empty line, in the smallest view that OBSERVES the
+/// conversation model itself.
+///
+/// `LinkWorkspaceModel` exposes `textModel` but does not forward its
+/// `objectWillChange`. The consequence lands here: a view that read
+/// `textMessages` through the parent would draw once and never hear
+/// an inbound message. `@ObservedObject` on the presentation model itself is
+/// what makes an arriving message invalidate exactly this subtree.
+///
+/// A `LazyVStack` inside the tab's own `ScrollView`, never a second scroller:
+/// two scroll regions on a phone is something the user cannot reliably get
+/// past, and at the largest content sizes an inner one with a fixed height
+/// shows about a line and a half.
+private struct LinkConversationTranscript: View {
+    @ObservedObject var text: LinkSessionPresentationModel
+
+    var body: some View {
+        if text.textMessages.isEmpty {
+            Text(L10n.t(.linkConversationEmpty))
+                .font(.callout)
+                .foregroundStyle(Palette.supportingLabel)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            LazyVStack(alignment: .leading, spacing: Metrics.tight) {
+                ForEach(text.textMessages) { message in
+                    VStack(alignment: .leading, spacing: Metrics.hairline) {
+                        Text(L10n.t(message.direction == .outgoing ? .textSent : .textReceived))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Palette.supportingLabel)
+                        // Verbatim, and never parsed: the body is peer-supplied
+                        // text, and `Text(verbatim:)` is what stops it being read
+                        // as markup.
+                        Text(verbatim: message.body)
+                            .font(.body.monospaced())
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(Metrics.tight)
+                    .background(.quaternary.opacity(0.35),
+                                in: RoundedRectangle(cornerRadius: Metrics.corner,
+                                                     style: .continuous))
+                    // One element per message, so VoiceOver reads "Sent, <body>"
+                    // rather than stopping on the direction label alone.
+                    .accessibilityElement(children: .combine)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(L10n.t(.linkA11yConversation))
+        }
+    }
+}
+
+/// The transfer list, its controls, and the share affordance — in the smallest
+/// view that OBSERVES the file model itself.
+///
+/// The same boundary `LinkConversationTranscript` exists for, on the other lane:
+/// `LinkWorkspaceModel` exposes `fileModel` without forwarding its
+/// `objectWillChange`, so a batch that is offered, accepted, transferred or
+/// committed changes only the child observable. A list read through the parent
+/// would compile, draw once, and then leave an inbound batch reading *Waiting
+/// for you to accept* for as long as the user was willing to look at it.
+///
+/// The card's own visibility is decided here for the same reason: `batches`
+/// going from empty to non-empty is exactly one of the changes the parent never
+/// hears.
+///
+/// `link` is observed too, and stays the owner of everything that is not a
+/// batch: the armed-file line is parent state, and every control acts through
+/// the workspace model rather than reaching into the lane.
+private struct LinkTransfersSection: View {
+    @ObservedObject var link: LinkWorkspaceModel
+    @ObservedObject var files: LinkFilePresentationModel
+
+    var body: some View {
+        if !files.batches.isEmpty || !link.armedFiles.isEmpty {
+            SectionCard(L10n.t(.linkTransfersHeading)) {
+                if !link.armedFiles.isEmpty {
+                    // A batch the lane has not seen. Its own state rather than
+                    // drawn as queued: queued means the lane took it.
+                    Text(L10n.t(.linkBatchArmed))
+                        .font(.footnote)
+                        .foregroundStyle(Palette.supportingLabel)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                LazyVStack(alignment: .leading, spacing: Metrics.inner) {
+                    ForEach(files.batches) { batch in
+                        batchRow(batch)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(L10n.t(.linkA11yTransfers))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func batchRow(_ batch: LinkFileBatch) -> some View {
+        VStack(alignment: .leading, spacing: Metrics.tight) {
+            HStack(alignment: .firstTextBaseline, spacing: Metrics.tight) {
+                Image(systemName: batch.direction == .outbound
+                      ? "arrow.up.doc" : "arrow.down.doc")
+                    // secondary-role: symbol — the batch's direction glyph, captioned in words
+                    // beside it. Non-text.
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Text(LinkBatchCopy.summary(files: batch.files.count,
+                                           totalBytes: batch.totalBytes))
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Text(LinkBatchCopy.text(for: batch.state))
+                    .font(.footnote)
+                    .foregroundStyle(Palette.supportingLabel)
+                    .fixedSize()
+            }
+            // One element: VoiceOver reads "3 files, 2 MB, Sending" rather than
+            // stopping on an unlabelled image and then on each fragment.
+            .accessibilityElement(children: .combine)
+
+            if let fraction = batch.fractionCompleted, !batch.isTerminal {
+                ProgressView(value: fraction)
+            }
+            if batch.state == .offered {
+                // Accepting a manifest releases a write to this user's disk, so
+                // it stays behind the verification boundary — `acceptsWork` —
+                // exactly as an outbound batch does.
+                Button(L10n.t(.linkAcceptFiles)) { link.acceptInboundBatch() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
+                    .disabled(!link.acceptsWork)
+                Button(L10n.t(.linkDeclineFiles), role: .destructive) {
+                    link.rejectInboundBatch()
+                }
+                    .borderedAction(.destructive)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
+            }
+            if case .queued = batch.state, batch.direction == .outbound {
+                Button(L10n.t(.commonCancel), role: .destructive) {
+                    link.cancelQueuedBatch(batch.id)
+                }
+                    .borderedAction(.destructive)
+                    .controlSize(.large)
+            }
+            if case .transferring = batch.state, batch.direction == .outbound {
+                Button(L10n.t(.commonCancel), role: .destructive) {
+                    link.cancelOutboundBatch()
+                }
+                    .borderedAction(.destructive)
+                    .controlSize(.large)
+            }
+            received(batch)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// A committed inbound batch, and the one thing iOS can offer over it.
+    ///
+    /// `dragURLs`, not the file list: a folder batch offers its CONTAINER as one
+    /// item, so *Save to Files* copies the tree in one piece instead of
+    /// flattening it. Built by the same function the legacy receive uses, so a
+    /// foldered link batch shares behaves exactly as a foldered legacy one does.
+    @ViewBuilder
+    private func received(_ batch: LinkFileBatch) -> some View {
+        if let files = batch.receivedFiles, !files.isEmpty {
+            let payload = receivedPayload(files: files, container: batch.receivedContainer)
+            if !payload.dragURLs.isEmpty {
+                ShareLink(items: payload.dragURLs) {
+                    Text(L10n.t(.commonShare)).frame(maxWidth: .infinity)
+                }
+                .borderedAction()
+                .controlSize(.large)
+            }
+        }
     }
 }
