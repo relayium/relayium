@@ -2,9 +2,12 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -693,7 +696,9 @@ func TestRealPionAllocationCloseConvergesToZero(t *testing.T) {
 	if err := relayConn.Close(); err != nil {
 		t.Fatalf("relayConn.Close: %v", err)
 	}
-	waitForActiveAllocs(t, reg, 0)
+	// Same reason as the shutdown test below: activeAllocs reaching zero does
+	// not mean the relay socket's reader has finished unwinding.
+	waitForRetirementFlushable(t, reg, 1)
 
 	// One final flush, then gone — and no index left behind.
 	snap := reg.snapshot()
@@ -773,7 +778,9 @@ func TestRealPionServerShutdownRetiresEveryAllocation(t *testing.T) {
 	if err := server.Close(); err != nil {
 		t.Fatalf("server.Close: %v", err)
 	}
-	waitForActiveAllocs(t, reg, 0)
+	// Not waitForActiveAllocs: the count falls the moment the socket is closed,
+	// which is before the packetHandler has unwound. See waitForRetirementFlushable.
+	waitForRetirementFlushable(t, reg, 1)
 
 	if got := reg.snapshot(); len(got) != 1 {
 		t.Fatalf("final flush = %d samples, want exactly 1", len(got))
@@ -857,6 +864,74 @@ func waitForActiveAllocs(t *testing.T, reg *allocRegistry, want int) {
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("10s later: activeAllocs = %d, want %d", got, want)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// retirementState classifies every registry entry the way snapshot does, under
+// the registry lock, and returns a per-entry dump for diagnostics.
+//
+// pending is written by socket goroutines that do not hold r.mu, so it is read
+// atomically here exactly as snapshot reads it. Holding the lock keeps the
+// three counts a consistent view of one instant rather than three.
+func retirementState(r *allocRegistry) (flushable, draining, open int, diag string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var b strings.Builder
+	for _, e := range r.entries {
+		pending := atomic.LoadInt64(&e.pending)
+		switch {
+		case !e.closed:
+			open++
+		case pending != 0:
+			draining++
+		default:
+			flushable++
+		}
+		fmt.Fprintf(&b, "\n\t[%s closed=%t pending=%d bytes=%d joined=%t]",
+			e.allocID, e.closed, pending, atomic.LoadInt64(&e.bytes), e.joined)
+	}
+	if b.Len() == 0 {
+		return flushable, draining, open, "\n\t(registry empty)"
+	}
+	return flushable, draining, open, b.String()
+}
+
+// waitForRetirementFlushable polls until exactly want retired allocations are
+// ready for their final flush: every socket closed AND no operation still in
+// flight on any of them.
+//
+// waitForActiveAllocs(reg, 0) is NOT that condition, and the difference is why
+// the real-pion tests above use this instead. activeAllocs counts entries whose
+// socket is still open, so it reaches zero as soon as markClosed runs — inside
+// countingPacketConn.Close, on pion's goroutine. The allocation's packetHandler
+// is meanwhile parked in countingPacketConn.ReadFrom with pending != 0, and it
+// only decrements after that read fails and its bytes are tallied. snapshot
+// deliberately skips a closed entry with pending != 0, because finalising it
+// would publish a total short of those bytes and then evict the entry the
+// pending add is about to land in. So a snapshot taken in that window reports
+// zero samples where the test wants one.
+//
+// That skip is correct production behavior and is asserted directly by
+// TestFinalSnapshotIncludesBytesStillInFlight; nothing here changes it. Only
+// the wait was synchronising on a weaker condition than the assertion that
+// follows it needed. Waiting for quiescence keeps those assertions exact —
+// still one final sample, then zero, then an empty index — rather than
+// relaxing them or sleeping and hoping.
+func waitForRetirementFlushable(t *testing.T, reg *allocRegistry, want int) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		flushable, draining, open, diag := retirementState(reg)
+		if open == 0 && draining == 0 && flushable == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("10s later: %d retired allocation(s) ready to flush, want %d; "+
+				"%d socket(s) still open, %d closed but still draining in-flight I/O "+
+				"(snapshot skips those, so the final flush would report short).\nentries:%s",
+				flushable, want, open, draining, diag)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
