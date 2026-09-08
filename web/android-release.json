@@ -1,6 +1,16 @@
 {
   "schema": 1,
   "android": {
-    "available": false
+    "available": true,
+    "applicationId": "com.relayium.android",
+    "versionCode": 2,
+    "versionName": "0.1.1",
+    "downloadUrl": "https://github.com/relayium/relayium/releases/download/android-v0.1.1/Relayium-0.1.1-2.apk",
+    "sha256": "a69e621a23a5d0a021e075b3f3b75083e57c5a363acfac3f0c1c76bd7c1c2e16",
+    "size": 41212796,
+    "notes": {
+      "en": "Adds manual update checking from the join screen and browser-based APK downloads. Public preview: join an existing transfer and keep the app open. No account features, Device Inbox or nearby discovery.",
+      "zh": "新增首页手动检查更新，可通过浏览器下载新版 APK。公开预览版：加入已有传输，传输时请保持应用打开。暂不支持账号功能、设备收件箱和附近发现。"
+    }
   }
 }
