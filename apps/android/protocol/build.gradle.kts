@@ -14,9 +14,12 @@ kotlin {
 }
 
 dependencies {
-    // X25519 and BLAKE2b only. The JCE PROVIDER is deliberately not registered:
-    // AES-GCM comes from the platform, and installing a provider would change
-    // crypto for every other consumer in the process.
+    // Lightweight primitives only: X25519, BLAKE2b, and — for the Device Inbox
+    // sealed box — the Salsa20 core, XSalsa20 and Poly1305, which compose
+    // libsodium's crypto_box_seal (see inbox/InboxSealedBox.kt). The JCE
+    // PROVIDER is deliberately not registered: AES-GCM comes from the platform,
+    // and installing a provider would change crypto for every other consumer in
+    // the process.
     implementation(libs.bouncycastle.prov)
 
     testImplementation(libs.junit)
@@ -45,6 +48,7 @@ tasks.withType<Test>().configureEach {
         sharedFixtures.file("crypto-vectors.json"),
         sharedFixtures.file("realtime-wire-vectors.json"),
         sharedFixtures.file("store-wire-vectors.json"),
+        sharedFixtures.file("device-inbox-manifest-v3-vectors.json"),
     )
         .withPropertyName("relayiumSharedFixtures")
         .withPathSensitivity(PathSensitivity.RELATIVE)
