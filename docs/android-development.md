@@ -1,13 +1,20 @@
 # Android development
 
-**Status: public preview.** `apps/android/` is the native Android client at
-0.1.1 (versionCode 2), applicationId `com.relayium.android`, distributed as a
-direct APK only — no Google Play listing, no Play Billing, and no Play Services
-or GMS dependency of any kind.
+**Status: public preview.** `apps/android/` is the native Android client,
+applicationId `com.relayium.android`, distributed as a direct APK only — no
+Google Play listing, no Play Billing, and no Play Services or GMS dependency of
+any kind. The published build is 0.1.1 (versionCode 2). The source is 0.2.0
+(versionCode 3), which is not published: the update feed still offers 0.1.1, and
+the download surface is unchanged.
 
-Its first published build was join-only; the current source additionally creates
-cross-network links and has a real account surface (see below). That is source
-state, not a release: no version number has moved and nothing is published for it.
+The published build is join-only. The source additionally creates cross-network
+links and has a real account surface, LAN/nearby discovery, the Device Inbox, an
+`ACTION_SEND` share target and a QR entry point (see below). Those are proved on
+the AOSP 36 emulator — the UI, the system services, SAF and `DocumentsUI`, the
+non-exported provider, a separate-uid fixture process, and the Go backend and
+Apple host modules on the other side of the wire all really run — and not on a
+physical phone or an iPhone. An emulator result is not a device certification,
+and none is claimed here.
 
 Since 2026-09-08 the website offers it: `/apps` renders a download card whenever
 `web/android-release.json` says a release is published, and the same document is
@@ -43,12 +50,17 @@ offers two rooms, and they are genuinely different products rather than one
 feature with a setting:
 
 * **On this network only** — Bonjour (`NsdManager`) discovery and direct TCP
-  signalling on the local link. **No Relayium server is contacted at all**, not
-  even to introduce the two devices, and no ICE credentials are fetched; two
-  devices on one link reach each other on host candidates. This is the same
-  rendezvous the iOS client uses (`_relayium._tcp`, a 32-hex per-channel
-  identity as the instance name, TXT `i`/`n`/`c`), so an iPhone and an Android
-  phone on one Wi-Fi network can find each other directly.
+  signalling on the local link. **This transfer contacts no Relayium server**:
+  nothing introduces the two devices and no ICE credentials are fetched, so two
+  devices on one link reach each other on host candidates. The claim is about
+  the transfer, and it stopped being true of the whole app when the shared host
+  landed — a signed-in account is restored at startup and Device Inbox
+  receiving is app-wide, so either may be talking to the server while the Nearby
+  destination is on screen. Those are separate features the user turned on, and
+  neither is used to set this one up. This is the same rendezvous the iOS client
+  uses (`_relayium._tcp`, a 32-hex per-channel identity as the instance name,
+  TXT `i`/`n`/`c`), so an iPhone and an Android phone on one Wi-Fi network can
+  find each other directly.
 * **Through relayium.com** — the code-less rendezvous room the Web and macOS
   clients join, which the server keys by the **public address it observes**. The
   UI says so, because it matters: anything else reaching the internet from that
@@ -71,6 +83,15 @@ this build has no foreground service and cannot honour a presence claim it
 cannot keep. Its own document picker and a configuration change are NOT leaving
 the app — both stop the Activity, and treating either as abandonment made the
 file flows impossible to complete.
+
+That exemption is **bounded**: an owned picker holds the claim for two minutes
+from the moment it was launched, on the monotonic clock, and a recreation does
+not renew it. The reason is a case the platform reports nothing about — pressing
+Home from inside `DocumentsUI` delivers no second `ON_STOP`, so without a
+deadline the exemption would be an open-ended advertisement lease. On expiry the
+claim is withdrawn, that pick is retired, and a result arriving afterwards
+cannot revive the session it was made for. It is a bounded accommodation for a
+round trip the app itself started, not a background service.
 
 **An account.** Email/password sign-in, registration with email verification and
 resend, password-reset request, browser-approved sign-in for accounts that have
@@ -148,8 +169,13 @@ copy says, is that an interrupted upload can be *continued*, not that it
 continues on its own. Uploads below the staging threshold are not resumable at
 all.
 
-**Three destinations**, Transfer, Cloud and Account, and nothing else: this build
-has no tab that opens onto a placeholder.
+**Five destinations** — Transfer, Nearby, Inbox, Cloud and Account — and nothing
+else: this build has no tab that opens onto a placeholder. The bar splits them
+evenly where each label fits and becomes a scrolling row where one would have to
+be truncated, so every destination stays directly addressable in every
+configuration. See `docs/android-host-integration.md` for the composition, the
+one foreground answer both presence features read, and the bounded lease on this
+app's own system pickers.
 
 ### Two wires, and which peer gets which
 
@@ -223,12 +249,20 @@ App.
 
 ### What is still absent, and is not claimed anywhere
 
-No LAN/nearby discovery, no Device Inbox, no `ACTION_SEND` share target, no QR
-entry point, and no billing of any kind — the app makes no checkout,
-subscription or plan-change request and offers no control that would start one.
-(Stored `#k=` transfers WERE absent and are not any more: this section said so
-until the cloud slices landed send, receive, resumable uploads and the file
-list, and the correction belongs here rather than in a later cleanup.)
+No billing of any kind — the app makes no checkout, subscription or plan-change
+request and offers no control that would start one.
+
+(Stored `#k=` transfers, LAN/nearby discovery, the Device Inbox, the
+`ACTION_SEND` share target and the QR entry point WERE all absent and are not
+any more: this section said so until the cloud, nearby, inbox and host slices
+landed them, and the correction belongs here rather than in a later cleanup.)
+
+One Inbox state has no live coverage, and none is claimed. An upload whose
+single-shot publish never answered renders a dedicated non-retryable row. A real
+dropped response reaches it, so it is not unreachable — it is simply not
+produced by the signed-out release navigation smoke, which never signs in and
+never uploads. It is covered by the JVM cases, the string-parity test and review
+of the compiled surface.
 
 There is still no resident session and no background-transfer claim: when
 Android stops the process, transfers stop with it. A large cloud upload is the
@@ -542,6 +576,14 @@ not on a session existing again afterwards.
 Neither is physical-phone evidence, and neither says anything about the Apple
 counterpart: that lane is separate, and a manually entered address is never a
 substitute for a Bonjour discovery.
+
+Since the shared host landed, the presence rule those tests describe is computed
+in one place for the whole app rather than inside the composition, and an owned
+picker round trip is bounded rather than open-ended: `MainActivity` reports
+`onStart`/`onStop`, `HostPresence` decides, and `PickerLease` ends a claim that
+outlives its picker by more than two minutes. Nearby and the Device Inbox read
+the same answer, so neither can be foreground while the other is not. See
+`docs/android-host-integration.md`.
 
 `scripts/android-account-acceptance.sh` is the account and create evidence. It
 starts its OWN throwaway server — with `RELAYIUM_BASE_URL` pointed at

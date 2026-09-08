@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.relayium.android.ui
 
 import androidx.activity.compose.BackHandler
@@ -24,6 +26,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
@@ -34,7 +37,10 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
@@ -50,14 +56,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.activity.compose.LocalActivity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -78,9 +88,18 @@ import com.relayium.android.TransferViewModel
 import com.relayium.android.account.AccountState
 import com.relayium.android.account.CreateLinkModel
 import com.relayium.android.account.PairCodeExpiry
+import com.relayium.android.inbox.InboxConversationEntry
+import com.relayium.android.inbox.InboxSendTarget
+import com.relayium.android.ingress.IngressRefusal
+import com.relayium.android.ingress.IngressSurface
+import com.relayium.android.ingress.ShareItemRefusal
+import com.relayium.android.integration.IngressHost
+import com.relayium.android.integration.PickerLease
+import com.relayium.android.scan.ScannerSheet
 import com.relayium.android.update.UpdateChecker
 import com.relayium.protocol.JoinInput
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * The things this build can do, and nothing it cannot. There is no destination
@@ -90,7 +109,7 @@ import kotlinx.coroutines.delay
  * The order is the order they are shown in, and it is the order of how often
  * they are used rather than the order they were built in.
  */
-internal enum class Destination { TRANSFER, NEARBY, CLOUD, ACCOUNT }
+internal enum class Destination { TRANSFER, NEARBY, INBOX, CLOUD, ACCOUNT }
 
 /**
  * The shell: a destination bar, and one of two surfaces under it. The layout
@@ -129,31 +148,42 @@ fun RelayiumApp(viewModel: TransferViewModel) {
     var savePromptId by rememberSaveable { mutableIntStateOf(0) }
 
     /**
-     * How many of THIS app's own system pickers are in front of it right now.
+     * The bounded lease token each owned picker round trip runs under.
      *
-     * Saved, because the whole point is to survive the round trip that saves and
-     * restores this composition. A counter rather than a flag: the cloud and
-     * session surfaces each own a pair of launchers, and two overlapping round
-     * trips must not have the first one to return declare the app abandoned.
+     * The composition holds the TOKEN; [TransferViewModel.pickerLease] holds the
+     * deadline. That split is the mechanism rather than a detail: the ViewModel
+     * survives the recreation that happens behind a picker, so nothing on the
+     * recreation path can restart the two-minute clock. What is written into
+     * saved instance state is an opaque `<runtime>:<counter>` string carrying no
+     * URI, grant, code or name — and one minted by a previous process cannot
+     * alias a token this one issued.
      *
-     * It exists for exactly one decision — see the lifecycle observer below —
-     * and it is deliberately not derived from any session state, because the
-     * question it answers is about this Activity, not about a transfer.
+     * One per launcher, because two round trips can overlap and each must be
+     * able to expire on its own deadline.
      */
-    var pickersInFlight by rememberSaveable { mutableIntStateOf(0) }
+    var sendLease by rememberSaveable { mutableStateOf("") }
+    var saveLease by rememberSaveable { mutableStateOf("") }
+    var cloudFileLease by rememberSaveable { mutableStateOf("") }
+    var cloudFolderLease by rememberSaveable { mutableStateOf("") }
 
     val filePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris ->
-        pickersInFlight = (pickersInFlight - 1).coerceAtLeast(0)
-        viewModel.sendPicked(uris, sendLinkId)
+        // A PRESENCE round trip: this device went on advertising itself while
+        // the picker was in front. An expired lease has already withdrawn that
+        // claim and retired the operation, so its answer may not revive the
+        // session it was chosen for.
+        if (viewModel.pickerReturned(sendLease) == PickerLease.Verdict.LIVE) {
+            viewModel.sendPicked(uris, sendLinkId)
+        }
     }
 
     val folderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
     ) { tree ->
-        pickersInFlight = (pickersInFlight - 1).coerceAtLeast(0)
-        viewModel.acceptIncoming(savePromptId, tree, saveLinkId)
+        if (viewModel.pickerReturned(saveLease) == PickerLease.Verdict.LIVE) {
+            viewModel.acceptIncoming(savePromptId, tree, saveLinkId)
+        }
     }
 
     // The cloud surface's own pair. Separate launchers rather than shared ones
@@ -173,97 +203,192 @@ fun RelayiumApp(viewModel: TransferViewModel) {
     val cloudFilePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris ->
-        pickersInFlight = (pickersInFlight - 1).coerceAtLeast(0)
+        // A DATA round trip: nothing was claimed to anybody else while it was
+        // away, so a lease that merely EXPIRED must not discard the user's pick
+        // — the upload model's own request fence decides whether the choice is
+        // still the one it asked for, and overruling it here would be a second,
+        // blunter fence.
+        //
+        // UNKNOWN is a different answer and must be refused BEFORE any provider
+        // read: the token was not issued by this lease, so it belongs to a
+        // previous process, to a launch this one replaced, or to a result
+        // already consumed. There is no operation for it to be about.
+        if (viewModel.pickerReturned(cloudFileLease) == PickerLease.Verdict.UNKNOWN) {
+            return@rememberLauncherForActivityResult
+        }
         viewModel.cloudFilesPicked(uris, cloudPickId)
     }
 
     val cloudFolderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
     ) { tree ->
-        pickersInFlight = (pickersInFlight - 1).coerceAtLeast(0)
+        if (viewModel.pickerReturned(cloudFolderLease) == PickerLease.Verdict.UNKNOWN) {
+            return@rememberLauncherForActivityResult
+        }
         viewModel.cloudFolderPicked(tree, cloudTransferId)
     }
 
     val cloudPickers = CloudPickers(
         chooseFiles = {
             cloudPickId = viewModel.cloudUpload.beginSelection()
-            pickersInFlight++
+            cloudFileLease = viewModel.pickerLaunched(PickerLease.Claim.DATA, replacing = cloudFileLease)
             cloudFilePicker.launch(arrayOf("*/*"))
         },
         chooseFolder = {
             cloudTransferId = viewModel.cloudDownload.currentTransfer()
-            pickersInFlight++
+            cloudFolderLease = viewModel.pickerLaunched(PickerLease.Claim.DATA, replacing = cloudFolderLease)
             cloudFolderPicker.launch(null)
+        },
+    )
+
+    // The Inbox surface's launchers, registered HERE for exactly the reason the
+    // others are — and this was got wrong once. Registering them inside the
+    // Inbox destination tied their result callbacks to the SELECTED TAB: a user
+    // who chose files to send and, while `DocumentsUI` was in front, had the app
+    // recreated onto another destination would come back to a result with
+    // nobody left to receive it. That reads as a chosen file that silently never
+    // sends, which is the failure the stable-above-navigation rule exists to
+    // prevent.
+    var inboxTargetId by rememberSaveable { mutableStateOf("") }
+    var inboxSendLease by rememberSaveable { mutableStateOf("") }
+    var inboxExportEntryId by rememberSaveable { mutableStateOf("") }
+    var inboxExportLease by rememberSaveable { mutableStateOf("") }
+
+    /** The account generation each round trip was launched under. A counter,
+     *  and nothing that names anybody — which is what may go into saved state. */
+    var inboxSendAccount by rememberSaveable { mutableIntStateOf(-1) }
+    var inboxExportAccount by rememberSaveable { mutableIntStateOf(-1) }
+
+    /** What the last open, export or share did. Transient, never persisted. */
+    var inboxNotice by remember { mutableStateOf<Int?>(null) }
+    val scope = rememberCoroutineScope()
+
+    val inboxSendPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        // A DATA round trip: nothing was claimed to another device while the
+        // picker was in front, so a lease that merely EXPIRED must not discard
+        // the user's choice — the account fence below is what decides whether
+        // it may still be delivered. UNKNOWN is different: the token was never
+        // issued by this lease, which is a result from a previous process or
+        // one already consumed, and there is no operation for it to belong to.
+        if (viewModel.pickerReturned(inboxSendLease) == PickerLease.Verdict.UNKNOWN) {
+            return@rememberLauncherForActivityResult
+        }
+        if (inboxTargetId.isNotEmpty()) {
+            viewModel.inboxSendPicked(uris, inboxTargetId, inboxSendAccount)
+        }
+    }
+
+    val inboxExportPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { tree ->
+        if (viewModel.pickerReturned(inboxExportLease) == PickerLease.Verdict.UNKNOWN) {
+            return@rememberLauncherForActivityResult
+        }
+        val entryId = inboxExportEntryId
+        if (entryId.isNotEmpty()) {
+            scope.launch {
+                inboxNotice = when (viewModel.inboxExport(entryId, tree, inboxExportAccount)) {
+                    TransferViewModel.ExportOutcome.DONE -> R.string.inbox_export_done
+                    TransferViewModel.ExportOutcome.UNAVAILABLE -> R.string.inbox_export_unavailable
+                    TransferViewModel.ExportOutcome.FAILED -> R.string.inbox_export_failed
+                    TransferViewModel.ExportOutcome.FAILED_INCOMPLETE ->
+                        R.string.inbox_export_incomplete
+                }
+            }
+        }
+    }
+
+    val inboxPickers = InboxPickers(
+        chooseFiles = { target ->
+            inboxTargetId = target.deviceId
+            // Captured AT LAUNCH, with the target: the pair is what the result
+            // is checked against, so neither can drift across the round trip.
+            inboxSendAccount = viewModel.accountGeneration()
+            inboxSendLease = viewModel.pickerLaunched(PickerLease.Claim.DATA, replacing = inboxSendLease)
+            inboxSendPicker.launch(arrayOf("*/*"))
+        },
+        chooseFolder = { entryId ->
+            inboxExportEntryId = entryId
+            inboxExportAccount = viewModel.accountGeneration()
+            inboxExportLease = viewModel.pickerLaunched(PickerLease.Claim.DATA, replacing = inboxExportLease)
+            inboxExportPicker.launch(null)
         },
     )
 
     val pickers = Pickers(
         chooseFiles = { linkId ->
             sendLinkId = linkId
-            pickersInFlight++
+            sendLease = viewModel.pickerLaunched(PickerLease.Claim.PRESENCE, replacing = sendLease)
             filePicker.launch(arrayOf("*/*"))
         },
         chooseFolder = { linkId, promptId ->
             saveLinkId = linkId
             savePromptId = promptId
-            pickersInFlight++
+            saveLease = viewModel.pickerLaunched(PickerLease.Claim.PRESENCE, replacing = saveLease)
             folderPicker.launch(null)
         },
     )
 
-    // Nearby is a FOREGROUND claim: while it runs, this device is advertising
-    // itself to other devices and holding sockets open. The app has no
-    // foreground service and no background permission, so the moment it stops
-    // being on screen that claim becomes false — and a device still announcing
-    // itself is offering a delivery it cannot make.
+    // The presence claims are NOT computed here any more.
     //
-    // Bound to the LIFECYCLE and hoisted above the destination switch for the
-    // same reason the pickers are: switching tabs is not leaving the app, and a
-    // session that ended because the user looked at their account would be a
-    // transfer lost to navigation. Tab changes therefore keep it; ON_STOP does
-    // not.
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val activity = LocalActivity.current
-    DisposableEffect(lifecycleOwner, activity) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event != Lifecycle.Event.ON_STOP) return@LifecycleEventObserver
-            // ON_STOP is NOT "the user left". Three different things produce it
-            // and only one of them is abandonment:
-            //
-            //  * this app's OWN system picker came to the front. `DocumentsUI`
-            //    is a separate Activity, so choosing a file to send — or a
-            //    folder to receive into — stops this one every single time.
-            //    Ending the session here would make Nearby's file flows
-            //    impossible to complete: the user taps Send, and the transfer
-            //    they were arranging is gone before they have chosen anything.
-            //  * a configuration this Activity does not handle changed. A locale
-            //    switch is the ordinary one — it is deliberately absent from the
-            //    manifest's `configChanges`, because the whole UI has to be
-            //    rebuilt for it. The Activity is coming straight back, with the
-            //    same ViewModel and the same live session.
-            //  * the user really did leave, and then a device that goes on
-            //    advertising itself is claiming a delivery this build cannot
-            //    make. That one, and only that one, stops Nearby.
-            //
-            // The picker count is saved state, so it survives the very
-            // recreation it exists to see through.
-            val ownedRoundTrip = pickersInFlight > 0
-            val recreating = activity?.isChangingConfigurations == true
-            if (!ownedRoundTrip && !recreating) viewModel.nearbyLeftForeground()
+    // `isChangingConfigurations` is the Activity's own answer and the picker
+    // lease lives in the ViewModel, so both inputs to "is this app in front of
+    // the user" are outside the composition — and a claim made to another
+    // device must not depend on whether a particular composable happened to be
+    // in the tree. `MainActivity.onStart`/`onStop` report the two facts and
+    // `HostPresence` decides. See [TransferViewModel.hostStopped].
+
+    // What another app has handed this one, and where the shell was asked to go.
+    val staged by viewModel.ingress.staged.collectAsStateWithLifecycle()
+    val ingressRefusal by viewModel.ingress.refusal.collectAsStateWithLifecycle()
+    val navigation by viewModel.ingress.navigation.collectAsStateWithLifecycle()
+
+    /**
+     * Whether the share surface is the one being shown.
+     *
+     * Saved, so a rotation while choosing a destination does not drop the user
+     * back onto the transfer tab. It is a boolean and nothing more: the share
+     * ITSELF lives in the ViewModel, because a staged URI is a grant and shared
+     * text is the user's message, and neither belongs in saved instance state.
+     */
+    var showShare by rememberSaveable { mutableStateOf(false) }
+
+    // One shot. The coordinator navigates once, when the request arrives, and
+    // never again — so a recreation cannot yank the screen away from wherever
+    // the user has since gone. Consuming it here is what makes that true.
+    LaunchedEffect(navigation) {
+        when (navigation) {
+            IngressSurface.JOIN -> {
+                destination = Destination.TRANSFER
+                showShare = false
+            }
+            IngressSurface.STORED -> {
+                destination = Destination.CLOUD
+                showShare = false
+            }
+            IngressSurface.SHARE -> showShare = true
+            null -> return@LaunchedEffect
         }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        viewModel.ingress.consumeNavigation()
     }
 
-    // Back returns to the transfer surface rather than leaving the app. Enabled
-    // only off the transfer tab, so the system's own "back closes the app"
-    // behaviour is untouched where it is the right one.
-    BackHandler(enabled = destination != Destination.TRANSFER) {
-        destination = Destination.TRANSFER
+    // A share that has been dispatched or cancelled has no surface to be on.
+    LaunchedEffect(staged) {
+        if (staged == null) showShare = false
+    }
+
+    // Back leaves the share surface without discarding what is staged — the
+    // banner below is how it is reached again — and otherwise returns to the
+    // transfer surface rather than leaving the app. Off the transfer tab only,
+    // so the system's own "back closes the app" is untouched where it is right.
+    BackHandler(enabled = showShare || destination != Destination.TRANSFER) {
+        if (showShare) showShare = false else destination = Destination.TRANSFER
     }
 
     Scaffold(
-        bottomBar = { DestinationBar(destination) { destination = it } },
+        bottomBar = { DestinationBar(destination) { destination = it; showShare = false } },
     ) { insets ->
         Box(
             modifier = Modifier
@@ -286,7 +411,32 @@ fun RelayiumApp(viewModel: TransferViewModel) {
                 if (state.cleanupIncomplete) {
                     CleanupWarningCard(onDismiss = viewModel::dismissCleanupWarning)
                 }
-                when (destination) {
+                // Why something handed to this app was refused. Above the
+                // surfaces for the same reason: it is true wherever the user is.
+                ingressRefusal?.let { reason ->
+                    StatusCard(text = stringResource(ingressRefusalText(reason)), isError = true)
+                    TextButton(onClick = viewModel.ingress::clearRefusal) {
+                        Text(stringResource(R.string.ingress_dismiss))
+                    }
+                }
+                val held = staged
+                if (held != null && !showShare) {
+                    // Something is waiting and the user has navigated away from
+                    // it. Without this the share would be unreachable — held,
+                    // with no way back to it — which is worse than not having
+                    // accepted it.
+                    StagedShareBanner(held) { showShare = true }
+                }
+                if (showShare && held != null) {
+                    ShareSurface(
+                        staged = held,
+                        state = state,
+                        viewModel = viewModel,
+                        onDismiss = { showShare = false },
+                        onOpenAccount = { destination = Destination.ACCOUNT; showShare = false },
+                    )
+                } else {
+                    when (destination) {
                     // A session belongs to the destination it was STARTED from.
                     // Without that, a Nearby transfer would also paint the
                     // cross-network tab — the two share one controller, and its
@@ -332,10 +482,18 @@ fun RelayiumApp(viewModel: TransferViewModel) {
                         } else {
                             NearbyScreen(state, viewModel)
                         }
+                    Destination.INBOX -> InboxDestination(
+                        viewModel = viewModel,
+                        pickers = inboxPickers,
+                        notice = inboxNotice,
+                        onNotice = { inboxNotice = it },
+                        onOpenAccount = { destination = Destination.ACCOUNT },
+                    )
                     Destination.CLOUD -> CloudScreen(viewModel, cloudPickers) {
                         destination = Destination.ACCOUNT
                     }
                     Destination.ACCOUNT -> AccountScreen(viewModel)
+                    }
                 }
             }
         }
@@ -392,6 +550,7 @@ private fun DestinationBar(current: Destination, onSelect: (Destination) -> Unit
     val entries = listOf(
         Triple(Destination.TRANSFER, Icons.Filled.Send, R.string.tab_transfer),
         Triple(Destination.NEARBY, Icons.Filled.Search, R.string.tab_nearby),
+        Triple(Destination.INBOX, Icons.Filled.MailOutline, R.string.tab_inbox),
         Triple(Destination.CLOUD, Icons.Filled.Share, R.string.tab_cloud),
         Triple(Destination.ACCOUNT, Icons.Filled.Person, R.string.tab_account),
     )
@@ -470,8 +629,32 @@ private fun DestinationBar(current: Destination, onSelect: (Destination) -> Unit
     }
 }
 
-/** Below this much width per destination, an even split starts truncating. */
-private val MIN_LABEL_DP = 88.dp
+/**
+ * Below this much width per destination, an even split starts truncating.
+ *
+ * ## Why 72 and not 88
+ *
+ * The former value was derived while there were four destinations, and it mixed
+ * two questions: how much room a label needs at the DEFAULT font scale, and how
+ * much it needs at a large one. The second question is answered separately by
+ * [MAX_EVEN_FONT_SCALE], so this one only has to be the first.
+ *
+ * At five destinations the difference is not cosmetic. 88dp each needs 440dp,
+ * which is wider than almost every phone — so an 88 here would put ORDINARY
+ * devices at the default font size into the scrolling form, where the fifth
+ * destination starts off screen and has to be discovered by swiping a bar most
+ * people will not think to swipe. Making the Inbox and Account destinations
+ * reachable only by a gesture is a real discoverability regression, not a
+ * layout preference.
+ *
+ * 72dp is what a Material navigation item actually needs for these five labels
+ * at font scale 1.0, and 5 × 72 = 360dp, which ordinary phones exceed. So the
+ * common case is the standard bar with all five visible and labelled, and the
+ * scrolling form stays what it was designed to be: the fallback for a genuinely
+ * narrow screen (320dp) or a large font, where nothing could have fitted and
+ * scrolling beats truncating.
+ */
+private val MIN_LABEL_DP = 72.dp
 
 /** Above this, even a wide screen's even split cannot hold a full label. */
 private const val MAX_EVEN_FONT_SCALE = 1.3f
@@ -499,7 +682,16 @@ private fun JoinScreen(
     viewModel: TransferViewModel,
     onOpenAccount: () -> Unit,
 ) {
-    var input by rememberSaveable { mutableStateOf("") }
+    // Owned by the ViewModel rather than by this composable, because a SCANNED
+    // code and a TAPPED LINK both prefill it — and a value a composable owned
+    // could not be written from outside the composition. In memory only: the
+    // ViewModel already survives rotation and the picker round trip, which is
+    // the lifetime the field needs, and process death honestly ends it.
+    val input by viewModel.joinDraft.collectAsStateWithLifecycle()
+
+    /** Whether the camera sheet is open. A boolean, and nothing else, is what
+     *  goes into saved state — never a payload. */
+    var scanning by rememberSaveable { mutableStateOf(false) }
 
     // Submitting hides the keyboard FIRST: at large font scales on a narrow
     // screen the field's supporting-text error can sit entirely below the IME,
@@ -509,7 +701,7 @@ private fun JoinScreen(
     val keyboard = LocalSoftwareKeyboardController.current
     val submit = {
         keyboard?.hide()
-        viewModel.join(input)
+        viewModel.joinFromDraft()
     }
 
     Text(
@@ -541,10 +733,7 @@ private fun JoinScreen(
 
     OutlinedTextField(
         value = input,
-        onValueChange = {
-            input = it
-            if (joinError != null) viewModel.clearJoinError()
-        },
+        onValueChange = { viewModel.updateJoinDraft(it) },
         modifier = Modifier.fillMaxWidth(),
         label = { Text(stringResource(R.string.join_field_label)) },
         placeholder = { Text(stringResource(R.string.join_field_hint), style = MonospaceDigits) },
@@ -570,6 +759,66 @@ private fun JoinScreen(
             if (endedBanner) stringResource(R.string.status_reconnect)
             else stringResource(R.string.join_action),
         )
+    }
+
+    // The camera is the SHORTCUT, and the field above is the full path. This
+    // button is the only thing that ever asks for the camera permission: asking
+    // at launch would be a prompt for a feature nobody has touched, and it
+    // teaches people to deny the one that matters later.
+    OutlinedButton(
+        onClick = { scanning = true },
+        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
+    ) {
+        Text(stringResource(R.string.scan_open))
+    }
+
+    if (scanning) {
+        // In a SHEET, which is a window of its own with a bounded height — not
+        // inline in this column.
+        //
+        // The join surface is inside the shell's outer `verticalScroll`, and a
+        // scrollable parent measures its children with an INFINITE maximum
+        // height. `ScannerSheet` is itself vertically scrollable (deliberately:
+        // at 320dp and font 2 its Cancel button would otherwise be laid out past
+        // the bottom edge), and a scrollable measured under an infinite height
+        // constraint throws — which is exactly what it did here, crashing the
+        // app the moment the scan button was pressed.
+        //
+        // Fixed at the HOST rather than in the accepted scanner: the component
+        // is right to scroll, and what was wrong is the container this shell put
+        // it in. A modal sheet is also the placement its name and its dismissal
+        // contract already assumed.
+        // A swipe or a scrim tap is the user finishing with the scanner just as
+        // Cancel is, so it closes an outstanding permission question too.
+        // FULLY EXPANDED, never at the half-height a modal sheet defaults to.
+        //
+        // `ModalBottomSheet` opens partially expanded unless told otherwise, and
+        // a device screenshot showed exactly what that costs here: the bounded
+        // viewfinder — legitimately up to 320dp — fills the visible half, and
+        // the hint, the manual-entry line and CANCEL are clipped below the
+        // screen. The sheet's own content already scrolls, but the control that
+        // releases the camera being off screen by default is not something a
+        // scroll gesture should be required to discover.
+        //
+        // The viewfinder is not the problem and is left alone: it is already
+        // bounded low, deliberately, so that the way out fits beside it. What
+        // was wrong is the height it was being bounded INSIDE.
+        ModalBottomSheet(
+            onDismissRequest = {
+                viewModel.scanner.dismiss()
+                scanning = false
+            },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
+            // A decoded code only PREFILLS the field above — the scanner's
+            // callback crosses the same ingress coordinator a tapped link does,
+            // whose vocabulary has no case that could connect. There is no
+            // auto-join and no session takeover.
+            ScannerSheet(
+                controller = viewModel.scanner,
+                onDismiss = { scanning = false },
+            )
+        }
     }
 
     Text(
@@ -1053,4 +1302,467 @@ private fun joinErrorText(reason: JoinInput.Result.Reason): Int = when (reason) 
     JoinInput.Result.Reason.FOREIGN_ORIGIN -> R.string.join_error_origin
     JoinInput.Result.Reason.STORED_LINK -> R.string.join_error_stored
     JoinInput.Result.Reason.NO_CODE_IN_LINK -> R.string.join_error_link
+}
+
+// ── things another app handed us ────────────────────────────────────────────
+
+/**
+ * Why something handed to this app was refused, as copy.
+ *
+ * A closed mapping from the module's own enum: the reason never quotes the
+ * input, so a hostile link's contents cannot reach the screen or a log.
+ */
+@Composable
+internal fun ingressRefusalText(reason: IngressRefusal): Int = when (reason) {
+    IngressRefusal.EMPTY -> R.string.ingress_refused_empty
+    IngressRefusal.MALFORMED_LINK -> R.string.ingress_refused_malformed_link
+    IngressRefusal.CREDENTIALS_IN_LINK -> R.string.ingress_refused_credentials
+    IngressRefusal.FOREIGN_ORIGIN -> R.string.ingress_refused_foreign_origin
+    IngressRefusal.UNSUPPORTED_PATH -> R.string.ingress_refused_unsupported_path
+    IngressRefusal.NO_CODE_IN_LINK -> R.string.ingress_refused_no_code
+    IngressRefusal.CODE_NOT_SIX_DIGITS -> R.string.ingress_refused_not_six_digits
+    IngressRefusal.STORED_LINK_INVALID -> R.string.ingress_refused_stored_link
+    IngressRefusal.NOTHING_SHAREABLE -> R.string.ingress_refused_nothing_shareable
+    IngressRefusal.MALFORMED_INTENT -> R.string.ingress_refused_malformed_intent
+    IngressRefusal.TOO_MANY_ITEMS -> R.string.ingress_refused_too_many
+    IngressRefusal.TEXT_TOO_LONG -> R.string.ingress_refused_text_too_long
+}
+
+/** Why one item of a share was dropped while the others were kept. */
+@Composable
+private fun shareSkippedText(reason: ShareItemRefusal): Int = when (reason) {
+    ShareItemRefusal.NO_READ_GRANT -> R.string.share_skipped_no_grant
+    ShareItemRefusal.UNSUPPORTED_SCHEME -> R.string.share_skipped_scheme
+    ShareItemRefusal.NO_AUTHORITY -> R.string.share_skipped_no_authority
+    ShareItemRefusal.USER_QUALIFIED_AUTHORITY -> R.string.share_skipped_user_qualified
+    ShareItemRefusal.OWN_PROVIDER -> R.string.share_skipped_own_provider
+    ShareItemRefusal.DUPLICATE -> R.string.share_skipped_duplicate
+}
+
+/**
+ * Something is staged and the user is looking somewhere else.
+ *
+ * Without this the share would be held with no way back to it, which is worse
+ * than never having accepted it: the app would be keeping a grant over
+ * somebody's document for a screen the user cannot reach.
+ */
+@Composable
+private fun StagedShareBanner(staged: IngressHost.Staged, onOpen: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = when (staged.kind) {
+                    IngressHost.Staged.Kind.TEXT -> stringResource(R.string.share_banner_text)
+                    IngressHost.Staged.Kind.FILES -> pluralStringResource(
+                        R.plurals.share_banner_files,
+                        staged.itemCount,
+                        staged.itemCount,
+                    )
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+            Button(
+                onClick = onOpen,
+                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
+            ) {
+                Text(stringResource(R.string.share_banner_action))
+            }
+        }
+    }
+}
+
+/**
+ * What was shared, and the destinations it can be sent to.
+ *
+ * ## Nothing here sends on arrival
+ *
+ * Every destination is a button. The app received references and a description;
+ * the transfer starts when a person chooses where it goes. An app that auto-sent
+ * on intent delivery would be uploading somebody's photo the moment they
+ * mis-tapped a share sheet.
+ *
+ * ## What it says about the content is what it actually knows
+ *
+ * A provider that would not answer gets "name unavailable" and "size unknown"
+ * rather than an invented name or a zero. Items admission dropped are counted
+ * with their reason, because a share that quietly became shorter is a share the
+ * user will believe was sent whole.
+ *
+ * ## Account-bound destinations are gated, not hidden
+ *
+ * Cloud and Inbox need a credential. Signed out, they say so and offer the way
+ * to sign in — the share survives that trip, because staging identity is
+ * deliberately not the account's. A hidden control would read as a destination
+ * this build does not have.
+ */
+@Composable
+private fun ShareSurface(
+    staged: IngressHost.Staged,
+    state: TransferController.State,
+    viewModel: TransferViewModel,
+    onDismiss: () -> Unit,
+    onOpenAccount: () -> Unit,
+) {
+    val account by viewModel.account.state.collectAsStateWithLifecycle()
+    val inbox by viewModel.inbox.collectAsStateWithLifecycle()
+    val signedIn = account is AccountState.Ready
+    val connected = state.phase == TransferController.Phase.CONNECTED
+
+    Text(
+        text = stringResource(R.string.share_title),
+        style = MaterialTheme.typography.headlineSmall,
+    )
+
+    Card {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            when (staged.kind) {
+                IngressHost.Staged.Kind.TEXT -> {
+                    Text(
+                        text = stringResource(R.string.share_text_title),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    // The user's own message, selectable and never persisted.
+                    SelectionContainer {
+                        Text(
+                            text = staged.text.orEmpty(),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+                IngressHost.Staged.Kind.FILES -> {
+                    Text(
+                        text = pluralStringResource(
+                            R.plurals.share_files_title,
+                            staged.itemCount,
+                            staged.itemCount,
+                        ),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    val items = staged.items
+                    if (items == null) {
+                        // The descriptions are being read off the main thread.
+                        // The count is already true, so it is shown rather than
+                        // replacing the card with a spinner.
+                        Text(
+                            text = stringResource(R.string.share_reading),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        for (item in items) {
+                            Text(
+                                text = item.displayName
+                                    ?: stringResource(R.string.share_item_unnamed),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = item.size?.let { formatBytes(it) }
+                                    ?: stringResource(R.string.share_item_unknown_size),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    for ((reason, count) in staged.skipped) {
+                        Text(
+                            text = pluralStringResource(
+                                R.plurals.share_skipped,
+                                count,
+                                count,
+                                stringResource(shareSkippedText(reason)),
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    Text(
+        text = stringResource(R.string.share_destination_title),
+        style = MaterialTheme.typography.titleMedium,
+    )
+
+    if (staged.kind == IngressHost.Staged.Kind.TEXT) {
+        // A message goes into the session's draft, where the user still presses
+        // Send — the same control a typed message uses, so there is one send
+        // path rather than two.
+        DestinationButton(
+            label = stringResource(R.string.share_text_to_draft),
+            enabled = connected,
+            unavailable = if (connected) null else stringResource(R.string.share_needs_session),
+            onClick = { viewModel.dispatchStagedTextToSession(); onDismiss() },
+        )
+    } else {
+        DestinationButton(
+            label = stringResource(R.string.share_to_session),
+            enabled = connected,
+            unavailable = if (connected) null else stringResource(R.string.share_needs_session),
+            onClick = { viewModel.dispatchStagedToSession(staged.id); onDismiss() },
+        )
+        DestinationButton(
+            label = stringResource(R.string.share_to_cloud),
+            enabled = signedIn,
+            unavailable = if (signedIn) null else stringResource(R.string.share_needs_account),
+            onClick = { viewModel.dispatchStagedToCloud(staged.id); onDismiss() },
+        )
+    }
+
+    // The Inbox needs a device as well as an account: a delivery is addressed,
+    // and offering "send to Inbox" with nothing to send to would be a button
+    // that cannot work.
+    if (!signedIn) {
+        DestinationButton(
+            label = stringResource(R.string.share_to_inbox),
+            enabled = false,
+            unavailable = stringResource(R.string.share_needs_account),
+            onClick = {},
+        )
+        OutlinedButton(
+            onClick = onOpenAccount,
+            modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
+        ) {
+            Text(stringResource(R.string.share_sign_in))
+        }
+    } else {
+        val targets = if (staged.kind == IngressHost.Staged.Kind.TEXT) {
+            // Only devices that announced they can PRESENT a message. Writing a
+            // `.txt` facsimile on a device that cannot is the dishonest half of
+            // the feature.
+            inbox.devices.filter { it.deviceId in inbox.textCapableDevices }
+        } else {
+            inbox.devices
+        }
+        if (targets.isEmpty()) {
+            DestinationButton(
+                label = stringResource(R.string.share_to_inbox),
+                enabled = false,
+                unavailable = stringResource(R.string.share_inbox_no_devices),
+                onClick = {},
+            )
+        } else {
+            Text(
+                text = stringResource(R.string.share_to_inbox),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            for (target in targets) {
+                DestinationButton(
+                    label = target.name,
+                    enabled = true,
+                    unavailable = null,
+                    onClick = {
+                        if (staged.kind == IngressHost.Staged.Kind.TEXT) {
+                            viewModel.dispatchStagedTextToInbox(target)
+                        } else {
+                            viewModel.dispatchStagedToInbox(staged.id, target)
+                        }
+                        onDismiss()
+                    },
+                )
+            }
+        }
+    }
+
+    HorizontalDivider()
+
+    // Cancelling RELEASES the grants rather than merely hiding the screen: a
+    // share nobody will dispatch is a claim on somebody's document that this
+    // app should not keep.
+    TextButton(onClick = { viewModel.cancelStagedShare(); onDismiss() }) {
+        Text(stringResource(R.string.share_discard))
+    }
+}
+
+/**
+ * One destination, with the reason it cannot be used when it cannot.
+ *
+ * Disabled and explained rather than absent: a missing button reads as a
+ * feature this build does not have, and the user has already chosen to send
+ * something here.
+ */
+@Composable
+private fun DestinationButton(
+    label: String,
+    enabled: Boolean,
+    unavailable: String?,
+    onClick: () -> Unit,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
+    ) {
+        Text(label)
+    }
+    unavailable?.let {
+        Text(
+            text = it,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+// Sizes are rendered with the session surface's own `formatBytes`: one spelling
+// of "how big is this" across the whole app, rather than a second one here that
+// would eventually disagree with it.
+
+// ── the Device Inbox, wired to the real feature ─────────────────────────────
+
+/**
+ * The Inbox surface with the host integrations the component cannot own.
+ *
+ * `InboxActions.open`, `export` and `share` are nullable in the accepted
+ * component precisely because they need a system integration it does not have —
+ * a content provider, a share sheet, a document tree. A host that left them null
+ * would get no controls, which is honest but incomplete; this supplies real
+ * ones, so a received delivery can actually be opened, saved somewhere the user
+ * chooses, or handed to another app.
+ *
+ * ## Every asynchronous step re-checks the account
+ *
+ * Locating an entry, minting a grant and copying into a chosen folder all
+ * suspend, and the account can be switched or signed out inside any of them.
+ * The ViewModel re-checks the binding after each await and answers with nothing
+ * rather than acting — so a URI is never handed to another app on behalf of a
+ * session that has ended, and an export never writes one account's delivery
+ * during another's.
+ *
+ * ## The export destination is a real picker, under the same bounded lease
+ *
+ * Choosing a folder stops this Activity exactly as any other picker does, so it
+ * takes a lease. It is a DATA claim: nothing is being advertised to anybody
+ * while the user browses, so an expiry ends the covered state without
+ * discarding the folder they chose.
+ */
+/**
+ * The Inbox surface's two system round trips, as callbacks it invokes.
+ *
+ * A holder for the same reason [Pickers] is one: the launchers themselves are
+ * registered above the destination switch, so their registration outlives a tab
+ * change and an Activity recreation, and the caller passes the identity the
+ * launch is happening under rather than anything downstream re-deriving it.
+ */
+internal class InboxPickers(
+    val chooseFiles: (InboxSendTarget) -> Unit,
+    val chooseFolder: (entryId: String) -> Unit,
+)
+
+@Composable
+private fun InboxDestination(
+    viewModel: TransferViewModel,
+    pickers: InboxPickers,
+    notice: Int?,
+    onNotice: (Int?) -> Unit,
+    onOpenAccount: () -> Unit,
+) {
+    val state by viewModel.inbox.collectAsStateWithLifecycle()
+    val unusable by viewModel.inboxAccountUnusable.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    val actions = remember(viewModel, pickers) {
+        InboxActions(
+            signIn = onOpenAccount,
+            retry = { viewModel.inboxRefresh() },
+            setPolicy = { viewModel.inboxSetPolicy(it) },
+            respond = { taskId, accept -> viewModel.inboxRespond(taskId, accept) },
+            repairKey = { viewModel.inboxRepairKey() },
+            chooseFiles = { target -> pickers.chooseFiles(target) },
+            sendText = { target, text -> viewModel.inboxSendText(target, text) },
+            send = { viewModel.inboxSend(it) },
+            cancelSend = { viewModel.inboxCancelSend(it) },
+            markRead = { viewModel.inboxMarkRead(it) },
+            delete = { viewModel.inboxDelete(it) },
+            loadMessage = { entry -> viewModel.inboxMessage(entry) },
+            open = { entry ->
+                scope.launch {
+                    val uris = viewModel.inboxGrantFiles(entry)
+                    val first = uris.firstOrNull()
+                    onNotice(
+                        if (first == null) {
+                            R.string.inbox_export_unavailable
+                        } else {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                                .setDataAndType(first, context.contentResolver.getType(first))
+                                // The grant the receiving app reads under.
+                                // Without it the provider is unreachable —
+                                // which is the point: nothing is exported, one
+                                // app is let in.
+                                .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            // Attempted rather than asked about.
+                            // `resolveActivity` needs a `<queries>` declaration
+                            // — a standing statement about which other apps
+                            // this one may see — for a question the launch's own
+                            // outcome already answers.
+                            try {
+                                context.startActivity(intent)
+                                null
+                            } catch (_: android.content.ActivityNotFoundException) {
+                                R.string.inbox_open_no_app
+                            }
+                        },
+                    )
+                }
+            },
+            export = { entry -> pickers.chooseFolder(entry.id) },
+            share = { entry ->
+                scope.launch {
+                    val uris = viewModel.inboxGrantFiles(entry)
+                    onNotice(
+                        if (uris.isEmpty()) {
+                            R.string.inbox_export_unavailable
+                        } else {
+                            val intent = if (uris.size == 1) {
+                                android.content.Intent(android.content.Intent.ACTION_SEND)
+                                    .setType(context.contentResolver.getType(uris[0]))
+                                    .putExtra(android.content.Intent.EXTRA_STREAM, uris[0])
+                            } else {
+                                android.content.Intent(android.content.Intent.ACTION_SEND_MULTIPLE)
+                                    .setType("*/*")
+                                    .putParcelableArrayListExtra(
+                                        android.content.Intent.EXTRA_STREAM,
+                                        ArrayList(uris),
+                                    )
+                            }.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            context.startActivity(
+                                android.content.Intent.createChooser(intent, null),
+                            )
+                            null
+                        },
+                    )
+                }
+            },
+        )
+    }
+
+    if (unusable) {
+        StatusCard(text = stringResource(R.string.inbox_account_unusable), isError = true)
+    }
+    // An export stopped by an account change cannot tell the coroutine that was
+    // awaiting it — that coroutine went with it. This is how the fact still
+    // reaches the person whose folder now holds files this app could not remove.
+    val leftovers by viewModel.exportCleanup.collectAsStateWithLifecycle()
+    leftovers?.let {
+        StatusCard(text = stringResource(R.string.inbox_export_incomplete), isError = true)
+        TextButton(onClick = viewModel::clearExportCleanup) {
+            Text(stringResource(R.string.ingress_dismiss))
+        }
+    }
+    notice?.let { message ->
+        StatusCard(text = stringResource(message), isError = false)
+        TextButton(onClick = { onNotice(null) }) {
+            Text(stringResource(R.string.ingress_dismiss))
+        }
+    }
+    InboxScreen(state, actions)
 }

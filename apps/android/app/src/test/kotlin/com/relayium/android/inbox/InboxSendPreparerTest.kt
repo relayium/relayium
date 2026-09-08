@@ -118,6 +118,136 @@ class InboxSendPreparerTest {
         assertArrayEquals(expected, decrypted(job))
     }
 
+    /**
+     * A record written before `emptyPublishAttempted` existed still loads.
+     *
+     * The record VERSION did not change when that flag was added, so every job
+     * already staged on a user's device is still a valid v1 record. Reading the
+     * new field strictly turned each one UNREADABLE on the first launch after
+     * an upgrade — a delivery the user had already asked for, destroyed by a
+     * field that was merely absent.
+     *
+     * The fixture is a REAL record with the field removed, not a hand-written
+     * one: what must load is what the previous build actually wrote.
+     */
+    @Test
+    fun `a record from before the empty-publish flag still loads`() = runBlocking {
+        val job = preparer().stageFiles(
+            InboxFixtures.OTHER_DEVICE_ID,
+            listOf(BytesSource("a.txt", "one".toByteArray())),
+        )
+        val record = File(File(folder.root, "send"), job.jobId + ".json")
+        assertTrue("the record must exist to be rewritten", record.isFile)
+
+        // The fake seal is `[len][label][plaintext]`, so the JSON can be taken
+        // out, aged, and put back under the same label.
+        val sealed = record.readBytes()
+        val labelLength = sealed[0].toInt() and 0xff
+        val label = String(sealed, 1, labelLength, Charsets.UTF_8)
+        // The fake seal XORs its payload, so the JSON is recovered the same way
+        // the fake's own `open` recovers it.
+        val json = plaintextOf(sealed, labelLength)
+        assertTrue("the fixture must contain the new field to remove", "emptyPublishAttempted" in json)
+        val field = "\"emptyPublishAttempted\""
+        val aged = json.replace(Regex(",?\\s*" + field + "\\s*:\\s*(true|false)"), "")
+        assertTrue("the aged fixture must not contain it", "emptyPublishAttempted" !in aged)
+        record.writeBytes(secrets.seal(label, aged.toByteArray(Charsets.UTF_8)))
+
+        val reloaded = store.load(job.jobId)
+        assertNotNull("a v1 record without the flag must still load", reloaded)
+        assertFalse(
+            "a build that never had the flag never published single-shot, so false is the truth",
+            reloaded!!.emptyPublishAttempted,
+        )
+    }
+
+    /** A field that is PRESENT and not a boolean is still a record this build
+     *  cannot vouch for. */
+    @Test
+    fun `a wrongly typed empty-publish flag is still refused`() = runBlocking {
+        val job = preparer().stageFiles(
+            InboxFixtures.OTHER_DEVICE_ID,
+            listOf(BytesSource("a.txt", "one".toByteArray())),
+        )
+        val record = File(File(folder.root, "send"), job.jobId + ".json")
+        val sealed = record.readBytes()
+        val labelLength = sealed[0].toInt() and 0xff
+        val label = String(sealed, 1, labelLength, Charsets.UTF_8)
+        val json = plaintextOf(sealed, labelLength)
+        val corrupted = json.replace(
+            Regex("\"emptyPublishAttempted\"\\s*:\\s*(true|false)"),
+            "\"emptyPublishAttempted\":\"yes\"",
+        )
+        record.writeBytes(secrets.seal(label, corrupted.toByteArray(Charsets.UTF_8)))
+
+        // Refused outright rather than defaulted: absent is an old record, but a
+        // value of the wrong type is one this build cannot vouch for.
+        val refusal = runCatching { store.load(job.jobId) }.exceptionOrNull()
+        assertTrue(
+            "a wrongly typed flag must be refused, not defaulted: $refusal",
+            refusal is InboxSendStoreException,
+        )
+    }
+
+    /** The JSON inside a `FakeSecretBox` record: `[len][label][plaintext xor 0x5a]`. */
+    private fun plaintextOf(sealed: ByteArray, labelLength: Int): String {
+        val body = sealed.copyOfRange(1 + labelLength, sealed.size)
+        for (i in body.indices) body[i] = (body[i].toInt() xor 0x5a).toByte()
+        return String(body, Charsets.UTF_8)
+    }
+
+    /** Each send is its own job, so a second staging cannot disturb the first. */
+    /**
+     * A delivery whose ONLY file is empty — the shape no mixed batch reaches,
+     * because one non-empty file is enough to make the spool non-empty.
+     */
+    @Test
+    fun `a delivery whose only file is empty can be staged and verified`() = runBlocking {
+        // An empty file is a real file the manifest explicitly allows, and the
+        // frame encoder correctly emits NOTHING for a source with no content.
+        // The spool is therefore zero bytes — with a real SHA-256, because the
+        // digest of nothing is a fixed, well-defined value.
+        //
+        // Requiring `ciphertextBytes > 0` as half of a biconditional identity
+        // check rejected that record on its way to disk: `prepareSpool` wrote
+        // 0 bytes and a non-empty hash, `validate` saw the two disagree and
+        // threw UNREADABLE, and the send surfaced no job, no history and no
+        // failure the user could see. Mixed batches never reached it, because
+        // one non-empty file is enough to make the spool non-empty.
+        val job = preparer().stageFiles(
+            InboxFixtures.OTHER_DEVICE_ID,
+            listOf(BytesSource("empty.bin", ByteArray(0))),
+        )
+
+        assertEquals(0L, job.totalBytes)
+        assertEquals(0L, job.ciphertextBytes)
+        assertTrue("an empty payload still has an identity", job.ciphertextSha256.isNotEmpty())
+        assertTrue("a staged empty delivery must count as prepared", job.isPrepared)
+        // The record survives a round trip through the store, which is where
+        // the validation that rejected it lives.
+        assertTrue("the spool must verify against its own identity", store.spoolMatches(job))
+    }
+
+    /** Zero bytes with an identity is a prepared empty payload; zero bytes
+     *  without one is a job nothing has written yet. */
+    @Test
+    fun `an unprepared job is still told apart from a prepared empty one`() = runBlocking {
+        // The distinction the identity carries: no hash means nothing has been
+        // written, and that must not become "prepared" just because both have
+        // zero bytes. Taken from a REAL staging so the record is otherwise
+        // well-formed, then stripped of exactly the identity.
+        val prepared = preparer().stageFiles(
+            InboxFixtures.OTHER_DEVICE_ID,
+            listOf(BytesSource("empty.bin", ByteArray(0))),
+        )
+        assertTrue("a staged empty delivery is prepared", prepared.isPrepared)
+
+        val unprepared = prepared.copy(ciphertextSha256 = "")
+        assertEquals(0L, unprepared.ciphertextBytes)
+        assertTrue("a job with no identity is not prepared", !unprepared.isPrepared)
+        assertTrue("nothing to check against, so nothing matches", !store.spoolMatches(unprepared))
+    }
+
     /** Each send is its own job, so a second staging cannot disturb the first. */
     @Test
     fun `two stagings are independent jobs`() = runBlocking {

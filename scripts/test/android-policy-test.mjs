@@ -63,6 +63,29 @@ const codeOf = (text) => text
   .replace(/\/\*[\s\S]*?\*\//g, "")  // block
   .replace(/\/\/[^\n]*/g, "");      // line
 
+/**
+ * An XML document with its COMMENTS removed, and nothing else touched.
+ *
+ * `codeOf` must not be used on XML, and the reason is not tidiness. Its
+ * C-style block-comment rule treats `/*` as an opening delimiter — and an
+ * Android manifest is full of MIME wildcards. In
+ *
+ *     <data android:mimeType="text&#47;*" />
+ *     …
+ *     <data android:mimeType="*&#47;*" />
+ *
+ * the `&#47;*` of the first is read as the start of a block comment and the
+ * `*&#47;` of the second as its end, so everything between them is DELETED
+ * before any rule looks at it. That silently removed a whole `<intent-filter>`
+ * — actions included — from the text these assertions run against, which is the
+ * worst possible failure for a file whose entire job is noticing that a
+ * declaration is missing: it would have reported one absent while it was
+ * present, and would just as happily report one present while it was gone.
+ *
+ * XML has exactly one comment form, so this strips exactly that.
+ */
+const xmlOf = (text) => text.replace(/<!--[\s\S]*?-->/g, "");
+
 // ── 0. the platform exists at all ───────────────────────────────────────────
 //
 // Asserted rather than assumed: a file this test reads that has been renamed
@@ -86,6 +109,9 @@ const REQUIRED = [
   "protocol/src/main/kotlin/com/relayium/protocol/legacy/LegacyTextLane.kt",
   "protocol/src/main/kotlin/com/relayium/protocol/legacy/WireProfile.kt",
   "app/src/androidTest/kotlin/com/relayium/android/LegacyInteropAcceptanceTest.kt",
+  "app/src/main/kotlin/com/relayium/android/ui/RelayiumApp.kt",
+  "app/src/main/kotlin/com/relayium/android/integration/InboxSharedFileProvider.kt",
+  "app/src/main/kotlin/com/relayium/android/integration/SharedFileGrants.kt",
 ];
 for (const relative of REQUIRED) {
   check(read(relative) !== null, `apps/android/${relative} is missing. This file asserts rules `
@@ -339,8 +365,8 @@ if (failures.length) {
 
 const gradle = codeOf(read("app/build.gradle.kts"));
 const backend = codeOf(read("app/src/main/kotlin/com/relayium/android/Backend.kt"));
-const mainManifest = codeOf(read("app/src/main/AndroidManifest.xml"));
-const debugManifest = codeOf(read("app/src/debug/AndroidManifest.xml"));
+const mainManifest = xmlOf(read("app/src/main/AndroidManifest.xml"));
+const debugManifest = xmlOf(read("app/src/debug/AndroidManifest.xml"));
 const releaseHooks = codeOf(read("app/src/release/kotlin/com/relayium/android/TestHooks.kt"));
 
 // ── 1. the release backend fence, at the build-configuration level ──────────
@@ -465,10 +491,241 @@ check(
   + "assetlinks.json on the production origin, so claiming verification produces a link that "
   + "silently never routes.",
 );
+// ── the share entry point ───────────────────────────────────────────────────
+//
+// This rule used to be its own opposite. While the app had no share handler,
+// declaring the filter would have offered users an entry point that did
+// nothing, so the manifest was asserted NOT to have one. The shared host landed
+// a real one — `IngressIntents.read` admits the intent, the content is STAGED as
+// references, and a destination is chosen on a screen that names what will be
+// sent — so the honest assertion is now the other way round.
+//
+// It is kept as a rule rather than deleted because the property still matters
+// in both directions: a manifest that quietly lost these filters would leave
+// `IngressIntents`, `ShareStaging` and the whole share surface reachable by
+// nothing at all, and every Kotlin test around them would still pass.
+
 check(
-  !/ACTION_SEND|android\.intent\.action\.SEND/.test(mainManifest),
-  "the manifest declares an ACTION_SEND filter. This stage has no share handler; declaring one "
-  + "would offer users an entry point that does nothing.",
+  /android\.intent\.action\.SEND(?!_MULTIPLE)/.test(mainManifest),
+  "the manifest no longer declares an ACTION_SEND filter. The shared host has a real share "
+  + "handler — a share is staged and dispatched by an explicit tap — and without the filter that "
+  + "entry point is unreachable while every test around it still passes.",
+);
+check(
+  /android\.intent\.action\.SEND_MULTIPLE/.test(mainManifest),
+  "the manifest no longer declares an ACTION_SEND_MULTIPLE filter. A multi-item share is the "
+  + "ordinary case — several photos from a gallery — and admitting only single sends would "
+  + "silently refuse it.",
+);
+
+// ── the non-exported grant provider ─────────────────────────────────────────
+//
+// Opening, exporting or sharing a received delivery hands a `content://` URI to
+// another app. Four facts make that safe, and each is one attribute away from
+// being silently untrue in a way no Kotlin test can see — the manifest is data,
+// and the provider would go on working while the fence was gone.
+
+const grantProvider = /<provider[^>]*InboxSharedFileProvider[\s\S]*?\/>/.exec(mainManifest)?.[0]
+  ?? "";
+
+check(
+  grantProvider !== "",
+  "the Inbox grant provider is not declared in the MAIN manifest. Without it every open, export "
+  + "and share control on the Inbox surface resolves to nothing.",
+);
+check(
+  /android:exported="false"/.test(grantProvider),
+  "the Inbox grant provider is EXPORTED. Not being exported is the authorisation: what reaches "
+  + "it is a URI this app put in an Intent with FLAG_GRANT_READ_URI_PERMISSION, which the system "
+  + "turns into a per-URI grant for one consumer. Exported, it is addressable by any installed app.",
+);
+check(
+  /android:grantUriPermissions="true"/.test(grantProvider),
+  "the Inbox grant provider no longer grants URI permissions, so the per-URI grant it depends on "
+  + "cannot be issued and every open/share hands out a URI the receiver cannot read.",
+);
+check(
+  !/android:permission/.test(grantProvider) && !/<intent-filter/.test(grantProvider),
+  "the Inbox grant provider declares a permission or an intent-filter. Either makes it "
+  + "addressable by something other than an explicit per-URI grant, which is the one thing it "
+  + "must not be.",
+);
+check(
+  /android:authorities="\$\{applicationId\}\.inboxfiles"/.test(mainManifest),
+  "the Inbox grant provider's authority is not derived from ${applicationId}. A constant would "
+  + "collide between a debug and a release install on one device, so one build's URIs would "
+  + "resolve against the other's registry.",
+);
+
+// ── nothing `init` touches may be declared after `init` ─────────────────────
+//
+// Kotlin runs property initialisers and `init` blocks in DECLARATION order, and
+// `TransferViewModel.init` starts collectors on `Dispatchers.Main.immediate` —
+// which do not wait. The account collector observes its first emission
+// synchronously, INSIDE `init`, and calls straight into these objects. Declared
+// below `init`, a field is still null at that moment and the app dies with an
+// NPE before its first frame.
+//
+// This is not hypothetical and it is not cheap: it shipped into a candidate,
+// crashed `MainActivity` on launch, and the entire JVM suite stayed green —
+// those tests never construct a `TransferViewModel`, which needs a real
+// `Application`. Only a device catches it, and only if the device run gets far
+// enough to launch the app.
+//
+// The compiler accepts both orders, so no Kotlin test can assert this. It is a
+// source fact about ORDER, which is exactly what this file is for.
+
+const viewModelSource = read("app/src/main/kotlin/com/relayium/android/TransferViewModel.kt");
+const initAt = viewModelSource.indexOf("\n    init {");
+check(
+  initAt > 0,
+  "`TransferViewModel` has no `init` block where one was expected; the declaration-order rule "
+  + "below cannot be applied and would silently check nothing.",
+);
+if (initAt > 0) {
+  const beforeInit = viewModelSource.slice(0, initAt);
+  // Every field the init-time collectors reach. Named explicitly rather than
+  // derived, so adding one to `init` without adding it here is a review
+  // question rather than a silent pass.
+  const initReaches = [
+    "exports",
+    "sessionDispatch",
+    "cloudDispatch",
+    "inboxDispatch",
+    "sessionSendObserved",
+    "lastAuthority",
+    "_exportCleanup",
+    "shareEpoch",
+    "ingress",
+    "pickerLease",
+    "presence",
+    "_foreground",
+    "_inboxAccountUnusable",
+  ];
+  for (const field of initReaches) {
+    check(
+      new RegExp(`(val|var)\\s+${field}\\b`).test(beforeInit),
+      `\`${field}\` is used by a collector that \`TransferViewModel.init\` starts on an IMMEDIATE `
+      + "dispatcher, but it is declared AFTER `init`. Its initialiser has not run when that "
+      + "collector sees its first emission, so the app crashes on launch with an NPE — and every "
+      + "JVM test still passes, because none of them constructs a ViewModel.",
+    );
+  }
+}
+
+// ── the stored credential is restored by the APP, not by one screen ────────
+//
+// `AccountSession.restore` reads whatever credential this device holds. It used
+// to be started from a `LaunchedEffect` inside `AccountScreen`, which made it
+// depend on the user opening that tab — and a cold start lands on Transfer.
+// Anyone who stayed on Transfer, Nearby, Inbox or Cloud sat on `Restoring`
+// forever: the Inbox never adopted and so never received, the cloud surfaces
+// looked signed out, and nothing on screen said why.
+//
+// Four destinations read this state, so the ViewModel owns starting it. A
+// device test can catch the symptom, but only after somebody thinks to write a
+// case that deliberately does NOT open Account — which is exactly the case a
+// suite about the Account screen would never contain.
+
+check(
+  /account\.restore\(\)/.test(codeOf(viewModelSource)),
+  "`TransferViewModel` no longer starts `account.restore()`. The stored credential would then be "
+  + "read only when some screen happens to ask, and a cold start that stayed on its launch "
+  + "destination would never leave `Restoring` — no Inbox adoption, no deliveries, and nothing "
+  + "on screen explaining it.",
+);
+// Read here rather than reusing the shell binding below: this rule runs before
+// that one, and a `const` referenced above its declaration is a crash rather
+// than a check.
+const composables = [
+  "app/src/main/kotlin/com/relayium/android/ui/AccountScreen.kt",
+  "app/src/main/kotlin/com/relayium/android/ui/RelayiumApp.kt",
+];
+for (const relative of composables) {
+  const source = read(relative);
+  check(
+    source !== null && !/account\.restore\(\)/.test(codeOf(source)),
+    `${relative} starts \`account.restore()\` from a composable. Tying the credential's `
+    + "restoration to a screen being composed is the defect that shipped once already: a cold "
+    + "start that stayed on its launch destination never left `Restoring`. The ViewModel owns it.",
+  );
+}
+
+// ── the export coordinator is stopped only by what invalidates an export ────
+//
+// `ExportCoordinator.stop()` cancels the run and closes its streams under a
+// blocked provider write. That is exactly right for the one thing that
+// invalidates an export from outside — the account it was authorised under
+// changing — and catastrophic anywhere else.
+//
+// It was, briefly, somewhere else: a copy sat in `scheduleLeaseSweep`, which
+// runs on EVERY picker launch, every picker result and every sweep. Opening an
+// unrelated Cloud or Nearby picker silently cancelled a perfectly valid Inbox
+// export, and no JVM test could see it — the call is in the ViewModel, which
+// none of them construct.
+//
+// The other two cancellation paths are structural and need no call: the body
+// runs in the caller's own context, so cancelling the caller (including
+// `viewModelScope` at `onCleared`) cancels the copy, and a superseding export
+// stops the previous one from inside `export()`.
+
+// Counted against COMMENT-STRIPPED source. The prose above names the very call
+// it forbids — as this file's own header warns is the trap — and counting the
+// raw text made the rule fail on the explanation of why it passes.
+const stopCalls = (codeOf(viewModelSource).match(/exports\.stop\(\)/g) ?? []).length;
+check(
+  stopCalls === 1,
+  `\`exports.stop()\` is called ${stopCalls} times in \`TransferViewModel\`; exactly one belongs `
+  + "there, on a real account-identity change. Picker scheduling, lifecycle callbacks and result "
+  + "handlers must not cancel an export: they run constantly and have nothing to do with whether "
+  + "the credential that authorised the write is still the live one.",
+);
+
+// ── every destination the shell declares is one the bar can reach ───────────
+//
+// `Destination` is the set of surfaces the app has; the destination bar's own
+// `entries` list is what actually renders them. Nothing connects the two: a
+// value added to the enum and forgotten in the list compiles, opens correctly
+// when navigated to programmatically, and is simply ABSENT from the only
+// control a user has for reaching it.
+//
+// No Kotlin test catches that. The enum is internal and the entries list is a
+// local inside a private composable, so a unit test cannot enumerate it; and a
+// device test asserts the destinations it was told about, which are exactly the
+// ones somebody remembered — the forgotten one is forgotten there too. The
+// count and the pairing are therefore asserted from the source.
+
+const shell = codeOf(read("app/src/main/kotlin/com/relayium/android/ui/RelayiumApp.kt"));
+const destinationEnum = /enum class Destination \{([^}]*)\}/.exec(shell)?.[1] ?? "";
+const destinations = destinationEnum
+  .split(",")
+  .map((one) => one.trim())
+  .filter((one) => /^[A-Z_]+$/.test(one));
+
+check(
+  destinations.length === 5,
+  `the shell declares ${destinations.length} destinations, not the five the shared host ships `
+  + "(Transfer, Nearby, Inbox, Cloud, Account). If a destination was added or removed on purpose, "
+  + "this number and the bar below move together — that is the point of asserting them here.",
+);
+for (const destination of destinations) {
+  check(
+    new RegExp(`Triple\\(Destination\\.${destination},`).test(shell),
+    `the ${destination} destination has no entry in the destination bar, so nothing in the UI can `
+    + "reach it. It would still compile, and still render correctly if something navigated to it.",
+  );
+}
+
+// The registry behind it is memory-only and root-confined. Both are Kotlin
+// facts with Kotlin tests — what cannot be asserted from inside is that the
+// SOURCE still says so, which is what a "just persist it across restarts"
+// change would quietly remove.
+const grants = codeOf(read("app/src/main/kotlin/com/relayium/android/integration/SharedFileGrants.kt"));
+check(
+  !/DurableFiles|writeAtomically|SharedPreferences|openFileOutput/.test(grants),
+  "the shared-file grant registry writes to disk. It is memory-only on purpose: a grant that "
+  + "survived process death would be a capability over this account's deliveries that the user "
+  + "never re-authorised, reconstructed from state that would itself have to name the file.",
 );
 
 // ── 5. the update check ─────────────────────────────────────────────────────

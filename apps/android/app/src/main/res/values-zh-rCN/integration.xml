@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 共享宿主自有的文案：第五个目的地、其他应用交给本应用的内容，以及打开已收到
+     投递的控件。
+
+     英文是源语言；此处每个键都与 values/integration.xml 一一对应，
+     `AppStringsParityTest` 会读取整个目录来强制这一点。 -->
+<resources>
+
+    <!-- ── 第五个目的地 ──────────────────────────────────────────────────── -->
+    <string name="tab_inbox">收件箱</string>
+
+    <!-- ── 来自外部的内容 ────────────────────────────────────────────────── -->
+    <string name="ingress_dismiss">知道了</string>
+
+    <!-- 拒绝原因。只说明情况，绝不引用输入内容：被拒链接的内容不得出现在界面
+         或日志中。 -->
+    <string name="ingress_refused_empty">没有可打开的内容。</string>
+    <string name="ingress_refused_malformed_link">Relayium 无法读取该链接。</string>
+    <string name="ingress_refused_credentials">该链接携带用户名或密码，Relayium 不会打开它。</string>
+    <string name="ingress_refused_foreign_origin">该链接属于其他网站。</string>
+    <string name="ingress_refused_unsupported_path">Relayium 没有对应该链接的页面。</string>
+    <string name="ingress_refused_no_code">该链接中没有配对码。</string>
+    <string name="ingress_refused_not_six_digits">配对码必须是六位数字。</string>
+    <string name="ingress_refused_stored_link">该传输链接无效。</string>
+    <string name="ingress_refused_nothing_shareable">该分享中没有可读取的内容。</string>
+    <string name="ingress_refused_malformed_intent">无法读取该分享。</string>
+    <string name="ingress_refused_too_many">该分享的项目数超过一次传输所能承载的数量。</string>
+    <string name="ingress_refused_text_too_long">该消息过长，无法发送。</string>
+
+    <!-- ── 已暂存的分享 ──────────────────────────────────────────────────── -->
+    <string name="share_title">发送这些内容</string>
+    <!-- 中文没有单复数变化，因此只有 other 一种形式。 -->
+    <plurals name="share_files_title">
+        <item quantity="other">已分享给 Relayium 的 %1$d 个项目</item>
+    </plurals>
+    <string name="share_text_title">已分享给 Relayium 的文本</string>
+    <string name="share_reading">正在读取详情…</string>
+    <string name="share_item_unnamed">无法获取名称</string>
+    <string name="share_item_unknown_size">大小未知</string>
+    <plurals name="share_skipped">
+        <item quantity="other">已跳过 %1$d 个：%2$s</item>
+    </plurals>
+    <string name="share_skipped_no_grant">分享它们的应用未授予读取权限</string>
+    <string name="share_skipped_scheme">不是可分享的文档</string>
+    <string name="share_skipped_no_authority">没有可读取它们的提供程序</string>
+    <string name="share_skipped_user_qualified">来自其他用户配置文件的分享</string>
+    <string name="share_skipped_own_provider">已经是 Relayium 自己的文件</string>
+    <string name="share_skipped_duplicate">同一项目重复出现</string>
+
+    <string name="share_destination_title">要发送到哪里？</string>
+    <string name="share_to_session">在当前传输中发送</string>
+    <string name="share_text_to_draft">放入消息框</string>
+    <string name="share_to_cloud">上传到你的存储空间</string>
+    <string name="share_to_inbox">发送到你的某台设备</string>
+    <string name="share_needs_session">请先连接一台设备再回来——这些内容会保留在这里。</string>
+    <string name="share_needs_account">请先登录——登录期间这些内容会保留在这里。</string>
+    <string name="share_inbox_no_devices">你的其他设备都没有接收投递。</string>
+    <string name="share_sign_in">前往账户</string>
+    <string name="share_discard">丢弃</string>
+
+    <plurals name="share_banner_files">
+        <item quantity="other">%1$d 个已分享的项目正在等待选择目的地。</item>
+    </plurals>
+    <string name="share_banner_text">已分享的文本正在等待选择目的地。</string>
+    <string name="share_banner_action">选择发送目的地</string>
+
+    <!-- ── 扫码入口 ──────────────────────────────────────────────────────── -->
+    <!-- 刻意与 `scan_title`（“扫码”）用词不同：两个控件文案完全相同，
+         对读屏用户和按文本匹配的检查都会产生歧义。 -->
+    <string name="scan_open">扫描对方设备上的配对码</string>
+
+    <!-- ── 打开收件箱中收到的内容 ────────────────────────────────────────── -->
+    <string name="inbox_export_done">已保存到你选择的文件夹。</string>
+    <string name="inbox_export_failed">无法将这些文件保存到那里。</string>
+    <!-- 单独的提示而不是笼统的“失败”：所选文件夹中已留下本应用写入且无法清除的
+         文件，需要由用户自行处理。 -->
+    <string name="inbox_export_incomplete">保存失败，且部分文件无法从你选择的文件夹中移除。</string>
+    <string name="inbox_export_unavailable">这些文件已不可用。</string>
+    <string name="inbox_open_no_app">此设备上没有应用可以打开该文件。</string>
+    <string name="inbox_account_unusable">此版本无法将该账户用于收件箱。</string>
+
+    <!-- ── 受限的选择器租约 ──────────────────────────────────────────────── -->
+    <!-- 仅在相关处显示：附近传输是唯一会向其他设备发出可见声明的界面。文案说明
+         超时与恢复方式，并且刻意不承诺后台投递。 -->
+    <string name="nearby_picker_timeout">在你选择文件期间，Relayium 会让本设备保持可见两分钟。若超过该时间，发现功能会停止，你可以重新开启。</string>
+</resources>

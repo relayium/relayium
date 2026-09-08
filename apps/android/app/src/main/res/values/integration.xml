@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The copy the shared host owns: the fifth destination, everything another
+     app hands this one, and the controls that open a received delivery.
+
+     English is the source language. Every key here has a Simplified Chinese
+     twin in values-zh-rCN/integration.xml, which `AppStringsParityTest`
+     enforces by reading the whole directory rather than a named file. -->
+<resources>
+
+    <!-- ── the fifth destination ─────────────────────────────────────────── -->
+    <string name="tab_inbox">Inbox</string>
+
+    <!-- ── something arrived from outside ────────────────────────────────── -->
+    <string name="ingress_dismiss">Dismiss</string>
+
+    <!-- Refusals. Each names the condition and never quotes the input: a
+         rejected link's contents must not reach the screen or a log. -->
+    <string name="ingress_refused_empty">There was nothing to open.</string>
+    <string name="ingress_refused_malformed_link">That is not a link Relayium can read.</string>
+    <string name="ingress_refused_credentials">That link carries a username or password, so Relayium will not open it.</string>
+    <string name="ingress_refused_foreign_origin">That link is for a different site.</string>
+    <string name="ingress_refused_unsupported_path">Relayium has no screen for that link.</string>
+    <string name="ingress_refused_no_code">That link has no pairing code in it.</string>
+    <string name="ingress_refused_not_six_digits">A pairing code is exactly six digits.</string>
+    <string name="ingress_refused_stored_link">That transfer link is not valid.</string>
+    <string name="ingress_refused_nothing_shareable">Nothing in that share could be read.</string>
+    <string name="ingress_refused_malformed_intent">That share could not be read.</string>
+    <string name="ingress_refused_too_many">That share has more items than one transfer can carry.</string>
+    <string name="ingress_refused_text_too_long">That message is too long to send.</string>
+
+    <!-- ── the staged share ──────────────────────────────────────────────── -->
+    <string name="share_title">Send this</string>
+    <!-- A count with a noun: a plural, not a string with "(s)" in it. English
+         needs two forms and Simplified Chinese needs one, which is exactly what
+         a plurals resource expresses and a formatted string cannot. -->
+    <plurals name="share_files_title">
+        <item quantity="one">%1$d item shared with Relayium</item>
+        <item quantity="other">%1$d items shared with Relayium</item>
+    </plurals>
+    <string name="share_text_title">Text shared with Relayium</string>
+    <string name="share_reading">Reading the details…</string>
+    <string name="share_item_unnamed">Name unavailable</string>
+    <string name="share_item_unknown_size">Size unknown</string>
+    <plurals name="share_skipped">
+        <item quantity="one">%1$d item skipped: %2$s</item>
+        <item quantity="other">%1$d items skipped: %2$s</item>
+    </plurals>
+    <string name="share_skipped_no_grant">the app that shared them gave no read permission</string>
+    <string name="share_skipped_scheme">not a shareable document</string>
+    <string name="share_skipped_no_authority">no provider to read them from</string>
+    <string name="share_skipped_user_qualified">shared from another user profile</string>
+    <string name="share_skipped_own_provider">already Relayium\'s own file</string>
+    <string name="share_skipped_duplicate">the same item more than once</string>
+
+    <string name="share_destination_title">Where should it go?</string>
+    <string name="share_to_session">Send on the current transfer</string>
+    <string name="share_text_to_draft">Put it in the message box</string>
+    <string name="share_to_cloud">Upload to your storage</string>
+    <string name="share_to_inbox">Send to one of your devices</string>
+    <string name="share_needs_session">Connect to a device first, then come back — this stays here.</string>
+    <string name="share_needs_account">Sign in first — this stays here while you do.</string>
+    <string name="share_inbox_no_devices">None of your other devices is accepting deliveries.</string>
+    <string name="share_sign_in">Go to Account</string>
+    <string name="share_discard">Discard</string>
+
+    <plurals name="share_banner_files">
+        <item quantity="one">%1$d shared item is waiting for a destination.</item>
+        <item quantity="other">%1$d shared items are waiting for a destination.</item>
+    </plurals>
+    <string name="share_banner_text">Shared text is waiting for a destination.</string>
+    <string name="share_banner_action">Choose where it goes</string>
+
+    <!-- ── the scanner entry point ───────────────────────────────────────── -->
+    <!-- Deliberately not the same words as `scan_title` ("Scan a code"), which
+         is the sheet's own heading. Two controls reading identically is
+         ambiguous for a screen reader traversing the screen and for anything
+         matching on text. -->
+    <string name="scan_open">Scan the other device\'s code</string>
+
+    <!-- ── opening what arrived in the Inbox ─────────────────────────────── -->
+    <string name="inbox_export_done">Saved to the folder you chose.</string>
+    <string name="inbox_export_failed">Those files could not be saved there.</string>
+    <!-- Its own message rather than a silent "failed": the folder now holds
+         something this app put there and could not take back, and the user is
+         the one who has to deal with it. -->
+    <string name="inbox_export_incomplete">Saving failed, and some files could not be removed from the folder you chose.</string>
+    <string name="inbox_export_unavailable">Those files are no longer available.</string>
+    <string name="inbox_open_no_app">No app on this device can open that file.</string>
+    <string name="inbox_account_unusable">This account cannot be used for the Inbox on this version.</string>
+
+    <!-- ── the bounded picker lease ──────────────────────────────────────── -->
+    <!-- Shown only where it is relevant: Nearby is the one surface holding a
+         claim other devices can see. It explains the timeout and the way back,
+         and it deliberately does not promise background delivery. -->
+    <string name="nearby_picker_timeout">While you are choosing a file, Relayium keeps this device visible for two minutes. If it takes longer, discovery stops and you can start it again.</string>
+</resources>

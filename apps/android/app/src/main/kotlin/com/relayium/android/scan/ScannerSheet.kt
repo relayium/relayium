@@ -207,7 +207,17 @@ fun ScannerSheet(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        TextButton(onClick = onDismiss) { Text(stringResource(R.string.scan_cancel)) }
+        // `dismiss`, not `onDismiss` alone: this is the one exit that means the
+        // user has finished with the scanner, so it is the one that closes an
+        // outstanding permission question. Every other way out — a recreation,
+        // the lifecycle stopping — keeps it, because a dialog still on screen
+        // is still being asked.
+        TextButton(
+            onClick = {
+                controller.dismiss()
+                onDismiss()
+            },
+        ) { Text(stringResource(R.string.scan_cancel)) }
     }
 }
 

@@ -8,12 +8,14 @@ import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * The Inbox feature, composed: an account's services, the receive loop, the send
@@ -399,6 +401,7 @@ class InboxRuntime(
             model.ensureCurrent(session.authority)
             lifecycle.withLock {
                 if (this@InboxRuntime.session !== session) return@withLock
+                val changed = session.policy != policy
                 session.policyChosen = true
                 session.policy = policy
                 if (policy == InboxAutoAccept.OFF) {
@@ -414,12 +417,57 @@ class InboxRuntime(
                         )
                     }
                     session.prepared = false
+                } else if (changed) {
+                    // ONE publish. Announcing the new policy first and the
+                    // receiving state only after the drain would put `ask` next
+                    // to LISTENING for as long as the old worker took to unwind
+                    // — the same false claim this path exists to remove, just
+                    // for a shorter time.
+                    model.publish(session.authority) {
+                        it.copy(policy = policy, failure = null, receiving = resting(session))
+                    }
+                    retire(session)
                 } else {
                     model.publish(session.authority) { it.copy(policy = policy, failure = null) }
                 }
             }
             reconcile()?.join()
         }
+    }
+
+    /**
+     * End the worker that is enrolled under the OLD policy.
+     *
+     * Central keeps the last policy a device announced, and the only thing that
+     * announces one is [InboxReceiveEngine.prepare] — which the loop runs once,
+     * behind `prepared`. So a change between two RECEIVING policies reached the
+     * screen and the durable record and stopped there: central went on holding
+     * `auto`, went on handing this device tasks to claim, and the receiver —
+     * which gates on `off` and nothing else — went on saving them while the
+     * surface said the owner would be asked. The switch appeared to work and
+     * did nothing.
+     *
+     * Clearing `prepared` alone does not fix it. The worker spends almost all of
+     * its time parked in the heartbeat pause, so it would go on claiming under
+     * the old enrolment until that pause elapsed, and a send arriving in that
+     * window would still be auto-saved. The worker has to be GONE before the
+     * next one enrols, which is what this does: [reconcile], called immediately
+     * after, finds nothing running and starts a loop that enrols first and only
+     * then claims.
+     *
+     * Cancelling can abort a delivery that is in flight. That is the intended
+     * cost and the receiver already treats it as one — a policy change owns its
+     * cancellation and reports nothing to central, because the generation it
+     * would report under is the one the user just ended.
+     *
+     * Publishing belongs to the CALLER, and before this: the surface has to stop
+     * claiming to listen before the drain begins, not after it finishes.
+     */
+    private suspend fun retire(session: Session) {
+        session.prepared = false
+        val ending = worker
+        worker = null
+        ending?.cancelAndJoin()
     }
 
     /** Answer a task central is holding for a person on this device. The only
@@ -713,7 +761,12 @@ class InboxRuntime(
      * attempt, not a delivery.
      */
     fun cancelSend(jobId: String) {
-        attempts.remove(jobId)?.cancel()
+        // The slot is NOT freed here. Cancellation is cooperative, so the
+        // attempt goes on unwinding for a while after this returns, and
+        // releasing its handle now would let the retry the corrected surface
+        // offers start a second upload alongside the dying first one. [deliver]
+        // frees it, once there is really nothing running.
+        attempts[jobId]?.cancel()
     }
 
     private suspend fun deliver(session: Session, services: InboxServices, jobId: String) {
@@ -762,8 +815,55 @@ class InboxRuntime(
             val conversations = services.conversations.conversations()
             model.ensureCurrent(session.authority)
             model.publish(session.authority) { it.copy(conversations = conversations) }
+        } catch (e: CancellationException) {
+            // The attempt has stopped and the surface still says SENDING,
+            // because that is what THIS function published on the way in. Left
+            // there it shows a progress bar for an upload that is not running
+            // and withholds the retry, which the row offers only once the phase
+            // is no longer SENDING — so the user's own cancel takes away the
+            // way back. Nothing else republishes: the sends list is rebuilt by
+            // `refresh`, which a cancel does not trigger.
+            //
+            // The slot is released FIRST. [status] reads [attempts] to decide
+            // SENDING, so correcting the surface before this line would publish
+            // the state being corrected.
+            attempt?.let { attempts.remove(jobId, it) }
+            withContext(NonCancellable) { publishCancelled(session, services) }
+            throw e
         } finally {
             attempt?.let { attempts.remove(jobId, it) }
+        }
+    }
+
+    /**
+     * Publish what the durable record says, after an attempt was cancelled.
+     *
+     * It reads the jobs back rather than editing the published row, so an
+     * unresolved create or an unresolved empty publish stays ambiguous: a
+     * cancelled attempt learns nothing about what central may already hold, and
+     * a phase decided here could claim otherwise. Nothing is written to [stops]
+     * either — the user's own stop is not a delivery failure, and inventing a
+     * reason for it would put an error they never hit on their screen.
+     *
+     * Runs under `NonCancellable` because it runs INSIDE a cancellation: the
+     * store read and the model's lock are both suspending, and in a cancelled
+     * coroutine each would throw before doing anything.
+     *
+     * A failure here is swallowed, and only here. The two that can happen are
+     * the session being superseded — by the very sign-out or account switch
+     * that caused this cancellation, in which case the surface belongs to
+     * someone else now — and the store being unreadable. Both leave the durable
+     * job exactly as it was, both are corrected by the next refresh, and
+     * throwing either would replace the cancellation with an unrelated
+     * exception on its way out.
+     */
+    private suspend fun publishCancelled(session: Session, services: InboxServices) {
+        try {
+            publishSends(session, services)
+        } catch (e: InboxSupersededException) {
+            // Not this session's surface any more.
+        } catch (e: Exception) {
+            // The durable job is untouched; the next refresh republishes it.
         }
     }
 
@@ -965,6 +1065,14 @@ class InboxRuntime(
 
     private fun status(job: InboxSendJob): InboxSendStatus {
         val stopped = stops[job.jobId]
+        // An unresolved single-shot publish is a DURABLE unknown.
+        //
+        // [stops] is in-memory, so after a relaunch a job whose empty-payload
+        // publish never came back had no stop recorded and rendered as STAGED
+        // and unambiguous — a delivery the surface invited the user to send
+        // again, when whether it already exists is exactly what nobody knows.
+        // The record itself says so, so the surface reads it from there.
+        val publishUnknown = job.emptyPublishAttempted && job.storedFileId == null
         return InboxSendStatus(
             jobId = job.jobId,
             targetDeviceId = job.targetDeviceId,
@@ -975,13 +1083,17 @@ class InboxRuntime(
                 job.taskId != null -> InboxSendStatus.Phase.DELIVERED
                 attempts.containsKey(job.jobId) -> InboxSendStatus.Phase.SENDING
                 stopped != null -> InboxSendStatus.Phase.STOPPED
+                // After the in-memory ones, so a live attempt or a stop this
+                // process actually saw still describes itself.
+                publishUnknown -> InboxSendStatus.Phase.STOPPED
                 else -> InboxSendStatus.Phase.STAGED
             },
             stop = stopped?.reason,
             // A job that still records an outstanding create is ambiguous
             // whatever the last attempt said, because an EARLIER request may
             // have created the delivery.
-            ambiguous = job.unresolvedCreate || stopped?.ambiguous == true,
+            ambiguous = job.unresolvedCreate || stopped?.ambiguous == true || publishUnknown,
+            uploadUnknown = publishUnknown,
             taskId = job.taskId,
         )
     }

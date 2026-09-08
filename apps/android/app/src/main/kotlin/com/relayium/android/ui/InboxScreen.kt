@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -631,9 +632,18 @@ private fun SendsCard(state: InboxModel.State, actions: InboxActions) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
                 // "It did not send" is a claim this app cannot make about an
-                // ambiguous outcome. The retry is safe precisely because central
-                // converges the identical request.
-                if (send.ambiguous) {
+                // ambiguous outcome. Which unknown it is decides what to say
+                // next: an unresolved CREATE is converged by central, so the
+                // same request is safe to repeat, while an unresolved single-
+                // shot upload has no identity to converge on and a repeat is a
+                // separate upload that answers nothing. Telling the user to try
+                // again there would be advice that cannot work.
+                if (send.uploadUnknown) {
+                    Text(
+                        stringResource(R.string.inbox_sending_upload_unknown),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else if (send.ambiguous) {
                     Text(
                         stringResource(R.string.inbox_sending_ambiguous),
                         style = MaterialTheme.typography.bodySmall,
@@ -645,7 +655,9 @@ private fun SendsCard(state: InboxModel.State, actions: InboxActions) {
                             onClick = { actions.cancelSend(send.jobId) },
                             modifier = Modifier.defaultMinSize(minHeight = 48.dp),
                         ) { Text(stringResource(R.string.inbox_sending_cancel)) }
-                    } else if (send.phase != InboxSendStatus.Phase.DELIVERED) {
+                    } else if (
+                        send.phase != InboxSendStatus.Phase.DELIVERED && !send.uploadUnknown
+                    ) {
                         Button(
                             onClick = { actions.send(send.jobId) },
                             modifier = Modifier.defaultMinSize(minHeight = 48.dp),
@@ -809,7 +821,13 @@ private fun EntryRow(
     actions: InboxActions,
     onDelete: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(
+        // Scopes an instrumented assertion to ONE entry. A history screen shows
+        // many rows with the same labels and buttons, so a match by text alone
+        // finds whichever came first, not the one under test.
+        modifier = Modifier.testTag("inboxEntry:${entry.id}"),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
         Text(
             stringResource(
                 if (entry.direction == InboxConversationEntry.Direction.RECEIVED) {

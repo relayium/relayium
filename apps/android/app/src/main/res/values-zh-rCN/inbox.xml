@@ -31,7 +31,7 @@
     <string name="inbox_directory_blocked">接收文件夹被同名的其他内容占用。</string>
     <string name="inbox_directory_full">剩余空间不足以保存接收的内容。</string>
     <string name="inbox_directory_denied">Relayium 没有写入接收文件夹的权限。</string>
-    <string name="inbox_foreground_note">Relayium 只在此界面打开时接收，不会在后台投递。</string>
+    <string name="inbox_foreground_note">Relayium 在应用打开时接收，无论你在哪个界面；不会在后台投递。</string>
 
     <string name="inbox_key_title">加密密钥</string>
     <string name="inbox_key_healthy">本设备持有其他设备加密所用的密钥。</string>
@@ -78,6 +78,7 @@
     <string name="inbox_sending_delivered">已投递到你的账户，等待那台设备保存。</string>
     <string name="inbox_sending_stopped">已停止。</string>
     <string name="inbox_sending_ambiguous">Relayium 无法确定这次是否已到达另一台设备。再试一次是安全的：服务器只会保留这次投递的一份。</string>
+    <string name="inbox_sending_upload_unknown">上传中断且没有得到回应，Relayium 无法确定这些加密数据是否已经到达服务器。再发一次会是另一次独立上传，仍然无法回答这个问题，所以这一条不能安全重试。</string>
     <string name="inbox_sending_cancel">停止</string>
     <string name="inbox_sending_retry">发送</string>
     <string name="inbox_stop_ineligible">该设备当前无法接收此内容。</string>

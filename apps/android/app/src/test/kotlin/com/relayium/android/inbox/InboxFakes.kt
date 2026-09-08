@@ -6,6 +6,7 @@ import com.relayium.protocol.inbox.InboxRejection
 import com.relayium.protocol.inbox.InboxTaskState
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CompletableDeferred
 
 /**
  * A scriptable Device Inbox server.
@@ -34,6 +35,14 @@ class FakeInboxTransport(
     var devices: List<InboxDeviceRow> = emptyList()
 
     var enrolResult: InboxEnrolResult? = null
+
+    /** Every enrolment request in call order, so a test can assert WHAT was
+     *  announced and not merely that something was. */
+    val enrolRequests: MutableList<InboxEnrolRequest> = Collections.synchronizedList(ArrayList())
+
+    /** Parked before `enrol` answers, so a test can look at the world while an
+     *  enrolment is in flight and central has acknowledged nothing. */
+    var enrolGate: CompletableDeferred<Unit>? = null
 
     /** Thrown by the next `registerKey`, then cleared. */
     var registerFailure: Throwable? = null
@@ -99,6 +108,8 @@ class FakeInboxTransport(
 
     override suspend fun enrol(request: InboxEnrolRequest): InboxEnrolResult {
         calls.add("enrol")
+        enrolRequests.add(request)
+        enrolGate?.await()
         return enrolResult ?: InboxEnrolResult(
             inbox = InboxEnrolmentView.read(
                 InboxFixtures.enrolment(

@@ -75,6 +75,10 @@ class CloudInboxUploaderTest {
                 """{"id":"11112222333344445555666677778888","expiresAt":1700600000}"""
             request.method == "POST" && request.path.endsWith("api/uploads") ->
                 """{"uploadId":"0123456789abcdef0123456789abcdef","chunkSize":262144}"""
+            // The single-shot route an EMPTY payload takes: one POST, one
+            // object, answered in the same shape the share route answers.
+            request.method == "POST" && request.path.endsWith("api/files") ->
+                """{"id":"11112222333344445555666677778888","expiresAt":1700600000}"""
             request.method == "GET" ->
                 """{"received":${offsetOverride ?: 0}}"""
             else -> {
@@ -91,6 +95,91 @@ class CloudInboxUploaderTest {
         server.received.first { it.path.endsWith(path) }.query
             .split('&').filter { it.isNotEmpty() }
             .associate { it.substringBefore('=') to it.substringAfter('=', "") }
+
+    // ── an empty payload ────────────────────────────────────────────────────
+
+    /**
+     * The resumable route cannot publish an empty payload at all: the object's
+     * bytes are the frame stream, the blob is materialised by the first append,
+     * and a delivery with no frames issues none. A real run produced exactly
+     * that — `received=0, done=1`, no object, and the receiver reporting
+     * `stored_object_unavailable`.
+     */
+    @Test
+    fun `an empty payload is published in one request, as a device task`() = runBlocking {
+        val server = server()
+        server.use {
+            val published = uploader(it.origin).upload(job(ByteArray(0)), store)
+
+            // ONE request, to the single-shot route — no session, no append, no
+            // finalize, because there is nothing to resume.
+            assertEquals(1, server.received.size)
+            val only = server.received.first()
+            assertEquals("POST", only.method)
+            assertTrue(only.path.endsWith("api/files"))
+            val query = queries(server, "api/files")
+            // Stated, never defaulted: an unset purpose publishes a SHARE,
+            // whose life is its TTL *and its download count*.
+            assertEquals("device_task", query["purpose"])
+            assertEquals(null, query["burnAfterRead"])
+            assertEquals(null, query["maxDownloads"])
+            assertEquals("3600", query["ttl"])
+            assertEquals("11112222333344445555666677778888", published.storedFileId)
+        }
+    }
+
+    /**
+     * The single-shot route has no session and no offset, so a lost answer
+     * cannot say whether an object exists. Trying again would publish a
+     * duplicate this device can never name — still billed, still held until its
+     * TTL — so the job stays uncertain instead.
+     */
+    @Test
+    fun `an empty publish whose answer was lost is never sent twice`() = runBlocking {
+        val prepared = job(ByteArray(0))
+        // The shape a lost answer leaves behind: the attempt is recorded, and
+        // no object id came back.
+        val attempted = store.save(prepared.copy(emptyPublishAttempted = true), now())
+
+        val server = server()
+        server.use {
+            val failure = runCatching { uploader(it.origin).upload(attempted, store) }
+                .exceptionOrNull() as? InboxUploadException
+            assertNotNull("a second attempt must be refused", failure)
+            assertTrue("the outcome is unknowable, not a failure", failure!!.ambiguous)
+            // The proof that matters: nothing was sent.
+            assertEquals(0, server.received.size)
+        }
+    }
+
+    /** The marker is written BEFORE the request, so an attempt that could not
+     *  be recorded does not happen at all. */
+    @Test
+    fun `an empty publish records its attempt before sending`() = runBlocking {
+        val server = server()
+        server.use {
+            uploader(it.origin).upload(job(ByteArray(0)), store)
+            val reloaded = store.load(InboxFixtures.STORED_ID)
+            assertTrue("the attempt must be durable", reloaded!!.emptyPublishAttempted)
+        }
+    }
+
+    /** A payload with bytes takes the route it always took. */
+    @Test
+    fun `a non-empty payload still uses the resumable route`() = runBlocking {
+        val server = server()
+        server.use {
+            uploader(it.origin).upload(job(), store)
+            assertTrue(
+                "the resumable session must still be opened",
+                server.received.any { r -> r.path.endsWith("api/uploads") },
+            )
+            assertTrue(
+                "the single-shot route must not be used for a real payload",
+                server.received.none { r -> r.path.endsWith("api/files") },
+            )
+        }
+    }
 
     // ── the purpose ─────────────────────────────────────────────────────────
 

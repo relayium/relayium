@@ -11,27 +11,47 @@ import com.relayium.android.ui.RelayiumTheme
 
 /**
  * The single Activity. All state lives in [TransferViewModel], which survives
- * rotation and the system pickers; this class only routes the launch intent.
+ * rotation and the system pickers; this class only routes intents into the
+ * accepted ingress boundary.
  *
- * An incoming `https://relayium.com/cross-network#c=…` VIEW intent goes through
- * the SAME [com.relayium.protocol.JoinInput] parser as pasted input: a stored
- * `#k=` link, a foreign origin, or a malformed fragment is refused with the
- * same honest message, never joined. The filter has no autoVerify — there is
- * no assetlinks.json on the server — so on Android 12+ tapping a link opens
- * the BROWSER by default; this filter only matters when the user pastes the
- * link or enables "open supported links" by hand. There is no ACTION_SEND
- * handler in this stage, so sharing a link INTO the app is not a supported
- * entry point and is deliberately not claimed. Nothing here pretends to be a
- * verified App Link either.
+ * ## Everything from outside crosses one boundary
  *
- * The launch intent is consumed EXACTLY ONCE. `onCreate` runs again on every
- * ordinary recreation — theme change, split-screen, process-alive restarts
- * the manifest's configChanges list does not cover — with the ORIGINAL intent
- * still attached; re-joining from it there would tear down a live transfer
- * the retained ViewModel is in the middle of. `savedInstanceState != null` is
- * that recreation, so only the genuinely first creation routes it, and a link
- * tapped later arrives through [onNewIntent] (singleTask), where the intent
- * really is new.
+ * `ACTION_VIEW`, `ACTION_SEND` and `ACTION_SEND_MULTIPLE` all go to
+ * [TransferViewModel.deliverIntent], which hands them to
+ * `IngressIntents.read` and then to the one `IngressCoordinator`. Nothing here
+ * parses a URL, reads an extra, or decides what an intent means — which is the
+ * point. The behaviour this replaced called `viewModel.join(url)` for any
+ * `ACTION_VIEW`, so a tapped link tore down whatever transfer was running with
+ * no confirmation. The coordinator's vocabulary has no case that can join,
+ * download or send: a link prefills a field and selects a screen, and the
+ * transfer stays a tap.
+ *
+ * A share is staged as REFERENCES — nothing is opened, copied or read — and
+ * waits for the user to choose a destination. There is no path on which
+ * receiving an intent sends anything.
+ *
+ * ## The launch intent is consumed EXACTLY ONCE
+ *
+ * `onCreate` runs again on every ordinary recreation — a locale change,
+ * split-screen, a configuration the manifest's `configChanges` does not cover —
+ * with the ORIGINAL intent still attached. Routing it again there would replay
+ * a share the user has already dealt with, or re-select a screen they have
+ * since left. `savedInstanceState != null` is exactly that recreation, so only
+ * the genuinely first creation routes the launch intent; anything tapped later
+ * arrives through [onNewIntent] (`singleTask`), where the intent really is new.
+ *
+ * After process death the guard means the app comes back with nothing pending,
+ * which is the truthful outcome: the staged references and their grants died
+ * with the process, and nothing here reconstructs them.
+ *
+ * ## The link filter is deliberately unverified
+ *
+ * There is no `assetlinks.json` on the production origin, so the `VIEW` filter
+ * has no `autoVerify`: on Android 12+ tapping a link opens the BROWSER, and
+ * this filter matters when the user pastes the link or turns on "open supported
+ * links" by hand. Nothing here pretends to be a verified App Link. The share
+ * filters have no such caveat — `ACTION_SEND` needs no domain verification —
+ * and a share is a real, complete entry point in this build.
  */
 class MainActivity : ComponentActivity() {
 
@@ -49,25 +69,34 @@ class MainActivity : ComponentActivity() {
             }
         }
         if (savedInstanceState == null) {
-            joinFromIntent(intent)
+            viewModel.deliverIntent(intent)
         }
     }
 
-    /** launchMode=singleTask: a link tapped while the app is open lands here.
-     *  The stored intent is replaced so a later recreation replays THIS one's
-     *  absence, not the original launch link. */
+    /** `launchMode=singleTask`: a link tapped, or a share sent, while the app is
+     *  open lands here. The stored intent is replaced so a later recreation
+     *  replays THIS one's absence, not the original launch intent. */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        joinFromIntent(intent)
+        viewModel.deliverIntent(intent)
     }
 
-    private fun joinFromIntent(intent: Intent?) {
-        if (intent?.action != Intent.ACTION_VIEW) return
-        val url = intent.dataString ?: return
-        // The parser owns every safety rule (origin, #k= refusal, six ASCII
-        // digits with leading zeros preserved); a rejection surfaces on the
-        // join form exactly as a pasted rejection would.
-        viewModel.join(url)
+    /**
+     * The two lifecycle facts the presence claims are computed from.
+     *
+     * Reported from the Activity rather than observed inside the composition
+     * because `isChangingConfigurations` is the Activity's own answer, and
+     * because a claim made to another device must not depend on whether a
+     * particular composable happened to be in the tree.
+     */
+    override fun onStart() {
+        super.onStart()
+        viewModel.hostStarted()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        viewModel.hostStopped(changingConfigurations = isChangingConfigurations)
     }
 }

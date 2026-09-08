@@ -55,6 +55,20 @@ class CloudInboxUploader(
 
     override suspend fun upload(job: InboxSendJob, store: InboxSendStore): InboxSendJob {
         job.storedFileId?.let { return job }
+
+        // BEFORE the token and before the spool.
+        //
+        // A single-shot publish whose answer was lost leaves a job whose
+        // outcome is unknowable, and nothing discovered afterwards can make it
+        // knowable again. A missing bearer or a spool that no longer verifies
+        // are ordinary definite refusals for a job that has not been sent — but
+        // for this one they would REPLACE an uncertain outcome with a confident
+        // wrong one, and a definite failure is what invites a retry that could
+        // duplicate a hidden object.
+        if (job.emptyPublishAttempted && job.storedFileId == null) {
+            throw InboxUploadException(ambiguous = true)
+        }
+
         val bearer = token() ?: throw InboxUploadException(ambiguous = false)
 
         // A finalize was already attempted and its answer never arrived. The
@@ -84,6 +98,20 @@ class CloudInboxUploader(
         }
         if (!matches) throw InboxUploadException(ambiguous = false)
         val total = job.ciphertextBytes
+
+        // An EMPTY payload cannot go through the resumable route at all.
+        //
+        // There the object's bytes are the frame stream alone — the sealed
+        // manifest travels at `init` and the blob is materialised by the first
+        // append — so a delivery with no frames issues no append, the blob is
+        // never created, and finalize publishes a task pointing at nothing. A
+        // real run produced exactly that: `received=0, done=1`, no object row,
+        // and the receiver reporting `stored_object_unavailable`.
+        //
+        // The single-shot route carries `uint32BE(len) || encManifest` in the
+        // request itself, so the object exists even with no frames. Reached
+        // ONLY at zero; every other payload takes the path it always took.
+        if (total == 0L) return publishEmpty(job, store, bearer, manifest)
 
         var current = job
         if (current.uploadId == null) {
@@ -245,6 +273,62 @@ class CloudInboxUploader(
      * published — and it cannot license a fresh session either. That uncertainty
      * is kept rather than resolved by guessing.
      */
+    /**
+     * Publish an empty payload as one object, at most once, ever.
+     *
+     * ## The marker is written before the request, and never cleared
+     *
+     * A single POST either created an object or did not, and a lost answer —
+     * a cancelled call, a dead socket, a body this build cannot parse — cannot
+     * tell which. There is no session to re-ask and no offset to resume from,
+     * which is precisely what the resumable route has and this does not.
+     *
+     * So the attempt is recorded durably first. If it does not come back with
+     * an id, the job stays UNCERTAIN and no later attempt may POST again: a
+     * second request is indistinguishable from the first to the server, and
+     * would publish a duplicate object this device cannot name, still billed
+     * and still held until its TTL. An ordinary user retry is a re-ask, not a
+     * re-publish — the same rule a lost finalize already follows.
+     *
+     * If the marker cannot be written, nothing is sent at all. Recording the
+     * intention is what makes the attempt bounded, so an attempt that could not
+     * be recorded must not happen.
+     */
+    private suspend fun publishEmpty(
+        job: InboxSendJob,
+        store: InboxSendStore,
+        bearer: String,
+        manifest: ByteArray,
+    ): InboxSendJob {
+        // The already-attempted case is refused at the top of `upload`, before
+        // anything that could fail definitely. Reaching here means this is the
+        // first attempt.
+        val marked = try {
+            store.save(job.copy(emptyPublishAttempted = true), nowSeconds())
+        } catch (e: InboxSendStoreException) {
+            // Nothing has been sent, so this is definite and the job is
+            // untouched — the one branch here that is safe to retry.
+            throw InboxUploadException(ambiguous = false, e)
+        }
+        val result = try {
+            client.uploadEmptyTaskObject(uploadHeader(manifest), ttlSeconds, bearer)
+        } catch (e: CancellationException) {
+            // Cancelled with the request possibly in flight. The marker stands.
+            throw e
+        } catch (e: CloudException) {
+            // Every outcome here is uncertain by construction: a refusal this
+            // build recognises still cannot prove the object was not created,
+            // because the answer that says so is the one that went missing.
+            throw InboxUploadException(ambiguous = true, e)
+        }
+        return try {
+            store.save(marked.copy(storedFileId = result.id), nowSeconds())
+        } catch (e: InboxSendStoreException) {
+            // The object EXISTS and this process cannot record which one.
+            throw InboxUploadException(ambiguous = true, e)
+        }
+    }
+
     private suspend fun finalize(
         job: InboxSendJob,
         store: InboxSendStore,

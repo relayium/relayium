@@ -968,6 +968,38 @@ enum EndpointBatch {
             ]
         case "competing":
             return [entry(name: "competing-\(runTag).bin", path: nil, seed: 103, size: 1_024)]
+
+        /// The Android host lane's batch, because `primary` cannot serve it.
+        ///
+        /// `primary`'s largest file is `bulk.bin` at 96_000 bytes, and
+        /// `STORE_CHUNK_SIZE` is 192 KiB — 196_608 — on both sides. So a
+        /// Mac→Android run built on `primary` proves nesting and the zero-byte
+        /// leaf and never crosses a chunk boundary at all. The note on
+        /// `AcceptanceBatch.bulk` that says "larger than one DataChannel
+        /// message" is about the REALTIME frame; the Device Inbox is the stored
+        /// wire, and 96_000 is one chunk there.
+        ///
+        /// Seeds are 201… — clear of `AcceptanceBatch`'s 1…5 and of the 101…103
+        /// above — so no file in any batch shares another's bytes.
+        case "android-parity":
+            let tree = "树-\(runTag)"
+            return [
+                // 307_200 > 196_608, so the receiver reassembles TWO chunks
+                // rather than one, and a splitter that assumed a single frame
+                // fails here rather than in the field.
+                entry(name: "大文件-\(runTag).bin",
+                      path: "\(tree)/深/大文件-\(runTag).bin", seed: 201, size: 307_200),
+                // Zero bytes, and deliberately NOT last, for the reason
+                // `AcceptanceBatch` records: an empty file in the middle of the
+                // stream is the one a length-driven splitter skips, after which
+                // every remaining file carries its neighbour's bytes under its
+                // own name — which counts, names and sizes all still accept.
+                entry(name: "empty-\(runTag).bin",
+                      path: "\(tree)/深/empty-\(runTag).bin", seed: 202, size: 0),
+                // Loose, so the same batch proves a file with no path beside
+                // two that have one.
+                entry(name: "loose-\(runTag).txt", path: nil, seed: 203, size: 97),
+            ]
         default:
             return AcceptanceBatch.make(runTag: runTag)
         }

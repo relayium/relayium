@@ -40,7 +40,7 @@
     <string name="inbox_directory_blocked">The received folder is blocked by something else with the same name.</string>
     <string name="inbox_directory_full">There is no room left to save a delivery.</string>
     <string name="inbox_directory_denied">Relayium is not allowed to write to its received folder.</string>
-    <string name="inbox_foreground_note">Relayium receives only while this screen is open. It does not deliver in the background.</string>
+    <string name="inbox_foreground_note">Relayium receives while the app is open, whichever screen you are on. It does not deliver in the background.</string>
 
     <string name="inbox_key_title">Encryption key</string>
     <string name="inbox_key_healthy">This device holds the key your other devices encrypt to.</string>
@@ -87,6 +87,7 @@
     <string name="inbox_sending_delivered">Delivered to your account. Waiting for that device to save it.</string>
     <string name="inbox_sending_stopped">Stopped.</string>
     <string name="inbox_sending_ambiguous">Relayium cannot tell whether this reached the other device. Trying again is safe: the server keeps only one copy of this delivery.</string>
+    <string name="inbox_sending_upload_unknown">The upload stopped without an answer, so Relayium cannot tell whether these encrypted bytes reached the server. Sending again would start a separate upload and still would not answer that, so this one cannot safely be retried.</string>
     <string name="inbox_sending_cancel">Stop</string>
     <string name="inbox_sending_retry">Send</string>
     <string name="inbox_stop_ineligible">That device cannot receive this right now.</string>

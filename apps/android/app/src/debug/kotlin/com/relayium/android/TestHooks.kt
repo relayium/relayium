@@ -42,6 +42,30 @@ object TestHooks {
     @Volatile
     var lastUpdateDownloadUrl: String? = null
 
+    /**
+     * DEBUG ONLY. An offset added to the monotonic clock the picker lease reads.
+     *
+     * The lease is two minutes long by design, and the behaviour worth asserting
+     * is what happens WHEN IT RUNS OUT: the presence claim withdrawn, the exact
+     * pending operation retired, a late result refused. A test that waited out
+     * the real interval would spend two minutes per case and still not be able
+     * to place the expiry precisely between a launch and a callback.
+     *
+     * So the acceptance moves the clock instead. It is the same code path with
+     * the same deadline arithmetic — only `now` is shifted — so what is proven
+     * is the product's own rule rather than a shortened copy of it.
+     *
+     * The RELEASE variant declares the same method returning a constant `0`,
+     * with no field behind it, so a shipped build has exactly one clock and no
+     * in-process surface can move it. `scripts/test/android-policy-test.mjs`
+     * asserts that asymmetry for the update launcher; the same shape is used
+     * here deliberately.
+     */
+    @Volatile
+    var pickerClockOffsetMillis: Long = 0L
+
+    fun clockOffsetMillis(): Long = pickerClockOffsetMillis
+
     fun updateLauncher(): ((String) -> Boolean)? {
         val installed = installedLauncher ?: return null
         return { url ->

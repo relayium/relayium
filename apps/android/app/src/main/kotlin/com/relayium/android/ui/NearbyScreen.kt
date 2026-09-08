@@ -64,6 +64,17 @@ internal fun NearbyScreen(
         return
     }
 
+    // The one place the bounded picker lease is worth explaining, because this
+    // is the one surface holding a claim other devices can see. It says what
+    // actually happens — visible for two minutes while a file is being chosen,
+    // then discovery stops and can be started again — and deliberately does not
+    // imply background delivery, which this build does not have.
+    Text(
+        text = stringResource(R.string.nearby_picker_timeout),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
     // One live region for the whole room state, so a screen reader announces a
     // device appearing, a drop and a retry rather than leaving them to be
     // discovered by exploration.

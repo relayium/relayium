@@ -318,6 +318,90 @@ class InboxRuntimeTest {
         assertEquals("the meeting moved to four", w.runtime.message(entry))
     }
 
+    /**
+     * A single-shot publish whose answer was lost stays UNKNOWN across a
+     * relaunch.
+     *
+     * The stop that would have said so is in memory, so after a restart the
+     * surface read the durable record alone and rendered the job as STAGED and
+     * unambiguous — inviting the user to send again something that may already
+     * exist, be billed, and be held until its TTL. The record says the attempt
+     * happened and no object came back; the surface now says the same.
+     */
+    @Test
+    fun `an unresolved empty publish still reads as unknown after a relaunch`() = runTest {
+        // One durable root, two runtimes over it: the relaunch must read the
+        // record rather than inherit anything from the first process.
+        val shared = folder.newFolder()
+        val w = world(root = shared)
+        w.adopt()
+        w.runtime.refresh()?.join()
+        advanceUntilIdle()
+        val target = w.model.state.value.devices.single()
+        w.runtime.sendText(target, "once")?.join()
+        advanceUntilIdle()
+        val jobId = w.model.state.value.sends.single().jobId
+
+        // The shape a lost single-shot answer leaves on disk: attempted, with
+        // no object id and no task. Written through the store, so this is the
+        // record a relaunch would actually read.
+        val stored = requireNotNull(w.services.sendStore.load(jobId))
+        w.services.sendStore.save(
+            stored.copy(
+                emptyPublishAttempted = true,
+                storedFileId = null,
+                taskId = null,
+            ),
+            now(),
+        )
+        // A fresh runtime over the same durable state — nothing in memory.
+        val relaunched = world(root = shared)
+        relaunched.adopt()
+        relaunched.runtime.refresh()?.join()
+        advanceUntilIdle()
+
+        val send = relaunched.model.state.value.sends.single { it.jobId == jobId }
+        assertEquals(InboxSendStatus.Phase.STOPPED, send.phase)
+        assertTrue("an unresolved publish is not a settled failure", send.ambiguous)
+        // And it is the unknown that cannot be resolved by repeating it, which
+        // is what withdraws the retry and changes what the row says. The
+        // generic ambiguity text promises the server keeps one copy, which is
+        // true of a create and NOT of a single-shot upload with no identity.
+        assertTrue("an unresolved upload must say which unknown it is", send.uploadUnknown)
+    }
+
+    /**
+     * An unresolved CREATE stays retryable, and does not borrow the upload's
+     * text.
+     *
+     * The two unknowns render differently on purpose, so this pins the side
+     * that keeps the retry: central converges an identical create, so the
+     * honest advice there is still to try again.
+     */
+    @Test
+    fun `an unresolved create is ambiguous without being an unresolved upload`() = runTest {
+        val w = world()
+        w.adopt()
+        w.runtime.refresh()?.join()
+        advanceUntilIdle()
+        val target = w.model.state.value.devices.single()
+        w.runtime.sendText(target, "once")?.join()
+        advanceUntilIdle()
+        val jobId = w.model.state.value.sends.single().jobId
+
+        val stored = requireNotNull(w.services.sendStore.load(jobId))
+        w.services.sendStore.save(
+            stored.copy(unresolvedCreate = true, taskId = null),
+            now(),
+        )
+        w.runtime.refresh()?.join()
+        advanceUntilIdle()
+
+        val send = w.model.state.value.sends.single { it.jobId == jobId }
+        assertTrue(send.ambiguous)
+        assertFalse("a create has an identity central converges", send.uploadUnknown)
+    }
+
     /** A repeat names the durable JOB, so central is never asked to create a
      *  second delivery for one the user asked for once. */
     @Test

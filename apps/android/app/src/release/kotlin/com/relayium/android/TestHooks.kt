@@ -23,4 +23,14 @@ object TestHooks {
      * update link sends the user.
      */
     fun updateLauncher(): ((String) -> Boolean)? = null
+
+    /**
+     * A constant zero, with NO mutable field behind it.
+     *
+     * The debug variant reads a settable offset so the acceptance can place the
+     * picker lease's expiry precisely rather than waiting out two minutes per
+     * case. A release build has exactly one clock: nothing in the process can
+     * shift the deadline that ends a presence claim.
+     */
+    fun clockOffsetMillis(): Long = 0L
 }

@@ -410,6 +410,19 @@ data class InboxSendStatus(
      * same job is safe precisely because central converges it.
      */
     val ambiguous: Boolean = false,
+    /**
+     * The UPLOAD's outcome is unknown, and repeating it would not resolve it.
+     *
+     * A separate flag rather than a shade of [ambiguous], because the two lead
+     * to opposite advice. An unresolved create is converged by central: the
+     * same request answers with the same delivery, so the honest thing to tell
+     * the user is to try again. An unresolved single-shot object publish has no
+     * such identity — a repeat is a NEW request that can leave a second object
+     * behind and still not say what became of the first — so there is nothing
+     * safe to offer, and offering it anyway is how a surface turns "we do not
+     * know" into an action that cannot ever produce an answer.
+     */
+    val uploadUnknown: Boolean = false,
     val taskId: String? = null,
 ) {
     /** No names, no bytes: this reaches failure text. */

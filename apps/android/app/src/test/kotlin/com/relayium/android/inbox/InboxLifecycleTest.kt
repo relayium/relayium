@@ -3,6 +3,7 @@ package com.relayium.android.inbox
 import com.relayium.protocol.inbox.InboxAutoAccept
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
@@ -15,6 +16,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -197,6 +199,26 @@ class InboxLifecycleTest {
         val model: InboxModel,
         val pause: Pause,
     )
+
+    /**
+     * Drain until the receive loop parks in its heartbeat pause again.
+     *
+     * `advanceUntilIdle` answers "nothing is scheduled right now", which a loop
+     * resuming through several suspension points can satisfy while it is still
+     * mid-pass — so a single call is not a barrier for "the loop got all the way
+     * round". The park is the loop's own end of pass, and waiting for it ties
+     * this to observable progress instead of a drain count that happened to be
+     * enough. The bound turns a loop that never gets there into a failure with a
+     * reason rather than a hang.
+     */
+    private fun TestScope.drainUntilParked(pause: Pause, target: Int) {
+        repeat(200) {
+            if (pause.entered.get() >= target) return
+            advanceUntilIdle()
+            runCurrent()
+        }
+        throw AssertionError("the receive loop never reached pause #$target")
+    }
 
     private fun TestScope.world(): World {
         val services = TestInboxServices(folder.newFolder(), a, nowSeconds = ::now)
@@ -444,6 +466,154 @@ class InboxLifecycleTest {
         // The durable job survives: a cancelled attempt is a paused delivery,
         // not a discarded one.
         assertEquals(1, w.services.sendStore.all().size)
+    }
+
+    /**
+     * Cancelling an attempt takes SENDING off the screen.
+     *
+     * The phase is published on the way into an attempt and, before this, only
+     * on the way out of a successful one — so a cancellation left a progress bar
+     * running for an upload that had stopped. The row offers its retry only when
+     * the phase is not SENDING, which made the user's own cancel the thing that
+     * took away the way back, and nothing else corrects it: the sends list is
+     * rebuilt by `refresh`, which a cancel does not trigger.
+     *
+     * The cancel happens INSIDE the upload, with the fake parked, so this is the
+     * real mid-attempt case and not a stop that raced a delivery that had
+     * already happened — `createTask` proves which one it was.
+     */
+    @Test
+    fun `cancelling inside an upload clears Sending without inventing an outcome`() = runTest {
+        val w = world()
+        w.runtime.adopt(a, "bearer-a")
+        w.runtime.refresh()?.join()
+        advanceUntilIdle()
+
+        w.services.uploader.gate = CompletableDeferred()
+        val attempt = w.runtime.sendText(w.model.state.value.devices.single(), "cancel this")
+        runCurrent()
+        assertEquals(1, w.services.uploader.uploads.size)
+        val jobId = w.services.uploader.uploads.single()
+        assertEquals(InboxSendStatus.Phase.SENDING, w.model.state.value.sends.single().phase)
+
+        w.runtime.cancelSend(jobId)
+        attempt?.join()
+        runCurrent()
+
+        val state = w.model.state.value.sends.single()
+        assertNotEquals(
+            "cancel must not leave Sending on screen",
+            InboxSendStatus.Phase.SENDING,
+            state.phase,
+        )
+        assertNotEquals(InboxSendStatus.Phase.DELIVERED, state.phase)
+        assertEquals(0, w.services.server.count("createTask"))
+        assertNotNull(w.services.sendStore.load(jobId))
+
+        // No reason is invented for it. A user's own stop is not a transport
+        // failure, and a phase carrying one would put an error they never hit
+        // on their screen. Which non-SENDING phase it is left open on purpose:
+        // a paused delivery does not logically have to render as STAGED.
+        assertNull(state.stop)
+        // Ambiguity is whatever the DURABLE record says, not something inferred
+        // from central having created nothing — an object publish can already be
+        // unknown before any task exists.
+        val job = requireNotNull(w.services.sendStore.load(jobId))
+        assertEquals(
+            job.unresolvedCreate || (job.emptyPublishAttempted && job.storedFileId == null),
+            state.ambiguous,
+        )
+        // The local attempt was cancelled; central was not asked to change.
+        assertEquals(0, w.services.server.count("cancelTask"))
+    }
+
+    // ── policy transitions ──────────────────────────────────────────────────
+
+    /**
+     * Changing between two RECEIVING policies re-enrols, and nothing claims
+     * under the new setting until central has acknowledged it.
+     *
+     * The policy only reaches central through an enrolment, and the loop enrols
+     * once. So `auto` → `ask` used to change the screen and the durable record
+     * and nothing else: central kept `auto`, kept offering this device tasks,
+     * and the receiver — which refuses only on `off` — kept saving them without
+     * asking. The switch looked like it worked.
+     *
+     * The enrolment is held open here, which is the part a call count cannot
+     * see. While it is in flight the surface must not claim to be listening and
+     * the loop must not claim a task, because both would be acting on a policy
+     * central has not agreed to yet.
+     */
+    @Test
+    fun `changing the policy re-enrols before anything claims under it`() = runTest {
+        val w = world()
+        w.services.holdKey()
+        // Central has something to hand over on every pass, so "did not claim"
+        // is a real observation rather than the loop having nothing to do. The
+        // claim itself leases nothing, which keeps this about the transition.
+        w.services.server.device.pending = listOf(InboxTaskRow.read(InboxFixtures.task()))
+        w.runtime.adopt(a, "bearer-a")
+        w.runtime.start()?.join()
+        w.runtime.setPolicy(InboxAutoAccept.AUTO)?.join()
+        advanceUntilIdle()
+
+        val device = w.services.server.device
+        assertEquals(InboxReceiving.LISTENING, w.model.state.value.receiving)
+        assertEquals(InboxAutoAccept.AUTO, device.enrolRequests.last().autoAccept)
+        val enrolsBefore = device.count("enrol")
+        val claimsBefore = device.count("claim")
+
+        // Hold the re-enrolment open, so the window this test is about is a
+        // state the test controls rather than a moment it has to catch.
+        val ack = CompletableDeferred<Unit>()
+        device.enrolGate = ack
+        // EVERY published pairing, not just the one left at the end. The drain
+        // suspends, so a transition that announced the new policy first and
+        // corrected the receiving state afterwards would be visible here — and
+        // it is a false claim for exactly as long as the old worker takes to
+        // unwind, which is not a duration this app controls.
+        val seen = mutableListOf<Pair<InboxAutoAccept, InboxReceiving>>()
+        backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            w.model.state.collect { seen += it.policy to it.receiving }
+        }
+
+        val change = w.runtime.setPolicy(InboxAutoAccept.ASK)
+        change?.join()
+        // The old worker was parked in the heartbeat pause. Releasing it AFTER
+        // the change proves the fix is not merely "the pause had not elapsed
+        // yet": a worker still enrolled as `auto` must not be there to wake up
+        // and claim one more time under the policy the user just left. The gate
+        // is replaced first, so whatever wakes parks again instead of spinning.
+        val parked = w.pause.gate
+        w.pause.gate = CompletableDeferred()
+        parked.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(InboxAutoAccept.ASK, w.model.state.value.policy)
+        assertEquals("the change must announce itself", enrolsBefore + 1, device.count("enrol"))
+        assertEquals(InboxAutoAccept.ASK, device.enrolRequests.last().autoAccept)
+        assertNotEquals(
+            "nothing is listening while central still holds the old policy",
+            InboxReceiving.LISTENING,
+            w.model.state.value.receiving,
+        )
+        assertEquals(
+            "no claim may be made under a policy central has not acknowledged",
+            claimsBefore,
+            device.count("claim"),
+        )
+        assertFalse(
+            "the surface must never pair the new policy with LISTENING before it is live",
+            seen.any { (p, r) -> p == InboxAutoAccept.ASK && r == InboxReceiving.LISTENING },
+        )
+
+        val parkedAgain = w.pause.entered.get() + 1
+        ack.complete(Unit)
+        drainUntilParked(w.pause, parkedAgain)
+
+        assertEquals(InboxReceiving.LISTENING, w.model.state.value.receiving)
+        assertTrue("the loop resumed under the new policy", device.count("claim") > claimsBefore)
+        assertEquals(InboxAutoAccept.ASK, device.enrolRequests.last().autoAccept)
     }
 
     // ── repair ──────────────────────────────────────────────────────────────

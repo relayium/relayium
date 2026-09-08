@@ -28,7 +28,13 @@
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
     <!-- Direct APK distribution: no Play Services, no Play Billing, and nothing
-         in this manifest requires either. -->
+         in this manifest requires either.
+
+         No foreground service and no background permission, which is why both
+         presence claims this app makes — Nearby's advertisement and the Device
+         Inbox's "listening" — end when the app stops being in front of the
+         user. Nothing here declares a background delivery channel, because
+         there is not one. -->
 
     <application
         android:name=".RelayiumApplication"
@@ -62,15 +68,74 @@
                  https filter does NOT intercept taps — links open in the
                  browser — and this filter matters only when the user pastes
                  the link or enables "open supported links" manually in the
-                 app's settings. There is no ACTION_SEND handler in this
-                 stage, so sharing a link INTO the app is not an entry point
-                 this build offers. -->
+                 app's settings. Sharing content INTO the app IS an entry
+                 point this build offers — see the share filters below — but it
+                 goes through the ingress boundary and stages what it receives
+                 rather than acting on it. -->
             <intent-filter android:autoVerify="false">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="relayium.com" android:pathPrefix="/cross-network" />
             </intent-filter>
+
+            <!-- Receiving a share from another app.
+
+                 This IS a complete entry point in this build, and unlike the
+                 link filter above it needs no domain verification: any app may
+                 offer content to any app that declares these actions.
+
+                 What arrives is STAGED, never sent. The intent produces a list
+                 of permission-bearing references — nothing is opened, copied or
+                 read — and the user then chooses a destination on a screen that
+                 names what will be sent and where. There is no path on which
+                 receiving an intent starts a transfer.
+
+                 `text/*` and `*/*` rather than a list of media types: what an
+                 item actually is comes from its provider, never from the MIME
+                 type the sender asserted, so narrowing here would only refuse
+                 legitimate shares without adding a check. Admission rules —
+                 own-provider, file-URI and user-qualified refusals, the item
+                 budget, an unreadable Bundle — are enforced in code, where they
+                 can be tested. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
         </activity>
+
+        <!-- Handing a RECEIVED delivery to another app — a viewer, a gallery,
+             a mail composer — without this app handing out a path.
+
+             `exported="false"` is the authorisation: no app can address this
+             provider. What reaches it is a URI this app put into an Intent with
+             FLAG_GRANT_READ_URI_PERMISSION, which the system turns into a
+             per-URI grant for exactly that consumer and revokes when its task
+             finishes.
+
+             The URI carries an opaque token, never a path, so there is nothing
+             to traverse: the provider answers only for files this process
+             already registered from inside its own no-backup directory. Grants
+             are read-only, bounded in time, scoped to the account session that
+             minted them, and held in memory only — after process death an
+             outstanding URI resolves to nothing, which is what actually
+             happened.
+
+             No permission attribute and no intent-filter, deliberately: either
+             would make this addressable by something other than an explicit
+             grant. Distinct from the debug-only TestDocumentsProvider, which is
+             a writable documents provider and stays out of release builds. -->
+        <provider
+            android:name=".integration.InboxSharedFileProvider"
+            android:authorities="${applicationId}.inboxfiles"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>

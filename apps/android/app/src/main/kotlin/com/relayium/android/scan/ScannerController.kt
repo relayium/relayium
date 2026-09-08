@@ -109,6 +109,30 @@ class ScannerController(
      */
     private var asked = false
 
+    /**
+     * A system dialog this controller raised is still unanswered.
+     *
+     * ## Why this has to survive the composable leaving the tree
+     *
+     * The permission dialog is another Activity in front of this one, and the
+     * system is free to RECREATE what is behind it — a rotation, a theme
+     * change, a locale switch while the dialog is up. That disposes the sheet
+     * and composes a new one, all while the question is still on screen and
+     * still unanswered.
+     *
+     * Treating that disposal as "the question is closed" is what broke the
+     * journey: [close] invalidated the outstanding request, the restored answer
+     * token no longer matched, the user's Grant was DISCARDED, and the scanner
+     * sat on a refusal screen having just been given the camera. The
+     * re-composed sheet could not fix it either — it must not prompt again, so
+     * there was nothing left to produce an answer.
+     *
+     * The controller outlives the composition (it belongs to the ViewModel), so
+     * the request it raised outlives a detach too. What must NOT survive is a
+     * genuine dismissal — see [dismiss].
+     */
+    private var awaitingAnswer = false
+
     // ── what the surface asks for ───────────────────────────────────────────
 
     /**
@@ -119,6 +143,19 @@ class ScannerController(
      * people to deny the one that matters later.
      */
     fun open(context: Context) {
+        // A question that is already on screen is not asked again, and is not
+        // answered here. This is the re-composition behind an outstanding
+        // dialog: the sheet was disposed and rebuilt while the system was still
+        // waiting for the user, and recomputing from scratch would land on a
+        // refusal — `alreadyAsked` — for a request that has not been refused.
+        //
+        // Bounded by what is actually true right now: a permission that was
+        // granted while this was detached, or a device with no camera, falls
+        // through to the ordinary decision below.
+        if (awaitingAnswer && hasCamera(context) && !isGranted(context)) {
+            _state.value = ScannerState.REQUESTING
+            return
+        }
         _state.value = ScannerTransitions.opened(
             hasCamera = hasCamera(context),
             alreadyGranted = isGranted(context),
@@ -127,6 +164,7 @@ class ScannerController(
         if (_state.value == ScannerState.REQUESTING) {
             asked = true
             permissionRequest += 1
+            awaitingAnswer = true
         }
     }
 
@@ -166,7 +204,25 @@ class ScannerController(
         if (_state.value != ScannerState.REQUESTING) return
         // Spent: a second answer for the same request cannot re-enter.
         permissionRequest += 1
+        awaitingAnswer = false
         _state.value = ScannerTransitions.answered(permission)
+    }
+
+    /**
+     * The user ended the scanner.
+     *
+     * The one thing that closes an outstanding question. A late answer to it
+     * afterwards is about something nobody is asking any more, so it is refused
+     * — a scanner the user dismissed must never come back holding the camera
+     * because a dialog they had already walked away from was finally answered.
+     *
+     * Distinct from [close], which stops the camera without deciding whether
+     * the question is over: see there for why the two cannot be the same call.
+     */
+    fun dismiss() {
+        awaitingAnswer = false
+        permissionRequest += 1
+        close()
     }
 
     /**
@@ -181,6 +237,7 @@ class ScannerController(
         if (_state.value == ScannerState.REQUESTING) {
             asked = true
             permissionRequest += 1
+            awaitingAnswer = true
         }
     }
 
@@ -195,9 +252,25 @@ class ScannerController(
     fun close() {
         session.close()
         unbind()
-        // Any outstanding permission answer is now about a closed question.
-        permissionRequest += 1
-        _state.value = ScannerTransitions.stopped(_state.value)
+        // An outstanding question is NOT closed by this.
+        //
+        // `close` is called from two things that mean different things: the
+        // composable leaving the tree, and the lifecycle stopping. Neither can
+        // tell a user walking away from a recreation behind the system dialog —
+        // and invalidating the request on the second one discards the answer to
+        // a question still on screen. Only [dismiss] ends the question, because
+        // only the user ending the scanner does.
+        //
+        // The camera is stopped either way: that is what this call is for, and
+        // it does not depend on the distinction.
+        if (!awaitingAnswer) permissionRequest += 1
+        _state.value = if (awaitingAnswer) {
+            // Still the same question. Collapsing to IDLE here is what made the
+            // re-composed sheet ask `opened` from scratch.
+            ScannerState.REQUESTING
+        } else {
+            ScannerTransitions.stopped(_state.value)
+        }
     }
 
     // ── the camera ──────────────────────────────────────────────────────────

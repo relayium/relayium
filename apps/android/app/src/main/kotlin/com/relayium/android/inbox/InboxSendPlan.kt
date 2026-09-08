@@ -75,6 +75,22 @@ data class InboxSendJob(
      * a second object the account pays for and cannot see.
      */
     val finalizeAttempted: Boolean = false,
+    /**
+     * A single-shot publish for an EMPTY payload has been attempted.
+     *
+     * Its own flag, and deliberately not [finalizeAttempted] or a null
+     * [storedFileId]: those describe the resumable route, where a lost answer
+     * can be resolved by re-asking the session for its offset. The single-shot
+     * route has no session and no offset — one POST either created an object or
+     * did not, and a lost answer cannot tell which.
+     *
+     * So this is written BEFORE the request leaves. If the answer never
+     * arrives, the job stays uncertain forever rather than being retried: a
+     * second POST cannot be told apart from the first by anything the server
+     * has, and would publish a hidden duplicate object nothing on this device
+     * can name, still billed and still occupying storage until its TTL.
+     */
+    val emptyPublishAttempted: Boolean = false,
     /** The object central created, once its identity is known. */
     val storedFileId: String? = null,
     val targetKeyId: String? = null,
@@ -107,8 +123,19 @@ data class InboxSendJob(
     val createdAt: Long = 0,
     val updatedAt: Long = 0,
 ) {
-    /** The spool has been written and its identity recorded. */
-    val isPrepared: Boolean get() = ciphertextBytes > 0 && ciphertextSha256.isNotEmpty()
+    /**
+     * The spool has been written and its identity recorded.
+     *
+     * The IDENTITY is what says a preparation happened, not the byte count. A
+     * delivery whose only file is empty produces a spool of zero bytes — the
+     * frame encoder emits nothing for an exhausted source, correctly — and its
+     * SHA-256 is still a real, fixed 64-hex value. Requiring `> 0` here made
+     * that job permanently unpreparable: it staged, failed its own record
+     * validation, and the send surfaced no job and no history at all.
+     *
+     * An unprepared job has no hash, so the two are still distinguishable.
+     */
+    val isPrepared: Boolean get() = ciphertextSha256.isNotEmpty()
 
     /** Everything a create needs is durable. */
     val isCreatable: Boolean
@@ -455,8 +482,17 @@ class InboxSendStore(
         if (!InboxSendRequest.isValidIdempotencyKey(job.idempotencyKey)) unreadable()
         if (job.totalBytes < 0) unreadable()
         if (job.ciphertextBytes < 0) unreadable()
-        // The two halves of the payload identity are one fact.
-        if ((job.ciphertextBytes > 0) != job.ciphertextSha256.isNotEmpty()) unreadable()
+        // Bytes without an identity is the inconsistency that matters: a record
+        // naming a payload it cannot check is one this code must not act on.
+        //
+        // The converse is NOT an inconsistency. Zero bytes WITH an identity is
+        // exactly how an empty delivery is represented — the encoder emits no
+        // frames for a file with no content, and the digest of nothing is a
+        // well-defined value. Treating the pair as one biconditional rejected
+        // that record on the way to disk, so a zero-only send could never be
+        // staged; and zero bytes with NO identity is still just an unprepared
+        // job, which is legal and remains so.
+        if (job.ciphertextBytes > 0 && job.ciphertextSha256.isEmpty()) unreadable()
         if (job.ciphertextSha256.isNotEmpty() &&
             !job.ciphertextSha256.matches(Regex("^[0-9a-f]{64}$"))
         ) {
@@ -518,6 +554,7 @@ class InboxSendStore(
             "ciphertextSha256" to Json.of(job.ciphertextSha256),
             "uploadId" to Json.of(job.uploadId.orEmpty()),
             "finalizeAttempted" to Json.of(job.finalizeAttempted),
+            "emptyPublishAttempted" to Json.of(job.emptyPublishAttempted),
             "storedFileId" to Json.of(job.storedFileId.orEmpty()),
             "targetKeyId" to Json.of(job.targetKeyId.orEmpty()),
             "targetKeyGeneration" to Json.of(job.targetKeyGeneration),
@@ -550,6 +587,16 @@ class InboxSendStore(
             ciphertextSha256 = str(root, "ciphertextSha256"),
             uploadId = str(root, "uploadId").ifEmpty { null },
             finalizeAttempted = bool(root, "finalizeAttempted"),
+            // ABSENT means false; a WRONG TYPE is still a refusal.
+            //
+            // The record version is unchanged, so every job written before this
+            // flag existed is still a valid v1 record and must load. Reading it
+            // strictly turned each one UNREADABLE on the first launch after an
+            // upgrade — a staged delivery the user had already asked for,
+            // destroyed by a field that was merely missing. False is the honest
+            // default: code that never had the flag never took the single-shot
+            // route, so nothing was ever attempted under it.
+            emptyPublishAttempted = optionalBool(root, "emptyPublishAttempted"),
             storedFileId = str(root, "storedFileId").ifEmpty { null },
             targetKeyId = str(root, "targetKeyId").ifEmpty { null },
             targetKeyGeneration = whole(root, "targetKeyGeneration"),
@@ -572,6 +619,21 @@ class InboxSendStore(
 
     private fun bool(source: Json.Obj, key: String): Boolean =
         (source[key] as? Json.Bool)?.value ?: unreadable()
+
+    /**
+     * A boolean a record may legitimately not carry.
+     *
+     * Absent — including an explicit `null` — is the default; anything present
+     * and not a boolean is still refused. The distinction matters: a field
+     * added after some records were written is missing for an ordinary reason,
+     * while a field holding a string is a record this build cannot vouch for.
+     */
+    private fun optionalBool(source: Json.Obj, key: String, fallback: Boolean = false): Boolean =
+        when (val value = source[key]) {
+            null, is Json.Null -> fallback
+            is Json.Bool -> value.value
+            else -> unreadable()
+        }
 
     private fun whole(source: Json.Obj, key: String): Long {
         val value = (source[key] as? Json.Num)?.value ?: unreadable()

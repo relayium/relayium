@@ -2,18 +2,45 @@
 
 Send files and messages straight to your own other devices, end-to-end
 encrypted, through the account you are already signed in to. This document is
-the development record for the Android half: what exists, what it deliberately
-does not do, and what still has no host.
+the development record for the Android half: what exists and what it
+deliberately does not do.
 
 ## Status
 
-**Component and runtime complete; not yet reachable in the app.** Everything
-below is implemented, tested and composable, but nothing in `MainActivity`,
-`RelayiumApp` or the navigation opens `InboxScreen` yet — that integration is a
-separate, serialized task, because the shared navigation and Activity files are
-owned by other in-flight work. Until it lands, the feature ships as code that is
-built and tested but not user-reachable, and no release note should claim
-otherwise.
+**Component, runtime and host integration complete; the feature is
+user-reachable.** `RelayiumApp` has an `Inbox` destination that opens
+`InboxScreen` against the real `InboxRuntime`, and `TransferViewModel` owns one
+runtime for the life of the process, adopted into each account in turn. `open`,
+`export` and `share` are supplied for real — through a non-exported,
+token-addressed grant provider and a SAF folder choice — so no control on the
+surface is a menu item that does nothing.
+
+Receiving is live whenever the APP is in the foreground, across all five
+destinations: it is not tied to the Inbox tab being selected. The composition,
+its lifetime rules and its fences are documented in
+`docs/android-host-integration.md`.
+
+The end-to-end gate has now been run, on the AOSP 36 emulator against the real
+Go backend and the real Apple host modules: real files and messages exchanged
+through an unchanged server, with the payloads checked by hash rather than by
+the sender's own report. The receiving-policy transitions (`ask`, `off`), a send
+cancelled mid-upload, and history read back after a restart — named entries, a
+file's SHA-256, a message body, a deleted entry's tombstone — are part of that
+run, as is the account boundary: a reader in a separate uid holding retained
+grants finds every one of them unreadable after an actual account switch, and a
+conversation the previous account owned is visible zero times.
+
+What the emulator does not stand in for is a physical phone or an iPhone.
+Everything above is real execution — the UI, the system services, the provider,
+the peer — but none of it is a device certification, and no release note should
+claim one.
+
+One state on this surface has no live coverage and is not claimed to have any.
+An upload whose single-shot publish never answered renders a dedicated
+non-retryable row. A real dropped response reaches it, so it is not
+unreachable — it is simply not produced by any run made so far, none of which
+loses a response. It is covered by the JVM cases in `InboxRuntimeTest`, by the
+string-parity test, and by review of the compiled surface.
 
 The protocol foundation (`protocol/.../inbox/**`) is documented separately in
 `docs/android-inbox-protocol.md`.
@@ -139,10 +166,26 @@ reached by scrolling.
 
 ## What is not covered
 
-- **Navigation, SAF and share-target ingress.** The surface exposes state and
-  actions; no host constructs them yet. A composed-screen test is not evidence
-  about an app.
-- **A live server.** The runtime suites use real stores and a scripted server;
-  the end-to-end run against an unchanged backend, with real files and messages
-  in both directions, is the integration harness's gate.
+Each suite answers for its own scope, and mistaking one for another is how a
+doc ends up claiming less than the project can prove. The runtime suites use
+real stores and a SCRIPTED server, on purpose — they are component tests.
+`scripts/android-host-acceptance.sh` is the composed-screen gate and exchanges
+nothing, because a composed-screen test was never evidence about an app.
+`scripts/android-host-system-acceptance.sh` owns what needs another process,
+including nine `ExternalShareIngressTest` cases fed by a separate-uid sender
+APK. `scripts/android-host-inbox-acceptance.sh` owns the live legs, and it is
+the run described under Status: a real external open of one file and a real
+share of three, whose bytes are checked by hash, the account and history
+boundaries, and an end-to-end exchange against an unchanged Go backend and the
+real Apple host modules. None of those is an open
+gap; what follows is.
+
+- **A physical phone, and an iPhone peer.** Every result above comes from the
+  AOSP 36 emulator. What runs there is real, but hardware behaviour is not
+  established by it and no result here claims to be a device certification.
+- **The unresolved-upload row.** A real single-shot publish whose response is
+  dropped reaches this state — it is not unreachable. It is simply not produced
+  by the signed-out release navigation smoke, which never signs in and never
+  uploads. Covered by the JVM cases in `InboxRuntimeTest`, by the string-parity
+  test, and by review of the compiled surface.
 - **Background delivery.** Not implemented, not promised, and the copy says so.

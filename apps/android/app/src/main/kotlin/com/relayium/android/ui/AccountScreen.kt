@@ -74,9 +74,15 @@ internal fun AccountScreen(viewModel: TransferViewModel) {
     val state by viewModel.account.state.collectAsStateWithLifecycle()
     val note by viewModel.account.signOutNote.collectAsStateWithLifecycle()
 
-    // The one place a restore is started. It is idempotent and refuses to
-    // restart anything that already holds something — see AccountSession.restore.
-    LaunchedEffect(Unit) { viewModel.account.restore() }
+    // NO restore is started here, deliberately.
+    //
+    // It used to be, and that tied the stored credential's restoration to the
+    // user opening THIS tab: a cold start that stayed on any other destination
+    // never left `Restoring`, so the Inbox never adopted and never received.
+    // `TransferViewModel` now restores at construction, because the account is
+    // app-wide state four destinations read rather than something this screen
+    // owns. The explicit retry affordances below are unchanged — they are for a
+    // restore that FAILED, which is a different thing from one never started.
 
     Text(
         text = stringResource(R.string.account_title),

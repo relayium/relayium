@@ -361,6 +361,71 @@ class CloudClient(
         UploadOffset(received, conflict = status == 409)
     }
 
+    /**
+     * `POST /api/files?purpose=device_task` — one request, one object, for a
+     * delivery whose ciphertext is EMPTY.
+     *
+     * ## Why the resumable route cannot carry this
+     *
+     * There, the object's bytes are the frame stream alone: the sealed manifest
+     * travels at `init` and the blob is materialised by the first append. A
+     * delivery whose only file is empty produces no frames, so no append is ever
+     * issued, the blob is never created, and finalize publishes a task pointing
+     * at nothing — the receiver then reports `stored_object_unavailable`.
+     *
+     * The single-shot body is `uint32BE(len) || encManifest || frames`, so even
+     * with no frames it is never empty and the object always exists. That is the
+     * whole reason this exists, and it is why it is deliberately limited to the
+     * zero case rather than offered as a general alternative.
+     *
+     * ## Why it takes SEALED bytes and not a plan
+     *
+     * [upload] builds and encrypts a `StoredManifest` of its own. A Device Inbox
+     * delivery's manifest is already sealed, in the Inbox's own v3 form, and is
+     * OPAQUE to the server — re-encrypting it here would produce a different
+     * document than the one the job committed to and the receiver expects. So
+     * this takes the header exactly as `uploadHeader(encManifest)` produced it
+     * and changes nothing about it.
+     *
+     * ## Retention is stated, never defaulted
+     *
+     * `purpose` is explicit. The server refuses a task-purpose upload that also
+     * asks to burn or caps downloads, and a purpose left unset would publish
+     * this as a SHARE — an object whose life is its TTL *and its download
+     * count*, which is not what a device task is. Nothing here can produce that
+     * by omission.
+     */
+    suspend fun uploadEmptyTaskObject(
+        header: ByteArray,
+        ttlSeconds: Int,
+        token: String,
+    ): StoredUploadResult = withContext(io) {
+        val url = base.newBuilder()
+            .addPathSegments("api/files")
+            .addQueryParameter("purpose", StoredUploadPurpose.DEVICE_TASK.wire)
+            .addQueryParameter("ttl", ttlSeconds.toString())
+            .build()
+        val request = Request.Builder()
+            .url(url)
+            .header("Accept", "application/json")
+            .header("User-Agent", userAgent)
+            .header("Authorization", "Bearer $token")
+            .post(header.toRequestBody(OCTETS))
+            .build()
+        val (status, text) = execute(authed.newCall(request))
+        if (status != 200) throw CloudException(uploadFailure(status, text))
+        // The same shape the share route answers, read the same way: a refusal
+        // to guess is what keeps a malformed answer from becoming an object id
+        // this device would then record as delivered.
+        val parsed = Json.parseOrNull(text) as? Json.Obj
+            ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+        val id = (parsed["id"] as? Json.Str)?.value?.let { StoredObjectId.accepted(it) }
+            ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+        val expiresAt = parsed.whole("expiresAt")
+            ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+        StoredUploadResult(id, expiresAt)
+    }
+
     /** `GET /api/uploads/{id}` — where to resume from. 404 means the session is
      *  gone: reaped while idle, or already terminal. */
     suspend fun uploadOffset(uploadId: String, token: String): Long = withContext(io) {
